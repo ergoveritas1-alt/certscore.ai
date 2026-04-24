@@ -39,9 +39,9 @@ import {
 } from "../../lib/scans/finding-evidence-gates";
 import {
   buildAccessibilitySupportFallbackEvidence,
+  buildChildContextFallbackEvidence,
   buildCookiePolicyFallbackEvidence,
   buildSnapshotDisclosureFallbackEvidence,
-  buildChildContextFallbackEvidence,
   isChildContextSignalKey
 } from "../../lib/scans/signal-fallback-evidence";
 import {
@@ -68,6 +68,11 @@ import {
   selectOwnerUnifiedFindingsForSection,
   type ScanReportUnifiedFindingState
 } from "../../lib/scans/scan-report-unified-findings";
+import {
+  type CanonicalReviewFinding,
+  type CanonicalReviewIssue,
+  type CanonicalSignalItem
+} from "../../lib/scans/scan-report-review-findings";
 import {
   getSurfacingDecisionStateBadgeClasses,
   getSurfacingDecisionStateLabel,
@@ -1097,31 +1102,6 @@ type ResultDetail = {
   value: unknown;
 };
 
-type CanonicalReviewIssue = {
-  description: string;
-  evidence?: string[];
-  fallbackEvidence?: Record<string, unknown>;
-  linkedValidationRuleKeys?: string[];
-  severity: "high" | "medium" | "low";
-  title: string;
-};
-
-type CanonicalReviewFinding = {
-  categoryId?: string;
-  description: string;
-  evidence?: string[];
-  fallbackEvidence?: Record<string, unknown>;
-  id: string;
-  linkedValidationFinding?: ScanValidationFinding | null;
-  observedValue: string | null;
-  severity: "high" | "medium" | "low";
-  signalKey?: string;
-  signalLabel?: string;
-  signalSource?: ReportSignalDefinition["source"];
-  sourceType: "issue" | "signal";
-  title: string;
-};
-
 type ScanRecordData = ScanDetailResponse;
 
 type CanonicalTaxonomyReviewProps = {
@@ -1186,14 +1166,6 @@ function renderCanonicalTaxonomyReviewSafely(input: CanonicalTaxonomyReviewProps
     );
   }
 }
-
-type CanonicalSignalItem = {
-  key: string;
-  label: string;
-  relation: "primary" | "secondary" | "overlay";
-  source: ReportSignalDefinition["source"];
-  value: unknown;
-};
 
 function isConcerningSignal(key: string, value: unknown) {
   if (!isSignalValuePopulated(key, value)) {
@@ -4539,8 +4511,6 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
 
   try {
     return buildScanReportUnifiedFindingState(scanRecord, {
-      buildReviewFindings: (input) => buildReviewFindings(input as Parameters<typeof buildReviewFindings>[0]),
-      buildSectionReviewIssues: (input) => buildSectionReviewIssues(input as Parameters<typeof buildSectionReviewIssues>[0]),
       deriveAccessibilityIssueRows,
       deriveAccessibilityRuleEvidenceRows,
       deriveConsentAuditFindings: (candidateSnapshot, runtimeArtifacts) =>
@@ -4548,8 +4518,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
       derivePolicyBehaviorContradictions: (input) =>
         derivePolicyBehaviorContradictions(input as Parameters<typeof derivePolicyBehaviorContradictions>[0]),
       derivePreconsentViolationRows,
-      filterContradictoryPositiveSurfaceFindings,
-      formatReviewIssueDescription
+      filterContradictoryPositiveSurfaceFindings
     });
   } catch (error) {
     console.error("Failed to build scan report unified finding state", error);

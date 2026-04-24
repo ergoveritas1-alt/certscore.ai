@@ -3,49 +3,27 @@ import {
   getReportEvidenceCategoriesForSection,
   getReportSectionsForPillar,
   getReportSignalsForEvidenceCategory,
+  type PreviewSampleFinding,
   type ReportEvidenceCategoryDefinition,
   type ReportPrimaryPillarDefinition,
-  type ReportSectionDefinition,
-  type ReportSignalDefinition
+  type ReportSectionDefinition
 } from "@website-signal-risk-scanner/shared";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
-import { buildValidationFindingLookup, type ScanValidationFinding } from "./validation-review-linking";
+import { buildValidationFindingLookup } from "./validation-review-linking";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import { getReportSignalValue, isSignalValuePopulated } from "./report-signal-values";
-
-export type CanonicalReviewIssue = {
-  description: string;
-  evidence?: string[];
-  fallbackEvidence?: Record<string, unknown>;
-  linkedValidationRuleKeys?: string[];
-  severity: "high" | "medium" | "low";
-  title: string;
-};
-
-export type CanonicalReviewFinding = {
-  categoryId?: string;
-  description: string;
-  evidence?: string[];
-  fallbackEvidence?: Record<string, unknown>;
-  id: string;
-  linkedValidationFinding?: ScanValidationFinding | null;
-  observedValue: string | null;
-  severity: "high" | "medium" | "low";
-  signalKey?: string;
-  signalLabel?: string;
-  signalSource?: ReportSignalDefinition["source"];
-  sourceType: "issue" | "signal";
-  title: string;
-};
-
-export type CanonicalSignalItem = {
-  key: string;
-  label: string;
-  relation: "primary" | "secondary" | "overlay";
-  source: ReportSignalDefinition["source"];
-  value: unknown;
-};
+import {
+  buildReviewFindings,
+  buildSectionReviewIssues,
+  formatReviewIssueDescription,
+  type AccessibilityIssueRow,
+  type AccessibilityRuleEvidenceRow,
+  type CanonicalReviewFinding,
+  type CanonicalSignalItem,
+  type PolicyBehaviorContradiction,
+  type PreconsentViolationRow
+} from "./scan-report-review-findings";
 
 export type ScanReportUnifiedFindingSectionDraft = {
   categories?: Array<{
@@ -70,63 +48,30 @@ export type ScanReportUnifiedFindingState = {
 };
 
 export type ScanReportUnifiedFindingStateDependencies = {
-  buildReviewFindings: (input: {
-    allSignals?: Array<{ key: string; value: unknown }>;
-    categoryId?: string;
-    issues: CanonicalReviewIssue[];
-    mergedSignals?: ScanDetailResponse["mergedSignals"];
-    policyEnrichment?: Array<Record<string, unknown>>;
-    prioritizedAccessibilityRuleRows: unknown[];
-    runtimeArtifacts?: Record<string, unknown> | null;
-    snapshot?: Record<string, unknown> | null;
-    sectionId: string;
-    sectionItems: CanonicalSignalItem[];
-    validationFindingLookup?: Map<string, ScanValidationFinding>;
-  }) => CanonicalReviewFinding[];
-  buildSectionReviewIssues: (input: {
-    accessibilityIssueRows: unknown[];
-    consentAuditFindings: unknown[];
-    policyBehaviorContradictions: unknown[];
-    preconsentViolationRows: unknown[];
-    runtimeArtifacts: Record<string, unknown> | null;
-    scanReportReviewIssues: Array<{
-      description: string;
-      key: string;
-      pageType: string;
-      pageUrl: string | null;
-      reason: string;
-      reviewStatus: string;
-      reviewVerdict: unknown;
-      summary: unknown;
-    }>;
-    sectionId: string;
-    snapshot: Record<string, unknown>;
-  }) => CanonicalReviewIssue[];
-  deriveAccessibilityIssueRows: (snapshot: Record<string, unknown>) => unknown[];
+  deriveAccessibilityIssueRows: (snapshot: Record<string, unknown>) => AccessibilityIssueRow[];
   deriveAccessibilityRuleEvidenceRows: (input: {
     examples: NonNullable<ScanDetailResponse["accessibilityRuleExamples"]>;
     ruleCounts: NonNullable<ScanDetailResponse["accessibilityRuleCounts"]>;
-  }) => Array<{ weightedPriority: number }>;
+  }) => AccessibilityRuleEvidenceRow[];
   deriveConsentAuditFindings: (
     snapshot: Record<string, unknown> | null,
     runtimeArtifacts: Record<string, unknown> | null
-  ) => unknown[];
+  ) => PreviewSampleFinding[];
   derivePolicyBehaviorContradictions: (input: {
     mergedSignals: ScanDetailResponse["mergedSignals"];
     primaryPolicyEnrichment: ScanDetailResponse["primaryPolicyEnrichment"];
     policyEnrichments: ScanDetailResponse["policyEnrichment"];
-    preconsentViolations: unknown[];
+    preconsentViolations: PreconsentViolationRow[];
     runtimeArtifacts: Record<string, unknown> | null;
     snapshot: Record<string, unknown> | null;
     trackerVendors: ScanDetailResponse["trackerVendors"];
-  }) => unknown[];
+  }) => PolicyBehaviorContradiction[];
   derivePreconsentViolationRows: (input: {
     persistedViolations: ScanDetailResponse["preconsentViolations"];
     runtimeArtifacts: Record<string, unknown> | null;
     trackerVendors: ScanDetailResponse["trackerVendors"];
-  }) => unknown[];
+  }) => PreconsentViolationRow[];
   filterContradictoryPositiveSurfaceFindings: (findings: UnifiedFindingDisplayPacket[]) => UnifiedFindingDisplayPacket[];
-  formatReviewIssueDescription: (reason: string) => string;
 };
 
 function getFiniteNumber(value: unknown) {
@@ -152,7 +97,7 @@ export function buildScanReportUnifiedFindingState(
     const enrichment = policyEnrichmentById.get(String(row.policyEnrichmentId ?? row.policy_enrichment_id ?? "")) ?? null;
 
     return {
-      description: dependencies.formatReviewIssueDescription(String(row.reason ?? "")),
+      description: formatReviewIssueDescription(String(row.reason ?? "")),
       key: String(row.id ?? `${row.reason ?? "review"}-${index}`),
       pageType: String(enrichment?.pageType ?? enrichment?.page_type ?? "unknown"),
       pageUrl:
@@ -214,7 +159,7 @@ export function buildScanReportUnifiedFindingState(
             return relationOrder[left.relation] - relationOrder[right.relation] || left.label.localeCompare(right.label);
           });
 
-        const reviewFindings = dependencies.buildReviewFindings({
+        const reviewFindings = buildReviewFindings({
           allSignals: scanRecord.signals,
           categoryId: category.id,
           issues: [],
@@ -236,7 +181,7 @@ export function buildScanReportUnifiedFindingState(
         };
       });
 
-      const issues = dependencies.buildSectionReviewIssues({
+      const issues = buildSectionReviewIssues({
         accessibilityIssueRows,
         consentAuditFindings,
         policyBehaviorContradictions,
@@ -246,7 +191,7 @@ export function buildScanReportUnifiedFindingState(
         sectionId: section.id,
         snapshot
       });
-      const issueFindings = dependencies.buildReviewFindings({
+      const issueFindings = buildReviewFindings({
         allSignals: scanRecord.signals,
         issues,
         mergedSignals: scanRecord.mergedSignals,
