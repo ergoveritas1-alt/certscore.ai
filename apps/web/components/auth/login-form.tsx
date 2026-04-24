@@ -21,12 +21,34 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
+function GoogleMark() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24">
+      <path
+        d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.3h6.44a5.52 5.52 0 0 1-2.39 3.62v3h3.88c2.27-2.08 3.56-5.15 3.56-8.65Z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12 24c3.24 0 5.95-1.07 7.94-2.9l-3.88-3c-1.07.72-2.44 1.15-4.06 1.15-3.12 0-5.77-2.1-6.72-4.93H1.27v3.09A12 12 0 0 0 12 24Z"
+        fill="#34A853"
+      />
+      <path
+        d="M5.28 14.32A7.2 7.2 0 0 1 4.91 12c0-.8.14-1.58.37-2.32V6.59H1.27A12 12 0 0 0 0 12c0 1.94.46 3.77 1.27 5.41l4.01-3.09Z"
+        fill="#FBBC05"
+      />
+      <path
+        d="M12 4.77c1.76 0 3.34.61 4.58 1.8l3.44-3.44C17.94 1.19 15.23 0 12 0A12 12 0 0 0 1.27 6.59l4.01 3.09c.95-2.83 3.6-4.91 6.72-4.91Z"
+        fill="#EA4335"
+      />
+    </svg>
+  );
+}
+
 export function LoginForm(input?: {
   allowedEmail?: string;
   allowCreateAccount?: boolean;
   allowGoogle?: boolean;
   footerMode?: "default" | "hidden";
-  title?: string;
 }) {
   const searchParams = useSearchParams();
   const nextPath = getSafeRedirectPath(searchParams?.get("next") ?? null);
@@ -43,9 +65,7 @@ export function LoginForm(input?: {
       ? "Email verified."
       : initialMessage === "password_reset"
         ? "Password updated. Sign in with your new password."
-        : initialMessage === "signed_out"
-          ? "Signed out."
-          : null
+        : null
   );
   const [flowError, setFlowError] = useState<string | null>(
     initialError === "invalid_verification_link"
@@ -119,25 +139,24 @@ export function LoginForm(input?: {
   const isSubmitting = isPending;
 
   return (
-    <div className="space-y-[10px]">
+    <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-[linear-gradient(180deg,rgba(224,242,254,0.96)_0%,rgba(239,246,255,0.98)_100%)] text-[13px] font-semibold text-sky-700 ring-1 ring-sky-200">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(180deg,rgba(239,246,255,0.98)_0%,rgba(224,242,254,0.96)_100%)] text-[22px] font-semibold text-sky-700 ring-1 ring-sky-200 shadow-[0_12px_30px_rgba(56,189,248,0.14)]">
             →
-          </span>
-          <span className="truncate text-xl font-semibold tracking-tight text-slate-950">
-            {input?.title ?? "Access your workspace"}
           </span>
         </div>
 
         {allowCreateAccount ? (
-          <div className="inline-flex shrink-0 rounded-full border border-slate-200 bg-slate-100 p-0.5">
+          <div className="inline-flex shrink-0 rounded-full border border-slate-200/90 bg-[linear-gradient(180deg,#f8fbff_0%,#eef4fb_100%)] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
             <button
               type="button"
               onClick={() => switchMode("sign_in")}
               className={[
-                "rounded-full px-3 py-1.5 text-xs font-medium transition",
-                mode === "sign_in" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-950"
+                "rounded-full px-4 py-2 text-sm font-medium transition",
+                mode === "sign_in"
+                  ? "bg-white text-slate-950 shadow-[0_6px_18px_rgba(15,23,42,0.08)]"
+                  : "text-slate-500 hover:text-slate-950"
               ].join(" ")}
             >
               Sign in
@@ -146,8 +165,10 @@ export function LoginForm(input?: {
               type="button"
               onClick={() => switchMode("create_account")}
               className={[
-                "rounded-full px-3 py-1.5 text-xs font-medium transition",
-                mode === "create_account" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-950"
+                "rounded-full px-4 py-2 text-sm font-medium transition",
+                mode === "create_account"
+                  ? "bg-white text-slate-950 shadow-[0_6px_18px_rgba(15,23,42,0.08)]"
+                  : "text-slate-500 hover:text-slate-950"
               ].join(" ")}
             >
               Create account
@@ -157,10 +178,35 @@ export function LoginForm(input?: {
       </div>
 
       {input?.allowedEmail ? (
-        <p className="text-sm text-slate-600">Validation Ops access is restricted to {input.allowedEmail}.</p>
+        <p className="rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-slate-600">
+          Validation Ops access is restricted to {input.allowedEmail}.
+        </p>
       ) : null}
 
-      <form action={formAction} className="space-y-4" onSubmit={handleCreateContinue}>
+      {input?.allowGoogle ? (
+        <div className="space-y-4 rounded-[28px] border border-slate-200/90 bg-[linear-gradient(180deg,rgba(248,250,252,0.82)_0%,rgba(255,255,255,0.98)_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+          <a
+            className="group flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] px-4 py-3 text-sm font-medium text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:border-slate-300 hover:bg-[linear-gradient(180deg,#ffffff_0%,#f3f8ff_100%)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.08)]"
+            href={`/auth/google?next=${encodeURIComponent(nextPath)}`}
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition group-hover:border-slate-300">
+              <GoogleMark />
+            </span>
+            <span className="tracking-[0.01em]">Continue with Google</span>
+          </a>
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-200" />
+            <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Or use email</span>
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
+        </div>
+      ) : null}
+
+      <form
+        action={formAction}
+        className="space-y-4 rounded-[28px] border border-slate-200/90 bg-white/95 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)]"
+        onSubmit={handleCreateContinue}
+      >
         <input name="mode" type="hidden" value={mode} />
         <input name="next" type="hidden" value={nextPath} />
 
@@ -260,32 +306,16 @@ export function LoginForm(input?: {
         {allowCreateAccount && isCreateAccount ? <p className="text-xs text-slate-500">No credit card required.</p> : null}
       </form>
 
-      {input?.allowGoogle ? (
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-slate-200" />
-            <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Or continue with</span>
-            <div className="h-px flex-1 bg-slate-200" />
-          </div>
-          <Link
-            className="flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 transition hover:border-slate-300 hover:bg-slate-50"
-            href={`/auth/google?next=${encodeURIComponent(nextPath)}`}
-          >
-            Google
-          </Link>
-        </div>
-      ) : null}
-
       {actionError ? <p className="text-sm text-red-600">{actionError}</p> : null}
 
       {allowCreateAccount && input?.footerMode !== "hidden" ? (
-        <div className="-mx-6 -mb-6 border-t border-slate-200 bg-slate-50 px-6 py-3 text-center">
-          <p className="text-xs leading-4 text-slate-600">
+        <div className="-mx-6 -mb-6 rounded-b-[24px] border-t border-slate-200/80 bg-[linear-gradient(180deg,#fbfdff_0%,#f7f9fc_100%)] px-6 py-3 text-center">
+          <p className="text-[11px] leading-4 text-slate-500">
             {mode === "create_account" ? "Already have an account? " : "Need an account? "}
             <button
               type="button"
               onClick={() => switchMode(mode === "create_account" ? "sign_in" : "create_account")}
-              className="font-medium text-sky-700 transition hover:text-sky-800"
+              className="font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 transition hover:text-slate-950 hover:decoration-slate-500"
             >
               {mode === "create_account" ? "Sign in" : "Create one"}
             </button>

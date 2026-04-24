@@ -30,7 +30,6 @@ export default async function LoginPage() {
               allowCreateAccount
               allowGoogle={allowGoogle}
               footerMode="default"
-              title="Access your workspace"
             />
           </CardContent>
         </Card>
