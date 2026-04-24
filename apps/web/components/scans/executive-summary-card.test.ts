@@ -407,6 +407,49 @@ test("ExecutiveSummaryCard renders score-only ADA accessibility as audit-only wi
   assert.doesNotMatch(adaMarkup, />88</);
 });
 
+test("ExecutiveSummaryCard shows benchmark beside posture without scanned timestamp pill", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      beforeConsentCookieCount: 0,
+      domainBenchmark: {
+        confidence: "medium",
+        estimatedRankLabel: "Typical",
+        expectedCookiesBeforeConsent: 0,
+        expectedOverallScore: 82,
+        expectedThirdPartyRequests: 8,
+        industry: "Web portal / News & Media / Internet services",
+        rationale: "Matched to a portal benchmark."
+      },
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 69,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyDomains: [],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "No meaningful third-party footprint observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /Action Needed/);
+  assert.match(html, /Benchmark: Web portal \/ News &amp; Media \/ Internet services/);
+  assert.doesNotMatch(html, /Scanned Apr/);
+  assert.ok(html.indexOf("Action Needed") < html.indexOf("Benchmark: Web portal"));
+});
+
 test("buildRegulatoryLenses promotes retained financial-promotion findings into the financial claims lens", () => {
   const lenses = buildRegulatoryLenses(
     [

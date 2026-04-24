@@ -234,6 +234,17 @@ test("keeps runtime-backed session recording in top findings when consent issues
     makePacket("session_replay_observed", {
       confidenceBand: "high",
       details: { family: "consent_tracking", kind: "session_replay_observed" },
+      evidence: {
+        counts: {},
+        entities: {
+          runtimeVendors: ["Microsoft Clarity"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.session_replay_runtime_vendors"],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: []
+      },
       observedValue: "Microsoft Clarity",
       presentationDecision: {
         confidenceRationale: "Runtime vendor provenance retained.",
@@ -253,6 +264,10 @@ test("keeps runtime-backed session recording in top findings when consent issues
   assert.ok(
     topFindingIds.indexOf("session_recording_services_detected") <
       topFindingIds.indexOf("asymmetric_consent_ui")
+  );
+  assert.equal(
+    projection.topFindings.find((finding) => finding.id === "session_recording_services_detected")?.shortSummary,
+    "Microsoft Clarity session recording was observed during runtime collection."
   );
 });
 
