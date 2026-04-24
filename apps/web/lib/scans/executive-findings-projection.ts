@@ -135,6 +135,65 @@ function buildEvidenceRefs(packet: UnifiedFindingDisplayPacket) {
   ]).slice(0, 4);
 }
 
+const SESSION_REPLAY_VENDOR_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: "Microsoft Clarity", pattern: /microsoft\s+clarity|clarity\.ms|\bclarity\b/i },
+  { label: "FullStory", pattern: /fullstory|fullstory\.com/i },
+  { label: "Hotjar", pattern: /hotjar|hotjar\.com/i },
+  { label: "LogRocket", pattern: /logrocket|logrocket\.com/i },
+  { label: "Mouseflow", pattern: /mouseflow|mouseflow\.com/i },
+  { label: "Smartlook", pattern: /smartlook|smartlook\.com/i },
+  { label: "Contentsquare", pattern: /contentsquare|contentsquare\.com/i },
+  { label: "Quantum Metric", pattern: /quantum\s+metric|quantummetric\.com/i },
+  { label: "Crazy Egg", pattern: /crazy\s*egg|crazyegg\.com/i },
+  { label: "Inspectlet", pattern: /inspectlet|inspectlet\.com/i },
+  { label: "Lucky Orange", pattern: /lucky\s+orange|luckyorange\.com/i }
+];
+
+function formatVendorList(vendors: string[]) {
+  if (vendors.length <= 1) {
+    return vendors[0] ?? "";
+  }
+  if (vendors.length === 2) {
+    return `${vendors[0]} and ${vendors[1]}`;
+  }
+  return `${vendors.slice(0, -1).join(", ")}, and ${vendors[vendors.length - 1]}`;
+}
+
+function getSessionReplayVendors(packet: UnifiedFindingDisplayPacket) {
+  const entityValues = Object.entries(packet.evidence?.entities ?? {}).flatMap(([key, values]) =>
+    /vendor/i.test(key) ? values : []
+  );
+  const reviewerVisibleText = uniqueStrings([
+    packet.observedValue,
+    packet.summary,
+    ...(packet.evidence?.snippets ?? []),
+    ...entityValues
+  ]).join(" ");
+
+  return SESSION_REPLAY_VENDOR_PATTERNS.flatMap(({ label, pattern }) =>
+    pattern.test(reviewerVisibleText) ? [label] : []
+  );
+}
+
+function buildExecutiveShortSummary(
+  packet: UnifiedFindingDisplayPacket,
+  findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
+) {
+  if (findingId === "session_recording_services_detected") {
+    const vendors = getSessionReplayVendors(packet);
+    if (vendors.length > 0) {
+      const vendorList = formatVendorList(vendors);
+      return vendors.length === 1
+        ? `${vendorList} session recording was observed during runtime collection.`
+        : `${vendorList} session recording services were observed during runtime collection.`;
+    }
+
+    return "Session recording services were observed during runtime collection.";
+  }
+
+  return packet.summary;
+}
+
 function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY) {
   const definition = CERT_SCORE_FINDING_REGISTRY[findingId]!;
   return {
@@ -149,7 +208,7 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
     evidencePreview: buildEvidencePreview(packet),
     evidenceRefs: buildEvidenceRefs(packet),
     severity: mapSeverity(packet, findingId),
-    shortSummary: packet.summary
+    shortSummary: buildExecutiveShortSummary(packet, findingId)
   } satisfies CertScoreFinding;
 }
 

@@ -19,20 +19,6 @@ type DomainBenchmarkCardData = {
   rationale: string;
 } | null;
 
-function formatFreshness(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Scan completed";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(date);
-}
-
 function getPostureClasses(posture: "Clear" | "Watch" | "Action Needed") {
   if (posture === "Action Needed") {
     return "border-rose-200 bg-rose-50/90 text-rose-950";
@@ -1151,9 +1137,6 @@ export function ExecutiveSummaryCard(input: {
                 className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] ${getPostureClasses(input.posture)}`}
               >
                 {input.posture}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-700">
-                Scanned {formatFreshness(input.lastScannedAt)}
               </span>
               {input.domainBenchmark ? (
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-600">
