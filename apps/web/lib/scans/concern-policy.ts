@@ -924,71 +924,103 @@ function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | 
   );
 }
 
-function hasRepresentativeAccessibilityExamples(rawEvidence: Record<string, unknown> | null | undefined) {
+function getStringValue(entry: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = entry[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function getNumberValue(entry: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = entry[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function hasStringArrayValue(entry: Record<string, unknown>, keys: string[]) {
+  return keys.some((key) => {
+    const value = entry[key];
+    return Array.isArray(value) && value.some((item) => typeof item === "string" && item.trim().length > 0);
+  });
+}
+
+function getRepresentativeAccessibilityExampleCoverage(rawEvidence: Record<string, unknown> | null | undefined) {
   if (!rawEvidence) {
-    return false;
+    return {
+      hasSevereExample: false,
+      representativeExampleCount: 0,
+      distinctPageCount: 0,
+      distinctRuleCount: 0
+    };
   }
 
   if (!Array.isArray(rawEvidence.accessibilityRuleExamples) || rawEvidence.accessibilityRuleExamples.length === 0) {
-    return false;
+    return {
+      hasSevereExample: false,
+      representativeExampleCount: 0,
+      distinctPageCount: 0,
+      distinctRuleCount: 0
+    };
   }
 
-  return rawEvidence.accessibilityRuleExamples.some((entry) => {
+  const pages = new Set<string>();
+  const rules = new Set<string>();
+  let hasSevereExample = false;
+  let representativeExampleCount = 0;
+
+  for (const entry of rawEvidence.accessibilityRuleExamples) {
     if (!entry || typeof entry !== "object") {
-      return false;
+      continue;
     }
 
-    const pageUrl =
-      typeof (entry as { pageUrl?: unknown }).pageUrl === "string"
-        ? (entry as { pageUrl: string }).pageUrl
-        : typeof (entry as { page_url?: unknown }).page_url === "string"
-          ? (entry as { page_url: string }).page_url
-          : null;
-    const ruleId =
-      typeof (entry as { ruleId?: unknown }).ruleId === "string"
-        ? (entry as { ruleId: string }).ruleId
-        : typeof (entry as { rule_id?: unknown }).rule_id === "string"
-          ? (entry as { rule_id: string }).rule_id
-          : typeof (entry as { ruleCode?: unknown }).ruleCode === "string"
-            ? (entry as { ruleCode: string }).ruleCode
-            : typeof (entry as { rule_code?: unknown }).rule_code === "string"
-              ? (entry as { rule_code: string }).rule_code
-          : null;
+    const example = entry as Record<string, unknown>;
+    const pageUrl = getStringValue(example, ["pageUrl", "page_url"]);
+    const ruleId = getStringValue(example, ["ruleId", "rule_id", "ruleCode", "rule_code"]);
     const selector =
-      typeof (entry as { selector?: unknown }).selector === "string"
-        ? (entry as { selector: string }).selector
-        : typeof (entry as { target?: unknown }).target === "string"
-          ? (entry as { target: string }).target
-          : Array.isArray((entry as { representativeSelectors?: unknown }).representativeSelectors) &&
-              (entry as { representativeSelectors: unknown[] }).representativeSelectors.some(
-                (value) => typeof value === "string" && value.trim().length > 0
-              )
-            ? "representative_selector"
-            : Array.isArray((entry as { representative_selectors?: unknown }).representative_selectors) &&
-                (entry as { representative_selectors: unknown[] }).representative_selectors.some(
-                  (value) => typeof value === "string" && value.trim().length > 0
-                )
-              ? "representative_selector"
-          : null;
-    const snippet =
-      typeof (entry as { snippet?: unknown }).snippet === "string"
-        ? (entry as { snippet: string }).snippet
-        : typeof (entry as { message?: unknown }).message === "string"
-          ? (entry as { message: string }).message
-          : typeof (entry as { description?: unknown }).description === "string"
-            ? (entry as { description: string }).description
-            : typeof (entry as { help?: unknown }).help === "string"
-              ? (entry as { help: string }).help
-          : null;
-    const nodeCount =
-      typeof (entry as { nodeCount?: unknown }).nodeCount === "number"
-        ? (entry as { nodeCount: number }).nodeCount
-        : typeof (entry as { node_count?: unknown }).node_count === "number"
-          ? (entry as { node_count: number }).node_count
-          : null;
+      getStringValue(example, ["selector", "target"]) ??
+      (hasStringArrayValue(example, ["representativeSelectors", "representative_selectors"]) ? "representative_selector" : null);
+    const snippet = getStringValue(example, ["snippet", "message", "description", "help"]);
+    const nodeCount = getNumberValue(example, ["nodeCount", "node_count"]);
+    const impact = getStringValue(example, ["impact", "severity"]);
 
-    return Boolean(pageUrl && ruleId && (selector || snippet || (typeof nodeCount === "number" && nodeCount > 0)));
-  });
+    if (!pageUrl || !ruleId || (!selector && !snippet && !(typeof nodeCount === "number" && nodeCount > 0))) {
+      continue;
+    }
+
+    representativeExampleCount += 1;
+    pages.add(pageUrl);
+    rules.add(ruleId);
+
+    if (impact && /^(?:critical|serious|high)$/i.test(impact)) {
+      hasSevereExample = true;
+    }
+  }
+
+  return {
+    hasSevereExample,
+    representativeExampleCount,
+    distinctPageCount: pages.size,
+    distinctRuleCount: rules.size
+  };
+}
+
+function hasRepresentativeAccessibilityExamples(rawEvidence: Record<string, unknown> | null | undefined) {
+  const coverage = getRepresentativeAccessibilityExampleCoverage(rawEvidence);
+
+  return (
+    coverage.hasSevereExample ||
+    coverage.distinctPageCount >= 2 ||
+    coverage.distinctRuleCount >= 2
+  );
 }
 
 function getNumberEvidence(

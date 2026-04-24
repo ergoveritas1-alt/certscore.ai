@@ -7,6 +7,7 @@ import {
   getUnifiedFindingOwnerCategoryId,
   type UnifiedFindingCandidate
 } from "./unified-findings";
+import { ADA_ACCESSIBILITY_FIXTURES } from "./ada-accessibility.fixtures";
 import { buildMergedSignalRecords } from "./merged-signals";
 import { POLICY_BEHAVIOR_CONFLICT_FIXTURES } from "./policy-behavior-conflict.fixtures";
 import { buildSanitizedNetworkEvidenceAuditRecord } from "./sanitized-network-evidence";
@@ -2460,14 +2461,7 @@ test("keeps accessibility risk score audit-only without representative axe examp
     ruleKey: "scan_snapshot.accessibility.accessibility_risk_score",
     severity: "medium",
     title: "Accessibility risk score",
-    evidence: {
-      pageUrl: "https://www.example.com/",
-      supportingSignals: [
-        "Scanner-derived accessibility risk indicators were elevated and warrant manual accessibility review.",
-        "on https://www.example.com/ (.hero-title)",
-        "Accessibility risk score: 14."
-      ]
-    }
+    evidence: ADA_ACCESSIBILITY_FIXTURES.scoreOnlySnapshot
   });
 
   const [packet] = buildUnifiedFindingDisplayPackets({
@@ -2481,28 +2475,33 @@ test("keeps accessibility risk score audit-only without representative axe examp
   assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), false);
 });
 
-test("surfaces accessibility risk score when representative axe examples are retained", () => {
+test("keeps accessibility risk score audit-only for a single moderate axe example", () => {
   const validationFinding = makeValidationFinding({
     id: "val-accessibility-risk",
     ruleKey: "scan_snapshot.accessibility.accessibility_risk_score",
     severity: "medium",
     title: "Accessibility risk score",
-    evidence: {
-      accessibilityRuleExamples: [
-        {
-          nodeCount: 2,
-          pageUrl: "https://www.example.com/",
-          representativeSelectors: [".hero-title"],
-          ruleCode: "color-contrast"
-        }
-      ],
-      pageUrl: "https://www.example.com/",
-      supportingSignals: [
-        "Scanner-derived accessibility risk indicators were elevated and warrant manual accessibility review.",
-        "color-contrast on https://www.example.com/ (.hero-title)",
-        "Accessibility risk score: 14."
-      ]
-    }
+    evidence: ADA_ACCESSIBILITY_FIXTURES.singleModerateAxeExample
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "accessibility_risk_score");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), true);
+});
+
+test("surfaces accessibility risk score when representative axe examples are severe or broadly covered", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-accessibility-risk",
+    ruleKey: "scan_snapshot.accessibility.accessibility_risk_score",
+    severity: "medium",
+    title: "Accessibility risk score",
+    evidence: ADA_ACCESSIBILITY_FIXTURES.seriousAxeExample
   });
 
   const [packet] = buildUnifiedFindingDisplayPackets({
@@ -2513,7 +2512,7 @@ test("surfaces accessibility risk score when representative axe examples are ret
 
   assert.equal(packet?.unifiedFindingId, "accessibility_risk_score");
   assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.presentation.confidenceScore, "0.75");
+  assert.equal(packet?.presentation.confidenceScore, "1.0");
   assert.equal(packet?.evidence?.flags?.includes("contradiction_runtime_artifact_retained"), false);
   assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), true);
 });
