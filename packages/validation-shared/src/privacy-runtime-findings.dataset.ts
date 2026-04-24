@@ -14,6 +14,7 @@ export const PRIVACY_RUNTIME_FINDING_IDS = [
   "targeted_advertising_disclosure_present",
   "weak_cookie_security_attributes",
   "accessibility_support_path_missing",
+  "privacy_rights_path_present",
   "privacy_contact_path_present",
   "privacy_policy_present",
   "sale_sharing_controls_missing",
@@ -33,6 +34,7 @@ export const PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS = [
   "preconsent_tracking",
   "weak_cookie_security_attributes",
   "accessibility_support_path_missing",
+  "privacy_rights_path_present",
   "privacy_contact_path_present",
   "privacy_policy_present",
   "sale_sharing_controls_missing",
@@ -332,6 +334,29 @@ const PRODUCTION_FINDING_CONFIGS: ProductionFindingConfig[] = [
   },
   {
     findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_rights_path_present",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-privacy-rights-${index}/policy.json`],
+      policyAnchor: {
+        claimType: "privacy_rights_path_present",
+        confidence: 0.87,
+        extractionStatus: "fetched",
+        sourceUrl: `https://reviewed-privacy-rights-${index}.example.test/privacy`,
+        snippet: "You may request access, deletion, or correction of your personal information through our privacy rights portal."
+      },
+      signalKey: "privacy.privacy_rights_path_present",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Reviewed privacy URL contains a concrete rights request path, portal, form, or instructions rather than generic rights language only.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: `https://reviewed-privacy-rights-${index}.example.test/privacy`
+      }
+    }),
+    positiveNotes: "Privacy-rights request path is present on a retained policy surface.",
+    signalKey: "privacy.privacy_rights_path_present"
+  },
+  {
+    findingGroup: "production_surfaced_calibration",
     findingId: "privacy_policy_present",
     positiveEvidenceFor: (index) => ({
       artifactRefs: [`s3://privacy-runtime/reviewed-policy-${index}/policy.html`],
@@ -412,6 +437,7 @@ const PRODUCTION_REVIEWED_URLS: Record<(typeof PRIVACY_RUNTIME_TOP_PRODUCTION_FI
   pricing_or_fee_transparency_unclear: "https://backtestr.xyz/",
   privacy_contact_path_present: "https://www.acorns.com/",
   privacy_policy_present: "https://www.acorns.com/",
+  privacy_rights_path_present: "https://www.acorns.com/",
   sale_sharing_controls_missing: "https://www.ameriprise.com/",
   weak_cookie_security_attributes: "https://www.acorns.com/"
 };

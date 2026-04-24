@@ -1,8 +1,10 @@
 import process from "node:process";
 import {
+  summarizeFinancialCommercialClaimsDataset,
   PRIVACY_RUNTIME_FINDINGS_DATASET_SEED,
   PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS,
   summarizePrivacyRuntimeFindingsDataset,
+  type FinancialCommercialClaimsEmittableFindingId,
   type PrivacyRuntimeFindingDatasetExample,
   type PrivacyRuntimeFindingId
 } from "@website-signal-risk-scanner/validation-shared";
@@ -24,6 +26,7 @@ type CalibrationEntry = {
 
 type CurrentTopFindingEntry = {
   calibrated: boolean;
+  calibrationSource: "financial_claims_corpus" | "privacy_runtime_corpus" | "none";
   findingId: string;
   rank: number;
   surfaceFrequencyPct: number;
@@ -102,12 +105,12 @@ function renderMarkdown(input: {
     "",
     "## Current Top Surface Drift",
     "",
-    "| Rank | Finding | Surface scans | Surface frequency | Calibrated |",
-    "|---:|---|---:|---:|---|"
+    "| Rank | Finding | Surface scans | Surface frequency | Calibrated | Source |",
+    "|---:|---|---:|---:|---|---|"
   );
   for (const entry of input.currentTopFindings) {
     lines.push(
-      `| ${entry.rank} | \`${entry.findingId}\` | ${entry.surfaceScans} | ${entry.surfaceFrequencyPct.toFixed(1)}% | ${entry.calibrated ? "yes" : "no"} |`
+      `| ${entry.rank} | \`${entry.findingId}\` | ${entry.surfaceScans} | ${entry.surfaceFrequencyPct.toFixed(1)}% | ${entry.calibrated ? "yes" : "no"} | ${entry.calibrationSource} |`
     );
   }
   if (uncalibratedTopFindings.length > 0) {
@@ -131,19 +134,35 @@ async function main() {
   });
   const currentTopLimit = getNumberArg("--current-top-limit", 8);
   const corpusSummary = summarizePrivacyRuntimeFindingsDataset(PRIVACY_RUNTIME_FINDINGS_DATASET_SEED);
+  const financialCorpusSummary = summarizeFinancialCommercialClaimsDataset();
   const frequencyByFinding = new Map(report.topFindings.map((finding) => [finding.findingId, finding]));
   const calibratedFindingIds = new Set<string>(PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS);
+  const financialFindingCounts = financialCorpusSummary.emittableFindingCounts as Partial<Record<FinancialCommercialClaimsEmittableFindingId, number>>;
+  const financialCorpusCalibratedFindingIds = new Set(
+    Object.entries(financialFindingCounts)
+      .filter(([, count]) => (count ?? 0) >= minExamples)
+      .map(([findingId]) => findingId)
+  );
   const currentTopFindings = [...report.topFindings]
     .filter((finding) => finding.scanCount > 0)
     .sort((left, right) => right.scanCount - left.scanCount || right.surfaceCount - left.surfaceCount || left.findingId.localeCompare(right.findingId))
     .slice(0, currentTopLimit)
-    .map((finding, index) => ({
-      calibrated: calibratedFindingIds.has(finding.findingId),
-      findingId: finding.findingId,
-      rank: index + 1,
-      surfaceFrequencyPct: finding.scanPct,
-      surfaceScans: finding.scanCount
-    }));
+    .map((finding, index) => {
+      const privacyCalibrated = calibratedFindingIds.has(finding.findingId);
+      const financialCalibrated = financialCorpusCalibratedFindingIds.has(finding.findingId);
+      return {
+        calibrated: privacyCalibrated || financialCalibrated,
+        calibrationSource: privacyCalibrated
+          ? "privacy_runtime_corpus"
+          : financialCalibrated
+            ? "financial_claims_corpus"
+            : "none",
+        findingId: finding.findingId,
+        rank: index + 1,
+        surfaceFrequencyPct: finding.scanPct,
+        surfaceScans: finding.scanCount
+      } satisfies CurrentTopFindingEntry;
+    });
   const entries: CalibrationEntry[] = PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS.map((findingId) => {
     const mix = countScenarioMix(PRIVACY_RUNTIME_FINDINGS_DATASET_SEED, findingId);
     const frequency = frequencyByFinding.get(findingId);
