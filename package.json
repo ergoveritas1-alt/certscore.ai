@@ -27,6 +27,7 @@
     "ops:check:scanner-deploy": "bash ./scripts/check-scanner-deploy-health.sh",
     "ops:check:live": "pnpm exec tsx ./scripts/check-live-deployment-state.ts",
     "ops:check:live-db": "pnpm exec tsx ./scripts/check-live-db-consistency.ts",
+    "ops:smoke:auth": "pnpm exec tsx ./scripts/check-production-auth-smoke.ts",
     "ops:smoke:ada-financial": "pnpm exec tsx ./scripts/check-ada-financial-live-smoke.ts",
     "ops:smoke:findings": "pnpm exec tsx ./scripts/check-live-finding-smoke.ts",
     "ops:verify:ada-live": "pnpm exec tsx ./scripts/run-ada-live-verification.ts",

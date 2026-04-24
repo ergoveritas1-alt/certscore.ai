@@ -9,6 +9,21 @@ const nextConfig = {
   devIndicators: false,
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [
+          {
+            type: "host",
+            value: "www.certscore.ai"
+          }
+        ],
+        destination: "https://certscore.ai/:path*",
+        permanent: true
+      }
+    ];
+  },
   transpilePackages: [
     "@website-signal-risk-scanner/shared",
     "@website-signal-risk-scanner/ui",

@@ -1308,23 +1308,23 @@ export function ExecutiveSummaryCard(input: {
                 <div className="mt-3 space-y-3">
                   {regulatoryLenses.map((lens) => (
                     <details key={lens.acronym} className="group rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3">
-                      <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
-                        <div className="min-w-0">
+                      <summary className="grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2">
+                        <div className="min-w-0 self-start">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-semibold text-slate-900">{lens.acronym}</p>
                             <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
                               {lens.ratingLabel}
                             </span>
                           </div>
-                          <p className="mt-1 text-xs leading-5 text-slate-600">{lens.summary}</p>
                         </div>
-                        <div className="shrink-0 text-right">
+                        <div className="shrink-0 self-start text-right">
                           <p className="text-xl font-semibold tracking-tight text-slate-900">{lens.score ?? "—"}</p>
                           {typeof lens.score === "number" ? (
                             <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
                           ) : null}
-                          <p className="mt-1 text-slate-400 transition-transform group-open:rotate-180">⌄</p>
                         </div>
+                        <p className="min-w-0 text-xs leading-5 text-slate-600">{lens.summary}</p>
+                        <p className="self-end text-right text-slate-400 transition-transform group-open:rotate-180">⌄</p>
                       </summary>
                       <div className="mt-3 border-t border-slate-200 pt-3">
                         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
