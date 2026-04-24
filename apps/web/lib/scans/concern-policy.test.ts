@@ -372,6 +372,50 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "raw high-risk financial product signal without offer context is blocked",
+      concern: makeConcern({
+        originKey: "financial.options_or_futures_language_present",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "Options or futures language present"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        signalKey: "financial.options_or_futures_language_present",
+        signalLabel: "Options or futures language present",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "raw high-risk financial product signal with offer context stays eligible",
+      concern: makeConcern({
+        originKey: "financial.options_or_futures_language_present",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "Options or futures language present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        matchedSnippet: "Trade options and futures with margin on our professional investing platform.",
+        pageClassification: "financial_offer",
+        pageType: "financial_offer",
+        pageUrl: "https://example.com/trading/options",
+        signalKey: "financial.options_or_futures_language_present",
+        signalLabel: "Options or futures language present",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "domain-level minors context without retained page evidence stays internal",
       concern: makeConcern({
         originKey: "privacy.minors_or_age_gated_collection_context",

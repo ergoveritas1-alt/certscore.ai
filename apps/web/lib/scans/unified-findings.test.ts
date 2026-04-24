@@ -243,6 +243,66 @@ test("routes corpus-derived financial claim findings through normalized concerns
   }
 });
 
+test("blocks raw high-risk financial product signals without offer context", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Options or futures language present.",
+        fallbackEvidence: {
+          signalKey: "financial.options_or_futures_language_present",
+          signalLabel: "Options or futures language present",
+          signalValue: true
+        },
+        observedValue: "Options or futures language present",
+        severity: "medium",
+        signalKey: "financial.options_or_futures_language_present",
+        signalLabel: "Options or futures language present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Options or futures language present"
+      }
+    ],
+    validationFindings: []
+  });
+
+  assert.equal(
+    packets.some((packet) => packet.unifiedFindingId === "leveraged_or_high_risk_product_promotion"),
+    false
+  );
+});
+
+test("surfaces raw high-risk financial product signals with offer context", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Options or futures language present.",
+        fallbackEvidence: {
+          matchedSnippet: "Trade options and futures with margin on our professional investing platform.",
+          pageClassification: "financial_offer",
+          pageType: "financial_offer",
+          pageUrl: "https://example.com/trading/options",
+          signalKey: "financial.options_or_futures_language_present",
+          signalLabel: "Options or futures language present",
+          signalValue: true
+        },
+        observedValue: "Options or futures language present",
+        severity: "medium",
+        signalKey: "financial.options_or_futures_language_present",
+        signalLabel: "Options or futures language present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Options or futures language present"
+      }
+    ],
+    validationFindings: []
+  });
+
+  assert.equal(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
+  assert.equal(packet?.concernContext?.originTypes.includes("snapshot_signal"), true);
+  assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), true);
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
 test("keeps direct runtime findings surfaced under thin coverage", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     coverageSummary: {

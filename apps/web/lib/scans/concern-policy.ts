@@ -881,6 +881,49 @@ function isCommercialEvidenceConcern(
   ].includes(concern.suggestedUnifiedFindingId ?? "");
 }
 
+function isRawHighRiskFinancialProductConcern(
+  concern: Pick<NormalizedConcern, "originType" | "suggestedUnifiedFindingId">
+) {
+  return (
+    concern.suggestedUnifiedFindingId === "leveraged_or_high_risk_product_promotion" &&
+    concern.originType !== "validation_rule"
+  );
+}
+
+function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence || !hasSubstantivePageOrSnippetEvidence(rawEvidence)) {
+    return false;
+  }
+
+  const pageClassification = getFirstString(rawEvidence, [
+    "pageClassification",
+    "page_classification"
+  ]);
+  if (
+    pageClassification &&
+    /financial_offer|pricing_or_fees|investment|trading|brokerage|loan|credit|banking|crypto/i.test(pageClassification)
+  ) {
+    return true;
+  }
+
+  const pageType = getFirstString(rawEvidence, ["pageType", "page_type"]);
+  if (
+    pageType &&
+    /financial|offer|pricing|checkout|trading|brokerage|investment|loan|credit|banking|crypto|account/i.test(pageType)
+  ) {
+    return true;
+  }
+
+  const reviewerVisibleText = [
+    ...getEvidenceTextCandidates(rawEvidence),
+    ...getEvidenceUrlCandidates(rawEvidence)
+  ].join(" ");
+
+  return /(?:margin|leverage|leveraged|derivative|perpetual|options?\s+trading|trade\s+options?|trading\s+options?|futures?\s+trading|trade\s+futures?|copy\s+trading|staking\s+(?:apy|yield)|\bapy\b|forex|cfd|crypto\s+(?:trading|yield|staking)|brokerage\s+account)/i.test(
+    reviewerVisibleText
+  );
+}
+
 function hasRepresentativeAccessibilityExamples(rawEvidence: Record<string, unknown> | null | undefined) {
   if (!rawEvidence) {
     return false;
@@ -1446,6 +1489,18 @@ export function deriveConcernPolicy(input: {
       externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
+    isRawHighRiskFinancialProductConcern(input.concern) &&
+    !hasFinancialOfferContext(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "suppress",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "blocked"
     };
   }
 
