@@ -262,7 +262,8 @@ test("blocks raw high-risk financial product signals without offer context", () 
         title: "Options or futures language present"
       }
     ],
-    validationFindings: []
+    validationFindings: [],
+    validationFindingLookup: new Map()
   });
 
   assert.equal(
@@ -294,7 +295,8 @@ test("surfaces raw high-risk financial product signals with offer context", () =
         title: "Options or futures language present"
       }
     ],
-    validationFindings: []
+    validationFindings: [],
+    validationFindingLookup: new Map()
   });
 
   assert.equal(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
