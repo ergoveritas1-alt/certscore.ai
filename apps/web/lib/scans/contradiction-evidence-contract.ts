@@ -552,7 +552,10 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
       ) ?? inferredConflictType,
     reasoning:
       getFirstString(conflictBridgeSource, ["bridgeReasoning", "reasoning", "explanation"]) ??
-      getFirstString(source, ["reasoning", "explanation"]),
+      getFirstString(source, ["reasoning", "explanation"]) ??
+      (inferredConflictType
+        ? `Policy claim ${policyClaimType} conflicts with runtime observation ${runtimeObservationType}.`
+        : null),
     supportsPromotion:
       getFirstBoolean(conflictBridgeSource, ["supportsPromotion"]) ??
       Boolean(inferredConflictType)

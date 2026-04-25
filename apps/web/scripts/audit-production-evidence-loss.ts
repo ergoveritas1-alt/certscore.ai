@@ -5,8 +5,11 @@ import { buildProductionFindingFrequencyReport } from "./report-production-findi
 
 type LineageRow = {
   bucket?: string;
+  domain?: string;
   findingId?: string;
   negativeEvidenceFlags?: string[];
+  packetPageUrls?: string[];
+  packetSnippets?: string[];
   packetEvidence?: {
     directRuntime?: boolean;
     packetBacked?: boolean;
@@ -15,6 +18,7 @@ type LineageRow = {
     readableSnippet?: boolean;
   } | null;
   rawReasons?: string[];
+  scanId?: string;
 };
 
 type LineageReport = {
@@ -105,6 +109,22 @@ function summarizeLineage(rows: LineageRow[] | null, findingId: string) {
 
   return {
     auditOnlyMissingEvidence: count("audit_only_missing_evidence"),
+    examples: findingRows
+      .filter((row) =>
+        row.bucket === "audit_only_missing_evidence" ||
+        row.bucket === "raw_present_no_unified_packet" ||
+        row.bucket === "runtime_support_only_no_disclosure_packet"
+      )
+      .slice(0, 5)
+      .map((row) => ({
+        bucket: row.bucket,
+        domain: row.domain,
+        negativeEvidenceFlags: (row.negativeEvidenceFlags ?? []).slice(0, 5),
+        packetPageUrls: (row.packetPageUrls ?? []).slice(0, 3),
+        packetSnippets: (row.packetSnippets ?? []).slice(0, 2),
+        rawReasons: (row.rawReasons ?? []).slice(0, 5),
+        scanId: row.scanId
+      })),
     noRawEvidence: count("no_raw_evidence"),
     rawPresentNoUnifiedPacket: count("raw_present_no_unified_packet"),
     retainedPacketEvidence,
@@ -206,6 +226,19 @@ async function main() {
         ...rows.map((row) =>
           `| \`${row.findingId}\` | ${row.surfaceScanCount} | ${row.auditOnlyScanCount} | ${row.auditPressure.toFixed(1)}% | ${row.likelyGap} | ${row.lineage.rawPresentNoUnifiedPacket} | ${row.lineage.runtimeSupportOnlyNoPacket} | ${row.lineage.auditOnlyMissingEvidence} | ${row.lineage.topFlags || "-"} | ${row.lineage.topRawReasons || "-"} |`
         ),
+        "",
+        "## Drilldown Examples",
+        "",
+        ...rows.flatMap((row) => [
+          `### \`${row.findingId}\``,
+          "",
+          ...(row.lineage.examples.length > 0
+            ? row.lineage.examples.map((example) =>
+                `- ${example.domain ?? example.scanId ?? "unknown"}: ${example.bucket}; reasons=${example.rawReasons.join(", ") || "-"}; urls=${example.packetPageUrls.join(", ") || "-"}`
+              )
+            : ["- No lineage examples available."]),
+          ""
+        ]),
         ""
       ].join("\n");
 

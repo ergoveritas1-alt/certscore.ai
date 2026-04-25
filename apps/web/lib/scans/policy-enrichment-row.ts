@@ -17,7 +17,37 @@ export function getPolicyEvidenceSnippets(row: PolicyEnrichmentRow) {
     ? (row.policyEvidenceSnippets as Record<string, unknown>)
     : row.policy_evidence_snippets && typeof row.policy_evidence_snippets === "object"
       ? (row.policy_evidence_snippets as Record<string, unknown>)
-      : null;
+      : row.evidenceSnippets && typeof row.evidenceSnippets === "object"
+        ? (row.evidenceSnippets as Record<string, unknown>)
+        : row.evidence_snippets && typeof row.evidence_snippets === "object"
+          ? (row.evidence_snippets as Record<string, unknown>)
+          : null;
+}
+
+function snippetSelectorMatches(key: string, selector: string | RegExp) {
+  return typeof selector === "string" ? key === selector : selector.test(key);
+}
+
+export function getPolicyEvidenceSnippetValues(row: PolicyEnrichmentRow, selectors: Array<string | RegExp>) {
+  const snippets = getPolicyEvidenceSnippets(row);
+  if (!snippets) {
+    return [];
+  }
+
+  const values: string[] = [];
+  for (const [key, value] of Object.entries(snippets)) {
+    if (!selectors.some((selector) => snippetSelectorMatches(key, selector))) {
+      continue;
+    }
+
+    if (typeof value === "string" && isMeaningfulPolicyText(value) && value.trim().toLowerCase() !== "nano") {
+      values.push(value);
+    } else if (Array.isArray(value)) {
+      values.push(...value.filter((entry): entry is string => isMeaningfulPolicyText(entry) && entry.trim().toLowerCase() !== "nano"));
+    }
+  }
+
+  return uniqueStrings(values);
 }
 
 export function getPolicyRightsSignals(row: PolicyEnrichmentRow, snippets?: Record<string, unknown> | null) {

@@ -10,6 +10,7 @@ type TargetFinding =
   | "behavioral_analytics_disclosure_present"
   | "children_privacy_disclosure_present"
   | "consent_gated_tracking_claim_conflict"
+  | "cookie_disclosure_gap"
   | "cookie_policy_present"
   | "privacy_contact_path_present"
   | "privacy_policy_present"
@@ -51,6 +52,8 @@ type LineageRow = {
     policyText: boolean;
     readableSnippet: boolean;
   } | null;
+  packetPageUrls: string[];
+  packetSnippets: string[];
   presentationStatus: string;
   rawReasons: string[];
   scanId: string;
@@ -65,6 +68,7 @@ const DEFAULT_FINDINGS: TargetFinding[] = [
   "third_party_advertising_disclosure_present",
   "children_privacy_disclosure_present",
   "cookie_policy_present",
+  "cookie_disclosure_gap",
   "behavioral_analytics_disclosure_present",
   "consent_gated_tracking_claim_conflict"
 ];
@@ -77,6 +81,7 @@ const SIGNAL_KEYS_BY_FINDING: Record<TargetFinding, string[]> = {
   ],
   children_privacy_disclosure_present: ["privacy.children_privacy_disclosure_present"],
   consent_gated_tracking_claim_conflict: [],
+  cookie_disclosure_gap: ["privacy.cookie_runtime_disclosure_gap_detected"],
   cookie_policy_present: ["privacy.cookie_policy_present", "disclosure.cookie_policy_present"],
   privacy_contact_path_present: ["privacy.privacy_contact_path_present"],
   privacy_policy_present: ["privacy.privacy_policy_present", "disclosure.privacy_policy_present"],
@@ -94,6 +99,7 @@ const POLICY_SNIPPET_KEYS_BY_FINDING: Record<TargetFinding, string[]> = {
   ],
   children_privacy_disclosure_present: ["topic:children", "children"],
   consent_gated_tracking_claim_conflict: [],
+  cookie_disclosure_gap: ["cookie_policy", "cookies", "tracking_technologies_disclosure"],
   cookie_policy_present: ["cookie_policy", "cookies"],
   privacy_contact_path_present: ["privacy_contact", "notice_contact", "dsar"],
   privacy_policy_present: [],
@@ -175,12 +181,17 @@ function getMergedSignalValue(mergedSignals: unknown[], keys: string[]) {
 function policySnippetReasons(policyRows: Array<Record<string, unknown>>, keys: string[]) {
   const reasons: string[] = [];
   for (const row of policyRows) {
-    const snippets = getRecord(row.evidence_snippets ?? row.evidenceSnippets);
+    const snippets = getRecord(
+      row.policy_evidence_snippets ??
+        row.policyEvidenceSnippets ??
+        row.evidence_snippets ??
+        row.evidenceSnippets
+    );
     if (!snippets) {
       continue;
     }
     for (const key of keys) {
-      if (typeof snippets[key] === "string" && snippets[key].trim().length > 0) {
+      if (typeof snippets[key] === "string" && snippets[key].trim().length > 0 && snippets[key].trim().toLowerCase() !== "nano") {
         reasons.push(`policy snippet ${key}`);
       }
     }
@@ -275,6 +286,19 @@ function probeRawEvidence(findingId: TargetFinding, record: Record<string, unkno
         policyReasons.push("policy_enrichment cookie_policy row");
       }
       break;
+    case "cookie_disclosure_gap": {
+      const runtimeCookieNames = uniqueStrings([
+        ...getStringArray(runtimeArtifacts, ["runtimeCookieNames", "runtime_cookie_names"]),
+        ...getStringArray(runtimeArtifacts, ["unmatchedCookieNames", "unmatched_cookie_names"])
+      ]);
+      if (runtimeCookieNames.length > 0) {
+        runtimeReasons.push("runtime cookie inventory");
+      }
+      if (hasPolicyPageType(policyRows, ["cookie_policy", "privacy_policy"])) {
+        policyReasons.push("policy cookie/privacy surface");
+      }
+      break;
+    }
     case "privacy_contact_path_present": {
       if (getBoolean(snapshot, ["privacy_contact_method_present"])) {
         policyReasons.push("snapshot privacy_contact_method_present");
@@ -566,6 +590,10 @@ async function main() {
               readableSnippet: packet.confidenceInputs.hasReadableSurfaceSnippetEvidence
             }
           : null,
+        packetPageUrls: uniqueStrings([...(packet?.evidence?.pageUrls ?? []), ...(packet?.evidence?.sourceUrls ?? [])]).slice(0, 5),
+        packetSnippets: uniqueStrings(packet?.evidence?.snippets ?? [])
+          .filter((value) => value.trim().toLowerCase() !== "nano")
+          .slice(0, 3),
         presentationStatus: packet?.presentationDecision.status ?? "none",
         rawReasons: rawProbe.reasons,
         scanId: scan.id

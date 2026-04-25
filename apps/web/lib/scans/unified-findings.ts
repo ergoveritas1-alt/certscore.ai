@@ -5,6 +5,7 @@ import {
   getReportUnifiedFindingForSignal,
   getReportUnifiedFindingForValidationRule,
   type ReportSignalSource,
+  type ReportUnifiedFindingId,
   type ReportUnifiedFindingCategoryAlignment
 } from "@website-signal-risk-scanner/shared";
 import {
@@ -42,8 +43,18 @@ import {
 } from "./promotion-evidence-contracts";
 import {
   isMeaningfulPolicyText,
-  normalizePolicySnippet
+  normalizePolicySnippet,
+  normalizePolicySnippetList
 } from "./policy-snippet-normalization";
+import {
+  getPolicyEvidenceSnippetValues,
+  getPolicyDsarMechanism,
+  getPolicyPageType,
+  getPolicyPageUrl,
+  getPolicyRightsSignals,
+  getPolicySummaryText,
+  getPrivacyContactChannelType
+} from "./policy-enrichment-row";
 import {
   hasConcreteSanitizedNetworkEvidence,
   hasSanitizedNetworkEvidenceHash
@@ -3111,6 +3122,107 @@ const POLICY_ENRICHMENT_FINDING_SUPPORT_RULES: PolicyEnrichmentFindingSupportRul
   }
 ];
 
+const POLICY_ENRICHMENT_POSITIVE_SNIPPET_SELECTORS: Record<string, Array<string | RegExp>> = {
+  privacy_contact_path_present: ["privacy_contact", "notice_contact", "dsar", /privacy.*contact/i],
+  privacy_rights_path_present: [
+    "dsar",
+    "access",
+    "delete",
+    "correct",
+    "export",
+    "manage",
+    "state_rights",
+    "authorized_agent",
+    "appeal",
+    "privacy_controls",
+    "privacy_contact",
+    /^rights[_:-]/i,
+    /^rights_signal[:_-]/i,
+    /^topic:privacy_rights/i,
+    /^topic:dsar/i
+  ],
+  gpc_disclosure_present: ["topic:gpc_disclosure", "gpc_disclosure", /global_privacy_control|gpc/i],
+  tracking_technologies_disclosure_present: [
+    "topic:tracking_technologies_disclosure",
+    "tracking_technologies_disclosure",
+    /tracking|cookie|pixel|beacon|tag/i
+  ],
+  targeted_advertising_disclosure_present: [
+    "topic:targeted_advertising_disclosure",
+    "targeted_advertising_disclosure",
+    /targeted|sale|sharing|advertising/i
+  ],
+  behavioral_analytics_disclosure_present: [
+    "topic:session_replay_disclosure",
+    "session_replay_disclosure",
+    "behavioral_analytics_disclosure",
+    "product_analytics_disclosure",
+    /session_replay|behavioral_analytics|product_analytics/i
+  ],
+  children_privacy_disclosure_present: ["topic:children", "children", /children|child|minor|under_13/i],
+  arbitration_clause_present: ["arbitration", /arbitration|dispute/i]
+};
+
+function buildPolicyEnrichmentPositiveCandidates(policyEnrichment?: Array<Record<string, unknown>>) {
+  const rows = Array.isArray(policyEnrichment) ? policyEnrichment : [];
+  if (rows.length === 0) {
+    return [] as UnifiedFindingCandidate[];
+  }
+
+  const candidates: UnifiedFindingCandidate[] = [];
+  for (const rule of POLICY_ENRICHMENT_FINDING_SUPPORT_RULES) {
+    const signalKey = getPolicyPositiveSignalKeysForFinding(rule.findingId)[0];
+    const mappedFinding = getReportUnifiedFinding(rule.findingId as ReportUnifiedFindingId);
+    if (!signalKey || !mappedFinding) {
+      continue;
+    }
+
+    const expectedPageType = rule.findingId === "arbitration_clause_present" ? "terms_of_service" : "privacy_policy";
+    const selectors = POLICY_ENRICHMENT_POSITIVE_SNIPPET_SELECTORS[rule.findingId] ?? [];
+    const row = rows.find((entry) => getPolicyPageType(entry) === expectedPageType && getPolicyEvidenceSnippetValues(entry, selectors).length > 0);
+    if (!row) {
+      continue;
+    }
+
+    const pageUrl = getPolicyPageUrl(row);
+    const snippets = normalizePolicySnippetList(getPolicyEvidenceSnippetValues(row, selectors).slice(0, 4));
+    if (!pageUrl || snippets.length === 0) {
+      continue;
+    }
+
+    const evidenceRefs = uniqueStrings([pageUrl]);
+    candidates.push({
+      description: rule.rationale,
+      fallbackEvidence: {
+        evidenceRefs,
+        pageUrl,
+        pageUrls: evidenceRefs,
+        policyDsarMechanism: getPolicyDsarMechanism(row),
+        policyPageType: getPolicyPageType(row),
+        policyPositiveSnippetKeys: selectors.filter((selector): selector is string => typeof selector === "string").slice(0, 8),
+        policyPositiveTopic: signalKey.replace(/^privacy\./, "").replace(/_present$/, ""),
+        policyRightsSignals: getPolicyRightsSignals(row),
+        policySnippets: snippets,
+        policySummaryShort: snippets.length > 0 ? null : getPolicySummaryText(row),
+        privacyContactChannelType: getPrivacyContactChannelType(row),
+        signalKey,
+        signalLabel: mappedFinding.label,
+        signalValue: true,
+        sourceUrls: evidenceRefs
+      },
+      observedValue: mappedFinding.label,
+      severity: "low",
+      signalKey,
+      signalLabel: mappedFinding.label,
+      signalSource: "policy_enrichment_signal",
+      sourceType: "signal",
+      title: mappedFinding.label
+    });
+  }
+
+  return candidates;
+}
+
 const DOMAIN_FLAG_FINDING_SUPPORT_RULES: DomainFlagFindingSupportRule[] = [
   {
     findingId: "consent_surface_missing",
@@ -4650,8 +4762,9 @@ export function buildUnifiedFindingDisplayPackets(input: {
         mergedSignals: input.mergedSignals
       })
     : [];
+  const policyEnrichmentCandidates = buildPolicyEnrichmentPositiveCandidates(input.policyEnrichment);
   const packets = buildUnifiedFindingPackets({
-    reviewFindingCandidates: [...input.reviewFindingCandidates, ...mergedSignalCandidates],
+    reviewFindingCandidates: [...input.reviewFindingCandidates, ...mergedSignalCandidates, ...policyEnrichmentCandidates],
     scanEvents: input.scanEvents,
     validationFindings: input.validationFindings
   });

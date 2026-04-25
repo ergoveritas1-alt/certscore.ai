@@ -29,6 +29,8 @@ import {
 } from "./policy-snippet-normalization";
 import {
   getPolicyEvidenceSnippets,
+  getPolicyEvidenceSnippetValues,
+  getPolicyDsarMechanism,
   getPolicyPageType,
   getPolicyPageUrl,
   getPolicyRightsSignals,
@@ -669,6 +671,7 @@ function getPolicySignalFallbackEvidence(input: {
     selectedPopulation?: { value?: boolean | number | string | string[] | null } | null;
   }>;
   policyEnrichment: Array<Record<string, unknown>>;
+  runtimeArtifacts?: Record<string, unknown> | null;
   signalKey: string;
   signalLabel: string;
   signalValue: unknown;
@@ -687,6 +690,14 @@ function getPolicySignalFallbackEvidence(input: {
     "privacy_controls",
     "privacy_contact"
   ] as const;
+  const rightsSnippetSelectors: Array<string | RegExp> = [
+    ...rightsSnippetKeys,
+    /^rights[_:-]/i,
+    /^rights_signal[:_-]/i,
+    /^topic:privacy_rights/i,
+    /^topic:dsar/i,
+    /dsar/i
+  ];
   const policyPositiveSpec = getPolicyPositiveSignalSpec(input.signalKey);
   const topicKey = policyPositiveSpec?.evidenceSnippetKey ?? null;
   const pageType = policyPositiveSpec?.pageType ?? "privacy_policy";
@@ -713,7 +724,15 @@ function getPolicySignalFallbackEvidence(input: {
         : [];
   const rowHasTopicSnippet = (entry: Record<string, unknown>) => {
     const snippets = getPolicyEvidenceSnippets(entry);
-    return topicSnippetKeys.some((key) => isMeaningfulPolicyText(snippets?.[key]));
+    if (topicSnippetKeys.some((key) => isMeaningfulPolicyText(snippets?.[key]))) {
+      return true;
+    }
+    if (policyPositiveSpec?.unifiedFindingId === "privacy_rights_path_present") {
+      return getPolicyEvidenceSnippetValues(entry, rightsSnippetSelectors).length > 0 ||
+        getPolicyRightsSignals(entry, snippets).length > 0 ||
+        Boolean(getPolicyDsarMechanism(entry));
+    }
+    return false;
   };
   const row =
     candidateRows.find(rowHasTopicSnippet) ??
@@ -724,12 +743,12 @@ function getPolicySignalFallbackEvidence(input: {
   const policySummaryShort = row ? getPolicySummaryText(row) : null;
   const evidenceSnippets = row ? getPolicyEvidenceSnippets(row) : null;
   const topicSnippets = topicSnippetKeys.flatMap((key) =>
-    isMeaningfulPolicyText(evidenceSnippets?.[key]) ? [String(evidenceSnippets[key])] : []
+    isMeaningfulPolicyText(evidenceSnippets?.[key]) && String(evidenceSnippets[key]).trim().toLowerCase() !== "nano"
+      ? [String(evidenceSnippets[key])]
+      : []
   );
   const rightsSnippets = isPrivacyRightsSignalKey(input.signalKey)
-    ? rightsSnippetKeys
-        .flatMap((key) => (isMeaningfulPolicyText(evidenceSnippets?.[key]) ? [String(evidenceSnippets[key])] : []))
-        .slice(0, 2)
+    ? getPolicyEvidenceSnippetValues(row ?? {}, rightsSnippetSelectors).slice(0, 3)
     : [];
   const policySnippets = normalizePolicySnippetList([...topicSnippets, ...rightsSnippets]);
   const rowPolicyRightsSignals = row ? getPolicyRightsSignals(row, evidenceSnippets) : [];
@@ -752,15 +771,29 @@ function getPolicySignalFallbackEvidence(input: {
   return {
     pageUrl,
     pageUrls: pageUrl ? [pageUrl] : [],
-    policyDsarMechanism:
-      typeof row?.policyDsarMechanism === "string"
-        ? row.policyDsarMechanism
-        : typeof row?.policy_dsar_mechanism === "string"
-          ? row.policy_dsar_mechanism
-          : null,
+    policyDsarMechanism: row ? getPolicyDsarMechanism(row) : null,
     policyPageType: row ? getPolicyPageType(row) : null,
     policySnippets,
     policyRightsSignals: retainedPolicyRightsSignals,
+    runtimeDisclosureSupport:
+      policyPositiveSpec?.unifiedFindingId &&
+      [
+        "tracking_technologies_disclosure_present",
+        "targeted_advertising_disclosure_present",
+        "third_party_advertising_disclosure_present",
+        "behavioral_analytics_disclosure_present"
+      ].includes(policyPositiveSpec.unifiedFindingId)
+        ? {
+            thirdPartyRequestCount:
+              typeof input.runtimeArtifacts?.third_party_request_count === "number"
+                ? input.runtimeArtifacts.third_party_request_count
+                : typeof input.snapshot?.third_party_request_count === "number"
+                  ? input.snapshot.third_party_request_count
+                  : null,
+            thirdPartyRequestDomains: getRecordStringArray(input.runtimeArtifacts, "third_party_request_domains").slice(0, 8),
+            sessionReplayRuntimeVendors: getRecordStringArray(input.runtimeArtifacts, "session_replay_runtime_vendors").slice(0, 8)
+          }
+        : null,
     privacyContactChannelType,
     policyChildrenReference,
     policyPositiveSnippetKeys: topicSnippetKeys,
@@ -953,6 +986,7 @@ export function buildReviewFindings(input: {
             ? getPolicySignalFallbackEvidence({
                 mergedSignals: input.mergedSignals,
                 policyEnrichment: input.policyEnrichment ?? [],
+                runtimeArtifacts: input.runtimeArtifacts,
                 signalKey: item.key,
                 signalLabel: item.label,
                 signalValue: item.value,

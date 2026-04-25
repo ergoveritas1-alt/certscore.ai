@@ -1246,7 +1246,11 @@ function hasCookieDisclosureGapBacking(packet: UnifiedFindingPacket) {
   }
 
   const urls = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])];
-  const unmatchedThirdPartyCookieCount = getEvidenceCount(packet, ["unmatched_third_party_cookie_count"]);
+  const unmatchedThirdPartyCookieCount = getEvidenceCount(packet, [
+    "unmatched_third_party_cookie_count",
+    "unmatchedThirdPartyCookieCount",
+    "unmatchedCookieCount"
+  ]);
   const runtimeCookieNames = [
     ...(packet.evidence?.entities?.runtime_cookie_names ?? []),
     ...(packet.evidence?.entities?.runtimeCookieNames ?? []),
