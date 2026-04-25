@@ -244,13 +244,17 @@ export async function fetchUrlscanResult(resultApiUrl: string | null) {
 export async function searchUrlscanCandidates(input: {
   hostname: string | null;
   limit?: number;
+  searchMode?: "page_domain" | "submitted_domain";
 }): Promise<UrlscanFallbackSource[]> {
   const hostname = normalizeHostname(input.hostname);
   if (!hostname) {
     return [];
   }
 
-  const searchUrl = `https://urlscan.io/api/v1/search/?q=${encodeURIComponent(`page.domain:"${hostname}"`)}&size=${input.limit ?? 5}`;
+  const query = input.searchMode === "submitted_domain"
+    ? `domain:${hostname}`
+    : `page.domain:"${hostname}"`;
+  const searchUrl = `https://urlscan.io/api/v1/search/?q=${encodeURIComponent(query)}&size=${input.limit ?? 5}`;
   const payload = await fetchJson(searchUrl, 900);
   const hits = getArray(payload, "results") as UrlscanSearchHit[];
 

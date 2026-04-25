@@ -97,10 +97,12 @@ export function shouldAttemptFullScanUrlscanSupplement(input: {
 
 export function buildFullScanUrlscanSupplementPayload(input: {
   domainHostname: string | null;
+  evidenceRelation?: "same_host" | "off_domain_redirect";
   hostname: string;
   normalizedUrl: string;
   selectedSource: UrlscanFallbackSource;
   snapshot: Record<string, unknown> | null;
+  urlscanFinalHostname?: string | null;
 }): PreviewScanPayload | null {
   const fallbackEvidence = buildUrlscanFallbackEvidenceFromResult({
     urlscanResult: input.selectedSource.result,
@@ -121,6 +123,9 @@ export function buildFullScanUrlscanSupplementPayload(input: {
   const protectionVendor =
     getString(input.snapshot, "block_vendor_guess") ??
     getString(input.snapshot, "cmp_vendor_name");
+  const evidenceRelation = input.evidenceRelation ?? "same_host";
+  const isOffDomainRedirect = evidenceRelation === "off_domain_redirect";
+  const urlscanFinalHostname = input.urlscanFinalHostname ?? null;
 
   return {
     version: "preview-v1",
@@ -132,10 +137,12 @@ export function buildFullScanUrlscanSupplementPayload(input: {
       low: 0
     },
     resultState: {
-      code: "full_scan_urlscan_supplement",
+      code: isOffDomainRedirect ? "full_scan_urlscan_redirect_supplement" : "full_scan_urlscan_supplement",
       coverageLevel: "limited_partial",
-      title: "Indirect public evidence available",
-      message: "CertScore was blocked before public-page verification, but urlscan.io retained supplemental same-host runtime evidence."
+      title: isOffDomainRedirect ? "Redirect evidence available" : "Indirect public evidence available",
+      message: isOffDomainRedirect
+        ? "CertScore was blocked before public-page verification, but urlscan.io retained supplemental runtime evidence showing the requested domain redirected off-domain."
+        : "CertScore was blocked before public-page verification, but urlscan.io retained supplemental same-host runtime evidence."
     },
     evidence: {
       coverageLevel: "limited_partial",
@@ -143,17 +150,30 @@ export function buildFullScanUrlscanSupplementPayload(input: {
       passiveVerificationAttempted: true,
       robotsStatus: robotsFetchHttpStatus,
       verifiedPublicSurfacesCount,
-      protectionVendor
+      protectionVendor,
+      urlscanEvidenceRelation: evidenceRelation,
+      urlscanFinalHostname
     },
     fallbackEvidence,
     summaryBullets: [
       "CertScore retained limited-coverage context because the live browser pass hit an access limitation.",
-      "urlscan.io retained same-host runtime evidence that can help explain what a public browser saw.",
+      isOffDomainRedirect && urlscanFinalHostname
+        ? `urlscan.io retained runtime evidence showing the requested domain redirected to ${urlscanFinalHostname}.`
+        : "urlscan.io retained same-host runtime evidence that can help explain what a public browser saw.",
       "This indirect evidence is supplemental and is not treated as a verified CertScore finding."
     ],
     sampleFindings: [],
     disclaimer: "urlscan.io supplemental evidence is indirect public runtime evidence and does not replace CertScore live verification."
   };
+}
+
+function getUrlscanPageHostname(result: Record<string, unknown> | null | undefined) {
+  const page = result?.page;
+  if (!page || typeof page !== "object" || Array.isArray(page)) {
+    return null;
+  }
+
+  return normalizeHostname(getString(page as Record<string, unknown>, "url"));
 }
 
 export async function getFullScanUrlscanSupplement(input: {
@@ -181,11 +201,31 @@ export async function getFullScanUrlscanSupplement(input: {
     hostname: preferredHostname,
     limit: 5
   });
-  const selectedSource = choosePreferredUrlscanSource({
+  let selectedSource = choosePreferredUrlscanSource({
     retained: null,
     candidates,
     preferredHostname
   });
+  let evidenceRelation: "same_host" | "off_domain_redirect" = "same_host";
+  let urlscanFinalHostname = getUrlscanPageHostname(selectedSource?.result);
+
+  if (!selectedSource?.result || isUrlscanResultThin(selectedSource.result, preferredHostname)) {
+    const submittedDomainCandidates = await searchUrlscanCandidates({
+      hostname: preferredHostname,
+      limit: 5,
+      searchMode: "submitted_domain"
+    });
+    selectedSource = choosePreferredUrlscanSource({
+      retained: null,
+      candidates: submittedDomainCandidates,
+      preferredHostname
+    });
+    urlscanFinalHostname = getUrlscanPageHostname(selectedSource?.result);
+
+    if (selectedSource?.result && urlscanFinalHostname && urlscanFinalHostname !== preferredHostname) {
+      evidenceRelation = "off_domain_redirect";
+    }
+  }
 
   if (!selectedSource?.result || isUrlscanResultThin(selectedSource.result, preferredHostname)) {
     return null;
@@ -193,9 +233,11 @@ export async function getFullScanUrlscanSupplement(input: {
 
   return buildFullScanUrlscanSupplementPayload({
     domainHostname: input.domainHostname,
+    evidenceRelation,
     hostname: preferredHostname,
     normalizedUrl,
     selectedSource,
-    snapshot: input.snapshot
+    snapshot: input.snapshot,
+    urlscanFinalHostname
   });
 }

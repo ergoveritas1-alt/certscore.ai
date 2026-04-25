@@ -87,3 +87,45 @@ test("builds supplemental urlscan evidence without promoted sample findings", ()
   assert.equal(payload.sampleFindings.length, 0);
   assert.match(payload.summaryBullets.join(" "), /not treated as a verified CertScore finding/);
 });
+
+test("labels submitted-domain urlscan evidence when the requested domain redirects off-domain", () => {
+  const payload = buildFullScanUrlscanSupplementPayload({
+    domainHostname: "freefunz.site",
+    evidenceRelation: "off_domain_redirect",
+    hostname: "freefunz.site",
+    normalizedUrl: "https://freefunz.site/",
+    selectedSource: {
+      reportUrl: "https://urlscan.io/result/redirect/",
+      resultApiUrl: "https://urlscan.io/api/v1/result/redirect/",
+      result: {
+        data: {
+          requests: new Array(116).fill({})
+        },
+        lists: {
+          domains: ["fojik.site", "cdn.example.net"],
+          ips: ["192.0.2.1"],
+          servers: ["cloudflare"]
+        },
+        page: {
+          title: "Fojik",
+          url: "https://fojik.site/"
+        },
+        stats: {
+          totalRequests: 116
+        }
+      }
+    },
+    snapshot: {
+      blocked_flag: true,
+      verified_public_surfaces_count: 0
+    },
+    urlscanFinalHostname: "fojik.site"
+  });
+
+  assert.ok(payload);
+  assert.equal(payload.resultState?.code, "full_scan_urlscan_redirect_supplement");
+  assert.equal(payload.evidence?.urlscanEvidenceRelation, "off_domain_redirect");
+  assert.equal(payload.evidence?.urlscanFinalHostname, "fojik.site");
+  assert.equal(payload.sampleFindings.length, 0);
+  assert.equal(payload.summaryBullets.some((bullet) => bullet.includes("redirected to fojik.site")), true);
+});
