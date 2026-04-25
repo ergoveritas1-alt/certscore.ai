@@ -57,11 +57,11 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   third_party_cookie_pre_consent: {
     id: "third_party_cookie_pre_consent",
-    label: "Third-party cookies before consent",
+    label: "Tracking cookies set before consent",
     section: "Cookies & Storage",
     defaultSurfacePriority: 92,
-    whyItMatters: "This is direct evidence of pre-consent third-party persistence.",
-    remediation: "Prevent third-party cookie writes before consent or remove the vendor."
+    whyItMatters: "This is direct evidence of pre-consent tracking persistence, including first-party-domain cookies written by third-party scripts.",
+    remediation: "Prevent non-essential tracking cookie writes before consent or remove the vendor."
   },
   analytics_cookie_pre_consent: {
     id: "analytics_cookie_pre_consent",

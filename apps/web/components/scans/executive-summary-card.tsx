@@ -249,6 +249,14 @@ export function buildRegulatoryLenses(
     findingIds.has("forced_consent_interaction");
   const hasStrongDarkPatternConcern =
     findingIds.has("consent_dark_patterns_detected") || findingIds.has("asymmetric_consent_ui");
+  const riskDriverKeys = new Set(options?.regulatoryRisk?.topRiskDrivers.map((driver) => driver.key) ?? []);
+  const hasSensitiveHealthTrackingRisk =
+    riskDriverKeys.has("health_identity_data_broker") ||
+    riskDriverKeys.has("health_dmp_flow") ||
+    riskDriverKeys.has("sensitive_context_tracking") ||
+    riskDriverKeys.has("sensitive_context_preconsent") ||
+    riskDriverKeys.has("identity_data_broker_preconsent") ||
+    riskDriverKeys.has("dmp_pre_consent");
 
   const privacyTrackingNotes = [
     trackingFinding ? trackingFinding.shortSummary : null,
@@ -287,6 +295,7 @@ export function buildRegulatoryLenses(
     80 -
       (hasConsentConcern ? 24 : 0) -
       (hasTrackingConcern ? 18 : 0) -
+      (hasSensitiveHealthTrackingRisk ? 16 : 0) -
       (counts.beforeConsentCookieCount > 0 ? 8 : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
@@ -322,6 +331,8 @@ export function buildRegulatoryLenses(
       score: ftcScore,
       summary: hasStrongDarkPatternConcern
         ? "Choice architecture and disclosure clarity are the main FTC-style concerns."
+        : hasSensitiveHealthTrackingRisk
+          ? "Health-context tracking and advertising/data-broker flows elevate FTC unfairness or deception risk."
         : hasConsentConcern
           ? "Consent-choice design should be reviewed for clarity."
           : hasTrackingConcern || counts.beforeConsentCookieCount > 0

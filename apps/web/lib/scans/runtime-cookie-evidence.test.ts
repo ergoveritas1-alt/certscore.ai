@@ -3,7 +3,8 @@ import test from "node:test";
 import {
   buildCookieDisclosureGapEvidence,
   buildRuntimeCookieInventory,
-  classifyRuntimeCookieCategory
+  classifyRuntimeCookieCategory,
+  isFunctionalCookieExcludedFromTrackingEvidence
 } from "./runtime-cookie-evidence";
 
 test("classifies expanded non-essential cookie families", () => {
@@ -12,10 +13,22 @@ test("classifies expanded non-essential cookie families", () => {
   assert.equal(classifyRuntimeCookieCategory("_hjSession_123", ".example.com"), "session_replay");
   assert.equal(classifyRuntimeCookieCategory("__cf_bm", ".example.com"), "necessary");
   assert.equal(classifyRuntimeCookieCategory("cto_bundle", ".criteo.com"), "advertising");
-  assert.equal(classifyRuntimeCookieCategory("demdex", ".demdex.net"), "advertising");
+  assert.equal(classifyRuntimeCookieCategory("demdex", ".demdex.net"), "dmp");
+  assert.equal(classifyRuntimeCookieCategory("aam", ".webmd.com"), "dmp");
   assert.equal(classifyRuntimeCookieCategory("KRTBCOOKIE_452", ".pubmatic.com"), "advertising");
   assert.equal(classifyRuntimeCookieCategory("tuuid", ".bidswitch.net"), "advertising");
   assert.equal(classifyRuntimeCookieCategory("QSI_ReplaySession_Info_ZN_abc", ".qualtrics.com"), "session_replay");
+});
+
+test("filters consent security and infrastructure cookies from tracking evidence", () => {
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("OptanonConsent", ".webmd.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("OptanonAlertBoxClosed", ".webmd.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("CookieConsent", ".example.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("euconsent-v2", ".example.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("notice_preferences", ".example.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("__cf_bm", ".example.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("BIGipServerpool", ".example.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("_ga", ".example.com"), false);
 });
 
 test("builds cookie inventory with initiator provenance and before-consent timing", () => {

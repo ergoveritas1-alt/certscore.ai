@@ -3175,7 +3175,10 @@ function deriveRuntimePrivacyFindings(input: {
     ...new Set([...thirdPartyVendorsBeforeConsent, ...preconsentViolationVendors])
   ];
   const domainPolicyCoverage = buildDomainPolicyCoverageSummary(input.policySemanticRows);
-  const cmpVendorName = typeof snapshot?.cmp_vendor_name === "string" ? snapshot.cmp_vendor_name : null;
+  const inferredCmpVendorName = rawThirdPartyDomains.some((domain) => /(^|\.)cookielaw\.org$/i.test(domain) || /(^|\.)onetrust\.(?:com|io)$/i.test(domain))
+    ? "OneTrust"
+    : null;
+  const cmpVendorName = typeof snapshot?.cmp_vendor_name === "string" ? snapshot.cmp_vendor_name : inferredCmpVendorName;
   const cmpDetected = Boolean(cmpVendorName) || consentSummary?.cmpDetected === true || getRecordBoolean(snapshot, "cookie_banner_present");
   const consentSurfaceObserved =
     runtime?.consent_surface_observed === true ||
@@ -3209,13 +3212,17 @@ function deriveRuntimePrivacyFindings(input: {
   if (
     thirdPartyCookieCount <= 0 &&
     thirdPartyVendorsBeforeConsent.length === 0 &&
-    preconsentViolationVendors.length === 0
+    preconsentViolationVendors.length === 0 &&
+    preconsentRuntimeRequestUrls.length === 0
   ) {
     return [] as Array<ReturnType<typeof buildRuntimePrivacyFinding>>;
   }
 
   const severity: "high" | "medium" =
-    thirdPartyCookieCount > 0 || thirdPartyVendorsBeforeConsent.length >= 2 || preconsentViolationVendors.length >= 3
+    thirdPartyCookieCount > 0 ||
+    thirdPartyVendorsBeforeConsent.length >= 2 ||
+    preconsentViolationVendors.length >= 3 ||
+    preconsentRuntimeRequestUrls.length >= 3
       ? "high"
       : "medium";
   const explicitPrivacyControlsDisclosed =

@@ -77,6 +77,7 @@ export type PreviewFallbackEvidence = {
   entities?: {
     cookieDomains?: string[];
     cookieNames?: string[];
+    diagnosticCookieNamesExcludedFromTrackingEvidence?: string[];
     technologyNames?: string[];
     serverNames?: string[];
     topDomains?: string[];

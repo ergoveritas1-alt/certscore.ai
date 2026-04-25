@@ -106,6 +106,38 @@ test("blocked or unreachable previews withhold scores and surface access blocker
   assert.equal(payload.summaryBullets.includes("Reason: homepage request was blocked with HTTP 403."), true);
 });
 
+test("preview pre-consent finding includes sensitive-context vendor roles when runtime evidence supports it", () => {
+  const snapshot = buildSnapshot({
+    cookieBannerPresent: true,
+    finalUrl: "https://www.webmd.com/",
+    registeredDomain: "webmd.com",
+    trackingBeforeConsentDetected: true
+  });
+  const payload = enrichPreviewPayloadWithFallbackEvidence({
+    payload: buildPreviewPayloadFromSnapshot({
+      hostname: "webmd.com",
+      normalizedUrl: "https://webmd.com",
+      snapshot
+    }),
+    snapshot,
+    events: [],
+    runtimeArtifacts: {
+      consent_baseline_tracker_evidence_urls: [
+        "https://img.lb.staging.wbmdstatic.com/webmd_static_vue/webmd-experian.min.js",
+        "https://cdn.id5-sync.com/api/1.0/id5-api.js",
+        "https://bh-medscape-cdn.contextweb.com/pixel.js"
+      ],
+      third_party_request_domains: ["cdn.id5-sync.com", "bh-medscape-cdn.contextweb.com"]
+    }
+  });
+
+  const finding = payload.sampleFindings.find((candidate) => candidate.title === "Tracking activity observed before consent");
+  assert.match(finding?.description ?? "", /health information site/i);
+  assert.match(finding?.description ?? "", /Experian/i);
+  assert.match(finding?.description ?? "", /ID5/i);
+  assert.match(finding?.description ?? "", /health-contextual advertising network/i);
+});
+
 test("blocked previews can still surface verified privacy and terms disclosures", () => {
   const payload = buildPreviewPayloadFromSnapshot({
     hostname: "coinbase.com",
@@ -361,8 +393,9 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
   assert.equal(payload.fallbackEvidence?.metrics?.requestCount, 8);
   assert.equal(payload.fallbackEvidence?.metrics?.thirdPartyRequestCount, 1);
   assert.equal(payload.fallbackEvidence?.metrics?.initialCookieCount, 3);
-  assert.deepEqual(payload.fallbackEvidence?.entities?.cookieNames, ["_ga", "OptanonConsent", "visitor_id"]);
-  assert.equal(payload.fallbackEvidence?.cookieFootprint?.details.includes("Cookie names: _ga, OptanonConsent, visitor_id"), true);
+  assert.deepEqual(payload.fallbackEvidence?.entities?.cookieNames, ["_ga"]);
+  assert.deepEqual(payload.fallbackEvidence?.entities?.diagnosticCookieNamesExcludedFromTrackingEvidence, ["OptanonConsent", "visitor_id"]);
+  assert.equal(payload.fallbackEvidence?.cookieFootprint?.details.includes("Tracking cookie names: _ga"), true);
   assert.equal(payload.fallbackEvidence?.reportUrl, "https://urlscan.io/result/promoted-example/");
   assert.equal(payload.fallbackEvidence?.resultApiUrl, "https://urlscan.io/api/v1/result/promoted-example/");
   assert.equal(payload.fallbackEvidence?.entities?.technologyNames?.includes("OneTrust"), true);

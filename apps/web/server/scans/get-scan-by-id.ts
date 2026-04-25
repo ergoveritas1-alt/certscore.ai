@@ -706,7 +706,9 @@ async function loadScanDetailRecord(input: {
   const regulatoryRisk = snapshot
     ? buildRegulatoryRiskAssessment({
         source: buildRegulatoryRiskSource({
-          snapshot: regulatorySnapshot as Record<string, unknown>
+          snapshot: regulatorySnapshot as Record<string, unknown>,
+          runtimeArtifacts: runtimeArtifacts as Record<string, unknown> | null,
+          hostname: domainHostname
         }),
         previousOverallScore: previousSnapshot
           ? buildRegulatoryRiskAssessment({

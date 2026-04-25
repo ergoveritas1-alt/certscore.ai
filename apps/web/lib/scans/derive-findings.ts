@@ -1,5 +1,9 @@
 import type { CertScoreFinding, CertScoreFindingSection } from "./finding-registry";
 import { getHybridRuntimeEvidence } from "./hybrid-runtime-evidence";
+import {
+  classifyRuntimeCookieCategory,
+  isFunctionalCookieExcludedFromTrackingEvidence
+} from "./runtime-cookie-evidence";
 import type { ScanValidationFinding } from "./validation-review-linking";
 
 type MinimalScanRecord = {
@@ -236,6 +240,16 @@ function looksLikeSessionReplayObservation(category: string | null, vendor: stri
 }
 
 function classifyCookieName(name: string, domain: string | null) {
+  if (isFunctionalCookieExcludedFromTrackingEvidence(name, domain)) {
+    return "security";
+  }
+  const runtimeCategory = classifyRuntimeCookieCategory(name, domain);
+  if (runtimeCategory === "dmp" || runtimeCategory === "advertising" || runtimeCategory === "session_replay") {
+    return "adtech";
+  }
+  if (runtimeCategory === "analytics") {
+    return "analytics";
+  }
   const normalized = `${name} ${domain ?? ""}`.toLowerCase();
   if (/(cf_clearance|__cf|recaptcha|akamai|datadome|perimeterx)/i.test(normalized)) {
     return "security";
@@ -570,17 +584,19 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   const cookieNamesSeen = uniqueStrings(
     cookieWriteObservations.flatMap((row) => {
       const cookieName = getString(row.cookieName) ?? getString(row.cookie_name);
-      return cookieName ? [cookieName] : [];
+      const domain = getString(row.domain) ?? getString(row.cookieDomain) ?? getString(row.cookie_domain);
+      return cookieName && !isFunctionalCookieExcludedFromTrackingEvidence(cookieName, domain) ? [cookieName] : [];
     })
   );
   const thirdPartyCookieNamesSeen = uniqueStrings(
     cookieWriteObservations.flatMap((row) => {
       const cookieName = getString(row.cookieName) ?? getString(row.cookie_name);
+      const domain = getString(row.domain) ?? getString(row.cookieDomain) ?? getString(row.cookie_domain);
       const isThirdParty =
         row.thirdParty === true ||
         getString(row.cookiePartyType) === "third_party" ||
         getString(row.cookie_party_type) === "third_party";
-      return cookieName && isThirdParty ? [cookieName] : [];
+      return cookieName && isThirdParty && !isFunctionalCookieExcludedFromTrackingEvidence(cookieName, domain) ? [cookieName] : [];
     })
   );
   const explicitCookiesBeforeConsentCount = getNumber(storageSummary?.cookiesBeforeConsentCount) ?? 0;
@@ -605,7 +621,9 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
       : 0
   );
   const cookieNamesBeforeConsent =
-    effectiveCookiesBeforeConsentCount > 0 ? uniqueStrings([...cookieNamesSeen, ...legacyInitialCookieNames]) : [];
+    effectiveCookiesBeforeConsentCount > 0
+      ? uniqueStrings([...cookieNamesSeen, ...legacyInitialCookieNames.filter((name) => !isFunctionalCookieExcludedFromTrackingEvidence(name))])
+      : [];
   const thirdPartyCookieNamesBeforeConsent =
     effectiveThirdPartyCookieBeforeConsentCount > 0 ? uniqueStrings(thirdPartyCookieNamesSeen) : [];
   const effectiveAnalyticsCookieNames =

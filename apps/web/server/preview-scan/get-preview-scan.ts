@@ -132,7 +132,9 @@ export async function getPreviewScan(scanId: string) {
 
   const regulatoryRisk = buildRegulatoryRiskAssessment({
     source: buildRegulatoryRiskSource({
-      snapshot: snapshotWithDerivedRuntime
+      snapshot: snapshotWithDerivedRuntime,
+      runtimeArtifacts: runtimeArtifacts as Record<string, unknown> | null,
+      hostname: response.hostname
     })
   });
 
@@ -150,6 +152,7 @@ export async function getPreviewScan(scanId: string) {
       finalUrl: derivedFinalUrl ?? snapshot.finalUrl
     },
     events: events as Array<{ event_type: string; metadata_json: Record<string, unknown> | null }>,
+    runtimeArtifacts: runtimeArtifacts as Record<string, unknown> | null,
     liveEarlyResults: response.liveEarlyResults,
     urlscanResult,
     urlscanSource: selectedUrlscanSource
