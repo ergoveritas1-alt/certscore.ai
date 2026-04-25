@@ -149,6 +149,44 @@ test("positive disclosure blocker classifier keeps generic analytics text blocke
   assert.ok(assessment.blockers.includes("generic_or_low_value_disclosure_text"));
 });
 
+test("positive disclosure blocker classifier promotes analytics tools tied to visitor-use measurement", () => {
+  const assessment = classifyPositiveDisclosurePromotionBlockers(
+    {
+      policyEvidenceSnippets: {
+        "topic:session_replay_disclosure":
+          "We use analytics tools (e.g., Google Analytics) and session cookies to understand how visitors use our Services."
+      },
+      policyExtractionStatus: "fetched",
+      policyPageUrl: "https://example.test/privacy",
+      policyPositiveSignalPresent: true,
+      policySemanticConfidence: 0.74
+    },
+    "behavioral_analytics_disclosure_present"
+  );
+
+  assert.equal(assessment.promotionReady, true);
+  assert.deepEqual(assessment.blockers, []);
+});
+
+test("positive disclosure blocker classifier rejects analytics transfer-only text", () => {
+  const assessment = classifyPositiveDisclosurePromotionBlockers(
+    {
+      policyEvidenceSnippets: {
+        "topic:tracking_technologies_disclosure":
+          "Information collected by third-party cookies (e.g., Google Analytics) may be transferred to and stored on servers outside the UK/EEA."
+      },
+      policyExtractionStatus: "fetched",
+      policyPageUrl: "https://example.test/privacy",
+      policyPositiveSignalPresent: true,
+      policySemanticConfidence: 0.74
+    },
+    "behavioral_analytics_disclosure_present"
+  );
+
+  assert.equal(assessment.promotionReady, false);
+  assert.ok(assessment.blockers.includes("generic_or_low_value_disclosure_text"));
+});
+
 test("positive disclosure blocker classifier aligns targeted advertising with surfacing text", () => {
   const saleSharingOnly = classifyPositiveDisclosurePromotionBlockers(
     {

@@ -4092,6 +4092,57 @@ test("retains behavioral analytics disclosure evidence from policy enrichment", 
   assert.ok(packet?.evidence?.flags?.includes("policy_positive_topic:behavioral_analytics_disclosure"));
 });
 
+test("surfaces visitor-use analytics tool disclosure from policy enrichment", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://tradingnut.com/legal/privacy",
+        policy_evidence_snippets: {
+          "topic:session_replay_disclosure":
+            "We use analytics tools (e.g., Google Analytics) and session cookies to understand how visitors use our Services."
+        }
+      }
+    ],
+    reviewFindingCandidates: [],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "behavioral_analytics_disclosure_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "review");
+  assert.equal(packet?.primaryPageUrl, "https://tradingnut.com/legal/privacy");
+  assert.deepEqual(packet?.evidence?.snippets, [
+    "We use analytics tools (e.g., Google Analytics) and session cookies to understand how visitors use our Services."
+  ]);
+});
+
+test("surfaces behavioral tracking disclosure retained under tracking-technology topic", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://wolfxsignals.com/legal/privacy",
+        policy_evidence_snippets: {
+          "topic:tracking_technologies_disclosure":
+            "Tracking tools such as Google Analytics, Meta Pixel, or others may collect behavioral data anonymously and track your use of the site."
+        }
+      }
+    ],
+    reviewFindingCandidates: [],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "behavioral_analytics_disclosure_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.primaryPageUrl, "https://wolfxsignals.com/legal/privacy");
+  assert.deepEqual(packet?.evidence?.snippets, [
+    "Tracking tools such as Google Analytics, Meta Pixel, or others may collect behavioral data anonymously and track your use of the site."
+  ]);
+});
+
 test("keeps behavioral analytics disclosure audit-only when only summary text is retained without a concrete user-facing url", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

@@ -683,7 +683,7 @@ test("substantive cookie policy surfaces can main-lane as review-level positive 
 });
 
 test("generic policy text is not enough to main-lane behavioral analytics disclosure", () => {
-  const evaluation = evaluateUnifiedFindingSurfacing({
+  const genericEvaluation = evaluateUnifiedFindingSurfacing({
     packets: [
       makePacket("behavioral_analytics_disclosure_present", {
         confidenceInputs: {
@@ -700,12 +700,36 @@ test("generic policy text is not enough to main-lane behavioral analytics disclo
       })
     ]
   });
+  const specificEvaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("behavioral_analytics_disclosure_present", {
+        confidenceInputs: {
+          ...makePacket("behavioral_analytics_disclosure_present").confidenceInputs,
+          hasPageAttribution: true,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("behavioral_analytics_disclosure_present").evidence,
+          pageUrls: ["https://www.example.com/privacy"],
+          snippets: [
+            "We use analytics tools (e.g., Google Analytics) and session cookies to understand how visitors use our Services."
+          ]
+        }
+      })
+    ]
+  });
 
-  const behavioralAnalytics = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "behavioral_analytics_disclosure_present");
+  const behavioralAnalytics = genericEvaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "behavioral_analytics_disclosure_present");
+  const specificBehavioralAnalytics = specificEvaluation.debugDecisions.find(
+    (decision) => decision.unifiedFindingId === "behavioral_analytics_disclosure_present"
+  );
 
   assert.equal(behavioralAnalytics?.decisionState, "support_only");
   assert.equal(behavioralAnalytics?.reportLane, "confidence_and_coverage");
   assert.ok(behavioralAnalytics?.appliedRules.includes("evidence.positive_surface.support_only"));
+  assert.equal(specificBehavioralAnalytics?.decisionState, "review");
+  assert.equal(specificBehavioralAnalytics?.reportLane, "main");
 });
 
 test("structured policy disclosure gaps stay review-level without runtime corroboration", () => {

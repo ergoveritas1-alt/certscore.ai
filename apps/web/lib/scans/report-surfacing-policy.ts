@@ -942,7 +942,7 @@ function hasFindingSpecificHighValuePrivacyDisclosureText(packet: UnifiedFinding
 
   switch (packet.unifiedFindingId) {
     case "behavioral_analytics_disclosure_present":
-      return /behavioral analytics|behavioural analytics|session replay|session recording|heat ?map|product analytics|hotjar|fullstory|mouseflow|contentsquare|microsoft clarity/i.test(
+      return /behavioral analytics|behavioural analytics|session replay|session recording|heat ?map|product analytics|hotjar|fullstory|mouseflow|contentsquare|microsoft clarity|google analytics.{0,160}(?:behavioral data|track (?:your )?use|understand how (?:visitors?|users?) use)|analytics tools?.{0,120}(?:understand|measure|analy[sz]e).{0,120}(?:visitors?|users?|use of (?:our )?(?:services?|site|website))/i.test(
         text
       );
     case "gpc_disclosure_present":

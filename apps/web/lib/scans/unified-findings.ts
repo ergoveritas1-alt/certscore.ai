@@ -2160,7 +2160,7 @@ function hasFindingSpecificSurfaceSnippet(findingId: string, snippets: string[] 
 
   if (findingId === "behavioral_analytics_disclosure_present") {
     return readableSnippets.some((snippet) =>
-      /behavioral analytics|behavioural analytics|session replay|session recording|heat ?map|product analytics|hotjar|fullstory|mouseflow|contentsquare|microsoft clarity|mouse movements?|clicks?|keystrokes?|pages visited|observe (?:how )?(?:visitors|users)/i.test(
+      /behavioral analytics|behavioural analytics|session replay|session recording|heat ?map|product analytics|hotjar|fullstory|mouseflow|contentsquare|microsoft clarity|google analytics.{0,160}(?:behavioral data|track (?:your )?use|understand how (?:visitors?|users?) use)|analytics tools?.{0,120}(?:understand|measure|analy[sz]e).{0,120}(?:visitors?|users?|use of (?:our )?(?:services?|site|website))|mouse movements?|clicks?|keystrokes?|pages visited|observe (?:how )?(?:visitors|users)/i.test(
         snippet
       )
     );
@@ -3367,10 +3367,11 @@ const POLICY_ENRICHMENT_POSITIVE_SNIPPET_SELECTORS: Record<string, Array<string 
   ],
   behavioral_analytics_disclosure_present: [
     "topic:session_replay_disclosure",
+    "topic:tracking_technologies_disclosure",
     "session_replay_disclosure",
     "behavioral_analytics_disclosure",
     "product_analytics_disclosure",
-    /session_replay|behavioral_analytics|product_analytics/i
+    /session_replay|behavioral_analytics|product_analytics|tracking_technologies/i
   ],
   children_privacy_disclosure_present: ["topic:children", "children", /children|child|minor|under_13/i],
   arbitration_clause_present: ["arbitration", /arbitration|dispute/i]
@@ -3378,6 +3379,18 @@ const POLICY_ENRICHMENT_POSITIVE_SNIPPET_SELECTORS: Record<string, Array<string 
 
 function policyEnrichmentSnippetRank(findingId: string, value: string) {
   if (findingId !== "cookie_policy_present") {
+    if (findingId === "behavioral_analytics_disclosure_present") {
+      if (/session replay|session recording|mouse movements?|clicks?|keystrokes?|pages visited|observe (?:how )?(?:visitors|users)/i.test(value)) {
+        return 0;
+      }
+      if (/google analytics.{0,160}(?:behavioral data|track (?:your )?use|understand how (?:visitors?|users?) use)|analytics tools?.{0,120}(?:understand|measure|analy[sz]e).{0,120}(?:visitors?|users?|use of (?:our )?(?:services?|site|website))/i.test(value)) {
+        return 1;
+      }
+      if (/behavioral analytics|behavioural analytics|product analytics|hotjar|fullstory|mouseflow|contentsquare|microsoft clarity/i.test(value)) {
+        return 2;
+      }
+      return 4;
+    }
     return 0;
   }
   if (/cookie policy|cookie notice|cookie statement|cookie settings|cookie consent center|manage cookies|cookie preferences/i.test(value)) {
