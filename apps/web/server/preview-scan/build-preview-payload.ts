@@ -9,6 +9,7 @@ import type {
   ScanSnapshot
 } from "@website-signal-risk-scanner/shared";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
+import { deriveScannerHealthWarnings } from "../../lib/scans/scanner-health-warnings";
 
 type PreviewSnapshotSource = {
   accessPostureClass?: ScanSnapshot["accessPostureClass"] | null;
@@ -893,11 +894,26 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
     resultApiUrl?: string | null;
   };
 }) {
+  const scannerHealthWarnings = deriveScannerHealthWarnings(
+    input.events.map((event) => ({
+      eventType: event.event_type,
+      metadataJson: event.metadata_json
+    }))
+  );
   const payload: PreviewScanPayload = {
     ...input.payload,
+    scannerHealthWarnings,
     summaryBullets: [...input.payload.summaryBullets],
     sampleFindings: [...input.payload.sampleFindings]
   };
+
+  if (scannerHealthWarnings.length === 0) {
+    delete payload.scannerHealthWarnings;
+  } else {
+    for (const warning of scannerHealthWarnings) {
+      insertSummaryBullet(payload.summaryBullets, `Scanner health warning: ${warning.message}`);
+    }
+  }
 
   const observableConsentSurface = hasObservableConsentSurface(input.snapshot);
   const worthwhileLeanPreview =

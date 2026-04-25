@@ -369,6 +369,44 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
   assert.equal(payload.fallbackEvidence?.entities?.topDomains?.includes("www.fandango.com"), true);
 });
 
+test("preview payload surfaces urlscan no-api-key diagnostics as scanner health warnings", () => {
+  const snapshot = buildSnapshot({
+    cookieBannerPresent: true,
+    pagesScanned: 4,
+    trackingBeforeConsentDetected: true
+  });
+  const payload = enrichPreviewPayloadWithFallbackEvidence({
+    payload: buildPreviewPayloadFromSnapshot({
+      hostname: "fandango.com",
+      normalizedUrl: "https://fandango.com",
+      snapshot
+    }),
+    snapshot,
+    events: [
+      {
+        event_type: "runtime.build_phase_diagnostic",
+        metadata_json: {
+          phase: "urlscan_preflight_lookup",
+          status: "no_api_key"
+        }
+      },
+      {
+        event_type: "runtime.build_phase_diagnostic",
+        metadata_json: {
+          phase: "urlscan_preflight_legal_fetch",
+          skipReason: "no_api_key"
+        }
+      }
+    ]
+  });
+
+  assert.equal(payload.scannerHealthWarnings?.[0]?.code, "urlscan_api_key_missing");
+  assert.equal(
+    payload.summaryBullets.some((bullet) => bullet.includes("Scanner health warning: urlscan.io enrichment was skipped")),
+    true
+  );
+});
+
 test("rate-limited previews with zero pages stop normal interpretation and surface the exact reason", () => {
   const payload = buildPreviewPayloadFromSnapshot({
     hostname: "coinbase.com",

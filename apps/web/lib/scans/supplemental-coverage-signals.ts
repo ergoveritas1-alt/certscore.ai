@@ -14,6 +14,25 @@ export type SupplementalCoverageSignal = {
   value: boolean | number | string | string[];
 };
 
+function getString(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function hasUrlscanMissingKey(metadata: Record<string, unknown>) {
+  const phase = getString(metadata, "phase");
+  if (!phase?.startsWith("urlscan_")) {
+    return false;
+  }
+
+  return [
+    getString(metadata, "status"),
+    getString(metadata, "skipReason"),
+    getString(metadata, "reason"),
+    getString(metadata, "error")
+  ].some((value) => value === "no_api_key");
+}
+
 export function deriveSupplementalCoverageSignals(input: {
   events: SupplementalCoverageEvent[];
   existingSignals: SupplementalCoverageExistingSignal[];
@@ -21,6 +40,7 @@ export function deriveSupplementalCoverageSignals(input: {
   const seenKeys = new Set(input.existingSignals.map((signal) => signal.key));
   const supplementalSignals = new Map<string, SupplementalCoverageSignal>();
   const snapshotOverrides: Record<string, unknown> = {};
+  const urlscanMissingKeyPhases = new Set<string>();
 
   const coverageMap = new Map<
     string,
@@ -81,6 +101,10 @@ export function deriveSupplementalCoverageSignals(input: {
 
     const metadata = event.metadataJson as Record<string, unknown>;
     const phase = String(metadata.phase ?? "");
+
+    if (hasUrlscanMissingKey(metadata)) {
+      urlscanMissingKeyPhases.add(phase);
+    }
 
     if (phase === "surface_recovery_summary") {
       const unresolvedSurfaceTypes = Array.isArray(metadata.unresolvedSurfaceTypes)
@@ -159,6 +183,15 @@ export function deriveSupplementalCoverageSignals(input: {
       label: "Bounded key-page discovery unresolved",
       snapshotField: "key_page_discovery_unresolved_after_bounded_search",
       value: true
+    });
+  }
+
+  if (!seenKeys.has("disclosure.urlscan_enrichment_unavailable") && urlscanMissingKeyPhases.size > 0) {
+    supplementalSignals.set("disclosure.urlscan_enrichment_unavailable", {
+      key: "disclosure.urlscan_enrichment_unavailable",
+      label: "urlscan enrichment unavailable",
+      snapshotField: "urlscan_enrichment_unavailable",
+      value: [...urlscanMissingKeyPhases].sort()
     });
   }
 
