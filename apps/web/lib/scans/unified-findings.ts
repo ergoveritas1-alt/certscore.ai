@@ -421,6 +421,7 @@ const CONSENT_TRACKING_FINDING_IDS = new Set([
   "consent_surface_missing",
   "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
+  "rtb_cookie_sync_observed",
   "gpc_signal_not_honored",
   "weak_cookie_security_attributes",
   "consent_surface_required_deeper_sweep",
@@ -3785,6 +3786,10 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   gpc_signal_not_honored: {
     suggestedFix: "Honor browser-level opt-out preference signals by suppressing the non-essential tracking or cookie activity that still fired under GPC.",
     whyThisMatters: "If the site ignores a browser-level privacy preference signal, users may not get the choice outcome they expected."
+  },
+  rtb_cookie_sync_observed: {
+    suggestedFix: "Inventory the advertising exchange, identity-sync, and cookie-sync endpoints that load during initial render, then gate non-essential programmatic adtech behind the consent state.",
+    whyThisMatters: "A broad RTB or identity-sync footprint can transmit identifiers across multiple third parties before users have a meaningful chance to choose."
   },
   weak_cookie_security_attributes: {
     suggestedFix: "Review the observed cookie set and tighten weak attributes such as missing Secure or HttpOnly flags and weak SameSite settings where appropriate.",

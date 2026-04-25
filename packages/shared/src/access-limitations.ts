@@ -146,6 +146,7 @@ export type RetryPolicyInput = {
   homepageFetchStatus?: string | null;
   normalizedBodyMissing?: boolean | null;
   pagesScanned?: number | null;
+  blockedFlag?: boolean | null;
   transportFailure?: boolean | null;
   blockPageClassification?: BlockPageClassification | null;
   authWallSuspected?: boolean | null;
@@ -347,6 +348,7 @@ function getFiniteNumber(value: unknown) {
 }
 
 function hasKnownAccessBlockSignal(input: {
+  accessPostureClass?: string | null;
   authWallDetected?: boolean | null;
   authWallSuspected?: boolean | null;
   blockedFlag?: boolean | null;
@@ -359,8 +361,29 @@ function hasKnownAccessBlockSignal(input: {
   homepageFetchStatus?: string | null;
   rateLimitSuspected?: boolean | null;
 }) {
+  const accessPostureClass = normalizeStatus(input.accessPostureClass);
   const homepageFetchStatus = normalizeStatus(input.homepageFetchStatus);
   const homepageFetchHttpStatus = getFiniteNumber(input.homepageFetchHttpStatus);
+  const reachedUsefulOrigin =
+    (accessPostureClass === "tolerant" || accessPostureClass === "degraded_but_useful") &&
+    homepageFetchStatus === "ok" &&
+    homepageFetchHttpStatus !== 401 &&
+    homepageFetchHttpStatus !== 403 &&
+    homepageFetchHttpStatus !== 429 &&
+    input.blockedFlag !== true &&
+    input.authWallDetected !== true &&
+    input.authWallSuspected !== true &&
+    input.captchaFlag !== true &&
+    input.challengeSuspected !== true &&
+    input.geoBlockSuspected !== true &&
+    input.fingerprintBlockSuspected !== true &&
+    input.rateLimitSuspected !== true;
+  const blockPageClassification = reachedUsefulOrigin && (
+    input.blockPageClassification === "login_wall_probable" ||
+    input.blockPageClassification === "vendor_interstitial_probable"
+  )
+    ? null
+    : input.blockPageClassification;
 
   return (
     input.authWallDetected === true ||
@@ -371,9 +394,9 @@ function hasKnownAccessBlockSignal(input: {
     input.geoBlockSuspected === true ||
     input.fingerprintBlockSuspected === true ||
     input.rateLimitSuspected === true ||
-    input.blockPageClassification === "captcha_probable" ||
-    input.blockPageClassification === "login_wall_probable" ||
-    input.blockPageClassification === "vendor_interstitial_probable" ||
+    blockPageClassification === "captcha_probable" ||
+    blockPageClassification === "login_wall_probable" ||
+    blockPageClassification === "vendor_interstitial_probable" ||
     homepageFetchHttpStatus === 401 ||
     homepageFetchHttpStatus === 403 ||
     homepageFetchHttpStatus === 429 ||
@@ -410,6 +433,7 @@ function isContentCaptureDegraded(input: {
     !hasKnownAccessBlockSignal({
       authWallDetected: input.authWallDetected,
       authWallSuspected: input.authWallSuspected,
+      accessPostureClass,
       blockedFlag: input.blockedFlag,
       blockPageClassification: input.blockPageClassification,
       captchaFlag: input.captchaFlag,
@@ -443,6 +467,27 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
   const authWallSuspected = input.authWallSuspected === true;
   const geoBlockSuspected = input.geoBlockSuspected === true;
   const blockedWhatThisMeans = buildBlockedWhatThisMeans();
+  const reachedUsefulOrigin =
+    (accessPostureClass === "tolerant" || accessPostureClass === "degraded_but_useful") &&
+    homepageFetchStatus === "ok" &&
+    homepageFetchHttpStatus !== 401 &&
+    homepageFetchHttpStatus !== 403 &&
+    homepageFetchHttpStatus !== 429 &&
+    input.blockedFlag !== true &&
+    input.authWallDetected !== true &&
+    !authWallSuspected &&
+    input.captchaFlag !== true &&
+    !challengeSuspected &&
+    !geoBlockSuspected &&
+    input.fingerprintBlockSuspected !== true &&
+    input.rateLimitSuspected !== true &&
+    (pagesScanned ?? 0) > 0;
+  const blockPageClassification = reachedUsefulOrigin && (
+    input.blockPageClassification === "login_wall_probable" ||
+    input.blockPageClassification === "vendor_interstitial_probable"
+  )
+    ? null
+    : input.blockPageClassification;
 
   if (fallbackSourceLabel && fallbackSourceReason) {
     return {
@@ -480,7 +525,7 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
     };
   }
 
-  if (input.captchaFlag === true || input.blockPageClassification === "captcha_probable") {
+  if (input.captchaFlag === true || blockPageClassification === "captcha_probable") {
     return {
       kind: "reachability_blocked_captcha",
       outcome: "reachability_blocked_captcha",
@@ -493,7 +538,7 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
     };
   }
 
-  if (input.authWallDetected === true || authWallSuspected || input.blockPageClassification === "login_wall_probable") {
+  if (input.authWallDetected === true || authWallSuspected || blockPageClassification === "login_wall_probable") {
     return {
       kind: "reachability_blocked_auth_wall",
       outcome: "reachability_blocked_auth_wall",
@@ -532,7 +577,7 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
     };
   }
 
-  if (challengeSuspected || input.blockPageClassification === "vendor_interstitial_probable") {
+  if (challengeSuspected || blockPageClassification === "vendor_interstitial_probable") {
     return {
       kind: "reachability_blocked_challenge_suspected",
       outcome: "reachability_blocked_challenge_suspected",
@@ -628,7 +673,7 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
       authWallDetected: input.authWallDetected,
       authWallSuspected,
       blockedFlag: input.blockedFlag,
-      blockPageClassification: input.blockPageClassification,
+      blockPageClassification,
       captchaFlag: input.captchaFlag,
       challengeSuspected,
       fingerprintBlockSuspected: input.fingerprintBlockSuspected,
@@ -678,6 +723,7 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
 export function deriveRetryPolicy(input: RetryPolicyInput): RetryPolicyDecision {
   const cleanHomepageButMissingBody = isContentCaptureDegraded({
     accessPostureClass: input.accessPostureClass,
+    blockedFlag: input.blockedFlag,
     authWallSuspected: input.authWallSuspected,
     blockPageClassification: input.blockPageClassification,
     challengeSuspected: input.challengeSuspected,

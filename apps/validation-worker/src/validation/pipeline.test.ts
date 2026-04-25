@@ -4886,6 +4886,150 @@ test("pre-consent runtime finding narrows framing when privacy controls are expl
   });
 });
 
+test("promotes RTB identity-sync runtime footprint as a generic adtech finding", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyReviewQueue: [],
+      runtimeArtifacts: {
+        third_party_request_count: 182,
+        third_party_request_domains: [
+          "securepubads.g.doubleclick.net",
+          "cm.g.doubleclick.net",
+          "static.criteo.net",
+          "cdn.id5-sync.com",
+          "micro.rubiconproject.com",
+          "oa.openxcdn.net",
+          "vtrk.dv.tech",
+          "insight.adsrvr.org",
+          "cdn.example.com"
+        ],
+        hybrid_runtime_evidence: {
+          networkSummary: {
+            totalRequestCount: 200
+          },
+          requestObservations: [
+            {
+              domain: "static.criteo.net",
+              thirdParty: true,
+              url: "https://static.criteo.net/js/ld/publishertag.js"
+            },
+            {
+              domain: "cdn.id5-sync.com",
+              thirdParty: true,
+              url: "https://cdn.id5-sync.com/api/1.0/id5-api.js"
+            }
+          ],
+          vendorSummary: {
+            normalizedVendors: ["Google Ad Manager", "Criteo", "ID5"],
+            rawThirdPartyDomains: ["static.criteo.net", "cdn.id5-sync.com", "micro.rubiconproject.com"]
+          }
+        }
+      },
+      snapshot: {
+        cookie_count_total: 32,
+        preconsent_tracking_detected: true,
+        third_party_cookie_count: 31,
+        tracker_count_total: 4,
+        tracker_vendor_count: 4
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Google Ad Manager"
+        },
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Criteo"
+        }
+      ]
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "runtime_privacy.rtb_cookie_sync_observed");
+  assert.ok(finding);
+  assert.equal(finding?.severity, "high");
+  assert.deepEqual(finding?.evidence.rtb_cookie_sync_domains, [
+    "cdn.id5-sync.com",
+    "cm.g.doubleclick.net",
+    "insight.adsrvr.org",
+    "micro.rubiconproject.com",
+    "oa.openxcdn.net",
+    "securepubads.g.doubleclick.net",
+    "static.criteo.net",
+    "vtrk.dv.tech"
+  ]);
+  assert.deepEqual(finding?.evidence.runtimeRequestUrls, [
+    "https://static.criteo.net/js/ld/publishertag.js",
+    "https://cdn.id5-sync.com/api/1.0/id5-api.js"
+  ]);
+});
+
+test("promotes CMP-gated tracking conflict when consent UI and policy coverage coexist with pre-consent adtech", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyReviewQueue: [],
+      runtimeArtifacts: {
+        consent_actionable_choice_observed: true,
+        consent_surface_observed: true,
+        third_party_request_count: 182,
+        third_party_request_domains: ["securepubads.g.doubleclick.net", "static.criteo.net", "cdn.id5-sync.com"],
+        hybrid_runtime_evidence: {
+          consentSummary: {
+            bannerPresent: true,
+            cmpDetected: true,
+            managePresent: true
+          },
+          networkSummary: {
+            totalRequestCount: 200
+          },
+          requestToVendorObservations: [
+            {
+              hostname: "securepubads.g.doubleclick.net",
+              preConsent: true,
+              vendor: "Google Ad Manager"
+            }
+          ],
+          requestObservations: [
+            {
+              domain: "securepubads.g.doubleclick.net",
+              thirdParty: true,
+              url: "https://securepubads.g.doubleclick.net/tag/js/gpt.js"
+            }
+          ]
+        }
+      },
+      snapshot: {
+        cmp_vendor_name: "OneTrust",
+        cookie_banner_present: true,
+        cookie_count_total: 32,
+        cookie_policy_present: true,
+        granular_preferences_present: true,
+        preconsent_tracking_detected: true,
+        privacy_policy_present: true,
+        third_party_cookie_count: 31,
+        tracker_count_total: 4,
+        tracker_vendor_count: 4
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Google Ad Manager"
+        }
+      ]
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "runtime_privacy.consent_gated_tracking_claim_conflict");
+  assert.ok(finding);
+  assert.equal(finding?.severity, "high");
+  assert.equal(finding?.evidence.cmp_vendor_name, "OneTrust");
+  assert.equal(finding?.evidence.consent_actionable_choice_observed, true);
+  assert.equal(finding?.evidence.preconsent_tracking_detected, true);
+});
+
 test("promotes obstructive consent interface findings when reject path is hidden behind a cookie wall", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({

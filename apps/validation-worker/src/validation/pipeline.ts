@@ -3127,6 +3127,35 @@ function deriveRuntimePrivacyFindings(input: {
   const initialCookieNames = Array.isArray(runtime?.initial_cookie_names)
     ? (runtime.initial_cookie_names as unknown[]).filter((value): value is string => typeof value === "string")
     : [];
+  const hybrid =
+    runtime &&
+    typeof runtime.hybrid_runtime_evidence === "object" &&
+    runtime.hybrid_runtime_evidence !== null &&
+    !Array.isArray(runtime.hybrid_runtime_evidence)
+      ? (runtime.hybrid_runtime_evidence as Record<string, unknown>)
+      : null;
+  const consentSummary =
+    hybrid &&
+    typeof hybrid.consentSummary === "object" &&
+    hybrid.consentSummary !== null &&
+    !Array.isArray(hybrid.consentSummary)
+      ? (hybrid.consentSummary as Record<string, unknown>)
+      : null;
+  const vendorSummary =
+    hybrid &&
+    typeof hybrid.vendorSummary === "object" &&
+    hybrid.vendorSummary !== null &&
+    !Array.isArray(hybrid.vendorSummary)
+      ? (hybrid.vendorSummary as Record<string, unknown>)
+      : null;
+  const rawThirdPartyDomains = [
+    ...new Set(
+      [
+        ...(Array.isArray(runtime?.third_party_request_domains) ? runtime.third_party_request_domains : []),
+        ...(Array.isArray(vendorSummary?.rawThirdPartyDomains) ? vendorSummary.rawThirdPartyDomains : [])
+      ].filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    )
+  ];
   const thirdPartyVendorsBeforeConsent = [
     ...new Set(
       input.trackerVendors
@@ -3146,6 +3175,32 @@ function deriveRuntimePrivacyFindings(input: {
     ...new Set([...thirdPartyVendorsBeforeConsent, ...preconsentViolationVendors])
   ];
   const domainPolicyCoverage = buildDomainPolicyCoverageSummary(input.policySemanticRows);
+  const cmpVendorName = typeof snapshot?.cmp_vendor_name === "string" ? snapshot.cmp_vendor_name : null;
+  const cmpDetected = Boolean(cmpVendorName) || consentSummary?.cmpDetected === true || getRecordBoolean(snapshot, "cookie_banner_present");
+  const consentSurfaceObserved =
+    runtime?.consent_surface_observed === true ||
+    consentSummary?.bannerPresent === true ||
+    consentSummary?.cmpDetected === true ||
+    getRecordBoolean(snapshot, "cookie_banner_present");
+  const consentActionableChoiceObserved =
+    runtime?.consent_actionable_choice_observed === true ||
+    consentSummary?.managePresent === true ||
+    consentSummary?.acceptPresent === true ||
+    consentSummary?.rejectPresent === true ||
+    getRecordBoolean(snapshot, "granular_preferences_present") ||
+    getRecordBoolean(snapshot, "accept_all_present") ||
+    getRecordBoolean(snapshot, "reject_all_present");
+  const rtbDomains = getRtbOrIdentitySyncDomains(rawThirdPartyDomains);
+  const rtbVendors = getRtbOrIdentitySyncVendors([
+    ...thirdPartyVendorsBeforeConsent,
+    ...preconsentViolationVendors,
+    ...(Array.isArray(vendorSummary?.normalizedVendors) ? vendorSummary.normalizedVendors : [])
+  ]);
+  const rtbRequestUrls = getRuntimeRequestUrlsForDomains(hybrid, rtbDomains);
+  const preconsentRuntimeRequestUrls = getRuntimeRequestUrlsForDomains(hybrid, rawThirdPartyDomains, { preconsentOnly: true });
+  const runtimeVendors = [
+    ...new Set([...attributedPreconsentVendors, ...rtbVendors])
+  ].sort();
 
   if (!preconsentTrackingDetected) {
     return [] as Array<ReturnType<typeof buildRuntimePrivacyFinding>>;
@@ -3172,17 +3227,26 @@ function deriveRuntimePrivacyFindings(input: {
     : "The scan observed cookies or tracking vendors before any consent interaction, indicating that tracking activity likely starts before the user can express a privacy choice.";
   const title = explicitPrivacyControlsDisclosed ? "Tracking observed before privacy choice" : "Tracking observed before consent";
 
-  return [
+  const findings = [
     buildRuntimePrivacyFinding({
       description,
       evidence: {
+        cmp_detected: cmpDetected,
+        cmp_vendor_name: cmpVendorName,
+        consent_actionable_choice_observed: consentActionableChoiceObserved,
+        consent_surface_observed: consentSurfaceObserved,
         domain_policy_coverage: domainPolicyCoverage,
         explicit_privacy_controls_disclosed: explicitPrivacyControlsDisclosed,
         initial_cookie_names: initialCookieNames,
         preconsent_tracking_detected: preconsentTrackingDetected,
         preconsent_violation_count: input.preconsentViolations.length,
         preconsent_violation_vendors: attributedPreconsentVendors,
+        preconsent_tracker_evidence_urls: preconsentRuntimeRequestUrls,
+        runtimeRequestUrls: preconsentRuntimeRequestUrls,
+        runtimeVendors,
         third_party_cookie_count: thirdPartyCookieCount,
+        third_party_request_domains: rawThirdPartyDomains,
+        third_party_request_domain_count: rawThirdPartyDomains.length,
         third_party_request_count: thirdPartyRequestCount,
         third_party_vendors_before_consent: thirdPartyVendorsBeforeConsent,
         total_cookie_count: totalCookieCount,
@@ -3196,6 +3260,165 @@ function deriveRuntimePrivacyFindings(input: {
       title
     })
   ];
+
+  if (rtbDomains.length >= 3 || rtbVendors.length >= 2) {
+    findings.push(
+      buildRuntimePrivacyFinding({
+        description:
+          "The scan observed multiple advertising exchange, identity-sync, or cookie-sync domains during initial runtime, indicating a programmatic adtech footprint that should be reviewed against consent gating and disclosure expectations.",
+        evidence: {
+          preconsent_tracking_detected: preconsentTrackingDetected,
+          rtb_cookie_sync_detected: true,
+          rtb_cookie_sync_domain_count: rtbDomains.length,
+          rtb_cookie_sync_domains: rtbDomains,
+          rtb_cookie_sync_vendors: rtbVendors,
+          runtimeRequestUrls: rtbRequestUrls,
+          runtimeVendors: rtbVendors,
+          third_party_request_count: thirdPartyRequestCount,
+          third_party_request_domain_count: rawThirdPartyDomains.length,
+          third_party_request_domains: rawThirdPartyDomains
+        },
+        pageUrl: null,
+        ruleKey: "runtime_privacy.rtb_cookie_sync_observed",
+        severity: rtbDomains.length >= 5 || rtbVendors.length >= 3 ? "high" : "medium",
+        title: "Programmatic adtech and identity-sync activity observed"
+      })
+    );
+  }
+
+  const hasPolicyOrChoiceCoverage =
+    explicitPrivacyControlsDisclosed ||
+    getRecordBoolean(snapshot, "privacy_policy_present") ||
+    getRecordBoolean(snapshot, "cookie_policy_present");
+  const hasThirdPartyAdtechBeforeConsent =
+    thirdPartyCookieCount > 0 ||
+    thirdPartyVendorsBeforeConsent.length > 0 ||
+    preconsentViolationVendors.length > 0 ||
+    rtbDomains.length > 0;
+  if (cmpDetected && consentSurfaceObserved && consentActionableChoiceObserved && hasPolicyOrChoiceCoverage && hasThirdPartyAdtechBeforeConsent) {
+    findings.push(
+      buildRuntimePrivacyFinding({
+        description:
+          "The scan observed a consent management surface and policy or choice coverage, but third-party advertising, analytics, or identity-sync activity still appeared before the visitor completed a choice.",
+        evidence: {
+          cmp_detected: cmpDetected,
+          cmp_vendor_name: cmpVendorName,
+          consent_actionable_choice_observed: consentActionableChoiceObserved,
+          consent_surface_observed: consentSurfaceObserved,
+          domain_policy_coverage: domainPolicyCoverage,
+          preconsent_tracking_detected: preconsentTrackingDetected,
+          preconsent_violation_vendors: attributedPreconsentVendors,
+          rtb_cookie_sync_domains: rtbDomains,
+          runtimeRequestUrls: [...new Set([...preconsentRuntimeRequestUrls, ...rtbRequestUrls])],
+          runtimeVendors,
+          third_party_cookie_count: thirdPartyCookieCount,
+          third_party_request_count: thirdPartyRequestCount,
+          third_party_request_domain_count: rawThirdPartyDomains.length,
+          third_party_vendors_before_consent: thirdPartyVendorsBeforeConsent
+        },
+        pageUrl: null,
+        ruleKey: "runtime_privacy.consent_gated_tracking_claim_conflict",
+        severity: "high",
+        title: "Consent-gated tracking claim conflicts with runtime behavior"
+      })
+    );
+  }
+
+  return findings;
+}
+
+const RTB_OR_IDENTITY_SYNC_DOMAIN_PATTERNS = [
+  /(^|\.)adnxs\.com$/i,
+  /(^|\.)bidswitch\.net$/i,
+  /(^|\.)casalemedia\.com$/i,
+  /(^|\.)criteo\.(?:com|net)$/i,
+  /(^|\.)doubleclick\.net$/i,
+  /(^|\.)doubleverify\.com$/i,
+  /(^|\.)dv\.tech$/i,
+  /(^|\.)exelator\.com$/i,
+  /(^|\.)fwmrm\.net$/i,
+  /(^|\.)gumgum\.com$/i,
+  /(^|\.)id5-sync\.com$/i,
+  /(^|\.)liadm\.com$/i,
+  /(^|\.)openx(?:cdn)?\.net$/i,
+  /(^|\.)pubmatic\.com$/i,
+  /(^|\.)quantserve\.com$/i,
+  /(^|\.)rlcdn\.com$/i,
+  /(^|\.)rubiconproject\.com$/i,
+  /(^|\.)adsrvr\.org$/i,
+  /(^|\.)3lift\.com$/i,
+  /(^|\.)crwdcntrl\.net$/i
+];
+
+const RTB_OR_IDENTITY_SYNC_VENDOR_PATTERN =
+  /ad manager|adobe audience manager|bidswitch|criteo|doubleclick|doubleverify|gumgum|id5|index exchange|liveintent|lotame|liveramp|openx|pubmatic|quantcast|rubicon|scorecardresearch|the trade desk|triplelift/i;
+
+function getRtbOrIdentitySyncDomains(domains: string[]) {
+  return [
+    ...new Set(
+      domains
+        .map((value) => value.trim().replace(/^\.+/, "").toLowerCase())
+        .filter((value) => RTB_OR_IDENTITY_SYNC_DOMAIN_PATTERNS.some((pattern) => pattern.test(value)))
+    )
+  ].sort();
+}
+
+function getRtbOrIdentitySyncVendors(vendors: unknown[]) {
+  return [
+    ...new Set(
+      vendors
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .filter((value) => RTB_OR_IDENTITY_SYNC_VENDOR_PATTERN.test(value))
+    )
+  ].sort();
+}
+
+function getRuntimeRequestUrlsForDomains(
+  hybrid: Record<string, unknown> | null,
+  domains: string[],
+  options?: { preconsentOnly?: boolean }
+) {
+  if (!hybrid || domains.length === 0) {
+    return [];
+  }
+
+  const domainSet = new Set(domains.map((value) => value.trim().replace(/^\.+/, "").toLowerCase()));
+  const requestObservations = getRuntimeObjectArray(hybrid.requestObservations);
+  const vendorRows = getRuntimeObjectArray(hybrid.requestToVendorObservations);
+  const preconsentHosts = new Set(
+    vendorRows
+      .filter((row) => row.preConsent === true || row.pre_consent === true)
+      .flatMap((row) => {
+        const hostname = typeof row.hostname === "string" ? row.hostname.trim().toLowerCase() : "";
+        return hostname ? [hostname] : [];
+      })
+  );
+
+  return [
+    ...new Set(
+      requestObservations.flatMap((row) => {
+        const domain = typeof row.domain === "string" ? row.domain.trim().replace(/^\.+/, "").toLowerCase() : "";
+        const url = typeof row.url === "string" && /^https?:\/\//i.test(row.url) ? row.url : null;
+        if (!domain || !url || !domainSet.has(domain)) {
+          return [];
+        }
+        if (options?.preconsentOnly && row.preConsent !== true && row.pre_consent !== true && !preconsentHosts.has(domain)) {
+          return [];
+        }
+        return [url];
+      })
+    )
+  ].slice(0, 20);
+}
+
+function getRuntimeObjectArray(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(
+    (entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry)
+  );
 }
 
 function deriveConsentInterfaceFindings(input: {

@@ -350,6 +350,99 @@ test("builds concrete fallback evidence for hybrid pre-consent request timing", 
   ]);
 });
 
+test("retains pre-consent request URLs from vendor observations when banner timing is absent", () => {
+  const runtimeArtifacts = {
+    hybrid_runtime_evidence: {
+      consentSummary: {
+        interactionCount: 0
+      },
+      networkSummary: {
+        preConsentThirdPartyRequestCount: 6
+      },
+      requestObservations: [
+        {
+          domain: "grid-bidder.criteo.com",
+          thirdParty: true,
+          url: "https://grid-bidder.criteo.com/openrtb_2_5/pbjs/auction/request?profileId=207"
+        },
+        {
+          domain: "dpm.demdex.net",
+          thirdParty: true,
+          url: "https://dpm.demdex.net/id?d_orgid=8CF467C25245AE3F0A490D4C%40AdobeOrg"
+        },
+        {
+          domain: "securepubads.g.doubleclick.net",
+          thirdParty: true,
+          url: "https://securepubads.g.doubleclick.net/gampad/ads?us_privacy=1YNN"
+        },
+        {
+          domain: "hbopenbid.pubmatic.com",
+          thirdParty: true,
+          url: "https://hbopenbid.pubmatic.com/translator?source=prebid-client"
+        }
+      ],
+      requestToVendorObservations: [
+        { category: "advertising", confidence: "high", hostname: "grid-bidder.criteo.com", preConsent: true, vendor: "Criteo" },
+        { category: "advertising", confidence: "high", hostname: "dpm.demdex.net", preConsent: true, vendor: "Adobe Audience Manager" },
+        { category: "advertising", confidence: "high", hostname: "securepubads.g.doubleclick.net", preConsent: true, vendor: "Google Ad Manager" },
+        { category: "advertising", confidence: "high", hostname: "hbopenbid.pubmatic.com", preConsent: true, vendor: "PubMatic" }
+      ]
+    }
+  } satisfies Record<string, unknown>;
+
+  const fallback = getHybridSignalFallbackEvidence({
+    runtimeArtifacts,
+    signalKey: "privacy.preconsent_tracking_detected",
+    signalLabel: "Pre-consent tracking detected",
+    signalValue: true
+  });
+
+  assert.deepEqual(fallback?.runtimeVendors, ["Criteo", "Adobe Audience Manager", "Google Ad Manager", "PubMatic"]);
+  assert.deepEqual(fallback?.preconsent_tracker_evidence_urls, [
+    "https://grid-bidder.criteo.com/openrtb_2_5/pbjs/auction/request?profileId=207",
+    "https://dpm.demdex.net/id?d_orgid=8CF467C25245AE3F0A490D4C%40AdobeOrg",
+    "https://securepubads.g.doubleclick.net/gampad/ads?us_privacy=1YNN",
+    "https://hbopenbid.pubmatic.com/translator?source=prebid-client"
+  ]);
+  assert.equal(fallback?.preconsent_tracking_detected, true);
+  assert.equal(fallback?.consentChoiceAtMs, null);
+});
+
+test("recognizes Qualtrics SiteIntercept as session replay behavioral analytics evidence", () => {
+  const runtimeArtifacts = {
+    hybrid_runtime_evidence: {
+      requestObservations: [
+        {
+          domain: "siteintercept.qualtrics.com",
+          thirdParty: true,
+          url: "https://siteintercept.qualtrics.com/WRSiteInterceptEngine/?Q_ZID=ZN_abc"
+        }
+      ],
+      requestToVendorObservations: [
+        {
+          category: "session_replay_behavioral_analytics",
+          confidence: "high",
+          hostname: "siteintercept.qualtrics.com",
+          vendor: "Qualtrics SiteIntercept"
+        }
+      ]
+    }
+  } satisfies Record<string, unknown>;
+
+  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.session_replay_runtime_detected"), true);
+
+  const fallback = getHybridSignalFallbackEvidence({
+    runtimeArtifacts,
+    signalKey: "privacy.session_replay_runtime_detected",
+    signalLabel: "Session replay runtime detected",
+    signalValue: true
+  });
+
+  assert.deepEqual(fallback?.runtimeVendors, ["Qualtrics SiteIntercept"]);
+  assert.deepEqual(fallback?.runtimeEvidenceUrls, ["https://siteintercept.qualtrics.com/WRSiteInterceptEngine/?Q_ZID=ZN_abc"]);
+  assert.equal(fallback?.session_replay_vendor_artifact_present, true);
+});
+
 test("backfills legacy runtime artifact summary fields from hybrid runtime evidence", () => {
   const merged = withHybridRuntimeArtifactFallbacks({
     hybrid_runtime_evidence: {

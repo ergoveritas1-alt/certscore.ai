@@ -92,6 +92,27 @@ type StaticVendorRule = {
 const STATIC_VENDOR_RULES: StaticVendorRule[] = [
   { vendorName: "Google Ads", vendorCategory: "advertising", domains: ["googleadservices.com", "g.doubleclick.net"] },
   { vendorName: "DoubleClick / Floodlight", vendorCategory: "advertising", domains: ["doubleclick.net", "fls.doubleclick.net"] },
+  { vendorName: "Google Ad Manager", vendorCategory: "advertising", domains: ["securepubads.g.doubleclick.net"] },
+  { vendorName: "Adobe Audience Manager", vendorCategory: "advertising", domains: ["demdex.net", "dpm.demdex.net", "fandangollc.demdex.net"] },
+  { vendorName: "Adobe Analytics", vendorCategory: "analytics", domains: ["omtrdc.net", "tt.omtrdc.net"] },
+  { vendorName: "Criteo", vendorCategory: "advertising", domains: ["criteo.com", "criteo.net", "static.criteo.net", "grid-bidder.criteo.com"], cookieNames: ["cto_bundle"] },
+  { vendorName: "ID5", vendorCategory: "identity", domains: ["id5-sync.com", "cdn.id5-sync.com"], cookieNames: ["id5id", "id5id_v2"] },
+  { vendorName: "OpenX", vendorCategory: "advertising", domains: ["openx.net", "openxcdn.net", "oa.openxcdn.net"] },
+  { vendorName: "Rubicon Project", vendorCategory: "advertising", domains: ["rubiconproject.com", "micro.rubiconproject.com"] },
+  { vendorName: "The Trade Desk", vendorCategory: "advertising", domains: ["adsrvr.org", "insight.adsrvr.org"], cookieNames: ["TDID", "TDCPM"] },
+  { vendorName: "LiveIntent", vendorCategory: "advertising", domains: ["liadm.com"] },
+  { vendorName: "Lotame", vendorCategory: "identity", domains: ["crwdcntrl.net", "tags.crwdcntrl.net"], cookieNames: ["_cc_id"] },
+  { vendorName: "LiveRamp", vendorCategory: "identity", domains: ["rlcdn.com", "idsync.rlcdn.com"] },
+  { vendorName: "Nielsen / Exelate", vendorCategory: "advertising", domains: ["exelator.com", "loadm.exelator.com"] },
+  { vendorName: "Quantcast", vendorCategory: "advertising", domains: ["quantserve.com", "cms.quantserve.com"] },
+  { vendorName: "FreeWheel", vendorCategory: "advertising", domains: ["fwmrm.net", "dmp.v.fwmrm.net"] },
+  { vendorName: "DoubleVerify", vendorCategory: "advertising", domains: ["doubleverify.com", "pub.doubleverify.com", "dv.tech", "vtrk.dv.tech"] },
+  { vendorName: "ScorecardResearch", vendorCategory: "analytics", domains: ["scorecardresearch.com", "sb.scorecardresearch.com"] },
+  { vendorName: "PubMatic", vendorCategory: "advertising", domains: ["pubmatic.com", "hbopenbid.pubmatic.com"] },
+  { vendorName: "Index Exchange", vendorCategory: "advertising", domains: ["casalemedia.com", "casale.com"] },
+  { vendorName: "GumGum", vendorCategory: "advertising", domains: ["gumgum.com"] },
+  { vendorName: "TripleLift", vendorCategory: "advertising", domains: ["3lift.com"] },
+  { vendorName: "Bidswitch", vendorCategory: "advertising", domains: ["bidswitch.net"] },
   { vendorName: "Meta Pixel", vendorCategory: "advertising", domains: ["facebook.com", "facebook.net", "connect.facebook.net"] },
   { vendorName: "Snap Pixel", vendorCategory: "advertising", domains: ["sc-static.net", "snapchat.com", "tr.snapchat.com", "tr6.snapchat.com"] },
   { vendorName: "Tapad", vendorCategory: "advertising", domains: ["tapad.com", "pixel.tapad.com"] },
@@ -304,6 +325,7 @@ export function collectVendorEnrichmentCandidates(input: {
   const cookieWriteObservations = getObjectArray(hybrid?.cookieWriteObservations);
   const cnameCandidates = getObjectArray(hybrid?.cnameCandidates);
   const rows = new Map<string, VendorCandidate>();
+  const requestedHostname = normalizeHostname(input.requestedHostname);
 
   const getOrCreate = (hostname: string, defaults?: Partial<VendorCandidate>) => {
     const normalizedHost = normalizeHostname(hostname);
@@ -352,7 +374,7 @@ export function collectVendorEnrichmentCandidates(input: {
     getOrCreate(hostname, {
       beforeConsent,
       collectionEndpointType: "request",
-      firstPartyOrThirdParty: "third_party",
+      firstPartyOrThirdParty: isFirstPartyProxyHost(hostname, requestedHostname) ? "first_party_proxy" : "third_party",
       sampleUrls: uniqueStrings([
         ...(beforeConsent ? [...getRequestUrlsFromRow(row), ...getRequestUrlsForHost(hybrid, hostname)] : []),
         ...getPreconsentRequestUrlsForHost(hybrid, hostname)
@@ -378,11 +400,49 @@ export function collectVendorEnrichmentCandidates(input: {
     getOrCreate(hostname, {
       beforeConsent,
       collectionEndpointType: "request",
-      firstPartyOrThirdParty: "third_party",
+      firstPartyOrThirdParty: isFirstPartyProxyHost(hostname, requestedHostname) ? "first_party_proxy" : "third_party",
       sampleUrls: uniqueStrings([
         ...(beforeConsent ? [...getStringArray(row.sampleUrls ?? row.sample_urls), ...getRequestUrlsForHost(hybrid, hostname)] : []),
         ...getPreconsentRequestUrlsForHost(hybrid, hostname)
       ])
+    });
+  }
+
+  const rawThirdPartyDomains = uniqueStrings([
+    ...getStringArray(getRecord(hybrid?.vendorSummary)?.rawThirdPartyDomains),
+    ...getStringArray(getRecord(hybrid?.vendor_summary)?.raw_third_party_domains),
+    ...getStringArray(input.runtimeArtifacts?.third_party_request_domains),
+    ...getStringArray(input.runtimeArtifacts?.thirdPartyRequestDomains),
+    ...getStringArray(input.runtimeArtifacts?.script_src_domains),
+    ...getStringArray(input.runtimeArtifacts?.scriptSrcDomains)
+  ]);
+  const hasPreconsentRuntime =
+    input.snapshot?.preconsent_tracking_detected === true ||
+    input.snapshot?.tracking_before_consent_detected === true ||
+    getRecord(hybrid?.networkSummary)?.preConsentThirdPartyRequestCount !== undefined ||
+    getRecord(hybrid?.network_summary)?.pre_consent_third_party_request_count !== undefined;
+
+  for (const hostname of rawThirdPartyDomains) {
+    const normalizedHost = normalizeHostname(hostname);
+    if (!normalizedHost) {
+      continue;
+    }
+    const staticVendorMatch = matchCandidateToStaticRules({
+      beforeConsent: false,
+      collectionEndpointType: "request",
+      cookieNames: [],
+      firstPartyOrThirdParty: "third_party",
+      hostname: normalizedHost,
+      sampleUrls: []
+    });
+    if (!staticVendorMatch) {
+      continue;
+    }
+    getOrCreate(normalizedHost, {
+      beforeConsent: hasPreconsentRuntime,
+      collectionEndpointType: "request",
+      firstPartyOrThirdParty: "third_party",
+      sampleUrls: hasPreconsentRuntime ? getPreconsentRequestUrlsForHost(hybrid, normalizedHost) : []
     });
   }
 
@@ -426,7 +486,6 @@ export function collectVendorEnrichmentCandidates(input: {
     });
   }
 
-  const requestedHostname = normalizeHostname(input.requestedHostname);
   return [...rows.values()].filter((row) => row.hostname !== requestedHostname);
 }
 
@@ -526,6 +585,14 @@ function matchCandidateToStaticRules(candidate: VendorCandidate): VendorRegistry
     id: `static:${rule.vendorName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
     vendorCategory: rule.vendorCategory
   };
+}
+
+function isFirstPartyProxyHost(hostname: string, requestedHostname: string | null) {
+  if (!requestedHostname) {
+    return false;
+  }
+
+  return hostname === requestedHostname || hostname.endsWith(`.${requestedHostname}`);
 }
 
 async function inferVendorsWithLlm(input: { candidates: VendorCandidate[]; domain: string }) {

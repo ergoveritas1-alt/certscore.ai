@@ -2639,6 +2639,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "policy_to_behavior_contradictions",
     mirrors: ["preconsent_tracking_incidents"],
     overlays: ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"],
+    validationRuleKeys: ["runtime_privacy.consent_gated_tracking_claim_conflict"],
     aliases: ["Consent-gated tracking claim conflicts with runtime behavior"]
   }),
   defineReportUnifiedFinding({
@@ -2703,6 +2704,19 @@ export const REPORT_UNIFIED_FINDINGS = [
       "Pre-consent tracking incidents detected",
       "Trackers observed before consent",
       "Pre-consent tracking detected"
+    ]
+  }),
+  defineReportUnifiedFinding({
+    id: "rtb_cookie_sync_observed",
+    label: "RTB and identity-sync activity observed",
+    owner: "adtech_analytics_replay_footprint",
+    mirrors: ["preconsent_tracking_incidents"],
+    overlays: ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk", "sale_sharing_targeted_advertising_controls"],
+    validationRuleKeys: ["runtime_privacy.rtb_cookie_sync_observed"],
+    aliases: [
+      "Programmatic adtech and identity-sync activity observed",
+      "RTB cookie sync observed",
+      "Identity-sync activity observed"
     ]
   }),
   defineReportUnifiedFinding({

@@ -154,6 +154,38 @@ test("blocked previews can still surface verified cookie policy and contact disc
   );
 });
 
+test("degraded-but-useful previews do not let stale auth-wall classification suppress scores or pre-consent findings", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "fandango.com",
+    normalizedUrl: "https://fandango.com",
+    snapshot: buildSnapshot({
+      accessPostureClass: "degraded_but_useful",
+      accessibilityScore: 72,
+      blockPageClassification: "login_wall_probable",
+      blockedFlag: false,
+      certscoreOverall: 70,
+      challengeSuspected: false,
+      cookieBannerPresent: true,
+      homepageFetchHttpStatus: 200,
+      homepageFetchStatus: "ok",
+      pagesScanned: 4,
+      partialScan: true,
+      privacyScore: 68,
+      thirdPartyCookieSetBeforeConsent: true,
+      totalSignals: 52,
+      trackingBeforeConsentDetected: true
+    })
+  });
+
+  assert.equal(payload.resultState, undefined);
+  assert.deepEqual(payload.scores, {
+    accessibility: 72,
+    overall: 70,
+    privacy: 68
+  });
+  assert.equal(payload.sampleFindings.some((finding) => finding.title === "Tracking activity observed before consent"), true);
+});
+
 test("evidence-rich zero-page previews do not collapse into blocked-access mode when runtime and verified surfaces were retained", () => {
   const payload = buildPreviewPayloadFromSnapshot({
     hostname: "nytimes.com",
@@ -419,6 +451,35 @@ test("successful homepage fetches with missing retained body classify as degrade
     payload.summaryBullets.includes(
       "Reason: homepage fetch succeeded, but the run did not retain a usable normalized homepage body for downstream review."
     ),
+    true
+  );
+});
+
+test("degraded-but-useful content capture can show computed scores with a caveat", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "fandango.com",
+    normalizedUrl: "https://fandango.com",
+    snapshot: buildSnapshot({
+      accessPostureClass: "degraded_but_useful",
+      accessibilityScore: 72,
+      certscoreOverall: 70,
+      homepageFetchHttpStatus: 200,
+      homepageFetchStatus: "ok",
+      normalizedBodyHash: null,
+      pagesScanned: 4,
+      privacyScore: 68,
+      totalSignals: 52
+    })
+  });
+
+  assert.equal(payload.resultState?.code, "content_capture_degraded");
+  assert.deepEqual(payload.scores, {
+    accessibility: 72,
+    overall: 70,
+    privacy: 68
+  });
+  assert.equal(
+    payload.summaryBullets.includes("Preview scores are shown with a coverage caveat: overall 70, privacy 68, accessibility 72."),
     true
   );
 });

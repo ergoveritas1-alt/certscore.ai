@@ -261,13 +261,53 @@ export function withHybridRuntimeArtifactFallbacks(runtimeArtifacts: Record<stri
   };
 }
 
+function isSessionReplayCategory(value: string | null | undefined) {
+  return /session_replay|session replay|behavioral_analytics|behavioral analytics|session_intercept|siteintercept/i.test(value ?? "");
+}
+
+function looksLikeSessionReplayVendor(row: Record<string, unknown>) {
+  const vendor = getString(row.vendor);
+  const hostname = getString(row.hostname);
+  return isSessionReplayCategory(getString(row.category)) || /qualtrics|siteintercept|hotjar|fullstory|clarity|contentsquare|mouseflow/i.test(`${vendor ?? ""} ${hostname ?? ""}`);
+}
+
+function getRequestUrl(row: Record<string, unknown>) {
+  if (typeof row.url === "string") {
+    return row.url;
+  }
+  const domain = getString(row.domain);
+  const pathSample =
+    typeof row.pathSample === "string"
+      ? row.pathSample
+      : typeof row.path_sample === "string"
+        ? row.path_sample
+        : null;
+  return domain && pathSample ? `https://${domain}${pathSample}` : domain ? `https://${domain}` : null;
+}
+
 function getSessionReplayVendors(hybrid: Record<string, unknown> | null) {
   const requestToVendorObservations = getObjectArray(hybrid?.requestToVendorObservations);
   const vendors = requestToVendorObservations
-    .filter((row) => row.category === "session_replay")
+    .filter(looksLikeSessionReplayVendor)
     .flatMap((row) => (typeof row.vendor === "string" ? [row.vendor] : []));
 
   return uniqueStrings(vendors);
+}
+
+function getSessionReplayRequestUrls(hybrid: Record<string, unknown> | null) {
+  const requestObservations = getObjectArray(hybrid?.requestObservations);
+  const sessionReplayHosts = getObjectArray(hybrid?.requestToVendorObservations)
+    .filter(looksLikeSessionReplayVendor)
+    .flatMap((row) => getString(row.hostname));
+
+  return uniqueStrings(
+    requestObservations
+      .filter((row) => {
+        const domain = getString(row.domain);
+        return Boolean(domain && sessionReplayHosts.includes(domain)) || /qualtrics|siteintercept|hotjar|fullstory|clarity|contentsquare|mouseflow/i.test(getRequestUrl(row) ?? "");
+      })
+      .flatMap((row) => getRequestUrl(row) ?? [])
+  );
 }
 
 function getPreconsentTrackerVendors(hybrid: Record<string, unknown> | null) {
@@ -277,6 +317,28 @@ function getPreconsentTrackerVendors(hybrid: Record<string, unknown> | null) {
     .flatMap((row) => (typeof row.vendor === "string" ? [row.vendor] : []));
 
   return uniqueStrings(vendors);
+}
+
+function isPreconsentRequestObservation(row: Record<string, unknown>, hybrid: Record<string, unknown> | null) {
+  if (row.preConsent === true || row.pre_consent === true || row.beforeConsent === true || row.before_consent === true) {
+    return true;
+  }
+
+  const phase = getString(row.phase) ?? getString(row.runtimePhase) ?? getString(row.runtime_phase);
+  if (phase === "pre_consent" || phase === "before_interaction" || phase === "before_consent") {
+    return true;
+  }
+
+  const tsMs = getNumber(row.ts_ms ?? row.tsMs);
+  const timelineMarkers = getRecord(hybrid?.timelineMarkers);
+  const consentChoiceAtMs = getNumber(
+    timelineMarkers?.consentChoiceAtMs ??
+      timelineMarkers?.consentAcceptedAtMs ??
+      timelineMarkers?.consentRejectedAtMs
+  );
+  const consentBannerDetectedMs = getNumber(timelineMarkers?.consentBannerDetectedMs);
+  const threshold = consentChoiceAtMs ?? consentBannerDetectedMs;
+  return tsMs !== null && threshold !== null && tsMs < threshold;
 }
 
 function getPreconsentCookieEvidenceRows(
@@ -301,29 +363,17 @@ function getPreconsentCookieEvidenceRows(
 
 function getPreconsentRequestUrls(hybrid: Record<string, unknown> | null) {
   const requestObservations = getObjectArray(hybrid?.requestObservations);
+  const preconsentVendorHosts = getObjectArray(hybrid?.requestToVendorObservations)
+    .filter((row) => row.pre_consent === true || row.preConsent === true)
+    .flatMap((row) => getString(row.hostname));
   return uniqueStrings(
     requestObservations
       .filter((row) => {
-        const tsMs = getNumber(row.ts_ms ?? row.tsMs);
-        const consentDetectedMs = getNumber(getRecord(hybrid?.timelineMarkers)?.consentBannerDetectedMs);
-        if (tsMs === null || consentDetectedMs === null) {
-          return false;
-        }
-        return tsMs < consentDetectedMs && row.thirdParty === true;
+        const domain = getString(row.domain);
+        const matchedPreconsentVendor = Boolean(domain && preconsentVendorHosts.includes(domain));
+        return row.thirdParty === true && (isPreconsentRequestObservation(row, hybrid) || matchedPreconsentVendor);
       })
-      .flatMap((row) => {
-        if (typeof row.url === "string") {
-          return [row.url];
-        }
-        const domain = typeof row.domain === "string" ? row.domain : null;
-        const pathSample =
-          typeof row.pathSample === "string"
-            ? row.pathSample
-            : typeof row.path_sample === "string"
-              ? row.path_sample
-              : null;
-        return domain && pathSample ? [`https://${domain}${pathSample}`] : domain ? [`https://${domain}`] : [];
-      })
+      .flatMap((row) => getRequestUrl(row) ?? [])
   );
 }
 
@@ -807,14 +857,18 @@ export function getHybridSignalFallbackEvidence(input: {
     case "privacy.session_replay_runtime_detected":
     case "privacy.session_replay_runtime_vendors": {
       const runtimeVendors = getSessionReplayVendors(hybrid);
+      const requestUrls = getSessionReplayRequestUrls(hybrid);
       return {
-        session_replay_runtime_detected: runtimeVendors.length > 0,
+        session_replay_runtime_detected: runtimeVendors.length > 0 || requestUrls.length > 0,
+        session_replay_request_urls: requestUrls,
         session_replay_runtime_vendors: runtimeVendors,
-        session_replay_vendor_artifact_present: runtimeVendors.length > 0,
+        session_replay_vendor_artifact_present: runtimeVendors.length > 0 || requestUrls.length > 0,
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
         signalValue: input.signalValue,
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+        requestUrls,
+        runtimeEvidenceUrls: requestUrls,
         runtimeVendors
       };
     }

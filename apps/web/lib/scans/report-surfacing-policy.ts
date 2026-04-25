@@ -240,6 +240,7 @@ const CONSENT_TRACKING_IDS = [
   "dismiss_without_reject",
   "session_replay_observed",
   "retargeting_pixel_observed",
+  "rtb_cookie_sync_observed",
   "fingerprinting_observed"
 ] as const satisfies ReportUnifiedFindingId[];
 

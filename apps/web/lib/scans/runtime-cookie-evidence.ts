@@ -77,13 +77,13 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
     return "analytics";
   }
   if (
-    /(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|infolinks|doubleclick|criteo|media\.net|_mkto_trk|muid|fr\b|demdex|dpm\.demdex|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check|optimizely|_vwo|_vis_opt|guest_id_ads|guest_id_marketing|personalization_id)/i.test(
+    /(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|infolinks|doubleclick|criteo|media\.net|_mkto_trk|muid|fr\b|demdex|dpm\.demdex|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check|optimizely|_vwo|_vis_opt|guest_id_ads|guest_id_marketing|personalization_id|pubmatic|krtbcookie|pugt|spugt|bidswitch|tuuid|id5|casalemedia|cmid|cmps|cmpro|gumgum|3lift|tluid|sync\b|tapad|adsrvr|tdid|tdcpm|rubiconproject|openx|adform|bidr\.io|scorecardresearch|quantserve|crwdcntrl|panoramaid|_pubcid|lijit|mathtag|rlcdn|pippio|deepintent|amazon-adsystem|stackadapt|onaudience)/i.test(
       normalized
     )
   ) {
     return "advertising";
   }
-  if (/(qsi_replaysession|qualtrics|hotjar|fullstory|clarity|contentsquare|mouseflow|fs_uid|hjSession|_hj)/i.test(normalized)) {
+  if (/(qsi_replaysession|qualtrics|siteintercept|hotjar|fullstory|clarity|contentsquare|mouseflow|fs_uid|hjSession|_hj)/i.test(normalized)) {
     return "session_replay";
   }
   if (
@@ -108,13 +108,49 @@ function inferCookieProvider(name: string, domain: string | null = null) {
   if (/^_fbp|^_fbc|facebook|connect\.facebook|fbcdn/.test(normalized)) {
     return "Meta";
   }
+  if (/criteo|cto_bundle/.test(normalized)) {
+    return "Criteo";
+  }
+  if (/doubleclick|googlesyndication|googleads|__gads|__gpi|__eoi/.test(normalized)) {
+    return "Google";
+  }
+  if (/pubmatic|krtbcookie|pugt|spugt/.test(normalized)) {
+    return "PubMatic";
+  }
+  if (/casalemedia|cmid|cmps|cmpro/.test(normalized)) {
+    return "Index Exchange";
+  }
+  if (/bidswitch|tuuid/.test(normalized)) {
+    return "BidSwitch";
+  }
+  if (/id5/.test(normalized)) {
+    return "ID5";
+  }
+  if (/gumgum/.test(normalized)) {
+    return "GumGum";
+  }
+  if (/3lift|tluid/.test(normalized)) {
+    return "TripleLift";
+  }
+  if (/tapad/.test(normalized)) {
+    return "Tapad";
+  }
+  if (/adsrvr|tdid|tdcpm/.test(normalized)) {
+    return "The Trade Desk";
+  }
+  if (/rubiconproject/.test(normalized)) {
+    return "Magnite/Rubicon";
+  }
+  if (/openx/.test(normalized)) {
+    return "OpenX";
+  }
   if (/^_ttp|ttclid|tiktok/.test(normalized)) {
     return "TikTok";
   }
   if (/demdex|dpm\.demdex|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check/.test(normalized)) {
     return "Adobe";
   }
-  if (/qsi_replaysession|qualtrics/.test(normalized)) {
+  if (/qsi_replaysession|qualtrics|siteintercept/.test(normalized)) {
     return "Qualtrics";
   }
   if (/hotjar|_hj/.test(normalized)) {

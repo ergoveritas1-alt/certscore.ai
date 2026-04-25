@@ -11,6 +11,11 @@ test("classifies expanded non-essential cookie families", () => {
   assert.equal(classifyRuntimeCookieCategory("analytics_session_id", ".example.com"), "analytics");
   assert.equal(classifyRuntimeCookieCategory("_hjSession_123", ".example.com"), "session_replay");
   assert.equal(classifyRuntimeCookieCategory("__cf_bm", ".example.com"), "necessary");
+  assert.equal(classifyRuntimeCookieCategory("cto_bundle", ".criteo.com"), "advertising");
+  assert.equal(classifyRuntimeCookieCategory("demdex", ".demdex.net"), "advertising");
+  assert.equal(classifyRuntimeCookieCategory("KRTBCOOKIE_452", ".pubmatic.com"), "advertising");
+  assert.equal(classifyRuntimeCookieCategory("tuuid", ".bidswitch.net"), "advertising");
+  assert.equal(classifyRuntimeCookieCategory("QSI_ReplaySession_Info_ZN_abc", ".qualtrics.com"), "session_replay");
 });
 
 test("builds cookie inventory with initiator provenance and before-consent timing", () => {
