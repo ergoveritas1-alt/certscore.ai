@@ -1,4 +1,7 @@
 import type { PopulatedSignalRecord, ReportSignalSource } from "@website-signal-risk-scanner/shared";
+import {
+  buildRuntimeCookieInventory
+} from "./runtime-cookie-evidence";
 
 function getRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -30,31 +33,6 @@ function normalizeDerivedVendorCategory(value: string | null | undefined) {
     return "unknown";
   }
   return normalized;
-}
-
-function classifyRuntimeCookieCategory(name: string, domain: string | null) {
-  const normalized = `${name} ${domain ?? ""}`.toLowerCase();
-  if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id)/i.test(normalized)) {
-    return "analytics";
-  }
-  if (
-    /(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|infolinks|doubleclick|criteo|media\.net|_mkto_trk|muid|fr\b|demdex|dpm\.demdex|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check)/i.test(
-      normalized
-    )
-  ) {
-    return "advertising";
-  }
-  if (/(qsi_replaysession|qualtrics|hotjar|fullstory|clarity|contentsquare|mouseflow)/i.test(normalized)) {
-    return "session_replay";
-  }
-  if (/(cf_clearance|__cf|recaptcha|akamai|datadome|perimeterx|awsalb|awsalbcors|awsalbtg|bm_sz|ak_bmsc|csrf|xsrf|phpsessid|jsessionid|(^|\\b)sid($|\\b)|(^|\\b)session($|\\b))/i.test(normalized)) {
-    return "necessary";
-  }
-  return "unknown";
-}
-
-function isNonEssentialCookieCategory(category: string | null | undefined) {
-  return category === "analytics" || category === "advertising" || category === "session_replay";
 }
 
 function getBoolean(value: unknown) {
@@ -301,86 +279,24 @@ function getPreconsentTrackerVendors(hybrid: Record<string, unknown> | null) {
   return uniqueStrings(vendors);
 }
 
-function isPreconsentCookieWrite(row: Record<string, unknown>, hybrid: Record<string, unknown> | null) {
-  if (row.beforeConsent === true || row.before_consent === true) {
-    return true;
-  }
-
-  const setAtMs = getNumber(row.setAtMs ?? row.set_at_ms);
-  const timelineMarkers = getRecord(hybrid?.timelineMarkers ?? hybrid?.timeline_markers);
-  const consentBannerDetectedMs = getNumber(timelineMarkers?.consentBannerDetectedMs ?? timelineMarkers?.consent_banner_detected_ms);
-  return setAtMs !== null && consentBannerDetectedMs !== null && setAtMs < consentBannerDetectedMs;
-}
-
-function getCookiePartyType(row: Record<string, unknown>) {
-  if (row.thirdParty === true || row.third_party === true) {
-    return "third_party";
-  }
-  const cookiePartyType = getString(row.cookiePartyType ?? row.cookie_party_type);
-  if (cookiePartyType === "third_party" || cookiePartyType === "first_party") {
-    return cookiePartyType;
-  }
-  return "first_party";
-}
-
 function getPreconsentCookieEvidenceRows(
   hybrid: Record<string, unknown> | null,
   runtimeArtifacts: Record<string, unknown> | null | undefined
 ) {
-  const cookieWriteObservations = getObjectArray(hybrid?.cookieWriteObservations ?? hybrid?.cookie_write_observations);
-  const writeRows = cookieWriteObservations
-    .filter((row) => isPreconsentCookieWrite(row, hybrid))
-    .flatMap((row) => {
-      const cookieName = getString(row.cookieName ?? row.cookie_name);
-      if (!cookieName) {
-        return [];
-      }
-      const domain = getString(row.domain ?? row.cookieDomain ?? row.cookie_domain);
-      const category = classifyRuntimeCookieCategory(cookieName, domain);
-      return [
-        {
-          category,
-          cookieName,
-          domain,
-          expirationType: getString(row.cookieExpirationType ?? row.cookie_expiration_type),
-          initiatorDomain: getString(row.cookieInitiatorDomain ?? row.cookie_initiator_domain),
-          initiatorVendor: getString(row.cookieInitiatorVendor ?? row.cookie_initiator_vendor),
-          nonEssential: isNonEssentialCookieCategory(category),
-          party: getCookiePartyType(row),
-          sameSite: getString(row.cookieSameSite ?? row.cookie_same_site),
-          secure: getBoolean(row.cookieSecure ?? row.cookie_secure),
-          setAtMs: getNumber(row.setAtMs ?? row.set_at_ms),
-          setMethod: getString(row.cookieSetMethod ?? row.cookie_set_method),
-          timingEvidence: "before_consent_cookie_write"
-        }
-      ];
-    });
-
-  if (writeRows.length > 0) {
-    return writeRows;
-  }
-
-  const initialCookieNames = getStringArray(runtimeArtifacts?.initial_cookie_names ?? runtimeArtifacts?.initialCookieNames);
-  const initialCookieDomains = getStringArray(runtimeArtifacts?.initial_cookie_domains ?? runtimeArtifacts?.initialCookieDomains);
-  return initialCookieNames.map((cookieName, index) => {
-    const domain = initialCookieDomains[index] ?? null;
-    const category = classifyRuntimeCookieCategory(cookieName, domain);
-    return {
-      category,
-      cookieName,
-      domain,
-      expirationType: null,
-      initiatorDomain: null,
-      initiatorVendor: null,
-      nonEssential: isNonEssentialCookieCategory(category),
-      party: "unknown",
-      sameSite: null,
-      secure: null,
-      setAtMs: null,
-      setMethod: "initial_cookie_snapshot",
-      timingEvidence: "initial_cookie_snapshot"
-    };
-  });
+  return buildRuntimeCookieInventory({ hybridRuntimeEvidence: hybrid, runtimeArtifacts }).rows.map((row) => ({
+    category: row.category,
+    cookieName: row.cookieName,
+    domain: row.domain,
+    firstObservedAtMs: row.firstObservedAtMs,
+    initiatorDomain: row.initiatorDomain,
+    initiatorUrl: row.initiatorUrl,
+    initiatorVendor: row.initiatorVendor,
+    nonEssential: row.nonEssential,
+    party: row.party,
+    setAtMs: row.setAtMs,
+    setMethod: row.setMethod,
+    timingEvidence: row.timingEvidence
+  }));
 }
 
 function getPreconsentRequestUrls(hybrid: Record<string, unknown> | null) {
@@ -780,11 +696,23 @@ export function getHybridSignalFallbackEvidence(input: {
         preconsentCookieEvidence.filter((row) => row.nonEssential).flatMap((row) => row.cookieName)
       );
       const preconsentCookieNames = uniqueStrings(preconsentCookieEvidence.flatMap((row) => row.cookieName));
+      const beforeConsentCookieRows = preconsentCookieEvidence.filter((row) => row.timingEvidence === "before_consent_cookie_write");
       return {
         consentBannerDetectedMs: getNumber(getRecord(hybrid.timelineMarkers)?.consentBannerDetectedMs),
+        consentChoiceAtMs: getNumber(
+          getRecord(hybrid.timelineMarkers)?.consentChoiceAtMs ??
+            getRecord(hybrid.timelineMarkers)?.consentAcceptedAtMs ??
+            getRecord(hybrid.timelineMarkers)?.consentRejectedAtMs
+        ),
+        preconsent_cookie_before_consent_count: beforeConsentCookieRows.length,
         preconsent_cookie_categories: uniqueStrings(preconsentCookieEvidence.flatMap((row) => row.category)),
         preconsent_cookie_evidence: preconsentCookieEvidence,
+        preconsent_cookie_initiator_domains: uniqueStrings(preconsentCookieEvidence.flatMap((row) => row.initiatorDomain)),
+        preconsent_cookie_initiator_urls: uniqueStrings(preconsentCookieEvidence.flatMap((row) => row.initiatorUrl)),
+        preconsent_cookie_initiator_vendors: uniqueStrings(preconsentCookieEvidence.flatMap((row) => row.initiatorVendor)),
         preconsent_cookie_names: preconsentCookieNames,
+        preconsent_cookie_set_methods: uniqueStrings(preconsentCookieEvidence.flatMap((row) => row.setMethod)),
+        preconsent_cookie_timing_evidence: uniqueStrings(preconsentCookieEvidence.flatMap((row) => row.timingEvidence)),
         preconsent_nonessential_cookie_names: preconsentNonEssentialCookies,
         preconsent_tracker_evidence_urls: preconsentRequestUrls,
         preconsent_tracker_vendor_evidence: getPreconsentVendorEvidenceRows(hybrid),

@@ -1,5 +1,6 @@
 import process from "node:process";
 import { closePools, query } from "@website-signal-risk-scanner/db";
+import { buildRuntimeCookieInventory } from "../lib/scans/runtime-cookie-evidence";
 import { classifyPreconsentPromotionBlockers } from "./production-promotion-blockers";
 import { loadScanRecord, type ScanRow } from "./report-production-finding-frequency";
 
@@ -53,78 +54,17 @@ function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-function getStringArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
-    : [];
-}
-
-function getObjectArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
-    : [];
-}
-
-function classifyCookieName(name: string) {
-  if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id)/i.test(name)) {
-    return "analytics";
-  }
-  if (/(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|doubleclick|criteo|_mkto_trk|muid|fr\b|demdex|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check)/i.test(name)) {
-    return "advertising";
-  }
-  if (/(qsi_replaysession|qualtrics|hotjar|fullstory|clarity|contentsquare|mouseflow)/i.test(name)) {
-    return "session_replay";
-  }
-  if (/^(__cf_bm|cf_clearance|awsalb|awsalbcors|jsessionid|phpsessid|csrftoken|xsrf|session|sid$)/i.test(name)) {
-    return "necessary";
-  }
-  return "unknown";
-}
-
-function isPromotionGradeCookieCategory(value: string | null | undefined) {
-  return Boolean(value && /analytics|advertising|marketing|retargeting|session_replay/i.test(value));
-}
-
 function getCookieWriteSummary(hybridRuntimeEvidence: Record<string, unknown> | null | undefined) {
-  const hybrid = getRecord(hybridRuntimeEvidence);
-  const rows = [
-    ...getObjectArray(hybrid?.cookieWriteObservations ?? hybrid?.cookie_write_observations),
-    ...getObjectArray(hybrid?.preconsentCookieEvidence ?? hybrid?.preconsent_cookie_evidence)
-  ];
-  const normalized = rows.map((row) => {
-    const name = getString(row.cookieName) ?? getString(row.cookie_name) ?? getString(row.name);
-    const explicitCategory = getString(row.category) ?? getString(row.cookieCategory) ?? getString(row.cookie_category);
-    const category = explicitCategory ?? (name ? classifyCookieName(name) : "unknown");
-    const timingEvidence = getString(row.timingEvidence) ?? getString(row.timing_evidence);
-    const beforeConsent =
-      row.beforeConsent === true ||
-      row.before_consent === true ||
-      row.consentState === "pre_consent" ||
-      row.consent_state === "pre_consent" ||
-      timingEvidence === "before_consent_cookie_write" ||
-      timingEvidence === "initial_cookie_snapshot";
-    const nonEssential =
-      row.nonEssential === true ||
-      row.non_essential === true ||
-      isPromotionGradeCookieCategory(category);
-
-    return {
-      beforeConsent,
-      category,
-      name,
-      nonEssential,
-      timingEvidence
-    };
-  }).filter((row) => row.name);
-  const beforeConsentRows = normalized.filter((row) => row.beforeConsent);
+  const inventory = buildRuntimeCookieInventory({ hybridRuntimeEvidence });
+  const beforeConsentRows = inventory.rows.filter((row) => row.timingEvidence === "before_consent_cookie_write");
   const nonEssentialRows = beforeConsentRows.filter((row) => row.nonEssential);
 
   return {
     beforeConsentCookieCount: beforeConsentRows.length,
-    cookieObservationCount: normalized.length,
+    cookieObservationCount: inventory.rows.length,
     nonEssentialCookieCount: nonEssentialRows.length,
-    sampleBeforeConsentCookies: beforeConsentRows.map((row) => row.name).filter(Boolean).slice(0, 8),
-    sampleNonEssentialCookies: nonEssentialRows.map((row) => row.name).filter(Boolean).slice(0, 8)
+    sampleBeforeConsentCookies: beforeConsentRows.map((row) => row.cookieName).filter(Boolean).slice(0, 8),
+    sampleNonEssentialCookies: nonEssentialRows.map((row) => row.cookieName).filter(Boolean).slice(0, 8)
   };
 }
 

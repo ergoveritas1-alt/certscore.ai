@@ -1,3 +1,5 @@
+import { buildRuntimeCookieInventory } from "../lib/scans/runtime-cookie-evidence";
+
 export type PromotionBlockerFindingId =
   | "behavioral_analytics_disclosure_present"
   | "cookie_disclosure_gap"
@@ -43,12 +45,6 @@ export type PromotionBlockerInput = {
 
 function getRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
-}
-
-function getObjectArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
-    : [];
 }
 
 function getString(value: unknown) {
@@ -158,7 +154,9 @@ function hasMinimumPolicyConfidence(input: PromotionBlockerInput, minimum = 0.6)
 function getRuntimeCookieNames(input: PromotionBlockerInput) {
   const hybrid = getRecord(input.hybridRuntimeEvidence);
   const validation = getRecord(input.cookieGapValidationEvidence);
+  const inventory = buildRuntimeCookieInventory({ hybridRuntimeEvidence: hybrid });
   return [
+    ...inventory.cookieNames,
     ...getStringArray(hybrid?.runtimeCookieNames ?? hybrid?.runtime_cookie_names),
     ...getStringArray(hybrid?.unmatchedCookieNames ?? hybrid?.unmatched_cookie_names),
     ...getStringArray(validation?.runtimeCookieNames ?? validation?.runtime_cookie_names),
@@ -169,7 +167,9 @@ function getRuntimeCookieNames(input: PromotionBlockerInput) {
 function getUnmatchedCookieNames(input: PromotionBlockerInput) {
   const hybrid = getRecord(input.hybridRuntimeEvidence);
   const validation = getRecord(input.cookieGapValidationEvidence);
+  const inventory = buildRuntimeCookieInventory({ hybridRuntimeEvidence: hybrid });
   return [
+    ...inventory.unmatchedCookieNames,
     ...getStringArray(hybrid?.unmatchedCookieNames ?? hybrid?.unmatched_cookie_names),
     ...getStringArray(validation?.unmatchedCookieNames ?? validation?.unmatched_cookie_names)
   ].filter((value, index, values) => values.indexOf(value) === index);
@@ -215,59 +215,17 @@ function disclosurePatternFor(findingId: PromotionBlockerFindingId) {
   }
 }
 
-function isPromotionGradeCookieCategory(value: string | null | undefined) {
-  return Boolean(value && /analytics|advertising|marketing|retargeting|session_replay/i.test(value));
-}
-
-function classifyCookieName(name: string) {
-  if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id)/i.test(name)) {
-    return "analytics";
-  }
-  if (/(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|doubleclick|criteo|_mkto_trk|muid|fr\b|demdex|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check)/i.test(name)) {
-    return "advertising";
-  }
-  if (/(qsi_replaysession|qualtrics|hotjar|fullstory|clarity|contentsquare|mouseflow)/i.test(name)) {
-    return "session_replay";
-  }
-  if (/^(__cf_bm|cf_clearance|awsalb|awsalbcors|jsessionid|phpsessid|csrftoken|xsrf|session|sid$)/i.test(name)) {
-    return "necessary";
-  }
-  return "unknown";
-}
-
 function getPreconsentCookieRows(hybridRuntimeEvidence: Record<string, unknown> | null | undefined) {
-  const hybrid = getRecord(hybridRuntimeEvidence);
-  const rows = [
-    ...getObjectArray(hybrid?.cookieWriteObservations ?? hybrid?.cookie_write_observations),
-    ...getObjectArray(hybrid?.preconsentCookieEvidence ?? hybrid?.preconsent_cookie_evidence)
-  ];
-
-  return rows.map((row) => {
-    const name = getString(row.cookieName) ?? getString(row.cookie_name) ?? getString(row.name);
-    const explicitCategory = getString(row.category) ?? getString(row.cookieCategory) ?? getString(row.cookie_category);
-    const inferredCategory = name ? classifyCookieName(name) : "unknown";
-    const timingEvidence = getString(row.timingEvidence) ?? getString(row.timing_evidence);
-    const beforeConsent =
-      row.beforeConsent === true ||
-      row.before_consent === true ||
-      row.consentState === "pre_consent" ||
-      row.consent_state === "pre_consent" ||
-      timingEvidence === "before_consent_cookie_write" ||
-      timingEvidence === "initial_cookie_snapshot";
-    const category = explicitCategory ?? inferredCategory;
-    const nonEssential =
-      row.nonEssential === true ||
-      row.non_essential === true ||
-      isPromotionGradeCookieCategory(category);
-
-    return {
-      beforeConsent,
-      category,
-      name,
-      nonEssential,
-      timingEvidence
-    };
-  }).filter((row) => row.name);
+  return buildRuntimeCookieInventory({ hybridRuntimeEvidence }).rows.map((row) => ({
+    beforeConsent: row.timingEvidence === "before_consent_cookie_write",
+    category: row.category,
+    initiatorDomain: row.initiatorDomain,
+    initiatorUrl: row.initiatorUrl,
+    initiatorVendor: row.initiatorVendor,
+    name: row.cookieName,
+    nonEssential: row.nonEssential,
+    timingEvidence: row.timingEvidence
+  }));
 }
 
 export function classifyPreconsentPromotionBlockers(input: PromotionBlockerInput): PromotionBlockerAssessment {
@@ -463,6 +421,8 @@ export function classifyPositiveDisclosurePromotionBlockers(
 }
 
 export function classifyCookieDisclosureGapPromotionBlockers(input: PromotionBlockerInput): PromotionBlockerAssessment {
+  const hybrid = getRecord(input.hybridRuntimeEvidence);
+  const inventory = buildRuntimeCookieInventory({ hybridRuntimeEvidence: hybrid });
   const runtimeCookieNames = getRuntimeCookieNames(input);
   const unmatchedCookieNames = getUnmatchedCookieNames(input);
   const unmatchedCookieCount = getUnmatchedCookieCount(input);
@@ -501,7 +461,17 @@ export function classifyCookieDisclosureGapPromotionBlockers(input: PromotionBlo
       policyPageType: input.policyPageType ?? null,
       policyPageUrl: effectivePolicyUrl ?? null,
       policySemanticConfidence: getPolicyConfidence(input),
+      runtimeCookieCategories: inventory.cookieCategories.slice(0, 8),
       runtimeCookieCount: runtimeCookieNames.length,
+      runtimeNonEssentialCookieCount: inventory.nonEssentialCookieNames.length,
+      sampleCookieInitiatorDomains: inventory.rows
+        .flatMap((row) => row.initiatorDomain)
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .slice(0, 8),
+      sampleCookieInitiatorVendors: inventory.rows
+        .flatMap((row) => row.initiatorVendor)
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .slice(0, 8),
       sampleRuntimeCookieNames: runtimeCookieNames.slice(0, 8),
       sampleUnmatchedCookieNames: unmatchedCookieNames.slice(0, 8),
       validationBacked,

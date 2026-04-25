@@ -1472,6 +1472,9 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     "policy_coverage_ratio",
     "policySemanticConfidence",
     "policy_semantic_confidence",
+    "unmatchedCookieCount",
+    "unmatched_cookie_count",
+    "unmatchedThirdPartyCookieCount",
     "unmatched_third_party_cookie_count"
   ]) {
     const value = normalizedFallbackEvidence[key];
@@ -1583,6 +1586,31 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   ]).filter(isConcreteHttpEvidenceUrl);
   if (runtimeRequestUrls.length > 0) {
     entities.runtimeRequestUrls = runtimeRequestUrls;
+  }
+  const runtimeCookieNames = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.runtimeCookieNames) ? (normalizedFallbackEvidence.runtimeCookieNames as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.runtime_cookie_names) ? (normalizedFallbackEvidence.runtime_cookie_names as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.unmatchedCookieNames) ? (normalizedFallbackEvidence.unmatchedCookieNames as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.unmatched_cookie_names) ? (normalizedFallbackEvidence.unmatched_cookie_names as string[]) : [])
+  ]);
+  if (runtimeCookieNames.length > 0) {
+    entities.runtime_cookie_names = runtimeCookieNames;
+  }
+  const unmatchedCookieNames = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.unmatchedCookieNames) ? (normalizedFallbackEvidence.unmatchedCookieNames as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.unmatched_cookie_names) ? (normalizedFallbackEvidence.unmatched_cookie_names as string[]) : [])
+  ]);
+  if (unmatchedCookieNames.length > 0) {
+    entities.unmatched_cookie_names = unmatchedCookieNames;
+  }
+  const runtimeCookieVendors = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.runtimeCookieVendors) ? (normalizedFallbackEvidence.runtimeCookieVendors as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.runtime_cookie_vendors) ? (normalizedFallbackEvidence.runtime_cookie_vendors as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.unmatchedCookieVendors) ? (normalizedFallbackEvidence.unmatchedCookieVendors as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.unmatched_cookie_vendors) ? (normalizedFallbackEvidence.unmatched_cookie_vendors as string[]) : [])
+  ]);
+  if (runtimeCookieVendors.length > 0) {
+    entities.runtime_cookie_vendors = runtimeCookieVendors;
   }
   const preconsentCookieNames = uniqueStrings([
     ...(Array.isArray(normalizedFallbackEvidence.preconsent_cookie_names)
