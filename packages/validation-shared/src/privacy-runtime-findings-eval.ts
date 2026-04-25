@@ -88,6 +88,16 @@ function hasReviewedProductionFindingEvidence(example: PrivacyRuntimeFindingData
   );
 }
 
+function hasCookiePolicySupportEvidence(example: PrivacyRuntimeFindingDatasetExample) {
+  return Boolean(
+    example.findingId === "cookie_policy_present" &&
+      example.evidence.signalKey === "disclosure.cookie_policy_present" &&
+      example.evidence.urlAssessment?.assessment === "supports_promotion" &&
+      example.evidence.snapshotEvidence?.cookie_policy_role === "support_context" &&
+      (hasValues(example.evidence.artifactRefs) || Boolean(example.evidence.policyAnchor))
+  );
+}
+
 function makeExpectation(input: {
   confidenceBand: PrivacyRuntimeConfidenceBand;
   externalSurfacingEligibility: PrivacyRuntimeExternalSurfacingEligibility;
@@ -151,6 +161,15 @@ export function derivePrivacyRuntimeFindingExpectation(
       externalSurfacingEligibility: "eligible",
       presentationState: "confirmed",
       promotionEligibility: "eligible"
+    });
+  }
+
+  if (hasCookiePolicySupportEvidence(example)) {
+    return makeExpectation({
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "support_only",
+      promotionEligibility: "internal_only"
     });
   }
 

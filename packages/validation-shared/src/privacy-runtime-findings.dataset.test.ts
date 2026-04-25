@@ -105,3 +105,45 @@ test("production top surfaced examples retain explicit URL assessment rationale"
     assert.equal(typeof example.evidence.signalKey, "string", `${example.id} needs signal key`);
   }
 });
+
+test("positive context calibration expands behavioral analytics and cookie-policy controls", () => {
+  const counts = new Map<string, { borderline: number; negative: number; positive: number; supportPositive: number; total: number }>();
+
+  for (const findingId of ["behavioral_analytics_disclosure_present", "cookie_policy_present"]) {
+    counts.set(findingId, { borderline: 0, negative: 0, positive: 0, supportPositive: 0, total: 0 });
+  }
+
+  for (const example of PRIVACY_RUNTIME_FINDINGS_DATASET_SEED) {
+    const current = counts.get(example.findingId);
+    if (!current || !example.id.startsWith("context-")) {
+      continue;
+    }
+
+    current.total += 1;
+    if (example.scenarioType === "negative_control") {
+      current.negative += 1;
+    } else if (example.scenarioType === "borderline_review" || example.scenarioType === "borderline_audit_only") {
+      current.borderline += 1;
+    } else {
+      current.positive += 1;
+    }
+    if (example.findingId === "cookie_policy_present" && example.expected.presentationState === "support_only") {
+      current.supportPositive += 1;
+    }
+  }
+
+  assert.deepEqual(counts.get("behavioral_analytics_disclosure_present"), {
+    borderline: 8,
+    negative: 12,
+    positive: 10,
+    supportPositive: 0,
+    total: 30
+  });
+  assert.deepEqual(counts.get("cookie_policy_present"), {
+    borderline: 8,
+    negative: 14,
+    positive: 8,
+    supportPositive: 16,
+    total: 30
+  });
+});
