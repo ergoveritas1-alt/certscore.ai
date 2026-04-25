@@ -9,7 +9,7 @@ import {
 test("privacy runtime coverage report has no seed distribution gaps", () => {
   const snapshot = summarizePrivacyRuntimeFindingsCoverage(PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE);
 
-  assert.equal(snapshot.currentExampleCount, 180);
+  assert.equal(snapshot.currentExampleCount, 210);
   assert.deepEqual(snapshot.gapSummary, []);
 });
 

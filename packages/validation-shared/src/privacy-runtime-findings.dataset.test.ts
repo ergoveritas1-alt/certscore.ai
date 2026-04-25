@@ -7,18 +7,54 @@ import {
   summarizePrivacyRuntimeFindingsDataset
 } from "./privacy-runtime-findings.dataset";
 
-test("privacy runtime seed corpus has the planned v1 distribution", () => {
+test("privacy runtime seed corpus has the current v1.1 distribution", () => {
   const summary = summarizePrivacyRuntimeFindingsDataset(PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE);
 
-  assert.equal(summary.currentExampleCount, 180);
-  assert.equal(summary.positiveCount, 72);
-  assert.equal(summary.negativeCount, 72);
-  assert.equal(summary.borderlineCount, 36);
+  assert.ok(summary.currentExampleCount >= 180);
+  assert.deepEqual(
+    {
+      borderlineCount: summary.borderlineCount,
+      currentExampleCount: summary.currentExampleCount,
+      negativeCount: summary.negativeCount,
+      positiveCount: summary.positiveCount
+    },
+    {
+      borderlineCount: 46,
+      currentExampleCount: 210,
+      negativeCount: 82,
+      positiveCount: 82
+    }
+  );
 
-  assert.equal(summary.groupCounts.preconsent_tracking, 45);
-  assert.equal(summary.groupCounts.fingerprinting, 45);
-  assert.equal(summary.groupCounts.dark_pattern_consent, 60);
-  assert.equal(summary.groupCounts.disclosure_runtime_mismatch, 30);
+  assert.deepEqual(
+    {
+      dark_pattern_consent: summary.groupCounts.dark_pattern_consent,
+      disclosure_runtime_mismatch: summary.groupCounts.disclosure_runtime_mismatch,
+      fingerprinting: summary.groupCounts.fingerprinting,
+      preconsent_tracking: summary.groupCounts.preconsent_tracking
+    },
+    {
+      dark_pattern_consent: 60,
+      disclosure_runtime_mismatch: 30,
+      fingerprinting: 45,
+      preconsent_tracking: 75
+    }
+  );
+
+  assert.deepEqual(
+    {
+      live_artifact: summary.sourceKindCounts.live_artifact,
+      nano_review: summary.sourceKindCounts.nano_review,
+      regression_case: summary.sourceKindCounts.regression_case,
+      synthetic_fixture: summary.sourceKindCounts.synthetic_fixture
+    },
+    {
+      live_artifact: 60,
+      nano_review: 12,
+      regression_case: 69,
+      synthetic_fixture: 69
+    }
+  );
 });
 
 test("privacy runtime corpus keeps negatives and borderline cases in every finding group", () => {
