@@ -1432,7 +1432,7 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     accessibilityCoverageSummary
   ])
     .map((snippet) => normalizePolicySnippet(snippet))
-    .filter((snippet): snippet is string => Boolean(snippet));
+    .filter((snippet): snippet is string => typeof snippet === "string" && !/^topic:[a-z0-9_:-]+$/i.test(snippet));
 
   const counts: Record<string, number> = {};
   for (const key of [
@@ -1508,6 +1508,9 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (Array.isArray(normalizedFallbackEvidence.policyBoilerplateSignals)) {
     entities.policyBoilerplateSignals = uniqueStrings(normalizedFallbackEvidence.policyBoilerplateSignals as string[]);
   }
+  if (Array.isArray(normalizedFallbackEvidence.policyPositiveSnippetKeys)) {
+    entities.policyPositiveSnippetKeys = uniqueStrings(normalizedFallbackEvidence.policyPositiveSnippetKeys as string[]);
+  }
   if (Array.isArray(normalizedFallbackEvidence.relatedVendors)) {
     entities.relatedVendors = uniqueStrings(normalizedFallbackEvidence.relatedVendors as string[]);
   }
@@ -1564,6 +1567,9 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     Array.isArray(normalizedFallbackEvidence.policyBoilerplateSignals) &&
     normalizedFallbackEvidence.policyBoilerplateSignals.some((entry) => typeof entry === "string" && entry.trim().length > 0)
       ? "policy_boilerplate_signals_retained"
+      : null,
+    typeof normalizedFallbackEvidence.policyPositiveTopic === "string"
+      ? `policy_positive_topic:${normalizedFallbackEvidence.policyPositiveTopic}`
       : null,
     normalizedFallbackEvidence.policyStructurallyWeak === true || normalizedFallbackEvidence.policy_structurally_weak === true
       ? "policy_structurally_weak"

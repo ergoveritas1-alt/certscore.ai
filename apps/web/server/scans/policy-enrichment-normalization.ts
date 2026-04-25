@@ -131,7 +131,27 @@ export function derivePositivePolicySignalMap(input: {
     return keys.some((key) => isMeaningfulPolicyText(snippets?.[key]));
   };
   const summaryMatches = (pattern: RegExp) => pattern.test(policySummaryText);
+  const rowTextMatches = (row: Record<string, unknown>, pattern: RegExp) => {
+    const snippets = getPolicyEvidenceSnippets(row);
+    const text = [
+      getPolicySummaryText(row),
+      ...(snippets
+        ? Object.values(snippets).flatMap((value) =>
+            Array.isArray(value)
+              ? value.filter((entry): entry is string => typeof entry === "string")
+              : typeof value === "string"
+                ? [value]
+                : []
+          )
+        : [])
+    ]
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .join(" ");
+    return pattern.test(text);
+  };
   const anyPrivacyPolicyRowMatches = (matcher: (row: Record<string, unknown>) => boolean) => privacyPolicyRows.some(matcher);
+  const behavioralAnalyticsDisclosurePattern =
+    /behavioral analytics|behavioural analytics|session replay|session recording|heat ?maps?|product analytics|hotjar|fullstory|mouseflow|contentsquare|microsoft clarity|record(?:ing)?\s+(?:user\s+)?(?:sessions?|interactions?)|observe\s+(?:mouse movements|clicks|keystrokes|entered text)/i;
 
   return new Map(
     POLICY_POSITIVE_SIGNAL_SPECS.map((spec) => {
@@ -160,7 +180,12 @@ export function derivePositivePolicySignalMap(input: {
                       ) ||
                       summaryMatches(/\badvertising partners?\b|\bthird-?party ad(?:vertising)?\b|\bad networks?\b|\bad servers?\b/)
                   : spec.evidenceSnippetKey === "topic:session_replay_disclosure"
-                    ? anyPrivacyPolicyRowMatches((row) => rowHasPolicyMention(row, "session_replay_disclosure"))
+                    ? anyPrivacyPolicyRowMatches(
+                        (row) =>
+                          rowHasPolicyMention(row, "session_replay_disclosure") ||
+                          rowHasEvidenceSnippet(row, "topic:session_replay_disclosure", "session_replay_disclosure") ||
+                          rowTextMatches(row, behavioralAnalyticsDisclosurePattern)
+                      )
                     : spec.evidenceSnippetKey === "topic:children"
                       ? anyPrivacyPolicyRowMatches(
                           (row) => rowHasPolicyMention(row, "children") || rowHasEvidenceSnippet(row, "topic:children", "children")

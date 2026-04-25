@@ -634,24 +634,36 @@ function getPolicySignalFallbackEvidence(input: {
   const policyPositiveSpec = getPolicyPositiveSignalSpec(input.signalKey);
   const topicKey = policyPositiveSpec?.evidenceSnippetKey ?? null;
   const pageType = policyPositiveSpec?.pageType ?? "privacy_policy";
-  const row =
-    input.policyEnrichment.find((entry) => getPolicyPageType(entry) === pageType) ??
-    input.policyEnrichment[0] ??
-    null;
-  const pageUrl = row ? getPolicyPageUrl(row) : null;
-  const policySummaryShort = row ? getPolicySummaryText(row) : null;
-  const evidenceSnippets = row ? getPolicyEvidenceSnippets(row) : null;
+  const candidateRows = input.policyEnrichment.filter((entry) => getPolicyPageType(entry) === pageType);
   const mergedPolicyRightsSignals = findMergedSignalValue(input.mergedSignals, "policyRightsSignals");
   const policyRightsSignals = Array.isArray(mergedPolicyRightsSignals)
     ? mergedPolicyRightsSignals.filter((value): value is string => typeof value === "string")
     : [];
   const topicSnippetKeys = topicKey
-    ? [topicKey]
+    ? [
+        topicKey,
+        topicKey.startsWith("topic:") ? topicKey.slice("topic:".length) : `topic:${topicKey}`,
+        ...(policyPositiveSpec?.unifiedFindingId === "behavioral_analytics_disclosure_present"
+          ? ["session_replay_disclosure", "behavioral_analytics_disclosure", "product_analytics_disclosure"]
+          : [])
+      ]
     : policyPositiveSpec?.unifiedFindingId === "privacy_contact_path_present"
       ? ["privacy_contact", "notice_contact", "dsar"]
       : policyPositiveSpec?.unifiedFindingId === "children_privacy_disclosure_present"
         ? ["topic:children", "children"]
         : [];
+  const rowHasTopicSnippet = (entry: Record<string, unknown>) => {
+    const snippets = getPolicyEvidenceSnippets(entry);
+    return topicSnippetKeys.some((key) => isMeaningfulPolicyText(snippets?.[key]));
+  };
+  const row =
+    candidateRows.find(rowHasTopicSnippet) ??
+    candidateRows[0] ??
+    input.policyEnrichment[0] ??
+    null;
+  const pageUrl = row ? getPolicyPageUrl(row) : null;
+  const policySummaryShort = row ? getPolicySummaryText(row) : null;
+  const evidenceSnippets = row ? getPolicyEvidenceSnippets(row) : null;
   const topicSnippets = topicSnippetKeys.flatMap((key) =>
     isMeaningfulPolicyText(evidenceSnippets?.[key]) ? [String(evidenceSnippets[key])] : []
   );
@@ -679,6 +691,11 @@ function getPolicySignalFallbackEvidence(input: {
     policyRightsSignals,
     privacyContactChannelType,
     policyChildrenReference,
+    policyPositiveSnippetKeys: topicSnippetKeys,
+    policyPositiveTopic:
+      policyPositiveSpec?.unifiedFindingId === "behavioral_analytics_disclosure_present"
+        ? "behavioral_analytics_disclosure"
+        : topicKey?.replace(/^topic:/, ""),
     policySummaryShort: policySnippets.length > 0 ? null : policySummaryShort,
     signalKey: input.signalKey,
     signalLabel: input.signalLabel,

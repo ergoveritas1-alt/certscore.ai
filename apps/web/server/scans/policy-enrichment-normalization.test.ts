@@ -85,6 +85,8 @@ test("derivePositivePolicySignalMap falls back to snippet-backed policy evidence
     primaryPolicyEnrichment: {
       policy_evidence_snippets: {
         dsar: "If you have privacy questions, contact us at privacy@example.com.",
+        session_replay_disclosure:
+          "We use session replay and heatmaps to understand clicks, scrolls, and page interactions.",
         "topic:third_party_advertising_disclosure":
           "Advertising partners may use cookies, JavaScript, or web beacons in their ads and links.",
         children: "We do not knowingly collect personal information from children under 13."
@@ -95,6 +97,20 @@ test("derivePositivePolicySignalMap falls back to snippet-backed policy evidence
   });
 
   assert.equal(signalMap.get("privacy.privacy_contact_path_present"), true);
+  assert.equal(signalMap.get("privacy.behavioral_analytics_disclosure_present"), true);
   assert.equal(signalMap.get("privacy.third_party_advertising_disclosure_present"), true);
   assert.equal(signalMap.get("privacy.children_privacy_disclosure_present"), true);
+});
+
+test("derivePositivePolicySignalMap detects explicit behavioral analytics summary text", () => {
+  const signalMap = derivePositivePolicySignalMap({
+    policyEnrichment: [],
+    primaryPolicyEnrichment: {
+      page_type: "privacy_policy",
+      policy_summary_short:
+        "We use Microsoft Clarity session recordings and heatmaps to improve site usability."
+    }
+  });
+
+  assert.equal(signalMap.get("privacy.behavioral_analytics_disclosure_present"), true);
 });
