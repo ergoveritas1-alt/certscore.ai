@@ -261,12 +261,34 @@ type UrlscanFallbackSnapshot = {
   countryCount: number | null;
   cookieDomains: string[];
   cookieNames: string[];
+  observedDomains: string[];
+  requestUrls: string[];
   topDomains: string[];
   countries: string[];
   serverNames: string[];
   technologyNames: string[];
   trackerVendorCount: number | null;
 };
+
+function extractRequestUrls(urlscanResult: Record<string, unknown> | null | undefined) {
+  const dataRequests = getRecordArray(getNestedRecord(urlscanResult, ["data"]), "requests");
+  const urls: string[] = [];
+
+  for (const row of dataRequests) {
+    const request = getNestedRecord(row, ["request"]);
+    const response = getNestedRecord(row, ["response"]);
+    const requestUrl = getRecordString(request, "url");
+    const responseUrl = getRecordString(response, "url");
+    if (requestUrl) {
+      urls.push(requestUrl);
+    }
+    if (responseUrl) {
+      urls.push(responseUrl);
+    }
+  }
+
+  return uniqueStrings(urls);
+}
 
 function extractTechnologyNames(urlscanResult: Record<string, unknown> | null | undefined) {
   const candidates = [
@@ -318,7 +340,8 @@ function buildUrlscanFallbackSnapshot(input: {
     (urlscanRequestCountFromStats > 0 ? urlscanRequestCountFromStats : null) ??
     getRecordNumber(input.fallbackLookup?.metadata_json ?? null, "requestCount") ??
     getEarlyResultNumber(input.liveEarlyResults, "Requests");
-  const topDomains = uniqueStrings(getRecordStringArray(urlscanLists, "domains").slice(0, 5));
+  const observedDomains = uniqueStrings(getRecordStringArray(urlscanLists, "domains"));
+  const topDomains = observedDomains.slice(0, 5);
   const countries = uniqueStrings(getRecordStringArray(urlscanLists, "countries").slice(0, 5));
   const serverNames = uniqueStrings(getRecordStringArray(urlscanLists, "servers").slice(0, 5));
   const verifiedSurfaceTargets = uniqueStrings([
@@ -332,6 +355,7 @@ function buildUrlscanFallbackSnapshot(input: {
   const technologyNames = extractTechnologyNames(input.urlscanResult);
   const cookieNames = uniqueStrings(urlscanCookies.map((cookie) => getRecordString(cookie, "name")));
   const cookieDomains = uniqueStrings(urlscanCookies.map((cookie) => getRecordString(cookie, "domain")));
+  const requestUrls = extractRequestUrls(input.urlscanResult);
 
   return {
     reportUrl:
@@ -358,6 +382,8 @@ function buildUrlscanFallbackSnapshot(input: {
     countryCount,
     cookieDomains,
     cookieNames,
+    observedDomains,
+    requestUrls,
     topDomains,
     countries,
     serverNames,
@@ -548,6 +574,64 @@ function describePreconsentTrackingFinding(input: {
   return "The live preview observed tracking signals or tracking cookies before a clear consent interaction point was completed.";
 }
 
+function buildFallbackRuntimeArtifacts(snapshot: UrlscanFallbackSnapshot) {
+  return {
+    consent_baseline_tracker_evidence_urls: snapshot.requestUrls,
+    initial_cookie_names: snapshot.cookieNames,
+    third_party_request_domains: snapshot.observedDomains
+  };
+}
+
+function hasFallbackObservableConsentSurface(snapshot: UrlscanFallbackSnapshot) {
+  const context = deriveHighRiskTrackingContext({
+    evidenceUrls: snapshot.requestUrls,
+    runtimeArtifacts: buildFallbackRuntimeArtifacts(snapshot),
+    thirdPartyDomains: snapshot.observedDomains
+  });
+  const haystack = uniqueStrings([
+    ...snapshot.technologyNames,
+    ...snapshot.observedDomains,
+    ...snapshot.cookieNames,
+    ...snapshot.requestUrls
+  ]).join("\n");
+
+  return (
+    context.cmpVendors.length > 0 ||
+    /\bonetrust\b/i.test(haystack) ||
+    /\bcookielaw\b/i.test(haystack) ||
+    /\btrustarc\b/i.test(haystack) ||
+    /\btruste\b/i.test(haystack) ||
+    /\bcookiebot\b/i.test(haystack) ||
+    /\bsourcepoint\b/i.test(haystack) ||
+    /\bOptanon(?:Consent|AlertBoxClosed)?\b/i.test(haystack)
+  );
+}
+
+function describeFallbackPreconsentTrackingFinding(input: {
+  hostname: string;
+  snapshot: PreviewSnapshotSource;
+  fallbackSnapshot: UrlscanFallbackSnapshot;
+}) {
+  const context = deriveHighRiskTrackingContext({
+    hostname: input.hostname,
+    snapshot: input.snapshot as unknown as Record<string, unknown>,
+    runtimeArtifacts: buildFallbackRuntimeArtifacts(input.fallbackSnapshot),
+    evidenceUrls: input.fallbackSnapshot.requestUrls,
+    thirdPartyDomains: input.fallbackSnapshot.observedDomains
+  });
+  const vendorSummary = formatHighRiskVendorSummary(context.highRiskVendors);
+
+  if (context.isSensitiveContext && vendorSummary.length > 0) {
+    return `Supplemental public runtime evidence retained tracking cookies or tracking requests on a ${context.sensitiveContextLabel}. Vendors observed include ${vendorSummary.join(", ")}. Sensitive-context behavioral data may be flowing to advertising, identity, or profiling systems before a clear consent interaction is completed.`;
+  }
+
+  if (vendorSummary.length > 0) {
+    return `Supplemental public runtime evidence retained tracking cookies or tracking requests before consent. Vendors observed include ${vendorSummary.join(", ")}.`;
+  }
+
+  return "Supplemental public runtime evidence retained tracking activity or tracking cookies before a clear consent interaction point was completed.";
+}
+
 function canSurfaceScoresWithCoverageCaveat(input: {
   siteSurfaceUnverified: boolean;
   snapshot: PreviewSnapshotSource;
@@ -595,6 +679,26 @@ function isEvidenceRichZeroPagePreview(snapshot: PreviewSnapshotSource, verified
   );
 }
 
+function hasUsablePublicCoverageDespiteProtectionLabel(snapshot: PreviewSnapshotSource, verifiedSurfaces: string[]) {
+  const homepageFetchHttpStatusSuccessful =
+    snapshot.homepageFetchHttpStatus == null ||
+    (snapshot.homepageFetchHttpStatus >= 200 && snapshot.homepageFetchHttpStatus < 400);
+  const meaningfulCoverage =
+    snapshot.pagesScanned >= 2 &&
+    snapshot.totalSignals >= 20 &&
+    (verifiedSurfaces.length > 0 || hasPreconsentTrackingEvidence(snapshot));
+
+  return (
+    meaningfulCoverage &&
+    (snapshot.homepageFetchStatus === "ok" || homepageFetchHttpStatusSuccessful) &&
+    homepageFetchHttpStatusSuccessful &&
+    snapshot.blockedFlag !== true &&
+    snapshot.captchaFlag !== true &&
+    snapshot.challengeSuspected !== true &&
+    snapshot.rateLimitSuspected !== true
+  );
+}
+
 export function buildPreviewPayloadFromSnapshot(input: {
   hostname: string;
   normalizedUrl: string;
@@ -628,7 +732,20 @@ export function buildPreviewPayloadFromSnapshot(input: {
     robotsFetchHttpStatus: input.snapshot.robotsFetchHttpStatus,
     robotsFetchStatus: input.snapshot.robotsFetchStatus
   });
-  const siteSurfaceUnverified = scanStopReason !== null && !evidenceRichZeroPagePreview;
+  const usablePublicCoverageDespiteProtectionLabel =
+    scanStopReason &&
+    [
+      "reachability_blocked_challenge_suspected",
+      "reachability_blocked_captcha",
+      "reachability_blocked_auth_wall",
+      "reachability_blocked_geo_or_reputation",
+      "unknown_access_limitation"
+    ].includes(scanStopReason.kind) &&
+    hasUsablePublicCoverageDespiteProtectionLabel(input.snapshot, verifiedSurfaces);
+  const siteSurfaceUnverified =
+    scanStopReason !== null &&
+    !evidenceRichZeroPagePreview &&
+    !usablePublicCoverageDespiteProtectionLabel;
   const surfaceScoresWithCoverageCaveat = canSurfaceScoresWithCoverageCaveat({
     siteSurfaceUnverified,
     snapshot: input.snapshot
@@ -1007,6 +1124,12 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
   }
 
   payload.fallbackEvidence = fallbackEvidence;
+  const fallbackConsentSurface = observableConsentSurface || hasFallbackObservableConsentSurface(fallbackSnapshot);
+  const fallbackTrackingCookieCount = fallbackEvidence.entities?.cookieNames?.length ?? 0;
+  const fallbackTrackingActivityRetained =
+    fallbackTrackingCookieCount > 0 ||
+    (fallbackSnapshot.thirdPartyRequestCount ?? 0) > 0 ||
+    fallbackSnapshot.requestUrls.length > 0;
 
   insertSummaryBullet(
     payload.summaryBullets,
@@ -1034,7 +1157,27 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
     );
   }
 
-  if (!observableConsentSurface && ((fallbackSnapshot.thirdPartyRequestCount ?? 0) > 0 || (fallbackSnapshot.initialCookieCount ?? 0) > 0)) {
+  if (fallbackConsentSurface && fallbackTrackingActivityRetained) {
+    insertSummaryBullet(
+      payload.summaryBullets,
+      "Supplemental public runtime evidence retained a consent platform and tracking activity."
+    );
+    prependFinding(payload.sampleFindings, {
+      affectedPage: "Homepage",
+      category: "privacy",
+      severity: "high",
+      title: "Tracking activity observed before consent",
+      description: describeFallbackPreconsentTrackingFinding({
+        hostname: getRecordString(input.snapshot as unknown as Record<string, unknown>, "registeredDomain") ??
+          hostnameFromUrl(input.snapshot.finalUrl) ??
+          "scanned domain",
+        snapshot: input.snapshot,
+        fallbackSnapshot
+      })
+    });
+  }
+
+  if (!fallbackConsentSurface && ((fallbackSnapshot.thirdPartyRequestCount ?? 0) > 0 || (fallbackSnapshot.initialCookieCount ?? 0) > 0)) {
     insertSummaryBullet(
       payload.summaryBullets,
       "No observable consent surface was retained, so fallback runtime activity was not promoted into a consent-violation claim."
