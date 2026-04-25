@@ -62,6 +62,25 @@ function buildNormalizedUrl(input: {
   return hostname ? `https://${hostname}/` : "";
 }
 
+function isHomepageAccessLimited(snapshot: Record<string, unknown>) {
+  const homepageFetchStatus = getString(snapshot, "homepage_fetch_status");
+  const homepageFetchHttpStatus = getNumber(snapshot, "homepage_fetch_http_status");
+  const scanOutcome = getString(snapshot, "scan_outcome");
+
+  return (
+    getBoolean(snapshot, "blocked_flag") === true ||
+    getBoolean(snapshot, "captcha_flag") === true ||
+    getBoolean(snapshot, "auth_wall_detected") === true ||
+    getBoolean(snapshot, "auth_wall_suspected") === true ||
+    getBoolean(snapshot, "challenge_suspected") === true ||
+    homepageFetchStatus === "blocked" ||
+    homepageFetchStatus === "forbidden" ||
+    homepageFetchHttpStatus === 401 ||
+    homepageFetchHttpStatus === 403 ||
+    Boolean(scanOutcome && /blocked|captcha|auth|challenge|forbidden/i.test(scanOutcome))
+  );
+}
+
 export function shouldAttemptFullScanUrlscanSupplement(input: {
   snapshot: Record<string, unknown> | null;
 }) {
@@ -70,29 +89,10 @@ export function shouldAttemptFullScanUrlscanSupplement(input: {
     return false;
   }
 
-  if (getVerifiedSurfaceCount(snapshot) > 0) {
-    return false;
-  }
-
-  const homepageFetchStatus = getString(snapshot, "homepage_fetch_status");
-  const homepageFetchHttpStatus = getNumber(snapshot, "homepage_fetch_http_status");
-  const scanOutcome = getString(snapshot, "scan_outcome");
   const coverageLevel = getString(snapshot, "coverage_level");
-  const blockedByFlags =
-    getBoolean(snapshot, "blocked_flag") === true ||
-    getBoolean(snapshot, "captcha_flag") === true ||
-    getBoolean(snapshot, "auth_wall_detected") === true ||
-    getBoolean(snapshot, "auth_wall_suspected") === true ||
-    getBoolean(snapshot, "challenge_suspected") === true;
-  const blockedByStatus =
-    homepageFetchStatus === "blocked" ||
-    homepageFetchStatus === "forbidden" ||
-    homepageFetchHttpStatus === 401 ||
-    homepageFetchHttpStatus === 403;
-  const blockedByOutcome = Boolean(scanOutcome && /blocked|captcha|auth|challenge|forbidden/i.test(scanOutcome));
   const blockedByCoverage = coverageLevel === "limited_partial" && getNumber(snapshot, "pages_scanned") === 0;
 
-  return blockedByFlags || blockedByStatus || blockedByOutcome || blockedByCoverage;
+  return isHomepageAccessLimited(snapshot) || blockedByCoverage;
 }
 
 export function buildFullScanUrlscanSupplementPayload(input: {
@@ -117,6 +117,7 @@ export function buildFullScanUrlscanSupplementPayload(input: {
   const homepageFetchStatus = getString(input.snapshot, "homepage_fetch_status");
   const homepageFetchHttpStatus = getNumber(input.snapshot, "homepage_fetch_http_status");
   const robotsFetchHttpStatus = getNumber(input.snapshot, "robots_fetch_http_status");
+  const verifiedPublicSurfacesCount = getVerifiedSurfaceCount(input.snapshot);
   const protectionVendor =
     getString(input.snapshot, "block_vendor_guess") ??
     getString(input.snapshot, "cmp_vendor_name");
@@ -141,12 +142,12 @@ export function buildFullScanUrlscanSupplementPayload(input: {
       homepageStatus: homepageFetchHttpStatus ?? homepageFetchStatus ?? null,
       passiveVerificationAttempted: true,
       robotsStatus: robotsFetchHttpStatus,
-      verifiedPublicSurfacesCount: 0,
+      verifiedPublicSurfacesCount,
       protectionVendor
     },
     fallbackEvidence,
     summaryBullets: [
-      "CertScore did not promote normal privacy findings because the live browser pass was blocked.",
+      "CertScore retained limited-coverage context because the live browser pass hit an access limitation.",
       "urlscan.io retained same-host runtime evidence that can help explain what a public browser saw.",
       "This indirect evidence is supplemental and is not treated as a verified CertScore finding."
     ],

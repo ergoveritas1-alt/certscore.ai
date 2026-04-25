@@ -6,7 +6,7 @@ import {
   shouldAttemptFullScanUrlscanSupplement
 } from "./urlscan-supplement";
 
-test("attempts urlscan supplement only for blocked full scans without verified public surfaces", () => {
+test("attempts urlscan supplement for homepage-blocked full scans even when legal surfaces were verified", () => {
   assert.equal(
     shouldAttemptFullScanUrlscanSupplement({
       snapshot: {
@@ -21,10 +21,11 @@ test("attempts urlscan supplement only for blocked full scans without verified p
     shouldAttemptFullScanUrlscanSupplement({
       snapshot: {
         blocked_flag: true,
+        pages_scanned: 4,
         verified_public_surfaces_count: 1
       }
     }),
-    false
+    true
   );
 
   assert.equal(
@@ -71,7 +72,8 @@ test("builds supplemental urlscan evidence without promoted sample findings", ()
     snapshot: {
       blocked_flag: true,
       homepage_fetch_http_status: 403,
-      homepage_fetch_status: "blocked"
+      homepage_fetch_status: "blocked",
+      verified_public_surfaces_count: 2
     }
   });
 
@@ -81,6 +83,7 @@ test("builds supplemental urlscan evidence without promoted sample findings", ()
   assert.equal(payload.fallbackEvidence?.metrics?.requestCount, 40);
   assert.equal(payload.fallbackEvidence?.metrics?.domainCount, 3);
   assert.deepEqual(payload.fallbackEvidence?.entities?.technologyNames, ["Cloudflare", "Google Tag Manager"]);
+  assert.equal(payload.evidence?.verifiedPublicSurfacesCount, 2);
   assert.equal(payload.sampleFindings.length, 0);
   assert.match(payload.summaryBullets.join(" "), /not treated as a verified CertScore finding/);
 });
