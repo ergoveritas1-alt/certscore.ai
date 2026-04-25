@@ -1965,6 +1965,15 @@ function isLowSignalBrandSnippet(value: string | null | undefined) {
   return wordCount <= 4 && /^[A-Z][A-Za-z&'.-]*(?:\s+[A-Z][A-Za-z&'.-]*)*$/.test(trimmed);
 }
 
+function isPolicyPositiveMarkerSnippet(value: string | null | undefined) {
+  return Boolean(
+    value &&
+      /^(?:topic:[a-z0-9_:-]+|dsar|access|delete|correct|correction|export|manage|state_rights|authorized_agent|appeal|privacy_controls|privacy_contact|tracking_technologies_disclosure|targeted_advertising_disclosure|behavioral_analytics_disclosure|session_replay_disclosure|product_analytics_disclosure)$/i.test(
+        value.trim()
+      )
+  );
+}
+
 function isReadableSurfaceSnippet(value: string | null | undefined) {
   if (!value) {
     return false;
@@ -2002,7 +2011,31 @@ function hasFindingSpecificSurfaceSnippet(findingId: string, snippets: string[] 
 
   if (findingId === "privacy_rights_path_present") {
     return readableSnippets.some(
-      (snippet) => /(privacy rights|right to access|right to request|delete request|access request|correction request|data request)/i.test(
+      (snippet) => /(privacy rights|right to access|right to request|delete request|access request|correction request|data request|exercise (?:your )?rights|submit (?:a )?request)/i.test(
+        snippet
+      )
+    );
+  }
+
+  if (findingId === "tracking_technologies_disclosure_present") {
+    return readableSnippets.some((snippet) =>
+      /tracking technolog(?:y|ies)|cookies? and similar technolog(?:y|ies)|pixels?|web beacons?|tags?|tracking scripts?|software development kits?|\bSDKs?\b/i.test(
+        snippet
+      )
+    );
+  }
+
+  if (findingId === "targeted_advertising_disclosure_present") {
+    return readableSnippets.some((snippet) =>
+      /targeted advertis(?:e|ing)|interest-based advertis(?:e|ing)|personalized ads?|cross-context behavioral advertis(?:e|ing)|sale or sharing|sell or share/i.test(
+        snippet
+      )
+    );
+  }
+
+  if (findingId === "behavioral_analytics_disclosure_present") {
+    return readableSnippets.some((snippet) =>
+      /behavioral analytics|behavioural analytics|session replay|session recording|heat ?map|product analytics|hotjar|fullstory|mouseflow|contentsquare|microsoft clarity|mouse movements?|clicks?|keystrokes?|pages visited|observe (?:how )?(?:visitors|users)/i.test(
         snippet
       )
     );
@@ -2214,7 +2247,9 @@ function sanitizeEvidenceForFinding(
   };
 
   if (POSITIVE_SURFACE_FINDING_IDS.has(findingId)) {
-    next.snippets = next.snippets.filter((snippet) => !isBlockedOrInterstitialSnippet(snippet));
+    next.snippets = next.snippets.filter(
+      (snippet) => !isBlockedOrInterstitialSnippet(snippet) && !isPolicyPositiveMarkerSnippet(snippet)
+    );
   }
 
   if (findingId === "contact_support_path_present" || findingId === "cookie_policy_present") {
@@ -2963,6 +2998,7 @@ type PacketizedFindingSupportRule = {
 
 type PolicyEnrichmentFindingSupportRule = {
   findingId:
+    | "privacy_rights_path_present"
     | "privacy_contact_path_present"
     | "gpc_disclosure_present"
     | "tracking_technologies_disclosure_present"
@@ -3119,6 +3155,10 @@ const PACKETIZED_FINDING_SUPPORT_RULES: PacketizedFindingSupportRule[] = [
 ];
 
 const POLICY_ENRICHMENT_FINDING_SUPPORT_RULES: PolicyEnrichmentFindingSupportRule[] = [
+  {
+    findingId: "privacy_rights_path_present",
+    rationale: "Surfaced because structured policy evidence retained a concrete privacy-rights path."
+  },
   {
     findingId: "privacy_contact_path_present",
     rationale: "Surfaced because structured policy evidence retained a clear privacy contact path."

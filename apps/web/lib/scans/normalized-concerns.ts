@@ -180,6 +180,19 @@ function getStringArrayEvidence(value: unknown) {
     : [];
 }
 
+function getNestedStringEvidence(value: unknown): string[] {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value.trim()];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(getNestedStringEvidence);
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).flatMap(getNestedStringEvidence);
+  }
+  return [];
+}
+
 function getStringValue(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -342,6 +355,7 @@ function normalizePolicySemanticEvidence(rawEvidence: Record<string, unknown> | 
   assignNumber("policySemanticConfidence", ["policySemanticConfidence", "policy_semantic_confidence"]);
   assignNumber("policyCoverageRatio", ["policyCoverageRatio", "policy_coverage_ratio"]);
   assignNumber("policySnippetCount", ["policySnippetCount", "policy_snippet_count"]);
+  assignString("policyDsarMechanism", ["policyDsarMechanism", "policy_dsar_mechanism"]);
   assignArray("policyRightsSignals", ["policyRightsSignals", "policy_rights_signals"]);
   assignArray("policyDataCategories", ["policyDataCategories", "policy_data_categories"]);
   assignBoolean("policySubprocessorsListed", ["policySubprocessorsListed", "policy_subprocessors_listed"]);
@@ -606,6 +620,8 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
         } else {
           sourceUrls.add(value);
         }
+      } else if (/policyDsarMechanism|policy_dsar_mechanism/i.test(key)) {
+        addEntity(entities, "policyDsarMechanism", [value]);
       } else if (/claim|policy|disclosure|summary|snippet|description|rationale/i.test(key)) {
         policySnippets.add(value);
       } else if (/runtime|request|network|artifact/i.test(key)) {
@@ -623,6 +639,13 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
 
     if (value === true) {
       flags.add(key);
+      continue;
+    }
+
+    if (/policy.*snippets?|evidence_snippets/i.test(key)) {
+      for (const entry of getNestedStringEvidence(value).slice(0, 12)) {
+        policySnippets.add(entry);
+      }
       continue;
     }
 
@@ -654,7 +677,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
-    if (/operator_relationship|policyRightsSignals|rights_signals?|policyBoilerplateSignals/i.test(key)) {
+    if (/operator_relationship|policyRightsSignals|rights_signals?|policyBoilerplateSignals|policyPositiveSnippetKeys|policy_positive_snippet_keys/i.test(key)) {
       addEntity(entities, key, stringValues);
       continue;
     }

@@ -2,8 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import process from "node:process";
 import { closePools, query } from "@website-signal-risk-scanner/db";
 import {
-  classifyDsarPromotionBlockers,
-  classifyPreconsentPromotionBlockers,
+  classifyPromotionBlockers,
   summarizePromotionBlockers,
   type PromotionBlockerAssessment,
   type PromotionBlockerFindingId,
@@ -49,19 +48,27 @@ const DEFAULT_FOCUS_FINDINGS = [
 
 type PromotionBlockerRow = {
   consent_baseline_tracker_evidence_urls: string[] | null;
+  cookie_gap_validation_evidence: Record<string, unknown> | null;
+  data_access_request_present: boolean | null;
+  data_deletion_request_present: boolean | null;
   domain: string | null;
   hybrid_runtime_evidence: Record<string, unknown> | null;
+  policy_actionable_flags: string[] | null;
   policy_coverage_ratio: number | null;
   policy_dsar_mechanism: string | null;
+  policy_evidence_snippets: Record<string, unknown> | null;
   policy_extraction_status: string | null;
   policy_enrichment_json: Record<string, unknown> | null;
   policy_page_url: string | null;
+  policy_page_type: string | null;
+  policy_positive_signal_present: boolean | null;
   policy_rights_signals: string[] | null;
   policy_semantic_confidence: number | null;
   policy_snippet_count: number | null;
   policy_structurally_weak: boolean | null;
   preconsent_tracking_detected: boolean | null;
   preconsent_violation_evidence_urls: string[] | null;
+  privacy_request_form_present: boolean | null;
   scan_id: string;
   section_review_no_dsar_mechanism: boolean | null;
   tracking_before_consent_detected: boolean | null;
@@ -74,6 +81,55 @@ function getArgValue(flag: string) {
 
 function hasFlag(flag: string) {
   return process.argv.includes(flag);
+}
+
+function looksLikeEvidenceHash(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value.trim());
+}
+
+function collectEvidenceHashes(value: unknown): string[] {
+  if (looksLikeEvidenceHash(value)) {
+    return [value.trim()];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(collectEvidenceHashes);
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).flatMap(collectEvidenceHashes);
+  }
+  return [];
+}
+
+function resolveEvidenceHashes(value: unknown, snippetsByHash: Map<string, string>): unknown {
+  if (looksLikeEvidenceHash(value)) {
+    return snippetsByHash.get(value.trim()) ?? value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => resolveEvidenceHashes(entry, snippetsByHash));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, resolveEvidenceHashes(entry, snippetsByHash)])
+    );
+  }
+  return value;
+}
+
+async function loadPolicyEvidenceByHash(hashes: string[]) {
+  const uniqueHashes = [...new Set(hashes)];
+  if (uniqueHashes.length === 0) {
+    return new Map<string, string>();
+  }
+
+  const result = await query<{ evidence_hash: string; snippet: string }>(
+    `select evidence_hash, snippet
+       from policy_evidence
+      where evidence_hash = any($1::text[])`,
+    [uniqueHashes],
+    { readOnly: true }
+  );
+
+  return new Map(result.rows.map((row) => [row.evidence_hash, row.snippet] as const));
 }
 
 function getNumberArg(flag: string, fallback: number) {
@@ -194,10 +250,16 @@ function classifyLikelyGap(input: {
 }
 
 function isPromotionBlockerFinding(value: string): value is PromotionBlockerFindingId {
-  return value === "preconsent_tracking" || value === "missing_dsar_mechanism";
+  return value === "preconsent_tracking" ||
+    value === "missing_dsar_mechanism" ||
+    value === "privacy_rights_path_present" ||
+    value === "cookie_disclosure_gap" ||
+    value === "behavioral_analytics_disclosure_present" ||
+    value === "targeted_advertising_disclosure_present" ||
+    value === "tracking_technologies_disclosure_present";
 }
 
-function toPromotionBlockerInput(row: PromotionBlockerRow): PromotionBlockerInput {
+function toPromotionBlockerInput(row: PromotionBlockerRow, findingId: PromotionBlockerFindingId): PromotionBlockerInput {
   const policyJson = row.policy_enrichment_json ?? {};
   const policyRightsSignals =
     row.policy_rights_signals ??
@@ -206,22 +268,51 @@ function toPromotionBlockerInput(row: PromotionBlockerRow): PromotionBlockerInpu
       : []);
   return {
     consentBaselineTrackerEvidenceUrls: row.consent_baseline_tracker_evidence_urls,
+    cookieGapValidationEvidence: row.cookie_gap_validation_evidence,
+    dataAccessRequestPresent: row.data_access_request_present,
+    dataDeletionRequestPresent: row.data_deletion_request_present,
     domain: row.domain,
     hybridRuntimeEvidence: row.hybrid_runtime_evidence,
+    policyActionableFlags: row.policy_actionable_flags,
     policyCoverageRatio: row.policy_coverage_ratio,
     policyDsarMechanism: row.policy_dsar_mechanism,
+    policyEvidenceSnippets:
+      row.policy_evidence_snippets ??
+      (policyJson.policy_evidence_snippets && typeof policyJson.policy_evidence_snippets === "object"
+        ? policyJson.policy_evidence_snippets as Record<string, unknown>
+        : null),
     policyExtractionStatus: row.policy_extraction_status,
     policyPageUrl: row.policy_page_url,
+    policyPageType: row.policy_page_type,
+    policyPositiveSignalPresent: row.policy_positive_signal_present,
     policyRightsSignals,
     policySemanticConfidence: row.policy_semantic_confidence ?? (typeof policyJson.policy_semantic_confidence === "number" ? policyJson.policy_semantic_confidence : null),
     policySnippetCount: row.policy_snippet_count ?? (typeof policyJson.policy_snippet_count === "number" ? policyJson.policy_snippet_count : null),
     policyStructurallyWeak: row.policy_structurally_weak ?? (policyJson.policy_structurally_weak === true),
     preconsentTrackingDetected: row.preconsent_tracking_detected,
     preconsentViolationEvidenceUrls: row.preconsent_violation_evidence_urls,
+    privacyRequestFormPresent: row.privacy_request_form_present,
     scanId: row.scan_id,
     sectionReviewNoDsarMechanism: row.section_review_no_dsar_mechanism,
     trackingBeforeConsentDetected: row.tracking_before_consent_detected
   };
+}
+
+function policyPositiveSignalKeyForFinding(findingId: PromotionBlockerFindingId) {
+  switch (findingId) {
+    case "behavioral_analytics_disclosure_present":
+      return "privacy.behavioral_analytics_disclosure_present";
+    case "privacy_rights_path_present":
+      return "privacy.privacy_rights_path_present";
+    case "targeted_advertising_disclosure_present":
+      return "privacy.targeted_advertising_disclosure_present";
+    case "tracking_technologies_disclosure_present":
+      return "privacy.tracking_technologies_disclosure_present";
+    case "cookie_disclosure_gap":
+      return "privacy.cookie_runtime_disclosure_gap_detected";
+    default:
+      return null;
+  }
 }
 
 async function loadPromotionBlockerRows(input: {
@@ -229,6 +320,7 @@ async function loadPromotionBlockerRows(input: {
   limit: number;
   scanType: string;
 }) {
+  const signalKey = policyPositiveSignalKeyForFinding(input.findingId);
   const predicate =
     input.findingId === "preconsent_tracking"
       ? `(ss.preconsent_tracking_detected is true or ss.tracking_before_consent_detected is true or exists (
@@ -237,26 +329,71 @@ async function loadPromotionBlockerRows(input: {
               and sig.signal_key = 'privacy.preconsent_tracking_detected'
               and sig.signal_value_json = 'true'::jsonb
          ))`
-      : `exists (
+      : input.findingId === "missing_dsar_mechanism"
+        ? `exists (
            select 1
              from validation_runs vr
              join validation_run_findings vf on vf.validation_run_id = vr.id
             where vr.scan_id = s.id
               and vf.rule_key = 'section_review.no_dsar_mechanism'
-         )`;
+         )`
+        : signalKey
+          ? `exists (
+              select 1 from scan_signals sig
+               where sig.scan_id = s.id
+                 and sig.signal_key = '${signalKey}'
+                 and sig.signal_value_json = 'true'::jsonb
+            )`
+          : "false";
 
   const result = await query<PromotionBlockerRow>(
     `
       select s.id::text as scan_id,
              ss.domain,
+             ss.privacy_request_form_present,
+             ss.data_access_request_present,
+             ss.data_deletion_request_present,
              ss.preconsent_tracking_detected,
              ss.tracking_before_consent_detected,
              ra.consent_baseline_tracker_evidence_urls,
              ra.hybrid_runtime_evidence,
              coalesce(pcv.evidence_urls, '{}'::text[]) as preconsent_violation_evidence_urls,
              pe.page_url as policy_page_url,
+             pe.page_type as policy_page_type,
              pe.policy_dsar_mechanism,
+             coalesce(
+               array(
+                 select jsonb_array_elements_text(
+                   case
+                     when jsonb_typeof(to_jsonb(pe)->'policy_rights_signals') = 'array'
+                       then to_jsonb(pe)->'policy_rights_signals'
+                     else '[]'::jsonb
+                   end
+                 )
+               ),
+               '{}'::text[]
+             ) as policy_rights_signals,
+             coalesce(to_jsonb(pe)->'policy_evidence_snippets', '{}'::jsonb) as policy_evidence_snippets,
+             coalesce(
+               array(
+                 select jsonb_array_elements_text(
+                   case
+                     when jsonb_typeof(to_jsonb(pe)->'policy_actionable_flags') = 'array'
+                       then to_jsonb(pe)->'policy_actionable_flags'
+                     else '[]'::jsonb
+                   end
+                 )
+               ),
+               '{}'::text[]
+             ) as policy_actionable_flags,
              to_jsonb(pe) as policy_enrichment_json,
+             exists (
+               select 1 from scan_signals sig
+                where sig.scan_id = s.id
+                  and sig.signal_key = $3
+                  and sig.signal_value_json = 'true'::jsonb
+             ) as policy_positive_signal_present,
+             cgv.evidence as cookie_gap_validation_evidence,
              case
                when pe.policy_structurally_weak is true then 'structurally_weak'
                when pe.id is not null then 'fetched'
@@ -286,10 +423,27 @@ async function loadPromotionBlockerRows(input: {
           select *
             from policy_enrichment pe
            where pe.scan_id = s.id
-             and (pe.page_type = 'privacy_policy' or pe.page_type is null)
-           order by pe.created_at desc
+             and (
+               case
+                 when $4 = 'cookie_disclosure_gap' then pe.page_type in ('cookie_policy', 'privacy_policy')
+                 else pe.page_type = 'privacy_policy'
+               end
+               or pe.page_type is null
+             )
+           order by
+             case when $4 = 'cookie_disclosure_gap' and pe.page_type = 'cookie_policy' then 0 else 1 end,
+             pe.created_at desc
            limit 1
         ) pe on true
+        left join lateral (
+          select vf.evidence_json as evidence
+            from validation_runs vr
+            join validation_run_findings vf on vf.validation_run_id = vr.id
+           where vr.scan_id = s.id
+             and vf.rule_key = 'cookie_runtime.disclosure_gap'
+           order by vf.created_at desc nulls last
+           limit 1
+        ) cgv on true
        where s.status = 'completed'
          and s.organization_id is not null
          and s.scan_type = $1
@@ -297,11 +451,18 @@ async function loadPromotionBlockerRows(input: {
        order by s.completed_at desc nulls last
        limit $2
     `,
-    [input.scanType, input.limit],
+    [input.scanType, input.limit, signalKey, input.findingId],
     { readOnly: true }
   );
 
-  return result.rows;
+  const snippetsByHash = await loadPolicyEvidenceByHash(
+    result.rows.flatMap((row) => collectEvidenceHashes(row.policy_evidence_snippets))
+  );
+
+  return result.rows.map((row) => ({
+    ...row,
+    policy_evidence_snippets: resolveEvidenceHashes(row.policy_evidence_snippets, snippetsByHash) as Record<string, unknown>
+  }));
 }
 
 async function buildPromotionBlockerDrilldowns(input: {
@@ -320,9 +481,10 @@ async function buildPromotionBlockerDrilldowns(input: {
   for (const findingId of findingIds) {
     const rows = await loadPromotionBlockerRows({ findingId, limit: input.limit, scanType: input.scanType });
     const assessments = rows.map((row) => ({
-      ...(findingId === "preconsent_tracking"
-        ? classifyPreconsentPromotionBlockers(toPromotionBlockerInput(row))
-        : classifyDsarPromotionBlockers(toPromotionBlockerInput(row))),
+      ...classifyPromotionBlockers({
+        ...toPromotionBlockerInput(row, findingId),
+        findingId
+      }),
       domain: row.domain,
       scanId: row.scan_id
     }));

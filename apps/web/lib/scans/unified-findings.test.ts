@@ -3812,6 +3812,33 @@ test("surfaces tracking technologies disclosure present from policy enrichment e
   ]);
 });
 
+test("surfaces privacy rights path present from policy enrichment evidence", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/privacy",
+        policy_dsar_mechanism: "present",
+        policy_evidence_snippets: {
+          dsar: "To exercise your privacy rights, submit a request to access, delete, or correct your personal information."
+        },
+        policy_rights_signals: ["access_request", "delete_request"],
+        policy_semantic_confidence: 0.82
+      }
+    ],
+    reviewFindingCandidates: [],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+  const packet = packets.find((entry) => entry.unifiedFindingId === "privacy_rights_path_present");
+
+  assert.equal(packet?.unifiedFindingId, "privacy_rights_path_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.deepEqual(packet?.evidence?.snippets, [
+    "To exercise your privacy rights, submit a request to access, delete, or correct your personal information."
+  ]);
+});
+
 test("surfaces third-party advertising disclosure present from policy enrichment evidence", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

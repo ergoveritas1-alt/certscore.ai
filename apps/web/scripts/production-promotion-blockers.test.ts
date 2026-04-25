@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  classifyCookieDisclosureGapPromotionBlockers,
   classifyDsarPromotionBlockers,
+  classifyPositiveDisclosurePromotionBlockers,
   classifyPreconsentPromotionBlockers,
+  classifyPrivacyRightsPathPromotionBlockers,
   summarizePromotionBlockers
 } from "./production-promotion-blockers";
 
@@ -92,6 +95,75 @@ test("DSAR blocker classifier demotes retained rights mechanisms", () => {
   assert.equal(assessment.promotionReady, false);
   assert.ok(assessment.blockers.includes("dsar_mechanism_present"));
   assert.ok(assessment.blockers.includes("rights_signals_present"));
+});
+
+test("privacy-rights path blocker classifier promotes actionable retained rights evidence", () => {
+  const assessment = classifyPrivacyRightsPathPromotionBlockers({
+    policyDsarMechanism: "form",
+    policyEvidenceSnippets: {
+      policy_rights_signals: "Submit a request to access, delete, or correct your personal information."
+    },
+    policyExtractionStatus: "fetched",
+    policyPageUrl: "https://example.test/privacy",
+    policyRightsSignals: ["access_request", "delete_request"],
+    policySemanticConfidence: 0.82
+  });
+
+  assert.equal(assessment.promotionReady, true);
+  assert.deepEqual(assessment.blockers, []);
+});
+
+test("positive disclosure blocker classifier requires finding-specific policy text", () => {
+  const assessment = classifyPositiveDisclosurePromotionBlockers(
+    {
+      policyEvidenceSnippets: {
+        session_replay_disclosure: "We use session replay tools and heatmaps to understand how visitors use our pages."
+      },
+      policyExtractionStatus: "fetched",
+      policyPageUrl: "https://example.test/privacy",
+      policyPositiveSignalPresent: true,
+      policySemanticConfidence: 0.74
+    },
+    "behavioral_analytics_disclosure_present"
+  );
+
+  assert.equal(assessment.promotionReady, true);
+  assert.deepEqual(assessment.blockers, []);
+});
+
+test("positive disclosure blocker classifier keeps generic analytics text blocked", () => {
+  const assessment = classifyPositiveDisclosurePromotionBlockers(
+    {
+      policyEvidenceSnippets: {
+        analytics: "We use analytics to improve our services."
+      },
+      policyExtractionStatus: "fetched",
+      policyPageUrl: "https://example.test/privacy",
+      policyPositiveSignalPresent: true,
+      policySemanticConfidence: 0.74
+    },
+    "behavioral_analytics_disclosure_present"
+  );
+
+  assert.equal(assessment.promotionReady, false);
+  assert.ok(assessment.blockers.includes("generic_or_low_value_disclosure_text"));
+});
+
+test("cookie disclosure gap blocker classifier requires runtime and unmatched inventory", () => {
+  const assessment = classifyCookieDisclosureGapPromotionBlockers({
+    cookieGapValidationEvidence: {
+      runtimeCookieNames: ["_ga", "_fbp"],
+      unmatchedCookieNames: ["_fbp"]
+    },
+    policyExtractionStatus: "fetched",
+    policyPageType: "cookie_policy",
+    policyPageUrl: "https://example.test/cookie-policy",
+    policyPositiveSignalPresent: true,
+    policySemanticConfidence: 0.8
+  });
+
+  assert.equal(assessment.promotionReady, true);
+  assert.deepEqual(assessment.blockers, []);
 });
 
 test("summarizePromotionBlockers counts blockers and ready candidates", () => {

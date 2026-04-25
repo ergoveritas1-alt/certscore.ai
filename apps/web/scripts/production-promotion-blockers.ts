@@ -1,4 +1,11 @@
-export type PromotionBlockerFindingId = "missing_dsar_mechanism" | "preconsent_tracking";
+export type PromotionBlockerFindingId =
+  | "behavioral_analytics_disclosure_present"
+  | "cookie_disclosure_gap"
+  | "missing_dsar_mechanism"
+  | "preconsent_tracking"
+  | "privacy_rights_path_present"
+  | "targeted_advertising_disclosure_present"
+  | "tracking_technologies_disclosure_present";
 
 export type PromotionBlockerAssessment = {
   blockers: string[];
@@ -9,18 +16,26 @@ export type PromotionBlockerAssessment = {
 
 export type PromotionBlockerInput = {
   consentBaselineTrackerEvidenceUrls?: string[] | null;
+  cookieGapValidationEvidence?: Record<string, unknown> | null;
+  dataAccessRequestPresent?: boolean | null;
+  dataDeletionRequestPresent?: boolean | null;
   domain?: string | null;
   hybridRuntimeEvidence?: Record<string, unknown> | null;
+  policyActionableFlags?: string[] | null;
   policyCoverageRatio?: number | null;
   policyDsarMechanism?: string | null;
+  policyEvidenceSnippets?: Record<string, unknown> | null;
   policyExtractionStatus?: string | null;
   policyPageUrl?: string | null;
+  policyPageType?: string | null;
+  policyPositiveSignalPresent?: boolean | null;
   policyRightsSignals?: string[] | null;
   policySemanticConfidence?: number | null;
   policySnippetCount?: number | null;
   policyStructurallyWeak?: boolean | null;
   preconsentTrackingDetected?: boolean | null;
   preconsentViolationEvidenceUrls?: string[] | null;
+  privacyRequestFormPresent?: boolean | null;
   scanId?: string | null;
   sectionReviewNoDsarMechanism?: boolean | null;
   trackingBeforeConsentDetected?: boolean | null;
@@ -44,6 +59,108 @@ function getStringArray(value: unknown) {
   return Array.isArray(value)
     ? [...new Set(value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim()))]
     : [];
+}
+
+function getNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function flattenSnippetValues(value: unknown): string[] {
+  if (typeof value === "string" && value.trim()) {
+    return [value.trim()];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(flattenSnippetValues);
+  }
+  const record = getRecord(value);
+  if (record) {
+    return Object.values(record).flatMap(flattenSnippetValues);
+  }
+  return [];
+}
+
+function getPolicySnippets(input: PromotionBlockerInput) {
+  return flattenSnippetValues(input.policyEvidenceSnippets);
+}
+
+function hasPolicyAnchor(input: PromotionBlockerInput) {
+  return Boolean(input.policyPageUrl && /^https?:\/\//i.test(input.policyPageUrl));
+}
+
+function hasFetchedPolicy(input: PromotionBlockerInput) {
+  return input.policyExtractionStatus === "fetched" && input.policyStructurallyWeak !== true;
+}
+
+function getPolicyConfidence(input: PromotionBlockerInput) {
+  return typeof input.policySemanticConfidence === "number" ? input.policySemanticConfidence : null;
+}
+
+function hasMinimumPolicyConfidence(input: PromotionBlockerInput, minimum = 0.6) {
+  const confidence = getPolicyConfidence(input);
+  return typeof confidence === "number" && confidence >= minimum;
+}
+
+function getRuntimeCookieNames(input: PromotionBlockerInput) {
+  const hybrid = getRecord(input.hybridRuntimeEvidence);
+  const validation = getRecord(input.cookieGapValidationEvidence);
+  return [
+    ...getStringArray(hybrid?.runtimeCookieNames ?? hybrid?.runtime_cookie_names),
+    ...getStringArray(hybrid?.unmatchedCookieNames ?? hybrid?.unmatched_cookie_names),
+    ...getStringArray(validation?.runtimeCookieNames ?? validation?.runtime_cookie_names),
+    ...getStringArray(validation?.unmatchedCookieNames ?? validation?.unmatched_cookie_names)
+  ].filter((value, index, values) => values.indexOf(value) === index);
+}
+
+function getUnmatchedCookieNames(input: PromotionBlockerInput) {
+  const hybrid = getRecord(input.hybridRuntimeEvidence);
+  const validation = getRecord(input.cookieGapValidationEvidence);
+  return [
+    ...getStringArray(hybrid?.unmatchedCookieNames ?? hybrid?.unmatched_cookie_names),
+    ...getStringArray(validation?.unmatchedCookieNames ?? validation?.unmatched_cookie_names)
+  ].filter((value, index, values) => values.indexOf(value) === index);
+}
+
+function getUnmatchedCookieCount(input: PromotionBlockerInput) {
+  const validation = getRecord(input.cookieGapValidationEvidence);
+  const hybrid = getRecord(input.hybridRuntimeEvidence);
+  const explicit =
+    getNumber(validation?.unmatchedCookieCount ?? validation?.unmatched_cookie_count) ??
+    getNumber(validation?.unmatchedThirdPartyCookieCount ?? validation?.unmatched_third_party_cookie_count) ??
+    getNumber(hybrid?.unmatchedCookieCount ?? hybrid?.unmatched_cookie_count) ??
+    getNumber(hybrid?.unmatchedThirdPartyCookieCount ?? hybrid?.unmatched_third_party_cookie_count);
+  return explicit ?? getUnmatchedCookieNames(input).length;
+}
+
+function isLikelyPolicyUrl(value: string | null | undefined, pattern: RegExp) {
+  if (!value) {
+    return false;
+  }
+  try {
+    const parsed = new URL(value);
+    return pattern.test(`${parsed.pathname}${parsed.search}`.toLowerCase());
+  } catch {
+    return pattern.test(value.toLowerCase());
+  }
+}
+
+function disclosurePatternFor(findingId: PromotionBlockerFindingId) {
+  switch (findingId) {
+    case "behavioral_analytics_disclosure_present":
+      return /behavioral analytics|behavioural analytics|session replay|session recording|heat ?map|product analytics|hotjar|fullstory|mouseflow|contentsquare|microsoft clarity/i;
+    case "targeted_advertising_disclosure_present":
+      return /targeted advertis(?:e|ing)|interest-based advertis(?:e|ing)|personalized ads?|cross-context behavioral advertis(?:e|ing)|sale or sharing|sell or share/i;
+    case "tracking_technologies_disclosure_present":
+      return /tracking technolog(?:y|ies)|cookies? and similar technolog(?:y|ies)|pixels?|web beacons?|tags?|tracking scripts?|software development kits?|\bSDKs?\b/i;
+    default:
+      return null;
+  }
 }
 
 function isPromotionGradeCookieCategory(value: string | null | undefined) {
@@ -197,6 +314,165 @@ export function classifyDsarPromotionBlockers(input: PromotionBlockerInput): Pro
     findingId: "missing_dsar_mechanism",
     promotionReady
   };
+}
+
+export function classifyPrivacyRightsPathPromotionBlockers(input: PromotionBlockerInput): PromotionBlockerAssessment {
+  const rightsSignals = input.policyRightsSignals ?? [];
+  const snippets = getPolicySnippets(input);
+  const concreteSnapshotMechanism =
+    input.privacyRequestFormPresent === true ||
+    input.dataAccessRequestPresent === true ||
+    input.dataDeletionRequestPresent === true;
+  const dsarMechanism = input.policyDsarMechanism?.trim() || null;
+  const actionableRightsSignal = rightsSignals.some((value) =>
+    /access|delete|deletion|correct|correction|export|portable|opt[-_\s]?out|privacy_controls|privacy_contact|authorized_agent|appeal/i.test(value)
+  );
+  const actionableSnippet = snippets.some((value) =>
+    /(?:privacy rights|rights (?:portal|center)|privacy (?:portal|center|request)|(?:access|delete|deletion|correction|opt-out|data) request|request (?:access|deletion|correction|a copy)|submit (?:a )?request|exercise (?:your )?rights|privacy@|data protection officer|\bdpo\b|webform|request form)/i.test(value)
+  );
+  const meaningfulMechanism = Boolean(dsarMechanism && !/^(?:none|unknown|absent|null|missing|not_found)$/i.test(dsarMechanism));
+  const blockers: string[] = [];
+
+  if (!hasPolicyAnchor(input)) {
+    blockers.push("missing_policy_anchor_url");
+  }
+  if (!hasFetchedPolicy(input)) {
+    blockers.push(input.policyExtractionStatus ? "policy_extraction_incomplete" : "missing_policy_extraction_status");
+  }
+  if (!hasMinimumPolicyConfidence(input)) {
+    blockers.push("low_policy_semantic_confidence");
+  }
+  if (!concreteSnapshotMechanism && !actionableRightsSignal && !actionableSnippet && !meaningfulMechanism) {
+    blockers.push("missing_actionable_rights_path_evidence");
+  }
+
+  return {
+    blockers,
+    evidence: {
+      actionableRightsSignal,
+      actionableSnippet,
+      concreteSnapshotMechanism,
+      policyDsarMechanism: dsarMechanism,
+      policyExtractionStatus: input.policyExtractionStatus ?? null,
+      policyPageUrl: input.policyPageUrl ?? null,
+      policyRightsSignals: rightsSignals,
+      policySemanticConfidence: getPolicyConfidence(input),
+      snippetCount: snippets.length
+    },
+    findingId: "privacy_rights_path_present",
+    promotionReady: blockers.length === 0
+  };
+}
+
+export function classifyPositiveDisclosurePromotionBlockers(
+  input: PromotionBlockerInput,
+  findingId:
+    | "behavioral_analytics_disclosure_present"
+    | "targeted_advertising_disclosure_present"
+    | "tracking_technologies_disclosure_present"
+): PromotionBlockerAssessment {
+  const snippets = getPolicySnippets(input);
+  const pattern = disclosurePatternFor(findingId);
+  const highValueSnippet = pattern ? snippets.some((value) => pattern.test(value)) : false;
+  const blockers: string[] = [];
+
+  if (!hasPolicyAnchor(input)) {
+    blockers.push("missing_policy_anchor_url");
+  }
+  if (!hasFetchedPolicy(input)) {
+    blockers.push(input.policyExtractionStatus ? "policy_extraction_incomplete" : "missing_policy_extraction_status");
+  }
+  if (!hasMinimumPolicyConfidence(input)) {
+    blockers.push("low_policy_semantic_confidence");
+  }
+  if (input.policyPositiveSignalPresent !== true) {
+    blockers.push("missing_policy_positive_signal");
+  }
+  if (snippets.length === 0) {
+    blockers.push("missing_policy_snippet");
+  } else if (!highValueSnippet) {
+    blockers.push("generic_or_low_value_disclosure_text");
+  }
+
+  return {
+    blockers,
+    evidence: {
+      highValueSnippet,
+      policyExtractionStatus: input.policyExtractionStatus ?? null,
+      policyPageUrl: input.policyPageUrl ?? null,
+      policyPositiveSignalPresent: input.policyPositiveSignalPresent === true,
+      policySemanticConfidence: getPolicyConfidence(input),
+      snippetCount: snippets.length,
+      snippetPreview: snippets[0]?.slice(0, 180) ?? null
+    },
+    findingId,
+    promotionReady: blockers.length === 0
+  };
+}
+
+export function classifyCookieDisclosureGapPromotionBlockers(input: PromotionBlockerInput): PromotionBlockerAssessment {
+  const runtimeCookieNames = getRuntimeCookieNames(input);
+  const unmatchedCookieNames = getUnmatchedCookieNames(input);
+  const unmatchedCookieCount = getUnmatchedCookieCount(input);
+  const hasCookiePolicyUrl =
+    input.policyPageType === "cookie_policy" ||
+    isLikelyPolicyUrl(input.policyPageUrl, /cookie|privacy|legal|policy|notice/);
+  const blockers: string[] = [];
+
+  if (!hasPolicyAnchor(input)) {
+    blockers.push("missing_policy_anchor_url");
+  }
+  if (!hasCookiePolicyUrl) {
+    blockers.push("missing_cookie_or_privacy_policy_anchor");
+  }
+  if (!hasFetchedPolicy(input)) {
+    blockers.push(input.policyExtractionStatus ? "policy_extraction_incomplete" : "missing_policy_extraction_status");
+  }
+  if (!hasMinimumPolicyConfidence(input)) {
+    blockers.push("low_policy_semantic_confidence");
+  }
+  if (input.policyPositiveSignalPresent !== true) {
+    blockers.push("missing_cookie_gap_signal");
+  }
+  if (runtimeCookieNames.length === 0) {
+    blockers.push("missing_runtime_cookie_inventory");
+  }
+  if (unmatchedCookieCount <= 0) {
+    blockers.push("missing_unmatched_cookie_inventory");
+  }
+
+  return {
+    blockers,
+    evidence: {
+      policyExtractionStatus: input.policyExtractionStatus ?? null,
+      policyPageType: input.policyPageType ?? null,
+      policyPageUrl: input.policyPageUrl ?? null,
+      policySemanticConfidence: getPolicyConfidence(input),
+      runtimeCookieCount: runtimeCookieNames.length,
+      sampleRuntimeCookieNames: runtimeCookieNames.slice(0, 8),
+      sampleUnmatchedCookieNames: unmatchedCookieNames.slice(0, 8),
+      unmatchedCookieCount
+    },
+    findingId: "cookie_disclosure_gap",
+    promotionReady: blockers.length === 0
+  };
+}
+
+export function classifyPromotionBlockers(input: PromotionBlockerInput & { findingId: PromotionBlockerFindingId }) {
+  switch (input.findingId) {
+    case "preconsent_tracking":
+      return classifyPreconsentPromotionBlockers(input);
+    case "missing_dsar_mechanism":
+      return classifyDsarPromotionBlockers(input);
+    case "privacy_rights_path_present":
+      return classifyPrivacyRightsPathPromotionBlockers(input);
+    case "cookie_disclosure_gap":
+      return classifyCookieDisclosureGapPromotionBlockers(input);
+    case "behavioral_analytics_disclosure_present":
+    case "targeted_advertising_disclosure_present":
+    case "tracking_technologies_disclosure_present":
+      return classifyPositiveDisclosurePromotionBlockers(input, input.findingId);
+  }
 }
 
 export function summarizePromotionBlockers(assessments: PromotionBlockerAssessment[]) {
