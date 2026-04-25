@@ -643,6 +643,7 @@ function getPolicySignalFallbackEvidence(input: {
   signalKey: string;
   signalLabel: string;
   signalValue: unknown;
+  snapshot?: Record<string, unknown> | null;
 }) {
   const rightsSnippetKeys = [
     "dsar",
@@ -700,10 +701,14 @@ function getPolicySignalFallbackEvidence(input: {
     : [];
   const policySnippets = normalizePolicySnippetList([...topicSnippets, ...rightsSnippets]);
   const mergedPrivacyContactChannelType = findMergedSignalValue(input.mergedSignals, "privacyContactChannelType");
+  const snapshotPrivacyContactChannelType =
+    typeof input.snapshot?.privacy_contact_channel_type === "string" && isMeaningfulPolicyText(input.snapshot.privacy_contact_channel_type)
+      ? input.snapshot.privacy_contact_channel_type
+      : null;
   const privacyContactChannelType =
     typeof mergedPrivacyContactChannelType === "string" && isMeaningfulPolicyText(mergedPrivacyContactChannelType)
       ? mergedPrivacyContactChannelType
-      : null;
+      : snapshotPrivacyContactChannelType;
   const mergedPolicyChildrenReference = findMergedSignalValue(input.mergedSignals, "policyChildrenReference");
   const policyChildrenReference =
     typeof mergedPolicyChildrenReference === "string" && isMeaningfulPolicyText(mergedPolicyChildrenReference)
@@ -909,7 +914,8 @@ export function buildReviewFindings(input: {
                 policyEnrichment: input.policyEnrichment ?? [],
                 signalKey: item.key,
                 signalLabel: item.label,
-                signalValue: item.value
+                signalValue: item.value,
+                snapshot: input.snapshot
               })
           : /privacy\.gpc_signal_not_honored/i.test(item.key)
             ? {
