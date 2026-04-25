@@ -1321,6 +1321,114 @@ export const PRIVACY_RUNTIME_POSITIVE_CONTEXT_CALIBRATION_EXAMPLES: PrivacyRunti
   })
 ];
 
+export const PRIVACY_RUNTIME_DSAR_ABSENCE_CALIBRATION_EXAMPLES: PrivacyRuntimeFindingDatasetExample[] = [
+  ...makeExamples({
+    count: 10,
+    evidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/dsar-absence/positive-${index}/policy-enrichment.json`],
+      policyAnchor: {
+        claimType: "missing_dsar_mechanism",
+        confidence: 0.84,
+        extractionStatus: "fetched",
+        sourceUrl: `https://dsar-absence-positive-${index}.example.test/privacy`,
+        snippet: "The privacy policy describes personal data handling but no access, deletion, correction, portability, or privacy request mechanism was identified."
+      },
+      signalKey: "section_review.no_dsar_mechanism",
+      snapshotEvidence: {
+        policy_dsar_mechanism: "absent",
+        policy_extraction_status: "fetched",
+        policy_rights_signals: [],
+        policy_semantic_confidence: 0.84,
+        section_review_no_dsar_mechanism: true
+      },
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Own URL review found a fetched primary privacy policy with explicit absence evidence and no retained privacy-rights request path.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: `https://dsar-absence-positive-${index}.example.test/privacy`
+      }
+    }),
+    expectationFor: () => positiveExpectation("high"),
+    findingGroup: "production_surfaced_calibration",
+    findingIds: ["missing_dsar_mechanism"],
+    idPrefix: "dsar-absence-positive",
+    notesFor: () => "Fetched policy, high-confidence enrichment, and explicit DSAR absence metadata support confirmed missing DSAR mechanism.",
+    scenarioType: "positive_high_confidence",
+    sourceKindFor: (index) => (index % 2 === 0 ? "regression_case" : "live_artifact")
+  }),
+  ...makeExamples({
+    count: 10,
+    evidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/dsar-absence/negative-${index}/policy-enrichment.json`],
+      policyAnchor: {
+        claimType: "privacy_rights_mechanism_present",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: `https://dsar-absence-negative-${index}.example.test/privacy-rights`,
+        snippet: "Submit a privacy request form to request access, deletion, correction, or portability of your personal information."
+      },
+      signalKey: "section_review.no_dsar_mechanism",
+      snapshotEvidence: {
+        policy_dsar_mechanism: index % 2 === 0 ? "form" : "privacy_contact",
+        policy_extraction_status: "fetched",
+        policy_rights_signals: ["access_request", "delete_request"],
+        policy_semantic_confidence: 0.86,
+        privacy_rights_path_present: true
+      },
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found an access/deletion request form, privacy-rights portal, or privacy-specific request contact.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: `https://dsar-absence-negative-${index}.example.test/privacy-rights`
+      }
+    }),
+    expectationFor: () => negativeExpectation(),
+    findingGroup: "production_surfaced_calibration",
+    findingIds: ["missing_dsar_mechanism"],
+    idPrefix: "dsar-absence-negative",
+    notesFor: () => "Concrete retained DSAR mechanism evidence should suppress the missing-DSAR interpretation.",
+    reasonFor: () => ({ negativeControlReason: "Retained policy evidence identifies an actionable privacy-rights request mechanism." }),
+    scenarioType: "negative_control",
+    sourceKindFor: (index) => (index % 2 === 0 ? "regression_case" : "synthetic_fixture")
+  }),
+  ...makeExamples({
+    count: 10,
+    evidenceFor: (index) => ({
+      artifactRefs: index % 2 === 0 ? [`s3://privacy-runtime/dsar-absence/borderline-${index}/policy-enrichment.json`] : [],
+      policyAnchor: {
+        claimType: "possible_missing_dsar_mechanism",
+        confidence: 0.62,
+        extractionStatus: index % 2 === 0 ? "parser_incomplete" : "fetched",
+        sourceUrl: `https://dsar-absence-borderline-${index}.example.test/privacy`,
+        snippet: index % 2 === 0
+          ? "Policy extraction was incomplete around privacy-rights language."
+          : "The policy mentions privacy rights but does not retain a request form, portal, or privacy-specific contact."
+      },
+      signalKey: "section_review.no_dsar_mechanism",
+      snapshotEvidence: {
+        policy_dsar_mechanism: index % 2 === 0 ? "unknown" : "absent",
+        policy_extraction_status: index % 2 === 0 ? "parser_incomplete" : "fetched",
+        policy_rights_signals: index % 3 === 0 ? ["access_request"] : [],
+        policy_semantic_confidence: index % 2 === 0 ? 0.58 : 0.68
+      },
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own URL review found partial, parser-incomplete, or internally inconsistent DSAR evidence.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: `https://dsar-absence-borderline-${index}.example.test/privacy`
+      }
+    }),
+    expectationFor: () => borderlineExpectation("review"),
+    findingGroup: "production_surfaced_calibration",
+    findingIds: ["missing_dsar_mechanism"],
+    idPrefix: "dsar-absence-borderline",
+    notesFor: () => "Parser-incomplete or mixed DSAR evidence remains review-only until explicit absence and no mechanism evidence agree.",
+    reasonFor: () => ({ downgradeReason: "Missing complete fetched-policy absence evidence or contradicted by retained rights signals." }),
+    scenarioType: "borderline_review",
+    sourceKindFor: (index) => (index % 2 === 0 ? "regression_case" : "synthetic_fixture")
+  })
+];
+
 export const PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE: PrivacyRuntimeFindingDatasetExample[] = [
   ...makeExamples({
     count: 18,
@@ -1660,6 +1768,7 @@ export const PRIVACY_RUNTIME_FINDINGS_DATASET_SEED: PrivacyRuntimeFindingDataset
   ...PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE,
   ...PRIVACY_RUNTIME_PRODUCTION_TOP_FINDINGS_EXAMPLES,
   ...PRIVACY_RUNTIME_POSITIVE_CONTEXT_CALIBRATION_EXAMPLES,
+  ...PRIVACY_RUNTIME_DSAR_ABSENCE_CALIBRATION_EXAMPLES,
   ...PRIVACY_RUNTIME_FINDINGS_REVIEWED_EXAMPLES
 ];
 

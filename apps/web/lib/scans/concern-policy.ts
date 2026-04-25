@@ -156,21 +156,21 @@ function getPolicySignalString(
   evidence: Record<string, unknown> | null | undefined,
   key: string
 ) {
-  return getCanonicalStringEvidence(evidence, [key]);
+  return getCanonicalStringEvidence(evidence, [key, key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)]);
 }
 
 function getPolicySignalNumber(
   evidence: Record<string, unknown> | null | undefined,
   key: string
 ) {
-  return getNumberEvidence(evidence, [key]);
+  return getNumberEvidence(evidence, [key, key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)]);
 }
 
 function getPolicySignalStringArray(
   evidence: Record<string, unknown> | null | undefined,
   key: string
 ) {
-  return getStringArrayValues(evidence, [key]);
+  return getStringArrayValues(evidence, [key, key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)]);
 }
 
 function getFetchQuality(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -619,9 +619,15 @@ export function hasConcreteDsarEvidence(evidence: Record<string, unknown> | null
   const policySemanticConfidence = getPolicySignalNumber(evidence, "policySemanticConfidence");
   const extractionStatus = getPolicyExtractionStatus(evidence);
   const policyRightsSignals = getPolicyRightsSignals(evidence);
+  const hasExplicitAbsenceSignal =
+    /^absent|none|missing|not_found$/i.test(dsarMechanism ?? "") ||
+    evidence.sectionReviewNoDsarMechanism === true ||
+    evidence.section_review_no_dsar_mechanism === true ||
+    getStringArrayValues(evidence, ["evidenceFlags", "flags"]).some((flag) => flag === "policy_field:dsar_path:absent");
 
   return (
-    dsarMechanism === "absent" &&
+    hasExplicitAbsenceSignal &&
+    !hasPrivacyRightsMechanismEvidence(evidence) &&
     extractionStatus === "fetched" &&
     typeof policySemanticConfidence === "number" &&
     policySemanticConfidence >= 0.6 &&

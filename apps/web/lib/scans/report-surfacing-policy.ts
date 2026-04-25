@@ -1143,6 +1143,10 @@ function hasStructuredPolicyAbsenceBacking(packet: UnifiedFindingPacket) {
     return false;
   }
 
+  if (packet.unifiedFindingId === "missing_dsar_mechanism" && !hasSpecificDsarAbsenceBacking(packet)) {
+    return false;
+  }
+
   const evidenceFlags = new Set(packet.evidence?.flags ?? []);
   if (
     evidenceFlags.has("policy_structurally_weak") ||
@@ -1173,11 +1177,50 @@ function hasStructuredPolicyAbsenceBacking(packet: UnifiedFindingPacket) {
   );
 }
 
+function hasSpecificDsarAbsenceBacking(packet: UnifiedFindingPacket) {
+  const evidenceText = getEvidenceSnippetText(packet);
+  const evidenceFlags = new Set(packet.evidence?.flags ?? []);
+  const dsarMechanisms = [
+    ...getEvidenceEntityValues(packet, "policyDsarMechanism"),
+    ...getEvidenceEntityValues(packet, "policy_dsar_mechanism")
+  ];
+  const rightsSignals = [
+    ...getEvidenceEntityValues(packet, "policyRightsSignals"),
+    ...getEvidenceEntityValues(packet, "policy_rights_signals")
+  ];
+
+  if (rightsSignals.length > 0) {
+    return false;
+  }
+
+  if (dsarMechanisms.some((value) => !/^(?:none|unknown|absent|null|missing|not_found)$/i.test(value.trim()))) {
+    return false;
+  }
+
+  return (
+    evidenceFlags.has("policy_field:dsar_path:absent") ||
+    dsarMechanisms.some((value) => /^(?:absent|none|missing|not_found)$/i.test(value.trim())) ||
+    /\b(?:no|lacks?|without|absent|missing) (?:concrete |specific |details? (?:on|about) )?(?:dsar|rights?|request|portal|form|mechanism|path|data rights?|access|deletion|correction|portability)\b/i.test(
+      evidenceText
+    )
+  );
+}
+
 function hasContradictoryMissingDisclosureCue(packet: UnifiedFindingPacket) {
   const evidenceText = (packet.evidence?.snippets ?? []).join(" ").toLowerCase();
   const evidenceFlags = new Set(packet.evidence?.flags ?? []);
 
   if (packet.unifiedFindingId === "missing_dsar_mechanism" && evidenceFlags.has("policy_field:dsar_path:found")) {
+    return true;
+  }
+
+  if (
+    packet.unifiedFindingId === "missing_dsar_mechanism" &&
+    (
+      getEvidenceEntityValues(packet, "policyDsarMechanism").some((value) => !/^(?:none|unknown|absent|null|missing|not_found)$/i.test(value.trim())) ||
+      getEvidenceEntityValues(packet, "policyRightsSignals").length > 0
+    )
+  ) {
     return true;
   }
 

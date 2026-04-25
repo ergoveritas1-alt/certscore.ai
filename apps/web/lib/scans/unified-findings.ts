@@ -1526,6 +1526,22 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (typeof normalizedFallbackEvidence.privacyContactChannelType === "string" && normalizedFallbackEvidence.privacyContactChannelType.trim()) {
     entities.privacyContactChannelType = [normalizedFallbackEvidence.privacyContactChannelType.trim()];
   }
+  const policyDsarMechanism =
+    typeof normalizedFallbackEvidence.policyDsarMechanism === "string"
+      ? normalizedFallbackEvidence.policyDsarMechanism
+      : typeof normalizedFallbackEvidence.policy_dsar_mechanism === "string"
+        ? normalizedFallbackEvidence.policy_dsar_mechanism
+        : null;
+  if (policyDsarMechanism && policyDsarMechanism.trim()) {
+    entities.policyDsarMechanism = [policyDsarMechanism.trim()];
+  }
+  const policyRightsSignals = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.policyRightsSignals) ? (normalizedFallbackEvidence.policyRightsSignals as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.policy_rights_signals) ? (normalizedFallbackEvidence.policy_rights_signals as string[]) : [])
+  ]);
+  if (policyRightsSignals.length > 0) {
+    entities.policyRightsSignals = policyRightsSignals;
+  }
   if (Array.isArray(normalizedFallbackEvidence.relatedVendors)) {
     entities.relatedVendors = uniqueStrings(normalizedFallbackEvidence.relatedVendors as string[]);
   }
@@ -1603,6 +1619,14 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     normalizedFallbackEvidence.policyExtractionStatus === "structurally_weak" ||
     normalizedFallbackEvidence.policy_extraction_status === "structurally_weak"
       ? "policy_extraction_status:structurally_weak"
+      : null,
+    /^absent|none|missing|not_found$/i.test(policyDsarMechanism ?? "") ||
+    normalizedFallbackEvidence.sectionReviewNoDsarMechanism === true ||
+    normalizedFallbackEvidence.section_review_no_dsar_mechanism === true
+      ? "policy_field:dsar_path:absent"
+      : null,
+    policyDsarMechanism && !/^absent|none|missing|not_found|unknown|null$/i.test(policyDsarMechanism)
+      ? "policy_field:dsar_path:found"
       : null,
     hasExplicitPolicySnippet ? "explicit_policy_snippet_retained" : null,
     hasExplicitRuntimeArtifact ? "contradiction_runtime_artifact_retained" : null,
@@ -1700,6 +1724,8 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
         } else {
           sourceUrls.add(value);
         }
+      } else if (key === "policyDsarMechanism" || key === "policy_dsar_mechanism") {
+        addEntity("policyDsarMechanism", [value]);
       } else if (
         (key === "policyExtractionStatus" || key === "policy_extraction_status") &&
         value.trim() === "structurally_weak"
@@ -1745,6 +1771,8 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
           sourceUrls.add(entry);
         }
       }
+    } else if (key === "policyRightsSignals" || key === "policy_rights_signals") {
+      addEntity("policyRightsSignals", stringValues);
     } else if (/vendor|cookie|selector|url|page|rule/i.test(key)) {
       addEntity(key, stringValues);
     } else {
@@ -4601,11 +4629,30 @@ function remapRawSignalFindingIdFromFallback(input: {
   currentFindingId: string | null;
   fallbackEvidence?: Record<string, unknown> | null;
 }) {
-  if (input.currentFindingId !== "targeted_advertising_choices_present" || !input.fallbackEvidence) {
+  const fallback = input.fallbackEvidence;
+  if (fallback) {
+    const policyDsarMechanism =
+      typeof fallback.policyDsarMechanism === "string"
+        ? fallback.policyDsarMechanism
+        : typeof fallback.policy_dsar_mechanism === "string"
+          ? fallback.policy_dsar_mechanism
+          : null;
+    if (
+      (!input.currentFindingId || input.currentFindingId === "policy_clarity_risk") &&
+      (
+        /^absent|none|missing|not_found$/i.test(policyDsarMechanism ?? "") ||
+        fallback.sectionReviewNoDsarMechanism === true ||
+        fallback.section_review_no_dsar_mechanism === true
+      )
+    ) {
+      return "missing_dsar_mechanism";
+    }
+  }
+
+  if (input.currentFindingId !== "targeted_advertising_choices_present" || !fallback) {
     return input.currentFindingId;
   }
 
-  const fallback = input.fallbackEvidence;
   const attributedUrls = uniqueStrings([
     ...(Array.isArray(fallback.pageUrls) ? fallback.pageUrls.filter((value): value is string => typeof value === "string") : []),
     ...(Array.isArray(fallback.sourceUrls)

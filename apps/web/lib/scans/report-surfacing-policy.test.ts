@@ -725,6 +725,8 @@ test("latest policy absence findings confirm only with structured validation and
         },
         evidence: {
           ...makePacket(findingId).evidence,
+          entities: findingId === "missing_dsar_mechanism" ? { policyDsarMechanism: ["absent"] } : undefined,
+          flags: findingId === "missing_dsar_mechanism" ? ["policy_field:dsar_path:absent"] : [],
           pageUrls: ["https://example.com/privacy"],
           snippets: ["The privacy policy was reviewed and no concrete requested disclosure or mechanism was found."],
           sourceUrls: ["https://example.com/privacy"]
@@ -906,6 +908,41 @@ test("missing DSAR findings can confirm when retained text mentions rights but n
   assert.equal(decision?.decisionState, "confirmed");
   assert.equal(decision?.reportLane, "main");
   assert.ok(decision?.appliedRules.includes("evidence.rights_gap.confirmed_structured_policy_absence"));
+});
+
+test("missing DSAR findings stay review-level when retained metadata names a rights mechanism", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("missing_dsar_mechanism", {
+        confidenceInputs: {
+          ...makePacket("missing_dsar_mechanism").confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket("missing_dsar_mechanism").evidence,
+          counts: {
+            policy_coverage_ratio: 0.7,
+            policy_semantic_confidence: 0.86
+          },
+          entities: {
+            policyDsarMechanism: ["form"],
+            policyRightsSignals: ["access_request", "delete_request"]
+          },
+          flags: ["policy_field:dsar_path:absent"],
+          pageUrls: ["https://example.com/privacy-policy"],
+          snippets: ["The policy includes a privacy request form for access and deletion requests."],
+          sourceUrls: ["https://example.com/privacy-policy"]
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.equal(decision?.reportLane, "confidence_and_coverage");
+  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
 });
 
 test("noisy rights-gap findings stay in confidence coverage when evidence is incomplete", () => {

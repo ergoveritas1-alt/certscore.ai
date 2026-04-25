@@ -180,6 +180,50 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "dsar accepts retained snake-case absence metadata",
+      concern: makeConcern({
+        originKey: "section_review.no_dsar_mechanism",
+        suggestedUnifiedFindingId: "missing_dsar_mechanism",
+        title: "No DSAR mechanism"
+      }),
+      evidenceStrengthFlags: ["policy_text", "page_attributed"] as const,
+      rawEvidence: {
+        policy_dsar_mechanism: "absent",
+        policy_extraction_status: "fetched",
+        policy_rights_signals: [],
+        policy_semantic_confidence: 0.82,
+        section_review_no_dsar_mechanism: true
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: ["policy_target_retrievable"]
+      }
+    },
+    {
+      name: "dsar absence is blocked when retained rights mechanism metadata exists",
+      concern: makeConcern({
+        originKey: "section_review.no_dsar_mechanism",
+        suggestedUnifiedFindingId: "missing_dsar_mechanism",
+        title: "No DSAR mechanism"
+      }),
+      evidenceStrengthFlags: ["policy_text", "page_attributed"] as const,
+      rawEvidence: {
+        policyDsarMechanism: "form",
+        policyExtractionStatus: "fetched",
+        policyRightsSignals: ["access_request", "delete_request"],
+        policySemanticConfidence: 0.84,
+        policySnippets: ["Submit a privacy request form to request access or deletion of your personal information."]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: ["policy_rights_language_observed", "policy_target_retrievable"]
+      }
+    },
+    {
       name: "gpc ignored with zero retained delta stays internal",
       concern: makeConcern({
         originKey: "privacy.gpc_signal_not_honored",
