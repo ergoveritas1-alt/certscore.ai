@@ -925,6 +925,14 @@ function getEvidenceSnippetText(packet: UnifiedFindingPacket) {
   return (packet.evidence?.snippets ?? []).filter((snippet): snippet is string => typeof snippet === "string").join(" ");
 }
 
+function getEvidenceEntityValues(packet: UnifiedFindingPacket, key: string) {
+  return (packet.evidence?.entities?.[key] ?? []).filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+}
+
+function hasMeaningfulEntityValue(packet: UnifiedFindingPacket, key: string) {
+  return getEvidenceEntityValues(packet, key).some((value) => !/^(?:none|unknown|absent|null|generic)$/i.test(value.trim()));
+}
+
 function hasFindingSpecificHighValuePrivacyDisclosureText(packet: UnifiedFindingPacket) {
   const text = getEvidenceSnippetText(packet);
 
@@ -951,12 +959,26 @@ function hasFindingSpecificPrivacyPathText(packet: UnifiedFindingPacket) {
 
   switch (packet.unifiedFindingId) {
     case "privacy_rights_path_present":
-      return /(?:privacy rights|rights (?:portal|center)|privacy (?:portal|center|request)|(?:access|delete|deletion|correction|opt-out|data) request|request (?:access|deletion|correction|a copy)|submit (?:a )?request|exercise (?:your )?rights|privacy@|data protection officer|\bdpo\b|webform|request form)/i.test(
-        text
+      return (
+        /(?:privacy rights|rights (?:portal|center)|privacy (?:portal|center|request)|(?:access|delete|deletion|correction|opt-out|data) request|request (?:access|deletion|correction|a copy)|submit (?:a )?request|exercise (?:your )?rights|privacy@|data protection officer|\bdpo\b|webform|request form)/i.test(
+          text
+        ) ||
+        hasMeaningfulEntityValue(packet, "policyDsarMechanism") ||
+        getEvidenceEntityValues(packet, "policyRightsSignals").some((value) =>
+          /access|delete|deletion|correct|correction|export|portable|opt[-_\s]?out|privacy_controls|privacy_contact|authorized_agent|appeal/i.test(
+            value
+          )
+        )
       );
     case "privacy_contact_path_present":
-      return /privacy@|privacy (?:team|office|department|request|contact|form|portal)|data protection officer|\bdpo\b|privacy rights|personal information request|data request/i.test(
-        text
+      return (
+        /privacy@|privacy (?:team|office|department|request|contact|form|portal|preferences?)|(?:about|regarding|concerning) privacy|data protection officer|\bdpo\b|privacy rights|personal information (?:request|questions?|contact|preferences?)|data (?:request|protection|privacy)|contact us.{0,120}(?:privacy|personal information)|(?:privacy|personal information).{0,120}contact us/i.test(
+          text
+        ) ||
+        (
+          hasMeaningfulEntityValue(packet, "privacyContactChannelType") &&
+          /privacy|personal information|personal data|data protection|contact|request/i.test(text)
+        )
       );
     default:
       return false;

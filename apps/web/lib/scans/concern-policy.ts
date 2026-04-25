@@ -332,7 +332,7 @@ function hasPrivacyRightsMechanismText(value: string) {
 }
 
 function hasPrivacySpecificContactText(value: string) {
-  return /privacy@|privacy (?:team|office|department|request|contact|form|portal)|data protection officer|\bdpo\b|privacy rights|personal information request|data request/i.test(
+  return /privacy@|privacy (?:team|office|department|request|contact|form|portal|preferences?)|(?:about|regarding|concerning) privacy|data protection officer|\bdpo\b|privacy rights|personal information (?:request|questions?|contact|preferences?)|data (?:request|protection|privacy)|contact us.{0,120}(?:privacy|personal information)|(?:privacy|personal information).{0,120}contact us/i.test(
     value
   );
 }
@@ -342,12 +342,55 @@ function hasPrivacySpecificContactChannelEvidence(rawEvidence: Record<string, un
     return false;
   }
 
+  const textCandidates = getEvidenceTextCandidates(rawEvidence);
   const channelType = getFirstString(rawEvidence, ["privacyContactChannelType", "privacy_contact_channel_type"]);
   if (channelType && !/^none|unknown|generic$/i.test(channelType)) {
+    return textCandidates.some(hasPrivacySpecificContactText);
+  }
+
+  return textCandidates.some(hasPrivacySpecificContactText);
+}
+
+function hasPrivacyRightsMechanismEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const dsarMechanism = getFirstString(rawEvidence, ["policyDsarMechanism", "policy_dsar_mechanism"]);
+  if (dsarMechanism && !/^none|unknown|absent|null$/i.test(dsarMechanism)) {
     return true;
   }
 
-  return getEvidenceTextCandidates(rawEvidence).some(hasPrivacySpecificContactText);
+  const rightsSignals = getStringArrayValues(rawEvidence, ["policyRightsSignals", "policy_rights_signals"]);
+  const hasActionableRightsSignal = rightsSignals.some((value) =>
+    /access|delete|deletion|correct|correction|export|portable|opt[-_\s]?out|privacy_controls|privacy_contact|authorized_agent|appeal/i.test(value)
+  );
+  const snippets = getEvidenceTextCandidates(rawEvidence);
+
+  return (
+    snippets.some(hasPrivacyRightsMechanismText) ||
+    getEvidenceUrlCandidates(rawEvidence).some(isPrivacyRightsMechanismUrl) ||
+    (
+      hasActionableRightsSignal &&
+      snippets.some((value) => /\b(request|submit|form|portal|exercise|verify|confirm|contact|privacy@|data protection officer|\bdpo\b)\b/i.test(value))
+    )
+  );
+}
+
+function hasPolicyPositiveTopicSnippet(
+  rawEvidence: Record<string, unknown> | null | undefined,
+  topicPattern: RegExp
+) {
+  const topic = getFirstString(rawEvidence, ["policyPositiveTopic", "policy_positive_topic"]);
+  const keys = getStringArrayValues(rawEvidence, ["policyPositiveSnippetKeys", "policy_positive_snippet_keys"]);
+  const snippets = getEvidenceTextCandidates(rawEvidence).filter(hasMeaningfulReviewerSnippet);
+  return (
+    snippets.length > 0 &&
+    (
+      (topic !== null && topicPattern.test(topic)) ||
+      keys.some((key) => topicPattern.test(key))
+    )
+  );
 }
 
 function isTermsLikeUrl(value: string) {
@@ -437,11 +480,35 @@ function getPositiveInfrastructureEvidenceGrade(
           ? "verified" as const
           : "weak" as const;
       case "privacy_rights_path_present":
-        return (snippets.some(hasPrivacyRightsMechanismText) || urls.some(isPrivacyRightsMechanismUrl))
+        return hasPrivacyRightsMechanismEvidence(rawEvidence)
           ? "verified" as const
           : "weak" as const;
       case "privacy_contact_path_present":
-        return snippets.some(hasPrivacySpecificContactText)
+        return hasPrivacySpecificContactChannelEvidence(rawEvidence)
+          ? "verified" as const
+          : "weak" as const;
+      case "gpc_disclosure_present":
+        return hasPolicyPositiveTopicSnippet(rawEvidence, /\bgpc(?:_disclosure)?\b|global privacy control/i)
+          ? "verified" as const
+          : "weak" as const;
+      case "tracking_technologies_disclosure_present":
+        return hasPolicyPositiveTopicSnippet(rawEvidence, /tracking_technologies|cookie|pixel|beacon|tag/i)
+          ? "verified" as const
+          : "weak" as const;
+      case "third_party_advertising_disclosure_present":
+        return hasPolicyPositiveTopicSnippet(rawEvidence, /third_party_advertising|advertising/i)
+          ? "verified" as const
+          : "weak" as const;
+      case "targeted_advertising_disclosure_present":
+        return hasPolicyPositiveTopicSnippet(rawEvidence, /targeted_advertising|sale|sharing|advertising/i)
+          ? "verified" as const
+          : "weak" as const;
+      case "behavioral_analytics_disclosure_present":
+        return hasPolicyPositiveTopicSnippet(rawEvidence, /behavioral_analytics|session_replay|product_analytics/i)
+          ? "verified" as const
+          : "weak" as const;
+      case "children_privacy_disclosure_present":
+        return hasPolicyPositiveTopicSnippet(rawEvidence, /children/i)
           ? "verified" as const
           : "weak" as const;
       default:
@@ -482,7 +549,7 @@ function getPositiveInfrastructureEvidenceGrade(
         : "weak" as const;
     case "privacy_rights_path_present":
       return hasPacketBacking &&
-        (snippets.some(hasPrivacyRightsMechanismText) || urls.some(isPrivacyRightsMechanismUrl)) &&
+        hasPrivacyRightsMechanismEvidence(rawEvidence) &&
         humanFacingUrlCount >= 1
         ? "corroborated" as const
         : "weak" as const;
@@ -500,7 +567,7 @@ function getPositiveInfrastructureEvidenceGrade(
         : "weak" as const;
     case "privacy_contact_path_present":
       return hasPacketBacking &&
-        snippets.some(hasPrivacySpecificContactText) &&
+        hasPrivacySpecificContactChannelEvidence(rawEvidence) &&
         humanFacingUrlCount >= 1
         ? "corroborated" as const
         : "weak" as const;

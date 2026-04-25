@@ -404,6 +404,56 @@ test("privacy rights and contact paths surface when page-attributed policy evide
   assert.ok(contactPath?.appliedRules.includes("evidence.positive_surface.review_high_value_policy_path"));
 });
 
+test("privacy rights and contact paths surface from retained structured policy metadata", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("privacy_rights_path_present", {
+        confidenceInputs: {
+          ...makePacket("privacy_rights_path_present").confidenceInputs,
+          hasPageAttribution: true,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("privacy_rights_path_present").evidence,
+          entities: {
+            policyDsarMechanism: ["form"],
+            policyRightsSignals: ["access", "delete"]
+          },
+          pageUrls: ["https://www.example.com/privacy"],
+          snippets: ["You can manage your personal information through this policy."]
+        }
+      }),
+      makePacket("privacy_contact_path_present", {
+        confidenceInputs: {
+          ...makePacket("privacy_contact_path_present").confidenceInputs,
+          hasPageAttribution: true,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("privacy_contact_path_present").evidence,
+          entities: {
+            privacyContactChannelType: ["form"]
+          },
+          pageUrls: ["https://www.example.com/privacy"],
+          snippets: ["Contact us with questions about your personal information."]
+        }
+      })
+    ]
+  });
+
+  const rightsPath = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "privacy_rights_path_present");
+  const contactPath = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "privacy_contact_path_present");
+
+  assert.equal(rightsPath?.decisionState, "review");
+  assert.equal(rightsPath?.reportLane, "main");
+  assert.ok(rightsPath?.appliedRules.includes("evidence.positive_surface.review_high_value_policy_path"));
+  assert.equal(contactPath?.decisionState, "review");
+  assert.equal(contactPath?.reportLane, "main");
+  assert.ok(contactPath?.appliedRules.includes("evidence.positive_surface.review_high_value_policy_path"));
+});
+
 test("high-value privacy disclosures surface when page-attributed policy evidence is strong", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [

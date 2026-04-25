@@ -31,7 +31,8 @@ import {
   type ScanValidationFinding
 } from "./validation-review-linking";
 import {
-  getPolicyPositiveSignalKeysForFinding
+  getPolicyPositiveSignalKeysForFinding,
+  isPolicyPositiveSignalKey
 } from "./policy-positive-signal-contract";
 import {
   getContradictionEvidenceBundle
@@ -4267,6 +4268,27 @@ function mergeConcernContext(
   existing: UnifiedFindingPacket["concernContext"] | undefined,
   candidate: ConcernBackedUnifiedFindingCandidate
 ): UnifiedFindingPacket["concernContext"] {
+  const nextNegativeEvidenceFlags = uniqueConcernFlags([
+    ...(existing?.negativeEvidenceFlags ?? []),
+    ...(candidate.normalizedConcern?.negativeEvidenceFlags ?? [])
+  ]);
+  const hasEligibleConcern =
+    (
+      candidate.normalizedConcern?.promotionEligibility === "eligible" &&
+      candidate.normalizedConcern.externalSurfacingEligibility === "eligible"
+    ) ||
+    (
+      existing?.promotionEligibilities.includes("eligible") === true &&
+      existing.externalSurfacingEligibilities.includes("eligible") === true
+    );
+  const negativeEvidenceFlags = hasEligibleConcern
+    ? nextNegativeEvidenceFlags.filter(
+        (flag) =>
+          flag !== "positive_surface_content_unverified" &&
+          flag !== "missing_privacy_specific_contact_channel"
+      )
+    : nextNegativeEvidenceFlags;
+
   return {
     assertionLevels: uniqueConcernFlags([
       ...(existing?.assertionLevels ?? []),
@@ -4280,10 +4302,7 @@ function mergeConcernContext(
       ...(existing?.externalSurfacingEligibilities ?? []),
       ...(candidate.normalizedConcern ? [candidate.normalizedConcern.externalSurfacingEligibility] : [])
     ]),
-    negativeEvidenceFlags: uniqueConcernFlags([
-      ...(existing?.negativeEvidenceFlags ?? []),
-      ...(candidate.normalizedConcern?.negativeEvidenceFlags ?? [])
-    ]),
+    negativeEvidenceFlags,
     originTypes: uniqueConcernFlags([
       ...(existing?.originTypes ?? []),
       ...(candidate.normalizedConcern ? [candidate.normalizedConcern.originType] : [])
@@ -4448,6 +4467,24 @@ function resolveUnifiedFindingIdForCandidate(candidate: UnifiedFindingCandidate)
   });
 }
 
+function hasRetainedPolicyPositiveEvidence(candidate: UnifiedFindingCandidate) {
+  if (!candidate.signalKey || !isPolicyPositiveSignalKey(candidate.signalKey)) {
+    return false;
+  }
+
+  const evidence = candidate.fallbackEvidence ?? {};
+  const snippets = Array.isArray(evidence.policySnippets)
+    ? evidence.policySnippets.filter((value): value is string => isMeaningfulPolicyText(value))
+    : [];
+  const pageUrls = [
+    ...(Array.isArray(evidence.pageUrls) ? evidence.pageUrls : []),
+    ...(typeof evidence.pageUrl === "string" ? [evidence.pageUrl] : []),
+    ...(Array.isArray(evidence.sourceUrls) ? evidence.sourceUrls : [])
+  ].filter((value): value is string => typeof value === "string" && /^https?:\/\//i.test(value));
+
+  return snippets.length > 0 && pageUrls.length > 0;
+}
+
 function remapRawSignalFindingIdFromFallback(input: {
   currentFindingId: string | null;
   fallbackEvidence?: Record<string, unknown> | null;
@@ -4524,7 +4561,7 @@ export function buildUnifiedFindingPackets(input: {
   );
   const reviewFindingCandidates = input.reviewFindingCandidates.filter((candidate) => {
     const findingId = resolveUnifiedFindingIdForCandidate(candidate);
-    return !findingId || !packetBackedFindingIds.has(findingId);
+    return !findingId || !packetBackedFindingIds.has(findingId) || hasRetainedPolicyPositiveEvidence(candidate);
   });
   const synthesizedCandidates = synthesizeGenericReviewFindingCandidates([...reviewFindingCandidates, ...familyPacketCandidates]);
   const normalizedConcerns = buildNormalizedConcerns({

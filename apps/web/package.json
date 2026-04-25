@@ -13,6 +13,7 @@
     "check:production-finding-calibration": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-production-finding-calibration.ts",
     "audit:production-finding-demotions": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-finding-demotions.ts",
     "audit:production-finding-evidence": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-finding-demotions.ts",
+    "audit:production-evidence-loss": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-evidence-loss.ts",
     "audit:production-evidence-lineage": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-evidence-lineage.ts",
     "audit:urlscan-supplements": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-urlscan-supplements.ts",
     "review:production-finding-surfacing": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/review-production-finding-surfacing.ts",

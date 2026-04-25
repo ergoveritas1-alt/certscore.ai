@@ -31,6 +31,7 @@ import {
   getPolicyEvidenceSnippets,
   getPolicyPageType,
   getPolicyPageUrl,
+  getPolicyRightsSignals,
   getPolicySummaryText
 } from "./policy-enrichment-row";
 import {
@@ -694,6 +695,7 @@ function getPolicySignalFallbackEvidence(input: {
   const policyRightsSignals = Array.isArray(mergedPolicyRightsSignals)
     ? mergedPolicyRightsSignals.filter((value): value is string => typeof value === "string")
     : [];
+  const rightsSnippetKeysForSignal = isPrivacyRightsSignalKey(input.signalKey) ? [...rightsSnippetKeys] : [];
   const topicSnippetKeys = topicKey
     ? [
         topicKey,
@@ -704,6 +706,8 @@ function getPolicySignalFallbackEvidence(input: {
       ]
     : policyPositiveSpec?.unifiedFindingId === "privacy_contact_path_present"
       ? ["privacy_contact", "notice_contact", "dsar"]
+      : policyPositiveSpec?.unifiedFindingId === "privacy_rights_path_present"
+        ? rightsSnippetKeysForSignal
       : policyPositiveSpec?.unifiedFindingId === "children_privacy_disclosure_present"
         ? ["topic:children", "children"]
         : [];
@@ -728,6 +732,8 @@ function getPolicySignalFallbackEvidence(input: {
         .slice(0, 2)
     : [];
   const policySnippets = normalizePolicySnippetList([...topicSnippets, ...rightsSnippets]);
+  const rowPolicyRightsSignals = row ? getPolicyRightsSignals(row, evidenceSnippets) : [];
+  const retainedPolicyRightsSignals = uniqueStrings([...policyRightsSignals, ...rowPolicyRightsSignals]);
   const mergedPrivacyContactChannelType = findMergedSignalValue(input.mergedSignals, "privacyContactChannelType");
   const snapshotPrivacyContactChannelType =
     typeof input.snapshot?.privacy_contact_channel_type === "string" && isMeaningfulPolicyText(input.snapshot.privacy_contact_channel_type)
@@ -746,8 +752,15 @@ function getPolicySignalFallbackEvidence(input: {
   return {
     pageUrl,
     pageUrls: pageUrl ? [pageUrl] : [],
+    policyDsarMechanism:
+      typeof row?.policyDsarMechanism === "string"
+        ? row.policyDsarMechanism
+        : typeof row?.policy_dsar_mechanism === "string"
+          ? row.policy_dsar_mechanism
+          : null,
+    policyPageType: row ? getPolicyPageType(row) : null,
     policySnippets,
-    policyRightsSignals,
+    policyRightsSignals: retainedPolicyRightsSignals,
     privacyContactChannelType,
     policyChildrenReference,
     policyPositiveSnippetKeys: topicSnippetKeys,

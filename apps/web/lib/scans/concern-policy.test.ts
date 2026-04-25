@@ -610,6 +610,28 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "privacy rights positive with retained DSAR mechanism metadata stays eligible",
+      concern: makeConcern({
+        originKey: "privacy.privacy_rights_path_present",
+        suggestedUnifiedFindingId: "privacy_rights_path_present",
+        title: "Privacy rights path present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        pageUrl: "https://example.com/privacy",
+        policyDsarMechanism: "present",
+        policyRightsSignals: ["access", "delete"],
+        policySnippets: ["We may need to confirm your identity before processing a privacy request."],
+        signalKey: "privacy.privacy_rights_path_present"
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "privacy contact positive with generic support contact stays audit-only",
       concern: makeConcern({
         originKey: "privacy.privacy_contact_path_present",
@@ -641,6 +663,49 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         pageUrl: "https://example.com/privacy",
         policySnippets: ["Contact our privacy team at privacy@example.com for personal information requests."],
         signalKey: "privacy.privacy_contact_path_present"
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "privacy contact positive with retained channel metadata and personal-information contact text stays eligible",
+      concern: makeConcern({
+        originKey: "privacy.privacy_contact_path_present",
+        suggestedUnifiedFindingId: "privacy_contact_path_present",
+        title: "Privacy contact path present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        pageUrl: "https://example.com/privacy",
+        policySnippets: ["If you have questions about personal information you provided, select the Contact Us link."],
+        privacyContactChannelType: "form",
+        signalKey: "privacy.privacy_contact_path_present"
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "tracking disclosure positive with retained topic snippet stays eligible without family packet backing",
+      concern: makeConcern({
+        originKey: "privacy.tracking_technologies_disclosure_present",
+        suggestedUnifiedFindingId: "tracking_technologies_disclosure_present",
+        title: "Tracking technologies disclosure present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        pageUrl: "https://example.com/privacy",
+        policyPositiveSnippetKeys: ["topic:tracking_technologies_disclosure"],
+        policyPositiveTopic: "tracking_technologies_disclosure",
+        policySnippets: ["We use cookies, pixels, tags, and similar technologies to understand site usage."],
+        signalKey: "privacy.tracking_technologies_disclosure_present"
       },
       expected: {
         allowedNarrativeTier: "moderate",
