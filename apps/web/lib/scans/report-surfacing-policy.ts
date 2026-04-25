@@ -1087,7 +1087,7 @@ function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
   const hasVendors = (packet.details.vendors ?? []).some((value) => typeof value === "string" && value.trim().length > 0) ||
     (packet.evidence?.entities?.runtimeVendors?.length ?? 0) > 0;
   const hasUrls = (packet.details.requestUrls ?? []).some((value) => /^https?:\/\//i.test(value)) ||
-    (packet.evidence?.pageUrls?.some((value) => /^https?:\/\//i.test(value)) ?? false);
+    (packet.evidence?.entities?.runtimeRequestUrls?.some((value) => /^https?:\/\//i.test(value)) ?? false);
   const hasRuntimeOrValidationBacking =
     packet.confidenceInputs.hasDirectRuntimeEvidence || packet.confidenceInputs.hasStructuredValidationEvidence;
 
@@ -1726,7 +1726,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
         state: "confirmed",
         lane: "main",
         tier: "headline",
-        reason: "Validation-backed runtime evidence retained both concrete vendors and request URLs, so pre-consent tracking is strong enough to stand on its own.",
+        reason: "Validation-backed runtime evidence retained concrete tracker request evidence or non-essential cookie timing evidence, so pre-consent tracking is strong enough to stand on its own.",
         ruleId: "evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"
       });
     } else {

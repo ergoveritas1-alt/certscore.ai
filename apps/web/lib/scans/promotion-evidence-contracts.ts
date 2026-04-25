@@ -143,7 +143,8 @@ export function hasConcretePreconsentArtifact(rawEvidence: Record<string, unknow
   const urls = getStringArrayValues(rawEvidence, [
     "preconsent_tracker_evidence_urls",
     "requestUrls",
-    "runtimeEvidenceUrls"
+    "runtimeEvidenceUrls",
+    "sourceUrls"
   ]).filter((value) => /^https?:\/\//i.test(value));
 
   return (
@@ -164,10 +165,11 @@ export function hasStrongPreconsentRuntimeEvidence(rawEvidence: Record<string, u
   const urls = getStringArrayValues(rawEvidence, [
     "preconsent_tracker_evidence_urls",
     "requestUrls",
-    "runtimeEvidenceUrls"
+    "runtimeEvidenceUrls",
+    "sourceUrls"
   ]).filter((value) => /^https?:\/\//i.test(value));
 
-  return ((vendors.length > 0 && urls.length > 0) || hasPromotionGradePreconsentCookieEvidence(rawEvidence)) && hasPreconsentSequenceEvidence(rawEvidence);
+  return (urls.length > 0 || (vendors.length > 0 && urls.length > 0) || hasPromotionGradePreconsentCookieEvidence(rawEvidence)) && hasPreconsentSequenceEvidence(rawEvidence);
 }
 
 export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -176,13 +178,15 @@ export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknow
   }
 
   const supportingSignals = getStringArrayValues(rawEvidence, ["supportingSignals"]);
+  const signalKeys = getStringArrayValues(rawEvidence, ["signalKey", "snapshotField", "unifiedFindingId"]);
 
   return (
     rawEvidence.preconsentTrackingDetected === true ||
     rawEvidence.preconsent_tracking_detected === true ||
     rawEvidence.trackingBeforeConsentDetected === true ||
     rawEvidence.tracking_before_consent_detected === true ||
-    supportingSignals.some((value) => /pre-?consent|before consent|trackers?_before_consent/i.test(value))
+    supportingSignals.some((value) => /pre-?consent|before consent|trackers?_before_consent/i.test(value)) ||
+    signalKeys.some((value) => /preconsent|tracking_before_consent|trackers?_before_consent/i.test(value))
   );
 }
 

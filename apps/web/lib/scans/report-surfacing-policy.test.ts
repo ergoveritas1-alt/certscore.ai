@@ -1465,6 +1465,38 @@ test("pre-consent tracking stays review-level when concrete URL evidence is miss
   assert.ok(decision?.appliedRules.includes("evidence.preconsent.review_without_runtime_artifacts"));
 });
 
+test("pre-consent tracking does not treat generic page URLs as request URL evidence", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("preconsent_tracking", {
+        confidenceInputs: {
+          ...makePacket("preconsent_tracking").confidenceInputs,
+          hasDirectRuntimeEvidence: true
+        },
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking",
+          requestUrls: [],
+          vendors: ["Meta Pixel"]
+        },
+        evidence: {
+          flags: ["preconsent_tracking_detected"],
+          pageUrls: ["https://example.com/privacy"],
+          snippets: [],
+          sourceUrls: [],
+          entities: {
+            runtimeVendors: ["Meta Pixel"]
+          }
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.ok(decision?.appliedRules.includes("evidence.preconsent.review_without_runtime_artifacts"));
+});
+
 test("pre-consent tracking stays review-level for necessary cookie evidence only", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [

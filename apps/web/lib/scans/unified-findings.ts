@@ -1383,6 +1383,15 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       ? formatRepresentativeAccessibilityCoverage(accessibilityExampleCoverage)
       : null;
   const contradictionEvidence = getContradictionEvidenceBundle(normalizedFallbackEvidence);
+  const fallbackSignalKey =
+    typeof normalizedFallbackEvidence.signalKey === "string"
+      ? normalizedFallbackEvidence.signalKey
+      : typeof normalizedFallbackEvidence.snapshotField === "string"
+        ? normalizedFallbackEvidence.snapshotField
+        : "";
+  const isPreconsentRuntimeSignal =
+    fallbackSignalKey === "privacy.preconsent_tracking_detected" ||
+    fallbackSignalKey === "privacy.tracking_before_consent_detected";
   const explicitPolicySnippetCandidate = getBestExplicitPolicySnippet(normalizedFallbackEvidence, contradictionEvidence);
   const isContradictionEvidenceContext =
     Boolean(contradictionEvidence?.contradictionBasis) ||
@@ -1567,10 +1576,46 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     ...(Array.isArray(normalizedFallbackEvidence.preconsent_tracker_evidence_urls)
       ? (normalizedFallbackEvidence.preconsent_tracker_evidence_urls as string[])
       : []),
+    ...(isPreconsentRuntimeSignal && Array.isArray(normalizedFallbackEvidence.sourceUrls)
+      ? (normalizedFallbackEvidence.sourceUrls as string[])
+      : []),
     ...(contradictionEvidence?.runtimeAnchor.requests ?? [])
   ]).filter((value) => /^https?:\/\//i.test(value));
   if (runtimeRequestUrls.length > 0) {
     entities.runtimeRequestUrls = runtimeRequestUrls;
+  }
+  const preconsentCookieNames = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.preconsent_cookie_names)
+      ? (normalizedFallbackEvidence.preconsent_cookie_names as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.preconsentCookieNames)
+      ? (normalizedFallbackEvidence.preconsentCookieNames as string[])
+      : [])
+  ]);
+  if (preconsentCookieNames.length > 0) {
+    entities.preconsent_cookie_names = preconsentCookieNames;
+  }
+  const preconsentNonessentialCookieNames = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.preconsent_nonessential_cookie_names)
+      ? (normalizedFallbackEvidence.preconsent_nonessential_cookie_names as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.preconsentNonessentialCookieNames)
+      ? (normalizedFallbackEvidence.preconsentNonessentialCookieNames as string[])
+      : [])
+  ]);
+  if (preconsentNonessentialCookieNames.length > 0) {
+    entities.preconsent_nonessential_cookie_names = preconsentNonessentialCookieNames;
+  }
+  const preconsentCookieCategories = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.preconsent_cookie_categories)
+      ? (normalizedFallbackEvidence.preconsent_cookie_categories as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.preconsentCookieCategories)
+      ? (normalizedFallbackEvidence.preconsentCookieCategories as string[])
+      : [])
+  ]);
+  if (preconsentCookieCategories.length > 0) {
+    entities.preconsent_cookie_categories = preconsentCookieCategories;
   }
   if (normalizedFallbackEvidence.cookieAttributeSummary && typeof normalizedFallbackEvidence.cookieAttributeSummary === "object") {
     const summary = normalizedFallbackEvidence.cookieAttributeSummary as Record<string, unknown>;

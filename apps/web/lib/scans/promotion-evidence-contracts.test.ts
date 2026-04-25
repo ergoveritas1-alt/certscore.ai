@@ -150,6 +150,17 @@ test("pre-consent cookie evidence is promotion-grade only for non-essential cook
   assert.equal(hasStrongPreconsentRuntimeEvidence(infrastructureCookieEvidence), false);
 });
 
+test("pre-consent source URLs remain review-grade sequence evidence", () => {
+  const sourceUrlEvidence = {
+    signalKey: "privacy.preconsent_tracking_detected",
+    signalValue: true,
+    sourceUrls: ["https://analytics.example.com/collect"]
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(sourceUrlEvidence), true);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(sourceUrlEvidence), true);
+});
+
 test("policy behavior conflict contract blocks incomplete contradiction fixtures", () => {
   const cases = [
     POLICY_BEHAVIOR_CONFLICT_FIXTURES.negativePolicyNotFetched,

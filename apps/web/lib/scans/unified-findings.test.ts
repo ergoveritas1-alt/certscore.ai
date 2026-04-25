@@ -1773,6 +1773,39 @@ test("keeps pre-consent tracking audit-only when concrete runtime vendors and UR
   assert.equal(packet?.presentation.confidenceScore, "0.45");
 });
 
+test("retains pre-consent cookie timing evidence on unified finding packets", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "The homepage set analytics cookies before any consent action.",
+        fallbackEvidence: {
+          preconsent_cookie_categories: ["advertising", "analytics"],
+          preconsent_cookie_names: ["_fbp", "_ga"],
+          preconsent_nonessential_cookie_names: ["_fbp", "_ga"],
+          preconsent_tracking_detected: true,
+          signalKey: "privacy.preconsent_tracking_detected",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "privacy.preconsent_tracking_detected",
+        signalLabel: "Pre-consent tracking detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Pre-consent tracking detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "preconsent_tracking");
+  assert.deepEqual(packet?.evidence?.entities?.preconsent_cookie_names, ["_fbp", "_ga"]);
+  assert.deepEqual(packet?.evidence?.entities?.preconsent_nonessential_cookie_names, ["_fbp", "_ga"]);
+  assert.deepEqual(packet?.evidence?.entities?.preconsent_cookie_categories, ["advertising", "analytics"]);
+  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+});
+
 test("keeps blocked contact-path evidence audit-only and strips interstitial snippets", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
