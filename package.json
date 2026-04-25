@@ -30,6 +30,7 @@
     "ops:smoke:auth": "pnpm exec tsx ./scripts/check-production-auth-smoke.ts",
     "ops:smoke:ada-financial": "pnpm exec tsx ./scripts/check-ada-financial-live-smoke.ts",
     "ops:smoke:findings": "pnpm exec tsx ./scripts/check-live-finding-smoke.ts",
+    "audit:production-evidence-lineage": "pnpm --filter @website-signal-risk-scanner/web audit:production-evidence-lineage",
     "check:production-finding-calibration": "pnpm --filter @website-signal-risk-scanner/web test:production-finding-calibration",
     "ops:verify:ada-live": "pnpm exec tsx ./scripts/run-ada-live-verification.ts",
     "db:migrate": "pnpm exec tsx ./scripts/apply-db-migrations.ts",
