@@ -570,6 +570,86 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "privacy rights positive with generic rights language stays audit-only",
+      concern: makeConcern({
+        originKey: "privacy.privacy_rights_path_present",
+        suggestedUnifiedFindingId: "privacy_rights_path_present",
+        title: "Privacy rights path present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        pageUrl: "https://example.com/privacy",
+        policySnippets: ["You may have rights to access or delete your personal information depending on your location."],
+        signalKey: "privacy.privacy_rights_path_present"
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["positive_surface_content_unverified"]
+      }
+    },
+    {
+      name: "privacy rights positive with concrete request mechanism stays eligible",
+      concern: makeConcern({
+        originKey: "privacy.privacy_rights_path_present",
+        suggestedUnifiedFindingId: "privacy_rights_path_present",
+        title: "Privacy rights path present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        pageUrl: "https://example.com/privacy-rights",
+        policySnippets: ["Submit a privacy request form to request access, deletion, or correction of your personal information."],
+        signalKey: "privacy.privacy_rights_path_present"
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "privacy contact positive with generic support contact stays audit-only",
+      concern: makeConcern({
+        originKey: "privacy.privacy_contact_path_present",
+        suggestedUnifiedFindingId: "privacy_contact_path_present",
+        title: "Privacy contact path present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        pageUrl: "https://example.com/contact",
+        policySnippets: ["Contact our support team for help with your account."],
+        signalKey: "privacy.privacy_contact_path_present"
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["positive_surface_content_unverified"]
+      }
+    },
+    {
+      name: "privacy contact positive with privacy-specific contact stays eligible",
+      concern: makeConcern({
+        originKey: "privacy.privacy_contact_path_present",
+        suggestedUnifiedFindingId: "privacy_contact_path_present",
+        title: "Privacy contact path present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        pageUrl: "https://example.com/privacy",
+        policySnippets: ["Contact our privacy team at privacy@example.com for personal information requests."],
+        signalKey: "privacy.privacy_contact_path_present"
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "contact support path with blocked interstitial evidence stays audit-only",
       concern: makeConcern({
         originKey: "disclosure.contact_page_present",
@@ -832,6 +912,100 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "internal_only",
         externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "accessibility support path missing without bounded review evidence stays audit-only",
+      concern: makeConcern({
+        originKey: "accessibility.accessibility_support_path_missing",
+        suggestedUnifiedFindingId: "accessibility_support_path_missing",
+        title: "Accessibility support path missing"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        accessibilityContactMethodPresent: false,
+        signalKey: "accessibility.accessibility_support_path_missing",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_representative_accessibility_examples"]
+      }
+    },
+    {
+      name: "accessibility support path missing with bounded linked discovery can promote",
+      concern: makeConcern({
+        originKey: "accessibility.accessibility_support_path_missing",
+        suggestedUnifiedFindingId: "accessibility_support_path_missing",
+        title: "Accessibility support path missing"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "key_page_discovery"] as const,
+      rawEvidence: {
+        accessibilityContactMethodPresent: false,
+        accessibilityStatementPresent: false,
+        keyPageAttemptCount: 3,
+        keyPageAttemptedUrls: [
+          "https://example.com/accessibility",
+          "https://example.com/accessibility-statement",
+          "https://example.com/contact"
+        ],
+        keyPageDiscoverySource: "footer_link",
+        signalKey: "accessibility.accessibility_support_path_missing",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "sale sharing controls missing without behavior anchor stays audit-only",
+      concern: makeConcern({
+        originKey: "privacy.sale_sharing_controls_missing",
+        suggestedUnifiedFindingId: "sale_sharing_controls_missing",
+        title: "Sale/sharing controls missing"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        doNotSellLinkPresent: false,
+        signalKey: "privacy.sale_sharing_controls_missing",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_policy_side_evidence"]
+      }
+    },
+    {
+      name: "sale sharing controls missing with policy behavior anchor can promote",
+      concern: makeConcern({
+        originKey: "privacy.sale_sharing_controls_missing",
+        suggestedUnifiedFindingId: "sale_sharing_controls_missing",
+        title: "Sale/sharing controls missing"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "policy_text", "page_attributed"] as const,
+      rawEvidence: {
+        doNotSellLinkPresent: false,
+        policyAnchor: {
+          claimType: "targeted_advertising_without_control",
+          sourceUrl: "https://example.com/privacy",
+          snippet: "We share identifiers with advertising partners for targeted advertising."
+        },
+        signalKey: "privacy.sale_sharing_controls_missing",
+        signalValue: true,
+        targetedAdvertisingDisclosurePresent: true
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: []
       }
     },
@@ -1198,4 +1372,85 @@ test("deriveConcernPolicy fails closed for Schwab-like contradiction candidates 
   assert.equal(policy.externalSurfacingEligibility, "audit_only");
   assert.ok(policy.negativeEvidenceFlags.includes("insufficient_evidence_for_policy_behavior_conflict"));
   assert.ok(policy.negativeEvidenceFlags.includes("runtime_tracking_review_incomplete"));
+});
+
+test("deriveConcernPolicy keeps vendor-only pre-consent evidence audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.preconsent_tracking_detected",
+      suggestedUnifiedFindingId: "preconsent_tracking",
+      title: "Pre-consent tracking detected"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      preconsent_tracker_vendors: ["Meta Pixel"],
+      preconsent_tracking_detected: true,
+      supportingSignals: ["privacy.preconsent_tracking_detected"]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+});
+
+test("deriveConcernPolicy promotes pre-consent evidence only with vendor, URL, and sequence", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.preconsent_tracking_detected",
+      suggestedUnifiedFindingId: "preconsent_tracking",
+      title: "Pre-consent tracking detected"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      preconsent_tracker_evidence_urls: ["https://connect.facebook.net/fbevents.js"],
+      preconsent_tracker_vendors: ["Meta Pixel"],
+      preconsent_tracking_detected: true,
+      supportingSignals: ["privacy.preconsent_tracking_detected"]
+    }
+  });
+
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy keeps thin fingerprinting evidence audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.fingerprinting_detected",
+      suggestedUnifiedFindingId: "fingerprinting_observed",
+      title: "Fingerprinting observed"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      fingerprintSummary: {
+        tier: 2
+      }
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+});
+
+test("deriveConcernPolicy promotes corroborated fingerprinting evidence", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.fingerprinting_detected",
+      suggestedUnifiedFindingId: "fingerprinting_observed",
+      title: "Fingerprinting observed"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      fingerprintAttributeCategories: ["canvas_webgl"],
+      fingerprintSummary: {
+        tier: 2
+      },
+      requestUrls: ["https://fp.example.test/collect"]
+    }
+  });
+
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
 });

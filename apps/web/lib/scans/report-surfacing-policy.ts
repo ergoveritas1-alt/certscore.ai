@@ -47,6 +47,7 @@ export type SurfacingPolicyRuleId =
   | "evidence.policy_extraction.review_disclosure_placement"
   | "evidence.policy_extraction.review_policy_fitness"
   | "evidence.rights_gap.confirmed_high_exposure_or_runtime"
+  | "evidence.rights_gap.confirmed_structured_policy_absence"
   | "evidence.rights_gap.review_structured_policy_gap"
   | "evidence.contradiction.confirmed_when_explicit_basis_and_runtime"
   | "evidence.contradiction.review_without_complete_anchor"
@@ -989,8 +990,10 @@ function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
     (packet.evidence?.entities?.runtimeVendors?.length ?? 0) > 0;
   const hasUrls = (packet.details.requestUrls ?? []).some((value) => /^https?:\/\//i.test(value)) ||
     (packet.evidence?.pageUrls?.some((value) => /^https?:\/\//i.test(value)) ?? false);
+  const hasRuntimeOrValidationBacking =
+    packet.confidenceInputs.hasDirectRuntimeEvidence || packet.confidenceInputs.hasStructuredValidationEvidence;
 
-  return packet.confidenceInputs.hasStructuredValidationEvidence && hasVendors && hasUrls;
+  return hasRuntimeOrValidationBacking && hasVendors && hasUrls;
 }
 
 function hasStandalonePreconsentRuntimeEvidence(packet: UnifiedFindingPacket) {
@@ -1011,6 +1014,26 @@ function hasFinancialContextAndBacking(packet: UnifiedFindingPacket) {
       ...(packet.evidence?.pageUrls ?? []),
       ...(packet.evidence?.sourceUrls ?? [])
     ]))
+  );
+}
+
+function hasStructuredPolicyAbsenceBacking(packet: UnifiedFindingPacket) {
+  if (
+    packet.unifiedFindingId !== "missing_dsar_mechanism" &&
+    packet.unifiedFindingId !== "missing_retention_disclosure" &&
+    packet.unifiedFindingId !== "missing_transfer_disclosure"
+  ) {
+    return false;
+  }
+
+  return (
+    packet.confidenceInputs.hasStructuredValidationEvidence &&
+    packet.confidenceInputs.hasPolicyTextEvidence &&
+    hasReadableSnippet(packet) &&
+    hasConcreteHumanFacingUrl([
+      ...(packet.evidence?.pageUrls ?? []),
+      ...(packet.evidence?.sourceUrls ?? [])
+    ])
   );
 }
 
@@ -1130,7 +1153,8 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
         "gpc_disclosure_present",
         "tracking_technologies_disclosure_present",
         "targeted_advertising_disclosure_present",
-        "third_party_advertising_disclosure_present"
+        "third_party_advertising_disclosure_present",
+        "behavioral_analytics_disclosure_present"
       ].includes(packet.unifiedFindingId) &&
       packet.confidenceInputs.hasPolicyTextEvidence &&
       hasReadableSnippet(packet) &&
@@ -1301,6 +1325,15 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
         reason: "Concrete runtime evidence, or a high-exposure rights gap backed by structured validation, was retained strongly enough for this finding to stand on its own.",
         ruleId: "evidence.rights_gap.confirmed_high_exposure_or_runtime"
       });
+    } else if (hasStructuredPolicyAbsenceBacking(packet)) {
+      overrideDecision(decision, {
+        state: "confirmed",
+        lane: "main",
+        tier: decision.surfaceTier,
+        reason:
+          "A fetched policy surface, readable policy evidence, and structured validation all support the same missing-disclosure interpretation, so this absence finding can stand on its own.",
+        ruleId: "evidence.rights_gap.confirmed_structured_policy_absence"
+      });
     } else {
       overrideDecision(decision, {
         state: "review",
@@ -1369,6 +1402,27 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (context.policy.family === "consent_tracking") {
+    if (packet.unifiedFindingId === "fingerprinting_observed") {
+      if (packet.confidenceBand === "high" && hasConcreteRuntimeEvidence(packet)) {
+        overrideDecision(decision, {
+          state: "confirmed",
+          lane: "main",
+          tier: "section",
+          reason: "Fingerprinting evidence was retained with high confidence and concrete runtime backing, so this finding can stand on its own.",
+          ruleId: "evidence.consent_behavior.confirmed_specific_runtime_failure"
+        });
+      } else {
+        overrideDecision(decision, {
+          state: "review",
+          lane: "main",
+          tier: decision.surfaceTier,
+          reason: "Fingerprinting evidence was retained, but it should remain review-level unless high-confidence runtime corroboration is present.",
+          ruleId: "evidence.consent_behavior.review_runtime_without_effect_evidence"
+        });
+      }
+      return;
+    }
+
     if (packet.unifiedFindingId === "session_replay_observed" && hasConcreteRuntimeEvidence(packet)) {
       overrideDecision(decision, {
         state: "review",

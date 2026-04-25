@@ -1,0 +1,80 @@
+name: Finding Calibration
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/finding-calibration.yml"
+      - "apps/web/lib/scans/**"
+      - "apps/web/scripts/**"
+      - "packages/validation-shared/**"
+      - "packages/shared/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  workflow_dispatch:
+
+jobs:
+  production-finding-calibration:
+    runs-on: ubuntu-latest
+
+    env:
+      PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve live calibration configuration
+        id: live-db
+        run: |
+          if [ -z "${PROD_DATABASE_URL}" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping production DB calibration because PROD_DATABASE_URL is not configured."
+            exit 0
+          fi
+
+          case "${PROD_DATABASE_URL}" in
+            *localhost*|*127.0.0.1*|*"[::1]"*|*"@::1"*)
+              echo "enabled=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::Skipping production DB calibration because PROD_DATABASE_URL points at a local database."
+              exit 0
+              ;;
+          esac
+
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace packages for tests
+        run: pnpm --filter @website-signal-risk-scanner/shared --filter @website-signal-risk-scanner/db --filter @website-signal-risk-scanner/validation-shared build
+
+      - name: Run deterministic finding calibration tests
+        run: pnpm exec tsx --test apps/web/lib/scans/concern-policy.test.ts apps/web/lib/scans/hybrid-runtime-evidence.test.ts apps/web/lib/scans/report-surfacing-policy.test.ts apps/web/scripts/report-production-finding-frequency.test.ts packages/validation-shared/src/privacy-runtime-findings.dataset.test.ts packages/validation-shared/src/privacy-runtime-findings-eval.test.ts packages/validation-shared/src/privacy-runtime-findings-coverage.test.ts packages/validation-shared/src/privacy-runtime-findings-promote.test.ts
+
+      - name: Run production finding calibration gate
+        if: steps.live-db.outputs.enabled == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/finding-calibration
+          pnpm check:production-finding-calibration | tee artifacts/finding-calibration/production-finding-calibration.md
+
+      - name: Upload production finding calibration report
+        if: always() && steps.live-db.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-finding-calibration
+          path: artifacts/finding-calibration/production-finding-calibration.md

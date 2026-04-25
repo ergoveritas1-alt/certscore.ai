@@ -10,6 +10,7 @@
     "check-runtime": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/check-validation-runtime.ts",
     "dev": "node --env-file=../web/.env.local --enable-source-maps --import tsx --watch ./src/index.ts",
     "extract:financial-claims-drafts": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/extract-financial-claims-drafts.ts",
+    "extract:privacy-runtime-drafts": "node --enable-source-maps --import tsx ./scripts/extract-privacy-runtime-drafts.ts",
     "inspect:signal-enrichment": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/inspect-signal-enrichment.ts",
     "score:financial-homepage-confidence": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/score-financial-homepage-confidence.ts",
     "list:degraded-body-retries": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/list-degraded-body-retry-candidates.ts",
