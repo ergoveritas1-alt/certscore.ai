@@ -62,6 +62,7 @@ import {
   normalizeDomainBenchmarkEstimate,
   type DomainBenchmarkEstimate
 } from "./domain-benchmark-estimate";
+import { getFullScanUrlscanSupplement } from "./urlscan-supplement";
 
 export type ScanDetailRecord = {
   id: string;
@@ -658,6 +659,10 @@ async function loadScanDetailRecord(input: {
         ...supplementalCoverageSignals.snapshotOverrides
       } satisfies Record<string, unknown>)
     : null;
+  const previewPayload = await getFullScanUrlscanSupplement({
+    domainHostname,
+    snapshot: normalizedSnapshot
+  });
   const supplementalPolicySignals = normalizeSupplementalPolicySignals(deriveSupplementalPolicySignals({
     existingSignalKeys: normalizedSignals.map((signal) => signal.key),
     policyEnrichment: normalizedPolicyEnrichment,
@@ -1129,6 +1134,7 @@ async function loadScanDetailRecord(input: {
     signalEnrichmentWorkflow,
     domainBenchmark,
     validationFindings,
+    previewPayload,
     regulatoryRisk,
     agencyMappings: regulatorySnapshot
       ? buildAgencyMappings(buildAgencyMappingSource(regulatorySnapshot as Record<string, unknown>), regulatoryRisk)
