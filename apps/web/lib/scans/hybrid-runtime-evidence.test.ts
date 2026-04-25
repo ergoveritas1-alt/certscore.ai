@@ -200,9 +200,10 @@ test("builds calibrated pre-consent cookie evidence from hybrid cookie writes", 
     signalValue: true
   });
 
-  assert.deepEqual(fallback?.preconsent_cookie_names, ["_fbp", "__cf_bm", "demdex", "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L"]);
+  assert.deepEqual(fallback?.preconsent_cookie_names, ["_fbp", "demdex", "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L"]);
   assert.deepEqual(fallback?.preconsent_nonessential_cookie_names, ["_fbp", "demdex", "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L"]);
-  assert.deepEqual(fallback?.preconsent_cookie_categories, ["advertising", "necessary", "session_replay"]);
+  assert.deepEqual(fallback?.preconsent_cookie_categories, ["advertising", "dmp", "session_replay"]);
+  assert.deepEqual(fallback?.preconsent_cookie_excluded_functional_names, ["__cf_bm"]);
   assert.deepEqual(fallback?.preconsent_cookie_evidence, [
     {
       category: "advertising",
@@ -219,21 +220,7 @@ test("builds calibrated pre-consent cookie evidence from hybrid cookie writes", 
       timingEvidence: "before_consent_cookie_write"
     },
     {
-      category: "necessary",
-      cookieName: "__cf_bm",
-      domain: ".example.com",
-      firstObservedAtMs: 0,
-      initiatorDomain: null,
-      initiatorUrl: null,
-      initiatorVendor: null,
-      nonEssential: false,
-      party: "first_party",
-      setAtMs: 0,
-      setMethod: "http_header",
-      timingEvidence: "before_consent_cookie_write"
-    },
-    {
-      category: "advertising",
+      category: "dmp",
       cookieName: "demdex",
       domain: ".demdex.net",
       firstObservedAtMs: 80,

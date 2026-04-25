@@ -393,8 +393,9 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
   assert.equal(payload.fallbackEvidence?.metrics?.requestCount, 8);
   assert.equal(payload.fallbackEvidence?.metrics?.thirdPartyRequestCount, 1);
   assert.equal(payload.fallbackEvidence?.metrics?.initialCookieCount, 3);
-  assert.deepEqual(payload.fallbackEvidence?.entities?.cookieNames, ["_ga", "OptanonConsent", "visitor_id"]);
-  assert.equal(payload.fallbackEvidence?.cookieFootprint?.details.includes("Cookie names: _ga, OptanonConsent, visitor_id"), true);
+  assert.deepEqual(payload.fallbackEvidence?.entities?.cookieNames, ["_ga"]);
+  assert.deepEqual(payload.fallbackEvidence?.entities?.diagnosticCookieNamesExcludedFromTrackingEvidence, ["OptanonConsent", "visitor_id"]);
+  assert.equal(payload.fallbackEvidence?.cookieFootprint?.details.includes("Tracking cookie names: _ga"), true);
   assert.equal(payload.fallbackEvidence?.reportUrl, "https://urlscan.io/result/promoted-example/");
   assert.equal(payload.fallbackEvidence?.resultApiUrl, "https://urlscan.io/api/v1/result/promoted-example/");
   assert.equal(payload.fallbackEvidence?.entities?.technologyNames?.includes("OneTrust"), true);

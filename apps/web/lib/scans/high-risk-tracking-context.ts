@@ -1,11 +1,22 @@
 export type HighRiskTrackingVendor = {
-  category: "data_broker" | "identity_resolution" | "health_adtech" | "adtech" | "device_signal" | "cmp";
+  category:
+    | "dmp"
+    | "identity_data_broker"
+    | "data_broker"
+    | "identity_resolution"
+    | "health_adtech"
+    | "adtech"
+    | "device_signal_adtech"
+    | "device_signal"
+    | "enterprise_device_risk"
+    | "cmp";
   evidence: string[];
   name: string;
   role: string;
 };
 
 export type HighRiskTrackingContext = {
+  cmpVendors: HighRiskTrackingVendor[];
   cmpVendorName: string | null;
   highRiskVendors: HighRiskTrackingVendor[];
   isSensitiveContext: boolean;
@@ -23,10 +34,17 @@ type VendorRule = {
 const HIGH_RISK_VENDOR_RULES: VendorRule[] = [
   {
     name: "Experian",
-    category: "data_broker",
+    category: "identity_data_broker",
     role: "credit bureau and consumer data broker",
     domains: ["experian.com", "experianmarketingservices.com"],
-    patterns: [/\bexperian\b/i]
+    patterns: [/\bexperian\b/i, /\bexperianauts\b/i, /\bexperian-hitwise\b/i]
+  },
+  {
+    name: "Adobe Audience Manager",
+    category: "dmp",
+    role: "data management platform audience profiling",
+    domains: ["demdex.net", "dpm.demdex.net"],
+    patterns: [/(^|\b)aam(\b|$)/i, /\bdemdex\b/i, /\bdpm\.demdex\b/i, /\badobe audience manager\b/i]
   },
   {
     name: "ID5",
@@ -44,14 +62,14 @@ const HIGH_RISK_VENDOR_RULES: VendorRule[] = [
   },
   {
     name: "Amazon Publisher Services",
-    category: "device_signal",
+    category: "device_signal_adtech",
     role: "advertising device-signal collection",
     domains: ["amazon-adsystem.com", "aax.amazon-adsystem.com"],
     patterns: [/\baps:\d+:deviceSignal\b/i, /\bamazon publisher services\b/i]
   },
   {
     name: "reCAPTCHA Enterprise",
-    category: "device_signal",
+    category: "enterprise_device_risk",
     role: "bot and device-risk telemetry",
     domains: ["google.com", "www.google.com", "gstatic.com", "www.gstatic.com"],
     patterns: [/\/recaptcha\/enterprise(?:\.js|\/)/i, /\brecaptcha enterprise\b/i]
@@ -62,6 +80,13 @@ const HIGH_RISK_VENDOR_RULES: VendorRule[] = [
     role: "consent management platform",
     domains: ["cookielaw.org", "onetrust.com", "onetrust.io"],
     patterns: [/\botSDKStub\.js\b/i, /\bcookielaw\b/i]
+  },
+  {
+    name: "TrustArc",
+    category: "cmp",
+    role: "privacy seal or preference management service",
+    domains: ["truste.com", "trustarc.com", "privacy-policy.truste.com", "preferences.trustarc.com"],
+    patterns: [/\btrustarc\b/i, /\btruste\b/i, /\bnotice_preferences\b/i, /\bnotice_gdpr_prefs\b/i]
   }
 ];
 
@@ -142,6 +167,8 @@ function collectTextEvidence(input: {
     ...evidenceUrls,
     ...thirdPartyDomains,
     ...getStringArray(runtimeArtifacts, "consent_baseline_tracker_script_hosts"),
+    ...getStringArray(runtimeArtifacts, "initial_cookie_names"),
+    ...getStringArray(runtimeArtifacts, "initialCookieNames"),
     ...getStringArray(runtimeArtifacts, "local_storage_keys"),
     ...getStringArray(runtimeArtifacts, "session_storage_keys")
   ]);
@@ -184,9 +211,11 @@ export function deriveHighRiskTrackingContext(input: {
     }];
   });
 
-  const cmpVendorName = highRiskVendors.find((vendor) => vendor.category === "cmp")?.name ?? null;
+  const cmpVendors = highRiskVendors.filter((vendor) => vendor.category === "cmp");
+  const cmpVendorName = cmpVendors[0]?.name ?? null;
 
   return {
+    cmpVendors,
     cmpVendorName,
     highRiskVendors: highRiskVendors.filter((vendor) => vendor.category !== "cmp"),
     isSensitiveContext: isHealthContext,

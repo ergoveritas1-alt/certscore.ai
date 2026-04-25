@@ -82,6 +82,11 @@ import {
 } from "../../lib/scans/policy-enrichment-row";
 import { deriveHighRiskTrackingContext } from "../../lib/scans/high-risk-tracking-context";
 import {
+  classifyRuntimeCookieCategory,
+  isFunctionalCookieExcludedFromTrackingEvidence,
+  isNonEssentialCookieCategory
+} from "../../lib/scans/runtime-cookie-evidence";
+import {
   getAllowedConflictType,
   type PolicyBehaviorConflictClaimType,
   type PolicyBehaviorConflictType,
@@ -4466,7 +4471,11 @@ export function deriveExecutiveDisplayedScore(input: {
 function isSameOrSubdomain(hostname: string, candidate: string) {
   const normalizedHostname = hostname.replace(/^\./, "").toLowerCase();
   const normalizedCandidate = candidate.replace(/^\./, "").toLowerCase();
-  return normalizedCandidate === normalizedHostname || normalizedCandidate.endsWith(`.${normalizedHostname}`);
+  return (
+    normalizedCandidate === normalizedHostname ||
+    normalizedCandidate.endsWith(`.${normalizedHostname}`) ||
+    normalizedHostname.endsWith(`.${normalizedCandidate}`)
+  );
 }
 
 function getThirdPartyCookieDomains(finalHostname: string | null, cookieDomains: string[]) {
@@ -4497,26 +4506,38 @@ function buildUrlscanCookieFinding(input: {
   finalHostname: string | null;
   reportUrl: string | null;
 }): CertScoreFinding | null {
-  if (input.cookieCount <= 0) {
+  const trackingCookieNames = input.cookieNames.filter((name) => {
+    if (isFunctionalCookieExcludedFromTrackingEvidence(name)) {
+      return false;
+    }
+    return isNonEssentialCookieCategory(classifyRuntimeCookieCategory(name));
+  });
+  const effectiveCookieCount = trackingCookieNames.length;
+  if (effectiveCookieCount <= 0) {
     return null;
   }
 
-  const thirdPartyCookieDomains = getThirdPartyCookieDomains(input.finalHostname, input.cookieDomains);
+  const thirdPartyCookieDomains = getThirdPartyCookieDomains(input.finalHostname, input.cookieDomains).filter(
+    (domain) => !/(cookielaw\.org|onetrust\.(?:com|io)|trustarc\.com|truste\.com|cloudflare\.com|akamai|bigip|f5)/i.test(domain)
+  );
   const hasThirdPartyCookies = thirdPartyCookieDomains.length > 0;
-  const hasAnalyticsCookie = input.cookieNames.some((name) => /^(_ga|_gid|_gat|utm|ajs_|amplitude|mp_)/i.test(name));
+  const hasDmpCookie = trackingCookieNames.some((name) => /(^aam$|demdex|dpm\.demdex)/i.test(name));
+  const hasAnalyticsCookie = trackingCookieNames.some((name) => /^(_ga|_gid|_gat|utm|ajs_|amplitude|mp_)/i.test(name));
   const findingId = hasThirdPartyCookies
     ? "third_party_cookie_pre_consent"
-    : hasAnalyticsCookie
-      ? "analytics_cookie_pre_consent"
-      : "storage_before_consent";
+    : hasDmpCookie
+      ? "adtech_cookie_pre_consent"
+      : hasAnalyticsCookie
+        ? "analytics_cookie_pre_consent"
+        : "storage_before_consent";
   const definition = CERT_SCORE_FINDING_REGISTRY[findingId];
 
   if (!definition) {
     return null;
   }
 
-  const cookieNameSummary = input.cookieNames.length > 0
-    ? ` Cookies: ${input.cookieNames.slice(0, 8).join(", ")}.`
+  const cookieNameSummary = trackingCookieNames.length > 0
+    ? ` Cookies: ${trackingCookieNames.slice(0, 8).join(", ")}.`
     : "";
   const cookieDomainSummary = input.cookieDomains.length > 0
     ? ` Cookie domains: ${input.cookieDomains.slice(0, 6).join(", ")}.`
@@ -4528,13 +4549,14 @@ function buildUrlscanCookieFinding(input: {
     confidence: "good",
     directVsInferred: "direct",
     evidencePreview: [
-      `${input.cookieCount} initial cookie${input.cookieCount === 1 ? "" : "s"} retained by supplemental public runtime evidence.${cookieNameSummary}`,
+      `${effectiveCookieCount} tracking cookie${effectiveCookieCount === 1 ? "" : "s"} retained by supplemental public runtime evidence.${cookieNameSummary}`,
       ...(hasThirdPartyCookies ? [`Third-party cookie domains retained: ${thirdPartyCookieDomains.slice(0, 6).join(", ")}.`] : []),
       `${cookieDomainSummary}${sourceSummary}`.trim()
     ],
     evidenceRefs: ["supplemental public runtime evidence"],
     severity: hasThirdPartyCookies ? "high" : "medium",
-    shortSummary: `${input.cookieCount} initial cookie${input.cookieCount === 1 ? "" : "s"} were observed in supplemental public runtime evidence before CertScore could verify a consent choice.`
+    label: hasThirdPartyCookies ? definition.label : "Tracking cookies set before consent",
+    shortSummary: `${effectiveCookieCount} tracking cookie${effectiveCookieCount === 1 ? "" : "s"} were observed before CertScore could verify a consent choice.`
   };
 }
 

@@ -74,8 +74,12 @@ export type RegulatoryRiskSource = {
   sensitiveContextTrackingDetected?: boolean | null;
   highRiskIdentityVendorDetected?: boolean | null;
   highRiskDataBrokerDetected?: boolean | null;
+  identityDataBrokerDetected?: boolean | null;
+  dmpVendorDetected?: boolean | null;
   healthAdtechVendorDetected?: boolean | null;
   deviceSignalVendorDetected?: boolean | null;
+  fingerprintingAdjacentVendorDetected?: boolean | null;
+  enterpriseDeviceRiskVendorDetected?: boolean | null;
   highRiskTrackingVendorNames?: string[] | null;
 };
 
@@ -147,7 +151,9 @@ function buildPrivacyBucket(source: RegulatoryRiskSource): ScoredBucket {
     label: "Sensitive-context tracking before consent",
     impact: 26
   });
-  pushIf(source.highRiskDataBrokerDetected === true, drivers, { key: "data_broker_present", label: "Data broker integration observed", impact: 16 });
+  pushIf(source.highRiskDataBrokerDetected === true, drivers, { key: "data_broker_present", label: "Data broker integration observed", impact: 18 });
+  pushIf(source.identityDataBrokerDetected === true, drivers, { key: "identity_data_broker_present", label: "Identity data broker integration observed", impact: 22 });
+  pushIf(source.dmpVendorDetected === true, drivers, { key: "dmp_pre_consent", label: "DMP audience profiling vendor observed", impact: 18 });
   pushIf(source.californiaExposureLikely === true && source.doNotSellLinkPresent === false, drivers, { key: "missing_opt_out", label: "California-style opt-out signal missing", impact: 14 });
 
   pushIf(source.dsarRequestMechanismPresent === true, mitigations, { key: "dsar_present", label: "DSAR mechanism present", impact: 16 });
@@ -168,13 +174,15 @@ function buildConsentBucket(source: RegulatoryRiskSource): ScoredBucket {
   const drivers: RegulatoryRiskDriver[] = [];
   const mitigations: RegulatoryRiskDriver[] = [];
   pushIf(source.trackingBeforeConsentDetected === true, drivers, { key: "tracking_before_consent", label: "Tracking before consent", impact: 30 });
-  pushIf(source.thirdPartyCookieSetBeforeConsent === true, drivers, { key: "third_party_cookies_before_consent", label: "Third-party cookies before consent", impact: 26 });
+  pushIf(source.thirdPartyCookieSetBeforeConsent === true, drivers, { key: "tracking_cookies_before_consent", label: "Tracking cookies before consent", impact: 26 });
   pushIf(source.sensitiveContextTrackingDetected === true, drivers, {
     key: "sensitive_context_preconsent",
     label: "Sensitive-context tracking before consent",
     impact: 24
   });
   pushIf(source.highRiskIdentityVendorDetected === true, drivers, { key: "identity_resolution_vendor", label: "Identity-resolution vendor observed", impact: 14 });
+  pushIf(source.dmpVendorDetected === true, drivers, { key: "dmp_pre_consent", label: "DMP audience profiling before consent", impact: 18 });
+  pushIf(source.identityDataBrokerDetected === true, drivers, { key: "identity_data_broker_preconsent", label: "Identity data broker before consent", impact: 20 });
   pushIf(source.cookieBannerPresent === true && source.rejectAllPresent === false, drivers, { key: "reject_all_missing", label: "Reject-all control missing", impact: 16 });
   pushIf(source.cookieBannerPresent === true && source.granularPreferencesPresent === false, drivers, {
     key: "granular_prefs_missing",
@@ -218,6 +226,16 @@ function buildConsumerBucket(source: RegulatoryRiskSource): ScoredBucket {
     label: "Sensitive-context data flow to third parties",
     impact: 24
   });
+  pushIf(source.identityDataBrokerDetected === true && source.sensitiveContextTrackingDetected === true, drivers, {
+    key: "health_identity_data_broker",
+    label: "Health-context data broker flow observed",
+    impact: 28
+  });
+  pushIf(source.dmpVendorDetected === true && source.sensitiveContextTrackingDetected === true, drivers, {
+    key: "health_dmp_flow",
+    label: "Health-context DMP audience profiling observed",
+    impact: 24
+  });
   pushIf(numberOrZero(source.advertisingTrackerCount) > 0 && source.policyClaimNoSale === true, drivers, { key: "no_sale_vs_adtech", label: "No-sale claim conflicts with adtech", impact: 18 });
   pushIf(numberOrZero(source.consumerProtectionScore) >= 65, drivers, { key: "consumer_score_elevated", label: "Elevated consumer-protection score", impact: 16 });
 
@@ -257,9 +275,21 @@ function buildDataExposureBucket(source: RegulatoryRiskSource): ScoredBucket {
     impact: 22
   });
   pushIf(source.highRiskDataBrokerDetected === true, drivers, { key: "data_broker_present", label: "Data broker integration observed", impact: 16 });
+  pushIf(source.identityDataBrokerDetected === true, drivers, { key: "identity_data_broker_present", label: "Identity data broker integration observed", impact: 22 });
+  pushIf(source.dmpVendorDetected === true, drivers, { key: "dmp_present", label: "DMP audience profiling vendor observed", impact: 18 });
   pushIf(source.healthAdtechVendorDetected === true, drivers, { key: "health_adtech_present", label: "Health-contextual adtech observed", impact: 14 });
   pushIf(source.highRiskIdentityVendorDetected === true, drivers, { key: "identity_resolution_vendor", label: "Identity-resolution vendor observed", impact: 12 });
   pushIf(source.deviceSignalVendorDetected === true, drivers, { key: "device_signal_vendor", label: "Device-signal vendor observed", impact: 8 });
+  pushIf(source.fingerprintingAdjacentVendorDetected === true, drivers, {
+    key: "fingerprinting_adjacent_identity",
+    label: "Fingerprinting-adjacent identity or device signals observed",
+    impact: 12
+  });
+  pushIf(source.enterpriseDeviceRiskVendorDetected === true, drivers, {
+    key: "enterprise_device_risk_signal",
+    label: "Enterprise device-risk telemetry observed",
+    impact: 8
+  });
   pushIf(source.mentionsBiometricData === true, drivers, { key: "biometric_data", label: "Biometric data references surfaced", impact: 12 });
   pushIf(source.mentionsFinancialData === true, drivers, { key: "financial_data", label: "Financial data references surfaced", impact: 10 });
   pushIf(source.mentionsUnder13 === true || source.mentionsUnder16 === true, drivers, { key: "children_data", label: "Children-related data references surfaced", impact: 14 });

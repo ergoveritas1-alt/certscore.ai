@@ -69,6 +69,9 @@ function uniqueStrings(values: Array<string | null | undefined>) {
 
 export function classifyRuntimeCookieCategory(name: string, domain: string | null = null) {
   const normalized = `${name} ${domain ?? ""}`.toLowerCase();
+  if (isFunctionalCookieExcludedFromTrackingEvidence(name, domain)) {
+    return "necessary";
+  }
   if (
     /(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id|ajs_user_id|analytics_session_id|heap|mp_|intercom-id|hubspotutk|__hstc|__hssc)/i.test(
       normalized
@@ -76,8 +79,11 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
   ) {
     return "analytics";
   }
+  if (/(^|\b)aam(\b|$)|demdex|dpm\.demdex|audience[._-\s]?manager/i.test(normalized)) {
+    return "dmp";
+  }
   if (
-    /(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|infolinks|doubleclick|criteo|media\.net|_mkto_trk|muid|fr\b|demdex|dpm\.demdex|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check|optimizely|_vwo|_vis_opt|guest_id_ads|guest_id_marketing|personalization_id|pubmatic|krtbcookie|pugt|spugt|bidswitch|tuuid|id5|casalemedia|cmid|cmps|cmpro|gumgum|3lift|tluid|sync\b|tapad|adsrvr|tdid|tdcpm|rubiconproject|openx|adform|bidr\.io|scorecardresearch|quantserve|crwdcntrl|panoramaid|_pubcid|lijit|mathtag|rlcdn|pippio|deepintent|amazon-adsystem|stackadapt|onaudience)/i.test(
+    /(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|infolinks|doubleclick|criteo|media\.net|_mkto_trk|muid|fr\b|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check|optimizely|_vwo|_vis_opt|guest_id_ads|guest_id_marketing|personalization_id|pubmatic|krtbcookie|pugt|spugt|bidswitch|tuuid|id5|casalemedia|cmid|cmps|cmpro|gumgum|3lift|tluid|sync\b|tapad|adsrvr|tdid|tdcpm|rubiconproject|openx|adform|bidr\.io|scorecardresearch|quantserve|crwdcntrl|panoramaid|_pubcid|lijit|mathtag|rlcdn|pippio|deepintent|amazon-adsystem|stackadapt|onaudience)/i.test(
       normalized
     )
   ) {
@@ -96,8 +102,15 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
   return "unknown";
 }
 
+export function isFunctionalCookieExcludedFromTrackingEvidence(name: string | null | undefined, domain: string | null = null) {
+  const normalized = `${name ?? ""} ${domain ?? ""}`.toLowerCase();
+  return /(^|\b)(optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|didomi_token|__cf_bm|cf_clearance|bigipserver|awsalb|awsalbcors|awsalbtg|bm_sz|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid)|(^|\b)_sp_/.test(
+    normalized
+  );
+}
+
 export function isNonEssentialCookieCategory(category: string | null | undefined) {
-  return category === "analytics" || category === "advertising" || category === "session_replay";
+  return category === "analytics" || category === "advertising" || category === "dmp" || category === "session_replay";
 }
 
 function inferCookieProvider(name: string, domain: string | null = null) {
@@ -147,8 +160,11 @@ function inferCookieProvider(name: string, domain: string | null = null) {
   if (/^_ttp|ttclid|tiktok/.test(normalized)) {
     return "TikTok";
   }
-  if (/demdex|dpm\.demdex|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check/.test(normalized)) {
-    return "Adobe";
+  if (/(^|\b)aam(\b|$)|demdex|dpm\.demdex|audience[._-\s]?manager/.test(normalized)) {
+    return "Adobe Audience Manager";
+  }
+  if (/amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check/.test(normalized)) {
+    return "Adobe Experience Cloud";
   }
   if (/qsi_replaysession|qualtrics|siteintercept/.test(normalized)) {
     return "Qualtrics";

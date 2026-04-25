@@ -282,7 +282,7 @@ const AGENCY_DEFINITIONS: AgencyDefinition[] = [
       },
       {
         key: "thirdPartyCookieSetBeforeConsent",
-        label: "Third-party cookies before consent",
+        label: "Tracking cookies before consent",
         points: 5,
         when: (s) => isTrue(s.thirdPartyCookieSetBeforeConsent)
       },

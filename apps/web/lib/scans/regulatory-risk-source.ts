@@ -102,9 +102,19 @@ export function buildRegulatoryRiskSource(input: {
         toBoolean(input.snapshot.preconsent_tracking_detected) === true ||
         toBoolean(input.snapshot.third_party_cookie_set_before_consent) === true),
     highRiskIdentityVendorDetected: highRiskVendorCategories.has("identity_resolution"),
-    highRiskDataBrokerDetected: highRiskVendorCategories.has("data_broker"),
+    highRiskDataBrokerDetected: highRiskVendorCategories.has("data_broker") || highRiskVendorCategories.has("identity_data_broker"),
+    identityDataBrokerDetected: highRiskVendorCategories.has("identity_data_broker"),
+    dmpVendorDetected: highRiskVendorCategories.has("dmp"),
     healthAdtechVendorDetected: highRiskVendorCategories.has("health_adtech"),
-    deviceSignalVendorDetected: highRiskVendorCategories.has("device_signal"),
+    deviceSignalVendorDetected:
+      highRiskVendorCategories.has("device_signal") ||
+      highRiskVendorCategories.has("device_signal_adtech") ||
+      highRiskVendorCategories.has("enterprise_device_risk"),
+    fingerprintingAdjacentVendorDetected:
+      highRiskVendorCategories.has("identity_resolution") ||
+      highRiskVendorCategories.has("device_signal_adtech") ||
+      highRiskVendorCategories.has("enterprise_device_risk"),
+    enterpriseDeviceRiskVendorDetected: highRiskVendorCategories.has("enterprise_device_risk"),
     highRiskTrackingVendorNames
   };
 }

@@ -85,6 +85,7 @@ function getErrorMessage(error: unknown) {
 type StaticVendorRule = {
   cookieNames?: string[];
   domains: string[];
+  urlPatterns?: RegExp[];
   vendorCategory: VendorRegistryEntry["vendorCategory"];
   vendorName: string;
 };
@@ -93,11 +94,17 @@ const STATIC_VENDOR_RULES: StaticVendorRule[] = [
   { vendorName: "Google Ads", vendorCategory: "advertising", domains: ["googleadservices.com", "g.doubleclick.net"] },
   { vendorName: "DoubleClick / Floodlight", vendorCategory: "advertising", domains: ["doubleclick.net", "fls.doubleclick.net"] },
   { vendorName: "Google Ad Manager", vendorCategory: "advertising", domains: ["securepubads.g.doubleclick.net"] },
-  { vendorName: "Adobe Audience Manager", vendorCategory: "advertising", domains: ["demdex.net", "dpm.demdex.net", "fandangollc.demdex.net"] },
+  { vendorName: "Adobe Audience Manager", vendorCategory: "dmp", domains: ["demdex.net", "dpm.demdex.net", "fandangollc.demdex.net"], cookieNames: ["aam", "demdex"] },
   { vendorName: "Adobe Analytics", vendorCategory: "analytics", domains: ["omtrdc.net", "tt.omtrdc.net"] },
-  { vendorName: "Experian", vendorCategory: "identity", domains: ["experian.com", "experianmarketingservices.com"], cookieNames: ["experian"] },
+  {
+    vendorName: "Experian",
+    vendorCategory: "identity_data_broker",
+    domains: ["experian.com", "experianmarketingservices.com"],
+    cookieNames: ["experian"],
+    urlPatterns: [/\bexperian\b/i, /\bexperianauts\b/i, /\bexperian-hitwise\b/i]
+  },
   { vendorName: "Criteo", vendorCategory: "advertising", domains: ["criteo.com", "criteo.net", "static.criteo.net", "grid-bidder.criteo.com"], cookieNames: ["cto_bundle"] },
-  { vendorName: "ID5", vendorCategory: "identity", domains: ["id5-sync.com", "cdn.id5-sync.com"], cookieNames: ["id5id", "id5id_v2"] },
+  { vendorName: "ID5", vendorCategory: "identity_resolution", domains: ["id5-sync.com", "cdn.id5-sync.com"], cookieNames: ["id5id", "id5id_v2"] },
   { vendorName: "OpenX", vendorCategory: "advertising", domains: ["openx.net", "openxcdn.net", "oa.openxcdn.net"] },
   { vendorName: "Rubicon Project", vendorCategory: "advertising", domains: ["rubiconproject.com", "micro.rubiconproject.com"] },
   { vendorName: "The Trade Desk", vendorCategory: "advertising", domains: ["adsrvr.org", "insight.adsrvr.org"], cookieNames: ["TDID", "TDCPM"] },
@@ -114,13 +121,25 @@ const STATIC_VENDOR_RULES: StaticVendorRule[] = [
   { vendorName: "GumGum", vendorCategory: "advertising", domains: ["gumgum.com"] },
   { vendorName: "TripleLift", vendorCategory: "advertising", domains: ["3lift.com"] },
   { vendorName: "Bidswitch", vendorCategory: "advertising", domains: ["bidswitch.net"] },
-  { vendorName: "PulsePoint / ContextWeb", vendorCategory: "advertising", domains: ["contextweb.com", "pulsepoint.com", "bh-medscape-cdn.contextweb.com"] },
-  { vendorName: "Amazon Publisher Services", vendorCategory: "advertising", domains: ["amazon-adsystem.com", "aax.amazon-adsystem.com"] },
+  { vendorName: "PulsePoint / ContextWeb", vendorCategory: "health_adtech", domains: ["contextweb.com", "pulsepoint.com", "bh-medscape-cdn.contextweb.com"] },
+  {
+    vendorName: "Amazon Publisher Services",
+    vendorCategory: "device_signal_adtech",
+    domains: ["amazon-adsystem.com", "aax.amazon-adsystem.com"],
+    urlPatterns: [/\baps:\d+:deviceSignal\b/i, /\bapstagCxMEnabled\b/i]
+  },
+  {
+    vendorName: "reCAPTCHA Enterprise",
+    vendorCategory: "enterprise_device_risk",
+    domains: ["google.com", "www.google.com", "gstatic.com", "www.gstatic.com"],
+    urlPatterns: [/\/recaptcha\/enterprise(?:\.js|\/)/i]
+  },
   { vendorName: "Meta Pixel", vendorCategory: "advertising", domains: ["facebook.com", "facebook.net", "connect.facebook.net"] },
   { vendorName: "Snap Pixel", vendorCategory: "advertising", domains: ["sc-static.net", "snapchat.com", "tr.snapchat.com", "tr6.snapchat.com"] },
   { vendorName: "Tapad", vendorCategory: "advertising", domains: ["tapad.com", "pixel.tapad.com"] },
   { vendorName: "TikTok", vendorCategory: "advertising", domains: ["analytics.tiktok.com", "ads.tiktok.com", "tiktok.com", "tiktokw.us"], cookieNames: ["_ttp"] },
-  { vendorName: "OneTrust", vendorCategory: "functional", domains: ["onetrust.com", "onetrust.io"] },
+  { vendorName: "OneTrust", vendorCategory: "functional", domains: ["onetrust.com", "onetrust.io", "cookielaw.org"] },
+  { vendorName: "TrustArc", vendorCategory: "functional", domains: ["trustarc.com", "truste.com", "privacy-policy.truste.com", "preferences.trustarc.com"], cookieNames: ["notice_preferences", "notice_gdpr_prefs"] },
   { vendorName: "Netflix Assets", vendorCategory: "functional", domains: ["nflxext.com", "nflximg.net", "nflxso.net"] },
   { vendorName: "Netflix Logging", vendorCategory: "functional", domains: ["logs.netflix.com", "ichnaea-web.netflix.com"] },
   { vendorName: "Netflix Web Platform", vendorCategory: "functional", domains: ["www.netflix.com", "web.prod.cloud.netflix.com"] }
@@ -572,6 +591,9 @@ function matchCandidateToStaticRules(candidate: VendorCandidate): VendorRegistry
   const rule = STATIC_VENDOR_RULES.find((entry) => {
     const hostMatched = entry.domains.some((domain) => candidate.hostname === domain || candidate.hostname.endsWith(`.${domain}`));
     if (hostMatched) {
+      return true;
+    }
+    if ((entry.urlPatterns ?? []).some((pattern) => candidate.sampleUrls.some((url) => pattern.test(url)))) {
       return true;
     }
     return (entry.cookieNames ?? []).some((cookieName) => candidate.cookieNames.includes(cookieName));
