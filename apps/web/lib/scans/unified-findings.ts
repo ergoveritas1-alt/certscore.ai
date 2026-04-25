@@ -289,6 +289,34 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function getPolicyFieldCoverageFlags(record: Record<string, unknown> | null | undefined) {
+  const coverage =
+    record?.policyFieldCoverage && typeof record.policyFieldCoverage === "object"
+      ? record.policyFieldCoverage
+      : record?.policy_field_coverage && typeof record.policy_field_coverage === "object"
+        ? record.policy_field_coverage
+        : null;
+
+  if (!coverage) {
+    return [];
+  }
+
+  const flags: string[] = [];
+  for (const [field, value] of Object.entries(coverage as Record<string, unknown>)) {
+    if (!value || typeof value !== "object") {
+      continue;
+    }
+    const found = (value as { found?: unknown }).found;
+    if (found === true) {
+      flags.push(`policy_field:${field}:found`);
+    } else if (found === false) {
+      flags.push(`policy_field:${field}:absent`);
+    }
+  }
+
+  return flags;
+}
+
 function uniqueTitleRecords(values: Array<{ title: string; url: string }>) {
   const seen = new Set<string>();
   const next: Array<{ title: string; url: string }> = [];
@@ -1556,6 +1584,7 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       ? "accessibility_examples_below_promotion_threshold"
       : null,
     hasSanitizedNetworkEvidenceHash(normalizedFallbackEvidence) ? "sanitized_network_evidence_hashed" : null,
+    ...getPolicyFieldCoverageFlags(normalizedFallbackEvidence),
     ...(contradictionEvidence?.supportingSignals ?? []),
     typeof normalizedFallbackEvidence.signalKey === "string" ? normalizedFallbackEvidence.signalKey : null
   ]);
@@ -1705,7 +1734,8 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
       ...flags,
       ...(hasExplicitPolicySnippet ? ["explicit_policy_snippet_retained"] : []),
       ...(hasExplicitRuntimeArtifact ? ["contradiction_runtime_artifact_retained"] : []),
-      ...(hasSanitizedNetworkEvidenceHash(evidence) ? ["sanitized_network_evidence_hashed"] : [])
+      ...(hasSanitizedNetworkEvidenceHash(evidence) ? ["sanitized_network_evidence_hashed"] : []),
+      ...getPolicyFieldCoverageFlags(evidence)
     ],
     pageUrls: [...pageUrls],
     snippets: [...snippets],
