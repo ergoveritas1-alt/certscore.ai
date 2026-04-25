@@ -166,6 +166,39 @@ test("cookie disclosure gap blocker classifier requires runtime and unmatched in
   assert.deepEqual(assessment.blockers, []);
 });
 
+test("cookie disclosure gap blocker classifier accepts validation-backed snake_case evidence", () => {
+  const assessment = classifyCookieDisclosureGapPromotionBlockers({
+    cookieGapValidationEvidence: {
+      cookie_policy_url: "https://example.test/legal/cookie-policy",
+      runtime_cookie_names: ["demdex", "QSI_ReplaySession_Info"],
+      unmatched_cookie_names: ["demdex"],
+      unmatched_third_party_cookie_count: 1
+    },
+    policyPositiveSignalPresent: false
+  });
+
+  assert.equal(assessment.promotionReady, true);
+  assert.deepEqual(assessment.blockers, []);
+  assert.equal(assessment.evidence.policyPageUrl, "https://example.test/legal/cookie-policy");
+  assert.equal(assessment.evidence.validationBacked, true);
+});
+
+test("cookie disclosure gap blocker classifier keeps runtime-only cases blocked", () => {
+  const assessment = classifyCookieDisclosureGapPromotionBlockers({
+    cookieGapValidationEvidence: {
+      runtime_cookie_names: ["_fbp"],
+      unmatched_cookie_names: ["_fbp"],
+      unmatched_third_party_cookie_count: 1
+    },
+    policyPositiveSignalPresent: false
+  });
+
+  assert.equal(assessment.promotionReady, false);
+  assert.ok(assessment.blockers.includes("missing_policy_anchor_url"));
+  assert.ok(assessment.blockers.includes("missing_cookie_or_privacy_policy_anchor"));
+  assert.ok(!assessment.blockers.includes("missing_cookie_gap_signal"));
+});
+
 test("summarizePromotionBlockers counts blockers and ready candidates", () => {
   const summary = summarizePromotionBlockers([
     classifyDsarPromotionBlockers({

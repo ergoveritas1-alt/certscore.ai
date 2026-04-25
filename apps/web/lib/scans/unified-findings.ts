@@ -1200,6 +1200,15 @@ function buildUnifiedFindingDetails(input: {
   }
 
   if (family === "rights_gap") {
+    const validationEvidence =
+      input.linkedValidationFinding?.evidence && typeof input.linkedValidationFinding.evidence === "object" && !Array.isArray(input.linkedValidationFinding.evidence)
+        ? input.linkedValidationFinding.evidence as Record<string, unknown>
+        : null;
+    const unmatchedCookieNames = Array.isArray(validationEvidence?.unmatchedCookieNames)
+      ? validationEvidence.unmatchedCookieNames
+      : Array.isArray(validationEvidence?.unmatched_cookie_names)
+        ? validationEvidence.unmatched_cookie_names
+        : [];
     return {
       family,
       kind: input.findingId,
@@ -1209,9 +1218,7 @@ function buildUnifiedFindingDetails(input: {
           : typeof input.fallbackEvidence?.signalValue === "number"
             ? input.fallbackEvidence.signalValue
             : null,
-      unmatchedItems: Array.isArray(input.linkedValidationFinding?.evidence?.unmatchedCookieNames)
-        ? (input.linkedValidationFinding?.evidence?.unmatchedCookieNames as string[])
-        : []
+      unmatchedItems: unmatchedCookieNames.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     } satisfies UnifiedFindingDetails;
   }
 

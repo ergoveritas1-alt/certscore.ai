@@ -261,6 +261,16 @@ function isPromotionBlockerFinding(value: string): value is PromotionBlockerFind
 
 function toPromotionBlockerInput(row: PromotionBlockerRow, findingId: PromotionBlockerFindingId): PromotionBlockerInput {
   const policyJson = row.policy_enrichment_json ?? {};
+  const cookieGapEvidence =
+    row.cookie_gap_validation_evidence && typeof row.cookie_gap_validation_evidence === "object" && !Array.isArray(row.cookie_gap_validation_evidence)
+      ? row.cookie_gap_validation_evidence
+      : {};
+  const validationCookiePolicyUrl =
+    typeof cookieGapEvidence.cookie_policy_url === "string" && cookieGapEvidence.cookie_policy_url.trim()
+      ? cookieGapEvidence.cookie_policy_url.trim()
+      : typeof cookieGapEvidence.cookiePolicyUrl === "string" && cookieGapEvidence.cookiePolicyUrl.trim()
+        ? cookieGapEvidence.cookiePolicyUrl.trim()
+        : null;
   const policyRightsSignals =
     row.policy_rights_signals ??
     (Array.isArray(policyJson.policy_rights_signals)
@@ -282,7 +292,7 @@ function toPromotionBlockerInput(row: PromotionBlockerRow, findingId: PromotionB
         ? policyJson.policy_evidence_snippets as Record<string, unknown>
         : null),
     policyExtractionStatus: row.policy_extraction_status,
-    policyPageUrl: row.policy_page_url,
+    policyPageUrl: row.policy_page_url ?? validationCookiePolicyUrl,
     policyPageType: row.policy_page_type,
     policyPositiveSignalPresent: row.policy_positive_signal_present,
     policyRightsSignals,
@@ -337,6 +347,19 @@ async function loadPromotionBlockerRows(input: {
             where vr.scan_id = s.id
               and vf.rule_key = 'section_review.no_dsar_mechanism'
          )`
+        : input.findingId === "cookie_disclosure_gap"
+          ? `(exists (
+              select 1
+                from validation_runs vr
+                join validation_run_findings vf on vf.validation_run_id = vr.id
+               where vr.scan_id = s.id
+                 and vf.rule_key = 'cookie_runtime.disclosure_gap'
+            ) or exists (
+              select 1 from scan_signals sig
+               where sig.scan_id = s.id
+                 and sig.signal_key = 'privacy.cookie_runtime_disclosure_gap_detected'
+                 and sig.signal_value_json = 'true'::jsonb
+            ))`
         : signalKey
           ? `exists (
               select 1 from scan_signals sig

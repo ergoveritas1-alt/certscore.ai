@@ -94,6 +94,15 @@ function hasPolicyAnchor(input: PromotionBlockerInput) {
   return Boolean(input.policyPageUrl && /^https?:\/\//i.test(input.policyPageUrl));
 }
 
+function getValidationCookiePolicyUrl(input: PromotionBlockerInput) {
+  const validation = getRecord(input.cookieGapValidationEvidence);
+  return getString(validation?.cookiePolicyUrl ?? validation?.cookie_policy_url);
+}
+
+function getEffectiveCookieGapPolicyUrl(input: PromotionBlockerInput) {
+  return input.policyPageUrl ?? getValidationCookiePolicyUrl(input);
+}
+
 function hasFetchedPolicy(input: PromotionBlockerInput) {
   return input.policyExtractionStatus === "fetched" && input.policyStructurallyWeak !== true;
 }
@@ -414,24 +423,27 @@ export function classifyCookieDisclosureGapPromotionBlockers(input: PromotionBlo
   const runtimeCookieNames = getRuntimeCookieNames(input);
   const unmatchedCookieNames = getUnmatchedCookieNames(input);
   const unmatchedCookieCount = getUnmatchedCookieCount(input);
+  const validationBacked = Boolean(getRecord(input.cookieGapValidationEvidence));
+  const effectivePolicyUrl = getEffectiveCookieGapPolicyUrl(input);
   const hasCookiePolicyUrl =
     input.policyPageType === "cookie_policy" ||
-    isLikelyPolicyUrl(input.policyPageUrl, /cookie|privacy|legal|policy|notice/);
+    isLikelyPolicyUrl(effectivePolicyUrl, /cookie|privacy|legal|policy|notice/);
+  const hasCookieGapSignal = input.policyPositiveSignalPresent === true || validationBacked;
   const blockers: string[] = [];
 
-  if (!hasPolicyAnchor(input)) {
+  if (!effectivePolicyUrl || !/^https?:\/\//i.test(effectivePolicyUrl)) {
     blockers.push("missing_policy_anchor_url");
   }
   if (!hasCookiePolicyUrl) {
     blockers.push("missing_cookie_or_privacy_policy_anchor");
   }
-  if (!hasFetchedPolicy(input)) {
+  if (!validationBacked && !hasFetchedPolicy(input)) {
     blockers.push(input.policyExtractionStatus ? "policy_extraction_incomplete" : "missing_policy_extraction_status");
   }
-  if (!hasMinimumPolicyConfidence(input)) {
+  if (!validationBacked && !hasMinimumPolicyConfidence(input)) {
     blockers.push("low_policy_semantic_confidence");
   }
-  if (input.policyPositiveSignalPresent !== true) {
+  if (!hasCookieGapSignal) {
     blockers.push("missing_cookie_gap_signal");
   }
   if (runtimeCookieNames.length === 0) {
@@ -446,11 +458,12 @@ export function classifyCookieDisclosureGapPromotionBlockers(input: PromotionBlo
     evidence: {
       policyExtractionStatus: input.policyExtractionStatus ?? null,
       policyPageType: input.policyPageType ?? null,
-      policyPageUrl: input.policyPageUrl ?? null,
+      policyPageUrl: effectivePolicyUrl ?? null,
       policySemanticConfidence: getPolicyConfidence(input),
       runtimeCookieCount: runtimeCookieNames.length,
       sampleRuntimeCookieNames: runtimeCookieNames.slice(0, 8),
       sampleUnmatchedCookieNames: unmatchedCookieNames.slice(0, 8),
+      validationBacked,
       unmatchedCookieCount
     },
     findingId: "cookie_disclosure_gap",
