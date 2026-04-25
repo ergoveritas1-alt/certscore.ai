@@ -95,6 +95,7 @@ export type PolicyBehaviorContradiction = {
   runtimeConfidence?: number | null;
   runtimeObservationType?: PolicyBehaviorRuntimeObservationType | null;
   runtimePhase?: RuntimeObservationPhase;
+  runtimeScriptHosts?: string[];
   runtimeSummary: string;
   runtimeVendors: string[];
   conflictReasoning?: string | null;
@@ -115,6 +116,7 @@ export type AccessibilityIssueRow = {
 
 export type PreconsentViolationRow = {
   evidenceUrls: string[];
+  scriptHost?: string | null;
   vendorCategory: string;
   vendorName: string;
 };
@@ -395,6 +397,7 @@ export function buildSectionReviewIssues(input: {
     issues.push(
       ...input.policyBehaviorContradictions.map((row) => {
         const runtimeRequestUrls = uniqueStrings(row.evidence.filter((value) => /^https?:\/\//i.test(value)));
+        const runtimeScriptHosts = uniqueStrings(row.runtimeScriptHosts ?? []);
         const policyAnchorPresent = Boolean(row.policyClaimType && row.policySnippet && row.policyPageUrl);
         const runtimeAnchorPresent = Boolean(row.runtimeObservationType && runtimeRequestUrls.length > 0 && row.runtimeVendors.length > 0);
         const conflictBridgePresent = Boolean(row.conflictType && row.conflictSupportsPromotion === true);
@@ -440,10 +443,13 @@ export function buildSectionReviewIssues(input: {
                 phase: row.runtimePhase ?? "unknown",
                 requests: runtimeRequestUrls,
                 sourceUrl: row.policyPageUrl,
-                storageArtifacts: [],
+                storageArtifacts: runtimeScriptHosts.map((host) => `script_host:${host}`),
                 vendors: row.runtimeVendors
               },
-              runtimeEvidenceArtifacts: row.evidence,
+              runtimeEvidenceArtifacts: uniqueStrings([
+                ...row.evidence,
+                ...runtimeScriptHosts.map((host) => `script_host:${host}`)
+              ]),
               runtimeSummary: row.runtimeSummary,
               runtimeVendors: row.runtimeVendors,
               sourceUrls: row.policyPageUrl ? [row.policyPageUrl] : [],
@@ -455,8 +461,12 @@ export function buildSectionReviewIssues(input: {
             policySummaryShort: row.policySummary,
             relatedVendors: row.relatedVendors,
             requestUrls: runtimeRequestUrls,
-            runtimeEvidenceArtifacts: row.evidence,
+            runtimeEvidenceArtifacts: uniqueStrings([
+              ...row.evidence,
+              ...runtimeScriptHosts.map((host) => `script_host:${host}`)
+            ]),
             runtimeEvidenceUrls: runtimeRequestUrls,
+            preconsent_tracker_script_hosts: runtimeScriptHosts,
             runtimeSummary: row.runtimeSummary,
             runtimeVendors: row.runtimeVendors,
             sourceUrls: row.policyPageUrl ? [row.policyPageUrl] : [],
@@ -487,15 +497,25 @@ export function buildSectionReviewIssues(input: {
   }
 
   if (input.sectionId === "tracking_third_party_ecosystem" && input.preconsentViolationRows.length > 0) {
+    const preconsentEvidenceUrls = uniqueStrings(
+      input.preconsentViolationRows.flatMap((row) => row.evidenceUrls)
+    );
+    const preconsentScriptHosts = uniqueStrings(input.preconsentViolationRows.map((row) => row.scriptHost));
+    const preconsentVendors = uniqueStrings(input.preconsentViolationRows.map((row) => row.vendorName));
     issues.push({
       description: `Observed vendor activity before consent for ${input.preconsentViolationRows.length} vendor${input.preconsentViolationRows.length === 1 ? "" : "s"}.`,
-      evidence: input.preconsentViolationRows.flatMap((row) => row.evidenceUrls).slice(0, 3),
+      evidence: preconsentEvidenceUrls.slice(0, 3),
       fallbackEvidence: {
-        preconsent_tracker_evidence_urls: uniqueStrings(
-          input.preconsentViolationRows.flatMap((row) => row.evidenceUrls)
-        ),
-        preconsent_tracker_vendors: uniqueStrings(input.preconsentViolationRows.map((row) => row.vendorName)),
+        preconsent_tracker_evidence_urls: preconsentEvidenceUrls,
+        preconsent_tracker_script_hosts: preconsentScriptHosts,
+        preconsent_tracker_vendors: preconsentVendors,
         preconsent_tracking_detected: true,
+        runtimeEvidenceArtifacts: uniqueStrings([
+          ...preconsentEvidenceUrls,
+          ...preconsentScriptHosts.map((host) => `script_host:${host}`)
+        ]),
+        runtimeEvidenceUrls: preconsentEvidenceUrls,
+        runtimeVendors: preconsentVendors,
         supportingSignals: ["privacy.preconsent_tracking_detected", "privacy.tracking_before_consent_detected"],
         tracking_before_consent_detected: true
       },
@@ -515,10 +535,18 @@ export function buildSectionReviewIssues(input: {
 
         let fallbackEvidence: Record<string, unknown> | undefined;
         if (finding.title === "Trackers fired before consent interaction") {
+          const baselineTrackerScriptHosts = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_script_hosts");
           fallbackEvidence = {
             preconsent_tracker_evidence_urls: baselineTrackerEvidenceUrls,
+            preconsent_tracker_script_hosts: baselineTrackerScriptHosts,
             preconsent_tracker_vendors: baselineTrackerVendors,
             preconsent_tracking_detected: true,
+            runtimeEvidenceArtifacts: uniqueStrings([
+              ...baselineTrackerEvidenceUrls,
+              ...baselineTrackerScriptHosts.map((host) => `script_host:${host}`)
+            ]),
+            runtimeEvidenceUrls: baselineTrackerEvidenceUrls,
+            runtimeVendors: baselineTrackerVendors,
             supportingSignals: ["privacy.preconsent_tracking_detected", "privacy.tracking_before_consent_detected"],
             tracking_before_consent_detected: true
           };

@@ -234,3 +234,50 @@ test("consent-gated tracking conflict contract stays audit-only without concrete
   assert.equal(decision?.externalSurfacingEligibility, "audit_only");
   assert.ok(decision?.negativeEvidenceFlags.includes("missing_runtime_request_url_evidence"));
 });
+
+test("consent-gated tracking conflict retains script hosts as support without treating them as request URLs", () => {
+  const decision = evaluateConsentGatedTrackingConflictContract({
+    contradictionEvidence: {
+      claim: "Optional analytics cookies only run after consent.",
+      contradictionBasis: "Analytics fired before consent.",
+      conflictBridge: {
+        conflictType: "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired",
+        reasoning: "The policy claim says only necessary cookies run before choice, but analytics host evidence was retained pre-consent.",
+        supportsPromotion: true
+      },
+      evidenceSufficiency: {
+        conflictBridgePresent: true,
+        policyAnchorPresent: true,
+        promotionEligible: false,
+        reviewStatus: "insufficient_evidence_for_policy_behavior_conflict",
+        runtimeAnchorPresent: true
+      },
+      policyAnchor: {
+        claimType: "only_necessary_cookies_before_choice",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        normalizedClaim: "Optional analytics cookies only run after consent.",
+        snippet: "Optional analytics cookies only run after consent.",
+        sourceUrl: "https://example.com/privacy"
+      },
+      runtimeAnchor: {
+        confidence: 0.82,
+        cookies: [],
+        observationType: "analytics_vendor_fired_pre_consent",
+        phase: "pre_consent",
+        requests: [],
+        sourceUrl: "https://example.com/",
+        storageArtifacts: ["script_host:www.google-analytics.com"],
+        vendors: ["Google Analytics"]
+      },
+      runtimeEvidenceArtifacts: ["script_host:www.google-analytics.com"],
+      runtimeVendors: ["Google Analytics"],
+      sourceUrls: ["https://example.com/privacy"]
+    }
+  });
+
+  assert.equal(decision?.promotionEligibility, "internal_only");
+  assert.equal(decision?.externalSurfacingEligibility, "audit_only");
+  assert.ok(!decision?.negativeEvidenceFlags.includes("missing_behavior_side_evidence"));
+  assert.ok(decision?.negativeEvidenceFlags.includes("missing_runtime_request_url_evidence"));
+});
