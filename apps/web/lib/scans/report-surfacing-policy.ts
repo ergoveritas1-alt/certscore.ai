@@ -919,6 +919,31 @@ function hasReadableSnippet(packet: UnifiedFindingPacket) {
   );
 }
 
+function getEvidenceSnippetText(packet: UnifiedFindingPacket) {
+  return (packet.evidence?.snippets ?? []).filter((snippet): snippet is string => typeof snippet === "string").join(" ");
+}
+
+function hasFindingSpecificHighValuePrivacyDisclosureText(packet: UnifiedFindingPacket) {
+  const text = getEvidenceSnippetText(packet);
+
+  switch (packet.unifiedFindingId) {
+    case "behavioral_analytics_disclosure_present":
+      return /behavioral analytics|behavioural analytics|session replay|session recording|heat ?map|product analytics|hotjar|fullstory|mouseflow|contentsquare|microsoft clarity/i.test(
+        text
+      );
+    case "gpc_disclosure_present":
+      return /global privacy control|\bGPC\b|privacy preference signal/i.test(text);
+    case "tracking_technologies_disclosure_present":
+      return /tracking technolog(?:y|ies)|cookies? and similar technolog(?:y|ies)|pixels?|web beacons?|tags?|tracking scripts?/i.test(text);
+    case "targeted_advertising_disclosure_present":
+      return /targeted advertis(?:e|ing)|interest-based advertis(?:e|ing)|personalized ads?|cross-context behavioral advertis(?:e|ing)/i.test(text);
+    case "third_party_advertising_disclosure_present":
+      return /third-party advertis(?:e|ing)|advertising partners?|ad networks?|outside advertising partners?/i.test(text);
+    default:
+      return false;
+  }
+}
+
 function hasConcreteRuntimeEvidence(packet: UnifiedFindingPacket) {
   return (
     packet.confidenceInputs.hasDirectRuntimeEvidence ||
@@ -1303,6 +1328,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       ].includes(packet.unifiedFindingId) &&
       packet.confidenceInputs.hasPolicyTextEvidence &&
       hasReadableSnippet(packet) &&
+      hasFindingSpecificHighValuePrivacyDisclosureText(packet) &&
       hasConcreteHumanFacingUrl(packet.evidence?.pageUrls)
     ) {
       overrideDecision(decision, {
@@ -1955,10 +1981,10 @@ function applyCrossFindingRules(decisionsById: Map<string, MutableDecision>, pac
     }
 
     if (decision.family === "positive_surface") {
-      decision.reportLane = "main";
+      decision.reportLane = "confidence_and_coverage";
       decision.appliedRules.push("support.orphan_positive_surface_retained");
       decision.decisionReasons.push(
-        "No stronger lead finding required this positive surface as support, so it was retained as standalone positive context."
+        "No stronger lead finding required this positive surface as support, so it was retained in confidence-and-coverage instead of the ranked findings model."
       );
       continue;
     }
