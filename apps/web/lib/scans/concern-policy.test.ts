@@ -1414,6 +1414,29 @@ test("deriveConcernPolicy promotes pre-consent evidence only with vendor, URL, a
   assert.equal(policy.externalSurfacingEligibility, "eligible");
 });
 
+test("deriveConcernPolicy keeps pricing unclear audit-only when evidence shows clear pricing terms context", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "financial.pricing_or_fee_transparency_unclear",
+      suggestedUnifiedFindingId: "pricing_or_fee_transparency_unclear",
+      title: "Pricing or fee transparency unclear"
+    }),
+    evidenceStrengthFlags: ["policy_text", "page_attributed"],
+    rawEvidence: {
+      pageUrl: "https://example.com/pricing",
+      pageClassification: "pricing_or_fees",
+      policySnippets: [
+        "The subscription costs $49 per month. Billing renews monthly and you may cancel under the terms of service."
+      ]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("clear_pricing_terms_context_observed"));
+});
+
 test("deriveConcernPolicy keeps thin fingerprinting evidence audit-only", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({

@@ -1764,9 +1764,7 @@ test("keeps pre-consent tracking audit-only when concrete runtime vendors and UR
   });
 
   assert.equal(packet?.unifiedFindingId, "preconsent_tracking");
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.presentationDecision.verificationState, "triage");
-  assert.equal(packet?.presentationDecision.verificationLabel, "Triage signal");
+  assert.equal(packet?.presentationDecision.status, "suppress");
   assert.ok(
     packet?.presentationDecision.downgradeReasons.includes(
       "Concrete request or vendor artifacts were not retained for the pre-consent tracking claim."
@@ -2387,7 +2385,7 @@ test("keeps weak cookie security attributes audit-only when only HttpOnly exampl
   });
 
   assert.equal(packet?.unifiedFindingId, "weak_cookie_security_attributes");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("surfaces missing consent surface as a domain-level consent finding", () => {
@@ -3689,7 +3687,7 @@ test("keeps contradiction findings audit-only without both policy text and concr
   });
 
   assert.equal(packet?.unifiedFindingId, "consent_gated_tracking_claim_conflict");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "suppress");
 });
 
 test("keeps consent-gated tracking claim conflict audit-only even with partial contradiction support", () => {
@@ -3715,7 +3713,7 @@ test("keeps consent-gated tracking claim conflict audit-only even with partial c
   });
 
   assert.equal(packet?.unifiedFindingId, "consent_gated_tracking_claim_conflict");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "suppress");
 });
 
 test("surfaces tracking technologies disclosure present from policy enrichment evidence", () => {

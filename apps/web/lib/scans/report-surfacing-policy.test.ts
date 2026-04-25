@@ -168,6 +168,114 @@ test("suppresses contradictory missing-surface findings when a matching positive
   assert.equal(accessibilityPresent?.reportable, true);
 });
 
+test("keeps generic privacy contact pages support-only without privacy-specific contact text", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("privacy_contact_path_present", {
+        confidenceInputs: {
+          ...makePacket("privacy_contact_path_present").confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          flags: [],
+          pageUrls: ["https://example.com/contact"],
+          snippets: ["Contact our support team for questions about your account."],
+          sourceUrls: []
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions.find((entry) => entry.unifiedFindingId === "privacy_contact_path_present");
+  assert.equal(decision?.decisionState, "support_only");
+  assert.equal(decision?.reportLane, "confidence_and_coverage");
+});
+
+test("surfaces privacy contact paths only with privacy-specific contact evidence", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("privacy_contact_path_present", {
+        confidenceInputs: {
+          ...makePacket("privacy_contact_path_present").confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          flags: [],
+          pageUrls: ["https://example.com/privacy"],
+          snippets: ["To exercise privacy rights or contact our privacy team, email privacy@example.com."],
+          sourceUrls: []
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions.find((entry) => entry.unifiedFindingId === "privacy_contact_path_present");
+  assert.equal(decision?.decisionState, "review");
+  assert.equal(decision?.reportLane, "main");
+});
+
+test("keeps audit-only pre-consent tracking out of main surfacing", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("preconsent_tracking", {
+        concernContext: {
+          assertionLevels: ["weak"],
+          evidenceStrengthFlags: ["direct_runtime"],
+          externalSurfacingEligibilities: ["audit_only"],
+          negativeEvidenceFlags: ["missing_concrete_preconsent_artifact"],
+          originTypes: ["snapshot_signal"],
+          promotionEligibilities: ["internal_only"]
+        },
+        confidenceInputs: {
+          ...makePacket("preconsent_tracking").confidenceInputs,
+          hasDirectRuntimeEvidence: true
+        },
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking"
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions.find((entry) => entry.unifiedFindingId === "preconsent_tracking");
+  assert.equal(decision?.decisionState, "suppressed");
+  assert.equal(decision?.reportLane, "suppressed");
+});
+
+test("keeps audit-only consent contradiction out of main surfacing", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("consent_gated_tracking_claim_conflict", {
+        concernContext: {
+          assertionLevels: ["weak"],
+          evidenceStrengthFlags: ["policy_text"],
+          externalSurfacingEligibilities: ["audit_only"],
+          negativeEvidenceFlags: ["missing_behavior_side_evidence"],
+          originTypes: ["snapshot_signal"],
+          promotionEligibilities: ["internal_only"]
+        },
+        confidenceInputs: {
+          ...makePacket("consent_gated_tracking_claim_conflict").confidenceInputs,
+          hasPolicyTextEvidence: true
+        },
+        details: {
+          family: "contradiction",
+          kind: "consent_gated_tracking_claim_conflict"
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions.find(
+    (entry) => entry.unifiedFindingId === "consent_gated_tracking_claim_conflict"
+  );
+  assert.equal(decision?.decisionState, "suppressed");
+  assert.equal(decision?.reportLane, "suppressed");
+});
+
 test("specific consent-gating contradiction demotes generic pre-consent tracking to support", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
@@ -183,7 +291,18 @@ test("specific consent-gating contradiction demotes generic pre-consent tracking
           contradictionBasis: "The policy and consent surface imply tracking should begin only after a valid consent interaction.",
           conflictType: "tracking_before_consent",
           policyClaimType: "consent_gated_tracking_claim",
-          runtimeObservationType: "tracker_runtime_observed"
+          runtimeObservationType: "tracker_runtime_observed",
+          vendors: ["Google Tag Manager"]
+        },
+        evidence: {
+          flags: [],
+          entities: {
+            runtimeRequestUrls: ["https://www.googletagmanager.com/gtm.js"],
+            runtimeVendors: ["Google Tag Manager"]
+          },
+          pageUrls: [],
+          snippets: [],
+          sourceUrls: []
         }
       }),
       makePacket("preconsent_tracking", {
