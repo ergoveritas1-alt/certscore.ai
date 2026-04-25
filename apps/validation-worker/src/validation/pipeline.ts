@@ -3334,21 +3334,24 @@ const RTB_OR_IDENTITY_SYNC_DOMAIN_PATTERNS = [
   /(^|\.)criteo\.(?:com|net)$/i,
   /(^|\.)doubleclick\.net$/i,
   /(^|\.)doubleverify\.com$/i,
+  /(^|\.)dv\.tech$/i,
   /(^|\.)exelator\.com$/i,
   /(^|\.)fwmrm\.net$/i,
   /(^|\.)gumgum\.com$/i,
   /(^|\.)id5-sync\.com$/i,
+  /(^|\.)liadm\.com$/i,
   /(^|\.)openx(?:cdn)?\.net$/i,
   /(^|\.)pubmatic\.com$/i,
   /(^|\.)quantserve\.com$/i,
   /(^|\.)rlcdn\.com$/i,
   /(^|\.)rubiconproject\.com$/i,
+  /(^|\.)adsrvr\.org$/i,
   /(^|\.)3lift\.com$/i,
   /(^|\.)crwdcntrl\.net$/i
 ];
 
 const RTB_OR_IDENTITY_SYNC_VENDOR_PATTERN =
-  /ad manager|adobe audience manager|bidswitch|criteo|doubleclick|doubleverify|gumgum|id5|index exchange|lotame|liveramp|openx|pubmatic|quantcast|rubicon|scorecardresearch|triplelift/i;
+  /ad manager|adobe audience manager|bidswitch|criteo|doubleclick|doubleverify|gumgum|id5|index exchange|liveintent|lotame|liveramp|openx|pubmatic|quantcast|rubicon|scorecardresearch|the trade desk|triplelift/i;
 
 function getRtbOrIdentitySyncDomains(domains: string[]) {
   return [

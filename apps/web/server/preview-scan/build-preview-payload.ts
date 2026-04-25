@@ -502,6 +502,36 @@ function hasObservableConsentSurface(snapshot: PreviewSnapshotSource) {
   );
 }
 
+function hasPreconsentTrackingEvidence(snapshot: PreviewSnapshotSource) {
+  return (
+    snapshot.trackingBeforeConsentDetected === true ||
+    snapshot.preconsentTrackingDetected === true ||
+    snapshot.thirdPartyCookieSetBeforeConsent === true
+  );
+}
+
+function canSurfaceScoresWithCoverageCaveat(input: {
+  siteSurfaceUnverified: boolean;
+  snapshot: PreviewSnapshotSource;
+}) {
+  return (
+    input.siteSurfaceUnverified &&
+    input.snapshot.accessPostureClass === "degraded_but_useful" &&
+    input.snapshot.blockedFlag !== true &&
+    input.snapshot.captchaFlag !== true &&
+    input.snapshot.authWallDetected !== true &&
+    input.snapshot.challengeSuspected !== true &&
+    input.snapshot.homepageFetchStatus === "ok" &&
+    input.snapshot.homepageFetchHttpStatus !== 401 &&
+    input.snapshot.homepageFetchHttpStatus !== 403 &&
+    input.snapshot.homepageFetchHttpStatus !== 429 &&
+    input.snapshot.totalSignals >= 20 &&
+    input.snapshot.certscoreOverall > 0 &&
+    input.snapshot.privacyScore > 0 &&
+    input.snapshot.accessibilityScore > 0
+  );
+}
+
 function isEvidenceRichZeroPagePreview(snapshot: PreviewSnapshotSource, verifiedSurfaces: string[]) {
   const homepageFetchStatusOk = snapshot.homepageFetchStatus === "ok";
   const homepageFetchHttpStatusSuccessful =
@@ -561,6 +591,10 @@ export function buildPreviewPayloadFromSnapshot(input: {
     robotsFetchStatus: input.snapshot.robotsFetchStatus
   });
   const siteSurfaceUnverified = scanStopReason !== null && !evidenceRichZeroPagePreview;
+  const surfaceScoresWithCoverageCaveat = canSurfaceScoresWithCoverageCaveat({
+    siteSurfaceUnverified,
+    snapshot: input.snapshot
+  });
   const secondarySurfaceCoverageLimited = input.snapshot.partialScan || input.snapshot.pagesScanned < 3;
   const requestedHostname = input.hostname.toLowerCase().replace(/^www\./, "");
   const finalHostname = hostnameFromUrl(input.snapshot.finalUrl);
@@ -670,11 +704,8 @@ export function buildPreviewPayloadFromSnapshot(input: {
 
   pushFinding(
     findings,
-    !siteSurfaceUnverified &&
     observableConsentSurface &&
-    (input.snapshot.trackingBeforeConsentDetected ||
-      input.snapshot.preconsentTrackingDetected ||
-      input.snapshot.thirdPartyCookieSetBeforeConsent)
+    hasPreconsentTrackingEvidence(input.snapshot)
       ? {
           affectedPage: "Homepage",
           category: "privacy",
@@ -819,7 +850,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
           protectionVendor
         }
       : undefined,
-    scores: siteSurfaceUnverified || snapshotScoresLookUnreliable
+    scores: (siteSurfaceUnverified && !surfaceScoresWithCoverageCaveat) || snapshotScoresLookUnreliable
       ? undefined
       : {
           overall: input.snapshot.certscoreOverall,
@@ -831,7 +862,9 @@ export function buildPreviewPayloadFromSnapshot(input: {
       ...(siteSurfaceUnverified
         ? [
             "Access limited by site protections.",
-            "Preview scores are withheld because the live pass stopped before it verified a trustworthy public site surface.",
+            surfaceScoresWithCoverageCaveat
+              ? `Preview scores are shown with a coverage caveat: overall ${input.snapshot.certscoreOverall}, privacy ${input.snapshot.privacyScore}, accessibility ${input.snapshot.accessibilityScore}.`
+              : "Preview scores are withheld because the live pass stopped before it verified a trustworthy public site surface.",
             scanStopReason?.reason ?? "Reason: the scanner could not verify a usable homepage surface."
           ]
         : snapshotScoresLookUnreliable

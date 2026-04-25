@@ -132,6 +132,9 @@ test("normalizes RTB and identity-sync domains from retained runtime domain list
             "cdn.id5-sync.com",
             "micro.rubiconproject.com",
             "oa.openxcdn.net",
+            "vtrk.dv.tech",
+            "insight.adsrvr.org",
+            "x.liadm.com",
             "cdn.example-cdn.com"
           ]
         }
@@ -148,9 +151,12 @@ test("normalizes RTB and identity-sync domains from retained runtime domain list
     [
       "cdn.id5-sync.com",
       "dpm.demdex.net",
+      "insight.adsrvr.org",
       "micro.rubiconproject.com",
       "oa.openxcdn.net",
-      "static.criteo.net"
+      "static.criteo.net",
+      "vtrk.dv.tech",
+      "x.liadm.com"
     ]
   );
 
@@ -158,4 +164,28 @@ test("normalizes RTB and identity-sync domains from retained runtime domain list
   assert.equal(criteo?.beforeConsent, true);
   assert.equal(criteo?.collectionEndpointType, "request");
   assert.equal(criteo?.firstPartyOrThirdParty, "third_party");
+});
+
+test("marks same-site unresolved vendor requests as first-party proxy evidence", () => {
+  const candidates = collectVendorEnrichmentCandidates({
+    requestedHostname: "fandango.com",
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        requestToVendorObservations: [
+          {
+            hostname: "images.fandango.com",
+            preConsent: true,
+            sampleUrls: ["https://images.fandango.com/require-core.js"],
+            vendor: "unresolved"
+          }
+        ]
+      }
+    },
+    snapshot: {
+      preconsent_tracking_detected: true
+    }
+  });
+
+  assert.equal(candidates[0]?.hostname, "images.fandango.com");
+  assert.equal(candidates[0]?.firstPartyOrThirdParty, "first_party_proxy");
 });

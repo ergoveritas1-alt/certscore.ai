@@ -4899,6 +4899,8 @@ test("promotes RTB identity-sync runtime footprint as a generic adtech finding",
           "cdn.id5-sync.com",
           "micro.rubiconproject.com",
           "oa.openxcdn.net",
+          "vtrk.dv.tech",
+          "insight.adsrvr.org",
           "cdn.example.com"
         ],
         hybrid_runtime_evidence: {
@@ -4951,10 +4953,12 @@ test("promotes RTB identity-sync runtime footprint as a generic adtech finding",
   assert.deepEqual(finding?.evidence.rtb_cookie_sync_domains, [
     "cdn.id5-sync.com",
     "cm.g.doubleclick.net",
+    "insight.adsrvr.org",
     "micro.rubiconproject.com",
     "oa.openxcdn.net",
     "securepubads.g.doubleclick.net",
-    "static.criteo.net"
+    "static.criteo.net",
+    "vtrk.dv.tech"
   ]);
   assert.deepEqual(finding?.evidence.runtimeRequestUrls, [
     "https://static.criteo.net/js/ld/publishertag.js",

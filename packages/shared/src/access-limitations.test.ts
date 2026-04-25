@@ -75,6 +75,21 @@ test("maps thin-page degraded captures into content degradation without requirin
   assert.equal(outcome?.kind, "content_capture_degraded");
 });
 
+test("ignores stale auth-wall classifications when useful origin evidence was retained", () => {
+  const outcome = deriveAccessLimitationOutcome({
+    accessPostureClass: "degraded_but_useful",
+    blockPageClassification: "login_wall_probable",
+    blockedFlag: false,
+    captchaFlag: false,
+    challengeSuspected: false,
+    homepageFetchHttpStatus: 200,
+    homepageFetchStatus: "ok",
+    pagesScanned: 4
+  });
+
+  assert.equal(outcome, null);
+});
+
 test("assigns 24 hour cooldown to challenge-suspected 403", () => {
   const policy = deriveRetryPolicy({
     homepageHttpStatus: 403,
