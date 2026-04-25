@@ -403,6 +403,94 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
   assert.equal(payload.fallbackEvidence?.sourceLabel, "Supplemental public runtime evidence");
 });
 
+test("sensitive fallback tracking is prioritized and calibrates preview scores", () => {
+  const snapshot = buildSnapshot({
+    cookieBannerPresent: false,
+    cmpVendorName: null,
+    consentInteractionModel: "none",
+    cookiePolicyPresent: true,
+    finalUrl: "https://www.webmd.com/",
+    pagesScanned: 0,
+    partialScan: true,
+    preconsentTrackingDetected: true,
+    privacyPolicyPresent: true,
+    registeredDomain: "webmd.com",
+    termsOfServicePresent: true,
+    thirdPartyCookieSetBeforeConsent: true,
+    totalSignals: 8,
+    trackingBeforeConsentDetected: true
+  });
+
+  const payload = enrichPreviewPayloadWithFallbackEvidence({
+    payload: buildPreviewPayloadFromSnapshot({
+      hostname: "webmd.com",
+      normalizedUrl: "https://webmd.com",
+      snapshot
+    }),
+    snapshot,
+    events: [
+      {
+        event_type: "runtime.build_phase_diagnostic",
+        metadata_json: {
+          phase: "urlscan_preflight_lookup",
+          status: "search_hit",
+          requestCount: 94,
+          cookieCount: 14
+        }
+      },
+      {
+        event_type: "runtime.build_phase_diagnostic",
+        metadata_json: {
+          phase: "urlscan_preflight_legal_fetch",
+          status: "search_hit",
+          verifiedCount: 3,
+          verifiedSurfaceTargets: ["privacy_policy", "terms_of_service", "cookie_policy"]
+        }
+      }
+    ],
+    urlscanResult: {
+      data: {
+        cookies: [
+          { name: "aam", domain: ".webmd.com" },
+          { name: "AMCV_16AD4362526701720A490D45%40AdobeOrg", domain: ".webmd.com" },
+          { name: "OptanonConsent", domain: ".webmd.com" }
+        ],
+        requests: [
+          { request: { url: "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js" } },
+          { request: { url: "https://www.google.com/recaptcha/enterprise.js" } }
+        ]
+      },
+      lists: {
+        countries: ["US"],
+        domains: ["cdn.cookielaw.org", "assets.adobedtm.com", "www.google.com", "www.gstatic.com"],
+        ips: ["203.0.113.10"],
+        servers: ["cloudflare"]
+      },
+      meta: {
+        processors: {
+          wappa: {
+            data: [{ app: "OneTrust" }, { app: "reCAPTCHA" }]
+          }
+        }
+      },
+      stats: {
+        domainStats: [{ count: 50 }, { count: 22 }, { count: 12 }, { count: 10 }],
+        uniqCountries: 1
+      }
+    }
+  });
+
+  assert.equal(payload.sampleFindings[0]?.title, "Tracking activity observed before consent");
+  assert.equal(payload.sampleFindings[0]?.severity, "high");
+  assert.equal(payload.sampleFindings[0]?.description.includes("health information site"), true);
+  assert.equal(payload.scores?.privacy, 55);
+  assert.equal(payload.scores?.overall, 62);
+  assert.equal(
+    payload.summaryBullets.includes("Preview scores were calibrated downward because sensitive-context tracking evidence was retained before consent."),
+    true
+  );
+});
+
 test("preview payload surfaces urlscan no-api-key diagnostics as scanner health warnings", () => {
   const snapshot = buildSnapshot({
     cookieBannerPresent: true,
