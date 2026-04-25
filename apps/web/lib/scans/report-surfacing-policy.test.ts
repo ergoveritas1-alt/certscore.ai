@@ -378,6 +378,38 @@ test("strong document-semantic policy clarity evidence surfaces in the main lane
   assert.ok(clarity?.appliedRules.includes("evidence.policy_extraction.review_policy_fitness"));
 });
 
+test("low-confidence ambiguity-only policy clarity evidence stays in confidence coverage", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("policy_clarity_risk", {
+        confidenceInputs: {
+          ...makePacket("policy_clarity_risk").confidenceInputs,
+          hasPageAttribution: true,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        details: {
+          family: "policy_extraction",
+          kind: "policy_clarity_risk",
+          ambiguityScore: 90,
+          confidence: 0.2
+        },
+        evidence: {
+          ...makePacket("policy_clarity_risk").evidence,
+          pageUrls: ["https://www.example.com/privacy"],
+          snippets: ["The retained policy text is sparse, but no separate structural weakness or boilerplate evidence was retained."]
+        }
+      })
+    ]
+  });
+
+  const clarity = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "policy_clarity_risk");
+
+  assert.equal(clarity?.decisionState, "review");
+  assert.equal(clarity?.reportLane, "confidence_and_coverage");
+  assert.ok(clarity?.appliedRules.includes("evidence.policy_extraction.keep_review"));
+});
+
 test("unresolved low-confidence absence still surfaces in confidence and coverage", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
