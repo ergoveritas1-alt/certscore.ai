@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "audit:live-consent": "node --enable-source-maps --import tsx ./scripts/live-consent-audit.ts",
+    "backfill:preconsent-evidence-urls": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/backfill-preconsent-evidence-urls.ts",
     "backfill:nano-signals": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/backfill-nano-signal-populations.ts",
     "build": "tsc -p tsconfig.json",
     "check-env": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/check-validation-env.ts",

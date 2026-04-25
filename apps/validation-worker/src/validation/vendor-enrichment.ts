@@ -124,12 +124,105 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function normalizeUrlEvidence(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
 function normalizeHostname(value: string | null | undefined) {
   if (!value) {
     return null;
   }
 
   return value.trim().replace(/^\.+/, "").toLowerCase();
+}
+
+function getHostnameFromUrl(value: string | null | undefined) {
+  const normalized = normalizeUrlEvidence(value);
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    return normalizeHostname(new URL(normalized).hostname);
+  } catch {
+    return null;
+  }
+}
+
+function getRequestUrlsFromRow(row: Record<string, unknown>) {
+  const directUrls = uniqueStrings([
+    normalizeUrlEvidence(getString(row.url)),
+    normalizeUrlEvidence(getString(row.requestUrl)),
+    normalizeUrlEvidence(getString(row.request_url)),
+    ...getStringArray(row.sampleUrls ?? row.sample_urls).map((value) => normalizeUrlEvidence(value))
+  ]);
+  if (directUrls.length > 0) {
+    return directUrls;
+  }
+
+  const domain = normalizeHostname(getString(row.hostname) ?? getString(row.domain));
+  const pathSample = getString(row.pathSample) ?? getString(row.path_sample);
+  if (!domain || !pathSample) {
+    return [];
+  }
+
+  const normalizedPath = pathSample.startsWith("/") ? pathSample : `/${pathSample}`;
+  return uniqueStrings([normalizeUrlEvidence(`https://${domain}${normalizedPath}`)]);
+}
+
+function isPreconsentRequestRow(row: Record<string, unknown>, hybrid: Record<string, unknown> | null) {
+  if (row.preConsent === true || row.pre_consent === true || row.beforeConsent === true || row.before_consent === true) {
+    return true;
+  }
+  const phase = getString(row.phase);
+  if (phase === "before_interaction" || phase === "before_consent" || phase === "baseline") {
+    return true;
+  }
+
+  const tsMs = typeof row.ts_ms === "number" ? row.ts_ms : typeof row.tsMs === "number" ? row.tsMs : null;
+  const timelineMarkers = getRecord(hybrid?.timelineMarkers ?? hybrid?.timeline_markers);
+  const consentBannerDetectedMs =
+    typeof timelineMarkers?.consentBannerDetectedMs === "number"
+      ? timelineMarkers.consentBannerDetectedMs
+      : typeof timelineMarkers?.consent_banner_detected_ms === "number"
+        ? timelineMarkers.consent_banner_detected_ms
+        : null;
+  return tsMs !== null && consentBannerDetectedMs !== null && tsMs < consentBannerDetectedMs;
+}
+
+function requestRowMatchesHost(row: Record<string, unknown>, hostname: string) {
+  const rowHosts = uniqueStrings([
+    normalizeHostname(getString(row.hostname)),
+    normalizeHostname(getString(row.domain)),
+    ...getRequestUrlsFromRow(row).map((url) => getHostnameFromUrl(url))
+  ]);
+  return rowHosts.some((rowHost) => rowHost === hostname);
+}
+
+function getRequestUrlsForHost(hybrid: Record<string, unknown> | null, hostname: string) {
+  const requestObservations = getObjectArray(hybrid?.requestObservations ?? hybrid?.request_observations);
+  return uniqueStrings(
+    requestObservations
+      .filter((row) => requestRowMatchesHost(row, hostname))
+      .flatMap((row) => getRequestUrlsFromRow(row))
+  ).slice(0, 5);
+}
+
+function getPreconsentRequestUrlsForHost(hybrid: Record<string, unknown> | null, hostname: string) {
+  const requestObservations = getObjectArray(hybrid?.requestObservations ?? hybrid?.request_observations);
+  return uniqueStrings(
+    requestObservations
+      .filter((row) => requestRowMatchesHost(row, hostname))
+      .filter((row) => isPreconsentRequestRow(row, hybrid))
+      .flatMap((row) => getRequestUrlsFromRow(row))
+  ).slice(0, 5);
 }
 
 function normalizeVendorCategory(value: string | null | undefined) {
@@ -255,10 +348,15 @@ export function collectVendorEnrichmentCandidates(input: {
     if (!hostname) {
       continue;
     }
+    const beforeConsent = row.preConsent === true || row.pre_consent === true;
     getOrCreate(hostname, {
-      beforeConsent: row.preConsent === true || row.pre_consent === true,
+      beforeConsent,
       collectionEndpointType: "request",
-      firstPartyOrThirdParty: "third_party"
+      firstPartyOrThirdParty: "third_party",
+      sampleUrls: uniqueStrings([
+        ...(beforeConsent ? [...getRequestUrlsFromRow(row), ...getRequestUrlsForHost(hybrid, hostname)] : []),
+        ...getPreconsentRequestUrlsForHost(hybrid, hostname)
+      ])
     });
   }
 
@@ -271,16 +369,20 @@ export function collectVendorEnrichmentCandidates(input: {
     if (!hostname) {
       continue;
     }
+    const beforeConsent =
+      typeof row.beforeConsentUiRequestCount === "number"
+        ? row.beforeConsentUiRequestCount > 0
+        : typeof row.before_consent_ui_request_count === "number"
+          ? Number(row.before_consent_ui_request_count) > 0
+          : false;
     getOrCreate(hostname, {
-      beforeConsent:
-        typeof row.beforeConsentUiRequestCount === "number"
-          ? row.beforeConsentUiRequestCount > 0
-          : typeof row.before_consent_ui_request_count === "number"
-            ? Number(row.before_consent_ui_request_count) > 0
-            : false,
+      beforeConsent,
       collectionEndpointType: "request",
       firstPartyOrThirdParty: "third_party",
-      sampleUrls: getStringArray(row.sampleUrls ?? row.sample_urls)
+      sampleUrls: uniqueStrings([
+        ...(beforeConsent ? [...getStringArray(row.sampleUrls ?? row.sample_urls), ...getRequestUrlsForHost(hybrid, hostname)] : []),
+        ...getPreconsentRequestUrlsForHost(hybrid, hostname)
+      ])
     });
   }
 
@@ -312,11 +414,15 @@ export function collectVendorEnrichmentCandidates(input: {
     if (!hostname) {
       continue;
     }
+    const beforeConsent = input.snapshot?.tracking_before_consent_detected === true;
     getOrCreate(hostname, {
-      beforeConsent: input.snapshot?.tracking_before_consent_detected === true,
+      beforeConsent,
       collectionEndpointType: "cname",
       firstPartyOrThirdParty: "first_party",
-      sampleUrls: getStringArray(row.sampleUrls ?? row.sample_urls)
+      sampleUrls: uniqueStrings([
+        ...(beforeConsent ? [...getStringArray(row.sampleUrls ?? row.sample_urls), ...getRequestUrlsForHost(hybrid, hostname)] : []),
+        ...getPreconsentRequestUrlsForHost(hybrid, hostname)
+      ])
     });
   }
 
@@ -349,19 +455,28 @@ export function collectResolvedRuntimeVendors(input: {
     const confidence = confidenceLabel === "high" ? 0.95 : confidenceLabel === "medium" ? 0.7 : 0.45;
     const key = `${vendorName}|${hostname}|${evidenceSource}`;
     const existing = rows.get(key);
+    const beforeConsent = row.preConsent === true || row.pre_consent === true;
     if (existing) {
-      existing.beforeConsent = existing.beforeConsent || row.preConsent === true || row.pre_consent === true;
+      existing.beforeConsent = existing.beforeConsent || beforeConsent;
+      existing.sampleUrls = uniqueStrings([
+        ...existing.sampleUrls,
+        ...(beforeConsent ? [...getRequestUrlsFromRow(row), ...getRequestUrlsForHost(hybrid, hostname)] : []),
+        ...getPreconsentRequestUrlsForHost(hybrid, hostname)
+      ]).slice(0, 5);
       continue;
     }
 
     rows.set(key, {
-      beforeConsent: row.preConsent === true || row.pre_consent === true,
+      beforeConsent,
       collectionEndpointType: "request",
       confidence,
       detectionSource: evidenceSource,
       firstPartyOrThirdParty: "third_party",
       hostname,
-      sampleUrls: [],
+      sampleUrls: uniqueStrings([
+        ...(beforeConsent ? [...getRequestUrlsFromRow(row), ...getRequestUrlsForHost(hybrid, hostname)] : []),
+        ...getPreconsentRequestUrlsForHost(hybrid, hostname)
+      ]).slice(0, 5),
       vendorCategory,
       vendorName
     });
@@ -918,6 +1033,27 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
   }
 
   if (preconsentRows.size > 0) {
+    const preconsentEvidenceUrls = uniqueStrings(
+      [...preconsentRows.values()].flatMap((row) => getStringArray(row.evidence_urls))
+    );
+    if (preconsentEvidenceUrls.length > 0) {
+      await query(
+        `
+          update scan_runtime_artifacts
+             set consent_baseline_tracker_evidence_urls = (
+                   select coalesce(array_agg(distinct url order by url), '{}'::text[])
+                     from unnest(coalesce(consent_baseline_tracker_evidence_urls, '{}'::text[]) || $2::text[]) as merged(url)
+                    where length(trim(url)) > 0
+                 ),
+                 updated_at = timezone('utc', now())
+           where scan_id = $1
+        `,
+        [input.scanId, preconsentEvidenceUrls]
+      ).catch((error) => {
+        throw new Error(`Failed to retain pre-consent tracker evidence URLs for ${input.scanId}: ${getErrorMessage(error)}`);
+      });
+    }
+
     await query(
       `
         insert into scan_preconsent_violations (
