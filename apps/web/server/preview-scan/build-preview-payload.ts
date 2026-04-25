@@ -249,6 +249,8 @@ type UrlscanFallbackSnapshot = {
   domainCount: number | null;
   ipCount: number | null;
   countryCount: number | null;
+  cookieDomains: string[];
+  cookieNames: string[];
   topDomains: string[];
   countries: string[];
   serverNames: string[];
@@ -296,6 +298,7 @@ function buildUrlscanFallbackSnapshot(input: {
   const urlscanLists = getNestedRecord(input.urlscanResult, ["lists"]);
   const urlscanStats = getNestedRecord(input.urlscanResult, ["stats"]);
   const urlscanData = getNestedRecord(input.urlscanResult, ["data"]);
+  const urlscanCookies = getRecordArray(urlscanData, "cookies");
   const urlscanRequestCountFromStats = Math.max(
     sumCounts(getRecordArray(urlscanStats, "domainStats")),
     getRecordNumber(urlscanStats, "totalRequests") ?? 0,
@@ -317,6 +320,8 @@ function buildUrlscanFallbackSnapshot(input: {
     getRecordNumber(urlscanStats, "uniqCountries") ??
     (countries.length > 0 ? countries.length : null);
   const technologyNames = extractTechnologyNames(input.urlscanResult);
+  const cookieNames = uniqueStrings(urlscanCookies.map((cookie) => getRecordString(cookie, "name")));
+  const cookieDomains = uniqueStrings(urlscanCookies.map((cookie) => getRecordString(cookie, "domain")));
 
   return {
     reportUrl:
@@ -341,6 +346,8 @@ function buildUrlscanFallbackSnapshot(input: {
     domainCount,
     ipCount,
     countryCount,
+    cookieDomains,
+    cookieNames,
     topDomains,
     countries,
     serverNames,
@@ -375,6 +382,14 @@ function buildNormalizedUrlscanFallbackEvidence(snapshot: UrlscanFallbackSnapsho
     snapshot.thirdPartyRequestCount ? formatCountLabel(snapshot.thirdPartyRequestCount, "third-party request") : null,
     snapshot.initialCookieCount ? formatCountLabel(snapshot.initialCookieCount, "initial cookie") : null
   ].filter((value): value is string => Boolean(value));
+  const cookieSummary =
+    (snapshot.initialCookieCount ?? 0) > 0
+      ? `${formatCountLabel(snapshot.initialCookieCount ?? 0, "initial cookie")} retained from urlscan.io runtime evidence.`
+      : null;
+  const cookieDetails = uniqueStrings([
+    snapshot.cookieNames.length > 0 ? `Cookie names: ${snapshot.cookieNames.slice(0, 12).join(", ")}` : null,
+    snapshot.cookieDomains.length > 0 ? `Cookie domains: ${snapshot.cookieDomains.slice(0, 8).join(", ")}` : null
+  ]);
 
   const vendorSummary =
     snapshot.technologyNames.length > 0
@@ -417,12 +432,22 @@ function buildNormalizedUrlscanFallbackEvidence(snapshot: UrlscanFallbackSnapsho
       verifiedSurfaceCount: snapshot.verifiedSurfaceCount ?? undefined
     },
     entities: {
+      cookieDomains: snapshot.cookieDomains,
+      cookieNames: snapshot.cookieNames,
       technologyNames: snapshot.technologyNames,
       serverNames: snapshot.serverNames,
       topDomains: snapshot.topDomains,
       countries: snapshot.countries,
       verifiedSurfaceTargets: snapshot.verifiedSurfaceTargets
     },
+    cookieFootprint:
+      cookieSummary
+        ? {
+            title: "Supplemental cookie evidence",
+            summary: cookieSummary,
+            details: cookieDetails
+          }
+        : undefined,
     requestFootprint:
       hasRequestEvidence && requestSummaryParts.length > 0
         ? {
