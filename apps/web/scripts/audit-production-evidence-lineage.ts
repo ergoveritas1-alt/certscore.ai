@@ -12,6 +12,7 @@ type TargetFinding =
   | "consent_gated_tracking_claim_conflict"
   | "cookie_disclosure_gap"
   | "cookie_policy_present"
+  | "missing_retention_disclosure"
   | "policy_clarity_risk"
   | "privacy_contact_channel_missing"
   | "privacy_contact_path_present"
@@ -71,6 +72,7 @@ const DEFAULT_FINDINGS: TargetFinding[] = [
   "children_privacy_disclosure_present",
   "cookie_policy_present",
   "cookie_disclosure_gap",
+  "missing_retention_disclosure",
   "policy_clarity_risk",
   "privacy_contact_channel_missing",
   "behavioral_analytics_disclosure_present",
@@ -87,6 +89,7 @@ const SIGNAL_KEYS_BY_FINDING: Record<TargetFinding, string[]> = {
   consent_gated_tracking_claim_conflict: [],
   cookie_disclosure_gap: ["privacy.cookie_runtime_disclosure_gap_detected"],
   cookie_policy_present: ["privacy.cookie_policy_present", "disclosure.cookie_policy_present"],
+  missing_retention_disclosure: ["section_review.no_retention_periods_noted"],
   policy_clarity_risk: [
     "policyAmbiguityScore",
     "disclosure.privacy_policy_word_count",
@@ -111,6 +114,7 @@ const POLICY_SNIPPET_KEYS_BY_FINDING: Record<TargetFinding, string[]> = {
   consent_gated_tracking_claim_conflict: [],
   cookie_disclosure_gap: ["cookie_policy", "cookies", "tracking_technologies_disclosure"],
   cookie_policy_present: ["cookie_policy", "cookies"],
+  missing_retention_disclosure: ["retention", "retention_absence", "policy_summary", "topic:privacy_policy"],
   policy_clarity_risk: ["policy_clarity", "policy_summary", "privacy_policy", "topic:privacy_policy"],
   privacy_contact_channel_missing: ["privacy_contact", "notice_contact", "dsar", "policy_summary", "topic:privacy_policy"],
   privacy_contact_path_present: ["privacy_contact", "notice_contact", "dsar"],
@@ -379,6 +383,18 @@ function probeRawEvidence(findingId: TargetFinding, record: Record<string, unkno
       }
       if (hasPolicyPageType(policyRows, ["cookie_policy", "privacy_policy"])) {
         policyReasons.push("policy cookie/privacy surface");
+      }
+      break;
+    }
+    case "missing_retention_disclosure": {
+      if (hasPolicyPageType(policyRows, ["privacy_policy"])) {
+        policyReasons.push("privacy policy surface");
+      }
+      if (policyRows.some((row) => /^absent|none|missing|not_found$/i.test(String(row.policy_retention_disclosure ?? "")))) {
+        policyReasons.push("policy retention disclosure absent");
+      }
+      if (policyRows.some((row) => Array.isArray(row.policy_retention_periods) && row.policy_retention_periods.length > 0)) {
+        policyReasons.push("policy retention periods present");
       }
       break;
     }

@@ -814,22 +814,45 @@ test("latest policy absence findings confirm only with structured validation and
 
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: absenceFindingIds.map((findingId) =>
-      makePacket(findingId, {
-        confidenceInputs: {
-          ...makePacket(findingId).confidenceInputs,
-          hasPolicyTextEvidence: true,
-          hasReadableSurfaceSnippetEvidence: true,
-          hasStructuredValidationEvidence: true
-        },
-        evidence: {
-          ...makePacket(findingId).evidence,
-          entities: findingId === "missing_dsar_mechanism" ? { policyDsarMechanism: ["absent"] } : undefined,
-          flags: findingId === "missing_dsar_mechanism" ? ["policy_field:dsar_path:absent"] : [],
-          pageUrls: ["https://example.com/privacy"],
-          snippets: ["The privacy policy was reviewed and no concrete requested disclosure or mechanism was found."],
-          sourceUrls: ["https://example.com/privacy"]
-        }
-      })
+      {
+        const absenceEvidence: {
+          entities?: Record<string, string[]>;
+          flags: string[];
+          snippets: string[];
+        } =
+          findingId === "missing_dsar_mechanism"
+            ? {
+                entities: { policyDsarMechanism: ["absent"] },
+                flags: ["policy_field:dsar_path:absent"],
+                snippets: ["The privacy policy was reviewed and no concrete DSAR request mechanism was found."]
+              }
+            : findingId === "missing_retention_disclosure"
+              ? {
+                  entities: { policyRetentionDisclosure: ["absent"] },
+                  flags: ["policy_field:retention:absent"],
+                  snippets: ["The privacy policy was reviewed and no concrete retention periods were found."]
+                }
+              : {
+                  flags: [],
+                  snippets: ["The privacy policy was reviewed and no concrete requested disclosure or mechanism was found."]
+                };
+        return makePacket(findingId, {
+          confidenceInputs: {
+            ...makePacket(findingId).confidenceInputs,
+            hasPolicyTextEvidence: true,
+            hasReadableSurfaceSnippetEvidence: true,
+            hasStructuredValidationEvidence: true
+          },
+          evidence: {
+            ...makePacket(findingId).evidence,
+            entities: absenceEvidence.entities,
+            flags: absenceEvidence.flags,
+            pageUrls: ["https://example.com/privacy"],
+            snippets: absenceEvidence.snippets,
+            sourceUrls: ["https://example.com/privacy"]
+          }
+        });
+      }
     )
   });
 
@@ -911,6 +934,71 @@ test("missing-retention findings do not confirm when retained evidence names ret
           snippets: [
             "The policy says the company stores data as needed and applies security measures, but no separate retention-period table was extracted."
           ],
+          sourceUrls: ["https://example.com/privacy-policy"]
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.equal(decision?.reportLane, "confidence_and_coverage");
+  assert.equal(decision?.surfaceTier, "support");
+  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
+});
+
+test("missing-retention findings require retention-specific absence evidence", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("missing_retention_disclosure", {
+        confidenceInputs: {
+          ...makePacket("missing_retention_disclosure").confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket("missing_retention_disclosure").evidence,
+          counts: {
+            policy_coverage_ratio: 0.72,
+            policy_semantic_confidence: 0.82
+          },
+          pageUrls: ["https://example.com/privacy-policy"],
+          snippets: ["The privacy policy was reviewed and no requested disclosure or mechanism was found."],
+          sourceUrls: ["https://example.com/privacy-policy"]
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.equal(decision?.reportLane, "confidence_and_coverage");
+  assert.equal(decision?.surfaceTier, "support");
+  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
+});
+
+test("missing-retention findings do not confirm when retention periods are retained", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("missing_retention_disclosure", {
+        confidenceInputs: {
+          ...makePacket("missing_retention_disclosure").confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket("missing_retention_disclosure").evidence,
+          counts: {
+            policy_coverage_ratio: 0.72,
+            policy_semantic_confidence: 0.82
+          },
+          entities: {
+            policyRetentionPeriods: ["account data retained for 7 years"]
+          },
+          pageUrls: ["https://example.com/privacy-policy"],
+          snippets: ["The policy says account data is retained for seven years for legal and compliance obligations."],
           sourceUrls: ["https://example.com/privacy-policy"]
         }
       })

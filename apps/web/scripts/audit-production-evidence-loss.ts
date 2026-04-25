@@ -35,6 +35,7 @@ type LineageReport = {
 const DEFAULT_FOCUS_FINDINGS = [
   "preconsent_tracking",
   "missing_dsar_mechanism",
+  "missing_retention_disclosure",
   "policy_clarity_risk",
   "privacy_contact_channel_missing",
   "privacy_contact_path_present",
@@ -64,6 +65,8 @@ type PromotionBlockerRow = {
   policy_page_url: string | null;
   policy_page_type: string | null;
   policy_positive_signal_present: boolean | null;
+  policy_retention_disclosure: string | null;
+  policy_retention_periods: unknown;
   privacy_contact_channel_type: string | null;
   policy_rights_signals: string[] | null;
   policy_semantic_confidence: number | null;
@@ -74,6 +77,7 @@ type PromotionBlockerRow = {
   privacy_request_form_present: boolean | null;
   scan_id: string;
   section_review_no_dsar_mechanism: boolean | null;
+  section_review_no_retention_periods_noted: boolean | null;
   tracking_before_consent_detected: boolean | null;
 };
 
@@ -255,6 +259,7 @@ function classifyLikelyGap(input: {
 function isPromotionBlockerFinding(value: string): value is PromotionBlockerFindingId {
   return value === "preconsent_tracking" ||
     value === "missing_dsar_mechanism" ||
+    value === "missing_retention_disclosure" ||
     value === "policy_clarity_risk" ||
     value === "privacy_contact_channel_missing" ||
     value === "privacy_rights_path_present" ||
@@ -281,6 +286,12 @@ function toPromotionBlockerInput(row: PromotionBlockerRow, findingId: PromotionB
     (Array.isArray(policyJson.policy_rights_signals)
       ? policyJson.policy_rights_signals.filter((value): value is string => typeof value === "string")
       : []);
+  const policyRetentionPeriods =
+    Array.isArray(row.policy_retention_periods)
+      ? row.policy_retention_periods.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      : Array.isArray(policyJson.policy_retention_periods)
+        ? policyJson.policy_retention_periods.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        : [];
   return {
     consentBaselineTrackerEvidenceUrls: row.consent_baseline_tracker_evidence_urls,
     cookieGapValidationEvidence: row.cookie_gap_validation_evidence,
@@ -303,6 +314,10 @@ function toPromotionBlockerInput(row: PromotionBlockerRow, findingId: PromotionB
     policyPageUrl: row.policy_page_url ?? validationCookiePolicyUrl,
     policyPageType: row.policy_page_type,
     policyPositiveSignalPresent: row.policy_positive_signal_present,
+    policyRetentionDisclosure:
+      row.policy_retention_disclosure ??
+      (typeof policyJson.policy_retention_disclosure === "string" ? policyJson.policy_retention_disclosure : null),
+    policyRetentionPeriods,
     privacyContactChannelType:
       row.privacy_contact_channel_type ??
       (typeof policyJson.privacy_contact_channel_type === "string" ? policyJson.privacy_contact_channel_type : null),
@@ -315,6 +330,7 @@ function toPromotionBlockerInput(row: PromotionBlockerRow, findingId: PromotionB
     privacyRequestFormPresent: row.privacy_request_form_present,
     scanId: row.scan_id,
     sectionReviewNoDsarMechanism: row.section_review_no_dsar_mechanism,
+    sectionReviewNoRetentionPeriodsNoted: row.section_review_no_retention_periods_noted,
     trackingBeforeConsentDetected: row.tracking_before_consent_detected
   };
 }
@@ -335,6 +351,8 @@ function policyPositiveSignalKeyForFinding(findingId: PromotionBlockerFindingId)
       return "privacy.cookie_runtime_disclosure_gap_detected";
     case "policy_clarity_risk":
       return "policyAmbiguityScore";
+    case "missing_retention_disclosure":
+      return "section_review.no_retention_periods_noted";
     default:
       return null;
   }
@@ -362,6 +380,14 @@ async function loadPromotionBlockerRows(input: {
             where vr.scan_id = s.id
               and vf.rule_key = 'section_review.no_dsar_mechanism'
          )`
+        : input.findingId === "missing_retention_disclosure"
+          ? `exists (
+             select 1
+               from validation_runs vr
+               join validation_run_findings vf on vf.validation_run_id = vr.id
+              where vr.scan_id = s.id
+                and vf.rule_key = 'section_review.no_retention_periods_noted'
+           )`
         : input.findingId === "cookie_disclosure_gap"
           ? `(exists (
               select 1
@@ -406,6 +432,8 @@ async function loadPromotionBlockerRows(input: {
              pe.page_url as policy_page_url,
              pe.page_type as policy_page_type,
              pe.policy_dsar_mechanism,
+             pe.policy_retention_disclosure,
+             to_jsonb(pe)->'policy_retention_periods' as policy_retention_periods,
              coalesce(
                array(
                  select jsonb_array_elements_text(
@@ -468,7 +496,14 @@ async function loadPromotionBlockerRows(input: {
                  join validation_run_findings vf on vf.validation_run_id = vr.id
                 where vr.scan_id = s.id
                   and vf.rule_key = 'section_review.no_dsar_mechanism'
-             ) as section_review_no_dsar_mechanism
+             ) as section_review_no_dsar_mechanism,
+             exists (
+               select 1
+                 from validation_runs vr
+                 join validation_run_findings vf on vf.validation_run_id = vr.id
+                where vr.scan_id = s.id
+                  and vf.rule_key = 'section_review.no_retention_periods_noted'
+             ) as section_review_no_retention_periods_noted
         from scans s
         join scan_snapshots ss on ss.scan_id = s.id
         left join scan_runtime_artifacts ra on ra.scan_id = s.id

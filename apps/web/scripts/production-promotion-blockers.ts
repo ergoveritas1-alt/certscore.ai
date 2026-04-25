@@ -9,6 +9,7 @@ export type PromotionBlockerFindingId =
   | "cookie_policy_present"
   | "cookie_disclosure_gap"
   | "missing_dsar_mechanism"
+  | "missing_retention_disclosure"
   | "policy_clarity_risk"
   | "preconsent_tracking"
   | "privacy_contact_channel_missing"
@@ -39,6 +40,8 @@ export type PromotionBlockerInput = {
   policyPageUrl?: string | null;
   policyPageType?: string | null;
   policyPositiveSignalPresent?: boolean | null;
+  policyRetentionDisclosure?: string | null;
+  policyRetentionPeriods?: string[] | null;
   privacyContactChannelType?: string | null;
   policyRightsSignals?: string[] | null;
   policySemanticConfidence?: number | null;
@@ -49,6 +52,7 @@ export type PromotionBlockerInput = {
   privacyRequestFormPresent?: boolean | null;
   scanId?: string | null;
   sectionReviewNoDsarMechanism?: boolean | null;
+  sectionReviewNoRetentionPeriodsNoted?: boolean | null;
   trackingBeforeConsentDetected?: boolean | null;
 };
 
@@ -191,6 +195,17 @@ function hasSubstantivePrivacyPolicyContent(value: string) {
   return (
     /personal information|personal data|covered personal information|data subjects?|privacy rights?|right to (?:know|access|delete|correct)|data protection/i.test(value) &&
     /collect|use|share|disclos|retain|protect|process|access|delete|correct|opt[-\s]?out|sell|transfer|request/i.test(value)
+  );
+}
+
+function hasRetentionAbsenceCue(value: string) {
+  return /\b(?:no|lacks?|without|absent|missing|did not (?:identify|find|detect)|omits?) (?:concrete |specific |clear )?(?:data )?(?:retention|retain|retention periods?|storage periods?|how long)\b/i.test(value);
+}
+
+function hasRetentionPresenceCue(value: string) {
+  return (
+    /\b(retain|retention|stores? (?:data|personal data|personal information|information)|stored (?:as|for)|as long as necessary|as needed|deleted within|keep (?:your |personal )?(?:data|information)|legal obligations?)\b/i.test(value) &&
+    !hasRetentionAbsenceCue(value)
   );
 }
 
@@ -396,6 +411,64 @@ export function classifyDsarPromotionBlockers(input: PromotionBlockerInput): Pro
     },
     findingId: "missing_dsar_mechanism",
     promotionReady
+  };
+}
+
+export function classifyRetentionDisclosurePromotionBlockers(input: PromotionBlockerInput): PromotionBlockerAssessment {
+  const snippets = getSubstantivePolicySnippets(input);
+  const snippetText = snippets.join(" ");
+  const retentionDisclosure = input.policyRetentionDisclosure?.trim() || null;
+  const retentionPeriods = input.policyRetentionPeriods ?? [];
+  const hasExplicitAbsence =
+    input.sectionReviewNoRetentionPeriodsNoted === true ||
+    /^(?:absent|none|missing|not_found)$/i.test(retentionDisclosure ?? "") ||
+    snippets.some(hasRetentionAbsenceCue);
+  const blockers: string[] = [];
+
+  if (!hasPolicyAnchor(input)) {
+    blockers.push("missing_policy_anchor_url");
+  }
+  if (!hasFetchedPolicy(input)) {
+    blockers.push(input.policyExtractionStatus ? "policy_extraction_incomplete" : "missing_policy_extraction_status");
+  }
+  if (input.policyStructurallyWeak === true) {
+    blockers.push("policy_structurally_weak");
+  }
+  if (!hasMinimumPolicyConfidence(input, 0.75)) {
+    blockers.push("low_policy_semantic_confidence");
+  }
+  if (snippets.length === 0) {
+    blockers.push("missing_substantive_policy_snippet");
+  } else if (!hasSubstantivePrivacyPolicyContent(snippetText)) {
+    blockers.push("missing_substantive_privacy_policy_text");
+  }
+  if (!hasExplicitAbsence) {
+    blockers.push("missing_explicit_retention_absence");
+  }
+  if (retentionPeriods.length > 0) {
+    blockers.push("retention_periods_present");
+  }
+  if (retentionDisclosure && /^(?:present|specific|found)$/i.test(retentionDisclosure)) {
+    blockers.push("retention_disclosure_present");
+  }
+  if (snippets.some(hasRetentionPresenceCue)) {
+    blockers.push("retention_language_visible");
+  }
+
+  return {
+    blockers,
+    evidence: {
+      policyExtractionStatus: input.policyExtractionStatus ?? null,
+      policyPageUrl: input.policyPageUrl ?? null,
+      policyRetentionDisclosure: retentionDisclosure,
+      policyRetentionPeriods: retentionPeriods,
+      policySemanticConfidence: getPolicyConfidence(input),
+      sectionReviewNoRetentionPeriodsNoted: input.sectionReviewNoRetentionPeriodsNoted === true,
+      snippetCount: snippets.length,
+      snippetPreview: snippets[0]?.slice(0, 180) ?? null
+    },
+    findingId: "missing_retention_disclosure",
+    promotionReady: blockers.length === 0
   };
 }
 
@@ -661,6 +734,8 @@ export function classifyPromotionBlockers(input: PromotionBlockerInput & { findi
       return classifyPreconsentPromotionBlockers(input);
     case "missing_dsar_mechanism":
       return classifyDsarPromotionBlockers(input);
+    case "missing_retention_disclosure":
+      return classifyRetentionDisclosurePromotionBlockers(input);
     case "privacy_contact_channel_missing":
       return classifyPrivacyContactMissingPromotionBlockers(input);
     case "privacy_rights_path_present":
