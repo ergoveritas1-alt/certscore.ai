@@ -887,6 +887,17 @@ function hasConcreteHumanFacingUrl(urls: string[] | undefined) {
   return (urls ?? []).some((url) => /^https?:\/\//i.test(url));
 }
 
+function getEvidenceCount(packet: UnifiedFindingPacket, keys: string[]) {
+  for (const key of keys) {
+    const value = packet.evidence?.counts?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 function normalizeComparableUrl(value: string | null | undefined) {
   if (!value) {
     return null;
@@ -1034,6 +1045,29 @@ function hasStructuredPolicyAbsenceBacking(packet: UnifiedFindingPacket) {
     return false;
   }
 
+  if (hasContradictoryMissingDisclosureCue(packet)) {
+    return false;
+  }
+
+  const evidenceFlags = new Set(packet.evidence?.flags ?? []);
+  if (
+    evidenceFlags.has("policy_structurally_weak") ||
+    evidenceFlags.has("policyStructurallyWeak") ||
+    evidenceFlags.has("policy_extraction_status:structurally_weak")
+  ) {
+    return false;
+  }
+
+  const policyCoverageRatio = getEvidenceCount(packet, ["policyCoverageRatio", "policy_coverage_ratio"]);
+  if (typeof policyCoverageRatio === "number" && policyCoverageRatio < 0.5) {
+    return false;
+  }
+
+  const policySemanticConfidence = getEvidenceCount(packet, ["policySemanticConfidence", "policy_semantic_confidence"]);
+  if (typeof policySemanticConfidence === "number" && policySemanticConfidence < 0.75) {
+    return false;
+  }
+
   return (
     packet.confidenceInputs.hasStructuredValidationEvidence &&
     packet.confidenceInputs.hasPolicyTextEvidence &&
@@ -1042,6 +1076,68 @@ function hasStructuredPolicyAbsenceBacking(packet: UnifiedFindingPacket) {
       ...(packet.evidence?.pageUrls ?? []),
       ...(packet.evidence?.sourceUrls ?? [])
     ])
+  );
+}
+
+function hasContradictoryMissingDisclosureCue(packet: UnifiedFindingPacket) {
+  const evidenceText = (packet.evidence?.snippets ?? []).join(" ").toLowerCase();
+  if (!evidenceText) {
+    return false;
+  }
+
+  if (packet.unifiedFindingId === "missing_retention_disclosure") {
+    return (
+      /\b(retain|retention|stores? (?:data|personal data|personal information|information)|stored (?:as|for)|as long as necessary|as needed)\b/i.test(
+        evidenceText
+      ) &&
+      !/\bno (?:specific )?(?:retention|retain|stored?|storage)\b/i.test(evidenceText)
+    );
+  }
+
+  return false;
+}
+
+function isLikelyFirstPartyCookieDisclosureUrl(value: string | null | undefined) {
+  if (!value || !/^https?:\/\//i.test(value)) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase().replace(/\/+$/, "") || "/";
+    const pathAndQuery = `${path}${parsed.search.toLowerCase()}`;
+
+    if (path === "/" || host === "www.cookieyes.com" && path.startsWith("/product/")) {
+      return false;
+    }
+
+    return /cookie|privacy|legal|policy|notice/.test(pathAndQuery);
+  } catch {
+    return /\/.+(cookie|privacy|legal|policy|notice)/i.test(value);
+  }
+}
+
+function hasCookieDisclosureGapBacking(packet: UnifiedFindingPacket) {
+  if (packet.unifiedFindingId !== "cookie_disclosure_gap") {
+    return false;
+  }
+
+  const urls = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])];
+  const unmatchedThirdPartyCookieCount = getEvidenceCount(packet, ["unmatched_third_party_cookie_count"]);
+  const runtimeCookieNames = [
+    ...(packet.evidence?.entities?.runtime_cookie_names ?? []),
+    ...(packet.evidence?.entities?.runtimeCookieNames ?? []),
+    ...(packet.evidence?.entities?.unmatched_cookie_names ?? []),
+    ...(packet.evidence?.entities?.unmatchedCookieNames ?? [])
+  ];
+
+  return (
+    packet.confidenceInputs.hasStructuredValidationEvidence &&
+    runtimeCookieNames.length > 0 &&
+    typeof unmatchedThirdPartyCookieCount === "number" &&
+    unmatchedThirdPartyCookieCount > 0 &&
+    urls.some(isLikelyFirstPartyCookieDisclosureUrl)
   );
 }
 
@@ -1321,6 +1417,29 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (context.policy.family === "rights_gap") {
+    if (packet.unifiedFindingId === "cookie_disclosure_gap") {
+      if (hasCookieDisclosureGapBacking(packet)) {
+        overrideDecision(decision, {
+          state: "confirmed",
+          lane: "main",
+          tier: decision.surfaceTier,
+          reason:
+            "Runtime cookie evidence, unmatched third-party cookie inventory, and a retained first-party cookie disclosure surface all support the disclosure-gap interpretation.",
+          ruleId: "evidence.rights_gap.confirmed_structured_policy_absence"
+        });
+      } else {
+        overrideDecision(decision, {
+          state: "review",
+          lane: "confidence_and_coverage",
+          tier: "support",
+          reason:
+            "The cookie disclosure gap is retained for review, but it lacks enough policy-surface and third-party runtime evidence to confirm as a standalone failure.",
+          ruleId: "evidence.rights_gap.review_structured_policy_gap"
+        });
+      }
+      return;
+    }
+
     if (
       hasConcreteRuntimeOrPayloadEvidence(packet) ||
       (CONFIRMED_RIGHTS_GAP_IDS as readonly string[]).includes(packet.unifiedFindingId) &&

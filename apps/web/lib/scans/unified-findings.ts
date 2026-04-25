@@ -1407,7 +1407,17 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     .filter((snippet): snippet is string => Boolean(snippet));
 
   const counts: Record<string, number> = {};
-  for (const key of ["consentFrictionDelta", "consentOptInClicks", "consentOptOutClicks", "keyPageAttemptCount"]) {
+  for (const key of [
+    "consentFrictionDelta",
+    "consentOptInClicks",
+    "consentOptOutClicks",
+    "keyPageAttemptCount",
+    "policyCoverageRatio",
+    "policy_coverage_ratio",
+    "policySemanticConfidence",
+    "policy_semantic_confidence",
+    "unmatched_third_party_cookie_count"
+  ]) {
     const value = normalizedFallbackEvidence[key];
     if (typeof value === "number" && Number.isFinite(value)) {
       counts[key] = value;
@@ -1527,6 +1537,13 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     normalizedFallbackEvidence.policyBoilerplateSignals.some((entry) => typeof entry === "string" && entry.trim().length > 0)
       ? "policy_boilerplate_signals_retained"
       : null,
+    normalizedFallbackEvidence.policyStructurallyWeak === true || normalizedFallbackEvidence.policy_structurally_weak === true
+      ? "policy_structurally_weak"
+      : null,
+    normalizedFallbackEvidence.policyExtractionStatus === "structurally_weak" ||
+    normalizedFallbackEvidence.policy_extraction_status === "structurally_weak"
+      ? "policy_extraction_status:structurally_weak"
+      : null,
     hasExplicitPolicySnippet ? "explicit_policy_snippet_retained" : null,
     hasExplicitRuntimeArtifact ? "contradiction_runtime_artifact_retained" : null,
     accessibilityExampleCoverage.representativeExampleCount > 0
@@ -1622,6 +1639,11 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
         } else {
           sourceUrls.add(value);
         }
+      } else if (
+        (key === "policyExtractionStatus" || key === "policy_extraction_status") &&
+        value.trim() === "structurally_weak"
+      ) {
+        flags.add("policy_extraction_status:structurally_weak");
       } else if (/claim|observed|summary|snippet|evidence|description|rationale/i.test(key) && isReviewerFacingSnippet(value)) {
         snippets.add(value);
       }
@@ -1629,7 +1651,7 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
     }
 
     if (typeof value === "number" && Number.isFinite(value)) {
-      if (/count|score|confidence|delta|attempt/i.test(key)) {
+      if (/count|score|confidence|delta|attempt|ratio/i.test(key)) {
         counts[key] = value;
       }
       continue;
@@ -1637,6 +1659,9 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
 
     if (value === true) {
       flags.add(key);
+      if (key === "policyStructurallyWeak" || key === "policy_structurally_weak") {
+        flags.add("policy_structurally_weak");
+      }
       continue;
     }
 

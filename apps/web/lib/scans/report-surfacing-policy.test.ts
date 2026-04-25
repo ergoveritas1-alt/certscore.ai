@@ -533,6 +533,70 @@ test("latest policy absence findings stay review-level when policy evidence is i
   assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
 });
 
+test("latest policy absence findings stay in confidence coverage when policy extraction is structurally weak", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("missing_retention_disclosure", {
+        confidenceInputs: {
+          ...makePacket("missing_retention_disclosure").confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket("missing_retention_disclosure").evidence,
+          counts: {
+            policy_coverage_ratio: 0.05,
+            policy_semantic_confidence: 0.8
+          },
+          flags: ["policy_extraction_status:structurally_weak"],
+          pageUrls: ["https://example.com/privacy"],
+          snippets: ["A sparse privacy page was found, but it did not contain enough substantive policy text."],
+          sourceUrls: ["https://example.com/privacy"]
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.equal(decision?.reportLane, "confidence_and_coverage");
+  assert.equal(decision?.surfaceTier, "support");
+  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
+});
+
+test("missing-retention findings do not confirm when retained evidence names retention behavior", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("missing_retention_disclosure", {
+        confidenceInputs: {
+          ...makePacket("missing_retention_disclosure").confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket("missing_retention_disclosure").evidence,
+          counts: {
+            policy_coverage_ratio: 0.62
+          },
+          pageUrls: ["https://example.com/privacy-policy"],
+          snippets: [
+            "The policy says the company stores data as needed and applies security measures, but no separate retention-period table was extracted."
+          ],
+          sourceUrls: ["https://example.com/privacy-policy"]
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.equal(decision?.reportLane, "confidence_and_coverage");
+  assert.equal(decision?.surfaceTier, "support");
+  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
+});
+
 test("noisy rights-gap findings stay in confidence coverage when evidence is incomplete", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
@@ -558,6 +622,84 @@ test("noisy rights-gap findings stay in confidence coverage when evidence is inc
     assert.equal(decision?.surfaceTier, "support", findingId);
     assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"), findingId);
   }
+});
+
+test("cookie disclosure gaps confirm only with third-party runtime inventory and a first-party disclosure URL", () => {
+  const confirmedEvaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("cookie_disclosure_gap", {
+        confidenceInputs: {
+          ...makePacket("cookie_disclosure_gap").confidenceInputs,
+          hasDirectRuntimeEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket("cookie_disclosure_gap").evidence,
+          counts: {
+            unmatched_third_party_cookie_count: 3
+          },
+          entities: {
+            runtime_cookie_names: ["_ga", "_fbp", "li_sugr"],
+            unmatched_cookie_names: ["_fbp", "li_sugr"]
+          },
+          sourceUrls: ["https://example.com/legal/cookie-policy"]
+        }
+      })
+    ]
+  });
+
+  const weakRuntimeEvaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("cookie_disclosure_gap", {
+        confidenceInputs: {
+          ...makePacket("cookie_disclosure_gap").confidenceInputs,
+          hasDirectRuntimeEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket("cookie_disclosure_gap").evidence,
+          counts: {
+            unmatched_third_party_cookie_count: 0
+          },
+          entities: {
+            runtime_cookie_names: ["xsrf-token", "laravel_session", "_ga"],
+            unmatched_cookie_names: ["xsrf-token", "laravel_session", "_ga"]
+          },
+          sourceUrls: ["https://example.com/cookie-policy"]
+        }
+      })
+    ]
+  });
+
+  const weakPolicyUrlEvaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("cookie_disclosure_gap", {
+        confidenceInputs: {
+          ...makePacket("cookie_disclosure_gap").confidenceInputs,
+          hasDirectRuntimeEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket("cookie_disclosure_gap").evidence,
+          counts: {
+            unmatched_third_party_cookie_count: 5
+          },
+          entities: {
+            runtime_cookie_names: ["_fbp", "ttclid"],
+            unmatched_cookie_names: ["_fbp", "ttclid"]
+          },
+          sourceUrls: ["https://www.cookieyes.com/product/cookie-consent"]
+        }
+      })
+    ]
+  });
+
+  assert.equal(confirmedEvaluation.debugDecisions[0]?.decisionState, "confirmed");
+  assert.equal(confirmedEvaluation.debugDecisions[0]?.reportLane, "main");
+  assert.equal(weakRuntimeEvaluation.debugDecisions[0]?.decisionState, "review");
+  assert.equal(weakRuntimeEvaluation.debugDecisions[0]?.reportLane, "confidence_and_coverage");
+  assert.equal(weakPolicyUrlEvaluation.debugDecisions[0]?.decisionState, "review");
+  assert.equal(weakPolicyUrlEvaluation.debugDecisions[0]?.reportLane, "confidence_and_coverage");
 });
 
 test("positive financial disclosure findings are suppressed unless they support a stronger financial story", () => {
