@@ -59,6 +59,10 @@ function classifyCookieNameForPromotion(name: string) {
   return "unknown";
 }
 
+function isPromotionGradeCookieCategory(value: string | null | undefined) {
+  return Boolean(value && /analytics|advertising|marketing|retargeting|session_replay/i.test(value));
+}
+
 function hasPromotionGradePreconsentCookieEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   const explicitNames = getStringArrayValues(rawEvidence, [
     "preconsent_nonessential_cookie_names",
@@ -78,7 +82,7 @@ function hasPromotionGradePreconsentCookieEvidence(rawEvidence: Record<string, u
       const nonEssential = row.nonEssential === true || row.non_essential === true;
       const cookieName = typeof row.cookieName === "string" ? row.cookieName : typeof row.cookie_name === "string" ? row.cookie_name : null;
       const inferredCategory = cookieName ? classifyCookieNameForPromotion(cookieName) : "unknown";
-      const promotionCategory = category === "analytics" || category === "advertising" || inferredCategory === "analytics" || inferredCategory === "advertising";
+      const promotionCategory = isPromotionGradeCookieCategory(category) || isPromotionGradeCookieCategory(inferredCategory);
       const timingEvidence = typeof row.timingEvidence === "string" ? row.timingEvidence : typeof row.timing_evidence === "string" ? row.timing_evidence : null;
       return promotionCategory && (nonEssential || timingEvidence === "before_consent_cookie_write" || timingEvidence === "initial_cookie_snapshot");
     })

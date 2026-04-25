@@ -1071,6 +1071,19 @@ function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
     return false;
   }
 
+  const hasPreconsentCookieEvidence =
+    (packet.evidence?.entities?.preconsent_nonessential_cookie_names?.length ?? 0) > 0 ||
+    (packet.evidence?.entities?.preconsentNonessentialCookieNames?.length ?? 0) > 0 ||
+    (
+      ((packet.evidence?.entities?.preconsent_cookie_names?.length ?? 0) > 0 ||
+        (packet.evidence?.entities?.preconsentCookieNames?.length ?? 0) > 0) &&
+      ((packet.evidence?.entities?.preconsent_cookie_categories ?? []).some((value) =>
+        /analytics|advertising|marketing|retargeting|session_replay/i.test(value)
+      ) ||
+        (packet.evidence?.entities?.preconsentCookieCategories ?? []).some((value) =>
+          /analytics|advertising|marketing|retargeting|session_replay/i.test(value)
+        ))
+    );
   const hasVendors = (packet.details.vendors ?? []).some((value) => typeof value === "string" && value.trim().length > 0) ||
     (packet.evidence?.entities?.runtimeVendors?.length ?? 0) > 0;
   const hasUrls = (packet.details.requestUrls ?? []).some((value) => /^https?:\/\//i.test(value)) ||
@@ -1078,7 +1091,7 @@ function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
   const hasRuntimeOrValidationBacking =
     packet.confidenceInputs.hasDirectRuntimeEvidence || packet.confidenceInputs.hasStructuredValidationEvidence;
 
-  return hasRuntimeOrValidationBacking && hasVendors && hasUrls;
+  return hasRuntimeOrValidationBacking && ((hasVendors && hasUrls) || hasPreconsentCookieEvidence);
 }
 
 function hasSpecificConsentGatedRuntimeEvidence(packet: UnifiedFindingPacket) {

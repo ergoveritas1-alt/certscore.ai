@@ -43,6 +43,63 @@ test("pre-consent tracking confirmation requires vendor, URL, and timing sequenc
   );
 });
 
+test("pre-consent tracking can confirm from non-essential cookie timing evidence", () => {
+  const example = {
+    evidence: {
+      consentBannerDetectedMs: 100,
+      sequenceEvidence: true,
+      snapshotEvidence: {
+        preconsent_cookie_categories: ["advertising"],
+        preconsent_cookie_names: ["_fbp"],
+        preconsent_nonessential_cookie_names: ["_fbp"],
+        preconsent_tracking_detected: true
+      }
+    },
+    expected: {
+      confidenceBand: "high",
+      externalSurfacingEligibility: "eligible",
+      presentationState: "confirmed",
+      promotionEligibility: "eligible"
+    },
+    findingGroup: "preconsent_tracking",
+    findingId: "preconsent_tracking",
+    id: "unit-preconsent-cookie-positive",
+    notes: "unit",
+    scenarioType: "positive_high_confidence",
+    sourceKind: "synthetic_fixture"
+  } satisfies PrivacyRuntimeFindingDatasetExample;
+
+  assert.equal(derivePrivacyRuntimeFindingExpectation(example).promotionEligibility, "eligible");
+});
+
+test("pre-consent tracking does not confirm from necessary cookies only", () => {
+  const example = {
+    evidence: {
+      consentBannerDetectedMs: 100,
+      sequenceEvidence: true,
+      snapshotEvidence: {
+        preconsent_cookie_categories: ["necessary"],
+        preconsent_cookie_names: ["__cf_bm"],
+        preconsent_tracking_detected: true
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "preconsent_tracking",
+    findingId: "preconsent_tracking",
+    id: "unit-preconsent-cookie-necessary",
+    notes: "unit",
+    scenarioType: "borderline_review",
+    sourceKind: "synthetic_fixture"
+  } satisfies PrivacyRuntimeFindingDatasetExample;
+
+  assert.equal(derivePrivacyRuntimeFindingExpectation(example).promotionEligibility, "internal_only");
+});
+
 test("nano policy anchors help disclosure cases but do not replace runtime anchors", () => {
   const example = {
     evidence: {

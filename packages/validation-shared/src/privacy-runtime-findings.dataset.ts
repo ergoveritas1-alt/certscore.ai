@@ -1380,6 +1380,80 @@ export const PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE: PrivacyRuntimeFindingDa
     scenarioType: "borderline_review"
   }),
   ...makeExamples({
+    count: 10,
+    evidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/preconsent-cookie/positive-${index}/cookies.json`],
+      consentBannerDetectedMs: 700 + index,
+      consentSurfaceObserved: true,
+      detectionSource: index % 2 === 0 ? "cookie_write_observation" : "initial_cookie_snapshot",
+      sequenceEvidence: true,
+      signalKey: "privacy.preconsent_tracking_detected",
+      snapshotEvidence: {
+        preconsent_cookie_categories: [index % 2 === 0 ? "advertising" : "analytics"],
+        preconsent_cookie_names: [index % 2 === 0 ? "_fbp" : "_ga"],
+        preconsent_cookie_timing_evidence: index % 2 === 0 ? "before_consent_cookie_write" : "initial_cookie_snapshot",
+        preconsent_nonessential_cookie_names: [index % 2 === 0 ? "_fbp" : "_ga"],
+        preconsent_tracking_detected: true
+      }
+    }),
+    expectationFor: () => positiveExpectation("high"),
+    findingGroup: "preconsent_tracking",
+    findingIds: ["preconsent_tracking"],
+    idPrefix: "preconsent-cookie-positive",
+    notesFor: () => "Non-essential analytics or advertising cookie was written before consent with retained timing evidence.",
+    scenarioType: "positive_high_confidence",
+    sourceKindFor: (index) => (index % 2 === 0 ? "regression_case" : "synthetic_fixture")
+  }),
+  ...makeExamples({
+    count: 10,
+    evidenceFor: (index) => ({
+      artifactRefs: index % 2 === 0 ? [`s3://privacy-runtime/preconsent-cookie/negative-${index}/cookies.json`] : [],
+      consentBannerDetectedMs: 720 + index,
+      consentSurfaceObserved: true,
+      detectionSource: index % 2 === 0 ? "cookie_write_observation" : "functional_allowlist",
+      sequenceEvidence: true,
+      signalKey: "privacy.preconsent_tracking_detected",
+      snapshotEvidence: {
+        preconsent_cookie_categories: [index % 2 === 0 ? "necessary" : "security"],
+        preconsent_cookie_names: [index % 2 === 0 ? "__cf_bm" : "JSESSIONID"],
+        preconsent_cookie_timing_evidence: "before_consent_cookie_write",
+        preconsent_tracking_detected: true
+      }
+    }),
+    expectationFor: () => negativeExpectation(),
+    findingGroup: "preconsent_tracking",
+    findingIds: ["preconsent_tracking"],
+    idPrefix: "preconsent-cookie-negative",
+    notesFor: () => "Necessary, security, or session cookies before consent should not surface as tracking.",
+    reasonFor: () => ({ negativeControlReason: "Cookie evidence is limited to necessary/security/session behavior with no non-essential cookie classification." }),
+    scenarioType: "negative_control",
+    sourceKindFor: (index) => (index % 2 === 0 ? "regression_case" : "synthetic_fixture")
+  }),
+  ...makeExamples({
+    count: 10,
+    evidenceFor: (index) => ({
+      artifactRefs: index % 2 === 0 ? [`s3://privacy-runtime/preconsent-cookie/borderline-${index}/cookies.json`] : [],
+      consentBannerDetectedMs: 760 + index,
+      consentSurfaceObserved: true,
+      detectionSource: index % 2 === 0 ? "cookie_name_inference" : "cookie_snapshot_without_sequence",
+      sequenceEvidence: index % 2 === 0,
+      signalKey: "privacy.preconsent_tracking_detected",
+      snapshotEvidence: {
+        preconsent_cookie_categories: [index % 2 === 0 ? "unknown" : "analytics"],
+        preconsent_cookie_names: [index % 2 === 0 ? "visitor_id" : "_gid"],
+        preconsent_tracking_detected: true
+      }
+    }),
+    expectationFor: () => borderlineExpectation("review"),
+    findingGroup: "preconsent_tracking",
+    findingIds: ["preconsent_tracking"],
+    idPrefix: "preconsent-cookie-borderline",
+    notesFor: () => "Cookie hints without non-essential classification or timing sequence remain review-only.",
+    reasonFor: () => ({ downgradeReason: "Missing either explicit non-essential cookie classification or complete before-consent timing evidence." }),
+    scenarioType: "borderline_review",
+    sourceKindFor: (index) => (index % 2 === 0 ? "regression_case" : "synthetic_fixture")
+  }),
+  ...makeExamples({
     count: 18,
     evidenceFor: (index) => ({
       attributeCategories: index % 2 === 0 ? ["canvas_webgl", "audio_context", "device_memory"] : ["canvas_webgl", "font_metrics"],

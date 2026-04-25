@@ -1371,6 +1371,40 @@ test("pre-consent tracking confirms with direct runtime vendor and URL evidence"
   assert.ok(decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
 });
 
+test("pre-consent tracking confirms with non-essential cookie timing evidence", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("preconsent_tracking", {
+        confidenceInputs: {
+          ...makePacket("preconsent_tracking").confidenceInputs,
+          hasDirectRuntimeEvidence: true
+        },
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking",
+          requestUrls: [],
+          vendors: []
+        },
+        evidence: {
+          flags: ["preconsent_tracking_detected"],
+          pageUrls: [],
+          snippets: [],
+          sourceUrls: [],
+          entities: {
+            preconsent_cookie_categories: ["advertising"],
+            preconsent_cookie_names: ["_fbp"],
+            preconsent_nonessential_cookie_names: ["_fbp"]
+          }
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "confirmed");
+  assert.ok(decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
+});
+
 test("pre-consent tracking stays review-level when concrete URL evidence is missing", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
@@ -1384,6 +1418,39 @@ test("pre-consent tracking stays review-level when concrete URL evidence is miss
           kind: "preconsent_tracking",
           requestUrls: [],
           vendors: ["Meta Pixel"]
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.ok(decision?.appliedRules.includes("evidence.preconsent.review_without_runtime_artifacts"));
+});
+
+test("pre-consent tracking stays review-level for necessary cookie evidence only", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("preconsent_tracking", {
+        confidenceInputs: {
+          ...makePacket("preconsent_tracking").confidenceInputs,
+          hasDirectRuntimeEvidence: true
+        },
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking",
+          requestUrls: [],
+          vendors: []
+        },
+        evidence: {
+          flags: ["preconsent_tracking_detected"],
+          pageUrls: [],
+          snippets: [],
+          sourceUrls: [],
+          entities: {
+            preconsent_cookie_categories: ["necessary"],
+            preconsent_cookie_names: ["__cf_bm"]
+          }
         }
       })
     ]

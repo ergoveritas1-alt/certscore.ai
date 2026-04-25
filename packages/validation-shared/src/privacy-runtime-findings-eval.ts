@@ -30,12 +30,35 @@ function hasValues(values: unknown[] | undefined) {
   return Array.isArray(values) && values.some((value) => typeof value === "string" && value.trim().length > 0);
 }
 
-function hasConcretePreconsentEvidence(example: PrivacyRuntimeFindingDatasetExample) {
+function hasNonessentialPreconsentCookieEvidence(example: PrivacyRuntimeFindingDatasetExample) {
+  const snapshot = example.evidence.snapshotEvidence ?? {};
+  const cookieNames = snapshot.preconsent_cookie_names;
+  const nonessentialCookieNames = snapshot.preconsent_nonessential_cookie_names;
+  const categories = snapshot.preconsent_cookie_categories;
+
   return Boolean(
     example.evidence.sequenceEvidence === true &&
-      hasValues(example.evidence.vendors) &&
-      hasValues(example.evidence.requestUrls) &&
-      example.evidence.consentBannerDetectedMs !== undefined
+      example.evidence.consentBannerDetectedMs !== undefined &&
+      (
+        hasValues(Array.isArray(nonessentialCookieNames) ? nonessentialCookieNames : undefined) ||
+        (
+          hasValues(Array.isArray(cookieNames) ? cookieNames : undefined) &&
+          Array.isArray(categories) &&
+          categories.some((value) => /analytics|advertising|marketing|retargeting|session_replay/i.test(value))
+        )
+      )
+  );
+}
+
+function hasConcretePreconsentEvidence(example: PrivacyRuntimeFindingDatasetExample) {
+  return Boolean(
+    (
+      example.evidence.sequenceEvidence === true &&
+        hasValues(example.evidence.vendors) &&
+        hasValues(example.evidence.requestUrls) &&
+        example.evidence.consentBannerDetectedMs !== undefined
+    ) ||
+      hasNonessentialPreconsentCookieEvidence(example)
   );
 }
 
