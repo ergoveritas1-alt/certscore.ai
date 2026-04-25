@@ -69,6 +69,14 @@ export type RegulatoryRiskSource = {
   ecommerceSiteLikely?: boolean | null;
   trackerRegulatoryRiskScore?: number | null;
   thirdPartyDataFlowRiskScore?: number | null;
+  thirdPartyRequestCount?: number | null;
+  thirdPartyRequestDomainCount?: number | null;
+  sensitiveContextTrackingDetected?: boolean | null;
+  highRiskIdentityVendorDetected?: boolean | null;
+  highRiskDataBrokerDetected?: boolean | null;
+  healthAdtechVendorDetected?: boolean | null;
+  deviceSignalVendorDetected?: boolean | null;
+  highRiskTrackingVendorNames?: string[] | null;
 };
 
 type ScoredBucket = {
@@ -134,6 +142,12 @@ function buildPrivacyBucket(source: RegulatoryRiskSource): ScoredBucket {
   pushIf(source.privacyContactChannelType === "none", drivers, { key: "missing_privacy_contact", label: "No clear privacy contact channel", impact: 12 });
   pushIf(source.policyBehaviorConflictDetected === true, drivers, { key: "policy_behavior_conflict", label: "Policy and observed behavior conflict", impact: 22 });
   pushIf(source.mentionsSensitiveData === true, drivers, { key: "sensitive_data", label: "Sensitive data disclosures surfaced", impact: 10 });
+  pushIf(source.sensitiveContextTrackingDetected === true, drivers, {
+    key: "sensitive_context_tracking",
+    label: "Sensitive-context tracking before consent",
+    impact: 26
+  });
+  pushIf(source.highRiskDataBrokerDetected === true, drivers, { key: "data_broker_present", label: "Data broker integration observed", impact: 16 });
   pushIf(source.californiaExposureLikely === true && source.doNotSellLinkPresent === false, drivers, { key: "missing_opt_out", label: "California-style opt-out signal missing", impact: 14 });
 
   pushIf(source.dsarRequestMechanismPresent === true, mitigations, { key: "dsar_present", label: "DSAR mechanism present", impact: 16 });
@@ -155,6 +169,12 @@ function buildConsentBucket(source: RegulatoryRiskSource): ScoredBucket {
   const mitigations: RegulatoryRiskDriver[] = [];
   pushIf(source.trackingBeforeConsentDetected === true, drivers, { key: "tracking_before_consent", label: "Tracking before consent", impact: 30 });
   pushIf(source.thirdPartyCookieSetBeforeConsent === true, drivers, { key: "third_party_cookies_before_consent", label: "Third-party cookies before consent", impact: 26 });
+  pushIf(source.sensitiveContextTrackingDetected === true, drivers, {
+    key: "sensitive_context_preconsent",
+    label: "Sensitive-context tracking before consent",
+    impact: 24
+  });
+  pushIf(source.highRiskIdentityVendorDetected === true, drivers, { key: "identity_resolution_vendor", label: "Identity-resolution vendor observed", impact: 14 });
   pushIf(source.cookieBannerPresent === true && source.rejectAllPresent === false, drivers, { key: "reject_all_missing", label: "Reject-all control missing", impact: 16 });
   pushIf(source.cookieBannerPresent === true && source.granularPreferencesPresent === false, drivers, {
     key: "granular_prefs_missing",
@@ -193,6 +213,11 @@ function buildConsumerBucket(source: RegulatoryRiskSource): ScoredBucket {
   });
   pushIf(source.policyBehaviorConflictDetected === true, drivers, { key: "policy_behavior_conflict", label: "Policy and behavior conflict", impact: 28 });
   pushIf(source.sessionReplayWithoutDisclosureDetected === true, drivers, { key: "session_replay_undisclosed", label: "Session replay without disclosure", impact: 22 });
+  pushIf(source.sensitiveContextTrackingDetected === true, drivers, {
+    key: "sensitive_context_consumer_risk",
+    label: "Sensitive-context data flow to third parties",
+    impact: 24
+  });
   pushIf(numberOrZero(source.advertisingTrackerCount) > 0 && source.policyClaimNoSale === true, drivers, { key: "no_sale_vs_adtech", label: "No-sale claim conflicts with adtech", impact: 18 });
   pushIf(numberOrZero(source.consumerProtectionScore) >= 65, drivers, { key: "consumer_score_elevated", label: "Elevated consumer-protection score", impact: 16 });
 
@@ -226,11 +251,21 @@ function buildDataExposureBucket(source: RegulatoryRiskSource): ScoredBucket {
   const mitigations: RegulatoryRiskDriver[] = [];
   pushIf(source.mentionsSensitiveData === true, drivers, { key: "sensitive_data", label: "Sensitive data categories disclosed", impact: 16 });
   pushIf(source.mentionsHealthData === true, drivers, { key: "health_data", label: "Health data references surfaced", impact: 12 });
+  pushIf(source.sensitiveContextTrackingDetected === true, drivers, {
+    key: "sensitive_context_tracking",
+    label: "Sensitive-context tracking evidence",
+    impact: 22
+  });
+  pushIf(source.highRiskDataBrokerDetected === true, drivers, { key: "data_broker_present", label: "Data broker integration observed", impact: 16 });
+  pushIf(source.healthAdtechVendorDetected === true, drivers, { key: "health_adtech_present", label: "Health-contextual adtech observed", impact: 14 });
+  pushIf(source.highRiskIdentityVendorDetected === true, drivers, { key: "identity_resolution_vendor", label: "Identity-resolution vendor observed", impact: 12 });
+  pushIf(source.deviceSignalVendorDetected === true, drivers, { key: "device_signal_vendor", label: "Device-signal vendor observed", impact: 8 });
   pushIf(source.mentionsBiometricData === true, drivers, { key: "biometric_data", label: "Biometric data references surfaced", impact: 12 });
   pushIf(source.mentionsFinancialData === true, drivers, { key: "financial_data", label: "Financial data references surfaced", impact: 10 });
   pushIf(source.mentionsUnder13 === true || source.mentionsUnder16 === true, drivers, { key: "children_data", label: "Children-related data references surfaced", impact: 14 });
   pushIf(numberOrZero(source.trackerRegulatoryRiskScore) >= 50, drivers, { key: "tracker_reg_risk", label: "Elevated tracker regulatory risk", impact: 10 });
   pushIf(numberOrZero(source.thirdPartyDataFlowRiskScore) >= 50, drivers, { key: "third_party_data_flows", label: "Elevated third-party data-flow risk", impact: 14 });
+  pushIf(numberOrZero(source.thirdPartyRequestDomainCount) >= 20, drivers, { key: "broad_third_party_domain_footprint", label: "Broad third-party domain footprint", impact: 10 });
 
   pushIf(source.retentionDisclosureQuality === "specific", mitigations, { key: "specific_retention", label: "Specific retention language present", impact: 10 });
   pushIf(source.policyClaimPrivacyProtective === true, mitigations, { key: "protective_claim", label: "Protective privacy commitments disclosed", impact: 4 });

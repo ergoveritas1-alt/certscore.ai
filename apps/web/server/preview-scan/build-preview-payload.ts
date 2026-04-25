@@ -10,6 +10,10 @@ import type {
 } from "@website-signal-risk-scanner/shared";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveScannerHealthWarnings } from "../../lib/scans/scanner-health-warnings";
+import {
+  deriveHighRiskTrackingContext,
+  formatHighRiskVendorSummary
+} from "../../lib/scans/high-risk-tracking-context";
 
 type PreviewSnapshotSource = {
   accessPostureClass?: ScanSnapshot["accessPostureClass"] | null;
@@ -511,6 +515,29 @@ function hasPreconsentTrackingEvidence(snapshot: PreviewSnapshotSource) {
   );
 }
 
+function describePreconsentTrackingFinding(input: {
+  hostname: string;
+  snapshot: PreviewSnapshotSource;
+  runtimeArtifacts?: Record<string, unknown> | null;
+}) {
+  const context = deriveHighRiskTrackingContext({
+    hostname: input.hostname,
+    snapshot: input.snapshot as unknown as Record<string, unknown>,
+    runtimeArtifacts: input.runtimeArtifacts
+  });
+  const vendorSummary = formatHighRiskVendorSummary(context.highRiskVendors);
+
+  if (context.isSensitiveContext && vendorSummary.length > 0) {
+    return `Pre-consent tracking was observed on a ${context.sensitiveContextLabel}. Vendors observed include ${vendorSummary.join(", ")}. Sensitive-context behavioral data may be flowing to third parties before a clear consent interaction is completed.`;
+  }
+
+  if (vendorSummary.length > 0) {
+    return `The live preview observed tracking signals or third-party cookies before consent. Vendors observed include ${vendorSummary.join(", ")}.`;
+  }
+
+  return "The live preview observed tracking signals or third-party cookies before a clear consent interaction point was completed.";
+}
+
 function canSurfaceScoresWithCoverageCaveat(input: {
   siteSurfaceUnverified: boolean;
   snapshot: PreviewSnapshotSource;
@@ -712,8 +739,10 @@ export function buildPreviewPayloadFromSnapshot(input: {
           category: "privacy",
           severity: "high",
           title: "Tracking activity observed before consent",
-          description:
-            "The live preview observed tracking signals or third-party cookies before a clear consent interaction point was completed."
+          description: describePreconsentTrackingFinding({
+            hostname: input.hostname,
+            snapshot: input.snapshot
+          })
         }
       : null
   );
@@ -887,6 +916,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
   payload: PreviewScanPayload;
   snapshot: PreviewSnapshotSource;
   events: PreviewFallbackEvent[];
+  runtimeArtifacts?: Record<string, unknown> | null;
   liveEarlyResults?: PreviewEarlyResultItem[];
   urlscanResult?: Record<string, unknown> | null;
   urlscanSource?: {
@@ -904,7 +934,20 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
     ...input.payload,
     scannerHealthWarnings,
     summaryBullets: [...input.payload.summaryBullets],
-    sampleFindings: [...input.payload.sampleFindings]
+    sampleFindings: input.payload.sampleFindings.map((finding) =>
+      finding.title === "Tracking activity observed before consent"
+        ? {
+            ...finding,
+            description: describePreconsentTrackingFinding({
+              hostname: getRecordString(input.snapshot as unknown as Record<string, unknown>, "registeredDomain") ??
+                hostnameFromUrl(input.snapshot.finalUrl) ??
+                "scanned domain",
+              snapshot: input.snapshot,
+              runtimeArtifacts: input.runtimeArtifacts
+            })
+          }
+        : finding
+    )
   };
 
   if (scannerHealthWarnings.length === 0) {

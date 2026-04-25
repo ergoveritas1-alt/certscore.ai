@@ -1,4 +1,5 @@
 import type { RegulatoryRiskSource } from "@website-signal-risk-scanner/shared";
+import { deriveHighRiskTrackingContext } from "./high-risk-tracking-context";
 
 function toBoolean(value: unknown) {
   return typeof value === "boolean" ? value : null;
@@ -18,7 +19,22 @@ function toPrivacyContactChannelType(value: unknown): RegulatoryRiskSource["priv
 
 export function buildRegulatoryRiskSource(input: {
   snapshot: Record<string, unknown>;
+  runtimeArtifacts?: Record<string, unknown> | null;
+  hostname?: string | null;
 }): RegulatoryRiskSource {
+  const trackingContext = deriveHighRiskTrackingContext({
+    hostname: input.hostname,
+    snapshot: input.snapshot,
+    runtimeArtifacts: input.runtimeArtifacts
+  });
+  const highRiskVendorCategories = new Set(trackingContext.highRiskVendors.map((vendor) => vendor.category));
+  const highRiskTrackingVendorNames = trackingContext.highRiskVendors.map((vendor) => vendor.name);
+  const thirdPartyRequestDomains = Array.isArray(input.runtimeArtifacts?.third_party_request_domains)
+    ? input.runtimeArtifacts.third_party_request_domains.filter((entry): entry is string => typeof entry === "string")
+    : Array.isArray(input.snapshot.third_party_request_domains)
+      ? input.snapshot.third_party_request_domains.filter((entry): entry is string => typeof entry === "string")
+      : [];
+
   return {
     homepageFetchStatus:
       input.snapshot.homepage_fetch_status === "ok" ||
@@ -75,6 +91,20 @@ export function buildRegulatoryRiskSource(input: {
     accessibilityLitigationRiskScore: toNumber(input.snapshot.accessibility_litigation_risk_score),
     ecommerceSiteLikely: toBoolean(input.snapshot.ecommerce_site_likely),
     trackerRegulatoryRiskScore: toNumber(input.snapshot.tracker_regulatory_risk_score),
-    thirdPartyDataFlowRiskScore: toNumber(input.snapshot.third_party_data_flow_risk_score)
+    thirdPartyDataFlowRiskScore: toNumber(input.snapshot.third_party_data_flow_risk_score),
+    thirdPartyRequestCount:
+      toNumber(input.runtimeArtifacts?.third_party_request_count) ?? toNumber(input.snapshot.third_party_request_count),
+    thirdPartyRequestDomainCount: thirdPartyRequestDomains.length > 0 ? thirdPartyRequestDomains.length : null,
+    sensitiveContextTrackingDetected:
+      trackingContext.isSensitiveContext &&
+      highRiskTrackingVendorNames.length > 0 &&
+      (toBoolean(input.snapshot.tracking_before_consent_detected) === true ||
+        toBoolean(input.snapshot.preconsent_tracking_detected) === true ||
+        toBoolean(input.snapshot.third_party_cookie_set_before_consent) === true),
+    highRiskIdentityVendorDetected: highRiskVendorCategories.has("identity_resolution"),
+    highRiskDataBrokerDetected: highRiskVendorCategories.has("data_broker"),
+    healthAdtechVendorDetected: highRiskVendorCategories.has("health_adtech"),
+    deviceSignalVendorDetected: highRiskVendorCategories.has("device_signal"),
+    highRiskTrackingVendorNames
   };
 }

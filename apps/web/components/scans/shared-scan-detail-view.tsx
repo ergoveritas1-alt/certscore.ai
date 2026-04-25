@@ -80,6 +80,7 @@ import {
   getPolicyPageUrl,
   getPolicySummaryText
 } from "../../lib/scans/policy-enrichment-row";
+import { deriveHighRiskTrackingContext } from "../../lib/scans/high-risk-tracking-context";
 import {
   getAllowedConflictType,
   type PolicyBehaviorConflictClaimType,
@@ -796,9 +797,21 @@ function derivePreconsentViolationRows(input: {
   const baselineTrackerVendors = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_vendor_names");
   const baselineEvidenceUrls = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_evidence_urls");
   const baselineScriptHosts = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_script_hosts");
+  const highRiskContext = deriveHighRiskTrackingContext({
+    runtimeArtifacts: input.runtimeArtifacts,
+    evidenceUrls: baselineEvidenceUrls
+  });
+  const synthesizedHighRiskVendors = highRiskContext.highRiskVendors.filter(
+    (vendor) => !baselineTrackerVendors.some((name) => name.toLowerCase() === vendor.name.toLowerCase())
+  );
+  const vendorNames = uniqueStrings([
+    ...baselineTrackerVendors,
+    ...synthesizedHighRiskVendors.map((vendor) => vendor.name)
+  ]);
 
-  return baselineTrackerVendors.map((vendorName) => {
+  return vendorNames.map((vendorName) => {
     const tracker = input.trackerVendors.find((candidate) => candidate.vendorName === vendorName);
+    const highRiskVendor = synthesizedHighRiskVendors.find((candidate) => candidate.name === vendorName);
     const vendorEvidenceUrls = baselineEvidenceUrls.filter((url) => {
       const lowerUrl = url.toLowerCase();
       const lowerVendor = vendorName.toLowerCase();
@@ -819,18 +832,23 @@ function derivePreconsentViolationRows(input: {
         return lowerUrl.includes("clarity");
       }
 
+      if (highRiskVendor) {
+        return highRiskVendor.evidence.some((evidence) => lowerUrl.includes(evidence.toLowerCase())) ||
+          lowerUrl.includes(lowerVendor.replace(/\s+|\/.*/g, ""));
+      }
+
       return lowerUrl.includes(lowerVendor.replace(/\s+/g, ""));
     });
 
     return {
       collectionEndpointType: tracker?.collectionEndpointType ?? "unknown",
-      confidence: tracker?.confidence ?? 0,
+      confidence: tracker?.confidence ?? (highRiskVendor ? 0.86 : 0),
       detectionSource: tracker?.detectionSource ?? "runtime_audit",
-      evidenceUrls: vendorEvidenceUrls,
+      evidenceUrls: vendorEvidenceUrls.length > 0 ? vendorEvidenceUrls : highRiskVendor?.evidence.filter((value) => /^https?:\/\//i.test(value)) ?? [],
       firstPartyOrThirdParty: "unknown",
       matchedSignatureId: tracker?.matchedSignatureId ?? null,
-      scriptHost: tracker?.scriptHost ?? baselineScriptHosts.find((host) => host && host.toLowerCase().includes(vendorName.toLowerCase().replace(/\s+/g, ""))) ?? null,
-      vendorCategory: tracker?.vendorCategory ?? "unknown",
+      scriptHost: tracker?.scriptHost ?? baselineScriptHosts.find((host) => host && host.toLowerCase().includes(vendorName.toLowerCase().replace(/\s+/g, ""))) ?? highRiskVendor?.evidence.find((value) => !/^https?:\/\//i.test(value)) ?? null,
+      vendorCategory: tracker?.vendorCategory ?? highRiskVendor?.category ?? "unknown",
       vendorName
     };
   });

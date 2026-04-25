@@ -415,12 +415,13 @@ export function getHybridPreconsentViolationCount(runtimeArtifacts: Record<strin
 
   const networkSummary = getRecord(hybrid.networkSummary);
   const explicitCount = getNumber(networkSummary?.preConsentThirdPartyRequestCount);
+  const evidenceUrlCount = getPreconsentRequestUrls(hybrid).length;
+  const vendorCount = getPreconsentTrackerVendors(hybrid).length;
   if (explicitCount !== null) {
-    return explicitCount;
+    return Math.max(explicitCount, evidenceUrlCount, vendorCount);
   }
 
-  const vendorCount = getPreconsentTrackerVendors(hybrid).length;
-  return vendorCount > 0 ? vendorCount : 0;
+  return Math.max(evidenceUrlCount, vendorCount);
 }
 
 export function getHybridPreconsentTrackerEvidenceUrls(runtimeArtifacts: Record<string, unknown> | null | undefined) {

@@ -50,6 +50,10 @@ import {
   getValidationMatchKeysForTitle,
   type ScanValidationFinding
 } from "./validation-review-linking";
+import {
+  deriveHighRiskTrackingContext,
+  formatHighRiskVendorSummary
+} from "./high-risk-tracking-context";
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
@@ -505,25 +509,47 @@ export function buildSectionReviewIssues(input: {
     );
     const preconsentScriptHosts = uniqueStrings(input.preconsentViolationRows.map((row) => row.scriptHost));
     const preconsentVendors = uniqueStrings(input.preconsentViolationRows.map((row) => row.vendorName));
+    const highRiskContext = deriveHighRiskTrackingContext({
+      hostname:
+        typeof input.snapshot?.registered_domain === "string"
+          ? input.snapshot.registered_domain
+          : typeof input.snapshot?.final_url === "string"
+            ? input.snapshot.final_url
+            : null,
+      snapshot: input.snapshot,
+      runtimeArtifacts: input.runtimeArtifacts,
+      evidenceUrls: preconsentEvidenceUrls
+    });
+    const highRiskVendorSummary = formatHighRiskVendorSummary(highRiskContext.highRiskVendors);
     issues.push({
-      description: `Observed vendor activity before consent for ${input.preconsentViolationRows.length} vendor${input.preconsentViolationRows.length === 1 ? "" : "s"}.`,
+      description:
+        highRiskContext.isSensitiveContext && highRiskVendorSummary.length > 0
+          ? `Pre-consent tracking was observed on a ${highRiskContext.sensitiveContextLabel}. Vendors observed include ${highRiskVendorSummary.join(", ")}. Sensitive-context behavioral data may be flowing to third parties before a clear consent interaction is completed.`
+          : `Observed vendor activity before consent for ${input.preconsentViolationRows.length} vendor${input.preconsentViolationRows.length === 1 ? "" : "s"}.`,
       evidence: preconsentEvidenceUrls.slice(0, 3),
       fallbackEvidence: {
+        high_risk_tracking_vendor_names: highRiskContext.highRiskVendors.map((vendor) => vendor.name),
+        high_risk_tracking_vendor_roles: highRiskContext.highRiskVendors.map((vendor) => `${vendor.name}: ${vendor.role}`),
         preconsent_tracker_evidence_urls: preconsentEvidenceUrls,
         preconsent_tracker_script_hosts: preconsentScriptHosts,
-        preconsent_tracker_vendors: preconsentVendors,
+        preconsent_tracker_vendors: uniqueStrings([...preconsentVendors, ...highRiskContext.highRiskVendors.map((vendor) => vendor.name)]),
         preconsent_tracking_detected: true,
         runtimeEvidenceArtifacts: uniqueStrings([
           ...preconsentEvidenceUrls,
           ...preconsentScriptHosts.map((host) => `script_host:${host}`)
         ]),
         runtimeEvidenceUrls: preconsentEvidenceUrls,
-        runtimeVendors: preconsentVendors,
+        runtimeVendors: uniqueStrings([...preconsentVendors, ...highRiskContext.highRiskVendors.map((vendor) => vendor.name)]),
+        sensitive_context_label: highRiskContext.sensitiveContextLabel,
+        sensitive_context_tracking_detected: highRiskContext.isSensitiveContext && highRiskContext.highRiskVendors.length > 0,
         supportingSignals: ["privacy.preconsent_tracking_detected", "privacy.tracking_before_consent_detected"],
         tracking_before_consent_detected: true
       },
       severity: "high",
-      title: "Pre-consent tracking incidents detected"
+      title:
+        highRiskContext.isSensitiveContext && highRiskVendorSummary.length > 0
+          ? "Sensitive-data collection with third-party tracking present"
+          : "Pre-consent tracking incidents detected"
     });
   }
 

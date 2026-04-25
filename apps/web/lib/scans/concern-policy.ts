@@ -1475,7 +1475,11 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isSensitiveThirdPartyTrackingConcern(input.concern)) {
-    if (!hasConcreteSensitivePayloadArtifact(input.rawEvidence)) {
+    const hasSensitiveContextTrackingEvidence =
+      input.rawEvidence?.sensitive_context_tracking_detected === true ||
+      input.rawEvidence?.sensitiveContextTrackingDetected === true;
+
+    if (!hasConcreteSensitivePayloadArtifact(input.rawEvidence) && !hasSensitiveContextTrackingEvidence) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
@@ -1487,7 +1491,8 @@ export function deriveConcernPolicy(input: {
     if (
       !hasConcreteRetargetingArtifact(input.rawEvidence) &&
       !hasConcreteReplayArtifact(input.rawEvidence) &&
-      !hasConcreteSanitizedNetworkEvidence(input.rawEvidence)
+      !hasConcreteSanitizedNetworkEvidence(input.rawEvidence) &&
+      !hasSensitiveContextTrackingEvidence
     ) {
       return {
         allowedNarrativeTier: "weak",
