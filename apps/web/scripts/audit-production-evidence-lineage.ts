@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import process from "node:process";
 import { closePools, query } from "@website-signal-risk-scanner/db";
 import { debugBuildScanReportUnifiedFindingState } from "../components/scans/shared-scan-detail-view";
@@ -27,11 +28,14 @@ type EvidenceLineageBucket =
   | "review"
   | "suppressed"
   | "raw_present_no_unified_packet"
+  | "runtime_support_only_no_disclosure_packet"
   | "no_raw_evidence";
 
 type EvidenceProbe = {
+  policyEvidencePresent: boolean;
   reasons: string[];
   rawEvidencePresent: boolean;
+  runtimeSupportOnly: boolean;
 };
 
 type LineageRow = {
@@ -188,6 +192,50 @@ function hasPolicyPageType(policyRows: Array<Record<string, unknown>>, pageTypes
   return policyRows.some((row) => pageTypes.includes(String(row.page_type ?? row.pageType ?? "")));
 }
 
+function isPositiveDisclosureFinding(findingId: TargetFinding) {
+  return findingId === "behavioral_analytics_disclosure_present" ||
+    findingId === "targeted_advertising_disclosure_present" ||
+    findingId === "third_party_advertising_disclosure_present" ||
+    findingId === "tracking_technologies_disclosure_present";
+}
+
+function getPolicyTextCandidates(policyRows: Array<Record<string, unknown>>) {
+  const values: string[] = [];
+  for (const row of policyRows) {
+    for (const key of ["summary", "page_summary", "pageSummary", "text", "content", "extractedText"]) {
+      const value = row[key];
+      if (typeof value === "string" && value.trim().length > 0) {
+        values.push(value);
+      }
+    }
+
+    const snippets = getRecord(row.evidence_snippets ?? row.evidenceSnippets);
+    if (snippets) {
+      for (const value of Object.values(snippets)) {
+        if (typeof value === "string" && value.trim().length > 0) {
+          values.push(value);
+        }
+      }
+    }
+  }
+  return uniqueStrings(values);
+}
+
+function consentGatingPolicyAnchorReasons(policyRows: Array<Record<string, unknown>>) {
+  const text = getPolicyTextCandidates(policyRows).join("\n").toLowerCase();
+  if (!text) {
+    return [];
+  }
+
+  const hasConsentVerb = /\b(consent|opt[-\s]?in|permission|authorize|agree|accept)\b/.test(text);
+  const hasTrackingObject = /\b(cookie|cookies|tracking|tracker|analytics|advertis(?:e|ing)|pixel|personalized ads?)\b/.test(text);
+  const hasBeforeAfterLanguage = /\b(before|prior to|until|unless|after|once)\b/.test(text);
+
+  return hasConsentVerb && hasTrackingObject && hasBeforeAfterLanguage
+    ? ["possible consent-gating policy anchor"]
+    : [];
+}
+
 function probeRawEvidence(findingId: TargetFinding, record: Record<string, unknown>): EvidenceProbe {
   const snapshot = getRecord(record.snapshot);
   const runtimeArtifacts = getRecord(record.runtimeArtifacts);
@@ -201,39 +249,40 @@ function probeRawEvidence(findingId: TargetFinding, record: Record<string, unkno
   const trackerVendors = Array.isArray(record.trackerVendors)
     ? record.trackerVendors.filter((row): row is Record<string, unknown> => Boolean(getRecord(row)))
     : [];
-  const reasons: string[] = [];
+  const policyReasons: string[] = [];
+  const runtimeReasons: string[] = [];
   const signalKeys = SIGNAL_KEYS_BY_FINDING[findingId];
   const mergedSignalValue = getMergedSignalValue(mergedSignals, signalKeys);
   if (mergedSignalValue !== null) {
-    reasons.push(`merged signal ${signalKeys.find((key) => getMergedSignalValue(mergedSignals, [key]) !== null) ?? signalKeys[0]}`);
+    policyReasons.push(`merged signal ${signalKeys.find((key) => getMergedSignalValue(mergedSignals, [key]) !== null) ?? signalKeys[0]}`);
   }
-  reasons.push(...policySnippetReasons(policyRows, POLICY_SNIPPET_KEYS_BY_FINDING[findingId]));
+  policyReasons.push(...policySnippetReasons(policyRows, POLICY_SNIPPET_KEYS_BY_FINDING[findingId]));
 
   switch (findingId) {
     case "privacy_policy_present":
       if (getBoolean(snapshot, ["privacy_policy_present"])) {
-        reasons.push("snapshot privacy_policy_present");
+        policyReasons.push("snapshot privacy_policy_present");
       }
       if (hasPolicyPageType(policyRows, ["privacy_policy"])) {
-        reasons.push("policy_enrichment privacy_policy row");
+        policyReasons.push("policy_enrichment privacy_policy row");
       }
       break;
     case "cookie_policy_present":
       if (getBoolean(snapshot, ["cookie_policy_present"])) {
-        reasons.push("snapshot cookie_policy_present");
+        policyReasons.push("snapshot cookie_policy_present");
       }
       if (hasPolicyPageType(policyRows, ["cookie_policy"])) {
-        reasons.push("policy_enrichment cookie_policy row");
+        policyReasons.push("policy_enrichment cookie_policy row");
       }
       break;
     case "privacy_contact_path_present": {
       if (getBoolean(snapshot, ["privacy_contact_method_present"])) {
-        reasons.push("snapshot privacy_contact_method_present");
+        policyReasons.push("snapshot privacy_contact_method_present");
       }
       const channelType = getString(snapshot, ["privacy_contact_channel_type"]) ??
         getString(runtimeArtifacts, ["privacyContactChannelType", "privacy_contact_channel_type"]);
       if (channelType && !/^none|unknown|generic$/i.test(channelType)) {
-        reasons.push(`privacy contact channel ${channelType}`);
+        policyReasons.push(`privacy contact channel ${channelType}`);
       }
       break;
     }
@@ -245,7 +294,7 @@ function probeRawEvidence(findingId: TargetFinding, record: Record<string, unkno
           "data_deletion_request_present"
         ])
       ) {
-        reasons.push("snapshot privacy rights mechanism");
+        policyReasons.push("snapshot privacy rights mechanism");
       }
       break;
     case "consent_gated_tracking_claim_conflict": {
@@ -253,23 +302,24 @@ function probeRawEvidence(findingId: TargetFinding, record: Record<string, unkno
         getBoolean(snapshot, ["preconsent_tracking_detected", "tracking_before_consent_detected"]) ||
         preconsentViolations.length > 0
       ) {
-        reasons.push("pre-consent runtime signal");
+        runtimeReasons.push("pre-consent runtime signal");
       }
       const retainedUrls = uniqueStrings([
         ...preconsentViolations.flatMap((row) => getStringArray(row, ["evidenceUrls", "evidence_urls"])),
         ...getStringArray(runtimeArtifacts, ["consent_baseline_tracker_evidence_urls", "consentBaselineTrackerEvidenceUrls"])
       ]);
       if (retainedUrls.some((url) => /^https?:\/\//i.test(url))) {
-        reasons.push("retained pre-consent request URL");
+        runtimeReasons.push("retained pre-consent request URL");
       }
       if (getBoolean(snapshot, ["privacy_policy_present"]) || hasPolicyPageType(policyRows, ["privacy_policy"])) {
-        reasons.push("privacy policy surface");
+        policyReasons.push("privacy policy surface");
       }
+      policyReasons.push(...consentGatingPolicyAnchorReasons(policyRows));
       break;
     }
     case "behavioral_analytics_disclosure_present":
       if (trackerVendors.some((row) => /session[_\s-]?replay|analytics/i.test(String(row.vendorCategory ?? "")))) {
-        reasons.push("runtime analytics or replay vendor");
+        runtimeReasons.push("runtime analytics or replay vendor");
       }
       break;
     case "targeted_advertising_disclosure_present":
@@ -278,7 +328,7 @@ function probeRawEvidence(findingId: TargetFinding, record: Record<string, unkno
         getBoolean(snapshot, ["ad_network_google_ads", "ad_network_meta_ads", "retargeting_pixel_detected"]) ||
         trackerVendors.some((row) => /advertis|marketing|retarget/i.test(String(row.vendorCategory ?? "")))
       ) {
-        reasons.push("runtime advertising signal");
+        runtimeReasons.push("runtime advertising signal");
       }
       break;
     case "tracking_technologies_disclosure_present":
@@ -286,28 +336,38 @@ function probeRawEvidence(findingId: TargetFinding, record: Record<string, unkno
         getBoolean(snapshot, ["cookie_policy_present", "third_party_tracking_detected"]) ||
         (Number(snapshot?.third_party_request_count ?? 0) > 0)
       ) {
-        reasons.push("runtime tracking/cookie signal");
+        runtimeReasons.push("runtime tracking/cookie signal");
       }
       break;
     case "children_privacy_disclosure_present":
       if (getBoolean(snapshot, ["children_privacy_disclosure_present", "children_directed_context_detected"])) {
-        reasons.push("snapshot children privacy context");
+        policyReasons.push("snapshot children privacy context");
       }
       break;
   }
 
-  const uniqueReasons = uniqueStrings(reasons);
+  const uniquePolicyReasons = uniqueStrings(policyReasons);
+  const uniqueRuntimeReasons = uniqueStrings(runtimeReasons);
+  const uniqueReasons = uniqueStrings([...uniquePolicyReasons, ...uniqueRuntimeReasons]);
   return {
+    policyEvidencePresent: uniquePolicyReasons.length > 0,
     rawEvidencePresent: uniqueReasons.length > 0,
-    reasons: uniqueReasons
+    reasons: uniqueReasons,
+    runtimeSupportOnly: isPositiveDisclosureFinding(findingId) &&
+      uniquePolicyReasons.length === 0 &&
+      uniqueRuntimeReasons.length > 0
   };
 }
 
 function classifyLineage(input: {
   packet: UnifiedFindingDisplayPacket | undefined;
   rawEvidencePresent: boolean;
+  runtimeSupportOnly: boolean;
 }): EvidenceLineageBucket {
   if (!input.packet) {
+    if (input.runtimeSupportOnly) {
+      return "runtime_support_only_no_disclosure_packet";
+    }
     return input.rawEvidencePresent ? "raw_present_no_unified_packet" : "no_raw_evidence";
   }
   switch (input.packet.presentationDecision.status) {
@@ -384,8 +444,8 @@ function renderMarkdown(input: {
     `Generated: ${input.generatedAt}`,
     `Scope: ${input.scanCount} recent completed org-backed scans`,
     "",
-    "| Finding | Surfaced | Audit-only | Review | Suppressed | Raw present/no packet | No raw evidence | Top negative flags |",
-    "|---|---:|---:|---:|---:|---:|---:|---|"
+    "| Finding | Surfaced | Audit-only | Review | Suppressed | Runtime support-only/no packet | Raw present/no packet | No raw evidence | Top negative flags |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|---|"
   ];
 
   for (const findingId of input.findings) {
@@ -404,7 +464,7 @@ function renderMarkdown(input: {
       .join(", ");
 
     lines.push(
-      `| \`${findingId}\` | ${count("surfaced")} | ${count("audit_only_missing_evidence")} | ${count("review")} | ${count("suppressed")} | ${count("raw_present_no_unified_packet")} | ${count("no_raw_evidence")} | ${flags || "-"} |`
+      `| \`${findingId}\` | ${count("surfaced")} | ${count("audit_only_missing_evidence")} | ${count("review")} | ${count("suppressed")} | ${count("runtime_support_only_no_disclosure_packet")} | ${count("raw_present_no_unified_packet")} | ${count("no_raw_evidence")} | ${flags || "-"} |`
     );
   }
 
@@ -441,6 +501,7 @@ function renderMarkdown(input: {
 
 async function main() {
   const findings = parseFindings();
+  const outputPath = getArgValue("--out");
   const scanLimit = getNumberArg("--scan-limit", 80);
   const scanType = getArgValue("--scan-type") ?? "full";
   const scans = await loadScans({ limit: scanLimit, scanType });
@@ -476,7 +537,8 @@ async function main() {
       const packet = packetByFindingId.get(findingId);
       const bucket = classifyLineage({
         packet,
-        rawEvidencePresent: rawProbe.rawEvidencePresent
+        rawEvidencePresent: rawProbe.rawEvidencePresent,
+        runtimeSupportOnly: rawProbe.runtimeSupportOnly
       });
 
       rows.push({
@@ -508,10 +570,13 @@ async function main() {
     scanCount: scans.length
   };
 
-  if (hasFlag("--json")) {
-    process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+  const rendered = hasFlag("--json")
+    ? `${JSON.stringify(output, null, 2)}\n`
+    : renderMarkdown(output);
+  if (outputPath) {
+    writeFileSync(outputPath, rendered);
   } else {
-    process.stdout.write(renderMarkdown(output));
+    process.stdout.write(rendered);
   }
 }
 

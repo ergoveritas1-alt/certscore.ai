@@ -87,3 +87,36 @@ test("insufficient major document-semantic signals create bounded unresolved can
   assert.equal(candidate?.fallbackEvidence?.inferredTargetFindingId, "gpc_disclosure_present");
   assert.equal(candidate?.fallbackEvidence?.mergedSignalPopulationStatus, "insufficient");
 });
+
+test("privacy contact merged-signal candidates retain sibling contact channel evidence", () => {
+  const mergedSignals = buildMergedSignalRecords({
+    nanoSignals: [
+      {
+        confidence: 0.88,
+        evidenceRefs: ["https://example.com/privacy"],
+        key: "privacy.privacy_contact_path_present",
+        label: "Privacy contact path present",
+        reportSignalSource: "policy_enrichment_signal",
+        source: "nano",
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        confidence: 0.9,
+        evidenceRefs: ["https://example.com/privacy"],
+        key: "privacyContactChannelType",
+        label: "Privacy contact channel type",
+        reportSignalSource: "policy_enrichment_signal",
+        source: "nano",
+        value: "email",
+        valueType: "text"
+      }
+    ]
+  });
+
+  const candidate = buildReviewFindingCandidatesFromMergedSignals({
+    mergedSignals
+  }).find((row) => row.signalKey === "privacy.privacy_contact_path_present");
+
+  assert.equal(candidate?.fallbackEvidence?.privacyContactChannelType, "email");
+});

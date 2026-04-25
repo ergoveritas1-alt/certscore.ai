@@ -105,6 +105,25 @@ function comparePopulationValue(left: PopulatedSignalRecord, right: PopulatedSig
   return left.value === right.value;
 }
 
+function getMergedSignalValue(mergedSignals: MergedSignalRecord[], key: string) {
+  const signal = mergedSignals.find((entry) => entry.key === key);
+  if (signal?.populationStatus !== "present") {
+    return null;
+  }
+  return signal.selectedPopulation?.value ?? signal.value ?? null;
+}
+
+function buildSiblingEvidenceForMergedSignal(signal: MergedSignalRecord, mergedSignals: MergedSignalRecord[]) {
+  if (signal.key !== "privacy.privacy_contact_path_present") {
+    return {};
+  }
+
+  const privacyContactChannelType = getMergedSignalValue(mergedSignals, "privacyContactChannelType");
+  return typeof privacyContactChannelType === "string" && privacyContactChannelType.trim().length > 0
+    ? { privacyContactChannelType: privacyContactChannelType.trim() }
+    : {};
+}
+
 function selectPopulation(populations: PopulatedSignalRecord[]) {
   return [...populations].sort((left, right) => {
     const statusDelta = getPopulationStatusPriority(right.populationStatus) - getPopulationStatusPriority(left.populationStatus);
@@ -233,6 +252,7 @@ export function buildReviewFindingCandidatesFromMergedSignals(input: {
       continue;
     }
 
+    const siblingEvidence = buildSiblingEvidenceForMergedSignal(signal, input.mergedSignals);
     const fallbackEvidence = {
       evidenceRefs: signal.evidenceRefs,
       mergedSignalConfidence: signal.confidence,
@@ -243,7 +263,8 @@ export function buildReviewFindingCandidatesFromMergedSignals(input: {
       selectedSignalSource: signal.selectedPopulation.source,
       signalKey: signal.key,
       signalLabel: signal.label,
-      signalValue: signal.value
+      signalValue: signal.value,
+      ...siblingEvidence
     } satisfies Record<string, unknown>;
 
     const linkedValidationEvidence = input.linkedValidationEvidenceBySignalKey?.get(signal.key) ?? null;
