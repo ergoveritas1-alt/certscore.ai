@@ -199,6 +199,22 @@ test("cookie disclosure gap blocker classifier keeps runtime-only cases blocked"
   assert.ok(!assessment.blockers.includes("missing_cookie_gap_signal"));
 });
 
+test("cookie disclosure gap blocker classifier rejects root URLs even when typed as cookie policy", () => {
+  const assessment = classifyCookieDisclosureGapPromotionBlockers({
+    cookieGapValidationEvidence: {
+      cookie_policy_url: "https://example.test/",
+      runtime_cookie_names: ["_fbp"],
+      unmatched_cookie_names: ["_fbp"],
+      unmatched_third_party_cookie_count: 1
+    },
+    policyPageType: "cookie_policy",
+    policyPageUrl: "https://example.test/"
+  });
+
+  assert.equal(assessment.promotionReady, false);
+  assert.ok(assessment.blockers.includes("missing_cookie_or_privacy_policy_anchor"));
+});
+
 test("summarizePromotionBlockers counts blockers and ready candidates", () => {
   const summary = summarizePromotionBlockers([
     classifyDsarPromotionBlockers({

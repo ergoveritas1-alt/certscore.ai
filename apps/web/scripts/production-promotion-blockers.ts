@@ -153,7 +153,11 @@ function isLikelyPolicyUrl(value: string | null | undefined, pattern: RegExp) {
   }
   try {
     const parsed = new URL(value);
-    return pattern.test(`${parsed.pathname}${parsed.search}`.toLowerCase());
+    const path = parsed.pathname.toLowerCase().replace(/\/+$/, "") || "/";
+    if (path === "/" || parsed.hostname.toLowerCase() === "www.cookieyes.com" && path.startsWith("/product/")) {
+      return false;
+    }
+    return pattern.test(`${path}${parsed.search.toLowerCase()}`);
   } catch {
     return pattern.test(value.toLowerCase());
   }
@@ -425,9 +429,7 @@ export function classifyCookieDisclosureGapPromotionBlockers(input: PromotionBlo
   const unmatchedCookieCount = getUnmatchedCookieCount(input);
   const validationBacked = Boolean(getRecord(input.cookieGapValidationEvidence));
   const effectivePolicyUrl = getEffectiveCookieGapPolicyUrl(input);
-  const hasCookiePolicyUrl =
-    input.policyPageType === "cookie_policy" ||
-    isLikelyPolicyUrl(effectivePolicyUrl, /cookie|privacy|legal|policy|notice/);
+  const hasCookiePolicyUrl = isLikelyPolicyUrl(effectivePolicyUrl, /cookie|privacy|legal|policy|notice/);
   const hasCookieGapSignal = input.policyPositiveSignalPresent === true || validationBacked;
   const blockers: string[] = [];
 
