@@ -972,7 +972,7 @@ test("noisy rights-gap findings stay in confidence coverage when evidence is inc
   }
 });
 
-test("cookie disclosure gaps confirm only with third-party runtime inventory and a first-party disclosure URL", () => {
+test("cookie disclosure gaps confirm only with promotion-grade runtime inventory and a first-party disclosure URL", () => {
   const confirmedEvaluation = evaluateUnifiedFindingSurfacing({
     packets: [
       makePacket("cookie_disclosure_gap", {
@@ -1010,8 +1010,8 @@ test("cookie disclosure gaps confirm only with third-party runtime inventory and
             unmatched_third_party_cookie_count: 0
           },
           entities: {
-            runtime_cookie_names: ["xsrf-token", "laravel_session", "_ga"],
-            unmatched_cookie_names: ["xsrf-token", "laravel_session", "_ga"]
+            runtime_cookie_names: ["xsrf-token", "laravel_session", "__cf_bm"],
+            unmatched_cookie_names: ["xsrf-token", "laravel_session", "__cf_bm"]
           },
           sourceUrls: ["https://example.com/cookie-policy"]
         }
@@ -1041,9 +1041,34 @@ test("cookie disclosure gaps confirm only with third-party runtime inventory and
       })
     ]
   });
+  const nonessentialCookieNameEvaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("cookie_disclosure_gap", {
+        confidenceInputs: {
+          ...makePacket("cookie_disclosure_gap").confidenceInputs,
+          hasDirectRuntimeEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket("cookie_disclosure_gap").evidence,
+          counts: {
+            unmatched_third_party_cookie_count: 0,
+            unmatchedCookieCount: 2
+          },
+          entities: {
+            runtime_cookie_names: ["_fbp", "_gcl_au"],
+            unmatched_cookie_names: ["_fbp", "_gcl_au"]
+          },
+          sourceUrls: ["https://example.com/cookie-policy"]
+        }
+      })
+    ]
+  });
 
   assert.equal(confirmedEvaluation.debugDecisions[0]?.decisionState, "confirmed");
   assert.equal(confirmedEvaluation.debugDecisions[0]?.reportLane, "main");
+  assert.equal(nonessentialCookieNameEvaluation.debugDecisions[0]?.decisionState, "confirmed");
+  assert.equal(nonessentialCookieNameEvaluation.debugDecisions[0]?.reportLane, "main");
   assert.equal(weakRuntimeEvaluation.debugDecisions[0]?.decisionState, "review");
   assert.equal(weakRuntimeEvaluation.debugDecisions[0]?.reportLane, "confidence_and_coverage");
   assert.equal(weakPolicyUrlEvaluation.debugDecisions[0]?.decisionState, "review");

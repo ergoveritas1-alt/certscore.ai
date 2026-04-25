@@ -900,6 +900,10 @@ function getEvidenceCount(packet: UnifiedFindingPacket, keys: string[]) {
   return null;
 }
 
+function getEvidenceEntityValuesForKeys(packet: UnifiedFindingPacket, keys: string[]) {
+  return keys.flatMap((key) => getEvidenceEntityValues(packet, key));
+}
+
 function normalizeComparableUrl(value: string | null | undefined) {
   if (!value) {
     return null;
@@ -1334,17 +1338,31 @@ function hasCookieDisclosureGapBacking(packet: UnifiedFindingPacket) {
     "unmatchedCookieCount"
   ]);
   const runtimeCookieNames = [
-    ...(packet.evidence?.entities?.runtime_cookie_names ?? []),
-    ...(packet.evidence?.entities?.runtimeCookieNames ?? []),
-    ...(packet.evidence?.entities?.unmatched_cookie_names ?? []),
-    ...(packet.evidence?.entities?.unmatchedCookieNames ?? [])
+    ...getEvidenceEntityValuesForKeys(packet, [
+      "runtime_cookie_names",
+      "runtimeCookieNames",
+      "unmatched_cookie_names",
+      "unmatchedCookieNames"
+    ])
   ];
+  const unmatchedCookieNames = getEvidenceEntityValuesForKeys(packet, ["unmatched_cookie_names", "unmatchedCookieNames"]);
+  const unmatchedCookieCategories = getEvidenceEntityValuesForKeys(packet, [
+    "unmatched_cookie_categories",
+    "unmatchedCookieCategories"
+  ]);
+  const hasPromotionGradeUnmatchedCookie =
+    unmatchedCookieCategories.some((value) => /analytics|advertising|marketing|retargeting|session_replay/i.test(value)) ||
+    unmatchedCookieNames.some((value) =>
+      /(^_ga|^_gid|^_gat|ga_|goog|gtm|doubleclick|^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|muid|demdex|adobeorg|kndctr_.*adobeorg|mbox|qsi_replaysession|qualtrics|hotjar|fullstory|clarity|contentsquare|mouseflow|_hj)/i.test(value)
+    );
 
   return (
     packet.confidenceInputs.hasStructuredValidationEvidence &&
     runtimeCookieNames.length > 0 &&
-    typeof unmatchedThirdPartyCookieCount === "number" &&
-    unmatchedThirdPartyCookieCount > 0 &&
+    (
+      typeof unmatchedThirdPartyCookieCount === "number" && unmatchedThirdPartyCookieCount > 0 ||
+      hasPromotionGradeUnmatchedCookie
+    ) &&
     urls.some(isLikelyFirstPartyCookieDisclosureUrl)
   );
 }
@@ -1643,7 +1661,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
           lane: "main",
           tier: decision.surfaceTier,
           reason:
-            "Runtime cookie evidence, unmatched third-party cookie inventory, and a retained first-party cookie disclosure surface all support the disclosure-gap interpretation.",
+            "Runtime cookie evidence, promotion-grade unmatched cookie inventory, and a retained first-party cookie disclosure surface all support the disclosure-gap interpretation.",
           ruleId: "evidence.rights_gap.confirmed_structured_policy_absence"
         });
       } else {
