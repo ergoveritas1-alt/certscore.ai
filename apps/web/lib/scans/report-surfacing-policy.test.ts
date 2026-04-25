@@ -1430,7 +1430,8 @@ test("pre-consent tracking confirms with non-essential cookie timing evidence", 
           entities: {
             preconsent_cookie_categories: ["advertising"],
             preconsent_cookie_names: ["_fbp"],
-            preconsent_nonessential_cookie_names: ["_fbp"]
+            preconsent_nonessential_cookie_names: ["_fbp"],
+            preconsent_cookie_timing_evidence: ["before_consent_cookie_write"]
           }
         }
       })
@@ -1440,6 +1441,41 @@ test("pre-consent tracking confirms with non-essential cookie timing evidence", 
   const decision = evaluation.debugDecisions[0];
   assert.equal(decision?.decisionState, "confirmed");
   assert.ok(decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
+});
+
+test("pre-consent tracking stays review-level for cookie names without before-consent write timing", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("preconsent_tracking", {
+        confidenceInputs: {
+          ...makePacket("preconsent_tracking").confidenceInputs,
+          hasDirectRuntimeEvidence: true
+        },
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking",
+          requestUrls: [],
+          vendors: []
+        },
+        evidence: {
+          flags: ["preconsent_tracking_detected"],
+          pageUrls: [],
+          snippets: [],
+          sourceUrls: [],
+          entities: {
+            preconsent_cookie_categories: ["advertising"],
+            preconsent_cookie_names: ["_fbp"],
+            preconsent_nonessential_cookie_names: ["_fbp"],
+            preconsent_cookie_timing_evidence: ["initial_cookie_snapshot"]
+          }
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.ok(decision?.appliedRules.includes("evidence.preconsent.review_without_runtime_artifacts"));
 });
 
 test("pre-consent tracking stays review-level when concrete URL evidence is missing", () => {
@@ -1486,6 +1522,39 @@ test("pre-consent tracking does not treat generic page URLs as request URL evide
           sourceUrls: [],
           entities: {
             runtimeVendors: ["Meta Pixel"]
+          }
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.ok(decision?.appliedRules.includes("evidence.preconsent.review_without_runtime_artifacts"));
+});
+
+test("pre-consent tracking does not treat malformed URL-like cookie names as request evidence", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("preconsent_tracking", {
+        confidenceInputs: {
+          ...makePacket("preconsent_tracking").confidenceInputs,
+          hasDirectRuntimeEvidence: true
+        },
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking",
+          requestUrls: [],
+          vendors: ["Google Analytics"]
+        },
+        evidence: {
+          flags: ["preconsent_tracking_detected"],
+          pageUrls: [],
+          snippets: [],
+          sourceUrls: [],
+          entities: {
+            runtimeRequestUrls: ["https://www.sofi.com_oeu1776902307725r0.1932886381308404$$14812420277$$session_state"],
+            runtimeVendors: ["Google Analytics"]
           }
         }
       })

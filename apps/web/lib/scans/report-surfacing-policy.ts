@@ -1053,6 +1053,22 @@ function isMainNarrativeKeyPageGap(packet: UnifiedFindingPacket) {
   return ["privacy_policy", "terms_of_service", "cookie_policy", "contact"].includes(packet.details.pageType);
 }
 
+function isConcreteHttpEvidenceUrl(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+  try {
+    const parsed = new URL(value);
+    return (
+      (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+      parsed.hostname.includes(".") &&
+      !parsed.hostname.includes("_")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function hasExplicitContradictionBasis(packet: UnifiedFindingPacket) {
   return (
     packet.details?.family === "contradiction" &&
@@ -1071,23 +1087,33 @@ function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
     return false;
   }
 
+  const hasBeforeConsentCookieWriteEvidence =
+    (packet.evidence?.entities?.preconsent_cookie_timing_evidence ?? []).some((value) =>
+      value === "before_consent_cookie_write"
+    ) ||
+    (packet.evidence?.entities?.preconsentCookieTimingEvidence ?? []).some((value) =>
+      value === "before_consent_cookie_write"
+    );
   const hasPreconsentCookieEvidence =
-    (packet.evidence?.entities?.preconsent_nonessential_cookie_names?.length ?? 0) > 0 ||
-    (packet.evidence?.entities?.preconsentNonessentialCookieNames?.length ?? 0) > 0 ||
+    hasBeforeConsentCookieWriteEvidence &&
     (
-      ((packet.evidence?.entities?.preconsent_cookie_names?.length ?? 0) > 0 ||
-        (packet.evidence?.entities?.preconsentCookieNames?.length ?? 0) > 0) &&
-      ((packet.evidence?.entities?.preconsent_cookie_categories ?? []).some((value) =>
-        /analytics|advertising|marketing|retargeting|session_replay/i.test(value)
-      ) ||
-        (packet.evidence?.entities?.preconsentCookieCategories ?? []).some((value) =>
+      (packet.evidence?.entities?.preconsent_nonessential_cookie_names?.length ?? 0) > 0 ||
+      (packet.evidence?.entities?.preconsentNonessentialCookieNames?.length ?? 0) > 0 ||
+      (
+        ((packet.evidence?.entities?.preconsent_cookie_names?.length ?? 0) > 0 ||
+          (packet.evidence?.entities?.preconsentCookieNames?.length ?? 0) > 0) &&
+        ((packet.evidence?.entities?.preconsent_cookie_categories ?? []).some((value) =>
           /analytics|advertising|marketing|retargeting|session_replay/i.test(value)
-        ))
+        ) ||
+          (packet.evidence?.entities?.preconsentCookieCategories ?? []).some((value) =>
+            /analytics|advertising|marketing|retargeting|session_replay/i.test(value)
+          ))
+      )
     );
   const hasVendors = (packet.details.vendors ?? []).some((value) => typeof value === "string" && value.trim().length > 0) ||
     (packet.evidence?.entities?.runtimeVendors?.length ?? 0) > 0;
-  const hasUrls = (packet.details.requestUrls ?? []).some((value) => /^https?:\/\//i.test(value)) ||
-    (packet.evidence?.entities?.runtimeRequestUrls?.some((value) => /^https?:\/\//i.test(value)) ?? false);
+  const hasUrls = (packet.details.requestUrls ?? []).some(isConcreteHttpEvidenceUrl) ||
+    (packet.evidence?.entities?.runtimeRequestUrls?.some(isConcreteHttpEvidenceUrl) ?? false);
   const hasRuntimeOrValidationBacking =
     packet.confidenceInputs.hasDirectRuntimeEvidence || packet.confidenceInputs.hasStructuredValidationEvidence;
 

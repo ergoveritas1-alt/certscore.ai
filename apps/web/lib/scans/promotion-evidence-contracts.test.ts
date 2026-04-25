@@ -148,6 +148,24 @@ test("pre-consent cookie evidence is promotion-grade only for non-essential cook
 
   assert.equal(hasConcretePreconsentArtifact(infrastructureCookieEvidence), false);
   assert.equal(hasStrongPreconsentRuntimeEvidence(infrastructureCookieEvidence), false);
+
+  const initialSnapshotOnlyEvidence = {
+    preconsent_cookie_evidence: [
+      {
+        category: "advertising",
+        cookieName: "_fbp",
+        nonEssential: true,
+        timingEvidence: "initial_cookie_snapshot"
+      }
+    ],
+    preconsent_cookie_names: ["_fbp"],
+    preconsent_nonessential_cookie_names: ["_fbp"],
+    preconsent_tracking_detected: true,
+    supportingSignals: ["privacy.preconsent_tracking_detected"]
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(initialSnapshotOnlyEvidence), false);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(initialSnapshotOnlyEvidence), false);
 });
 
 test("pre-consent source URLs remain review-grade sequence evidence", () => {
@@ -159,6 +177,15 @@ test("pre-consent source URLs remain review-grade sequence evidence", () => {
 
   assert.equal(hasConcretePreconsentArtifact(sourceUrlEvidence), true);
   assert.equal(hasStrongPreconsentRuntimeEvidence(sourceUrlEvidence), true);
+
+  const malformedUrlEvidence = {
+    signalKey: "privacy.preconsent_tracking_detected",
+    signalValue: true,
+    sourceUrls: ["https://www.sofi.com_oeu1776902307725r0.1932886381308404$$14812420277$$session_state"]
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(malformedUrlEvidence), false);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(malformedUrlEvidence), false);
 });
 
 test("policy behavior conflict contract blocks incomplete contradiction fixtures", () => {

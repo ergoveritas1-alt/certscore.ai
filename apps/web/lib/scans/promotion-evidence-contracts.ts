@@ -66,19 +66,39 @@ function isPromotionGradeCookieCategory(value: string | null | undefined) {
   return Boolean(value && /analytics|advertising|marketing|retargeting|session_replay/i.test(value));
 }
 
+function isConcreteHttpEvidenceUrl(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+  try {
+    const parsed = new URL(value);
+    return (
+      (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+      parsed.hostname.includes(".") &&
+      !parsed.hostname.includes("_")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function hasPromotionGradePreconsentCookieEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const cookieRows = getObjectArrayValues(rawEvidence, ["preconsent_cookie_evidence", "preconsentCookieEvidence"]);
+  const hasBeforeConsentWrite = cookieRows.some((row) => {
+    const timingEvidence = typeof row.timingEvidence === "string" ? row.timingEvidence : typeof row.timing_evidence === "string" ? row.timing_evidence : null;
+    return timingEvidence === "before_consent_cookie_write";
+  });
   const explicitNames = getStringArrayValues(rawEvidence, [
     "preconsent_nonessential_cookie_names",
     "preconsentNonessentialCookieNames"
   ]);
-  if (explicitNames.some((name) => {
+  if (hasBeforeConsentWrite && explicitNames.some((name) => {
     const category = classifyCookieNameForPromotion(name);
     return category === "analytics" || category === "advertising";
   })) {
     return true;
   }
 
-  const cookieRows = getObjectArrayValues(rawEvidence, ["preconsent_cookie_evidence", "preconsentCookieEvidence"]);
   if (
     cookieRows.some((row) => {
       const category = typeof row.category === "string" ? row.category : null;
@@ -87,13 +107,13 @@ function hasPromotionGradePreconsentCookieEvidence(rawEvidence: Record<string, u
       const inferredCategory = cookieName ? classifyCookieNameForPromotion(cookieName) : "unknown";
       const promotionCategory = isPromotionGradeCookieCategory(category) || isPromotionGradeCookieCategory(inferredCategory);
       const timingEvidence = typeof row.timingEvidence === "string" ? row.timingEvidence : typeof row.timing_evidence === "string" ? row.timing_evidence : null;
-      return promotionCategory && (nonEssential || timingEvidence === "before_consent_cookie_write" || timingEvidence === "initial_cookie_snapshot");
+      return promotionCategory && (nonEssential || timingEvidence === "before_consent_cookie_write") && timingEvidence === "before_consent_cookie_write";
     })
   ) {
     return true;
   }
 
-  return getStringArrayValues(rawEvidence, ["preconsent_cookie_names", "preconsentCookieNames"]).some((name) => {
+  return hasBeforeConsentWrite && getStringArrayValues(rawEvidence, ["preconsent_cookie_names", "preconsentCookieNames"]).some((name) => {
     const category = classifyCookieNameForPromotion(name);
     return category === "analytics" || category === "advertising";
   });
@@ -145,7 +165,7 @@ export function hasConcretePreconsentArtifact(rawEvidence: Record<string, unknow
     "requestUrls",
     "runtimeEvidenceUrls",
     "sourceUrls"
-  ]).filter((value) => /^https?:\/\//i.test(value));
+  ]).filter(isConcreteHttpEvidenceUrl);
 
   return (
     vendors.length > 0 ||
@@ -167,7 +187,7 @@ export function hasStrongPreconsentRuntimeEvidence(rawEvidence: Record<string, u
     "requestUrls",
     "runtimeEvidenceUrls",
     "sourceUrls"
-  ]).filter((value) => /^https?:\/\//i.test(value));
+  ]).filter(isConcreteHttpEvidenceUrl);
 
   return (urls.length > 0 || (vendors.length > 0 && urls.length > 0) || hasPromotionGradePreconsentCookieEvidence(rawEvidence)) && hasPreconsentSequenceEvidence(rawEvidence);
 }

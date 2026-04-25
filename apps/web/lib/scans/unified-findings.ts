@@ -1580,7 +1580,7 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       ? (normalizedFallbackEvidence.sourceUrls as string[])
       : []),
     ...(contradictionEvidence?.runtimeAnchor.requests ?? [])
-  ]).filter((value) => /^https?:\/\//i.test(value));
+  ]).filter(isConcreteHttpEvidenceUrl);
   if (runtimeRequestUrls.length > 0) {
     entities.runtimeRequestUrls = runtimeRequestUrls;
   }
@@ -1616,6 +1616,35 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   ]);
   if (preconsentCookieCategories.length > 0) {
     entities.preconsent_cookie_categories = preconsentCookieCategories;
+  }
+  const preconsentCookieTimingEvidence = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.preconsent_cookie_timing_evidence)
+      ? (normalizedFallbackEvidence.preconsent_cookie_timing_evidence as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.preconsentCookieTimingEvidence)
+      ? (normalizedFallbackEvidence.preconsentCookieTimingEvidence as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.preconsent_cookie_evidence)
+      ? (normalizedFallbackEvidence.preconsent_cookie_evidence as Array<Record<string, unknown>>).map((row) =>
+          typeof row.timingEvidence === "string"
+            ? row.timingEvidence
+            : typeof row.timing_evidence === "string"
+              ? row.timing_evidence
+              : null
+        )
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.preconsentCookieEvidence)
+      ? (normalizedFallbackEvidence.preconsentCookieEvidence as Array<Record<string, unknown>>).map((row) =>
+          typeof row.timingEvidence === "string"
+            ? row.timingEvidence
+            : typeof row.timing_evidence === "string"
+              ? row.timing_evidence
+              : null
+        )
+      : [])
+  ]);
+  if (preconsentCookieTimingEvidence.length > 0) {
+    entities.preconsent_cookie_timing_evidence = preconsentCookieTimingEvidence;
   }
   if (normalizedFallbackEvidence.cookieAttributeSummary && typeof normalizedFallbackEvidence.cookieAttributeSummary === "object") {
     const summary = normalizedFallbackEvidence.cookieAttributeSummary as Record<string, unknown>;
@@ -1914,6 +1943,22 @@ function isWeakRootLikeUrl(value: string | null | undefined) {
     return pathname === "" || pathname === "/";
   } catch {
     return /\/?#?$/.test(value);
+  }
+}
+
+function isConcreteHttpEvidenceUrl(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+  try {
+    const parsed = new URL(value);
+    return (
+      (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+      parsed.hostname.includes(".") &&
+      !parsed.hostname.includes("_")
+    );
+  } catch {
+    return false;
   }
 }
 
