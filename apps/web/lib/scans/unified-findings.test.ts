@@ -4499,6 +4499,35 @@ test("synthesizes policy clarity risk from boilerplate-heavy legal text", () => 
   assert.equal(clarityPacket?.presentationDecision.status, "surface");
 });
 
+test("retains policy enrichment boilerplate evidence for policy clarity risk", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/privacy",
+        policy_evidence_snippets: {
+          generic_ad_partner_disclosure:
+            "Advertising Partners Privacy Policies describe a broad relationship with advertising partners without naming controls or implementation details.",
+          generic_cookie_web_beacons:
+            "Cookies and Web Beacons are referenced using generic template language that is not tied to the site's observed tracking behavior.",
+          generic_log_files:
+            "Log Files language describes IP addresses, browser type, and timestamps without a clear retention or sharing explanation."
+        },
+        policy_semantic_confidence: 0.72,
+        policy_snippet_count: 3
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const clarityPacket = packets.find((packet) => packet.unifiedFindingId === "policy_clarity_risk");
+  assert.equal(clarityPacket?.presentationDecision.status, "surface");
+  assert.ok(clarityPacket?.evidence?.flags?.includes("policy_boilerplate_signals_retained"));
+  assert.ok((clarityPacket?.evidence?.entities?.policyBoilerplateSignals?.length ?? 0) >= 2);
+});
+
 test("suppresses fetch-failed coverage gaps when another retained finding already verified the same target url", () => {
   const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

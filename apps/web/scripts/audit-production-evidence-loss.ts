@@ -54,6 +54,7 @@ type PromotionBlockerRow = {
   domain: string | null;
   hybrid_runtime_evidence: Record<string, unknown> | null;
   policy_actionable_flags: string[] | null;
+  policy_ambiguity_score: number | null;
   policy_coverage_ratio: number | null;
   policy_dsar_mechanism: string | null;
   policy_evidence_snippets: Record<string, unknown> | null;
@@ -252,6 +253,7 @@ function classifyLikelyGap(input: {
 function isPromotionBlockerFinding(value: string): value is PromotionBlockerFindingId {
   return value === "preconsent_tracking" ||
     value === "missing_dsar_mechanism" ||
+    value === "policy_clarity_risk" ||
     value === "privacy_rights_path_present" ||
     value === "cookie_disclosure_gap" ||
     value === "behavioral_analytics_disclosure_present" ||
@@ -284,6 +286,9 @@ function toPromotionBlockerInput(row: PromotionBlockerRow, findingId: PromotionB
     domain: row.domain,
     hybridRuntimeEvidence: row.hybrid_runtime_evidence,
     policyActionableFlags: row.policy_actionable_flags,
+    policyAmbiguityScore:
+      row.policy_ambiguity_score ??
+      (typeof policyJson.policyAmbiguityScore === "number" ? policyJson.policyAmbiguityScore : null),
     policyCoverageRatio: row.policy_coverage_ratio,
     policyDsarMechanism: row.policy_dsar_mechanism,
     policyEvidenceSnippets:
@@ -320,6 +325,8 @@ function policyPositiveSignalKeyForFinding(findingId: PromotionBlockerFindingId)
       return "privacy.tracking_technologies_disclosure_present";
     case "cookie_disclosure_gap":
       return "privacy.cookie_runtime_disclosure_gap_detected";
+    case "policy_clarity_risk":
+      return "policyAmbiguityScore";
     default:
       return null;
   }
@@ -360,6 +367,12 @@ async function loadPromotionBlockerRows(input: {
                  and sig.signal_key = 'privacy.cookie_runtime_disclosure_gap_detected'
                  and sig.signal_value_json = 'true'::jsonb
             ))`
+        : input.findingId === "policy_clarity_risk"
+          ? `exists (
+              select 1 from scan_signals sig
+               where sig.scan_id = s.id
+                 and sig.signal_key in ('policyAmbiguityScore','disclosure.privacy_policy_word_count','disclosure.privacy_policy_parser_confidence')
+            )`
         : signalKey
           ? `exists (
               select 1 from scan_signals sig
@@ -423,6 +436,20 @@ async function loadPromotionBlockerRows(input: {
                else null
              end as policy_extraction_status,
              pe.policy_semantic_confidence,
+             (
+               select case
+                        when jsonb_typeof(sig.signal_value_json) = 'number'
+                          then (sig.signal_value_json #>> '{}')::numeric
+                        when jsonb_typeof(sig.signal_value_json) = 'string'
+                          then nullif(sig.signal_value_json #>> '{}', '')::numeric
+                        else null
+                      end
+                 from scan_signals sig
+                where sig.scan_id = s.id
+                  and sig.signal_key = 'policyAmbiguityScore'
+                order by sig.created_at desc nulls last
+                limit 1
+             ) as policy_ambiguity_score,
              pe.policy_coverage_ratio,
              pe.policy_snippet_count,
              pe.policy_structurally_weak,

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   classifyCookieDisclosureGapPromotionBlockers,
   classifyDsarPromotionBlockers,
+  classifyPolicyClarityPromotionBlockers,
   classifyPositiveDisclosurePromotionBlockers,
   classifyPreconsentPromotionBlockers,
   classifyPrivacyRightsPathPromotionBlockers,
@@ -375,6 +376,50 @@ test("cookie disclosure gap blocker classifier rejects root URLs even when typed
 
   assert.equal(assessment.promotionReady, false);
   assert.ok(assessment.blockers.includes("missing_cookie_or_privacy_policy_anchor"));
+});
+
+test("policy clarity blocker classifier requires substantive text and calibrated weakness evidence", () => {
+  const assessment = classifyPolicyClarityPromotionBlockers({
+    policyAmbiguityScore: 78,
+    policyEvidenceSnippets: {
+      policy_clarity:
+        "The policy uses broad collection and sharing language while omitting concrete retention, rights handling, and contact details."
+    },
+    policyPageUrl: "https://example.test/privacy",
+    policySemanticConfidence: 0.72
+  });
+
+  assert.equal(assessment.promotionReady, true);
+  assert.deepEqual(assessment.blockers, []);
+});
+
+test("policy clarity blocker classifier blocks placeholder-only score evidence", () => {
+  const assessment = classifyPolicyClarityPromotionBlockers({
+    policyAmbiguityScore: 95,
+    policyEvidenceSnippets: {
+      policy_clarity: "nano"
+    },
+    policyPageUrl: "https://example.test/privacy"
+  });
+
+  assert.equal(assessment.promotionReady, false);
+  assert.ok(assessment.blockers.includes("missing_substantive_policy_snippet"));
+  assert.ok(assessment.blockers.includes("missing_semantic_confidence"));
+});
+
+test("policy clarity blocker classifier blocks below-threshold ambiguity scores", () => {
+  const assessment = classifyPolicyClarityPromotionBlockers({
+    policyAmbiguityScore: 68,
+    policyEvidenceSnippets: {
+      policy_clarity:
+        "The policy includes real privacy text, but the retained ambiguity score is below the external surfacing threshold."
+    },
+    policyPageUrl: "https://example.test/privacy",
+    policySemanticConfidence: 0.7
+  });
+
+  assert.equal(assessment.promotionReady, false);
+  assert.ok(assessment.blockers.includes("ambiguity_score_below_surface_threshold"));
 });
 
 test("summarizePromotionBlockers counts blockers and ready candidates", () => {

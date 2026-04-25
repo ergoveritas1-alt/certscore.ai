@@ -9,6 +9,7 @@ export type PromotionBlockerFindingId =
   | "cookie_policy_present"
   | "cookie_disclosure_gap"
   | "missing_dsar_mechanism"
+  | "policy_clarity_risk"
   | "preconsent_tracking"
   | "privacy_rights_path_present"
   | "targeted_advertising_disclosure_present"
@@ -29,6 +30,7 @@ export type PromotionBlockerInput = {
   domain?: string | null;
   hybridRuntimeEvidence?: Record<string, unknown> | null;
   policyActionableFlags?: string[] | null;
+  policyAmbiguityScore?: number | null;
   policyCoverageRatio?: number | null;
   policyDsarMechanism?: string | null;
   policyEvidenceSnippets?: Record<string, unknown> | null;
@@ -89,6 +91,13 @@ function flattenSnippetValues(value: unknown): string[] {
 
 function getPolicySnippets(input: PromotionBlockerInput) {
   return flattenSnippetValues(input.policyEvidenceSnippets);
+}
+
+function getSubstantivePolicySnippets(input: PromotionBlockerInput) {
+  return getPolicySnippets(input).filter((snippet) => {
+    const normalized = snippet.trim();
+    return normalized.length >= 40 && normalized.toLowerCase() !== "nano";
+  });
 }
 
 function getPolicySnippetRecord(input: PromotionBlockerInput) {
@@ -546,6 +555,43 @@ export function classifyCookieDisclosureGapPromotionBlockers(input: PromotionBlo
   };
 }
 
+export function classifyPolicyClarityPromotionBlockers(input: PromotionBlockerInput): PromotionBlockerAssessment {
+  const snippets = getSubstantivePolicySnippets(input);
+  const policyUrl = getString(input.policyPageUrl);
+  const ambiguityScore = getNumber(input.policyAmbiguityScore);
+  const semanticConfidence = getNumber(input.policySemanticConfidence);
+  const snippetCount = getNumber(input.policySnippetCount);
+  const coverageRatio = getNumber(input.policyCoverageRatio);
+  const structurallyWeak = input.policyStructurallyWeak === true || input.policyExtractionStatus === "structurally_weak";
+  const boilerplateSignals = getPolicySnippets(input).filter((snippet) =>
+    /advertising partners privacy policies?|cookies and web beacons|log files|hyperlinking to our content|\biframes?\b|ccpa privacy rights|gdpr/i.test(snippet)
+  );
+  const blockers = [
+    policyUrl ? null : "missing_policy_url",
+    snippets.length > 0 ? null : "missing_substantive_policy_snippet",
+    ambiguityScore === null && !structurallyWeak && boilerplateSignals.length < 2 ? "missing_clarity_weakness_evidence" : null,
+    ambiguityScore !== null && ambiguityScore < 70 && !structurallyWeak && boilerplateSignals.length < 2 ? "ambiguity_score_below_surface_threshold" : null,
+    ambiguityScore !== null && ambiguityScore >= 70 && semanticConfidence !== null && semanticConfidence < 0.5 ? "low_semantic_confidence" : null,
+    ambiguityScore !== null && ambiguityScore >= 70 && semanticConfidence === null && !structurallyWeak && boilerplateSignals.length < 2 ? "missing_semantic_confidence" : null
+  ].filter((blocker): blocker is string => Boolean(blocker));
+
+  return {
+    blockers,
+    evidence: {
+      ambiguityScore,
+      boilerplateSignalCount: boilerplateSignals.length,
+      coverageRatio,
+      policyUrl,
+      semanticConfidence,
+      snippetCount,
+      substantiveSnippetCount: snippets.length,
+      structurallyWeak
+    },
+    findingId: "policy_clarity_risk",
+    promotionReady: blockers.length === 0
+  };
+}
+
 export function classifyPromotionBlockers(input: PromotionBlockerInput & { findingId: PromotionBlockerFindingId }) {
   switch (input.findingId) {
     case "preconsent_tracking":
@@ -556,6 +602,8 @@ export function classifyPromotionBlockers(input: PromotionBlockerInput & { findi
       return classifyPrivacyRightsPathPromotionBlockers(input);
     case "cookie_disclosure_gap":
       return classifyCookieDisclosureGapPromotionBlockers(input);
+    case "policy_clarity_risk":
+      return classifyPolicyClarityPromotionBlockers(input);
     case "cookie_policy_present":
     case "behavioral_analytics_disclosure_present":
     case "targeted_advertising_disclosure_present":

@@ -925,6 +925,26 @@ function hasReadableSnippet(packet: UnifiedFindingPacket) {
   );
 }
 
+function hasSubstantiveReadableSnippet(packet: UnifiedFindingPacket) {
+  return packet.evidence?.snippets?.some((snippet) => {
+    if (typeof snippet !== "string") {
+      return false;
+    }
+    const normalized = snippet.trim();
+    return normalized.length >= 40 && normalized.toLowerCase() !== "nano";
+  }) ?? false;
+}
+
+function hasNonPlaceholderSnippet(packet: UnifiedFindingPacket) {
+  return packet.evidence?.snippets?.some((snippet) => {
+    if (typeof snippet !== "string") {
+      return false;
+    }
+    const normalized = snippet.trim();
+    return normalized.length > 0 && normalized.toLowerCase() !== "nano";
+  }) ?? false;
+}
+
 function getEvidenceSnippetText(packet: UnifiedFindingPacket) {
   return (packet.evidence?.snippets ?? []).filter((snippet): snippet is string => typeof snippet === "string").join(" ");
 }
@@ -1667,19 +1687,22 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     if (
       packet.unifiedFindingId === "policy_clarity_risk" &&
       packet.confidenceInputs.hasPageAttribution &&
-      hasReadableSnippet(packet) &&
       (
-        packet.evidence?.flags?.includes("policy_boilerplate_signals_retained") ||
-        ((packet.evidence?.entities?.policyBoilerplateSignals?.length ?? 0) >= 2) ||
         (
+          hasNonPlaceholderSnippet(packet) &&
+          (
+            packet.evidence?.flags?.includes("policy_boilerplate_signals_retained") ||
+            ((packet.evidence?.entities?.policyBoilerplateSignals?.length ?? 0) >= 2)
+          )
+        ) ||
+        (
+          hasSubstantiveReadableSnippet(packet) &&
           packet.confidenceInputs.hasPolicyTextEvidence &&
           hasConcreteHumanFacingUrl(packet.evidence?.pageUrls) &&
           typeof policyExtractionDetails?.ambiguityScore === "number" &&
           policyExtractionDetails.ambiguityScore >= 70 &&
-          (
-            typeof policyExtractionDetails.confidence !== "number" ||
-            policyExtractionDetails.confidence >= 0.5
-          )
+          typeof policyExtractionDetails.confidence === "number" &&
+          policyExtractionDetails.confidence >= 0.5
         )
       )
     ) {

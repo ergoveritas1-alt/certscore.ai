@@ -12,6 +12,7 @@ type TargetFinding =
   | "consent_gated_tracking_claim_conflict"
   | "cookie_disclosure_gap"
   | "cookie_policy_present"
+  | "policy_clarity_risk"
   | "privacy_contact_path_present"
   | "privacy_policy_present"
   | "privacy_rights_path_present"
@@ -69,6 +70,7 @@ const DEFAULT_FINDINGS: TargetFinding[] = [
   "children_privacy_disclosure_present",
   "cookie_policy_present",
   "cookie_disclosure_gap",
+  "policy_clarity_risk",
   "behavioral_analytics_disclosure_present",
   "consent_gated_tracking_claim_conflict"
 ];
@@ -83,6 +85,11 @@ const SIGNAL_KEYS_BY_FINDING: Record<TargetFinding, string[]> = {
   consent_gated_tracking_claim_conflict: [],
   cookie_disclosure_gap: ["privacy.cookie_runtime_disclosure_gap_detected"],
   cookie_policy_present: ["privacy.cookie_policy_present", "disclosure.cookie_policy_present"],
+  policy_clarity_risk: [
+    "policyAmbiguityScore",
+    "disclosure.privacy_policy_word_count",
+    "disclosure.privacy_policy_parser_confidence"
+  ],
   privacy_contact_path_present: ["privacy.privacy_contact_path_present"],
   privacy_policy_present: ["privacy.privacy_policy_present", "disclosure.privacy_policy_present"],
   privacy_rights_path_present: ["privacy.privacy_rights_path_present"],
@@ -101,6 +108,7 @@ const POLICY_SNIPPET_KEYS_BY_FINDING: Record<TargetFinding, string[]> = {
   consent_gated_tracking_claim_conflict: [],
   cookie_disclosure_gap: ["cookie_policy", "cookies", "tracking_technologies_disclosure"],
   cookie_policy_present: ["cookie_policy", "cookies"],
+  policy_clarity_risk: ["policy_clarity", "policy_summary", "privacy_policy", "topic:privacy_policy"],
   privacy_contact_path_present: ["privacy_contact", "notice_contact", "dsar"],
   privacy_policy_present: [],
   privacy_rights_path_present: ["privacy_rights", "dsar", "access_delete"],
@@ -176,6 +184,49 @@ function getMergedSignalValue(mergedSignals: unknown[], keys: string[]) {
     }
   }
   return null;
+}
+
+function getMergedSignalNumber(mergedSignals: unknown[], keys: string[]) {
+  const value = getMergedSignalValue(mergedSignals, keys);
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function getPolicyBoilerplateSignalsFromRows(policyRows: Array<Record<string, unknown>>) {
+  const snippets = getPolicyTextCandidates(policyRows);
+  return uniqueStrings(
+    snippets.flatMap((value) => {
+      const hits: string[] = [];
+      if (/advertising partners privacy policies?/i.test(value)) {
+        hits.push("generic_ad_partner_disclosure");
+      }
+      if (/cookies and web beacons/i.test(value)) {
+        hits.push("generic_cookie_web_beacons");
+      }
+      if (/log files/i.test(value)) {
+        hits.push("generic_log_files");
+      }
+      if (/hyperlinking to our content/i.test(value)) {
+        hits.push("generic_hyperlinking_clause");
+      }
+      if (/\biframes?\b/i.test(value)) {
+        hits.push("generic_iframe_clause");
+      }
+      if (/ccpa privacy rights/i.test(value)) {
+        hits.push("ccpa_rights_template");
+      }
+      if (/gdpr/i.test(value)) {
+        hits.push("gdpr_template");
+      }
+      return hits;
+    })
+  );
 }
 
 function policySnippetReasons(policyRows: Array<Record<string, unknown>>, keys: string[]) {
@@ -286,6 +337,34 @@ function probeRawEvidence(findingId: TargetFinding, record: Record<string, unkno
         policyReasons.push("policy_enrichment cookie_policy row");
       }
       break;
+    case "policy_clarity_risk": {
+      const hasPrivacyPolicySurface =
+        getBoolean(snapshot, ["privacy_policy_present"]) || hasPolicyPageType(policyRows, ["privacy_policy"]);
+      const clarityReasons: string[] = [];
+      const ambiguityScore = getMergedSignalNumber(mergedSignals, ["policyAmbiguityScore"]);
+      if (typeof ambiguityScore === "number") {
+        clarityReasons.push(`policy ambiguity score ${ambiguityScore}`);
+      }
+      const wordCount = getMergedSignalNumber(mergedSignals, ["disclosure.privacy_policy_word_count"]);
+      if (typeof wordCount === "number") {
+        clarityReasons.push(`privacy policy word count ${wordCount}`);
+      }
+      const parserConfidence = getMergedSignalNumber(mergedSignals, ["disclosure.privacy_policy_parser_confidence"]);
+      if (typeof parserConfidence === "number") {
+        clarityReasons.push(`privacy policy parser confidence ${parserConfidence}`);
+      }
+      const boilerplateSignals = getPolicyBoilerplateSignalsFromRows(policyRows);
+      if (boilerplateSignals.length > 0) {
+        clarityReasons.push(`policy boilerplate signals ${boilerplateSignals.join(",")}`);
+      }
+      if (clarityReasons.length > 0) {
+        if (hasPrivacyPolicySurface) {
+          policyReasons.push("privacy policy surface");
+        }
+        policyReasons.push(...clarityReasons);
+      }
+      break;
+    }
     case "cookie_disclosure_gap": {
       const runtimeCookieNames = uniqueStrings([
         ...getStringArray(runtimeArtifacts, ["runtimeCookieNames", "runtime_cookie_names"]),

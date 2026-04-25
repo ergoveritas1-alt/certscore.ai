@@ -48,10 +48,13 @@ import {
 } from "./policy-snippet-normalization";
 import {
   getPolicyEvidenceSnippetValues,
+  getPolicyAmbiguityScore,
   getPolicyDsarMechanism,
   getPolicyPageType,
   getPolicyPageUrl,
   getPolicyRightsSignals,
+  getPolicySemanticConfidence,
+  getPolicySnippetCount,
   getPolicySummaryText,
   getPrivacyContactChannelType
 } from "./policy-enrichment-row";
@@ -3415,6 +3418,39 @@ function sortPolicyEnrichmentSnippetValues(findingId: string, snippets: string[]
   });
 }
 
+function getPolicyBoilerplateSignalsFromSnippets(snippets: string[]) {
+  return uniqueStrings(
+    snippets.flatMap((value) => {
+      const hits: string[] = [];
+      if (/advertising partners privacy policies?/i.test(value)) {
+        hits.push("generic_ad_partner_disclosure");
+      }
+      if (/cookies and web beacons/i.test(value)) {
+        hits.push("generic_cookie_web_beacons");
+      }
+      if (/log files/i.test(value)) {
+        hits.push("generic_log_files");
+      }
+      if (/hyperlinking to our content/i.test(value)) {
+        hits.push("generic_hyperlinking_clause");
+      }
+      if (/\biframes?\b/i.test(value)) {
+        hits.push("generic_iframe_clause");
+      }
+      if (/comments?/i.test(value) && /post|publish|user/i.test(value)) {
+        hits.push("generic_user_comment_clause");
+      }
+      if (/ccpa privacy rights/i.test(value)) {
+        hits.push("ccpa_rights_template");
+      }
+      if (/gdpr/i.test(value)) {
+        hits.push("gdpr_template");
+      }
+      return hits;
+    })
+  );
+}
+
 function buildPolicyEnrichmentPositiveCandidates(policyEnrichment?: Array<Record<string, unknown>>) {
   const rows = Array.isArray(policyEnrichment) ? policyEnrichment : [];
   if (rows.length === 0) {
@@ -3476,6 +3512,69 @@ function buildPolicyEnrichmentPositiveCandidates(policyEnrichment?: Array<Record
       observedValue: mappedFinding.label,
       severity: "low",
       signalKey,
+      signalLabel: mappedFinding.label,
+      signalSource: "policy_enrichment_signal",
+      sourceType: "signal",
+      title: mappedFinding.label
+    });
+  }
+
+  return candidates;
+}
+
+function buildPolicyEnrichmentClarityCandidates(policyEnrichment?: Array<Record<string, unknown>>) {
+  const rows = Array.isArray(policyEnrichment) ? policyEnrichment : [];
+  const candidates: UnifiedFindingCandidate[] = [];
+  const mappedFinding = getReportUnifiedFinding("policy_clarity_risk");
+  if (!mappedFinding) {
+    return candidates;
+  }
+
+  for (const row of rows) {
+    if (getPolicyPageType(row) !== "privacy_policy") {
+      continue;
+    }
+    const pageUrl = getPolicyPageUrl(row);
+    if (!pageUrl) {
+      continue;
+    }
+    const snippets = normalizePolicySnippetList(getPolicyEvidenceSnippetValues(row, [/.*/]).slice(0, 6));
+    const boilerplateSignals = getPolicyBoilerplateSignalsFromSnippets(snippets);
+    const ambiguityScore = getPolicyAmbiguityScore(row);
+    const semanticConfidence = getPolicySemanticConfidence(row);
+    const hasScoreBackedRisk =
+      typeof ambiguityScore === "number" &&
+      ambiguityScore >= 70 &&
+      typeof semanticConfidence === "number" &&
+      semanticConfidence >= 0.5;
+    const hasBoilerplateRisk = boilerplateSignals.length >= 2 && snippets.length > 0;
+    if (!hasScoreBackedRisk && !hasBoilerplateRisk) {
+      continue;
+    }
+
+    candidates.push({
+      description:
+        hasBoilerplateRisk
+          ? "The retained privacy-policy text includes multiple boilerplate markers that may not be tailored to the observed site implementation."
+          : "The retained privacy-policy text includes a calibrated ambiguity score and substantive policy snippets.",
+      fallbackEvidence: {
+        evidenceRefs: [pageUrl],
+        mergedSignalConfidence: semanticConfidence,
+        pageUrl,
+        pageUrls: [pageUrl],
+        policyBoilerplateSignals: boilerplateSignals,
+        policyPageType: getPolicyPageType(row),
+        policySnippetCount: getPolicySnippetCount(row),
+        policySnippets: snippets,
+        signalKey: "policyAmbiguityScore",
+        signalLabel: mappedFinding.label,
+        signalValue: ambiguityScore,
+        sourceUrls: [pageUrl],
+        unifiedFindingId: "policy_clarity_risk"
+      },
+      observedValue: typeof ambiguityScore === "number" ? String(ambiguityScore) : mappedFinding.label,
+      severity: "medium",
+      signalKey: "policyAmbiguityScore",
       signalLabel: mappedFinding.label,
       signalSource: "policy_enrichment_signal",
       sourceType: "signal",
@@ -5045,8 +5144,14 @@ export function buildUnifiedFindingDisplayPackets(input: {
       })
     : [];
   const policyEnrichmentCandidates = buildPolicyEnrichmentPositiveCandidates(input.policyEnrichment);
+  const policyEnrichmentClarityCandidates = buildPolicyEnrichmentClarityCandidates(input.policyEnrichment);
   const packets = buildUnifiedFindingPackets({
-    reviewFindingCandidates: [...input.reviewFindingCandidates, ...mergedSignalCandidates, ...policyEnrichmentCandidates],
+    reviewFindingCandidates: [
+      ...input.reviewFindingCandidates,
+      ...mergedSignalCandidates,
+      ...policyEnrichmentCandidates,
+      ...policyEnrichmentClarityCandidates
+    ],
     scanEvents: input.scanEvents,
     validationFindings: input.validationFindings
   });
