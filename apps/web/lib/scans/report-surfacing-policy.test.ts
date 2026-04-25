@@ -453,7 +453,7 @@ test("strongly evidenced key-page absence becomes a main confirmed finding", () 
   assert.equal(decision?.surfaceTier, "section");
 });
 
-test("positive-presence findings are retained as standalone positive context when no stronger finding exists", () => {
+test("positive-presence findings stay in confidence coverage when no stronger finding exists", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
       makePacket("privacy_policy_present", {
@@ -468,9 +468,35 @@ test("positive-presence findings are retained as standalone positive context whe
 
   const decision = evaluation.debugDecisions[0];
   assert.equal(decision?.decisionState, "support_only");
-  assert.equal(decision?.reportLane, "main");
+  assert.equal(decision?.reportLane, "confidence_and_coverage");
   assert.equal(decision?.reportable, true);
   assert.ok(decision?.appliedRules.includes("support.orphan_positive_surface_retained"));
+});
+
+test("generic policy text is not enough to main-lane behavioral analytics disclosure", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("behavioral_analytics_disclosure_present", {
+        confidenceInputs: {
+          ...makePacket("behavioral_analytics_disclosure_present").confidenceInputs,
+          hasPageAttribution: true,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("behavioral_analytics_disclosure_present").evidence,
+          pageUrls: ["https://www.example.com/privacy"],
+          snippets: ["We use analytics to understand site performance and improve our services."]
+        }
+      })
+    ]
+  });
+
+  const behavioralAnalytics = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "behavioral_analytics_disclosure_present");
+
+  assert.equal(behavioralAnalytics?.decisionState, "support_only");
+  assert.equal(behavioralAnalytics?.reportLane, "confidence_and_coverage");
+  assert.ok(behavioralAnalytics?.appliedRules.includes("evidence.positive_surface.support_only"));
 });
 
 test("structured policy disclosure gaps stay review-level without runtime corroboration", () => {
