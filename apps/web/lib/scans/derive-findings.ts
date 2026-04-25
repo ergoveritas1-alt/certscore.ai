@@ -225,9 +225,14 @@ function normalizeComparableHost(value: string | null | undefined) {
 }
 
 function looksLikeAdtechHost(host: string) {
-  return /(adnxs|appnexus|infolinks|rtmark|media\.net|doubleclick|taboola|outbrain|criteo|pubmatic|rubicon|adsrvr|google-analytics|googletagmanager|plausible|cloudflareinsights)/i.test(
+  return /(adnxs|appnexus|infolinks|rtmark|media\.net|doubleclick|taboola|outbrain|criteo|pubmatic|rubicon|adsrvr|google-analytics|googletagmanager|plausible|cloudflareinsights|casalemedia|gumgum|3lift|bidswitch|id5-sync|openx|tapad|mathtag|scorecardresearch|quantserve|crwdcntrl)/i.test(
     host
   );
+}
+
+function looksLikeSessionReplayObservation(category: string | null, vendor: string | null, hostname: string | null) {
+  return /session_replay|session replay|behavioral_analytics|behavioral analytics|session_intercept|siteintercept/i.test(category ?? "") ||
+    /qualtrics|siteintercept|hotjar|fullstory|clarity|contentsquare|mouseflow/i.test(`${vendor ?? ""} ${hostname ?? ""}`);
 }
 
 function classifyCookieName(name: string, domain: string | null) {
@@ -235,7 +240,7 @@ function classifyCookieName(name: string, domain: string | null) {
   if (/(cf_clearance|__cf|recaptcha|akamai|datadome|perimeterx)/i.test(normalized)) {
     return "security";
   }
-  if (/(uuid2|xandr|adnxs|anusercookie|rtmark|infolinks|doubleclick|criteo|media\.net|(^|\\s)id($|\\s))/i.test(normalized)) {
+  if (/(uuid2|xandr|adnxs|anusercookie|rtmark|infolinks|doubleclick|criteo|cto_bundle|media\.net|pubmatic|krtbcookie|pugt|bidswitch|tuuid|id5|casalemedia|cmid|cmps|cmpro|gumgum|3lift|tluid|tapad|adsrvr|tdid|rubiconproject|openx|scorecardresearch|quantserve|crwdcntrl|panoramaid|_pubcid|(^|\\s)id($|\\s))/i.test(normalized)) {
     return "adtech";
   }
   if (/(^_ga|goog|gtm|plausible|analytics)/i.test(normalized)) {
@@ -479,11 +484,11 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   const sessionReplayVendorNames = uniqueStrings(
     requestToVendorObservations.flatMap((row) => {
       const category = getString(row.category);
-      if (category !== "session_replay") {
-        return [];
-      }
       const vendor = getString(row.vendor);
       const hostname = getString(row.hostname);
+      if (!looksLikeSessionReplayObservation(category, vendor, hostname)) {
+        return [];
+      }
       return vendor && vendor !== "unresolved" ? [vendor] : hostname ? [hostname] : [];
     })
   );

@@ -65,6 +65,49 @@ test("deriveCertScoreFindings now returns metrics without surfaced findings", ()
   assert.deepEqual(summary.securityCookieNames, ["cf_clearance"]);
 });
 
+test("deriveCertScoreFindings recognizes RTB and session intercept vendors in runtime summary metrics", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          thirdPartyRequestCount: 12,
+          thirdPartyDomainCount: 5
+        },
+        requestObservations: [
+          { domain: "grid-bidder.criteo.com", thirdParty: true },
+          { domain: "hbopenbid.pubmatic.com", thirdParty: true },
+          { domain: "siteintercept.qualtrics.com", thirdParty: true }
+        ],
+        requestToVendorObservations: [
+          { category: "advertising", hostname: "grid-bidder.criteo.com", preConsent: true, vendor: "Criteo" },
+          { category: "advertising", hostname: "hbopenbid.pubmatic.com", preConsent: true, vendor: "PubMatic" },
+          { category: "session_replay_behavioral_analytics", hostname: "siteintercept.qualtrics.com", vendor: "Qualtrics SiteIntercept" }
+        ],
+        cookieWriteObservations: [
+          { cookieName: "cto_bundle", domain: ".criteo.com" },
+          { cookieName: "KRTBCOOKIE_452", domain: ".pubmatic.com" },
+          { cookieName: "QSI_ReplaySession_Info_ZN_abc", domain: ".qualtrics.com" }
+        ]
+      }
+    },
+    snapshot: {
+      certscore_overall: 58,
+      final_url: "https://www.fandango.com/"
+    },
+    scan: {
+      completedAt: "2026-04-25T20:00:00.000Z",
+      createdAt: "2026-04-25T19:59:00.000Z",
+      domainHostname: "fandango.com"
+    }
+  });
+
+  assert.ok(summary.rawAdtechHosts.includes("grid-bidder.criteo.com"));
+  assert.ok(summary.rawAdtechHosts.includes("hbopenbid.pubmatic.com"));
+  assert.deepEqual(summary.adtechCookieNames, ["cto_bundle", "KRTBCOOKIE_452"]);
+  assert.deepEqual(summary.preConsentVendorNames, ["Criteo", "PubMatic"]);
+  assert.deepEqual(summary.sessionReplayVendorNames, ["Qualtrics SiteIntercept"]);
+});
+
 test("deriveCertScoreFindings preserves landed-host attribution and host alias handling", () => {
   const offOrigin = deriveCertScoreFindings({
     events: [
