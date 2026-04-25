@@ -1432,7 +1432,11 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
           packet.confidenceInputs.hasPolicyTextEvidence &&
           hasConcreteHumanFacingUrl(packet.evidence?.pageUrls) &&
           typeof policyExtractionDetails?.ambiguityScore === "number" &&
-          policyExtractionDetails.ambiguityScore >= 70
+          policyExtractionDetails.ambiguityScore >= 70 &&
+          (
+            typeof policyExtractionDetails.confidence !== "number" ||
+            policyExtractionDetails.confidence >= 0.5
+          )
         )
       )
     ) {

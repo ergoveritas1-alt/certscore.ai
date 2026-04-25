@@ -1177,8 +1177,8 @@ function buildUnifiedFindingDetails(input: {
       confidence:
         typeof input.linkedValidationFinding?.systemConfidenceScore === "number"
           ? input.linkedValidationFinding.systemConfidenceScore
-          : typeof input.fallbackEvidence?.signalValue === "number"
-            ? input.fallbackEvidence.signalValue
+          : typeof input.fallbackEvidence?.mergedSignalConfidence === "number"
+            ? input.fallbackEvidence.mergedSignalConfidence
             : null,
       ambiguityScore:
         typeof input.fallbackEvidence?.signalValue === "number" && input.findingId === "policy_clarity_risk"
