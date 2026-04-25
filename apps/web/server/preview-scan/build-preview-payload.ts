@@ -342,6 +342,11 @@ function buildUrlscanFallbackSnapshot(input: {
     getEarlyResultNumber(input.liveEarlyResults, "Requests");
   const observedDomains = uniqueStrings(getRecordStringArray(urlscanLists, "domains"));
   const topDomains = observedDomains.slice(0, 5);
+  const retainedThirdPartyRequestCount = Math.max(
+    getEarlyResultNumber(input.liveEarlyResults, "3P requests") ?? 0,
+    getRecordNumber(input.fallbackLookup?.metadata_json ?? null, "thirdPartyRequestCount") ?? 0,
+    observedDomains.length
+  );
   const countries = uniqueStrings(getRecordStringArray(urlscanLists, "countries").slice(0, 5));
   const serverNames = uniqueStrings(getRecordStringArray(urlscanLists, "servers").slice(0, 5));
   const verifiedSurfaceTargets = uniqueStrings([
@@ -365,9 +370,7 @@ function buildUrlscanFallbackSnapshot(input: {
       input.urlscanSource?.resultApiUrl ??
       getRecordString(input.fallbackLookup?.metadata_json ?? null, "resultApiUrl"),
     requestCount: urlscanRequestCount,
-    thirdPartyRequestCount:
-      getEarlyResultNumber(input.liveEarlyResults, "3P requests") ??
-      getRecordNumber(input.fallbackLookup?.metadata_json ?? null, "thirdPartyRequestCount"),
+    thirdPartyRequestCount: retainedThirdPartyRequestCount > 0 ? retainedThirdPartyRequestCount : null,
     initialCookieCount:
       (getRecordArray(urlscanData, "cookies").length > 0 ? getRecordArray(urlscanData, "cookies").length : null) ??
       getRecordNumber(urlscanStats, "cookies") ??
@@ -410,7 +413,7 @@ function buildNormalizedUrlscanFallbackEvidence(snapshot: UrlscanFallbackSnapsho
   const requestDetails = uniqueStrings([
     snapshot.domainCount ? `Domains contacted: ${formatCountLabel(snapshot.domainCount, "domain")}` : null,
     snapshot.ipCount ? `IPs contacted: ${formatCountLabel(snapshot.ipCount, "IP")}` : null,
-    snapshot.countryCount ? `Countries reached: ${formatCountLabel(snapshot.countryCount, "country")}` : null,
+    snapshot.countryCount ? `Countries reached: ${formatCountLabel(snapshot.countryCount, "country", "countries")}` : null,
     snapshot.topDomains.length > 0 ? `Top hosts: ${snapshot.topDomains.slice(0, 3).join(", ")}` : null
   ]);
   const requestSummaryParts = [

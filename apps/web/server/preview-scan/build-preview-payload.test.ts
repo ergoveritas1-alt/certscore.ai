@@ -368,7 +368,7 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
     true
   );
   assert.equal(
-    payload.summaryBullets.includes("8 network requests, 1 third-party request, 3 initial cookies retained from supplemental public runtime evidence."),
+    payload.summaryBullets.includes("8 network requests, 3 third-party requests, 3 initial cookies retained from supplemental public runtime evidence."),
     true
   );
   assert.equal(
@@ -391,7 +391,7 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
   assert.equal(payload.fallbackEvidence?.vendorFootprint?.details.includes("Technologies: OneTrust, Google Publisher Tag"), true);
   assert.equal(payload.fallbackEvidence?.disclosureFootprint?.details.includes("Verified surfaces: privacy policy, terms of service, cookie policy"), true);
   assert.equal(payload.fallbackEvidence?.metrics?.requestCount, 8);
-  assert.equal(payload.fallbackEvidence?.metrics?.thirdPartyRequestCount, 1);
+  assert.equal(payload.fallbackEvidence?.metrics?.thirdPartyRequestCount, 3);
   assert.equal(payload.fallbackEvidence?.metrics?.initialCookieCount, 3);
   assert.deepEqual(payload.fallbackEvidence?.entities?.cookieNames, ["_ga"]);
   assert.deepEqual(payload.fallbackEvidence?.entities?.diagnosticCookieNamesExcludedFromTrackingEvidence, ["OptanonConsent", "visitor_id"]);
