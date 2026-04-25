@@ -4503,7 +4503,7 @@ function buildUrlscanCookieFinding(input: {
   const cookieDomainSummary = input.cookieDomains.length > 0
     ? ` Cookie domains: ${input.cookieDomains.slice(0, 6).join(", ")}.`
     : "";
-  const sourceSummary = input.reportUrl ? ` Source report: ${input.reportUrl}` : " Source: supplemental public runtime evidence.";
+  const sourceSummary = " Source: supplemental public runtime evidence.";
 
   return {
     ...definition,
@@ -4514,7 +4514,7 @@ function buildUrlscanCookieFinding(input: {
       ...(hasThirdPartyCookies ? [`Third-party cookie domains retained: ${thirdPartyCookieDomains.slice(0, 6).join(", ")}.`] : []),
       `${cookieDomainSummary}${sourceSummary}`.trim()
     ],
-    evidenceRefs: input.reportUrl ? [input.reportUrl] : ["supplemental public runtime evidence"],
+    evidenceRefs: ["supplemental public runtime evidence"],
     severity: hasThirdPartyCookies ? "high" : "medium",
     shortSummary: `${input.cookieCount} initial cookie${input.cookieCount === 1 ? "" : "s"} were observed in supplemental public runtime evidence before CertScore could verify a consent choice.`
   };
@@ -4767,6 +4767,12 @@ export function SharedScanDetailView({
     snapshot,
     storedScore: certScoreSummary.score
   });
+  const fallbackAdjustedPosture =
+    !executiveAccessLimitationNotice && fallbackCookieFinding
+      ? fallbackCookieFinding.severity === "critical"
+        ? "Action Needed"
+        : "Watch"
+      : executiveFindingsProjection.posture;
   const presentedCertScoreFindings = executiveAccessLimitationNotice
     ? (fallbackCookieFinding ? [fallbackCookieFinding] : [])
     : allExecutiveFindings;
@@ -4820,7 +4826,7 @@ export function SharedScanDetailView({
     legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
     pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned),
     policyEnrichmentCount: scanRecord.policyEnrichment.length,
-    posture: executiveAccessLimitationNotice ? "Watch" : executiveFindingsProjection.posture,
+    posture: executiveAccessLimitationNotice ? "Watch" : fallbackAdjustedPosture,
     requestedHost: certScoreSummary.requestedHost,
     scanId: scanRecord.scan.id,
     scanOutcome: typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null,
@@ -4892,7 +4898,7 @@ export function SharedScanDetailView({
             fingerprintNarrative={certScoreSummary.fingerprintNarrative}
             landedOnDifferentHost={certScoreSummary.landedOnDifferentHost}
             lastScannedAt={certScoreSummary.lastScannedAt}
-            posture={executiveAccessLimitationNotice ? "Watch" : executiveFindingsProjection.posture}
+            posture={executiveAccessLimitationNotice ? "Watch" : fallbackAdjustedPosture}
             preConsentVendorNames={certScoreSummary.preConsentVendorNames}
             requestedHost={certScoreSummary.requestedHost}
             regulatoryRisk={scanRecord.regulatoryRisk}
@@ -4948,16 +4954,6 @@ export function SharedScanDetailView({
                     </div>
                   ) : null}
                 </div>
-                {fallbackEvidence.reportUrl ? (
-                  <a
-                    className="inline-flex shrink-0 items-center justify-center rounded-full border border-sky-200 bg-white px-4 py-2 text-xs font-semibold text-sky-900 shadow-sm transition hover:border-sky-300 hover:bg-sky-50"
-                    href={fallbackEvidence.reportUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Open source report
-                  </a>
-                ) : null}
               </div>
             </section>
           ) : null}

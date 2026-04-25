@@ -64,16 +64,6 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
             <CardHeader className="space-y-2 pb-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone="warning">Indirect source</Badge>
-                {scan.previewPayload.fallbackEvidence?.reportUrl ? (
-                  <a
-                    className="text-xs font-medium text-sky-700 underline underline-offset-2"
-                    href={scan.previewPayload.fallbackEvidence.reportUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Open source report
-                  </a>
-                ) : null}
               </div>
               <CardTitle className="text-base">Lightweight results were enriched with supplemental public evidence</CardTitle>
             </CardHeader>
@@ -177,17 +167,7 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
                     {scan.previewPayload.fallbackEvidence ? (
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Fallback evidence</p>
-                          {scan.previewPayload.fallbackEvidence.reportUrl ? (
-                            <a
-                              className="text-xs font-medium text-sky-700 underline underline-offset-2"
-                              href={scan.previewPayload.fallbackEvidence.reportUrl}
-                              rel="noreferrer"
-                              target="_blank"
-                            >
-                              Open source report
-                            </a>
-                          ) : null}
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Supplemental evidence</p>
                         </div>
                         <div className="grid gap-3 lg:grid-cols-3">
                           {[

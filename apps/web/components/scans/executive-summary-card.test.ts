@@ -715,6 +715,50 @@ test("ExecutiveSummaryCard keeps tracker disclosure counts aligned with the full
   assert.match(html, /1 vendor names and 13 third-party domains/);
 });
 
+test("ExecutiveSummaryCard lets fallback pre-consent findings correct packet-derived GDPR copy", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [
+        makeFinding("third_party_cookie_pre_consent", "Third-party cookies before consent", {
+          severity: "high",
+          shortSummary: "64 third-party cookies were observed before any consent action."
+        })
+      ],
+      beforeConsentCookieCount: 64,
+      domainBenchmark: null,
+      finalHost: "fandango.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "None detected",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Watch",
+      preConsentVendorNames: [],
+      requestedHost: "fandango.com",
+      resolvedVendorNames: ["Google Ads"],
+      score: 70,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 52,
+      thirdPartyDomains: ["doubleclick.net"],
+      topFindings: [
+        makeFinding("third_party_cookie_pre_consent", "Third-party cookies before consent", {
+          severity: "high",
+          shortSummary: "64 third-party cookies were observed before any consent action."
+        })
+      ],
+      topObservedEntities: [{ label: "Google Ads", category: "ads", requestCount: 13 }],
+      trackerSummary: "1 vendor observed across 1 third-party domain",
+      unifiedFindings: [makeUnifiedPacket("privacy_policy_present", { details: { family: "context", kind: "privacy_policy_present" } })],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { ads: 1 }
+    })
+  );
+
+  assert.match(html, /Consent and pre-consent tracking risk is the main issue\./);
+  assert.doesNotMatch(html, /No major consent-triggering issue surfaced in the top findings\./);
+});
+
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {

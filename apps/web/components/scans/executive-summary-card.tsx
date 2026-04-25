@@ -1136,9 +1136,15 @@ export function ExecutiveSummaryCard(input: {
     agencyMappings: input.agencyMappings,
     regulatoryRisk: input.regulatoryRisk
   };
+  const findingBasedRegulatoryLenses = buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);
   const regulatoryLenses = input.unifiedFindings
-    ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions)
-    : buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);
+    ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions).map((lens) => {
+        const findingBasedLens = findingBasedRegulatoryLenses.find((candidate) => candidate.acronym === lens.acronym);
+        return findingBasedLens?.summary === "Consent and pre-consent tracking risk is the main issue."
+          ? findingBasedLens
+          : lens;
+      })
+    : findingBasedRegulatoryLenses;
 
   return (
     <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">

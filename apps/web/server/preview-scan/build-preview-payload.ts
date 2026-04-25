@@ -1006,7 +1006,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
       category: "privacy",
       severity: "medium",
       title: "Third-party data collection footprint retained in fallback evidence",
-      description: `The supplemental public runtime path retained ${footprintParts.join(", ")} for this lightweight preview${fallbackSnapshot.reportUrl ? ` (source report: ${fallbackSnapshot.reportUrl})` : ""}.`
+      description: `The supplemental public runtime path retained ${footprintParts.join(", ")} for this lightweight preview.`
     });
   }
 
