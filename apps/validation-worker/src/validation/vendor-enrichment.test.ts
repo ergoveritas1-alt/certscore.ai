@@ -120,3 +120,42 @@ test("derives request URL evidence from stored domain and path samples when vend
 
   assert.equal(vendors[0]?.sampleUrls[0], "https://cdn.optimizely.com/public/123/s/landing.js");
 });
+
+test("normalizes RTB and identity-sync domains from retained runtime domain lists", () => {
+  const candidates = collectVendorEnrichmentCandidates({
+    requestedHostname: "example.com",
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        vendorSummary: {
+          rawThirdPartyDomains: [
+            "static.criteo.net",
+            "cdn.id5-sync.com",
+            "micro.rubiconproject.com",
+            "oa.openxcdn.net",
+            "cdn.example-cdn.com"
+          ]
+        }
+      },
+      third_party_request_domains: ["dpm.demdex.net"]
+    },
+    snapshot: {
+      preconsent_tracking_detected: true
+    }
+  });
+
+  assert.deepEqual(
+    candidates.map((candidate) => candidate.hostname).sort(),
+    [
+      "cdn.id5-sync.com",
+      "dpm.demdex.net",
+      "micro.rubiconproject.com",
+      "oa.openxcdn.net",
+      "static.criteo.net"
+    ]
+  );
+
+  const criteo = candidates.find((candidate) => candidate.hostname === "static.criteo.net");
+  assert.equal(criteo?.beforeConsent, true);
+  assert.equal(criteo?.collectionEndpointType, "request");
+  assert.equal(criteo?.firstPartyOrThirdParty, "third_party");
+});
