@@ -332,7 +332,7 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
   });
 
   assert.equal(
-    payload.summaryBullets.includes("Fallback runtime evidence from urlscan.io was retained for this lightweight preview."),
+    payload.summaryBullets.includes("Supplemental public runtime evidence was retained for this lightweight preview."),
     true
   );
   assert.equal(
@@ -367,6 +367,7 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
   assert.equal(payload.fallbackEvidence?.resultApiUrl, "https://urlscan.io/api/v1/result/promoted-example/");
   assert.equal(payload.fallbackEvidence?.entities?.technologyNames?.includes("OneTrust"), true);
   assert.equal(payload.fallbackEvidence?.entities?.topDomains?.includes("www.fandango.com"), true);
+  assert.equal(payload.fallbackEvidence?.sourceLabel, "Supplemental public runtime evidence");
 });
 
 test("preview payload surfaces urlscan no-api-key diagnostics as scanner health warnings", () => {
@@ -402,7 +403,7 @@ test("preview payload surfaces urlscan no-api-key diagnostics as scanner health 
 
   assert.equal(payload.scannerHealthWarnings?.[0]?.code, "urlscan_api_key_missing");
   assert.equal(
-    payload.summaryBullets.some((bullet) => bullet.includes("Scanner health warning: urlscan.io enrichment was skipped")),
+    payload.summaryBullets.some((bullet) => bullet.includes("Scanner health warning: Supplemental public runtime enrichment was skipped")),
     true
   );
 });

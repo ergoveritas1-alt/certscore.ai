@@ -189,7 +189,7 @@ export function deriveSupplementalCoverageSignals(input: {
   if (!seenKeys.has("disclosure.urlscan_enrichment_unavailable") && urlscanMissingKeyPhases.size > 0) {
     supplementalSignals.set("disclosure.urlscan_enrichment_unavailable", {
       key: "disclosure.urlscan_enrichment_unavailable",
-      label: "urlscan enrichment unavailable",
+      label: "Supplemental public runtime enrichment unavailable",
       snapshotField: "urlscan_enrichment_unavailable",
       value: [...urlscanMissingKeyPhases].sort()
     });

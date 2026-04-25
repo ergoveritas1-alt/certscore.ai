@@ -71,11 +71,11 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
                     rel="noreferrer"
                     target="_blank"
                   >
-                    Open urlscan report
+                    Open source report
                   </a>
                 ) : null}
               </div>
-              <CardTitle className="text-base">Lightweight results were enriched with retained urlscan.io evidence</CardTitle>
+              <CardTitle className="text-base">Lightweight results were enriched with supplemental public evidence</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-slate-700">
               <p>
@@ -185,7 +185,7 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
                               rel="noreferrer"
                               target="_blank"
                             >
-                              Open urlscan report
+                              Open source report
                             </a>
                           ) : null}
                         </div>
