@@ -33,7 +33,13 @@ import {
   getPolicyPageUrl,
   getPolicySummaryText
 } from "./policy-enrichment-row";
-import { type ContradictionEvidenceBundle } from "./contradiction-evidence-contract";
+import {
+  type ContradictionEvidenceBundle,
+  type PolicyBehaviorConflictClaimType,
+  type PolicyBehaviorConflictType,
+  type PolicyBehaviorRuntimeObservationType,
+  type RuntimeObservationPhase
+} from "./contradiction-evidence-contract";
 import {
   findValidationFindingForKeys,
   getValidationMatchKeysForReviewReason,
@@ -80,11 +86,20 @@ export type PolicyBehaviorContradiction = {
   evidence: string[];
   observedBehavior: string;
   policyPageUrl: string | null;
+  policyClaimType?: PolicyBehaviorConflictClaimType | null;
+  policyConfidence?: number | null;
+  policyExtractionStatus?: string | null;
   policySnippet: string | null;
   policySummary: string | null;
   relatedVendors: string[];
+  runtimeConfidence?: number | null;
+  runtimeObservationType?: PolicyBehaviorRuntimeObservationType | null;
+  runtimePhase?: RuntimeObservationPhase;
   runtimeSummary: string;
   runtimeVendors: string[];
+  conflictReasoning?: string | null;
+  conflictSupportsPromotion?: boolean;
+  conflictType?: PolicyBehaviorConflictType | null;
   supportingSignals: string[];
   severity: "high" | "medium";
   status: "contradiction" | "violation risk" | "likely contradiction";
@@ -378,68 +393,79 @@ export function buildSectionReviewIssues(input: {
 
   if (input.sectionId === "policy_clarity_consistency_review") {
     issues.push(
-      ...input.policyBehaviorContradictions.map((row) => ({
-        description: row.observedBehavior,
-        evidence: row.evidence,
-        fallbackEvidence: {
-          contradictionEvidence: {
+      ...input.policyBehaviorContradictions.map((row) => {
+        const runtimeRequestUrls = uniqueStrings(row.evidence.filter((value) => /^https?:\/\//i.test(value)));
+        const policyAnchorPresent = Boolean(row.policyClaimType && row.policySnippet && row.policyPageUrl);
+        const runtimeAnchorPresent = Boolean(row.runtimeObservationType && runtimeRequestUrls.length > 0 && row.runtimeVendors.length > 0);
+        const conflictBridgePresent = Boolean(row.conflictType && row.conflictSupportsPromotion === true);
+        const promotionEligible = policyAnchorPresent && runtimeAnchorPresent && conflictBridgePresent;
+        const reviewStatus = promotionEligible ? "complete" : "insufficient_evidence_for_policy_behavior_conflict";
+
+        return {
+          description: row.observedBehavior,
+          evidence: row.evidence,
+          fallbackEvidence: {
+            contradictionEvidence: {
+              claim: row.claim,
+              contradictionBasis: row.status,
+              conflictBridge: {
+                conflictType: row.conflictType ?? null,
+                reasoning: row.conflictReasoning ?? row.runtimeSummary,
+                supportsPromotion: row.conflictSupportsPromotion === true
+              },
+              evidenceSufficiency: {
+                conflictBridgePresent,
+                policyAnchorPresent,
+                promotionEligible,
+                reviewStatus,
+                runtimeAnchorPresent
+              },
+              explicitPolicySnippet: row.policySnippet ?? null,
+              policyAnchor: {
+                claimType: row.policyClaimType ?? null,
+                confidence: row.policyConfidence ?? null,
+                extractionStatus: row.policyExtractionStatus ?? null,
+                normalizedClaim: row.claim,
+                snippet: row.policySnippet ?? row.claim,
+                sourceUrl: row.policyPageUrl
+              },
+              policySnippet: row.policySnippet ?? row.claim,
+              policySourceUrl: row.policyPageUrl,
+              policySummaryShort: row.policySummary,
+              relatedVendors: row.relatedVendors,
+              runtimeAnchor: {
+                confidence: row.runtimeConfidence ?? null,
+                cookies: [],
+                observationType: row.runtimeObservationType ?? null,
+                phase: row.runtimePhase ?? "unknown",
+                requests: runtimeRequestUrls,
+                sourceUrl: row.policyPageUrl,
+                storageArtifacts: [],
+                vendors: row.runtimeVendors
+              },
+              runtimeEvidenceArtifacts: row.evidence,
+              runtimeSummary: row.runtimeSummary,
+              runtimeVendors: row.runtimeVendors,
+              sourceUrls: row.policyPageUrl ? [row.policyPageUrl] : [],
+              supportingSignals: row.supportingSignals
+            } satisfies ContradictionEvidenceBundle,
             claim: row.claim,
-            contradictionBasis: row.status,
-            conflictBridge: {
-              conflictType: null,
-              reasoning: row.runtimeSummary,
-              supportsPromotion: false
-            },
-            evidenceSufficiency: {
-              conflictBridgePresent: false,
-              policyAnchorPresent: Boolean(row.policySnippet && row.policyPageUrl),
-              promotionEligible: false,
-              reviewStatus: "insufficient_evidence_for_policy_behavior_conflict",
-              runtimeAnchorPresent: row.evidence.length > 0
-            },
-            explicitPolicySnippet: row.policySnippet ?? null,
-            policyAnchor: {
-              claimType: null,
-              confidence: null,
-              extractionStatus: null,
-              normalizedClaim: row.claim,
-              snippet: row.policySnippet ?? row.claim,
-              sourceUrl: row.policyPageUrl
-            },
-            policySnippet: row.policySnippet ?? row.claim,
-            policySourceUrl: row.policyPageUrl,
+            pageUrl: row.policyPageUrl,
+            policySnippets: row.policySnippet ? [row.policySnippet] : [],
             policySummaryShort: row.policySummary,
             relatedVendors: row.relatedVendors,
-            runtimeAnchor: {
-              confidence: null,
-              cookies: [],
-              observationType: null,
-              phase: "unknown",
-              requests: [],
-              sourceUrl: row.policyPageUrl,
-              storageArtifacts: [],
-              vendors: row.runtimeVendors
-            },
+            requestUrls: runtimeRequestUrls,
             runtimeEvidenceArtifacts: row.evidence,
+            runtimeEvidenceUrls: runtimeRequestUrls,
             runtimeSummary: row.runtimeSummary,
             runtimeVendors: row.runtimeVendors,
             sourceUrls: row.policyPageUrl ? [row.policyPageUrl] : [],
             supportingSignals: row.supportingSignals
-          } satisfies ContradictionEvidenceBundle,
-          claim: row.claim,
-          pageUrl: row.policyPageUrl,
-          policySnippets: row.policySnippet ? [row.policySnippet] : [],
-          policySummaryShort: row.policySummary,
-          relatedVendors: row.relatedVendors,
-          runtimeEvidenceArtifacts: row.evidence,
-          runtimeSummary: row.runtimeSummary,
-          runtimeVendors: row.runtimeVendors,
-          sourceUrls: row.policyPageUrl ? [row.policyPageUrl] : [],
-          supportingSignals: row.supportingSignals
-        },
-        severity: row.severity,
-        title: row.title
-      }))
+          },
+          severity: row.severity,
+          title: row.title
+        };
+      })
     );
 
     issues.push(

@@ -334,7 +334,13 @@ function inferClaimType(source: Record<string, unknown> | null | undefined): Pol
   if (/only necessary|strictly necessary|essential cookies? only/.test(haystack) && /before consent|before choice|until consent/.test(haystack)) {
     return "only_necessary_cookies_before_choice";
   }
+  if (/(?:non-?essential|optional|analytics|advertising|marketing).{0,80}(?:consent|choice|permission|opt-?in)|(?:consent|choice|permission|opt-?in).{0,80}(?:non-?essential|optional|analytics|advertising|marketing)|(?:reject|decline|disable).{0,80}(?:analytics|advertising|marketing|non-?essential cookies?)/.test(haystack)) {
+    return "only_necessary_cookies_before_choice";
+  }
   if (/marketing/.test(haystack) && /before consent|until consent|without consent|absent opt-?in/.test(haystack)) {
+    return "no_marketing_tracking_before_consent";
+  }
+  if (/(?:analytics|advertising|marketing|tracking).{0,80}(?:before|until|without).{0,40}(?:consent|choice|permission|opt-?in)|(?:consent|choice|permission|opt-?in).{0,80}(?:before).{0,40}(?:analytics|advertising|marketing|tracking)/.test(haystack)) {
     return "no_marketing_tracking_before_consent";
   }
   if (/after reject|after refusal|declin/.test(haystack) && /tracking disabled|tracking stop|disabled/.test(haystack)) {
@@ -490,6 +496,9 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
   const runtimeRequests = uniqueStrings([
     ...getStringArray(runtimeAnchorSource, ["requests", "requestUrls"]),
     ...getStringArray(source, ["requestUrls"]),
+    ...getStringArray(source, ["runtimeEvidenceUrls"]),
+    ...getStringArray(source, ["preconsent_tracker_evidence_urls"]),
+    ...getStringArray(source, ["consentBaselineTrackerEvidenceUrls"]),
     ...getSanitizedNetworkEvidenceRequestUrls(record, {
       runtimePhase: inferPhase(runtimeAnchorSource)
     })

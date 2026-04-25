@@ -73,12 +73,19 @@ import {
   normalizePolicySnippet
 } from "../../lib/scans/policy-snippet-normalization";
 import {
+  getPolicyEvidenceSnippets,
   getPolicyActionableFlags,
   getPolicyMentions,
   getPolicyPageType,
   getPolicyPageUrl,
   getPolicySummaryText
 } from "../../lib/scans/policy-enrichment-row";
+import {
+  getAllowedConflictType,
+  type PolicyBehaviorConflictClaimType,
+  type PolicyBehaviorConflictType,
+  type PolicyBehaviorRuntimeObservationType
+} from "../../lib/scans/contradiction-evidence-contract";
 import { PRIMARY_SCAN_CATEGORY_META } from "../../lib/scans/signal-taxonomy";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
@@ -350,11 +357,20 @@ type PolicyBehaviorContradiction = {
   evidence: string[];
   observedBehavior: string;
   policyPageUrl: string | null;
+  policyClaimType?: PolicyBehaviorConflictClaimType | null;
+  policyConfidence?: number | null;
+  policyExtractionStatus?: string | null;
   policySnippet: string | null;
   policySummary: string | null;
   relatedVendors: string[];
+  runtimeConfidence?: number | null;
+  runtimeObservationType?: PolicyBehaviorRuntimeObservationType | null;
+  runtimePhase?: "pre_consent" | "unknown";
   runtimeSummary: string;
   runtimeVendors: string[];
+  conflictReasoning?: string | null;
+  conflictSupportsPromotion?: boolean;
+  conflictType?: PolicyBehaviorConflictType | null;
   supportingSignals: string[];
   severity: "high" | "medium";
   status: "contradiction" | "violation risk" | "likely contradiction";
@@ -499,6 +515,79 @@ function dedupeHeadlineFindings(findings: PreviewSampleFinding[]) {
   return deduped;
 }
 
+function getPolicySnippetValues(row: Record<string, unknown> | null) {
+  if (!row) {
+    return [];
+  }
+
+  const snippets = getPolicyEvidenceSnippets(row);
+  const snippetValues = snippets && typeof snippets === "object" ? Object.values(snippets) : [];
+
+  return uniqueStrings([
+    ...snippetValues.map((value) => (typeof value === "string" ? normalizePolicySnippet(value) : null)),
+    getPolicySummaryText(row) ? normalizePolicySnippet(getPolicySummaryText(row) ?? "") : null
+  ]);
+}
+
+function deriveConsentGatingPolicyAnchor(row: Record<string, unknown> | null) {
+  const snippets = getPolicySnippetValues(row);
+  const policyPageUrl = row ? getPolicyPageUrl(row) : null;
+
+  for (const snippet of snippets) {
+    const lowerSnippet = snippet.toLowerCase();
+    const mentionsNonEssential =
+      /optional|non[-\s]?essential|analytics|advertis(?:e|ing)|marketing|tracking|targeting|performance/.test(lowerSnippet);
+    const mentionsConsent = /consent|choice|permission|opt[-\s]?in|accept|agree/.test(lowerSnippet);
+    const necessaryOnly =
+      /(only|solely|strictly)\s+(necessary|required|essential)/.test(lowerSnippet) ||
+      /necessary cookies? (?:only|until|before)/.test(lowerSnippet);
+    const marketingBeforeConsent =
+      /(advertis(?:e|ing)|marketing|tracking|targeting|analytics).{0,80}(consent|choice|permission|opt[-\s]?in)/.test(lowerSnippet) ||
+      /(consent|choice|permission|opt[-\s]?in).{0,80}(advertis(?:e|ing)|marketing|tracking|targeting|analytics)/.test(lowerSnippet);
+    const rejectDisablesTracking =
+      /(reject|decline|disable|turn off).{0,80}(analytics|advertis(?:e|ing)|marketing|tracking|targeting|non[-\s]?essential)/.test(lowerSnippet);
+
+    let claimType: PolicyBehaviorConflictClaimType | null = null;
+    if (necessaryOnly && mentionsConsent) {
+      claimType = "only_necessary_cookies_before_choice";
+    } else if ((mentionsNonEssential && mentionsConsent) || marketingBeforeConsent || rejectDisablesTracking) {
+      claimType = "no_marketing_tracking_before_consent";
+    }
+
+    if (!claimType) {
+      continue;
+    }
+
+    return {
+      claimType,
+      confidence: policyPageUrl ? 0.82 : 0.68,
+      extractionStatus: policyPageUrl ? "fetched" : "unknown",
+      normalizedClaim: snippet,
+      snippet,
+      sourceUrl: policyPageUrl
+    };
+  }
+
+  return null;
+}
+
+function derivePreconsentObservationType(
+  preconsentRows: Array<{ vendorCategory: string; vendorName: string }>
+): PolicyBehaviorRuntimeObservationType | null {
+  const categories = preconsentRows.map((row) => row.vendorCategory.toLowerCase());
+  const vendorNames = preconsentRows.map((row) => row.vendorName.toLowerCase());
+  const haystack = [...categories, ...vendorNames].join(" ");
+
+  if (/advertis|marketing|adtech|retarget|targeting|social|doubleclick|facebook|linkedin|reddit|tiktok|snap/.test(haystack)) {
+    return "marketing_vendor_fired_pre_consent";
+  }
+  if (/analytics|measurement|session[_\s-]?replay|replay|hotjar|clarity|fullstory|google analytics|ga4/.test(haystack)) {
+    return "analytics_vendor_fired_pre_consent";
+  }
+
+  return preconsentRows.length > 0 ? "analytics_vendor_fired_pre_consent" : null;
+}
+
 function derivePolicyBehaviorContradictions(input: {
   mergedSignals?: Array<{
     key: string;
@@ -545,21 +634,52 @@ function derivePolicyBehaviorContradictions(input: {
   const policyDoNotSell = typeof mergedPolicyDoNotSell === "string" ? mergedPolicyDoNotSell : "unknown";
   const policyPageUrl = privacyEnrichment ? getPolicyPageUrl(privacyEnrichment) : null;
   const policySummary = privacyEnrichment ? getPolicySummaryText(privacyEnrichment) : null;
+  const consentGatingAnchor = deriveConsentGatingPolicyAnchor(privacyEnrichment);
 
   if (preconsentVendors.length > 0) {
+    const runtimeObservationType = derivePreconsentObservationType(input.preconsentViolations);
+    const conflictType = consentGatingAnchor
+      ? getAllowedConflictType(consentGatingAnchor.claimType, runtimeObservationType)
+      : null;
+    const hasConcreteRuntimeRequest = preconsentEvidence.some((url) => /^https?:\/\//i.test(url));
+    const conflictSupportsPromotion = Boolean(
+      consentGatingAnchor?.sourceUrl &&
+        consentGatingAnchor.snippet &&
+        runtimeObservationType &&
+        conflictType &&
+        hasConcreteRuntimeRequest &&
+        preconsentVendors.length > 0
+    );
+    const policyClaim =
+      consentGatingAnchor?.normalizedClaim ??
+      "The policy and consent surface imply tracking should begin only after a valid consent interaction.";
+    const runtimeSummary = `Trackers fired on first render before consent interaction: ${preconsentVendors.join(", ")}.`;
+
     contradictions.push({
       title: "Consent-gated tracking claim conflicts with runtime behavior",
       status: "violation risk",
       severity: "high",
-      claim: "The policy and consent surface imply tracking should begin only after a valid consent interaction.",
-      observedBehavior: `Trackers fired on first render before consent interaction: ${preconsentVendors.join(", ")}.`,
+      claim: policyClaim,
+      observedBehavior: runtimeSummary,
       evidence: preconsentEvidence.slice(0, 3),
       policyPageUrl,
-      policySnippet: "The policy and consent surface imply tracking should begin only after a valid consent interaction.",
+      policyClaimType: consentGatingAnchor?.claimType ?? null,
+      policyConfidence: consentGatingAnchor?.confidence ?? null,
+      policyExtractionStatus: consentGatingAnchor?.extractionStatus ?? null,
+      policySnippet: consentGatingAnchor?.snippet ?? null,
       policySummary,
       relatedVendors: preconsentVendors,
-      runtimeSummary: `Trackers fired on first render before consent interaction: ${preconsentVendors.join(", ")}.`,
+      runtimeConfidence: hasConcreteRuntimeRequest ? 0.82 : 0.5,
+      runtimeObservationType,
+      runtimePhase: "pre_consent",
+      runtimeSummary,
       runtimeVendors: preconsentVendors,
+      conflictReasoning:
+        consentGatingAnchor && runtimeObservationType
+          ? "The policy anchor describes consent-gated non-essential tracking, while runtime evidence shows tracker requests before consent."
+          : runtimeSummary,
+      conflictSupportsPromotion,
+      conflictType,
       supportingSignals: ["consent_gating_claim"]
     });
   }

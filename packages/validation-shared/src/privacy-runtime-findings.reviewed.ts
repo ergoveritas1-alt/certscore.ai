@@ -2014,5 +2014,363 @@ export const PRIVACY_RUNTIME_FINDINGS_REVIEWED_EXAMPLES: PrivacyRuntimeFindingDa
     notes: "Live reviewed negative control for missing transfer disclosure.",
     scenarioType: "negative_control",
     sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      policyAnchor: {
+        claimType: "only_necessary_cookies_before_choice",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: "https://example.com/privacy",
+        snippet: "Optional analytics cookies are used only after you consent."
+      },
+      requestUrls: ["https://www.google-analytics.com/g/collect?v=2"],
+      runtimeAnchor: {
+        confidence: 0.82,
+        observationType: "analytics_vendor_fired_pre_consent",
+        phase: "pre_consent",
+        requestUrls: ["https://www.google-analytics.com/g/collect?v=2"],
+        vendors: ["Google Analytics"]
+      },
+      signalKey: "policy_runtime.consent_gated_tracking_claim_conflict",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Own URL-style review case has an explicit consent-gating policy claim and a concrete analytics collection URL before consent.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://example.com/privacy"
+      },
+      vendorCategories: ["analytics"],
+      vendors: ["Google Analytics"]
+    },
+    expected: {
+      confidenceBand: "high",
+      externalSurfacingEligibility: "eligible",
+      presentationState: "confirmed",
+      promotionEligibility: "eligible"
+    },
+    findingGroup: "disclosure_runtime_mismatch",
+    findingId: "consent_gated_tracking_claim_conflict",
+    id: "regression-consent-gated-conflict-complete-evidence-2026-04-25",
+    notes: "Regression case for promoting consent-gated tracking conflict only with policy anchor, runtime request URL, and typed runtime observation.",
+    scenarioType: "positive_high_confidence",
+    sourceKind: "regression_case"
+  },
+  {
+    downgradeReason: "The policy anchor and vendor name are present, but no retained runtime request URL is available for independent validation.",
+    evidence: {
+      policyAnchor: {
+        claimType: "only_necessary_cookies_before_choice",
+        confidence: 0.84,
+        extractionStatus: "fetched",
+        sourceUrl: "https://example.com/privacy",
+        snippet: "Optional analytics cookies are used only after you consent."
+      },
+      runtimeAnchor: {
+        confidence: 0.76,
+        observationType: "analytics_vendor_fired_pre_consent",
+        phase: "pre_consent",
+        requestUrls: [],
+        vendors: ["Google Analytics"]
+      },
+      signalKey: "policy_runtime.consent_gated_tracking_claim_conflict",
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own review cannot validate the runtime side because the retained evidence lacks a concrete request URL.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://example.com/privacy"
+      },
+      vendorCategories: ["analytics"],
+      vendors: ["Google Analytics"]
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "disclosure_runtime_mismatch",
+    findingId: "consent_gated_tracking_claim_conflict",
+    id: "regression-consent-gated-conflict-missing-runtime-url-2026-04-25",
+    notes: "Borderline case preserving weak conflict context without confirmed surfacing.",
+    scenarioType: "borderline_review",
+    sourceKind: "regression_case"
+  },
+  {
+    evidence: {
+      policyAnchor: {
+        claimType: "no_consent_gating_claim",
+        confidence: 0.82,
+        extractionStatus: "fetched",
+        sourceUrl: "https://example.com/privacy",
+        snippet: "We use analytics cookies to understand website performance."
+      },
+      requestUrls: ["https://www.google-analytics.com/g/collect?v=2"],
+      runtimeAnchor: {
+        confidence: 0.8,
+        observationType: "analytics_vendor_fired_pre_consent",
+        phase: "pre_consent",
+        requestUrls: ["https://www.google-analytics.com/g/collect?v=2"],
+        vendors: ["Google Analytics"]
+      },
+      signalKey: "policy_runtime.consent_gated_tracking_claim_conflict",
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own review found analytics disclosure language but not a claim that analytics is consent-gated.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://example.com/privacy"
+      },
+      vendorCategories: ["analytics"],
+      vendors: ["Google Analytics"]
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "disclosure_runtime_mismatch",
+    findingId: "consent_gated_tracking_claim_conflict",
+    id: "regression-consent-gated-conflict-no-policy-claim-2026-04-25",
+    negativeControlReason: "Runtime analytics alone does not contradict a policy unless the policy contains a consent-gating claim.",
+    notes: "Negative control for consent-gated conflict promotion.",
+    scenarioType: "negative_control",
+    sourceKind: "regression_case"
+  },
+  {
+    evidence: {
+      policyAnchor: {
+        claimType: "privacy_contact_path_present",
+        confidence: 0.9,
+        extractionStatus: "fetched",
+        sourceUrl: "https://example.com/privacy",
+        snippet: "For privacy questions or requests, contact our privacy team at privacy@example.com."
+      },
+      signalKey: "privacy.privacy_contact_path_present",
+      snapshotEvidence: {
+        privacyContactChannelType: "email"
+      },
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Own review sees a privacy-specific contact channel, not just a generic support path.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://example.com/privacy"
+      }
+    },
+    expected: {
+      confidenceBand: "high",
+      externalSurfacingEligibility: "eligible",
+      presentationState: "confirmed",
+      promotionEligibility: "eligible"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_contact_path_present",
+    id: "regression-privacy-contact-specific-email-2026-04-25",
+    notes: "Regression case for promoting privacy contact only with privacy-specific channel evidence.",
+    scenarioType: "positive_high_confidence",
+    sourceKind: "regression_case"
+  },
+  {
+    evidence: {
+      policyAnchor: {
+        claimType: "generic_contact_path_present",
+        confidence: 0.82,
+        extractionStatus: "fetched",
+        sourceUrl: "https://example.com/contact",
+        snippet: "Contact our support team for help with your account."
+      },
+      signalKey: "privacy.privacy_contact_path_present",
+      snapshotEvidence: {
+        privacyContactChannelType: "generic"
+      },
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own review found a support contact surface but no privacy-specific contact path.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://example.com/contact"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_contact_path_present",
+    id: "regression-privacy-contact-generic-support-negative-2026-04-25",
+    negativeControlReason: "Generic support contact is not enough to surface privacy_contact_path_present.",
+    notes: "Negative control for privacy contact calibration.",
+    scenarioType: "negative_control",
+    sourceKind: "regression_case"
+  },
+  {
+    downgradeReason: "The text is privacy-adjacent but does not retain a clear contact channel type or explicit privacy contact destination.",
+    evidence: {
+      policyAnchor: {
+        claimType: "privacy_contact_possible",
+        confidence: 0.64,
+        extractionStatus: "fetched",
+        sourceUrl: "https://example.com/privacy",
+        snippet: "Contact us if you have questions about this notice."
+      },
+      signalKey: "privacy.privacy_contact_path_present",
+      snapshotEvidence: {
+        privacyContactChannelType: "unknown"
+      },
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own review sees privacy-page contact wording, but not a concrete privacy-specific channel.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://example.com/privacy"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_contact_path_present",
+    id: "regression-privacy-contact-adjacent-no-channel-2026-04-25",
+    notes: "Borderline privacy contact case retained for review rather than confirmed surfacing.",
+    scenarioType: "borderline_review",
+    sourceKind: "regression_case"
+  },
+  {
+    downgradeReason: "Live URL probe found possible runtime concern, but retained evidence still lacks an explicit consent-gating policy claim and contradiction bridge.",
+    evidence: {
+      policyAnchor: {
+        claimType: "missing_consent_gating_policy_anchor",
+        confidence: 0.45,
+        extractionStatus: "parser_incomplete",
+        sourceUrl: "https://bestcopytrading.com/",
+        snippet: "No explicit consent-gating policy anchor was retained for the reviewed production candidate."
+      },
+      runtimeAnchor: {
+        confidence: 0.62,
+        observationType: "analytics_vendor_fired_pre_consent",
+        phase: "pre_consent",
+        requestUrls: [],
+        vendors: []
+      },
+      signalKey: "policy_runtime.consent_gated_tracking_claim_conflict",
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Live production audit returned needs_review; promotion still requires retained policy anchor, concrete request URL, and approved bridge.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://bestcopytrading.com/"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "disclosure_runtime_mismatch",
+    findingId: "consent_gated_tracking_claim_conflict",
+    id: "live-review-consent-gated-conflict-bestcopytrading-2026-04-25",
+    notes: "Own URL assessment case from production audit for consent-gated tracking conflict.",
+    scenarioType: "borderline_review",
+    sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      policyAnchor: {
+        claimType: "missing_consent_gating_policy_anchor",
+        confidence: 0.4,
+        extractionStatus: "missing",
+        sourceUrl: "https://atlas-finance.org/",
+        snippet: "Live audit did not retain a consent-gating policy claim for this production candidate."
+      },
+      signalKey: "policy_runtime.consent_gated_tracking_claim_conflict",
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Live production audit supported demotion; no explicit policy/runtime contradiction pair was available.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://atlas-finance.org/"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "disclosure_runtime_mismatch",
+    findingId: "consent_gated_tracking_claim_conflict",
+    id: "live-demotion-consent-gated-conflict-atlas-finance-2026-04-25",
+    negativeControlReason: "No retained explicit consent-gating policy claim or runtime contradiction bridge.",
+    notes: "Own URL assessment negative control from production audit.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      policyAnchor: {
+        claimType: "privacy_contact_path_present",
+        confidence: 0.88,
+        extractionStatus: "fetched",
+        sourceUrl: "https://www.betterment.com/legal/privacy-policy",
+        snippet: "The reviewed privacy policy includes a privacy-specific contact path."
+      },
+      signalKey: "privacy.privacy_contact_path_present",
+      snapshotEvidence: {
+        privacyContactChannelType: "privacy_specific"
+      },
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Live production audit found a privacy-specific contact channel or data-protection contact path.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://www.betterment.com/legal/privacy-policy"
+      }
+    },
+    expected: {
+      confidenceBand: "high",
+      externalSurfacingEligibility: "eligible",
+      presentationState: "confirmed",
+      promotionEligibility: "eligible"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_contact_path_present",
+    id: "live-promotion-privacy-contact-betterment-2026-04-25",
+    notes: "Own URL assessment positive control from production audit.",
+    scenarioType: "positive_high_confidence",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Live URL probe did not find a privacy-specific contact channel; generic or absent contact evidence should remain review-only.",
+    evidence: {
+      policyAnchor: {
+        claimType: "privacy_contact_not_confirmed",
+        confidence: 0.52,
+        extractionStatus: "parser_incomplete",
+        sourceUrl: "https://bestforex-signals.com/",
+        snippet: "No privacy-specific contact channel was found by the live probe."
+      },
+      signalKey: "privacy.privacy_contact_path_present",
+      snapshotEvidence: {
+        privacyContactChannelType: "unknown"
+      },
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Live production audit did not find a privacy-specific contact channel.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://bestforex-signals.com/"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_contact_path_present",
+    id: "live-review-privacy-contact-bestforex-signals-2026-04-25",
+    notes: "Own URL assessment borderline case from production audit.",
+    scenarioType: "borderline_review",
+    sourceKind: "live_artifact"
   }
 ];

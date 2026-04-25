@@ -626,7 +626,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "internal_only",
         externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: ["positive_surface_content_unverified"]
+        negativeEvidenceFlags: ["positive_surface_content_unverified", "missing_privacy_specific_contact_channel"]
       }
     },
     {

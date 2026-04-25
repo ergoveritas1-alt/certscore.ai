@@ -212,6 +212,9 @@ test("builds concrete fallback evidence for hybrid pre-consent request timing", 
   });
 
   assert.deepEqual(fallback?.preconsent_tracker_evidence_urls, ["https://connect.facebook.net/fbevents.js"]);
+  assert.deepEqual(fallback?.requestUrls, ["https://connect.facebook.net/fbevents.js"]);
+  assert.deepEqual(fallback?.runtimeEvidenceUrls, ["https://connect.facebook.net/fbevents.js"]);
+  assert.deepEqual(fallback?.runtimeVendors, ["Meta Pixel"]);
   assert.equal(fallback?.consentBannerDetectedMs, 500);
   assert.deepEqual(fallback?.preconsent_tracker_vendor_evidence, [
     {

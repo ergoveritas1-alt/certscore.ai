@@ -3716,6 +3716,69 @@ test("keeps consent-gated tracking claim conflict audit-only even with partial c
   assert.equal(packet?.presentationDecision.status, "suppress");
 });
 
+test("surfaces consent-gated tracking claim conflict with complete policy anchor, request URL, and bridge evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Google Analytics fired before consent.",
+        fallbackEvidence: {
+          contradictionEvidence: {
+            claim: "Optional analytics cookies only run after consent.",
+            contradictionBasis: "Analytics fired before consent.",
+            conflictBridge: {
+              conflictType: "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired",
+              reasoning: "The policy says optional analytics cookies only run after consent, but a Google Analytics request fired pre-consent.",
+              supportsPromotion: true
+            },
+            evidenceSufficiency: {
+              conflictBridgePresent: true,
+              policyAnchorPresent: true,
+              promotionEligible: true,
+              reviewStatus: "complete",
+              runtimeAnchorPresent: true
+            },
+            policyAnchor: {
+              claimType: "only_necessary_cookies_before_choice",
+              confidence: 0.86,
+              extractionStatus: "fetched",
+              normalizedClaim: "Optional analytics cookies only run after consent.",
+              snippet: "Optional analytics cookies only run after consent.",
+              sourceUrl: "https://www.example.com/privacy"
+            },
+            policySnippet: "Optional analytics cookies only run after consent.",
+            policySourceUrl: "https://www.example.com/privacy",
+            runtimeAnchor: {
+              confidence: 0.82,
+              cookies: [],
+              observationType: "analytics_vendor_fired_pre_consent",
+              phase: "pre_consent",
+              requests: ["https://www.google-analytics.com/g/collect?v=2"],
+              sourceUrl: "https://www.example.com/",
+              storageArtifacts: [],
+              vendors: ["Google Analytics"]
+            },
+            runtimeEvidenceArtifacts: ["https://www.google-analytics.com/g/collect?v=2"],
+            runtimeSummary: "Google Analytics request fired before consent.",
+            runtimeVendors: ["Google Analytics"],
+            sourceUrls: ["https://www.example.com/privacy"],
+            supportingSignals: ["consent_gating_claim"]
+          }
+        },
+        observedValue: "Consent-gated tracking claim conflict",
+        severity: "high",
+        sourceType: "issue",
+        title: "Consent-gated tracking claim conflicts with runtime behavior"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "consent_gated_tracking_claim_conflict");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.reportable, true);
+});
+
 test("surfaces tracking technologies disclosure present from policy enrichment evidence", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

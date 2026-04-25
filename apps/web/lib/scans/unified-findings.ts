@@ -1511,6 +1511,9 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (Array.isArray(normalizedFallbackEvidence.policyPositiveSnippetKeys)) {
     entities.policyPositiveSnippetKeys = uniqueStrings(normalizedFallbackEvidence.policyPositiveSnippetKeys as string[]);
   }
+  if (typeof normalizedFallbackEvidence.privacyContactChannelType === "string" && normalizedFallbackEvidence.privacyContactChannelType.trim()) {
+    entities.privacyContactChannelType = [normalizedFallbackEvidence.privacyContactChannelType.trim()];
+  }
   if (Array.isArray(normalizedFallbackEvidence.relatedVendors)) {
     entities.relatedVendors = uniqueStrings(normalizedFallbackEvidence.relatedVendors as string[]);
   }
