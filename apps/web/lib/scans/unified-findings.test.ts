@@ -3812,13 +3812,15 @@ test("keeps third-party advertising disclosure audit-only when only summary text
   assert.equal(packet?.presentationDecision.status, "surface");
 });
 
-test("surfaces behavioral analytics disclosure present from policy enrichment evidence", () => {
+test("retains behavioral analytics disclosure evidence from policy enrichment", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
         description: "The scan retained a disclosure describing behavioral analytics or replay-style tooling.",
         fallbackEvidence: {
           pageUrl: "https://www.example.com/privacy",
+          policyPositiveSnippetKeys: ["topic:session_replay_disclosure", "session_replay_disclosure"],
+          policyPositiveTopic: "behavioral_analytics_disclosure",
           policySnippets: ["On certain pages, we use third-party tools to observe mouse movements, clicks, keystrokes, entered text, and pages visited."],
           signalKey: "privacy.behavioral_analytics_disclosure_present",
           signalLabel: "Behavioral analytics disclosure present",
@@ -3838,11 +3840,16 @@ test("surfaces behavioral analytics disclosure present from policy enrichment ev
   });
 
   assert.equal(packet?.unifiedFindingId, "behavioral_analytics_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.match(packet?.presentation.whyThisMatters ?? "", /behavioral analytics/i);
   assert.deepEqual(packet?.evidence?.snippets, [
     "On certain pages, we use third-party tools to observe mouse movements, clicks, keystrokes, entered text, and pages visited."
   ]);
+  assert.deepEqual(packet?.evidence?.entities?.policyPositiveSnippetKeys, [
+    "topic:session_replay_disclosure",
+    "session_replay_disclosure"
+  ]);
+  assert.ok(packet?.evidence?.flags?.includes("policy_positive_topic:behavioral_analytics_disclosure"));
 });
 
 test("keeps behavioral analytics disclosure audit-only when only summary text is retained without a concrete user-facing url", () => {
