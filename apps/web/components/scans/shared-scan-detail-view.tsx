@@ -4516,7 +4516,7 @@ function buildUrlscanCookieFinding(input: {
     ],
     evidenceRefs: input.reportUrl ? [input.reportUrl] : ["supplemental public runtime evidence"],
     severity: hasThirdPartyCookies ? "high" : "medium",
-    shortSummary: `${input.cookieCount} initial cookie${input.cookieCount === 1 ? "" : "s"} were observed on the fallback runtime path before CertScore could verify a consent choice.`
+    shortSummary: `${input.cookieCount} initial cookie${input.cookieCount === 1 ? "" : "s"} were observed in supplemental public runtime evidence before CertScore could verify a consent choice.`
   };
 }
 

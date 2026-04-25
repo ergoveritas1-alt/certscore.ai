@@ -2703,7 +2703,11 @@ export const REPORT_UNIFIED_FINDINGS = [
       "Trackers fired before consent interaction",
       "Pre-consent tracking incidents detected",
       "Trackers observed before consent",
-      "Pre-consent tracking detected"
+      "Pre-consent tracking detected",
+      "Third-party tracking before consent",
+      "Third-party cookies before consent",
+      "Analytics cookies before consent",
+      "Adtech cookies before consent"
     ]
   }),
   defineReportUnifiedFinding({

@@ -65,7 +65,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 126);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 137);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
@@ -304,12 +304,12 @@ test("returns signals attached to an evidence category by relation", () => {
       "snapshot_signal:privacy.sale_sharing_controls_missing",
       "snapshot_signal:privacy.consent_withdrawal_mechanism_present",
       "snapshot_signal:privacy.user_rights_friction_score",
-      "policy_enrichment_signal:policyDsarMechanism",
+      "document_semantic_signal:policyDsarMechanism",
       "snapshot_signal:privacy.privacy_contact_channel_missing",
-      "policy_enrichment_signal:policyDoNotSell",
-      "policy_enrichment_signal:privacy.policy_runtime_functional_misalignment_detected",
-      "policy_enrichment_signal:policyRightsSignals",
-      "policy_enrichment_signal:privacy.gpc_disclosure_present"
+      "document_semantic_signal:policyDoNotSell",
+      "document_semantic_signal:privacy.policy_runtime_functional_misalignment_detected",
+      "document_semantic_signal:policyRightsSignals",
+      "document_semantic_signal:privacy.gpc_disclosure_present"
     ]
   );
 });
@@ -370,51 +370,51 @@ test("maps signals and validation rules into unified findings", () => {
     "sale_sharing_controls_missing"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "policyRightsSignals")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "policyRightsSignals")?.id,
     "privacy_rights_path_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.privacy_rights_path_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.privacy_rights_path_present")?.id,
     "privacy_rights_path_present"
-  );
-  assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.privacy_contact_path_present")?.id,
-    "privacy_contact_path_present"
-  );
-  assert.equal(
-    getReportUnifiedFindingForSignal("document_semantic_signal", "privacyContactChannelType"),
-    undefined
   );
   assert.equal(
     getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.privacy_contact_path_present")?.id,
     "privacy_contact_path_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.gpc_disclosure_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacyContactChannelType"),
+    null
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.privacy_contact_path_present")?.id,
+    "privacy_contact_path_present"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.gpc_disclosure_present")?.id,
     "gpc_disclosure_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.tracking_technologies_disclosure_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.tracking_technologies_disclosure_present")?.id,
     "tracking_technologies_disclosure_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.targeted_advertising_disclosure_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.targeted_advertising_disclosure_present")?.id,
     "targeted_advertising_disclosure_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.third_party_advertising_disclosure_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.third_party_advertising_disclosure_present")?.id,
     "third_party_advertising_disclosure_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.behavioral_analytics_disclosure_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.behavioral_analytics_disclosure_present")?.id,
     "behavioral_analytics_disclosure_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "privacy.children_privacy_disclosure_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "privacy.children_privacy_disclosure_present")?.id,
     "children_privacy_disclosure_present"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("policy_enrichment_signal", "commerce.arbitration_clause_present")?.id,
+    getReportUnifiedFindingForSignal("document_semantic_signal", "commerce.arbitration_clause_present")?.id,
     "arbitration_clause_present"
   );
   assert.equal(
@@ -585,7 +585,10 @@ test("returns category-, section-, and pillar-scoped unified findings from deriv
       "accept_more_prominent_than_reject",
       "forced_consent_wall",
       "accept_only_banner",
-      "dismiss_without_reject"
+      "dismiss_without_reject",
+      "popup_behavior_observed",
+      "blocking_overlay_observed",
+      "autoplay_media_observed"
     ]
   );
 
@@ -594,6 +597,7 @@ test("returns category-, section-, and pillar-scoped unified findings from deriv
       ({ finding }) => finding.id === "preconsent_tracking"
     )
   );
+  assert.equal(getReportUnifiedFindingByAlias("Third-party cookies before consent")?.id, "preconsent_tracking");
   assert.ok(
     getReportUnifiedFindingsForPillar("accessibility").some(
       ({ finding }) => finding.id === "accessibility_claim_mismatch"

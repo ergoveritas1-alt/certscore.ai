@@ -223,7 +223,11 @@ export function buildRegulatoryLenses(
   const financialClaimFindings = findings.filter((finding) => FINANCIAL_CLAIMS_FINDING_IDS.has(finding.id));
   const trackingFinding =
     findings.find((finding) => finding.id === "pre_consent_tracking_detected") ??
-    findings.find((finding) => finding.id === "third_party_tracking_pre_consent");
+    findings.find((finding) => finding.id === "third_party_tracking_pre_consent") ??
+    findings.find((finding) => finding.id === "third_party_cookie_pre_consent") ??
+    findings.find((finding) => finding.id === "analytics_cookie_pre_consent") ??
+    findings.find((finding) => finding.id === "adtech_cookie_pre_consent") ??
+    findings.find((finding) => /pre[- ]consent|before consent/i.test(`${finding.label} ${finding.shortSummary}`));
   const replayFinding = findings.find((finding) => finding.id === "session_recording_services_detected");
   const consentFinding =
     findings.find((finding) => finding.id === "consent_dark_patterns_detected") ??
@@ -232,7 +236,12 @@ export function buildRegulatoryLenses(
     findings.find((finding) => finding.id === "forced_consent_interaction");
   const clarityFinding = findings.find((finding) => finding.id === "policy_clarity_risk");
   const hasTrackingConcern =
-    findingIds.has("pre_consent_tracking_detected") || findingIds.has("third_party_tracking_pre_consent");
+    findingIds.has("pre_consent_tracking_detected") ||
+    findingIds.has("third_party_tracking_pre_consent") ||
+    findingIds.has("third_party_cookie_pre_consent") ||
+    findingIds.has("analytics_cookie_pre_consent") ||
+    findingIds.has("adtech_cookie_pre_consent") ||
+    Boolean(trackingFinding);
   const hasConsentConcern =
     findingIds.has("consent_dark_patterns_detected") ||
     findingIds.has("asymmetric_consent_ui") ||
@@ -1277,7 +1286,7 @@ export function ExecutiveSummaryCard(input: {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Tracker footprint</p>
                   <p className="mt-2 text-sm text-slate-800">{input.trackerSummary}</p>
                   <DetailDisclosure
-                    summary={`${vendorEvidence.length} vendor names and ${thirdPartyDomains.length} third-party domains`}
+                    summary={`${vendorEvidence.length} vendor names and ${input.thirdPartyDomains.length} third-party domains`}
                     title="Observed vendors and domains"
                     items={[...vendorEvidence, ...thirdPartyDomains]}
                   />

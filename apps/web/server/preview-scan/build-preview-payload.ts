@@ -453,7 +453,7 @@ function buildNormalizedUrlscanFallbackEvidence(snapshot: UrlscanFallbackSnapsho
       hasRequestEvidence && requestSummaryParts.length > 0
         ? {
             title: "Request footprint",
-            summary: `${requestSummaryParts.join(", ")} retained from the fallback runtime path.`,
+            summary: `${requestSummaryParts.join(", ")} retained from supplemental public runtime evidence.`,
             details: requestDetails
           }
         : undefined,

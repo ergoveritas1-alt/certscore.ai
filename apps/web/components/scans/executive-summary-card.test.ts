@@ -168,6 +168,24 @@ test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards 
   assert.equal(lenses[2]?.ratingLabel, "Needs work");
 });
 
+test("buildRegulatoryLenses treats pre-consent cookie findings as GDPR tracking risk", () => {
+  const lenses = buildRegulatoryLenses(
+    [
+      makeFinding("third_party_cookie_pre_consent", "Third-party cookies before consent", {
+        severity: "high",
+        shortSummary: "64 third-party cookies were observed before any consent action."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 64,
+      thirdPartyRequestCount: 52
+    }
+  );
+
+  assert.equal(lenses[0]?.summary, "Consent and pre-consent tracking risk is the main issue.");
+  assert.notEqual(lenses[0]?.summary, "No major consent-triggering issue surfaced in the top findings.");
+});
+
 test("buildRegulatoryLenses does not overstate consent-only review signals as GDPR tracking issues", () => {
   const lenses = buildRegulatoryLenses(
     [
@@ -661,6 +679,40 @@ test("ExecutiveSummaryCard renders fractional regulatory rating bar segments", (
   );
 
   assert.match(html, /width:10%/);
+});
+
+test("ExecutiveSummaryCard keeps tracker disclosure counts aligned with the full domain inventory", () => {
+  const domains = Array.from({ length: 13 }, (_, index) => `tracker-${index + 1}.example`);
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "fandango.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "None detected",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Watch",
+      preConsentVendorNames: [],
+      requestedHost: "fandango.com",
+      resolvedVendorNames: ["Google Ads"],
+      score: 70,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 52,
+      thirdPartyDomains: domains,
+      topFindings: [],
+      topObservedEntities: [{ label: "Google Ads", category: "ads", requestCount: 13 }],
+      trackerSummary: "1 vendor observed across 13 third-party domains",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { ads: 1 }
+    })
+  );
+
+  assert.match(html, /1 vendor observed across 13 third-party domains/);
+  assert.match(html, /1 vendor names and 13 third-party domains/);
 });
 
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {
