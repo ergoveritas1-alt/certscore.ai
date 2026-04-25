@@ -223,7 +223,11 @@ export function buildRegulatoryLenses(
   const financialClaimFindings = findings.filter((finding) => FINANCIAL_CLAIMS_FINDING_IDS.has(finding.id));
   const trackingFinding =
     findings.find((finding) => finding.id === "pre_consent_tracking_detected") ??
-    findings.find((finding) => finding.id === "third_party_tracking_pre_consent");
+    findings.find((finding) => finding.id === "third_party_tracking_pre_consent") ??
+    findings.find((finding) => finding.id === "third_party_cookie_pre_consent") ??
+    findings.find((finding) => finding.id === "analytics_cookie_pre_consent") ??
+    findings.find((finding) => finding.id === "adtech_cookie_pre_consent") ??
+    findings.find((finding) => /pre[- ]consent|before consent/i.test(`${finding.label} ${finding.shortSummary}`));
   const replayFinding = findings.find((finding) => finding.id === "session_recording_services_detected");
   const consentFinding =
     findings.find((finding) => finding.id === "consent_dark_patterns_detected") ??
@@ -232,7 +236,12 @@ export function buildRegulatoryLenses(
     findings.find((finding) => finding.id === "forced_consent_interaction");
   const clarityFinding = findings.find((finding) => finding.id === "policy_clarity_risk");
   const hasTrackingConcern =
-    findingIds.has("pre_consent_tracking_detected") || findingIds.has("third_party_tracking_pre_consent");
+    findingIds.has("pre_consent_tracking_detected") ||
+    findingIds.has("third_party_tracking_pre_consent") ||
+    findingIds.has("third_party_cookie_pre_consent") ||
+    findingIds.has("analytics_cookie_pre_consent") ||
+    findingIds.has("adtech_cookie_pre_consent") ||
+    Boolean(trackingFinding);
   const hasConsentConcern =
     findingIds.has("consent_dark_patterns_detected") ||
     findingIds.has("asymmetric_consent_ui") ||
@@ -278,6 +287,7 @@ export function buildRegulatoryLenses(
     80 -
       (hasConsentConcern ? 24 : 0) -
       (hasTrackingConcern ? 18 : 0) -
+      (counts.beforeConsentCookieCount > 0 ? 8 : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
 
@@ -314,7 +324,9 @@ export function buildRegulatoryLenses(
         ? "Choice architecture and disclosure clarity are the main FTC-style concerns."
         : hasConsentConcern
           ? "Consent-choice design should be reviewed for clarity."
-          : "No strong unfairness/deception cue surfaced in the top findings.",
+          : hasTrackingConcern || counts.beforeConsentCookieCount > 0
+            ? "Pre-consent tracking and third-party collection should be reviewed for unfairness or deception risk."
+            : "No strong unfairness/deception cue surfaced in the top findings.",
       toneClass: ftcTone.toneClass
     }
   ];
@@ -1127,9 +1139,23 @@ export function ExecutiveSummaryCard(input: {
     agencyMappings: input.agencyMappings,
     regulatoryRisk: input.regulatoryRisk
   };
+  const findingBasedRegulatoryLenses = buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);
   const regulatoryLenses = input.unifiedFindings
-    ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions)
-    : buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);
+    ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions).map((lens) => {
+        const findingBasedLens = findingBasedRegulatoryLenses.find((candidate) => candidate.acronym === lens.acronym);
+        const findingBasedScore = findingBasedLens?.score;
+        const packetScore = lens.score;
+        const findingBasedHasScoreImpact =
+          typeof findingBasedScore === "number" &&
+          (typeof packetScore !== "number" || findingBasedScore < packetScore);
+        return findingBasedLens &&
+          (findingBasedLens.summary === "Consent and pre-consent tracking risk is the main issue." ||
+            ((lens.acronym === "GDPR / ePrivacy" || lens.acronym === "CCPA / CPRA" || lens.acronym === "FTC") &&
+              findingBasedHasScoreImpact))
+          ? findingBasedLens
+          : lens;
+      })
+    : findingBasedRegulatoryLenses;
 
   return (
     <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
@@ -1277,7 +1303,7 @@ export function ExecutiveSummaryCard(input: {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Tracker footprint</p>
                   <p className="mt-2 text-sm text-slate-800">{input.trackerSummary}</p>
                   <DetailDisclosure
-                    summary={`${vendorEvidence.length} vendor names and ${thirdPartyDomains.length} third-party domains`}
+                    summary={`${vendorEvidence.length} vendor names and ${input.thirdPartyDomains.length} third-party domains`}
                     title="Observed vendors and domains"
                     items={[...vendorEvidence, ...thirdPartyDomains]}
                   />

@@ -48,7 +48,7 @@ test("adds urlscan enrichment unavailable when urlscan diagnostics report no API
     result.supplementalSignals.find((signal) => signal.key === "disclosure.urlscan_enrichment_unavailable"),
     {
       key: "disclosure.urlscan_enrichment_unavailable",
-      label: "urlscan enrichment unavailable",
+      label: "Supplemental public runtime enrichment unavailable",
       snapshotField: "urlscan_enrichment_unavailable",
       value: ["urlscan_preflight_legal_fetch", "urlscan_preflight_lookup"]
     }

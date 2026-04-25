@@ -141,8 +141,8 @@ export function buildFullScanUrlscanSupplementPayload(input: {
       coverageLevel: "limited_partial",
       title: isOffDomainRedirect ? "Redirect evidence available" : "Indirect public evidence available",
       message: isOffDomainRedirect
-        ? "CertScore was blocked before public-page verification, but urlscan.io retained supplemental runtime evidence showing the requested domain redirected off-domain."
-        : "CertScore was blocked before public-page verification, but urlscan.io retained supplemental same-host runtime evidence."
+        ? "CertScore was blocked before public-page verification, but supplemental public runtime evidence showed the requested domain redirected off-domain."
+        : "CertScore was blocked before public-page verification, but supplemental same-host public runtime evidence was retained."
     },
     evidence: {
       coverageLevel: "limited_partial",
@@ -158,12 +158,12 @@ export function buildFullScanUrlscanSupplementPayload(input: {
     summaryBullets: [
       "CertScore retained limited-coverage context because the live browser pass hit an access limitation.",
       isOffDomainRedirect && urlscanFinalHostname
-        ? `urlscan.io retained runtime evidence showing the requested domain redirected to ${urlscanFinalHostname}.`
-        : "urlscan.io retained same-host runtime evidence that can help explain what a public browser saw.",
+        ? `Supplemental public runtime evidence showed the requested domain redirected to ${urlscanFinalHostname}.`
+        : "Supplemental same-host public runtime evidence was retained to help explain what a public browser observed.",
       "This indirect evidence is supplemental and is not treated as a verified CertScore finding."
     ],
     sampleFindings: [],
-    disclaimer: "urlscan.io supplemental evidence is indirect public runtime evidence and does not replace CertScore live verification."
+    disclaimer: "Supplemental public runtime evidence is indirect evidence and does not replace CertScore live verification."
   };
 }
 

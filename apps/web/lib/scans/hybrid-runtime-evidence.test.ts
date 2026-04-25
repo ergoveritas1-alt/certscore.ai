@@ -88,6 +88,24 @@ test("derives fingerprinting and intrusive behavior signals from hybrid runtime 
   assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.autoplay_media_detected"), true);
 });
 
+test("does not classify a plain banner overlay as a blocking overlay without obstruction signals", () => {
+  const runtimeArtifacts = {
+    hybrid_runtime_evidence: {
+      consentSummary: {
+        bannerPresent: true
+      },
+      uiSummary: {
+        overlayDetected: true,
+        forcedActionRequired: false,
+        interstitialDetected: false,
+        scrollLocked: false
+      }
+    }
+  } satisfies Record<string, unknown>;
+
+  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.overlay_blocking_detected"), false);
+});
+
 test("builds fallback evidence for hybrid pre-consent tracking concerns", () => {
   const runtimeArtifacts = {
     hybrid_runtime_evidence: {

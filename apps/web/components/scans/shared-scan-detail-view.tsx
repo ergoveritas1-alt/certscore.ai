@@ -4503,20 +4503,20 @@ function buildUrlscanCookieFinding(input: {
   const cookieDomainSummary = input.cookieDomains.length > 0
     ? ` Cookie domains: ${input.cookieDomains.slice(0, 6).join(", ")}.`
     : "";
-  const sourceSummary = input.reportUrl ? ` Source: ${input.reportUrl}` : " Source: urlscan.io fallback evidence.";
+  const sourceSummary = " Source: supplemental public runtime evidence.";
 
   return {
     ...definition,
     confidence: "good",
     directVsInferred: "direct",
     evidencePreview: [
-      `${input.cookieCount} initial cookie${input.cookieCount === 1 ? "" : "s"} retained by urlscan.io runtime evidence.${cookieNameSummary}`,
+      `${input.cookieCount} initial cookie${input.cookieCount === 1 ? "" : "s"} retained by supplemental public runtime evidence.${cookieNameSummary}`,
       ...(hasThirdPartyCookies ? [`Third-party cookie domains retained: ${thirdPartyCookieDomains.slice(0, 6).join(", ")}.`] : []),
       `${cookieDomainSummary}${sourceSummary}`.trim()
     ],
-    evidenceRefs: input.reportUrl ? [input.reportUrl] : ["urlscan.io fallback evidence"],
+    evidenceRefs: ["supplemental public runtime evidence"],
     severity: hasThirdPartyCookies ? "high" : "medium",
-    shortSummary: `${input.cookieCount} initial cookie${input.cookieCount === 1 ? "" : "s"} were observed on the fallback runtime path before CertScore could verify a consent choice.`
+    shortSummary: `${input.cookieCount} initial cookie${input.cookieCount === 1 ? "" : "s"} were observed in supplemental public runtime evidence before CertScore could verify a consent choice.`
   };
 }
 
@@ -4767,6 +4767,12 @@ export function SharedScanDetailView({
     snapshot,
     storedScore: certScoreSummary.score
   });
+  const fallbackAdjustedPosture =
+    !executiveAccessLimitationNotice && fallbackCookieFinding
+      ? fallbackCookieFinding.severity === "critical"
+        ? "Action Needed"
+        : "Watch"
+      : executiveFindingsProjection.posture;
   const presentedCertScoreFindings = executiveAccessLimitationNotice
     ? (fallbackCookieFinding ? [fallbackCookieFinding] : [])
     : allExecutiveFindings;
@@ -4820,7 +4826,7 @@ export function SharedScanDetailView({
     legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
     pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned),
     policyEnrichmentCount: scanRecord.policyEnrichment.length,
-    posture: executiveAccessLimitationNotice ? "Watch" : executiveFindingsProjection.posture,
+    posture: executiveAccessLimitationNotice ? "Watch" : fallbackAdjustedPosture,
     requestedHost: certScoreSummary.requestedHost,
     scanId: scanRecord.scan.id,
     scanOutcome: typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null,
@@ -4892,7 +4898,7 @@ export function SharedScanDetailView({
             fingerprintNarrative={certScoreSummary.fingerprintNarrative}
             landedOnDifferentHost={certScoreSummary.landedOnDifferentHost}
             lastScannedAt={certScoreSummary.lastScannedAt}
-            posture={executiveAccessLimitationNotice ? "Watch" : executiveFindingsProjection.posture}
+            posture={executiveAccessLimitationNotice ? "Watch" : fallbackAdjustedPosture}
             preConsentVendorNames={certScoreSummary.preConsentVendorNames}
             requestedHost={certScoreSummary.requestedHost}
             regulatoryRisk={scanRecord.regulatoryRisk}
@@ -4921,10 +4927,10 @@ export function SharedScanDetailView({
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">Supplemental public runtime evidence</p>
                   <p>
                     {fallbackEvidenceRelation === "off_domain_redirect" && fallbackFinalHostname
-                      ? `CertScore live verification stayed blocked, but urlscan.io retained public runtime evidence showing this domain redirected to ${fallbackFinalHostname}.`
-                      : "CertScore live verification stayed blocked, but urlscan.io retained same-host public runtime evidence for this domain."}
+                      ? `CertScore live verification stayed blocked, but supplemental public runtime evidence showed this domain redirected to ${fallbackFinalHostname}.`
+                      : "CertScore live verification stayed blocked, but supplemental same-host public runtime evidence was retained for this domain."}
                     {" "}
-                    This evidence is source-attributed to urlscan.io and can trigger cookie or vendor findings when concrete runtime records are retained.
+                    This evidence is source-attributed internally and can trigger cookie or vendor findings when concrete runtime records are retained.
                   </p>
                   {fallbackEvidence.requestFootprint?.summary ? (
                     <p className="font-medium text-slate-900">{fallbackEvidence.requestFootprint.summary}</p>
@@ -4943,21 +4949,11 @@ export function SharedScanDetailView({
                         </ul>
                       ) : null}
                       <p className="mt-2 text-xs text-slate-600">
-                        This cookie evidence is counted in the same report counters and finding path as CertScore runtime cookie evidence, with urlscan.io retained as the source attribution.
+                        This cookie evidence is counted in the same report counters and finding path as CertScore runtime cookie evidence, with the supplemental source retained internally for audit traceability.
                       </p>
                     </div>
                   ) : null}
                 </div>
-                {fallbackEvidence.reportUrl ? (
-                  <a
-                    className="inline-flex shrink-0 items-center justify-center rounded-full border border-sky-200 bg-white px-4 py-2 text-xs font-semibold text-sky-900 shadow-sm transition hover:border-sky-300 hover:bg-sky-50"
-                    href={fallbackEvidence.reportUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Open urlscan report
-                  </a>
-                ) : null}
               </div>
             </section>
           ) : null}

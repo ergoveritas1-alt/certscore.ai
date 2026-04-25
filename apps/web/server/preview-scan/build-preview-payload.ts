@@ -385,7 +385,7 @@ function buildNormalizedUrlscanFallbackEvidence(snapshot: UrlscanFallbackSnapsho
   ].filter((value): value is string => Boolean(value));
   const cookieSummary =
     (snapshot.initialCookieCount ?? 0) > 0
-      ? `${formatCountLabel(snapshot.initialCookieCount ?? 0, "initial cookie")} retained from urlscan.io runtime evidence.`
+      ? `${formatCountLabel(snapshot.initialCookieCount ?? 0, "initial cookie")} retained from supplemental public runtime evidence.`
       : null;
   const cookieDetails = uniqueStrings([
     snapshot.cookieNames.length > 0 ? `Cookie names: ${snapshot.cookieNames.slice(0, 12).join(", ")}` : null,
@@ -420,7 +420,7 @@ function buildNormalizedUrlscanFallbackEvidence(snapshot: UrlscanFallbackSnapsho
 
   return {
     source: "urlscan",
-    sourceLabel: "urlscan.io fallback evidence",
+    sourceLabel: "Supplemental public runtime evidence",
     reportUrl: snapshot.reportUrl,
     resultApiUrl: snapshot.resultApiUrl,
     metrics: {
@@ -453,7 +453,7 @@ function buildNormalizedUrlscanFallbackEvidence(snapshot: UrlscanFallbackSnapsho
       hasRequestEvidence && requestSummaryParts.length > 0
         ? {
             title: "Request footprint",
-            summary: `${requestSummaryParts.join(", ")} retained from the fallback runtime path.`,
+            summary: `${requestSummaryParts.join(", ")} retained from supplemental public runtime evidence.`,
             details: requestDetails
           }
         : undefined,
@@ -957,7 +957,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
 
   insertSummaryBullet(
     payload.summaryBullets,
-    "Fallback runtime evidence from urlscan.io was retained for this lightweight preview."
+    "Supplemental public runtime evidence was retained for this lightweight preview."
   );
 
   if (fallbackEvidence.requestFootprint) {
@@ -1006,7 +1006,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
       category: "privacy",
       severity: "medium",
       title: "Third-party data collection footprint retained in fallback evidence",
-      description: `The urlscan.io fallback path retained ${footprintParts.join(", ")} for this lightweight preview${fallbackSnapshot.reportUrl ? ` (report: ${fallbackSnapshot.reportUrl})` : ""}.`
+      description: `The supplemental public runtime path retained ${footprintParts.join(", ")} for this lightweight preview.`
     });
   }
 

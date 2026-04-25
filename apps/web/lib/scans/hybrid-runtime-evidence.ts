@@ -705,7 +705,8 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
       return (getNumber(uiSummary?.popupCount) ?? 0) > 0;
     case "privacy.overlay_blocking_detected":
       return (
-        uiSummary?.overlayDetected === true ||
+        consentSummary?.cookieWallDetected === true ||
+        consentSummary?.pageInteractionBlocked === true ||
         uiSummary?.interstitialDetected === true ||
         uiSummary?.scrollLocked === true ||
         uiSummary?.forcedActionRequired === true
