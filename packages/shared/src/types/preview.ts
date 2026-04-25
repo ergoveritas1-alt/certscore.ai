@@ -45,6 +45,15 @@ export type PreviewScoreSummary = {
   accessibility: number;
 };
 
+export type PreviewScannerHealthWarning = {
+  code: string;
+  severity: "info" | "warning";
+  title: string;
+  message: string;
+  source: string;
+  phases?: string[];
+};
+
 export type PreviewFallbackEvidenceSection = {
   title: string;
   summary: string;
@@ -103,6 +112,7 @@ export type PreviewScanPayload = {
   };
   scores?: PreviewScoreSummary;
   fallbackEvidence?: PreviewFallbackEvidence;
+  scannerHealthWarnings?: PreviewScannerHealthWarning[];
   summaryBullets: string[];
   sampleFindings: PreviewSampleFinding[];
   disclaimer: string;

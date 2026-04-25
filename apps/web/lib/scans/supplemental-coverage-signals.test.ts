@@ -23,6 +23,38 @@ test("adds bounded key-page discovery unresolved when surface recovery leaves ke
   );
 });
 
+test("adds urlscan enrichment unavailable when urlscan diagnostics report no API key", () => {
+  const result = deriveSupplementalCoverageSignals({
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "urlscan_preflight_lookup",
+          status: "no_api_key"
+        }
+      },
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "urlscan_preflight_legal_fetch",
+          error: "no_api_key"
+        }
+      }
+    ],
+    existingSignals: []
+  });
+
+  assert.deepEqual(
+    result.supplementalSignals.find((signal) => signal.key === "disclosure.urlscan_enrichment_unavailable"),
+    {
+      key: "disclosure.urlscan_enrichment_unavailable",
+      label: "urlscan enrichment unavailable",
+      snapshotField: "urlscan_enrichment_unavailable",
+      value: ["urlscan_preflight_legal_fetch", "urlscan_preflight_lookup"]
+    }
+  );
+});
+
 test("adds bounded key-page discovery unresolved when policy enrichment is skipped because no policy pages were retained", () => {
   const result = deriveSupplementalCoverageSignals({
     events: [
