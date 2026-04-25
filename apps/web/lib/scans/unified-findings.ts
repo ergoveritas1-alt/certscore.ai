@@ -1523,6 +1523,17 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if ((contradictionEvidence?.runtimeVendors.length ?? 0) > 0) {
     entities.runtimeVendors = uniqueStrings([...(entities.runtimeVendors ?? []), ...((contradictionEvidence?.runtimeVendors ?? []) as string[])]);
   }
+  const runtimeRequestUrls = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.requestUrls) ? (normalizedFallbackEvidence.requestUrls as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.runtimeEvidenceUrls) ? (normalizedFallbackEvidence.runtimeEvidenceUrls as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.preconsent_tracker_evidence_urls)
+      ? (normalizedFallbackEvidence.preconsent_tracker_evidence_urls as string[])
+      : []),
+    ...(contradictionEvidence?.runtimeAnchor.requests ?? [])
+  ]).filter((value) => /^https?:\/\//i.test(value));
+  if (runtimeRequestUrls.length > 0) {
+    entities.runtimeRequestUrls = runtimeRequestUrls;
+  }
   if (normalizedFallbackEvidence.cookieAttributeSummary && typeof normalizedFallbackEvidence.cookieAttributeSummary === "object") {
     const summary = normalizedFallbackEvidence.cookieAttributeSummary as Record<string, unknown>;
     for (const key of [

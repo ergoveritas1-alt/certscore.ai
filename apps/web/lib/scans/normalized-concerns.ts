@@ -79,6 +79,7 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "missing_preconsent_sequence_evidence"
   | "missing_concrete_sensitive_payload"
   | "missing_third_party_tracking_artifact"
+  | "clear_pricing_terms_context_observed"
   | "missing_representative_accessibility_examples"
   | "accessibility_examples_below_promotion_threshold";
 

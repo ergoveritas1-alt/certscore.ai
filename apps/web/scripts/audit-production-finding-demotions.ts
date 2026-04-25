@@ -2,6 +2,9 @@ import process from "node:process";
 import { closePools, query } from "@website-signal-risk-scanner/db";
 
 type TargetFinding =
+  | "consent_gated_tracking_claim_conflict"
+  | "preconsent_tracking"
+  | "weak_cookie_security_attributes"
   | "accessibility_support_path_missing"
   | "privacy_contact_path_present"
   | "privacy_contact_channel_missing"
@@ -37,11 +40,15 @@ type CandidateRow = {
   accessibility_contact_method_present: boolean | null;
   accessibility_statement_present: boolean | null;
   completed_at: string;
+  consent_baseline_tracker_evidence_urls: string[] | null;
+  consent_mechanism_type: string | null;
+  cookie_attribute_summary: Record<string, unknown> | null;
   cookie_policy_present: boolean | null;
   domain: string;
   do_not_sell_link_present: boolean | null;
   final_url: string | null;
   mentions_data_sale_or_sharing: boolean | null;
+  preconsent_tracking_detected: boolean | null;
   privacy_contact_method_present: boolean | null;
   privacy_policy_present: boolean | null;
   privacy_request_form_present: boolean | null;
@@ -54,6 +61,7 @@ type CandidateRow = {
   retargeting_pixel_detected: boolean | null;
   session_replay_tool_detected: boolean | null;
   session_replay_tracker_count: number | null;
+  tracking_before_consent_detected: boolean | null;
   scan_id: string;
   verified_public_surfaces_count: number | null;
 };
@@ -108,6 +116,9 @@ function normalizeFinding(value: string | null): TargetFinding | "all" {
   }
   if (
     value === "accessibility_support_path_missing" ||
+    value === "consent_gated_tracking_claim_conflict" ||
+    value === "preconsent_tracking" ||
+    value === "weak_cookie_security_attributes" ||
     value === "privacy_contact_path_present" ||
     value === "privacy_contact_channel_missing" ||
     value === "privacy_policy_present" ||
@@ -157,6 +168,51 @@ function getText(html: string) {
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function getNumberValue(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function getStringArrayValue(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0) : [];
+}
+
+function hasMeaningfulWeakCookieAttributeSummary(summary: Record<string, unknown> | null | undefined) {
+  if (!summary) {
+    return false;
+  }
+
+  const totalCookiesAnalyzed = getNumberValue(summary, "totalCookiesAnalyzed") || getNumberValue(summary, "total_cookies_analyzed");
+  const missingSecureCount = getNumberValue(summary, "missingSecureCount") || getNumberValue(summary, "missing_secure_count");
+  const missingHttpOnlyCount = getNumberValue(summary, "missingHttpOnlyCount") || getNumberValue(summary, "missing_http_only_count");
+  const weakSameSiteCount = getNumberValue(summary, "weakSameSiteCount") || getNumberValue(summary, "weak_same_site_count");
+  const thirdPartyWeakCount =
+    getNumberValue(summary, "thirdPartyWeakAttributeCount") || getNumberValue(summary, "third_party_weak_attribute_count");
+  const missingSecureNames = [
+    ...getStringArrayValue(summary, "missingSecureCookieNames"),
+    ...getStringArrayValue(summary, "missing_secure_cookie_names")
+  ];
+  const weakSameSiteNames = [
+    ...getStringArrayValue(summary, "weakSameSiteCookieNames"),
+    ...getStringArrayValue(summary, "weak_same_site_cookie_names")
+  ];
+  const thirdPartyWeakNames = [
+    ...getStringArrayValue(summary, "thirdPartyWeakAttributeCookieNames"),
+    ...getStringArrayValue(summary, "third_party_weak_attribute_cookie_names")
+  ];
+
+  return (
+    thirdPartyWeakCount >= 1 ||
+    thirdPartyWeakNames.length >= 1 ||
+    weakSameSiteCount >= 1 ||
+    weakSameSiteNames.length >= 1 ||
+    missingSecureCount >= 2 ||
+    missingSecureNames.length >= 2 ||
+    (totalCookiesAnalyzed >= 3 && (missingSecureCount >= 1 || missingHttpOnlyCount >= 3))
+  );
 }
 
 function extractLinks(baseUrl: string, html: string, pattern: RegExp) {
@@ -372,6 +428,83 @@ async function probePricingTransparency(row: CandidateRow): Promise<LiveProbe> {
     assessment: "needs_review",
     evidenceUrl: row.final_url,
     rationale: "Live URL probe did not find enough pricing context to confirm or demote the transparency finding."
+  };
+}
+
+async function probePreconsentTracking(row: CandidateRow): Promise<LiveProbe> {
+  const baseUrl = getBaseUrl(row);
+  const homepage = await fetchText(baseUrl);
+  const retainedUrls = row.consent_baseline_tracker_evidence_urls ?? [];
+  const homepageHasKnownTracker = homepage
+    ? /connect\.facebook\.net|googletagmanager|google-analytics|doubleclick|clarity\.ms|hotjar|fullstory|segment\.com|amplitude\.com/i.test(
+        homepage.html
+      )
+    : false;
+  const retainedPreconsent = row.preconsent_tracking_detected === true || row.tracking_before_consent_detected === true;
+
+  if (retainedPreconsent && retainedUrls.some((url) => /^https?:\/\//i.test(url))) {
+    return {
+      assessment: "supports_promotion",
+      evidenceUrl: retainedUrls.find((url) => /^https?:\/\//i.test(url)) ?? homepage?.finalUrl ?? row.final_url,
+      rationale:
+        "Retained runtime artifacts include pre-consent tracker evidence URLs; own URL probe is supplementary because consent timing comes from runtime sequence artifacts."
+    };
+  }
+
+  if (retainedPreconsent && homepageHasKnownTracker) {
+    return {
+      assessment: "needs_review",
+      evidenceUrl: homepage?.finalUrl ?? row.final_url,
+      rationale:
+        "Live homepage probe found known tracker scripts, but promotion still needs retained pre-consent sequence and request URL artifacts."
+    };
+  }
+
+  return {
+    assessment: "supports_demotion",
+    evidenceUrl: homepage?.finalUrl ?? row.final_url,
+    rationale: "No retained pre-consent request URL artifact was available, so the finding should not promote from booleans alone."
+  };
+}
+
+async function probeConsentGatedTrackingConflict(row: CandidateRow): Promise<LiveProbe> {
+  const preconsent = await probePreconsentTracking(row);
+  if (preconsent.assessment !== "supports_promotion") {
+    return {
+      ...preconsent,
+      assessment: preconsent.assessment === "supports_demotion" ? "supports_demotion" : "needs_review",
+      rationale:
+        "Consent-gated tracking conflicts need the same concrete runtime side as pre-consent tracking plus policy/disclosure-side evidence."
+    };
+  }
+
+  return {
+    ...preconsent,
+    assessment: row.privacy_policy_present === true ? "needs_review" : "supports_demotion",
+    rationale:
+      row.privacy_policy_present === true
+        ? "Runtime side is artifact-backed; conflict promotion still needs a retained policy anchor that claims consent-gated tracking."
+        : "Runtime side is artifact-backed, but no retained policy surface was available to support the contradiction."
+  };
+}
+
+async function probeWeakCookieSecurityAttributes(row: CandidateRow): Promise<LiveProbe> {
+  const baseUrl = getBaseUrl(row);
+  const homepage = await fetchText(baseUrl);
+  const summary = row.cookie_attribute_summary;
+  if (hasMeaningfulWeakCookieAttributeSummary(summary)) {
+    return {
+      assessment: "supports_promotion",
+      evidenceUrl: homepage?.finalUrl ?? row.final_url,
+      rationale:
+        "Retained runtime cookie artifact includes named or count-backed Secure/SameSite weakness evidence; live URL fetch is supplementary because JavaScript-set cookies may not appear in raw response headers."
+    };
+  }
+
+  return {
+    assessment: "supports_demotion",
+    evidenceUrl: homepage?.finalUrl ?? row.final_url,
+    rationale: "No meaningful retained cookie attribute summary was available; avoid promoting weak-cookie posture from a raw signal alone."
   };
 }
 
@@ -933,6 +1066,9 @@ async function probeRegulatoryComplianceClaim(row: CandidateRow): Promise<LivePr
 
 async function loadCandidates(finding: TargetFinding, input: { domains: string[]; limit: number }) {
   const predicateByFinding: Record<TargetFinding, string> = {
+    consent_gated_tracking_claim_conflict: `(ss.preconsent_tracking_detected is true or ss.tracking_before_consent_detected is true) and ss.privacy_policy_present is true`,
+    preconsent_tracking: `ss.preconsent_tracking_detected is true or ss.tracking_before_consent_detected is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.preconsent_tracking_detected' and sig.signal_value_json = 'true'::jsonb)`,
+    weak_cookie_security_attributes: `exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.weak_cookie_security_attributes_detected') or exists (select 1 from scan_runtime_artifacts ra2 where ra2.scan_id = s.id and ra2.cookie_attribute_summary is not null)`,
     accessibility_support_path_missing: `ss.accessibility_contact_method_present is false and ss.accessibility_statement_present is false`,
     privacy_contact_path_present: `ss.privacy_contact_method_present is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.privacy_contact_path_present')`,
     privacy_contact_channel_missing: `ss.privacy_contact_channel_type = 'none' or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.privacy_contact_channel_missing')`,
@@ -977,6 +1113,11 @@ async function loadCandidates(finding: TargetFinding, input: { domains: string[]
              s.completed_at::text as completed_at,
              ss.domain,
              ss.final_url,
+             ss.consent_mechanism_type,
+             ss.preconsent_tracking_detected,
+             ss.tracking_before_consent_detected,
+             ra.cookie_attribute_summary,
+             ra.consent_baseline_tracker_evidence_urls,
              ss.cookie_policy_present,
              ss.accessibility_contact_method_present,
              ss.accessibility_statement_present,
@@ -1000,6 +1141,7 @@ async function loadCandidates(finding: TargetFinding, input: { domains: string[]
              ss.verified_public_surfaces_count
         from scans s
         join scan_snapshots ss on ss.scan_id = s.id
+        left join scan_runtime_artifacts ra on ra.scan_id = s.id
        where s.status = 'completed'
          and s.organization_id is not null
          and s.scan_type = 'full'
@@ -1016,6 +1158,46 @@ async function loadCandidates(finding: TargetFinding, input: { domains: string[]
 }
 
 function localAssessment(finding: TargetFinding, row: CandidateRow): LiveProbe {
+  if (finding === "preconsent_tracking") {
+    const retainedUrls = row.consent_baseline_tracker_evidence_urls ?? [];
+    return {
+      assessment:
+        (row.preconsent_tracking_detected === true || row.tracking_before_consent_detected === true) &&
+        retainedUrls.some((url) => /^https?:\/\//i.test(url))
+          ? "supports_promotion"
+          : "needs_review",
+      evidenceUrl: retainedUrls.find((url) => /^https?:\/\//i.test(url)) ?? row.final_url,
+      rationale:
+        "Pre-consent tracking promotion needs retained sequence evidence plus concrete tracker request URL artifacts."
+    };
+  }
+
+  if (finding === "consent_gated_tracking_claim_conflict") {
+    const retainedUrls = row.consent_baseline_tracker_evidence_urls ?? [];
+    return {
+      assessment:
+        row.privacy_policy_present === true &&
+        (row.preconsent_tracking_detected === true || row.tracking_before_consent_detected === true) &&
+        retainedUrls.some((url) => /^https?:\/\//i.test(url))
+          ? "needs_review"
+          : "supports_demotion",
+      evidenceUrl: retainedUrls.find((url) => /^https?:\/\//i.test(url)) ?? row.final_url,
+      rationale:
+        "Consent-gated tracking conflicts need both retained policy-claim evidence and concrete pre-consent runtime URL artifacts."
+    };
+  }
+
+  if (finding === "weak_cookie_security_attributes") {
+    return {
+      assessment: hasMeaningfulWeakCookieAttributeSummary(row.cookie_attribute_summary)
+        ? "supports_promotion"
+        : "supports_demotion",
+      evidenceUrl: row.final_url,
+      rationale:
+        "Weak-cookie promotion needs a retained cookie attribute summary with named or count-backed Secure/SameSite weakness evidence."
+    };
+  }
+
   if (finding === "accessibility_support_path_missing") {
     const surfaces = row.verified_public_surfaces_count ?? 0;
     return {
@@ -1229,6 +1411,9 @@ async function main() {
   const findings: TargetFinding[] =
     finding === "all"
       ? [
+          "consent_gated_tracking_claim_conflict",
+          "preconsent_tracking",
+          "weak_cookie_security_attributes",
           "accessibility_support_path_missing",
           "sale_sharing_controls_missing",
           "privacy_policy_present",
@@ -1272,7 +1457,13 @@ async function main() {
     for (const candidate of candidates) {
       const local = localAssessment(findingId, candidate);
       const live = liveCheck
-        ? findingId === "accessibility_support_path_missing"
+        ? findingId === "preconsent_tracking"
+          ? await probePreconsentTracking(candidate)
+          : findingId === "consent_gated_tracking_claim_conflict"
+            ? await probeConsentGatedTrackingConflict(candidate)
+            : findingId === "weak_cookie_security_attributes"
+              ? await probeWeakCookieSecurityAttributes(candidate)
+              : findingId === "accessibility_support_path_missing"
           ? await probeAccessibility(candidate)
           : findingId === "sale_sharing_controls_missing"
             ? await probeSaleSharing(candidate)

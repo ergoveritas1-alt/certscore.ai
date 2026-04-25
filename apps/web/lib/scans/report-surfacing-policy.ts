@@ -559,14 +559,16 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     family: "consent_tracking",
     initialState: "review",
     initialTier: "headline",
-    initialLane: "main"
+    initialLane: "main",
+    orphanedSupportFallback: "suppressed"
   },
   consent_gated_tracking_claim_conflict: {
     findingId: "consent_gated_tracking_claim_conflict",
     family: "contradiction",
     initialState: "review",
     initialTier: "headline",
-    initialLane: "main"
+    initialLane: "main",
+    orphanedSupportFallback: "suppressed"
   },
   reject_did_not_reduce_tracking: {
     findingId: "reject_did_not_reduce_tracking",
@@ -944,6 +946,23 @@ function hasFindingSpecificHighValuePrivacyDisclosureText(packet: UnifiedFinding
   }
 }
 
+function hasFindingSpecificPrivacyPathText(packet: UnifiedFindingPacket) {
+  const text = getEvidenceSnippetText(packet);
+
+  switch (packet.unifiedFindingId) {
+    case "privacy_rights_path_present":
+      return /(?:privacy rights|rights (?:portal|center)|privacy (?:portal|center|request)|(?:access|delete|deletion|correction|opt-out|data) request|request (?:access|deletion|correction|a copy)|submit (?:a )?request|exercise (?:your )?rights|privacy@|data protection officer|\bdpo\b|webform|request form)/i.test(
+        text
+      );
+    case "privacy_contact_path_present":
+      return /privacy@|privacy (?:team|office|department|request|contact|form|portal)|data protection officer|\bdpo\b|privacy rights|personal information request|data request/i.test(
+        text
+      );
+    default:
+      return false;
+  }
+}
+
 function hasConcreteRuntimeEvidence(packet: UnifiedFindingPacket) {
   return (
     packet.confidenceInputs.hasDirectRuntimeEvidence ||
@@ -1038,6 +1057,21 @@ function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
     packet.confidenceInputs.hasDirectRuntimeEvidence || packet.confidenceInputs.hasStructuredValidationEvidence;
 
   return hasRuntimeOrValidationBacking && hasVendors && hasUrls;
+}
+
+function hasSpecificConsentGatedRuntimeEvidence(packet: UnifiedFindingPacket) {
+  if (packet.unifiedFindingId !== "consent_gated_tracking_claim_conflict" || packet.details?.family !== "contradiction") {
+    return false;
+  }
+
+  const hasVendors =
+    (packet.details.vendors ?? []).some((value) => typeof value === "string" && value.trim().length > 0) ||
+    (packet.evidence?.entities?.runtimeVendors?.length ?? 0) > 0;
+  const hasRuntimeRequestUrls = (packet.evidence?.entities?.runtimeRequestUrls ?? []).some((value) =>
+    /^https?:\/\//i.test(value)
+  );
+
+  return hasVendors && hasRuntimeRequestUrls && (packet.confidenceInputs.hasDirectRuntimeEvidence || hasConcreteRuntimeEvidence(packet));
 }
 
 function hasStandalonePreconsentRuntimeEvidence(packet: UnifiedFindingPacket) {
@@ -1292,7 +1326,12 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (
-    (context.policy.family === "accessibility" || context.policy.family === "financial_promotion") &&
+    (
+      context.policy.family === "accessibility" ||
+      context.policy.family === "financial_promotion" ||
+      context.policy.family === "consent_tracking" ||
+      context.policy.family === "contradiction"
+    ) &&
     packet.concernContext?.externalSurfacingEligibilities?.every((value) => value === "audit_only")
   ) {
     overrideDecision(decision, {
@@ -1346,6 +1385,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       (packet.unifiedFindingId === "privacy_rights_path_present" || packet.unifiedFindingId === "privacy_contact_path_present") &&
       packet.confidenceInputs.hasPolicyTextEvidence &&
       hasReadableSnippet(packet) &&
+      hasFindingSpecificPrivacyPathText(packet) &&
       hasConcreteHumanFacingUrl(packet.evidence?.pageUrls)
     ) {
       overrideDecision(decision, {
@@ -1554,6 +1594,18 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
 
   if (context.policy.family === "contradiction") {
     if (packet.unifiedFindingId === "policy_behavior_conflict" || packet.unifiedFindingId === "consent_gated_tracking_claim_conflict") {
+      if (packet.unifiedFindingId === "consent_gated_tracking_claim_conflict" && !hasSpecificConsentGatedRuntimeEvidence(packet)) {
+        overrideDecision(decision, {
+          state: "support_only",
+          lane: "confidence_and_coverage",
+          tier: "support",
+          reason:
+            "Consent-gated tracking conflicts need concrete retained runtime vendor and request URL artifacts before they can surface externally.",
+          ruleId: "evidence.normalized_concern.audit_only"
+        });
+        return;
+      }
+
       if (hasExplicitContradictionBasis(packet)) {
         overrideDecision(decision, {
           state: "confirmed",

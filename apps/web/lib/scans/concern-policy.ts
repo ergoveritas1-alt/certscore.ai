@@ -1039,6 +1039,26 @@ function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | 
   return hasExplicitFinancialOffer;
 }
 
+function hasClearPricingTermsContext(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence || !hasSubstantivePageOrSnippetEvidence(rawEvidence)) {
+    return false;
+  }
+
+  const reviewerVisibleText = [
+    ...getEvidenceTextCandidates(rawEvidence),
+    ...getEvidenceUrlCandidates(rawEvidence)
+  ].join(" ");
+  const hasFeeClaim =
+    /\b(?:fee|fees|pricing|price|cost|monthly|annual|subscription|subscribe|membership|trial|\$|usd)\b/i.test(
+      reviewerVisibleText
+    );
+  const hasMaterialTerms = /refund|cancel|cancellation|renewal|billing|terms|fee schedule|withdrawal|conditions/i.test(
+    reviewerVisibleText
+  );
+
+  return hasFeeClaim && hasMaterialTerms;
+}
+
 function hasRepresentativeAccessibilityExamples(rawEvidence: Record<string, unknown> | null | undefined) {
   return hasExternallyPromotableAccessibilityExamples(rawEvidence);
 }
@@ -1632,6 +1652,18 @@ export function deriveConcernPolicy(input: {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_behavior_side_evidence"],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
+    input.concern.suggestedUnifiedFindingId === "pricing_or_fee_transparency_unclear" &&
+    hasClearPricingTermsContext(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "clear_pricing_terms_context_observed"],
       promotionEligibility: "internal_only"
     };
   }
