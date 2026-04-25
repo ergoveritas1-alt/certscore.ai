@@ -665,13 +665,18 @@ export function getHybridSignalFallbackEvidence(input: {
 
   switch (input.signalKey) {
     case "privacy.preconsent_tracking_detected":
-    case "privacy.tracking_before_consent_detected":
+    case "privacy.tracking_before_consent_detected": {
+      const preconsentRequestUrls = getPreconsentRequestUrls(hybrid);
+      const preconsentVendors = getPreconsentTrackerVendors(hybrid);
       return {
         consentBannerDetectedMs: getNumber(getRecord(hybrid.timelineMarkers)?.consentBannerDetectedMs),
-        preconsent_tracker_evidence_urls: getPreconsentRequestUrls(hybrid),
+        preconsent_tracker_evidence_urls: preconsentRequestUrls,
         preconsent_tracker_vendor_evidence: getPreconsentVendorEvidenceRows(hybrid),
-        preconsent_tracker_vendors: getPreconsentTrackerVendors(hybrid),
+        preconsent_tracker_vendors: preconsentVendors,
         preconsent_tracking_detected: true,
+        requestUrls: preconsentRequestUrls,
+        runtimeEvidenceUrls: preconsentRequestUrls,
+        runtimeVendors: preconsentVendors,
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
         signalValue: input.signalValue,
@@ -680,6 +685,7 @@ export function getHybridSignalFallbackEvidence(input: {
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
         hybridNetworkSummary: networkSummary
       };
+    }
     case "privacy.dark_pattern_reject_button_missing":
       if (!verifiedConsentSurface) {
         return null;

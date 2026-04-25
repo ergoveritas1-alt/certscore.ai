@@ -3,7 +3,10 @@ import test from "node:test";
 
 import { getContradictionEvidenceBundle } from "./contradiction-evidence-contract";
 import { POLICY_BEHAVIOR_CONFLICT_FIXTURES } from "./policy-behavior-conflict.fixtures";
-import { evaluatePolicyBehaviorConflictContract } from "./promotion-evidence-contracts";
+import {
+  evaluateConsentGatedTrackingConflictContract,
+  evaluatePolicyBehaviorConflictContract
+} from "./promotion-evidence-contracts";
 import { buildSanitizedNetworkEvidenceAuditRecord } from "./sanitized-network-evidence";
 
 test("policy behavior conflict fixtures parse into the structured contradiction schema", () => {
@@ -132,4 +135,102 @@ test("policy behavior conflict remains blocked when only a hashed artifact shell
 
   assert.equal(decision?.promotionEligibility, "internal_only");
   assert.ok(decision?.negativeEvidenceFlags.includes("runtime_tracking_review_incomplete"));
+});
+
+test("consent-gated tracking conflict contract accepts complete policy, runtime URL, and bridge evidence", () => {
+  const decision = evaluateConsentGatedTrackingConflictContract({
+    contradictionEvidence: {
+      claim: "Optional analytics cookies only run after consent.",
+      contradictionBasis: "Analytics fired before consent.",
+      conflictBridge: {
+        conflictType: "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired",
+        reasoning: "The policy claim says only necessary cookies run before choice, but an analytics request fired pre-consent.",
+        supportsPromotion: true
+      },
+      evidenceSufficiency: {
+        conflictBridgePresent: true,
+        policyAnchorPresent: true,
+        promotionEligible: true,
+        reviewStatus: "complete",
+        runtimeAnchorPresent: true
+      },
+      policyAnchor: {
+        claimType: "only_necessary_cookies_before_choice",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        normalizedClaim: "Optional analytics cookies only run after consent.",
+        snippet: "Optional analytics cookies only run after consent.",
+        sourceUrl: "https://example.com/privacy"
+      },
+      policySnippet: "Optional analytics cookies only run after consent.",
+      policySourceUrl: "https://example.com/privacy",
+      runtimeAnchor: {
+        confidence: 0.82,
+        cookies: [],
+        observationType: "analytics_vendor_fired_pre_consent",
+        phase: "pre_consent",
+        requests: ["https://www.google-analytics.com/g/collect?v=2"],
+        sourceUrl: "https://example.com/",
+        storageArtifacts: [],
+        vendors: ["Google Analytics"]
+      },
+      runtimeEvidenceArtifacts: ["https://www.google-analytics.com/g/collect?v=2"],
+      runtimeSummary: "Google Analytics request fired before consent.",
+      runtimeVendors: ["Google Analytics"],
+      sourceUrls: ["https://example.com/privacy"],
+      supportingSignals: ["consent_gating_claim"]
+    }
+  });
+
+  assert.deepEqual(decision, {
+    allowedNarrativeTier: "strong",
+    promotionEligibility: "eligible",
+    externalSurfacingEligibility: "eligible",
+    negativeEvidenceFlags: []
+  });
+});
+
+test("consent-gated tracking conflict contract stays audit-only without concrete runtime request URL", () => {
+  const decision = evaluateConsentGatedTrackingConflictContract({
+    contradictionEvidence: {
+      claim: "Optional analytics cookies only run after consent.",
+      contradictionBasis: "Analytics fired before consent.",
+      conflictBridge: {
+        conflictType: "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired",
+        reasoning: "The policy claim says only necessary cookies run before choice, but analytics was inferred pre-consent.",
+        supportsPromotion: true
+      },
+      evidenceSufficiency: {
+        conflictBridgePresent: true,
+        policyAnchorPresent: true,
+        promotionEligible: false,
+        reviewStatus: "insufficient_evidence_for_policy_behavior_conflict",
+        runtimeAnchorPresent: false
+      },
+      policyAnchor: {
+        claimType: "only_necessary_cookies_before_choice",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        normalizedClaim: "Optional analytics cookies only run after consent.",
+        snippet: "Optional analytics cookies only run after consent.",
+        sourceUrl: "https://example.com/privacy"
+      },
+      runtimeAnchor: {
+        confidence: 0.82,
+        cookies: [],
+        observationType: "analytics_vendor_fired_pre_consent",
+        phase: "pre_consent",
+        requests: [],
+        sourceUrl: "https://example.com/",
+        storageArtifacts: [],
+        vendors: ["Google Analytics"]
+      },
+      runtimeVendors: ["Google Analytics"],
+      sourceUrls: ["https://example.com/privacy"]
+    }
+  });
+
+  assert.equal(decision?.promotionEligibility, "internal_only");
+  assert.equal(decision?.externalSurfacingEligibility, "audit_only");
+  assert.ok(decision?.negativeEvidenceFlags.includes("missing_runtime_request_url_evidence"));
 });

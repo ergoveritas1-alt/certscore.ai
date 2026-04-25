@@ -69,6 +69,8 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "missing_explicit_contradiction_basis"
   | "missing_specific_policy_anchor"
   | "missing_specific_runtime_anchor"
+  | "missing_runtime_request_url_evidence"
+  | "missing_privacy_specific_contact_channel"
   | "unsupported_contradiction_mapping"
   | "policy_semantic_review_incomplete"
   | "runtime_tracking_review_incomplete"

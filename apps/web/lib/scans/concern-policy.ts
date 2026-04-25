@@ -15,6 +15,7 @@ import {
 import { getStoredFinancialJudgeOutput } from "./financial-judge-contract";
 import {
   evaluateConcreteRuntimeContract,
+  evaluateConsentGatedTrackingConflictContract,
   evaluatePolicyBehaviorConflictContract,
   evaluateStrongEvidenceContract,
   hasConcretePreconsentArtifact,
@@ -334,6 +335,19 @@ function hasPrivacySpecificContactText(value: string) {
   return /privacy@|privacy (?:team|office|department|request|contact|form|portal)|data protection officer|\bdpo\b|privacy rights|personal information request|data request/i.test(
     value
   );
+}
+
+function hasPrivacySpecificContactChannelEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const channelType = getFirstString(rawEvidence, ["privacyContactChannelType", "privacy_contact_channel_type"]);
+  if (channelType && !/^none|unknown|generic$/i.test(channelType)) {
+    return true;
+  }
+
+  return getEvidenceTextCandidates(rawEvidence).some(hasPrivacySpecificContactText);
 }
 
 function isTermsLikeUrl(value: string) {
@@ -1528,6 +1542,16 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isContradictionConcern(input.concern)) {
+    if (input.concern.suggestedUnifiedFindingId === "consent_gated_tracking_claim_conflict") {
+      const contractDecision = evaluateConsentGatedTrackingConflictContract(input.rawEvidence);
+      if (contractDecision) {
+        return {
+          ...contractDecision,
+          negativeEvidenceFlags: [...negativeEvidenceFlags, ...contractDecision.negativeEvidenceFlags] as NormalizedConcernNegativeEvidenceFlag[]
+        };
+      }
+    }
+
     if (input.concern.suggestedUnifiedFindingId === "policy_behavior_conflict") {
       const contractDecision = evaluatePolicyBehaviorConflictContract(input.rawEvidence);
       if (contractDecision) {
@@ -1879,8 +1903,17 @@ export function deriveConcernPolicy(input: {
     if (!hasVerifiedContentEvidence && !hasCorroboratedSurfaceEvidence) {
       negativeEvidenceFlags.add("positive_surface_content_unverified");
     }
+    if (
+      input.concern.suggestedUnifiedFindingId === "privacy_contact_path_present" &&
+      !hasPrivacySpecificContactChannelEvidence(input.rawEvidence)
+    ) {
+      negativeEvidenceFlags.add("missing_privacy_specific_contact_channel");
+    }
 
-    if (!hasVerifiedContentEvidence && !hasCorroboratedSurfaceEvidence) {
+    if (
+      (!hasVerifiedContentEvidence && !hasCorroboratedSurfaceEvidence) ||
+      negativeEvidenceFlags.has("missing_privacy_specific_contact_channel")
+    ) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",

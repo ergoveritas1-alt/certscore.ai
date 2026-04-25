@@ -560,6 +560,86 @@ export function evaluatePolicyBehaviorConflictContract(rawEvidence: Record<strin
   };
 }
 
+export function evaluateConsentGatedTrackingConflictContract(rawEvidence: Record<string, unknown> | null | undefined): ContractDecision | null {
+  const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
+  if (!contradictionEvidence) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [
+        "missing_behavior_side_evidence",
+        "missing_policy_side_evidence",
+        "missing_contradiction_mapping",
+        "missing_explicit_contradiction_basis",
+        "insufficient_evidence_for_policy_behavior_conflict"
+      ],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  const negativeEvidenceFlags = new Set<string>();
+  const { policyAnchor, runtimeAnchor, conflictBridge } = contradictionEvidence;
+  const allowedConflictType = getAllowedConflictType(policyAnchor.claimType, runtimeAnchor.observationType);
+  const consentGatingClaim =
+    policyAnchor.claimType === "only_necessary_cookies_before_choice" ||
+    policyAnchor.claimType === "no_marketing_tracking_before_consent";
+  const preconsentRuntime =
+    runtimeAnchor.phase === "pre_consent" &&
+    (runtimeAnchor.observationType === "marketing_vendor_fired_pre_consent" ||
+      runtimeAnchor.observationType === "analytics_vendor_fired_pre_consent");
+  const hasRuntimeRequests =
+    runtimeAnchor.requests.some((value) => /^https?:\/\//i.test(value)) ||
+    hasConcreteSanitizedNetworkEvidence(rawEvidence, { runtimePhase: "pre_consent" });
+  const hasRuntimeVendors = runtimeAnchor.vendors.length > 0;
+  const policyFetched = policyAnchor.extractionStatus === "fetched";
+  const policyConfidenceOk = typeof policyAnchor.confidence !== "number" || policyAnchor.confidence >= 0.55;
+  const runtimeConfidenceOk = typeof runtimeAnchor.confidence !== "number" || runtimeAnchor.confidence >= 0.55;
+  const bridgeOk = Boolean(
+    conflictBridge.conflictType &&
+      allowedConflictType &&
+      conflictBridge.conflictType === allowedConflictType &&
+      conflictBridge.supportsPromotion
+  );
+
+  if (!policyFetched || !consentGatingClaim || !policyAnchor.sourceUrl || !policyAnchor.snippet || !policyConfidenceOk) {
+    negativeEvidenceFlags.add("missing_policy_side_evidence");
+    negativeEvidenceFlags.add("missing_specific_policy_anchor");
+  }
+  if (!preconsentRuntime || !hasRuntimeVendors || !runtimeConfidenceOk) {
+    negativeEvidenceFlags.add("missing_behavior_side_evidence");
+    negativeEvidenceFlags.add("missing_specific_runtime_anchor");
+    negativeEvidenceFlags.add("runtime_tracking_review_incomplete");
+  }
+  if (!hasRuntimeRequests) {
+    negativeEvidenceFlags.add("missing_runtime_request_url_evidence");
+  }
+  if (!bridgeOk) {
+    negativeEvidenceFlags.add("missing_contradiction_mapping");
+    negativeEvidenceFlags.add("missing_explicit_contradiction_basis");
+  }
+  if (hasBlockingContradictionMetaSignal(rawEvidence)) {
+    negativeEvidenceFlags.add("model_suspicion_without_structured_support");
+  }
+
+  if (negativeEvidenceFlags.size > 0) {
+    negativeEvidenceFlags.add("possible_policy_runtime_mismatch");
+    negativeEvidenceFlags.add("insufficient_evidence_for_policy_behavior_conflict");
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  return {
+    allowedNarrativeTier: "strong",
+    externalSurfacingEligibility: "eligible",
+    negativeEvidenceFlags: [],
+    promotionEligibility: "eligible"
+  };
+}
+
 export function evaluateConcreteRuntimeContract(input: {
   allowAuditOnlyWithoutArtifact?: boolean;
   missingFlag: string;
