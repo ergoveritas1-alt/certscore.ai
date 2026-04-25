@@ -108,6 +108,8 @@ test("builds fallback evidence for hybrid pre-consent tracking concerns", () => 
   });
 
   assert.deepEqual(fallback?.preconsent_tracker_vendors, ["Meta Pixel"]);
+  assert.deepEqual(fallback?.preconsent_cookie_evidence, []);
+  assert.deepEqual(fallback?.preconsent_nonessential_cookie_names, []);
   assert.deepEqual(fallback?.preconsent_tracker_evidence_urls, []);
   assert.deepEqual(fallback?.preconsent_tracker_vendor_evidence, [
     {
@@ -122,6 +124,81 @@ test("builds fallback evidence for hybrid pre-consent tracking concerns", () => 
   ]);
   assert.equal(fallback?.preconsent_tracking_detected, true);
   assert.deepEqual(fallback?.runtimeEvidenceArtifacts, ["hybrid_runtime_evidence"]);
+});
+
+test("builds calibrated pre-consent cookie evidence from hybrid cookie writes", () => {
+  const runtimeArtifacts = {
+    hybrid_runtime_evidence: {
+      cookieWriteObservations: [
+        {
+          beforeConsent: true,
+          cookieName: "_fbp",
+          cookiePartyType: "third_party",
+          cookieSameSite: "None",
+          cookieSecure: true,
+          cookieSetMethod: "http_header",
+          domain: ".facebook.com",
+          setAtMs: 120,
+          thirdParty: true
+        },
+        {
+          beforeConsent: true,
+          cookieName: "__cf_bm",
+          cookiePartyType: "first_party",
+          cookieSetMethod: "http_header",
+          domain: ".example.com",
+          setAtMs: 0,
+          thirdParty: false
+        }
+      ],
+      networkSummary: {
+        preConsentThirdPartyRequestCount: 0
+      }
+    }
+  } satisfies Record<string, unknown>;
+
+  const fallback = getHybridSignalFallbackEvidence({
+    runtimeArtifacts,
+    signalKey: "privacy.preconsent_tracking_detected",
+    signalLabel: "Pre-consent tracking detected",
+    signalValue: true
+  });
+
+  assert.deepEqual(fallback?.preconsent_cookie_names, ["_fbp", "__cf_bm"]);
+  assert.deepEqual(fallback?.preconsent_nonessential_cookie_names, ["_fbp"]);
+  assert.deepEqual(fallback?.preconsent_cookie_categories, ["advertising", "necessary"]);
+  assert.deepEqual(fallback?.preconsent_cookie_evidence, [
+    {
+      category: "advertising",
+      cookieName: "_fbp",
+      domain: ".facebook.com",
+      expirationType: null,
+      initiatorDomain: null,
+      initiatorVendor: null,
+      nonEssential: true,
+      party: "third_party",
+      sameSite: "None",
+      secure: true,
+      setAtMs: 120,
+      setMethod: "http_header",
+      timingEvidence: "before_consent_cookie_write"
+    },
+    {
+      category: "necessary",
+      cookieName: "__cf_bm",
+      domain: ".example.com",
+      expirationType: null,
+      initiatorDomain: null,
+      initiatorVendor: null,
+      nonEssential: false,
+      party: "first_party",
+      sameSite: null,
+      secure: null,
+      setAtMs: 0,
+      setMethod: "http_header",
+      timingEvidence: "before_consent_cookie_write"
+    }
+  ]);
 });
 
 test("does not derive consent dark-pattern signals without an observed consent surface", () => {
