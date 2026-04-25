@@ -1112,6 +1112,215 @@ function makeProductionSurfacedCalibrationExamples() {
 export const PRIVACY_RUNTIME_PRODUCTION_TOP_FINDINGS_EXAMPLES: PrivacyRuntimeFindingDatasetExample[] =
   makeProductionSurfacedCalibrationExamples();
 
+const BEHAVIORAL_ANALYTICS_CONTEXT_SNIPPETS = [
+  "We use behavioral analytics, session recording, and heatmaps to understand how visitors use the site.",
+  "Our product analytics tools may record sessions and replay user interactions for service improvement.",
+  "We use Hotjar heatmaps and behavior analytics to improve page layouts.",
+  "We use FullStory session replay and product analytics to diagnose user experience issues.",
+  "We use Mouseflow recordings and heatmaps to analyze user behavior.",
+  "We use Contentsquare behavioral analytics to evaluate user journeys.",
+  "We use Microsoft Clarity session recordings and heatmaps to improve our website.",
+  "We collect behavioral analytics events to understand how visitors interact with pages.",
+  "Our analytics providers may create session recordings and heatmaps of site interactions.",
+  "We use product analytics and session replay to review clicks, scrolls, and navigation paths."
+] as const;
+
+const COOKIE_POLICY_CONTEXT_SNIPPETS = [
+  "Cookie Policy: we explain cookie categories, retention periods, and preference controls.",
+  "Cookie Settings: users can manage essential, analytics, and advertising cookies.",
+  "Our Cookies Notice describes the cookies we use and how to update choices.",
+  "Privacy Choices includes cookie preferences and opt-out controls.",
+  "The cookie center lists cookie categories, providers, and controls.",
+  "Manage Cookies lets visitors adjust analytics and advertising cookie preferences.",
+  "Our cookie policy explains similar technologies and links to preference settings.",
+  "The privacy center includes a substantive cookie notice and cookie control panel."
+] as const;
+
+export const PRIVACY_RUNTIME_POSITIVE_CONTEXT_CALIBRATION_EXAMPLES: PrivacyRuntimeFindingDatasetExample[] = [
+  ...makeExamples({
+    count: 10,
+    evidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/context-behavioral-analytics/positive-${index}.json`],
+      policyAnchor: {
+        claimType: "behavioral_analytics_disclosure",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: `https://context-behavioral-positive-${index}.example.test/privacy`,
+        snippet: BEHAVIORAL_ANALYTICS_CONTEXT_SNIPPETS[index % BEHAVIORAL_ANALYTICS_CONTEXT_SNIPPETS.length]!
+      },
+      signalKey: "privacy.behavioral_analytics_disclosure_present",
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Own URL review found explicit behavioral analytics, session replay, heatmap, product analytics, or named replay-tool disclosure language.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: `https://context-behavioral-positive-${index}.example.test/privacy`
+      }
+    }),
+    expectationFor: () => positiveExpectation("high"),
+    findingGroup: "production_surfaced_calibration",
+    findingIds: ["behavioral_analytics_disclosure_present"],
+    idPrefix: "context-behavioral-analytics-positive",
+    notesFor: () => "Explicit retained behavioral analytics disclosure text is eligible for main-lane review-level positive context.",
+    scenarioType: "positive_high_confidence",
+    sourceKindFor: (index) => (index % 2 === 0 ? "live_artifact" : "regression_case")
+  }),
+  ...makeExamples({
+    count: 12,
+    evidenceFor: (index) => ({
+      artifactRefs: index % 2 === 0 ? [`s3://privacy-runtime/context-behavioral-analytics/negative-${index}.json`] : [],
+      policyAnchor: {
+        claimType: "generic_analytics_reference",
+        confidence: 0.72,
+        extractionStatus: "fetched",
+        sourceUrl: `https://context-behavioral-negative-${index}.example.test/privacy`,
+        snippet: index % 2 === 0
+          ? "We use analytics to understand site performance and improve our services."
+          : "We may collect usage data and aggregate statistics about visits to our website."
+      },
+      signalKey: "privacy.behavioral_analytics_disclosure_present",
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found only generic analytics, site-improvement, usage-data, or cookie analytics language without behavioral/session/heatmap specificity.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: `https://context-behavioral-negative-${index}.example.test/privacy`
+      }
+    }),
+    expectationFor: () => negativeExpectation(),
+    findingGroup: "production_surfaced_calibration",
+    findingIds: ["behavioral_analytics_disclosure_present"],
+    idPrefix: "context-behavioral-analytics-negative",
+    notesFor: () => "Generic analytics language should not promote a behavioral analytics disclosure interpretation.",
+    reasonFor: () => ({ negativeControlReason: "No explicit behavioral analytics, session replay, heatmap, product analytics, or named replay-tool disclosure." }),
+    scenarioType: "negative_control",
+    sourceKindFor: (index) => (index % 2 === 0 ? "live_artifact" : "synthetic_fixture")
+  }),
+  ...makeExamples({
+    count: 8,
+    evidenceFor: (index) => ({
+      artifactRefs: index % 2 === 0 ? [`s3://privacy-runtime/context-behavioral-analytics/borderline-${index}.json`] : [],
+      policyAnchor: index % 2 === 0 ? {
+        claimType: "behavioral_analytics_disclosure_partial",
+        confidence: 0.64,
+        extractionStatus: index % 4 === 0 ? "parser_incomplete" : "fetched",
+        sourceUrl: `https://context-behavioral-borderline-${index}.example.test/privacy`,
+        snippet: index % 3 === 0
+          ? "We may use tools that help us understand interactions with our website."
+          : "Analytics tools may help us review user journeys and page interactions."
+      } : undefined,
+      signalKey: "privacy.behavioral_analytics_disclosure_present",
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own URL review found partial behavioral-analytics context, but retained evidence lacks a strong snippet, page attribution, or parser quality.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: `https://context-behavioral-borderline-${index}.example.test/privacy`
+      }
+    }),
+    expectationFor: () => borderlineExpectation("review"),
+    findingGroup: "production_surfaced_calibration",
+    findingIds: ["behavioral_analytics_disclosure_present"],
+    idPrefix: "context-behavioral-analytics-borderline",
+    notesFor: () => "Partial behavioral analytics language remains review-only until retained evidence is explicit and page-attributed.",
+    reasonFor: () => ({ downgradeReason: "Retained evidence is partial, parser-incomplete, or lacks explicit behavioral/session/heatmap wording." }),
+    scenarioType: "borderline_review",
+    sourceKindFor: (index) => (index % 2 === 0 ? "live_artifact" : "regression_case")
+  }),
+  ...makeExamples({
+    count: 8,
+    evidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/context-cookie-policy/support-${index}.json`],
+      policyAnchor: {
+        claimType: "cookie_policy_surface_present",
+        confidence: 0.84,
+        extractionStatus: "fetched",
+        sourceUrl: `https://context-cookie-support-${index}.example.test/cookie-policy`,
+        snippet: COOKIE_POLICY_CONTEXT_SNIPPETS[index % COOKIE_POLICY_CONTEXT_SNIPPETS.length]!
+      },
+      signalKey: "disclosure.cookie_policy_present",
+      snapshotEvidence: {
+        cookie_policy_role: "support_context"
+      },
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Own URL review found a substantive cookie policy, notice, settings, or privacy-choices surface; this should support stronger cookie/tracking findings rather than surface standalone.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: `https://context-cookie-support-${index}.example.test/cookie-policy`
+      }
+    }),
+    expectationFor: () => borderlineExpectation("support_only"),
+    findingGroup: "production_surfaced_calibration",
+    findingIds: ["cookie_policy_present"],
+    idPrefix: "context-cookie-policy-support",
+    notesFor: () => "Substantive cookie-policy evidence is retained as support context, not as a standalone ranked finding.",
+    scenarioType: "positive_moderate",
+    sourceKindFor: (index) => (index % 2 === 0 ? "live_artifact" : "regression_case")
+  }),
+  ...makeExamples({
+    count: 14,
+    evidenceFor: (index) => ({
+      artifactRefs: index % 2 === 0 ? [`s3://privacy-runtime/context-cookie-policy/negative-${index}.json`] : [],
+      policyAnchor: index % 3 === 0 ? {
+        claimType: "thin_cookie_reference",
+        confidence: 0.58,
+        extractionStatus: "fetched",
+        sourceUrl: `https://context-cookie-negative-${index}.example.test/privacy`,
+        snippet: "This site may use cookies."
+      } : undefined,
+      requestUrls: index % 4 === 0 ? [`https://context-cookie-negative-${index}.example.test/`] : [],
+      signalKey: "disclosure.cookie_policy_present",
+      snapshotEvidence: {
+        cookie_policy_candidate: false
+      },
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found a footer cookie mention, dead cookie link, banner-only reference, or generic privacy page without a substantive cookie surface.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: `https://context-cookie-negative-${index}.example.test/`
+      }
+    }),
+    expectationFor: () => negativeExpectation(),
+    findingGroup: "production_surfaced_calibration",
+    findingIds: ["cookie_policy_present"],
+    idPrefix: "context-cookie-policy-negative",
+    notesFor: () => "Thin cookie mentions or dead/non-substantive cookie surfaces should not count as retained cookie-policy support.",
+    reasonFor: () => ({ negativeControlReason: "No substantive cookie policy, cookie settings, cookie notice, or privacy-choices surface was retained." }),
+    scenarioType: "negative_control",
+    sourceKindFor: (index) => (index % 2 === 0 ? "live_artifact" : "synthetic_fixture")
+  }),
+  ...makeExamples({
+    count: 8,
+    evidenceFor: (index) => ({
+      artifactRefs: index % 2 === 0 ? [`s3://privacy-runtime/context-cookie-policy/borderline-${index}.json`] : [],
+      policyAnchor: {
+        claimType: "partial_cookie_surface",
+        confidence: 0.63,
+        extractionStatus: index % 3 === 0 ? "parser_incomplete" : "fetched",
+        sourceUrl: `https://context-cookie-borderline-${index}.example.test/privacy`,
+        snippet: index % 2 === 0
+          ? "We use cookies and similar technologies as described in this privacy notice."
+          : "A cookie banner was observed, but no retained cookie-settings destination was captured."
+      },
+      signalKey: "disclosure.cookie_policy_present",
+      snapshotEvidence: {
+        cookie_policy_role: "ambiguous_support_context"
+      },
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own URL review found partial cookie language or a banner, but retained evidence does not prove a substantive first-party cookie policy/settings surface.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: `https://context-cookie-borderline-${index}.example.test/privacy`
+      }
+    }),
+    expectationFor: () => borderlineExpectation("support_only"),
+    findingGroup: "production_surfaced_calibration",
+    findingIds: ["cookie_policy_present"],
+    idPrefix: "context-cookie-policy-borderline",
+    notesFor: () => "Partial cookie evidence remains support-only/audit-only until a substantive first-party surface is retained.",
+    reasonFor: () => ({ downgradeReason: "Cookie evidence is partial, parser-incomplete, banner-only, or lacks a retained settings/policy destination." }),
+    scenarioType: "borderline_audit_only",
+    sourceKindFor: (index) => (index % 2 === 0 ? "live_artifact" : "regression_case")
+  })
+];
+
 export const PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE: PrivacyRuntimeFindingDatasetExample[] = [
   ...makeExamples({
     count: 18,
@@ -1376,6 +1585,7 @@ export const PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE: PrivacyRuntimeFindingDa
 export const PRIVACY_RUNTIME_FINDINGS_DATASET_SEED: PrivacyRuntimeFindingDatasetExample[] = [
   ...PRIVACY_RUNTIME_FINDINGS_DATASET_SEED_BASE,
   ...PRIVACY_RUNTIME_PRODUCTION_TOP_FINDINGS_EXAMPLES,
+  ...PRIVACY_RUNTIME_POSITIVE_CONTEXT_CALIBRATION_EXAMPLES,
   ...PRIVACY_RUNTIME_FINDINGS_REVIEWED_EXAMPLES
 ];
 
