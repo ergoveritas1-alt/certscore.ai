@@ -1081,8 +1081,38 @@ function hasStructuredPolicyAbsenceBacking(packet: UnifiedFindingPacket) {
 
 function hasContradictoryMissingDisclosureCue(packet: UnifiedFindingPacket) {
   const evidenceText = (packet.evidence?.snippets ?? []).join(" ").toLowerCase();
+  const evidenceFlags = new Set(packet.evidence?.flags ?? []);
+
+  if (packet.unifiedFindingId === "missing_dsar_mechanism" && evidenceFlags.has("policy_field:dsar_path:found")) {
+    return true;
+  }
+
+  if (packet.unifiedFindingId === "missing_retention_disclosure" && evidenceFlags.has("policy_field:retention:found")) {
+    return true;
+  }
+
+  if (
+    packet.unifiedFindingId === "missing_transfer_disclosure" &&
+    (
+      evidenceFlags.has("policy_field:third_party_sharing:found") ||
+      evidenceFlags.has("policy_field:transfer:found") ||
+      evidenceFlags.has("policy_field:transfers:found")
+    )
+  ) {
+    return true;
+  }
+
   if (!evidenceText) {
     return false;
+  }
+
+  if (packet.unifiedFindingId === "missing_dsar_mechanism") {
+    return (
+      /\b(?:privacy|data|consumer) (?:request|portal|center|form)|submit (?:a )?(?:privacy|data|consumer)? ?request|exercise (?:your )?(?:privacy|data|consumer)? ?rights|request (?:access|deletion|correction|a copy)|(?:access|delete|deletion|correct|correction|portability|opt-out) request\b/i.test(
+        evidenceText
+      ) &&
+      !/\b(?:no|lacks?|without|absent|missing) (?:concrete |specific |details? (?:on|about) )?(?:dsar|rights?|request|portal|form|mechanism|path|data rights?)\b/i.test(evidenceText)
+    );
   }
 
   if (packet.unifiedFindingId === "missing_retention_disclosure") {
@@ -1091,6 +1121,17 @@ function hasContradictoryMissingDisclosureCue(packet: UnifiedFindingPacket) {
         evidenceText
       ) &&
       !/\bno (?:specific )?(?:retention|retain|stored?|storage)\b/i.test(evidenceText)
+    );
+  }
+
+  if (packet.unifiedFindingId === "missing_transfer_disclosure") {
+    return (
+      /\b(?:share|shares|shared|sharing|disclose|discloses|disclosed|transfer|transfers|transferred) (?:your |personal |user |customer |account |usage |non-personal |data|information)|(?:service providers?|affiliates?|partners?|vendors?|processors?|subprocessors?|third parties|third-party) (?:may )?(?:receive|access|process|use|handle|support)\b/i.test(
+        evidenceText
+      ) &&
+      !/\b(?:no|not|never|does not|do not) (?:sell|share|transfer|disclose)|(?:lacks?|without|absent|missing) (?:concrete |specific )?(?:transfer|sharing|third-party|service provider)\b/i.test(
+        evidenceText
+      )
     );
   }
 

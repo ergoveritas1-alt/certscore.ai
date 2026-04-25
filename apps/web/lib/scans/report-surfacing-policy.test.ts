@@ -597,6 +597,90 @@ test("missing-retention findings do not confirm when retained evidence names ret
   assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
 });
 
+test("missing DSAR and transfer findings do not confirm when retained evidence contradicts the absence", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("missing_dsar_mechanism", {
+        confidenceInputs: {
+          ...makePacket("missing_dsar_mechanism").confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket("missing_dsar_mechanism").evidence,
+          counts: {
+            policy_coverage_ratio: 0.7,
+            policy_semantic_confidence: 0.85
+          },
+          flags: ["policy_field:dsar_path:found"],
+          pageUrls: ["https://example.com/privacy-policy"],
+          snippets: ["Use our privacy request form to submit access, deletion, or correction requests."],
+          sourceUrls: ["https://example.com/privacy-policy"]
+        }
+      }),
+      makePacket("missing_transfer_disclosure", {
+        confidenceInputs: {
+          ...makePacket("missing_transfer_disclosure").confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket("missing_transfer_disclosure").evidence,
+          counts: {
+            policy_coverage_ratio: 0.8,
+            policy_semantic_confidence: 0.9
+          },
+          flags: ["policy_field:third_party_sharing:found"],
+          pageUrls: ["https://example.com/privacy-policy"],
+          snippets: ["We share personal information with service providers, affiliates, and advertising partners."],
+          sourceUrls: ["https://example.com/privacy-policy"]
+        }
+      })
+    ]
+  });
+
+  for (const findingId of ["missing_dsar_mechanism", "missing_transfer_disclosure"]) {
+    const decision = evaluation.debugDecisions.find((item) => item.unifiedFindingId === findingId);
+    assert.equal(decision?.decisionState, "review", findingId);
+    assert.equal(decision?.reportLane, "confidence_and_coverage", findingId);
+    assert.equal(decision?.surfaceTier, "support", findingId);
+    assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"), findingId);
+  }
+});
+
+test("missing DSAR findings can confirm when retained text mentions rights but no concrete request mechanism", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("missing_dsar_mechanism", {
+        confidenceInputs: {
+          ...makePacket("missing_dsar_mechanism").confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        evidence: {
+          ...makePacket("missing_dsar_mechanism").evidence,
+          counts: {
+            policy_coverage_ratio: 0.6,
+            policy_semantic_confidence: 0.8
+          },
+          flags: ["policy_field:dsar_path:absent"],
+          pageUrls: ["https://example.com/privacy-policy"],
+          snippets: ["The policy outlines data rights but lacks specific details on data rights request paths."],
+          sourceUrls: ["https://example.com/privacy-policy"]
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "confirmed");
+  assert.equal(decision?.reportLane, "main");
+  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.confirmed_structured_policy_absence"));
+});
+
 test("noisy rights-gap findings stay in confidence coverage when evidence is incomplete", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
