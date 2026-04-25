@@ -1,4 +1,8 @@
-import { buildRuntimeCookieInventory } from "../lib/scans/runtime-cookie-evidence";
+import {
+  buildRuntimeCookieInventory,
+  classifyRuntimeCookieCategory,
+  isNonEssentialCookieCategory
+} from "../lib/scans/runtime-cookie-evidence";
 
 export type PromotionBlockerFindingId =
   | "behavioral_analytics_disclosure_present"
@@ -180,10 +184,38 @@ function getUnmatchedCookieCount(input: PromotionBlockerInput) {
   const hybrid = getRecord(input.hybridRuntimeEvidence);
   const explicit =
     getNumber(validation?.unmatchedCookieCount ?? validation?.unmatched_cookie_count) ??
-    getNumber(validation?.unmatchedThirdPartyCookieCount ?? validation?.unmatched_third_party_cookie_count) ??
-    getNumber(hybrid?.unmatchedCookieCount ?? hybrid?.unmatched_cookie_count) ??
-    getNumber(hybrid?.unmatchedThirdPartyCookieCount ?? hybrid?.unmatched_third_party_cookie_count);
+    getNumber(hybrid?.unmatchedCookieCount ?? hybrid?.unmatched_cookie_count);
   return explicit ?? getUnmatchedCookieNames(input).length;
+}
+
+function getUnmatchedThirdPartyCookieCount(input: PromotionBlockerInput) {
+  const validation = getRecord(input.cookieGapValidationEvidence);
+  const hybrid = getRecord(input.hybridRuntimeEvidence);
+  return (
+    getNumber(validation?.unmatchedThirdPartyCookieCount ?? validation?.unmatched_third_party_cookie_count) ??
+    getNumber(hybrid?.unmatchedThirdPartyCookieCount ?? hybrid?.unmatched_third_party_cookie_count) ??
+    0
+  );
+}
+
+function hasPromotionGradeUnmatchedCookie(input: PromotionBlockerInput) {
+  if (getUnmatchedThirdPartyCookieCount(input) > 0) {
+    return true;
+  }
+  const validation = getRecord(input.cookieGapValidationEvidence);
+  const hybrid = getRecord(input.hybridRuntimeEvidence);
+  const inventory = buildRuntimeCookieInventory({ hybridRuntimeEvidence: hybrid });
+  if (inventory.unmatchedRows.some((row) => row.nonEssential || row.party === "third_party" && row.category !== "necessary")) {
+    return true;
+  }
+  const categories = [
+    ...getStringArray(validation?.unmatchedCookieCategories ?? validation?.unmatched_cookie_categories),
+    ...getStringArray(hybrid?.unmatchedCookieCategories ?? hybrid?.unmatched_cookie_categories)
+  ];
+  if (categories.some(isNonEssentialCookieCategory)) {
+    return true;
+  }
+  return getUnmatchedCookieNames(input).some((name) => isNonEssentialCookieCategory(classifyRuntimeCookieCategory(name)));
 }
 
 function isLikelyPolicyUrl(value: string | null | undefined, pattern: RegExp) {
@@ -426,6 +458,8 @@ export function classifyCookieDisclosureGapPromotionBlockers(input: PromotionBlo
   const runtimeCookieNames = getRuntimeCookieNames(input);
   const unmatchedCookieNames = getUnmatchedCookieNames(input);
   const unmatchedCookieCount = getUnmatchedCookieCount(input);
+  const unmatchedThirdPartyCookieCount = getUnmatchedThirdPartyCookieCount(input);
+  const promotionGradeUnmatchedCookie = hasPromotionGradeUnmatchedCookie(input);
   const validationBacked = Boolean(getRecord(input.cookieGapValidationEvidence));
   const effectivePolicyUrl = getEffectiveCookieGapPolicyUrl(input);
   const hasCookiePolicyUrl = isLikelyPolicyUrl(effectivePolicyUrl, /cookie|privacy|legal|policy|notice/);
@@ -453,6 +487,9 @@ export function classifyCookieDisclosureGapPromotionBlockers(input: PromotionBlo
   if (unmatchedCookieCount <= 0) {
     blockers.push("missing_unmatched_cookie_inventory");
   }
+  if (unmatchedCookieCount > 0 && !promotionGradeUnmatchedCookie) {
+    blockers.push("missing_unmatched_nonessential_or_third_party_cookie");
+  }
 
   return {
     blockers,
@@ -475,7 +512,8 @@ export function classifyCookieDisclosureGapPromotionBlockers(input: PromotionBlo
       sampleRuntimeCookieNames: runtimeCookieNames.slice(0, 8),
       sampleUnmatchedCookieNames: unmatchedCookieNames.slice(0, 8),
       validationBacked,
-      unmatchedCookieCount
+      unmatchedCookieCount,
+      unmatchedThirdPartyCookieCount
     },
     findingId: "cookie_disclosure_gap",
     promotionReady: blockers.length === 0

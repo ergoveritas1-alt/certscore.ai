@@ -2372,5 +2372,179 @@ export const PRIVACY_RUNTIME_FINDINGS_REVIEWED_EXAMPLES: PrivacyRuntimeFindingDa
     notes: "Own URL assessment borderline case from production audit.",
     scenarioType: "borderline_review",
     sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      artifactRefs: ["review:cookie-disclosure-gap-urls:2026-04-25"],
+      policyAnchor: {
+        claimType: "cookie_policy_partial_or_missing_runtime_coverage",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: "https://www.troweprice.com/en/us/legal/cookie-policy",
+        snippet: "Live URL review did not find sampled unmatched runtime cookies or vendors in the cookie policy text."
+      },
+      runtimeAnchor: {
+        confidence: 0.86,
+        observationType: "cookie_or_tracker_inventory_exceeds_policy_disclosure",
+        phase: "unknown",
+        vendors: ["Adobe", "Qualtrics", "Google"]
+      },
+      signalKey: "privacy.cookie_runtime_disclosure_gap_detected",
+      snapshotEvidence: {
+        unmatchedCookieCount: 7,
+        unmatchedThirdPartyCookieCount: 1
+      },
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Live policy fetch returned substantive cookie-policy text, and sampled unmatched runtime cookies/vendors were not found in that text.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://www.troweprice.com/en/us/legal/cookie-policy"
+      },
+      vendorCategories: ["analytics", "advertising", "session_replay"],
+      vendors: ["Adobe", "Qualtrics", "Google"]
+    },
+    expected: {
+      confidenceBand: "high",
+      externalSurfacingEligibility: "eligible",
+      presentationState: "confirmed",
+      promotionEligibility: "eligible"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "cookie_disclosure_gap",
+    id: "live-promotion-cookie-gap-troweprice-2026-04-25",
+    notes: "Own URL assessment positive control from cookie disclosure gap URL review.",
+    scenarioType: "positive_high_confidence",
+    sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      artifactRefs: ["review:cookie-disclosure-gap-urls:2026-04-25"],
+      policyAnchor: {
+        claimType: "cookie_policy_partial_or_missing_runtime_coverage",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: "https://ftmo.com/en/cookies/",
+        snippet: "Live URL review did not find sampled unmatched runtime cookies or vendors in the cookie policy text."
+      },
+      runtimeAnchor: {
+        confidence: 0.86,
+        observationType: "cookie_or_tracker_inventory_exceeds_policy_disclosure",
+        phase: "unknown",
+        vendors: ["Google", "Meta"]
+      },
+      signalKey: "privacy.cookie_runtime_disclosure_gap_detected",
+      snapshotEvidence: {
+        unmatchedCookieCount: 5,
+        unmatchedThirdPartyCookieCount: 5
+      },
+      urlAssessment: {
+        assessment: "supports_promotion",
+        rationale: "Live policy fetch returned substantive cookie-policy text, and sampled unmatched runtime cookies/vendors were not found in that text.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://ftmo.com/en/cookies/"
+      },
+      vendorCategories: ["analytics", "advertising"],
+      vendors: ["Google", "Meta"]
+    },
+    expected: {
+      confidenceBand: "high",
+      externalSurfacingEligibility: "eligible",
+      presentationState: "confirmed",
+      promotionEligibility: "eligible"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "cookie_disclosure_gap",
+    id: "live-promotion-cookie-gap-ftmo-2026-04-25",
+    notes: "Own URL assessment positive control from cookie disclosure gap URL review.",
+    scenarioType: "positive_high_confidence",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Live policy text mentions some sampled unmatched vendors, so this should remain review-only pending alias/category reconciliation.",
+    evidence: {
+      artifactRefs: ["review:cookie-disclosure-gap-urls:2026-04-25"],
+      policyAnchor: {
+        claimType: "cookie_policy_partial_runtime_coverage",
+        confidence: 0.78,
+        extractionStatus: "fetched",
+        sourceUrl: "https://howtotrade.com/cookie-policy/",
+        snippet: "Live URL review found some unmatched vendors such as Google and Meta in the policy text."
+      },
+      runtimeAnchor: {
+        confidence: 0.82,
+        observationType: "cookie_or_tracker_inventory_exceeds_policy_disclosure",
+        phase: "unknown",
+        vendors: ["Google", "Meta"]
+      },
+      signalKey: "privacy.cookie_runtime_disclosure_gap_detected",
+      snapshotEvidence: {
+        matchedByLivePolicyText: ["Google", "Meta"],
+        unmatchedCookieCount: 18
+      },
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Live URL review found partial vendor coverage in the cookie policy; do not promote without more precise structured unmatched-cookie evidence.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://howtotrade.com/cookie-policy/"
+      },
+      vendorCategories: ["analytics", "advertising"],
+      vendors: ["Google", "Meta"]
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "cookie_disclosure_gap",
+    id: "live-review-cookie-gap-howtotrade-2026-04-25",
+    notes: "Own URL assessment borderline control from cookie disclosure gap URL review.",
+    scenarioType: "borderline_review",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Live policy text mentions at least one sampled unmatched cookie token, so this should remain review-only until aliases are reconciled.",
+    evidence: {
+      artifactRefs: ["review:cookie-disclosure-gap-urls:2026-04-25"],
+      policyAnchor: {
+        claimType: "cookie_policy_partial_runtime_coverage",
+        confidence: 0.76,
+        extractionStatus: "fetched",
+        sourceUrl: "https://nytimes.com/cookies",
+        snippet: "Live URL review found a sampled unmatched cookie token in policy text."
+      },
+      runtimeAnchor: {
+        confidence: 0.82,
+        observationType: "cookie_or_tracker_inventory_exceeds_policy_disclosure",
+        phase: "unknown",
+        vendors: ["Google"]
+      },
+      signalKey: "privacy.cookie_runtime_disclosure_gap_detected",
+      snapshotEvidence: {
+        matchedByLivePolicyText: ["IDE"],
+        unmatchedCookieCount: 18
+      },
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Live URL review found partial cookie coverage in the policy; do not promote without more precise structured unmatched-cookie evidence.",
+        reviewedAt: "2026-04-25",
+        reviewedUrl: "https://nytimes.com/cookies"
+      },
+      vendorCategories: ["advertising"],
+      vendors: ["Google"]
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "cookie_disclosure_gap",
+    id: "live-review-cookie-gap-nytimes-2026-04-25",
+    notes: "Own URL assessment borderline control from cookie disclosure gap URL review.",
+    scenarioType: "borderline_review",
+    sourceKind: "live_artifact"
   }
 ];
