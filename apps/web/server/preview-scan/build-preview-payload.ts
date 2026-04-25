@@ -93,6 +93,17 @@ function deriveIssueCounts(findings: PreviewSampleFinding[]): PreviewIssueCounts
   );
 }
 
+const FINDING_SEVERITY_RANK: Record<PreviewSampleFinding["severity"], number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+  info: 3
+};
+
+function sortPreviewFindings(findings: PreviewSampleFinding[]) {
+  return findings.sort((a, b) => FINDING_SEVERITY_RANK[a.severity] - FINDING_SEVERITY_RANK[b.severity]);
+}
+
 function hostnameFromUrl(value: string | null) {
   if (!value) {
     return null;
@@ -204,6 +215,18 @@ function prependFinding(findings: PreviewSampleFinding[], finding: PreviewSample
   }
 
   findings.unshift(finding);
+  if (findings.length > limit) {
+    findings.length = limit;
+  }
+}
+
+function pushPrioritizedFinding(findings: PreviewSampleFinding[], finding: PreviewSampleFinding, limit = 4) {
+  if (findings.some((existing) => existing.title === finding.title)) {
+    return;
+  }
+
+  findings.push(finding);
+  sortPreviewFindings(findings);
   if (findings.length > limit) {
     findings.length = limit;
   }
@@ -585,6 +608,20 @@ function buildFallbackRuntimeArtifacts(snapshot: UrlscanFallbackSnapshot) {
   };
 }
 
+function deriveFallbackHighRiskTrackingContext(input: {
+  hostname: string;
+  snapshot: PreviewSnapshotSource;
+  fallbackSnapshot: UrlscanFallbackSnapshot;
+}) {
+  return deriveHighRiskTrackingContext({
+    hostname: input.hostname,
+    snapshot: input.snapshot as unknown as Record<string, unknown>,
+    runtimeArtifacts: buildFallbackRuntimeArtifacts(input.fallbackSnapshot),
+    evidenceUrls: input.fallbackSnapshot.requestUrls,
+    thirdPartyDomains: input.fallbackSnapshot.observedDomains
+  });
+}
+
 function hasFallbackObservableConsentSurface(snapshot: UrlscanFallbackSnapshot) {
   const context = deriveHighRiskTrackingContext({
     evidenceUrls: snapshot.requestUrls,
@@ -615,13 +652,7 @@ function describeFallbackPreconsentTrackingFinding(input: {
   snapshot: PreviewSnapshotSource;
   fallbackSnapshot: UrlscanFallbackSnapshot;
 }) {
-  const context = deriveHighRiskTrackingContext({
-    hostname: input.hostname,
-    snapshot: input.snapshot as unknown as Record<string, unknown>,
-    runtimeArtifacts: buildFallbackRuntimeArtifacts(input.fallbackSnapshot),
-    evidenceUrls: input.fallbackSnapshot.requestUrls,
-    thirdPartyDomains: input.fallbackSnapshot.observedDomains
-  });
+  const context = deriveFallbackHighRiskTrackingContext(input);
   const vendorSummary = formatHighRiskVendorSummary(context.highRiskVendors);
 
   if (context.isSensitiveContext && vendorSummary.length > 0) {
@@ -633,6 +664,32 @@ function describeFallbackPreconsentTrackingFinding(input: {
   }
 
   return "Supplemental public runtime evidence retained tracking activity or tracking cookies before a clear consent interaction point was completed.";
+}
+
+function isSensitiveContextFallbackPreconsentTracking(input: {
+  hostname: string;
+  snapshot: PreviewSnapshotSource;
+  fallbackSnapshot: UrlscanFallbackSnapshot;
+}) {
+  const context = deriveFallbackHighRiskTrackingContext(input);
+  return context.isSensitiveContext && context.highRiskVendors.length > 0;
+}
+
+function capScoresForSensitiveContextFallbackRisk(payload: PreviewScanPayload) {
+  if (!payload.scores) {
+    return;
+  }
+
+  payload.scores = {
+    ...payload.scores,
+    overall: Math.min(payload.scores.overall, 62),
+    privacy: Math.min(payload.scores.privacy, 55)
+  };
+
+  insertSummaryBullet(
+    payload.summaryBullets,
+    "Preview scores were calibrated downward because sensitive-context tracking evidence was retained before consent."
+  );
 }
 
 function canSurfaceScoresWithCoverageCaveat(input: {
@@ -1175,19 +1232,30 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
       payload.summaryBullets,
       "Supplemental public runtime evidence retained a consent platform and tracking activity."
     );
-    prependFinding(payload.sampleFindings, {
+    const findingHostname = getRecordString(input.snapshot as unknown as Record<string, unknown>, "registeredDomain") ??
+      hostnameFromUrl(input.snapshot.finalUrl) ??
+      "scanned domain";
+    const sensitiveContextFallbackRisk = isSensitiveContextFallbackPreconsentTracking({
+      hostname: findingHostname,
+      snapshot: input.snapshot,
+      fallbackSnapshot
+    });
+
+    pushPrioritizedFinding(payload.sampleFindings, {
       affectedPage: "Homepage",
       category: "privacy",
       severity: "high",
       title: "Tracking activity observed before consent",
       description: describeFallbackPreconsentTrackingFinding({
-        hostname: getRecordString(input.snapshot as unknown as Record<string, unknown>, "registeredDomain") ??
-          hostnameFromUrl(input.snapshot.finalUrl) ??
-          "scanned domain",
+        hostname: findingHostname,
         snapshot: input.snapshot,
         fallbackSnapshot
       })
     });
+
+    if (sensitiveContextFallbackRisk) {
+      capScoresForSensitiveContextFallbackRisk(payload);
+    }
   }
 
   if (!fallbackConsentSurface && ((fallbackSnapshot.thirdPartyRequestCount ?? 0) > 0 || (fallbackSnapshot.initialCookieCount ?? 0) > 0)) {
@@ -1210,7 +1278,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
         : null
     ].filter((value): value is string => Boolean(value));
 
-    prependFinding(payload.sampleFindings, {
+    pushPrioritizedFinding(payload.sampleFindings, {
       affectedPage: "Homepage",
       category: "privacy",
       severity: "medium",
@@ -1220,7 +1288,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
   }
 
   if (fallbackEvidence.vendorFootprint && ((fallbackSnapshot.technologyNames.length > 0) || ((fallbackSnapshot.trackerVendorCount ?? 0) > 0))) {
-    prependFinding(payload.sampleFindings, {
+    pushPrioritizedFinding(payload.sampleFindings, {
       affectedPage: "Homepage",
       category: "privacy",
       severity: "low",
@@ -1230,7 +1298,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
   }
 
   if (fallbackEvidence.disclosureFootprint) {
-    prependFinding(payload.sampleFindings, {
+    pushPrioritizedFinding(payload.sampleFindings, {
       affectedPage: "Public disclosures",
       category: "legal",
       severity: "low",
@@ -1239,6 +1307,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
     });
   }
 
+  sortPreviewFindings(payload.sampleFindings);
   payload.issueCounts = deriveIssueCounts(payload.sampleFindings);
 
   return payload;
