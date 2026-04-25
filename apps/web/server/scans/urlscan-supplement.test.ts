@@ -50,7 +50,7 @@ test("builds supplemental urlscan evidence without promoted sample findings", ()
       resultApiUrl: "https://urlscan.io/api/v1/result/rich/",
       result: {
         data: {
-          cookies: [{}, {}],
+          cookies: [{ name: "_ga", domain: ".example.com" }, { name: "visitor_id", domain: "analytics.example.net" }],
           requests: new Array(40).fill({})
         },
         lists: {
@@ -82,6 +82,9 @@ test("builds supplemental urlscan evidence without promoted sample findings", ()
   assert.equal(payload.fallbackEvidence?.reportUrl, "https://urlscan.io/result/rich/");
   assert.equal(payload.fallbackEvidence?.metrics?.requestCount, 40);
   assert.equal(payload.fallbackEvidence?.metrics?.domainCount, 3);
+  assert.deepEqual(payload.fallbackEvidence?.entities?.cookieNames, ["_ga", "visitor_id"]);
+  assert.deepEqual(payload.fallbackEvidence?.entities?.cookieDomains, [".example.com", "analytics.example.net"]);
+  assert.equal(payload.fallbackEvidence?.cookieFootprint?.summary, "2 initial cookies retained from urlscan.io runtime evidence.");
   assert.deepEqual(payload.fallbackEvidence?.entities?.technologyNames, ["Cloudflare", "Google Tag Manager"]);
   assert.equal(payload.evidence?.verifiedPublicSurfacesCount, 2);
   assert.equal(payload.sampleFindings.length, 0);

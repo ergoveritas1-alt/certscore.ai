@@ -66,12 +66,15 @@ export type PreviewFallbackEvidence = {
     verifiedSurfaceCount?: number;
   };
   entities?: {
+    cookieDomains?: string[];
+    cookieNames?: string[];
     technologyNames?: string[];
     serverNames?: string[];
     topDomains?: string[];
     countries?: string[];
     verifiedSurfaceTargets?: string[];
   };
+  cookieFootprint?: PreviewFallbackEvidenceSection;
   requestFootprint?: PreviewFallbackEvidenceSection;
   vendorFootprint?: PreviewFallbackEvidenceSection;
   disclosureFootprint?: PreviewFallbackEvidenceSection;

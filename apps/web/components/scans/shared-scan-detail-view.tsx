@@ -95,7 +95,10 @@ import {
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { PendingButtonLink } from "../ui/pending-link";
 import { ViewerTimestamp } from "../time/viewer-timestamp";
-import type { CertScoreFinding } from "../../lib/scans/finding-registry";
+import {
+  CERT_SCORE_FINDING_REGISTRY,
+  type CertScoreFinding
+} from "../../lib/scans/finding-registry";
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
@@ -4442,6 +4445,81 @@ export function deriveExecutiveDisplayedScore(input: {
   return Math.min(...caps);
 }
 
+function isSameOrSubdomain(hostname: string, candidate: string) {
+  const normalizedHostname = hostname.replace(/^\./, "").toLowerCase();
+  const normalizedCandidate = candidate.replace(/^\./, "").toLowerCase();
+  return normalizedCandidate === normalizedHostname || normalizedCandidate.endsWith(`.${normalizedHostname}`);
+}
+
+function getThirdPartyCookieDomains(finalHostname: string | null, cookieDomains: string[]) {
+  return finalHostname
+    ? cookieDomains.filter((domain) => !isSameOrSubdomain(finalHostname, domain))
+    : cookieDomains;
+}
+
+function uniqueFindingsById(findings: CertScoreFinding[]) {
+  const seen = new Set<string>();
+  const deduped: CertScoreFinding[] = [];
+
+  for (const finding of findings) {
+    if (seen.has(finding.id)) {
+      continue;
+    }
+    seen.add(finding.id);
+    deduped.push(finding);
+  }
+
+  return deduped;
+}
+
+function buildUrlscanCookieFinding(input: {
+  cookieCount: number;
+  cookieDomains: string[];
+  cookieNames: string[];
+  finalHostname: string | null;
+  reportUrl: string | null;
+}): CertScoreFinding | null {
+  if (input.cookieCount <= 0) {
+    return null;
+  }
+
+  const thirdPartyCookieDomains = getThirdPartyCookieDomains(input.finalHostname, input.cookieDomains);
+  const hasThirdPartyCookies = thirdPartyCookieDomains.length > 0;
+  const hasAnalyticsCookie = input.cookieNames.some((name) => /^(_ga|_gid|_gat|utm|ajs_|amplitude|mp_)/i.test(name));
+  const findingId = hasThirdPartyCookies
+    ? "third_party_cookie_pre_consent"
+    : hasAnalyticsCookie
+      ? "analytics_cookie_pre_consent"
+      : "storage_before_consent";
+  const definition = CERT_SCORE_FINDING_REGISTRY[findingId];
+
+  if (!definition) {
+    return null;
+  }
+
+  const cookieNameSummary = input.cookieNames.length > 0
+    ? ` Cookies: ${input.cookieNames.slice(0, 8).join(", ")}.`
+    : "";
+  const cookieDomainSummary = input.cookieDomains.length > 0
+    ? ` Cookie domains: ${input.cookieDomains.slice(0, 6).join(", ")}.`
+    : "";
+  const sourceSummary = input.reportUrl ? ` Source: ${input.reportUrl}` : " Source: urlscan.io fallback evidence.";
+
+  return {
+    ...definition,
+    confidence: "good",
+    directVsInferred: "direct",
+    evidencePreview: [
+      `${input.cookieCount} initial cookie${input.cookieCount === 1 ? "" : "s"} retained by urlscan.io runtime evidence.${cookieNameSummary}`,
+      ...(hasThirdPartyCookies ? [`Third-party cookie domains retained: ${thirdPartyCookieDomains.slice(0, 6).join(", ")}.`] : []),
+      `${cookieDomainSummary}${sourceSummary}`.trim()
+    ],
+    evidenceRefs: input.reportUrl ? [input.reportUrl] : ["urlscan.io fallback evidence"],
+    severity: hasThirdPartyCookies ? "high" : "medium",
+    shortSummary: `${input.cookieCount} initial cookie${input.cookieCount === 1 ? "" : "s"} were observed on the fallback runtime path before CertScore could verify a consent choice.`
+  };
+}
+
 type SharedScanDetailViewProps = {
   autoRefresh?: ReactNode;
   createAccountHref?: string | null;
@@ -4488,6 +4566,9 @@ export function SharedScanDetailView({
   const fallbackEvidence = previewPayload?.fallbackEvidence ?? null;
   const fallbackEvidenceRelation = previewPayload?.evidence?.urlscanEvidenceRelation ?? "same_host";
   const fallbackFinalHostname = previewPayload?.evidence?.urlscanFinalHostname ?? null;
+  const fallbackCookieNames = uniqueStrings(fallbackEvidence?.entities?.cookieNames ?? []);
+  const fallbackCookieDomains = uniqueStrings(fallbackEvidence?.entities?.cookieDomains ?? []);
+  const fallbackThirdPartyCookieDomains = getThirdPartyCookieDomains(fallbackFinalHostname, fallbackCookieDomains);
   const fallbackTechnologyNames = uniqueStrings(fallbackEvidence?.entities?.technologyNames ?? []);
   const fallbackObservedRequestCount = getFiniteNumber(fallbackEvidence?.metrics?.requestCount) ?? 0;
   const fallbackObservedCookieCount = getFiniteNumber(fallbackEvidence?.metrics?.initialCookieCount) ?? 0;
@@ -4591,23 +4672,33 @@ export function SharedScanDetailView({
   const thirdPartyCookiesSeenCount = Math.max(
     getRecordNumber(hybridStorageSummary, "thirdPartyCookieCount") ?? 0,
     getRecordNumber(snapshot, "third_party_cookie_count") ?? 0,
-    certScoreSummary.thirdPartyCookieNamesSeen.length
+    certScoreSummary.thirdPartyCookieNamesSeen.length,
+    fallbackThirdPartyCookieDomains.length
   );
   const cookiesBeforeConsentCount = Math.max(
     getRecordNumber(hybridStorageSummary, "cookiesBeforeConsentCount") ?? 0,
     certScoreSummary.cookieNamesBeforeConsent.length,
-    runtimeInitialCookieCount
+    runtimeInitialCookieCount,
+    fallbackObservedCookieCount
   );
   const reviewSectionError: string | null = null;
   const scanReportUnifiedFindingState = debugBuildScanReportUnifiedFindingState(scanRecord);
   const { taxonomySnapshotSections } = scanReportUnifiedFindingState.derivedContext;
 
+  const fallbackCookieFinding = buildUrlscanCookieFinding({
+    cookieCount: fallbackObservedCookieCount,
+    cookieDomains: fallbackCookieDomains,
+    cookieNames: fallbackCookieNames,
+    finalHostname: fallbackFinalHostname,
+    reportUrl: fallbackEvidence?.reportUrl ?? null
+  });
   const preConsentTrackingObserved =
     snapshot?.preconsent_tracking_detected === true ||
     snapshot?.tracking_before_consent_detected === true ||
     hasTruthySignal(scanRecord.signals, "tracking_before_consent_detected") ||
     hasTruthySignal(scanRecord.signals, "preconsent_tracking_detected") ||
-    hasTruthySignal(scanRecord.signals, "third_party_cookie_set_before_consent");
+    hasTruthySignal(scanRecord.signals, "third_party_cookie_set_before_consent") ||
+    Boolean(fallbackCookieFinding);
   const consentAuditCompleted = getRecordBoolean(runtimeArtifacts, "consent_audit_completed");
   const consentRejectInteractionSucceeded = getRecordBoolean(runtimeArtifacts, "consent_reject_interaction_succeeded");
   const consentAcceptInteractionSucceeded = getRecordBoolean(runtimeArtifacts, "consent_accept_interaction_succeeded");
@@ -4667,16 +4758,21 @@ export function SharedScanDetailView({
     scanRecord.trackerVendors.length > 0;
   const executiveSummaryBadgeCounts = deriveExecutiveSummaryBadgeCounts(findingEvidenceDiagnostics);
   const executiveFindingsProjection = projectExecutiveFindingsFromUnifiedPackets(findingEvidenceDiagnostics);
+  const allExecutiveFindings = fallbackCookieFinding
+    ? uniqueFindingsById([fallbackCookieFinding, ...executiveFindingsProjection.findings])
+    : executiveFindingsProjection.findings;
   const executiveDisplayedScore = deriveExecutiveDisplayedScore({
-    findings: executiveFindingsProjection.findings,
+    findings: allExecutiveFindings,
     previewMode,
     snapshot,
     storedScore: certScoreSummary.score
   });
-  const presentedCertScoreFindings = executiveAccessLimitationNotice ? [] : executiveFindingsProjection.findings;
+  const presentedCertScoreFindings = executiveAccessLimitationNotice
+    ? (fallbackCookieFinding ? [fallbackCookieFinding] : [])
+    : allExecutiveFindings;
   const topExecutiveFindings = executiveAccessLimitationNotice
-    ? [executiveAccessLimitationNotice.finding]
-    : executiveFindingsProjection.topFindings;
+    ? uniqueFindingsById([executiveAccessLimitationNotice.finding, ...(fallbackCookieFinding ? [fallbackCookieFinding] : [])])
+    : uniqueFindingsById([...(fallbackCookieFinding ? [fallbackCookieFinding] : []), ...executiveFindingsProjection.topFindings]);
   const scanExecutionSummary = deriveScanExecutionSummary({
     accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
     authWallDetected: snapshot?.auth_wall_detected === true,
@@ -4774,7 +4870,7 @@ export function SharedScanDetailView({
         <>
           <ExecutiveSummaryCard
             accessLimitationNotice={executiveAccessNoticeCardProps}
-            allFindings={executiveFindingsProjection.findings}
+            allFindings={allExecutiveFindings}
             accessibilitySignals={{
               accessibilityClaimMismatchDetected: getRecordBoolean(snapshot, "accessibility_claim_mismatch_detected"),
               accessibilityLitigationRiskScore: getRecordNumber(snapshot, "accessibility_litigation_risk_score"),
@@ -4828,10 +4924,28 @@ export function SharedScanDetailView({
                       ? `CertScore live verification stayed blocked, but urlscan.io retained public runtime evidence showing this domain redirected to ${fallbackFinalHostname}.`
                       : "CertScore live verification stayed blocked, but urlscan.io retained same-host public runtime evidence for this domain."}
                     {" "}
-                    This evidence is shown separately and does not convert the blocked run into normal CertScore findings.
+                    This evidence is source-attributed to urlscan.io and can trigger cookie or vendor findings when concrete runtime records are retained.
                   </p>
                   {fallbackEvidence.requestFootprint?.summary ? (
                     <p className="font-medium text-slate-900">{fallbackEvidence.requestFootprint.summary}</p>
+                  ) : null}
+                  {fallbackEvidence.cookieFootprint ? (
+                    <div className="mt-3 rounded-2xl border border-sky-200 bg-white/75 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-900">
+                        {fallbackEvidence.cookieFootprint.title}
+                      </p>
+                      <p className="mt-1 font-medium text-slate-950">{fallbackEvidence.cookieFootprint.summary}</p>
+                      {fallbackEvidence.cookieFootprint.details.length > 0 ? (
+                        <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                          {fallbackEvidence.cookieFootprint.details.map((detail) => (
+                            <li key={detail}>{detail}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      <p className="mt-2 text-xs text-slate-600">
+                        This cookie evidence is counted in the same report counters and finding path as CertScore runtime cookie evidence, with urlscan.io retained as the source attribution.
+                      </p>
+                    </div>
                   ) : null}
                 </div>
                 {fallbackEvidence.reportUrl ? (
