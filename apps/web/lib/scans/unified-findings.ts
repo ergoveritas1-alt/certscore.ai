@@ -3451,6 +3451,22 @@ function getPolicyBoilerplateSignalsFromSnippets(snippets: string[]) {
   );
 }
 
+function hasConcretePrivacyContactSnippet(snippets: string[]) {
+  return snippets.some((value) =>
+    /(?:privacy|dpo|data[-_\s]?protection)[\w.+-]*@[a-z0-9.-]+\.[a-z]{2,}|data protection officer|\bdpo\b|privacy (?:team|office|department)|(?:privacy|personal information|personal data|data protection).{0,80}(?:request form|webform|portal|request portal|contact form)|(?:request form|webform|portal|request portal|contact form).{0,80}(?:privacy|personal information|personal data|data protection)|contact us.{0,160}(?:privacy practices?|privacy questions?|personal information|rights? request)|(?:privacy practices?|privacy questions?|personal information|rights? request).{0,160}contact us/i.test(
+      value
+    )
+  );
+}
+
+function hasSubstantivePrivacyPolicyContent(snippets: string[]) {
+  const text = snippets.join(" ");
+  return (
+    /personal information|personal data|covered personal information|data subjects?|privacy rights?|right to (?:know|access|delete|correct)|data protection/i.test(text) &&
+    /collect|use|share|disclos|retain|protect|process|access|delete|correct|opt[-\s]?out|sell|transfer|request/i.test(text)
+  );
+}
+
 function buildPolicyEnrichmentPositiveCandidates(policyEnrichment?: Array<Record<string, unknown>>) {
   const rows = Array.isArray(policyEnrichment) ? policyEnrichment : [];
   if (rows.length === 0) {
@@ -3512,6 +3528,66 @@ function buildPolicyEnrichmentPositiveCandidates(policyEnrichment?: Array<Record
       observedValue: mappedFinding.label,
       severity: "low",
       signalKey,
+      signalLabel: mappedFinding.label,
+      signalSource: "policy_enrichment_signal",
+      sourceType: "signal",
+      title: mappedFinding.label
+    });
+  }
+
+  return candidates;
+}
+
+function buildPolicyEnrichmentMissingContactCandidates(policyEnrichment?: Array<Record<string, unknown>>) {
+  const rows = Array.isArray(policyEnrichment) ? policyEnrichment : [];
+  const candidates: UnifiedFindingCandidate[] = [];
+  const mappedFinding = getReportUnifiedFinding("privacy_contact_channel_missing");
+  if (!mappedFinding) {
+    return candidates;
+  }
+
+  for (const row of rows) {
+    if (getPolicyPageType(row) !== "privacy_policy" || getPrivacyContactChannelType(row) !== "none") {
+      continue;
+    }
+    const pageUrl = getPolicyPageUrl(row);
+    if (!pageUrl) {
+      continue;
+    }
+    const snippets = normalizePolicySnippetList(getPolicyEvidenceSnippetValues(row, [/.*/]).slice(0, 6));
+    const policySemanticConfidence = getPolicySemanticConfidence(row);
+    if (
+      snippets.length === 0 ||
+      !hasSubstantivePrivacyPolicyContent(snippets) ||
+      hasConcretePrivacyContactSnippet(snippets) ||
+      typeof policySemanticConfidence !== "number" ||
+      policySemanticConfidence < 0.7
+    ) {
+      continue;
+    }
+
+    candidates.push({
+      description:
+        "The retained privacy-policy evidence did not identify a privacy-specific contact email, form, portal, or equivalent request channel.",
+      fallbackEvidence: {
+        evidenceRefs: [pageUrl],
+        mergedSignalConfidence: policySemanticConfidence,
+        pageUrl,
+        pageUrls: [pageUrl],
+        policyPageType: getPolicyPageType(row),
+        policySemanticConfidence,
+        policySnippetCount: getPolicySnippetCount(row),
+        policySnippets: snippets,
+        privacyContactChannelType: "none",
+        signalKey: "privacy.privacy_contact_channel_missing",
+        signalLabel: mappedFinding.label,
+        signalValue: true,
+        sourceUrls: [pageUrl],
+        unifiedFindingId: "privacy_contact_channel_missing"
+      },
+      observedValue: "No privacy-specific contact channel",
+      severity: "medium",
+      signalKey: "privacy.privacy_contact_channel_missing",
       signalLabel: mappedFinding.label,
       signalSource: "policy_enrichment_signal",
       sourceType: "signal",
@@ -5144,12 +5220,14 @@ export function buildUnifiedFindingDisplayPackets(input: {
       })
     : [];
   const policyEnrichmentCandidates = buildPolicyEnrichmentPositiveCandidates(input.policyEnrichment);
+  const policyEnrichmentMissingContactCandidates = buildPolicyEnrichmentMissingContactCandidates(input.policyEnrichment);
   const policyEnrichmentClarityCandidates = buildPolicyEnrichmentClarityCandidates(input.policyEnrichment);
   const packets = buildUnifiedFindingPackets({
     reviewFindingCandidates: [
       ...input.reviewFindingCandidates,
       ...mergedSignalCandidates,
       ...policyEnrichmentCandidates,
+      ...policyEnrichmentMissingContactCandidates,
       ...policyEnrichmentClarityCandidates
     ],
     scanEvents: input.scanEvents,

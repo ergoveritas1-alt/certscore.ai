@@ -93,9 +93,9 @@ export function getPolicySummaryText(row: PolicyEnrichmentRow) {
 }
 
 export function getPrivacyContactChannelType(row: PolicyEnrichmentRow) {
-  return isMeaningfulPolicyText(row.privacyContactChannelType)
+  return typeof row.privacyContactChannelType === "string" && row.privacyContactChannelType.trim().length > 0
     ? row.privacyContactChannelType
-    : isMeaningfulPolicyText(row.privacy_contact_channel_type)
+    : typeof row.privacy_contact_channel_type === "string" && row.privacy_contact_channel_type.trim().length > 0
       ? row.privacy_contact_channel_type
       : null;
 }

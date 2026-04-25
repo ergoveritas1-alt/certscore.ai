@@ -13,6 +13,7 @@ type TargetFinding =
   | "cookie_disclosure_gap"
   | "cookie_policy_present"
   | "policy_clarity_risk"
+  | "privacy_contact_channel_missing"
   | "privacy_contact_path_present"
   | "privacy_policy_present"
   | "privacy_rights_path_present"
@@ -71,6 +72,7 @@ const DEFAULT_FINDINGS: TargetFinding[] = [
   "cookie_policy_present",
   "cookie_disclosure_gap",
   "policy_clarity_risk",
+  "privacy_contact_channel_missing",
   "behavioral_analytics_disclosure_present",
   "consent_gated_tracking_claim_conflict"
 ];
@@ -90,6 +92,7 @@ const SIGNAL_KEYS_BY_FINDING: Record<TargetFinding, string[]> = {
     "disclosure.privacy_policy_word_count",
     "disclosure.privacy_policy_parser_confidence"
   ],
+  privacy_contact_channel_missing: ["privacy.privacy_contact_channel_missing", "privacyContactChannelType"],
   privacy_contact_path_present: ["privacy.privacy_contact_path_present"],
   privacy_policy_present: ["privacy.privacy_policy_present", "disclosure.privacy_policy_present"],
   privacy_rights_path_present: ["privacy.privacy_rights_path_present"],
@@ -109,6 +112,7 @@ const POLICY_SNIPPET_KEYS_BY_FINDING: Record<TargetFinding, string[]> = {
   cookie_disclosure_gap: ["cookie_policy", "cookies", "tracking_technologies_disclosure"],
   cookie_policy_present: ["cookie_policy", "cookies"],
   policy_clarity_risk: ["policy_clarity", "policy_summary", "privacy_policy", "topic:privacy_policy"],
+  privacy_contact_channel_missing: ["privacy_contact", "notice_contact", "dsar", "policy_summary", "topic:privacy_policy"],
   privacy_contact_path_present: ["privacy_contact", "notice_contact", "dsar"],
   privacy_policy_present: [],
   privacy_rights_path_present: ["privacy_rights", "dsar", "access_delete"],
@@ -386,6 +390,20 @@ function probeRawEvidence(findingId: TargetFinding, record: Record<string, unkno
         getString(runtimeArtifacts, ["privacyContactChannelType", "privacy_contact_channel_type"]);
       if (channelType && !/^none|unknown|generic$/i.test(channelType)) {
         policyReasons.push(`privacy contact channel ${channelType}`);
+      }
+      break;
+    }
+    case "privacy_contact_channel_missing": {
+      const channelType = getString(snapshot, ["privacy_contact_channel_type"]) ??
+        getString(runtimeArtifacts, ["privacyContactChannelType", "privacy_contact_channel_type"]);
+      if (/^none$/i.test(channelType ?? "")) {
+        policyReasons.push("privacy contact channel none");
+      }
+      if (getBoolean(snapshot, ["privacy_policy_present"]) || hasPolicyPageType(policyRows, ["privacy_policy"])) {
+        policyReasons.push("privacy policy surface");
+      }
+      if (Number(snapshot?.verified_public_surfaces_count ?? 0) >= 2) {
+        policyReasons.push("multiple verified public surfaces");
       }
       break;
     }

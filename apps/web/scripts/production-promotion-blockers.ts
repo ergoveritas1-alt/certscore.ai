@@ -11,6 +11,7 @@ export type PromotionBlockerFindingId =
   | "missing_dsar_mechanism"
   | "policy_clarity_risk"
   | "preconsent_tracking"
+  | "privacy_contact_channel_missing"
   | "privacy_rights_path_present"
   | "targeted_advertising_disclosure_present"
   | "tracking_technologies_disclosure_present";
@@ -38,6 +39,7 @@ export type PromotionBlockerInput = {
   policyPageUrl?: string | null;
   policyPageType?: string | null;
   policyPositiveSignalPresent?: boolean | null;
+  privacyContactChannelType?: string | null;
   policyRightsSignals?: string[] | null;
   policySemanticConfidence?: number | null;
   policySnippetCount?: number | null;
@@ -177,6 +179,19 @@ function getPolicyConfidence(input: PromotionBlockerInput) {
 function hasMinimumPolicyConfidence(input: PromotionBlockerInput, minimum = 0.6) {
   const confidence = getPolicyConfidence(input);
   return typeof confidence === "number" && confidence >= minimum;
+}
+
+function hasConcretePrivacyContactCue(value: string) {
+  return /(?:privacy|dpo|data[-_\s]?protection)[\w.+-]*@[a-z0-9.-]+\.[a-z]{2,}|data protection officer|\bdpo\b|privacy (?:team|office|department)|(?:privacy|personal information|personal data|data protection).{0,80}(?:request form|webform|portal|request portal|contact form)|(?:request form|webform|portal|request portal|contact form).{0,80}(?:privacy|personal information|personal data|data protection)|contact us.{0,160}(?:privacy practices?|privacy questions?|personal information|rights? request)|(?:privacy practices?|privacy questions?|personal information|rights? request).{0,160}contact us/i.test(
+    value
+  );
+}
+
+function hasSubstantivePrivacyPolicyContent(value: string) {
+  return (
+    /personal information|personal data|covered personal information|data subjects?|privacy rights?|right to (?:know|access|delete|correct)|data protection/i.test(value) &&
+    /collect|use|share|disclos|retain|protect|process|access|delete|correct|opt[-\s]?out|sell|transfer|request/i.test(value)
+  );
 }
 
 function getRuntimeCookieNames(input: PromotionBlockerInput) {
@@ -432,6 +447,54 @@ export function classifyPrivacyRightsPathPromotionBlockers(input: PromotionBlock
   };
 }
 
+export function classifyPrivacyContactMissingPromotionBlockers(input: PromotionBlockerInput): PromotionBlockerAssessment {
+  const snippets = getSubstantivePolicySnippets(input);
+  const snippetText = snippets.join(" ");
+  const channelType = getString(input.privacyContactChannelType);
+  const concreteContactCue = snippets.some(hasConcretePrivacyContactCue);
+  const blockers: string[] = [];
+
+  if (!hasPolicyAnchor(input)) {
+    blockers.push("missing_policy_anchor_url");
+  }
+  if (input.policyPageType && input.policyPageType !== "privacy_policy") {
+    blockers.push("missing_privacy_policy_anchor");
+  }
+  if (!hasFetchedPolicy(input)) {
+    blockers.push(input.policyExtractionStatus ? "policy_extraction_incomplete" : "missing_policy_extraction_status");
+  }
+  if (!hasMinimumPolicyConfidence(input, 0.7)) {
+    blockers.push("low_policy_semantic_confidence");
+  }
+  if (!/^none$/i.test(channelType ?? "")) {
+    blockers.push(channelType ? "privacy_contact_channel_present" : "missing_explicit_no_contact_channel");
+  }
+  if (snippets.length === 0) {
+    blockers.push("missing_substantive_policy_snippet");
+  } else if (!hasSubstantivePrivacyPolicyContent(snippetText)) {
+    blockers.push("missing_substantive_privacy_policy_text");
+  }
+  if (concreteContactCue) {
+    blockers.push("privacy_contact_channel_visible");
+  }
+
+  return {
+    blockers,
+    evidence: {
+      concreteContactCue,
+      policyExtractionStatus: input.policyExtractionStatus ?? null,
+      policyPageType: input.policyPageType ?? null,
+      policyPageUrl: input.policyPageUrl ?? null,
+      policySemanticConfidence: getPolicyConfidence(input),
+      privacyContactChannelType: channelType,
+      snippetCount: snippets.length,
+      snippetPreview: snippets[0]?.slice(0, 180) ?? null
+    },
+    findingId: "privacy_contact_channel_missing",
+    promotionReady: blockers.length === 0
+  };
+}
+
 export function classifyPositiveDisclosurePromotionBlockers(
   input: PromotionBlockerInput,
   findingId:
@@ -598,6 +661,8 @@ export function classifyPromotionBlockers(input: PromotionBlockerInput & { findi
       return classifyPreconsentPromotionBlockers(input);
     case "missing_dsar_mechanism":
       return classifyDsarPromotionBlockers(input);
+    case "privacy_contact_channel_missing":
+      return classifyPrivacyContactMissingPromotionBlockers(input);
     case "privacy_rights_path_present":
       return classifyPrivacyRightsPathPromotionBlockers(input);
     case "cookie_disclosure_gap":

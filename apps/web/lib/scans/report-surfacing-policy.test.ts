@@ -1070,6 +1070,39 @@ test("noisy rights-gap findings stay in confidence coverage when evidence is inc
   }
 });
 
+test("privacy contact missing confirms with fetched policy absence evidence", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("privacy_contact_channel_missing", {
+        confidenceInputs: {
+          ...makePacket("privacy_contact_channel_missing").confidenceInputs,
+          hasPageAttribution: true,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("privacy_contact_channel_missing").evidence,
+          counts: {
+            policySemanticConfidence: 0.72
+          },
+          entities: {
+            privacyContactChannelType: ["none"]
+          },
+          pageUrls: ["https://www.example.com/privacy"],
+          snippets: [
+            "This privacy policy describes personal information collection, use, sharing, retention, cookies, and user rights, but the retained text does not identify a dedicated channel for privacy questions."
+          ]
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions.find((item) => item.unifiedFindingId === "privacy_contact_channel_missing");
+  assert.equal(decision?.decisionState, "confirmed");
+  assert.equal(decision?.reportLane, "main");
+  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.confirmed_structured_policy_absence"));
+});
+
 test("cookie disclosure gaps confirm only with promotion-grade runtime inventory and a first-party disclosure URL", () => {
   const confirmedEvaluation = evaluateUnifiedFindingSurfacing({
     packets: [

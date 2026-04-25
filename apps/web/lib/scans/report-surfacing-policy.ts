@@ -949,6 +949,19 @@ function getEvidenceSnippetText(packet: UnifiedFindingPacket) {
   return (packet.evidence?.snippets ?? []).filter((snippet): snippet is string => typeof snippet === "string").join(" ");
 }
 
+function hasConcretePrivacyContactCue(value: string) {
+  return /(?:privacy|dpo|data[-_\s]?protection)[\w.+-]*@[a-z0-9.-]+\.[a-z]{2,}|data protection officer|\bdpo\b|privacy (?:team|office|department)|(?:privacy|personal information|personal data|data protection).{0,80}(?:request form|webform|portal|request portal|contact form)|(?:request form|webform|portal|request portal|contact form).{0,80}(?:privacy|personal information|personal data|data protection)|contact us.{0,160}(?:privacy practices?|privacy questions?|personal information|rights? request)|(?:privacy practices?|privacy questions?|personal information|rights? request).{0,160}contact us/i.test(
+    value
+  );
+}
+
+function hasSubstantivePrivacyPolicyContent(value: string) {
+  return (
+    /personal information|personal data|covered personal information|data subjects?|privacy rights?|right to (?:know|access|delete|correct)|data protection/i.test(value) &&
+    /collect|use|share|disclos|retain|protect|process|access|delete|correct|opt[-\s]?out|sell|transfer|request/i.test(value)
+  );
+}
+
 function getEvidenceEntityValues(packet: UnifiedFindingPacket, key: string) {
   return (packet.evidence?.entities?.[key] ?? []).filter((value): value is string => typeof value === "string" && value.trim().length > 0);
 }
@@ -1259,6 +1272,40 @@ function hasStructuredPolicyAbsenceBacking(packet: UnifiedFindingPacket) {
     packet.confidenceInputs.hasStructuredValidationEvidence &&
     packet.confidenceInputs.hasPolicyTextEvidence &&
     hasReadableSnippet(packet) &&
+    hasConcreteHumanFacingUrl([
+      ...(packet.evidence?.pageUrls ?? []),
+      ...(packet.evidence?.sourceUrls ?? [])
+    ])
+  );
+}
+
+function hasPrivacyContactMissingBacking(packet: UnifiedFindingPacket) {
+  if (packet.unifiedFindingId !== "privacy_contact_channel_missing") {
+    return false;
+  }
+
+  const channelTypes = getEvidenceEntityValues(packet, "privacyContactChannelType");
+  const hasExplicitMissingChannel = channelTypes.some((value) => /^none$/i.test(value.trim()));
+  if (!hasExplicitMissingChannel) {
+    return false;
+  }
+
+  const policySemanticConfidence = getEvidenceCount(packet, ["policySemanticConfidence", "policy_semantic_confidence"]);
+  if (typeof policySemanticConfidence !== "number" || policySemanticConfidence < 0.7) {
+    return false;
+  }
+
+  const evidenceText = getEvidenceSnippetText(packet);
+  if (!hasSubstantivePrivacyPolicyContent(evidenceText)) {
+    return false;
+  }
+  if (hasConcretePrivacyContactCue(evidenceText)) {
+    return false;
+  }
+
+  return (
+    packet.confidenceInputs.hasPolicyTextEvidence &&
+    hasSubstantiveReadableSnippet(packet) &&
     hasConcreteHumanFacingUrl([
       ...(packet.evidence?.pageUrls ?? []),
       ...(packet.evidence?.sourceUrls ?? [])
@@ -1728,6 +1775,18 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (context.policy.family === "rights_gap") {
+    if (packet.unifiedFindingId === "privacy_contact_channel_missing" && hasPrivacyContactMissingBacking(packet)) {
+      overrideDecision(decision, {
+        state: "confirmed",
+        lane: "main",
+        tier: decision.surfaceTier,
+        reason:
+          "A fetched privacy-policy surface, substantive policy text, and retained no-contact-channel metadata all support the missing privacy-contact interpretation.",
+        ruleId: "evidence.rights_gap.confirmed_structured_policy_absence"
+      });
+      return;
+    }
+
     if (packet.unifiedFindingId === "cookie_disclosure_gap") {
       if (hasCookieDisclosureGapBacking(packet)) {
         overrideDecision(decision, {

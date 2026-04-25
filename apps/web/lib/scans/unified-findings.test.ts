@@ -4528,6 +4528,56 @@ test("retains policy enrichment boilerplate evidence for policy clarity risk", (
   assert.ok((clarityPacket?.evidence?.entities?.policyBoilerplateSignals?.length ?? 0) >= 2);
 });
 
+test("retains policy enrichment evidence for missing privacy contact channel", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/privacy",
+        privacy_contact_channel_type: "none",
+        policy_evidence_snippets: {
+          data_collection:
+            "This privacy policy explains how personal information is collected, used, shared, retained, protected, and disclosed to service providers.",
+          data_rights:
+            "The policy describes user rights and account settings, but the retained text does not identify any dedicated request channel for privacy questions."
+        },
+        policy_semantic_confidence: 0.72,
+        policy_snippet_count: 2
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const contactMissing = packets.find((packet) => packet.unifiedFindingId === "privacy_contact_channel_missing");
+  assert.equal(contactMissing?.presentationDecision.status, "surface");
+  assert.deepEqual(contactMissing?.evidence?.entities?.privacyContactChannelType, ["none"]);
+  assert.equal(contactMissing?.primaryPageUrl, "https://www.example.com/privacy");
+});
+
+test("does not retain missing privacy contact when policy text names a privacy contact", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/privacy",
+        privacy_contact_channel_type: "none",
+        policy_evidence_snippets: {
+          notice_contact: "Contact our privacy team at privacy@example.com for personal information requests."
+        },
+        policy_semantic_confidence: 0.72,
+        policy_snippet_count: 1
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packets.some((packet) => packet.unifiedFindingId === "privacy_contact_channel_missing"), false);
+});
+
 test("suppresses fetch-failed coverage gaps when another retained finding already verified the same target url", () => {
   const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

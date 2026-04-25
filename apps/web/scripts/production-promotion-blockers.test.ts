@@ -6,6 +6,7 @@ import {
   classifyPolicyClarityPromotionBlockers,
   classifyPositiveDisclosurePromotionBlockers,
   classifyPreconsentPromotionBlockers,
+  classifyPrivacyContactMissingPromotionBlockers,
   classifyPrivacyRightsPathPromotionBlockers,
   summarizePromotionBlockers
 } from "./production-promotion-blockers";
@@ -112,6 +113,69 @@ test("privacy-rights path blocker classifier promotes actionable retained rights
 
   assert.equal(assessment.promotionReady, true);
   assert.deepEqual(assessment.blockers, []);
+});
+
+test("privacy contact missing blocker classifier promotes fetched no-channel policy evidence", () => {
+  const assessment = classifyPrivacyContactMissingPromotionBlockers({
+    policyEvidenceSnippets: {
+      data_collection:
+        "This privacy policy explains how personal information is collected, used, shared, retained, protected, and processed by service providers without identifying any dedicated privacy request channel."
+    },
+    policyExtractionStatus: "fetched",
+    policyPageType: "privacy_policy",
+    policyPageUrl: "https://example.test/privacy",
+    policySemanticConfidence: 0.72,
+    privacyContactChannelType: "none"
+  });
+
+  assert.equal(assessment.promotionReady, true);
+  assert.deepEqual(assessment.blockers, []);
+});
+
+test("privacy contact missing blocker classifier demotes visible privacy contacts", () => {
+  const assessment = classifyPrivacyContactMissingPromotionBlockers({
+    policyEvidenceSnippets: {
+      notice_contact: "Contact our privacy team at privacy@example.test for personal information requests."
+    },
+    policyExtractionStatus: "fetched",
+    policyPageType: "privacy_policy",
+    policyPageUrl: "https://example.test/privacy",
+    policySemanticConfidence: 0.72,
+    privacyContactChannelType: "email"
+  });
+
+  assert.equal(assessment.promotionReady, false);
+  assert.ok(assessment.blockers.includes("privacy_contact_channel_present"));
+  assert.ok(assessment.blockers.includes("privacy_contact_channel_visible"));
+});
+
+test("privacy contact missing blocker classifier blocks weak no-snippet evidence", () => {
+  const assessment = classifyPrivacyContactMissingPromotionBlockers({
+    policyExtractionStatus: "fetched",
+    policyPageType: "privacy_policy",
+    policyPageUrl: "https://example.test/privacy",
+    policySemanticConfidence: 0.72,
+    privacyContactChannelType: "none"
+  });
+
+  assert.equal(assessment.promotionReady, false);
+  assert.ok(assessment.blockers.includes("missing_substantive_policy_snippet"));
+});
+
+test("privacy contact missing blocker classifier blocks page chrome without privacy-policy substance", () => {
+  const assessment = classifyPrivacyContactMissingPromotionBlockers({
+    policyEvidenceSnippets: {
+      page_chrome: "Privacy Policy | Example Login Contact Us Menu Products Services Careers Investors Help Center"
+    },
+    policyExtractionStatus: "fetched",
+    policyPageType: "privacy_policy",
+    policyPageUrl: "https://example.test/privacy",
+    policySemanticConfidence: 0.72,
+    privacyContactChannelType: "none"
+  });
+
+  assert.equal(assessment.promotionReady, false);
+  assert.ok(assessment.blockers.includes("missing_substantive_privacy_policy_text"));
 });
 
 test("positive disclosure blocker classifier requires finding-specific policy text", () => {

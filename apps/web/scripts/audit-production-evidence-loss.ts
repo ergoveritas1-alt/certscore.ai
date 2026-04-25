@@ -36,6 +36,7 @@ const DEFAULT_FOCUS_FINDINGS = [
   "preconsent_tracking",
   "missing_dsar_mechanism",
   "policy_clarity_risk",
+  "privacy_contact_channel_missing",
   "privacy_contact_path_present",
   "privacy_rights_path_present",
   "cookie_disclosure_gap",
@@ -63,6 +64,7 @@ type PromotionBlockerRow = {
   policy_page_url: string | null;
   policy_page_type: string | null;
   policy_positive_signal_present: boolean | null;
+  privacy_contact_channel_type: string | null;
   policy_rights_signals: string[] | null;
   policy_semantic_confidence: number | null;
   policy_snippet_count: number | null;
@@ -254,6 +256,7 @@ function isPromotionBlockerFinding(value: string): value is PromotionBlockerFind
   return value === "preconsent_tracking" ||
     value === "missing_dsar_mechanism" ||
     value === "policy_clarity_risk" ||
+    value === "privacy_contact_channel_missing" ||
     value === "privacy_rights_path_present" ||
     value === "cookie_disclosure_gap" ||
     value === "behavioral_analytics_disclosure_present" ||
@@ -300,6 +303,9 @@ function toPromotionBlockerInput(row: PromotionBlockerRow, findingId: PromotionB
     policyPageUrl: row.policy_page_url ?? validationCookiePolicyUrl,
     policyPageType: row.policy_page_type,
     policyPositiveSignalPresent: row.policy_positive_signal_present,
+    privacyContactChannelType:
+      row.privacy_contact_channel_type ??
+      (typeof policyJson.privacy_contact_channel_type === "string" ? policyJson.privacy_contact_channel_type : null),
     policyRightsSignals,
     policySemanticConfidence: row.policy_semantic_confidence ?? (typeof policyJson.policy_semantic_confidence === "number" ? policyJson.policy_semantic_confidence : null),
     policySnippetCount: row.policy_snippet_count ?? (typeof policyJson.policy_snippet_count === "number" ? policyJson.policy_snippet_count : null),
@@ -319,6 +325,8 @@ function policyPositiveSignalKeyForFinding(findingId: PromotionBlockerFindingId)
       return "privacy.behavioral_analytics_disclosure_present";
     case "privacy_rights_path_present":
       return "privacy.privacy_rights_path_present";
+    case "privacy_contact_channel_missing":
+      return "privacy.privacy_contact_channel_missing";
     case "targeted_advertising_disclosure_present":
       return "privacy.targeted_advertising_disclosure_present";
     case "tracking_technologies_disclosure_present":
@@ -389,6 +397,7 @@ async function loadPromotionBlockerRows(input: {
              ss.privacy_request_form_present,
              ss.data_access_request_present,
              ss.data_deletion_request_present,
+             ss.privacy_contact_channel_type,
              ss.preconsent_tracking_detected,
              ss.tracking_before_consent_detected,
              ra.consent_baseline_tracker_evidence_urls,
