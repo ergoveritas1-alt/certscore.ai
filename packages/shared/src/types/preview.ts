@@ -95,6 +95,8 @@ export type PreviewScanPayload = {
     robotsStatus: number | string | null;
     verifiedPublicSurfacesCount: number;
     protectionVendor?: string | null;
+    urlscanEvidenceRelation?: "same_host" | "off_domain_redirect";
+    urlscanFinalHostname?: string | null;
   };
   scores?: PreviewScoreSummary;
   fallbackEvidence?: PreviewFallbackEvidence;

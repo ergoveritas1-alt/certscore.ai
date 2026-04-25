@@ -4466,6 +4466,8 @@ export function SharedScanDetailView({
   const runtimeInitialCookieCount = getRecordNumber(runtimeArtifacts, "initial_cookie_count") ?? getRecordNumber(runtimeArtifacts, "initialCookieCount") ?? 0;
   const certScoreSummary = deriveCertScoreFindings(scanRecord);
   const fallbackEvidence = previewPayload?.fallbackEvidence ?? null;
+  const fallbackEvidenceRelation = previewPayload?.evidence?.urlscanEvidenceRelation ?? "same_host";
+  const fallbackFinalHostname = previewPayload?.evidence?.urlscanFinalHostname ?? null;
   const fallbackTechnologyNames = uniqueStrings(fallbackEvidence?.entities?.technologyNames ?? []);
   const fallbackObservedRequestCount = getFiniteNumber(fallbackEvidence?.metrics?.requestCount) ?? 0;
   const fallbackObservedCookieCount = getFiniteNumber(fallbackEvidence?.metrics?.initialCookieCount) ?? 0;
@@ -4802,7 +4804,9 @@ export function SharedScanDetailView({
                 <div className="space-y-1">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">Supplemental public runtime evidence</p>
                   <p>
-                    CertScore live verification stayed blocked, but urlscan.io retained same-host public runtime evidence for this domain.
+                    {fallbackEvidenceRelation === "off_domain_redirect" && fallbackFinalHostname
+                      ? `CertScore live verification stayed blocked, but urlscan.io retained public runtime evidence showing this domain redirected to ${fallbackFinalHostname}.`
+                      : "CertScore live verification stayed blocked, but urlscan.io retained same-host public runtime evidence for this domain."}
                     This evidence is shown separately and does not convert the blocked run into normal CertScore findings.
                   </p>
                   {fallbackEvidence.requestFootprint?.summary ? (
