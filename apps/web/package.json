@@ -14,6 +14,7 @@
     "audit:production-finding-demotions": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-finding-demotions.ts",
     "audit:production-finding-evidence": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-finding-demotions.ts",
     "audit:production-evidence-lineage": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-evidence-lineage.ts",
+    "audit:urlscan-supplements": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-urlscan-supplements.ts",
     "review:production-finding-surfacing": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/review-production-finding-surfacing.ts",
     "review:production-policy-nano": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/review-production-policy-nano-candidates.ts",
     "validate:noisy-findings:postdeploy": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/run-noisy-finding-postdeploy-validation.ts",
