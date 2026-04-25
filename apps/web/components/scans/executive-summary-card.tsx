@@ -287,6 +287,7 @@ export function buildRegulatoryLenses(
     80 -
       (hasConsentConcern ? 24 : 0) -
       (hasTrackingConcern ? 18 : 0) -
+      (counts.beforeConsentCookieCount > 0 ? 8 : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
 
@@ -323,7 +324,9 @@ export function buildRegulatoryLenses(
         ? "Choice architecture and disclosure clarity are the main FTC-style concerns."
         : hasConsentConcern
           ? "Consent-choice design should be reviewed for clarity."
-          : "No strong unfairness/deception cue surfaced in the top findings.",
+          : hasTrackingConcern || counts.beforeConsentCookieCount > 0
+            ? "Pre-consent tracking and third-party collection should be reviewed for unfairness or deception risk."
+            : "No strong unfairness/deception cue surfaced in the top findings.",
       toneClass: ftcTone.toneClass
     }
   ];
@@ -1140,7 +1143,15 @@ export function ExecutiveSummaryCard(input: {
   const regulatoryLenses = input.unifiedFindings
     ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions).map((lens) => {
         const findingBasedLens = findingBasedRegulatoryLenses.find((candidate) => candidate.acronym === lens.acronym);
-        return findingBasedLens?.summary === "Consent and pre-consent tracking risk is the main issue."
+        const findingBasedScore = findingBasedLens?.score;
+        const packetScore = lens.score;
+        const findingBasedHasScoreImpact =
+          typeof findingBasedScore === "number" &&
+          (typeof packetScore !== "number" || findingBasedScore < packetScore);
+        return findingBasedLens &&
+          (findingBasedLens.summary === "Consent and pre-consent tracking risk is the main issue." ||
+            ((lens.acronym === "GDPR / ePrivacy" || lens.acronym === "CCPA / CPRA" || lens.acronym === "FTC") &&
+              findingBasedHasScoreImpact))
           ? findingBasedLens
           : lens;
       })

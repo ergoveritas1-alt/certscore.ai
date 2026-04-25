@@ -68,9 +68,6 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
               <CardTitle className="text-base">Lightweight results were enriched with supplemental public evidence</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-slate-700">
-              <p>
-                The main report below is the standard scan page. This microcard only indicates that some request, vendor, or disclosure context came from an indirect public source because the preview used a lightweight path.
-              </p>
               {scan.previewPayload.fallbackEvidence ? (
                 <div className="grid gap-3 lg:grid-cols-3">
                   {[

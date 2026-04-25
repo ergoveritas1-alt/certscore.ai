@@ -5,6 +5,7 @@ import { cn } from "@website-signal-risk-scanner/ui";
 type CertScoreLogoProps = {
   className?: string;
   compact?: boolean;
+  showText?: boolean;
   theme?: "light" | "dark";
 };
 
@@ -23,6 +24,7 @@ type CertScoreMarkProps = {
 export default function CertScoreLogo({
   className,
   compact = false,
+  showText = false,
   theme = "light"
 }: CertScoreLogoProps) {
   const NAVY = theme === "dark" ? "#F5F9FF" : "#0B2E4F";
@@ -40,12 +42,12 @@ export default function CertScoreLogo({
     >
       <CertScoreMark compact={compact} theme={theme} className={compact ? "h-9 w-auto" : "h-[52px] w-auto"} />
 
-      {!compact ? (
+      {!compact || showText ? (
         <span className="inline-flex items-baseline tracking-tight leading-none">
-          <span className="text-[1.7rem] font-bold" style={{ color: NAVY }}>
+          <span className={cn("font-bold", compact ? "text-[1.35rem]" : "text-[1.7rem]")} style={{ color: NAVY }}>
             CertScore
           </span>
-          <span className="text-[1.7rem] font-bold" style={{ color: GREEN }}>
+          <span className={cn("font-bold", compact ? "text-[1.35rem]" : "text-[1.7rem]")} style={{ color: GREEN }}>
             .ai
           </span>
         </span>

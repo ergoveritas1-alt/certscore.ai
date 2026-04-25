@@ -756,7 +756,12 @@ test("ExecutiveSummaryCard lets fallback pre-consent findings correct packet-der
   );
 
   assert.match(html, /Consent and pre-consent tracking risk is the main issue\./);
+  assert.match(html, /CCPA \/ CPRA[\s\S]*?<p class="text-xl font-semibold tracking-tight text-slate-900">46<\/p>/);
+  assert.match(html, /Third-party collection and disclosure posture drives this score\./);
+  assert.match(html, /FTC[\s\S]*?<p class="text-xl font-semibold tracking-tight text-slate-900">54<\/p>/);
+  assert.match(html, /Pre-consent tracking and third-party collection should be reviewed for unfairness or deception risk\./);
   assert.doesNotMatch(html, /No major consent-triggering issue surfaced in the top findings\./);
+  assert.doesNotMatch(html, /No strong unfairness\/deception cue surfaced in the top findings\./);
 });
 
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {
