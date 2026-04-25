@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import process from "node:process";
 import { closePools, query, queryOne } from "@website-signal-risk-scanner/db";
 
-type ScanRow = {
+export type ScanRow = {
   completed_at: string | null;
   created_at: string;
   domain_id: string | null;
@@ -164,7 +164,7 @@ async function loadRows(sql: string, params: unknown[]) {
   return query<Record<string, unknown>>(sql, params, { readOnly: true }).then((result) => result.rows);
 }
 
-async function loadScanRecord(input: {
+export async function loadScanRecord(input: {
   buildMergedSignalRecords: (input: Record<string, unknown>) => unknown[];
   getHybridDerivedTrackerVendors: (runtimeArtifacts: Record<string, unknown> | null) => Array<Record<string, unknown>>;
   getPrimaryCategoryDescription: (category: string) => string;
