@@ -1,6 +1,9 @@
 import process from "node:process";
 import { closePools, query } from "@website-signal-risk-scanner/db";
-import { buildRuntimeCookieInventory } from "../lib/scans/runtime-cookie-evidence";
+import {
+  buildCookieDisclosureGapEvidence,
+  buildRuntimeCookieInventory
+} from "../lib/scans/runtime-cookie-evidence";
 import {
   classifyCookieDisclosureGapPromotionBlockers,
   classifyPreconsentPromotionBlockers
@@ -13,6 +16,7 @@ type CookieDebugRow = {
   hybrid_runtime_evidence: Record<string, unknown> | null;
   id: string;
   policy_evidence_snippets: Record<string, unknown> | null;
+  policy_cookie_disclosures: unknown[] | null;
   policy_extraction_status: string | null;
   policy_page_type: string | null;
   policy_page_url: string | null;
@@ -100,6 +104,7 @@ async function loadRows(limit: number) {
              end as policy_extraction_status,
              pe.policy_semantic_confidence,
              pe.policy_structurally_weak,
+             pe.policy_cookie_disclosures,
              coalesce(to_jsonb(pe)->'policy_evidence_snippets', '{}'::jsonb) as policy_evidence_snippets,
              exists (
                select 1 from scan_signals sig
@@ -155,6 +160,21 @@ function buildDebugRows(rows: CookieDebugRow[]) {
   return rows.map((row) => {
     const inventory = buildRuntimeCookieInventory({ hybridRuntimeEvidence: row.hybrid_runtime_evidence });
     const policy = summarizePolicyCookieMentions(row);
+    const derivedCookieGapEvidence = buildCookieDisclosureGapEvidence({
+      cookiePolicyUrl: policy.policyUrl,
+      disclosures: row.policy_cookie_disclosures ?? [],
+      inventory
+    });
+    const effectiveCookieGapEvidence =
+      row.cookie_gap_validation_evidence && Object.keys(row.cookie_gap_validation_evidence).length > 0
+        ? row.cookie_gap_validation_evidence
+        : {
+            cookie_policy_url: derivedCookieGapEvidence.cookie_policy_url,
+            runtime_cookie_names: derivedCookieGapEvidence.runtime_cookie_names,
+            unmatched_cookie_names: derivedCookieGapEvidence.unmatched_cookie_names,
+            unmatched_cookie_count: derivedCookieGapEvidence.unmatched_cookie_count,
+            unmatched_third_party_cookie_count: derivedCookieGapEvidence.unmatched_third_party_cookie_count
+          };
     const preconsentAssessment = classifyPreconsentPromotionBlockers({
       consentBaselineTrackerEvidenceUrls: row.consent_baseline_tracker_evidence_urls,
       hybridRuntimeEvidence: row.hybrid_runtime_evidence,
@@ -163,7 +183,7 @@ function buildDebugRows(rows: CookieDebugRow[]) {
       trackingBeforeConsentDetected: row.tracking_before_consent_detected
     });
     const disclosureAssessment = classifyCookieDisclosureGapPromotionBlockers({
-      cookieGapValidationEvidence: row.cookie_gap_validation_evidence,
+      cookieGapValidationEvidence: effectiveCookieGapEvidence,
       hybridRuntimeEvidence: row.hybrid_runtime_evidence,
       policyEvidenceSnippets: row.policy_evidence_snippets,
       policyExtractionStatus: row.policy_extraction_status,
@@ -176,6 +196,7 @@ function buildDebugRows(rows: CookieDebugRow[]) {
     return {
       beforeConsentCookieCount: inventory.beforeConsentRows.length,
       cookieCategories: inventory.cookieCategories,
+      derivedUnmatchedCookieCount: derivedCookieGapEvidence.unmatched_cookie_count,
       cookieDisclosureBlockers: disclosureAssessment.blockers,
       cookieDisclosurePromotionReady: disclosureAssessment.promotionReady,
       domain: row.domain,
@@ -187,10 +208,10 @@ function buildDebugRows(rows: CookieDebugRow[]) {
       preconsentPromotionReady: preconsentAssessment.promotionReady,
       sampleBeforeConsentCookies: inventory.beforeConsentCookieNames.slice(0, 8),
       sampleRuntimeCookies: inventory.cookieNames.slice(0, 8),
-      sampleUnmatchedCookies: inventory.unmatchedCookieNames.slice(0, 8),
+      sampleUnmatchedCookies: derivedCookieGapEvidence.unmatched_cookie_names.slice(0, 8),
       scanId: row.id,
       runtimeCookieCount: inventory.cookieNames.length,
-      unmatchedCookieCount: inventory.unmatchedCookieNames.length
+      unmatchedCookieCount: derivedCookieGapEvidence.unmatched_cookie_count
     };
   });
 }

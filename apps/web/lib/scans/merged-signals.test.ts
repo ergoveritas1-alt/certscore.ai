@@ -120,3 +120,55 @@ test("privacy contact merged-signal candidates retain sibling contact channel ev
 
   assert.equal(candidate?.fallbackEvidence?.privacyContactChannelType, "email");
 });
+
+test("cookie disclosure gap merged-signal candidates retain runtime comparison evidence", () => {
+  const mergedSignals = buildMergedSignalRecords({
+    nanoSignals: [
+      {
+        confidence: 0.86,
+        evidenceRefs: ["https://example.com/cookie-policy"],
+        key: "privacy.cookie_runtime_disclosure_gap_detected",
+        label: "Cookie runtime disclosure gap detected",
+        reportSignalSource: "document_semantic_signal",
+        source: "nano",
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        confidence: 0.86,
+        key: "cookieRuntimeNames",
+        label: "Runtime cookie names",
+        reportSignalSource: "document_semantic_signal",
+        source: "nano",
+        value: ["_ga", "_fbp"],
+        valueType: "string_array"
+      },
+      {
+        confidence: 0.86,
+        key: "cookieUnmatchedNames",
+        label: "Unmatched runtime cookie names",
+        reportSignalSource: "document_semantic_signal",
+        source: "nano",
+        value: ["_fbp"],
+        valueType: "string_array"
+      },
+      {
+        confidence: 0.86,
+        key: "cookieUnmatchedThirdPartyCount",
+        label: "Unmatched third-party cookie count",
+        reportSignalSource: "document_semantic_signal",
+        source: "nano",
+        value: 1,
+        valueType: "number"
+      }
+    ]
+  });
+
+  const candidate = buildReviewFindingCandidatesFromMergedSignals({
+    mergedSignals
+  }).find((row) => row.signalKey === "privacy.cookie_runtime_disclosure_gap_detected");
+
+  assert.deepEqual(candidate?.fallbackEvidence?.runtimeCookieNames, ["_ga", "_fbp"]);
+  assert.deepEqual(candidate?.fallbackEvidence?.unmatchedCookieNames, ["_fbp"]);
+  assert.equal(candidate?.fallbackEvidence?.unmatchedThirdPartyCookieCount, 1);
+});

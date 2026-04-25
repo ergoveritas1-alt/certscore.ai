@@ -22,6 +22,10 @@ import {
   getPrimaryPolicyEnrichmentRow,
   getPrivacyContactChannelType
 } from "./policy-enrichment-row";
+import {
+  buildCookieDisclosureGapEvidence,
+  buildRuntimeCookieInventory
+} from "./runtime-cookie-evidence";
 
 export type PersistedNanoSignalRow = {
   confidence: number | null;
@@ -48,6 +52,14 @@ export const MANAGED_NANO_POLICY_SIGNAL_KEYS = new Set([
   "policyBehaviorConflictCandidate",
   "disclosure.policy_runtime_disclosure_likely_obstructed",
   "disclosure.cookie_policy_structurally_obstructed",
+  "cookieRuntimeNames",
+  "cookieDisclosedNames",
+  "cookieDisclosedProviders",
+  "cookieUnmatchedNames",
+  "cookieUnmatchedVendors",
+  "cookieUnmatchedCategories",
+  "cookieUnmatchedCount",
+  "cookieUnmatchedThirdPartyCount",
   "disclosure.policy_runtime_missing_technical_disclosure_detected",
   "privacy.cookie_runtime_disclosure_gap_detected",
   "privacy.policy_runtime_functional_misalignment_detected"
@@ -63,48 +75,6 @@ function getStringArray(value: unknown) {
 
 function getNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function getHybridRuntimeEvidence(runtimeArtifacts: Record<string, unknown> | null | undefined) {
-  return runtimeArtifacts && typeof runtimeArtifacts === "object"
-    ? (((runtimeArtifacts.hybrid_runtime_evidence ?? runtimeArtifacts.hybridRuntimeEvidence) as Record<string, unknown> | null) ?? null)
-    : null;
-}
-
-function normalizeCookieName(value: string | null | undefined) {
-  if (!value) {
-    return null;
-  }
-
-  return value.trim().toLowerCase();
-}
-
-function normalizeCookieTokenList(values: string[]) {
-  return [...new Set(values.map((value) => normalizeCookieName(value)).filter((value): value is string => Boolean(value)))];
-}
-
-function getRuntimeCookieNames(runtimeArtifacts: Record<string, unknown> | null | undefined) {
-  const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
-  const cookieWriteObservations = Array.isArray(hybrid?.cookieWriteObservations)
-    ? hybrid.cookieWriteObservations.filter(
-        (value): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
-      )
-    : [];
-  const hybridCookieNames = cookieWriteObservations
-    .map((row) => getString(row.cookieName) ?? getString(row.cookie_name))
-    .filter((value): value is string => typeof value === "string");
-
-  if (hybridCookieNames.length > 0) {
-    return normalizeCookieTokenList(hybridCookieNames);
-  }
-
-  const persistedCookieNames = Array.isArray(runtimeArtifacts?.initial_cookie_names)
-    ? (runtimeArtifacts.initial_cookie_names as unknown[]).filter((value): value is string => typeof value === "string")
-    : Array.isArray(runtimeArtifacts?.initialCookieNames)
-      ? (runtimeArtifacts.initialCookieNames as unknown[]).filter((value): value is string => typeof value === "string")
-      : [];
-
-  return normalizeCookieTokenList(persistedCookieNames);
 }
 
 function hasSparsePolicyExtraction(input: {
@@ -135,50 +105,6 @@ function hasSparsePolicyExtraction(input: {
     return true;
   }
   return typeof input.summaryShort !== "string" || input.summaryShort.trim().length === 0;
-}
-
-function inferCookieProvider(cookieName: string) {
-  const normalized = normalizeCookieName(cookieName);
-  if (!normalized) {
-    return null;
-  }
-
-  if (normalized.startsWith("_ga") || normalized.startsWith("_gid")) {
-    return { category: "analytics", provider: "Google" };
-  }
-  if (normalized.startsWith("_fbp")) {
-    return { category: "advertising", provider: "Meta" };
-  }
-  if (normalized.startsWith("_ttp")) {
-    return { category: "advertising", provider: "TikTok" };
-  }
-
-  return null;
-}
-
-function matchRuntimeCookie(input: { cookieName: string; disclosures: Array<Record<string, unknown>> }) {
-  const runtimeName = normalizeCookieName(input.cookieName);
-  if (!runtimeName) {
-    return null;
-  }
-
-  for (const disclosure of input.disclosures) {
-    const disclosedName = normalizeCookieName(getString(disclosure.cookie_name) ?? getString(disclosure.cookieName));
-    if (disclosedName && (runtimeName === disclosedName || runtimeName.startsWith(disclosedName) || disclosedName.startsWith(runtimeName))) {
-      return true;
-    }
-  }
-
-  const inferred = inferCookieProvider(runtimeName);
-  if (!inferred) {
-    return false;
-  }
-
-  return input.disclosures.some((disclosure) => {
-    const provider = (getString(disclosure.provider) ?? "").toLowerCase();
-    const purpose = (getString(disclosure.purpose) ?? "").toLowerCase();
-    return provider.includes(inferred.provider.toLowerCase()) || purpose.includes(inferred.category);
-  });
 }
 
 function buildPolicyRowConfidence(rows: Array<Record<string, unknown>>) {
@@ -367,13 +293,16 @@ export function buildNanoPolicySignalRows(input: {
   }
 
   const cookiePolicyRow = getFirstPolicyRowByPageTypes(input.policyEnrichments, ["cookie_policy"]);
-  const runtimeCookieNames = getRuntimeCookieNames(input.runtimeArtifacts);
-  if (cookiePolicyRow && runtimeCookieNames.length > 0) {
-    const cookieDisclosures = getPolicyCookieDisclosures(cookiePolicyRow).filter(
-      (value): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
-    );
+  const runtimeCookieInventory = buildRuntimeCookieInventory({ runtimeArtifacts: input.runtimeArtifacts });
+  if (cookiePolicyRow && runtimeCookieInventory.cookieNames.length > 0) {
+    const cookieDisclosures = getPolicyCookieDisclosures(cookiePolicyRow);
     const cookieFlags = getPolicyActionableFlags(cookiePolicyRow);
     const cookieConfidence = getPolicySemanticConfidence(cookiePolicyRow);
+    const cookieGapEvidence = buildCookieDisclosureGapEvidence({
+      cookiePolicyUrl: getPolicyPageUrl(cookiePolicyRow),
+      disclosures: cookieDisclosures,
+      inventory: runtimeCookieInventory
+    });
     const cookieStructurallyWeak =
       cookieDisclosures.length === 0 ||
       (cookieConfidence !== null && cookieConfidence < 0.6) ||
@@ -392,8 +321,91 @@ export function buildNanoPolicySignalRows(input: {
         value: true
       });
     } else {
-      const unmatchedCookieNames = runtimeCookieNames.filter((cookieName) => !matchRuntimeCookie({ cookieName, disclosures: cookieDisclosures }));
-      if (unmatchedCookieNames.length > 0) {
+      if (cookieGapEvidence.unmatched_cookie_count > 0) {
+        rows.push({
+          confidence: cookieConfidence,
+          evidence_refs: getPolicyRowEvidenceRefs([cookiePolicyRow]),
+          key: "cookieRuntimeNames",
+          label: "Runtime cookie names",
+          population_status: "present",
+          provenance_detail: "runtime.cookie_inventory",
+          report_signal_source: "document_semantic_signal",
+          value: cookieGapEvidence.runtime_cookie_names
+        });
+        rows.push({
+          confidence: cookieConfidence,
+          evidence_refs: getPolicyRowEvidenceRefs([cookiePolicyRow]),
+          key: "cookieDisclosedNames",
+          label: "Disclosed cookie names",
+          population_status: "present",
+          provenance_detail: "policy_enrichment.cookie_policy",
+          report_signal_source: "document_semantic_signal",
+          value: cookieGapEvidence.disclosed_cookie_names
+        });
+        rows.push({
+          confidence: cookieConfidence,
+          evidence_refs: getPolicyRowEvidenceRefs([cookiePolicyRow]),
+          key: "cookieDisclosedProviders",
+          label: "Disclosed cookie providers",
+          population_status: "present",
+          provenance_detail: "policy_enrichment.cookie_policy",
+          report_signal_source: "document_semantic_signal",
+          value: cookieGapEvidence.disclosed_cookie_providers
+        });
+        rows.push({
+          confidence: cookieConfidence,
+          evidence_refs: getPolicyRowEvidenceRefs([cookiePolicyRow]),
+          key: "cookieUnmatchedNames",
+          label: "Unmatched runtime cookie names",
+          population_status: "present",
+          provenance_detail: "runtime_policy.cookie_comparison",
+          report_signal_source: "document_semantic_signal",
+          value: cookieGapEvidence.unmatched_cookie_names
+        });
+        rows.push({
+          confidence: cookieConfidence,
+          evidence_refs: getPolicyRowEvidenceRefs([cookiePolicyRow]),
+          key: "cookieUnmatchedCount",
+          label: "Unmatched runtime cookie count",
+          population_status: "present",
+          provenance_detail: "runtime_policy.cookie_comparison",
+          report_signal_source: "document_semantic_signal",
+          value: cookieGapEvidence.unmatched_cookie_count
+        });
+        rows.push({
+          confidence: cookieConfidence,
+          evidence_refs: getPolicyRowEvidenceRefs([cookiePolicyRow]),
+          key: "cookieUnmatchedThirdPartyCount",
+          label: "Unmatched third-party cookie count",
+          population_status: "present",
+          provenance_detail: "runtime_policy.cookie_comparison",
+          report_signal_source: "document_semantic_signal",
+          value: cookieGapEvidence.unmatched_third_party_cookie_count
+        });
+        if (cookieGapEvidence.unmatched_cookie_vendors.length > 0) {
+          rows.push({
+            confidence: cookieConfidence,
+            evidence_refs: getPolicyRowEvidenceRefs([cookiePolicyRow]),
+            key: "cookieUnmatchedVendors",
+            label: "Unmatched runtime cookie vendors",
+            population_status: "present",
+            provenance_detail: "runtime_policy.cookie_comparison",
+            report_signal_source: "document_semantic_signal",
+            value: cookieGapEvidence.unmatched_cookie_vendors
+          });
+        }
+        if (cookieGapEvidence.unmatched_cookie_categories.length > 0) {
+          rows.push({
+            confidence: cookieConfidence,
+            evidence_refs: getPolicyRowEvidenceRefs([cookiePolicyRow]),
+            key: "cookieUnmatchedCategories",
+            label: "Unmatched runtime cookie categories",
+            population_status: "present",
+            provenance_detail: "runtime_policy.cookie_comparison",
+            report_signal_source: "document_semantic_signal",
+            value: cookieGapEvidence.unmatched_cookie_categories
+          });
+        }
         rows.push({
           confidence: cookieConfidence,
           evidence_refs: getPolicyRowEvidenceRefs([cookiePolicyRow]),

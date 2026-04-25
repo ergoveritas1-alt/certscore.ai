@@ -31,6 +31,10 @@ import {
   type PersistedAccessibilityRuleExampleRow
 } from "../../lib/scans/accessibility-evidence";
 import { loadMergedSignalsByScanId } from "../scans/merged-signal-summary";
+import {
+  buildCookieDisclosureGapEvidence,
+  buildRuntimeCookieInventory
+} from "../../lib/scans/runtime-cookie-evidence";
 
 type ValidationSettingsRow = {
   automatic_interval_minutes: number;
@@ -144,8 +148,10 @@ type PolicyReviewQueueRow = {
 
 type PolicyEnrichmentLookupRow = {
   id: string;
+  policy_actionable_flags?: string[] | null;
   policy_ambiguity_score?: number | null;
   policy_coverage_ratio?: number | null;
+  policy_cookie_disclosures?: unknown[] | null;
   policy_effective_date?: string | null;
   policy_field_coverage?: Record<string, unknown>;
   policy_governing_law?: string | null;
@@ -988,6 +994,77 @@ function buildSupplementalSnapshotFindings(input: {
   return supplements;
 }
 
+function normalizeStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+}
+
+function buildSupplementalCookieDisclosureGapFindings(input: {
+  cookiePolicyRow: PolicyEnrichmentLookupRow | null;
+  existingFindings: ExistingFindingIdentity[];
+  runtimeArtifacts: Record<string, unknown> | null;
+  startingRank: number;
+}) {
+  const ruleKey = "cookie_runtime.disclosure_gap";
+  const title = "Cookie disclosure gap";
+  const existingRuleKeys = new Set(input.existingFindings.map((row) => row.rule_key));
+  const existingTitles = new Set(input.existingFindings.map((row) => row.title.trim().toLowerCase()));
+  if (existingRuleKeys.has(ruleKey) || existingTitles.has(title.toLowerCase()) || !input.cookiePolicyRow || !input.runtimeArtifacts) {
+    return [] as ValidationRunFindingRow[];
+  }
+
+  const cookieDisclosures = input.cookiePolicyRow.policy_cookie_disclosures ?? [];
+  const policyFlags = normalizeStringArray(input.cookiePolicyRow.policy_actionable_flags);
+  const policyConfidence = input.cookiePolicyRow.policy_semantic_confidence ?? null;
+  const structurallyWeak =
+    cookieDisclosures.length === 0 ||
+    input.cookiePolicyRow.policy_structurally_weak === true ||
+    (policyConfidence !== null && policyConfidence < 0.6) ||
+    policyFlags.includes("low_confidence") ||
+    policyFlags.includes("llm_provider_error");
+  if (structurallyWeak) {
+    return [] as ValidationRunFindingRow[];
+  }
+
+  const inventory = buildRuntimeCookieInventory({ runtimeArtifacts: input.runtimeArtifacts });
+  const evidence = buildCookieDisclosureGapEvidence({
+    cookiePolicyUrl: input.cookiePolicyRow.page_url,
+    disclosures: cookieDisclosures,
+    inventory
+  });
+  if (evidence.unmatched_cookie_count <= 0) {
+    return [] as ValidationRunFindingRow[];
+  }
+
+  return [
+    {
+      category: "privacy",
+      description: "Observed runtime cookies could not be reconciled to explicit cookie disclosures on the site.",
+      evidence_json: {
+        ...evidence,
+        cookiePolicyUrl: evidence.cookie_policy_url,
+        disclosedCookieNames: evidence.disclosed_cookie_names,
+        disclosedCookieProviders: evidence.disclosed_cookie_providers,
+        runtimeCookieNames: evidence.runtime_cookie_names,
+        unmatchedCookieCategories: evidence.unmatched_cookie_categories,
+        unmatchedCookieCount: evidence.unmatched_cookie_count,
+        unmatchedCookieNames: evidence.unmatched_cookie_names,
+        unmatchedCookieVendors: evidence.unmatched_cookie_vendors,
+        unmatchedRuntimeCookies: evidence.unmatched_runtime_cookies,
+        unmatchedThirdPartyCookieCount: evidence.unmatched_third_party_cookie_count
+      },
+      finding_rank: input.startingRank + 1,
+      id: "supplemental:cookie_runtime:disclosure_gap",
+      page_url: input.cookiePolicyRow.page_url ?? null,
+      rule_key: ruleKey,
+      severity: evidence.unmatched_third_party_cookie_count > 0 ? "high" : "medium",
+      subtype: "runtime_policy_reconciliation",
+      title
+    }
+  ];
+}
+
 async function loadSupplementalValidationFindings(input: {
   existingFindings: ExistingFindingIdentity[];
   scanId: string | null;
@@ -999,8 +1076,10 @@ async function loadSupplementalValidationFindings(input: {
   let snapshot: SnapshotSupplementRow | null;
   let policyQueue: PolicyReviewQueueRow[];
   let accessibilityRuleExamples: ScanAccessibilityRuleExampleRow[];
+  let cookiePolicyRow: PolicyEnrichmentLookupRow | null;
+  let runtimeArtifacts: Record<string, unknown> | null;
   try {
-    [snapshot, policyQueue, accessibilityRuleExamples] = await Promise.all([
+    [snapshot, policyQueue, accessibilityRuleExamples, cookiePolicyRow, runtimeArtifacts] = await Promise.all([
       queryOne<SnapshotSupplementRow>(
         `
           select retargeting_pixel_detected, accessibility_litigation_risk_score
@@ -1039,7 +1118,36 @@ async function loadSupplementalValidationFindings(input: {
         `,
         [input.scanId],
         { readOnly: true }
-      ).then((result) => result.rows)
+      ).then((result) => result.rows),
+      queryOne<PolicyEnrichmentLookupRow>(
+        `
+          select
+            id,
+            page_type,
+            page_url,
+            policy_actionable_flags,
+            policy_cookie_disclosures,
+            policy_semantic_confidence,
+            policy_structurally_weak,
+            policy_summary_short
+          from policy_enrichment
+          where scan_id = $1
+            and page_type = 'cookie_policy'
+          order by created_at desc
+          limit 1
+        `,
+        [input.scanId],
+        { readOnly: true }
+      ),
+      queryOne<Record<string, unknown>>(
+        `
+          select *
+          from scan_runtime_artifacts
+          where scan_id = $1
+        `,
+        [input.scanId],
+        { readOnly: true }
+      )
     ]);
   } catch (error) {
     throw new Error(`Failed to load supplemental validation findings for ${input.scanId}: ${getErrorMessage(error)}`);
@@ -1096,8 +1204,14 @@ async function loadSupplementalValidationFindings(input: {
     snapshot: snapshot ?? null,
     startingRank: input.existingFindings.length + policySupplements.length
   });
+  const cookieGapSupplements = buildSupplementalCookieDisclosureGapFindings({
+    cookiePolicyRow: cookiePolicyRow ?? null,
+    existingFindings: [...input.existingFindings, ...policySupplements, ...snapshotSupplements],
+    runtimeArtifacts: runtimeArtifacts ?? null,
+    startingRank: input.existingFindings.length + policySupplements.length + snapshotSupplements.length
+  });
 
-  return [...policySupplements, ...snapshotSupplements].map((row, index) => ({
+  return [...policySupplements, ...snapshotSupplements, ...cookieGapSupplements].map((row, index) => ({
     ...row,
     finding_rank: input.existingFindings.length + index + 1
   }));

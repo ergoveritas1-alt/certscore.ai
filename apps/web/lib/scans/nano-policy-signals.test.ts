@@ -98,6 +98,9 @@ test("builds policy-runtime bridge signal rows from review reasons and runtime c
   assert.equal(rows.some((row) => row.key === "disclosure.policy_runtime_missing_technical_disclosure_detected"), true);
   assert.equal(rows.some((row) => row.key === "disclosure.policy_runtime_disclosure_likely_obstructed"), true);
   assert.equal(rows.some((row) => row.key === "privacy.cookie_runtime_disclosure_gap_detected"), true);
+  assert.deepEqual(rows.find((row) => row.key === "cookieRuntimeNames")?.value, ["_fbp", "_ga"]);
+  assert.deepEqual(rows.find((row) => row.key === "cookieUnmatchedNames")?.value, ["_fbp"]);
+  assert.equal(rows.find((row) => row.key === "cookieUnmatchedCount")?.value, 1);
 });
 
 test("buildNanoPolicySignalRows discards non-string policy arrays before building persisted rows", () => {

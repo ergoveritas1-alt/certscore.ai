@@ -113,15 +113,47 @@ function getMergedSignalValue(mergedSignals: MergedSignalRecord[], key: string) 
   return signal.selectedPopulation?.value ?? signal.value ?? null;
 }
 
+function getMergedSignalStringArray(mergedSignals: MergedSignalRecord[], key: string) {
+  const value = getMergedSignalValue(mergedSignals, key);
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
+}
+
+function getMergedSignalNumber(mergedSignals: MergedSignalRecord[], key: string) {
+  const value = getMergedSignalValue(mergedSignals, key);
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function buildSiblingEvidenceForMergedSignal(signal: MergedSignalRecord, mergedSignals: MergedSignalRecord[]) {
-  if (signal.key !== "privacy.privacy_contact_path_present") {
-    return {};
+  if (signal.key === "privacy.privacy_contact_path_present") {
+    const privacyContactChannelType = getMergedSignalValue(mergedSignals, "privacyContactChannelType");
+    return typeof privacyContactChannelType === "string" && privacyContactChannelType.trim().length > 0
+      ? { privacyContactChannelType: privacyContactChannelType.trim() }
+      : {};
   }
 
-  const privacyContactChannelType = getMergedSignalValue(mergedSignals, "privacyContactChannelType");
-  return typeof privacyContactChannelType === "string" && privacyContactChannelType.trim().length > 0
-    ? { privacyContactChannelType: privacyContactChannelType.trim() }
-    : {};
+  if (signal.key === "privacy.cookie_runtime_disclosure_gap_detected") {
+    const runtimeCookieNames = getMergedSignalStringArray(mergedSignals, "cookieRuntimeNames");
+    const unmatchedCookieNames = getMergedSignalStringArray(mergedSignals, "cookieUnmatchedNames");
+    const unmatchedCookieVendors = getMergedSignalStringArray(mergedSignals, "cookieUnmatchedVendors");
+    const unmatchedCookieCategories = getMergedSignalStringArray(mergedSignals, "cookieUnmatchedCategories");
+    const disclosedCookieNames = getMergedSignalStringArray(mergedSignals, "cookieDisclosedNames");
+    const disclosedCookieProviders = getMergedSignalStringArray(mergedSignals, "cookieDisclosedProviders");
+    const unmatchedCookieCount = getMergedSignalNumber(mergedSignals, "cookieUnmatchedCount") ?? unmatchedCookieNames.length;
+    const unmatchedThirdPartyCookieCount =
+      getMergedSignalNumber(mergedSignals, "cookieUnmatchedThirdPartyCount") ?? unmatchedCookieCount;
+    return {
+      disclosedCookieNames,
+      disclosedCookieProviders,
+      runtimeCookieNames,
+      unmatchedCookieCategories,
+      unmatchedCookieCount,
+      unmatchedCookieNames,
+      unmatchedCookieVendors,
+      unmatchedThirdPartyCookieCount
+    };
+  }
+
+  return {};
 }
 
 function selectPopulation(populations: PopulatedSignalRecord[]) {
