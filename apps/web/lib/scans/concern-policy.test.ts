@@ -1394,7 +1394,7 @@ test("deriveConcernPolicy keeps vendor-only pre-consent evidence audit-only", ()
   assert.equal(policy.externalSurfacingEligibility, "audit_only");
 });
 
-test("deriveConcernPolicy promotes pre-consent evidence only with vendor, URL, and sequence", () => {
+test("deriveConcernPolicy promotes pre-consent evidence with vendor, URL, and sequence", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
       originKey: "privacy.preconsent_tracking_detected",
@@ -1412,6 +1412,63 @@ test("deriveConcernPolicy promotes pre-consent evidence only with vendor, URL, a
 
   assert.equal(policy.promotionEligibility, "eligible");
   assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy promotes non-essential pre-consent cookie evidence", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.preconsent_tracking_detected",
+      suggestedUnifiedFindingId: "preconsent_tracking",
+      title: "Pre-consent tracking detected"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      preconsent_cookie_evidence: [
+        {
+          category: "advertising",
+          cookieName: "_fbp",
+          nonEssential: true,
+          timingEvidence: "before_consent_cookie_write"
+        }
+      ],
+      preconsent_cookie_names: ["_fbp"],
+      preconsent_nonessential_cookie_names: ["_fbp"],
+      preconsent_tracking_detected: true,
+      supportingSignals: ["privacy.preconsent_tracking_detected"]
+    }
+  });
+
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy keeps necessary pre-consent cookie evidence audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.preconsent_tracking_detected",
+      suggestedUnifiedFindingId: "preconsent_tracking",
+      title: "Pre-consent tracking detected"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      preconsent_cookie_evidence: [
+        {
+          category: "necessary",
+          cookieName: "__cf_bm",
+          nonEssential: false,
+          timingEvidence: "before_consent_cookie_write"
+        }
+      ],
+      preconsent_cookie_names: ["__cf_bm"],
+      preconsent_tracking_detected: true,
+      supportingSignals: ["privacy.preconsent_tracking_detected"]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_concrete_preconsent_artifact"));
 });
 
 test("deriveConcernPolicy keeps pricing unclear audit-only when evidence shows clear pricing terms context", () => {

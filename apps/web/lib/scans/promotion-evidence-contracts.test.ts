@@ -5,7 +5,9 @@ import { getContradictionEvidenceBundle } from "./contradiction-evidence-contrac
 import { POLICY_BEHAVIOR_CONFLICT_FIXTURES } from "./policy-behavior-conflict.fixtures";
 import {
   evaluateConsentGatedTrackingConflictContract,
-  evaluatePolicyBehaviorConflictContract
+  evaluatePolicyBehaviorConflictContract,
+  hasConcretePreconsentArtifact,
+  hasStrongPreconsentRuntimeEvidence
 } from "./promotion-evidence-contracts";
 import { buildSanitizedNetworkEvidenceAuditRecord } from "./sanitized-network-evidence";
 
@@ -90,6 +92,43 @@ test("policy behavior conflict contract accepts contradiction-grade positive fix
       negativeEvidenceFlags: []
     });
   }
+});
+
+test("pre-consent cookie evidence is promotion-grade only for non-essential cookies", () => {
+  const analyticsCookieEvidence = {
+    preconsent_cookie_evidence: [
+      {
+        category: "analytics",
+        cookieName: "_ga",
+        nonEssential: true,
+        timingEvidence: "before_consent_cookie_write"
+      }
+    ],
+    preconsent_cookie_names: ["_ga"],
+    preconsent_nonessential_cookie_names: ["_ga"],
+    preconsent_tracking_detected: true,
+    supportingSignals: ["privacy.preconsent_tracking_detected"]
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(analyticsCookieEvidence), true);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(analyticsCookieEvidence), true);
+
+  const infrastructureCookieEvidence = {
+    preconsent_cookie_evidence: [
+      {
+        category: "necessary",
+        cookieName: "__cf_bm",
+        nonEssential: false,
+        timingEvidence: "before_consent_cookie_write"
+      }
+    ],
+    preconsent_cookie_names: ["__cf_bm"],
+    preconsent_tracking_detected: true,
+    supportingSignals: ["privacy.preconsent_tracking_detected"]
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(infrastructureCookieEvidence), false);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(infrastructureCookieEvidence), false);
 });
 
 test("policy behavior conflict contract blocks incomplete contradiction fixtures", () => {

@@ -34,6 +34,64 @@ function getStringArrayValues(record: Record<string, unknown> | null | undefined
   return uniqueStrings(values);
 }
 
+function getObjectArrayValues(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  const values: Array<Record<string, unknown>> = [];
+  for (const key of keys) {
+    const value = record?.[key];
+    if (Array.isArray(value)) {
+      values.push(
+        ...value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+      );
+    }
+  }
+
+  return values;
+}
+
+function classifyCookieNameForPromotion(name: string) {
+  const normalized = name.toLowerCase();
+  if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog)/i.test(normalized)) {
+    return "analytics";
+  }
+  if (/(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|doubleclick|criteo|_mkto_trk|muid|fr\b)/i.test(normalized)) {
+    return "advertising";
+  }
+  return "unknown";
+}
+
+function hasPromotionGradePreconsentCookieEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const explicitNames = getStringArrayValues(rawEvidence, [
+    "preconsent_nonessential_cookie_names",
+    "preconsentNonessentialCookieNames"
+  ]);
+  if (explicitNames.some((name) => {
+    const category = classifyCookieNameForPromotion(name);
+    return category === "analytics" || category === "advertising";
+  })) {
+    return true;
+  }
+
+  const cookieRows = getObjectArrayValues(rawEvidence, ["preconsent_cookie_evidence", "preconsentCookieEvidence"]);
+  if (
+    cookieRows.some((row) => {
+      const category = typeof row.category === "string" ? row.category : null;
+      const nonEssential = row.nonEssential === true || row.non_essential === true;
+      const cookieName = typeof row.cookieName === "string" ? row.cookieName : typeof row.cookie_name === "string" ? row.cookie_name : null;
+      const inferredCategory = cookieName ? classifyCookieNameForPromotion(cookieName) : "unknown";
+      const promotionCategory = category === "analytics" || category === "advertising" || inferredCategory === "analytics" || inferredCategory === "advertising";
+      const timingEvidence = typeof row.timingEvidence === "string" ? row.timingEvidence : typeof row.timing_evidence === "string" ? row.timing_evidence : null;
+      return promotionCategory && (nonEssential || timingEvidence === "before_consent_cookie_write" || timingEvidence === "initial_cookie_snapshot");
+    })
+  ) {
+    return true;
+  }
+
+  return getStringArrayValues(rawEvidence, ["preconsent_cookie_names", "preconsentCookieNames"]).some((name) => {
+    const category = classifyCookieNameForPromotion(name);
+    return category === "analytics" || category === "advertising";
+  });
+}
+
 function collectStrings(value: unknown, acc: string[], depth = 0) {
   if (depth > 3 || acc.length >= 80) {
     return;
@@ -81,7 +139,12 @@ export function hasConcretePreconsentArtifact(rawEvidence: Record<string, unknow
     "runtimeEvidenceUrls"
   ]).filter((value) => /^https?:\/\//i.test(value));
 
-  return vendors.length > 0 || urls.length > 0 || hasConcreteSanitizedNetworkEvidence(rawEvidence, { runtimePhase: "pre_consent" });
+  return (
+    vendors.length > 0 ||
+    urls.length > 0 ||
+    hasPromotionGradePreconsentCookieEvidence(rawEvidence) ||
+    hasConcreteSanitizedNetworkEvidence(rawEvidence, { runtimePhase: "pre_consent" })
+  );
 }
 
 export function hasStrongPreconsentRuntimeEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -97,7 +160,7 @@ export function hasStrongPreconsentRuntimeEvidence(rawEvidence: Record<string, u
     "runtimeEvidenceUrls"
   ]).filter((value) => /^https?:\/\//i.test(value));
 
-  return vendors.length > 0 && urls.length > 0 && hasPreconsentSequenceEvidence(rawEvidence);
+  return ((vendors.length > 0 && urls.length > 0) || hasPromotionGradePreconsentCookieEvidence(rawEvidence)) && hasPreconsentSequenceEvidence(rawEvidence);
 }
 
 export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknown> | null | undefined) {

@@ -32,6 +32,28 @@ function normalizeDerivedVendorCategory(value: string | null | undefined) {
   return normalized;
 }
 
+function classifyRuntimeCookieCategory(name: string, domain: string | null) {
+  const normalized = `${name} ${domain ?? ""}`.toLowerCase();
+  if (/(cf_clearance|__cf|recaptcha|akamai|datadome|perimeterx|awsalb|awsalbcors|awsalbtg|bm_sz|ak_bmsc|csrf|xsrf|session)/i.test(normalized)) {
+    return "necessary";
+  }
+  if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog)/i.test(normalized)) {
+    return "analytics";
+  }
+  if (
+    /(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|infolinks|doubleclick|criteo|media\.net|_mkto_trk|muid|fr\b)/i.test(
+      normalized
+    )
+  ) {
+    return "advertising";
+  }
+  return "unknown";
+}
+
+function isNonEssentialCookieCategory(category: string | null | undefined) {
+  return category === "analytics" || category === "advertising";
+}
+
 function getBoolean(value: unknown) {
   return typeof value === "boolean" ? value : null;
 }
@@ -274,6 +296,88 @@ function getPreconsentTrackerVendors(hybrid: Record<string, unknown> | null) {
     .flatMap((row) => (typeof row.vendor === "string" ? [row.vendor] : []));
 
   return uniqueStrings(vendors);
+}
+
+function isPreconsentCookieWrite(row: Record<string, unknown>, hybrid: Record<string, unknown> | null) {
+  if (row.beforeConsent === true || row.before_consent === true) {
+    return true;
+  }
+
+  const setAtMs = getNumber(row.setAtMs ?? row.set_at_ms);
+  const timelineMarkers = getRecord(hybrid?.timelineMarkers ?? hybrid?.timeline_markers);
+  const consentBannerDetectedMs = getNumber(timelineMarkers?.consentBannerDetectedMs ?? timelineMarkers?.consent_banner_detected_ms);
+  return setAtMs !== null && consentBannerDetectedMs !== null && setAtMs < consentBannerDetectedMs;
+}
+
+function getCookiePartyType(row: Record<string, unknown>) {
+  if (row.thirdParty === true || row.third_party === true) {
+    return "third_party";
+  }
+  const cookiePartyType = getString(row.cookiePartyType ?? row.cookie_party_type);
+  if (cookiePartyType === "third_party" || cookiePartyType === "first_party") {
+    return cookiePartyType;
+  }
+  return "first_party";
+}
+
+function getPreconsentCookieEvidenceRows(
+  hybrid: Record<string, unknown> | null,
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+) {
+  const cookieWriteObservations = getObjectArray(hybrid?.cookieWriteObservations ?? hybrid?.cookie_write_observations);
+  const writeRows = cookieWriteObservations
+    .filter((row) => isPreconsentCookieWrite(row, hybrid))
+    .flatMap((row) => {
+      const cookieName = getString(row.cookieName ?? row.cookie_name);
+      if (!cookieName) {
+        return [];
+      }
+      const domain = getString(row.domain ?? row.cookieDomain ?? row.cookie_domain);
+      const category = classifyRuntimeCookieCategory(cookieName, domain);
+      return [
+        {
+          category,
+          cookieName,
+          domain,
+          expirationType: getString(row.cookieExpirationType ?? row.cookie_expiration_type),
+          initiatorDomain: getString(row.cookieInitiatorDomain ?? row.cookie_initiator_domain),
+          initiatorVendor: getString(row.cookieInitiatorVendor ?? row.cookie_initiator_vendor),
+          nonEssential: isNonEssentialCookieCategory(category),
+          party: getCookiePartyType(row),
+          sameSite: getString(row.cookieSameSite ?? row.cookie_same_site),
+          secure: getBoolean(row.cookieSecure ?? row.cookie_secure),
+          setAtMs: getNumber(row.setAtMs ?? row.set_at_ms),
+          setMethod: getString(row.cookieSetMethod ?? row.cookie_set_method),
+          timingEvidence: "before_consent_cookie_write"
+        }
+      ];
+    });
+
+  if (writeRows.length > 0) {
+    return writeRows;
+  }
+
+  const initialCookieNames = getStringArray(runtimeArtifacts?.initial_cookie_names ?? runtimeArtifacts?.initialCookieNames);
+  const initialCookieDomains = getStringArray(runtimeArtifacts?.initial_cookie_domains ?? runtimeArtifacts?.initialCookieDomains);
+  return initialCookieNames.map((cookieName, index) => {
+    const domain = initialCookieDomains[index] ?? null;
+    const category = classifyRuntimeCookieCategory(cookieName, domain);
+    return {
+      category,
+      cookieName,
+      domain,
+      expirationType: null,
+      initiatorDomain: null,
+      initiatorVendor: null,
+      nonEssential: isNonEssentialCookieCategory(category),
+      party: "unknown",
+      sameSite: null,
+      secure: null,
+      setAtMs: null,
+      setMethod: "initial_cookie_snapshot",
+      timingEvidence: "initial_cookie_snapshot"
+    };
+  });
 }
 
 function getPreconsentRequestUrls(hybrid: Record<string, unknown> | null) {
@@ -668,8 +772,17 @@ export function getHybridSignalFallbackEvidence(input: {
     case "privacy.tracking_before_consent_detected": {
       const preconsentRequestUrls = getPreconsentRequestUrls(hybrid);
       const preconsentVendors = getPreconsentTrackerVendors(hybrid);
+      const preconsentCookieEvidence = getPreconsentCookieEvidenceRows(hybrid, input.runtimeArtifacts);
+      const preconsentNonEssentialCookies = uniqueStrings(
+        preconsentCookieEvidence.filter((row) => row.nonEssential).flatMap((row) => row.cookieName)
+      );
+      const preconsentCookieNames = uniqueStrings(preconsentCookieEvidence.flatMap((row) => row.cookieName));
       return {
         consentBannerDetectedMs: getNumber(getRecord(hybrid.timelineMarkers)?.consentBannerDetectedMs),
+        preconsent_cookie_categories: uniqueStrings(preconsentCookieEvidence.flatMap((row) => row.category)),
+        preconsent_cookie_evidence: preconsentCookieEvidence,
+        preconsent_cookie_names: preconsentCookieNames,
+        preconsent_nonessential_cookie_names: preconsentNonEssentialCookies,
         preconsent_tracker_evidence_urls: preconsentRequestUrls,
         preconsent_tracker_vendor_evidence: getPreconsentVendorEvidenceRows(hybrid),
         preconsent_tracker_vendors: preconsentVendors,
