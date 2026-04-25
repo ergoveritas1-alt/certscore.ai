@@ -4827,6 +4827,7 @@ export function SharedScanDetailView({
                     {fallbackEvidenceRelation === "off_domain_redirect" && fallbackFinalHostname
                       ? `CertScore live verification stayed blocked, but urlscan.io retained public runtime evidence showing this domain redirected to ${fallbackFinalHostname}.`
                       : "CertScore live verification stayed blocked, but urlscan.io retained same-host public runtime evidence for this domain."}
+                    {" "}
                     This evidence is shown separately and does not convert the blocked run into normal CertScore findings.
                   </p>
                   {fallbackEvidence.requestFootprint?.summary ? (
