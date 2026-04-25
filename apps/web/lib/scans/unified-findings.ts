@@ -2709,9 +2709,11 @@ function maybeRepairCookiePolicyPacketFromPolicyEnrichment(input: {
     signalValue: true
   });
 
-  const repairedSnippets = uniqueStrings([...(fallbackEvidence.policySnippets ?? []), ...existingSnippets]).filter((snippet) =>
-    isReadableSurfaceSnippet(snippet)
-  );
+  const repairedSnippets = uniqueStrings([
+    ...(fallbackEvidence.policySnippets ?? []),
+    fallbackEvidence.policySummaryShort,
+    ...existingSnippets
+  ]).filter((snippet) => isReadableSurfaceSnippet(snippet));
   const repairedPageUrls = preferMoreSpecificSameHostUrls(
     uniqueStrings([fallbackEvidence.pageUrl, ...(fallbackEvidence.pageUrls ?? []), ...(existingEvidence.pageUrls ?? [])]).filter((url) =>
       hasConcreteHumanFacingUrl([url])

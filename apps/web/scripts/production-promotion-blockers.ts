@@ -6,6 +6,7 @@ import {
 
 export type PromotionBlockerFindingId =
   | "behavioral_analytics_disclosure_present"
+  | "cookie_policy_present"
   | "cookie_disclosure_gap"
   | "missing_dsar_mechanism"
   | "preconsent_tracking"
@@ -97,6 +98,7 @@ function getPolicySnippetRecord(input: PromotionBlockerInput) {
 function getPositiveDisclosureSnippetKeys(
   findingId:
     | "behavioral_analytics_disclosure_present"
+    | "cookie_policy_present"
     | "targeted_advertising_disclosure_present"
     | "tracking_technologies_disclosure_present"
 ) {
@@ -107,6 +109,16 @@ function getPositiveDisclosureSnippetKeys(
         "session_replay_disclosure",
         "behavioral_analytics_disclosure",
         "product_analytics_disclosure"
+      ];
+    case "cookie_policy_present":
+      return [
+        "cookie_policy",
+        "cookie_policy_present",
+        "cookie_policy_surface",
+        "topic:cookie_policy",
+        "topic:cookie_policy_present",
+        "topic:tracking_technologies_disclosure",
+        "tracking_technologies_disclosure"
       ];
     case "targeted_advertising_disclosure_present":
       return ["topic:targeted_advertising_disclosure", "targeted_advertising_disclosure"];
@@ -119,6 +131,7 @@ function getPositiveDisclosurePolicySnippets(
   input: PromotionBlockerInput,
   findingId:
     | "behavioral_analytics_disclosure_present"
+    | "cookie_policy_present"
     | "targeted_advertising_disclosure_present"
     | "tracking_technologies_disclosure_present"
 ) {
@@ -238,6 +251,8 @@ function disclosurePatternFor(findingId: PromotionBlockerFindingId) {
   switch (findingId) {
     case "behavioral_analytics_disclosure_present":
       return /behavioral analytics|behavioural analytics|session replay|session recording|heat ?map|product analytics|hotjar|fullstory|mouseflow|contentsquare|microsoft clarity/i;
+    case "cookie_policy_present":
+      return /cookie policy|cookie notice|cookie statement|cookie settings|cookie consent center|manage cookies|cookie preferences|cookies? and similar technolog(?:y|ies)|tracking technolog(?:y|ies)/i;
     case "targeted_advertising_disclosure_present":
       return /targeted advertis(?:e|ing)|interest-based advertis(?:e|ing)|personalized ads?|cross-context behavioral advertis(?:e|ing)/i;
     case "tracking_technologies_disclosure_present":
@@ -410,16 +425,24 @@ export function classifyPositiveDisclosurePromotionBlockers(
   input: PromotionBlockerInput,
   findingId:
     | "behavioral_analytics_disclosure_present"
+    | "cookie_policy_present"
     | "targeted_advertising_disclosure_present"
     | "tracking_technologies_disclosure_present"
 ): PromotionBlockerAssessment {
   const snippets = getPositiveDisclosurePolicySnippets(input, findingId);
   const pattern = disclosurePatternFor(findingId);
   const highValueSnippet = pattern ? snippets.some((value) => pattern.test(value)) : false;
+  const cookiePolicyUrl =
+    findingId === "cookie_policy_present"
+      ? isLikelyPolicyUrl(input.policyPageUrl, /cookie|privacy-choices|privacychoices|cookie-settings|cookie-preferences/)
+      : true;
   const blockers: string[] = [];
 
   if (!hasPolicyAnchor(input)) {
     blockers.push("missing_policy_anchor_url");
+  }
+  if (!cookiePolicyUrl) {
+    blockers.push("missing_cookie_policy_anchor");
   }
   if (!hasFetchedPolicy(input)) {
     blockers.push(input.policyExtractionStatus ? "policy_extraction_incomplete" : "missing_policy_extraction_status");
@@ -441,6 +464,7 @@ export function classifyPositiveDisclosurePromotionBlockers(
     evidence: {
       highValueSnippet,
       policyExtractionStatus: input.policyExtractionStatus ?? null,
+      policyPageType: input.policyPageType ?? null,
       policyPageUrl: input.policyPageUrl ?? null,
       policyPositiveSignalPresent: input.policyPositiveSignalPresent === true,
       policySemanticConfidence: getPolicyConfidence(input),
@@ -530,6 +554,7 @@ export function classifyPromotionBlockers(input: PromotionBlockerInput & { findi
       return classifyPrivacyRightsPathPromotionBlockers(input);
     case "cookie_disclosure_gap":
       return classifyCookieDisclosureGapPromotionBlockers(input);
+    case "cookie_policy_present":
     case "behavioral_analytics_disclosure_present":
     case "targeted_advertising_disclosure_present":
     case "tracking_technologies_disclosure_present":

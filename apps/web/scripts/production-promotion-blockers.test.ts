@@ -217,6 +217,45 @@ test("positive disclosure blocker classifier rejects bare tracking text", () => 
   assert.ok(assessment.blockers.includes("generic_or_low_value_disclosure_text"));
 });
 
+test("positive disclosure blocker classifier promotes substantive cookie policy surfaces", () => {
+  const assessment = classifyPositiveDisclosurePromotionBlockers(
+    {
+      policyEvidenceSnippets: {
+        cookie_policy: "Our Cookie Policy explains the cookies and similar technologies we use and how to manage cookie preferences."
+      },
+      policyExtractionStatus: "fetched",
+      policyPageType: "cookie_policy",
+      policyPageUrl: "https://example.test/legal/cookie-policy",
+      policyPositiveSignalPresent: true,
+      policySemanticConfidence: 0.82
+    },
+    "cookie_policy_present"
+  );
+
+  assert.equal(assessment.promotionReady, true);
+  assert.deepEqual(assessment.blockers, []);
+});
+
+test("positive disclosure blocker classifier blocks generic cookie-policy present signals", () => {
+  const assessment = classifyPositiveDisclosurePromotionBlockers(
+    {
+      policyEvidenceSnippets: {
+        generic: "This website uses cookies."
+      },
+      policyExtractionStatus: "fetched",
+      policyPageType: "privacy_policy",
+      policyPageUrl: "https://example.test/privacy",
+      policyPositiveSignalPresent: true,
+      policySemanticConfidence: 0.82
+    },
+    "cookie_policy_present"
+  );
+
+  assert.equal(assessment.promotionReady, false);
+  assert.ok(assessment.blockers.includes("missing_cookie_policy_anchor"));
+  assert.ok(assessment.blockers.includes("generic_or_low_value_disclosure_text"));
+});
+
 test("cookie disclosure gap blocker classifier requires runtime and unmatched inventory", () => {
   const assessment = classifyCookieDisclosureGapPromotionBlockers({
     cookieGapValidationEvidence: {

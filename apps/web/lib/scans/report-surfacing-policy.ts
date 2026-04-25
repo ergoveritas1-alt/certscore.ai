@@ -958,6 +958,45 @@ function hasFindingSpecificHighValuePrivacyDisclosureText(packet: UnifiedFinding
   }
 }
 
+function isLikelySubstantiveCookiePolicyUrl(value: string | null | undefined) {
+  if (!value || !/^https?:\/\//i.test(value)) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase().replace(/\/+$/, "") || "/";
+    const pathAndQuery = `${path}${parsed.search.toLowerCase()}`;
+
+    if (path === "/" || host === "www.cookieyes.com" && path.startsWith("/product/")) {
+      return false;
+    }
+
+    return /cookie|privacy-choices|privacychoices|cookie-settings|cookie-preferences/.test(pathAndQuery);
+  } catch {
+    return /\/.+(?:cookie|privacy-choices|privacychoices|cookie-settings|cookie-preferences)/i.test(value);
+  }
+}
+
+function hasSubstantiveCookiePolicySurfaceEvidence(packet: UnifiedFindingPacket) {
+  if (packet.unifiedFindingId !== "cookie_policy_present") {
+    return false;
+  }
+
+  const evidenceText = getEvidenceSnippetText(packet);
+  const urls = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])];
+
+  return (
+    packet.confidenceInputs.hasPolicyTextEvidence &&
+    hasReadableSnippet(packet) &&
+    /cookie policy|cookie notice|cookie statement|cookie settings|cookie consent center|manage cookies|cookie preferences|cookies? and similar technolog(?:y|ies)|tracking technolog(?:y|ies)/i.test(
+      evidenceText
+    ) &&
+    urls.some(isLikelySubstantiveCookiePolicyUrl)
+  );
+}
+
 function hasFindingSpecificPrivacyPathText(packet: UnifiedFindingPacket) {
   const text = getEvidenceSnippetText(packet);
 
@@ -1483,6 +1522,18 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (context.policy.family === "positive_surface") {
+    if (hasSubstantiveCookiePolicySurfaceEvidence(packet)) {
+      overrideDecision(decision, {
+        state: "review",
+        lane: "main",
+        tier: "section",
+        reason:
+          "A retained, page-attributed cookie policy surface has substantive cookie-policy text and a cookie-specific first-party URL, so it can surface as review-level positive evidence.",
+        ruleId: "evidence.positive_surface.review_high_value_privacy_disclosure"
+      });
+      return;
+    }
+
     if (
       [
         "gpc_disclosure_present",

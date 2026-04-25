@@ -642,6 +642,46 @@ test("positive-presence findings stay in confidence coverage when no stronger fi
   assert.ok(decision?.appliedRules.includes("support.orphan_positive_surface_retained"));
 });
 
+test("substantive cookie policy surfaces can main-lane as review-level positive evidence", () => {
+  const strongCookiePolicyEvaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("cookie_policy_present", {
+        confidenceInputs: {
+          ...makePacket("cookie_policy_present").confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("cookie_policy_present").evidence,
+          pageUrls: ["https://example.com/legal/cookie-policy"],
+          snippets: ["Our Cookie Policy explains the cookies and similar technologies we use and how to manage cookie preferences."]
+        }
+      })
+    ]
+  });
+  const weakCookiePolicyEvaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("cookie_policy_present", {
+        confidenceInputs: {
+          ...makePacket("cookie_policy_present").confidenceInputs,
+          hasPolicyTextEvidence: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("cookie_policy_present").evidence,
+          pageUrls: ["https://example.com/privacy"],
+          snippets: ["This website uses cookies."]
+        }
+      })
+    ]
+  });
+
+  assert.equal(strongCookiePolicyEvaluation.debugDecisions[0]?.decisionState, "review");
+  assert.equal(strongCookiePolicyEvaluation.debugDecisions[0]?.reportLane, "main");
+  assert.equal(weakCookiePolicyEvaluation.debugDecisions[0]?.decisionState, "support_only");
+  assert.equal(weakCookiePolicyEvaluation.debugDecisions[0]?.reportLane, "confidence_and_coverage");
+});
+
 test("generic policy text is not enough to main-lane behavioral analytics disclosure", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [

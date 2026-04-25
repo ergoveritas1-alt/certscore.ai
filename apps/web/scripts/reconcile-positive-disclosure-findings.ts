@@ -8,6 +8,7 @@ import { loadScanRecord, type ScanRow } from "./report-production-finding-freque
 
 type PositiveDisclosureFindingId =
   | "behavioral_analytics_disclosure_present"
+  | "cookie_policy_present"
   | "targeted_advertising_disclosure_present"
   | "tracking_technologies_disclosure_present";
 
@@ -38,12 +39,14 @@ type ReconciliationBucket =
 
 const DEFAULT_FINDINGS: PositiveDisclosureFindingId[] = [
   "behavioral_analytics_disclosure_present",
+  "cookie_policy_present",
   "targeted_advertising_disclosure_present",
   "tracking_technologies_disclosure_present"
 ];
 
 const SIGNAL_KEYS: Record<PositiveDisclosureFindingId, string> = {
   behavioral_analytics_disclosure_present: "privacy.behavioral_analytics_disclosure_present",
+  cookie_policy_present: "disclosure.cookie_policy_present",
   targeted_advertising_disclosure_present: "privacy.targeted_advertising_disclosure_present",
   tracking_technologies_disclosure_present: "privacy.tracking_technologies_disclosure_present"
 };
@@ -78,6 +81,7 @@ function parseFindings(): PositiveDisclosureFindingId[] {
     .map((value) => value.trim())
     .filter((value): value is PositiveDisclosureFindingId =>
       value === "behavioral_analytics_disclosure_present" ||
+      value === "cookie_policy_present" ||
       value === "targeted_advertising_disclosure_present" ||
       value === "tracking_technologies_disclosure_present"
     );
@@ -168,9 +172,9 @@ function isWeakPolicyAnchor(value: string | null | undefined) {
   try {
     const parsed = new URL(value);
     const path = parsed.pathname.toLowerCase().replace(/\/+$/, "") || "/";
-    return path === "/" || !/privacy|legal|policy|notice/.test(`${path}${parsed.search.toLowerCase()}`);
+    return path === "/" || !/privacy|legal|policy|notice|cookie|privacy-choices|privacychoices/.test(`${path}${parsed.search.toLowerCase()}`);
   } catch {
-    return !/privacy|legal|policy|notice/i.test(value);
+    return !/privacy|legal|policy|notice|cookie|privacy-choices|privacychoices/i.test(value);
   }
 }
 
@@ -252,8 +256,16 @@ async function loadCandidates(input: {
           select *
             from policy_enrichment pe
            where pe.scan_id = s.id
-             and (pe.page_type = 'privacy_policy' or pe.page_type is null)
-           order by case when pe.page_type = 'privacy_policy' then 0 else 1 end, pe.created_at desc
+             and (
+               rf.finding_id = 'cookie_policy_present' and (pe.page_type = 'cookie_policy' or pe.page_type is null)
+               or rf.finding_id <> 'cookie_policy_present' and (pe.page_type = 'privacy_policy' or pe.page_type is null)
+             )
+           order by case
+              when rf.finding_id = 'cookie_policy_present' and pe.page_type = 'cookie_policy' then 0
+              when rf.finding_id <> 'cookie_policy_present' and pe.page_type = 'privacy_policy' then 0
+              else 1
+            end,
+            pe.created_at desc
            limit 1
         ) pe on true
        where s.status = 'completed'
@@ -322,15 +334,15 @@ function renderMarkdown(rows: Array<Record<string, unknown>>) {
     "",
     "## Candidates",
     "",
-    "| Finding | Domain | Status | Bucket | Blockers | Policy URL | Snippets | Decision reasons |",
-    "|---|---|---|---|---|---|---:|---|"
+    "| Finding | Domain | Status | Bucket | Blockers | Policy URL | Snippets | Packet snippets | Decision reasons |",
+    "|---|---|---|---|---|---|---:|---:|---|"
   ];
 
   for (const row of rows) {
     const blockers = Array.isArray(row.blockers) && row.blockers.length > 0 ? row.blockers.join(", ") : "-";
     const reasons = Array.isArray(row.decisionReasons) && row.decisionReasons.length > 0 ? row.decisionReasons.join(" ") : "-";
     lines.push(
-      `| \`${row.findingId}\` | ${row.domain ?? "-"} | ${row.presentationStatus ?? "no_packet"} | \`${row.bucket}\` | ${blockers} | ${row.policyUrl ?? "-"} | ${row.snippetCount ?? 0} | ${String(reasons).replace(/\|/g, "\\|").slice(0, 180)} |`
+      `| \`${row.findingId}\` | ${row.domain ?? "-"} | ${row.presentationStatus ?? "no_packet"} | \`${row.bucket}\` | ${blockers} | ${row.policyUrl ?? "-"} | ${row.snippetCount ?? 0} | ${row.packetSnippetCount ?? 0} | ${String(reasons).replace(/\|/g, "\\|").slice(0, 180)} |`
     );
   }
 
@@ -384,6 +396,12 @@ async function main() {
     const presentationDecision = getRecord(packet?.presentationDecision);
     const surfacingDecision = getRecord(packet?.surfacingDecision);
     const presentationStatus = getString(presentationDecision?.status) ?? null;
+    const packetEvidence = getRecord(packet?.evidence);
+    const packetSnippets = flattenSnippetValues(packetEvidence?.snippets);
+    const packetUrls = [
+      ...flattenSnippetValues(packetEvidence?.pageUrls),
+      ...flattenSnippetValues(packetEvidence?.sourceUrls)
+    ];
     const bucket = classifyBucket({
       blockerReady: blockerAssessment.promotionReady,
       packetPresent: Boolean(packet),
@@ -399,7 +417,9 @@ async function main() {
       decisionReasons: Array.isArray(surfacingDecision?.decisionReasons) ? surfacingDecision.decisionReasons : [],
       domain: row.domain,
       findingId: row.finding_id,
-      packetSnippetCount: Array.isArray(getRecord(packet?.evidence)?.snippets) ? (getRecord(packet?.evidence)?.snippets as unknown[]).length : 0,
+      packetSnippetCount: packetSnippets.length,
+      packetSnippetPreview: packetSnippets[0]?.slice(0, 180) ?? null,
+      packetUrlPreview: packetUrls[0] ?? null,
       policyUrl: row.policy_page_url,
       presentationStatus,
       scanId: row.id,
