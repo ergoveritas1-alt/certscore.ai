@@ -4439,10 +4439,11 @@ export function SharedScanDetailView({
   executiveAccessLimitationOverride = null,
   headerActions = null,
   previewNotice = null,
-  previewPayload = null,
+  previewPayload: previewPayloadOverride = null,
   previewMode = "full",
   scanRecord
 }: SharedScanDetailViewProps) {
+  const previewPayload = previewPayloadOverride ?? scanRecord.previewPayload ?? null;
   const snapshot = scanRecord.snapshot;
   const unverifiedHomepageReview = snapshot
     ? deriveUnverifiedHomepageReview(snapshot, scanRecord.events, scanRecord.policyEnrichment)
@@ -4795,6 +4796,32 @@ export function SharedScanDetailView({
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
             lightweightHeroMetrics={lightweightHeroMetrics}
           />
+          {fallbackEvidence ? (
+            <section className="rounded-[1.4rem] border border-sky-200 bg-sky-50/60 px-5 py-4 text-sm leading-6 text-slate-700">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">Supplemental public runtime evidence</p>
+                  <p>
+                    CertScore live verification stayed blocked, but urlscan.io retained same-host public runtime evidence for this domain.
+                    This evidence is shown separately and does not convert the blocked run into normal CertScore findings.
+                  </p>
+                  {fallbackEvidence.requestFootprint?.summary ? (
+                    <p className="font-medium text-slate-900">{fallbackEvidence.requestFootprint.summary}</p>
+                  ) : null}
+                </div>
+                {fallbackEvidence.reportUrl ? (
+                  <a
+                    className="inline-flex shrink-0 items-center justify-center rounded-full border border-sky-200 bg-white px-4 py-2 text-xs font-semibold text-sky-900 shadow-sm transition hover:border-sky-300 hover:bg-sky-50"
+                    href={fallbackEvidence.reportUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Open urlscan report
+                  </a>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
           {presentedCertScoreFindings.length > 0 ? (
         <section className="space-y-6">
           <div className="space-y-2.5">

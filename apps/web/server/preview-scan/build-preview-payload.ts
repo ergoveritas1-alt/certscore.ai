@@ -450,6 +450,23 @@ function buildNormalizedUrlscanFallbackEvidence(snapshot: UrlscanFallbackSnapsho
   };
 }
 
+export function buildUrlscanFallbackEvidenceFromResult(input: {
+  urlscanResult?: Record<string, unknown> | null;
+  urlscanSource?: {
+    reportUrl?: string | null;
+    resultApiUrl?: string | null;
+  };
+}) {
+  return buildNormalizedUrlscanFallbackEvidence(
+    buildUrlscanFallbackSnapshot({
+      fallbackLegalFetch: undefined,
+      fallbackLookup: undefined,
+      urlscanResult: input.urlscanResult,
+      urlscanSource: input.urlscanSource
+    })
+  );
+}
+
 function hasObservableConsentSurface(snapshot: PreviewSnapshotSource) {
   return (
     snapshot.cookieBannerPresent === true ||
