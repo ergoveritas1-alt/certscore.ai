@@ -45,6 +45,12 @@ type DomainRow = {
   normalized_url: string;
 };
 
+type ScanIdentityRow = {
+  domain: string | null;
+  hostname: string | null;
+  id: string;
+};
+
 const DEFAULT_ORG_ID = "2f2ef2a2-d86b-4993-8bd5-de912e7de905";
 const DEFAULT_MAX_PAGES = 5;
 const DEFAULT_TIMEOUT_MS = 8 * 60_000;
@@ -81,6 +87,18 @@ function getArgValue(flag: string) {
   }
 
   return process.argv[index + 1] ?? null;
+}
+
+function getListArg(flag: string) {
+  const raw = getArgValue(flag);
+  if (!raw) {
+    return [];
+  }
+
+  return raw
+    .split(/[\s,]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
 }
 
 function hasFlag(flag: string) {
@@ -557,6 +575,22 @@ async function summarizeScan(input: {
   };
 }
 
+async function loadScanIdentity(scanId: string) {
+  return queryOne<ScanIdentityRow>(
+    `
+      select s.id,
+             ss.domain,
+             d.hostname
+        from scans s
+        left join scan_snapshots ss on ss.scan_id = s.id
+        left join domains d on d.id = s.domain_id
+       where s.id = $1
+    `,
+    [scanId],
+    { readOnly: true }
+  );
+}
+
 async function main() {
   const orgId = getArgValue("--org") ?? DEFAULT_ORG_ID;
   const timeoutMs = Number(getArgValue("--timeout-ms") ?? DEFAULT_TIMEOUT_MS);
@@ -569,6 +603,7 @@ async function main() {
   const onlySummarize = hasFlag("--summarize-only");
   const queueOnly = hasFlag("--queue-only");
   const aggregateTimings = hasFlag("--aggregate-timings");
+  const explicitScanIds = getListArg("--scan-ids");
   const argv = process.argv.slice(2);
   const positionalDomains: string[] = [];
 
@@ -586,7 +621,8 @@ async function main() {
       token === "--pages" ||
       token === "--processor" ||
       token === "--profile" ||
-      token === "--max-tier"
+      token === "--max-tier" ||
+      token === "--scan-ids"
     ) {
       index += 1;
       continue;
@@ -602,8 +638,12 @@ async function main() {
   const explicitDomains = getArgValue("--domains");
   const parsedBatch = parseDomainBatchInput(explicitDomains ?? positionalDomains.join(" "));
 
-  if (parsedBatch.valid.length === 0) {
+  if (explicitScanIds.length === 0 && parsedBatch.valid.length === 0) {
     throw new Error("Provide at least one valid domain with --domains.");
+  }
+
+  if (explicitScanIds.length > 0 && !onlySummarize) {
+    throw new Error("Use --summarize-only with --scan-ids.");
   }
 
   if (onlySummarize && queueOnly) {
@@ -611,6 +651,56 @@ async function main() {
   }
 
   const results: Array<Record<string, unknown>> = [];
+
+  for (const scanId of explicitScanIds) {
+    const identity = await loadScanIdentity(scanId);
+    if (!identity) {
+      results.push({
+        domain: null,
+        pendingReason: "scan_not_found",
+        scanId,
+        surfaced: []
+      });
+      continue;
+    }
+
+    const hostname = identity.domain ?? identity.hostname ?? scanId;
+    const summary = await summarizeScan({
+      hostname,
+      scanId
+    });
+
+    results.push({
+      counts: summary.counts,
+      domain: hostname,
+      scanId,
+      scan: {
+        completedAt: summary.scan.completedAt,
+        createdAt: summary.scan.createdAt,
+        endToEndDurationMs: diffMs(summary.scan.createdAt, summary.scan.completedAt),
+        runDurationMs: diffMs(summary.scan.startedAt ?? summary.scan.createdAt, summary.scan.completedAt),
+        startedAt: summary.scan.startedAt,
+        status: summary.scan.status
+      },
+      scanOutcome: (summary.snapshot as Record<string, unknown> | null)?.scan_outcome ?? null,
+      stopReason: (summary.snapshot as Record<string, unknown> | null)?.stop_reason_code ?? null,
+      homepageStatus: (summary.snapshot as Record<string, unknown> | null)?.homepage_fetch_http_status ?? null,
+      blocked: (summary.snapshot as Record<string, unknown> | null)?.blocked_flag ?? null,
+      calibrationSummary: summary.calibrationSummary,
+      workflow: {
+        actualMode: summary.workflow.actualMode,
+        findingsReady: summary.workflow.findingsReady,
+        mergedSignalsReady: summary.workflow.mergedSignalsReady,
+        timings: summary.workflow.timings
+      },
+      surfaced: summary.surfaced
+    });
+  }
+
+  if (explicitScanIds.length > 0) {
+    console.log(JSON.stringify(results, null, 2));
+    return;
+  }
 
   for (const entry of parsedBatch.valid) {
     const domain = await ensureDomain({

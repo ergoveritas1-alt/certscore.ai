@@ -346,6 +346,14 @@ const CONFIRMED_RIGHTS_GAP_IDS = [
   "sale_sharing_controls_missing"
 ] as const satisfies ReportUnifiedFindingId[];
 
+const WEAK_REVIEW_RIGHTS_GAP_IDS = [
+  "cookie_disclosure_gap",
+  "missing_dsar_mechanism",
+  "missing_retention_disclosure",
+  "missing_transfer_disclosure",
+  "privacy_contact_channel_missing"
+] as const satisfies ReportUnifiedFindingId[];
+
 const SUPPORT_ONLY_FINANCIAL_CONTEXT_IDS = [
   "legal_entity_name_present",
   "operator_contact_path_present",
@@ -1333,6 +1341,14 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
         reason:
           "A fetched policy surface, readable policy evidence, and structured validation all support the same missing-disclosure interpretation, so this absence finding can stand on its own.",
         ruleId: "evidence.rights_gap.confirmed_structured_policy_absence"
+      });
+    } else if ((WEAK_REVIEW_RIGHTS_GAP_IDS as readonly string[]).includes(packet.unifiedFindingId)) {
+      overrideDecision(decision, {
+        state: "review",
+        lane: "confidence_and_coverage",
+        tier: "support",
+        reason: "This disclosure or rights gap is important to review, but structured policy absence alone is not yet strong enough to confirm it as a standalone failure.",
+        ruleId: "evidence.rights_gap.review_structured_policy_gap"
       });
     } else {
       overrideDecision(decision, {
