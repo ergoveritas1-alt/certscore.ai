@@ -149,6 +149,24 @@ test("builds calibrated pre-consent cookie evidence from hybrid cookie writes", 
           domain: ".example.com",
           setAtMs: 0,
           thirdParty: false
+        },
+        {
+          beforeConsent: true,
+          cookieName: "demdex",
+          cookiePartyType: "third_party",
+          cookieSetMethod: "http_header",
+          domain: ".demdex.net",
+          setAtMs: 80,
+          thirdParty: true
+        },
+        {
+          beforeConsent: true,
+          cookieName: "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L",
+          cookiePartyType: "first_party",
+          cookieSetMethod: "document_cookie",
+          domain: ".example.com",
+          setAtMs: 90,
+          thirdParty: false
         }
       ],
       networkSummary: {
@@ -164,9 +182,9 @@ test("builds calibrated pre-consent cookie evidence from hybrid cookie writes", 
     signalValue: true
   });
 
-  assert.deepEqual(fallback?.preconsent_cookie_names, ["_fbp", "__cf_bm"]);
-  assert.deepEqual(fallback?.preconsent_nonessential_cookie_names, ["_fbp"]);
-  assert.deepEqual(fallback?.preconsent_cookie_categories, ["advertising", "necessary"]);
+  assert.deepEqual(fallback?.preconsent_cookie_names, ["_fbp", "__cf_bm", "demdex", "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L"]);
+  assert.deepEqual(fallback?.preconsent_nonessential_cookie_names, ["_fbp", "demdex", "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L"]);
+  assert.deepEqual(fallback?.preconsent_cookie_categories, ["advertising", "necessary", "session_replay"]);
   assert.deepEqual(fallback?.preconsent_cookie_evidence, [
     {
       category: "advertising",
@@ -196,6 +214,36 @@ test("builds calibrated pre-consent cookie evidence from hybrid cookie writes", 
       secure: null,
       setAtMs: 0,
       setMethod: "http_header",
+      timingEvidence: "before_consent_cookie_write"
+    },
+    {
+      category: "advertising",
+      cookieName: "demdex",
+      domain: ".demdex.net",
+      expirationType: null,
+      initiatorDomain: null,
+      initiatorVendor: null,
+      nonEssential: true,
+      party: "third_party",
+      sameSite: null,
+      secure: null,
+      setAtMs: 80,
+      setMethod: "http_header",
+      timingEvidence: "before_consent_cookie_write"
+    },
+    {
+      category: "session_replay",
+      cookieName: "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L",
+      domain: ".example.com",
+      expirationType: null,
+      initiatorDomain: null,
+      initiatorVendor: null,
+      nonEssential: true,
+      party: "first_party",
+      sameSite: null,
+      secure: null,
+      setAtMs: 90,
+      setMethod: "document_cookie",
       timingEvidence: "before_consent_cookie_write"
     }
   ]);

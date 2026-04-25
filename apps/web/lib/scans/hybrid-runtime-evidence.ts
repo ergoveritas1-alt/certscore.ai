@@ -34,24 +34,27 @@ function normalizeDerivedVendorCategory(value: string | null | undefined) {
 
 function classifyRuntimeCookieCategory(name: string, domain: string | null) {
   const normalized = `${name} ${domain ?? ""}`.toLowerCase();
-  if (/(cf_clearance|__cf|recaptcha|akamai|datadome|perimeterx|awsalb|awsalbcors|awsalbtg|bm_sz|ak_bmsc|csrf|xsrf|session)/i.test(normalized)) {
-    return "necessary";
-  }
-  if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog)/i.test(normalized)) {
+  if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id)/i.test(normalized)) {
     return "analytics";
   }
   if (
-    /(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|infolinks|doubleclick|criteo|media\.net|_mkto_trk|muid|fr\b)/i.test(
+    /(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|infolinks|doubleclick|criteo|media\.net|_mkto_trk|muid|fr\b|demdex|dpm\.demdex|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check)/i.test(
       normalized
     )
   ) {
     return "advertising";
   }
+  if (/(qsi_replaysession|qualtrics|hotjar|fullstory|clarity|contentsquare|mouseflow)/i.test(normalized)) {
+    return "session_replay";
+  }
+  if (/(cf_clearance|__cf|recaptcha|akamai|datadome|perimeterx|awsalb|awsalbcors|awsalbtg|bm_sz|ak_bmsc|csrf|xsrf|phpsessid|jsessionid|(^|\\b)sid($|\\b)|(^|\\b)session($|\\b))/i.test(normalized)) {
+    return "necessary";
+  }
   return "unknown";
 }
 
 function isNonEssentialCookieCategory(category: string | null | undefined) {
-  return category === "analytics" || category === "advertising";
+  return category === "analytics" || category === "advertising" || category === "session_replay";
 }
 
 function getBoolean(value: unknown) {

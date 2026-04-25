@@ -113,6 +113,25 @@ test("pre-consent cookie evidence is promotion-grade only for non-essential cook
   assert.equal(hasConcretePreconsentArtifact(analyticsCookieEvidence), true);
   assert.equal(hasStrongPreconsentRuntimeEvidence(analyticsCookieEvidence), true);
 
+  const adobeCookieEvidence = {
+    preconsent_cookie_evidence: [
+      {
+        cookieName: "demdex",
+        timingEvidence: "before_consent_cookie_write"
+      },
+      {
+        cookieName: "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L",
+        timingEvidence: "before_consent_cookie_write"
+      }
+    ],
+    preconsent_cookie_names: ["demdex", "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L"],
+    preconsent_tracking_detected: true,
+    supportingSignals: ["privacy.preconsent_tracking_detected"]
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(adobeCookieEvidence), true);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(adobeCookieEvidence), true);
+
   const infrastructureCookieEvidence = {
     preconsent_cookie_evidence: [
       {

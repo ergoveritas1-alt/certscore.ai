@@ -51,11 +51,14 @@ function isPromotionGradeCookieCategory(value: string | null | undefined) {
 }
 
 function classifyCookieName(name: string) {
-  if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog)/i.test(name)) {
+  if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id)/i.test(name)) {
     return "analytics";
   }
-  if (/(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|doubleclick|criteo|_mkto_trk|muid|fr\b)/i.test(name)) {
+  if (/(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|doubleclick|criteo|_mkto_trk|muid|fr\b|demdex|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check)/i.test(name)) {
     return "advertising";
+  }
+  if (/(qsi_replaysession|qualtrics|hotjar|fullstory|clarity|contentsquare|mouseflow)/i.test(name)) {
+    return "session_replay";
   }
   if (/^(__cf_bm|cf_clearance|awsalb|awsalbcors|jsessionid|phpsessid|csrftoken|xsrf|session|sid$)/i.test(name)) {
     return "necessary";

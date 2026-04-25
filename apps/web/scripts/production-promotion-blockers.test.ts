@@ -44,6 +44,28 @@ test("preconsent blocker classifier distinguishes necessary cookie-only evidence
   assert.ok(assessment.blockers.includes("necessary_cookie_only"));
 });
 
+test("preconsent blocker classifier treats Adobe and replay cookies as non-essential", () => {
+  const assessment = classifyPreconsentPromotionBlockers({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        {
+          cookieName: "demdex",
+          timingEvidence: "before_consent_cookie_write"
+        },
+        {
+          cookieName: "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L",
+          timingEvidence: "before_consent_cookie_write"
+        }
+      ]
+    },
+    preconsentTrackingDetected: true
+  });
+
+  assert.equal(assessment.promotionReady, true);
+  assert.deepEqual(assessment.blockers, []);
+  assert.deepEqual(assessment.evidence.nonEssentialCookieNames, ["demdex", "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L"]);
+});
+
 test("DSAR blocker classifier promotes explicit fetched absence evidence", () => {
   const assessment = classifyDsarPromotionBlockers({
     policyDsarMechanism: "absent",
