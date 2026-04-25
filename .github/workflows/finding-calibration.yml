@@ -67,4 +67,14 @@ jobs:
         if: steps.live-db.outputs.enabled == 'true'
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-        run: pnpm check:production-finding-calibration
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/finding-calibration
+          pnpm check:production-finding-calibration | tee artifacts/finding-calibration/production-finding-calibration.md
+
+      - name: Upload production finding calibration report
+        if: always() && steps.live-db.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-finding-calibration
+          path: artifacts/finding-calibration/production-finding-calibration.md

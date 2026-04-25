@@ -1612,5 +1612,407 @@ export const PRIVACY_RUNTIME_FINDINGS_REVIEWED_EXAMPLES: PrivacyRuntimeFindingDa
     notes: "Live positive-surface audit found insufficient pricing-page context for external surfacing.",
     scenarioType: "borderline_review",
     sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "A missing privacy-contact interpretation needs bounded crawl scope and retained legal/policy surfaces before external surfacing.",
+    evidence: {
+      artifactRefs: ["production-review:privacy-contact-channel-missing:bestforex-signals:2026-04-24"],
+      signalKey: "privacy.privacy_contact_channel_missing",
+      snapshotEvidence: {
+        privacy_contact_channel_type: "none",
+        verified_public_surfaces_count: 2
+      },
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own URL review did not find a privacy-specific contact channel, but absence needs retained crawl scope before promotion.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://bestforex-signals.com/privacy-policy"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_contact_channel_missing",
+    id: "live-review-privacy-contact-channel-missing-bestforex-signals-2026-04-24",
+    notes: "Live review keeps missing privacy-contact channel conservative without retained representative crawl evidence.",
+    scenarioType: "borderline_review",
+    sourceKind: "live_artifact"
+  },
+  {
+    evidence: {
+      artifactRefs: ["production-review:privacy-contact-channel-missing:acorns:2026-04-24"],
+      policyAnchor: {
+        claimType: "privacy_contact_channel_present",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: "https://www.acorns.com/privacy/",
+        snippet: "Contact our Privacy Team about privacy requests."
+      },
+      signalKey: "privacy.privacy_contact_channel_missing",
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found a privacy-specific contact path, so the missing-contact interpretation should not promote.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://www.acorns.com/privacy/"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "privacy_contact_channel_missing",
+    id: "live-demotion-privacy-contact-channel-missing-acorns-2026-04-24",
+    negativeControlReason: "A privacy-specific contact channel is visible on a reviewed policy surface.",
+    notes: "Live review negative control for missing privacy-contact channel.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Nano ambiguity support alone is useful review evidence, but needs retained policy coverage and page attribution before stronger surfacing.",
+    evidence: {
+      nanoPolicyAnchor: {
+        confidence: 0.78,
+        pageUrl: "https://bestforex-signals.com/privacy-policy",
+        snippet: "We may collect information as needed for various business purposes.",
+        topic: "policy_clarity_risk"
+      },
+      policyAnchor: {
+        claimType: "policy_clarity_risk",
+        confidence: 0.68,
+        extractionStatus: "fetched",
+        sourceUrl: "https://bestforex-signals.com/privacy-policy",
+        snippet: "We may collect information as needed for various business purposes."
+      },
+      signalKey: "policyAmbiguityScore",
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Nano and URL review found vague policy language, but retained parser-quality evidence is needed before promotion.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://bestforex-signals.com/privacy-policy"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "policy_clarity_risk",
+    id: "nano-review-policy-clarity-bestforex-signals-2026-04-24",
+    notes: "Nano review case for policy clarity calibration.",
+    scenarioType: "borderline_review",
+    sourceKind: "nano_review"
+  },
+  {
+    evidence: {
+      artifactRefs: ["production-review:policy-clarity:betterment:2026-04-24"],
+      policyAnchor: {
+        claimType: "policy_clarity_risk",
+        confidence: 0.88,
+        extractionStatus: "fetched",
+        sourceUrl: "https://www.betterment.com/legal/privacy-policy",
+        snippet: "Policy sections clearly enumerate collection, use, sharing, choices, and contact paths."
+      },
+      signalKey: "policyAmbiguityScore",
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found a substantive and structured privacy policy, so a clarity-risk interpretation should not promote without retained ambiguity evidence.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://www.betterment.com/legal/privacy-policy"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "policy_clarity_risk",
+    id: "live-demotion-policy-clarity-betterment-2026-04-24",
+    negativeControlReason: "A substantive structured policy is visible and no retained ambiguity evidence is present.",
+    notes: "Live reviewed negative control for policy clarity risk.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Cookie disclosure gap needs both runtime inventory and policy coverage evidence; policy-language review alone is not enough.",
+    evidence: {
+      nanoPolicyAnchor: {
+        confidence: 0.82,
+        pageUrl: "https://ftmo.com/en/cookies/",
+        snippet: "Cookies are grouped by purpose and described in a cookie policy.",
+        topic: "cookie_disclosure"
+      },
+      policyAnchor: {
+        claimType: "cookie_policy_surface_present",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: "https://ftmo.com/en/cookies/",
+        snippet: "Cookies are grouped by purpose and described in a cookie policy."
+      },
+      signalKey: "privacy.cookie_runtime_disclosure_gap_detected",
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own URL review found cookie disclosure language; gap promotion still requires retained runtime cookie inventory plus missing/partial coverage.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://ftmo.com/en/cookies/"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "cookie_disclosure_gap",
+    id: "nano-review-cookie-gap-ftmo-2026-04-24",
+    notes: "Nano review case that prevents policy-only cookie disclosure from becoming a runtime gap.",
+    scenarioType: "borderline_review",
+    sourceKind: "nano_review"
+  },
+  {
+    evidence: {
+      policyAnchor: {
+        claimType: "cookie_policy_covers_runtime_categories",
+        confidence: 0.87,
+        extractionStatus: "fetched",
+        sourceUrl: "https://www.shopify.com/legal/privacy",
+        snippet: "The policy describes analytics, advertising, and cookie choices."
+      },
+      signalKey: "privacy.cookie_runtime_disclosure_gap_detected",
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found cookie/tracking disclosure coverage, so a disclosure-gap finding should not promote without contrary runtime inventory.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://www.shopify.com/legal/privacy"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "cookie_disclosure_gap",
+    id: "live-demotion-cookie-gap-shopify-2026-04-24",
+    negativeControlReason: "Reviewed policy includes cookie/tracking disclosure coverage and no retained runtime gap is present.",
+    notes: "Live reviewed negative control for cookie disclosure gap.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "DSAR absence needs retained section-review absence evidence; Nano policy summary alone should not confirm.",
+    evidence: {
+      nanoPolicyAnchor: {
+        confidence: 0.79,
+        pageUrl: "https://forexroboteasy.com/privacy-policy/",
+        snippet: "No concrete access or deletion request mechanism was identified in the reviewed policy text.",
+        topic: "dsar_absence"
+      },
+      policyAnchor: {
+        claimType: "missing_dsar_mechanism",
+        confidence: 0.72,
+        extractionStatus: "fetched",
+        sourceUrl: "https://forexroboteasy.com/privacy-policy/",
+        snippet: "No concrete access or deletion request mechanism was identified in the reviewed policy text."
+      },
+      signalKey: "section_review.no_dsar_mechanism",
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own URL review did not find a concrete DSAR mechanism; promotion still needs retained section-review evidence confirming scoped absence.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://forexroboteasy.com/privacy-policy/"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "missing_dsar_mechanism",
+    id: "nano-review-missing-dsar-forexroboteasy-2026-04-24",
+    notes: "Nano review case for DSAR absence calibration.",
+    scenarioType: "borderline_review",
+    sourceKind: "nano_review"
+  },
+  {
+    evidence: {
+      policyAnchor: {
+        claimType: "privacy_rights_mechanism_present",
+        confidence: 0.88,
+        extractionStatus: "fetched",
+        sourceUrl: "https://www.acorns.com/privacy/",
+        snippet: "Submit access, deletion, or correction requests through the privacy request process."
+      },
+      signalKey: "section_review.no_dsar_mechanism",
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found concrete privacy-rights request instructions, so the missing-DSAR interpretation should not promote.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://www.acorns.com/privacy/"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "missing_dsar_mechanism",
+    id: "live-demotion-missing-dsar-acorns-2026-04-24",
+    negativeControlReason: "Concrete privacy-rights request instructions are visible on the reviewed policy surface.",
+    notes: "Live reviewed negative control for missing DSAR mechanism.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Retention absence requires retained section-review evidence; Nano policy review alone should keep the case review-only.",
+    evidence: {
+      nanoPolicyAnchor: {
+        confidence: 0.76,
+        pageUrl: "https://bestforex-signals.com/privacy-policy",
+        snippet: "No concrete retention period was identified in the reviewed policy text.",
+        topic: "retention_absence"
+      },
+      policyAnchor: {
+        claimType: "missing_retention_disclosure",
+        confidence: 0.72,
+        extractionStatus: "fetched",
+        sourceUrl: "https://bestforex-signals.com/privacy-policy",
+        snippet: "No concrete retention period was identified in the reviewed policy text."
+      },
+      signalKey: "section_review.no_retention_periods_noted",
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own URL review did not find retention disclosure language; promotion still needs retained section-review evidence confirming scoped absence.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://bestforex-signals.com/privacy-policy"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "missing_retention_disclosure",
+    id: "nano-review-missing-retention-bestforex-signals-2026-04-24",
+    notes: "Nano review case for retention absence calibration.",
+    scenarioType: "borderline_review",
+    sourceKind: "nano_review"
+  },
+  {
+    evidence: {
+      policyAnchor: {
+        claimType: "retention_disclosure_present",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: "https://signal2forex.com/privacy_policy/",
+        snippet: "The policy describes how long personal information is retained."
+      },
+      signalKey: "section_review.no_retention_periods_noted",
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found retention disclosure language, so the missing-retention interpretation should not promote.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://signal2forex.com/privacy_policy/"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "missing_retention_disclosure",
+    id: "live-demotion-missing-retention-signal2forex-2026-04-24",
+    negativeControlReason: "Retention disclosure language is visible on the reviewed privacy policy.",
+    notes: "Live reviewed negative control for missing retention disclosure.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
+  },
+  {
+    downgradeReason: "Transfer absence requires retained section-review evidence; Nano policy review alone should keep the case review-only.",
+    evidence: {
+      nanoPolicyAnchor: {
+        confidence: 0.76,
+        pageUrl: "https://empireofforex.com/privacy-policy/",
+        snippet: "No cross-border transfer mechanism was identified in the reviewed policy text.",
+        topic: "transfer_absence"
+      },
+      policyAnchor: {
+        claimType: "missing_transfer_disclosure",
+        confidence: 0.72,
+        extractionStatus: "fetched",
+        sourceUrl: "https://empireofforex.com/privacy-policy/",
+        snippet: "No cross-border transfer mechanism was identified in the reviewed policy text."
+      },
+      signalKey: "section_review.no_transfer_mechanism_noted",
+      urlAssessment: {
+        assessment: "borderline",
+        rationale: "Own URL review did not find transfer mechanism language; promotion still needs retained section-review evidence confirming scoped absence.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://empireofforex.com/privacy-policy/"
+      }
+    },
+    expected: {
+      confidenceBand: "moderate",
+      externalSurfacingEligibility: "audit_only",
+      presentationState: "review",
+      promotionEligibility: "internal_only"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "missing_transfer_disclosure",
+    id: "nano-review-missing-transfer-empireofforex-2026-04-24",
+    notes: "Nano review case for transfer absence calibration.",
+    scenarioType: "borderline_review",
+    sourceKind: "nano_review"
+  },
+  {
+    evidence: {
+      policyAnchor: {
+        claimType: "transfer_mechanism_disclosure_present",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        sourceUrl: "https://stripe.com/privacy",
+        snippet: "The policy references international transfers and applicable transfer safeguards."
+      },
+      signalKey: "section_review.no_transfer_mechanism_noted",
+      urlAssessment: {
+        assessment: "supports_demotion",
+        rationale: "Own URL review found transfer mechanism or international transfer safeguard language, so the missing-transfer interpretation should not promote.",
+        reviewedAt: "2026-04-24",
+        reviewedUrl: "https://stripe.com/privacy"
+      }
+    },
+    expected: {
+      confidenceBand: "low",
+      externalSurfacingEligibility: "suppress",
+      presentationState: "suppressed",
+      promotionEligibility: "blocked"
+    },
+    findingGroup: "production_surfaced_calibration",
+    findingId: "missing_transfer_disclosure",
+    id: "live-demotion-missing-transfer-stripe-2026-04-24",
+    negativeControlReason: "International transfer or safeguard language is visible on the reviewed policy surface.",
+    notes: "Live reviewed negative control for missing transfer disclosure.",
+    scenarioType: "negative_control",
+    sourceKind: "live_artifact"
   }
 ];
