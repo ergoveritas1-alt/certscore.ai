@@ -98,6 +98,7 @@ function normalizeContradictionEvidenceRecord(
   assignCanonicalField("relatedVendors", ["related_vendors"]);
   assignCanonicalField("sourceUrls", ["source_urls"]);
   assignCanonicalField("requestUrls", ["request_urls", "runtimeEvidenceUrls"]);
+  assignCanonicalField("scriptHosts", ["script_hosts", "preconsent_tracker_script_hosts"]);
   assignCanonicalField("cookieNames", ["cookie_names"]);
   assignCanonicalField("storageArtifacts", ["storage_artifacts", "localStorageKeys", "sessionStorageKeys"]);
   assignCanonicalField("confidence", ["policyConfidence", "policy_confidence", "runtimeConfidence", "runtime_confidence"]);
@@ -504,7 +505,11 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
     })
   ]);
   const runtimeCookies = getStringArray(runtimeAnchorSource, ["cookies", "cookieNames"]);
-  const storageArtifacts = getStringArray(runtimeAnchorSource, ["storageArtifacts"]);
+  const storageArtifacts = uniqueStrings([
+    ...getStringArray(runtimeAnchorSource, ["storageArtifacts"]),
+    ...getStringArray(runtimeAnchorSource, ["scriptHosts"]).map((host) => `script_host:${host}`),
+    ...getStringArray(source, ["preconsent_tracker_script_hosts"]).map((host) => `script_host:${host}`)
+  ]);
 
   const policyAnchor: ContradictionPolicyAnchor = {
     claimType: policyClaimType,

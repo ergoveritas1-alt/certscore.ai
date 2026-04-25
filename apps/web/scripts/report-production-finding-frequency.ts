@@ -1,6 +1,10 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import process from "node:process";
 import { closePools, query, queryOne } from "@website-signal-risk-scanner/db";
+import {
+  collectPolicyEvidenceHashes,
+  dereferencePolicyEvidenceSnippets
+} from "../server/scans/policy-enrichment-normalization";
 
 export type ScanRow = {
   completed_at: string | null;
@@ -164,6 +168,29 @@ async function loadRows(sql: string, params: unknown[]) {
   return query<Record<string, unknown>>(sql, params, { readOnly: true }).then((result) => result.rows);
 }
 
+async function loadPolicyEvidenceByHash(policyEvidenceHashes: string[]): Promise<Map<string, string>> {
+  if (!policyEvidenceHashes.length) {
+    return new Map();
+  }
+
+  const rows = await query<{ evidence_hash: string; snippet: string }>(
+    `select evidence_hash, snippet
+       from policy_evidence
+      where evidence_hash = any($1::text[])`,
+    [policyEvidenceHashes],
+    { readOnly: true }
+  ).then((result) => result.rows);
+
+  return new Map(
+    rows
+      .filter(
+        (row): row is { evidence_hash: string; snippet: string } =>
+          Boolean(row) && typeof row.evidence_hash === "string" && typeof row.snippet === "string"
+      )
+      .map((row) => [row.evidence_hash, row.snippet] as const)
+  );
+}
+
 export async function loadScanRecord(input: {
   buildMergedSignalRecords: (input: Record<string, unknown>) => unknown[];
   getHybridDerivedTrackerVendors: (runtimeArtifacts: Record<string, unknown> | null) => Array<Record<string, unknown>>;
@@ -312,6 +339,12 @@ export async function loadScanRecord(input: {
   }
 
   const observedAt = input.scan.completed_at ?? input.scan.started_at ?? input.scan.created_at;
+  const policyEvidenceHashes = collectPolicyEvidenceHashes(policyRows);
+  const policyEvidenceByHash = await loadPolicyEvidenceByHash(policyEvidenceHashes);
+  const dereferencedPolicyRows = dereferencePolicyEvidenceSnippets({
+    evidenceByHash: policyEvidenceByHash,
+    rows: policyRows
+  });
   const scannerSignalRows = signalRows.filter((row) => !row.population_source || row.population_source === "scanner");
   const nanoSignalRows = signalRows.filter((row) => row.population_source === "nano");
   const validationSignalRows = signalRows.filter((row) => row.population_source === "validation");
@@ -339,10 +372,10 @@ export async function loadScanRecord(input: {
       scannerSignals: scannerSignalRows.map((row) => normalizePopulation({ observedAt, row, source: "scanner" })),
       validationSignals: validationSignalRows.map((row) => normalizePopulation({ observedAt, row, source: "validation" }))
     }),
-    policyEnrichment: policyRows,
+    policyEnrichment: dereferencedPolicyRows,
     policyReviewQueue: policyReviewRows,
     preconsentViolations: preconsentRows,
-    primaryPolicyEnrichment: input.getPrimaryPolicyEnrichmentRow(policyRows),
+    primaryPolicyEnrichment: input.getPrimaryPolicyEnrichmentRow(dereferencedPolicyRows),
     runtimeArtifacts,
     scan: {
       completedAt: input.scan.completed_at,

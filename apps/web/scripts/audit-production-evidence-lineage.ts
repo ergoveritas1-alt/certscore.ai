@@ -308,8 +308,18 @@ function probeRawEvidence(findingId: TargetFinding, record: Record<string, unkno
         ...preconsentViolations.flatMap((row) => getStringArray(row, ["evidenceUrls", "evidence_urls"])),
         ...getStringArray(runtimeArtifacts, ["consent_baseline_tracker_evidence_urls", "consentBaselineTrackerEvidenceUrls"])
       ]);
+      const retainedScriptHosts = uniqueStrings([
+        ...preconsentViolations.map((row) => getString(row, ["scriptHost", "script_host"])),
+        ...trackerVendors
+          .filter((row) => row.beforeConsent === true || row.before_consent === true)
+          .map((row) => getString(row, ["scriptHost", "script_host"])),
+        ...getStringArray(runtimeArtifacts, ["consent_baseline_tracker_script_hosts", "consentBaselineTrackerScriptHosts"])
+      ]);
       if (retainedUrls.some((url) => /^https?:\/\//i.test(url))) {
         runtimeReasons.push("retained pre-consent request URL");
+      }
+      if (retainedScriptHosts.length > 0) {
+        runtimeReasons.push("retained pre-consent script host");
       }
       if (getBoolean(snapshot, ["privacy_policy_present"]) || hasPolicyPageType(policyRows, ["privacy_policy"])) {
         policyReasons.push("privacy policy surface");

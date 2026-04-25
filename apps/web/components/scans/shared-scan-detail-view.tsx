@@ -366,6 +366,7 @@ type PolicyBehaviorContradiction = {
   runtimeConfidence?: number | null;
   runtimeObservationType?: PolicyBehaviorRuntimeObservationType | null;
   runtimePhase?: "pre_consent" | "unknown";
+  runtimeScriptHosts?: string[];
   runtimeSummary: string;
   runtimeVendors: string[];
   conflictReasoning?: string | null;
@@ -571,6 +572,18 @@ function deriveConsentGatingPolicyAnchor(row: Record<string, unknown> | null) {
   return null;
 }
 
+function deriveConsentGatingPolicyAnchorFromRows(rows: Array<Record<string, unknown>>) {
+  const privacyPolicyAnchor = rows
+    .filter((row) => getPolicyPageType(row) === "privacy_policy" || getPolicyPageType(row) === "cookie_policy")
+    .map((row) => deriveConsentGatingPolicyAnchor(row))
+    .find(Boolean);
+  if (privacyPolicyAnchor) {
+    return privacyPolicyAnchor;
+  }
+
+  return rows.map((row) => deriveConsentGatingPolicyAnchor(row)).find(Boolean) ?? null;
+}
+
 function derivePreconsentObservationType(
   preconsentRows: Array<{ vendorCategory: string; vendorName: string }>
 ): PolicyBehaviorRuntimeObservationType | null {
@@ -598,6 +611,7 @@ function derivePolicyBehaviorContradictions(input: {
   policyEnrichments: Array<Record<string, unknown>>;
   preconsentViolations: Array<{
     evidenceUrls: string[];
+    scriptHost?: string | null;
     vendorCategory: string;
     vendorName: string;
   }>;
@@ -634,7 +648,7 @@ function derivePolicyBehaviorContradictions(input: {
   const policyDoNotSell = typeof mergedPolicyDoNotSell === "string" ? mergedPolicyDoNotSell : "unknown";
   const policyPageUrl = privacyEnrichment ? getPolicyPageUrl(privacyEnrichment) : null;
   const policySummary = privacyEnrichment ? getPolicySummaryText(privacyEnrichment) : null;
-  const consentGatingAnchor = deriveConsentGatingPolicyAnchor(privacyEnrichment);
+  const consentGatingAnchor = deriveConsentGatingPolicyAnchorFromRows(input.policyEnrichments);
 
   if (preconsentVendors.length > 0) {
     const runtimeObservationType = derivePreconsentObservationType(input.preconsentViolations);
@@ -642,6 +656,7 @@ function derivePolicyBehaviorContradictions(input: {
       ? getAllowedConflictType(consentGatingAnchor.claimType, runtimeObservationType)
       : null;
     const hasConcreteRuntimeRequest = preconsentEvidence.some((url) => /^https?:\/\//i.test(url));
+    const preconsentScriptHosts = uniqueStrings(input.preconsentViolations.map((row) => row.scriptHost));
     const conflictSupportsPromotion = Boolean(
       consentGatingAnchor?.sourceUrl &&
         consentGatingAnchor.snippet &&
@@ -662,7 +677,7 @@ function derivePolicyBehaviorContradictions(input: {
       claim: policyClaim,
       observedBehavior: runtimeSummary,
       evidence: preconsentEvidence.slice(0, 3),
-      policyPageUrl,
+      policyPageUrl: consentGatingAnchor?.sourceUrl ?? policyPageUrl,
       policyClaimType: consentGatingAnchor?.claimType ?? null,
       policyConfidence: consentGatingAnchor?.confidence ?? null,
       policyExtractionStatus: consentGatingAnchor?.extractionStatus ?? null,
@@ -672,6 +687,7 @@ function derivePolicyBehaviorContradictions(input: {
       runtimeConfidence: hasConcreteRuntimeRequest ? 0.82 : 0.5,
       runtimeObservationType,
       runtimePhase: "pre_consent",
+      runtimeScriptHosts: preconsentScriptHosts,
       runtimeSummary,
       runtimeVendors: preconsentVendors,
       conflictReasoning:
@@ -680,7 +696,10 @@ function derivePolicyBehaviorContradictions(input: {
           : runtimeSummary,
       conflictSupportsPromotion,
       conflictType,
-      supportingSignals: ["consent_gating_claim"]
+      supportingSignals: uniqueStrings([
+        "consent_gating_claim",
+        ...preconsentScriptHosts.map((host) => `preconsent_script_host:${host}`)
+      ])
     });
   }
 
@@ -773,6 +792,7 @@ function derivePreconsentViolationRows(input: {
 
   const baselineTrackerVendors = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_vendor_names");
   const baselineEvidenceUrls = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_evidence_urls");
+  const baselineScriptHosts = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_script_hosts");
 
   return baselineTrackerVendors.map((vendorName) => {
     const tracker = input.trackerVendors.find((candidate) => candidate.vendorName === vendorName);
@@ -806,7 +826,7 @@ function derivePreconsentViolationRows(input: {
       evidenceUrls: vendorEvidenceUrls,
       firstPartyOrThirdParty: "unknown",
       matchedSignatureId: tracker?.matchedSignatureId ?? null,
-      scriptHost: tracker?.scriptHost ?? null,
+      scriptHost: tracker?.scriptHost ?? baselineScriptHosts.find((host) => host && host.toLowerCase().includes(vendorName.toLowerCase().replace(/\s+/g, ""))) ?? null,
       vendorCategory: tracker?.vendorCategory ?? "unknown",
       vendorName
     };
