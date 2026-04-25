@@ -683,6 +683,12 @@ function isEvidenceRichZeroPagePreview(snapshot: PreviewSnapshotSource, verified
 }
 
 function hasUsablePublicCoverageDespiteProtectionLabel(snapshot: PreviewSnapshotSource, verifiedSurfaces: string[]) {
+  const broadEvidenceRichCoverage =
+    snapshot.coverageLevel === "broad" &&
+    snapshot.pagesScanned >= 3 &&
+    snapshot.totalSignals >= 20 &&
+    verifiedSurfaces.length > 0 &&
+    hasPreconsentTrackingEvidence(snapshot);
   const homepageFetchHttpStatusSuccessful =
     snapshot.homepageFetchHttpStatus == null ||
     (snapshot.homepageFetchHttpStatus >= 200 && snapshot.homepageFetchHttpStatus < 400);
@@ -690,6 +696,10 @@ function hasUsablePublicCoverageDespiteProtectionLabel(snapshot: PreviewSnapshot
     snapshot.pagesScanned >= 2 &&
     snapshot.totalSignals >= 20 &&
     (verifiedSurfaces.length > 0 || hasPreconsentTrackingEvidence(snapshot));
+
+  if (broadEvidenceRichCoverage) {
+    return true;
+  }
 
   return (
     meaningfulCoverage &&
