@@ -90,6 +90,45 @@ function getPolicySnippets(input: PromotionBlockerInput) {
   return flattenSnippetValues(input.policyEvidenceSnippets);
 }
 
+function getPolicySnippetRecord(input: PromotionBlockerInput) {
+  return getRecord(input.policyEvidenceSnippets);
+}
+
+function getPositiveDisclosureSnippetKeys(
+  findingId:
+    | "behavioral_analytics_disclosure_present"
+    | "targeted_advertising_disclosure_present"
+    | "tracking_technologies_disclosure_present"
+) {
+  switch (findingId) {
+    case "behavioral_analytics_disclosure_present":
+      return [
+        "topic:session_replay_disclosure",
+        "session_replay_disclosure",
+        "behavioral_analytics_disclosure",
+        "product_analytics_disclosure"
+      ];
+    case "targeted_advertising_disclosure_present":
+      return ["topic:targeted_advertising_disclosure", "targeted_advertising_disclosure"];
+    case "tracking_technologies_disclosure_present":
+      return ["topic:tracking_technologies_disclosure", "tracking_technologies_disclosure"];
+  }
+}
+
+function getPositiveDisclosurePolicySnippets(
+  input: PromotionBlockerInput,
+  findingId:
+    | "behavioral_analytics_disclosure_present"
+    | "targeted_advertising_disclosure_present"
+    | "tracking_technologies_disclosure_present"
+) {
+  const record = getPolicySnippetRecord(input);
+  const selected = record
+    ? getPositiveDisclosureSnippetKeys(findingId).flatMap((key) => flattenSnippetValues(record[key]))
+    : [];
+  return selected.length > 0 ? selected : getPolicySnippets(input);
+}
+
 function hasPolicyAnchor(input: PromotionBlockerInput) {
   return Boolean(input.policyPageUrl && /^https?:\/\//i.test(input.policyPageUrl));
 }
@@ -168,9 +207,9 @@ function disclosurePatternFor(findingId: PromotionBlockerFindingId) {
     case "behavioral_analytics_disclosure_present":
       return /behavioral analytics|behavioural analytics|session replay|session recording|heat ?map|product analytics|hotjar|fullstory|mouseflow|contentsquare|microsoft clarity/i;
     case "targeted_advertising_disclosure_present":
-      return /targeted advertis(?:e|ing)|interest-based advertis(?:e|ing)|personalized ads?|cross-context behavioral advertis(?:e|ing)|sale or sharing|sell or share/i;
+      return /targeted advertis(?:e|ing)|interest-based advertis(?:e|ing)|personalized ads?|cross-context behavioral advertis(?:e|ing)/i;
     case "tracking_technologies_disclosure_present":
-      return /tracking technolog(?:y|ies)|cookies? and similar technolog(?:y|ies)|pixels?|web beacons?|tags?|tracking scripts?|software development kits?|\bSDKs?\b/i;
+      return /tracking technolog(?:y|ies)|cookies? and similar technolog(?:y|ies)|pixels?|web beacons?|tags?|tracking scripts?/i;
     default:
       return null;
   }
@@ -384,7 +423,7 @@ export function classifyPositiveDisclosurePromotionBlockers(
     | "targeted_advertising_disclosure_present"
     | "tracking_technologies_disclosure_present"
 ): PromotionBlockerAssessment {
-  const snippets = getPolicySnippets(input);
+  const snippets = getPositiveDisclosurePolicySnippets(input, findingId);
   const pattern = disclosurePatternFor(findingId);
   const highValueSnippet = pattern ? snippets.some((value) => pattern.test(value)) : false;
   const blockers: string[] = [];

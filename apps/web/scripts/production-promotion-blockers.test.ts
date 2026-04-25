@@ -149,6 +149,74 @@ test("positive disclosure blocker classifier keeps generic analytics text blocke
   assert.ok(assessment.blockers.includes("generic_or_low_value_disclosure_text"));
 });
 
+test("positive disclosure blocker classifier aligns targeted advertising with surfacing text", () => {
+  const saleSharingOnly = classifyPositiveDisclosurePromotionBlockers(
+    {
+      policyEvidenceSnippets: {
+        sale_sharing: "You may opt out of sale or sharing of personal information."
+      },
+      policyExtractionStatus: "fetched",
+      policyPageUrl: "https://example.test/privacy",
+      policyPositiveSignalPresent: true,
+      policySemanticConfidence: 0.8
+    },
+    "targeted_advertising_disclosure_present"
+  );
+  const targeted = classifyPositiveDisclosurePromotionBlockers(
+    {
+      policyEvidenceSnippets: {
+        targeted_ads: "We use personal information for cross-context behavioral advertising."
+      },
+      policyExtractionStatus: "fetched",
+      policyPageUrl: "https://example.test/privacy",
+      policyPositiveSignalPresent: true,
+      policySemanticConfidence: 0.8
+    },
+    "targeted_advertising_disclosure_present"
+  );
+
+  assert.equal(saleSharingOnly.promotionReady, false);
+  assert.ok(saleSharingOnly.blockers.includes("generic_or_low_value_disclosure_text"));
+  assert.equal(targeted.promotionReady, true);
+});
+
+test("positive disclosure blocker classifier only uses finding-specific disclosure snippets when retained", () => {
+  const assessment = classifyPositiveDisclosurePromotionBlockers(
+    {
+      policyEvidenceSnippets: {
+        cancellation_refund: "Opt-Out of Targeted Advertising.",
+        "topic:targeted_advertising_disclosure": "You can exercise your privacy rights through Your Privacy Choices."
+      },
+      policyExtractionStatus: "fetched",
+      policyPageUrl: "https://example.test/privacy",
+      policyPositiveSignalPresent: true,
+      policySemanticConfidence: 0.8
+    },
+    "targeted_advertising_disclosure_present"
+  );
+
+  assert.equal(assessment.promotionReady, false);
+  assert.ok(assessment.blockers.includes("generic_or_low_value_disclosure_text"));
+});
+
+test("positive disclosure blocker classifier rejects bare tracking text", () => {
+  const assessment = classifyPositiveDisclosurePromotionBlockers(
+    {
+      policyEvidenceSnippets: {
+        generic_tracking: "We may use tracking to understand website performance."
+      },
+      policyExtractionStatus: "fetched",
+      policyPageUrl: "https://example.test/privacy",
+      policyPositiveSignalPresent: true,
+      policySemanticConfidence: 0.8
+    },
+    "tracking_technologies_disclosure_present"
+  );
+
+  assert.equal(assessment.promotionReady, false);
+  assert.ok(assessment.blockers.includes("generic_or_low_value_disclosure_text"));
+});
+
 test("cookie disclosure gap blocker classifier requires runtime and unmatched inventory", () => {
   const assessment = classifyCookieDisclosureGapPromotionBlockers({
     cookieGapValidationEvidence: {

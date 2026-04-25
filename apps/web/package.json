@@ -16,6 +16,7 @@
     "audit:production-evidence-loss": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-evidence-loss.ts",
     "audit:production-evidence-lineage": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-evidence-lineage.ts",
     "audit:cookie-disclosure-gap-reconciliation": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/reconcile-cookie-disclosure-gap.ts",
+    "audit:positive-disclosure-reconciliation": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/reconcile-positive-disclosure-findings.ts",
     "audit:urlscan-supplements": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-urlscan-supplements.ts",
     "review:production-finding-surfacing": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/review-production-finding-surfacing.ts",
     "review:production-policy-nano": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/review-production-policy-nano-candidates.ts",
