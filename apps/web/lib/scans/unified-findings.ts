@@ -3125,6 +3125,7 @@ type PacketizedFindingSupportRule = {
 
 type PolicyEnrichmentFindingSupportRule = {
   findingId:
+    | "cookie_policy_present"
     | "privacy_rights_path_present"
     | "privacy_contact_path_present"
     | "gpc_disclosure_present"
@@ -3283,6 +3284,10 @@ const PACKETIZED_FINDING_SUPPORT_RULES: PacketizedFindingSupportRule[] = [
 
 const POLICY_ENRICHMENT_FINDING_SUPPORT_RULES: PolicyEnrichmentFindingSupportRule[] = [
   {
+    findingId: "cookie_policy_present",
+    rationale: "Surfaced because structured policy evidence retained a reachable cookie-policy or cookie-settings surface."
+  },
+  {
     findingId: "privacy_rights_path_present",
     rationale: "Surfaced because structured policy evidence retained a concrete privacy-rights path."
   },
@@ -3318,6 +3323,19 @@ const POLICY_ENRICHMENT_FINDING_SUPPORT_RULES: PolicyEnrichmentFindingSupportRul
 ];
 
 const POLICY_ENRICHMENT_POSITIVE_SNIPPET_SELECTORS: Record<string, Array<string | RegExp>> = {
+  cookie_policy_present: [
+    "cookie_table",
+    "cookie_notice",
+    "cookies",
+    "tracking_technologies",
+    "targeted_advertising",
+    "privacy_choices",
+    "do_not_sell",
+    /^topic:cookie/i,
+    /cookie/i,
+    /tracking/i,
+    /privacy_choices/i
+  ],
   privacy_contact_path_present: ["privacy_contact", "notice_contact", "dsar", /privacy.*contact/i],
   privacy_rights_path_present: [
     "dsar",
@@ -3358,6 +3376,32 @@ const POLICY_ENRICHMENT_POSITIVE_SNIPPET_SELECTORS: Record<string, Array<string 
   arbitration_clause_present: ["arbitration", /arbitration|dispute/i]
 };
 
+function policyEnrichmentSnippetRank(findingId: string, value: string) {
+  if (findingId !== "cookie_policy_present") {
+    return 0;
+  }
+  if (/cookie policy|cookie notice|cookie statement|cookie settings|cookie consent center|manage cookies|cookie preferences/i.test(value)) {
+    return 0;
+  }
+  if (/cookies? and similar technolog(?:y|ies)|tracking technolog(?:y|ies)|advertising cookies|analytics cookies/i.test(value)) {
+    return 1;
+  }
+  if (/privacy choices|your privacy choices|gpc|global privacy control|opt-out preference/i.test(value)) {
+    return 2;
+  }
+  if (/cookie/i.test(value) && value.length >= 80) {
+    return 3;
+  }
+  return 4;
+}
+
+function sortPolicyEnrichmentSnippetValues(findingId: string, snippets: string[]) {
+  return [...snippets].sort((left, right) => {
+    const rankDelta = policyEnrichmentSnippetRank(findingId, left) - policyEnrichmentSnippetRank(findingId, right);
+    return rankDelta !== 0 ? rankDelta : right.length - left.length;
+  });
+}
+
 function buildPolicyEnrichmentPositiveCandidates(policyEnrichment?: Array<Record<string, unknown>>) {
   const rows = Array.isArray(policyEnrichment) ? policyEnrichment : [];
   if (rows.length === 0) {
@@ -3366,13 +3410,21 @@ function buildPolicyEnrichmentPositiveCandidates(policyEnrichment?: Array<Record
 
   const candidates: UnifiedFindingCandidate[] = [];
   for (const rule of POLICY_ENRICHMENT_FINDING_SUPPORT_RULES) {
-    const signalKey = getPolicyPositiveSignalKeysForFinding(rule.findingId)[0];
+    const signalKey =
+      rule.findingId === "cookie_policy_present"
+        ? "disclosure.cookie_policy_present"
+        : getPolicyPositiveSignalKeysForFinding(rule.findingId)[0];
     const mappedFinding = getReportUnifiedFinding(rule.findingId as ReportUnifiedFindingId);
     if (!signalKey || !mappedFinding) {
       continue;
     }
 
-    const expectedPageType = rule.findingId === "arbitration_clause_present" ? "terms_of_service" : "privacy_policy";
+    const expectedPageType =
+      rule.findingId === "arbitration_clause_present"
+        ? "terms_of_service"
+        : rule.findingId === "cookie_policy_present"
+          ? "cookie_policy"
+          : "privacy_policy";
     const selectors = POLICY_ENRICHMENT_POSITIVE_SNIPPET_SELECTORS[rule.findingId] ?? [];
     const row = rows.find((entry) => getPolicyPageType(entry) === expectedPageType && getPolicyEvidenceSnippetValues(entry, selectors).length > 0);
     if (!row) {
@@ -3380,7 +3432,9 @@ function buildPolicyEnrichmentPositiveCandidates(policyEnrichment?: Array<Record
     }
 
     const pageUrl = getPolicyPageUrl(row);
-    const snippets = normalizePolicySnippetList(getPolicyEvidenceSnippetValues(row, selectors).slice(0, 4));
+    const snippets = normalizePolicySnippetList(
+      sortPolicyEnrichmentSnippetValues(rule.findingId, getPolicyEvidenceSnippetValues(row, selectors)).slice(0, 4)
+    );
     if (!pageUrl || snippets.length === 0) {
       continue;
     }
@@ -3403,7 +3457,8 @@ function buildPolicyEnrichmentPositiveCandidates(policyEnrichment?: Array<Record
         signalKey,
         signalLabel: mappedFinding.label,
         signalValue: true,
-        sourceUrls: evidenceRefs
+        sourceUrls: evidenceRefs,
+        unifiedFindingId: rule.findingId
       },
       observedValue: mappedFinding.label,
       severity: "low",

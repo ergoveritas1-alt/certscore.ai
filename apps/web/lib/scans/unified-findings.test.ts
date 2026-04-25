@@ -2199,6 +2199,110 @@ test("repairs weak cookie-policy packets from policy enrichment during display a
   );
 });
 
+test("synthesizes cookie-policy packets from promotion-grade policy enrichment", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    policyEnrichment: [
+      {
+        page_type: "cookie_policy",
+        page_url: "https://stripe.com/cookie-settings",
+        policy_evidence_snippets: {
+          cookie_settings:
+            "Cookie Settings. You can manage advertising cookies, analytics cookies, and similar tracking technologies from this page.",
+          privacy_choices:
+            "Your browser privacy preference signal may override your advertising-cookie selection."
+        },
+        policy_summary_short:
+          "Cookie Settings. Manage advertising cookies, analytics cookies, and related privacy choices."
+      }
+    ],
+    reviewFindingCandidates: [],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const packet = packets.find((item) => item.unifiedFindingId === "cookie_policy_present");
+
+  assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "review");
+  assert.equal(packet?.primaryPageUrl, "https://stripe.com/cookie-settings");
+  assert.equal(packet?.evidence?.fetchQuality, "verified_content");
+  assert.ok(packet?.evidence?.pageUrls?.includes("https://stripe.com/cookie-settings"));
+  assert.ok(
+    packet?.evidence?.snippets?.some((snippet) =>
+      /manage advertising cookies, analytics cookies, and similar tracking technologies/i.test(snippet)
+    )
+  );
+});
+
+test("prefers cookie-policy enrichment over privacy-notice cookie support when repairing weak packets", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://www.example.com/privacy-notice",
+        policy_summary_short:
+          "The privacy notice mentions opt out instructions at the cookie consent center and links to the cookie policy."
+      },
+      {
+        page_type: "cookie_policy",
+        page_url: "https://www.example.com/legal/cookie-policy",
+        policy_evidence_snippets: {
+          cookie_policy:
+            "This Cookie Policy explains our cookies, tracking technologies, analytics cookies, marketing cookies, and how to manage your preferences."
+        },
+        policy_summary_short:
+          "This Cookie Policy explains our cookies, tracking technologies, analytics cookies, marketing cookies, and how to manage your preferences."
+      }
+    ],
+    reviewFindingCandidates: [],
+    scanEvents: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "finding_family_packets",
+          packets: [
+            {
+              familyId: "privacy_controls",
+              canonicalTargets: [
+                {
+                  canonicalUrl: "https://www.example.com/privacy-notice",
+                  fetchQuality: "verified_content",
+                  snippet: "Opt out instructions are available at the cookie consent center.",
+                  supportedSurfaceTypes: ["privacy_choices"],
+                  title: "Privacy Notice"
+                }
+              ],
+              supportedUnifiedFindings: [
+                {
+                  evidenceUrls: ["https://www.example.com/privacy-notice"],
+                  findingId: "cookie_policy_present",
+                  reason: "Verified privacy-controls evidence includes cookie policy or settings language.",
+                  sourceSurfaceTypes: ["cookie_policy"]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const packet = packets.find((item) => item.unifiedFindingId === "cookie_policy_present");
+
+  assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.primaryPageUrl, "https://www.example.com/legal/cookie-policy");
+  assert.deepEqual(packet?.evidence?.pageUrls?.slice(0, 1), ["https://www.example.com/legal/cookie-policy"]);
+  assert.ok(
+    packet?.evidence?.snippets?.some((snippet) =>
+      /This Cookie Policy explains our cookies, tracking technologies/i.test(snippet)
+    )
+  );
+});
+
 test("normalizes legacy family-packet policy evidence keys before assembling unified findings", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [],

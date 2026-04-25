@@ -259,7 +259,7 @@ function getPolicySnippetCandidates(row: NormalizedPolicyRow | null, snippetKeys
 }
 
 function getCookiePolicySnippetCandidates(row: NormalizedPolicyRow | null) {
-  return getPolicySnippetCandidates(row, [
+  const keyedSnippets = getPolicySnippetCandidates(row, [
     "cookie_table",
     "cookie_notice",
     "cookies",
@@ -268,6 +268,28 @@ function getCookiePolicySnippetCandidates(row: NormalizedPolicyRow | null) {
     "privacy_choices",
     "do_not_sell"
   ]);
+
+  if (!row) {
+    return keyedSnippets;
+  }
+
+  const snippets = getPolicyEnrichmentSnippetRecord(row);
+  const broadlyMatchedSnippets = snippets
+    ? Object.entries(snippets).flatMap(([key, value]) => {
+        if (!/cookie|tracking|privacy_choices|do_not_sell|targeted_advertising/i.test(key)) {
+          return [];
+        }
+        if (typeof value === "string" && isMeaningfulPolicyText(value)) {
+          return [value];
+        }
+        if (Array.isArray(value)) {
+          return value.filter((entry): entry is string => isMeaningfulPolicyText(entry));
+        }
+        return [];
+      })
+    : [];
+
+  return sortCookiePolicySnippets(normalizePolicySnippetList([...keyedSnippets, ...broadlyMatchedSnippets]));
 }
 
 function hasCookieLikeEvidenceText(value: string | null | undefined) {
@@ -278,6 +300,29 @@ function hasCookieLikeEvidenceText(value: string | null | undefined) {
   return /cookie|tracking technolog|analytical cookies|marketing cookies|privacy choices|your privacy choices|gpc|global privacy control|opt-out preference/i.test(
     value
   );
+}
+
+function cookiePolicySnippetRank(value: string) {
+  if (/cookie policy|cookie notice|cookie statement|cookie settings|cookie consent center|manage cookies|cookie preferences/i.test(value)) {
+    return 0;
+  }
+  if (/cookies? and similar technolog(?:y|ies)|tracking technolog(?:y|ies)|advertising cookies|analytics cookies/i.test(value)) {
+    return 1;
+  }
+  if (/privacy choices|your privacy choices|gpc|global privacy control|opt-out preference/i.test(value)) {
+    return 2;
+  }
+  if (/cookie/i.test(value) && value.length >= 80) {
+    return 3;
+  }
+  return 4;
+}
+
+function sortCookiePolicySnippets(snippets: string[]) {
+  return [...snippets].sort((left, right) => {
+    const rankDelta = cookiePolicySnippetRank(left) - cookiePolicySnippetRank(right);
+    return rankDelta !== 0 ? rankDelta : right.length - left.length;
+  });
 }
 
 function isGenericCookiePathUrl(value: string | null | undefined) {
