@@ -528,8 +528,36 @@ test("latest policy absence findings stay review-level when policy evidence is i
 
   const decision = evaluation.debugDecisions[0];
   assert.equal(decision?.decisionState, "review");
-  assert.equal(decision?.reportLane, "main");
+  assert.equal(decision?.reportLane, "confidence_and_coverage");
+  assert.equal(decision?.surfaceTier, "support");
   assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
+});
+
+test("noisy rights-gap findings stay in confidence coverage when evidence is incomplete", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("cookie_disclosure_gap", {
+        confidenceInputs: {
+          ...makePacket("cookie_disclosure_gap").confidenceInputs,
+          hasStructuredValidationEvidence: true
+        }
+      }),
+      makePacket("privacy_contact_channel_missing", {
+        confidenceInputs: {
+          ...makePacket("privacy_contact_channel_missing").confidenceInputs,
+          hasStructuredValidationEvidence: true
+        }
+      })
+    ]
+  });
+
+  for (const findingId of ["cookie_disclosure_gap", "privacy_contact_channel_missing"]) {
+    const decision = evaluation.debugDecisions.find((item) => item.unifiedFindingId === findingId);
+    assert.equal(decision?.decisionState, "review", findingId);
+    assert.equal(decision?.reportLane, "confidence_and_coverage", findingId);
+    assert.equal(decision?.surfaceTier, "support", findingId);
+    assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"), findingId);
+  }
 });
 
 test("positive financial disclosure findings are suppressed unless they support a stronger financial story", () => {
