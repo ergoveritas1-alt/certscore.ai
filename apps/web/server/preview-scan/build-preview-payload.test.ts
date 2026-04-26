@@ -493,6 +493,61 @@ test("sensitive fallback tracking is prioritized and calibrates preview scores",
   );
 });
 
+test("captcha-limited sensitive previews can surface calibrated scores when live evidence is strong", () => {
+  const snapshot = buildSnapshot({
+    accessibilityScore: 100,
+    blockVendorGuess: "cloudflare",
+    captchaFlag: true,
+    certscoreOverall: 71,
+    cookieBannerPresent: true,
+    finalUrl: "https://www.webmd.com/",
+    homepageFetchHttpStatus: 200,
+    homepageFetchStatus: "ok",
+    pagesScanned: 0,
+    partialScan: true,
+    privacyScore: 73,
+    registeredDomain: "webmd.com",
+    totalSignals: 26,
+    trackingBeforeConsentDetected: true
+  });
+
+  const payload = enrichPreviewPayloadWithFallbackEvidence({
+    payload: buildPreviewPayloadFromSnapshot({
+      hostname: "webmd.com",
+      normalizedUrl: "https://webmd.com",
+      snapshot
+    }),
+    snapshot,
+    events: [],
+    runtimeArtifacts: {
+      consent_baseline_tracker_evidence_urls: [
+        "https://cdn.id5-sync.com/api/1.0/id5-api.js",
+        "https://bh-medscape-cdn.contextweb.com/pixel.js",
+        "https://c.amazon-adsystem.com/aax2/apstag.js"
+      ],
+      local_storage_keys: ["aps:3100:deviceSignal/sua"],
+      third_party_request_domains: ["api.id5-sync.com", "bh-medscape-cdn.contextweb.com", "c.amazon-adsystem.com"]
+    }
+  });
+
+  assert.equal(payload.resultState, undefined);
+  assert.equal(payload.sampleFindings[0]?.title, "Tracking activity observed before consent");
+  assert.equal(payload.scores?.overall, 62);
+  assert.equal(payload.scores?.privacy, 55);
+  assert.equal(payload.scores?.accessibility, 100);
+  assert.equal(payload.summaryBullets.includes("Preview scores: overall 62, privacy 55, accessibility 100."), true);
+  assert.equal(
+    payload.summaryBullets.some((bullet) => bullet.includes("withheld because the live pass stopped")),
+    false
+  );
+  assert.equal(
+    payload.summaryBullets.includes(
+      "Site protections limited page-depth verification, but retained live-browser evidence was sufficient to surface sensitive-context tracking risk."
+    ),
+    true
+  );
+});
+
 test("preview payload surfaces urlscan no-api-key diagnostics as scanner health warnings", () => {
   const snapshot = buildSnapshot({
     cookieBannerPresent: true,
