@@ -28,7 +28,8 @@ test("deriveCertScoreFindings now returns metrics without surfaced findings", ()
         cookieWriteObservations: [
           { cookieName: "_ga", domain: ".fojik.site" },
           { cookieName: "uuid2", domain: ".adnxs.com" },
-          { cookieName: "cf_clearance", domain: ".fojik.site" }
+          { cookieName: "cf_clearance", domain: ".fojik.site" },
+          { cookieName: "OptanonConsent", domain: ".fojik.site" }
         ],
         fingerprintSummary: {
           tier: 3,
@@ -103,7 +104,7 @@ test("deriveCertScoreFindings recognizes RTB and session intercept vendors in ru
 
   assert.ok(summary.rawAdtechHosts.includes("grid-bidder.criteo.com"));
   assert.ok(summary.rawAdtechHosts.includes("hbopenbid.pubmatic.com"));
-  assert.deepEqual(summary.adtechCookieNames, ["cto_bundle", "KRTBCOOKIE_452"]);
+  assert.deepEqual(summary.adtechCookieNames, ["cto_bundle", "KRTBCOOKIE_452", "QSI_ReplaySession_Info_ZN_abc"]);
   assert.deepEqual(summary.preConsentVendorNames, ["Criteo", "PubMatic"]);
   assert.deepEqual(summary.sessionReplayVendorNames, ["Qualtrics SiteIntercept"]);
 });
