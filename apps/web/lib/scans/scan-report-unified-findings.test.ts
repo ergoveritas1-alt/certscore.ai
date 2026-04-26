@@ -209,6 +209,47 @@ test("high-risk gambling section review retains concrete offer and disclosure ad
   assert.deepEqual(packet?.evidence?.entities?.termsDisclosureAdjacent, ["false"]);
 });
 
+test("high-risk gambling section review retains concrete offer from page evidence rows", () => {
+  const issues = buildSectionReviewIssues({
+    accessibilityIssueRows: [],
+    consentAuditFindings: [],
+    pageEvidenceRows: [
+      {
+        evidence_id: "home-offer-1",
+        matched_text: "Get $1,000 in bonus bets when you sign up today.",
+        page_url: "https://www.draftkings.com/"
+      }
+    ],
+    policyBehaviorContradictions: [],
+    preconsentViolationRows: [],
+    runtimeArtifacts: {
+      third_party_request_domains: ["www.draftkings.com"]
+    },
+    scanReportReviewIssues: [],
+    sectionId: "high_risk_product_marketing_disclosures",
+    snapshot: {
+      final_url: "https://www.draftkings.com/",
+      registered_domain: "draftkings.com"
+    }
+  });
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: issues.map((issue) => ({
+      description: issue.description,
+      evidence: issue.evidence ?? [],
+      fallbackEvidence: issue.fallbackEvidence,
+      observedValue: issue.evidence?.[0] ?? null,
+      severity: issue.severity,
+      sourceType: "issue",
+      title: issue.title
+    })),
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+  const packet = packets.find((finding) => finding.unifiedFindingId === "leveraged_or_high_risk_product_promotion");
+
+  assert.ok(packet?.evidence?.entities?.offerSnippets?.some((snippet) => snippet.includes("$1,000 in bonus bets")));
+});
+
 test("supplemental runtime request evidence still promotes through unified packets", () => {
   const [packet] = buildSupplementalRuntimeUnifiedFindingPackets({
     disclaimer: "",

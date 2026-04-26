@@ -589,11 +589,13 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
   documentSources: Array<Record<string, unknown>>;
   events: ScanEventQueryRow[];
   macroEnrichment: Record<string, unknown> | null;
+  pageEvidence: Array<Record<string, unknown>>;
   policyEnrichment: Array<Record<string, unknown>>;
   policyReviewQueue: Array<Record<string, unknown>>;
   preconsentViolations: ScanPreconsentViolationRow[];
   runtimeArtifacts: Record<string, unknown> | null;
   signals: ScanSignalQueryRow[];
+  signalHits: Array<Record<string, unknown>>;
   snapshot: Record<string, unknown> | null;
   trackerVendors: Array<Record<string, unknown>>;
   validationRunId: string | null;
@@ -611,6 +613,8 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
     policyReviewQueue,
     documentSources,
     macroEnrichmentResult,
+    pageEvidenceResult,
+    signalHitsResult,
     validationRun
   ] = await Promise.all([
     query<ScanEventQueryRow>(
@@ -690,6 +694,22 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
     queryOne<Record<string, unknown>>(`select * from scan_macro_enrichments where scan_id = $1`, [scanId], { readOnly: true }).then(
       (row) => ({ data: row, error: null as QueryErrorLike })
     ).catch((error) => ({ data: null, error: { message: getErrorMessage(error) } as QueryErrorLike })),
+    query<Record<string, unknown>>(
+      `select evidence_id, page_url, page_type, page_role, matched_text, metadata
+         from scan_page_evidence
+        where scan_id = $1`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => ({ data: result.rows, error: null as QueryErrorLike }))
+      .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } as QueryErrorLike })),
+    query<Record<string, unknown>>(
+      `select id, signal_key, page_url, page_type, page_role, evidence_refs, payload
+         from scan_signal_hits
+        where scan_id = $1`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => ({ data: result.rows, error: null as QueryErrorLike }))
+      .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } as QueryErrorLike })),
     queryOne<{ id?: string }>(
       `select id
          from validation_runs
@@ -704,6 +724,12 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
   if (macroEnrichmentResult.error && !isMissingOptionalTableError(macroEnrichmentResult.error)) {
     throw new Error(`Failed to load scan macro enrichment: ${macroEnrichmentResult.error.message}`);
   }
+  if (pageEvidenceResult.error && !isMissingOptionalTableError(pageEvidenceResult.error)) {
+    throw new Error(`Failed to load scan page evidence: ${pageEvidenceResult.error.message}`);
+  }
+  if (signalHitsResult.error && !isMissingOptionalTableError(signalHitsResult.error)) {
+    throw new Error(`Failed to load scan signal hits: ${signalHitsResult.error.message}`);
+  }
 
   return {
     accessibilityRuleCounts,
@@ -711,11 +737,13 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
     documentSources,
     events,
     macroEnrichment: macroEnrichmentResult.data ?? null,
+    pageEvidence: pageEvidenceResult.data,
     policyEnrichment,
     policyReviewQueue,
     preconsentViolations,
     runtimeArtifacts,
     signals,
+    signalHits: signalHitsResult.data,
     snapshot,
     trackerVendors,
     validationRunId: validationRun?.id ?? null

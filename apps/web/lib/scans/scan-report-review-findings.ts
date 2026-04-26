@@ -139,9 +139,31 @@ const SPORTSBOOK_OFFER_PATTERN =
   /(?:\$\s?\d[\d,]*(?:\.\d{2})?\s*(?:in\s*)?(?:bonus\s+bets?|free\s+bets?|bet(?:ting)?\s+credits?)|(?:bonus\s+bets?|free\s+bets?|risk[- ]free\s+bet|no\s+sweat\s+bet|deposit\s+match|odds\s+boost|profit\s+boost)[^.!?\n]{0,120})/gi;
 
 function getHighRiskPromotionEvidence(input: {
+  pageEvidenceRows?: Array<Record<string, unknown>>;
   runtimeArtifacts: Record<string, unknown> | null;
+  signalHitRows?: Array<Record<string, unknown>>;
   snapshot: Record<string, unknown>;
 }) {
+  const pageEvidenceCandidates = (input.pageEvidenceRows ?? []).flatMap((row) => {
+    const metadataValues: string[] = [];
+    collectTextCandidates(row.metadata, metadataValues);
+    return [
+      getRecordString(row, "matched_text"),
+      getRecordString(row, "matchedText"),
+      ...metadataValues
+    ];
+  });
+  const signalHitCandidates = (input.signalHitRows ?? []).flatMap((row) => {
+    const payloadValues: string[] = [];
+    collectTextCandidates(row.payload, payloadValues);
+    return [
+      getRecordString(row, "signal_key"),
+      getRecordString(row, "signalKey"),
+      ...getRecordStringArray(row, "evidence_refs"),
+      ...getRecordStringArray(row, "evidenceRefs"),
+      ...payloadValues
+    ];
+  });
   const directCandidates = uniqueStrings([
     getRecordString(input.snapshot, "homepage_text"),
     getRecordString(input.snapshot, "homepageText"),
@@ -158,7 +180,9 @@ function getHighRiskPromotionEvidence(input: {
     getRecordString(input.runtimeArtifacts, "document_text"),
     getRecordString(input.runtimeArtifacts, "documentText"),
     getRecordString(input.runtimeArtifacts, "rendered_text"),
-    getRecordString(input.runtimeArtifacts, "renderedText")
+    getRecordString(input.runtimeArtifacts, "renderedText"),
+    ...pageEvidenceCandidates,
+    ...signalHitCandidates
   ]);
   const nestedCandidates: string[] = [];
   collectTextCandidates(input.runtimeArtifacts, nestedCandidates);
@@ -705,11 +729,13 @@ export function formatReviewIssueDescription(reason: string) {
 export function buildSectionReviewIssues(input: {
   accessibilityIssueRows: AccessibilityIssueRow[];
   consentAuditFindings: PreviewSampleFinding[];
+  pageEvidenceRows?: Array<Record<string, unknown>>;
   policyBehaviorContradictions: PolicyBehaviorContradiction[];
   preconsentViolationRows: PreconsentViolationRow[];
   runtimeArtifacts: Record<string, unknown> | null;
   scanReportReviewIssues: ScanReportReviewIssueRow[];
   sectionId: string;
+  signalHitRows?: Array<Record<string, unknown>>;
   snapshot: Record<string, unknown>;
 }) {
   const issues: CanonicalReviewIssue[] = [];
@@ -742,7 +768,9 @@ export function buildSectionReviewIssues(input: {
 
     if (gamblingContextDetected) {
       const promotionEvidence = getHighRiskPromotionEvidence({
+        pageEvidenceRows: input.pageEvidenceRows,
         runtimeArtifacts: input.runtimeArtifacts,
+        signalHitRows: input.signalHitRows,
         snapshot: input.snapshot
       });
       const matchedSnippet =

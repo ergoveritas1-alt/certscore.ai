@@ -192,6 +192,25 @@ export type AccessibilityRuleExampleRecord = {
 
 export type ScanValidationFindingRecord = ScanValidationFinding;
 
+export type ScanPageEvidenceRecord = {
+  evidence_id?: string | null;
+  matched_text?: string | null;
+  metadata?: unknown;
+  page_role?: string | null;
+  page_type?: string | null;
+  page_url?: string | null;
+};
+
+export type ScanSignalHitRecord = {
+  evidence_refs?: unknown;
+  id?: string | null;
+  page_role?: string | null;
+  page_type?: string | null;
+  page_url?: string | null;
+  payload?: unknown;
+  signal_key?: string | null;
+};
+
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const message = error?.message ?? "";
   return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
@@ -523,11 +542,13 @@ async function loadScanDetailRecord(input: {
     documentSources,
     events,
     macroEnrichment,
+    pageEvidence,
     policyEnrichment,
     policyReviewQueue,
     preconsentViolations,
     runtimeArtifacts,
     signals,
+    signalHits,
     snapshot,
     trackerVendors,
     validationRunId
@@ -1120,6 +1141,7 @@ async function loadScanDetailRecord(input: {
       macroEnrichment
         ? (stripTimestampFields(macroEnrichment as Record<string, unknown>) satisfies Exclude<ScanMacroEnrichmentRecord, null>)
         : null,
+    pageEvidence: pageEvidence as ScanPageEvidenceRecord[],
     preconsentViolations: normalizedPreconsentViolations,
     accessibilityRuleCounts: normalizedAccessibilityRuleCounts,
     accessibilityRuleExamples: normalizedAccessibilityRuleExamples,
@@ -1133,6 +1155,7 @@ async function loadScanDetailRecord(input: {
     policyEnrichment: normalizedPolicyEnrichment,
     primaryPolicyEnrichment,
     policyReviewQueue: normalizedPolicyReviewQueue,
+    signalHits: signalHits as ScanSignalHitRecord[],
     signalEnrichmentWorkflow,
     domainBenchmark,
     validationFindings,

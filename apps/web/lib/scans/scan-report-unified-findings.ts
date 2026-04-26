@@ -212,11 +212,13 @@ export function buildScanReportUnifiedFindingState(
       const issues = buildSectionReviewIssues({
         accessibilityIssueRows,
         consentAuditFindings,
+        pageEvidenceRows: scanRecord.pageEvidence,
         policyBehaviorContradictions,
         preconsentViolationRows,
         runtimeArtifacts,
         scanReportReviewIssues,
         sectionId: section.id,
+        signalHitRows: scanRecord.signalHits,
         snapshot
       });
       const issueFindings = buildReviewFindings({
