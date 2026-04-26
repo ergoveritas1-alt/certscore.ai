@@ -195,6 +195,38 @@ test("buildRegulatoryLenses uses gambling-specific FTC copy for sensitive tracki
   assert.doesNotMatch(ftcLens?.summary ?? "", /Health-context/i);
 });
 
+test("buildRegulatoryLenses activates financial claims lens for gambling-sensitive tracking", () => {
+  const lenses = buildRegulatoryLenses(
+    [
+      makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+        severity: "critical",
+        shortSummary: "Pre-consent tracking was observed on a sports betting or gambling site."
+      }),
+      makeFinding("session_recording_services_detected", "Session recording services detected", {
+        severity: "high",
+        shortSummary: "FullStory session replay was observed before consent."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 95
+    },
+    {
+      benchmarkIndustry: "Sports betting / gambling",
+      regulatoryRisk: makeRegulatoryRisk({
+        topRiskDrivers: [{ key: "sensitive_context_tracking", label: "Sensitive-context tracking before consent", impact: 26 }]
+      })
+    }
+  );
+
+  const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
+  assert.ok(financialLens);
+  assert.equal(financialLens?.minimal, undefined);
+  assert.equal(financialLens?.ratingLabel, "Watch");
+  assert.match(financialLens?.summary ?? "", /High-risk gambling promotions and financial-behavior context/i);
+  assert.match(financialLens?.findings.join(" "), /age eligibility, bonus-term, and responsible-gambling disclosure review/i);
+});
+
 test("buildRegulatoryLenses treats pre-consent cookie findings as GDPR tracking risk", () => {
   const lenses = buildRegulatoryLenses(
     [
