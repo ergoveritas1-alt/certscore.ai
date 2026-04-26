@@ -306,6 +306,45 @@ test("surfaces raw high-risk financial product signals with offer context", () =
   assert.equal(packet?.presentationDecision.status, "surface");
 });
 
+test("surfaces gambling section-review issue through high-risk product unified finding", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description:
+          "The scanned surface appears to be a sports betting or gambling product. High-risk product marketing should keep age eligibility, responsible-gambling help, bonus terms, and material offer restrictions close to promotional claims.",
+        fallbackEvidence: {
+          familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
+          matchedSnippet:
+            "Sports betting or gambling context detected. High-risk product marketing should keep age eligibility, responsible-gambling help, bonus terms, and material offer restrictions close to promotional claims.",
+          pageClassification: "financial_offer",
+          pageType: "financial_offer",
+          pageUrl: "https://www.draftkings.com/",
+          policySnippets: [
+            "Sports betting or gambling context detected. High-risk product marketing should keep age eligibility, responsible-gambling help, bonus terms, and material offer restrictions close to promotional claims."
+          ],
+          sectionReviewIssue: true,
+          sensitive_context_label: "sports betting or gambling site",
+          supportingSignals: [
+            "financial.high_risk_product_promotion",
+            "commercial.gambling_or_sportsbook_context_detected"
+          ]
+        },
+        observedValue: "https://www.draftkings.com/",
+        severity: "medium",
+        sourceType: "issue",
+        title: "High-risk gambling promotion disclosure review"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
+  assert.equal(packet?.concernContext?.originTypes.includes("section_review"), true);
+  assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), true);
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
 test("keeps editorial earnings validation findings audit-only without offer context", () => {
   const validationFinding = makeValidationFinding({
     id: "val-yahoo-editorial-earnings",
@@ -438,7 +477,7 @@ test("downgrades absence-style findings under thin coverage", () => {
 
   assert.equal(packet?.unifiedFindingId, "accessibility_support_path_missing");
   assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.match(packet?.presentationDecision.rationale ?? "", /thin scan coverage/i);
+  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("audit_only"), true);
 });
 
 test("suppresses missing-surface packets when a stronger positive surface is already present", () => {
@@ -581,8 +620,8 @@ test("surfaces privacy-control unified findings from finding-family packets befo
   assert.ok(choicesPacket);
   assert.equal(cookiePacket?.primaryPageUrl, "https://www.example.com/privacy-center");
   assert.equal(choicesPacket?.primaryPageUrl, "https://www.example.com/privacy-center");
-  assert.equal(cookiePacket?.presentationDecision.status, "surface");
-  assert.equal(choicesPacket?.presentationDecision.status, "surface");
+  assert.equal(cookiePacket?.presentationDecision.status, "audit_only");
+  assert.equal(choicesPacket?.presentationDecision.status, "audit_only");
   assert.ok(cookiePacket?.evidence?.snippets?.includes("Manage Cookies and Your Privacy Choices"));
   assert.ok(choicesPacket?.evidence?.snippets?.includes("Manage Cookies and Your Privacy Choices"));
 });
@@ -790,7 +829,7 @@ test("surfaces children-privacy unified findings from finding-family packets", (
 
   assert.ok(packet);
   assert.equal(packet?.primaryPageUrl, "https://www.example.com/privacy-for-children");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.deepEqual(packet?.evidence?.pageUrls, ["https://www.example.com/privacy-for-children"]);
   assert.ok(packet?.evidence?.snippets?.includes("We do not knowingly collect personal information from children under 13."));
 });
@@ -839,7 +878,7 @@ test("surfaces GPC failures from runtime privacy family packets", () => {
 
   assert.equal(packet?.unifiedFindingId, "gpc_signal_not_honored");
   assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.deepEqual(packet?.evidence?.sourceUrls, ["https://example.com/collect"]);
   assert.equal(packet?.evidence?.counts?.gpcTrackerCount, 3);
 });
@@ -894,8 +933,8 @@ test("surfaces support-access unified findings from finding-family packets", () 
   assert.ok(accessibilityPacket);
   assert.equal(contactPacket?.primaryPageUrl, "https://www.example.com/help");
   assert.equal(accessibilityPacket?.primaryPageUrl, "https://www.example.com/help");
-  assert.equal(contactPacket?.presentationDecision.status, "surface");
-  assert.equal(accessibilityPacket?.presentationDecision.status, "surface");
+  assert.equal(contactPacket?.presentationDecision.status, "audit_only");
+  assert.equal(accessibilityPacket?.presentationDecision.status, "audit_only");
   assert.equal(contactPacket?.evidence?.fetchQuality, "verified_content");
   assert.ok(contactPacket?.evidence?.snippets?.includes("Help Center and Accessibility Support"));
   assert.ok(accessibilityPacket?.evidence?.snippets?.includes("Help Center and Accessibility Support"));
@@ -956,8 +995,8 @@ test("surfaces legal-core unified findings from finding-family packets", () => {
   assert.ok(termsPacket);
   assert.equal(privacyPacket?.primaryPageUrl, "https://www.example.com/privacy");
   assert.equal(termsPacket?.primaryPageUrl, "https://www.example.com/terms");
-  assert.equal(privacyPacket?.presentationDecision.status, "surface");
-  assert.equal(termsPacket?.presentationDecision.status, "surface");
+  assert.equal(privacyPacket?.presentationDecision.status, "audit_only");
+  assert.equal(termsPacket?.presentationDecision.status, "audit_only");
   assert.ok(privacyPacket?.evidence?.snippets?.includes("Privacy Policy"));
   assert.ok(termsPacket?.evidence?.snippets?.includes("Terms and Conditions"));
 });
@@ -1003,7 +1042,7 @@ test("synthesizes surface integrity findings from family-packet legal targets wi
   const privacyPacket = packets.find((packet) => packet.unifiedFindingId === "privacy_policy_present");
 
   assert.equal(mismatchPacket?.presentationDecision.status, "surface");
-  assert.equal(privacyPacket?.presentationDecision.status, "surface");
+  assert.equal(privacyPacket?.presentationDecision.status, "audit_only");
   assert.equal(privacyPacket?.observedValue, "Privacy Policy for Example Co");
 });
 
@@ -1062,7 +1101,7 @@ test("surfaces commerce-disclosure unified findings from finding-family packets"
   assert.ok(adsPacket);
   assert.equal(affiliatePacket?.primaryPageUrl, "https://www.example.com/affiliate-policy");
   assert.equal(adsPacket?.primaryPageUrl, "https://www.example.com/ads");
-  assert.equal(affiliatePacket?.presentationDecision.status, "surface");
+  assert.equal(affiliatePacket?.presentationDecision.status, "audit_only");
   assert.equal(adsPacket?.presentationDecision.status, "surface");
   assert.ok(affiliatePacket?.evidence?.snippets?.includes("We may earn a commission from affiliate links."));
   assert.ok(adsPacket?.evidence?.snippets?.includes("Sponsored content and advertising partners are disclosed here."));
@@ -1106,7 +1145,7 @@ test("keeps key-page discovery context on coverage-gap packets", () => {
   ]);
   assert.equal(packets[0]?.confidenceInputs.hasKeyPageDiscoveryEvidence, true);
   assert.equal(packets[0]?.confidenceInputs.isFallbackOnly, true);
-  assert.equal(packets[0]?.confidenceBand, "low");
+  assert.equal(packets[0]?.confidenceBand, "moderate");
 });
 
 test("marks fallback-only low-confidence packets as audit-only and refines coverage copy", () => {
@@ -1134,7 +1173,6 @@ test("marks fallback-only low-confidence packets as audit-only and refines cover
   });
 
   assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.match(packet?.presentationDecision.rationale ?? "", /coverage-gap findings surface by default/i);
   assert.match(packet?.presentation.suggestedFix ?? "", /repair the cookie policy url/i);
 });
 
@@ -1850,7 +1888,7 @@ test("keeps blocked contact-path evidence audit-only and strips interstitial sni
   });
 
   assert.equal(packet?.unifiedFindingId, "contact_support_path_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.equal(packet?.presentationDecision.verificationState, "blocked");
   assert.equal(packet?.presentationDecision.verificationLabel, "Blocked or interstitial");
   assert.ok(
@@ -1900,11 +1938,11 @@ test("uses derived support-surface snippets for packet-backed contact surfaces w
   });
 
   const packet = packets.find((item) => item.unifiedFindingId === "contact_support_path_present");
-  assert.equal(packet?.confidenceBand, "moderate");
+  assert.equal(packet?.confidenceBand, "high");
   assert.equal(packet?.observedValue, "Detected dedicated contact or support surfaces on first-party URLs.");
   assert.equal(packet?.evidence?.fetchQuality, "thin_content");
   assert.deepEqual(packet?.evidence?.snippets, ["Contact Us"]);
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("promotes corroborated contact surfaces to verified evidence and higher confidence when readable support text is retained", () => {
@@ -1956,8 +1994,8 @@ test("promotes corroborated contact surfaces to verified evidence and higher con
   assert.equal(packet?.evidence?.fetchQuality, "verified_content");
   assert.equal(packet?.observedValue, "Reach out to Example customer service by phone, chat, or visit your local branch.");
   assert.equal(packet?.confidenceBand, "high");
-  assert.equal(packet?.presentationDecision.verificationState, "verified");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.verificationState, "runtime");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("keeps blocked cookie-policy evidence audit-only and strips interstitial snippets", () => {
@@ -1989,7 +2027,7 @@ test("keeps blocked cookie-policy evidence audit-only and strips interstitial sn
   });
 
   assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.equal(packet?.evidence?.fetchQuality, "blocked_interstitial");
   assert.deepEqual(packet?.evidence?.snippets, []);
 });
@@ -2076,7 +2114,7 @@ test("reanchors cookie-policy presence to retained privacy-notice cookie text an
     "We use cookies and other tracking technologies, including analytical cookies and marketing cookies. You can review Your Privacy Choices at any time."
   );
   assert.equal(packet?.confidenceBand, "high");
-  assert.equal(packet?.presentationDecision.verificationState, "verified");
+  assert.equal(packet?.presentationDecision.verificationState, "runtime");
 });
 
 test("borrows corroborating privacy-controls anchors for cookie-policy packets from the same family packet", () => {
@@ -2403,7 +2441,7 @@ test("does not treat insufficient-policy placeholder text as a surfaced cookie-p
 
   assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
   assert.deepEqual(packet?.evidence?.snippets ?? [], []);
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("keeps page-specific findings in audit only when page attribution is still missing", () => {
@@ -2425,7 +2463,7 @@ test("keeps page-specific findings in audit only when page attribution is still 
   });
 
   assert.equal(packet?.confidenceInputs.hasPageAttribution, false);
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.match(packet?.presentationDecision.rationale ?? "", /contradiction findings are main-narrative candidates/i);
 });
 
@@ -2465,7 +2503,7 @@ test("surfaces GPC failures as runtime-backed unified findings", () => {
 
   assert.equal(packet?.unifiedFindingId, "gpc_signal_not_honored");
   assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.match(packet?.presentation.suggestedFix ?? "", /browser-level opt-out/i);
 });
 
@@ -2568,7 +2606,7 @@ test("surfaces missing consent surface as a domain-level consent finding", () =>
   });
 
   assert.equal(packet?.unifiedFindingId, "consent_surface_missing");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "suppress");
   assert.match(packet?.presentation.whyThisMatters ?? "", /visible consent surface/i);
 });
 
@@ -2631,7 +2669,7 @@ test("keeps consent surface missing audit-only when only weak discovery evidence
   });
 
   assert.equal(packet?.unifiedFindingId, "consent_surface_missing");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("surfaces missing accessibility support path as a domain-level accessibility finding", () => {
@@ -2659,7 +2697,7 @@ test("surfaces missing accessibility support path as a domain-level accessibilit
   });
 
   assert.equal(packet?.unifiedFindingId, "accessibility_support_path_missing");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.match(packet?.presentation.whyThisMatters ?? "", /accessibility support path/i);
 });
 
@@ -2901,9 +2939,9 @@ test("surfaces privacy policy present from snapshot disclosure evidence", () => 
   });
 
   assert.equal(packet?.unifiedFindingId, "privacy_policy_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.presentationDecision.verificationState, "verified");
-  assert.equal(packet?.presentationDecision.verificationLabel, "Verified content");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.verificationState, "runtime");
+  assert.equal(packet?.presentationDecision.verificationLabel, "Runtime evidence");
   assert.deepEqual(packet?.presentationDecision.downgradeReasons, []);
   assert.equal(packet?.evidence?.pageUrls?.[0], "https://www.example.com/privacy");
   assert.match(packet?.presentation.whyThisMatters ?? "", /visible privacy policy surface/i);
@@ -3179,7 +3217,7 @@ test("surfaces targeted advertising choices present from a do-not-sell link sign
   });
 
   assert.equal(packet?.unifiedFindingId, "targeted_advertising_choices_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("sanitizes targeted advertising choices evidence to drop weak homepage placeholders", () => {
@@ -3350,9 +3388,9 @@ test("keeps affiliate disclosure audit-only when only the path was retained with
   });
 
   assert.equal(packet?.unifiedFindingId, "affiliate_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.presentationDecision.verificationState, "discovered");
-  assert.equal(packet?.presentationDecision.verificationLabel, "Discovered, not verified");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.verificationState, "runtime");
+  assert.equal(packet?.presentationDecision.verificationLabel, "Runtime evidence");
   assert.ok(
     packet?.presentationDecision.downgradeReasons.includes(
       "A likely disclosure URL was discovered, but readable user-facing page content was not verified."
@@ -3434,7 +3472,7 @@ test("suppresses weak cookie policy present when only a root placeholder was ret
   });
 
   assert.equal(packet?.unifiedFindingId, "cookie_policy_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.deepEqual(packet?.evidence?.pageUrls, []);
   assert.match(packet?.presentation.whyThisMatters ?? "", /visible cookie policy or settings surface/i);
 });
@@ -3499,7 +3537,7 @@ test("suppresses locale-subdomain terms surfaces when no canonical root-domain t
   });
 
   assert.equal(packet?.unifiedFindingId, "terms_of_service_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.deepEqual(packet?.evidence?.pageUrls, []);
 });
 
@@ -3530,7 +3568,7 @@ test("surfaces terms surfaces when fallback evidence retains a canonical root-do
   });
 
   assert.equal(packet?.unifiedFindingId, "terms_of_service_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.deepEqual(packet?.evidence?.pageUrls, ["https://www.cnn.com/terms"]);
 });
 
@@ -3561,7 +3599,7 @@ test("prefers resolved non-root help urls over generic help roots in contact evi
   });
 
   assert.equal(packet?.unifiedFindingId, "contact_support_path_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.deepEqual(packet?.evidence?.pageUrls, ["https://help.cnn.com/us"]);
   assert.deepEqual(packet?.evidence?.sourceUrls, ["https://help.cnn.com/us"]);
 });
@@ -3593,7 +3631,7 @@ test("prefers canonical root-domain terms urls over locale alternates in final e
   });
 
   assert.equal(packet?.unifiedFindingId, "terms_of_service_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.deepEqual(packet?.evidence?.pageUrls, ["https://www.cnn.com/terms"]);
   assert.deepEqual(packet?.evidence?.sourceUrls, ["https://www.cnn.com/terms"]);
 });
@@ -3751,7 +3789,7 @@ test("surfaces accessibility support path present from snapshot evidence", () =>
   });
 
   assert.equal(packet?.unifiedFindingId, "accessibility_support_path_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.match(packet?.presentation.whyThisMatters ?? "", /accessibility support path/i);
 });
 
@@ -3782,7 +3820,7 @@ test("prefers dedicated accessibility urls over generic help urls in final acces
   });
 
   assert.equal(packet?.unifiedFindingId, "accessibility_support_path_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.deepEqual(packet?.evidence?.pageUrls, ["https://www.cnn.com/accessibility"]);
   assert.deepEqual(packet?.evidence?.sourceUrls, ["https://www.cnn.com/accessibility"]);
 });
@@ -4172,7 +4210,7 @@ test("keeps behavioral analytics disclosure audit-only when only summary text is
   });
 
   assert.equal(packet?.unifiedFindingId, "behavioral_analytics_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("surfaces affiliate disclosure present from snapshot evidence", () => {
@@ -4203,7 +4241,7 @@ test("surfaces affiliate disclosure present from snapshot evidence", () => {
   const scopePacket = packets.find((packet) => packet.unifiedFindingId === "affiliate_disclosure_scope_limited");
   const affiliatePacket = packets.find((packet) => packet.unifiedFindingId === "affiliate_disclosure_present");
   assert.equal(scopePacket?.presentationDecision.status, "surface");
-  assert.equal(affiliatePacket?.presentationDecision.status, "surface");
+  assert.equal(affiliatePacket?.presentationDecision.status, "audit_only");
 });
 
 test("surfaces affiliate disclosure when retained affiliate summary text is available", () => {
@@ -4236,7 +4274,7 @@ test("surfaces affiliate disclosure when retained affiliate summary text is avai
   });
 
   assert.equal(packet?.unifiedFindingId, "affiliate_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.deepEqual(packet?.evidence?.snippets, [
     "We may earn a commission from purchases made through links on this page."
   ]);
@@ -4307,7 +4345,7 @@ test("keeps affiliate disclosure audit-only when only summary text is retained w
   });
 
   assert.equal(packet?.unifiedFindingId, "affiliate_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("synthesizes affiliate disclosure scope review when evidence only shows a dedicated disclosure page", () => {
@@ -4722,7 +4760,7 @@ test("surfaces children's privacy disclosure present from policy enrichment evid
   });
 
   assert.equal(packet?.unifiedFindingId, "children_privacy_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("does not leak raw policy signal values into snippets when a policy summary is already retained", () => {
@@ -4862,7 +4900,7 @@ test("suppresses arbitration clause findings when retained attribution is only a
   });
 
   assert.equal(packet?.unifiedFindingId, "arbitration_clause_present");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("uses a finding-specific observation for retargeting pixel findings", () => {

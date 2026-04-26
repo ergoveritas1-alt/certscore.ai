@@ -54,6 +54,11 @@ import {
   deriveHighRiskTrackingContext,
   formatHighRiskVendorSummary
 } from "./high-risk-tracking-context";
+import {
+  classifyRuntimeCookieCategory,
+  isFunctionalCookieExcludedFromTrackingEvidence,
+  isNonEssentialCookieCategory
+} from "./runtime-cookie-evidence";
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
@@ -86,6 +91,18 @@ function formatCompactValue(value: unknown) {
 function getRecordStringArray(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+function getInitialNonEssentialCookieNames(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  return uniqueStrings(
+    getRecordStringArray(runtimeArtifacts, "initial_cookie_names").filter((name) => {
+      if (isFunctionalCookieExcludedFromTrackingEvidence(name)) {
+        return false;
+      }
+
+      return isNonEssentialCookieCategory(classifyRuntimeCookieCategory(name));
+    })
+  );
 }
 
 function getRecordNumber(record: Record<string, unknown> | null | undefined, key: string) {
@@ -440,6 +457,12 @@ export function buildSectionReviewIssues(input: {
   const issues: CanonicalReviewIssue[] = [];
 
   if (input.sectionId === "high_risk_product_marketing_disclosures") {
+    const pageUrl =
+      typeof input.snapshot?.final_url === "string" && /^https?:\/\//i.test(input.snapshot.final_url)
+        ? input.snapshot.final_url
+        : typeof input.snapshot?.registered_domain === "string" && input.snapshot.registered_domain.trim().length > 0
+          ? `https://${input.snapshot.registered_domain}/`
+          : null;
     const highRiskContext = deriveHighRiskTrackingContext({
       hostname:
         typeof input.snapshot?.registered_domain === "string"
@@ -460,15 +483,23 @@ export function buildSectionReviewIssues(input: {
       /\b(gambling|sportsbook|sports betting|casino|wager|bonus bet|promo|1-800-gambler|draftkings|fanduel)\b/i.test(runtimeText);
 
     if (gamblingContextDetected) {
+      const matchedSnippet =
+        "Sports betting or gambling context detected. High-risk product marketing should keep age eligibility, responsible-gambling help, bonus terms, and material offer restrictions close to promotional claims.";
       issues.push({
         description:
           "The scanned surface appears to be a sports betting or gambling product. High-risk product marketing should keep age eligibility, responsible-gambling help, bonus terms, and material offer restrictions close to promotional claims.",
         evidence: uniqueStrings([
-          typeof input.snapshot?.registered_domain === "string" ? input.snapshot.registered_domain : null,
+          pageUrl,
           ...getRecordStringArray(input.runtimeArtifacts, "third_party_request_domains").slice(0, 4)
         ]),
         fallbackEvidence: {
           familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
+          matchedSnippet,
+          pageClassification: "financial_offer",
+          pageType: "financial_offer",
+          pageUrl,
+          policySnippets: [matchedSnippet],
+          sectionReviewIssue: true,
           sensitive_context_label: "sports betting or gambling site",
           supportingSignals: [
             "financial.high_risk_product_promotion",
@@ -633,6 +664,30 @@ export function buildSectionReviewIssues(input: {
           ? "Sensitive-data collection with third-party tracking present"
           : "Pre-consent tracking incidents detected"
     });
+  }
+
+  if (input.sectionId === "tracking_third_party_ecosystem" && input.preconsentViolationRows.length === 0) {
+    const initialNonEssentialCookieNames = getInitialNonEssentialCookieNames(input.runtimeArtifacts);
+    if (initialNonEssentialCookieNames.length > 0) {
+      const initialCookieDomains = uniqueStrings(getRecordStringArray(input.runtimeArtifacts, "initial_cookie_domains"));
+      issues.push({
+        description:
+          `${initialNonEssentialCookieNames.length} non-essential cookie${initialNonEssentialCookieNames.length === 1 ? " was" : "s were"} retained in the initial runtime payload before CertScore had enough consent-timing evidence to promote a pre-consent tracking finding.`,
+        evidence: initialNonEssentialCookieNames.slice(0, 6),
+        fallbackEvidence: {
+          initial_cookie_domains: initialCookieDomains,
+          initial_cookie_names: initialNonEssentialCookieNames,
+          preconsent_cookie_names: initialNonEssentialCookieNames,
+          signalKey: "privacy.preconsent_tracking_detected",
+          signalValue: true,
+          source: "initial_runtime_cookie_inventory",
+          supportingSignals: ["privacy.preconsent_tracking_detected"],
+          unifiedFindingId: "preconsent_tracking"
+        },
+        severity: "medium",
+        title: "Initial tracking cookies retained before consent verification"
+      });
+    }
   }
 
   if (input.sectionId === "tracking_third_party_ecosystem") {

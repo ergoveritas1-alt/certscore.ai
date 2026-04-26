@@ -19,6 +19,10 @@ import {
   isFunctionalCookieExcludedFromTrackingEvidence,
   isNonEssentialCookieCategory
 } from "../../lib/scans/runtime-cookie-evidence";
+import {
+  buildUnifiedFindingDisplayPackets,
+  type UnifiedFindingCandidate
+} from "../../lib/scans/unified-findings";
 
 type PreviewSnapshotSource = {
   accessPostureClass?: ScanSnapshot["accessPostureClass"] | null;
@@ -353,6 +357,61 @@ function pushPrioritizedFinding(findings: PreviewSampleFinding[], finding: Previ
   }
 }
 
+function mapExecutiveSeverityToPreviewSeverity(severity: "critical" | "high" | "medium" | "low") {
+  if (severity === "critical" || severity === "high") {
+    return "high" as const;
+  }
+  if (severity === "medium") {
+    return "medium" as const;
+  }
+  return "low" as const;
+}
+
+function mapExecutiveFindingToPreviewTitle(findingId: string, shortSummary: string) {
+  switch (findingId) {
+    case "preconsent_tracking":
+      return "Tracking activity observed before consent";
+    case "reject_option_missing_or_hidden":
+      return "Cookie preferences control not obvious";
+    case "privacy_policy_missing_surface":
+      return "Privacy policy not detected";
+    case "terms_missing_surface":
+      return "Terms or disclosure link not detected";
+    case "contact_page_missing_surface":
+      return "Public contact path not detected";
+    case "policy_clarity_risk":
+      return "Disclosure clarity remains weak";
+    default:
+      return shortSummary;
+  }
+}
+
+function buildPreviewFindingsFromUnifiedCandidates(candidates: UnifiedFindingCandidate[]) {
+  if (candidates.length === 0) {
+    return [] as PreviewSampleFinding[];
+  }
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: candidates,
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+  const previewPackets = packets.filter((packet) => packet.presentationDecision.status !== "suppress");
+
+  return previewPackets.map((packet): PreviewSampleFinding => ({
+    affectedPage: "Homepage",
+    category:
+      packet.details?.family === "accessibility"
+        ? "accessibility"
+        : packet.details?.family === "consent_tracking" || packet.details?.family === "sensitive_data"
+          ? "privacy"
+          : "legal",
+    description: packet.summary,
+    severity: mapExecutiveSeverityToPreviewSeverity(packet.severity),
+    title: mapExecutiveFindingToPreviewTitle(packet.unifiedFindingId, packet.title)
+  }));
+}
+
 function formatCountLabel(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -620,6 +679,7 @@ function buildNormalizedUrlscanFallbackEvidence(snapshot: UrlscanFallbackSnapsho
       cookieDomains: snapshot.cookieDomains,
       cookieNames: trackingCookieNames,
       diagnosticCookieNamesExcludedFromTrackingEvidence: snapshot.cookieNames.filter((name) => !trackingCookieNames.includes(name)),
+      requestUrls: snapshot.requestUrls,
       technologyNames: snapshot.technologyNames,
       serverNames: snapshot.serverNames,
       topDomains: snapshot.topDomains,
@@ -999,6 +1059,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
   snapshot: PreviewSnapshotSource;
 }): PreviewScanPayload {
   const findings: PreviewSampleFinding[] = [];
+  const unifiedPreviewCandidates: UnifiedFindingCandidate[] = [];
   const verifiedSurfaces = deriveVerifiedPublicSurfaces(input.snapshot);
   const evidenceRichZeroPagePreview = isEvidenceRichZeroPagePreview(input.snapshot, verifiedSurfaces);
   const observableConsentSurface = hasObservableConsentSurface(input.snapshot);
@@ -1151,49 +1212,78 @@ export function buildPreviewPayloadFromSnapshot(input: {
       : null
   );
 
-  pushFinding(
-    findings,
-    observableConsentSurface &&
-    hasPreconsentTrackingEvidence(input.snapshot)
-      ? {
-          affectedPage: "Homepage",
-          category: "privacy",
-          severity: "high",
-          title: "Tracking activity observed before consent",
-          description: describePreconsentTrackingFinding({
-            hostname: input.hostname,
-            snapshot: input.snapshot
-          })
-        }
-      : null
-  );
+  if (observableConsentSurface && hasPreconsentTrackingEvidence(input.snapshot)) {
+    unifiedPreviewCandidates.push({
+      description: describePreconsentTrackingFinding({
+        hostname: input.hostname,
+        snapshot: input.snapshot
+      }),
+      fallbackEvidence: {
+        consentActionableChoiceObserved: input.snapshot.rejectAllPresent === true || input.snapshot.granularPreferencesPresent === true,
+        consentSurfaceObserved: true,
+        cookieBannerPresent: input.snapshot.cookieBannerPresent,
+        pageUrl: input.normalizedUrl,
+        preconsent_tracking_detected: true,
+        sourceUrls: [input.normalizedUrl],
+        signalKey: "privacy.preconsent_tracking_detected",
+        signalValue: true,
+        supportingSignals: ["privacy.preconsent_tracking_detected"]
+      },
+      observedValue: "Tracking before consent observed",
+      severity: "high",
+      signalKey: "privacy.preconsent_tracking_detected",
+      signalLabel: "Tracking before consent",
+      signalSource: "snapshot_signal",
+      sourceType: "signal",
+      title: "Tracking before consent"
+    });
+  }
 
-  pushFinding(
-    findings,
-    !siteSurfaceUnverified && !secondarySurfaceCoverageLimited && !input.snapshot.privacyPolicyPresent
-      ? {
-          affectedPage: "Homepage",
-          category: "legal",
-          severity: "high",
-          title: "Privacy policy not detected",
-          description: "The live preview did not detect a likely privacy policy page from the scanned site surface."
-        }
-      : null
-  );
+  if (!siteSurfaceUnverified && !secondarySurfaceCoverageLimited && !input.snapshot.privacyPolicyPresent) {
+    unifiedPreviewCandidates.push({
+      description: "The live preview did not detect a likely privacy policy page from the scanned site surface.",
+      fallbackEvidence: {
+        keyPageAttemptCount: input.snapshot.pagesScanned,
+        pageUrl: input.normalizedUrl,
+        privacyPolicyPresent: false,
+        signalKey: "disclosure.privacy_policy_surface_missing",
+        signalValue: true,
+        sourceUrls: [input.normalizedUrl],
+        surfaceMissingConfirmed: input.snapshot.pagesScanned >= 3 && input.snapshot.partialScan !== true
+      },
+      observedValue: "Privacy policy missing",
+      severity: "high",
+      signalKey: "disclosure.privacy_policy_surface_missing",
+      signalLabel: "Privacy policy missing",
+      signalSource: "snapshot_signal",
+      sourceType: "signal",
+      title: "Privacy policy missing"
+    });
+  }
 
-  pushFinding(
-    findings,
-    observableConsentSurface && !input.snapshot.rejectAllPresent && !input.snapshot.granularPreferencesPresent
-      ? {
-          affectedPage: "Cookie banner",
-          category: "privacy",
-          severity: "medium",
-          title: "Cookie preferences control not obvious",
-          description:
-            "A consent surface was observed, but a clear reject-all or granular preferences path was not detected."
-        }
-      : null
-  );
+  if (observableConsentSurface && !input.snapshot.rejectAllPresent && !input.snapshot.granularPreferencesPresent) {
+    unifiedPreviewCandidates.push({
+      description: "A consent surface was observed, but a clear reject-all or granular preferences path was not detected.",
+      fallbackEvidence: {
+        consentActionableChoiceObserved: false,
+        consentSurfaceObserved: true,
+        cookieBannerPresent: input.snapshot.cookieBannerPresent,
+        pageUrl: input.normalizedUrl,
+        reject_button_missing: true,
+        signalKey: "privacy.dark_pattern_reject_button_missing",
+        signalValue: true,
+        supportingSignals: ["privacy.dark_pattern_reject_button_missing"],
+        sourceUrls: [input.normalizedUrl]
+      },
+      observedValue: "Reject or granular control not detected",
+      severity: "medium",
+      signalKey: "privacy.dark_pattern_reject_button_missing",
+      signalLabel: "Reject button missing",
+      signalSource: "snapshot_signal",
+      sourceType: "signal",
+      title: "Reject button missing"
+    });
+  }
 
   pushFinding(
     findings,
@@ -1209,33 +1299,53 @@ export function buildPreviewPayloadFromSnapshot(input: {
       : null
   );
 
-  pushFinding(
-    findings,
-    !siteSurfaceUnverified && !secondarySurfaceCoverageLimited && !input.snapshot.termsOfServicePresent
-      ? {
-          affectedPage: "Footer",
-          category: "legal",
-          severity: "medium",
-          title: "Terms or disclosure link not detected",
-          description:
-            "The preview did not clearly detect a likely terms, conditions, or comparable disclosure page from the scanned site surface."
-        }
-      : null
-  );
+  if (!siteSurfaceUnverified && !secondarySurfaceCoverageLimited && !input.snapshot.termsOfServicePresent) {
+    unifiedPreviewCandidates.push({
+      description: "The preview did not clearly detect a likely terms, conditions, or comparable disclosure page from the scanned site surface.",
+      fallbackEvidence: {
+        keyPageAttemptCount: input.snapshot.pagesScanned,
+        pageUrl: input.normalizedUrl,
+        signalKey: "disclosure.terms_of_service_surface_missing",
+        signalValue: true,
+        sourceUrls: [input.normalizedUrl],
+        surfaceMissingConfirmed: input.snapshot.pagesScanned >= 3 && input.snapshot.partialScan !== true,
+        termsOfServicePresent: false
+      },
+      observedValue: "Terms or disclosure page missing",
+      severity: "medium",
+      signalKey: "disclosure.terms_of_service_surface_missing",
+      signalLabel: "Terms surface missing",
+      signalSource: "snapshot_signal",
+      sourceType: "signal",
+      title: "Terms surface missing"
+    });
+  }
 
-  pushFinding(
-    findings,
-    !siteSurfaceUnverified && !secondarySurfaceCoverageLimited && !input.snapshot.contactPagePresent
-      ? {
-          affectedPage: "Footer",
-          category: "legal",
-          severity: "medium",
-          title: "Public contact path not detected",
-          description:
-            "The preview did not clearly detect a public contact page or contact route from the scanned site surface."
-        }
-      : null
-  );
+  if (!siteSurfaceUnverified && !secondarySurfaceCoverageLimited && !input.snapshot.contactPagePresent) {
+    unifiedPreviewCandidates.push({
+      description: "The preview did not clearly detect a public contact page or contact route from the scanned site surface.",
+      fallbackEvidence: {
+        contactPagePresent: false,
+        keyPageAttemptCount: input.snapshot.pagesScanned,
+        pageUrl: input.normalizedUrl,
+        signalKey: "disclosure.contact_page_surface_missing",
+        signalValue: true,
+        sourceUrls: [input.normalizedUrl],
+        surfaceMissingConfirmed: input.snapshot.pagesScanned >= 3 && input.snapshot.partialScan !== true
+      },
+      observedValue: "Public contact path missing",
+      severity: "medium",
+      signalKey: "disclosure.contact_page_surface_missing",
+      signalLabel: "Contact page missing",
+      signalSource: "snapshot_signal",
+      sourceType: "signal",
+      title: "Contact page missing"
+    });
+  }
+
+  for (const unifiedFinding of buildPreviewFindingsFromUnifiedCandidates(unifiedPreviewCandidates)) {
+    pushFinding(findings, unifiedFinding);
+  }
 
   const issueCounts = deriveIssueCounts(findings);
   const pagesScannedDescriptor =

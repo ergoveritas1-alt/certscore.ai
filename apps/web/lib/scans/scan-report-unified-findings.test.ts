@@ -5,6 +5,8 @@ import {
   selectOwnerUnifiedFindingsForSection,
   type ScanReportUnifiedFindingState
 } from "./scan-report-unified-findings";
+import { buildSectionReviewIssues } from "./scan-report-review-findings";
+import { buildSupplementalRuntimeUnifiedFindingPackets } from "./supplemental-runtime-unified-findings";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 
 function packet(id: string, categoryId: string, relation: "owner" | "mirror" | "overlay") {
@@ -83,4 +85,70 @@ test("report-level candidates surface runtime-backed session replay provenance",
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.surfacingDecision.decisionState, "review");
   assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
+});
+
+test("initial cookie inventory routes to audit-only preconsent packet instead of raw executive bridge", () => {
+  const issues = buildSectionReviewIssues({
+    accessibilityIssueRows: [],
+    consentAuditFindings: [],
+    policyBehaviorContradictions: [],
+    preconsentViolationRows: [],
+    runtimeArtifacts: {
+      initial_cookie_domains: [".example.com"],
+      initial_cookie_names: ["__cf_bm", "kndctr_16AD4362526701720A490D45_AdobeOrg_identity"]
+    },
+    scanReportReviewIssues: [],
+    sectionId: "tracking_third_party_ecosystem",
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    }
+  });
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: issues.map((issue) => ({
+      description: issue.description,
+      evidence: issue.evidence ?? [],
+      fallbackEvidence: issue.fallbackEvidence,
+      observedValue: issue.evidence?.[0] ?? null,
+      severity: issue.severity,
+      sourceType: "issue",
+      title: issue.title
+    })),
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+  const packet = packets.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+
+  assert.equal(packet?.presentationDecision.status, "suppress");
+  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("audit_only"), true);
+  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_concrete_preconsent_artifact"), true);
+  assert.equal(packet?.evidence?.entities?.preconsent_cookie_names?.includes("kndctr_16AD4362526701720A490D45_AdobeOrg_identity"), true);
+});
+
+test("supplemental runtime request evidence still promotes through unified packets", () => {
+  const [packet] = buildSupplementalRuntimeUnifiedFindingPackets({
+    disclaimer: "",
+    hostname: "example.com",
+    issueCounts: { high: 0, medium: 0, low: 0 },
+    normalizedUrl: "https://www.example.com/",
+    sampleFindings: [],
+    summaryBullets: [],
+    supplementalEvidence: {
+      source: "supplemental_public_runtime",
+      sourceLabel: "Supplemental public runtime evidence",
+      entities: {
+        cookieNames: ["_ga"],
+        requestUrls: ["https://metrics.example.net/collect"],
+        technologyNames: ["Google Analytics"]
+      }
+    },
+    version: "preview-v1"
+  });
+
+  assert.equal(packet?.unifiedFindingId, "preconsent_tracking");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.equal(packet?.details?.family, "consent_tracking");
+  assert.deepEqual(packet?.details?.requestUrls, ["https://metrics.example.net/collect"]);
+  assert.equal(packet?.evidence?.entities?.preconsent_cookie_names?.includes("_ga"), true);
 });

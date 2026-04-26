@@ -195,7 +195,7 @@ test("buildRegulatoryLenses uses gambling-specific FTC copy for sensitive tracki
   assert.doesNotMatch(ftcLens?.summary ?? "", /Health-context/i);
 });
 
-test("buildRegulatoryLenses activates financial claims lens for gambling-sensitive tracking", () => {
+test("buildRegulatoryLenses does not activate financial claims lens from gambling-sensitive tracking alone", () => {
   const lenses = buildRegulatoryLenses(
     [
       makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
@@ -221,10 +221,9 @@ test("buildRegulatoryLenses activates financial claims lens for gambling-sensiti
 
   const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
   assert.ok(financialLens);
-  assert.equal(financialLens?.minimal, undefined);
-  assert.equal(financialLens?.ratingLabel, "Watch");
-  assert.match(financialLens?.summary ?? "", /High-risk gambling promotions and financial-behavior context/i);
-  assert.match(financialLens?.findings.join(" "), /age eligibility, bonus-term, and responsible-gambling disclosure review/i);
+  assert.equal(financialLens?.minimal, true);
+  assert.equal(financialLens?.ratingLabel, "Audit-only");
+  assert.equal(financialLens?.findings.length, 0);
 });
 
 test("buildRegulatoryLenses treats pre-consent cookie findings as GDPR tracking risk", () => {
@@ -794,7 +793,7 @@ test("ExecutiveSummaryCard keeps tracker disclosure counts aligned with the full
   assert.match(html, /1 vendor names and 13 third-party domains/);
 });
 
-test("ExecutiveSummaryCard lets fallback pre-consent findings correct packet-derived GDPR copy", () => {
+test("ExecutiveSummaryCard keeps regulatory copy packet-derived when unified findings are present", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
@@ -834,13 +833,13 @@ test("ExecutiveSummaryCard lets fallback pre-consent findings correct packet-der
     })
   );
 
-  assert.match(html, /Consent and pre-consent tracking risk is the main issue\./);
-  assert.match(html, /CCPA \/ CPRA[\s\S]*?<p class="text-xl font-semibold tracking-tight text-slate-900">46<\/p>/);
-  assert.match(html, /Third-party collection and disclosure posture drives this score\./);
-  assert.match(html, /FTC[\s\S]*?<p class="text-xl font-semibold tracking-tight text-slate-900">54<\/p>/);
-  assert.match(html, /Pre-consent tracking and third-party collection should be reviewed for unfairness or deception risk\./);
-  assert.doesNotMatch(html, /No major consent-triggering issue surfaced in the top findings\./);
-  assert.doesNotMatch(html, /No strong unfairness\/deception cue surfaced in the top findings\./);
+  assert.match(html, /No major consent-triggering issue surfaced in the top findings\./);
+  assert.match(html, /CCPA \/ CPRA[\s\S]*?<p class="text-xl font-semibold tracking-tight text-slate-900">82<\/p>/);
+  assert.match(html, /No strong sale\/share-style signal surfaced in the top findings\./);
+  assert.match(html, /FTC[\s\S]*?<p class="text-xl font-semibold tracking-tight text-slate-900">80<\/p>/);
+  assert.match(html, /No strong unfairness\/deception cue surfaced in the top findings\./);
+  assert.doesNotMatch(html, /Consent and pre-consent tracking risk is the main issue\./);
+  assert.doesNotMatch(html, /Pre-consent tracking and third-party collection should be reviewed for unfairness or deception risk\./);
 });
 
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {

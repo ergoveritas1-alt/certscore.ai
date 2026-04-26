@@ -434,7 +434,16 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
           { name: "OptanonConsent", domain: ".fandango.com" },
           { name: "visitor_id", domain: ".metrics.example.net" }
         ],
-        requests: [{}, {}, {}, {}, {}, {}, {}, {}]
+        requests: [
+          { request: { url: "https://www.fandango.com/" } },
+          { request: { url: "https://metrics.example.net/collect" } },
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ]
       },
       lists: {
         countries: ["DE", "NL"],
@@ -491,6 +500,7 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
   assert.equal(payload.supplementalEvidence?.metrics?.thirdPartyRequestCount, 3);
   assert.equal(payload.supplementalEvidence?.metrics?.initialCookieCount, 3);
   assert.deepEqual(payload.supplementalEvidence?.entities?.cookieNames, ["_ga"]);
+  assert.equal(payload.supplementalEvidence?.entities?.requestUrls?.includes("https://metrics.example.net/collect"), true);
   assert.deepEqual(payload.supplementalEvidence?.entities?.diagnosticCookieNamesExcludedFromTrackingEvidence, ["OptanonConsent", "visitor_id"]);
   assert.equal(payload.supplementalEvidence?.cookieFootprint?.details.includes("Tracking cookie names: _ga"), true);
   assert.equal(payload.supplementalEvidence?.reportUrl, undefined);

@@ -78,6 +78,7 @@ export type PreviewSupplementalEvidence = {
     cookieDomains?: string[];
     cookieNames?: string[];
     diagnosticCookieNamesExcludedFromTrackingEvidence?: string[];
+    requestUrls?: string[];
     technologyNames?: string[];
     serverNames?: string[];
     topDomains?: string[];

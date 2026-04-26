@@ -24,6 +24,7 @@ export type NormalizedConcernOriginType =
   | "compatibility_signal"
   | "policy_enrichment"
   | "document_semantic"
+  | "section_review"
   | "policy_review_queue"
   | "validation_rule";
 
@@ -899,6 +900,13 @@ function deriveOriginTypeFromCandidate(candidate: ReviewFindingCandidateInput): 
 
   if (candidate.linkedValidationFinding) {
     return "validation_rule";
+  }
+
+  if (
+    candidate.fallbackEvidence?.sectionReviewIssue === true ||
+    candidate.fallbackEvidence?.section_review_issue === true
+  ) {
+    return "section_review";
   }
 
   return "compatibility_signal";

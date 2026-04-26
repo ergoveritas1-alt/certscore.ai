@@ -19,6 +19,14 @@ type DomainBenchmarkCardData = {
   rationale: string;
 } | null;
 
+type UnifiedRegulatoryContext = {
+  beforeConsentCookieCount?: number;
+  hasSensitiveGamblingTrackingRisk?: boolean;
+  hasSensitiveHealthTrackingRisk?: boolean;
+  hasTrackingConcern?: boolean;
+  thirdPartyRequestCount?: number;
+};
+
 function getPostureClasses(posture: "Clear" | "Watch" | "Action Needed") {
   if (posture === "Action Needed") {
     return "border-rose-200 bg-rose-50/90 text-rose-950";
@@ -167,14 +175,8 @@ function buildMinimalFinancialClaimsLens() {
 
 function buildFinancialClaimsLens(input: {
   findings: CertScoreFinding[];
-  hasSensitiveGamblingTrackingRisk: boolean;
 }) {
-  const financialFindings = [
-    ...input.findings.map((finding) => getFinancialClaimsFindingSummary(finding)),
-    input.hasSensitiveGamblingTrackingRisk
-      ? "Sports betting or gambling context raises marketing, age eligibility, bonus-term, and responsible-gambling disclosure review."
-      : null
-  ].filter(Boolean) as string[];
+  const financialFindings = input.findings.map((finding) => getFinancialClaimsFindingSummary(finding));
 
   if (financialFindings.length === 0) {
     return buildMinimalFinancialClaimsLens();
@@ -191,7 +193,7 @@ function buildFinancialClaimsLens(input: {
       default:
         return total + 8;
     }
-  }, input.hasSensitiveGamblingTrackingRisk ? 18 : 0);
+  }, 0);
   const financialScore = clampScore(84 - financialSeverityPenalty - Math.max(0, financialFindings.length - 1) * 6);
   const financialTone = buildTone(financialScore);
 
@@ -201,12 +203,10 @@ function buildFinancialClaimsLens(input: {
     findings: financialFindings,
     ratingLabel: financialTone.label,
     score: financialScore,
-    summary: input.hasSensitiveGamblingTrackingRisk
-      ? "High-risk gambling promotions and financial-behavior context should be reviewed for age, bonus-term, and responsible-gambling disclosures."
-      : input.findings.some((finding) => finding.id === "guaranteed_outcome_claim_detected") ||
-          input.findings.some((finding) => finding.id === "earnings_claim_without_adjacent_disclosure")
-        ? "High-confidence claims or earnings language surfaced without enough balancing disclosure."
-        : "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
+    summary: input.findings.some((finding) => finding.id === "guaranteed_outcome_claim_detected") ||
+      input.findings.some((finding) => finding.id === "earnings_claim_without_adjacent_disclosure")
+      ? "High-confidence claims or earnings language surfaced without enough balancing disclosure."
+      : "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
     toneClass: financialTone.toneClass
   } satisfies RegulatoryLens;
 }
@@ -264,6 +264,7 @@ export function buildRegulatoryLenses(
     agencyMappings?: AgencyMapping[];
     benchmarkIndustry?: string | null;
     regulatoryRisk?: RegulatoryRiskAssessment | null;
+    unifiedContext?: UnifiedRegulatoryContext | null;
   }
 ): RegulatoryLens[] {
   const findingIds = new Set(findings.map((finding) => finding.id));
@@ -283,13 +284,16 @@ export function buildRegulatoryLenses(
     findings.find((finding) => finding.id === "forced_consent_interaction");
   const clarityFinding = findings.find((finding) => finding.id === "policy_clarity_risk");
   const hasTrackingConcern =
-    findingIds.has("pre_consent_tracking_detected") ||
-    findingIds.has("third_party_tracking_pre_consent") ||
-    findingIds.has("third_party_cookie_pre_consent") ||
-    findingIds.has("analytics_cookie_pre_consent") ||
-    findingIds.has("adtech_cookie_pre_consent") ||
-    Boolean(trackingFinding);
-  const hasPreConsentCookieConcern = counts.beforeConsentCookieCount > 0;
+    options?.unifiedContext?.hasTrackingConcern ??
+    (findingIds.has("pre_consent_tracking_detected") ||
+      findingIds.has("third_party_tracking_pre_consent") ||
+      findingIds.has("third_party_cookie_pre_consent") ||
+      findingIds.has("analytics_cookie_pre_consent") ||
+      findingIds.has("adtech_cookie_pre_consent") ||
+      Boolean(trackingFinding));
+  const beforeConsentCookieCount = options?.unifiedContext?.beforeConsentCookieCount ?? counts.beforeConsentCookieCount;
+  const thirdPartyRequestCount = options?.unifiedContext?.thirdPartyRequestCount ?? counts.thirdPartyRequestCount;
+  const hasPreConsentCookieConcern = beforeConsentCookieCount > 0;
   const hasConsentConcern =
     findingIds.has("consent_dark_patterns_detected") ||
     findingIds.has("asymmetric_consent_ui") ||
@@ -299,33 +303,39 @@ export function buildRegulatoryLenses(
     findingIds.has("consent_dark_patterns_detected") || findingIds.has("asymmetric_consent_ui");
   const riskDriverKeys = new Set(options?.regulatoryRisk?.topRiskDrivers.map((driver) => driver.key) ?? []);
   const benchmarkHaystack = `${options?.benchmarkIndustry ?? ""} ${findings.map((finding) => `${finding.label} ${finding.shortSummary}`).join(" ")}`;
-  const hasGamblingSensitiveContext = /\b(gambling|sports betting|sportsbook|casino|wager|betting)\b/i.test(benchmarkHaystack);
-  const hasHealthSensitiveContext = /\b(health|medical|patient|symptom|condition|clinical)\b/i.test(benchmarkHaystack);
+  const inferredGamblingContext = /\b(gambling|sports betting|sportsbook|casino|wager|betting)\b/i.test(benchmarkHaystack);
+  const inferredHealthContext = /\b(health|medical|patient|symptom|condition|clinical)\b/i.test(benchmarkHaystack);
+  const hasGamblingSensitiveContext =
+    options?.unifiedContext?.hasSensitiveGamblingTrackingRisk === true || inferredGamblingContext;
+  const hasHealthSensitiveContext =
+    options?.unifiedContext?.hasSensitiveHealthTrackingRisk === true || inferredHealthContext;
   const hasGenericSensitiveTrackingRisk =
     riskDriverKeys.has("sensitive_context_tracking") ||
     riskDriverKeys.has("sensitive_context_preconsent");
   const hasSensitiveHealthTrackingRisk =
-    riskDriverKeys.has("health_identity_data_broker") ||
-    riskDriverKeys.has("health_dmp_flow") ||
-    riskDriverKeys.has("identity_data_broker_preconsent") ||
-    riskDriverKeys.has("dmp_pre_consent") ||
-    (hasGenericSensitiveTrackingRisk && hasHealthSensitiveContext && !hasGamblingSensitiveContext);
+    options?.unifiedContext?.hasSensitiveHealthTrackingRisk ??
+    (riskDriverKeys.has("health_identity_data_broker") ||
+      riskDriverKeys.has("health_dmp_flow") ||
+      riskDriverKeys.has("identity_data_broker_preconsent") ||
+      riskDriverKeys.has("dmp_pre_consent") ||
+      (hasGenericSensitiveTrackingRisk && hasHealthSensitiveContext && !hasGamblingSensitiveContext));
   const hasSensitiveGamblingTrackingRisk =
-    hasGamblingSensitiveContext && (
+    options?.unifiedContext?.hasSensitiveGamblingTrackingRisk ??
+    (hasGamblingSensitiveContext && (
       hasGenericSensitiveTrackingRisk ||
       findingIds.has("session_recording_services_detected") ||
       hasTrackingConcern
-    );
+    ));
 
   const privacyTrackingNotes = [
     trackingFinding ? trackingFinding.shortSummary : null,
-    counts.beforeConsentCookieCount > 0 ? `${counts.beforeConsentCookieCount} cookies were observed before consent.` : null,
+    beforeConsentCookieCount > 0 ? `${beforeConsentCookieCount} cookies were observed before consent.` : null,
     replayFinding ? replayFinding.shortSummary : null
   ].filter(Boolean) as string[];
 
   const cpraNotes = [
     trackingFinding ? trackingFinding.shortSummary : null,
-    counts.thirdPartyRequestCount > 0 ? `${counts.thirdPartyRequestCount} third-party requests were observed on the initial path.` : null,
+    thirdPartyRequestCount > 0 ? `${thirdPartyRequestCount} third-party requests were observed on the initial path.` : null,
     replayFinding ? replayFinding.shortSummary : null,
     clarityFinding ? clarityFinding.shortSummary : null
   ].filter(Boolean) as string[];
@@ -339,14 +349,14 @@ export function buildRegulatoryLenses(
   const gdprScore = clampScore(
     84 -
       (hasTrackingConcern ? 32 : 0) -
-      (counts.beforeConsentCookieCount > 0 ? 14 : 0) -
-      (hasConsentConcern ? (hasTrackingConcern || counts.beforeConsentCookieCount > 0 ? 16 : 6) : 0) -
+      (beforeConsentCookieCount > 0 ? 14 : 0) -
+      (hasConsentConcern ? (hasTrackingConcern || beforeConsentCookieCount > 0 ? 16 : 6) : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
   const cpraScore = clampScore(
     82 -
       (hasTrackingConcern ? 24 : 0) -
-      (counts.beforeConsentCookieCount > 0 ? 12 : 0) -
+      (beforeConsentCookieCount > 0 ? 12 : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0) -
       (findingIds.has("policy_clarity_risk") ? 8 : 0)
   );
@@ -355,7 +365,7 @@ export function buildRegulatoryLenses(
       (hasConsentConcern ? 24 : 0) -
       (hasTrackingConcern ? 18 : 0) -
       (hasSensitiveHealthTrackingRisk ? 16 : 0) -
-      (counts.beforeConsentCookieCount > 0 ? 8 : 0) -
+      (beforeConsentCookieCount > 0 ? 8 : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
 
@@ -468,8 +478,7 @@ export function buildRegulatoryLenses(
     );
 
     lenses.push(buildFinancialClaimsLens({
-      findings: financialClaimFindings,
-      hasSensitiveGamblingTrackingRisk
+      findings: financialClaimFindings
     }));
 
     return lenses;
@@ -525,8 +534,7 @@ export function buildRegulatoryLenses(
   });
 
   lenses.push(buildFinancialClaimsLens({
-    findings: financialClaimFindings,
-    hasSensitiveGamblingTrackingRisk
+    findings: financialClaimFindings
   }));
 
   return lenses;
@@ -635,8 +643,64 @@ export function buildRegulatoryLensesFromUnifiedPackets(
           ]
         }
       : options;
+  const surfacedPackets = packets.filter((packet) => packet.presentationDecision.status === "surface");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(packets);
+  const surfacedText = surfacedPackets
+    .flatMap((packet) => [
+      packet.summary,
+      packet.observedValue,
+      ...(packet.evidence?.snippets ?? []),
+      ...Object.values(packet.evidence?.entities ?? {}).flat()
+    ])
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+  const packetDerivedBeforeConsentCookieCount = surfacedPackets.reduce((count, packet) => {
+    const entities = packet.evidence?.entities ?? {};
+    return count + Math.max(
+      entities.preconsent_nonessential_cookie_names?.length ?? 0,
+      entities.preconsent_cookie_names?.length ?? 0,
+      entities.preconsentNonessentialCookieNames?.length ?? 0,
+      entities.preconsentCookieNames?.length ?? 0
+    );
+  }, 0);
+  const packetDerivedThirdPartyRequestCount = surfacedPackets.reduce((count, packet) => {
+    const evidenceUrls = packet.evidence?.entities?.preconsent_tracker_evidence_urls?.length ??
+      packet.evidence?.entities?.preconsentTrackerEvidenceUrls?.length ??
+      0;
+    return count + evidenceUrls;
+  }, 0);
+  const hasSensitiveHealthTrackingRisk =
+    /health|medical|patient|symptom|condition|clinical/i.test(surfacedText) &&
+    surfacedPackets.some((packet) => (
+      packet.unifiedFindingId === "preconsent_tracking" ||
+      packet.unifiedFindingId === "sensitive_data_collection_with_third_party_tracking_present"
+    ));
+  const hasSensitiveGamblingTrackingRisk =
+    /gambling|sports betting|sportsbook|casino|wager|bonus bet|responsible gambling|1-800-gambler/i.test(surfacedText) &&
+    surfacedPackets.some((packet) => (
+      packet.unifiedFindingId === "preconsent_tracking" ||
+      packet.unifiedFindingId === "session_replay_observed" ||
+      packet.unifiedFindingId === "leveraged_or_high_risk_product_promotion"
+    ));
 
-  return buildRegulatoryLenses(projectExecutiveFindingsFromUnifiedPackets(packets).findings, counts, accessibilityOptions);
+  return buildRegulatoryLenses(
+    projection.findings,
+    {
+      beforeConsentCookieCount: packetDerivedBeforeConsentCookieCount,
+      thirdPartyRequestCount: packetDerivedThirdPartyRequestCount
+    },
+    {
+      ...accessibilityOptions,
+      regulatoryRisk: null,
+      unifiedContext: {
+        beforeConsentCookieCount: packetDerivedBeforeConsentCookieCount,
+        hasSensitiveGamblingTrackingRisk,
+        hasSensitiveHealthTrackingRisk,
+        hasTrackingConcern: surfacedPackets.some((packet) => packet.unifiedFindingId === "preconsent_tracking"),
+        thirdPartyRequestCount: packetDerivedThirdPartyRequestCount
+      }
+    }
+  );
 }
 
 function RegulatoryRatingBar(input: { score: number; toneClass: string }) {
@@ -1158,23 +1222,9 @@ export function ExecutiveSummaryCard(input: {
     benchmarkIndustry: input.domainBenchmark?.industry ?? null,
     regulatoryRisk: input.regulatoryRisk
   };
-  const findingBasedRegulatoryLenses = buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);
   const regulatoryLenses = input.unifiedFindings
-    ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions).map((lens) => {
-        const findingBasedLens = findingBasedRegulatoryLenses.find((candidate) => candidate.acronym === lens.acronym);
-        const findingBasedScore = findingBasedLens?.score;
-        const packetScore = lens.score;
-        const findingBasedHasScoreImpact =
-          typeof findingBasedScore === "number" &&
-          (typeof packetScore !== "number" || findingBasedScore < packetScore);
-        return findingBasedLens &&
-          (findingBasedLens.summary === "Consent and pre-consent tracking risk is the main issue." ||
-            ((lens.acronym === "GDPR / ePrivacy" || lens.acronym === "CCPA / CPRA" || lens.acronym === "FTC") &&
-              findingBasedHasScoreImpact))
-          ? findingBasedLens
-          : lens;
-      })
-    : findingBasedRegulatoryLenses;
+    ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions)
+    : buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);
 
   return (
     <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">

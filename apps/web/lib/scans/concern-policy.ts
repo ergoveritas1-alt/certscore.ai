@@ -1076,7 +1076,7 @@ function isNegativeFinancialPromotionConcern(
 }
 
 const EXPLICIT_FINANCIAL_OFFER_PATTERN =
-  /(?:\binvest(?:ment|ing|or)?\b|trading\s+(?:signals?|system|platform|strategy|bot)|(?:subscribe|join|sign\s*up|open)\s+(?:an?\s+)?(?:account|plan|membership)|pricing|checkout|margin|leverage|leveraged|derivative|perpetual|options?\s+trading|trade\s+options?|trading\s+options?|futures?\s+trading|trade\s+futures?|copy\s+trading|staking\s+(?:apy|yield)|\bapy\b|forex|cfd|crypto\s+(?:trading|yield|staking)|brokerage\s+account)/i;
+  /(?:\binvest(?:ment|ing|or)?\b|trading\s+(?:signals?|system|platform|strategy|bot)|(?:subscribe|join|sign\s*up|open)\s+(?:an?\s+)?(?:account|plan|membership)|pricing|checkout|margin|leverage|leveraged|derivative|perpetual|options?\s+trading|trade\s+options?|trading\s+options?|futures?\s+trading|trade\s+futures?|copy\s+trading|staking\s+(?:apy|yield)|\bapy\b|forex|cfd|crypto\s+(?:trading|yield|staking)|brokerage\s+account|sportsbook|sports\s+betting|bonus\s+bets?|wager(?:ing)?|casino|gambl(?:e|ing))/i;
 
 const NON_FINANCIAL_EDITORIAL_OR_RETAIL_PATTERN =
   /(?:\b(?:lineup|festival|concert|album|movie|sports|election|celebrity|weather|recipe|travel)\b|(?:\b\d{1,2}%\s+off\b)|(?:\bselling\b.{0,80}\b(?:serum|makeup|shoes|clothing|furniture|kitchen|mattress|headphones|deals?)\b)|(?:\bamazon\b.{0,80}\b(?:selling|deal|deals?|off)\b))/i;

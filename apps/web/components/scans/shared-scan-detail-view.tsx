@@ -39,6 +39,7 @@ import {
 import { buildScanCalibrationSummary } from "../../lib/scans/calibration-summary";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { getHybridRuntimeEvidence } from "../../lib/scans/hybrid-runtime-evidence";
+import { buildSupplementalRuntimeUnifiedFindingPackets } from "../../lib/scans/supplemental-runtime-unified-findings";
 import {
   findMergedSignalValue,
   getReportSignalValue
@@ -82,11 +83,6 @@ import {
 } from "../../lib/scans/policy-enrichment-row";
 import { deriveHighRiskTrackingContext } from "../../lib/scans/high-risk-tracking-context";
 import {
-  classifyRuntimeCookieCategory,
-  isFunctionalCookieExcludedFromTrackingEvidence,
-  isNonEssentialCookieCategory
-} from "../../lib/scans/runtime-cookie-evidence";
-import {
   getAllowedConflictType,
   type PolicyBehaviorConflictClaimType,
   type PolicyBehaviorConflictType,
@@ -101,10 +97,7 @@ import {
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { PendingButtonLink } from "../ui/pending-link";
 import { ViewerTimestamp } from "../time/viewer-timestamp";
-import {
-  CERT_SCORE_FINDING_REGISTRY,
-  type CertScoreFinding
-} from "../../lib/scans/finding-registry";
+import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
@@ -3788,6 +3781,10 @@ export function deriveExecutiveSummaryBadgeCounts(findings: UnifiedFindingDispla
   };
 }
 
+function mergeUnifiedFindingPacketsById(findings: UnifiedFindingDisplayPacket[]) {
+  return [...new Map(findings.map((finding) => [finding.unifiedFindingId, finding])).values()];
+}
+
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
   const showHomepagePreviewGate = input.previewMode === "homepage" && Boolean(input.createAccountHref);
   const { globalUnifiedFindings, sectionDrafts } = input.unifiedFindingState;
@@ -4486,98 +4483,6 @@ export function deriveExecutiveDisplayedScore(input: {
   return Math.min(...caps);
 }
 
-function isSameOrSubdomain(hostname: string, candidate: string) {
-  const normalizedHostname = hostname.replace(/^\./, "").toLowerCase();
-  const normalizedCandidate = candidate.replace(/^\./, "").toLowerCase();
-  return (
-    normalizedCandidate === normalizedHostname ||
-    normalizedCandidate.endsWith(`.${normalizedHostname}`) ||
-    normalizedHostname.endsWith(`.${normalizedCandidate}`)
-  );
-}
-
-function getThirdPartyCookieDomains(finalHostname: string | null, cookieDomains: string[]) {
-  return finalHostname
-    ? cookieDomains.filter((domain) => !isSameOrSubdomain(finalHostname, domain))
-    : cookieDomains;
-}
-
-function uniqueFindingsById(findings: CertScoreFinding[]) {
-  const seen = new Set<string>();
-  const deduped: CertScoreFinding[] = [];
-
-  for (const finding of findings) {
-    if (seen.has(finding.id)) {
-      continue;
-    }
-    seen.add(finding.id);
-    deduped.push(finding);
-  }
-
-  return deduped;
-}
-
-function buildUrlscanCookieFinding(input: {
-  cookieCount: number;
-  cookieDomains: string[];
-  cookieNames: string[];
-  finalHostname: string | null;
-  reportUrl: string | null;
-}): CertScoreFinding | null {
-  const trackingCookieNames = input.cookieNames.filter((name) => {
-    if (isFunctionalCookieExcludedFromTrackingEvidence(name)) {
-      return false;
-    }
-    return isNonEssentialCookieCategory(classifyRuntimeCookieCategory(name));
-  });
-  const effectiveCookieCount = trackingCookieNames.length;
-  if (effectiveCookieCount <= 0) {
-    return null;
-  }
-
-  const thirdPartyCookieDomains = getThirdPartyCookieDomains(input.finalHostname, input.cookieDomains).filter(
-    (domain) => !/(cookielaw\.org|onetrust\.(?:com|io)|trustarc\.com|truste\.com|cloudflare\.com|akamai|bigip|f5)/i.test(domain)
-  );
-  const hasThirdPartyCookies = thirdPartyCookieDomains.length > 0;
-  const hasDmpCookie = trackingCookieNames.some((name) => /(^aam$|demdex|dpm\.demdex)/i.test(name));
-  const hasAnalyticsCookie = trackingCookieNames.some((name) => /^(_ga|_gid|_gat|utm|ajs_|amplitude|mp_)/i.test(name));
-  const findingId = hasThirdPartyCookies
-    ? "third_party_cookie_pre_consent"
-    : hasDmpCookie
-      ? "adtech_cookie_pre_consent"
-      : hasAnalyticsCookie
-        ? "analytics_cookie_pre_consent"
-        : "storage_before_consent";
-  const definition = CERT_SCORE_FINDING_REGISTRY[findingId];
-
-  if (!definition) {
-    return null;
-  }
-
-  const cookieNameSummary = trackingCookieNames.length > 0
-    ? ` Cookies: ${trackingCookieNames.slice(0, 8).join(", ")}.`
-    : "";
-  const cookieDomainSummary = input.cookieDomains.length > 0
-    ? ` Cookie domains: ${input.cookieDomains.slice(0, 6).join(", ")}.`
-    : "";
-  const sourceSummary = " Source: supplemental public runtime evidence.";
-
-  return {
-    ...definition,
-    confidence: "good",
-    directVsInferred: "direct",
-    evidencePreview: [
-      `${effectiveCookieCount} tracking cookie${effectiveCookieCount === 1 ? "" : "s"} retained by supplemental public runtime evidence.${cookieNameSummary}`,
-      ...(hasThirdPartyCookies ? [`Third-party cookie domains retained: ${thirdPartyCookieDomains.slice(0, 6).join(", ")}.`] : []),
-      `${cookieDomainSummary}${sourceSummary}`.trim()
-    ],
-    evidenceRefs: ["supplemental public runtime evidence"],
-    severity: hasThirdPartyCookies ? "high" : "medium",
-    label: hasThirdPartyCookies ? definition.label : "Tracking cookies set before consent",
-    shortSummary: `${effectiveCookieCount} tracking cookie${effectiveCookieCount === 1 ? "" : "s"} were observed before CertScore could verify a consent choice.`
-  };
-}
-
 type SharedScanDetailViewProps = {
   autoRefresh?: ReactNode;
   createAccountHref?: string | null;
@@ -4630,143 +4535,55 @@ export function SharedScanDetailView({
     previewPayload?.evidence?.supplementalFinalHostname ??
     previewPayload?.evidence?.urlscanFinalHostname ??
     null;
-  const fallbackCookieNames = uniqueStrings(fallbackEvidence?.entities?.cookieNames ?? []);
-  const fallbackCookieDomains = uniqueStrings(fallbackEvidence?.entities?.cookieDomains ?? []);
-  const fallbackThirdPartyCookieDomains = getThirdPartyCookieDomains(fallbackFinalHostname, fallbackCookieDomains);
-  const fallbackTechnologyNames = uniqueStrings(fallbackEvidence?.entities?.technologyNames ?? [])
-    .filter((name) => !isCmpOrFunctionalVendorLabel(name));
   const fallbackObservedRequestCount = getFiniteNumber(fallbackEvidence?.metrics?.requestCount) ?? 0;
-  const fallbackObservedCookieCount = getFiniteNumber(fallbackEvidence?.metrics?.initialCookieCount) ?? 0;
   const fallbackObservedDomainCount = getFiniteNumber(fallbackEvidence?.metrics?.domainCount) ?? 0;
   const fallbackObservedIpCount = getFiniteNumber(fallbackEvidence?.metrics?.ipCount) ?? 0;
-  const fallbackObservedTechnologyCount = fallbackTechnologyNames.length;
-  const fallbackServerNames = uniqueStrings(fallbackEvidence?.entities?.serverNames ?? []);
-  const fallbackTopDomains = uniqueStrings(fallbackEvidence?.entities?.topDomains ?? []);
-  const fallbackVerifiedSurfaceTargets = uniqueStrings(fallbackEvidence?.entities?.verifiedSurfaceTargets ?? []);
-  const fallbackThirdPartyRequestCount = getFiniteNumber(fallbackEvidence?.metrics?.thirdPartyRequestCount) ?? 0;
-  const executiveResolvedVendorNames = uniqueStrings([
-    ...certScoreSummary.resolvedVendorNames,
-    ...fallbackTechnologyNames
-  ]).filter((name) => !isCmpOrFunctionalVendorLabel(name));
+  const executiveResolvedVendorNames = certScoreSummary.resolvedVendorNames.filter((name) => !isCmpOrFunctionalVendorLabel(name));
   const executiveThirdPartyDomains = uniqueStrings([
-    ...getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains"),
-    ...fallbackTopDomains
+    ...getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains")
   ]).filter((domain) => !isCmpOrFunctionalVendorDomain(domain));
-  const executiveThirdPartyRequestCount = Math.max(certScoreSummary.thirdPartyRequestCount, fallbackThirdPartyRequestCount);
+  const executiveThirdPartyRequestCount = certScoreSummary.thirdPartyRequestCount;
   const executiveTopObservedEntities =
     certScoreSummary.topObservedEntities.length > 0
       ? certScoreSummary.topObservedEntities.filter((entity) => (
           !isCmpOrFunctionalVendorLabel(entity.label) &&
           !isCmpOrFunctionalVendorDomain(entity.label)
         ))
-      : [
-          ...fallbackTechnologyNames.map((label) => ({
-            label,
-            category: "unknown",
-            requestCount: executiveThirdPartyRequestCount
-          })),
-          ...fallbackTopDomains
-            .filter((label) => !fallbackTechnologyNames.includes(label))
-            .slice(0, Math.max(0, 6 - fallbackTechnologyNames.length))
-            .map((label) => ({
-              label,
-              category: "unknown",
-              requestCount: executiveThirdPartyRequestCount
-            }))
-        ];
-  const executiveVendorCategoryCounts =
-    Object.keys(certScoreSummary.vendorCategoryCounts).length > 0
-      ? certScoreSummary.vendorCategoryCounts
-      : fallbackTechnologyNames.length > 0
-        ? { unknown: fallbackTechnologyNames.length }
-        : fallbackServerNames.length > 0
-          ? { unknown: fallbackServerNames.length }
-          : certScoreSummary.vendorCategoryCounts;
-  const executiveTrackerSummary =
-    certScoreSummary.trackerSummary === "No meaningful third-party footprint observed"
-      ? fallbackEvidence?.vendorFootprint?.summary ??
-        fallbackEvidence?.requestFootprint?.summary ??
-        (executiveThirdPartyRequestCount > 0
-          ? `${executiveThirdPartyRequestCount} third-party request${executiveThirdPartyRequestCount === 1 ? "" : "s"} retained from supplemental runtime evidence.`
-          : certScoreSummary.trackerSummary)
-      : certScoreSummary.trackerSummary;
+      : [];
+  const executiveVendorCategoryCounts = certScoreSummary.vendorCategoryCounts;
+  const executiveTrackerSummary = certScoreSummary.trackerSummary;
   const executiveUnresolvedVendorHosts = uniqueStrings([
-    ...certScoreSummary.unresolvedVendorHosts,
-    ...fallbackTopDomains
+    ...certScoreSummary.unresolvedVendorHosts
   ]).filter((host) => !isCmpOrFunctionalVendorDomain(host));
   const executiveFingerprintReasons = uniqueStrings([
-    ...getRecordStringArray(hybridFingerprintSummary, "reasons"),
-    ...(fallbackServerNames.length > 0 ? [`Supplemental runtime evidence retained infrastructure signals: ${fallbackServerNames.join(", ")}`] : []),
-    ...(fallbackVerifiedSurfaceTargets.length > 0 ? [`Supplemental runtime evidence retained disclosure surfaces: ${fallbackVerifiedSurfaceTargets.join(", ")}`] : [])
+    ...getRecordStringArray(hybridFingerprintSummary, "reasons")
   ]);
-  const useLightweightHeroMetrics =
-    Boolean(fallbackEvidence) &&
-    (
-      fallbackObservedRequestCount > 0 ||
-      fallbackObservedCookieCount > 0 ||
-      fallbackObservedDomainCount > 0 ||
-      fallbackObservedTechnologyCount > 0
-    );
-  const lightweightHeroMetrics = useLightweightHeroMetrics
-    ? [
-        {
-          accent: "sky" as const,
-          helper: "Supplemental runtime footprint",
-          label: "Requests observed",
-          value: fallbackObservedRequestCount || null
-        },
-        {
-          accent: "emerald" as const,
-          helper: "Observed in retained runtime payload",
-          label: "Cookies observed",
-          value: fallbackObservedCookieCount || null
-        },
-        {
-          accent: "amber" as const,
-          helper: fallbackObservedDomainCount > 0
-            ? "Distinct domains contacted"
-            : "Named technologies retained",
-          label: fallbackObservedDomainCount > 0 ? "Domains observed" : "Technologies retained",
-          value: fallbackObservedDomainCount > 0 ? fallbackObservedDomainCount : fallbackObservedTechnologyCount || null
-        }
-      ]
-    : null;
+  const lightweightHeroMetrics = null;
   const cookiesSeenCount = Math.max(
     getRecordNumber(hybridStorageSummary, "cookiesSeenCount") ?? 0,
     getRecordNumber(snapshot, "cookie_count_total") ?? 0,
-    runtimeInitialCookieCount,
-    fallbackObservedCookieCount
+    runtimeInitialCookieCount
   );
   const thirdPartyCookiesSeenCount = Math.max(
     getRecordNumber(hybridStorageSummary, "thirdPartyCookieCount") ?? 0,
     getRecordNumber(snapshot, "third_party_cookie_count") ?? 0,
-    certScoreSummary.thirdPartyCookieNamesSeen.length,
-    fallbackThirdPartyCookieDomains.length
+    certScoreSummary.thirdPartyCookieNamesSeen.length
   );
   const cookiesBeforeConsentCount = Math.max(
     getRecordNumber(hybridStorageSummary, "cookiesBeforeConsentCount") ?? 0,
     certScoreSummary.cookieNamesBeforeConsent.length,
-    runtimeInitialCookieCount,
-    fallbackObservedCookieCount
+    runtimeInitialCookieCount
   );
   const reviewSectionError: string | null = null;
   const scanReportUnifiedFindingState = debugBuildScanReportUnifiedFindingState(scanRecord);
   const { taxonomySnapshotSections } = scanReportUnifiedFindingState.derivedContext;
 
-  const fallbackCookieFinding = buildUrlscanCookieFinding({
-    cookieCount: fallbackObservedCookieCount,
-    cookieDomains: fallbackCookieDomains,
-    cookieNames: fallbackCookieNames,
-    finalHostname: fallbackFinalHostname,
-    reportUrl: fallbackEvidence?.reportUrl ?? null
-  });
   const preConsentTrackingObserved =
     snapshot?.preconsent_tracking_detected === true ||
     snapshot?.tracking_before_consent_detected === true ||
     hasTruthySignal(scanRecord.signals, "tracking_before_consent_detected") ||
     hasTruthySignal(scanRecord.signals, "preconsent_tracking_detected") ||
-    hasTruthySignal(scanRecord.signals, "third_party_cookie_set_before_consent") ||
-    Boolean(fallbackCookieFinding);
+    hasTruthySignal(scanRecord.signals, "third_party_cookie_set_before_consent");
   const consentAuditCompleted = getRecordBoolean(runtimeArtifacts, "consent_audit_completed");
   const consentRejectInteractionSucceeded = getRecordBoolean(runtimeArtifacts, "consent_reject_interaction_succeeded");
   const consentAcceptInteractionSucceeded = getRecordBoolean(runtimeArtifacts, "consent_accept_interaction_succeeded");
@@ -4815,10 +4632,15 @@ export function SharedScanDetailView({
     getFiniteNumber(snapshot?.consumer_protection_score)
   ]);
   const showHomepagePreviewGate = previewMode === "homepage" && Boolean(createAccountHref);
-  const findingEvidenceDiagnostics =
+  const baseFindingEvidenceDiagnostics =
     snapshot && !reviewSectionError
       ? filterContradictoryPositiveSurfaceFindings(buildScanReportUnifiedFindingsFromState(scanReportUnifiedFindingState))
       : [];
+  const supplementalRuntimeFindingDiagnostics = buildSupplementalRuntimeUnifiedFindingPackets(previewPayload);
+  const findingEvidenceDiagnostics = filterContradictoryPositiveSurfaceFindings(mergeUnifiedFindingPacketsById([
+    ...baseFindingEvidenceDiagnostics,
+    ...supplementalRuntimeFindingDiagnostics
+  ]));
   const shouldPreferCanonicalReview =
     findingEvidenceDiagnostics.length > 0 ||
     scanRecord.policyEnrichment.length > 0 ||
@@ -4826,27 +4648,19 @@ export function SharedScanDetailView({
     scanRecord.trackerVendors.length > 0;
   const executiveSummaryBadgeCounts = deriveExecutiveSummaryBadgeCounts(findingEvidenceDiagnostics);
   const executiveFindingsProjection = projectExecutiveFindingsFromUnifiedPackets(findingEvidenceDiagnostics);
-  const allExecutiveFindings = fallbackCookieFinding
-    ? uniqueFindingsById([fallbackCookieFinding, ...executiveFindingsProjection.findings])
-    : executiveFindingsProjection.findings;
+  const allExecutiveFindings = executiveFindingsProjection.findings;
   const executiveDisplayedScore = deriveExecutiveDisplayedScore({
     findings: allExecutiveFindings,
     previewMode,
     snapshot,
     storedScore: certScoreSummary.score
   });
-  const fallbackAdjustedPosture =
-    !executiveAccessLimitationNotice && fallbackCookieFinding
-      ? fallbackCookieFinding.severity === "critical"
-        ? "Action Needed"
-        : "Watch"
-      : executiveFindingsProjection.posture;
   const presentedCertScoreFindings = executiveAccessLimitationNotice
-    ? (fallbackCookieFinding ? [fallbackCookieFinding] : [])
+    ? [executiveAccessLimitationNotice.finding]
     : allExecutiveFindings;
   const topExecutiveFindings = executiveAccessLimitationNotice
-    ? uniqueFindingsById([executiveAccessLimitationNotice.finding, ...(fallbackCookieFinding ? [fallbackCookieFinding] : [])])
-    : uniqueFindingsById([...(fallbackCookieFinding ? [fallbackCookieFinding] : []), ...executiveFindingsProjection.topFindings]);
+    ? [executiveAccessLimitationNotice.finding]
+    : executiveFindingsProjection.topFindings;
   const scanExecutionSummary = deriveScanExecutionSummary({
     accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
     authWallDetected: snapshot?.auth_wall_detected === true,
@@ -4894,7 +4708,7 @@ export function SharedScanDetailView({
     legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
     pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned),
     policyEnrichmentCount: scanRecord.policyEnrichment.length,
-    posture: executiveAccessLimitationNotice ? "Watch" : fallbackAdjustedPosture,
+    posture: executiveAccessLimitationNotice ? "Watch" : executiveFindingsProjection.posture,
     requestedHost: certScoreSummary.requestedHost,
     scanId: scanRecord.scan.id,
     scanOutcome: typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null,
@@ -4966,7 +4780,7 @@ export function SharedScanDetailView({
             fingerprintNarrative={certScoreSummary.fingerprintNarrative}
             landedOnDifferentHost={certScoreSummary.landedOnDifferentHost}
             lastScannedAt={certScoreSummary.lastScannedAt}
-            posture={executiveAccessLimitationNotice ? "Watch" : fallbackAdjustedPosture}
+            posture={executiveAccessLimitationNotice ? "Watch" : executiveFindingsProjection.posture}
             preConsentVendorNames={certScoreSummary.preConsentVendorNames}
             requestedHost={certScoreSummary.requestedHost}
             regulatoryRisk={scanRecord.regulatoryRisk}
@@ -5002,7 +4816,7 @@ export function SharedScanDetailView({
                           ? `Supplemental public runtime evidence showed this domain redirected to ${fallbackFinalHostname}.`
                           : "Supplemental same-host public runtime evidence was retained for this domain."}
                     {" "}
-                    This evidence is source-attributed internally and can trigger cookie or vendor findings when concrete runtime records are retained.
+                    This evidence is source-attributed internally and reaches findings only when promoted through the unified finding pipeline.
                   </p>
                   {fallbackEvidence.requestFootprint?.summary ? (
                     <p className="font-medium text-slate-900">{fallbackEvidence.requestFootprint.summary}</p>
@@ -5021,7 +4835,7 @@ export function SharedScanDetailView({
                         </ul>
                       ) : null}
                       <p className="mt-2 text-xs text-slate-600">
-                        This cookie evidence is counted in the same report counters and finding path as CertScore runtime cookie evidence, with the supplemental source retained internally for audit traceability.
+                        This cookie evidence stays in supporting evidence unless the unified finding pipeline promotes it, with the supplemental source retained internally for audit traceability.
                       </p>
                     </div>
                   ) : null}
