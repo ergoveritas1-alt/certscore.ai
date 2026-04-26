@@ -186,6 +186,26 @@ test("buildRegulatoryLenses treats pre-consent cookie findings as GDPR tracking 
   assert.notEqual(lenses[0]?.summary, "No major consent-triggering issue surfaced in the top findings.");
 });
 
+test("buildRegulatoryLenses treats pre-consent cookie counts as regulatory tracking risk", () => {
+  const lenses = buildRegulatoryLenses(
+    [
+      makeFinding("policy_runtime_conflict", "Policy and runtime behavior conflict", {
+        severity: "high",
+        shortSummary: "The consent policy and runtime behavior appear inconsistent."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 12,
+      thirdPartyRequestCount: 52
+    }
+  );
+
+  assert.equal(lenses[0]?.summary, "Consent and pre-consent tracking risk is the main issue.");
+  assert.equal(lenses[1]?.summary, "Third-party collection and disclosure posture drives this score.");
+  assert.notEqual(lenses[0]?.summary, "No major consent-triggering issue surfaced in the top findings.");
+  assert.notEqual(lenses[1]?.summary, "No strong sale/share-style signal surfaced in the top findings.");
+});
+
 test("buildRegulatoryLenses does not overstate consent-only review signals as GDPR tracking issues", () => {
   const lenses = buildRegulatoryLenses(
     [
