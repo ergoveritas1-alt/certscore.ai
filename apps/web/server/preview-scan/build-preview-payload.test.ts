@@ -376,15 +376,15 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
     true
   );
   assert.equal(
-    payload.sampleFindings.some((finding) => finding.title === "Third-party data collection footprint retained in fallback evidence"),
+    payload.sampleFindings.some((finding) => finding.title === "Third-party data collection footprint retained"),
     true
   );
   assert.equal(
-    payload.sampleFindings.some((finding) => finding.title === "Tracking or consent technologies retained in fallback evidence"),
+    payload.sampleFindings.some((finding) => finding.title === "Tracking or consent technologies retained"),
     true
   );
   assert.equal(
-    payload.sampleFindings.some((finding) => finding.title === "Disclosure surfaces verified via fallback retrieval"),
+    payload.sampleFindings.some((finding) => finding.title === "Disclosure surfaces verified via supplemental retrieval"),
     true
   );
   assert.equal(payload.fallbackEvidence?.requestFootprint?.details.includes("Top hosts: www.fandango.com, images.fandango.com, metrics.example.net"), true);

@@ -1123,7 +1123,9 @@ export function buildPreviewPayloadFromSnapshot(input: {
   const pagesScannedDescriptor =
     siteSurfaceUnverified
       ? scanStopReason?.reason.replace(/^Reason:\s*/i, "") ?? "This preview could not verify a usable homepage fetch during the live pass."
-      : input.snapshot.pagesScanned === 1
+      : input.snapshot.pagesScanned === 0
+        ? "This lightweight preview retained public runtime evidence, but page-depth verification was limited."
+        : input.snapshot.pagesScanned === 1
         ? "This preview focused on the homepage."
         : `This preview scanned ${input.snapshot.pagesScanned} pages in a lightweight pass.`;
   const confidenceDescriptor = siteSurfaceUnverified
@@ -1373,7 +1375,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
   if (!fallbackConsentSurface && ((fallbackSnapshot.thirdPartyRequestCount ?? 0) > 0 || (fallbackSnapshot.initialCookieCount ?? 0) > 0)) {
     insertSummaryBullet(
       payload.summaryBullets,
-      "No observable consent surface was retained, so fallback runtime activity was not promoted into a consent-violation claim."
+      "No observable consent surface was retained, so supplemental runtime activity was not promoted into a consent-violation claim."
     );
   }
 
@@ -1394,8 +1396,8 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
       affectedPage: "Homepage",
       category: "privacy",
       severity: "medium",
-      title: "Third-party data collection footprint retained in fallback evidence",
-      description: `The supplemental public runtime path retained ${footprintParts.join(", ")} for this lightweight preview.`
+      title: "Third-party data collection footprint retained",
+      description: `Supplemental public runtime evidence retained ${footprintParts.join(", ")} for this lightweight preview.`
     });
   }
 
@@ -1404,7 +1406,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
       affectedPage: "Homepage",
       category: "privacy",
       severity: "low",
-      title: "Tracking or consent technologies retained in fallback evidence",
+      title: "Tracking or consent technologies retained",
       description: fallbackEvidence.vendorFootprint.summary
     });
   }
@@ -1414,7 +1416,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
       affectedPage: "Public disclosures",
       category: "legal",
       severity: "low",
-      title: "Disclosure surfaces verified via fallback retrieval",
+      title: "Disclosure surfaces verified via supplemental retrieval",
       description: fallbackEvidence.disclosureFootprint.summary
     });
   }
