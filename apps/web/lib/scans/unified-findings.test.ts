@@ -1822,16 +1822,25 @@ test("retains pre-consent cookie timing evidence on unified finding packets", ()
             {
               category: "advertising",
               cookieName: "_fbp",
+              initiatorDomain: "connect.facebook.net",
+              initiatorUrl: "https://connect.facebook.net/en_US/fbevents.js",
+              initiatorVendor: "Meta Pixel",
               nonEssential: true,
               timingEvidence: "before_consent_cookie_write"
             },
             {
               category: "analytics",
               cookieName: "_ga",
+              initiatorDomain: "www.google-analytics.com",
+              initiatorUrl: "https://www.google-analytics.com/analytics.js",
+              initiatorVendor: "Google Analytics",
               nonEssential: true,
               timingEvidence: "before_consent_cookie_write"
             }
           ],
+          preconsent_cookie_initiator_domains: ["connect.facebook.net", "www.google-analytics.com"],
+          preconsent_cookie_initiator_urls: ["https://connect.facebook.net/en_US/fbevents.js", "https://www.google-analytics.com/analytics.js"],
+          preconsent_cookie_initiator_vendors: ["Meta Pixel", "Google Analytics"],
           preconsent_cookie_names: ["_fbp", "_ga"],
           preconsent_nonessential_cookie_names: ["_fbp", "_ga"],
           preconsent_tracking_detected: true,
@@ -1855,6 +1864,12 @@ test("retains pre-consent cookie timing evidence on unified finding packets", ()
   assert.deepEqual(packet?.evidence?.entities?.preconsent_cookie_names, ["_fbp", "_ga"]);
   assert.deepEqual(packet?.evidence?.entities?.preconsent_nonessential_cookie_names, ["_fbp", "_ga"]);
   assert.deepEqual(packet?.evidence?.entities?.preconsent_cookie_categories, ["advertising", "analytics"]);
+  assert.deepEqual(packet?.evidence?.entities?.preconsent_cookie_initiator_vendors, ["Meta Pixel", "Google Analytics"]);
+  assert.deepEqual(packet?.evidence?.entities?.preconsent_cookie_initiator_domains, ["connect.facebook.net", "www.google-analytics.com"]);
+  assert.deepEqual(packet?.evidence?.entities?.preconsent_cookie_initiator_urls, [
+    "https://connect.facebook.net/en_US/fbevents.js",
+    "https://www.google-analytics.com/analytics.js"
+  ]);
   assert.deepEqual(packet?.evidence?.entities?.preconsent_cookie_timing_evidence, ["before_consent_cookie_write"]);
   assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
 });

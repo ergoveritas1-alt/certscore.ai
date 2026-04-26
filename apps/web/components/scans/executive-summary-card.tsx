@@ -21,6 +21,7 @@ type DomainBenchmarkCardData = {
 } | null;
 
 type UnifiedRegulatoryContext = {
+  beforeConsentCookieEvidence?: Record<string, unknown> | null;
   beforeConsentCookieCount?: number;
   hasSensitiveGamblingTrackingRisk?: boolean;
   hasSensitiveHealthTrackingRisk?: boolean;
@@ -40,6 +41,10 @@ function getPostureClasses(posture: "Clear" | "Watch" | "Action Needed") {
 
 function formatCategoryLabel(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
 function DetailDisclosure(input: {
@@ -159,6 +164,7 @@ function buildRegulatoryLensFindingFromCertFinding(
 
 function buildObservedCountLensFinding(input: {
   count: number;
+  evidence?: Record<string, unknown> | null;
   id: string;
   label: string;
   metric: string;
@@ -167,6 +173,7 @@ function buildObservedCountLensFinding(input: {
   return buildRegulatoryLensFinding({
     evidence: {
       count: input.count,
+      ...(input.evidence ?? {}),
       metric: input.metric,
       reason: input.label,
       source: input.source
@@ -403,6 +410,7 @@ export function buildRegulatoryLenses(
     beforeConsentCookieCount > 0
       ? buildObservedCountLensFinding({
           count: beforeConsentCookieCount,
+          evidence: options?.unifiedContext?.beforeConsentCookieEvidence,
           id: "before_consent_cookie_count",
           label: `${beforeConsentCookieCount} cookies were observed before consent.`,
           metric: "beforeConsentCookieCount",
@@ -862,6 +870,48 @@ export function buildRegulatoryLensesFromUnifiedPackets(
       entities.preconsentCookieNames?.length ?? 0
     );
   }, 0);
+  const getPacketEntityStrings = (packet: UnifiedFindingDisplayPacket, keys: string[]) => {
+    const entities = packet.evidence?.entities as Record<string, unknown> | undefined;
+    return uniqueStrings(keys.flatMap((key) => {
+      const value = entities?.[key];
+      return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+    }));
+  };
+  const consentTrackingPackets = surfacedPackets.filter((packet) => packet.unifiedFindingId === "preconsent_tracking");
+  const beforeConsentCookieEvidence = {
+    cookieNames: uniqueStrings(consentTrackingPackets.flatMap((packet) =>
+      getPacketEntityStrings(packet, [
+        "preconsent_nonessential_cookie_names",
+        "preconsent_cookie_names",
+        "preconsentNonessentialCookieNames",
+        "preconsentCookieNames"
+      ])
+    )),
+    cookieCategories: uniqueStrings(consentTrackingPackets.flatMap((packet) =>
+      getPacketEntityStrings(packet, ["preconsent_cookie_categories", "preconsentCookieCategories"])
+    )),
+    cookieTimingEvidence: uniqueStrings(consentTrackingPackets.flatMap((packet) =>
+      getPacketEntityStrings(packet, ["preconsent_cookie_timing_evidence", "preconsentCookieTimingEvidence"])
+    )),
+    cookieVendors: uniqueStrings(consentTrackingPackets.flatMap((packet) => [
+      ...getPacketEntityStrings(packet, [
+        "preconsent_cookie_initiator_vendors",
+        "preconsentCookieInitiatorVendors",
+        "preconsent_tracker_vendors",
+        "preconsentTrackerVendors"
+      ]),
+      ...((packet.details && typeof packet.details === "object" && Array.isArray((packet.details as { vendors?: unknown }).vendors))
+        ? (packet.details as { vendors: unknown[] }).vendors.filter((value): value is string => typeof value === "string")
+        : [])
+    ])),
+    initiatorDomains: uniqueStrings(consentTrackingPackets.flatMap((packet) =>
+      getPacketEntityStrings(packet, ["preconsent_cookie_initiator_domains", "preconsentCookieInitiatorDomains"])
+    )),
+    initiatorUrls: uniqueStrings(consentTrackingPackets.flatMap((packet) =>
+      getPacketEntityStrings(packet, ["preconsent_cookie_initiator_urls", "preconsentCookieInitiatorUrls"])
+    )),
+    sourceFindingIds: uniqueStrings(consentTrackingPackets.map((packet) => packet.unifiedFindingId))
+  };
   const packetDerivedThirdPartyRequestCount = surfacedPackets.reduce((count, packet) => {
     const evidenceUrls = packet.evidence?.entities?.preconsent_tracker_evidence_urls?.length ??
       packet.evidence?.entities?.preconsentTrackerEvidenceUrls?.length ??
@@ -892,6 +942,7 @@ export function buildRegulatoryLensesFromUnifiedPackets(
       ...accessibilityOptions,
       regulatoryRisk: null,
       unifiedContext: {
+        beforeConsentCookieEvidence,
         beforeConsentCookieCount: packetDerivedBeforeConsentCookieCount,
         hasSensitiveGamblingTrackingRisk,
         hasSensitiveHealthTrackingRisk,

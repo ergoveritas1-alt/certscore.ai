@@ -1649,6 +1649,61 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (preconsentCookieCategories.length > 0) {
     entities.preconsent_cookie_categories = preconsentCookieCategories;
   }
+  const preconsentCookieEvidenceRows = [
+    ...(Array.isArray(normalizedFallbackEvidence.preconsent_cookie_evidence)
+      ? (normalizedFallbackEvidence.preconsent_cookie_evidence as Array<Record<string, unknown>>)
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.preconsentCookieEvidence)
+      ? (normalizedFallbackEvidence.preconsentCookieEvidence as Array<Record<string, unknown>>)
+      : [])
+  ];
+  const preconsentCookieInitiatorVendors = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.preconsent_cookie_initiator_vendors)
+      ? (normalizedFallbackEvidence.preconsent_cookie_initiator_vendors as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.preconsentCookieInitiatorVendors)
+      ? (normalizedFallbackEvidence.preconsentCookieInitiatorVendors as string[])
+      : []),
+    ...preconsentCookieEvidenceRows.map((row) => typeof row.initiatorVendor === "string" ? row.initiatorVendor : null)
+  ]);
+  if (preconsentCookieInitiatorVendors.length > 0) {
+    entities.preconsent_cookie_initiator_vendors = preconsentCookieInitiatorVendors;
+  }
+  const preconsentCookieInitiatorDomains = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.preconsent_cookie_initiator_domains)
+      ? (normalizedFallbackEvidence.preconsent_cookie_initiator_domains as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.preconsentCookieInitiatorDomains)
+      ? (normalizedFallbackEvidence.preconsentCookieInitiatorDomains as string[])
+      : []),
+    ...preconsentCookieEvidenceRows.map((row) => typeof row.initiatorDomain === "string" ? row.initiatorDomain : null)
+  ]);
+  if (preconsentCookieInitiatorDomains.length > 0) {
+    entities.preconsent_cookie_initiator_domains = preconsentCookieInitiatorDomains;
+  }
+  const preconsentCookieInitiatorUrls = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.preconsent_cookie_initiator_urls)
+      ? (normalizedFallbackEvidence.preconsent_cookie_initiator_urls as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.preconsentCookieInitiatorUrls)
+      ? (normalizedFallbackEvidence.preconsentCookieInitiatorUrls as string[])
+      : []),
+    ...preconsentCookieEvidenceRows.map((row) => typeof row.initiatorUrl === "string" ? row.initiatorUrl : null)
+  ]);
+  if (preconsentCookieInitiatorUrls.length > 0) {
+    entities.preconsent_cookie_initiator_urls = preconsentCookieInitiatorUrls;
+  }
+  const preconsentTrackerVendors = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.preconsent_tracker_vendors)
+      ? (normalizedFallbackEvidence.preconsent_tracker_vendors as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.preconsentTrackerVendors)
+      ? (normalizedFallbackEvidence.preconsentTrackerVendors as string[])
+      : [])
+  ]);
+  if (preconsentTrackerVendors.length > 0) {
+    entities.preconsent_tracker_vendors = preconsentTrackerVendors;
+  }
   const preconsentCookieTimingEvidence = uniqueStrings([
     ...(Array.isArray(normalizedFallbackEvidence.preconsent_cookie_timing_evidence)
       ? (normalizedFallbackEvidence.preconsent_cookie_timing_evidence as string[])

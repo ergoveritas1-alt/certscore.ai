@@ -268,6 +268,50 @@ test("buildRegulatoryLenses treats pre-consent cookie counts as regulatory track
   assert.notEqual(lenses[1]?.summary, "No strong sale/share-style signal surfaced in the top findings.");
 });
 
+test("buildRegulatoryLensesFromUnifiedPackets carries cookie vendors into count evidence", () => {
+  const lenses = buildRegulatoryLensesFromUnifiedPackets(
+    [
+      makeUnifiedPacket("preconsent_tracking", {
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking",
+          vendors: ["Google Analytics", "Meta Pixel"]
+        },
+        evidence: {
+          counts: {},
+          entities: {
+            preconsent_cookie_categories: ["analytics", "advertising"],
+            preconsent_cookie_initiator_domains: ["www.google-analytics.com", "connect.facebook.net"],
+            preconsent_cookie_initiator_urls: ["https://www.google-analytics.com/analytics.js", "https://connect.facebook.net/en_US/fbevents.js"],
+            preconsent_cookie_initiator_vendors: ["Google Analytics", "Meta Pixel"],
+            preconsent_cookie_names: ["_ga", "_fbp"],
+            preconsent_cookie_timing_evidence: ["before_consent_cookie_write"],
+            preconsent_nonessential_cookie_names: ["_ga", "_fbp"]
+          },
+          fetchQuality: null,
+          flags: ["privacy.preconsent_tracking_detected"],
+          pageUrls: [],
+          snippets: [],
+          sourceUrls: []
+        },
+        summary: "Observed before a clear user choice was made."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    }
+  );
+
+  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
+  const cookieFinding = gdprLens?.findings.find((finding) => finding.id === "before_consent_cookie_count");
+
+  assert.equal(cookieFinding?.evidence.count, 2);
+  assert.deepEqual(cookieFinding?.evidence.cookieNames, ["_ga", "_fbp"]);
+  assert.deepEqual(cookieFinding?.evidence.cookieVendors, ["Google Analytics", "Meta Pixel"]);
+  assert.deepEqual(cookieFinding?.evidence.initiatorDomains, ["www.google-analytics.com", "connect.facebook.net"]);
+});
+
 test("buildRegulatoryLenses does not overstate consent-only review signals as GDPR tracking issues", () => {
   const lenses = buildRegulatoryLenses(
     [
