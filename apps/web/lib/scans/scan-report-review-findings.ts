@@ -189,6 +189,68 @@ function buildSessionReplayTrackerFallbackEvidence(input: {
   };
 }
 
+function mergeStringArrayEvidence(left: unknown, right: unknown) {
+  return uniqueStrings([
+    ...(Array.isArray(left) ? left.filter((entry): entry is string => typeof entry === "string") : []),
+    ...(Array.isArray(right) ? right.filter((entry): entry is string => typeof entry === "string") : [])
+  ]);
+}
+
+function mergeObjectArrayEvidence(left: unknown, right: unknown) {
+  const rows = [
+    ...(Array.isArray(left) ? left.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry)) : []),
+    ...(Array.isArray(right) ? right.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry)) : [])
+  ];
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = JSON.stringify(row);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function mergeFallbackEvidenceRecords(
+  baseFallbackEvidence: Record<string, unknown> | null | undefined,
+  hybridFallbackEvidence: Record<string, unknown> | null | undefined
+) {
+  if (!baseFallbackEvidence) {
+    return hybridFallbackEvidence ?? undefined;
+  }
+  if (!hybridFallbackEvidence) {
+    return baseFallbackEvidence;
+  }
+
+  const merged: Record<string, unknown> = { ...baseFallbackEvidence, ...hybridFallbackEvidence };
+  for (const key of [
+    "requestUrls",
+    "runtimeEvidenceArtifacts",
+    "runtimeEvidenceUrls",
+    "runtimeVendors",
+    "session_replay_request_urls",
+    "session_replay_runtime_vendors",
+    "sourceUrls",
+    "supportingSignals"
+  ]) {
+    const values = mergeStringArrayEvidence(baseFallbackEvidence[key], hybridFallbackEvidence[key]);
+    if (values.length > 0) {
+      merged[key] = values;
+    }
+  }
+
+  const trackerRows = mergeObjectArrayEvidence(
+    baseFallbackEvidence.session_replay_tracker_evidence,
+    hybridFallbackEvidence.session_replay_tracker_evidence
+  );
+  if (trackerRows.length > 0) {
+    merged.session_replay_tracker_evidence = trackerRows;
+  }
+
+  return merged;
+}
+
 function getRuntimeRecord(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -1406,9 +1468,7 @@ export function buildReviewFindings(input: {
         signalValue: item.value
       });
       const fallbackEvidence =
-        hybridFallbackEvidence && baseFallbackEvidence
-          ? { ...baseFallbackEvidence, ...hybridFallbackEvidence }
-          : hybridFallbackEvidence ?? baseFallbackEvidence;
+        mergeFallbackEvidenceRecords(baseFallbackEvidence, hybridFallbackEvidence);
 
       if (!shouldSurfacePrimarySignalFinding({
         fallbackEvidence,

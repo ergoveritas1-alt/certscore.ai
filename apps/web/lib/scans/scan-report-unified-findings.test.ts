@@ -101,6 +101,12 @@ test("session replay snapshot signal retains persisted tracker vendor provenance
         value: true
       }
     ],
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        requestObservations: [],
+        requestToVendorObservations: []
+      }
+    },
     trackerVendors: [
       {
         beforeConsent: true,
