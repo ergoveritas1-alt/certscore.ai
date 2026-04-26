@@ -33,6 +33,18 @@ function hasUrlscanMissingKey(metadata: Record<string, unknown>) {
   ].some((value) => value === "no_api_key");
 }
 
+function publicSupplementalPhaseLabel(phase: string) {
+  if (phase.includes("legal_fetch")) {
+    return "supplemental_disclosure_fetch";
+  }
+
+  if (phase.includes("lookup")) {
+    return "supplemental_runtime_lookup";
+  }
+
+  return "supplemental_runtime_enrichment";
+}
+
 export function deriveScannerHealthWarnings(events: ScannerHealthEvent[]): PreviewScannerHealthWarning[] {
   const missingUrlscanKeyPhases = new Set<string>();
 
@@ -54,13 +66,13 @@ export function deriveScannerHealthWarnings(events: ScannerHealthEvent[]): Previ
 
   return [
     {
-      code: "urlscan_api_key_missing",
+      code: "supplemental_enrichment_key_missing",
       severity: "warning",
       title: "Supplemental enrichment unavailable",
       message:
         "Supplemental public runtime enrichment was skipped because the scanner runtime did not have the enrichment API key configured. CertScore still uses retained live-browser evidence and cached public runtime lookups when available, but supplemental cookie and request enrichment may be incomplete.",
       source: "supplemental_public_runtime_enrichment",
-      phases: [...missingUrlscanKeyPhases].sort()
+      phases: [...new Set([...missingUrlscanKeyPhases].map(publicSupplementalPhaseLabel))].sort()
     }
   ];
 }

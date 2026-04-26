@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { deriveScannerHealthWarnings } from "./scanner-health-warnings";
 
-test("derives a scanner health warning when urlscan preflight lacks an API key", () => {
+test("derives a provider-neutral scanner health warning when supplemental preflight lacks an API key", () => {
   const warnings = deriveScannerHealthWarnings([
     {
       eventType: "runtime.build_phase_diagnostic",
@@ -21,8 +21,8 @@ test("derives a scanner health warning when urlscan preflight lacks an API key",
   ]);
 
   assert.equal(warnings.length, 1);
-  assert.equal(warnings[0]?.code, "urlscan_api_key_missing");
-  assert.deepEqual(warnings[0]?.phases, ["urlscan_preflight_legal_fetch", "urlscan_preflight_lookup"]);
+  assert.equal(warnings[0]?.code, "supplemental_enrichment_key_missing");
+  assert.deepEqual(warnings[0]?.phases, ["supplemental_disclosure_fetch", "supplemental_runtime_lookup"]);
 });
 
 test("ignores non-urlscan no_api_key diagnostics", () => {
