@@ -706,7 +706,7 @@ function describePreconsentTrackingFinding(input: {
     snapshot: input.snapshot as unknown as Record<string, unknown>,
     runtimeArtifacts: input.runtimeArtifacts
   });
-  const vendorSummary = formatHighRiskVendorSummary(context.highRiskVendors);
+  const vendorSummary = formatHighRiskVendorSummary(context.highRiskVendors, context.isSensitiveContext ? 8 : 5);
 
   if (context.isSensitiveContext && vendorSummary.length > 0) {
     return `Pre-consent tracking was observed on a ${context.sensitiveContextLabel}. Vendors observed include ${vendorSummary.join(", ")}. Sensitive-context behavioral data may be flowing to third parties before a clear consent interaction is completed.`;
@@ -772,7 +772,7 @@ function describeFallbackPreconsentTrackingFinding(input: {
   fallbackSnapshot: UrlscanFallbackSnapshot;
 }) {
   const context = deriveFallbackHighRiskTrackingContext(input);
-  const vendorSummary = formatHighRiskVendorSummary(context.highRiskVendors);
+  const vendorSummary = formatHighRiskVendorSummary(context.highRiskVendors, context.isSensitiveContext ? 8 : 5);
 
   if (context.isSensitiveContext && vendorSummary.length > 0) {
     return `Supplemental public runtime evidence retained tracking cookies or tracking requests on a ${context.sensitiveContextLabel}. Vendors observed include ${vendorSummary.join(", ")}. Sensitive-context behavioral data may be flowing to advertising, identity, or profiling systems before a clear consent interaction is completed.`;
@@ -1490,7 +1490,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
       snapshot: input.snapshot,
       fallbackSnapshot
     });
-    const sensitiveVendorSummary = formatHighRiskVendorSummary(sensitiveContext.highRiskVendors);
+    const sensitiveVendorSummary = formatHighRiskVendorSummary(sensitiveContext.highRiskVendors, 8);
 
     pushPrioritizedFinding(payload.sampleFindings, {
       affectedPage: "Homepage",

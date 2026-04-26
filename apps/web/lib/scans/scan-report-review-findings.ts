@@ -559,7 +559,7 @@ export function buildSectionReviewIssues(input: {
       runtimeArtifacts: input.runtimeArtifacts,
       evidenceUrls: preconsentEvidenceUrls
     });
-    const highRiskVendorSummary = formatHighRiskVendorSummary(highRiskContext.highRiskVendors);
+    const highRiskVendorSummary = formatHighRiskVendorSummary(highRiskContext.highRiskVendors, highRiskContext.isSensitiveContext ? 8 : 5);
     issues.push({
       description:
         highRiskContext.isSensitiveContext && highRiskVendorSummary.length > 0
