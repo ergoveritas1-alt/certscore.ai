@@ -680,11 +680,18 @@ function capScoresForSensitiveContextFallbackRisk(payload: PreviewScanPayload) {
     return;
   }
 
-  payload.scores = {
+  const calibratedScores = {
     ...payload.scores,
     overall: Math.min(payload.scores.overall, 62),
     privacy: Math.min(payload.scores.privacy, 55)
   };
+  payload.scores = calibratedScores;
+
+  const scoreBulletIndex = payload.summaryBullets.findIndex((bullet) => bullet.startsWith("Preview scores:"));
+  if (scoreBulletIndex >= 0) {
+    payload.summaryBullets[scoreBulletIndex] =
+      `Preview scores: overall ${calibratedScores.overall}, privacy ${calibratedScores.privacy}, accessibility ${calibratedScores.accessibility}.`;
+  }
 
   insertSummaryBullet(
     payload.summaryBullets,

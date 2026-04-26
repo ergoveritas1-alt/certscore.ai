@@ -485,6 +485,8 @@ test("sensitive fallback tracking is prioritized and calibrates preview scores",
   assert.equal(payload.sampleFindings[0]?.description.includes("health information site"), true);
   assert.equal(payload.scores?.privacy, 55);
   assert.equal(payload.scores?.overall, 62);
+  assert.equal(payload.summaryBullets.includes("Preview scores: overall 62, privacy 55, accessibility 82."), true);
+  assert.equal(payload.summaryBullets.includes("Preview scores: overall 79, privacy 78, accessibility 82."), false);
   assert.equal(
     payload.summaryBullets.includes("Preview scores were calibrated downward because sensitive-context tracking evidence was retained before consent."),
     true
