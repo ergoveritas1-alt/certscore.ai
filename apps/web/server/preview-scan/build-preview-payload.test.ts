@@ -750,3 +750,51 @@ test("off-domain redirects surface an explicit redirect finding", () => {
   assert.equal(payload.sampleFindings.some((finding) => finding.title === "Domain redirected to a different site"), true);
   assert.equal(payload.summaryBullets.some((bullet) => bullet.includes("redirected to nfund.com")), true);
 });
+
+test("preview enrichment suppresses privacy absence when homepage discovery retained a strong privacy notice", () => {
+  const snapshot = buildSnapshot({
+    pagesScanned: 1,
+    partialScan: true,
+    privacyPolicyPresent: false,
+    totalSignals: 42
+  });
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "draftkings.com",
+    normalizedUrl: "https://draftkings.com",
+    snapshot
+  });
+
+  assert.equal(payload.sampleFindings.some((finding) => finding.title === "Privacy policy not detected"), true);
+
+  const enriched = enrichPreviewPayloadWithFallbackEvidence({
+    events: [
+      {
+        event_type: "runtime.build_phase_diagnostic",
+        metadata_json: {
+          discoveryDebug: {
+            topDiscoveryCandidates: [
+              {
+                anchorText: "Privacy Notice",
+                candidateScore: 0.98,
+                candidateUrl: "https://myaccount.draftkings.com/documents/privacy-notice",
+                discoveredFrom: "homepage_rendered_link",
+                pageType: "privacy_policy",
+                sourceUrl: "https://www.draftkings.com/"
+              }
+            ]
+          },
+          phase: "page_discovery_fetch"
+        }
+      }
+    ],
+    payload,
+    snapshot
+  });
+
+  assert.equal(enriched.sampleFindings.some((finding) => finding.title === "Privacy policy not detected"), false);
+  assert.equal(enriched.issueCounts.high, payload.issueCounts.high - 1);
+  assert.equal(
+    enriched.summaryBullets.includes("A likely privacy notice link was retained from the scanned homepage surface."),
+    true
+  );
+});
