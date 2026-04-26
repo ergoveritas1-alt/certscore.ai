@@ -84,6 +84,18 @@ test("projects surfaced unified findings into executive findings and regulatory 
     makePacket("preconsent_tracking", {
       confidenceBand: "high",
       details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      evidence: {
+        counts: { preconsentViolationCount: 2 },
+        entities: {
+          runtimeVendors: ["Meta Pixel", "Google Analytics"],
+          runtimeRequestUrls: ["https://connect.facebook.net/en_US/fbevents.js"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Trackers fired before consent interaction."],
+        sourceUrls: ["https://connect.facebook.net/en_US/fbevents.js"]
+      },
       severity: "high",
       summary: "6 third-party requests fired before any consent action."
     }),
@@ -140,6 +152,10 @@ test("projects surfaced unified findings into executive findings and regulatory 
     ]
   );
   assert.equal(projection.posture, "Action Needed");
+  const preconsentFinding = projection.findings.find((finding) => finding.id === "pre_consent_tracking_detected");
+  assert.deepEqual(preconsentFinding?.evidenceDetails?.runtimeVendors, ["Meta Pixel", "Google Analytics"]);
+  assert.deepEqual(preconsentFinding?.evidenceDetails?.runtimeRequestUrls, ["https://connect.facebook.net/en_US/fbevents.js"]);
+  assert.deepEqual(preconsentFinding?.evidenceDetails?.counts, { preconsentViolationCount: 2 });
   assert.ok(
     projection.topFindings.every((finding) => projection.findings.some((candidate) => candidate.id === finding.id))
   );
@@ -199,12 +215,27 @@ test("projects surfaced scanner-level financial promotion into executive finding
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("leveraged_or_high_risk_product_promotion", {
       details: { family: "financial_promotion", kind: "leveraged_or_high_risk_product_promotion" },
+      evidence: {
+        counts: {},
+        entities: {
+          pageUrls: ["https://example.com/sportsbook"]
+        },
+        fetchQuality: null,
+        flags: ["financial.leveraged_or_high_risk_product_promotion"],
+        pageUrls: ["https://example.com/sportsbook"],
+        snippets: ["Sportsbook promotion language appeared on a wagering product page."],
+        sourceUrls: ["https://example.com/sportsbook"]
+      },
       summary: "High-risk financial product promotion language surfaced."
     })
   ]);
 
   assert.deepEqual(projection.findings.map((finding) => finding.id), [
     "leveraged_or_high_risk_product_promotion"
+  ]);
+  assert.deepEqual(projection.findings[0]?.evidenceDetails?.sourceUrls, ["https://example.com/sportsbook"]);
+  assert.deepEqual(projection.findings[0]?.evidenceDetails?.evidenceSnippets, [
+    "Sportsbook promotion language appeared on a wagering product page."
   ]);
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
 });

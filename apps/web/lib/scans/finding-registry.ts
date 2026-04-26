@@ -22,10 +22,14 @@ export type CertScoreFindingDefinition = {
 };
 
 export type CertScoreFindingEvidenceDetails = {
-  runtimeVendors?: string[];
+  counts?: Record<string, number>;
+  evidenceSnippets?: string[];
+  pageUrls?: string[];
   runtimeRequestUrls?: string[];
-  sourceSignals?: string[];
+  runtimeVendors?: string[];
   evidenceFlags?: string[];
+  sourceSignals?: string[];
+  sourceUrls?: string[];
 };
 
 export type CertScoreFinding = CertScoreFindingDefinition & {

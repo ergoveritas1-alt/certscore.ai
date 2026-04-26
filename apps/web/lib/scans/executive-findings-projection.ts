@@ -61,6 +61,10 @@ function getEntityValues(packet: UnifiedFindingDisplayPacket, pattern: RegExp) {
   );
 }
 
+function getEntityUrlValues(packet: UnifiedFindingDisplayPacket, pattern: RegExp) {
+  return getEntityValues(packet, pattern).filter((value) => /^https?:\/\//i.test(value));
+}
+
 function mapConfidenceBandToExecutiveConfidence(
   band: UnifiedFindingDisplayPacket["confidenceBand"]
 ): CertScoreFindingConfidence {
@@ -117,16 +121,14 @@ function getMappedFindingId(
 }
 
 function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: keyof typeof CERT_SCORE_FINDING_REGISTRY) {
-  const sessionReplayEvidence =
-    findingId === "session_recording_services_detected"
-      ? buildExecutiveEvidenceDetails(packet, findingId)
-      : null;
+  const evidenceDetails = findingId ? buildExecutiveEvidenceDetails(packet, findingId) : null;
 
   return uniqueStrings([
     packet.summary,
     packet.observedValue,
-    ...(sessionReplayEvidence?.runtimeVendors ?? []).map((vendor) => `Runtime vendor: ${vendor}`),
-    ...(sessionReplayEvidence?.runtimeRequestUrls ?? []).slice(0, 2).map((url) => `Runtime request: ${url}`),
+    ...(evidenceDetails?.runtimeVendors ?? []).map((vendor) => `Runtime vendor: ${vendor}`),
+    ...(evidenceDetails?.runtimeRequestUrls ?? []).slice(0, 2).map((url) => `Runtime request: ${url}`),
+    ...(evidenceDetails?.sourceUrls ?? []).slice(0, 2).map((url) => `Source: ${url}`),
     ...(packet.evidence?.snippets ?? []),
     ...(packet.evidence?.sourceUrls ?? []).slice(0, 2),
     ...packet.sourceRefs.flatMap((sourceRef) => {
@@ -194,19 +196,37 @@ function getSessionReplayVendors(packet: UnifiedFindingDisplayPacket) {
 }
 
 function getSessionReplayRequestUrls(packet: UnifiedFindingDisplayPacket) {
-  return uniqueStrings(packet.evidence?.sourceUrls ?? []).filter((url) => SESSION_REPLAY_URL_PATTERN.test(url));
+  return uniqueStrings([
+    ...(packet.evidence?.sourceUrls ?? []),
+    ...getEntityUrlValues(packet, /runtime.*request|request.*url|evidence.*url|source.*url/i)
+  ]).filter((url) => SESSION_REPLAY_URL_PATTERN.test(url));
 }
 
 function buildExecutiveEvidenceDetails(
   packet: UnifiedFindingDisplayPacket,
   findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
 ): CertScoreFindingEvidenceDetails | undefined {
-  if (findingId !== "session_recording_services_detected") {
-    return undefined;
-  }
-
-  const runtimeVendors = uniqueStrings([...getEntityValues(packet, /runtime.*vendor|vendor/i), ...getSessionReplayVendors(packet)]);
-  const runtimeRequestUrls = getSessionReplayRequestUrls(packet);
+  const runtimeVendors = uniqueStrings([
+    ...getEntityValues(packet, /runtime.*vendor|vendor|preconsent.*tracker.*vendor|relatedVendors/i),
+    ...(findingId === "session_recording_services_detected" ? getSessionReplayVendors(packet) : [])
+  ]);
+  const genericRuntimeRequestUrls = uniqueStrings([
+    ...getEntityUrlValues(packet, /runtime.*request|request.*url|preconsent.*tracker.*evidence|evidence.*url/i),
+    ...((packet.details?.family === "consent_tracking" || findingId === "pre_consent_tracking_detected")
+      ? (packet.evidence?.sourceUrls ?? [])
+      : [])
+  ]);
+  const runtimeRequestUrls =
+    findingId === "session_recording_services_detected"
+      ? uniqueStrings([...getSessionReplayRequestUrls(packet), ...genericRuntimeRequestUrls])
+      : genericRuntimeRequestUrls;
+  const sourceUrls = uniqueStrings(packet.evidence?.sourceUrls ?? []);
+  const pageUrls = uniqueStrings([
+    packet.primaryPageUrl,
+    packet.sourceUrl,
+    ...(packet.evidence?.pageUrls ?? [])
+  ]);
+  const evidenceSnippets = uniqueStrings(packet.evidence?.snippets ?? []).slice(0, 5);
   const sourceSignals = uniqueStrings(
     packet.sourceRefs.flatMap((sourceRef) => {
       if (sourceRef.kind !== "signal") {
@@ -216,8 +236,20 @@ function buildExecutiveEvidenceDetails(
     })
   );
   const evidenceFlags = uniqueStrings(packet.evidence?.flags ?? []);
+  const counts = Object.fromEntries(
+    Object.entries(packet.evidence?.counts ?? {}).filter(([, value]) => Number.isFinite(value))
+  );
   const details: CertScoreFindingEvidenceDetails = {};
 
+  if (Object.keys(counts).length > 0) {
+    details.counts = counts;
+  }
+  if (evidenceSnippets.length > 0) {
+    details.evidenceSnippets = evidenceSnippets;
+  }
+  if (pageUrls.length > 0) {
+    details.pageUrls = pageUrls;
+  }
   if (runtimeVendors.length > 0) {
     details.runtimeVendors = runtimeVendors;
   }
@@ -229,6 +261,9 @@ function buildExecutiveEvidenceDetails(
   }
   if (evidenceFlags.length > 0) {
     details.evidenceFlags = evidenceFlags;
+  }
+  if (sourceUrls.length > 0) {
+    details.sourceUrls = sourceUrls;
   }
 
   return Object.keys(details).length > 0 ? details : undefined;
