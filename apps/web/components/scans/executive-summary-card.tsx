@@ -216,6 +216,7 @@ export function buildRegulatoryLenses(
       wcagMissingAltCount?: number | null;
     } | null;
     agencyMappings?: AgencyMapping[];
+    benchmarkIndustry?: string | null;
     regulatoryRisk?: RegulatoryRiskAssessment | null;
   }
 ): RegulatoryLens[] {
@@ -251,13 +252,24 @@ export function buildRegulatoryLenses(
   const hasStrongDarkPatternConcern =
     findingIds.has("consent_dark_patterns_detected") || findingIds.has("asymmetric_consent_ui");
   const riskDriverKeys = new Set(options?.regulatoryRisk?.topRiskDrivers.map((driver) => driver.key) ?? []);
+  const benchmarkHaystack = `${options?.benchmarkIndustry ?? ""} ${findings.map((finding) => `${finding.label} ${finding.shortSummary}`).join(" ")}`;
+  const hasGamblingSensitiveContext = /\b(gambling|sports betting|sportsbook|casino|wager|betting)\b/i.test(benchmarkHaystack);
+  const hasHealthSensitiveContext = /\b(health|medical|patient|symptom|condition|clinical)\b/i.test(benchmarkHaystack);
+  const hasGenericSensitiveTrackingRisk =
+    riskDriverKeys.has("sensitive_context_tracking") ||
+    riskDriverKeys.has("sensitive_context_preconsent");
   const hasSensitiveHealthTrackingRisk =
     riskDriverKeys.has("health_identity_data_broker") ||
     riskDriverKeys.has("health_dmp_flow") ||
-    riskDriverKeys.has("sensitive_context_tracking") ||
-    riskDriverKeys.has("sensitive_context_preconsent") ||
     riskDriverKeys.has("identity_data_broker_preconsent") ||
-    riskDriverKeys.has("dmp_pre_consent");
+    riskDriverKeys.has("dmp_pre_consent") ||
+    (hasGenericSensitiveTrackingRisk && hasHealthSensitiveContext && !hasGamblingSensitiveContext);
+  const hasSensitiveGamblingTrackingRisk =
+    hasGamblingSensitiveContext && (
+      hasGenericSensitiveTrackingRisk ||
+      findingIds.has("session_recording_services_detected") ||
+      hasTrackingConcern
+    );
 
   const privacyTrackingNotes = [
     trackingFinding ? trackingFinding.shortSummary : null,
@@ -336,6 +348,8 @@ export function buildRegulatoryLenses(
       score: ftcScore,
       summary: hasStrongDarkPatternConcern
         ? "Choice architecture and disclosure clarity are the main FTC-style concerns."
+        : hasSensitiveGamblingTrackingRisk
+          ? "High-risk gambling, financial-behavior, and advertising flows elevate FTC unfairness or deception risk."
         : hasSensitiveHealthTrackingRisk
           ? "Health-context tracking and advertising/data-broker flows elevate FTC unfairness or deception risk."
         : hasConsentConcern
@@ -1153,6 +1167,7 @@ export function ExecutiveSummaryCard(input: {
   const regulatoryOptions = {
     accessibilitySignals: input.accessibilitySignals,
     agencyMappings: input.agencyMappings,
+    benchmarkIndustry: input.domainBenchmark?.industry ?? null,
     regulatoryRisk: input.regulatoryRisk
   };
   const findingBasedRegulatoryLenses = buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);

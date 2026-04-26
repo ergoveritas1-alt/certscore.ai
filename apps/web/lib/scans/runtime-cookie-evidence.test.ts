@@ -34,6 +34,7 @@ test("filters consent security and infrastructure cookies from tracking evidence
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("notice_preferences", ".example.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("__cf_bm", ".example.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("BIGipServerpool", ".example.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("akaalb_usp-google", "www.sbtech.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("_ga", ".example.com"), false);
 });
 

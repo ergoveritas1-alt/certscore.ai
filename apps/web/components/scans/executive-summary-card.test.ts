@@ -168,6 +168,33 @@ test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards 
   assert.equal(lenses[2]?.ratingLabel, "Needs work");
 });
 
+test("buildRegulatoryLenses uses gambling-specific FTC copy for sensitive tracking on sportsbook benchmarks", () => {
+  const lenses = buildRegulatoryLenses(
+    [
+      makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+        shortSummary: "Pre-consent tracking was observed on a sports betting or gambling site."
+      }),
+      makeFinding("session_recording_services_detected", "Session recording services detected", {
+        shortSummary: "FullStory session replay was observed before consent."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 95
+    },
+    {
+      benchmarkIndustry: "Sports betting / gambling",
+      regulatoryRisk: makeRegulatoryRisk({
+        topRiskDrivers: [{ key: "sensitive_context_tracking", label: "Sensitive-context tracking before consent", impact: 26 }]
+      })
+    }
+  );
+
+  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
+  assert.match(ftcLens?.summary ?? "", /High-risk gambling, financial-behavior, and advertising flows/i);
+  assert.doesNotMatch(ftcLens?.summary ?? "", /Health-context/i);
+});
+
 test("buildRegulatoryLenses treats pre-consent cookie findings as GDPR tracking risk", () => {
   const lenses = buildRegulatoryLenses(
     [

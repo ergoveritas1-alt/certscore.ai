@@ -439,6 +439,49 @@ export function buildSectionReviewIssues(input: {
 }) {
   const issues: CanonicalReviewIssue[] = [];
 
+  if (input.sectionId === "high_risk_product_marketing_disclosures") {
+    const highRiskContext = deriveHighRiskTrackingContext({
+      hostname:
+        typeof input.snapshot?.registered_domain === "string"
+          ? input.snapshot.registered_domain
+          : typeof input.snapshot?.final_url === "string"
+            ? input.snapshot.final_url
+            : null,
+      snapshot: input.snapshot,
+      runtimeArtifacts: input.runtimeArtifacts
+    });
+    const runtimeText = uniqueStrings([
+      ...(typeof input.snapshot?.registered_domain === "string" ? [input.snapshot.registered_domain] : []),
+      ...getRecordStringArray(input.runtimeArtifacts, "third_party_request_domains"),
+      ...getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_evidence_urls")
+    ]).join(" ");
+    const gamblingContextDetected =
+      highRiskContext.sensitiveContextLabel === "sports betting or gambling site" ||
+      /\b(gambling|sportsbook|sports betting|casino|wager|bonus bet|promo|1-800-gambler|draftkings|fanduel)\b/i.test(runtimeText);
+
+    if (gamblingContextDetected) {
+      issues.push({
+        description:
+          "The scanned surface appears to be a sports betting or gambling product. High-risk product marketing should keep age eligibility, responsible-gambling help, bonus terms, and material offer restrictions close to promotional claims.",
+        evidence: uniqueStrings([
+          typeof input.snapshot?.registered_domain === "string" ? input.snapshot.registered_domain : null,
+          ...getRecordStringArray(input.runtimeArtifacts, "third_party_request_domains").slice(0, 4)
+        ]),
+        fallbackEvidence: {
+          familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
+          sensitive_context_label: "sports betting or gambling site",
+          supportingSignals: [
+            "financial.high_risk_product_promotion",
+            "commercial.gambling_or_sportsbook_context_detected"
+          ]
+        },
+        linkedValidationRuleKeys: ["section_review.high_risk_product_without_local_loss_risk_disclosure"],
+        severity: "medium",
+        title: "High-risk gambling promotion disclosure review"
+      });
+    }
+  }
+
   if (input.sectionId === "policy_clarity_consistency_review") {
     issues.push(
       ...input.policyBehaviorContradictions.map((row) => {
