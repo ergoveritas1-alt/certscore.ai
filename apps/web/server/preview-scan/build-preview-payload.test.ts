@@ -230,6 +230,8 @@ test("preview pre-consent finding uses retained first-load diagnostics when expl
   assert.match(finding?.description ?? "", /FullStory/i);
   assert.match(finding?.description ?? "", /Braze/i);
   assert.match(finding?.description ?? "", /Meta Pixel/i);
+  assert.match(finding?.description ?? "", /Reddit Pixel/i);
+  assert.match(finding?.description ?? "", /Microsoft Bing Ads/i);
   assert.doesNotMatch(finding?.description ?? "", /TrustArc/i);
 });
 
