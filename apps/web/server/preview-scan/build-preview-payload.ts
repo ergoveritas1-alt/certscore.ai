@@ -484,10 +484,8 @@ function buildNormalizedUrlscanFallbackEvidence(snapshot: UrlscanFallbackSnapsho
   ]);
 
   return {
-    source: "urlscan",
+    source: "supplemental_public_runtime",
     sourceLabel: "Supplemental public runtime evidence",
-    reportUrl: snapshot.reportUrl,
-    resultApiUrl: snapshot.resultApiUrl,
     metrics: {
       requestCount: snapshot.requestCount ?? undefined,
       thirdPartyRequestCount: snapshot.thirdPartyRequestCount ?? undefined,
