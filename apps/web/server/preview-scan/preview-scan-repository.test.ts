@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildActivityLineWithExecutionSummary,
-  hasPersistedSignalsMismatch
+  hasPersistedSignalsMismatch,
+  sanitizeStaleAccessDiagnostics
 } from "./preview-scan-repository";
 
 test("hasPersistedSignalsMismatch detects degraded signal persistence behind a signals.persisted event", () => {
@@ -103,4 +104,61 @@ test("buildActivityLineWithExecutionSummary overrides misleading signals.persist
 
   assert.match(line ?? "", /degraded signal persistence/i);
   assert.doesNotMatch(line ?? "", /compatibility signals persisted/i);
+});
+
+test("sanitizeStaleAccessDiagnostics clears stale auth wall diagnostics after useful origin reach", () => {
+  const result = sanitizeStaleAccessDiagnostics({
+    executionSummary: {
+      stages: [
+        {
+          metadata: {
+            accessPostureClass: "degraded_but_useful",
+            authWallSuspected: true,
+            blockedFlag: false,
+            blockPageClassification: "login_wall_probable",
+            captchaFlag: false,
+            challengeSuspected: false,
+            homepageFetchHttpStatus: 200,
+            homepageFetchStatus: "ok",
+            rateLimitSuspected: false
+          }
+        }
+      ]
+    },
+    snapshot: {
+      access_posture_class: "degraded_but_useful",
+      auth_wall_suspected: true,
+      blocked_flag: false,
+      block_page_classification: "login_wall_probable",
+      captcha_flag: false,
+      challenge_suspected: false,
+      homepage_fetch_http_status: 200,
+      homepage_fetch_status: "ok",
+      rate_limit_suspected: false
+    }
+  });
+
+  const metadata = result.executionSummary.stages[0]?.metadata;
+  assert.ok(metadata);
+  assert.equal(metadata.authWallSuspected, false);
+  assert.equal(metadata.blockPageClassification, null);
+  assert.equal(result.snapshot.auth_wall_suspected, false);
+  assert.equal(result.snapshot.block_page_classification, null);
+});
+
+test("sanitizeStaleAccessDiagnostics preserves auth wall diagnostics when useful origin was not reached", () => {
+  const result = sanitizeStaleAccessDiagnostics({
+    accessPostureClass: "early_loss",
+    authWallSuspected: true,
+    blockedFlag: false,
+    blockPageClassification: "login_wall_probable",
+    captchaFlag: false,
+    challengeSuspected: false,
+    homepageFetchHttpStatus: 200,
+    homepageFetchStatus: "ok",
+    rateLimitSuspected: false
+  });
+
+  assert.equal(result.authWallSuspected, true);
+  assert.equal(result.blockPageClassification, "login_wall_probable");
 });
