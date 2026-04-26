@@ -1095,7 +1095,7 @@ export function buildPreviewPayloadFromSnapshot(input: {
 
   pushFinding(
     findings,
-    !siteSurfaceUnverified && !input.snapshot.privacyPolicyPresent
+    !siteSurfaceUnverified && !secondarySurfaceCoverageLimited && !input.snapshot.privacyPolicyPresent
       ? {
           affectedPage: "Homepage",
           category: "legal",

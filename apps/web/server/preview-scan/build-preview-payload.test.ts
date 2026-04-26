@@ -80,6 +80,24 @@ test("broader preview coverage can still surface missing terms and contact findi
   );
 });
 
+test("lightweight previews suppress weak privacy absence findings", () => {
+  const payload = buildPreviewPayloadFromSnapshot({
+    hostname: "draftkings.com",
+    normalizedUrl: "https://draftkings.com",
+    snapshot: buildSnapshot({
+      pagesScanned: 1,
+      partialScan: true,
+      privacyPolicyPresent: false,
+      totalSignals: 25
+    })
+  });
+
+  assert.equal(
+    payload.sampleFindings.some((finding) => finding.title === "Privacy policy not detected"),
+    false
+  );
+});
+
 test("blocked or unreachable previews withhold scores and surface access blockers", () => {
   const payload = buildPreviewPayloadFromSnapshot({
     hostname: "chime.com",
@@ -753,8 +771,8 @@ test("off-domain redirects surface an explicit redirect finding", () => {
 
 test("preview enrichment suppresses privacy absence when homepage discovery retained a strong privacy notice", () => {
   const snapshot = buildSnapshot({
-    pagesScanned: 1,
-    partialScan: true,
+    pagesScanned: 4,
+    partialScan: false,
     privacyPolicyPresent: false,
     totalSignals: 42
   });
