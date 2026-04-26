@@ -699,6 +699,105 @@ function capScoresForSensitiveContextFallbackRisk(payload: PreviewScanPayload) {
   );
 }
 
+function replaceWithPreviewScoreBullet(payload: PreviewScanPayload, scores: NonNullable<PreviewScanPayload["scores"]>) {
+  const scoreBullet = `Preview scores: overall ${scores.overall}, privacy ${scores.privacy}, accessibility ${scores.accessibility}.`;
+  const scoreBulletIndex = payload.summaryBullets.findIndex((bullet) => bullet.startsWith("Preview scores:"));
+
+  if (scoreBulletIndex >= 0) {
+    payload.summaryBullets[scoreBulletIndex] = scoreBullet;
+    return;
+  }
+
+  insertSummaryBullet(payload.summaryBullets, scoreBullet);
+}
+
+function removeAccessWithholdingSummaryBullets(summaryBullets: string[]) {
+  return summaryBullets.filter((bullet) => {
+    if (bullet === "Access limited by site protections.") {
+      return false;
+    }
+
+    if (bullet.startsWith("Preview scores are withheld")) {
+      return false;
+    }
+
+    if (bullet.startsWith("Reason:")) {
+      return false;
+    }
+
+    if (/captcha|bot challenge|authentication wall|site protections/i.test(bullet)) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function maybePromoteSensitiveProtectedPreview(input: {
+  payload: PreviewScanPayload;
+  snapshot: PreviewSnapshotSource;
+  runtimeArtifacts?: Record<string, unknown> | null;
+}) {
+  if (!input.payload.resultState || input.payload.scores) {
+    return;
+  }
+
+  const hasProtectedAccessState = [
+    "reachability_blocked_challenge_suspected",
+    "reachability_blocked_captcha",
+    "unknown_access_limitation"
+  ].includes(input.payload.resultState.code);
+  const hasHighPreconsentFinding = input.payload.sampleFindings.some(
+    (finding) => finding.title === "Tracking activity observed before consent" && finding.severity === "high"
+  );
+  const homepageFetchHttpStatusSuccessful =
+    input.snapshot.homepageFetchHttpStatus == null ||
+    (input.snapshot.homepageFetchHttpStatus >= 200 && input.snapshot.homepageFetchHttpStatus < 400);
+  const highRiskContext = deriveHighRiskTrackingContext({
+    hostname:
+      getRecordString(input.snapshot as unknown as Record<string, unknown>, "registeredDomain") ??
+      hostnameFromUrl(input.snapshot.finalUrl) ??
+      "scanned domain",
+    snapshot: input.snapshot as unknown as Record<string, unknown>,
+    runtimeArtifacts: input.runtimeArtifacts
+  });
+  const canPromote =
+    hasProtectedAccessState &&
+    hasHighPreconsentFinding &&
+    highRiskContext.isSensitiveContext &&
+    highRiskContext.highRiskVendors.length > 0 &&
+    hasPreconsentTrackingEvidence(input.snapshot) &&
+    input.snapshot.homepageFetchStatus === "ok" &&
+    homepageFetchHttpStatusSuccessful &&
+    input.snapshot.blockedFlag !== true &&
+    input.snapshot.authWallDetected !== true &&
+    input.snapshot.certscoreOverall > 0 &&
+    input.snapshot.privacyScore > 0 &&
+    input.snapshot.accessibilityScore > 0 &&
+    input.snapshot.totalSignals >= 20;
+
+  if (!canPromote) {
+    return;
+  }
+
+  delete input.payload.resultState;
+  delete input.payload.evidence;
+  input.payload.scores = {
+    overall: input.snapshot.certscoreOverall,
+    privacy: input.snapshot.privacyScore,
+    accessibility: input.snapshot.accessibilityScore
+  };
+  input.payload.summaryBullets = removeAccessWithholdingSummaryBullets(input.payload.summaryBullets);
+  replaceWithPreviewScoreBullet(input.payload, input.payload.scores);
+  insertSummaryBullet(
+    input.payload.summaryBullets,
+    "Site protections limited page-depth verification, but retained live-browser evidence was sufficient to surface sensitive-context tracking risk."
+  );
+  capScoresForSensitiveContextFallbackRisk(input.payload);
+  sortPreviewFindings(input.payload.sampleFindings);
+  input.payload.issueCounts = deriveIssueCounts(input.payload.sampleFindings);
+}
+
 function canSurfaceScoresWithCoverageCaveat(input: {
   siteSurfaceUnverified: boolean;
   snapshot: PreviewSnapshotSource;
@@ -1161,6 +1260,12 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
       insertSummaryBullet(payload.summaryBullets, `Scanner health warning: ${warning.message}`);
     }
   }
+
+  maybePromoteSensitiveProtectedPreview({
+    payload,
+    snapshot: input.snapshot,
+    runtimeArtifacts: input.runtimeArtifacts
+  });
 
   const observableConsentSurface = hasObservableConsentSurface(input.snapshot);
   const worthwhileLeanPreview =
