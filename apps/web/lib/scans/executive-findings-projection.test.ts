@@ -395,7 +395,7 @@ test("projects representative accessibility packets into DOJ ADA regulatory lens
   assert.ok(adaLens);
   assert.equal(adaLens?.minimal, undefined);
   assert.notEqual(adaLens?.ratingLabel, "Not applicable");
-  assert.ok(adaLens?.findings.some((finding) => /automated wcag|representative accessibility/i.test(finding)));
+  assert.ok(adaLens?.findings.some((finding) => /automated wcag|representative accessibility/i.test(finding.label)));
 });
 
 test("keeps DOJ ADA regulatory lens minimal for score-only accessibility packets", () => {

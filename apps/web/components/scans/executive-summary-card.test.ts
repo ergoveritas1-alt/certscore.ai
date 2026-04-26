@@ -70,6 +70,10 @@ function makeAgencyMapping(overrides: Partial<AgencyMapping> = {}): AgencyMappin
   };
 }
 
+function regulatoryFindingLabels(findings: Array<{ label: string }>) {
+  return findings.map((finding) => finding.label);
+}
+
 function makeUnifiedPacket(
   unifiedFindingId: string,
   overrides: Partial<UnifiedFindingDisplayPacket> = {}
@@ -317,11 +321,11 @@ test("buildRegulatoryLenses adds DOJ / ADA accessibility when the shared accessi
   const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
   assert.ok(adaLens);
   assert.equal(adaLens?.summary, "Accessibility claims appear inconsistent with observed barriers.");
-  assert.match(adaLens?.findings.join(" "), /Automated WCAG issues detected: 27/);
-  assert.match(adaLens?.findings.join(" "), /Keyboard navigation issues surfaced/);
-  assert.match(adaLens?.findings.join(" "), /Accessibility statement not detected/);
+  assert.match(regulatoryFindingLabels(adaLens?.findings ?? []).join(" "), /Automated WCAG issues detected: 27/);
+  assert.match(regulatoryFindingLabels(adaLens?.findings ?? []).join(" "), /Keyboard navigation issues surfaced/);
+  assert.match(regulatoryFindingLabels(adaLens?.findings ?? []).join(" "), /Accessibility statement not detected/);
   assert.equal(
-    adaLens?.findings.filter((item) => /accessibility statement/i.test(item)).length,
+    regulatoryFindingLabels(adaLens?.findings ?? []).filter((item) => /accessibility statement/i.test(item)).length,
     1
   );
 });
@@ -467,7 +471,7 @@ test("buildRegulatoryLensesFromUnifiedPackets explains representative DOJ ADA ax
 
   assert.ok(adaLens);
   assert.equal(adaLens?.minimal, undefined);
-  assert.match(adaLens?.findings.join(" "), /Representative axe examples: 2 rules across 2 pages; max impact: serious\./);
+  assert.match(regulatoryFindingLabels(adaLens?.findings ?? []).join(" "), /Representative axe examples: 2 rules across 2 pages; max impact: serious\./);
 });
 
 test("ExecutiveSummaryCard renders score-only ADA accessibility as audit-only without the stale 88 rating", () => {
@@ -607,7 +611,7 @@ test("buildRegulatoryLenses promotes retained financial-promotion findings into 
   assert.equal(financialLens?.minimal, undefined);
   assert.equal(financialLens?.ratingLabel, "Watch");
   assert.match(financialLens?.summary ?? "", /Commercial claims and pricing language should be reviewed/i);
-  assert.match(financialLens?.findings.join(" "), /High-risk financial product promotion language surfaced/i);
+  assert.match(regulatoryFindingLabels(financialLens?.findings ?? []).join(" "), /High-risk financial product promotion language surfaced/i);
 });
 
 test("buildRegulatoryLenses places financial claims directly below DOJ / ADA accessibility in regulatory findings", () => {
@@ -647,8 +651,8 @@ test("buildRegulatoryLenses places financial claims directly below DOJ / ADA acc
   assert.equal(financialLens?.detailTitle, "Claims, urgency, and pricing disclosures");
   assert.match(financialLens?.summary ?? "", /claims|pricing/i);
   assert.equal(financialLens?.minimal, undefined);
-  assert.match(financialLens?.findings.join(" ") ?? "", /Earnings-style claim surfaced/);
-  assert.match(financialLens?.findings.join(" ") ?? "", /Pricing or fee disclosure remains unclear/);
+  assert.match(regulatoryFindingLabels(financialLens?.findings ?? []).join(" "), /Earnings-style claim surfaced/);
+  assert.match(regulatoryFindingLabels(financialLens?.findings ?? []).join(" "), /Pricing or fee disclosure remains unclear/);
 });
 
 test("ExecutiveSummaryCard builds regulatory lenses from all findings instead of only top findings", () => {

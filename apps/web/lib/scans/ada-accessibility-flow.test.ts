@@ -97,7 +97,7 @@ test("ADA accessibility flow promotes persisted WS axe examples into the DOJ ADA
   assert.notEqual(adaLens.ratingLabel, "Audit-only");
   assert.ok(
     adaLens.findings.some((finding) =>
-      /Representative axe examples: 2 rules across 2 pages; max impact: critical\./.test(finding)
+      /Representative axe examples: 2 rules across 2 pages; max impact: critical\./.test(finding.label)
     )
   );
 });

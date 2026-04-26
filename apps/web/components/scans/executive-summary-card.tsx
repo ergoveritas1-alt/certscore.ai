@@ -80,8 +80,14 @@ type RegulatoryLens = {
   score: number | null;
   summary: string;
   toneClass: string;
-  findings: string[];
+  findings: RegulatoryLensFinding[];
   minimal?: boolean;
+};
+
+type RegulatoryLensFinding = {
+  evidence: Record<string, unknown>;
+  id: string;
+  label: string;
 };
 
 const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
@@ -113,6 +119,61 @@ function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
     default:
       return finding.shortSummary;
   }
+}
+
+function buildFindingEvidencePayload(finding: CertScoreFinding, context?: Record<string, unknown>) {
+  return {
+    context,
+    confidence: finding.confidence,
+    directVsInferred: finding.directVsInferred,
+    evidenceDetails: finding.evidenceDetails ?? null,
+    evidencePreview: finding.evidencePreview,
+    evidenceRefs: finding.evidenceRefs,
+    findingId: finding.id,
+    label: finding.label,
+    section: finding.section,
+    severity: finding.severity,
+    shortSummary: finding.shortSummary
+  };
+}
+
+function buildRegulatoryLensFinding(input: {
+  evidence: Record<string, unknown>;
+  id: string;
+  label: string;
+}) {
+  return input satisfies RegulatoryLensFinding;
+}
+
+function buildRegulatoryLensFindingFromCertFinding(
+  finding: CertScoreFinding,
+  label = finding.shortSummary,
+  context?: Record<string, unknown>
+) {
+  return buildRegulatoryLensFinding({
+    evidence: buildFindingEvidencePayload(finding, context),
+    id: finding.id,
+    label
+  });
+}
+
+function buildObservedCountLensFinding(input: {
+  count: number;
+  id: string;
+  label: string;
+  metric: string;
+  source: string;
+}) {
+  return buildRegulatoryLensFinding({
+    evidence: {
+      count: input.count,
+      metric: input.metric,
+      reason: input.label,
+      source: input.source
+    },
+    id: input.id,
+    label: input.label
+  });
 }
 
 export type ExecutiveAccessLimitationNotice = {
@@ -177,7 +238,11 @@ function buildMinimalFinancialClaimsLens() {
 function buildFinancialClaimsLens(input: {
   findings: CertScoreFinding[];
 }) {
-  const financialFindings = input.findings.map((finding) => getFinancialClaimsFindingSummary(finding));
+  const financialFindings = input.findings.map((finding) =>
+    buildRegulatoryLensFindingFromCertFinding(finding, getFinancialClaimsFindingSummary(finding), {
+      lens: "Financial & commercial claims"
+    })
+  );
 
   if (financialFindings.length === 0) {
     return buildMinimalFinancialClaimsLens();
@@ -329,23 +394,79 @@ export function buildRegulatoryLenses(
     ));
 
   const privacyTrackingNotes = [
-    trackingFinding ? trackingFinding.shortSummary : null,
-    beforeConsentCookieCount > 0 ? `${beforeConsentCookieCount} cookies were observed before consent.` : null,
-    replayFinding ? replayFinding.shortSummary : null
-  ].filter(Boolean) as string[];
+    trackingFinding
+      ? buildRegulatoryLensFindingFromCertFinding(trackingFinding, trackingFinding.shortSummary, {
+          lens: "GDPR / ePrivacy",
+          reason: "pre_consent_tracking"
+        })
+      : null,
+    beforeConsentCookieCount > 0
+      ? buildObservedCountLensFinding({
+          count: beforeConsentCookieCount,
+          id: "before_consent_cookie_count",
+          label: `${beforeConsentCookieCount} cookies were observed before consent.`,
+          metric: "beforeConsentCookieCount",
+          source: "regulatory_counts"
+        })
+      : null,
+    replayFinding
+      ? buildRegulatoryLensFindingFromCertFinding(replayFinding, replayFinding.shortSummary, {
+          lens: "GDPR / ePrivacy",
+          reason: "session_recording"
+        })
+      : null
+  ].filter((item): item is RegulatoryLensFinding => Boolean(item));
 
   const cpraNotes = [
-    trackingFinding ? trackingFinding.shortSummary : null,
-    thirdPartyRequestCount > 0 ? `${thirdPartyRequestCount} third-party requests were observed on the initial path.` : null,
-    replayFinding ? replayFinding.shortSummary : null,
-    clarityFinding ? clarityFinding.shortSummary : null
-  ].filter(Boolean) as string[];
+    trackingFinding
+      ? buildRegulatoryLensFindingFromCertFinding(trackingFinding, trackingFinding.shortSummary, {
+          lens: "CCPA / CPRA",
+          reason: "pre_consent_tracking"
+        })
+      : null,
+    thirdPartyRequestCount > 0
+      ? buildObservedCountLensFinding({
+          count: thirdPartyRequestCount,
+          id: "third_party_request_count",
+          label: `${thirdPartyRequestCount} third-party requests were observed on the initial path.`,
+          metric: "thirdPartyRequestCount",
+          source: "regulatory_counts"
+        })
+      : null,
+    replayFinding
+      ? buildRegulatoryLensFindingFromCertFinding(replayFinding, replayFinding.shortSummary, {
+          lens: "CCPA / CPRA",
+          reason: "session_recording"
+        })
+      : null,
+    clarityFinding
+      ? buildRegulatoryLensFindingFromCertFinding(clarityFinding, clarityFinding.shortSummary, {
+          lens: "CCPA / CPRA",
+          reason: "policy_clarity"
+        })
+      : null
+  ].filter((item): item is RegulatoryLensFinding => Boolean(item));
 
   const ftcNotes = [
-    consentFinding ? consentFinding.shortSummary : null,
-    replayFinding ? replayFinding.shortSummary : null,
-    trackingFinding ? trackingFinding.shortSummary : null
-  ].filter(Boolean) as string[];
+    consentFinding
+      ? buildRegulatoryLensFindingFromCertFinding(consentFinding, consentFinding.shortSummary, {
+          lens: "FTC",
+          reason: "consent_choice_architecture"
+        })
+      : null,
+    replayFinding
+      ? buildRegulatoryLensFindingFromCertFinding(replayFinding, replayFinding.shortSummary, {
+          lens: "FTC",
+          reason: "session_recording"
+        })
+      : null,
+    trackingFinding
+      ? buildRegulatoryLensFindingFromCertFinding(trackingFinding, trackingFinding.shortSummary, {
+          lens: "FTC",
+          reason: "pre_consent_tracking"
+        })
+      : null
+  ].filter((item): item is RegulatoryLensFinding => Boolean(item));
 
   const gdprScore = clampScore(
     84 -
@@ -495,21 +616,98 @@ export function buildRegulatoryLenses(
     );
 
   const adaFindings = [
-    typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal > 0 ? `Automated WCAG issues detected: ${wcagErrorCountTotal}` : null,
-    typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0 ? "Keyboard navigation issues surfaced" : null,
-    typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0 ? "Form labeling issues surfaced" : null,
-    accessibilityStatementPresent === false ? "Accessibility statement not detected" : null,
-    accessibilityClaimMismatchDetected === true ? "Accessibility claim mismatch surfaced" : null,
+    typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal > 0
+      ? buildObservedCountLensFinding({
+          count: wcagErrorCountTotal,
+          id: "wcag_error_count_total",
+          label: `Automated WCAG issues detected: ${wcagErrorCountTotal}`,
+          metric: "wcagErrorCountTotal",
+          source: "accessibility_signals"
+        })
+      : null,
+    typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0
+      ? buildObservedCountLensFinding({
+          count: wcagKeyboardNavigationIssueCount,
+          id: "wcag_keyboard_navigation_issue_count",
+          label: "Keyboard navigation issues surfaced",
+          metric: "wcagKeyboardNavigationIssueCount",
+          source: "accessibility_signals"
+        })
+      : null,
+    typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0
+      ? buildObservedCountLensFinding({
+          count: wcagFormLabelErrorCount,
+          id: "wcag_form_label_error_count",
+          label: "Form labeling issues surfaced",
+          metric: "wcagFormLabelErrorCount",
+          source: "accessibility_signals"
+        })
+      : null,
+    accessibilityStatementPresent === false
+      ? buildRegulatoryLensFinding({
+          evidence: { observed: false, signal: "accessibilityStatementPresent" },
+          id: "accessibility_statement_not_detected",
+          label: "Accessibility statement not detected"
+        })
+      : null,
+    accessibilityClaimMismatchDetected === true
+      ? buildRegulatoryLensFinding({
+          evidence: { observed: true, signal: "accessibilityClaimMismatchDetected" },
+          id: "accessibility_claim_mismatch",
+          label: "Accessibility claim mismatch surfaced"
+        })
+      : null,
     typeof accessibilityLitigationRiskScore === "number" && accessibilityLitigationRiskScore >= 45
-      ? `Elevated accessibility risk score (${accessibilityLitigationRiskScore})`
+      ? buildObservedCountLensFinding({
+          count: accessibilityLitigationRiskScore,
+          id: "accessibility_litigation_risk_score",
+          label: `Elevated accessibility risk score (${accessibilityLitigationRiskScore})`,
+          metric: "accessibilityLitigationRiskScore",
+          source: "accessibility_signals"
+        })
       : null,
     typeof adaDemandLetterProbability === "number" && adaDemandLetterProbability >= 45
-      ? `Elevated ADA demand-letter exposure score (${adaDemandLetterProbability})`
+      ? buildObservedCountLensFinding({
+          count: adaDemandLetterProbability,
+          id: "ada_demand_letter_probability",
+          label: `Elevated ADA demand-letter exposure score (${adaDemandLetterProbability})`,
+          metric: "adaDemandLetterProbability",
+          source: "accessibility_signals"
+        })
       : null,
-    typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5 ? `${wcagMissingAltCount} missing alt-text issues surfaced` : null,
-    ...normalizedAgencyFindingLabels,
-    ...((dojAdaMapping?.contributingSubscores ?? []).map((subscore) => `${subscore.label} subscore ${subscore.score}`))
-  ].filter(Boolean) as string[];
+    typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5
+      ? buildObservedCountLensFinding({
+          count: wcagMissingAltCount,
+          id: "wcag_missing_alt_count",
+          label: `${wcagMissingAltCount} missing alt-text issues surfaced`,
+          metric: "wcagMissingAltCount",
+          source: "accessibility_signals"
+        })
+      : null,
+    ...normalizedAgencyFindingLabels.map((label, index) =>
+      buildRegulatoryLensFinding({
+        evidence: {
+          agencyKey: dojAdaMapping?.agencyKey ?? "doj_ada",
+          label,
+          source: "agency_mapping"
+        },
+        id: `agency_signal_${index}`,
+        label
+      })
+    ),
+    ...((dojAdaMapping?.contributingSubscores ?? []).map((subscore) =>
+      buildRegulatoryLensFinding({
+        evidence: {
+          key: subscore.key,
+          label: subscore.label,
+          score: subscore.score,
+          source: "agency_mapping_subscore"
+        },
+        id: `agency_subscore_${subscore.key}`,
+        label: `${subscore.label} subscore ${subscore.score}`
+      })
+    ))
+  ].filter((item): item is RegulatoryLensFinding => Boolean(item));
 
   const adaScore = clampScore(100 - (accessibilityRiskScore ?? (dojAdaMapping?.relevanceLevel === "limited" ? 35 : 50)));
   const adaSummary =
@@ -724,6 +922,64 @@ function RegulatoryRatingBar(input: { score: number; toneClass: string }) {
           </span>
         );
       })}
+    </div>
+  );
+}
+
+function RegulatoryLensFindingCard(input: {
+  finding: RegulatoryLensFinding;
+  lens: Pick<RegulatoryLens, "acronym" | "detailTitle" | "ratingLabel" | "score" | "summary">;
+}) {
+  const evidencePayload = JSON.stringify(
+    {
+      evidence: input.finding.evidence,
+      lens: {
+        acronym: input.lens.acronym,
+        detailTitle: input.lens.detailTitle,
+        ratingLabel: input.lens.ratingLabel,
+        score: input.lens.score,
+        summary: input.lens.summary
+      },
+      reason: input.finding.label
+    },
+    null,
+    2
+  );
+
+  return (
+    <div className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700">
+      <details className="group/json">
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
+          <span className="min-w-0 leading-5">{input.finding.label}</span>
+          <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-400 hover:text-slate-700">
+            <span className="sr-only">Show evidence JSON</span>
+            <svg
+              viewBox="0 0 24 24"
+              className="h-3.5 w-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
+              <path d="M8 4 4 12l4 8" />
+              <path d="M16 4l4 8-4 8" />
+              <path d="M14 3 10 21" />
+            </svg>
+          </span>
+        </summary>
+        <div className="relative mt-2 w-full rounded-lg bg-slate-950">
+          <CopyJsonButton
+            payload={evidencePayload}
+            label="Copy evidence JSON"
+            className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-200 shadow-sm transition-colors hover:border-slate-500 hover:text-white"
+          />
+          <pre className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words px-3 py-3 pr-12 text-[11px] leading-5 text-slate-100">
+            {evidencePayload}
+          </pre>
+        </div>
+      </details>
     </div>
   );
 }
@@ -1434,15 +1690,17 @@ export function ExecutiveSummaryCard(input: {
                       </summary>
                       <div className="mt-3 border-t border-slate-200 pt-3">
                         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
+                        <div className="mt-2 space-y-2">
                           {lens.findings.length > 0 ? (
                             lens.findings.map((item) => (
-                              <span key={item} className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
-                                {item}
-                              </span>
+                              <RegulatoryLensFindingCard
+                                key={`${lens.acronym}-${item.id}-${item.label}`}
+                                finding={item}
+                                lens={lens}
+                              />
                             ))
                           ) : (
-                            <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
+                            <span className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700">
                               No top-level issue mapped here
                             </span>
                           )}
