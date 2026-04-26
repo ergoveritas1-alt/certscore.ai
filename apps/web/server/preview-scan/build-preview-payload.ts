@@ -837,7 +837,6 @@ function isEvidenceRichZeroPagePreview(snapshot: PreviewSnapshotSource, verified
     snapshot.blockedFlag !== true &&
     snapshot.captchaFlag !== true &&
     snapshot.authWallDetected !== true &&
-    snapshot.authWallSuspected !== true &&
     snapshot.challengeSuspected !== true &&
     corroboratedEvidencePresent
   );
@@ -854,7 +853,7 @@ function hasUsablePublicCoverageDespiteProtectionLabel(snapshot: PreviewSnapshot
     snapshot.homepageFetchHttpStatus == null ||
     (snapshot.homepageFetchHttpStatus >= 200 && snapshot.homepageFetchHttpStatus < 400);
   const meaningfulCoverage =
-    snapshot.pagesScanned >= 2 &&
+    snapshot.pagesScanned >= 1 &&
     snapshot.totalSignals >= 20 &&
     (verifiedSurfaces.length > 0 || hasPreconsentTrackingEvidence(snapshot));
 

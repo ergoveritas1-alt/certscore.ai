@@ -372,12 +372,12 @@ function hasKnownAccessBlockSignal(input: {
     homepageFetchHttpStatus !== 429 &&
     input.blockedFlag !== true &&
     input.authWallDetected !== true &&
-    input.authWallSuspected !== true &&
     input.captchaFlag !== true &&
     input.challengeSuspected !== true &&
     input.geoBlockSuspected !== true &&
     input.fingerprintBlockSuspected !== true &&
     input.rateLimitSuspected !== true;
+  const authWallSuspected = reachedUsefulOrigin ? false : input.authWallSuspected === true;
   const blockPageClassification = reachedUsefulOrigin && (
     input.blockPageClassification === "login_wall_probable" ||
     input.blockPageClassification === "vendor_interstitial_probable"
@@ -387,7 +387,7 @@ function hasKnownAccessBlockSignal(input: {
 
   return (
     input.authWallDetected === true ||
-    input.authWallSuspected === true ||
+    authWallSuspected ||
     input.blockedFlag === true ||
     input.captchaFlag === true ||
     input.challengeSuspected === true ||
@@ -464,7 +464,6 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
   const robotsFetchStatus = normalizeStatus(input.robotsFetchStatus);
   const robotsFetchHttpStatus = getFiniteNumber(input.robotsFetchHttpStatus);
   const challengeSuspected = input.challengeSuspected === true;
-  const authWallSuspected = input.authWallSuspected === true;
   const geoBlockSuspected = input.geoBlockSuspected === true;
   const blockedWhatThisMeans = buildBlockedWhatThisMeans();
   const reachedUsefulOrigin =
@@ -475,7 +474,6 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
     homepageFetchHttpStatus !== 429 &&
     input.blockedFlag !== true &&
     input.authWallDetected !== true &&
-    !authWallSuspected &&
     input.captchaFlag !== true &&
     !challengeSuspected &&
     !geoBlockSuspected &&
@@ -487,6 +485,7 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
   )
     ? null
     : input.blockPageClassification;
+  const authWallSuspected = reachedUsefulOrigin ? false : input.authWallSuspected === true;
 
   if (fallbackSourceLabel && fallbackSourceReason) {
     return {
