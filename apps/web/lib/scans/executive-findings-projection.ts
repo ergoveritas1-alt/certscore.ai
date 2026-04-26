@@ -3,6 +3,7 @@ import {
   type CertScoreFinding,
   type CertScoreFindingConfidence,
   type CertScoreFindingDirectness,
+  type CertScoreFindingEvidenceDetails,
   type CertScoreFindingSection,
   type CertScoreFindingSeverity
 } from "./finding-registry";
@@ -50,6 +51,14 @@ const CONTRADICTION_FINDING_IDS = new Set([
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
+function getEntityValues(packet: UnifiedFindingDisplayPacket, pattern: RegExp) {
+  return uniqueStrings(
+    Object.entries(packet.evidence?.entities ?? {}).flatMap(([key, values]) =>
+      pattern.test(key) ? values : []
+    )
+  );
 }
 
 function mapConfidenceBandToExecutiveConfidence(
@@ -107,10 +116,17 @@ function getMappedFindingId(
   return null;
 }
 
-function buildEvidencePreview(packet: UnifiedFindingDisplayPacket) {
+function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: keyof typeof CERT_SCORE_FINDING_REGISTRY) {
+  const sessionReplayEvidence =
+    findingId === "session_recording_services_detected"
+      ? buildExecutiveEvidenceDetails(packet, findingId)
+      : null;
+
   return uniqueStrings([
     packet.summary,
     packet.observedValue,
+    ...(sessionReplayEvidence?.runtimeVendors ?? []).map((vendor) => `Runtime vendor: ${vendor}`),
+    ...(sessionReplayEvidence?.runtimeRequestUrls ?? []).slice(0, 2).map((url) => `Runtime request: ${url}`),
     ...(packet.evidence?.snippets ?? []),
     ...(packet.evidence?.sourceUrls ?? []).slice(0, 2),
     ...packet.sourceRefs.flatMap((sourceRef) => {
@@ -139,6 +155,7 @@ const SESSION_REPLAY_VENDOR_PATTERNS: Array<{ label: string; pattern: RegExp }> 
   { label: "Microsoft Clarity", pattern: /microsoft\s+clarity|clarity\.ms|\bclarity\b/i },
   { label: "FullStory", pattern: /fullstory|fullstory\.com/i },
   { label: "Hotjar", pattern: /hotjar|hotjar\.com/i },
+  { label: "Qualtrics SiteIntercept", pattern: /qualtrics|siteintercept/i },
   { label: "LogRocket", pattern: /logrocket|logrocket\.com/i },
   { label: "Mouseflow", pattern: /mouseflow|mouseflow\.com/i },
   { label: "Smartlook", pattern: /smartlook|smartlook\.com/i },
@@ -148,6 +165,9 @@ const SESSION_REPLAY_VENDOR_PATTERNS: Array<{ label: string; pattern: RegExp }> 
   { label: "Inspectlet", pattern: /inspectlet|inspectlet\.com/i },
   { label: "Lucky Orange", pattern: /lucky\s+orange|luckyorange\.com/i }
 ];
+
+const SESSION_REPLAY_URL_PATTERN =
+  /clarity\.ms|fullstory\.com|hotjar\.com|qualtrics|siteintercept|logrocket\.com|mouseflow\.com|smartlook\.com|contentsquare\.com|quantummetric\.com|crazyegg\.com|inspectlet\.com|luckyorange\.com/i;
 
 function formatVendorList(vendors: string[]) {
   if (vendors.length <= 1) {
@@ -160,9 +180,7 @@ function formatVendorList(vendors: string[]) {
 }
 
 function getSessionReplayVendors(packet: UnifiedFindingDisplayPacket) {
-  const entityValues = Object.entries(packet.evidence?.entities ?? {}).flatMap(([key, values]) =>
-    /vendor/i.test(key) ? values : []
-  );
+  const entityValues = getEntityValues(packet, /vendor/i);
   const reviewerVisibleText = uniqueStrings([
     packet.observedValue,
     packet.summary,
@@ -173,6 +191,47 @@ function getSessionReplayVendors(packet: UnifiedFindingDisplayPacket) {
   return SESSION_REPLAY_VENDOR_PATTERNS.flatMap(({ label, pattern }) =>
     pattern.test(reviewerVisibleText) ? [label] : []
   );
+}
+
+function getSessionReplayRequestUrls(packet: UnifiedFindingDisplayPacket) {
+  return uniqueStrings(packet.evidence?.sourceUrls ?? []).filter((url) => SESSION_REPLAY_URL_PATTERN.test(url));
+}
+
+function buildExecutiveEvidenceDetails(
+  packet: UnifiedFindingDisplayPacket,
+  findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
+): CertScoreFindingEvidenceDetails | undefined {
+  if (findingId !== "session_recording_services_detected") {
+    return undefined;
+  }
+
+  const runtimeVendors = uniqueStrings([...getEntityValues(packet, /runtime.*vendor|vendor/i), ...getSessionReplayVendors(packet)]);
+  const runtimeRequestUrls = getSessionReplayRequestUrls(packet);
+  const sourceSignals = uniqueStrings(
+    packet.sourceRefs.flatMap((sourceRef) => {
+      if (sourceRef.kind !== "signal") {
+        return [];
+      }
+      return sourceRef.label ? `${sourceRef.key}: ${sourceRef.label}` : sourceRef.key;
+    })
+  );
+  const evidenceFlags = uniqueStrings(packet.evidence?.flags ?? []);
+  const details: CertScoreFindingEvidenceDetails = {};
+
+  if (runtimeVendors.length > 0) {
+    details.runtimeVendors = runtimeVendors;
+  }
+  if (runtimeRequestUrls.length > 0) {
+    details.runtimeRequestUrls = runtimeRequestUrls;
+  }
+  if (sourceSignals.length > 0) {
+    details.sourceSignals = sourceSignals;
+  }
+  if (evidenceFlags.length > 0) {
+    details.evidenceFlags = evidenceFlags;
+  }
+
+  return Object.keys(details).length > 0 ? details : undefined;
 }
 
 function buildExecutiveShortSummary(
@@ -196,6 +255,7 @@ function buildExecutiveShortSummary(
 
 function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY) {
   const definition = CERT_SCORE_FINDING_REGISTRY[findingId]!;
+  const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);
   return {
     id: definition.id,
     label: definition.label,
@@ -205,7 +265,8 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
     remediation: definition.remediation,
     confidence: mapConfidenceBandToExecutiveConfidence(packet.confidenceBand),
     directVsInferred: mapVerificationStateToDirectness(packet.presentationDecision.verificationState),
-    evidencePreview: buildEvidencePreview(packet),
+    ...(evidenceDetails ? { evidenceDetails } : {}),
+    evidencePreview: buildEvidencePreview(packet, findingId),
     evidenceRefs: buildEvidenceRefs(packet),
     severity: mapSeverity(packet, findingId),
     shortSummary: buildExecutiveShortSummary(packet, findingId)

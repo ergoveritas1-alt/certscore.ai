@@ -5,7 +5,7 @@ import {
   selectOwnerUnifiedFindingsForSection,
   type ScanReportUnifiedFindingState
 } from "./scan-report-unified-findings";
-import { buildSectionReviewIssues } from "./scan-report-review-findings";
+import { buildReviewFindings, buildSectionReviewIssues } from "./scan-report-review-findings";
 import { buildSupplementalRuntimeUnifiedFindingPackets } from "./supplemental-runtime-unified-findings";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 
@@ -85,6 +85,46 @@ test("report-level candidates surface runtime-backed session replay provenance",
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.surfacingDecision.decisionState, "review");
   assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
+});
+
+test("session replay snapshot signal retains persisted tracker vendor provenance", () => {
+  const candidates = buildReviewFindings({
+    issues: [],
+    prioritizedAccessibilityRuleRows: [],
+    sectionId: "tracking_third_party_ecosystem",
+    sectionItems: [
+      {
+        key: "commerce.session_replay_tool_detected",
+        label: "Session replay tool detected",
+        relation: "primary",
+        source: "snapshot_signal",
+        value: true
+      }
+    ],
+    trackerVendors: [
+      {
+        beforeConsent: true,
+        collectionEndpointType: "first_party_collection_proxy",
+        confidence: 0.95,
+        detectionSource: "request",
+        firstPartyOrThirdParty: "first_party",
+        matchedSignatureId: "fullstory",
+        scriptHost: "www.draftkings.com",
+        vendorCategory: "session_replay",
+        vendorName: "FullStory"
+      }
+    ]
+  });
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: candidates,
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+  const packet = packets.find((finding) => finding.unifiedFindingId === "session_replay_observed");
+
+  assert.deepEqual(packet?.evidence?.entities?.runtimeVendors, ["FullStory"]);
+  assert.deepEqual(packet?.evidence?.entities?.runtimeRequestUrls, ["https://www.draftkings.com"]);
+  assert.ok(packet?.evidence?.flags?.includes("commerce.session_replay_tool_detected"));
 });
 
 test("initial cookie inventory routes to audit-only preconsent packet instead of raw executive bridge", () => {

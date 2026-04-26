@@ -197,6 +197,7 @@ export function buildScanReportUnifiedFindingState(
           snapshot,
           sectionId: section.id,
           sectionItems: items,
+          trackerVendors: scanRecord.trackerVendors,
           validationFindingLookup
         });
 
@@ -228,6 +229,7 @@ export function buildScanReportUnifiedFindingState(
         snapshot,
         sectionId: section.id,
         sectionItems: [],
+        trackerVendors: scanRecord.trackerVendors,
         validationFindingLookup
       });
 

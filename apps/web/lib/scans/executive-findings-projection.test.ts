@@ -271,6 +271,61 @@ test("keeps runtime-backed session recording in top findings when consent issues
   );
 });
 
+test("projects concrete session replay vendor evidence into executive finding json", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("session_replay_observed", {
+      confidenceBand: "moderate",
+      details: {
+        family: "consent_tracking",
+        kind: "session_replay_observed",
+        requestUrls: ["https://siteintercept.qualtrics.com/WRSiteInterceptEngine/?Q_ZID=ZN_abc"],
+        vendors: ["Qualtrics SiteIntercept"]
+      },
+      evidence: {
+        counts: {},
+        entities: {
+          runtimeVendors: ["Qualtrics SiteIntercept"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.session_replay_runtime_detected", "privacy.session_replay_runtime_vendors"],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: ["https://siteintercept.qualtrics.com/WRSiteInterceptEngine/?Q_ZID=ZN_abc"]
+      },
+      observedValue: "Yes",
+      presentationDecision: {
+        confidenceRationale: "Runtime vendor provenance retained.",
+        downgradeReasons: [],
+        rationale: "Direct runtime evidence retained a session-recording vendor.",
+        status: "surface",
+        verificationLabel: "Runtime",
+        verificationState: "runtime"
+      },
+      sourceRefs: [
+        {
+          kind: "signal",
+          key: "privacy.session_replay_runtime_detected",
+          label: "Session replay runtime detected",
+          source: "snapshot_signal"
+        }
+      ],
+      summary: "Session replay runtime detected."
+    })
+  ]);
+
+  const finding = projection.topFindings.find((candidate) => candidate.id === "session_recording_services_detected");
+
+  assert.deepEqual(finding?.evidenceDetails?.runtimeVendors, ["Qualtrics SiteIntercept"]);
+  assert.deepEqual(finding?.evidenceDetails?.runtimeRequestUrls, [
+    "https://siteintercept.qualtrics.com/WRSiteInterceptEngine/?Q_ZID=ZN_abc"
+  ]);
+  assert.ok(finding?.evidencePreview.includes("Runtime vendor: Qualtrics SiteIntercept"));
+  assert.equal(
+    finding?.shortSummary,
+    "Qualtrics SiteIntercept session recording was observed during runtime collection."
+  );
+});
+
 test("projects representative accessibility packets into DOJ ADA regulatory lens", () => {
   const seriousExampleCount = ADA_ACCESSIBILITY_FIXTURES.seriousAxeExample.accessibilityRuleExamples.length;
   const lenses = buildRegulatoryLensesFromUnifiedPackets(

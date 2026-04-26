@@ -110,6 +110,85 @@ function getRecordNumber(record: Record<string, unknown> | null | undefined, key
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function looksLikeSessionReplayVendor(row: TrackerVendorEvidenceRow) {
+  return (
+    row.vendorCategory === "session_replay" ||
+    /fullstory|hotjar|clarity|qualtrics|siteintercept|logrocket|mouseflow|smartlook|contentsquare|quantum\s*metric|crazy\s*egg|inspectlet|lucky\s*orange/i.test(
+      `${row.vendorName} ${row.scriptHost ?? ""} ${row.matchedSignatureId ?? ""}`
+    )
+  );
+}
+
+function hostToEvidenceUrl(host: string | null | undefined) {
+  const normalized = typeof host === "string" ? host.trim().replace(/^\./, "") : "";
+  if (!normalized || normalized.startsWith("script_host:")) {
+    return null;
+  }
+  if (/^https?:\/\//i.test(normalized)) {
+    return normalized;
+  }
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(normalized) ? `https://${normalized}` : null;
+}
+
+function buildSessionReplayTrackerFallbackEvidence(input: {
+  signalKey: string;
+  signalLabel: string;
+  signalValue: unknown;
+  trackerVendors?: TrackerVendorEvidenceRow[];
+}) {
+  const replayRows = (input.trackerVendors ?? []).filter(looksLikeSessionReplayVendor);
+  const seenVendorNames = new Set<string>();
+  const uniqueReplayRows = replayRows.filter((row) => {
+    if (seenVendorNames.has(row.vendorName)) {
+      return false;
+    }
+    seenVendorNames.add(row.vendorName);
+    return true;
+  });
+
+  if (uniqueReplayRows.length === 0) {
+    return null;
+  }
+
+  const runtimeVendors = uniqueStrings(uniqueReplayRows.map((row) => row.vendorName));
+  const runtimeEvidenceUrls = uniqueStrings(uniqueReplayRows.map((row) => hostToEvidenceUrl(row.scriptHost)));
+  const runtimeEvidenceArtifacts = uniqueStrings(
+    uniqueReplayRows.flatMap((row) => [
+      `tracker_vendor:${row.vendorName}`,
+      `vendor_category:${row.vendorCategory}`,
+      row.scriptHost ? `script_host:${row.scriptHost}` : null,
+      row.matchedSignatureId ? `matched_signature:${row.matchedSignatureId}` : null,
+      row.collectionEndpointType ? `collection_endpoint:${row.collectionEndpointType}` : null,
+      typeof row.beforeConsent === "boolean" ? `before_consent:${row.beforeConsent}` : null,
+      typeof row.confidence === "number" ? `tracker_confidence:${row.confidence}` : null
+    ])
+  );
+
+  return {
+    requestUrls: runtimeEvidenceUrls,
+    runtimeEvidenceArtifacts,
+    runtimeEvidenceUrls,
+    runtimeVendors,
+    session_replay_runtime_detected: true,
+    session_replay_runtime_vendors: runtimeVendors,
+    session_replay_tracker_evidence: uniqueReplayRows.map((row) => ({
+      beforeConsent: row.beforeConsent ?? null,
+      collectionEndpointType: row.collectionEndpointType ?? null,
+      confidence: row.confidence ?? null,
+      detectionSource: row.detectionSource ?? null,
+      firstPartyOrThirdParty: row.firstPartyOrThirdParty ?? null,
+      matchedSignatureId: row.matchedSignatureId ?? null,
+      scriptHost: row.scriptHost ?? null,
+      vendorCategory: row.vendorCategory,
+      vendorName: row.vendorName
+    })),
+    session_replay_vendor_artifact_present: true,
+    signalKey: input.signalKey,
+    signalLabel: input.signalLabel,
+    signalValue: input.signalValue
+  };
+}
+
 function getRuntimeRecord(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -179,6 +258,18 @@ export type AccessibilityIssueRow = {
 
 export type PreconsentViolationRow = {
   evidenceUrls: string[];
+  scriptHost?: string | null;
+  vendorCategory: string;
+  vendorName: string;
+};
+
+export type TrackerVendorEvidenceRow = {
+  beforeConsent?: boolean | null;
+  collectionEndpointType?: string | null;
+  confidence?: number | null;
+  detectionSource?: string | null;
+  firstPartyOrThirdParty?: string | null;
+  matchedSignatureId?: string | null;
   scriptHost?: string | null;
   vendorCategory: string;
   vendorName: string;
@@ -1109,6 +1200,7 @@ export function buildReviewFindings(input: {
   snapshot?: Record<string, unknown> | null;
   sectionId: string;
   sectionItems: CanonicalSignalItem[];
+  trackerVendors?: TrackerVendorEvidenceRow[];
   validationFindingLookup?: Map<string, ScanValidationFinding>;
 }) {
   const contradictorySignalPairs = new Map<string, string>([
@@ -1242,6 +1334,17 @@ export function buildReviewFindings(input: {
                   signalLabel: item.label,
                   signalValue: item.value
                 }
+          : /(?:commerce|privacy)\.session_replay_|session_replay.*detected/i.test(item.key)
+            ? buildSessionReplayTrackerFallbackEvidence({
+                signalKey: item.key,
+                signalLabel: item.label,
+                signalValue: item.value,
+                trackerVendors: input.trackerVendors
+              }) ?? {
+                signalKey: item.key,
+                signalLabel: item.label,
+                signalValue: item.value
+              }
           : isChildContextSignalKey(item.key)
               ? buildChildContextFallbackEvidence({
                   signalKey: item.key,

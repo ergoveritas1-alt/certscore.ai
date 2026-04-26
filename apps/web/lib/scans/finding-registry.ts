@@ -21,9 +21,17 @@ export type CertScoreFindingDefinition = {
   remediation: string;
 };
 
+export type CertScoreFindingEvidenceDetails = {
+  runtimeVendors?: string[];
+  runtimeRequestUrls?: string[];
+  sourceSignals?: string[];
+  evidenceFlags?: string[];
+};
+
 export type CertScoreFinding = CertScoreFindingDefinition & {
   confidence: CertScoreFindingConfidence;
   directVsInferred: CertScoreFindingDirectness;
+  evidenceDetails?: CertScoreFindingEvidenceDetails;
   evidencePreview: string[];
   evidenceRefs: string[];
   severity: CertScoreFindingSeverity;
