@@ -6,6 +6,11 @@ export type HighRiskTrackingVendor = {
     | "identity_resolution"
     | "health_adtech"
     | "adtech"
+    | "session_replay"
+    | "marketing_automation"
+    | "sports_data_advertising"
+    | "post_purchase_advertising"
+    | "cross_device_identity"
     | "device_signal_adtech"
     | "device_signal"
     | "enterprise_device_risk"
@@ -75,6 +80,41 @@ const HIGH_RISK_VENDOR_RULES: VendorRule[] = [
     patterns: [/\/recaptcha\/enterprise(?:\.js|\/)/i, /\brecaptcha enterprise\b/i]
   },
   {
+    name: "FullStory",
+    category: "session_replay",
+    role: "session recording and behavioral replay",
+    domains: ["fullstory.com", "rs.fullstory.com", "edge.fullstory.com"],
+    patterns: [/\bfullstory\b/i]
+  },
+  {
+    name: "Braze",
+    category: "marketing_automation",
+    role: "customer engagement and marketing automation",
+    domains: ["appboycdn.com", "js.appboycdn.com", "braze.com"],
+    patterns: [/\bappboy\b/i, /\bbraze\b/i]
+  },
+  {
+    name: "Sportradar",
+    category: "sports_data_advertising",
+    role: "sports data advertising and audience infrastructure",
+    domains: ["sportradar.com", "ads.sportradar.com", "tm.ads.sportradar.com"],
+    patterns: [/\bsportradar\b/i]
+  },
+  {
+    name: "Rokt",
+    category: "post_purchase_advertising",
+    role: "post-purchase advertising and offer optimization",
+    domains: ["rokt.com", "apps.rokt.com"],
+    patterns: [/\brokt\b/i, /\breferral-tag\.js\b/i]
+  },
+  {
+    name: "Digital Turbine / Barometric",
+    category: "cross_device_identity",
+    role: "cross-device identity resolution",
+    domains: ["barometric.com", "digitalturbine.com"],
+    patterns: [/\bbarometric\b/i, /\bbarometric\[cuid\]/i]
+  },
+  {
     name: "OneTrust",
     category: "cmp",
     role: "consent management platform",
@@ -105,6 +145,21 @@ const HEALTH_CONTEXT_PATTERNS = [
   /\beverydayhealth\b/i,
   /\bverywellhealth\b/i,
   /\bdrugs\.com\b/i
+];
+
+const GAMBLING_CONTEXT_PATTERNS = [
+  /\bgambling\b/i,
+  /\bsportsbook\b/i,
+  /\bsports betting\b/i,
+  /\bcasino\b/i,
+  /\bwager(?:ing)?\b/i,
+  /\bbet(?:ting)?\b/i,
+  /\bdraftkings\b/i,
+  /\bfanduel\b/i,
+  /\bbetmgm\b/i,
+  /\bcaesars sportsbook\b/i,
+  /\bresponsible gam(?:ing|bling)\b/i,
+  /\b1-800-gambler\b/i
 ];
 
 function uniqueStrings(values: Array<string | null | undefined>) {
@@ -192,6 +247,13 @@ export function deriveHighRiskTrackingContext(input: {
     getBoolean(snapshot, "form_collects_health_information") === true ||
     getBoolean(snapshot, "high_sensitivity_data_collection_detected") === true ||
     HEALTH_CONTEXT_PATTERNS.some((pattern) => pattern.test(haystack));
+  const isGamblingContext = GAMBLING_CONTEXT_PATTERNS.some((pattern) => pattern.test(haystack));
+  const isSensitiveContext = isHealthContext || isGamblingContext;
+  const sensitiveContextLabel = isHealthContext
+    ? "health information site"
+    : isGamblingContext
+      ? "sports betting or gambling site"
+      : null;
 
   const highRiskVendors = HIGH_RISK_VENDOR_RULES.flatMap((rule): HighRiskTrackingVendor[] => {
     const evidence = uniqueStrings([
@@ -218,8 +280,8 @@ export function deriveHighRiskTrackingContext(input: {
     cmpVendors,
     cmpVendorName,
     highRiskVendors: highRiskVendors.filter((vendor) => vendor.category !== "cmp"),
-    isSensitiveContext: isHealthContext,
-    sensitiveContextLabel: isHealthContext ? "health information site" : null
+    isSensitiveContext,
+    sensitiveContextLabel
   };
 }
 

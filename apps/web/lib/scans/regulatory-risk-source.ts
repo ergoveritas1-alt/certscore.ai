@@ -51,6 +51,10 @@ export function buildRegulatoryRiskSource(input: {
   });
   const highRiskVendorCategories = new Set(trackingContext.highRiskVendors.map((vendor) => vendor.category));
   const highRiskTrackingVendorNames = trackingContext.highRiskVendors.map((vendor) => vendor.name);
+  const hasPreconsentTrackingSignal =
+    booleanFromKeys(input.snapshot, ["tracking_before_consent_detected", "trackingBeforeConsentDetected"]) === true ||
+    booleanFromKeys(input.snapshot, ["preconsent_tracking_detected", "preconsentTrackingDetected"]) === true ||
+    booleanFromKeys(input.snapshot, ["third_party_cookie_set_before_consent", "thirdPartyCookieSetBeforeConsent"]) === true;
   const thirdPartyRequestDomains = Array.isArray(input.runtimeArtifacts?.third_party_request_domains)
     ? input.runtimeArtifacts.third_party_request_domains.filter((entry): entry is string => typeof entry === "string")
     : Array.isArray(input.snapshot.third_party_request_domains)
@@ -105,10 +109,16 @@ export function buildRegulatoryRiskSource(input: {
     policyClaimPrivacyProtective:
       toBoolean(input.snapshot.policyClaimPrivacyProtective) ?? toBoolean(input.snapshot.policy_claim_privacy_protective),
     policyBehaviorConflictDetected: booleanFromKeys(input.snapshot, ["policy_behavior_conflict_detected", "policyBehaviorConflictDetected"]),
-    sessionReplayWithoutDisclosureDetected: booleanFromKeys(input.snapshot, [
-      "session_replay_without_disclosure_detected",
-      "sessionReplayWithoutDisclosureDetected"
-    ]),
+    sessionReplayWithoutDisclosureDetected:
+      booleanFromKeys(input.snapshot, [
+        "session_replay_without_disclosure_detected",
+        "sessionReplayWithoutDisclosureDetected"
+      ]) ??
+      (trackingContext.isSensitiveContext &&
+      highRiskVendorCategories.has("session_replay") &&
+      hasPreconsentTrackingSignal
+        ? true
+        : null),
     mentionsSensitiveData: booleanFromKeys(input.snapshot, ["mentions_sensitive_data", "mentionsSensitiveData"]),
     mentionsHealthData: booleanFromKeys(input.snapshot, ["mentions_health_data", "mentionsHealthData"]),
     mentionsBiometricData: booleanFromKeys(input.snapshot, ["mentions_biometric_data", "mentionsBiometricData"]),
@@ -144,7 +154,9 @@ export function buildRegulatoryRiskSource(input: {
       (trackingBeforeConsentDetected === true ||
         preconsentTrackingDetected === true ||
         thirdPartyCookieSetBeforeConsent === true),
-    highRiskIdentityVendorDetected: highRiskVendorCategories.has("identity_resolution"),
+    highRiskIdentityVendorDetected:
+      highRiskVendorCategories.has("identity_resolution") ||
+      highRiskVendorCategories.has("cross_device_identity"),
     highRiskDataBrokerDetected: highRiskVendorCategories.has("data_broker") || highRiskVendorCategories.has("identity_data_broker"),
     identityDataBrokerDetected: highRiskVendorCategories.has("identity_data_broker"),
     dmpVendorDetected: highRiskVendorCategories.has("dmp"),
@@ -155,6 +167,7 @@ export function buildRegulatoryRiskSource(input: {
       highRiskVendorCategories.has("enterprise_device_risk"),
     fingerprintingAdjacentVendorDetected:
       highRiskVendorCategories.has("identity_resolution") ||
+      highRiskVendorCategories.has("cross_device_identity") ||
       highRiskVendorCategories.has("device_signal_adtech") ||
       highRiskVendorCategories.has("enterprise_device_risk"),
     enterpriseDeviceRiskVendorDetected: highRiskVendorCategories.has("enterprise_device_risk"),
