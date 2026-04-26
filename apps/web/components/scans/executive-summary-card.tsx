@@ -242,6 +242,7 @@ export function buildRegulatoryLenses(
     findingIds.has("analytics_cookie_pre_consent") ||
     findingIds.has("adtech_cookie_pre_consent") ||
     Boolean(trackingFinding);
+  const hasPreConsentCookieConcern = counts.beforeConsentCookieCount > 0;
   const hasConsentConcern =
     findingIds.has("consent_dark_patterns_detected") ||
     findingIds.has("asymmetric_consent_ui") ||
@@ -311,7 +312,9 @@ export function buildRegulatoryLenses(
       findings: privacyTrackingNotes,
       ratingLabel: gdprTone.label,
       score: gdprScore,
-      summary: hasTrackingConcern ? "Consent and pre-consent tracking risk is the main issue." : "No major consent-triggering issue surfaced in the top findings.",
+      summary: hasTrackingConcern || hasPreConsentCookieConcern
+        ? "Consent and pre-consent tracking risk is the main issue."
+        : "No major consent-triggering issue surfaced in the top findings.",
       toneClass: gdprTone.toneClass
     },
     {
@@ -320,7 +323,9 @@ export function buildRegulatoryLenses(
       findings: cpraNotes,
       ratingLabel: cpraTone.label,
       score: cpraScore,
-      summary: replayFinding || hasTrackingConcern ? "Third-party collection and disclosure posture drives this score." : "No strong sale/share-style signal surfaced in the top findings.",
+      summary: replayFinding || hasTrackingConcern || hasPreConsentCookieConcern
+        ? "Third-party collection and disclosure posture drives this score."
+        : "No strong sale/share-style signal surfaced in the top findings.",
       toneClass: cpraTone.toneClass
     },
     {
