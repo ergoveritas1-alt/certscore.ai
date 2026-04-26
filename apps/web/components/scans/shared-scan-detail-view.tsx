@@ -331,11 +331,13 @@ function getHybridRuntimeSummaryRows(runtimeArtifacts: Record<string, unknown> |
   const mediaSummary = getRecord(hybrid.mediaSummary);
   const fingerprintSummary = getRecord(hybrid.fingerprintSummary);
   const vendorSummary = getRecord(hybrid.vendorSummary);
+  const rawThirdPartyDomains = getRecordStringArray(vendorSummary, "rawThirdPartyDomains")
+    .filter((host) => !isCmpOrFunctionalVendorDomain(host));
 
   return [
     { label: "Requests observed", value: networkSummary?.totalRequestCount },
     { label: "Third-party requests", value: networkSummary?.thirdPartyRequestCount },
-    { label: "Third-party domains", value: vendorSummary?.rawThirdPartyDomains },
+    { label: "Third-party domains", value: rawThirdPartyDomains },
     { label: "Consent banner", value: consentSummary?.bannerPresent },
     { label: "Reject option present", value: consentSummary?.rejectPresent },
     { label: "Cookie wall detected", value: consentSummary?.cookieWallDetected },
@@ -4201,7 +4203,8 @@ function ResultHeroPanel(input: {
     },
     {
       label: "Third-party domains",
-      value: getRecordStringArray(vendorSummary, "rawThirdPartyDomains").length || "None"
+      value: getRecordStringArray(vendorSummary, "rawThirdPartyDomains")
+        .filter((host) => !isCmpOrFunctionalVendorDomain(host)).length || "None"
     },
     {
       label: "Fingerprint tier",
