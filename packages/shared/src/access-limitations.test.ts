@@ -90,6 +90,21 @@ test("ignores stale auth-wall classifications when useful origin evidence was re
   assert.equal(outcome, null);
 });
 
+test("ignores stale auth-wall classifications for degraded useful homepages even when page counting stayed thin", () => {
+  const outcome = deriveAccessLimitationOutcome({
+    accessPostureClass: "degraded_but_useful",
+    blockPageClassification: "login_wall_probable",
+    blockedFlag: false,
+    captchaFlag: false,
+    challengeSuspected: false,
+    homepageFetchHttpStatus: 200,
+    homepageFetchStatus: "ok",
+    pagesScanned: 0
+  });
+
+  assert.equal(outcome, null);
+});
+
 test("assigns 24 hour cooldown to challenge-suspected 403", () => {
   const policy = deriveRetryPolicy({
     homepageHttpStatus: 403,

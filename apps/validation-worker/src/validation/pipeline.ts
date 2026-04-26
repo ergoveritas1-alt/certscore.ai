@@ -3175,9 +3175,13 @@ function deriveRuntimePrivacyFindings(input: {
     ...new Set([...thirdPartyVendorsBeforeConsent, ...preconsentViolationVendors])
   ];
   const domainPolicyCoverage = buildDomainPolicyCoverageSummary(input.policySemanticRows);
-  const inferredCmpVendorName = rawThirdPartyDomains.some((domain) => /(^|\.)cookielaw\.org$/i.test(domain) || /(^|\.)onetrust\.(?:com|io)$/i.test(domain))
-    ? "OneTrust"
-    : null;
+  const inferredCmpVendorName = inferCmpVendorName({
+    domains: rawThirdPartyDomains,
+    hybrid,
+    initialCookieNames,
+    runtimeArtifacts: input.runtimeArtifacts,
+    snapshot
+  });
   const cmpVendorName = typeof snapshot?.cmp_vendor_name === "string" ? snapshot.cmp_vendor_name : inferredCmpVendorName;
   const cmpDetected = Boolean(cmpVendorName) || consentSummary?.cmpDetected === true || getRecordBoolean(snapshot, "cookie_banner_present");
   const consentSurfaceObserved =
@@ -3412,10 +3416,82 @@ function getRuntimeRequestUrlsForDomains(
         if (options?.preconsentOnly && row.preConsent !== true && row.pre_consent !== true && !preconsentHosts.has(domain)) {
           return [];
         }
+        if (options?.preconsentOnly && isCmpEvidenceUrl(url)) {
+          return [];
+        }
         return [url];
       })
     )
   ].slice(0, 20);
+}
+
+function inferCmpVendorName(input: {
+  domains: string[];
+  hybrid: Record<string, unknown> | null;
+  initialCookieNames: string[];
+  runtimeArtifacts?: Record<string, unknown> | null;
+  snapshot?: Record<string, unknown> | null;
+}) {
+  const requestUrls = getRuntimeObjectArray(input.hybrid?.requestObservations).flatMap((row) => {
+    const value = typeof row.url === "string" ? row.url : null;
+    return value ? [value] : [];
+  });
+  const text = [
+    ...input.domains,
+    ...input.initialCookieNames,
+    ...requestUrls,
+    ...getRuntimeStringArray(input.runtimeArtifacts?.consent_baseline_tracker_evidence_urls),
+    ...getRuntimeStringArray(input.runtimeArtifacts?.consentBaselineTrackerEvidenceUrls),
+    typeof input.snapshot?.cmp_vendor_name === "string" ? input.snapshot.cmp_vendor_name : null
+  ].filter((value): value is string => typeof value === "string").join("\n").toLowerCase();
+
+  if (/cookielaw\.org|onetrust\.com|onetrust\.io|optanonconsent|optanonalertboxclosed/.test(text)) {
+    return "OneTrust";
+  }
+  if (/trustarc\.com|truste\.com|notice_behavior|tasessionid|notice_preferences|notice_gdpr_prefs/.test(text)) {
+    return "TrustArc";
+  }
+  if (/cookiebot\.com|cookieconsent/.test(text)) {
+    return "Cookiebot";
+  }
+  if (/privacy-mgmt\.com|sourcepoint\.mgr\.consensu\.org|(^|\b)_sp_/.test(text)) {
+    return "Sourcepoint";
+  }
+  if (/quantcast\.mgr\.consensu\.org|mgr\.consensu\.org/.test(text)) {
+    return "Quantcast Choice";
+  }
+  return null;
+}
+
+function isCmpEvidenceUrl(value: string | null | undefined) {
+  if (!value || !/^https?:\/\//i.test(value)) {
+    return false;
+  }
+  let hostname = "";
+  try {
+    hostname = new URL(value).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return [
+    "cdn.cookielaw.org",
+    "geolocation.onetrust.com",
+    "optanon.blob.core.windows.net",
+    "consent.trustarc.com",
+    "form-renderer.trustarc.com",
+    "privacy-policy.truste.com",
+    "preferences.trustarc.com",
+    "consent.cookiebot.com",
+    "app.cookieinformation.com",
+    "cdn.privacy-mgmt.com",
+    "sourcepoint.mgr.consensu.org",
+    "quantcast.mgr.consensu.org",
+    "mgr.consensu.org"
+  ].some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+}
+
+function getRuntimeStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
 }
 
 function getRuntimeObjectArray(value: unknown): Record<string, unknown>[] {

@@ -42,3 +42,27 @@ test("camelCase preview snapshot flags feed sensitive-context regulatory risk so
   assert.equal(risk.consentEnforcementRiskScore >= 70, true);
   assert.equal(risk.topRiskDrivers.some((driver) => driver.key === "tracking_before_consent"), true);
 });
+
+test("gambling-context session replay feeds sensitive-context regulatory risk source", () => {
+  const source = buildRegulatoryRiskSource({
+    hostname: "draftkings.com",
+    snapshot: {
+      final_url: "https://www.draftkings.com/",
+      homepage_fetch_status: "ok",
+      registered_domain: "draftkings.com",
+      tracking_before_consent_detected: true
+    },
+    runtimeArtifacts: {
+      consent_baseline_tracker_evidence_urls: [
+        "https://rs.fullstory.com/rec/page.js",
+        "https://js.appboycdn.com/web-sdk/2.7/appboy.min.js",
+        "https://tm.ads.sportradar.com/dist/tag-manager.js"
+      ],
+      third_party_request_domains: ["rs.fullstory.com", "js.appboycdn.com", "tm.ads.sportradar.com"]
+    }
+  });
+
+  assert.equal(source.sensitiveContextTrackingDetected, true);
+  assert.equal(source.sessionReplayWithoutDisclosureDetected, true);
+  assert.deepEqual(source.highRiskTrackingVendorNames?.slice(0, 3), ["FullStory", "Braze", "Sportradar"]);
+});

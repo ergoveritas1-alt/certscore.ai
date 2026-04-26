@@ -480,8 +480,7 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
     !challengeSuspected &&
     !geoBlockSuspected &&
     input.fingerprintBlockSuspected !== true &&
-    input.rateLimitSuspected !== true &&
-    (pagesScanned ?? 0) > 0;
+    input.rateLimitSuspected !== true;
   const blockPageClassification = reachedUsefulOrigin && (
     input.blockPageClassification === "login_wall_probable" ||
     input.blockPageClassification === "vendor_interstitial_probable"
@@ -665,6 +664,10 @@ export function deriveAccessLimitationOutcome(input: AccessLimitationInput): Acc
       reviewTitle: "Transport failure",
       whatThisMeans: buildBlockedWhatThisMeans()
     };
+  }
+
+  if (reachedUsefulOrigin && pagesScanned === 0) {
+    return null;
   }
 
   if (

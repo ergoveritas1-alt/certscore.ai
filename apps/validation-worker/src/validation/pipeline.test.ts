@@ -1174,43 +1174,21 @@ test("buildNanoDocCandidateUrls falls back to broader legal-hub seed urls when n
     pages: []
   });
 
-  assert.deepEqual(candidates, [
-    {
-      documentType: "privacy_policy",
-      priorityTier: "secondary",
-      url: "https://example.com/privacy"
-    },
-    {
-      documentType: "privacy_policy",
-      priorityTier: "secondary",
-      url: "https://example.com/legal/privacy-policy"
-    },
-    {
-      documentType: "terms_of_service",
-      priorityTier: "secondary",
-      url: "https://example.com/terms"
-    },
-    {
-      documentType: "terms_of_service",
-      priorityTier: "secondary",
-      url: "https://example.com/legal/terms-of-service"
-    },
-    {
-      documentType: "terms_of_service",
-      priorityTier: "secondary",
-      url: "https://example.com/legal/enterprise-end-user-agreement"
-    },
-    {
-      documentType: "cookie_policy",
-      priorityTier: "secondary",
-      url: "https://example.com/legal/cookie-policy"
-    },
-    {
-      documentType: "cookie_policy",
-      priorityTier: "secondary",
-      url: "https://example.com/cookie-policy"
-    }
-  ]);
+  for (const url of [
+    "https://example.com/privacy",
+    "https://example.com/privacy-policy",
+    "https://example.com/legal/privacy-policy",
+    "https://example.com/terms",
+    "https://example.com/terms-of-service",
+    "https://example.com/legal/terms-of-service",
+    "https://example.com/cookie-policy",
+    "https://example.com/cookies",
+    "https://example.com/responsible-gaming",
+    "https://example.com/responsible-gambling",
+    "https://example.com/your-privacy-choices"
+  ]) {
+    assert.equal(candidates.some((candidate) => candidate.url === url), true, url);
+  }
 });
 
 test("buildNanoDocCandidateUrls reuses recent domain legal docs before discovery fallback", () => {
@@ -4836,6 +4814,75 @@ test("pre-consent runtime finding attributes observed third-party vendors in sur
     "Google Analytics",
     "Meta Pixel",
     "Example first-party web platform"
+  ]);
+});
+
+test("pre-consent runtime finding filters CMP script URLs while using them for CMP attribution", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyReviewQueue: [],
+      runtimeArtifacts: {
+        hybrid_runtime_evidence: {
+          consentSummary: {
+            cmpDetected: true
+          },
+          networkSummary: {
+            totalRequestCount: 80
+          },
+          requestToVendorObservations: [
+            {
+              hostname: "connect.facebook.net",
+              preConsent: true,
+              vendor: "Meta Pixel"
+            },
+            {
+              hostname: "consent.trustarc.com",
+              preConsent: true,
+              vendor: "TrustArc"
+            }
+          ],
+          requestObservations: [
+            {
+              domain: "connect.facebook.net",
+              preConsent: true,
+              thirdParty: true,
+              url: "https://connect.facebook.net/en_US/fbevents.js"
+            },
+            {
+              domain: "consent.trustarc.com",
+              preConsent: true,
+              thirdParty: true,
+              url: "https://consent.trustarc.com/notice?domain=example.com"
+            }
+          ]
+        },
+        third_party_request_domains: ["connect.facebook.net", "consent.trustarc.com"]
+      },
+      snapshot: {
+        cookie_count_total: 10,
+        preconsent_tracking_detected: true,
+        third_party_cookie_count: 3,
+        tracker_count_total: 4,
+        tracker_vendor_count: 4
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Meta Pixel"
+        }
+      ]
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "runtime_privacy.preconsent_tracking_observed");
+  assert.ok(finding);
+  assert.equal(finding.evidence.cmp_vendor_name, "TrustArc");
+  assert.deepEqual(finding.evidence.preconsent_tracker_evidence_urls, [
+    "https://connect.facebook.net/en_US/fbevents.js"
+  ]);
+  assert.deepEqual(finding.evidence.runtimeRequestUrls, [
+    "https://connect.facebook.net/en_US/fbevents.js"
   ]);
 });
 

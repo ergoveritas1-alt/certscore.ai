@@ -135,11 +135,27 @@ const STATIC_VENDOR_RULES: StaticVendorRule[] = [
     urlPatterns: [/\/recaptcha\/enterprise(?:\.js|\/)/i]
   },
   { vendorName: "Meta Pixel", vendorCategory: "advertising", domains: ["facebook.com", "facebook.net", "connect.facebook.net"] },
-  { vendorName: "Snap Pixel", vendorCategory: "advertising", domains: ["sc-static.net", "snapchat.com", "tr.snapchat.com", "tr6.snapchat.com"] },
+  { vendorName: "Reddit Pixel", vendorCategory: "advertising", domains: ["redditstatic.com", "alb.reddit.com"], urlPatterns: [/\/ads\/pixel\.js\b/i] },
+  { vendorName: "Microsoft Bing Ads", vendorCategory: "advertising", domains: ["bat.bing.com"], urlPatterns: [/\/bat\.js\b/i] },
+  { vendorName: "Braze", vendorCategory: "marketing_automation", domains: ["appboycdn.com", "js.appboycdn.com", "braze.com"], urlPatterns: [/appboy(?:\.min)?\.js/i] },
+  { vendorName: "FullStory", vendorCategory: "session_replay", domains: ["fullstory.com", "rs.fullstory.com", "edge.fullstory.com"], urlPatterns: [/fullstory/i] },
+  { vendorName: "Kenshoo / Skai", vendorCategory: "performance_marketing", domains: ["xg4ken.com", "resources.xg4ken.com"], urlPatterns: [/\/ktag\.js\b/i] },
+  { vendorName: "TVSquared", vendorCategory: "tv_attribution", domains: ["tvsquared.com", "collector-4612.tvsquared.com"], urlPatterns: [/tv2track\.js/i] },
+  { vendorName: "Snapchat Pixel", vendorCategory: "advertising", domains: ["sc-static.net", "snapchat.com", "tr.snapchat.com", "tr6.snapchat.com"], urlPatterns: [/scevent\.min\.js/i] },
+  { vendorName: "TVPixel", vendorCategory: "ctv_tracking", domains: ["tvpixel.com", "c.tvpixel.com"], urlPatterns: [/dpm_pixel/i] },
+  { vendorName: "Twitter/X Ads", vendorCategory: "advertising", domains: ["static.ads-twitter.com", "ads-twitter.com", "t.co"], urlPatterns: [/\/uwt\.js\b/i] },
   { vendorName: "Tapad", vendorCategory: "advertising", domains: ["tapad.com", "pixel.tapad.com"] },
   { vendorName: "TikTok", vendorCategory: "advertising", domains: ["analytics.tiktok.com", "ads.tiktok.com", "tiktok.com", "tiktokw.us"], cookieNames: ["_ttp"] },
-  { vendorName: "OneTrust", vendorCategory: "functional", domains: ["onetrust.com", "onetrust.io", "cookielaw.org"] },
-  { vendorName: "TrustArc", vendorCategory: "functional", domains: ["trustarc.com", "truste.com", "privacy-policy.truste.com", "preferences.trustarc.com"], cookieNames: ["notice_preferences", "notice_gdpr_prefs"] },
+  { vendorName: "Sift", vendorCategory: "fraud_detection", domains: ["sift.com", "cdn.sift.com"], urlPatterns: [/\/s\.js\b/i] },
+  { vendorName: "Rokt", vendorCategory: "post_purchase_advertising", domains: ["rokt.com", "apps.rokt.com"], urlPatterns: [/referral-tag\.js/i] },
+  { vendorName: "Rakuten Advertising", vendorCategory: "performance_marketing", domains: ["rkdms.com", "track.sv.rkdms.com", "rakutenmarketing.com"], urlPatterns: [/\/sv\.js\b/i] },
+  { vendorName: "Sportradar", vendorCategory: "sports_data_advertising", domains: ["sportradar.com", "ads.sportradar.com", "tm.ads.sportradar.com"], urlPatterns: [/sportradar/i] },
+  { vendorName: "Digital Turbine / Barometric", vendorCategory: "cross_device_identity", domains: ["barometric.com", "digitalturbine.com"], cookieNames: ["barometric[cuid]"], urlPatterns: [/barometric/i] },
+  { vendorName: "OneTrust", vendorCategory: "functional", domains: ["onetrust.com", "onetrust.io", "cookielaw.org", "cdn.cookielaw.org", "geolocation.onetrust.com", "optanon.blob.core.windows.net"] },
+  { vendorName: "TrustArc", vendorCategory: "functional", domains: ["trustarc.com", "truste.com", "consent.trustarc.com", "form-renderer.trustarc.com", "privacy-policy.truste.com", "preferences.trustarc.com"], cookieNames: ["notice_behavior", "TAsessionID", "notice_preferences", "notice_gdpr_prefs"] },
+  { vendorName: "Cookiebot", vendorCategory: "functional", domains: ["cookiebot.com", "consent.cookiebot.com"], cookieNames: ["CookieConsent"] },
+  { vendorName: "Sourcepoint", vendorCategory: "functional", domains: ["privacy-mgmt.com", "cdn.privacy-mgmt.com", "sourcepoint.mgr.consensu.org"], cookieNames: ["_sp_"] },
+  { vendorName: "Quantcast Choice", vendorCategory: "functional", domains: ["quantcast.mgr.consensu.org", "mgr.consensu.org"] },
   { vendorName: "Netflix Assets", vendorCategory: "functional", domains: ["nflxext.com", "nflximg.net", "nflxso.net"] },
   { vendorName: "Netflix Logging", vendorCategory: "functional", domains: ["logs.netflix.com", "ichnaea-web.netflix.com"] },
   { vendorName: "Netflix Web Platform", vendorCategory: "functional", domains: ["www.netflix.com", "web.prod.cloud.netflix.com"] }
@@ -176,6 +192,42 @@ function normalizeUrlEvidence(value: string | null | undefined) {
     return null;
   }
   return trimmed;
+}
+
+function isFunctionalVendorCategory(category: string | null | undefined) {
+  return category === "functional";
+}
+
+function isCmpEvidenceUrl(value: string | null | undefined) {
+  const url = normalizeUrlEvidence(value);
+  if (!url) {
+    return false;
+  }
+  let hostname = "";
+  try {
+    hostname = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return [
+    "cdn.cookielaw.org",
+    "geolocation.onetrust.com",
+    "optanon.blob.core.windows.net",
+    "consent.trustarc.com",
+    "form-renderer.trustarc.com",
+    "privacy-policy.truste.com",
+    "preferences.trustarc.com",
+    "consent.cookiebot.com",
+    "app.cookieinformation.com",
+    "cdn.privacy-mgmt.com",
+    "sourcepoint.mgr.consensu.org",
+    "quantcast.mgr.consensu.org",
+    "mgr.consensu.org"
+  ].some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+}
+
+function filterTrackingEvidenceUrls(values: string[]) {
+  return uniqueStrings(values.filter((value) => !isCmpEvidenceUrl(value)));
 }
 
 function normalizeHostname(value: string | null | undefined) {
@@ -1075,9 +1127,13 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
     if (!vendor.beforeConsent) {
       continue;
     }
+    if (isFunctionalVendorCategory(vendor.vendorCategory)) {
+      continue;
+    }
+    const trackingSampleUrls = filterTrackingEvidenceUrls(vendor.sampleUrls);
     const existing = preconsentRows.get(vendor.vendorName);
     if (existing) {
-      existing.evidence_urls = uniqueStrings([...(getStringArray(existing.evidence_urls) ?? []), ...vendor.sampleUrls]);
+      existing.evidence_urls = uniqueStrings([...(getStringArray(existing.evidence_urls) ?? []), ...trackingSampleUrls]);
       continue;
     }
     preconsentRows.set(vendor.vendorName, {
@@ -1085,7 +1141,7 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
       confidence: vendor.confidence,
       detection_source: vendor.detectionSource,
       domain_id: scan.domain_id,
-      evidence_urls: vendor.sampleUrls,
+      evidence_urls: trackingSampleUrls,
       first_party_or_third_party: vendor.firstPartyOrThirdParty,
       matched_signature_id: null,
       organization_id: scan.organization_id,
@@ -1103,9 +1159,13 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
     if (!matched) {
       continue;
     }
+    if (isFunctionalVendorCategory(matched.vendorCategory)) {
+      continue;
+    }
+    const trackingSampleUrls = filterTrackingEvidenceUrls(candidate.sampleUrls);
     const existing = preconsentRows.get(matched.canonicalName);
     if (existing) {
-      existing.evidence_urls = uniqueStrings([...(getStringArray(existing.evidence_urls) ?? []), ...candidate.sampleUrls]);
+      existing.evidence_urls = uniqueStrings([...(getStringArray(existing.evidence_urls) ?? []), ...trackingSampleUrls]);
       continue;
     }
     preconsentRows.set(matched.canonicalName, {
@@ -1113,7 +1173,7 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
       confidence: matched.confidence,
       detection_source: ENRICHMENT_SOURCE,
       domain_id: scan.domain_id,
-      evidence_urls: candidate.sampleUrls,
+      evidence_urls: trackingSampleUrls,
       first_party_or_third_party: candidate.firstPartyOrThirdParty,
       matched_signature_id: `vendor_registry:${matched.id}`,
       organization_id: scan.organization_id,

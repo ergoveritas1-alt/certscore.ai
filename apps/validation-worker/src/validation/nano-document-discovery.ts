@@ -406,12 +406,27 @@ function buildSeedFallbackCandidates(domainHostname: string | null) {
 
   return [
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/privacy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/privacy-policy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/privacy_policy` },
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy-policy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/terms` },
+    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/terms-of-service` },
+    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/terms-of-use` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/terms-of-service` },
+    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/terms` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/enterprise-end-user-agreement` },
     { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/cookie-policy` },
-    { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookie-policy` }
+    { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookie-policy` },
+    { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookies` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/do-not-sell` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/ccpa` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/your-privacy-choices` },
+    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/responsible-gaming` },
+    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/responsible-gambling` },
+    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/problem-gambling` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/policies` }
   ] satisfies NanoDocCandidate[];
 }
 
