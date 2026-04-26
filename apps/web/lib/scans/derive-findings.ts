@@ -239,7 +239,16 @@ function looksLikeSessionReplayObservation(category: string | null, vendor: stri
     /qualtrics|siteintercept|hotjar|fullstory|clarity|contentsquare|mouseflow/i.test(`${vendor ?? ""} ${hostname ?? ""}`);
 }
 
+function isConsentMechanismCookieName(name: string) {
+  return /^(optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|didomi_token)$/i.test(
+    name
+  ) || /^_sp_/i.test(name);
+}
+
 function classifyCookieName(name: string, domain: string | null) {
+  if (isConsentMechanismCookieName(name)) {
+    return "consent";
+  }
   if (isFunctionalCookieExcludedFromTrackingEvidence(name, domain)) {
     return "security";
   }
