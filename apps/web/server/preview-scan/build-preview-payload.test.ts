@@ -387,21 +387,22 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
     payload.sampleFindings.some((finding) => finding.title === "Disclosure surfaces verified via supplemental retrieval"),
     true
   );
-  assert.equal(payload.fallbackEvidence?.requestFootprint?.details.includes("Top hosts: www.fandango.com, images.fandango.com, metrics.example.net"), true);
-  assert.equal(payload.fallbackEvidence?.vendorFootprint?.details.includes("Technologies: OneTrust, Google Publisher Tag"), true);
-  assert.equal(payload.fallbackEvidence?.disclosureFootprint?.details.includes("Verified surfaces: privacy policy, terms of service, cookie policy"), true);
-  assert.equal(payload.fallbackEvidence?.metrics?.requestCount, 8);
-  assert.equal(payload.fallbackEvidence?.metrics?.thirdPartyRequestCount, 3);
-  assert.equal(payload.fallbackEvidence?.metrics?.initialCookieCount, 3);
-  assert.deepEqual(payload.fallbackEvidence?.entities?.cookieNames, ["_ga"]);
-  assert.deepEqual(payload.fallbackEvidence?.entities?.diagnosticCookieNamesExcludedFromTrackingEvidence, ["OptanonConsent", "visitor_id"]);
-  assert.equal(payload.fallbackEvidence?.cookieFootprint?.details.includes("Tracking cookie names: _ga"), true);
-  assert.equal(payload.fallbackEvidence?.reportUrl, undefined);
-  assert.equal(payload.fallbackEvidence?.resultApiUrl, undefined);
-  assert.equal(payload.fallbackEvidence?.source, "supplemental_public_runtime");
-  assert.equal(payload.fallbackEvidence?.entities?.technologyNames?.includes("OneTrust"), true);
-  assert.equal(payload.fallbackEvidence?.entities?.topDomains?.includes("www.fandango.com"), true);
-  assert.equal(payload.fallbackEvidence?.sourceLabel, "Supplemental public runtime evidence");
+  assert.equal(payload.supplementalEvidence?.requestFootprint?.details.includes("Top hosts: www.fandango.com, images.fandango.com, metrics.example.net"), true);
+  assert.equal(payload.supplementalEvidence?.vendorFootprint?.details.includes("Technologies: OneTrust, Google Publisher Tag"), true);
+  assert.equal(payload.supplementalEvidence?.disclosureFootprint?.details.includes("Verified surfaces: privacy policy, terms of service, cookie policy"), true);
+  assert.equal(payload.supplementalEvidence?.metrics?.requestCount, 8);
+  assert.equal(payload.supplementalEvidence?.metrics?.thirdPartyRequestCount, 3);
+  assert.equal(payload.supplementalEvidence?.metrics?.initialCookieCount, 3);
+  assert.deepEqual(payload.supplementalEvidence?.entities?.cookieNames, ["_ga"]);
+  assert.deepEqual(payload.supplementalEvidence?.entities?.diagnosticCookieNamesExcludedFromTrackingEvidence, ["OptanonConsent", "visitor_id"]);
+  assert.equal(payload.supplementalEvidence?.cookieFootprint?.details.includes("Tracking cookie names: _ga"), true);
+  assert.equal(payload.supplementalEvidence?.reportUrl, undefined);
+  assert.equal(payload.supplementalEvidence?.resultApiUrl, undefined);
+  assert.equal(payload.supplementalEvidence?.source, "supplemental_public_runtime");
+  assert.equal(payload.supplementalEvidence?.entities?.technologyNames?.includes("OneTrust"), true);
+  assert.equal(payload.supplementalEvidence?.entities?.topDomains?.includes("www.fandango.com"), true);
+  assert.equal(payload.supplementalEvidence?.sourceLabel, "Supplemental public runtime evidence");
+  assert.equal(Object.prototype.hasOwnProperty.call(payload, "fallbackEvidence"), false);
 });
 
 test("sensitive fallback tracking is prioritized and calibrates preview scores", () => {

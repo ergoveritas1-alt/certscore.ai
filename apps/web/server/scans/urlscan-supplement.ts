@@ -151,10 +151,10 @@ export function buildFullScanUrlscanSupplementPayload(input: {
       robotsStatus: robotsFetchHttpStatus,
       verifiedPublicSurfacesCount,
       protectionVendor,
-      urlscanEvidenceRelation: evidenceRelation,
-      urlscanFinalHostname
+      supplementalEvidenceRelation: evidenceRelation,
+      supplementalFinalHostname: urlscanFinalHostname
     },
-    fallbackEvidence,
+    supplementalEvidence: fallbackEvidence,
     summaryBullets: [
       "CertScore retained limited-coverage context because the live browser pass hit an access limitation.",
       isOffDomainRedirect && urlscanFinalHostname

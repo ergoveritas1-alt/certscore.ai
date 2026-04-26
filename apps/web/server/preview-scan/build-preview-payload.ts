@@ -1305,7 +1305,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
     return payload;
   }
 
-  payload.fallbackEvidence = fallbackEvidence;
+  payload.supplementalEvidence = fallbackEvidence;
   const fallbackConsentSurface = observableConsentSurface || hasFallbackObservableConsentSurface(fallbackSnapshot);
   const fallbackTrackingCookieCount = fallbackEvidence.entities?.cookieNames?.length ?? 0;
   const fallbackTrackingActivityRetained =
