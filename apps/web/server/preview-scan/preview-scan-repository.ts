@@ -543,13 +543,104 @@ function getPreviewPayload(scan: ScanRow): PreviewScanPayload | null {
   return config.previewPayload ?? null;
 }
 
+function getStringRecordValue(record: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getBooleanRecordValue(record: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getNumberRecordValue(record: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function shouldClearStaleAccessBlockDiagnostics(record: Record<string, unknown>) {
+  const accessPostureClass = getStringRecordValue(record, "accessPostureClass", "access_posture_class")?.toLowerCase() ?? null;
+  const homepageFetchStatus = getStringRecordValue(record, "homepageFetchStatus", "homepage_fetch_status")?.toLowerCase() ?? null;
+  const homepageFetchHttpStatus = getNumberRecordValue(record, "homepageFetchHttpStatus", "homepage_fetch_http_status");
+
+  return (
+    (accessPostureClass === "tolerant" || accessPostureClass === "degraded_but_useful") &&
+    homepageFetchStatus === "ok" &&
+    homepageFetchHttpStatus !== 401 &&
+    homepageFetchHttpStatus !== 403 &&
+    homepageFetchHttpStatus !== 429 &&
+    getBooleanRecordValue(record, "blockedFlag", "blocked_flag") !== true &&
+    getBooleanRecordValue(record, "authWallDetected", "auth_wall_detected") !== true &&
+    getBooleanRecordValue(record, "captchaFlag", "captcha_flag") !== true &&
+    getBooleanRecordValue(record, "challengeSuspected", "challenge_suspected") !== true &&
+    getBooleanRecordValue(record, "geoBlockSuspected", "geo_block_suspected") !== true &&
+    getBooleanRecordValue(record, "fingerprintBlockSuspected", "fingerprint_block_suspected") !== true &&
+    getBooleanRecordValue(record, "rateLimitSuspected", "rate_limit_suspected") !== true
+  );
+}
+
+export function sanitizeStaleAccessDiagnostics<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeStaleAccessDiagnostics(item)) as T;
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+  const sanitized: Record<string, unknown> = {};
+
+  for (const [key, entry] of Object.entries(record)) {
+    sanitized[key] = sanitizeStaleAccessDiagnostics(entry);
+  }
+
+  if (shouldClearStaleAccessBlockDiagnostics(sanitized)) {
+    if (sanitized.authWallSuspected === true) {
+      sanitized.authWallSuspected = false;
+    }
+    if (sanitized.auth_wall_suspected === true) {
+      sanitized.auth_wall_suspected = false;
+    }
+    if (
+      sanitized.blockPageClassification === "login_wall_probable" ||
+      sanitized.blockPageClassification === "vendor_interstitial_probable"
+    ) {
+      sanitized.blockPageClassification = null;
+    }
+    if (
+      sanitized.block_page_classification === "login_wall_probable" ||
+      sanitized.block_page_classification === "vendor_interstitial_probable"
+    ) {
+      sanitized.block_page_classification = null;
+    }
+  }
+
+  return sanitized as T;
+}
+
 export async function getPreviewScanSnapshot(scanId: string): Promise<SnapshotRow | null> {
   const data = await loadPreviewScanSnapshotRecord(scanId);
   if (!data) {
     return null;
   }
 
-  const row = data as unknown as Record<string, unknown>;
+  const row = sanitizeStaleAccessDiagnostics(data as unknown as Record<string, unknown>);
 
   return {
     totalSignals: Number(row.total_signals ?? 0),
@@ -650,7 +741,7 @@ function serializePreviewEvents(events: ScanEventRow[]): PreviewScanEvent[] {
     createdAt: event.created_at,
     eventType: event.event_type,
     message: event.message,
-    metadataJson: event.metadata_json
+    metadataJson: sanitizeStaleAccessDiagnostics(event.metadata_json)
   }));
 }
 
@@ -683,7 +774,7 @@ export function serializePreviewScan(input: {
 }): PreviewScanStatusResponse {
   const payload = getPreviewPayload(input.scan);
   const events = input.events ?? input.recentEvents ?? [];
-  const executionSummary = getScannerExecutionSummary(input.scan.scan_config_json);
+  const executionSummary = sanitizeStaleAccessDiagnostics(getScannerExecutionSummary(input.scan.scan_config_json));
   const displayState = derivePreviewDisplayState(input.scan, events);
   const displayScan = {
     ...input.scan,
