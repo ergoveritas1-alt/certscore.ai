@@ -156,6 +156,83 @@ test("preview pre-consent finding includes sensitive-context vendor roles when r
   assert.match(finding?.description ?? "", /health-contextual advertising network/i);
 });
 
+test("preview pre-consent finding uses retained first-load diagnostics when explicit pre-consent URLs are sparse", () => {
+  const snapshot = buildSnapshot({
+    cookieBannerPresent: true,
+    cmpVendorName: "TrustArc",
+    finalUrl: "https://www.draftkings.com/",
+    registeredDomain: "draftkings.com",
+    trackingBeforeConsentDetected: true
+  });
+  const payload = enrichPreviewPayloadWithFallbackEvidence({
+    payload: buildPreviewPayloadFromSnapshot({
+      hostname: "draftkings.com",
+      normalizedUrl: "https://draftkings.com",
+      snapshot
+    }),
+    snapshot,
+    events: [{
+      event_type: "runtime.build_phase_diagnostic",
+      metadata_json: {
+        phase: "hybrid_auto_local_evidence",
+        preconsentEvidenceUrls: [
+          "https://form-renderer.trustarc.com/browser/client.js",
+          "https://www.googletagmanager.com/gtm.js?id=GTM-5SJK66"
+        ],
+        requestHostEvidence: [
+          {
+            hostname: "connect.facebook.net",
+            sampleUrls: ["https://connect.facebook.net/en_US/fbevents.js"]
+          },
+          {
+            hostname: "www.redditstatic.com",
+            sampleUrls: ["https://www.redditstatic.com/ads/pixel.js"]
+          },
+          {
+            hostname: "bat.bing.com",
+            sampleUrls: ["https://bat.bing.com/bat.js"]
+          },
+          {
+            hostname: "form-renderer.trustarc.com",
+            sampleUrls: ["https://form-renderer.trustarc.com/browser/client.js"]
+          }
+        ],
+        scriptSrcDomains: [
+          "connect.facebook.net",
+          "www.redditstatic.com",
+          "bat.bing.com",
+          "form-renderer.trustarc.com"
+        ],
+        trackerDiagnostics: [
+          {
+            vendorName: "FullStory",
+            vendorCategory: "session_replay",
+            sampleUrls: ["https://www.draftkings.com/dkjs/header/v1/web/header.js"]
+          },
+          {
+            vendorName: "Braze",
+            vendorCategory: "marketing",
+            sampleUrls: ["https://js.appboycdn.com/web-sdk/3.0/appboy.min.js"]
+          }
+        ]
+      }
+    }],
+    runtimeArtifacts: {
+      consent_baseline_tracker_evidence_urls: [
+        "https://form-renderer.trustarc.com/browser/client.js",
+        "https://www.googletagmanager.com/gtm.js?id=GTM-5SJK66"
+      ]
+    }
+  });
+
+  const finding = payload.sampleFindings.find((candidate) => candidate.title === "Tracking activity observed before consent");
+  assert.match(finding?.description ?? "", /sports betting or gambling site/i);
+  assert.match(finding?.description ?? "", /FullStory/i);
+  assert.match(finding?.description ?? "", /Braze/i);
+  assert.match(finding?.description ?? "", /Meta Pixel/i);
+  assert.doesNotMatch(finding?.description ?? "", /TrustArc/i);
+});
+
 test("blocked previews can still surface verified privacy and terms disclosures", () => {
   const payload = buildPreviewPayloadFromSnapshot({
     hostname: "coinbase.com",

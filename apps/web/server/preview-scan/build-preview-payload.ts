@@ -234,6 +234,81 @@ function hasStrongPrivacyDiscoveryCandidate(events: PreviewFallbackEvent[]) {
   return events.some((event) => eventHasStrongPrivacyDiscoveryCandidate(event));
 }
 
+function getEventMetadataForPhase(events: PreviewFallbackEvent[], phase: string) {
+  return [...events]
+    .reverse()
+    .find((event) => (
+      event.event_type === "runtime.build_phase_diagnostic" &&
+      getRecordString(event.metadata_json, "phase") === phase
+    ))?.metadata_json ?? null;
+}
+
+function getObjectArray(record: Record<string, unknown> | null | undefined, key: string) {
+  return getRecordArray(record, key).filter((entry): entry is Record<string, unknown> => (
+    Boolean(entry) &&
+    typeof entry === "object" &&
+    !Array.isArray(entry)
+  ));
+}
+
+function getRuntimeUrlsFromHostEvidence(metadata: Record<string, unknown> | null | undefined) {
+  return uniqueStrings(
+    getObjectArray(metadata, "requestHostEvidence").flatMap((row) => [
+      getRecordString(row, "hostname"),
+      ...getRecordStringArray(row, "sampleUrls")
+    ])
+  );
+}
+
+function getRuntimeUrlsFromTrackerDiagnostics(metadata: Record<string, unknown> | null | undefined) {
+  return uniqueStrings(
+    getObjectArray(metadata, "trackerDiagnostics").flatMap((row) => [
+      getRecordString(row, "vendorName"),
+      getRecordString(row, "vendorCategory"),
+      ...getRecordStringArray(row, "sampleUrls")
+    ])
+  );
+}
+
+function getFirstLoadRuntimeEvidence(metadata: Record<string, unknown> | null | undefined) {
+  return {
+    scriptSrcDomains: getRecordStringArray(metadata, "scriptSrcDomains"),
+    thirdPartyRequestDomains: getRecordStringArray(metadata, "thirdPartyRequestDomains"),
+    trackerDiagnostics: getRuntimeUrlsFromTrackerDiagnostics(metadata),
+    requestHostEvidence: getRuntimeUrlsFromHostEvidence(metadata)
+  };
+}
+
+function mergePreviewRuntimeEvidence(input: {
+  runtimeArtifacts?: Record<string, unknown> | null;
+  events: PreviewFallbackEvent[];
+}) {
+  const hybridEvidence = getEventMetadataForPhase(input.events, "hybrid_auto_local_evidence");
+  const firstLoadEvidence = getFirstLoadRuntimeEvidence(hybridEvidence);
+  const runtimeArtifacts = input.runtimeArtifacts ?? {};
+  const existingEvidenceUrls = getRecordStringArray(runtimeArtifacts, "consent_baseline_tracker_evidence_urls");
+  const existingDomains = getRecordStringArray(runtimeArtifacts, "third_party_request_domains");
+
+  return {
+    ...runtimeArtifacts,
+    consent_baseline_tracker_evidence_urls: uniqueStrings([
+      ...existingEvidenceUrls,
+      ...firstLoadEvidence.trackerDiagnostics,
+      ...firstLoadEvidence.requestHostEvidence
+    ]),
+    consent_baseline_tracker_script_hosts: uniqueStrings([
+      ...getRecordStringArray(runtimeArtifacts, "consent_baseline_tracker_script_hosts"),
+      ...firstLoadEvidence.scriptSrcDomains
+    ]),
+    third_party_request_domains: uniqueStrings([
+      ...existingDomains,
+      ...firstLoadEvidence.thirdPartyRequestDomains,
+      ...firstLoadEvidence.scriptSrcDomains,
+      ...firstLoadEvidence.requestHostEvidence
+    ])
+  };
+}
+
 function getEarlyResultNumber(items: PreviewEarlyResultItem[] | undefined, label: string) {
   const raw = items?.find((item) => item.label === label)?.value ?? null;
   if (!raw) {
@@ -1272,6 +1347,10 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
     resultApiUrl?: string | null;
   };
 }) {
+  const runtimeArtifacts = mergePreviewRuntimeEvidence({
+    runtimeArtifacts: input.runtimeArtifacts,
+    events: input.events
+  });
   const scannerHealthWarnings = deriveScannerHealthWarnings(
     input.events.map((event) => ({
       eventType: event.event_type,
@@ -1291,7 +1370,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
                 hostnameFromUrl(input.snapshot.finalUrl) ??
                 "scanned domain",
               snapshot: input.snapshot,
-              runtimeArtifacts: input.runtimeArtifacts
+              runtimeArtifacts
             })
           }
         : finding
@@ -1309,7 +1388,7 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
   maybePromoteSensitiveProtectedPreview({
     payload,
     snapshot: input.snapshot,
-    runtimeArtifacts: input.runtimeArtifacts
+    runtimeArtifacts
   });
 
   if (!input.snapshot.privacyPolicyPresent && hasStrongPrivacyDiscoveryCandidate(input.events)) {

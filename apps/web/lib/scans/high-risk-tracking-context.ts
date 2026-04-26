@@ -94,6 +94,76 @@ const HIGH_RISK_VENDOR_RULES: VendorRule[] = [
     patterns: [/\bappboy\b/i, /\bbraze\b/i]
   },
   {
+    name: "Meta Pixel",
+    category: "adtech",
+    role: "advertising pixel",
+    domains: ["connect.facebook.net", "facebook.com", "www.facebook.com"],
+    patterns: [/\bfbevents\.js\b/i, /\bmeta pixel\b/i, /\bfacebook pixel\b/i]
+  },
+  {
+    name: "Reddit Pixel",
+    category: "adtech",
+    role: "advertising pixel",
+    domains: ["redditstatic.com", "www.redditstatic.com"],
+    patterns: [/\breddit.*pixel\b/i]
+  },
+  {
+    name: "Microsoft Bing Ads",
+    category: "adtech",
+    role: "advertising conversion tracking",
+    domains: ["bat.bing.com"],
+    patterns: [/\bbing ads\b/i, /\bbat\.js\b/i]
+  },
+  {
+    name: "Snapchat Pixel",
+    category: "adtech",
+    role: "advertising pixel",
+    domains: ["sc-static.net", "tr.snapchat.com", "snapchat.com"],
+    patterns: [/\bscevent\.min\.js\b/i, /\bsnapchat pixel\b/i]
+  },
+  {
+    name: "Twitter/X Ads",
+    category: "adtech",
+    role: "advertising conversion tracking",
+    domains: ["static.ads-twitter.com", "analytics.twitter.com", "t.co"],
+    patterns: [/\btwitter\/x ads\b/i, /\buwt\.js\b/i, /\badsct\b/i]
+  },
+  {
+    name: "Comscore / Scorecard Research",
+    category: "adtech",
+    role: "audience measurement",
+    domains: ["scorecardresearch.com", "sb.scorecardresearch.com"],
+    patterns: [/\bscorecardresearch\b/i, /\bcomscore\b/i]
+  },
+  {
+    name: "The Trade Desk",
+    category: "adtech",
+    role: "programmatic advertising",
+    domains: ["adsrvr.org", "js.adsrvr.org"],
+    patterns: [/\bthe trade desk\b/i, /\badsrvr\b/i]
+  },
+  {
+    name: "Sift",
+    category: "device_signal",
+    role: "fraud and device-risk telemetry",
+    domains: ["sift.com", "cdn.sift.com"],
+    patterns: [/\bsift\b/i]
+  },
+  {
+    name: "TVSquared",
+    category: "adtech",
+    role: "TV attribution tracking",
+    domains: ["tvsquared.com"],
+    patterns: [/\btvsquared\b/i, /\btv2track\.js\b/i]
+  },
+  {
+    name: "Singular",
+    category: "adtech",
+    role: "marketing attribution",
+    domains: ["singular.net", "web-sdk-cdn.singular.net"],
+    patterns: [/\bsingular\b/i]
+  },
+  {
     name: "Sportradar",
     category: "sports_data_advertising",
     role: "sports data advertising and audience infrastructure",
