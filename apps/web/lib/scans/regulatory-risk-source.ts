@@ -5,8 +5,30 @@ function toBoolean(value: unknown) {
   return typeof value === "boolean" ? value : null;
 }
 
+function booleanFromKeys(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = toBoolean(record[key]);
+    if (value !== null) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 function toNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function numberFromKeys(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = toNumber(record[key]);
+    if (value !== null) {
+      return value;
+    }
+  }
+
+  return null;
 }
 
 function toRetentionDisclosure(value: unknown): RegulatoryRiskSource["retentionDisclosureQuality"] {
@@ -34,6 +56,18 @@ export function buildRegulatoryRiskSource(input: {
     : Array.isArray(input.snapshot.third_party_request_domains)
       ? input.snapshot.third_party_request_domains.filter((entry): entry is string => typeof entry === "string")
       : [];
+  const trackingBeforeConsentDetected = booleanFromKeys(input.snapshot, [
+    "tracking_before_consent_detected",
+    "trackingBeforeConsentDetected"
+  ]);
+  const preconsentTrackingDetected = booleanFromKeys(input.snapshot, [
+    "preconsent_tracking_detected",
+    "preconsentTrackingDetected"
+  ]);
+  const thirdPartyCookieSetBeforeConsent = booleanFromKeys(input.snapshot, [
+    "third_party_cookie_set_before_consent",
+    "thirdPartyCookieSetBeforeConsent"
+  ]);
 
   return {
     homepageFetchStatus:
@@ -50,14 +84,14 @@ export function buildRegulatoryRiskSource(input: {
     partialScan: toBoolean(input.snapshot.partial_scan),
     finalUrl: typeof input.snapshot.final_url === "string" ? input.snapshot.final_url : null,
     registeredDomain: typeof input.snapshot.registered_domain === "string" ? input.snapshot.registered_domain : null,
-    trackingBeforeConsentDetected: toBoolean(input.snapshot.tracking_before_consent_detected),
-    thirdPartyCookieSetBeforeConsent: toBoolean(input.snapshot.third_party_cookie_set_before_consent),
-    cookieBannerPresent: toBoolean(input.snapshot.cookie_banner_present),
-    rejectAllPresent: toBoolean(input.snapshot.reject_all_present),
-    granularPreferencesPresent: toBoolean(input.snapshot.granular_preferences_present),
-    dsarRequestMechanismPresent: toBoolean(input.snapshot.dsar_request_mechanism_present),
-    dataAccessRequestPresent: toBoolean(input.snapshot.data_access_request_present),
-    dataDeletionRequestPresent: toBoolean(input.snapshot.data_deletion_request_present),
+    trackingBeforeConsentDetected,
+    thirdPartyCookieSetBeforeConsent,
+    cookieBannerPresent: booleanFromKeys(input.snapshot, ["cookie_banner_present", "cookieBannerPresent"]),
+    rejectAllPresent: booleanFromKeys(input.snapshot, ["reject_all_present", "rejectAllPresent"]),
+    granularPreferencesPresent: booleanFromKeys(input.snapshot, ["granular_preferences_present", "granularPreferencesPresent"]),
+    dsarRequestMechanismPresent: booleanFromKeys(input.snapshot, ["dsar_request_mechanism_present", "dsarRequestMechanismPresent"]),
+    dataAccessRequestPresent: booleanFromKeys(input.snapshot, ["data_access_request_present", "dataAccessRequestPresent"]),
+    dataDeletionRequestPresent: booleanFromKeys(input.snapshot, ["data_deletion_request_present", "dataDeletionRequestPresent"]),
     privacyContactChannelType:
       toPrivacyContactChannelType(input.snapshot.privacyContactChannelType) ??
       toPrivacyContactChannelType(input.snapshot.privacy_contact_channel_type),
@@ -70,37 +104,46 @@ export function buildRegulatoryRiskSource(input: {
     policyClaimNoTracking: toBoolean(input.snapshot.policyClaimNoTracking) ?? toBoolean(input.snapshot.policy_claim_no_tracking),
     policyClaimPrivacyProtective:
       toBoolean(input.snapshot.policyClaimPrivacyProtective) ?? toBoolean(input.snapshot.policy_claim_privacy_protective),
-    policyBehaviorConflictDetected: toBoolean(input.snapshot.policy_behavior_conflict_detected),
-    sessionReplayWithoutDisclosureDetected: toBoolean(input.snapshot.session_replay_without_disclosure_detected),
-    mentionsSensitiveData: toBoolean(input.snapshot.mentions_sensitive_data),
-    mentionsHealthData: toBoolean(input.snapshot.mentions_health_data),
-    mentionsBiometricData: toBoolean(input.snapshot.mentions_biometric_data),
-    mentionsFinancialData: toBoolean(input.snapshot.mentions_financial_data),
-    mentionsUnder13: toBoolean(input.snapshot.mentions_under_13),
-    mentionsUnder16: toBoolean(input.snapshot.mentions_under_16),
-    californiaExposureLikely: toBoolean(input.snapshot.california_exposure_likely),
-    doNotSellLinkPresent: toBoolean(input.snapshot.do_not_sell_link_present),
-    advertisingTrackerCount: toNumber(input.snapshot.advertising_tracker_count),
-    sessionReplayTrackerCount: toNumber(input.snapshot.session_replay_tracker_count),
-    consumerProtectionScore: toNumber(input.snapshot.consumer_protection_score),
-    wcagErrorCountTotal: toNumber(input.snapshot.wcag_error_count_total),
-    wcagMissingAltCount: toNumber(input.snapshot.wcag_missing_alt_count),
-    wcagFormLabelErrorCount: toNumber(input.snapshot.wcag_form_label_error_count),
-    accessibilityStatementPresent: toBoolean(input.snapshot.accessibility_statement_present),
-    accessibilityClaimMismatchDetected: toBoolean(input.snapshot.accessibility_claim_mismatch_detected),
-    accessibilityLitigationRiskScore: toNumber(input.snapshot.accessibility_litigation_risk_score),
-    ecommerceSiteLikely: toBoolean(input.snapshot.ecommerce_site_likely),
-    trackerRegulatoryRiskScore: toNumber(input.snapshot.tracker_regulatory_risk_score),
-    thirdPartyDataFlowRiskScore: toNumber(input.snapshot.third_party_data_flow_risk_score),
+    policyBehaviorConflictDetected: booleanFromKeys(input.snapshot, ["policy_behavior_conflict_detected", "policyBehaviorConflictDetected"]),
+    sessionReplayWithoutDisclosureDetected: booleanFromKeys(input.snapshot, [
+      "session_replay_without_disclosure_detected",
+      "sessionReplayWithoutDisclosureDetected"
+    ]),
+    mentionsSensitiveData: booleanFromKeys(input.snapshot, ["mentions_sensitive_data", "mentionsSensitiveData"]),
+    mentionsHealthData: booleanFromKeys(input.snapshot, ["mentions_health_data", "mentionsHealthData"]),
+    mentionsBiometricData: booleanFromKeys(input.snapshot, ["mentions_biometric_data", "mentionsBiometricData"]),
+    mentionsFinancialData: booleanFromKeys(input.snapshot, ["mentions_financial_data", "mentionsFinancialData"]),
+    mentionsUnder13: booleanFromKeys(input.snapshot, ["mentions_under_13", "mentionsUnder13"]),
+    mentionsUnder16: booleanFromKeys(input.snapshot, ["mentions_under_16", "mentionsUnder16"]),
+    californiaExposureLikely: booleanFromKeys(input.snapshot, ["california_exposure_likely", "californiaExposureLikely"]),
+    doNotSellLinkPresent: booleanFromKeys(input.snapshot, ["do_not_sell_link_present", "doNotSellLinkPresent"]),
+    advertisingTrackerCount: numberFromKeys(input.snapshot, ["advertising_tracker_count", "advertisingTrackerCount"]),
+    sessionReplayTrackerCount: numberFromKeys(input.snapshot, ["session_replay_tracker_count", "sessionReplayTrackerCount"]),
+    consumerProtectionScore: numberFromKeys(input.snapshot, ["consumer_protection_score", "consumerProtectionScore"]),
+    wcagErrorCountTotal: numberFromKeys(input.snapshot, ["wcag_error_count_total", "wcagErrorCountTotal"]),
+    wcagMissingAltCount: numberFromKeys(input.snapshot, ["wcag_missing_alt_count", "wcagMissingAltCount"]),
+    wcagFormLabelErrorCount: numberFromKeys(input.snapshot, ["wcag_form_label_error_count", "wcagFormLabelErrorCount"]),
+    accessibilityStatementPresent: booleanFromKeys(input.snapshot, ["accessibility_statement_present", "accessibilityStatementPresent"]),
+    accessibilityClaimMismatchDetected: booleanFromKeys(input.snapshot, [
+      "accessibility_claim_mismatch_detected",
+      "accessibilityClaimMismatchDetected"
+    ]),
+    accessibilityLitigationRiskScore: numberFromKeys(input.snapshot, [
+      "accessibility_litigation_risk_score",
+      "accessibilityLitigationRiskScore"
+    ]),
+    ecommerceSiteLikely: booleanFromKeys(input.snapshot, ["ecommerce_site_likely", "ecommerceSiteLikely"]),
+    trackerRegulatoryRiskScore: numberFromKeys(input.snapshot, ["tracker_regulatory_risk_score", "trackerRegulatoryRiskScore"]),
+    thirdPartyDataFlowRiskScore: numberFromKeys(input.snapshot, ["third_party_data_flow_risk_score", "thirdPartyDataFlowRiskScore"]),
     thirdPartyRequestCount:
       toNumber(input.runtimeArtifacts?.third_party_request_count) ?? toNumber(input.snapshot.third_party_request_count),
     thirdPartyRequestDomainCount: thirdPartyRequestDomains.length > 0 ? thirdPartyRequestDomains.length : null,
     sensitiveContextTrackingDetected:
       trackingContext.isSensitiveContext &&
       highRiskTrackingVendorNames.length > 0 &&
-      (toBoolean(input.snapshot.tracking_before_consent_detected) === true ||
-        toBoolean(input.snapshot.preconsent_tracking_detected) === true ||
-        toBoolean(input.snapshot.third_party_cookie_set_before_consent) === true),
+      (trackingBeforeConsentDetected === true ||
+        preconsentTrackingDetected === true ||
+        thirdPartyCookieSetBeforeConsent === true),
     highRiskIdentityVendorDetected: highRiskVendorCategories.has("identity_resolution"),
     highRiskDataBrokerDetected: highRiskVendorCategories.has("data_broker") || highRiskVendorCategories.has("identity_data_broker"),
     identityDataBrokerDetected: highRiskVendorCategories.has("identity_data_broker"),
