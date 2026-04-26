@@ -13,6 +13,7 @@ import {
   type SignalEnrichmentWorkflowStageStatus
 } from "@website-signal-risk-scanner/shared";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
+import { CopyJsonButton } from "./copy-json-button";
 import { CookieStoragePanel } from "./cookie-storage-panel";
 import { DiagnosticsPanel } from "./diagnostics-panel";
 import { ExecutiveSummaryCard } from "./executive-summary-card";
@@ -1740,9 +1741,12 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
                 </svg>
               </span>
             </summary>
-            <pre className="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-white p-3 text-[11px] leading-5 text-slate-600">
-              {findingJsonPayload}
-            </pre>
+            <div className="relative mt-2">
+              <CopyJsonButton payload={findingJsonPayload} label="Copy evidence JSON" />
+              <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-white p-3 pr-12 text-[11px] leading-5 text-slate-600">
+                {findingJsonPayload}
+              </pre>
+            </div>
           </details>
         </div>
       </details>
@@ -3566,9 +3570,12 @@ function CategoryFindingSummaryCard(input: { finding: UnifiedFindingDisplayPacke
               <path d="M14 3 10 21" />
             </svg>
           </summary>
-          <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-600">
-            {findingJsonPayload}
-          </pre>
+          <div className="relative">
+            <CopyJsonButton payload={findingJsonPayload} label="Copy evidence JSON" />
+            <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-white p-3 pr-12 text-[11px] leading-5 text-slate-600">
+              {findingJsonPayload}
+            </pre>
+          </div>
         </details>
       </div>
     </div>

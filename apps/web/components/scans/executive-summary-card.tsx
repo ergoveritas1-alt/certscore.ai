@@ -9,6 +9,7 @@ import { formatRepresentativeAccessibilityCoverage } from "../../lib/scans/acces
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
+import { CopyJsonButton } from "./copy-json-button";
 type DomainBenchmarkCardData = {
   confidence: "low" | "medium" | "high";
   estimatedRankLabel: string;
@@ -1109,8 +1110,13 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
             <span>{"{}"} JSON evidence</span>
             <span className="text-slate-400 transition-transform group-open/json:rotate-180">⌄</span>
           </summary>
-          <div className="mt-3 min-w-0 max-w-full overflow-hidden rounded-lg bg-slate-950">
-            <pre className="max-w-full whitespace-pre-wrap break-words px-3 py-3 text-xs leading-5 text-slate-100">{jsonPayload}</pre>
+          <div className="relative mt-3 min-w-0 max-w-full overflow-hidden rounded-lg bg-slate-950">
+            <CopyJsonButton
+              payload={jsonPayload}
+              label="Copy evidence JSON"
+              className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-200 shadow-sm transition-colors hover:border-slate-500 hover:text-white"
+            />
+            <pre className="max-w-full whitespace-pre-wrap break-words px-3 py-3 pr-12 text-xs leading-5 text-slate-100">{jsonPayload}</pre>
           </div>
         </details>
       </div>
