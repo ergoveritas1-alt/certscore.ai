@@ -110,6 +110,21 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+const CMP_OR_FUNCTIONAL_VENDOR_DOMAIN_PATTERN =
+  /(?:^|\.)((?:cdn\.)?cookielaw\.org|onetrust\.(?:com|io)|geolocation\.onetrust\.com|optanon\.blob\.core\.windows\.net|trustarc\.com|truste\.com|consent\.trustarc\.com|form-renderer\.trustarc\.com|privacy-policy\.truste\.com|preferences\.trustarc\.com|consent\.cookiebot\.com|app\.cookieinformation\.com|cdn\.privacy-mgmt\.com|sourcepoint\.mgr\.consensu\.org|quantcast\.mgr\.consensu\.org|mgr\.consensu\.org)$/i;
+
+function isCmpOrFunctionalVendorDomain(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+  const normalized = value.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0]?.replace(/:\d+$/, "") ?? "";
+  return CMP_OR_FUNCTIONAL_VENDOR_DOMAIN_PATTERN.test(normalized);
+}
+
+function isCmpOrFunctionalVendorLabel(value: string | null | undefined) {
+  return /^(onetrust|trustarc|cookiebot|sourcepoint|quantcast choice)$/i.test(value?.trim() ?? "");
+}
+
 function formatDateTime(value: string | null) {
   if (!value) {
     return "Not available";
@@ -4615,7 +4630,8 @@ export function SharedScanDetailView({
   const fallbackCookieNames = uniqueStrings(fallbackEvidence?.entities?.cookieNames ?? []);
   const fallbackCookieDomains = uniqueStrings(fallbackEvidence?.entities?.cookieDomains ?? []);
   const fallbackThirdPartyCookieDomains = getThirdPartyCookieDomains(fallbackFinalHostname, fallbackCookieDomains);
-  const fallbackTechnologyNames = uniqueStrings(fallbackEvidence?.entities?.technologyNames ?? []);
+  const fallbackTechnologyNames = uniqueStrings(fallbackEvidence?.entities?.technologyNames ?? [])
+    .filter((name) => !isCmpOrFunctionalVendorLabel(name));
   const fallbackObservedRequestCount = getFiniteNumber(fallbackEvidence?.metrics?.requestCount) ?? 0;
   const fallbackObservedCookieCount = getFiniteNumber(fallbackEvidence?.metrics?.initialCookieCount) ?? 0;
   const fallbackObservedDomainCount = getFiniteNumber(fallbackEvidence?.metrics?.domainCount) ?? 0;
@@ -4628,15 +4644,18 @@ export function SharedScanDetailView({
   const executiveResolvedVendorNames = uniqueStrings([
     ...certScoreSummary.resolvedVendorNames,
     ...fallbackTechnologyNames
-  ]);
+  ]).filter((name) => !isCmpOrFunctionalVendorLabel(name));
   const executiveThirdPartyDomains = uniqueStrings([
     ...getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains"),
     ...fallbackTopDomains
-  ]);
+  ]).filter((domain) => !isCmpOrFunctionalVendorDomain(domain));
   const executiveThirdPartyRequestCount = Math.max(certScoreSummary.thirdPartyRequestCount, fallbackThirdPartyRequestCount);
   const executiveTopObservedEntities =
     certScoreSummary.topObservedEntities.length > 0
-      ? certScoreSummary.topObservedEntities
+      ? certScoreSummary.topObservedEntities.filter((entity) => (
+          !isCmpOrFunctionalVendorLabel(entity.label) &&
+          !isCmpOrFunctionalVendorDomain(entity.label)
+        ))
       : [
           ...fallbackTechnologyNames.map((label) => ({
             label,
@@ -4671,7 +4690,7 @@ export function SharedScanDetailView({
   const executiveUnresolvedVendorHosts = uniqueStrings([
     ...certScoreSummary.unresolvedVendorHosts,
     ...fallbackTopDomains
-  ]);
+  ]).filter((host) => !isCmpOrFunctionalVendorDomain(host));
   const executiveFingerprintReasons = uniqueStrings([
     ...getRecordStringArray(hybridFingerprintSummary, "reasons"),
     ...(fallbackServerNames.length > 0 ? [`Supplemental runtime evidence retained infrastructure signals: ${fallbackServerNames.join(", ")}`] : []),
@@ -4972,9 +4991,13 @@ export function SharedScanDetailView({
                 <div className="space-y-1">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">Supplemental public runtime evidence</p>
                   <p>
-                    {fallbackEvidenceRelation === "off_domain_redirect" && fallbackFinalHostname
+                    {executiveAccessLimitationNotice && fallbackEvidenceRelation === "off_domain_redirect" && fallbackFinalHostname
                       ? `CertScore live verification stayed blocked, but supplemental public runtime evidence showed this domain redirected to ${fallbackFinalHostname}.`
-                      : "CertScore live verification stayed blocked, but supplemental same-host public runtime evidence was retained for this domain."}
+                      : executiveAccessLimitationNotice
+                        ? "CertScore live verification stayed blocked, but supplemental same-host public runtime evidence was retained for this domain."
+                        : fallbackEvidenceRelation === "off_domain_redirect" && fallbackFinalHostname
+                          ? `Supplemental public runtime evidence showed this domain redirected to ${fallbackFinalHostname}.`
+                          : "Supplemental same-host public runtime evidence was retained for this domain."}
                     {" "}
                     This evidence is source-attributed internally and can trigger cookie or vendor findings when concrete runtime records are retained.
                   </p>

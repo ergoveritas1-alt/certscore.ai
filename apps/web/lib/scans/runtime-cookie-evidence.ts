@@ -93,7 +93,7 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
     return "session_replay";
   }
   if (
-    /(cf_clearance|__cf|recaptcha|akamai|datadome|perimeterx|awsalb|awsalbcors|awsalbtg|bm_sz|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid|(^|\b)sid($|\b)|(^|\b)session($|\b)|optanonconsent|cookieyes-consent|didomi_token)/i.test(
+    /(cf_clearance|__cf|recaptcha|akamai|datadome|perimeterx|awsalb|awsalbcors|awsalbtg|akaalb|usp-google|bm_sz|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid|(^|\b)sid($|\b)|(^|\b)session($|\b)|optanonconsent|cookieyes-consent|didomi_token)/i.test(
       normalized
     )
   ) {
@@ -104,7 +104,7 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
 
 export function isFunctionalCookieExcludedFromTrackingEvidence(name: string | null | undefined, domain: string | null = null) {
   const normalized = `${name ?? ""} ${domain ?? ""}`.toLowerCase();
-  return /(^|\b)(optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|didomi_token|__cf_bm|cf_clearance|bigipserver|awsalb|awsalbcors|awsalbtg|bm_sz|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid)|(^|\b)_sp_/.test(
+  return /(^|\b)(optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|didomi_token|__cf_bm|cf_clearance|bigipserver|awsalb|awsalbcors|awsalbtg|akaalb|usp-google|bm_sz|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid)|(^|\b)_sp_/.test(
     normalized
   );
 }
