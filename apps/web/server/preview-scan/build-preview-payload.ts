@@ -1352,6 +1352,12 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
       snapshot: input.snapshot,
       fallbackSnapshot
     });
+    const sensitiveContext = deriveFallbackHighRiskTrackingContext({
+      hostname: findingHostname,
+      snapshot: input.snapshot,
+      fallbackSnapshot
+    });
+    const sensitiveVendorSummary = formatHighRiskVendorSummary(sensitiveContext.highRiskVendors);
 
     pushPrioritizedFinding(payload.sampleFindings, {
       affectedPage: "Homepage",
@@ -1366,6 +1372,19 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
     });
 
     if (sensitiveContextFallbackRisk) {
+      const sensitiveVendorCategories = new Set(sensitiveContext.highRiskVendors.map((vendor) => vendor.category));
+      const sensitiveFindingTitle = sensitiveVendorCategories.has("identity_data_broker")
+        ? "Identity data broker tracking before consent"
+        : sensitiveVendorCategories.has("dmp")
+          ? "DMP audience profiling before consent"
+          : "Sensitive-context tracking before consent";
+      pushPrioritizedFinding(payload.sampleFindings, {
+        affectedPage: "Homepage",
+        category: "privacy",
+        severity: "high",
+        title: sensitiveFindingTitle,
+        description: `Sensitive-context behavioral data may be flowing to advertising, identity, or profiling systems before consent on a ${sensitiveContext.sensitiveContextLabel ?? "sensitive-context site"}. Vendors observed include ${sensitiveVendorSummary.join(", ")}.`
+      }, 5);
       capScoresForSensitiveContextFallbackRisk(payload);
     }
   }

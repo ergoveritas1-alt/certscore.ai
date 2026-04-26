@@ -33,6 +33,10 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
   );
   const previewSupplementalEvidence =
     scan?.previewPayload?.supplementalEvidence ?? scan?.previewPayload?.fallbackEvidence ?? null;
+  const previewHeadlineFindings =
+    scan?.previewPayload?.sampleFindings
+      ?.filter((finding) => finding.severity === "high" || finding.severity === "medium")
+      .slice(0, 3) ?? [];
 
   if (scan && shouldAttemptDetailedPreviewReport) {
     try {
@@ -91,6 +95,22 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
                         ) : null}
                       </div>
                     ))}
+                </div>
+              ) : null}
+              {previewHeadlineFindings.length > 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Headline findings</p>
+                  <div className="mt-3 space-y-3">
+                    {previewHeadlineFindings.map((finding) => (
+                      <div key={`${finding.category}-${finding.title}`} className="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone="warning">{finding.severity}</Badge>
+                          <p className="text-sm font-semibold text-slate-900">{finding.title}</p>
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-slate-700">{finding.description}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
             </CardContent>

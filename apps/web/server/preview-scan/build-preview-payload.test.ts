@@ -485,6 +485,10 @@ test("sensitive fallback tracking is prioritized and calibrates preview scores",
   assert.equal(payload.sampleFindings[0]?.title, "Tracking activity observed before consent");
   assert.equal(payload.sampleFindings[0]?.severity, "high");
   assert.equal(payload.sampleFindings[0]?.description.includes("health information site"), true);
+  const sensitiveFinding = payload.sampleFindings.find((finding) => finding.title === "DMP audience profiling before consent");
+  assert.equal(sensitiveFinding?.severity, "high");
+  assert.equal(sensitiveFinding?.description.includes("Adobe Audience Manager"), true);
+  assert.equal(sensitiveFinding?.description.includes("reCAPTCHA Enterprise"), true);
   assert.equal(payload.scores?.privacy, 55);
   assert.equal(payload.scores?.overall, 62);
   assert.equal(payload.summaryBullets.includes("Preview scores: overall 62, privacy 55, accessibility 82."), true);
