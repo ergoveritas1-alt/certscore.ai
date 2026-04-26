@@ -581,7 +581,8 @@ test("preview payload surfaces urlscan no-api-key diagnostics as scanner health 
     ]
   });
 
-  assert.equal(payload.scannerHealthWarnings?.[0]?.code, "urlscan_api_key_missing");
+  assert.equal(payload.scannerHealthWarnings?.[0]?.code, "supplemental_enrichment_key_missing");
+  assert.deepEqual(payload.scannerHealthWarnings?.[0]?.phases, ["supplemental_disclosure_fetch", "supplemental_runtime_lookup"]);
   assert.equal(
     payload.summaryBullets.some((bullet) => bullet.includes("Scanner health warning: Supplemental public runtime enrichment was skipped")),
     true

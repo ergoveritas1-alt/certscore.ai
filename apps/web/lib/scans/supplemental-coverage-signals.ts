@@ -33,6 +33,18 @@ function hasUrlscanMissingKey(metadata: Record<string, unknown>) {
   ].some((value) => value === "no_api_key");
 }
 
+function publicSupplementalPhaseLabel(phase: string) {
+  if (phase.includes("legal_fetch")) {
+    return "supplemental_disclosure_fetch";
+  }
+
+  if (phase.includes("lookup")) {
+    return "supplemental_runtime_lookup";
+  }
+
+  return "supplemental_runtime_enrichment";
+}
+
 export function deriveSupplementalCoverageSignals(input: {
   events: SupplementalCoverageEvent[];
   existingSignals: SupplementalCoverageExistingSignal[];
@@ -40,7 +52,7 @@ export function deriveSupplementalCoverageSignals(input: {
   const seenKeys = new Set(input.existingSignals.map((signal) => signal.key));
   const supplementalSignals = new Map<string, SupplementalCoverageSignal>();
   const snapshotOverrides: Record<string, unknown> = {};
-  const urlscanMissingKeyPhases = new Set<string>();
+  const supplementalMissingKeyPhases = new Set<string>();
 
   const coverageMap = new Map<
     string,
@@ -103,7 +115,7 @@ export function deriveSupplementalCoverageSignals(input: {
     const phase = String(metadata.phase ?? "");
 
     if (hasUrlscanMissingKey(metadata)) {
-      urlscanMissingKeyPhases.add(phase);
+      supplementalMissingKeyPhases.add(publicSupplementalPhaseLabel(phase));
     }
 
     if (phase === "surface_recovery_summary") {
@@ -186,12 +198,12 @@ export function deriveSupplementalCoverageSignals(input: {
     });
   }
 
-  if (!seenKeys.has("disclosure.urlscan_enrichment_unavailable") && urlscanMissingKeyPhases.size > 0) {
-    supplementalSignals.set("disclosure.urlscan_enrichment_unavailable", {
-      key: "disclosure.urlscan_enrichment_unavailable",
+  if (!seenKeys.has("disclosure.supplemental_runtime_enrichment_unavailable") && supplementalMissingKeyPhases.size > 0) {
+    supplementalSignals.set("disclosure.supplemental_runtime_enrichment_unavailable", {
+      key: "disclosure.supplemental_runtime_enrichment_unavailable",
       label: "Supplemental public runtime enrichment unavailable",
-      snapshotField: "urlscan_enrichment_unavailable",
-      value: [...urlscanMissingKeyPhases].sort()
+      snapshotField: "supplemental_runtime_enrichment_unavailable",
+      value: [...supplementalMissingKeyPhases].sort()
     });
   }
 

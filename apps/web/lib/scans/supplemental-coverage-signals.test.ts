@@ -23,7 +23,7 @@ test("adds bounded key-page discovery unresolved when surface recovery leaves ke
   );
 });
 
-test("adds urlscan enrichment unavailable when urlscan diagnostics report no API key", () => {
+test("adds supplemental enrichment unavailable when diagnostics report no API key", () => {
   const result = deriveSupplementalCoverageSignals({
     events: [
       {
@@ -45,12 +45,12 @@ test("adds urlscan enrichment unavailable when urlscan diagnostics report no API
   });
 
   assert.deepEqual(
-    result.supplementalSignals.find((signal) => signal.key === "disclosure.urlscan_enrichment_unavailable"),
+    result.supplementalSignals.find((signal) => signal.key === "disclosure.supplemental_runtime_enrichment_unavailable"),
     {
-      key: "disclosure.urlscan_enrichment_unavailable",
+      key: "disclosure.supplemental_runtime_enrichment_unavailable",
       label: "Supplemental public runtime enrichment unavailable",
-      snapshotField: "urlscan_enrichment_unavailable",
-      value: ["urlscan_preflight_legal_fetch", "urlscan_preflight_lookup"]
+      snapshotField: "supplemental_runtime_enrichment_unavailable",
+      value: ["supplemental_disclosure_fetch", "supplemental_runtime_lookup"]
     }
   );
 });
