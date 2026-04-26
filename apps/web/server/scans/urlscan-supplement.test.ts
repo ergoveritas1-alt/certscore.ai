@@ -78,13 +78,15 @@ test("builds supplemental urlscan evidence without promoted sample findings", ()
   });
 
   assert.ok(payload);
-  assert.equal(payload.fallbackEvidence?.source, "urlscan");
-  assert.equal(payload.fallbackEvidence?.reportUrl, "https://urlscan.io/result/rich/");
+  assert.equal(payload.fallbackEvidence?.source, "supplemental_public_runtime");
+  assert.equal(payload.fallbackEvidence?.reportUrl, undefined);
+  assert.equal(payload.fallbackEvidence?.resultApiUrl, undefined);
   assert.equal(payload.fallbackEvidence?.metrics?.requestCount, 40);
   assert.equal(payload.fallbackEvidence?.metrics?.domainCount, 3);
-  assert.deepEqual(payload.fallbackEvidence?.entities?.cookieNames, ["_ga", "visitor_id"]);
+  assert.deepEqual(payload.fallbackEvidence?.entities?.cookieNames, ["_ga"]);
+  assert.deepEqual(payload.fallbackEvidence?.entities?.diagnosticCookieNamesExcludedFromTrackingEvidence, ["visitor_id"]);
   assert.deepEqual(payload.fallbackEvidence?.entities?.cookieDomains, [".example.com", "analytics.example.net"]);
-  assert.equal(payload.fallbackEvidence?.cookieFootprint?.summary, "2 initial cookies retained from supplemental public runtime evidence.");
+  assert.equal(payload.fallbackEvidence?.cookieFootprint?.summary, "1 tracking cookie retained from supplemental public runtime evidence.");
   assert.deepEqual(payload.fallbackEvidence?.entities?.technologyNames, ["Cloudflare", "Google Tag Manager"]);
   assert.equal(payload.evidence?.verifiedPublicSurfacesCount, 2);
   assert.equal(payload.sampleFindings.length, 0);

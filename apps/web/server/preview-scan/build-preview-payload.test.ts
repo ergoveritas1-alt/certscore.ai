@@ -396,8 +396,9 @@ test("evidence-rich lean previews aggressively surface urlscan-backed fallback e
   assert.deepEqual(payload.fallbackEvidence?.entities?.cookieNames, ["_ga"]);
   assert.deepEqual(payload.fallbackEvidence?.entities?.diagnosticCookieNamesExcludedFromTrackingEvidence, ["OptanonConsent", "visitor_id"]);
   assert.equal(payload.fallbackEvidence?.cookieFootprint?.details.includes("Tracking cookie names: _ga"), true);
-  assert.equal(payload.fallbackEvidence?.reportUrl, "https://urlscan.io/result/promoted-example/");
-  assert.equal(payload.fallbackEvidence?.resultApiUrl, "https://urlscan.io/api/v1/result/promoted-example/");
+  assert.equal(payload.fallbackEvidence?.reportUrl, undefined);
+  assert.equal(payload.fallbackEvidence?.resultApiUrl, undefined);
+  assert.equal(payload.fallbackEvidence?.source, "supplemental_public_runtime");
   assert.equal(payload.fallbackEvidence?.entities?.technologyNames?.includes("OneTrust"), true);
   assert.equal(payload.fallbackEvidence?.entities?.topDomains?.includes("www.fandango.com"), true);
   assert.equal(payload.fallbackEvidence?.sourceLabel, "Supplemental public runtime evidence");

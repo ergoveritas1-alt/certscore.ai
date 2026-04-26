@@ -61,7 +61,7 @@ export type PreviewFallbackEvidenceSection = {
 };
 
 export type PreviewFallbackEvidence = {
-  source: "urlscan";
+  source: "supplemental_public_runtime";
   sourceLabel: string;
   reportUrl?: string | null;
   resultApiUrl?: string | null;
