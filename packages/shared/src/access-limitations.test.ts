@@ -82,6 +82,7 @@ test("ignores stale auth-wall classifications when useful origin evidence was re
     blockedFlag: false,
     captchaFlag: false,
     challengeSuspected: false,
+    authWallSuspected: true,
     homepageFetchHttpStatus: 200,
     homepageFetchStatus: "ok",
     pagesScanned: 4
