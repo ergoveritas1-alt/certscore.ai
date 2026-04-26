@@ -1302,6 +1302,38 @@ test("selectNanoDocCandidates prefers current ws01 legal coverage over recent do
   assert.equal(candidates.some((candidate) => candidate.url === "https://example.com/terms"), false);
 });
 
+test("buildNanoDocCandidateUrls prioritizes rendered homepage legal documents over guessed fallbacks", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [],
+    domainHostname: "draftkings.com",
+    homepageDiscoveryCandidates: [
+      {
+        anchorText: "Privacy Notice",
+        candidateScore: 0.98,
+        discoveredFrom: "homepage_rendered_link",
+        documentType: "privacy_policy",
+        sourceUrl: "https://www.draftkings.com/",
+        url: "https://myaccount.draftkings.com/documents/privacy-notice"
+      },
+      {
+        anchorText: "Terms of Use",
+        candidateScore: 0.96,
+        discoveredFrom: "homepage_rendered_link",
+        documentType: "terms_of_service",
+        sourceUrl: "https://www.draftkings.com/",
+        url: "https://myaccount.draftkings.com/documents/us-terms-of-use"
+      }
+    ],
+    pages: []
+  });
+
+  assert.equal(candidates[0]?.url, "https://myaccount.draftkings.com/documents/privacy-notice");
+  assert.equal(candidates[0]?.priorityTier, "priority");
+  assert.equal(candidates.some((candidate) => candidate.url === "https://myaccount.draftkings.com/documents/us-terms-of-use"), true);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://draftkings.com/privacy"), false);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://draftkings.com/privacy-policy"), false);
+});
+
 test("getNanoDocumentSourceDedupKeys covers both ws01 source and redirected canonical urls", () => {
   const keys = getNanoDocumentSourceDedupKeys({
     canonical_url: "https://www.example.com/legal/enterprise-end-user-agreement",

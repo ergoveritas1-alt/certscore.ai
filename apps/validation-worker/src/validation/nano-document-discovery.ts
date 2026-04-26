@@ -104,7 +104,7 @@ function getDocumentSpecificityAdjustment(input: { documentType: string | null; 
   let adjustment = 0;
 
   if (input.documentType === "privacy_policy") {
-    if (/\bprivacy policy\b|\/privacy-policy\b|\/privacy\b/.test(haystack)) adjustment += 0.18;
+    if (/\bprivacy policy\b|\bprivacy notice\b|\/privacy-policy\b|\/privacy-notice\b|\/privacy\b/.test(haystack)) adjustment += 0.18;
     if (isSupplementalPrivacySurface({ anchorText: input.anchorText, url: input.url })) adjustment += 0.12;
     if (/\bjob|applicant|employee|candidate|affiliate|supplier|vendor|consumer-health|hipaa|california\b/.test(haystack)) adjustment -= 0.28;
     if (looksLikeMachineLegalEndpoint(input.url)) adjustment -= 0.2;
@@ -407,15 +407,20 @@ function buildSeedFallbackCandidates(domainHostname: string | null) {
   return [
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/privacy` },
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/privacy-policy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/privacy-notice` },
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/privacy_policy` },
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy-policy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy-notice` },
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/documents/privacy-notice` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/terms` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/terms-of-service` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/terms-of-use` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/terms-of-service` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/terms` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/enterprise-end-user-agreement` },
+    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/documents/terms-of-use` },
+    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/documents/us-terms-of-use` },
     { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/cookie-policy` },
     { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookie-policy` },
     { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookies` },
@@ -520,15 +525,16 @@ export function buildNanoDocCandidateUrls(input: {
   );
   const orderedEvidence = evidenceCandidates
     .filter((candidate) => isSupportedDocumentType(candidate.documentType ?? null))
-    .sort((left, right) => (right.score ?? 0) - (left.score ?? 0) || left.url.localeCompare(right.url))
+    .sort((left, right) => (right.score ?? right.candidateScore ?? 0) - (left.score ?? left.candidateScore ?? 0) || left.url.localeCompare(right.url))
     .map((candidate) => ({
       documentType: candidate.documentType!,
       priorityTier:
         candidate.discoveredFrom === "scanner_page" ||
         candidate.discoveredFrom === "footer_link" ||
         candidate.discoveredFrom === "legal_hub" ||
+        candidate.discoveredFrom === "homepage_rendered_link" ||
         candidate.discoveredFrom === "rendered_link" ||
-        (candidate.score ?? 0) >= 0.75
+        (candidate.score ?? candidate.candidateScore ?? 0) >= 0.75
           ? "priority"
           : "secondary",
       url: candidate.url
@@ -656,15 +662,17 @@ export async function rankNanoDocDiscoveryCandidatesWithLlm(input: {
   pages: Array<Record<string, unknown>>;
   recentDomainDocumentCandidates?: Array<Record<string, unknown>>;
 }) {
-  const recentDomainCandidates = buildNanoDocCandidateUrls({
-    discoveryCandidates: [],
-    domainHostname: input.domainHostname,
-    homepageDiscoveryCandidates: [],
-    pages: [],
-    recentDomainDocumentCandidates: input.recentDomainDocumentCandidates
-  });
-  if (recentDomainCandidates.length > 0) {
-    return recentDomainCandidates;
+  if ((input.recentDomainDocumentCandidates ?? []).length > 0) {
+    const recentDomainCandidates = buildNanoDocCandidateUrls({
+      discoveryCandidates: [],
+      domainHostname: input.domainHostname,
+      homepageDiscoveryCandidates: [],
+      pages: [],
+      recentDomainDocumentCandidates: input.recentDomainDocumentCandidates
+    });
+    if (recentDomainCandidates.length > 0) {
+      return recentDomainCandidates;
+    }
   }
 
   const available = buildEvidenceCandidates(input);
