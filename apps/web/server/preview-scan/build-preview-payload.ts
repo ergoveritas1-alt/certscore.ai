@@ -188,6 +188,52 @@ function getNestedStringArray(record: Record<string, unknown> | null | undefined
     : [];
 }
 
+function eventHasStrongPrivacyDiscoveryCandidate(event: PreviewFallbackEvent) {
+  if (event.event_type !== "runtime.build_phase_diagnostic") {
+    return false;
+  }
+
+  const metadata = event.metadata_json;
+  if (getRecordString(metadata, "phase") !== "page_discovery_fetch") {
+    return false;
+  }
+
+  const discoveryDebug = getNestedRecord(metadata, ["discoveryDebug"]);
+  const topCandidates = getRecordArray(discoveryDebug, "topDiscoveryCandidates");
+  return topCandidates.some((candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      return false;
+    }
+
+    const record = candidate as Record<string, unknown>;
+    const pageType = getRecordString(record, "pageType") ?? getRecordString(record, "page_type");
+    const candidateScore =
+      getRecordNumber(record, "candidateScore") ??
+      getRecordNumber(record, "candidate_score") ??
+      0;
+    const candidateUrl = getRecordString(record, "candidateUrl") ?? getRecordString(record, "candidate_url");
+    const anchorText = getRecordString(record, "anchorText") ?? getRecordString(record, "anchor_text");
+    const discoveredFrom = getRecordString(record, "discoveredFrom") ?? getRecordString(record, "discovered_from");
+    const haystack = `${candidateUrl ?? ""} ${anchorText ?? ""}`.toLowerCase();
+    const strongDiscoverySource =
+      discoveredFrom === "homepage_rendered_link" ||
+      discoveredFrom === "rendered_link" ||
+      discoveredFrom === "footer_link" ||
+      discoveredFrom === "legal_hub";
+
+    return (
+      pageType === "privacy_policy" &&
+      candidateScore >= 0.75 &&
+      strongDiscoverySource &&
+      /\bprivacy\b|privacy-policy|privacy-notice/.test(haystack)
+    );
+  });
+}
+
+function hasStrongPrivacyDiscoveryCandidate(events: PreviewFallbackEvent[]) {
+  return events.some((event) => eventHasStrongPrivacyDiscoveryCandidate(event));
+}
+
 function getEarlyResultNumber(items: PreviewEarlyResultItem[] | undefined, label: string) {
   const raw = items?.find((item) => item.label === label)?.value ?? null;
   if (!raw) {
@@ -1265,6 +1311,15 @@ export function enrichPreviewPayloadWithFallbackEvidence(input: {
     snapshot: input.snapshot,
     runtimeArtifacts: input.runtimeArtifacts
   });
+
+  if (!input.snapshot.privacyPolicyPresent && hasStrongPrivacyDiscoveryCandidate(input.events)) {
+    payload.sampleFindings = payload.sampleFindings.filter((finding) => finding.title !== "Privacy policy not detected");
+    insertSummaryBullet(
+      payload.summaryBullets,
+      "A likely privacy notice link was retained from the scanned homepage surface."
+    );
+    payload.issueCounts = deriveIssueCounts(payload.sampleFindings);
+  }
 
   const observableConsentSurface = hasObservableConsentSurface(input.snapshot);
   const worthwhileLeanPreview =
