@@ -31,6 +31,8 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
       hasRenderablePreviewResult &&
       !hasUnsafeDegradedExecution
   );
+  const previewSupplementalEvidence =
+    scan?.previewPayload?.supplementalEvidence ?? scan?.previewPayload?.fallbackEvidence ?? null;
 
   if (scan && shouldAttemptDetailedPreviewReport) {
     try {
@@ -58,24 +60,24 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
         })
       : null;
   const lightweightPreviewNotice =
-    scan?.previewPayload && ((scan?.pagesScanned ?? 0) === 0 || Boolean(scan.previewPayload.fallbackEvidence))
+    scan?.previewPayload && ((scan?.pagesScanned ?? 0) === 0 || Boolean(previewSupplementalEvidence))
       ? (
           <Card className="border-slate-200 bg-slate-50/70">
             <CardHeader className="space-y-2 pb-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge tone="warning">Indirect source</Badge>
+                <Badge tone="warning">Supplemental evidence</Badge>
               </div>
               <CardTitle className="text-base">Lightweight results were enriched with supplemental public evidence</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-slate-700">
-              {scan.previewPayload.fallbackEvidence ? (
+              {previewSupplementalEvidence ? (
                 <div className="grid gap-3 lg:grid-cols-3">
                   {[
-                    scan.previewPayload.fallbackEvidence.requestFootprint,
-                    scan.previewPayload.fallbackEvidence.vendorFootprint,
-                    scan.previewPayload.fallbackEvidence.disclosureFootprint
+                    previewSupplementalEvidence.requestFootprint,
+                    previewSupplementalEvidence.vendorFootprint,
+                    previewSupplementalEvidence.disclosureFootprint
                   ]
-                    .filter((section): section is NonNullable<typeof scan.previewPayload.fallbackEvidence.requestFootprint> => Boolean(section))
+                    .filter((section): section is NonNullable<typeof previewSupplementalEvidence.requestFootprint> => Boolean(section))
                     .map((section) => (
                       <div key={section.title} className="rounded-xl border border-sky-100 bg-white px-4 py-3">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{section.title}</p>
@@ -161,18 +163,18 @@ export default async function PreviewScanPage({ params }: PreviewScanPageProps) 
                         <li key={bullet}>{bullet}</li>
                       ))}
                     </ul>
-                    {scan.previewPayload.fallbackEvidence ? (
+                    {previewSupplementalEvidence ? (
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Supplemental evidence</p>
                         </div>
                         <div className="grid gap-3 lg:grid-cols-3">
                           {[
-                            scan.previewPayload.fallbackEvidence.requestFootprint,
-                            scan.previewPayload.fallbackEvidence.vendorFootprint,
-                            scan.previewPayload.fallbackEvidence.disclosureFootprint
+                            previewSupplementalEvidence.requestFootprint,
+                            previewSupplementalEvidence.vendorFootprint,
+                            previewSupplementalEvidence.disclosureFootprint
                           ]
-                            .filter((section): section is NonNullable<typeof scan.previewPayload.fallbackEvidence.requestFootprint> => Boolean(section))
+                            .filter((section): section is NonNullable<typeof previewSupplementalEvidence.requestFootprint> => Boolean(section))
                             .map((section) => (
                               <div key={section.title} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{section.title}</p>

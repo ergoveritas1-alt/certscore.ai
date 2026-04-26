@@ -4603,9 +4603,15 @@ export function SharedScanDetailView({
   const hybridMediaSummary = getRecord(hybridRuntimeEvidence?.mediaSummary);
   const runtimeInitialCookieCount = getRecordNumber(runtimeArtifacts, "initial_cookie_count") ?? getRecordNumber(runtimeArtifacts, "initialCookieCount") ?? 0;
   const certScoreSummary = deriveCertScoreFindings(scanRecord);
-  const fallbackEvidence = previewPayload?.fallbackEvidence ?? null;
-  const fallbackEvidenceRelation = previewPayload?.evidence?.urlscanEvidenceRelation ?? "same_host";
-  const fallbackFinalHostname = previewPayload?.evidence?.urlscanFinalHostname ?? null;
+  const fallbackEvidence = previewPayload?.supplementalEvidence ?? previewPayload?.fallbackEvidence ?? null;
+  const fallbackEvidenceRelation =
+    previewPayload?.evidence?.supplementalEvidenceRelation ??
+    previewPayload?.evidence?.urlscanEvidenceRelation ??
+    "same_host";
+  const fallbackFinalHostname =
+    previewPayload?.evidence?.supplementalFinalHostname ??
+    previewPayload?.evidence?.urlscanFinalHostname ??
+    null;
   const fallbackCookieNames = uniqueStrings(fallbackEvidence?.entities?.cookieNames ?? []);
   const fallbackCookieDomains = uniqueStrings(fallbackEvidence?.entities?.cookieDomains ?? []);
   const fallbackThirdPartyCookieDomains = getThirdPartyCookieDomains(fallbackFinalHostname, fallbackCookieDomains);
@@ -4659,7 +4665,7 @@ export function SharedScanDetailView({
       ? fallbackEvidence?.vendorFootprint?.summary ??
         fallbackEvidence?.requestFootprint?.summary ??
         (executiveThirdPartyRequestCount > 0
-          ? `${executiveThirdPartyRequestCount} third-party request${executiveThirdPartyRequestCount === 1 ? "" : "s"} retained from an indirect scan source.`
+          ? `${executiveThirdPartyRequestCount} third-party request${executiveThirdPartyRequestCount === 1 ? "" : "s"} retained from supplemental runtime evidence.`
           : certScoreSummary.trackerSummary)
       : certScoreSummary.trackerSummary;
   const executiveUnresolvedVendorHosts = uniqueStrings([
@@ -4668,11 +4674,11 @@ export function SharedScanDetailView({
   ]);
   const executiveFingerprintReasons = uniqueStrings([
     ...getRecordStringArray(hybridFingerprintSummary, "reasons"),
-    ...(fallbackServerNames.length > 0 ? [`Indirect source retained infrastructure signals: ${fallbackServerNames.join(", ")}`] : []),
-    ...(fallbackVerifiedSurfaceTargets.length > 0 ? [`Indirect source retained disclosure surfaces: ${fallbackVerifiedSurfaceTargets.join(", ")}`] : [])
+    ...(fallbackServerNames.length > 0 ? [`Supplemental runtime evidence retained infrastructure signals: ${fallbackServerNames.join(", ")}`] : []),
+    ...(fallbackVerifiedSurfaceTargets.length > 0 ? [`Supplemental runtime evidence retained disclosure surfaces: ${fallbackVerifiedSurfaceTargets.join(", ")}`] : [])
   ]);
   const useLightweightHeroMetrics =
-    Boolean(previewPayload?.fallbackEvidence) &&
+    Boolean(fallbackEvidence) &&
     (
       fallbackObservedRequestCount > 0 ||
       fallbackObservedCookieCount > 0 ||
@@ -4683,7 +4689,7 @@ export function SharedScanDetailView({
     ? [
         {
           accent: "sky" as const,
-          helper: "Indirect-source footprint",
+          helper: "Supplemental runtime footprint",
           label: "Requests observed",
           value: fallbackObservedRequestCount || null
         },

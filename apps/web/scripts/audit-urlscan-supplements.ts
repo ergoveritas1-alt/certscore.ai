@@ -222,7 +222,9 @@ async function classifyHostSupplement(input: {
       snapshot: input.snapshot
     });
 
-    if (!payload?.fallbackEvidence) {
+    const supplementalEvidence = payload?.supplementalEvidence ?? payload?.fallbackEvidence ?? null;
+
+    if (!payload || !supplementalEvidence) {
       return {
         bucket: "no_supplement",
         finalHostname: null,
@@ -233,13 +235,13 @@ async function classifyHostSupplement(input: {
     }
 
     return {
-      bucket: payload.evidence?.urlscanEvidenceRelation === "off_domain_redirect"
+      bucket: (payload.evidence?.supplementalEvidenceRelation ?? payload.evidence?.urlscanEvidenceRelation) === "off_domain_redirect"
         ? "off_domain_redirect"
         : "same_host",
-      finalHostname: payload.evidence?.urlscanFinalHostname ?? null,
+      finalHostname: payload.evidence?.supplementalFinalHostname ?? payload.evidence?.urlscanFinalHostname ?? null,
       reason: payload.resultState?.message ?? "urlscan supplement selected",
-      reportUrl: payload.fallbackEvidence.reportUrl ?? null,
-      requestCount: payload.fallbackEvidence.metrics?.requestCount ?? null
+      reportUrl: supplementalEvidence.reportUrl ?? null,
+      requestCount: supplementalEvidence.metrics?.requestCount ?? null
     };
   } catch (error) {
     return {

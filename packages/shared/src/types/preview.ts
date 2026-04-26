@@ -54,13 +54,13 @@ export type PreviewScannerHealthWarning = {
   phases?: string[];
 };
 
-export type PreviewFallbackEvidenceSection = {
+export type PreviewSupplementalEvidenceSection = {
   title: string;
   summary: string;
   details: string[];
 };
 
-export type PreviewFallbackEvidence = {
+export type PreviewSupplementalEvidence = {
   source: "supplemental_public_runtime";
   sourceLabel: string;
   reportUrl?: string | null;
@@ -84,11 +84,14 @@ export type PreviewFallbackEvidence = {
     countries?: string[];
     verifiedSurfaceTargets?: string[];
   };
-  cookieFootprint?: PreviewFallbackEvidenceSection;
-  requestFootprint?: PreviewFallbackEvidenceSection;
-  vendorFootprint?: PreviewFallbackEvidenceSection;
-  disclosureFootprint?: PreviewFallbackEvidenceSection;
+  cookieFootprint?: PreviewSupplementalEvidenceSection;
+  requestFootprint?: PreviewSupplementalEvidenceSection;
+  vendorFootprint?: PreviewSupplementalEvidenceSection;
+  disclosureFootprint?: PreviewSupplementalEvidenceSection;
 };
+
+export type PreviewFallbackEvidenceSection = PreviewSupplementalEvidenceSection;
+export type PreviewFallbackEvidence = PreviewSupplementalEvidence;
 
 export type PreviewScanPayload = {
   version: "preview-v1";
@@ -108,10 +111,13 @@ export type PreviewScanPayload = {
     robotsStatus: number | string | null;
     verifiedPublicSurfacesCount: number;
     protectionVendor?: string | null;
+    supplementalEvidenceRelation?: "same_host" | "off_domain_redirect";
+    supplementalFinalHostname?: string | null;
     urlscanEvidenceRelation?: "same_host" | "off_domain_redirect";
     urlscanFinalHostname?: string | null;
   };
   scores?: PreviewScoreSummary;
+  supplementalEvidence?: PreviewSupplementalEvidence;
   fallbackEvidence?: PreviewFallbackEvidence;
   scannerHealthWarnings?: PreviewScannerHealthWarning[];
   summaryBullets: string[];
