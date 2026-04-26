@@ -128,6 +128,8 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
     packet.observedValue,
     ...(evidenceDetails?.runtimeVendors ?? []).map((vendor) => `Runtime vendor: ${vendor}`),
     ...(evidenceDetails?.runtimeRequestUrls ?? []).slice(0, 2).map((url) => `Runtime request: ${url}`),
+    ...(evidenceDetails?.offerSnippets ?? []).slice(0, 2).map((snippet) => `Offer: ${snippet}`),
+    ...(evidenceDetails?.disclosureFindings ?? []).slice(0, 2),
     ...(evidenceDetails?.sourceUrls ?? []).slice(0, 2).map((url) => `Source: ${url}`),
     ...(packet.evidence?.snippets ?? []),
     ...(packet.evidence?.sourceUrls ?? []).slice(0, 2),
@@ -171,6 +173,17 @@ const SESSION_REPLAY_VENDOR_PATTERNS: Array<{ label: string; pattern: RegExp }> 
 const SESSION_REPLAY_URL_PATTERN =
   /clarity\.ms|fullstory\.com|hotjar\.com|qualtrics|siteintercept|logrocket\.com|mouseflow\.com|smartlook\.com|contentsquare\.com|quantummetric\.com|crazyegg\.com|inspectlet\.com|luckyorange\.com/i;
 
+function getUrlHostname(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 function formatVendorList(vendors: string[]) {
   if (vendors.length <= 1) {
     return vendors[0] ?? "";
@@ -200,6 +213,53 @@ function getSessionReplayRequestUrls(packet: UnifiedFindingDisplayPacket) {
     ...(packet.evidence?.sourceUrls ?? []),
     ...getEntityUrlValues(packet, /runtime.*request|request.*url|evidence.*url|source.*url/i)
   ]).filter((url) => SESSION_REPLAY_URL_PATTERN.test(url));
+}
+
+function hasFirstPartyProxySessionReplayEvidence(packet: UnifiedFindingDisplayPacket, requestUrls: string[]) {
+  const vendors = getSessionReplayVendors(packet);
+  if (!vendors.some((vendor) => vendor === "FullStory")) {
+    return false;
+  }
+
+  const artifactText = uniqueStrings([
+    ...(packet.evidence?.snippets ?? []),
+    ...(packet.evidence?.flags ?? []),
+    ...getEntityValues(packet, /runtime.*artifact|session.*replay|endpoint|relationship/i)
+  ]).join(" ");
+  if (/first[_ -]?party(?:_collection)?[_ -]?proxy|collection_endpoint:first_party_collection_proxy|relationship:first_party/i.test(artifactText)) {
+    return true;
+  }
+
+  const pageHosts = new Set(
+    uniqueStrings([packet.primaryPageUrl, packet.sourceUrl, ...(packet.evidence?.pageUrls ?? [])])
+      .map(getUrlHostname)
+      .filter((host): host is string => Boolean(host))
+  );
+  if (pageHosts.size === 0) {
+    return false;
+  }
+
+  return requestUrls.some((url) => {
+    if (SESSION_REPLAY_URL_PATTERN.test(url)) {
+      return false;
+    }
+    const requestHost = getUrlHostname(url);
+    return Boolean(requestHost && pageHosts.has(requestHost));
+  });
+}
+
+function getFinancialPromotionOfferSnippets(packet: UnifiedFindingDisplayPacket) {
+  return uniqueStrings([
+    ...getEntityValues(packet, /offer.*snippet|promotion.*snippet|claim.*snippet|matched.*snippet|primary.*offer/i),
+    ...(packet.evidence?.snippets ?? [])
+  ]).filter((value) =>
+    /\b(?:bonus\s+bets?|free\s+bet|risk[- ]free|sportsbook|sports betting|wager|casino|gambl|\$\s?\d[\d,]*(?:\.\d{2})?)\b/i.test(value)
+  );
+}
+
+function formatQuotedSnippet(snippet: string) {
+  const normalized = snippet.replace(/\s+/g, " ").trim();
+  return normalized.length > 140 ? `${normalized.slice(0, 137).trim()}...` : normalized;
 }
 
 function buildExecutiveEvidenceDetails(
@@ -247,6 +307,27 @@ function buildExecutiveEvidenceDetails(
   if (evidenceSnippets.length > 0) {
     details.evidenceSnippets = evidenceSnippets;
   }
+  if (findingId === "leveraged_or_high_risk_product_promotion") {
+    const offerSnippets = getFinancialPromotionOfferSnippets(packet).slice(0, 3);
+    const disclosureFindings = uniqueStrings([
+      ...getEntityValues(packet, /responsibleGamblingDisclosureAdjacent|termsDisclosureAdjacent/i).map((value) => {
+        if (/^true$/i.test(value)) {
+          return "Relevant disclosure evidence appears near the retained offer snippet.";
+        }
+        if (/^false$/i.test(value)) {
+          return "Clear adjacent disclosure evidence was not retained with the offer snippet.";
+        }
+        return null;
+      }),
+      ...getEntityValues(packet, /responsibleGamblingSnippets|termsSnippets/i)
+    ]).slice(0, 5);
+    if (offerSnippets.length > 0) {
+      details.offerSnippets = offerSnippets;
+    }
+    if (disclosureFindings.length > 0) {
+      details.disclosureFindings = disclosureFindings;
+    }
+  }
   if (pageUrls.length > 0) {
     details.pageUrls = pageUrls;
   }
@@ -262,6 +343,16 @@ function buildExecutiveEvidenceDetails(
   if (evidenceFlags.length > 0) {
     details.evidenceFlags = evidenceFlags;
   }
+  if (findingId === "session_recording_services_detected" && hasFirstPartyProxySessionReplayEvidence(packet, runtimeRequestUrls)) {
+    details.evidenceFlags = uniqueStrings([
+      ...(details.evidenceFlags ?? []),
+      "session_replay_first_party_proxy_collection"
+    ]);
+    details.evidenceSnippets = uniqueStrings([
+      ...(details.evidenceSnippets ?? []),
+      "FullStory collection appears proxied through the scanned first-party domain."
+    ]).slice(0, 5);
+  }
   if (sourceUrls.length > 0) {
     details.sourceUrls = sourceUrls;
   }
@@ -275,6 +366,11 @@ function buildExecutiveShortSummary(
 ) {
   if (findingId === "session_recording_services_detected") {
     const vendors = getSessionReplayVendors(packet);
+    const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);
+    if (hasFirstPartyProxySessionReplayEvidence(packet, evidenceDetails?.runtimeRequestUrls ?? [])) {
+      return "FullStory session recording appears proxied through the scanned first-party domain, which can make the collection endpoint harder to identify or block at the network level.";
+    }
+
     if (vendors.length > 0) {
       const vendorList = formatVendorList(vendors);
       return vendors.length === 1
@@ -283,6 +379,24 @@ function buildExecutiveShortSummary(
     }
 
     return "Session recording services were observed during runtime collection.";
+  }
+
+  if (findingId === "leveraged_or_high_risk_product_promotion") {
+    const offerSnippets = getFinancialPromotionOfferSnippets(packet);
+    const hasAdjacentDisclosureEvidence = getEntityValues(packet, /responsibleGamblingDisclosureAdjacent|termsDisclosureAdjacent/i)
+      .some((value) => /^true$/i.test(value));
+    const disclosureText = uniqueStrings([
+      ...getEntityValues(packet, /responsible|terms|disclosure|adjacent/i),
+      ...(packet.evidence?.snippets ?? [])
+    ]).join(" ");
+    const disclosureQualifier = hasAdjacentDisclosureEvidence ||
+      /responsible.*adjacent|adjacent.*responsible|terms.*adjacent|adjacent.*terms/i.test(disclosureText)
+      ? "with nearby responsible-gambling or terms evidence retained"
+      : "without clear nearby responsible-gambling or terms evidence retained";
+
+    if (offerSnippets.length > 0) {
+      return `Sportsbook offer language was observed ("${formatQuotedSnippet(offerSnippets[0]!)}") ${disclosureQualifier}.`;
+    }
   }
 
   return packet.summary;

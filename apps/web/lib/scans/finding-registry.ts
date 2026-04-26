@@ -23,7 +23,9 @@ export type CertScoreFindingDefinition = {
 
 export type CertScoreFindingEvidenceDetails = {
   counts?: Record<string, number>;
+  disclosureFindings?: string[];
   evidenceSnippets?: string[];
+  offerSnippets?: string[];
   pageUrls?: string[];
   runtimeRequestUrls?: string[];
   runtimeVendors?: string[];

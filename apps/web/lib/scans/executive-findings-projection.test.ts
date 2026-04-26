@@ -240,6 +240,38 @@ test("projects surfaced scanner-level financial promotion into executive finding
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
 });
 
+test("projects concrete sportsbook offer evidence into high-risk promotion finding", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("leveraged_or_high_risk_product_promotion", {
+      details: { family: "financial_promotion", kind: "leveraged_or_high_risk_product_promotion" },
+      evidence: {
+        counts: {},
+        entities: {
+          offerSnippets: ["Get $1,000 in bonus bets when you sign up."],
+          primaryOfferSnippet: ["Get $1,000 in bonus bets when you sign up."],
+          responsibleGamblingDisclosureAdjacent: ["false"],
+          termsDisclosureAdjacent: ["false"]
+        },
+        fetchQuality: null,
+        flags: ["financial.leveraged_or_high_risk_product_promotion"],
+        pageUrls: ["https://example.com/sportsbook"],
+        snippets: ["Get $1,000 in bonus bets when you sign up."],
+        sourceUrls: ["https://example.com/sportsbook"]
+      },
+      summary: "Sportsbook offer language was observed."
+    })
+  ]);
+
+  const finding = projection.findings.find((candidate) => candidate.id === "leveraged_or_high_risk_product_promotion");
+
+  assert.equal(
+    finding?.shortSummary,
+    'Sportsbook offer language was observed ("Get $1,000 in bonus bets when you sign up.") without clear nearby responsible-gambling or terms evidence retained.'
+  );
+  assert.deepEqual(finding?.evidenceDetails?.offerSnippets, ["Get $1,000 in bonus bets when you sign up."]);
+  assert.ok(finding?.evidenceDetails?.disclosureFindings?.includes("Clear adjacent disclosure evidence was not retained with the offer snippet."));
+});
+
 test("keeps runtime-backed session recording in top findings when consent issues also surface", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("preconsent_tracking", {
@@ -300,6 +332,42 @@ test("keeps runtime-backed session recording in top findings when consent issues
     projection.topFindings.find((finding) => finding.id === "session_recording_services_detected")?.shortSummary,
     "Microsoft Clarity session recording was observed during runtime collection."
   );
+});
+
+test("names first-party proxied FullStory collection in executive summary", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("session_replay_observed", {
+      confidenceBand: "moderate",
+      details: {
+        family: "consent_tracking",
+        kind: "session_replay_observed",
+        vendors: ["FullStory"]
+      },
+      evidence: {
+        counts: {},
+        entities: {
+          runtimeRequestUrls: ["https://www.draftkings.com"],
+          runtimeVendors: ["FullStory"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.session_replay_runtime_detected"],
+        pageUrls: ["https://www.draftkings.com"],
+        snippets: ["collection_endpoint:first_party_collection_proxy", "tracker_vendor:FullStory"],
+        sourceUrls: []
+      },
+      primaryPageUrl: "https://www.draftkings.com",
+      summary: "Session replay runtime detected."
+    })
+  ]);
+
+  const finding = projection.topFindings.find((candidate) => candidate.id === "session_recording_services_detected");
+
+  assert.equal(
+    finding?.shortSummary,
+    "FullStory session recording appears proxied through the scanned first-party domain, which can make the collection endpoint harder to identify or block at the network level."
+  );
+  assert.deepEqual(finding?.evidenceDetails?.runtimeRequestUrls, ["https://www.draftkings.com"]);
+  assert.ok(finding?.evidenceDetails?.evidenceFlags?.includes("session_replay_first_party_proxy_collection"));
 });
 
 test("projects concrete session replay vendor evidence into executive finding json", () => {

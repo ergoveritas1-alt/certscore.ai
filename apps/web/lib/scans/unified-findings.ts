@@ -1546,6 +1546,24 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (Array.isArray(normalizedFallbackEvidence.policyPositiveSnippetKeys)) {
     entities.policyPositiveSnippetKeys = uniqueStrings(normalizedFallbackEvidence.policyPositiveSnippetKeys as string[]);
   }
+  if (Array.isArray(normalizedFallbackEvidence.offerSnippets)) {
+    entities.offerSnippets = uniqueStrings(normalizedFallbackEvidence.offerSnippets as string[]);
+  }
+  if (typeof normalizedFallbackEvidence.primaryOfferSnippet === "string" && normalizedFallbackEvidence.primaryOfferSnippet.trim()) {
+    entities.primaryOfferSnippet = [normalizedFallbackEvidence.primaryOfferSnippet.trim()];
+  }
+  if (typeof normalizedFallbackEvidence.responsibleGamblingDisclosureAdjacent === "boolean") {
+    entities.responsibleGamblingDisclosureAdjacent = [String(normalizedFallbackEvidence.responsibleGamblingDisclosureAdjacent)];
+  }
+  if (Array.isArray(normalizedFallbackEvidence.responsibleGamblingSnippets)) {
+    entities.responsibleGamblingSnippets = uniqueStrings(normalizedFallbackEvidence.responsibleGamblingSnippets as string[]);
+  }
+  if (typeof normalizedFallbackEvidence.termsDisclosureAdjacent === "boolean") {
+    entities.termsDisclosureAdjacent = [String(normalizedFallbackEvidence.termsDisclosureAdjacent)];
+  }
+  if (Array.isArray(normalizedFallbackEvidence.termsSnippets)) {
+    entities.termsSnippets = uniqueStrings(normalizedFallbackEvidence.termsSnippets as string[]);
+  }
   if (typeof normalizedFallbackEvidence.privacyContactChannelType === "string" && normalizedFallbackEvidence.privacyContactChannelType.trim()) {
     entities.privacyContactChannelType = [normalizedFallbackEvidence.privacyContactChannelType.trim()];
   }

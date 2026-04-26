@@ -171,6 +171,44 @@ test("initial cookie inventory routes to audit-only preconsent packet instead of
   assert.equal(packet?.evidence?.entities?.preconsent_cookie_names?.includes("kndctr_16AD4362526701720A490D45_AdobeOrg_identity"), true);
 });
 
+test("high-risk gambling section review retains concrete offer and disclosure adjacency evidence", () => {
+  const issues = buildSectionReviewIssues({
+    accessibilityIssueRows: [],
+    consentAuditFindings: [],
+    policyBehaviorContradictions: [],
+    preconsentViolationRows: [],
+    runtimeArtifacts: {
+      rendered_text:
+        `DraftKings Sportsbook. Get $1,000 in bonus bets when you sign up today. Start betting now. ${"Featured games and league content. ".repeat(30)} Responsible gaming resources are available in the footer. Terms and conditions apply on a separate promotions page.`,
+      third_party_request_domains: ["www.draftkings.com"]
+    },
+    scanReportReviewIssues: [],
+    sectionId: "high_risk_product_marketing_disclosures",
+    snapshot: {
+      final_url: "https://www.draftkings.com/",
+      registered_domain: "draftkings.com"
+    }
+  });
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: issues.map((issue) => ({
+      description: issue.description,
+      evidence: issue.evidence ?? [],
+      fallbackEvidence: issue.fallbackEvidence,
+      observedValue: issue.evidence?.[0] ?? null,
+      severity: issue.severity,
+      sourceType: "issue",
+      title: issue.title
+    })),
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+  const packet = packets.find((finding) => finding.unifiedFindingId === "leveraged_or_high_risk_product_promotion");
+
+  assert.ok(packet?.evidence?.entities?.offerSnippets?.some((snippet) => snippet.includes("$1,000 in bonus bets")));
+  assert.deepEqual(packet?.evidence?.entities?.responsibleGamblingDisclosureAdjacent, ["false"]);
+  assert.deepEqual(packet?.evidence?.entities?.termsDisclosureAdjacent, ["false"]);
+});
+
 test("supplemental runtime request evidence still promotes through unified packets", () => {
   const [packet] = buildSupplementalRuntimeUnifiedFindingPackets({
     disclaimer: "",

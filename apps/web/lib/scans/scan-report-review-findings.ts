@@ -93,6 +93,111 @@ function getRecordStringArray(record: Record<string, unknown> | null | undefined
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
 
+function getRecordString(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function collectTextCandidates(value: unknown, output: string[], depth = 0) {
+  if (depth > 3 || output.length >= 100) {
+    return;
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    output.push(value.trim());
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      collectTextCandidates(entry, output, depth + 1);
+    }
+    return;
+  }
+
+  if (value && typeof value === "object") {
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (/html|script|style|css|svg|screenshot|image|base64|cookie|headers?/i.test(key)) {
+        continue;
+      }
+      collectTextCandidates(entry, output, depth + 1);
+    }
+  }
+}
+
+function normalizeSentenceSnippet(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function extractNearbySnippet(text: string, index: number, radius = 180) {
+  const start = Math.max(0, index - radius);
+  const end = Math.min(text.length, index + radius);
+  return normalizeSentenceSnippet(text.slice(start, end));
+}
+
+const SPORTSBOOK_OFFER_PATTERN =
+  /(?:\$\s?\d[\d,]*(?:\.\d{2})?\s*(?:in\s*)?(?:bonus\s+bets?|free\s+bets?|bet(?:ting)?\s+credits?)|(?:bonus\s+bets?|free\s+bets?|risk[- ]free\s+bet|no\s+sweat\s+bet|deposit\s+match|odds\s+boost|profit\s+boost)[^.!?\n]{0,120})/gi;
+
+function getHighRiskPromotionEvidence(input: {
+  runtimeArtifacts: Record<string, unknown> | null;
+  snapshot: Record<string, unknown>;
+}) {
+  const directCandidates = uniqueStrings([
+    getRecordString(input.snapshot, "homepage_text"),
+    getRecordString(input.snapshot, "homepageText"),
+    getRecordString(input.snapshot, "visible_text"),
+    getRecordString(input.snapshot, "visibleText"),
+    getRecordString(input.snapshot, "document_text"),
+    getRecordString(input.snapshot, "documentText"),
+    getRecordString(input.snapshot, "normalized_body_text"),
+    getRecordString(input.snapshot, "normalizedBodyText"),
+    getRecordString(input.runtimeArtifacts, "homepage_text"),
+    getRecordString(input.runtimeArtifacts, "homepageText"),
+    getRecordString(input.runtimeArtifacts, "visible_text"),
+    getRecordString(input.runtimeArtifacts, "visibleText"),
+    getRecordString(input.runtimeArtifacts, "document_text"),
+    getRecordString(input.runtimeArtifacts, "documentText"),
+    getRecordString(input.runtimeArtifacts, "rendered_text"),
+    getRecordString(input.runtimeArtifacts, "renderedText")
+  ]);
+  const nestedCandidates: string[] = [];
+  collectTextCandidates(input.runtimeArtifacts, nestedCandidates);
+  collectTextCandidates(input.snapshot, nestedCandidates);
+  const text = uniqueStrings([...directCandidates, ...nestedCandidates])
+    .filter((value) => /\b(?:bonus\s+bets?|free\s+bet|risk[- ]free|sportsbook|sports betting|wager|casino|gambl|terms|responsible)\b|\$\s?\d/i.test(value))
+    .join(" ");
+
+  if (!text) {
+    return null;
+  }
+
+  const offerSnippets: string[] = [];
+  for (const match of text.matchAll(SPORTSBOOK_OFFER_PATTERN)) {
+    if (typeof match.index !== "number") {
+      continue;
+    }
+    offerSnippets.push(extractNearbySnippet(text, match.index));
+  }
+
+  const uniqueOfferSnippets = uniqueStrings(offerSnippets).slice(0, 3);
+  const responsibleIndex = text.search(/responsible\s+(?:gaming|gambling)|1-800-gambler|problem\s+gambling|gambling\s+problem/i);
+  const termsIndex = text.search(/\b(?:terms\s*(?:and|&)\s*conditions|terms\s+apply|t&c|bonus\s+terms|offer\s+terms|eligibility|restrictions?)\b/i);
+  const firstOfferIndex = text.search(SPORTSBOOK_OFFER_PATTERN);
+  const responsibleGamblingDisclosureAdjacent =
+    firstOfferIndex >= 0 && responsibleIndex >= 0 ? Math.abs(responsibleIndex - firstOfferIndex) <= 600 : false;
+  const termsDisclosureAdjacent =
+    firstOfferIndex >= 0 && termsIndex >= 0 ? Math.abs(termsIndex - firstOfferIndex) <= 600 : false;
+
+  return {
+    offerSnippets: uniqueOfferSnippets,
+    primaryOfferSnippet: uniqueOfferSnippets[0] ?? null,
+    responsibleGamblingDisclosureAdjacent,
+    responsibleGamblingSnippets: responsibleIndex >= 0 ? [extractNearbySnippet(text, responsibleIndex, 120)] : [],
+    termsDisclosureAdjacent,
+    termsSnippets: termsIndex >= 0 ? [extractNearbySnippet(text, termsIndex, 120)] : []
+  };
+}
+
 function getInitialNonEssentialCookieNames(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   return uniqueStrings(
     getRecordStringArray(runtimeArtifacts, "initial_cookie_names").filter((name) => {
@@ -636,28 +741,47 @@ export function buildSectionReviewIssues(input: {
       /\b(gambling|sportsbook|sports betting|casino|wager|bonus bet|promo|1-800-gambler|draftkings|fanduel)\b/i.test(runtimeText);
 
     if (gamblingContextDetected) {
+      const promotionEvidence = getHighRiskPromotionEvidence({
+        runtimeArtifacts: input.runtimeArtifacts,
+        snapshot: input.snapshot
+      });
       const matchedSnippet =
+        promotionEvidence?.primaryOfferSnippet ??
         "Sports betting or gambling context detected. High-risk product marketing should keep age eligibility, responsible-gambling help, bonus terms, and material offer restrictions close to promotional claims.";
+      const disclosureAdjacency = promotionEvidence
+        ? promotionEvidence.responsibleGamblingDisclosureAdjacent && promotionEvidence.termsDisclosureAdjacent
+          ? "Nearby responsible-gambling and terms evidence was retained."
+          : "Clear nearby responsible-gambling and terms evidence was not retained with the offer snippet."
+        : "No specific homepage offer snippet was retained with this context signal.";
       issues.push({
         description:
-          "The scanned surface appears to be a sports betting or gambling product. High-risk product marketing should keep age eligibility, responsible-gambling help, bonus terms, and material offer restrictions close to promotional claims.",
+          promotionEvidence?.primaryOfferSnippet
+            ? `Sportsbook offer language was observed: "${promotionEvidence.primaryOfferSnippet}" ${disclosureAdjacency}`
+            : "The scanned surface appears to be a sports betting or gambling product. High-risk product marketing should keep age eligibility, responsible-gambling help, bonus terms, and material offer restrictions close to promotional claims.",
         evidence: uniqueStrings([
           pageUrl,
+          ...(promotionEvidence?.offerSnippets ?? []),
           ...getRecordStringArray(input.runtimeArtifacts, "third_party_request_domains").slice(0, 4)
         ]),
         fallbackEvidence: {
           familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
           matchedSnippet,
+          offerSnippets: promotionEvidence?.offerSnippets ?? [],
           pageClassification: "financial_offer",
           pageType: "financial_offer",
           pageUrl,
           policySnippets: [matchedSnippet],
+          primaryOfferSnippet: promotionEvidence?.primaryOfferSnippet ?? null,
+          responsibleGamblingDisclosureAdjacent: promotionEvidence?.responsibleGamblingDisclosureAdjacent ?? null,
+          responsibleGamblingSnippets: promotionEvidence?.responsibleGamblingSnippets ?? [],
           sectionReviewIssue: true,
           sensitive_context_label: "sports betting or gambling site",
           supportingSignals: [
             "financial.high_risk_product_promotion",
             "commercial.gambling_or_sportsbook_context_detected"
-          ]
+          ],
+          termsDisclosureAdjacent: promotionEvidence?.termsDisclosureAdjacent ?? null,
+          termsSnippets: promotionEvidence?.termsSnippets ?? []
         },
         linkedValidationRuleKeys: ["section_review.high_risk_product_without_local_loss_risk_disclosure"],
         severity: "medium",
