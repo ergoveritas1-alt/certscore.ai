@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        previewUrl: `/preview/${preview.scan.id}`,
+        previewUrl: `/scan/${preview.scan.id}`,
         scanId: preview.scan.id,
         statusUrl: `/api/preview-scan/${preview.scan.id}`
       },

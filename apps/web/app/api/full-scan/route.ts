@@ -136,10 +136,7 @@ export async function POST(request: Request) {
         {
           queuedCount: 1,
           scanId: anonymousScan.scan.id,
-          scanUrl:
-            "mode" in anonymousScan && anonymousScan.mode === "preview"
-              ? `/preview/${anonymousScan.scan.id}`
-              : `/scan/${anonymousScan.scan.id}`,
+          scanUrl: `/scan/${anonymousScan.scan.id}`,
           warning:
             "mode" in anonymousScan && anonymousScan.mode === "preview"
               ? {
