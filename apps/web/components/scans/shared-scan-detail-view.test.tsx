@@ -171,7 +171,7 @@ async function loadExecutiveDisplayedScore() {
 
   return (sharedScanDetailViewModule as unknown as {
     deriveExecutiveDisplayedScore: (input: {
-      findings: Array<{ id: string }>;
+      findings: Array<{ id: string; severity?: string }>;
       previewMode?: "full" | "homepage";
       snapshot: Record<string, unknown> | null;
       storedScore: number | null;
@@ -1050,6 +1050,61 @@ test("deriveExecutiveDisplayedScore withholds contradictory zeroed homepage prev
   });
 
   assert.equal(score, null);
+});
+
+test("deriveExecutiveDisplayedScore applies financial penalty for full scans with severe financial findings", async () => {
+  const deriveExecutiveDisplayedScore = await loadExecutiveDisplayedScore();
+
+  const score = deriveExecutiveDisplayedScore({
+    findings: [
+      { id: "guaranteed_outcome_claim_detected", severity: "critical" },
+      { id: "leveraged_or_high_risk_product_promotion", severity: "high" }
+    ],
+    previewMode: "full",
+    snapshot: null,
+    storedScore: 76
+  });
+
+  // Financial score: 84 - 24 - 20 - 6 = 34
+  // Penalty: max(0, (60 - 34) * 0.5) = 13
+  // Adjusted: max(34, 76 - 13) = 63
+  assert.equal(score, 63);
+});
+
+test("deriveExecutiveDisplayedScore caps homepage preview by financial score and consent subscore", async () => {
+  const deriveExecutiveDisplayedScore = await loadExecutiveDisplayedScore();
+
+  const score = deriveExecutiveDisplayedScore({
+    findings: [
+      { id: "guaranteed_outcome_claim_detected", severity: "critical" },
+      { id: "pre_consent_tracking_detected", severity: "high" }
+    ],
+    previewMode: "homepage",
+    snapshot: {
+      consent_score: 53,
+      privacy_score: 73
+    },
+    storedScore: 76
+  });
+
+  // Financial score: 84 - 24 - 6 = 54
+  // Penalty: max(0, (60 - 54) * 0.5) = 3
+  // Financial adjusted: max(54, 76 - 3) = 73
+  // Then consent cap: min(73, 53) = 53
+  assert.equal(score, 53);
+});
+
+test("deriveExecutiveDisplayedScore returns storedScore unchanged when no financial findings exist", async () => {
+  const deriveExecutiveDisplayedScore = await loadExecutiveDisplayedScore();
+
+  const score = deriveExecutiveDisplayedScore({
+    findings: [{ id: "pre_consent_tracking_detected", severity: "high" }],
+    previewMode: "full",
+    snapshot: null,
+    storedScore: 76
+  });
+
+  assert.equal(score, 76);
 });
 
 test("deriveUnverifiedHomepageReview carries verified privacy and terms surfaces on blocked runs", async () => {

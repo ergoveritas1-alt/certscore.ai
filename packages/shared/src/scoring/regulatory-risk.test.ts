@@ -62,3 +62,20 @@ test("elevates sensitive-context pre-consent identity and data-broker tracking",
   assert.equal(result.dataExposureRiskScore >= 75, true);
   assert.equal(result.topRiskDrivers.length > 0, true);
 });
+
+test("adds financial claims risk to consumer protection bucket", () => {
+  const result = buildRegulatoryRiskAssessment({
+    source: {
+      homepageFetchStatus: "ok",
+      pagesScanned: 2,
+      performanceClaimPresent: true,
+      guaranteedReturnLanguagePresent: true,
+      highRiskProductSignalCount: 3
+    }
+  });
+
+  assert.equal(result.topRiskDrivers.some((driver) => driver.key === "guaranteed_return"), true);
+  assert.equal(result.topRiskDrivers.some((driver) => driver.key === "performance_claim"), true);
+  assert.equal(result.topRiskDrivers.some((driver) => driver.key === "high_risk_product_signals"), true);
+  assert.equal(result.consumerProtectionRiskScore >= 60, true);
+});

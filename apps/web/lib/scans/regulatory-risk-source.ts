@@ -171,6 +171,9 @@ export function buildRegulatoryRiskSource(input: {
       highRiskVendorCategories.has("device_signal_adtech") ||
       highRiskVendorCategories.has("enterprise_device_risk"),
     enterpriseDeviceRiskVendorDetected: highRiskVendorCategories.has("enterprise_device_risk"),
-    highRiskTrackingVendorNames
+    highRiskTrackingVendorNames,
+    performanceClaimPresent: booleanFromKeys(input.snapshot, ["performance_claim_present", "performanceClaimPresent"]),
+    guaranteedReturnLanguagePresent: booleanFromKeys(input.snapshot, ["guaranteed_return_language_present", "guaranteedReturnLanguagePresent"]),
+    highRiskProductSignalCount: numberFromKeys(input.snapshot, ["high_risk_product_signal_count", "highRiskProductSignalCount"])
   };
 }

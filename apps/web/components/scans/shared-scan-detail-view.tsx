@@ -4439,6 +4439,38 @@ function ResultCategorySection(input: {
   );
 }
 
+const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
+  "guaranteed_outcome_claim_detected",
+  "earnings_claim_without_adjacent_disclosure",
+  "simulated_performance_without_disclosure",
+  "unqualified_superlative_claim_detected",
+  "financial_urgency_pressure_tactic_detected",
+  "pricing_or_fee_transparency_unclear",
+  "leveraged_or_high_risk_product_promotion",
+  "regulatory_registration_disclosure_absent",
+  "unsubstantiated_testimonial_near_performance_claim"
+]);
+
+function computeFinancialScoreFromFindings(findings: CertScoreFinding[]): number | null {
+  const financialFindings = findings.filter((finding) => FINANCIAL_CLAIMS_FINDING_IDS.has(finding.id));
+  if (financialFindings.length === 0) {
+    return null;
+  }
+  const severityPenalty = financialFindings.reduce((total, finding) => {
+    switch (finding.severity) {
+      case "critical":
+        return total + 24;
+      case "high":
+        return total + 20;
+      case "medium":
+        return total + 14;
+      default:
+        return total + 8;
+    }
+  }, 0);
+  return Math.max(0, Math.min(100, 84 - severityPenalty - Math.max(0, financialFindings.length - 1) * 6));
+}
+
 export function deriveExecutiveDisplayedScore(input: {
   findings: CertScoreFinding[];
   previewMode?: "full" | "homepage";
@@ -4447,6 +4479,66 @@ export function deriveExecutiveDisplayedScore(input: {
 }) {
   if (typeof input.storedScore !== "number" || !Number.isFinite(input.storedScore)) {
     return null;
+  }
+
+  const financialScore = computeFinancialScoreFromFindings(input.findings);
+  if (financialScore !== null) {
+    const financialPenalty = Math.max(0, (60 - financialScore) * 0.5);
+    const financialAdjustedScore = Math.max(financialScore, input.storedScore - financialPenalty);
+    if (input.previewMode !== "homepage" || !input.snapshot) {
+      return financialAdjustedScore;
+    }
+    // For homepage previews, apply both financial adjustment and consent/privacy caps
+    const caps = [financialAdjustedScore];
+
+    const findingIds = new Set(input.findings.map((finding) => finding.id));
+    const hasConsentWeightedFinding =
+      findingIds.has("pre_consent_tracking_detected") ||
+      findingIds.has("third_party_tracking_pre_consent") ||
+      findingIds.has("storage_before_consent") ||
+      findingIds.has("third_party_cookie_pre_consent") ||
+      findingIds.has("analytics_cookie_pre_consent") ||
+      findingIds.has("adtech_cookie_pre_consent") ||
+      findingIds.has("reject_option_missing_or_hidden") ||
+      findingIds.has("asymmetric_consent_ui") ||
+      findingIds.has("forced_consent_interaction") ||
+      findingIds.has("consent_dark_patterns_detected");
+    const hasPrivacyWeightedFinding =
+      hasConsentWeightedFinding ||
+      findingIds.has("session_recording_services_detected") ||
+      findingIds.has("identifier_transmission_detected") ||
+      findingIds.has("telemetry_rich_identification_observed") ||
+      findingIds.has("device_data_collection_detected") ||
+      findingIds.has("probable_fingerprinting") ||
+      findingIds.has("non_cookie_tracking_detected");
+
+    const consentScore =
+      typeof input.snapshot.consent_score === "number" && Number.isFinite(input.snapshot.consent_score)
+        ? input.snapshot.consent_score
+        : null;
+    const privacyScore =
+      typeof input.snapshot.privacy_score === "number" && Number.isFinite(input.snapshot.privacy_score)
+        ? input.snapshot.privacy_score
+        : null;
+
+    if (hasConsentWeightedFinding && consentScore !== null) {
+      caps.push(consentScore);
+    }
+
+    if (hasPrivacyWeightedFinding && privacyScore !== null) {
+      caps.push(privacyScore);
+    }
+
+    if (
+      input.storedScore === 0 &&
+      isEvidenceRichZeroPagePreviewSnapshot(input.snapshot) &&
+      getRecordNumber(input.snapshot, "privacy_score") === 0 &&
+      getRecordNumber(input.snapshot, "consent_score") === 0
+    ) {
+      return null;
+    }
+
+    return Math.min(...caps);
   }
 
   if (input.previewMode !== "homepage" || !input.snapshot) {

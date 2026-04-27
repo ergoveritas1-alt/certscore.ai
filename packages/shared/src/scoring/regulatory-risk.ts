@@ -81,6 +81,9 @@ export type RegulatoryRiskSource = {
   fingerprintingAdjacentVendorDetected?: boolean | null;
   enterpriseDeviceRiskVendorDetected?: boolean | null;
   highRiskTrackingVendorNames?: string[] | null;
+  performanceClaimPresent?: boolean | null;
+  guaranteedReturnLanguagePresent?: boolean | null;
+  highRiskProductSignalCount?: number | null;
 };
 
 type ScoredBucket = {
@@ -238,6 +241,10 @@ function buildConsumerBucket(source: RegulatoryRiskSource): ScoredBucket {
   });
   pushIf(numberOrZero(source.advertisingTrackerCount) > 0 && source.policyClaimNoSale === true, drivers, { key: "no_sale_vs_adtech", label: "No-sale claim conflicts with adtech", impact: 18 });
   pushIf(numberOrZero(source.consumerProtectionScore) >= 65, drivers, { key: "consumer_score_elevated", label: "Elevated consumer-protection score", impact: 16 });
+  pushIf(source.performanceClaimPresent === true, drivers, { key: "performance_claim", label: "Financial performance claim present", impact: 18 });
+  pushIf(source.guaranteedReturnLanguagePresent === true, drivers, { key: "guaranteed_return", label: "Guaranteed return language present", impact: 26 });
+  pushIf(numberOrZero(source.highRiskProductSignalCount) >= 3, drivers, { key: "high_risk_product_signals", label: "Multiple high-risk product signals", impact: 20 });
+  pushIf(numberOrZero(source.highRiskProductSignalCount) > 0 && numberOrZero(source.highRiskProductSignalCount) < 3, drivers, { key: "high_risk_product_signal", label: "High-risk product signal present", impact: 14 });
 
   pushIf(source.policyClaimPrivacyProtective === true, mitigations, { key: "protective_language", label: "Protective disclosure language present", impact: 6 });
   pushIf(source.doNotSellLinkPresent === true, mitigations, { key: "do_not_sell_present", label: "Do-not-sell control present", impact: 10 });
