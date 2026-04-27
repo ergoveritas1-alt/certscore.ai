@@ -345,7 +345,8 @@ const FINANCIAL_REPORT_SIGNALS: ReportSignalDefinition[] = [
   defineReportSignal("snapshot_signal", "financial.copy_trading_language_present", "Copy trading language present", "high_risk_product_promotion", ["performance_claim_context_and_risk_disclosure"], ["consumer_financial_marketing_claims"]),
   defineReportSignal("snapshot_signal", "financial.ai_trading_or_automated_trading_language_present", "AI trading or automated trading language present", "high_risk_product_promotion", ["performance_claim_context_and_risk_disclosure"], ["disclosures_claim_substantiation"]),
   defineReportSignal("snapshot_signal", "financial.loss_risk_disclosure_text_present", "Loss-risk disclosure text present", "performance_claim_context_and_risk_disclosure", ["high_risk_product_promotion"]),
-  defineReportSignal("snapshot_signal", "financial.high_risk_product_explainer_page_present", "High-risk product explainer page present", "high_risk_product_promotion", ["performance_claim_context_and_risk_disclosure"])
+  defineReportSignal("snapshot_signal", "financial.high_risk_product_explainer_page_present", "High-risk product explainer page present", "high_risk_product_promotion", ["performance_claim_context_and_risk_disclosure"]),
+  defineReportSignal("snapshot_signal", "regulatory.registration_disclosure_absent", "Registration disclosure absent", "registration_status_credibility", ["consumer_financial_marketing_claims", "performance_claim_context_and_risk_disclosure"])
 ];
 
 const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
@@ -497,6 +498,13 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     signalMappings: [{ source: "snapshot_signal", key: "financial.testimonial_or_review_block_near_financial_claim_present" }]
   }),
   defineReportUnifiedFinding({
+    id: "unsubstantiated_testimonial_near_performance_claim",
+    label: "Testimonial adjacent to unsubstantiated performance claim",
+    owner: "consumer_financial_marketing_claims",
+    mirrors: ["performance_claim_context_and_risk_disclosure", "disclosures_claim_substantiation"],
+    validationRuleKeys: ["financial_review.unsubstantiated_testimonial_near_performance_claim"]
+  }),
+  defineReportUnifiedFinding({
     id: "regulatory_compliance_claim_present",
     label: "Regulatory-compliance claim present",
     owner: "registration_status_credibility",
@@ -548,6 +556,14 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     owner: "registration_status_credibility",
     mirrors: ["entity_identity_governance_and_operator_accountability"],
     validationRuleKeys: ["section_review.registration_claim_without_identifier"]
+  }),
+  defineReportUnifiedFinding({
+    id: "regulatory_registration_disclosure_absent",
+    label: "Regulatory registration disclosure absent",
+    owner: "registration_status_credibility",
+    mirrors: ["consumer_financial_marketing_claims", "performance_claim_context_and_risk_disclosure"],
+    signalMappings: [{ source: "snapshot_signal", key: "regulatory.registration_disclosure_absent" }],
+    validationRuleKeys: ["regulatory.registration_transparency_disclosure_absent"]
   }),
   defineReportUnifiedFinding({
     id: "registration_claim_support_missing",

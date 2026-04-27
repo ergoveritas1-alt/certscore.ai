@@ -1898,6 +1898,82 @@ test("deriveValidationFindings promotes guaranteed financial claims into restore
   ]);
 });
 
+test("deriveValidationFindings infers trading-signal claim and registration transparency findings from retained page evidence", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-signals",
+          matched_text: "VIP forex trading signals with 92% accuracy. Copy our trades and join the signal service today.",
+          metadata: {
+            surroundingHeading: "Forex signals"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://dailyvipsignals.com/"
+        }
+      ],
+      policyReviewQueue: [],
+      signalHits: [],
+      snapshot: {
+        benchmark_category: "financial_content_trading_signals"
+      }
+    })
+  );
+
+  assert.ok(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"));
+  const registrationFinding = findings.find((item) => item.ruleKey === "regulatory.registration_transparency_disclosure_absent");
+  assert.ok(registrationFinding);
+  assert.equal(registrationFinding?.severity, "high");
+  assert.equal(registrationFinding?.evidence.unifiedFindingId, "regulatory_registration_disclosure_absent");
+});
+
+test("deriveValidationFindings promotes testimonial adjacent to guaranteed performance claim", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      pageEvidence: [
+        {
+          evidence_id: "ev-1",
+          matched_text: "Guaranteed forex profit signals. Subscriber reviews say the VIP signal service changed my account.",
+          metadata: {
+            surroundingHeading: "Member results"
+          },
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://forexprofita.example/"
+        }
+      ],
+      policyReviewQueue: [],
+      signalHits: [
+        {
+          evidence_refs: ["ev-1"],
+          id: "sig-guarantee",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://forexprofita.example/",
+          payload: {},
+          signal_key: "financial.guaranteed_return_language_present"
+        },
+        {
+          evidence_refs: ["ev-1"],
+          id: "sig-testimonial",
+          page_role: "primary",
+          page_type: "homepage",
+          page_url: "https://forexprofita.example/",
+          payload: {},
+          signal_key: "financial.testimonial_or_review_block_near_financial_claim_present"
+        }
+      ]
+    })
+  );
+
+  const compoundFinding = findings.find(
+    (item) => item.ruleKey === "financial_review.unsubstantiated_testimonial_near_performance_claim"
+  );
+  assert.ok(compoundFinding);
+  assert.equal(compoundFinding?.evidence.unifiedFindingId, "unsubstantiated_testimonial_near_performance_claim");
+});
+
 test("deriveValidationFindings suppresses faq-style guarantee questions as earnings or guaranteed-outcome claims", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({

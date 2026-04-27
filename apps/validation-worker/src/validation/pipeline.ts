@@ -1471,6 +1471,14 @@ function getFinancialCommercialDefinition(findingId: string) {
         severity: "medium" as const,
         title: "Pricing or fee transparency unclear"
       };
+    case "unsubstantiated_testimonial_near_performance_claim":
+      return {
+        description:
+          "The scan retained testimonial or review language adjacent to guaranteed-return or performance-style financial promotion language without nearby balancing disclosure evidence.",
+        ruleKey: "financial_review.unsubstantiated_testimonial_near_performance_claim",
+        severity: "high" as const,
+        title: "Testimonial adjacent to unsubstantiated performance claim"
+      };
     default:
       return null;
   }
@@ -1498,6 +1506,12 @@ const FINANCIAL_TESTIMONIAL_PATTERN =
 const FINANCIAL_TITLE_LIKE_PATTERN = /^[^.!?\n]{0,140}\|\s*[^.!?\n]{0,120}$/i;
 const FINANCIAL_STRUCTURED_PERFORMANCE_PATTERN =
   /\b(?:\d{1,3}(?:-\d{1,3})?(?:\.\d+)?%\s+accuracy|\+?\d{2,6}(?:-\d{2,6})?\s*pips?\b(?:.{0,24}\b(?:guaranteed|per month|weekly|daily))?|(?:\$|usd|eur|gbp)\s?\d.{0,32}\b(?:package|plan|subscription|membership|access)\b|\b\d(?:-\d)?\s*figure\s+returns\b)\b/i;
+const FINANCIAL_SIGNAL_SERVICE_CONTEXT_PATTERN =
+  /\b(?:forex|futures?|options?|cfds?|spread betting|trading signals?|signal service|copy our trades|copy trading|mirror trading|prop firm|funded accounts?|funded trader|fundednext|we fund traders|challenge fee|evaluation fee|profit split|keep \d{1,3}% of profits|pips?|win rate|accuracy)\b/i;
+const FINANCIAL_REGISTRATION_DISCLOSURE_PATTERN =
+  /\b(?:NFA\s*(?:member\s*)?(?:ID|registration|number)|CFTC\s+registration|registered\s+(?:CTA|CPO|FCM)|commodity trading advisor|commodity pool operator|SEC\s+(?:RIA|registered investment adviser|registered investment advisor)|Form\s+ADV|CRD\s*(?:number|#)|FCA\s+(?:registration|reference)\s*(?:number|no\.?)|FRN\s*\d|ASIC\s+(?:AFS|license|licence|registration)|AFSL\s*\d|FSCA\s+(?:FSP|registration)|FSP\s*(?:number|no\.?)|MAS\s+(?:regulated|license|licence|registration))\b/i;
+const FINANCIAL_RISK_DISCLOSURE_PATTERN =
+  /\b(?:past performance is not indicative of future results|past performance does not guarantee future results|individual results may vary|trading involves risk|risk of loss|you can lose money|not investment advice|educational purposes only|informational purposes only|not a registered (?:investment adviser|investment advisor|cta|cpo)|not registered with (?:the )?(?:sec|cftc|nfa))\b/i;
 
 function scoreFinancialCommercialSnippet(text: string | null, signalKeys: string[] = []) {
   if (!text) {
@@ -2223,8 +2237,53 @@ function normalizeFinancialCommercialCandidateSignals(signalKeys: string[], bloc
   if (hasKeyword(blockText, /\b(invest|investing|trading|crypto|yield|apy|apr|portfolio|fund|returns?)\b/i)) {
     candidateSignals.add("investment_context");
   }
+  if (hasKeyword(blockText, FINANCIAL_SIGNAL_SERVICE_CONTEXT_PATTERN)) {
+    candidateSignals.add("investment_context");
+    candidateSignals.add("signal_service");
+  }
 
   return [...candidateSignals];
+}
+
+function inferFinancialCommercialSignalKeysFromText(text: string | null) {
+  const signalKeys = new Set<string>();
+  if (!text) {
+    return [];
+  }
+  const suspiciousFinancialSignalContext = FINANCIAL_SIGNAL_SERVICE_CONTEXT_PATTERN.test(text);
+  if (!suspiciousFinancialSignalContext) {
+    return [];
+  }
+
+  if (
+    /\b(?:\d{1,3}(?:\.\d+)?%\s*(?:accuracy|win rate|profitable|returns?|roi)|\d+\s+out\s+of\s+\d+\s+signals?\s+(?:profitable|winning)|\+?\d{2,6}\s*pips?\s+(?:per|a)\s+(?:day|week|month)|make\s+(?:\$|usd|eur|gbp)?\s?\d|subscribers?\s+make\s+their\s+fee\s+back|profit split|keep\s+\d{1,3}%\s+of\s+profits?)\b/i.test(text)
+  ) {
+    signalKeys.add("financial.performance_claim_text_present");
+    signalKeys.add("financial.return_or_yield_percentage_present");
+  }
+  if (/\b(?:guaranteed?|assured|risk[-\s]?free|steady profit|guaranteed profit|guaranteed returns?)\b/i.test(text)) {
+    signalKeys.add("financial.guaranteed_return_language_present");
+  }
+  if (/\b(?:backtest|backtested|hypothetical|simulated performance|model portfolio)\b/i.test(text)) {
+    signalKeys.add("financial.hypothetical_or_backtest_language_present");
+  }
+  if (FINANCIAL_SUPERLATIVE_MARKETING_PATTERN.test(text)) {
+    signalKeys.add("financial.investment_outperformance_language_present");
+  }
+  if (FINANCIAL_TESTIMONIAL_PATTERN.test(text) && FINANCIAL_SIGNAL_SERVICE_CONTEXT_PATTERN.test(text)) {
+    signalKeys.add("financial.testimonial_or_review_block_near_financial_claim_present");
+  }
+  if (/\b(?:join|subscribe|buy now|get started|start now|sign up|copy our trades|mirror trading|challenge fee|evaluation fee|funded account)\b/i.test(text)) {
+    signalKeys.add("financial.claim_cta_block_present");
+  }
+  if (FINANCIAL_RISK_DISCLOSURE_PATTERN.test(text)) {
+    signalKeys.add("financial.risk_disclosure_text_present");
+  }
+  if (/\b(?:past performance is not indicative of future results|past performance does not guarantee future results)\b/i.test(text)) {
+    signalKeys.add("financial.past_performance_disclaimer_text_present");
+  }
+
+  return [...signalKeys];
 }
 
 function isFinancialClaimsSuppressedLegalSurface(input: { pageType: string | null; pageUrl: string | null }) {
@@ -2356,6 +2415,42 @@ function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle)
     const groupKey = `${pageUrl}::${pageType}`;
     const existing = groupedHits.get(groupKey) ?? [];
     existing.push(hit);
+    groupedHits.set(groupKey, existing);
+  }
+
+  for (const row of input.pageEvidence) {
+    const evidenceId = getStringValue(row, "evidence_id");
+    const matchedText = getStringValue(row, "matched_text");
+    const inferredSignalKeys = inferFinancialCommercialSignalKeysFromText(matchedText);
+    if (!evidenceId || inferredSignalKeys.length === 0) {
+      continue;
+    }
+
+    const pageUrl = getStringValue(row, "page_url") ?? "unknown";
+    const pageType = getStringValue(row, "page_type") ?? "unknown";
+    const groupKey = `${pageUrl}::${pageType}`;
+    const existing = groupedHits.get(groupKey) ?? [];
+    const existingKeys = new Set(existing.map((hit) => getStringValue(hit, "signal_key")).filter(Boolean));
+
+    for (const signalKey of inferredSignalKeys) {
+      if (existingKeys.has(signalKey)) {
+        continue;
+      }
+      existing.push({
+        evidence_refs: [evidenceId],
+        id: `inferred-${evidenceId}-${signalKey}`,
+        page_role: getStringValue(row, "page_role") ?? "primary",
+        page_type: pageType,
+        page_url: pageUrl,
+        payload: {
+          matchedText,
+          source: "deterministic_financial_claim_text_inference"
+        },
+        signal_key: signalKey
+      });
+      existingKeys.add(signalKey);
+    }
+
     groupedHits.set(groupKey, existing);
   }
 
@@ -2568,7 +2663,21 @@ function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle)
         },
         classification
       });
-      const normalizedFindingIds = [...new Set(derivedFindingIds)];
+      const normalizedFindingIds: string[] = [...new Set(derivedFindingIds)];
+      if (
+        signalKeys.includes("financial.performance_claim_text_present") &&
+        signalKeys.includes("financial.return_or_yield_percentage_present") &&
+        !classification.adjacentDisclosurePresent
+      ) {
+        normalizedFindingIds.push("earnings_claim_without_adjacent_disclosure");
+      }
+      if (
+        signalKeys.includes("financial.guaranteed_return_language_present") &&
+        signalKeys.includes("financial.testimonial_or_review_block_near_financial_claim_present") &&
+        !classification.adjacentDisclosurePresent
+      ) {
+        normalizedFindingIds.push("unsubstantiated_testimonial_near_performance_claim");
+      }
       const shouldDowngradeGuaranteedToEarnings =
         normalizedFindingIds.includes("guaranteed_outcome_claim_detected") &&
         !hasStrongFinancialCommercialSnippetForFinding({
@@ -2678,6 +2787,168 @@ function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle)
     }
   }
 
+  return findings;
+}
+
+const FINANCIAL_REGULATORY_CONTEXT_BENCHMARK_PATTERN =
+  /\b(?:forex|futures?|options?|crypto_derivatives|investment_signals?|trading_signals?|prop_trading|funded_accounts?|cfd|spread_betting|financial_advisory|investment_newsletter|copy_trading|signal_service|trading signals?|funded account|prop trading)\b/i;
+
+function getSnapshotText(input: ValidationArtifactBundle) {
+  return [
+    getStringValue(input.snapshot, "benchmark_category"),
+    getStringValue(input.snapshot, "benchmarkCategory"),
+    getStringValue(input.snapshot, "benchmark_industry"),
+    getStringValue(input.snapshot, "benchmarkIndustry"),
+    getStringValue(input.snapshot, "domain_risk_profile"),
+    getStringValue(input.snapshot, "domainRiskProfile")
+  ].filter((value): value is string => Boolean(value)).join(" ");
+}
+
+function deriveRegulatoryRegistrationTransparencyFindings(input: ValidationArtifactBundle) {
+  const retainedTexts = [
+    getSnapshotText(input),
+    ...input.pageEvidence.map((row) => getStringValue(row, "matched_text")).filter((value): value is string => Boolean(value)),
+    ...input.signalHits.flatMap((hit) => {
+      const payload = getRecord(hit.payload);
+      return [
+        getStringValue(hit, "signal_key"),
+        getStringValue(payload, "matchedText"),
+        getStringValue(payload, "matchedTerm"),
+        ...(Array.isArray(payload?.matchedTexts)
+          ? (payload.matchedTexts as unknown[]).filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+          : [])
+      ].filter((value): value is string => Boolean(value));
+    })
+  ];
+  const corpus = retainedTexts.join(" ");
+  const hasFinancialAdvisoryOrSignalContext =
+    FINANCIAL_REGULATORY_CONTEXT_BENCHMARK_PATTERN.test(corpus) ||
+    FINANCIAL_SIGNAL_SERVICE_CONTEXT_PATTERN.test(corpus) ||
+    input.signalHits.some((hit) => {
+      const signalKey = getStringValue(hit, "signal_key") ?? "";
+      return (
+        signalKey.startsWith("financial.") ||
+        signalKey === "entity.regulatory_or_license_claim_text_present"
+      );
+    });
+  const registrationDisclosurePresent =
+    FINANCIAL_REGISTRATION_DISCLOSURE_PATTERN.test(corpus) ||
+    input.signalHits.some((hit) => getStringValue(hit, "signal_key") === "entity.registration_identifier_text_present");
+
+  if (!hasFinancialAdvisoryOrSignalContext || registrationDisclosurePresent) {
+    return [];
+  }
+
+  const pageUrl =
+    input.pageEvidence.map((row) => getStringValue(row, "page_url")).find((value): value is string => Boolean(value)) ??
+    input.signalHits.map((hit) => getStringValue(hit, "page_url")).find((value): value is string => Boolean(value)) ??
+    null;
+  const taxonomy = deriveValidationFindingTaxonomy({
+    category: "scan_report_review",
+    ruleKey: "regulatory.registration_transparency_disclosure_absent",
+    subtype: "regulatory_registration_transparency"
+  });
+
+  return [{
+    category: "scan_report_review" as const,
+    description:
+      "Financial advisory, trading-signal, forex, derivatives, or prop-trading context was retained without a visible registration disclosure on the scanned surface.",
+    evidence: {
+      confidence: "moderate",
+      contextSignals: retainedTexts.filter((value) => FINANCIAL_REGULATORY_CONTEXT_BENCHMARK_PATTERN.test(value) || FINANCIAL_SIGNAL_SERVICE_CONTEXT_PATTERN.test(value)).slice(0, 8),
+      matchedSnippet: retainedTexts.find((value) => FINANCIAL_SIGNAL_SERVICE_CONTEXT_PATTERN.test(value)) ?? getSnapshotText(input) ?? null,
+      pageUrl,
+      registrationDisclosurePresent: false,
+      remediation:
+        "If you provide investment advice, trading signals, or manage client funds, disclose your registration status (NFA, CFTC, SEC, FCA, or equivalent) or a clear statement that you are not a registered adviser and signals are for informational use only.",
+      sourceUrls: pageUrl ? [pageUrl] : [],
+      unifiedFindingId: "regulatory_registration_disclosure_absent"
+    },
+    findingFamily: taxonomy.familyId,
+    findingScope: taxonomy.scope,
+    findingSource: taxonomy.source,
+    findingSubject: taxonomy.subject,
+    pageUrl,
+    rank: 0,
+    ruleKey: "regulatory.registration_transparency_disclosure_absent",
+    severity: "high" as const,
+    subtype: "regulatory_registration_transparency",
+    title: "Regulatory registration disclosure absent"
+  }];
+}
+
+function deriveFinancialContextTextClaimFindings(input: ValidationArtifactBundle) {
+  const findings: ValidationFindingRow[] = [];
+  for (const row of input.pageEvidence) {
+    const evidenceId = getStringValue(row, "evidence_id");
+    if (
+      evidenceId &&
+      input.signalHits.some((hit) =>
+        getStringArray(hit, "evidence_refs").includes(evidenceId) &&
+        FINANCIAL_COMMERCIAL_SIGNAL_KEYS.has(getStringValue(hit, "signal_key") ?? "")
+      )
+    ) {
+      continue;
+    }
+    const matchedText = getStringValue(row, "matched_text");
+    if (!matchedText || !FINANCIAL_SIGNAL_SERVICE_CONTEXT_PATTERN.test(matchedText)) {
+      continue;
+    }
+    const inferredSignalKeys = inferFinancialCommercialSignalKeysFromText(matchedText);
+    if (
+      !inferredSignalKeys.includes("financial.performance_claim_text_present") ||
+      !inferredSignalKeys.includes("financial.return_or_yield_percentage_present") ||
+      FINANCIAL_RISK_DISCLOSURE_PATTERN.test(matchedText)
+    ) {
+      continue;
+    }
+    const definition = getFinancialCommercialDefinition("earnings_claim_without_adjacent_disclosure");
+    if (!definition) {
+      continue;
+    }
+    const pageUrl = getStringValue(row, "page_url");
+    const pageType = getStringValue(row, "page_type");
+    const taxonomy = deriveValidationFindingTaxonomy({
+      category: "scan_report_review",
+      ruleKey: definition.ruleKey,
+      subtype: "financial_review"
+    });
+    findings.push({
+      category: "scan_report_review",
+      description: definition.description,
+      evidence: {
+        adjacentDisclosurePresent: false,
+        candidateSignals: normalizeFinancialCommercialCandidateSignals(inferredSignalKeys, matchedText),
+        claimText: matchedText,
+        confidence: 0.78,
+        financialEvidenceScore: scoreFinancialCommercialSnippet(matchedText, inferredSignalKeys),
+        matchedPhrase: matchedText,
+        matchedSnippet: matchedText,
+        pageClassification: classifyFinancialValidationPage(pageType, {
+          blockText: matchedText,
+          candidateSignals: normalizeFinancialCommercialCandidateSignals(inferredSignalKeys, matchedText)
+        }),
+        pageType,
+        pageUrl,
+        policySnippets: [matchedText],
+        signalKey: inferredSignalKeys[0] ?? null,
+        sourceUrls: pageUrl ? [pageUrl] : [],
+        supportingHeadings: [],
+        supportingSignals: inferredSignalKeys,
+        unifiedFindingId: "earnings_claim_without_adjacent_disclosure"
+      },
+      findingFamily: taxonomy.familyId,
+      findingScope: "page",
+      findingSource: "supplemental_validation",
+      findingSubject: "disclosure",
+      pageUrl,
+      rank: 0,
+      ruleKey: definition.ruleKey,
+      severity: definition.severity,
+      subtype: "financial_review",
+      title: definition.title
+    });
+  }
   return findings;
 }
 
@@ -4225,6 +4496,8 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     }),
     ...deriveFinancialValidationFindings(input),
     ...deriveFinancialCommercialClaimFindings(input),
+    ...deriveFinancialContextTextClaimFindings(input),
+    ...deriveRegulatoryRegistrationTransparencyFindings(input),
     ...deriveRuntimePrivacyFindings({
       policySemanticRows,
       preconsentViolations: input.preconsentViolations,

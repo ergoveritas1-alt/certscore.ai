@@ -499,9 +499,11 @@ const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "pump_and_dump_language_present",
   "registration_claim_support_missing",
   "registration_identifier_missing",
+  "regulatory_registration_disclosure_absent",
   "regulatory_compliance_claim_present",
   "simulated_performance_without_disclosure",
   "testimonial_endorsement_financial_promotion_risk",
+  "unsubstantiated_testimonial_near_performance_claim",
   "unqualified_superlative_claim_detected",
   "vague_whitepaper_or_technical_obfuscation_present",
   "yield_or_return_claims_high_risk"
@@ -520,9 +522,11 @@ const DECEPTIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "performance_claims_without_context",
   "pricing_or_fee_transparency_unclear",
   "pump_and_dump_language_present",
+  "regulatory_registration_disclosure_absent",
   "regulatory_compliance_claim_present",
   "simulated_performance_without_disclosure",
   "testimonial_endorsement_financial_promotion_risk",
+  "unsubstantiated_testimonial_near_performance_claim",
   "unqualified_superlative_claim_detected",
   "vague_whitepaper_or_technical_obfuscation_present",
   "yield_or_return_claims_high_risk"
@@ -4046,6 +4050,12 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     whyThisMatters:
       "Simulated or backtested performance can overstate likely outcomes if users are not shown clear nearby context about methodology and real-world limits."
   },
+  unsubstantiated_testimonial_near_performance_claim: {
+    suggestedFix:
+      "Keep testimonials, reviews, and endorsement-style social proof away from performance claims unless the page also includes clear nearby substantiation, typicality, compensation, and risk disclosures.",
+    whyThisMatters:
+      "Pairing social proof with guaranteed or performance-style claims can amplify deception risk under endorsement and investment-advertising review standards."
+  },
   unqualified_superlative_claim_detected: {
     suggestedFix:
       "Review broad superiority language such as best, highest, leading, or number one and either substantiate it clearly or narrow the wording to what the page can actually support.",
@@ -4071,6 +4081,12 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   regulatory_compliance_claim_present: {
     suggestedFix: "Review any regulatory, registration, exchange, or compliance claims and make sure the site can substantiate them clearly wherever they appear.",
     whyThisMatters: "Regulatory-compliance framing can materially affect how users judge trust and legality, so weak or misleading claims deserve close review."
+  },
+  regulatory_registration_disclosure_absent: {
+    suggestedFix:
+      "If the site provides investment advice, trading signals, or managed-fund style services, disclose the relevant registration status, registration number, or a clear non-registered informational-use statement.",
+    whyThisMatters:
+      "Trading-signal, forex, futures, prop-trading, and advisory surfaces create elevated review risk when users cannot tell whether the operator is registered with NFA, CFTC, SEC, FCA, or an equivalent regulator."
   },
   investment_risk_disclosure_present: {
     suggestedFix: "Keep investment-risk disclosures easy to find anywhere yield, return, or high-risk product claims appear, and make sure the language matches the live offer.",

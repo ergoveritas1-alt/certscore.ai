@@ -102,7 +102,9 @@ const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
   "unqualified_superlative_claim_detected",
   "financial_urgency_pressure_tactic_detected",
   "pricing_or_fee_transparency_unclear",
-  "leveraged_or_high_risk_product_promotion"
+  "leveraged_or_high_risk_product_promotion",
+  "regulatory_registration_disclosure_absent",
+  "unsubstantiated_testimonial_near_performance_claim"
 ]);
 
 function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
@@ -121,6 +123,10 @@ function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
       return "Pricing or fee disclosure remains unclear near the offer path.";
     case "leveraged_or_high_risk_product_promotion":
       return "High-risk financial product promotion language surfaced.";
+    case "regulatory_registration_disclosure_absent":
+      return "Financial advisory or signal context surfaced without a visible registration disclosure.";
+    case "unsubstantiated_testimonial_near_performance_claim":
+      return "Testimonial or review language appeared near an unsubstantiated performance claim.";
     default:
       return finding.shortSummary;
   }
@@ -244,6 +250,7 @@ function buildMinimalFinancialClaimsLens() {
 
 function buildFinancialClaimsLens(input: {
   findings: CertScoreFinding[];
+  forceScored?: boolean;
 }) {
   const financialFindings = input.findings.map((finding) =>
     buildRegulatoryLensFindingFromCertFinding(finding, getFinancialClaimsFindingSummary(finding), {
@@ -252,6 +259,18 @@ function buildFinancialClaimsLens(input: {
   );
 
   if (financialFindings.length === 0) {
+    if (input.forceScored === true) {
+      const tone = buildTone(88);
+      return {
+        acronym: "Financial & commercial claims",
+        detailTitle: "Claims, urgency, and pricing disclosures",
+        findings: [],
+        ratingLabel: tone.label,
+        score: 88,
+        summary: "No material financial claims issue surfaced from the scanned signal set.",
+        toneClass: tone.toneClass
+      } satisfies RegulatoryLens;
+    }
     return buildMinimalFinancialClaimsLens();
   }
 
@@ -281,6 +300,75 @@ function buildFinancialClaimsLens(input: {
       ? "High-confidence claims or earnings language surfaced without enough balancing disclosure."
       : "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
     toneClass: financialTone.toneClass
+  } satisfies RegulatoryLens;
+}
+
+function hasFinancialRegulatoryBenchmark(value: string | null | undefined) {
+  return /\b(?:forex|futures?|options?|crypto derivatives?|investment signals?|trading signals?|prop trading|funded accounts?|cfd|spread betting|financial advisory|investment newsletter|copy trading|signal service|funded account)\b/i.test(
+    value ?? ""
+  );
+}
+
+function buildFinancialRegulatorLens(input: {
+  acronym: "CFTC" | "SEC";
+  findings: CertScoreFinding[];
+  regulatoryBenchmarkActive: boolean;
+}) {
+  const relevantFindings = input.findings.filter((finding) =>
+    finding.id === "regulatory_registration_disclosure_absent" ||
+    finding.id === "guaranteed_outcome_claim_detected" ||
+    finding.id === "earnings_claim_without_adjacent_disclosure" ||
+    finding.id === "simulated_performance_without_disclosure" ||
+    finding.id === "unsubstantiated_testimonial_near_performance_claim" ||
+    finding.id === "testimonial_endorsement_financial_promotion_risk" ||
+    (input.acronym === "CFTC" && finding.id === "leveraged_or_high_risk_product_promotion")
+  );
+
+  if (!input.regulatoryBenchmarkActive && relevantFindings.length === 0) {
+    return null;
+  }
+
+  const hasCompound = relevantFindings.some((finding) => finding.id === "unsubstantiated_testimonial_near_performance_claim") &&
+    relevantFindings.some((finding) => finding.id === "regulatory_registration_disclosure_absent");
+  const hasRegistrationGap = relevantFindings.some((finding) => finding.id === "regulatory_registration_disclosure_absent");
+  const hasGuarantee = relevantFindings.some((finding) => finding.id === "guaranteed_outcome_claim_detected");
+  const hasPerformanceDisclosureGap = relevantFindings.some((finding) =>
+    finding.id === "earnings_claim_without_adjacent_disclosure" ||
+    finding.id === "simulated_performance_without_disclosure" ||
+    finding.id === "unsubstantiated_testimonial_near_performance_claim"
+  );
+  const score = clampScore(
+    hasCompound
+      ? 16
+      : hasGuarantee || hasRegistrationGap
+        ? 32
+        : hasPerformanceDisclosureGap
+          ? 52
+          : relevantFindings.length > 0
+            ? 68
+            : 88
+  );
+  const tone = buildTone(score);
+
+  return {
+    acronym: input.acronym,
+    detailTitle: input.acronym === "CFTC" ? "Forex, futures, CTA/CPO registration signals" : "Advisory, marketing-rule, and RIA disclosure signals",
+    findings: relevantFindings.map((finding) =>
+      buildRegulatoryLensFindingFromCertFinding(finding, getFinancialClaimsFindingSummary(finding), {
+        lens: input.acronym
+      })
+    ),
+    ratingLabel: tone.label,
+    score,
+    summary:
+      relevantFindings.length === 0
+        ? `No material ${input.acronym} registration or claims issue surfaced from the scanned signal set.`
+        : hasRegistrationGap
+          ? `${input.acronym} review risk is driven by advisory or trading context without visible registration disclosure.`
+          : hasPerformanceDisclosureGap || hasGuarantee
+            ? `${input.acronym} review risk is driven by performance or outcome claims needing stronger nearby qualification.`
+            : `${input.acronym} review risk should be checked against retained financial-promotion signals.`,
+    toneClass: tone.toneClass
   } satisfies RegulatoryLens;
 }
 
@@ -342,6 +430,12 @@ export function buildRegulatoryLenses(
 ): RegulatoryLens[] {
   const findingIds = new Set(findings.map((finding) => finding.id));
   const financialClaimFindings = findings.filter((finding) => FINANCIAL_CLAIMS_FINDING_IDS.has(finding.id));
+  const financialRegulatoryBenchmarkActive =
+    hasFinancialRegulatoryBenchmark(options?.benchmarkIndustry) ||
+    financialClaimFindings.some((finding) =>
+      finding.id === "regulatory_registration_disclosure_absent" ||
+      finding.id === "leveraged_or_high_risk_product_promotion"
+    );
   const trackingFinding =
     findings.find((finding) => finding.id === "pre_consent_tracking_detected") ??
     findings.find((finding) => finding.id === "third_party_tracking_pre_consent") ??
@@ -547,6 +641,23 @@ export function buildRegulatoryLenses(
     }
   ];
 
+  const cftcLens = buildFinancialRegulatorLens({
+    acronym: "CFTC",
+    findings: financialClaimFindings,
+    regulatoryBenchmarkActive: financialRegulatoryBenchmarkActive
+  });
+  const secLens = buildFinancialRegulatorLens({
+    acronym: "SEC",
+    findings: financialClaimFindings,
+    regulatoryBenchmarkActive: financialRegulatoryBenchmarkActive
+  });
+  if (cftcLens) {
+    lenses.push(cftcLens);
+  }
+  if (secLens) {
+    lenses.push(secLens);
+  }
+
   const dojAdaMapping = options?.agencyMappings?.find((mapping) => mapping.agencyKey === "doj_ada");
   const accessibilitySignals = options?.accessibilitySignals ?? null;
   const accessibilityRiskScore = options?.regulatoryRisk?.accessibilityEnforcementRiskScore ?? null;
@@ -608,7 +719,8 @@ export function buildRegulatoryLenses(
     );
 
     lenses.push(buildFinancialClaimsLens({
-      findings: financialClaimFindings
+      findings: financialClaimFindings,
+      forceScored: financialRegulatoryBenchmarkActive
     }));
 
     return lenses;
@@ -741,7 +853,8 @@ export function buildRegulatoryLenses(
   });
 
   lenses.push(buildFinancialClaimsLens({
-    findings: financialClaimFindings
+    findings: financialClaimFindings,
+    forceScored: financialRegulatoryBenchmarkActive
   }));
 
   return lenses;
