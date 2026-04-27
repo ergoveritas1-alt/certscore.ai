@@ -4042,7 +4042,7 @@ function SignalEnrichmentWorkflowCard(input: {
   return (
     <CollapsibleSectionCard
       title="Signal enrichment workflow"
-      defaultOpen={input.scanRecord.scan.status !== "completed"}
+      defaultOpen={false}
     >
       <div className="space-y-4">
         <p className="text-sm leading-6 text-slate-600">
@@ -4938,47 +4938,7 @@ export function SharedScanDetailView({
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
             lightweightHeroMetrics={lightweightHeroMetrics}
           />
-          {fallbackEvidence ? (
-            <section className="rounded-[1.4rem] border border-sky-200 bg-sky-50/60 px-5 py-4 text-sm leading-6 text-slate-700">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div className="space-y-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">Supplemental public runtime evidence</p>
-                  <p>
-                    {executiveAccessLimitationNotice && fallbackEvidenceRelation === "off_domain_redirect" && fallbackFinalHostname
-                      ? `CertScore live verification stayed blocked, but supplemental public runtime evidence showed this domain redirected to ${fallbackFinalHostname}.`
-                      : executiveAccessLimitationNotice
-                        ? "CertScore live verification stayed blocked, but supplemental same-host public runtime evidence was retained for this domain."
-                        : fallbackEvidenceRelation === "off_domain_redirect" && fallbackFinalHostname
-                          ? `Supplemental public runtime evidence showed this domain redirected to ${fallbackFinalHostname}.`
-                          : "Supplemental same-host public runtime evidence was retained for this domain."}
-                    {" "}
-                    This evidence is source-attributed internally and reaches findings only when promoted through the unified finding pipeline.
-                  </p>
-                  {fallbackEvidence.requestFootprint?.summary ? (
-                    <p className="font-medium text-slate-900">{fallbackEvidence.requestFootprint.summary}</p>
-                  ) : null}
-                  {fallbackEvidence.cookieFootprint ? (
-                    <div className="mt-3 rounded-2xl border border-sky-200 bg-white/75 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-900">
-                        {fallbackEvidence.cookieFootprint.title}
-                      </p>
-                      <p className="mt-1 font-medium text-slate-950">{fallbackEvidence.cookieFootprint.summary}</p>
-                      {fallbackEvidence.cookieFootprint.details.length > 0 ? (
-                        <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                          {fallbackEvidence.cookieFootprint.details.map((detail) => (
-                            <li key={detail}>{detail}</li>
-                          ))}
-                        </ul>
-                      ) : null}
-                      <p className="mt-2 text-xs text-slate-600">
-                        This cookie evidence stays in supporting evidence unless the unified finding pipeline promotes it, with the supplemental source retained internally for audit traceability.
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </section>
-          ) : null}
+          
           {presentedCertScoreFindings.length > 0 ? (
         <section className="space-y-6">
           <div className="space-y-2.5">
@@ -5057,11 +5017,54 @@ export function SharedScanDetailView({
                 />
               </div>
             </div>
+            {fallbackEvidence ? (
+              <section className="rounded-[1.4rem] border border-sky-200 bg-sky-50/60 px-5 py-4 text-sm leading-6 text-slate-700">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">Supplemental public runtime evidence</p>
+                    <p>
+                      {executiveAccessLimitationNotice && fallbackEvidenceRelation === "off_domain_redirect" && fallbackFinalHostname
+                        ? `CertScore live verification stayed blocked, but supplemental public runtime evidence showed this domain redirected to ${fallbackFinalHostname}.`
+                        : executiveAccessLimitationNotice
+                          ? "CertScore live verification stayed blocked, but supplemental same-host public runtime evidence was retained for this domain."
+                          : fallbackEvidenceRelation === "off_domain_redirect" && fallbackFinalHostname
+                            ? `Supplemental public runtime evidence showed this domain redirected to ${fallbackFinalHostname}.`
+                            : "Supplemental same-host public runtime evidence was retained for this domain."}
+                      {" "}
+                      This evidence is source-attributed internally and reaches findings only when promoted through the unified finding pipeline.
+                    </p>
+                    {fallbackEvidence.requestFootprint?.summary ? (
+                      <p className="font-medium text-slate-900">{fallbackEvidence.requestFootprint.summary}</p>
+                    ) : null}
+                    {fallbackEvidence.cookieFootprint ? (
+                      <div className="mt-3 rounded-2xl border border-sky-200 bg-white/75 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-900">
+                          {fallbackEvidence.cookieFootprint.title}
+                        </p>
+                        <p className="mt-1 font-medium text-slate-950">{fallbackEvidence.cookieFootprint.summary}</p>
+                        {fallbackEvidence.cookieFootprint.details.length > 0 ? (
+                          <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                            {fallbackEvidence.cookieFootprint.details.map((detail) => (
+                              <li key={detail}>{detail}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        <p className="mt-2 text-xs text-slate-600">
+                          This cookie evidence stays in supporting evidence unless the unified finding pipeline promotes it, with the supplemental source retained internally for audit traceability.
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+            ) : null}
           </CollapsibleSectionCard>
           <div className="space-y-5">
-            {executiveFindingsProjection.groupedFindings.map((group) => (
-              <FindingsSection key={group.section} findings={group.findings} section={group.section} />
-            ))}
+            {executiveFindingsProjection.groupedFindings
+              .filter((group) => !["Privacy & Tracking", "Fingerprinting", "Financial & Claims"].includes(group.section))
+              .map((group) => (
+                <FindingsSection key={group.section} findings={group.findings} section={group.section} />
+              ))}
           </div>
         </section>
           ) : null}
