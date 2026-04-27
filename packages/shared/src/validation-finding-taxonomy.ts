@@ -12,6 +12,7 @@ export type ValidationFindingFamilyId =
   | "financial_review"
   | "policy_runtime_review"
   | "policy_review_queue"
+  | "regulatory_registration_transparency"
   | "section_review"
   | "uncategorized";
 
@@ -21,6 +22,7 @@ export type ValidationFindingSource =
   | "policy_runtime"
   | "policy_enrichment"
   | "policy_review_queue"
+  | "regulatory_signal"
   | "supplemental_validation"
   | "snapshot_accessibility"
   | "unknown";
@@ -90,6 +92,16 @@ export function deriveValidationFindingTaxonomy(input: {
       familyLabel: "Financial Review",
       scope: "page",
       source: "financial_signal",
+      subject: "disclosure"
+    };
+  }
+
+  if (rulePrefix === "regulatory") {
+    return {
+      familyId: "regulatory_registration_transparency",
+      familyLabel: "Regulatory Registration Transparency",
+      scope: "page",
+      source: "regulatory_signal",
       subject: "disclosure"
     };
   }

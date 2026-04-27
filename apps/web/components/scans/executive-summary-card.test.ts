@@ -688,7 +688,7 @@ test("buildRegulatoryLenses places financial claims directly below DOJ / ADA acc
 
   assert.deepEqual(
     lenses.map((lens) => lens.acronym),
-    ["GDPR / ePrivacy", "CCPA / CPRA", "FTC", "DOJ / ADA accessibility", "Financial & commercial claims"]
+    ["GDPR / ePrivacy", "CCPA / CPRA", "FTC", "CFTC", "SEC", "DOJ / ADA accessibility", "Financial & commercial claims"]
   );
 
   const financialLens = lenses.at(-1);
