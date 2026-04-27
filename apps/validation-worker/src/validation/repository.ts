@@ -164,6 +164,7 @@ type NanoDocRetrievalInput = {
     created_at?: string | null;
     error_message?: string | null;
     id?: string;
+    scan_type?: string | null;
     started_at?: string | null;
     status?: string | null;
   } | null;
@@ -1415,7 +1416,7 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
     .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } }));
 
   const [scan, snapshot, runtimeArtifacts, policyEnrichments, policyReviewQueue] = await Promise.all([
-    queryOne<Record<string, unknown>>(`select id, status, created_at, started_at, completed_at, error_message from scans where id = $1`, [scanId], { readOnly: true }),
+    queryOne<Record<string, unknown>>(`select id, status, scan_type, created_at, started_at, completed_at, error_message from scans where id = $1`, [scanId], { readOnly: true }),
     queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [scanId], { readOnly: true }),
     queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [scanId], { readOnly: true }),
     query<Record<string, unknown>>(`select * from policy_enrichment where scan_id = $1 order by created_at asc`, [scanId], { readOnly: true }).then((result) => result.rows),
@@ -1448,6 +1449,7 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
       created_at?: string | null;
       error_message?: string | null;
       id?: string;
+      scan_type?: string | null;
       started_at?: string | null;
       status?: string | null;
     } | null) ?? null,
@@ -2654,6 +2656,18 @@ export async function appendScanWorkflowEvent(input: {
       values (null, $1, $2, $3, null, $4)
     `,
     [input.eventType, input.message, input.metadataJson ?? {}, input.scanId]
+  );
+}
+
+export async function updateScanStatus(input: {
+  scanId: string;
+  status: "queued" | "running" | "completed" | "failed";
+  completedAt?: string | null;
+  errorMessage?: string | null;
+}) {
+  await query(
+    `update scans set status = $1, completed_at = $2, error_message = $3, updated_at = now() where id = $4`,
+    [input.status, input.completedAt ?? null, input.errorMessage ?? null, input.scanId]
   );
 }
 

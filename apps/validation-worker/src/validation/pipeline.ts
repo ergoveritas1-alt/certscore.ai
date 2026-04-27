@@ -27,6 +27,7 @@ import {
   replaceValidationRunFindings,
   syncTrancoTargets,
   updateScanDocumentSourceExtractions,
+  updateScanStatus,
   updateValidationRun,
   upsertValidationVerdict
 } from "./repository";
@@ -5854,6 +5855,15 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
       scanId
     });
+
+    const scanType = typeof artifacts.scan?.scan_type === "string" ? artifacts.scan.scan_type : null;
+    if (scanType === "preview" && scanStatus !== "completed" && scanStatus !== "failed") {
+      await updateScanStatus({
+        scanId,
+        status: "completed",
+        completedAt: new Date().toISOString()
+      });
+    }
   }
 }
 
