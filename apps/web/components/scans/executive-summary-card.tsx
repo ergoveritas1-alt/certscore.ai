@@ -259,18 +259,6 @@ function buildFinancialClaimsLens(input: {
   );
 
   if (financialFindings.length === 0) {
-    if (input.forceScored === true) {
-      const tone = buildTone(88);
-      return {
-        acronym: "Financial & commercial claims",
-        detailTitle: "Claims, urgency, and pricing disclosures",
-        findings: [],
-        ratingLabel: tone.label,
-        score: 88,
-        summary: "No material financial claims issue surfaced from the scanned signal set.",
-        toneClass: tone.toneClass
-      } satisfies RegulatoryLens;
-    }
     return buildMinimalFinancialClaimsLens();
   }
 
