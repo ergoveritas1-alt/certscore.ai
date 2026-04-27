@@ -140,6 +140,19 @@ export type PreviewRuntimeArtifactsRecord = {
 
 export type PreviewRuntimeArtifactsRow = PreviewRuntimeArtifactsRecord | null;
 
+export type PreviewSignalRow = {
+  confidence: number | null;
+  evidence_refs: string[];
+  observed_at: string | null;
+  population_source: string;
+  population_status: string;
+  provenance_json: unknown;
+  signal_key: string;
+  signal_label: string;
+  signal_value_json: boolean | number | string | string[];
+  value_type: string;
+};
+
 export async function findOrCreateAnonymousPreviewDomain(hostname: string, normalizedUrl: string) {
   let existingDomain: PreviewDomainRow | null;
   try {
@@ -415,5 +428,21 @@ export async function getPreviewRuntimeArtifacts(scanId: string): Promise<Previe
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown database error.";
     throw new Error(`Failed to load preview scan runtime artifacts: ${message}`);
+  }
+}
+
+export async function getPreviewScanSignals(scanId: string): Promise<PreviewSignalRow[]> {
+  try {
+    const result = await query<PreviewSignalRow>(
+      `select signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at
+         from scan_signals
+        where scan_id = $1`,
+      [scanId],
+      { readOnly: true }
+    );
+    return result.rows;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown database error.";
+    throw new Error(`Failed to load preview scan signals: ${message}`);
   }
 }

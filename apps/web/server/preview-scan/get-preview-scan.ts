@@ -1,7 +1,14 @@
-import { buildAgencyMappings, buildRegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
+import {
+  buildAgencyMappings,
+  buildRegulatoryRiskAssessment,
+  type SignalPopulationSource,
+  type SignalPopulationStatus,
+  type SignalValueType
+} from "@website-signal-risk-scanner/shared";
 import { buildPreviewPayloadFromSnapshot, enrichPreviewPayloadWithFallbackEvidence } from "./build-preview-payload";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
+import { buildMergedSignalRecords } from "../../lib/scans/merged-signals";
 import {
   choosePreferredUrlscanSource,
   fetchUrlscanResult,
@@ -14,6 +21,7 @@ import {
   getRecentPreviewScanEvents,
   getPreviewScanRecord,
   getPreviewRuntimeArtifacts,
+  getPreviewScanSignals,
   getPreviewScanSnapshot,
   serializePreviewScan
 } from "./preview-scan-repository";
@@ -59,6 +67,64 @@ function deriveObservedFinalUrl(events: Array<{ event_type: string; metadata_jso
   return null;
 }
 
+function buildPreviewMergedSignals(rows: Awaited<ReturnType<typeof getPreviewScanSignals>>) {
+  const scannerSignals = rows.map((row) => {
+    const populationStatus: SignalPopulationStatus =
+      row.population_status === "present" ||
+      row.population_status === "missing" ||
+      row.population_status === "conflicting" ||
+      row.population_status === "insufficient"
+        ? row.population_status
+        : "present";
+    const source: SignalPopulationSource =
+      row.population_source === "nano" || row.population_source === "validation" ? row.population_source : "scanner";
+    const valueType: SignalValueType =
+      row.value_type === "boolean" ||
+      row.value_type === "number" ||
+      row.value_type === "text" ||
+      row.value_type === "string_array"
+        ? row.value_type
+        : Array.isArray(row.signal_value_json)
+          ? "string_array"
+          : typeof row.signal_value_json === "boolean"
+            ? "boolean"
+            : typeof row.signal_value_json === "number"
+              ? "number"
+              : "text";
+
+    return {
+      confidence: typeof row.confidence === "number" ? row.confidence : null,
+      evidenceRefs: Array.isArray(row.evidence_refs) ? row.evidence_refs.filter((value): value is string => typeof value === "string") : [],
+      key: row.signal_key,
+      label: row.signal_label,
+      observedAt: row.observed_at,
+      populationStatus,
+      provenance: Array.isArray(row.provenance_json)
+        ? row.provenance_json.filter(
+            (
+              value
+            ): value is { detail: string; kind: "document" | "runtime" | "signal" | "validation" } =>
+              Boolean(value) &&
+              typeof value === "object" &&
+              typeof (value as { detail?: unknown }).detail === "string" &&
+              ((value as { kind?: unknown }).kind === "document" ||
+                (value as { kind?: unknown }).kind === "runtime" ||
+                (value as { kind?: unknown }).kind === "signal" ||
+                (value as { kind?: unknown }).kind === "validation")
+          )
+        : [],
+      reportSignalSource: row.population_source === "scanner" ? "snapshot_signal" as const : "document_semantic_signal" as const,
+      source,
+      value: row.signal_value_json,
+      valueType
+    };
+  });
+
+  return buildMergedSignalRecords({
+    scannerSignals
+  });
+}
+
 export async function getPreviewScan(scanId: string) {
   const record = await getPreviewScanRecord(scanId);
 
@@ -66,12 +132,14 @@ export async function getPreviewScan(scanId: string) {
     return null;
   }
 
-  const [latestEvent, recentEvents, events, runtimeArtifacts] = await Promise.all([
+  const [latestEvent, recentEvents, events, runtimeArtifacts, signalRows] = await Promise.all([
     getLatestPreviewScanEvent(scanId),
     getRecentPreviewScanEvents(scanId),
     getAllPreviewScanEvents(scanId),
-    getPreviewRuntimeArtifacts(scanId)
+    getPreviewRuntimeArtifacts(scanId),
+    getPreviewScanSignals(scanId)
   ]);
+  const mergedSignals = buildPreviewMergedSignals(signalRows);
   const response = serializePreviewScan({
     ...record,
     events,
@@ -141,6 +209,7 @@ export async function getPreviewScan(scanId: string) {
   const previewPayload = enrichPreviewPayloadWithFallbackEvidence({
     payload: buildPreviewPayloadFromSnapshot({
       hostname: response.hostname,
+      mergedSignals,
       normalizedUrl: response.normalizedUrl,
       snapshot: {
         ...snapshot,

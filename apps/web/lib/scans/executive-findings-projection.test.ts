@@ -240,6 +240,48 @@ test("projects surfaced scanner-level financial promotion into executive finding
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
 });
 
+test("projects financial companion findings into executive findings", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("guaranteed_outcome_claim_detected", {
+      confidenceBand: "high",
+      details: { family: "financial_promotion", kind: "guaranteed_outcome_claim_detected" },
+      severity: "high",
+      summary: "Guaranteed outcome language surfaced."
+    }),
+    makePacket("regulatory_registration_disclosure_absent", {
+      confidenceBand: "high",
+      details: { family: "financial_promotion", kind: "regulatory_registration_disclosure_absent" },
+      severity: "high",
+      summary: "Registration disclosure was not retained."
+    }),
+    makePacket("unsubstantiated_testimonial_near_performance_claim", {
+      confidenceBand: "high",
+      details: { family: "financial_promotion", kind: "unsubstantiated_testimonial_near_performance_claim" },
+      severity: "high",
+      summary: "Testimonial appeared near performance claim."
+    }),
+    makePacket("earnings_claim_without_adjacent_disclosure", {
+      confidenceBand: "high",
+      details: { family: "financial_promotion", kind: "earnings_claim_without_adjacent_disclosure" },
+      severity: "high",
+      summary: "Earnings claim surfaced without nearby disclosure."
+    })
+  ]);
+
+  assert.deepEqual(
+    projection.findings.map((finding) => finding.id).sort(),
+    [
+      "earnings_claim_without_adjacent_disclosure",
+      "guaranteed_outcome_claim_detected",
+      "regulatory_registration_disclosure_absent",
+      "unsubstantiated_testimonial_near_performance_claim"
+    ]
+  );
+  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
+  assert.ok(projection.topFindings.some((finding) => finding.id === "guaranteed_outcome_claim_detected"));
+  assert.equal(projection.topFindings.filter((finding) => finding.section === "Financial & Claims").length, 2);
+});
+
 test("projects concrete sportsbook offer evidence into high-risk promotion finding", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("leveraged_or_high_risk_product_promotion", {

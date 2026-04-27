@@ -24,6 +24,7 @@ import {
   getAllPreviewScanEvents,
   getLatestPreviewScanEvent,
   getPreviewRuntimeArtifacts,
+  getPreviewScanSignals,
   getPreviewScanRecord,
   getRecentPreviewScanEvents,
   insertPreviewScanEvent as insertScanEvent,
@@ -42,6 +43,7 @@ export {
   getAllPreviewScanEvents,
   getLatestPreviewScanEvent,
   getPreviewRuntimeArtifacts,
+  getPreviewScanSignals,
   getPreviewScanRecord,
   getRecentPreviewScanEvents,
   updatePreviewScan

@@ -348,6 +348,35 @@ async function loadExecutiveAccessLimitationNotice() {
   }).deriveExecutiveAccessLimitationNotice;
 }
 
+async function loadSelectExecutiveAccessLimitationNotice() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (sharedScanDetailViewImport as unknown as { selectExecutiveAccessLimitationNotice?: unknown })
+      .selectExecutiveAccessLimitationNotice
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    selectExecutiveAccessLimitationNotice: (input: {
+      allExecutiveFindings: unknown[];
+      notice: unknown;
+      topExecutiveFindings: unknown[];
+    }) => unknown;
+  }).selectExecutiveAccessLimitationNotice;
+}
+
 async function loadPreviewExecutiveAccessLimitationNotice() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule =
@@ -921,6 +950,32 @@ test("deriveExecutiveAccessLimitationNotice stays off when blocked scans still v
   });
 
   assert.equal(notice, null);
+});
+
+test("selectExecutiveAccessLimitationNotice does not replace retained unified findings", async () => {
+  const selectExecutiveAccessLimitationNotice = await loadSelectExecutiveAccessLimitationNotice();
+  const notice = {
+    finding: { label: "Public site access was limited" },
+    review: { coverageLabel: "No public verification available" },
+    summary: "No reliable findings were retained."
+  };
+
+  assert.equal(
+    selectExecutiveAccessLimitationNotice({
+      allExecutiveFindings: [{ id: "guaranteed_outcome_claim_detected" }],
+      notice,
+      topExecutiveFindings: [{ id: "guaranteed_outcome_claim_detected" }]
+    }),
+    null
+  );
+  assert.equal(
+    selectExecutiveAccessLimitationNotice({
+      allExecutiveFindings: [],
+      notice,
+      topExecutiveFindings: []
+    }),
+    notice
+  );
 });
 
 test("buildPreviewExecutiveAccessLimitationNotice preserves limited homepage preview withholding", async () => {

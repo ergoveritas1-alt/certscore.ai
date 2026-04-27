@@ -143,9 +143,12 @@ function getPostureHeadline(posture: ExecutivePosture) {
   return "No major privacy and consent issues surfaced";
 }
 
-function getCoverageScopedPostureHeadline(posture: ExecutivePosture) {
+function getCoverageScopedPostureHeadline(posture: ExecutivePosture, findingSections: string[] = []) {
   if (posture === "Clear") {
     return "Limited scan coverage did not surface major homepage privacy concerns";
+  }
+  if (findingSections.some((section) => section === "Financial & Claims")) {
+    return "Limited scan coverage surfaced possible financial-claims concerns";
   }
 
   return "Limited scan coverage surfaced possible homepage privacy concerns";
@@ -187,6 +190,7 @@ export function deriveExecutiveNarrativePresentation(input: {
   policyEnrichmentCount?: number | null;
   requestedHost: string | null;
   scanOutcome?: string | null;
+  topFindingSections?: string[];
   verifiedPublicSurfacesCount?: number | null;
 }) {
   const hostResolutionCategory = deriveHostResolutionCategory({
@@ -237,7 +241,7 @@ export function deriveExecutiveNarrativePresentation(input: {
   if (limitedCoverage) {
     return {
       findingsHeading: "Possible homepage issues",
-      headline: getCoverageScopedPostureHeadline(input.posture),
+      headline: getCoverageScopedPostureHeadline(input.posture, input.topFindingSections),
       hostResolutionCategory,
       limitedCoverage,
       summaryLabel: "Coverage note:",
@@ -286,6 +290,7 @@ export function buildScanCalibrationSummary(input: {
     posture: input.posture,
     requestedHost: input.requestedHost,
     scanOutcome: input.scanOutcome,
+    topFindingSections: input.topFindings.map((finding) => finding.section),
     verifiedPublicSurfacesCount: input.verifiedPublicSurfacesCount
   });
 

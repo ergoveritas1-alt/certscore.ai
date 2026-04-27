@@ -2473,6 +2473,20 @@ export function deriveExecutiveAccessLimitationNotice(
   };
 }
 
+export function selectExecutiveAccessLimitationNotice(input: {
+  allExecutiveFindings: unknown[];
+  notice: ExecutiveAccessLimitationNotice | null;
+  topExecutiveFindings: unknown[];
+}) {
+  if (!input.notice) {
+    return null;
+  }
+  if (input.allExecutiveFindings.length > 0 || input.topExecutiveFindings.length > 0) {
+    return null;
+  }
+  return input.notice;
+}
+
 function LimitedSurfaceReview(input: { review: UnverifiedHomepageReview }) {
   return (
     <div className="space-y-4 rounded-2xl border border-amber-200 bg-amber-50 px-6 py-5">
@@ -4516,7 +4530,7 @@ export function SharedScanDetailView({
   const unverifiedHomepageReview = snapshot
     ? deriveUnverifiedHomepageReview(snapshot, scanRecord.events, scanRecord.policyEnrichment)
     : null;
-  const executiveAccessLimitationNotice =
+  const requestedExecutiveAccessLimitationNotice =
     executiveAccessLimitationOverride ??
     (snapshot ? deriveExecutiveAccessLimitationNotice(snapshot, scanRecord.events, scanRecord.policyEnrichment) : null);
   const suppressLimitedSurfaceReview =
@@ -4656,6 +4670,11 @@ export function SharedScanDetailView({
   const executiveSummaryBadgeCounts = deriveExecutiveSummaryBadgeCounts(findingEvidenceDiagnostics);
   const executiveFindingsProjection = projectExecutiveFindingsFromUnifiedPackets(findingEvidenceDiagnostics);
   const allExecutiveFindings = executiveFindingsProjection.findings;
+  const executiveAccessLimitationNotice = selectExecutiveAccessLimitationNotice({
+    allExecutiveFindings,
+    notice: requestedExecutiveAccessLimitationNotice,
+    topExecutiveFindings: executiveFindingsProjection.topFindings
+  });
   const executiveDisplayedScore = deriveExecutiveDisplayedScore({
     findings: allExecutiveFindings,
     previewMode,

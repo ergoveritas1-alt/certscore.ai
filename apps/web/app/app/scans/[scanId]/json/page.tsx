@@ -5,6 +5,7 @@ import { buildScanReportUnifiedFindings } from "../../../../../components/scans/
 import { ScanFindingsPane } from "../../../../../components/scans/scan-findings-pane";
 import { ScanViewActions } from "../../../../../components/scans/scan-view-actions";
 import { ScanStatusAutoRefresh } from "../../../../../components/scans/scan-status-auto-refresh";
+import { hasPendingPostCompletionFindingWork } from "../../../../../lib/scans/scan-auto-refresh";
 import { getRescanAvailability } from "../../../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../../../server/auth";
 import { getScanById } from "../../../../../server/scans/get-scan-by-id";
@@ -84,6 +85,10 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
     count: allFindings.length,
     scanId: scanRecord.scan.id
   });
+  const pendingPostCompletionWork = hasPendingPostCompletionFindingWork({
+    signalEnrichmentWorkflow: scanRecord.signalEnrichmentWorkflow,
+    status: scanRecord.scan.status
+  });
 
   return (
     <div className="space-y-8">
@@ -98,7 +103,10 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
             Scan created {formatDateTime(scanRecord.scan.createdAt)} · Started {formatDateTime(scanRecord.scan.startedAt)} · Completed{" "}
             {formatDateTime(scanRecord.scan.completedAt)}
           </p>
-          <ScanStatusAutoRefresh status={scanRecord.scan.status} />
+          <ScanStatusAutoRefresh
+            pendingPostCompletionWork={pendingPostCompletionWork}
+            status={scanRecord.scan.status}
+          />
         </div>
         <ScanViewActions
           alternateHref={`/app/scans/${scanRecord.scan.id}`}

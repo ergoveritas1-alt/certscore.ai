@@ -5395,6 +5395,91 @@ test("merged signals feed unified finding derivation through the canonical displ
   assert.equal(packets.some((packet) => packet.unifiedFindingId === "gpc_disclosure_present"), true);
 });
 
+test("financial merged signals promote companion findings through normalized concerns", () => {
+  const mergedSignals = buildMergedSignalRecords({
+    scannerSignals: [
+      {
+        confidence: 0.92,
+        evidenceRefs: ["https://forexprofita.example/"],
+        key: "financial.guaranteed_return_language_present",
+        label: "Guaranteed return language present",
+        reportSignalSource: "snapshot_signal",
+        source: "scanner",
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        confidence: 0.9,
+        evidenceRefs: ["https://forexprofita.example/"],
+        key: "financial.performance_claim_text_present",
+        label: "Performance claim text present",
+        reportSignalSource: "snapshot_signal",
+        source: "scanner",
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        confidence: 0.88,
+        evidenceRefs: ["https://forexprofita.example/"],
+        key: "financial.testimonial_or_review_block_near_financial_claim_present",
+        label: "Testimonial near financial claim present",
+        reportSignalSource: "snapshot_signal",
+        source: "scanner",
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        confidence: 0.86,
+        evidenceRefs: ["https://forexprofita.example/"],
+        key: "commercial.fee_related_text_present",
+        label: "Fee related text present",
+        reportSignalSource: "snapshot_signal",
+        source: "scanner",
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        confidence: 0.84,
+        evidenceRefs: ["https://forexprofita.example/"],
+        key: "financial.copy_trading_language_present",
+        label: "Copy trading language present",
+        reportSignalSource: "snapshot_signal",
+        source: "scanner",
+        value: true,
+        valueType: "boolean"
+      }
+    ]
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    mergedSignals,
+    reviewFindingCandidates: [],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+  const packetIds = new Set(packets.map((packet) => packet.unifiedFindingId));
+
+  assert.equal(packetIds.has("guaranteed_outcome_claim_detected"), true);
+  assert.equal(packetIds.has("earnings_claim_without_adjacent_disclosure"), true);
+  assert.equal(packetIds.has("pricing_or_fee_transparency_unclear"), true);
+  assert.equal(packetIds.has("unsubstantiated_testimonial_near_performance_claim"), true);
+  assert.equal(packetIds.has("regulatory_registration_disclosure_absent"), true);
+  assert.equal(
+    packets
+      .filter((packet) =>
+        [
+          "guaranteed_outcome_claim_detected",
+          "earnings_claim_without_adjacent_disclosure",
+          "pricing_or_fee_transparency_unclear",
+          "unsubstantiated_testimonial_near_performance_claim",
+          "regulatory_registration_disclosure_absent"
+        ].includes(packet.unifiedFindingId)
+      )
+      .every((packet) => packet.presentationDecision.status !== "suppress"),
+    true
+  );
+});
+
 test("document semantic contact channel does not surface missing-contact finding and uses positive contact path signal instead", () => {
   const mergedSignals = buildMergedSignalRecords({
     nanoSignals: [

@@ -5,6 +5,7 @@ import { DomainScanForm } from "../../../../components/marketing/domain-scan-for
 import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
+import { hasPendingPostCompletionFindingWork } from "../../../../lib/scans/scan-auto-refresh";
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 
@@ -30,13 +31,22 @@ export default async function PublicScanDetailPage({ params }: PublicScanDetailP
     count: reportFindingCount,
     scanId: scanRecord.scan.id
   });
+  const pendingPostCompletionWork = hasPendingPostCompletionFindingWork({
+    signalEnrichmentWorkflow: scanRecord.signalEnrichmentWorkflow,
+    status: scanRecord.scan.status
+  });
 
   return (
     <main className="min-h-screen bg-white">
       <SiteHeader />
       <section className="mx-auto max-w-6xl px-6 py-16">
         <SharedScanDetailView
-          autoRefresh={<ScanStatusAutoRefresh status={scanRecord.scan.status} />}
+          autoRefresh={
+            <ScanStatusAutoRefresh
+              pendingPostCompletionWork={pendingPostCompletionWork}
+              status={scanRecord.scan.status}
+            />
+          }
           headerActions={
             scanRecord.scan.status === "completed" ? (
               <div className="w-full max-w-[21rem]">

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
+import { hasPendingPostCompletionFindingWork } from "../../../../lib/scans/scan-auto-refresh";
 import { ScanViewActions } from "../../../../components/scans/scan-view-actions";
 import { getRescanAvailability } from "../../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../../server/auth";
@@ -58,6 +59,10 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
     count: reportFindingCount,
     scanId: scanRecord.scan.id
   });
+  const pendingPostCompletionWork = hasPendingPostCompletionFindingWork({
+    signalEnrichmentWorkflow: scanRecord.signalEnrichmentWorkflow,
+    status: scanRecord.scan.status
+  });
 
   const canRescan = scanRecord.scan.status === "completed" && Boolean(scanRecord.scan.domainId);
   const rescanAvailability = canRescan
@@ -78,7 +83,12 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
 
   return (
     <SharedScanDetailView
-      autoRefresh={<ScanStatusAutoRefresh status={scanRecord.scan.status} />}
+      autoRefresh={
+        <ScanStatusAutoRefresh
+          pendingPostCompletionWork={pendingPostCompletionWork}
+          status={scanRecord.scan.status}
+        />
+      }
       headerActions={
         <ScanViewActions
           alternateHref={`/app/scans/${scanRecord.scan.id}/json`}

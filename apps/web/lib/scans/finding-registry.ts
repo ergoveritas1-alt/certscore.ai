@@ -307,6 +307,23 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "Pricing or fee promotion language without clear nearby terms can mislead users and raise disclosure risk.",
     remediation: "Place pricing, fee, and term disclosures directly next to the promotional claim or offer."
   },
+  regulatory_registration_disclosure_absent: {
+    id: "regulatory_registration_disclosure_absent",
+    label: "Regulatory registration disclosure absent",
+    section: "Financial & Claims",
+    defaultSurfacePriority: 88,
+    whyItMatters: "Trading-signal, forex, derivatives, and advisory surfaces create elevated review risk when users cannot tell whether the operator is registered or unregistered.",
+    remediation:
+      "Disclose the relevant NFA, CFTC, SEC, FCA, or equivalent registration status, or clearly state that the service is not registered and signals are for informational use only."
+  },
+  unsubstantiated_testimonial_near_performance_claim: {
+    id: "unsubstantiated_testimonial_near_performance_claim",
+    label: "Testimonial adjacent to unsubstantiated performance claim",
+    section: "Financial & Claims",
+    defaultSurfacePriority: 86,
+    whyItMatters: "Pairing social proof with guaranteed-return or performance language can amplify deception risk in financial promotions.",
+    remediation: "Separate testimonials from performance claims or add clear adjacent disclosure explaining substantiation, typicality, compensation, and material limitations."
+  },
   leveraged_or_high_risk_product_promotion: {
     id: "leveraged_or_high_risk_product_promotion",
     label: "Leveraged or high-risk product promotion",

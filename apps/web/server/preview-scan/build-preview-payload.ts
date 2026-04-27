@@ -4,6 +4,7 @@ import type {
   PreviewFallbackEvidence,
   BlockVendorGuess,
   PreviewIssueCounts,
+  MergedSignalRecord,
   PreviewSampleFinding,
   PreviewScanPayload,
   ScanSnapshot
@@ -386,13 +387,17 @@ function mapExecutiveFindingToPreviewTitle(findingId: string, shortSummary: stri
   }
 }
 
-function buildPreviewFindingsFromUnifiedCandidates(candidates: UnifiedFindingCandidate[]) {
-  if (candidates.length === 0) {
+function buildPreviewFindingsFromUnifiedCandidates(input: {
+  candidates: UnifiedFindingCandidate[];
+  mergedSignals?: MergedSignalRecord[];
+}) {
+  if (input.candidates.length === 0 && (!input.mergedSignals || input.mergedSignals.length === 0)) {
     return [] as PreviewSampleFinding[];
   }
 
   const packets = buildUnifiedFindingDisplayPackets({
-    reviewFindingCandidates: candidates,
+    mergedSignals: input.mergedSignals,
+    reviewFindingCandidates: input.candidates,
     validationFindings: [],
     validationFindingLookup: new Map()
   });
@@ -1055,6 +1060,7 @@ function hasUsablePublicCoverageDespiteProtectionLabel(snapshot: PreviewSnapshot
 
 export function buildPreviewPayloadFromSnapshot(input: {
   hostname: string;
+  mergedSignals?: MergedSignalRecord[];
   normalizedUrl: string;
   snapshot: PreviewSnapshotSource;
 }): PreviewScanPayload {
@@ -1343,8 +1349,11 @@ export function buildPreviewPayloadFromSnapshot(input: {
     });
   }
 
-  for (const unifiedFinding of buildPreviewFindingsFromUnifiedCandidates(unifiedPreviewCandidates)) {
-    pushFinding(findings, unifiedFinding);
+  for (const unifiedFinding of buildPreviewFindingsFromUnifiedCandidates({
+    candidates: unifiedPreviewCandidates,
+    mergedSignals: input.mergedSignals
+  })) {
+    pushFinding(findings, unifiedFinding, 8);
   }
 
   const issueCounts = deriveIssueCounts(findings);

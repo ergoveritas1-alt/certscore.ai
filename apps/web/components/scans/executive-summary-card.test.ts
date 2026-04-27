@@ -1053,6 +1053,53 @@ test("ExecutiveSummaryCard scopes the hero copy when coverage level is limited p
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
 });
 
+test("ExecutiveSummaryCard names financial claims in limited-coverage hero copy", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      beforeConsentCookieCount: 0,
+      coverageLevel: "limited_partial",
+      domainBenchmark: null,
+      finalHost: "forexprofita.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-18T21:03:44.000Z",
+      legalCoverageScore: 0,
+      pagesScanned: 2,
+      policyEnrichmentCount: 1,
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "forexprofita.com",
+      resolvedVendorNames: [],
+      score: 76,
+      scanOutcome: "completed_partial",
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 11,
+      thirdPartyDomains: [],
+      topFindings: [
+        makeFinding("guaranteed_outcome_claim_detected", "Guaranteed outcome claim detected", {
+          section: "Financial & Claims",
+          shortSummary: "Guaranteed outcome claim detected."
+        }),
+        makeFinding("regulatory_registration_disclosure_absent", "Regulatory registration disclosure absent", {
+          section: "Financial & Claims",
+          shortSummary: "Regulatory registration disclosure absent."
+        })
+      ],
+      topObservedEntities: [],
+      trackerSummary: "No third-party domains observed",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {},
+      verifiedPublicSurfacesCount: 1
+    })
+  );
+
+  assert.match(html, /Limited scan coverage surfaced possible financial-claims concerns/);
+  assert.doesNotMatch(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
+});
+
 test("ExecutiveSummaryCard switches to host-resolution scope language when the request lands on a different host", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {

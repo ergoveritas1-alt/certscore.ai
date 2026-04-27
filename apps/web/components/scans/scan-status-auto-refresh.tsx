@@ -1,13 +1,26 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 
 type ScanStatusAutoRefreshProps = {
+  pendingPostCompletionWork?: boolean;
   status: string;
 };
 
-export function ScanStatusAutoRefresh({ status }: ScanStatusAutoRefreshProps) {
-  const shouldRefresh = status === "queued" || status === "running";
+export function shouldAutoRefreshScanStatus(input: ScanStatusAutoRefreshProps) {
+  return (
+    input.status === "queued" ||
+    input.status === "running" ||
+    input.status === "processing" ||
+    input.pendingPostCompletionWork === true
+  );
+}
+
+export function ScanStatusAutoRefresh({
+  pendingPostCompletionWork = false,
+  status
+}: ScanStatusAutoRefreshProps) {
+  const shouldRefresh = shouldAutoRefreshScanStatus({ pendingPostCompletionWork, status });
   const lastInteractionAtRef = useRef(Date.now());
   const AUTO_REFRESH_INTERACTION_GRACE_MS = 12_000;
 
@@ -60,5 +73,11 @@ export function ScanStatusAutoRefresh({ status }: ScanStatusAutoRefreshProps) {
     return null;
   }
 
-  return <p className="text-sm text-slate-500">Refreshing status automatically while this scan is {status}.</p>;
+  const statusLabel = pendingPostCompletionWork ? "finalizing findings" : status;
+
+  return (
+    <p className="text-sm text-slate-500">
+      Refreshing status automatically while this scan is {statusLabel}.
+    </p>
+  );
 }

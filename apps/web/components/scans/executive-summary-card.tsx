@@ -1636,6 +1636,7 @@ export function ExecutiveSummaryCard(input: {
     posture: input.posture as ExecutivePosture,
     requestedHost: input.requestedHost,
     scanOutcome: input.scanOutcome,
+    topFindingSections: primaryFindings.map((finding) => finding.section),
     verifiedPublicSurfacesCount: input.verifiedPublicSurfacesCount
   });
   const regulatoryCounts = {

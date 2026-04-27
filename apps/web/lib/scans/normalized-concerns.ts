@@ -655,6 +655,16 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
+    if (/evidenceFlags|supportingSignals|financialEvidenceFlags|signalKeys/i.test(key)) {
+      const financialFlags = stringValues.filter((entry) => /^(?:financial|commercial|entity|regulatory)\./.test(entry));
+      if (financialFlags.length > 0) {
+        for (const entry of financialFlags) {
+          flags.add(entry);
+        }
+        continue;
+      }
+    }
+
     if (stringValues.some((entry) => /^https?:\/\//i.test(entry.trim()))) {
       for (const entry of stringValues) {
         if (/pageurl|page_url/i.test(key)) {
@@ -1194,14 +1204,205 @@ export function normalizeConcernFromPolicyReviewQueue(input: PolicyReviewConcern
   });
 }
 
+type FinancialCompanionDefinition = {
+  description: string;
+  id: string;
+  severity: ReviewFindingSeverity;
+  title: string;
+};
+
+const FINANCIAL_COMPANION_DEFINITIONS: Record<string, FinancialCompanionDefinition> = {
+  guaranteed_outcome_claim_detected: {
+    description:
+      "The scan retained guaranteed-outcome or low-risk/high-return marketing language in a public-facing financial promotion context.",
+    id: "guaranteed_outcome_claim_detected",
+    severity: "high",
+    title: "Guaranteed outcome claim detected"
+  },
+  earnings_claim_without_adjacent_disclosure: {
+    description:
+      "The scan retained performance, earnings, return, or accuracy language without adjacent balancing disclosure evidence.",
+    id: "earnings_claim_without_adjacent_disclosure",
+    severity: "high",
+    title: "Earnings claim without adjacent disclosure"
+  },
+  pricing_or_fee_transparency_unclear: {
+    description:
+      "The scan retained fee, subscription, promotional price, or cost-recovery language without enough adjacent fee disclosure context.",
+    id: "pricing_or_fee_transparency_unclear",
+    severity: "medium",
+    title: "Pricing or fee transparency unclear"
+  },
+  regulatory_registration_disclosure_absent: {
+    description:
+      "The scan retained trading-signal, forex, copy-trading, or advisory context without clear registration or unregistered-status disclosure evidence.",
+    id: "regulatory_registration_disclosure_absent",
+    severity: "high",
+    title: "Registration disclosure absent"
+  },
+  unsubstantiated_testimonial_near_performance_claim: {
+    description:
+      "The scan retained testimonial or review evidence adjacent to unsubstantiated performance or guaranteed-outcome financial claims.",
+    id: "unsubstantiated_testimonial_near_performance_claim",
+    severity: "high",
+    title: "Testimonial adjacent to unsubstantiated performance claim"
+  }
+};
+
+function getFinancialConcernFlags(concern: NormalizedConcern) {
+  return new Set(
+    [
+      ...concern.evidenceBundle.flags,
+      ...getStringArrayEvidence(concern.evidenceBundle.rawEvidence?.evidenceFlags),
+      ...getStringArrayEvidence(concern.evidenceBundle.rawEvidence?.financialEvidenceFlags),
+      ...getStringArrayEvidence(concern.evidenceBundle.rawEvidence?.supportingSignals),
+      getStringValue(concern.evidenceBundle.rawEvidence?.signalKey),
+      concern.signalKey
+    ].filter((value): value is string => Boolean(value))
+  );
+}
+
+function hasAnyFlag(flags: Set<string>, values: string[]) {
+  return values.some((value) => flags.has(value));
+}
+
+function hasAggregateFinancialFlagEvidence(concern: NormalizedConcern) {
+  return [
+    ...getStringArrayEvidence(concern.evidenceBundle.rawEvidence?.evidenceFlags),
+    ...getStringArrayEvidence(concern.evidenceBundle.rawEvidence?.financialEvidenceFlags)
+  ].some((flag) => /^(?:financial|commercial|entity)\./.test(flag));
+}
+
+const FINANCIAL_REGISTRATION_DISCLOSURE_PATTERN =
+  /\b(?:NFA\s*(?:member\s*)?(?:ID|registration|number)|CFTC\s+registration|registered\s+(?:CTA|CPO|FCM)|commodity trading advisor|commodity pool operator|SEC\s+(?:RIA|registered investment adviser|registered investment advisor)|Form\s+ADV|CRD\s*(?:number|#)|FCA\s+(?:registration|reference)\s*(?:number|no\.?)|FRN\s*\d|ASIC\s+(?:AFS|license|licence|registration)|AFSL\s*\d|FSCA\s+(?:FSP|registration)|FSP\s*(?:number|no\.?)|MAS\s+(?:regulated|license|licence|registration))\b/i;
+
+function hasConcreteRegistrationDisclosureEvidence(concern: NormalizedConcern) {
+  const registrationEvidenceText = uniqueStrings([
+    ...concern.evidenceBundle.policySnippets,
+    ...getNestedStringEvidence(concern.evidenceBundle.rawEvidence)
+  ]).join(" ");
+
+  return FINANCIAL_REGISTRATION_DISCLOSURE_PATTERN.test(registrationEvidenceText);
+}
+
+function deriveFinancialCompanionFindingIds(concern: NormalizedConcern) {
+  const flags = getFinancialConcernFlags(concern);
+  const currentId = concern.suggestedUnifiedFindingId ?? "";
+  const hasFinancialRuntimeContext =
+    [...flags].some((flag) => /^(?:financial|commercial|entity)\./.test(flag)) ||
+    concern.originKey.startsWith("financial_review.") ||
+    concern.originKey.startsWith("regulatory.");
+
+  if (!hasFinancialRuntimeContext || !hasAggregateFinancialFlagEvidence(concern)) {
+    return [];
+  }
+
+  const hasGuarantee = hasAnyFlag(flags, [
+    "financial.guaranteed_return_language_present",
+    "financial.low_risk_high_return_language_present"
+  ]);
+  const hasPerformanceClaim = hasAnyFlag(flags, [
+    "financial.performance_claim_text_present",
+    "financial.return_or_yield_percentage_present",
+    "financial.investment_outperformance_language_present"
+  ]);
+  const hasFeeClaim = hasAnyFlag(flags, [
+    "commercial.fee_related_text_present",
+    "commercial.promo_price_or_free_claim_present",
+    "commercial.variable_fee_language_present_without_explanation"
+  ]);
+  const hasClearFeeDisclosure = hasAnyFlag(flags, [
+    "commercial.explicit_fee_disclosure_text_present",
+    "commercial.fee_schedule_table_present"
+  ]);
+  const hasPastPerformanceDisclosure = hasAnyFlag(flags, [
+    "financial.past_performance_disclaimer_text_present",
+    "financial.risk_disclosure_text_present"
+  ]);
+  const hasTestimonial = flags.has("financial.testimonial_or_review_block_near_financial_claim_present");
+  const hasAdvisoryOrSignalContext =
+    hasAnyFlag(flags, [
+      "financial.copy_trading_language_present",
+      "financial.ai_trading_or_automated_trading_language_present",
+      "financial.signal_service_language_present"
+    ]) ||
+    /forex|trading signal|copy trading|mirror trading|funded account|prop trading/i.test(
+      concern.evidenceBundle.policySnippets.join(" ")
+    );
+  const hasRegistrationDisclosure = hasConcreteRegistrationDisclosureEvidence(concern);
+
+  const ids = new Set<string>();
+  if (hasGuarantee) {
+    ids.add("guaranteed_outcome_claim_detected");
+  }
+  if ((hasPerformanceClaim || hasGuarantee) && !hasPastPerformanceDisclosure) {
+    ids.add("earnings_claim_without_adjacent_disclosure");
+  }
+  if (hasFeeClaim && !hasClearFeeDisclosure) {
+    ids.add("pricing_or_fee_transparency_unclear");
+  }
+  if (hasGuarantee && hasTestimonial) {
+    ids.add("unsubstantiated_testimonial_near_performance_claim");
+  }
+  if (hasAdvisoryOrSignalContext && !hasRegistrationDisclosure) {
+    ids.add("regulatory_registration_disclosure_absent");
+  }
+
+  ids.delete(currentId);
+  return [...ids];
+}
+
+function expandFinancialCompanionConcerns(concern: NormalizedConcern): NormalizedConcern[] {
+  const companionIds = deriveFinancialCompanionFindingIds(concern);
+  if (companionIds.length === 0) {
+    return [concern];
+  }
+
+  const flags = [...getFinancialConcernFlags(concern)];
+  const companions = companionIds.flatMap((id) => {
+    const definition = FINANCIAL_COMPANION_DEFINITIONS[id];
+    const unifiedFinding = getReportUnifiedFinding(id);
+    if (!definition || !unifiedFinding) {
+      return [];
+    }
+
+    return buildConcernFromSharedInput({
+      categoryId: concern.categoryId,
+      description: definition.description,
+      evidence: uniqueStrings([...concern.evidenceBundle.pageUrls, ...concern.evidenceBundle.sourceUrls]),
+      linkedValidationFinding: concern.linkedValidationFinding ?? null,
+      observedValue: concern.observedValue,
+      originKey: `${concern.originKey}#${id}`,
+      originType: concern.originType,
+      rawEvidence: {
+        ...(concern.evidenceBundle.rawEvidence ?? {}),
+        evidenceFlags: flags,
+        financialEvidenceFlags: flags,
+        sourceConcernKey: concern.canonicalConcernKey,
+        unifiedFindingId: id
+      },
+      severity: definition.severity,
+      signalKey: concern.signalKey,
+      signalLabel: concern.signalLabel,
+      signalSource: concern.signalSource,
+      sourceType: concern.sourceType,
+      title: definition.title
+    });
+  });
+
+  return [concern, ...companions];
+}
+
 export function buildNormalizedConcerns(input: {
   reviewFindingCandidates: ReviewFindingCandidateInput[];
   validationFindings: ScanValidationFinding[];
 }) {
-  return [
+  const concerns = [
     ...input.reviewFindingCandidates.map((candidate) => normalizeConcernFromReviewFindingCandidate(candidate)),
     ...input.validationFindings.map((finding) => normalizeConcernFromValidationFinding(finding))
   ];
+
+  return concerns.flatMap(expandFinancialCompanionConcerns);
 }
 
 export function buildUnifiedFindingCandidatesFromConcerns(concerns: NormalizedConcern[]): ConcernBackedUnifiedFindingCandidate[] {

@@ -123,6 +123,22 @@ function getMergedSignalNumber(mergedSignals: MergedSignalRecord[], key: string)
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function isPresentMergedSignal(signal: MergedSignalRecord) {
+  if (signal.populationStatus !== "present") {
+    return false;
+  }
+  if (signal.value === false || signal.value === null || signal.value === undefined) {
+    return false;
+  }
+  if (typeof signal.value === "number") {
+    return signal.value > 0;
+  }
+  if (Array.isArray(signal.value)) {
+    return signal.value.length > 0;
+  }
+  return true;
+}
+
 function buildSiblingEvidenceForMergedSignal(signal: MergedSignalRecord, mergedSignals: MergedSignalRecord[]) {
   if (signal.key === "privacy.privacy_contact_path_present") {
     const privacyContactChannelType = getMergedSignalValue(mergedSignals, "privacyContactChannelType");
@@ -150,6 +166,22 @@ function buildSiblingEvidenceForMergedSignal(signal: MergedSignalRecord, mergedS
       unmatchedCookieNames,
       unmatchedCookieVendors,
       unmatchedThirdPartyCookieCount
+    };
+  }
+
+  if (/^(?:financial|commercial|entity)\./.test(signal.key)) {
+    const siblingSignals = mergedSignals
+      .filter((entry) => /^(?:financial|commercial|entity)\./.test(entry.key))
+      .filter(isPresentMergedSignal);
+    const supportingSignals = uniqueStrings(siblingSignals.map((entry) => entry.key));
+    const pageUrls = uniqueStrings(siblingSignals.flatMap((entry) => entry.evidenceRefs));
+
+    return {
+      evidenceFlags: supportingSignals,
+      financialEvidenceFlags: supportingSignals,
+      pageUrls,
+      sourceUrls: pageUrls,
+      supportingSignals
     };
   }
 
