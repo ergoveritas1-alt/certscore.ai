@@ -4806,6 +4806,7 @@ export function SharedScanDetailView({
     wcagErrorCountTotal: getRecordNumber(snapshot, "wcag_error_count_total")
   });
   const isScanInFlight = scanRecord.scan.status === "queued" || scanRecord.scan.status === "running";
+  const isScanFailed = scanRecord.scan.status === "failed";
   const executiveAccessNoticeCardProps = executiveAccessLimitationNotice
     ? {
         coverageLabel: executiveAccessLimitationNotice.review.coverageLabel,
@@ -4874,10 +4875,27 @@ export function SharedScanDetailView({
       {previewNotice}
       {!isScanInFlight ? (
         <>
-          <ExecutiveSummaryCard
-            accessLimitationNotice={executiveAccessNoticeCardProps}
-            allFindings={allExecutiveFindings}
-            accessibilitySignals={{
+          {isScanFailed ? (
+            <section className="rounded-[1.4rem] border border-rose-200 bg-rose-50/60 px-6 py-5">
+              <div className="flex items-start gap-3">
+                <svg viewBox="0 0 24 24" className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M8 8l8 8M16 8l-8 8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-rose-900">Scan failed</p>
+                  <p className="text-sm leading-6 text-rose-800">
+                    {scanRecord.scan.errorMessage ?? "This scan could not be completed. No results are available."}
+                  </p>
+                </div>
+              </div>
+            </section>
+          ) : (
+            <>
+              <ExecutiveSummaryCard
+                accessLimitationNotice={executiveAccessNoticeCardProps}
+                allFindings={allExecutiveFindings}
+                accessibilitySignals={{
               accessibilityClaimMismatchDetected: getRecordBoolean(snapshot, "accessibility_claim_mismatch_detected"),
               accessibilityLitigationRiskScore: getRecordNumber(snapshot, "accessibility_litigation_risk_score"),
               accessibilityStatementPresent: getRecordBoolean(snapshot, "accessibility_statement_present"),
@@ -5048,6 +5066,8 @@ export function SharedScanDetailView({
         </section>
           ) : null}
         </>
+        )}
+      </>
       ) : null}
       {!isScanInFlight && snapshot ? (
         <>
