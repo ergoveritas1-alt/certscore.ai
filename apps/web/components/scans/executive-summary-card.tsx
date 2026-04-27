@@ -1399,11 +1399,19 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
     );
   }
 
+  if (input.finding.id === "leveraged_or_high_risk_product_promotion") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <path d="M12 3v12M7 9l5-5 5 5M5 21h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
   if (input.finding.id === "access_limited_no_reliable_findings") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-amber-700`} aria-hidden="true">
-        <path d="M12 3l7 3v5c0 4.5-2.8 7.8-7 10-4.2-2.2-7-5.5-7-10V6l7-3Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M9 12h6M12 9v6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M12 4l8 14H4L12 4Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+        <path d="M12 10v4M12 17h.01" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     );
   }
