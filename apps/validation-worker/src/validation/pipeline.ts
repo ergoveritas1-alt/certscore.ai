@@ -41,6 +41,7 @@ import {
 import { enrichUnknownScanVendors } from "./vendor-enrichment";
 import { buildValidationWorkerDocumentHeaders } from "../web-bot-auth";
 import { getWorkerEnv } from "../env";
+import { runAccessibilityValidationJob } from "./run-accessibility-validation-job";
 import { deriveFinancialCommercialExpectedFindingIds } from "@website-signal-risk-scanner/validation-shared";
 
 export { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";

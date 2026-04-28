@@ -9,6 +9,13 @@ const nextConfig = {
   devIndicators: false,
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  webpackDevMiddleware: (config) => {
+    config.watchOptions = {
+      ignored: ["**/node_modules/**", "**/.git/**", "**/tmp/**", "**/.next/**", "**/dist/**"],
+      poll: false,
+    };
+    return config;
+  },
   async redirects() {
     return [
       {

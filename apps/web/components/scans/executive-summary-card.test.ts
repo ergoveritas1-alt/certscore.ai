@@ -409,7 +409,7 @@ test("buildRegulatoryLenses keeps ADA minimal when accessibility statement is th
   assert.equal(adaLens?.summary, "");
 });
 
-test("buildRegulatoryLenses keeps ADA and financial claims as minimal cards when no significant findings are present", () => {
+test("buildRegulatoryLenses surfaces scored ADA lens when any WCAG errors are present", () => {
   const lenses = buildRegulatoryLenses(
     [],
     {
@@ -437,11 +437,11 @@ test("buildRegulatoryLenses keeps ADA and financial claims as minimal cards when
   const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
   assert.ok(adaLens);
   assert.ok(financialLens);
-  assert.equal(adaLens?.minimal, true);
+  assert.ok(!adaLens?.minimal);
   assert.equal(financialLens?.minimal, true);
-  assert.equal(adaLens?.ratingLabel, "Audit-only");
-  assert.equal(adaLens?.score, null);
-  assert.equal(adaLens?.summary, "");
+  assert.equal(adaLens?.ratingLabel, "Strong");
+  assert.equal(typeof adaLens?.score, "number");
+  assert.equal(adaLens?.summary, "Accessibility barriers and disclosure gaps are the main issue.");
   assert.equal(financialLens?.ratingLabel, "Audit-only");
   assert.equal(financialLens?.score, null);
   assert.equal(financialLens?.summary, "");

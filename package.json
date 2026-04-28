@@ -45,6 +45,9 @@
     "restart:certscore": "bash ./scripts/restart-certscore.sh",
     "restart:localhost": "bash ./scripts/restart-localhost.sh",
     "test:scan-pipeline": "pnpm --filter @website-signal-risk-scanner/validation-worker test:scan-pipeline",
+    "dev:safe": "NODE_OPTIONS='--max-old-space-size=2048' turbo run dev --parallel",
+    "scan:safe": "PLAYWRIGHT_WORKERS=1 NODE_OPTIONS='--max-old-space-size=4096' pnpm --filter @website-signal-risk-scanner/validation-worker test:scan-pipeline",
+    "vscode:light": "code --disable-extensions .",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean"
   },

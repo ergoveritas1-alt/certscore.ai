@@ -3,6 +3,7 @@
 import {
   loadAccessibilityOverviewCompletedScans,
   loadAccessibilityOverviewDomainsAndSnapshots,
+  loadAccessibilityScanSummaries,
   type AccessibilityOverviewScanRow
 } from "./repository";
 
@@ -27,8 +28,11 @@ export async function getOrganizationAccessibilityOverview(organizationId: strin
     scanIds
   });
 
+  const summaries = await loadAccessibilityScanSummaries(scanIds);
+
   const domainMap = new Map(domains.map((domain) => [domain.id, domain.hostname]));
   const snapshotMap = new Map(snapshots.map((snapshot) => [snapshot.scan_id, snapshot]));
+  const summaryMap = new Map(summaries.map((summary) => [summary.scan_id, summary]));
 
   const rows = latestScans
     .map((scan) => {
@@ -38,11 +42,14 @@ export async function getOrganizationAccessibilityOverview(organizationId: strin
         return null;
       }
 
+      const enrichedSummary = summaryMap.get(scan.id);
+
       return {
+        accessibilityBenchmarkLabel: enrichedSummary?.benchmark_label ?? null,
         accessibilityClaimMismatchDetected: snapshot.accessibility_claim_mismatch_detected ?? false,
         accessibilityContactMethodPresent: snapshot.accessibility_contact_method_present ?? false,
         accessibilityLitigationRiskScore: snapshot.accessibility_litigation_risk_score ?? 0,
-        accessibilityScore: snapshot.accessibility_score ?? 0,
+        accessibilityScore: enrichedSummary?.accessibility_score ?? snapshot.accessibility_score ?? 0,
         accessibilityStatementPresent: snapshot.accessibility_statement_present ?? false,
         completedAt: scan.completed_at,
         domainHostname: hostname,
@@ -50,7 +57,7 @@ export async function getOrganizationAccessibilityOverview(organizationId: strin
         vpatPresent: snapshot.vpat_or_accessibility_conformance_doc_present ?? false,
         wcagAriaErrorCount: snapshot.wcag_aria_error_count ?? 0,
         wcagContrastFailuresCount: snapshot.wcag_contrast_failures_count ?? 0,
-        wcagErrorCountTotal: snapshot.wcag_error_count_total ?? 0,
+        wcagErrorCountTotal: enrichedSummary?.total_violation_count ?? snapshot.wcag_error_count_total ?? 0,
         wcagKeyboardNavigationIssueCount: snapshot.wcag_keyboard_navigation_issue_count ?? 0,
         wcagMissingAltCount: snapshot.wcag_missing_alt_count ?? 0
       };

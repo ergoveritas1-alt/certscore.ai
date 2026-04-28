@@ -26,6 +26,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@axe-core/playwright": "^4.10.1",
     "@website-signal-risk-scanner/db": "workspace:*",
     "@website-signal-risk-scanner/shared": "workspace:*",
     "@website-signal-risk-scanner/validation-shared": "workspace:*",

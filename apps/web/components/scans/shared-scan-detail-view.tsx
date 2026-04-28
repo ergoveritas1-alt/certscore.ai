@@ -4904,7 +4904,19 @@ export function SharedScanDetailView({
               wcagErrorCountTotal: getRecordNumber(snapshot, "wcag_error_count_total"),
               wcagFormLabelErrorCount: getRecordNumber(snapshot, "wcag_form_label_error_count"),
               wcagKeyboardNavigationIssueCount: getRecordNumber(snapshot, "wcag_keyboard_navigation_issue_count"),
-              wcagMissingAltCount: getRecordNumber(snapshot, "wcag_missing_alt_count")
+              wcagMissingAltCount: getRecordNumber(snapshot, "wcag_missing_alt_count"),
+              wcagViolations: scanRecord.accessibilityRuleExamples.map((example) => ({
+                description: example.description,
+                help: example.help,
+                helpUrl: example.helpUrl,
+                impact: example.impact,
+                nodeCount: example.nodeCount,
+                pageUrl: example.pageUrl,
+                representativeSelectors: example.representativeSelectors,
+                ruleCode: example.ruleCode,
+                ruleGroup: example.ruleGroup,
+                severity: example.severity
+              }))
             }}
             agencyMappings={scanRecord.agencyMappings}
             beforeConsentCookieCount={cookiesBeforeConsentCount}

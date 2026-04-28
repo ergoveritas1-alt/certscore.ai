@@ -91,6 +91,12 @@ export default async function AccessibilityPage() {
                   <p className="mt-1 text-2xl font-semibold text-slate-950">{formatMetric(row.wcagErrorCountTotal)}</p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Benchmark</p>
+                  <p className="mt-1 text-sm font-medium text-slate-800">
+                    {row.accessibilityBenchmarkLabel ? row.accessibilityBenchmarkLabel.replace(/_/g, " ") : "—"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Disclosure posture</p>
                   <p className="mt-1 text-sm text-slate-800">
                     Statement {row.accessibilityStatementPresent ? "Yes" : "No"} · VPAT {row.vpatPresent ? "Yes" : "No"} · Contact{" "}

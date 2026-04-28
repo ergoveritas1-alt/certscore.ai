@@ -3,7 +3,6 @@
 .gitignore
 .next
 .turbo
-.vercel
 .vscode
 .codex
 .DS_Store

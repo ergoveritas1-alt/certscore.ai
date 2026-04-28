@@ -9,6 +9,7 @@
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
     "noUncheckedIndexedAccess": true,
+    "disableReferencedProjectLoad": true,
     "moduleDetection": "force",
     "allowSyntheticDefaultImports": true,
     "baseUrl": ".",

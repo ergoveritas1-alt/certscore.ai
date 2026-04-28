@@ -347,6 +347,18 @@ export function buildRegulatoryLenses(
       wcagFormLabelErrorCount?: number | null;
       wcagKeyboardNavigationIssueCount?: number | null;
       wcagMissingAltCount?: number | null;
+      wcagViolations?: Array<{
+        description: string;
+        help: string;
+        helpUrl: string;
+        impact: string | null;
+        nodeCount: number;
+        pageUrl: string;
+        representativeSelectors: string[];
+        ruleCode: string;
+        ruleGroup: string;
+        severity: string;
+      }>;
     } | null;
     agencyMappings?: AgencyMapping[];
     benchmarkIndustry?: string | null;
@@ -594,7 +606,7 @@ export function buildRegulatoryLenses(
   const hasOnlyAccessibilityStatementMissingSignal =
     accessibilityStatementPresent === false &&
     accessibilityClaimMismatchDetected !== true &&
-    !((typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 20)) &&
+    !((typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 1)) &&
     !((typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0)) &&
     !((typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0)) &&
     !((typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5)) &&
@@ -604,7 +616,7 @@ export function buildRegulatoryLenses(
     !hasStrongAdaDriver;
   const hasSignificantAccessibilitySignals =
     accessibilityClaimMismatchDetected === true ||
-    (typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 20) ||
+    (typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 1) ||
     (typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0) ||
     (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0) ||
     (typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5) ||
@@ -644,10 +656,12 @@ export function buildRegulatoryLenses(
         : true
     );
 
+  const wcagViolations = accessibilitySignals?.wcagViolations ?? [];
   const adaFindings = [
     typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal > 0
       ? buildObservedCountLensFinding({
           count: wcagErrorCountTotal,
+          evidence: wcagViolations.length > 0 ? { violations: wcagViolations } : null,
           id: "wcag_error_count_total",
           label: `Automated WCAG issues detected: ${wcagErrorCountTotal}`,
           metric: "wcagErrorCountTotal",
@@ -742,7 +756,7 @@ export function buildRegulatoryLenses(
   const adaSummary =
     accessibilityClaimMismatchDetected === true
       ? "Accessibility claims appear inconsistent with observed barriers."
-      : (typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 20) ||
+      : (typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 1) ||
           (typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0) ||
           (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0)
         ? "Accessibility barriers and disclosure gaps are the main issue."
@@ -1474,6 +1488,18 @@ export function ExecutiveSummaryCard(input: {
     wcagFormLabelErrorCount?: number | null;
     wcagKeyboardNavigationIssueCount?: number | null;
     wcagMissingAltCount?: number | null;
+    wcagViolations?: Array<{
+      description: string;
+      help: string;
+      helpUrl: string;
+      impact: string | null;
+      nodeCount: number;
+      pageUrl: string;
+      representativeSelectors: string[];
+      ruleCode: string;
+      ruleGroup: string;
+      severity: string;
+    }>;
   } | null;
   agencyMappings?: AgencyMapping[];
   beforeConsentCookieCount: number;
