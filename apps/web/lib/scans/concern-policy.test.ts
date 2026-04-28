@@ -741,7 +741,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
-      name: "editorial earnings claim without offer context stays audit-only",
+      name: "editorial earnings claim without offer context stays audit-only without domain classification",
       concern: makeConcern({
         originKey: "financial_review.earnings_claim_without_adjacent_disclosure",
         originType: "validation_rule",
@@ -793,6 +793,58 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "internal_only",
         externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_behavior_side_evidence"]
+      }
+    },
+    {
+      name: "validation financial finding on non-finance domain is suppressed via macro enrichment",
+      concern: makeConcern({
+        originKey: "financial_review.earnings_claim_without_adjacent_disclosure",
+        originType: "validation_rule",
+        suggestedUnifiedFindingId: "earnings_claim_without_adjacent_disclosure",
+        title: "Earnings claim without adjacent disclosure"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: {
+        claimText: "The world's largest running event returns to London this summer.",
+        domainIndustryPrimary: "beverage",
+        matchedSnippet: "The world's largest running event returns to London this summer.",
+        pageClassification: "financial_offer",
+        pageType: "homepage",
+        pageUrl: "https://www.redbull.com/",
+        signalKey: "financial.performance_claim_text_present",
+        sourceUrls: ["https://www.redbull.com/"]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: ["missing_behavior_side_evidence"]
+      }
+    },
+    {
+      name: "validation leveraged product finding on media domain is suppressed via macro enrichment",
+      concern: makeConcern({
+        originKey: "financial_review.leveraged_or_high_risk_product_promotion",
+        originType: "validation_rule",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "Leveraged or high-risk product promotion"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: {
+        claimText: "Yield: 4 servings. Swap olive oil for butter.",
+        domainIndustryPrimary: "media",
+        matchedSnippet: "Yield: 4 servings. Swap olive oil for butter.",
+        pageClassification: "financial_offer",
+        pageType: "homepage",
+        pageUrl: "https://www.foodnetwork.com/",
+        signalKey: "financial.perpetuals_or_derivatives_language_present",
+        sourceUrls: ["https://www.foodnetwork.com/"]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
         negativeEvidenceFlags: ["missing_behavior_side_evidence"]
       }
     },

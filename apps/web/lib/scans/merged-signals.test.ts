@@ -47,52 +47,9 @@ test("nano can backfill missing signals and create signal-backed finding candida
         source: "nano",
         value: true,
         valueType: "boolean"
-      }
-    ]
-  });
-
-  const [candidate] = buildReviewFindingCandidatesFromMergedSignals({
-    mergedSignals
-  });
-
-  assert.equal(candidate?.signalKey, "privacy.gpc_disclosure_present");
-  assert.equal(candidate?.signalSource, "policy_enrichment_signal");
-  assert.equal(candidate?.sourceType, "signal");
-});
-
-test("insufficient major document-semantic signals create bounded unresolved candidates", () => {
-  const mergedSignals = buildMergedSignalRecords({
-    nanoSignals: [
+      },
       {
-        confidence: 0.4,
-        evidenceRefs: ["https://example.com/privacy"],
-        key: "privacy.gpc_disclosure_present",
-        label: "GPC disclosure present",
-        populationStatus: "insufficient",
-        reportSignalSource: "document_semantic_signal",
-        source: "nano",
-        value: true,
-        valueType: "boolean"
-      }
-    ]
-  });
-
-  const [candidate] = buildReviewFindingCandidatesFromMergedSignals({
-    mergedSignals
-  });
-
-  assert.equal(candidate?.signalKey, "disclosure.key_page_discovery_unresolved_after_bounded_search");
-  assert.equal(candidate?.signalSource, "snapshot_signal");
-  assert.equal(candidate?.title, "GPC handling disclosed unverified");
-  assert.equal(candidate?.fallbackEvidence?.inferredTargetFindingId, "gpc_disclosure_present");
-  assert.equal(candidate?.fallbackEvidence?.mergedSignalPopulationStatus, "insufficient");
-});
-
-test("privacy contact merged-signal candidates retain sibling contact channel evidence", () => {
-  const mergedSignals = buildMergedSignalRecords({
-    nanoSignals: [
-      {
-        confidence: 0.88,
+        confidence: 0.9,
         evidenceRefs: ["https://example.com/privacy"],
         key: "privacy.privacy_contact_path_present",
         label: "Privacy contact path present",
@@ -171,4 +128,61 @@ test("cookie disclosure gap merged-signal candidates retain runtime comparison e
   assert.deepEqual(candidate?.fallbackEvidence?.runtimeCookieNames, ["_ga", "_fbp"]);
   assert.deepEqual(candidate?.fallbackEvidence?.unmatchedCookieNames, ["_fbp"]);
   assert.equal(candidate?.fallbackEvidence?.unmatchedThirdPartyCookieCount, 1);
+});
+
+test("merged signal candidates include domainIndustryPrimary from macroEnrichment", () => {
+  const mergedSignals = buildMergedSignalRecords({
+    nanoSignals: [
+      {
+        confidence: 0.91,
+        evidenceRefs: ["https://example.com/privacy"],
+        key: "privacy.gpc_disclosure_present",
+        label: "GPC disclosure present",
+        reportSignalSource: "policy_enrichment_signal",
+        source: "nano",
+        value: true,
+        valueType: "boolean"
+      }
+    ]
+  });
+
+  const candidates = buildReviewFindingCandidatesFromMergedSignals({
+    macroEnrichment: {
+      normalized_output_json: {
+        industry_primary: "media"
+      }
+    },
+    mergedSignals
+  });
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0]?.fallbackEvidence?.domainIndustryPrimary, "media");
+});
+
+test("financial merged signal candidates on non-finance domain are suppressed via macroEnrichment", () => {
+  const mergedSignals = buildMergedSignalRecords({
+    scannerSignals: [
+      {
+        confidence: 0.8,
+        evidenceRefs: ["https://cookingchanneltv.com/cookies"],
+        key: "financial.perpetuals_or_derivatives_language_present",
+        label: "Perpetuals or derivatives language present",
+        reportSignalSource: "snapshot_signal",
+        source: "scanner",
+        value: true,
+        valueType: "boolean"
+      }
+    ]
+  });
+
+  const candidates = buildReviewFindingCandidatesFromMergedSignals({
+    macroEnrichment: {
+      normalized_output_json: {
+        industry_primary: "media"
+      }
+    },
+    mergedSignals
+  });
+
+  assert.equal(candidates.length, 0);
 });

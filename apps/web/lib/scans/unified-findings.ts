@@ -72,6 +72,7 @@ import {
 } from "./report-surfacing-policy";
 import { buildCookiePolicyFallbackEvidence, type FetchQuality } from "./signal-fallback-evidence";
 import { buildReviewFindingCandidatesFromMergedSignals } from "./merged-signals";
+import { buildScanDomainContext, type ScanDomainContext } from "./scan-domain-context";
 import {
   formatRepresentativeAccessibilityCoverage,
   getRepresentativeAccessibilityExampleCoverage,
@@ -1274,6 +1275,12 @@ function buildUnifiedFindingDetails(input: {
       ...(Array.isArray(input.linkedValidationFinding?.evidence?.preconsent_tracker_vendors)
         ? (input.linkedValidationFinding?.evidence?.preconsent_tracker_vendors as string[])
         : []),
+      ...(Array.isArray(input.linkedValidationFinding?.evidence?.preconsent_violation_vendors)
+        ? (input.linkedValidationFinding?.evidence?.preconsent_violation_vendors as string[])
+        : []),
+      ...(Array.isArray(input.linkedValidationFinding?.evidence?.runtimeVendors)
+        ? (input.linkedValidationFinding?.evidence?.runtimeVendors as string[])
+        : []),
       ...(Array.isArray(input.fallbackEvidence?.preconsent_tracker_vendors)
         ? (input.fallbackEvidence?.preconsent_tracker_vendors as string[])
         : []),
@@ -1295,6 +1302,9 @@ function buildUnifiedFindingDetails(input: {
       requestUrls: uniqueStrings([
         ...(Array.isArray(input.linkedValidationFinding?.evidence?.preconsent_tracker_evidence_urls)
           ? (input.linkedValidationFinding?.evidence?.preconsent_tracker_evidence_urls as string[])
+          : []),
+        ...(Array.isArray(input.linkedValidationFinding?.evidence?.runtimeRequestUrls)
+          ? (input.linkedValidationFinding?.evidence?.runtimeRequestUrls as string[])
           : []),
         ...(Array.isArray(input.fallbackEvidence?.preconsent_tracker_evidence_urls)
           ? (input.fallbackEvidence?.preconsent_tracker_evidence_urls as string[])
@@ -1486,7 +1496,11 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     "unmatchedCookieCount",
     "unmatched_cookie_count",
     "unmatchedThirdPartyCookieCount",
-    "unmatched_third_party_cookie_count"
+    "unmatched_third_party_cookie_count",
+    "firstRequestMs",
+    "firstThirdPartyRequestMs",
+    "firstCookieSeenMs",
+    "cmpVisibleMs"
   ]) {
     const value = normalizedFallbackEvidence[key];
     if (typeof value === "number" && Number.isFinite(value)) {
@@ -4997,6 +5011,76 @@ function mergeConcernContext(
   };
 }
 
+function mergeUnifiedFindingDetails(
+  existing: UnifiedFindingDetails | undefined,
+  next: UnifiedFindingDetails | undefined
+): UnifiedFindingDetails | undefined {
+  if (!next) {
+    return existing;
+  }
+  if (!existing || existing.family !== next.family) {
+    return next;
+  }
+
+  switch (existing.family) {
+    case "consent_tracking": {
+      const e = existing as Extract<UnifiedFindingDetails, { family: "consent_tracking" }>;
+      const n = next as Extract<UnifiedFindingDetails, { family: "consent_tracking" }>;
+      return {
+        ...n,
+        vendors: uniqueStrings([...(e.vendors ?? []), ...(n.vendors ?? [])]),
+        requestUrls: uniqueStrings([...(e.requestUrls ?? []), ...(n.requestUrls ?? [])])
+      };
+    }
+    case "contradiction": {
+      const e = existing as Extract<UnifiedFindingDetails, { family: "contradiction" }>;
+      const n = next as Extract<UnifiedFindingDetails, { family: "contradiction" }>;
+      return {
+        ...n,
+        runtimeEvidenceArtifacts: uniqueStrings([
+          ...(e.runtimeEvidenceArtifacts ?? []),
+          ...(n.runtimeEvidenceArtifacts ?? [])
+        ]),
+        vendors: uniqueStrings([...(e.vendors ?? []), ...(n.vendors ?? [])])
+      };
+    }
+    case "rights_gap": {
+      const e = existing as Extract<UnifiedFindingDetails, { family: "rights_gap" }>;
+      const n = next as Extract<UnifiedFindingDetails, { family: "rights_gap" }>;
+      return {
+        ...n,
+        unmatchedItems: uniqueStrings([...(e.unmatchedItems ?? []), ...(n.unmatchedItems ?? [])])
+      };
+    }
+    case "sensitive_data": {
+      const e = existing as Extract<UnifiedFindingDetails, { family: "sensitive_data" }>;
+      const n = next as Extract<UnifiedFindingDetails, { family: "sensitive_data" }>;
+      return {
+        ...n,
+        dataTypes: uniqueStrings([...(e.dataTypes ?? []), ...(n.dataTypes ?? [])])
+      };
+    }
+    case "accessibility": {
+      const e = existing as Extract<UnifiedFindingDetails, { family: "accessibility" }>;
+      const n = next as Extract<UnifiedFindingDetails, { family: "accessibility" }>;
+      return {
+        ...n,
+        ruleExamples: uniqueStrings([...(e.ruleExamples ?? []), ...(n.ruleExamples ?? [])])
+      };
+    }
+    case "coverage_gap": {
+      const e = existing as Extract<UnifiedFindingDetails, { family: "coverage_gap" }>;
+      const n = next as Extract<UnifiedFindingDetails, { family: "coverage_gap" }>;
+      return {
+        ...n,
+        attemptedUrls: uniqueStrings([...(e.attemptedUrls ?? []), ...(n.attemptedUrls ?? [])])
+      };
+    }
+    default:
+      return next;
+  }
+}
+
 function finalizeUnifiedFindingPacket(input: {
   candidate: ConcernBackedUnifiedFindingCandidate;
   fallbackEvidence: ReturnType<typeof extractEvidenceFromFallback>;
@@ -5027,13 +5111,16 @@ function finalizeUnifiedFindingPacket(input: {
 
   input.packet.primaryPageUrl = attributedUrls[0] ?? null;
   input.packet.affectedPageCount = attributedUrls.length;
-  input.packet.details = buildUnifiedFindingDetails({
-    fallbackEvidence: input.candidate.fallbackEvidence ?? null,
-    findingId: input.findingId,
-    linkedValidationFinding: input.linkedValidationFinding,
-    observedValue: input.candidate.observedValue,
-    summary: input.candidate.description
-  });
+  input.packet.details = mergeUnifiedFindingDetails(
+    input.packet.details,
+    buildUnifiedFindingDetails({
+      fallbackEvidence: input.candidate.fallbackEvidence ?? null,
+      findingId: input.findingId,
+      linkedValidationFinding: input.linkedValidationFinding,
+      observedValue: input.candidate.observedValue,
+      summary: input.candidate.description
+    })
+  );
   input.packet.confidenceInputs = deriveConfidenceInputs({
     fallbackEvidenceRows: input.fallbackEvidenceRows,
     packet: input.packet,
@@ -5251,6 +5338,7 @@ function resolveUnifiedFindingForCandidate(candidate: UnifiedFindingCandidate | 
 }
 
 export function buildUnifiedFindingPackets(input: {
+  domainContext?: ScanDomainContext;
   reviewFindingCandidates: UnifiedFindingCandidate[];
   scanEvents?: UnifiedFindingScanEvent[];
   validationFindings: ScanValidationFinding[];
@@ -5267,6 +5355,7 @@ export function buildUnifiedFindingPackets(input: {
   });
   const synthesizedCandidates = synthesizeGenericReviewFindingCandidates([...reviewFindingCandidates, ...familyPacketCandidates]);
   const normalizedConcerns = buildNormalizedConcerns({
+    domainContext: input.domainContext,
     reviewFindingCandidates: [...reviewFindingCandidates, ...familyPacketCandidates, ...synthesizedCandidates],
     validationFindings: input.validationFindings
   });
@@ -5340,6 +5429,7 @@ export function buildUnifiedFindingPackets(input: {
 
 export function buildUnifiedFindingDisplayPackets(input: {
   coverageSummary?: UnifiedFindingCoverageSummary;
+  macroEnrichment?: Record<string, unknown> | null;
   mergedSignals?: MergedSignalRecord[];
   policyEnrichment?: Array<Record<string, unknown>>;
   reviewFindingCandidates: UnifiedFindingCandidate[];
@@ -5349,6 +5439,7 @@ export function buildUnifiedFindingDisplayPackets(input: {
 }) {
   const mergedSignalCandidates = input.mergedSignals
     ? buildReviewFindingCandidatesFromMergedSignals({
+        macroEnrichment: input.macroEnrichment,
         mergedSignals: input.mergedSignals
       })
     : [];
@@ -5356,6 +5447,7 @@ export function buildUnifiedFindingDisplayPackets(input: {
   const policyEnrichmentMissingContactCandidates = buildPolicyEnrichmentMissingContactCandidates(input.policyEnrichment);
   const policyEnrichmentClarityCandidates = buildPolicyEnrichmentClarityCandidates(input.policyEnrichment);
   const packets = buildUnifiedFindingPackets({
+    domainContext: buildScanDomainContext(input.macroEnrichment),
     reviewFindingCandidates: [
       ...input.reviewFindingCandidates,
       ...mergedSignalCandidates,

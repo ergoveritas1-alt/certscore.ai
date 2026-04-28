@@ -67,8 +67,7 @@ test("normalizes snapshot signal candidates into eligible concerns", () => {
   assert.equal(concerns[0]?.allowedNarrativeTier, "weak");
   assert.deepEqual(concerns[0]?.negativeEvidenceFlags, [
     "no_consent_surface_observed",
-    "missing_concrete_preconsent_artifact",
-    "missing_preconsent_sequence_evidence"
+    "missing_concrete_preconsent_artifact"
   ]);
   assert.ok(concerns[0]?.evidenceStrengthFlags.includes("fallback_only"));
 });

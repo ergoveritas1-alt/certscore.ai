@@ -264,6 +264,7 @@ export function buildScanReportUnifiedFindingState(
       policyEnrichmentCount: scanRecord.policyEnrichment.length,
       verifiedPublicSurfacesCount: getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)
     },
+    macroEnrichment: scanRecord.macroEnrichment,
     mergedSignals: scanRecord.mergedSignals,
     policyEnrichment: scanRecord.policyEnrichment,
     reviewFindingCandidates: allReviewFindingCandidates,

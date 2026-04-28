@@ -8,6 +8,7 @@ import type {
 } from "@website-signal-risk-scanner/shared";
 import { getReportUnifiedFindingForSignal, type ReportSignalSource } from "@website-signal-risk-scanner/shared";
 import { shouldSurfacePrimarySignalFinding } from "./finding-evidence-gates";
+import { buildScanDomainContext } from "./scan-domain-context";
 import type { UnifiedFindingCandidate } from "./unified-findings";
 
 const BOUNDED_DISCOVERY_SIGNAL_KEY = "disclosure.key_page_discovery_unresolved_after_bounded_search";
@@ -271,6 +272,7 @@ export function buildMergedSignalRecords(input: {
 
 export function buildReviewFindingCandidatesFromMergedSignals(input: {
   linkedValidationEvidenceBySignalKey?: Map<string, Record<string, unknown> | null | undefined>;
+  macroEnrichment?: Record<string, unknown> | null;
   mergedSignals: MergedSignalRecord[];
 }) {
   const candidates: UnifiedFindingCandidate[] = [];
@@ -298,7 +300,8 @@ export function buildReviewFindingCandidatesFromMergedSignals(input: {
             signalKey: BOUNDED_DISCOVERY_SIGNAL_KEY,
             signalLabel: BOUNDED_DISCOVERY_SIGNAL_LABEL,
             signalValue: true,
-            sourceUrls: signal.evidenceRefs
+            sourceUrls: signal.evidenceRefs,
+            ...buildScanDomainContext(input.macroEnrichment)
           } satisfies Record<string, unknown>,
           observedValue: mappedFinding.label,
           severity: "medium",
@@ -328,7 +331,8 @@ export function buildReviewFindingCandidatesFromMergedSignals(input: {
       signalKey: signal.key,
       signalLabel: signal.label,
       signalValue: signal.value,
-      ...siblingEvidence
+      ...siblingEvidence,
+      ...buildScanDomainContext(input.macroEnrichment)
     } satisfies Record<string, unknown>;
 
     const linkedValidationEvidence = input.linkedValidationEvidenceBySignalKey?.get(signal.key) ?? null;

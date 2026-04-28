@@ -1399,32 +1399,12 @@ function getRepresentativeAccessibilityExamplesForSignal(input: {
   }));
 }
 
-function getDomainMacroFallbackFields(
+import { buildScanDomainContext } from "./scan-domain-context";
+
+export function getDomainMacroFallbackFields(
   macroEnrichment: Record<string, unknown> | null | undefined
 ): { domainIndustryPrimary: string | null; investorOrSecuritiesPromotion: boolean | null } {
-  if (!macroEnrichment) {
-    return { domainIndustryPrimary: null, investorOrSecuritiesPromotion: null };
-  }
-
-  const normalizedOutput =
-    macroEnrichment.normalized_output_json && typeof macroEnrichment.normalized_output_json === "object"
-      ? (macroEnrichment.normalized_output_json as Record<string, unknown>)
-      : null;
-
-  const monetizationSignals =
-    normalizedOutput?.monetization_signals && typeof normalizedOutput.monetization_signals === "object"
-      ? (normalizedOutput.monetization_signals as Record<string, unknown>)
-      : null;
-
-  const domainIndustryPrimary =
-    typeof normalizedOutput?.industry_primary === "string" ? normalizedOutput.industry_primary : null;
-
-  const investorOrSecuritiesPromotion =
-    typeof monetizationSignals?.investor_or_securities_promotion === "boolean"
-      ? monetizationSignals.investor_or_securities_promotion
-      : null;
-
-  return { domainIndustryPrimary, investorOrSecuritiesPromotion };
+  return buildScanDomainContext(macroEnrichment);
 }
 
 function getSignalHitMatchedTexts(signalKey: string, signalHitRows: Array<Record<string, unknown>> | undefined): string[] {

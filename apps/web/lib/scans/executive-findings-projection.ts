@@ -366,6 +366,18 @@ function buildExecutiveEvidenceDetails(
   if (sourceUrls.length > 0) {
     details.sourceUrls = sourceUrls;
   }
+  if (findingId === "pre_consent_tracking_detected") {
+    const timing: Record<string, number | null> = {};
+    for (const key of ["firstRequestMs", "firstThirdPartyRequestMs", "firstCookieSeenMs", "cmpVisibleMs"]) {
+      const value = packet.evidence?.counts?.[key];
+      if (value !== undefined && (typeof value === "number" || value === null)) {
+        timing[key] = value;
+      }
+    }
+    if (Object.keys(timing).length > 0) {
+      details.timing = timing;
+    }
+  }
 
   return Object.keys(details).length > 0 ? details : undefined;
 }

@@ -1191,6 +1191,7 @@ export function promoteSectionFinancialReviewFindings(findings: ValidationFindin
 
 type ValidationArtifactBundle = {
   documentSources?: Array<Record<string, unknown>>;
+  macroEnrichment?: Record<string, unknown> | null;
   pageEvidence: Array<Record<string, unknown>>;
   pages: Array<Record<string, unknown>>;
   policyEnrichments?: Array<Record<string, unknown>>;
@@ -2162,6 +2163,68 @@ function suppressMainstreamInvestmentFalsePositiveFinding(input: {
     advisoryDisclosureCuePresent ||
     !explicitSuspiciousCuePresent
   );
+}
+
+function shouldSuppressFinancialFindingForDomainContext(
+  finding: ValidationFindingRow,
+  domainContext: {
+    domainIndustryPrimary: string | null;
+    investorOrSecuritiesPromotion: boolean | null;
+  }
+) {
+  // Never suppress finance/crypto domains
+  if (
+    domainContext.domainIndustryPrimary === "finance" ||
+    domainContext.domainIndustryPrimary === "crypto"
+  ) {
+    return false;
+  }
+
+  // Never suppress if investor promotion flag is set
+  if (domainContext.investorOrSecuritiesPromotion === true) {
+    return false;
+  }
+
+  // No domain classification → defer to downstream logic
+  if (!domainContext.domainIndustryPrimary) {
+    return false;
+  }
+
+  // For explicitly non-finance domains, require strong financial offer evidence
+  const evidence = getRecord(finding.evidence) ?? {};
+  const pageClassification = getString(evidence.pageClassification);
+  const financialEvidenceScore =
+    typeof evidence.financialEvidenceScore === "number" ? evidence.financialEvidenceScore : null;
+
+  // Strong page classification → keep
+  if (
+    pageClassification === "financial_offer" ||
+    pageClassification === "quasi_financial_offer" ||
+    pageClassification === "pricing_or_fees"
+  ) {
+    return false;
+  }
+
+  // High evidence score → keep
+  if (financialEvidenceScore !== null && financialEvidenceScore >= 0.7) {
+    return false;
+  }
+
+  // Explicit high-confidence signals → keep
+  const supportingSignals = getEvidenceStringArray(evidence, "supportingSignals");
+  const signalKey = getString(evidence.signalKey);
+  const allSignals = [...supportingSignals, signalKey].filter((s): s is string => Boolean(s));
+  const strongSignalKeys = [
+    "financial.guaranteed_return_language_present",
+    "financial.low_risk_high_return_language_present",
+    "financial.apr_or_interest_rate_disclosure_text_present"
+  ];
+  if (allSignals.some((s) => strongSignalKeys.includes(s))) {
+    return false;
+  }
+
+  // Suppress on non-finance domain without strong financial evidence
+  return true;
 }
 
 function normalizeFinancialCommercialCandidateSignals(signalKeys: string[], blockText: string | null) {
@@ -4539,7 +4602,39 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     : withoutLowSignalNoise;
   const sortBucket = buildFindingSortBucket(filtered.map((finding) => finding.ruleKey));
 
-  return filtered
+  const macroNormalizedOutput =
+    input.macroEnrichment?.normalized_output_json && typeof input.macroEnrichment.normalized_output_json === "object"
+      ? (input.macroEnrichment.normalized_output_json as Record<string, unknown>)
+      : null;
+  const monetizationSignals =
+    macroNormalizedOutput?.monetization_signals && typeof macroNormalizedOutput.monetization_signals === "object"
+      ? (macroNormalizedOutput.monetization_signals as Record<string, unknown>)
+      : null;
+  const domainIndustryPrimary =
+    typeof macroNormalizedOutput?.industry_primary === "string" ? macroNormalizedOutput.industry_primary : null;
+  const investorOrSecuritiesPromotion =
+    typeof monetizationSignals?.investor_or_securities_promotion === "boolean"
+      ? monetizationSignals.investor_or_securities_promotion
+      : null;
+
+  const withDomainContext = domainIndustryPrimary
+    ? filtered.map((finding) =>
+        finding.ruleKey.startsWith("financial_review.")
+          ? { ...finding, evidence: { ...finding.evidence, domainIndustryPrimary } }
+          : finding
+      )
+    : filtered;
+
+  const withDomainSuppression = withDomainContext.filter(
+    (finding) =>
+      !finding.ruleKey.startsWith("financial_review.") ||
+      !shouldSuppressFinancialFindingForDomainContext(finding, {
+        domainIndustryPrimary,
+        investorOrSecuritiesPromotion
+      })
+  );
+
+  return withDomainSuppression
     .sort(
       (left, right) =>
         sortBucket(left.ruleKey) - sortBucket(right.ruleKey) ||

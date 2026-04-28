@@ -208,7 +208,6 @@ function getEvidenceTextCandidates(rawEvidence: Record<string, unknown> | null |
     "snippets",
     "sourceEvidence",
     "sourceTitle",
-    "supportingSignals",
     "summary",
     "title"
   ]);
@@ -1242,40 +1241,15 @@ function hasNonFinancialEditorialOrRetailContext(rawEvidence: Record<string, unk
   return NON_FINANCIAL_EDITORIAL_OR_RETAIL_PATTERN.test(reviewerVisibleText);
 }
 
-function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | undefined) {
-  if (!rawEvidence) {
-    return false;
-  }
-
-  const domainIndustryPrimary = getFirstString(rawEvidence, [
-    "domainIndustryPrimary",
-    "domain_industry_primary"
-  ]);
-  if (domainIndustryPrimary === "finance" || domainIndustryPrimary === "crypto") {
-    return true;
-  }
-
-  const investorOrSecuritiesPromotion = getBooleanEvidence(rawEvidence, [
-    "investorOrSecuritiesPromotion",
-    "investor_or_securities_promotion"
-  ]);
-  if (investorOrSecuritiesPromotion === true) {
-    return true;
-  }
-
-  if (!hasSubstantivePageOrSnippetEvidence(rawEvidence)) {
-    return false;
-  }
-
+function hasExplicitFinancialOfferInEvidence(rawEvidence: Record<string, unknown> | null | undefined): boolean {
   const reviewerVisibleText = [
     ...getEvidenceTextCandidates(rawEvidence),
     ...getEvidenceUrlCandidates(rawEvidence)
   ].join(" ");
-  const hasExplicitFinancialOffer = EXPLICIT_FINANCIAL_OFFER_PATTERN.test(reviewerVisibleText);
-  if (hasNonFinancialEditorialOrRetailContext(rawEvidence) && !hasExplicitFinancialOffer) {
-    return false;
-  }
+  return EXPLICIT_FINANCIAL_OFFER_PATTERN.test(reviewerVisibleText);
+}
 
+function hasLegacyFinancialPageHeuristics(rawEvidence: Record<string, unknown> | null | undefined): boolean {
   const pageClassification = getFirstString(rawEvidence, [
     "pageClassification",
     "page_classification"
@@ -1292,6 +1266,57 @@ function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | 
     pageType &&
     /financial|offer|pricing|checkout|trading|brokerage|investment|loan|credit|banking|crypto|account/i.test(pageType)
   ) {
+    return true;
+  }
+
+  return false;
+}
+
+function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const domainIndustryPrimary = getFirstString(rawEvidence, [
+    "domainIndustryPrimary",
+    "domain_industry_primary"
+  ]);
+
+  // Explicit finance/crypto domain → always treat as financial context
+  if (domainIndustryPrimary === "finance" || domainIndustryPrimary === "crypto") {
+    return true;
+  }
+
+  // Explicit investor/securities promotion flag → always treat as financial context
+  const investorOrSecuritiesPromotion = getBooleanEvidence(rawEvidence, [
+    "investorOrSecuritiesPromotion",
+    "investor_or_securities_promotion"
+  ]);
+  if (investorOrSecuritiesPromotion === true) {
+    return true;
+  }
+
+  // No substantive page or snippet evidence → no financial context
+  if (!hasSubstantivePageOrSnippetEvidence(rawEvidence)) {
+    return false;
+  }
+
+  const hasExplicitFinancialOffer = hasExplicitFinancialOfferInEvidence(rawEvidence);
+
+  // Non-financial editorial or retail context without explicit offer → no financial context
+  if (hasNonFinancialEditorialOrRetailContext(rawEvidence) && !hasExplicitFinancialOffer) {
+    return false;
+  }
+
+  // When the domain is explicitly classified as non-finance, do not trust
+  // page-level heuristics (classification / type) alone. Require explicit
+  // financial offer language in the evidence text.
+  if (domainIndustryPrimary !== null && domainIndustryPrimary !== "") {
+    return hasExplicitFinancialOffer;
+  }
+
+  // No domain classification: fall back to legacy page-level heuristics
+  if (hasLegacyFinancialPageHeuristics(rawEvidence)) {
     return true;
   }
 
@@ -1990,6 +2015,20 @@ export function deriveConcernPolicy(input: {
     isNegativeFinancialPromotionConcern(input.concern) &&
     !hasFinancialOfferContext(input.rawEvidence)
   ) {
+    const domainIndustryPrimary = getFirstString(input.rawEvidence, [
+      "domainIndustryPrimary",
+      "domain_industry_primary"
+    ]);
+    // When the domain is explicitly classified as non-finance, fully suppress
+    // the financial concern. Otherwise keep it audit-only for internal review.
+    if (domainIndustryPrimary && domainIndustryPrimary !== "finance" && domainIndustryPrimary !== "crypto") {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_behavior_side_evidence"],
+        promotionEligibility: "blocked"
+      };
+    }
     return {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "audit_only",

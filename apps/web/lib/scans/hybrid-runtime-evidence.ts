@@ -937,13 +937,18 @@ export function getHybridSignalFallbackEvidence(input: {
       );
       const preconsentCookieNames = uniqueStrings(preconsentCookieEvidence.flatMap((row) => row.cookieName));
       const beforeConsentCookieRows = preconsentCookieEvidence.filter((row) => row.timingEvidence === "before_consent_cookie_write");
+      const timelineMarkers = getRecord(hybrid.timelineMarkers);
       return {
-        consentBannerDetectedMs: getNumber(getRecord(hybrid.timelineMarkers)?.consentBannerDetectedMs),
+        consentBannerDetectedMs: getNumber(timelineMarkers?.consentBannerDetectedMs),
         consentChoiceAtMs: getNumber(
-          getRecord(hybrid.timelineMarkers)?.consentChoiceAtMs ??
-            getRecord(hybrid.timelineMarkers)?.consentAcceptedAtMs ??
-            getRecord(hybrid.timelineMarkers)?.consentRejectedAtMs
+          timelineMarkers?.consentChoiceAtMs ??
+            timelineMarkers?.consentAcceptedAtMs ??
+            timelineMarkers?.consentRejectedAtMs
         ),
+        firstRequestMs: getNumber(timelineMarkers?.firstRequestMs),
+        firstThirdPartyRequestMs: getNumber(timelineMarkers?.firstThirdPartyRequestMs),
+        firstCookieSeenMs: getNumber(timelineMarkers?.firstCookieSeenMs),
+        cmpVisibleMs: getNumber(getRecord(hybrid.consentSummary)?.firstVisibleMs),
         preconsent_cookie_before_consent_count: beforeConsentCookieRows.length,
         preconsent_cookie_categories: uniqueStrings(preconsentCookieEvidence.flatMap((row) => row.category)),
         preconsent_cookie_evidence: preconsentCookieEvidence,

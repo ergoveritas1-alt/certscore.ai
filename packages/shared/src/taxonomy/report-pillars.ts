@@ -2723,6 +2723,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "preconsent_tracking_incidents",
     overlays: ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"],
     signalMappings: [{ source: "snapshot_signal", key: "privacy.preconsent_tracking_detected" }],
+    validationRuleKeys: ["runtime_privacy.preconsent_tracking_observed"],
     aliases: [
       "Trackers fired before consent interaction",
       "Pre-consent tracking incidents detected",

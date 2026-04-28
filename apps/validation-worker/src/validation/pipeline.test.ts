@@ -20,6 +20,7 @@ import {
 
 function buildArtifacts(overrides?: {
   documentSources?: Array<Record<string, unknown>>;
+  macroEnrichment?: Record<string, unknown>;
   pageEvidence?: Array<Record<string, unknown>>;
   pages?: Array<Record<string, unknown>>;
   policyEnrichments?: Array<Record<string, unknown>>;
@@ -34,6 +35,7 @@ function buildArtifacts(overrides?: {
 }) {
   return {
     documentSources: overrides?.documentSources ?? [],
+    macroEnrichment: overrides?.macroEnrichment ?? null,
     pageEvidence: overrides?.pageEvidence ?? [],
     pages: overrides?.pages ?? [{ page_type: "privacy_policy", page_url: "https://www.example.com/privacy", fetch_status: "ok" }],
     policyEnrichments: overrides?.policyEnrichments ?? [

@@ -281,7 +281,6 @@ function getEvidenceSnippets(record: Record<string, unknown> | null | undefined)
     "snippet",
     "snippets",
     "sourceEvidence",
-    "supportingSignals",
     "summary"
   ]);
 }

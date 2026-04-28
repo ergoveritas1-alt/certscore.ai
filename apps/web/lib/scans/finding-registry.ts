@@ -32,6 +32,7 @@ export type CertScoreFindingEvidenceDetails = {
   evidenceFlags?: string[];
   sourceSignals?: string[];
   sourceUrls?: string[];
+  timing?: Record<string, number | null>;
 };
 
 export type CertScoreFinding = CertScoreFindingDefinition & {
