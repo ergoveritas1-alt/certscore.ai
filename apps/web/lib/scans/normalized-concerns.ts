@@ -25,7 +25,9 @@ function truncatePolicySnippet(value: string): string {
   if (value.length <= MAX_POLICY_SNIPPET_LENGTH) {
     return value;
   }
-  return `${value.slice(0, MAX_POLICY_SNIPPET_LENGTH)}...`;
+  const slicePoint = value.lastIndexOf(" ", MAX_POLICY_SNIPPET_LENGTH);
+  const endIndex = slicePoint > 0 ? slicePoint : MAX_POLICY_SNIPPET_LENGTH;
+  return `${value.slice(0, endIndex).trimEnd()}...`;
 }
 
 export type NormalizedConcernOriginType =

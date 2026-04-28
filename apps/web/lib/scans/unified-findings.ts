@@ -2935,7 +2935,9 @@ function truncateToDisplayLength(value: string, maxLength = 240): string {
   if (value.length <= maxLength) {
     return value;
   }
-  return `${value.slice(0, maxLength)}...`;
+  const slicePoint = value.lastIndexOf(" ", maxLength);
+  const endIndex = slicePoint > 0 ? slicePoint : maxLength;
+  return `${value.slice(0, endIndex).trimEnd()}...`;
 }
 
 function selectObservedValue(packet: UnifiedFindingPacket) {

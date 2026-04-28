@@ -6,7 +6,9 @@ function compactLongString(value: string) {
     return value;
   }
 
-  return `${value.slice(0, MAX_STRING_LENGTH)}... [truncated ${value.length - MAX_STRING_LENGTH} chars]`;
+  const slicePoint = value.lastIndexOf(" ", MAX_STRING_LENGTH);
+  const endIndex = slicePoint > 0 ? slicePoint : MAX_STRING_LENGTH;
+  return `${value.slice(0, endIndex).trimEnd()}... [truncated ${value.length - endIndex} chars]`;
 }
 
 const EVIDENCE_JSON_KEYS_TO_SUPPRESS = new Set([

@@ -12,11 +12,18 @@ import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 
 const MAX_DISPLAY_SNIPPET_LENGTH = 240;
 
-function truncateDisplaySnippet(value: string): string {
-  if (value.length <= MAX_DISPLAY_SNIPPET_LENGTH) {
+function truncateAtWordBoundary(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
     return value;
   }
-  return `${value.slice(0, MAX_DISPLAY_SNIPPET_LENGTH)}...`;
+  // Find the last space before maxLength so we don't cut a word in half
+  const slicePoint = value.lastIndexOf(" ", maxLength);
+  const endIndex = slicePoint > 0 ? slicePoint : maxLength;
+  return `${value.slice(0, endIndex).trimEnd()}...`;
+}
+
+function truncateDisplaySnippet(value: string): string {
+  return truncateAtWordBoundary(value, MAX_DISPLAY_SNIPPET_LENGTH);
 }
 
 const SECTION_ORDER: CertScoreFindingSection[] = [
@@ -269,7 +276,7 @@ function getFinancialPromotionOfferSnippets(packet: UnifiedFindingDisplayPacket)
 
 function formatQuotedSnippet(snippet: string) {
   const normalized = snippet.replace(/\s+/g, " ").trim();
-  return normalized.length > 140 ? `${normalized.slice(0, 137).trim()}...` : normalized;
+  return normalized.length > 140 ? truncateAtWordBoundary(normalized, 137) : normalized;
 }
 
 function buildExecutiveEvidenceDetails(
