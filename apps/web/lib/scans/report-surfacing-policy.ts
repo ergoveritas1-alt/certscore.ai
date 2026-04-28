@@ -227,7 +227,6 @@ const CONSENT_TRACKING_IDS = [
   "preconsent_tracking",
   "consent_mechanism_absent",
   "consent_surface_missing",
-  "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
   "gpc_signal_not_honored",
   "weak_cookie_security_attributes",
@@ -246,7 +245,6 @@ const CONSENT_TRACKING_IDS = [
 ] as const satisfies ReportUnifiedFindingId[];
 
 const CONFIRMED_CONSENT_RUNTIME_FAILURE_IDS = [
-  "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
   "gpc_signal_not_honored"
 ] as const satisfies ReportUnifiedFindingId[];
@@ -270,13 +268,7 @@ const SUPPORT_ONLY_CONSENT_TRACKING_CONTEXT_IDS = [
 
 const SENSITIVE_DATA_IDS = [
   "session_replay_on_sensitive_input_surface",
-  "high_sensitivity_data_collection",
   "sensitive_data_collection_with_third_party_tracking_present",
-  "health_information_collection",
-  "geolocation_collection",
-  "ssn_collection",
-  "government_id_collection",
-  "financial_information_collection",
   "minors_or_age_gated_collection_context",
   "children_privacy_context_without_supporting_disclosure"
 ] as const satisfies ReportUnifiedFindingId[];
@@ -327,7 +319,6 @@ const FINANCIAL_PROMOTION_IDS = [
   "hypothetical_performance_disclosure_missing",
   "unsubstantiated_testimonial_near_performance_claim",
   "testimonial_endorsement_financial_promotion_risk",
-  "regulatory_compliance_claim_present",
   "investment_purchase_by_credit_card_present",
   "investment_urgency_countdown_present",
   "pump_and_dump_language_present",
@@ -576,13 +567,6 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialLane: "main",
     orphanedSupportFallback: "suppressed"
   },
-  reject_did_not_reduce_tracking: {
-    findingId: "reject_did_not_reduce_tracking",
-    family: "consent_tracking",
-    initialState: "review",
-    initialTier: "headline",
-    initialLane: "main"
-  },
   session_replay_observed: {
     findingId: "session_replay_observed",
     family: "consent_tracking",
@@ -672,13 +656,6 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
   sale_sharing_controls_missing: {
     findingId: "sale_sharing_controls_missing",
     family: "rights_gap",
-    initialState: "review",
-    initialTier: "section",
-    initialLane: "main"
-  },
-  high_sensitivity_data_collection: {
-    findingId: "high_sensitivity_data_collection",
-    family: "sensitive_data",
     initialState: "review",
     initialTier: "section",
     initialLane: "main"
@@ -877,12 +854,6 @@ const EXPLICIT_PRECEDENCE_RULES: PrecedenceRule[] = [
     primaryFindingId: "critical_form_completion_barrier",
     reason: "A task-completion accessibility finding should lead over a generic WCAG summary.",
     supportingFindingId: "wcag_issue_summary"
-  },
-  {
-    appliedRule: "precedence.sensitive_tracking_combo_beats_generic_sensitivity",
-    primaryFindingId: "sensitive_data_collection_with_third_party_tracking_present",
-    reason: "The combination finding is more specific than generic high-sensitivity collection and should lead.",
-    supportingFindingId: "high_sensitivity_data_collection"
   },
   {
     appliedRule: "precedence.contradiction_beats_generic_absence",
@@ -2052,7 +2023,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       overrideDecision(decision, {
         state: "confirmed",
         lane: "main",
-        tier: packet.unifiedFindingId === "reject_did_not_reduce_tracking" ? "headline" : decision.surfaceTier,
+        tier: decision.surfaceTier,
         reason: "A concrete runtime consent-control failure was retained strongly enough for this finding to stand on its own.",
         ruleId: "evidence.consent_behavior.confirmed_specific_runtime_failure"
       });
@@ -2145,14 +2116,6 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
         tier: packet.unifiedFindingId === "guaranteed_or_high_return_claims_present" ? "headline" : decision.surfaceTier,
         reason: "Financial-risk evidence and retained supporting context were strong enough for this finding to stand on its own.",
         ruleId: "evidence.financial.confirmed_negative_risk_with_backing"
-      });
-    } else if (packet.unifiedFindingId === "regulatory_compliance_claim_present") {
-      overrideDecision(decision, {
-        state: "review",
-        lane: "main",
-        tier: decision.surfaceTier,
-        reason: "Regulatory or compliance claims are important to review, but their mere presence should not be treated as a confirmed lead finding without a stronger contradiction or support gap.",
-        ruleId: "evidence.financial.review_claim_context"
       });
     } else {
       overrideDecision(decision, {

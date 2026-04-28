@@ -11,7 +11,6 @@ type TargetFinding =
   | "privacy_policy_present"
   | "privacy_rights_path_present"
   | "pricing_or_fee_transparency_unclear"
-  | "regulatory_compliance_claim_present"
   | "sale_sharing_controls_missing"
   | "third_party_advertising_disclosure_present"
   | "unqualified_superlative_claim_detected"
@@ -124,7 +123,6 @@ function normalizeFinding(value: string | null): TargetFinding | "all" {
     value === "privacy_policy_present" ||
     value === "privacy_rights_path_present" ||
     value === "pricing_or_fee_transparency_unclear" ||
-    value === "regulatory_compliance_claim_present" ||
     value === "sale_sharing_controls_missing" ||
     value === "third_party_advertising_disclosure_present" ||
     value === "unqualified_superlative_claim_detected" ||
@@ -1033,37 +1031,6 @@ async function probeArbitrationClause(row: CandidateRow): Promise<LiveProbe> {
   };
 }
 
-async function probeRegulatoryComplianceClaim(row: CandidateRow): Promise<LiveProbe> {
-  const baseUrl = getBaseUrl(row);
-  const homepage = await fetchText(baseUrl);
-  const candidateUrls = getCandidateUrls({
-    baseUrl,
-    homepage,
-    paths: ["/", "/about", "/legal", "/regulation", "/compliance", "/licenses"],
-    patterns: [/about|legal|regulat|compliance|license|licence|security/i]
-  });
-
-  for (const url of candidateUrls) {
-    const page = await fetchText(url);
-    if (!page) {
-      continue;
-    }
-    if (/\b(?:regulated|registered|licensed|authori[sz]ed|member (?:finra|sipc)|sec|finra|fca|asic|cysec|nfa|cftc)\b/i.test(page.text)) {
-      return {
-        assessment: "supports_promotion",
-        evidenceUrl: page.finalUrl,
-        rationale: "Live URL review found regulatory, registration, authorization, license, or supervisory claim language."
-      };
-    }
-  }
-
-  return {
-    assessment: "needs_review",
-    evidenceUrl: null,
-    rationale: "Live URL probe did not find regulatory claim language; keep the interpretation review-only without retained claim text."
-  };
-}
-
 async function loadCandidates(finding: TargetFinding, input: { domains: string[]; limit: number }) {
   const predicateByFinding: Record<TargetFinding, string> = {
     consent_gated_tracking_claim_conflict: `(ss.preconsent_tracking_detected is true or ss.tracking_before_consent_detected is true) and ss.privacy_policy_present is true`,
@@ -1075,7 +1042,6 @@ async function loadCandidates(finding: TargetFinding, input: { domains: string[]
     privacy_policy_present: `ss.privacy_policy_present is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'disclosure.privacy_policy_present')`,
     privacy_rights_path_present: `ss.privacy_request_form_present is true or ss.data_access_request_present is true or ss.data_deletion_request_present is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.privacy_rights_path_present')`,
     pricing_or_fee_transparency_unclear: `ss.fee_related_text_present is true or ss.pricing_page_present is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'financial.pricing_or_fee_transparency_unclear')`,
-    regulatory_compliance_claim_present: `exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'entity.regulatory_or_license_claim_text_present' and sig.signal_value_json = 'true'::jsonb)`,
     sale_sharing_controls_missing: `ss.retargeting_pixel_detected is true and ss.do_not_sell_link_present is false`,
     targeted_advertising_disclosure_present: `exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.targeted_advertising_disclosure_present' and sig.signal_value_json = 'true'::jsonb)`,
     terms_of_service_present: `ss.terms_of_service_present is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'disclosure.terms_of_service_present')`,
@@ -1263,14 +1229,6 @@ function localAssessment(finding: TargetFinding, row: CandidateRow): LiveProbe {
     };
   }
 
-  if (finding === "regulatory_compliance_claim_present") {
-    return {
-      assessment: "needs_review",
-      evidenceUrl: row.final_url,
-      rationale: "Regulatory-compliance claims need live claim text or retained snippets; generic entity signals are not enough."
-    };
-  }
-
   if (finding === "terms_of_service_present") {
     return {
       assessment: row.terms_of_service_present === true ? "supports_promotion" : "needs_review",
@@ -1417,7 +1375,6 @@ async function main() {
           "accessibility_support_path_missing",
           "sale_sharing_controls_missing",
           "privacy_policy_present",
-          "regulatory_compliance_claim_present",
           "privacy_contact_path_present",
           "privacy_contact_channel_missing",
           "privacy_rights_path_present",
@@ -1467,8 +1424,6 @@ async function main() {
           ? await probeAccessibility(candidate)
           : findingId === "sale_sharing_controls_missing"
             ? await probeSaleSharing(candidate)
-            : findingId === "regulatory_compliance_claim_present"
-              ? await probeRegulatoryComplianceClaim(candidate)
             : findingId === "terms_of_service_present"
               ? await probeTermsOfService(candidate)
             : findingId === "privacy_contact_channel_missing"

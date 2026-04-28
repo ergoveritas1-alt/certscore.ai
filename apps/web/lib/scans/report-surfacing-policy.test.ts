@@ -1393,25 +1393,6 @@ test("direct session replay observation surfaces as standalone review finding", 
   assert.ok(decision?.appliedRules.includes("evidence.consent_behavior.review_runtime_without_effect_evidence"));
 });
 
-test("runtime-backed consent-control failures confirm when the retained evidence shows the control failed", () => {
-  const evaluation = evaluateUnifiedFindingSurfacing({
-    packets: [
-      makePacket("reject_did_not_reduce_tracking", {
-        confidenceInputs: {
-          ...makePacket("reject_did_not_reduce_tracking").confidenceInputs,
-          hasDirectRuntimeEvidence: true,
-          hasStructuredValidationEvidence: true
-        }
-      })
-    ]
-  });
-
-  const decision = evaluation.debugDecisions[0];
-  assert.equal(decision?.decisionState, "confirmed");
-  assert.equal(decision?.surfaceTier, "headline");
-  assert.ok(decision?.appliedRules.includes("evidence.consent_behavior.confirmed_specific_runtime_failure"));
-});
-
 test("consent interface findings stay review-level even when related evidence exists", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [

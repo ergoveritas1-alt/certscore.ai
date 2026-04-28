@@ -1424,40 +1424,6 @@ test("rolls structured validation evidence into unified finding packets", () => 
   assert.equal(packet?.confidenceBand, "high");
 });
 
-test("treats concrete payload evidence as a confidence booster for sensitive-data findings", () => {
-  const [packet] = buildUnifiedFindingPackets({
-    reviewFindingCandidates: [
-      {
-        description: "Scanner-derived risk indicator is elevated.",
-        fallbackEvidence: {
-          sensitivePayloadViolations: [
-            {
-              detectedType: "postal_code_detected",
-              evidenceStrength: "suspected",
-              requestMethod: "POST",
-              requestUrl: "https://tracker.example.net/collect"
-            }
-          ],
-          signalKey: "commerce.high_sensitivity_data_collection_detected",
-          signalValue: true
-        },
-        observedValue: "Yes",
-        severity: "high",
-        signalKey: "commerce.high_sensitivity_data_collection_detected",
-        signalLabel: "High-sensitivity data collection detected",
-        signalSource: "snapshot_signal",
-        sourceType: "signal",
-        title: "High-sensitivity data collection detected"
-      }
-    ],
-    validationFindings: []
-  });
-
-  assert.equal(packet?.unifiedFindingId, "high_sensitivity_data_collection");
-  assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
-  assert.equal(packet?.confidenceBand, "high");
-});
-
 test("specializes high-sensitivity replay evidence into a sensitive replay packet", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

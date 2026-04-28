@@ -420,7 +420,6 @@ const CONSENT_TRACKING_FINDING_IDS = new Set([
   "preconsent_tracking",
   "consent_mechanism_absent",
   "consent_surface_missing",
-  "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
   "rtb_cookie_sync_observed",
   "gpc_signal_not_honored",
@@ -439,14 +438,8 @@ const CONSENT_TRACKING_FINDING_IDS = new Set([
 ]);
 
 const SENSITIVE_DATA_FINDING_IDS = new Set([
-  "high_sensitivity_data_collection",
   "session_replay_on_sensitive_input_surface",
   "sensitive_data_collection_with_third_party_tracking_present",
-  "health_information_collection",
-  "geolocation_collection",
-  "ssn_collection",
-  "government_id_collection",
-  "financial_information_collection",
   "minors_or_age_gated_collection_context",
   "children_privacy_context_without_supporting_disclosure"
 ]);
@@ -502,7 +495,6 @@ const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "registration_claim_support_missing",
   "registration_identifier_missing",
   "regulatory_registration_disclosure_absent",
-  "regulatory_compliance_claim_present",
   "simulated_performance_without_disclosure",
   "testimonial_endorsement_financial_promotion_risk",
   "unsubstantiated_testimonial_near_performance_claim",
@@ -525,7 +517,6 @@ const DECEPTIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "pricing_or_fee_transparency_unclear",
   "pump_and_dump_language_present",
   "regulatory_registration_disclosure_absent",
-  "regulatory_compliance_claim_present",
   "simulated_performance_without_disclosure",
   "testimonial_endorsement_financial_promotion_risk",
   "unsubstantiated_testimonial_near_performance_claim",
@@ -3903,10 +3894,6 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Add a visible consent banner, modal, or equivalent control surface before non-essential tracking starts, and make sure it lets users reject or manage tracking without extra friction.",
     whyThisMatters: "If there is no visible consent surface at all, users may never get a clear chance to understand or control non-essential tracking."
   },
-  reject_did_not_reduce_tracking: {
-    suggestedFix: "Review consent enforcement so a reject action actually suppresses the non-essential tracking vendors seen after rejection.",
-    whyThisMatters: "If reject does not materially reduce tracking, the consent experience may not be honoring the choice it presents."
-  },
   reject_did_not_reduce_third_party_cookies: {
     suggestedFix: "Review third-party cookie controls so reject meaningfully reduces non-essential cookie activity after the interaction completes.",
     whyThisMatters: "Persistent third-party cookies after reject can signal that consent controls are not enforcing the promised outcome."
@@ -4132,10 +4119,6 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   operator_contact_path_present: {
     suggestedFix: "Keep the operator contact path easy to find and make sure the listed email, form, phone, or support route remains current.",
     whyThisMatters: "A visible operator contact path helps users and reviewers understand how to reach the business behind the offer."
-  },
-  regulatory_compliance_claim_present: {
-    suggestedFix: "Review any regulatory, registration, exchange, or compliance claims and make sure the site can substantiate them clearly wherever they appear.",
-    whyThisMatters: "Regulatory-compliance framing can materially affect how users judge trust and legality, so weak or misleading claims deserve close review."
   },
   regulatory_registration_disclosure_absent: {
     suggestedFix:

@@ -498,12 +498,7 @@ export function inferSpecializedUnifiedFindingId(input: {
   const hasSensitivePayload = hasConcreteSensitivePayloadArtifact(rawEvidence);
   if (
     hasSensitivePayload &&
-    (currentId === "high_sensitivity_data_collection" ||
-      currentId === "health_information_collection" ||
-      currentId === "financial_information_collection" ||
-      currentId === "government_id_collection" ||
-      currentId === "ssn_collection" ||
-      input.signalKey === "commerce.high_sensitivity_data_collection_detected" ||
+    (input.signalKey === "commerce.high_sensitivity_data_collection_detected" ||
       input.signalKey === "commerce.form_collects_health_information" ||
       input.signalKey === "commerce.form_collects_financial_information" ||
       input.signalKey === "commerce.form_collects_government_id" ||

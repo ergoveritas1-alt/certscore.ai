@@ -65,7 +65,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 140);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 132);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
@@ -527,10 +527,6 @@ test("maps signals and validation rules into unified findings", () => {
   assert.equal(
     getReportUnifiedFindingForSignal("snapshot_signal", "financial.guaranteed_return_language_present")?.id,
     "guaranteed_or_high_return_claims_present"
-  );
-  assert.equal(
-    getReportUnifiedFindingForSignal("snapshot_signal", "entity.regulatory_or_license_claim_text_present")?.id,
-    "regulatory_compliance_claim_present"
   );
   assert.equal(
     getReportUnifiedFindingForSignal("snapshot_signal", "commerce.payment_card_input_present")?.id,

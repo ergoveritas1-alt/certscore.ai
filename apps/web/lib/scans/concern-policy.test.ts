@@ -1454,8 +1454,8 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       name: "high-sensitivity concern with request evidence stays eligible",
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",
-        suggestedUnifiedFindingId: "high_sensitivity_data_collection",
-        title: "High-sensitivity data collection detected"
+        suggestedUnifiedFindingId: "sensitive_data_collection_with_third_party_tracking_present",
+        title: "Sensitive data collection with third-party tracking present"
       }),
       evidenceStrengthFlags: ["concrete_payload", "page_attributed"] as const,
       rawEvidence: {
@@ -1464,7 +1464,8 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
             evidenceStrength: "suspected",
             requestUrl: "https://tracker.example.com/collect"
           }
-        ]
+        ],
+        retargetingPixelArtifactPresent: true
       },
       expected: {
         allowedNarrativeTier: "strong",

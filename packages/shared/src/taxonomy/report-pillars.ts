@@ -505,18 +505,6 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     validationRuleKeys: ["financial_review.unsubstantiated_testimonial_near_performance_claim"]
   }),
   defineReportUnifiedFinding({
-    id: "regulatory_compliance_claim_present",
-    label: "Regulatory-compliance claim present",
-    owner: "registration_status_credibility",
-    mirrors: ["consumer_financial_marketing_claims", "contact_durability_operator_disclosure_quality"],
-    signalMappings: [{ source: "snapshot_signal", key: "entity.regulatory_or_license_claim_text_present" }],
-    aliases: [
-      "Regulatory-compliance claim present",
-      "Regulatory legitimacy claim present",
-      "SEC-compliant exchange claim present"
-    ]
-  }),
-  defineReportUnifiedFinding({
     id: "investment_purchase_by_credit_card_present",
     label: "Investment purchase by credit card present",
     owner: "consumer_choice_and_cost_transparency",
@@ -2766,15 +2754,6 @@ export const REPORT_UNIFIED_FINDINGS = [
     aliases: ["No consent surface detected", "No user-facing consent surface detected"]
   }),
   defineReportUnifiedFinding({
-    id: "reject_did_not_reduce_tracking",
-    label: "Reject did not reduce tracking",
-    owner: "enforcement_outcomes_after_user_choice",
-    mirrors: ["vendor_tracker_inventory"],
-    overlays: ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"],
-    signalMappings: [{ source: "runtime_artifact_signal", key: "consent_reject_reduced_tracking" }],
-    aliases: ["Reject interaction did not reduce tracking", "Trackers persisted after reject"]
-  }),
-  defineReportUnifiedFinding({
     id: "reject_did_not_reduce_third_party_cookies",
     label: "Reject did not reduce third-party cookies",
     owner: "enforcement_outcomes_after_user_choice",
@@ -2949,53 +2928,11 @@ export const REPORT_UNIFIED_FINDINGS = [
   }),
 
   defineReportUnifiedFinding({
-    id: "high_sensitivity_data_collection",
-    label: "High-sensitivity data collection",
-    owner: "health_location_other_sensitive_data_collection",
-    overlays: ["tracking_profiling_sensitive_data_risk", "sensitive_data_vulnerable_user_protections"],
-    signalMappings: [{ source: "snapshot_signal", key: "commerce.high_sensitivity_data_collection_detected" }]
-  }),
-  defineReportUnifiedFinding({
     id: "sensitive_data_collection_with_third_party_tracking_present",
     label: "Sensitive-data collection with third-party tracking present",
     owner: "sensitive_data_third_party_exposure_context",
     mirrors: ["adtech_analytics_replay_footprint", "identity_financial_data_collection", "health_location_other_sensitive_data_collection"],
     overlays: ["tracking_profiling_sensitive_data_risk", "profiling_high_risk_data_use_signals"]
-  }),
-  defineReportUnifiedFinding({
-    id: "health_information_collection",
-    label: "Health information collection",
-    owner: "health_location_other_sensitive_data_collection",
-    overlays: ["tracking_profiling_sensitive_data_risk", "profiling_high_risk_data_use_signals", "sensitive_data_vulnerable_user_protections"],
-    signalMappings: [{ source: "snapshot_signal", key: "commerce.form_collects_health_information" }]
-  }),
-  defineReportUnifiedFinding({
-    id: "geolocation_collection",
-    label: "Geolocation collection",
-    owner: "health_location_other_sensitive_data_collection",
-    overlays: ["tracking_profiling_sensitive_data_risk", "profiling_high_risk_data_use_signals"],
-    signalMappings: [{ source: "snapshot_signal", key: "commerce.form_collects_geolocation" }]
-  }),
-  defineReportUnifiedFinding({
-    id: "ssn_collection",
-    label: "SSN collection",
-    owner: "identity_financial_data_collection",
-    overlays: ["profiling_high_risk_data_use_signals", "sensitive_data_vulnerable_user_protections"],
-    signalMappings: [{ source: "snapshot_signal", key: "commerce.form_collects_ssn" }]
-  }),
-  defineReportUnifiedFinding({
-    id: "government_id_collection",
-    label: "Government ID collection",
-    owner: "identity_financial_data_collection",
-    overlays: ["profiling_high_risk_data_use_signals", "sensitive_data_vulnerable_user_protections"],
-    signalMappings: [{ source: "snapshot_signal", key: "commerce.form_collects_government_id" }]
-  }),
-  defineReportUnifiedFinding({
-    id: "financial_information_collection",
-    label: "Financial information collection",
-    owner: "identity_financial_data_collection",
-    overlays: ["profiling_high_risk_data_use_signals"],
-    signalMappings: [{ source: "snapshot_signal", key: "commerce.form_collects_financial_information" }]
   }),
   defineReportUnifiedFinding({
     id: "minors_or_age_gated_collection_context",

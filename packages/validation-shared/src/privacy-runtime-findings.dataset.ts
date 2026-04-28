@@ -19,7 +19,6 @@ export const PRIVACY_RUNTIME_FINDING_IDS = [
   "privacy_policy_present",
   "sale_sharing_controls_missing",
   "pricing_or_fee_transparency_unclear",
-  "regulatory_compliance_claim_present",
   "terms_of_service_present",
   "privacy_contact_channel_missing",
   "third_party_advertising_disclosure_present",
@@ -57,7 +56,6 @@ export const PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS = [
   "privacy_policy_present",
   "sale_sharing_controls_missing",
   "pricing_or_fee_transparency_unclear",
-  "regulatory_compliance_claim_present",
   "tracking_technologies_disclosure_present",
   "terms_of_service_present",
   "privacy_contact_channel_missing",
@@ -466,29 +464,6 @@ const PRODUCTION_FINDING_CONFIGS: ProductionFindingConfig[] = [
     }),
     positiveNotes: "Pricing or fee claim appears without adjacent material fee-term disclosure.",
     signalKey: "financial.pricing_or_fee_transparency_unclear"
-  },
-  {
-    findingGroup: "production_surfaced_calibration",
-    findingId: "regulatory_compliance_claim_present",
-    positiveEvidenceFor: (index) => ({
-      artifactRefs: [`s3://privacy-runtime/reviewed-regulatory-${index}/claim.html`],
-      policyAnchor: {
-        claimType: "regulatory_or_license_claim",
-        confidence: 0.84,
-        extractionStatus: "fetched",
-        sourceUrl: `https://reviewed-regulatory-${index}.example.test/about`,
-        snippet: "Our services are regulated, registered, licensed, or authorized by applicable financial authorities."
-      },
-      signalKey: "entity.regulatory_or_license_claim_text_present",
-      urlAssessment: {
-        assessment: "supports_promotion",
-        rationale: "Reviewed URL contains regulatory, registration, authorization, license, or supervisory claim language.",
-        reviewedAt: "2026-04-24",
-        reviewedUrl: `https://reviewed-regulatory-${index}.example.test/about`
-      }
-    }),
-    positiveNotes: "Regulatory, registration, authorization, license, or supervisory claim text is retained.",
-    signalKey: "entity.regulatory_or_license_claim_text_present"
   },
   {
     findingGroup: "production_surfaced_calibration",
@@ -995,7 +970,6 @@ const PRODUCTION_REVIEWED_URLS: Record<(typeof PRIVACY_RUNTIME_TOP_PRODUCTION_FI
   privacy_policy_present: "https://www.acorns.com/",
   privacy_rights_path_present: "https://www.acorns.com/",
   privacy_contact_channel_missing: "https://1000pipbuilder.com/",
-  regulatory_compliance_claim_present: "https://www.blackrock.com/corporate",
   sale_sharing_controls_missing: "https://www.ameriprise.com/",
   targeted_advertising_disclosure_present: "https://www.betterment.com/legal/privacy-policy",
   terms_of_service_present: "https://bestcopytrading.com/terms-and-conditions/",
