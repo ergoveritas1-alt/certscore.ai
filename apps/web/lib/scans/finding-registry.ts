@@ -157,6 +157,14 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "Session replay or recording tools can capture detailed on-page behavior and require careful consent, masking, and disclosure controls.",
     remediation: "Audit replay tooling, ensure sensitive fields are masked, gate it behind consent where required, and disclose it clearly."
   },
+  video_content_tracking_exposure: {
+    id: "video_content_tracking_exposure",
+    label: "Video content tracking exposure",
+    section: "Privacy & Tracking",
+    defaultSurfacePriority: 90,
+    whyItMatters: "Advertising pixels on video-content pages can create VPPA-style privacy exposure when viewing context is linked to user or ad identifiers.",
+    remediation: "Gate advertising pixels on video surfaces behind appropriate consent and avoid sending video titles or page context unless necessary and disclosed."
+  },
   pre_submit_text_capture_detected: {
     id: "pre_submit_text_capture_detected",
     label: "Possible pre-submit text capture",

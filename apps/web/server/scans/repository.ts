@@ -703,7 +703,7 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
     ).then((result) => ({ data: result.rows, error: null as QueryErrorLike }))
       .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } as QueryErrorLike })),
     query<Record<string, unknown>>(
-      `select id, signal_key, page_url, page_type, page_role, evidence_refs, payload
+      `select id, signal_key, page_url, page_type, page_role, evidence_refs, matched_text, matched_snippet, payload
          from scan_signal_hits
         where scan_id = $1`,
       [scanId],

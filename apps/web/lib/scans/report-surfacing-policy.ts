@@ -240,6 +240,7 @@ const CONSENT_TRACKING_IDS = [
   "dismiss_without_reject",
   "session_replay_observed",
   "retargeting_pixel_observed",
+  "video_content_tracking_exposure",
   "rtb_cookie_sync_observed",
   "fingerprinting_observed"
 ] as const satisfies ReportUnifiedFindingId[];
@@ -597,6 +598,13 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialTier: "support",
     initialLane: "main",
     orphanedSupportFallback: "suppressed"
+  },
+  video_content_tracking_exposure: {
+    findingId: "video_content_tracking_exposure",
+    family: "consent_tracking",
+    initialState: "review",
+    initialTier: "headline",
+    initialLane: "main"
   },
   session_replay_undisclosed: {
     findingId: "session_replay_undisclosed",

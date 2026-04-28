@@ -433,6 +433,7 @@ const CONSENT_TRACKING_FINDING_IDS = new Set([
   "dismiss_without_reject",
   "session_replay_observed",
   "retargeting_pixel_observed",
+  "video_content_tracking_exposure",
   "fingerprinting_observed"
 ]);
 
@@ -1020,9 +1021,11 @@ function isRawMarkerToken(value: string) {
   return /^[a-z]+(?:_[a-z0-9]+)+$/i.test(trimmed) && !/\s/.test(trimmed);
 }
 
+const MAX_REVIEWER_FACING_SNIPPET_LENGTH = 600;
+
 function isReviewerFacingSnippet(value: string) {
   const trimmed = value.trim();
-  if (trimmed.length === 0) {
+  if (trimmed.length === 0 || trimmed.length > MAX_REVIEWER_FACING_SNIPPET_LENGTH) {
     return false;
   }
 
@@ -1599,9 +1602,23 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if ((contradictionEvidence?.runtimeVendors.length ?? 0) > 0) {
     entities.runtimeVendors = uniqueStrings([...(entities.runtimeVendors ?? []), ...((contradictionEvidence?.runtimeVendors ?? []) as string[])]);
   }
+  if (Array.isArray(normalizedFallbackEvidence.videoTitleSnippets)) {
+    entities.videoTitleSnippets = uniqueStrings(normalizedFallbackEvidence.videoTitleSnippets as string[]);
+  }
+  if (Array.isArray(normalizedFallbackEvidence.videoPageUrls)) {
+    entities.videoPageUrls = uniqueStrings(normalizedFallbackEvidence.videoPageUrls as string[]);
+  }
+  if (Array.isArray(normalizedFallbackEvidence.metaPixelPayloadFieldHints)) {
+    entities.metaPixelPayloadFieldHints = uniqueStrings(normalizedFallbackEvidence.metaPixelPayloadFieldHints as string[]);
+  }
+  if (Array.isArray(normalizedFallbackEvidence.metaPixelRuntimePhases)) {
+    entities.metaPixelRuntimePhases = uniqueStrings(normalizedFallbackEvidence.metaPixelRuntimePhases as string[]);
+  }
   const runtimeRequestUrls = uniqueStrings([
     ...(Array.isArray(normalizedFallbackEvidence.requestUrls) ? (normalizedFallbackEvidence.requestUrls as string[]) : []),
     ...(Array.isArray(normalizedFallbackEvidence.runtimeEvidenceUrls) ? (normalizedFallbackEvidence.runtimeEvidenceUrls as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.runtimeRequestUrls) ? (normalizedFallbackEvidence.runtimeRequestUrls as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.metaPixelRequestUrls) ? (normalizedFallbackEvidence.metaPixelRequestUrls as string[]) : []),
     ...(Array.isArray(normalizedFallbackEvidence.preconsent_tracker_evidence_urls)
       ? (normalizedFallbackEvidence.preconsent_tracker_evidence_urls as string[])
       : []),
@@ -2900,6 +2917,13 @@ function looksSynthesizedPolicySummary(value: string | null | undefined) {
   return Boolean((dateLikeMatches?.length ?? 0) >= 2 || trimmed.includes("—"));
 }
 
+function truncateToDisplayLength(value: string, maxLength = 240): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, maxLength)}...`;
+}
+
 function selectObservedValue(packet: UnifiedFindingPacket) {
   const rankedSnippets = rankSnippetsForFinding(packet.unifiedFindingId, packet.evidence?.snippets ?? []);
   const snippet = rankedSnippets[0] ?? null;
@@ -2908,6 +2932,17 @@ function selectObservedValue(packet: UnifiedFindingPacket) {
 
   if (packet.unifiedFindingId === "retargeting_pixel_observed") {
     return "The scan retained a detector-backed retargeting or remarketing signal that merits manual confirmation.";
+  }
+
+  if (packet.unifiedFindingId === "video_content_tracking_exposure") {
+    const videoTitle = uniqueStrings(
+      Object.entries(packet.evidence?.entities ?? {}).flatMap(([key, values]) =>
+        /video.*title/i.test(key) ? values : []
+      )
+    )[0];
+    return videoTitle
+      ? `Meta/Facebook tracking was observed on a video-content surface ("${truncateToDisplayLength(videoTitle)}").`
+      : "Meta/Facebook tracking was observed on a video-content surface.";
   }
 
   if (packet.unifiedFindingId === "contact_support_path_present") {
@@ -2919,7 +2954,7 @@ function selectObservedValue(packet: UnifiedFindingPacket) {
         /(contact|support|help|feedback|phone|chat|branch|advisor|service)/i.test(value)
     );
     if (descriptiveSnippet) {
-      return descriptiveSnippet;
+      return truncateToDisplayLength(descriptiveSnippet);
     }
 
     if (allUrls.some((url) => /contact|help|support|feedback/i.test(url))) {
@@ -2938,7 +2973,7 @@ function selectObservedValue(packet: UnifiedFindingPacket) {
         /(cookie|tracking|privacy choices|privacy settings|manage cookies|analytical cookies|marketing cookies)/i.test(value)
     );
     if (descriptiveSnippet) {
-      return descriptiveSnippet;
+      return truncateToDisplayLength(descriptiveSnippet);
     }
 
     if (allUrls.some((url) => /cookie|privacy|legal/i.test(url))) {
@@ -2956,20 +2991,20 @@ function selectObservedValue(packet: UnifiedFindingPacket) {
         return phraseMatch[0];
       }
 
-      return descriptiveSnippet;
+      return truncateToDisplayLength(descriptiveSnippet);
     }
   }
 
   if (packet.unifiedFindingId === "arbitration_clause_present") {
     if (snippet && !looksSynthesizedPolicySummary(snippet) && !isGenericObservationText(snippet)) {
-      return snippet;
+      return truncateToDisplayLength(snippet);
     }
 
     return "The scan retained terms language that appears to include arbitration or dispute-resolution provisions worth reading directly.";
   }
 
   if (snippet && !isGenericObservationText(snippet)) {
-    return snippet;
+    return truncateToDisplayLength(snippet);
   }
 
   return getBestObservedValue([summary]) ?? null;
@@ -3955,6 +3990,10 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   retargeting_pixel_observed: {
     suggestedFix: "Review the retained detector output and confirm whether the site deploys a specific retargeting or advertising pixel that needs follow-up disclosure, consent, or control review.",
     whyThisMatters: "A retargeting-related signal can indicate advertising or remarketing infrastructure, but detector-only evidence should be confirmed against retained runtime artifacts before treating it as a confirmed pixel deployment."
+  },
+  video_content_tracking_exposure: {
+    suggestedFix: "Review the retained video page and Meta/Facebook request evidence, then gate advertising pixels on video-content surfaces behind appropriate consent and avoid sending video titles or page context unless it is necessary and disclosed.",
+    whyThisMatters: "Video page activity combined with advertising pixels can create VPPA-style privacy exposure when viewing context is linked to a user or advertising identifier."
   },
   fingerprinting_observed: {
     suggestedFix: "Review the scripts collecting multiple device or browser attributes and gate that activity until it is clearly necessary, disclosed, and consent-aligned.",

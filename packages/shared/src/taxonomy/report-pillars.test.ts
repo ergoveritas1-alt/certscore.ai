@@ -65,12 +65,27 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 139);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 140);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
     )
   );
+});
+
+test("maps video content tracking exposure through signal and finding registries", () => {
+  const signal = getReportSignalBySourceAndKey(
+    "snapshot_signal",
+    "privacy.video_content_tracking_exposure_detected"
+  );
+  const finding = getReportUnifiedFindingForSignal(
+    "snapshot_signal",
+    "privacy.video_content_tracking_exposure_detected"
+  );
+
+  assert.equal(signal?.primaryEvidenceCategoryId, "adtech_analytics_replay_footprint");
+  assert.equal(finding?.id, "video_content_tracking_exposure");
+  assert.equal(getReportUnifiedFindingByAlias("VPPA-style video privacy exposure")?.id, "video_content_tracking_exposure");
 });
 
 test("returns stable section metadata with parent linkage", () => {

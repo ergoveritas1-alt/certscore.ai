@@ -1323,6 +1323,14 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "snapshot_signal",
+    "privacy.video_content_tracking_exposure_detected",
+    "Video content tracking exposure detected",
+    "adtech_analytics_replay_footprint",
+    ["preconsent_tracking_incidents"],
+    ["tracking_profiling_sensitive_data_risk", "sale_sharing_targeted_advertising_controls"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
     "privacy.dark_pattern_reject_button_missing",
     "Reject button missing on consent surface",
     "choice_symmetry_dark_pattern_indicators",
@@ -2896,6 +2904,15 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "adtech_analytics_replay_footprint",
     overlays: ["sale_sharing_targeted_advertising_controls", "tracking_profiling_sensitive_data_risk", "opt_out_choice_design_dark_pattern_risk"],
     signalMappings: [{ source: "snapshot_signal", key: "commerce.retargeting_pixel_detected" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "video_content_tracking_exposure",
+    label: "Video content tracking exposure",
+    owner: "adtech_analytics_replay_footprint",
+    mirrors: ["preconsent_tracking_incidents"],
+    overlays: ["tracking_profiling_sensitive_data_risk", "sale_sharing_targeted_advertising_controls"],
+    signalMappings: [{ source: "snapshot_signal", key: "privacy.video_content_tracking_exposure_detected" }],
+    aliases: ["VPPA-style video privacy exposure", "Video privacy tracking exposure"]
   }),
   defineReportUnifiedFinding({
     id: "fingerprinting_observed",

@@ -485,6 +485,10 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
       primaryCategory: "data_collection_third_party_ecosystem",
       subcategory: "Advertising & Retargeting"
     },
+    "privacy.video_content_tracking_exposure_detected": {
+      primaryCategory: "data_collection_third_party_ecosystem",
+      subcategory: "Advertising & Retargeting"
+    },
     "commerce.session_replay_tool_detected": {
       primaryCategory: "data_collection_third_party_ecosystem",
       subcategory: "Session Replay / Behavioral Tools"

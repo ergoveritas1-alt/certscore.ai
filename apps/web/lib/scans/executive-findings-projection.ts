@@ -10,6 +10,15 @@ import {
 import { getFindingSurfaceScore, selectTopFindings } from "./rank-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 
+const MAX_DISPLAY_SNIPPET_LENGTH = 240;
+
+function truncateDisplaySnippet(value: string): string {
+  if (value.length <= MAX_DISPLAY_SNIPPET_LENGTH) {
+    return value;
+  }
+  return `${value.slice(0, MAX_DISPLAY_SNIPPET_LENGTH)}...`;
+}
+
 const SECTION_ORDER: CertScoreFindingSection[] = [
   "Privacy & Tracking",
   "Consent Experience",
@@ -36,7 +45,8 @@ const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SC
   pricing_or_fee_transparency_unclear: "pricing_or_fee_transparency_unclear",
   reject_button_missing: "reject_option_missing_or_hidden",
   session_replay_observed: "session_recording_services_detected",
-  session_replay_undisclosed: "session_recording_services_detected"
+  session_replay_undisclosed: "session_recording_services_detected",
+  video_content_tracking_exposure: "video_content_tracking_exposure"
 };
 
 const CONTRADICTION_FINDING_IDS = new Set([
@@ -128,10 +138,10 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
     packet.observedValue,
     ...(evidenceDetails?.runtimeVendors ?? []).map((vendor) => `Runtime vendor: ${vendor}`),
     ...(evidenceDetails?.runtimeRequestUrls ?? []).slice(0, 2).map((url) => `Runtime request: ${url}`),
-    ...(evidenceDetails?.offerSnippets ?? []).slice(0, 2).map((snippet) => `Offer: ${snippet}`),
+    ...(evidenceDetails?.offerSnippets ?? []).slice(0, 2).map((snippet) => `Offer: ${truncateDisplaySnippet(snippet)}`),
     ...(evidenceDetails?.disclosureFindings ?? []).slice(0, 2),
     ...(evidenceDetails?.sourceUrls ?? []).slice(0, 2).map((url) => `Source: ${url}`),
-    ...(packet.evidence?.snippets ?? []),
+    ...(packet.evidence?.snippets ?? []).map((snippet) => truncateDisplaySnippet(snippet)),
     ...(packet.evidence?.sourceUrls ?? []).slice(0, 2),
     ...packet.sourceRefs.flatMap((sourceRef) => {
       if (sourceRef.kind === "signal") {
@@ -286,7 +296,7 @@ function buildExecutiveEvidenceDetails(
     packet.sourceUrl,
     ...(packet.evidence?.pageUrls ?? [])
   ]);
-  const evidenceSnippets = uniqueStrings(packet.evidence?.snippets ?? []).slice(0, 5);
+  const evidenceSnippets = uniqueStrings(packet.evidence?.snippets ?? []).map((snippet) => truncateDisplaySnippet(snippet)).slice(0, 5);
   const sourceSignals = uniqueStrings(
     packet.sourceRefs.flatMap((sourceRef) => {
       if (sourceRef.kind !== "signal") {

@@ -19,6 +19,15 @@ import { deriveConcernPolicy } from "./concern-policy";
 import type { FetchQuality } from "./signal-fallback-evidence";
 import type { ScanValidationFinding } from "./validation-review-linking";
 
+const MAX_POLICY_SNIPPET_LENGTH = 600;
+
+function truncatePolicySnippet(value: string): string {
+  if (value.length <= MAX_POLICY_SNIPPET_LENGTH) {
+    return value;
+  }
+  return `${value.slice(0, MAX_POLICY_SNIPPET_LENGTH)}...`;
+}
+
 export type NormalizedConcernOriginType =
   | "snapshot_signal"
   | "compatibility_signal"
@@ -624,7 +633,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       } else if (/policyDsarMechanism|policy_dsar_mechanism/i.test(key)) {
         addEntity(entities, "policyDsarMechanism", [value]);
       } else if (/claim|policy|disclosure|summary|snippet|description|rationale/i.test(key)) {
-        policySnippets.add(value);
+        policySnippets.add(truncatePolicySnippet(value));
       } else if (/runtime|request|network|artifact/i.test(key)) {
         runtimeArtifacts.add(value);
       }
@@ -645,7 +654,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
 
     if (/policy.*snippets?|evidence_snippets/i.test(key)) {
       for (const entry of getNestedStringEvidence(value).slice(0, 12)) {
-        policySnippets.add(entry);
+        policySnippets.add(truncatePolicySnippet(entry));
       }
       continue;
     }
@@ -681,6 +690,11 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
+    if (/videoTitleSnippets|video_title_snippets|videoPageUrls|video_page_urls|metaPixelPayloadFieldHints|meta_pixel_payload_field_hints|metaPixelRuntimePhases|meta_pixel_runtime_phases/i.test(key)) {
+      addEntity(entities, key, stringValues);
+      continue;
+    }
+
     if (/runtime|request|network|artifact/i.test(key)) {
       for (const entry of stringValues) {
         runtimeArtifacts.add(entry);
@@ -694,6 +708,10 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     }
 
     if (/^signalValue$/i.test(key)) {
+      continue;
+    }
+
+    if (/mergedSignalSources/i.test(key)) {
       continue;
     }
 

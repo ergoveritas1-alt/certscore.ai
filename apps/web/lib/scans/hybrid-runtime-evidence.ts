@@ -579,6 +579,181 @@ function getMediaSummary(hybrid: Record<string, unknown> | null) {
   return getRecord(hybrid?.mediaSummary);
 }
 
+function looksLikeMetaPixelVendor(row: Record<string, unknown>) {
+  const vendor = getString(row.vendor);
+  const hostname = getString(row.hostname) ?? getString(row.domain);
+  const requestUrl = getRequestUrl(row);
+
+  return /meta\s+pixel|facebook|fb\s*pixel/i.test(`${vendor ?? ""} ${hostname ?? ""} ${requestUrl ?? ""}`) ||
+    /(?:^|\.)facebook\.com$|(?:^|\.)facebook\.net$/i.test(hostname ?? "") ||
+    /\/tr\/?|fbevents\.js|facebook\.com\/tr/i.test(requestUrl ?? "");
+}
+
+function getPageUrlFromRuntimeRow(row: Record<string, unknown>) {
+  return (
+    getString(row.pageUrl) ??
+    getString(row.page_url) ??
+    getString(row.sourcePageUrl) ??
+    getString(row.source_page_url) ??
+    getString(row.topLevelUrl) ??
+    getString(row.top_level_url) ??
+    getString(row.documentUrl) ??
+    getString(row.document_url) ??
+    getString(row.frameUrl) ??
+    getString(row.frame_url) ??
+    getString(row.initiatorPageUrl) ??
+    getString(row.initiator_page_url)
+  );
+}
+
+function getMediaVideoEvidenceRows(mediaSummary: Record<string, unknown> | null) {
+  return [
+    ...getObjectArray(mediaSummary?.videoEvidence),
+    ...getObjectArray(mediaSummary?.video_evidence),
+    ...getObjectArray(mediaSummary?.videoContentEvidence),
+    ...getObjectArray(mediaSummary?.video_content_evidence)
+  ];
+}
+
+function getVideoPageUrls(hybrid: Record<string, unknown> | null) {
+  const mediaSummary = getMediaSummary(hybrid);
+  const directUrls = uniqueStrings([
+    getString(mediaSummary?.pageUrl),
+    getString(mediaSummary?.page_url),
+    ...getStringArray(mediaSummary?.videoPageUrls),
+    ...getStringArray(mediaSummary?.video_page_urls)
+  ]);
+  const evidenceUrls = getMediaVideoEvidenceRows(mediaSummary)
+    .flatMap((row) => getPageUrlFromRuntimeRow(row) ?? getString(row.url) ?? [])
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+  return uniqueStrings([...directUrls, ...evidenceUrls]);
+}
+
+function getVideoTitleSnippets(hybrid: Record<string, unknown> | null) {
+  const mediaSummary = getMediaSummary(hybrid);
+  return uniqueStrings([
+    getString(mediaSummary?.videoTitle),
+    getString(mediaSummary?.video_title),
+    getString(mediaSummary?.pageTitle),
+    getString(mediaSummary?.page_title),
+    ...getStringArray(mediaSummary?.videoTitles),
+    ...getStringArray(mediaSummary?.video_titles),
+    ...getMediaVideoEvidenceRows(mediaSummary).flatMap((row) => [
+      getString(row.videoTitle),
+      getString(row.video_title),
+      getString(row.title),
+      getString(row.pageTitle),
+      getString(row.page_title)
+    ])
+  ]);
+}
+
+function hasVideoContentSurface(hybrid: Record<string, unknown> | null) {
+  const mediaSummary = getMediaSummary(hybrid);
+  if (!mediaSummary) {
+    return false;
+  }
+
+  return (
+    mediaSummary.videoContentSurfaceObserved === true ||
+    mediaSummary.video_content_surface_observed === true ||
+    mediaSummary.videoPlayerDetected === true ||
+    mediaSummary.video_player_detected === true ||
+    (getNumber(mediaSummary.videoElementCount ?? mediaSummary.video_element_count) ?? 0) > 0 ||
+    (getNumber(mediaSummary.videoCount ?? mediaSummary.video_count) ?? 0) > 0 ||
+    getMediaVideoEvidenceRows(mediaSummary).length > 0 ||
+    getVideoPageUrls(hybrid).length > 0
+  );
+}
+
+function getMetaPixelRequestRows(hybrid: Record<string, unknown> | null) {
+  const requestToVendorObservations = getObjectArray(hybrid?.requestToVendorObservations);
+  const requestObservations = getObjectArray(hybrid?.requestObservations);
+  const metaHosts = requestToVendorObservations
+    .filter(looksLikeMetaPixelVendor)
+    .flatMap((row) => getString(row.hostname) ?? getString(row.domain) ?? []);
+
+  return requestObservations.filter((row) => {
+    const domain = getString(row.domain);
+    return looksLikeMetaPixelVendor(row) || Boolean(domain && metaHosts.includes(domain));
+  });
+}
+
+function getMetaPixelRequestUrls(hybrid: Record<string, unknown> | null) {
+  return uniqueStrings(getMetaPixelRequestRows(hybrid).flatMap((row) => getRequestUrl(row) ?? []));
+}
+
+function getMetaPixelRuntimePhases(hybrid: Record<string, unknown> | null) {
+  return uniqueStrings(
+    getMetaPixelRequestRows(hybrid).flatMap((row) =>
+      getString(row.runtimePhase) ??
+      getString(row.runtime_phase) ??
+      getString(row.phase) ??
+      (isPreconsentRequestObservation(row, hybrid) ? "pre_consent" : [])
+    )
+  );
+}
+
+function getMetaPixelPayloadFieldHints(hybrid: Record<string, unknown> | null) {
+  const fieldNames = getMetaPixelRequestRows(hybrid).flatMap((row) => [
+    ...getStringArray(row.payloadKeys),
+    ...getStringArray(row.payload_keys),
+    ...getStringArray(row.parameterKeys),
+    ...getStringArray(row.parameter_keys),
+    ...getStringArray(row.queryKeys),
+    ...getStringArray(row.query_keys),
+    ...getStringArray(row.urlQueryKeys),
+    ...getStringArray(row.url_query_keys),
+    ...extractQueryKeys(getRequestUrl(row))
+  ]);
+
+  return uniqueStrings(fieldNames);
+}
+
+function extractQueryKeys(value: string | null) {
+  if (!value) {
+    return [] as string[];
+  }
+  try {
+    return [...new URL(value).searchParams.keys()];
+  } catch {
+    return [] as string[];
+  }
+}
+
+function hasSamePageVideoMetaCorrelation(hybrid: Record<string, unknown> | null) {
+  const videoPageUrls = getVideoPageUrls(hybrid);
+  const requestRows = getMetaPixelRequestRows(hybrid);
+  if (requestRows.some((row) => row.samePageVideoCorrelation === true || row.same_page_video_correlation === true)) {
+    return true;
+  }
+
+  const normalizedVideoPageUrls = new Set(videoPageUrls.map((url) => normalizeUrlForPageCorrelation(url)));
+  if (normalizedVideoPageUrls.size === 0) {
+    return false;
+  }
+
+  return requestRows.some((row) => {
+    const requestPageUrl = getPageUrlFromRuntimeRow(row);
+    return Boolean(requestPageUrl && normalizedVideoPageUrls.has(normalizeUrlForPageCorrelation(requestPageUrl)));
+  });
+}
+
+function normalizeUrlForPageCorrelation(value: string) {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return value.trim().replace(/\/$/, "");
+  }
+}
+
+function hasVideoContentTrackingExposure(hybrid: Record<string, unknown> | null) {
+  return hasVideoContentSurface(hybrid) && getMetaPixelRequestRows(hybrid).length > 0 && hasSamePageVideoMetaCorrelation(hybrid);
+}
+
 function getObservedConsentSurface(
   hybrid: Record<string, unknown> | null,
   runtimeArtifacts: Record<string, unknown> | null | undefined
@@ -719,6 +894,8 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
       );
     case "privacy.autoplay_media_detected":
       return mediaSummary?.autoplayVideoObserved === true || mediaSummary?.autoplayAudioObserved === true;
+    case "privacy.video_content_tracking_exposure_detected":
+      return hasVideoContentTrackingExposure(hybrid);
     default:
       return undefined;
   }
@@ -924,6 +1101,26 @@ export function getHybridSignalFallbackEvidence(input: {
         signalLabel: input.signalLabel,
         signalValue: input.signalValue,
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+        hybridMediaSummary: mediaSummary
+      };
+    case "privacy.video_content_tracking_exposure_detected":
+      return {
+        metaPixelPayloadFieldHints: getMetaPixelPayloadFieldHints(hybrid),
+        metaPixelRequestUrls: getMetaPixelRequestUrls(hybrid),
+        metaPixelRuntimePhases: getMetaPixelRuntimePhases(hybrid),
+        runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+        runtimeEvidenceUrls: getMetaPixelRequestUrls(hybrid),
+        runtimeRequestUrls: getMetaPixelRequestUrls(hybrid),
+        runtimeVendors: ["Meta Pixel"],
+        samePageVideoTrackingCorrelation: hasSamePageVideoMetaCorrelation(hybrid),
+        signalKey: input.signalKey,
+        signalLabel: input.signalLabel,
+        signalValue: input.signalValue,
+        supportingSignals: ["privacy.video_content_tracking_exposure_detected"],
+        videoContentSurfaceObserved: hasVideoContentSurface(hybrid),
+        videoContentTrackingExposureDetected: hasVideoContentTrackingExposure(hybrid),
+        videoPageUrls: getVideoPageUrls(hybrid),
+        videoTitleSnippets: getVideoTitleSnippets(hybrid),
         hybridMediaSummary: mediaSummary
       };
     default:

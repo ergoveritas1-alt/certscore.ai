@@ -376,6 +376,38 @@ test("keeps runtime-backed session recording in top findings when consent issues
   );
 });
 
+test("projects video content tracking exposure into executive findings", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("video_content_tracking_exposure", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "video_content_tracking_exposure" },
+      evidence: {
+        counts: {},
+        entities: {
+          metaPixelPayloadFieldHints: ["ev", "dl", "page_title"],
+          runtimeVendors: ["Meta Pixel"],
+          videoTitleSnippets: ["Week 1 highlights"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.video_content_tracking_exposure_detected"],
+        pageUrls: ["https://example.com/watch/highlights"],
+        snippets: ["Week 1 highlights"],
+        sourceUrls: ["https://www.facebook.com/tr/?ev=PageView"]
+      },
+      observedValue: "Meta/Facebook tracking was observed on a video-content surface.",
+      severity: "high",
+      summary: "Meta/Facebook tracking was observed on a video-content surface."
+    })
+  ]);
+
+  const finding = projection.findings.find((candidate) => candidate.id === "video_content_tracking_exposure");
+
+  assert.equal(finding?.label, "Video content tracking exposure");
+  assert.equal(finding?.section, "Privacy & Tracking");
+  assert.deepEqual(finding?.evidenceDetails?.runtimeVendors, ["Meta Pixel"]);
+  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
+});
+
 test("names first-party proxied FullStory collection in executive summary", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("session_replay_observed", {

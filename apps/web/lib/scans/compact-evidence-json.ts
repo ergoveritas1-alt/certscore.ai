@@ -9,6 +9,11 @@ function compactLongString(value: string) {
   return `${value.slice(0, MAX_STRING_LENGTH)}... [truncated ${value.length - MAX_STRING_LENGTH} chars]`;
 }
 
+const EVIDENCE_JSON_KEYS_TO_SUPPRESS = new Set([
+  "familyPacketFindingId",
+  "evidencePreview"
+]);
+
 export function compactEvidenceJsonForDisplay(value: unknown): unknown {
   if (Array.isArray(value)) {
     const compactedItems = value.slice(0, MAX_ARRAY_SAMPLE).map((entry) => compactEvidenceJsonForDisplay(entry));
@@ -32,6 +37,8 @@ export function compactEvidenceJsonForDisplay(value: unknown): unknown {
   }
 
   return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [key, compactEvidenceJsonForDisplay(entry)])
+    Object.entries(value)
+      .filter(([key]) => !EVIDENCE_JSON_KEYS_TO_SUPPRESS.has(key))
+      .map(([key, entry]) => [key, compactEvidenceJsonForDisplay(entry)])
   );
 }

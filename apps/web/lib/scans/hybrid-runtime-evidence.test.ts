@@ -61,6 +61,83 @@ test("derives session replay vendors from hybrid request-to-vendor observations"
   assert.deepEqual(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.session_replay_runtime_vendors"), ["Microsoft Clarity"]);
 });
 
+test("derives video content tracking exposure from same-page Meta Pixel evidence", () => {
+  const runtimeArtifacts = {
+    hybrid_runtime_evidence: {
+      mediaSummary: {
+        videoContentSurfaceObserved: true,
+        videoEvidence: [
+          {
+            pageUrl: "https://example.com/watch/highlights",
+            videoTitle: "Week 1 highlights"
+          }
+        ]
+      },
+      requestObservations: [
+        {
+          domain: "www.facebook.com",
+          pageUrl: "https://example.com/watch/highlights",
+          parameterKeys: ["ev", "dl", "page_title"],
+          runtimePhase: "pre_consent",
+          thirdParty: true,
+          url: "https://www.facebook.com/tr/?ev=PageView&dl=https%3A%2F%2Fexample.com%2Fwatch%2Fhighlights"
+        }
+      ],
+      requestToVendorObservations: [
+        {
+          category: "advertising",
+          hostname: "www.facebook.com",
+          preConsent: true,
+          vendor: "Meta Pixel"
+        }
+      ]
+    }
+  } satisfies Record<string, unknown>;
+
+  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.video_content_tracking_exposure_detected"), true);
+
+  const fallback = getHybridSignalFallbackEvidence({
+    runtimeArtifacts,
+    signalKey: "privacy.video_content_tracking_exposure_detected",
+    signalLabel: "Video content tracking exposure detected",
+    signalValue: true
+  });
+
+  assert.deepEqual(fallback?.runtimeVendors, ["Meta Pixel"]);
+  assert.deepEqual(fallback?.videoPageUrls, ["https://example.com/watch/highlights"]);
+  assert.deepEqual(fallback?.videoTitleSnippets, ["Week 1 highlights"]);
+  assert.deepEqual(fallback?.metaPixelPayloadFieldHints, ["ev", "dl", "page_title"]);
+  assert.equal(fallback?.samePageVideoTrackingCorrelation, true);
+});
+
+test("does not derive video tracking exposure without same-page correlation", () => {
+  const runtimeArtifacts = {
+    hybrid_runtime_evidence: {
+      mediaSummary: {
+        videoContentSurfaceObserved: true,
+        videoPageUrls: ["https://example.com/watch/highlights"]
+      },
+      requestObservations: [
+        {
+          domain: "www.facebook.com",
+          pageUrl: "https://example.com/",
+          thirdParty: true,
+          url: "https://www.facebook.com/tr/?ev=PageView"
+        }
+      ],
+      requestToVendorObservations: [
+        {
+          category: "advertising",
+          hostname: "www.facebook.com",
+          vendor: "Meta Pixel"
+        }
+      ]
+    }
+  } satisfies Record<string, unknown>;
+
+  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.video_content_tracking_exposure_detected"), false);
+});
+
 test("derives fingerprinting and intrusive behavior signals from hybrid runtime evidence", () => {
   const runtimeArtifacts = {
     hybrid_runtime_evidence: {

@@ -306,8 +306,164 @@ test("surfaces raw high-risk financial product signals with offer context", () =
   assert.equal(packet?.presentationDecision.status, "surface");
 });
 
-test("surfaces gambling section-review issue through high-risk product unified finding", () => {
+test("blocks derivatives signals on sportsbook from surfacing as high-risk product promotion", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Options or futures language present.",
+        fallbackEvidence: {
+          matchedSnippet: "Explore betting options and NFL futures odds on our sportsbook.",
+          pageClassification: "financial_offer",
+          pageType: "financial_offer",
+          pageUrl: "https://example.com/sportsbook",
+          signalKey: "financial.options_or_futures_language_present",
+          signalLabel: "Options or futures language present",
+          signalValue: true
+        },
+        observedValue: "Options or futures language present",
+        severity: "medium",
+        signalKey: "financial.options_or_futures_language_present",
+        signalLabel: "Options or futures language present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Options or futures language present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(
+    packets.some((p) => p.unifiedFindingId === "leveraged_or_high_risk_product_promotion"),
+    false
+  );
+});
+
+test("surfaces derivatives signals with true financial context as high-risk product promotion", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Perpetuals or derivatives language present.",
+        fallbackEvidence: {
+          matchedSnippet: "Perpetual swaps with underlying crypto assets and hedging on our derivatives exchange.",
+          pageClassification: "financial_offer",
+          pageType: "financial_offer",
+          pageUrl: "https://example.com/trading/perps",
+          signalKey: "financial.perpetuals_or_derivatives_language_present",
+          signalLabel: "Perpetuals or derivatives language present",
+          signalValue: true
+        },
+        observedValue: "Perpetuals or derivatives language present",
+        severity: "medium",
+        signalKey: "financial.perpetuals_or_derivatives_language_present",
+        signalLabel: "Perpetuals or derivatives language present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Perpetuals or derivatives language present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
+  assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), true);
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
+test("surfaces bare-word financial signal when domain macro enrichment indicates finance industry", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Options or futures language present.",
+        fallbackEvidence: {
+          domainIndustryPrimary: "finance",
+          matchedSnippet: "We offer options regarding personal information.",
+          signalKey: "financial.options_or_futures_language_present",
+          signalLabel: "Options or futures language present",
+          signalValue: true
+        },
+        observedValue: "Options or futures language present",
+        severity: "medium",
+        signalKey: "financial.options_or_futures_language_present",
+        signalLabel: "Options or futures language present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Options or futures language present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
+  assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), true);
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
+test("surfaces bare-word financial signal when domain macro enrichment indicates investor promotion", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Perpetuals or derivatives language present.",
+        fallbackEvidence: {
+          investorOrSecuritiesPromotion: true,
+          matchedSnippet: "Future updates will include new features.",
+          signalKey: "financial.perpetuals_or_derivatives_language_present",
+          signalLabel: "Perpetuals or derivatives language present",
+          signalValue: true
+        },
+        observedValue: "Perpetuals or derivatives language present",
+        severity: "medium",
+        signalKey: "financial.perpetuals_or_derivatives_language_present",
+        signalLabel: "Perpetuals or derivatives language present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Perpetuals or derivatives language present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
+  assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), true);
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
+test("blocks bare-word financial signal on non-financial domain without offer context", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Options or futures language present.",
+        fallbackEvidence: {
+          domainIndustryPrimary: "ecommerce",
+          matchedSnippet: "We offer options regarding personal information.",
+          signalKey: "financial.options_or_futures_language_present",
+          signalLabel: "Options or futures language present",
+          signalValue: true
+        },
+        observedValue: "Options or futures language present",
+        severity: "medium",
+        signalKey: "financial.options_or_futures_language_present",
+        signalLabel: "Options or futures language present",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Options or futures language present"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(
+    packets.some((p) => p.unifiedFindingId === "leveraged_or_high_risk_product_promotion"),
+    false
+  );
+});
+
+test("blocks gambling section-review issue without offer evidence", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
         description:
@@ -316,6 +472,7 @@ test("surfaces gambling section-review issue through high-risk product unified f
           familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
           matchedSnippet:
             "Sports betting or gambling context detected. High-risk product marketing should keep age eligibility, responsible-gambling help, bonus terms, and material offer restrictions close to promotional claims.",
+          offerSnippets: [],
           pageClassification: "financial_offer",
           pageType: "financial_offer",
           pageUrl: "https://www.draftkings.com/",
@@ -330,6 +487,44 @@ test("surfaces gambling section-review issue through high-risk product unified f
           ]
         },
         observedValue: "https://www.draftkings.com/",
+        severity: "medium",
+        sourceType: "issue",
+        title: "High-risk gambling promotion disclosure review"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const packet = packets.find((p) => p.unifiedFindingId === "leveraged_or_high_risk_product_promotion");
+  assert.equal(packet, undefined);
+});
+
+test("surfaces gambling section-review issue with offer evidence through high-risk product unified finding", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description:
+          "Sportsbook offer language was observed: \"Get $1,000 in bonus bets when you sign up.\" Clear nearby responsible-gambling and terms evidence was not retained with the offer snippet.",
+        fallbackEvidence: {
+          familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
+          matchedSnippet: "Get $1,000 in bonus bets when you sign up.",
+          offerSnippets: ["Get $1,000 in bonus bets when you sign up."],
+          pageClassification: "financial_offer",
+          pageType: "financial_offer",
+          pageUrl: "https://www.draftkings.com/",
+          policySnippets: ["Get $1,000 in bonus bets when you sign up."],
+          primaryOfferSnippet: "Get $1,000 in bonus bets when you sign up.",
+          responsibleGamblingDisclosureAdjacent: false,
+          sectionReviewIssue: true,
+          sensitive_context_label: "sports betting or gambling site",
+          supportingSignals: [
+            "financial.high_risk_product_promotion",
+            "commercial.gambling_or_sportsbook_context_detected"
+          ],
+          termsDisclosureAdjacent: false
+        },
+        observedValue: "Get $1,000 in bonus bets when you sign up.",
         severity: "medium",
         sourceType: "issue",
         title: "High-risk gambling promotion disclosure review"
@@ -4704,6 +4899,79 @@ test("uses retargeting-specific unified finding copy instead of the generic fall
   assert.equal(packet?.unifiedFindingId, "retargeting_pixel_observed");
   assert.match(packet?.presentation.whyThisMatters ?? "", /retargeting-related signal|confirmed against retained runtime artifacts/i);
   assert.match(packet?.presentation.suggestedFix ?? "", /retained detector output|specific retargeting or advertising pixel/i);
+});
+
+test("surfaces video content tracking exposure only with same-page Meta evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Meta Pixel was observed on a video content surface.",
+        fallbackEvidence: {
+          metaPixelPayloadFieldHints: ["ev", "dl", "page_title"],
+          metaPixelRequestUrls: ["https://www.facebook.com/tr/?ev=PageView"],
+          runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+          runtimeVendors: ["Meta Pixel"],
+          samePageVideoTrackingCorrelation: true,
+          signalKey: "privacy.video_content_tracking_exposure_detected",
+          signalValue: true,
+          videoContentSurfaceObserved: true,
+          videoPageUrls: ["https://example.com/watch/highlights"],
+          videoTitleSnippets: ["Week 1 highlights"]
+        },
+        observedValue: "Meta Pixel on video surface",
+        severity: "high",
+        signalKey: "privacy.video_content_tracking_exposure_detected",
+        signalLabel: "Video content tracking exposure detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Video content tracking exposure detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "video_content_tracking_exposure");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.concernContext?.assertionLevels.includes("strong"), true);
+  assert.deepEqual(packet?.evidence?.entities?.runtimeVendors, ["Meta Pixel"]);
+  assert.deepEqual(packet?.evidence?.entities?.videoTitleSnippets, ["Week 1 highlights"]);
+  assert.match(packet?.presentation.whyThisMatters ?? "", /VPPA-style privacy exposure/i);
+});
+
+test("does not surface video tracking exposure without same-page correlation", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Meta Pixel and video evidence were observed without same-page correlation.",
+        fallbackEvidence: {
+          metaPixelRequestUrls: ["https://www.facebook.com/tr/?ev=PageView"],
+          runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+          runtimeVendors: ["Meta Pixel"],
+          samePageVideoTrackingCorrelation: false,
+          signalKey: "privacy.video_content_tracking_exposure_detected",
+          signalValue: true,
+          videoContentSurfaceObserved: true,
+          videoPageUrls: ["https://example.com/watch/highlights"]
+        },
+        observedValue: "Meta Pixel and video evidence",
+        severity: "high",
+        signalKey: "privacy.video_content_tracking_exposure_detected",
+        signalLabel: "Video content tracking exposure detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Video content tracking exposure detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const packet = packets.find((candidate) => candidate.unifiedFindingId === "video_content_tracking_exposure");
+
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("audit_only"), true);
+  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_specific_runtime_anchor"), true);
 });
 
 test("drops weak root-only cookie obstruction urls from final evidence packets", () => {

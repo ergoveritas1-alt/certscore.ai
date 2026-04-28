@@ -204,6 +204,8 @@ export type ScanPageEvidenceRecord = {
 export type ScanSignalHitRecord = {
   evidence_refs?: unknown;
   id?: string | null;
+  matched_text?: string | null;
+  matched_snippet?: string | null;
   page_role?: string | null;
   page_type?: string | null;
   page_url?: string | null;
@@ -435,40 +437,69 @@ function normalizeSupplementalPolicySignals(signals: SupplementalPolicySignal[])
 
 function buildScannerSignalPopulationRecords(input: {
   observedAt: string | null;
+  signalHits?: ScanSignalHitRecord[];
   signals: ScanSignalRecord[];
 }): PopulatedSignalRecord[] {
-  return input.signals.map((signal) => ({
-    confidence: 1,
-    evidenceRefs: [],
-    key: signal.key,
-    label: signal.label,
-    observedAt: input.observedAt,
-    populationStatus: "present",
-    provenance: [
-      {
-        detail: "scanner_retained_signal",
-        kind: "signal"
+  return input.signals.map((signal) => {
+    const matchedTexts: string[] = [];
+    if (input.signalHits) {
+      for (const hit of input.signalHits) {
+        if (hit.signal_key !== signal.key) {
+          continue;
+        }
+        let payload: Record<string, unknown> | null = null;
+        if (typeof hit.payload === "string") {
+          try {
+            payload = JSON.parse(hit.payload) as Record<string, unknown>;
+          } catch {
+            payload = null;
+          }
+        } else if (hit.payload && typeof hit.payload === "object" && !Array.isArray(hit.payload)) {
+          payload = hit.payload as Record<string, unknown>;
+        }
+        const texts = payload?.matchedTexts;
+        if (Array.isArray(texts)) {
+          for (const text of texts) {
+            if (typeof text === "string" && text.trim().length > 0) {
+              matchedTexts.push(text.trim());
+            }
+          }
+        }
       }
-    ],
-    reportSignalSource:
-      signal.key.startsWith("privacy.") && /reject_reduced|weak_cookie_security|gpc_signal_not_honored/i.test(signal.key)
-        ? "runtime_artifact_signal"
-        : signal.key.startsWith("privacy.") ||
-            signal.key.startsWith("commerce.") ||
-            signal.key.startsWith("financial.") ||
-            signal.key.startsWith("entity.") ||
-            signal.key.startsWith("disclosure.") ||
-            signal.key.startsWith("context.") ||
-            signal.key.startsWith("accessibility.")
-          ? "snapshot_signal"
-          : null,
-    source: "scanner",
-    value: signal.value,
-    valueType:
-      signal.valueType === "number" || signal.valueType === "string_array" || signal.valueType === "text"
-        ? signal.valueType
-        : "boolean"
-  }));
+    }
+    return {
+      confidence: 1,
+      evidenceRefs: matchedTexts,
+      key: signal.key,
+      label: signal.label,
+      observedAt: input.observedAt,
+      populationStatus: "present",
+      provenance: [
+        {
+          detail: "scanner_retained_signal",
+          kind: "signal"
+        }
+      ],
+      reportSignalSource:
+        signal.key.startsWith("privacy.") && /reject_reduced|weak_cookie_security|gpc_signal_not_honored/i.test(signal.key)
+          ? "runtime_artifact_signal"
+          : signal.key.startsWith("privacy.") ||
+              signal.key.startsWith("commerce.") ||
+              signal.key.startsWith("financial.") ||
+              signal.key.startsWith("entity.") ||
+              signal.key.startsWith("disclosure.") ||
+              signal.key.startsWith("context.") ||
+              signal.key.startsWith("accessibility.")
+            ? "snapshot_signal"
+            : null,
+      source: "scanner",
+      value: signal.value,
+      valueType:
+        signal.valueType === "number" || signal.valueType === "string_array" || signal.valueType === "text"
+          ? signal.valueType
+          : "boolean"
+    };
+  });
 }
 
 function mergeRelatedPreviewSnapshot(
@@ -698,6 +729,7 @@ async function loadScanDetailRecord(input: {
   });
   const scannerSignalPopulations = buildScannerSignalPopulationRecords({
     observedAt: scanObservedAt,
+    signalHits,
     signals: [
       ...normalizedSignals,
       ...supplementalSnapshotSignals,

@@ -8,6 +8,7 @@ import {
 import { buildReviewFindings, buildSectionReviewIssues } from "./scan-report-review-findings";
 import { buildSupplementalRuntimeUnifiedFindingPackets } from "./supplemental-runtime-unified-findings";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
+import { deriveConcernPolicy } from "./concern-policy";
 
 function packet(id: string, categoryId: string, relation: "owner" | "mirror" | "overlay") {
   return {
@@ -276,4 +277,80 @@ test("supplemental runtime request evidence still promotes through unified packe
   assert.equal(packet?.details?.family, "consent_tracking");
   assert.deepEqual(packet?.details?.requestUrls, ["https://metrics.example.net/collect"]);
   assert.equal(packet?.evidence?.entities?.preconsent_cookie_names?.includes("_ga"), true);
+});
+
+test("buildReviewFindings injects domain macro enrichment fields into fallbackEvidence", () => {
+  const candidates = buildReviewFindings({
+    issues: [],
+    macroEnrichment: {
+      normalized_output_json: {
+        industry_primary: "finance",
+        monetization_signals: {
+          investor_or_securities_promotion: true
+        }
+      }
+    },
+    prioritizedAccessibilityRuleRows: [],
+    sectionId: "tracking_third_party_ecosystem",
+    sectionItems: [
+      {
+        key: "commerce.session_replay_tool_detected",
+        label: "Session replay tool detected",
+        relation: "primary",
+        source: "snapshot_signal",
+        value: true
+      }
+    ],
+    trackerVendors: [
+      {
+        beforeConsent: true,
+        collectionEndpointType: "first_party_collection_proxy",
+        confidence: 0.95,
+        detectionSource: "request",
+        firstPartyOrThirdParty: "first_party",
+        matchedSignatureId: "fullstory",
+        scriptHost: "www.example.com",
+        vendorCategory: "session_replay",
+        vendorName: "FullStory"
+      }
+    ]
+  });
+
+  const candidate = candidates.find((c) => c.signalKey === "commerce.session_replay_tool_detected");
+  assert.equal(candidate?.fallbackEvidence?.domainIndustryPrimary, "finance");
+  assert.equal(candidate?.fallbackEvidence?.investorOrSecuritiesPromotion, true);
+});
+
+test("buildReviewFindings omits domain macro fields when macroEnrichment is absent", () => {
+  const candidates = buildReviewFindings({
+    issues: [],
+    prioritizedAccessibilityRuleRows: [],
+    sectionId: "tracking_third_party_ecosystem",
+    sectionItems: [
+      {
+        key: "commerce.session_replay_tool_detected",
+        label: "Session replay tool detected",
+        relation: "primary",
+        source: "snapshot_signal",
+        value: true
+      }
+    ],
+    trackerVendors: [
+      {
+        beforeConsent: true,
+        collectionEndpointType: "first_party_collection_proxy",
+        confidence: 0.95,
+        detectionSource: "request",
+        firstPartyOrThirdParty: "first_party",
+        matchedSignatureId: "fullstory",
+        scriptHost: "www.example.com",
+        vendorCategory: "session_replay",
+        vendorName: "FullStory"
+      }
+    ]
+  });
+
+  const candidate = candidates.find((c) => c.signalKey === "commerce.session_replay_tool_detected");
+  assert.equal(candidate?.fallbackEvidence?.domainIndustryPrimary, null);
+  assert.equal(candidate?.fallbackEvidence?.investorOrSecuritiesPromotion, null);
 });

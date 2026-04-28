@@ -6,6 +6,7 @@ import {
   type ExecutivePosture
 } from "../../lib/scans/calibration-summary";
 import { formatRepresentativeAccessibilityCoverage } from "../../lib/scans/accessibility-evidence";
+import { compactEvidenceJsonForDisplay } from "../../lib/scans/compact-evidence-json";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
@@ -1004,7 +1005,7 @@ function RegulatoryLensFindingCard(input: {
 }) {
   const evidencePayload = JSON.stringify(
     {
-      evidence: input.finding.evidence,
+      evidence: compactEvidenceJsonForDisplay(input.finding.evidence),
       lens: {
         acronym: input.lens.acronym,
         detailTitle: input.lens.detailTitle,

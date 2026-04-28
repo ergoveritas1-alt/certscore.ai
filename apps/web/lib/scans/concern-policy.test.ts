@@ -461,6 +461,286 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "raw high-risk financial product signal on finance domain stays eligible via macro enrichment",
+      concern: makeConcern({
+        originKey: "financial.options_or_futures_language_present",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "Options or futures language present"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        domainIndustryPrimary: "finance",
+        signalKey: "financial.options_or_futures_language_present",
+        signalLabel: "Options or futures language present",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "raw high-risk financial product signal on crypto domain stays eligible via macro enrichment",
+      concern: makeConcern({
+        originKey: "financial.perpetuals_or_derivatives_language_present",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "Perpetuals or derivatives language present"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        domainIndustryPrimary: "crypto",
+        investorOrSecuritiesPromotion: true,
+        signalKey: "financial.perpetuals_or_derivatives_language_present",
+        signalLabel: "Perpetuals or derivatives language present",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "options or futures signal on sportsbook is blocked",
+      concern: makeConcern({
+        originKey: "financial.options_or_futures_language_present",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "Options or futures language present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        matchedSnippet: "Explore betting options and NFL futures odds on our sportsbook.",
+        pageClassification: "financial_offer",
+        pageType: "financial_offer",
+        pageUrl: "https://example.com/sportsbook",
+        signalKey: "financial.options_or_futures_language_present",
+        signalLabel: "Options or futures language present",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "perpetuals or derivatives signal on gambling site is blocked",
+      concern: makeConcern({
+        originKey: "financial.perpetuals_or_derivatives_language_present",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "Perpetuals or derivatives language present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        matchedSnippet: "Casino gaming with derivatives bonus bets and wagering options.",
+        pageClassification: "financial_offer",
+        pageType: "financial_offer",
+        pageUrl: "https://example.com/casino",
+        signalKey: "financial.perpetuals_or_derivatives_language_present",
+        signalLabel: "Perpetuals or derivatives language present",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "options signal with true financial derivatives context stays eligible",
+      concern: makeConcern({
+        originKey: "financial.options_or_futures_language_present",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "Options or futures language present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        matchedSnippet: "Trade equity options with strike price and expiry on our derivatives exchange.",
+        pageClassification: "financial_offer",
+        pageType: "financial_offer",
+        pageUrl: "https://example.com/trading/options",
+        signalKey: "financial.options_or_futures_language_present",
+        signalLabel: "Options or futures language present",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "perpetuals signal with true financial derivatives context stays eligible",
+      concern: makeConcern({
+        originKey: "financial.perpetuals_or_derivatives_language_present",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "Perpetuals or derivatives language present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        matchedSnippet: "Perpetual swaps with underlying crypto assets and hedging on our derivatives market.",
+        pageClassification: "financial_offer",
+        pageType: "financial_offer",
+        pageUrl: "https://example.com/trading/perps",
+        signalKey: "financial.perpetuals_or_derivatives_language_present",
+        signalLabel: "Perpetuals or derivatives language present",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "options signal on daily fantasy sports is blocked",
+      concern: makeConcern({
+        originKey: "financial.options_or_futures_language_present",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "Options or futures language present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        matchedSnippet: "Player prop markets and parlay options for daily fantasy sports.",
+        pageClassification: "financial_offer",
+        pageType: "financial_offer",
+        pageUrl: "https://example.com/fantasy",
+        signalKey: "financial.options_or_futures_language_present",
+        signalLabel: "Options or futures language present",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "options signal on CFTC-regulated prediction market stays eligible",
+      concern: makeConcern({
+        originKey: "financial.options_or_futures_language_present",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "Options or futures language present"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        matchedSnippet: "Trade event contracts on economic and political outcomes. CFTC-regulated designated contract market.",
+        pageClassification: "financial_offer",
+        pageType: "financial_offer",
+        pageUrl: "https://example.com/events",
+        signalKey: "financial.options_or_futures_language_present",
+        signalLabel: "Options or futures language present",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "section review high-risk product on gambling domain without offer evidence is blocked",
+      concern: makeConcern({
+        originKey: "section_review.high_risk_product_without_local_loss_risk_disclosure",
+        originType: "section_review",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "High-risk gambling promotion disclosure review"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed"] as const,
+      rawEvidence: {
+        familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
+        matchedSnippet:
+          "Sports betting or gambling context detected. High-risk product marketing should keep age eligibility, responsible-gambling help, bonus terms, and material offer restrictions close to promotional claims.",
+        offerSnippets: [],
+        pageClassification: "financial_offer",
+        pageType: "financial_offer",
+        pageUrl: "https://www.draftkings.com/",
+        sectionReviewIssue: true,
+        sensitive_context_label: "sports betting or gambling site",
+        supportingSignals: [
+          "financial.high_risk_product_promotion",
+          "commercial.gambling_or_sportsbook_context_detected"
+        ]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "section review high-risk product on gambling domain with offer evidence stays eligible",
+      concern: makeConcern({
+        originKey: "section_review.high_risk_product_without_local_loss_risk_disclosure",
+        originType: "section_review",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "High-risk gambling promotion disclosure review"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
+        matchedSnippet: "Get $1,000 in bonus bets when you sign up.",
+        offerSnippets: ["Get $1,000 in bonus bets when you sign up."],
+        pageClassification: "financial_offer",
+        pageType: "financial_offer",
+        pageUrl: "https://www.draftkings.com/",
+        primaryOfferSnippet: "Get $1,000 in bonus bets when you sign up.",
+        sectionReviewIssue: true,
+        sensitive_context_label: "sports betting or gambling site",
+        supportingSignals: [
+          "financial.high_risk_product_promotion",
+          "commercial.gambling_or_sportsbook_context_detected"
+        ]
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "section review high-risk product on true financial exchange stays eligible",
+      concern: makeConcern({
+        originKey: "section_review.high_risk_product_without_local_loss_risk_disclosure",
+        originType: "section_review",
+        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        title: "High-risk gambling promotion disclosure review"
+      }),
+      evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
+      rawEvidence: {
+        familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
+        matchedSnippet: "Trade perpetual swaps with leverage on our derivatives exchange.",
+        offerSnippets: ["Trade perpetual swaps with leverage on our derivatives exchange."],
+        pageClassification: "financial_offer",
+        pageType: "financial_offer",
+        pageUrl: "https://www.kraken.com/",
+        primaryOfferSnippet: "Trade perpetual swaps with leverage on our derivatives exchange.",
+        sectionReviewIssue: true,
+        sensitive_context_label: "sports betting or gambling site",
+        supportingSignals: [
+          "financial.high_risk_product_promotion",
+          "commercial.gambling_or_sportsbook_context_detected"
+        ]
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "editorial earnings claim without offer context stays audit-only",
       concern: makeConcern({
         originKey: "financial_review.earnings_claim_without_adjacent_disclosure",
@@ -1642,4 +1922,51 @@ test("deriveConcernPolicy promotes corroborated fingerprinting evidence", () => 
 
   assert.equal(policy.promotionEligibility, "eligible");
   assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy promotes same-page video content tracking exposure", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.video_content_tracking_exposure_detected",
+      suggestedUnifiedFindingId: "video_content_tracking_exposure",
+      title: "Video content tracking exposure detected"
+    }),
+    evidenceStrengthFlags: ["direct_runtime", "page_attributed"],
+    rawEvidence: {
+      metaPixelPayloadFieldHints: ["ev", "dl", "page_title"],
+      metaPixelRequestUrls: ["https://www.facebook.com/tr/?ev=PageView"],
+      runtimeVendors: ["Meta Pixel"],
+      samePageVideoTrackingCorrelation: true,
+      videoContentSurfaceObserved: true,
+      videoPageUrls: ["https://example.com/watch/highlights"],
+      videoTitleSnippets: ["Week 1 highlights"]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "strong");
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy keeps uncorrelated video and Meta evidence audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.video_content_tracking_exposure_detected",
+      suggestedUnifiedFindingId: "video_content_tracking_exposure",
+      title: "Video content tracking exposure detected"
+    }),
+    evidenceStrengthFlags: ["direct_runtime", "page_attributed"],
+    rawEvidence: {
+      metaPixelRequestUrls: ["https://www.facebook.com/tr/?ev=PageView"],
+      runtimeVendors: ["Meta Pixel"],
+      samePageVideoTrackingCorrelation: false,
+      videoContentSurfaceObserved: true,
+      videoPageUrls: ["https://example.com/watch/highlights"]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_specific_runtime_anchor"));
 });

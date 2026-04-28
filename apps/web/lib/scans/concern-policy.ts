@@ -610,6 +610,48 @@ export function hasConcreteRetargetingEvidence(evidence: Record<string, unknown>
   return hasConcreteRetargetingArtifact(evidence);
 }
 
+function hasVideoContentSurfaceEvidence(evidence: Record<string, unknown> | null | undefined) {
+  return (
+    getBooleanEvidence(evidence, ["videoContentSurfaceObserved", "video_content_surface_observed"]) === true ||
+    getStringArrayValues(evidence, ["videoPageUrls", "video_page_urls"]).length > 0 ||
+    getStringArrayValues(evidence, ["videoTitleSnippets", "video_title_snippets"]).length > 0
+  );
+}
+
+function hasMetaPixelEvidence(evidence: Record<string, unknown> | null | undefined) {
+  const vendors = getStringArrayValues(evidence, [
+    "runtimeVendors",
+    "runtime_vendors",
+    "relatedVendors",
+    "related_vendors"
+  ]);
+  const requestUrls = getStringArrayValues(evidence, [
+    "metaPixelRequestUrls",
+    "meta_pixel_request_urls",
+    "runtimeRequestUrls",
+    "runtime_request_urls",
+    "runtimeEvidenceUrls",
+    "runtime_evidence_urls"
+  ]);
+
+  return vendors.some((value) => /meta\s+pixel|facebook/i.test(value)) ||
+    requestUrls.some((value) => /facebook\.com|facebook\.net|fbevents\.js|\/tr\//i.test(value));
+}
+
+function hasSamePageVideoTrackingCorrelation(evidence: Record<string, unknown> | null | undefined) {
+  return getBooleanEvidence(evidence, [
+    "samePageVideoTrackingCorrelation",
+    "same_page_video_tracking_correlation"
+  ]) === true;
+}
+
+function hasVideoPayloadFieldHints(evidence: Record<string, unknown> | null | undefined) {
+  return getStringArrayValues(evidence, [
+    "metaPixelPayloadFieldHints",
+    "meta_pixel_payload_field_hints"
+  ]).some((value) => /content|video|title|page|dl|rl|ev/i.test(value));
+}
+
 export function hasConcreteDsarEvidence(evidence: Record<string, unknown> | null | undefined) {
   if (!evidence) {
     return false;
@@ -786,6 +828,22 @@ function isRetargetingConcern(
     .toLowerCase();
 
   return /retargeting_pixel|retargeting pixel|retargeting_pixel_observed/.test(haystack);
+}
+
+function isVideoContentTrackingConcern(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
+) {
+  const haystack = [
+    concern.canonicalConcernKey,
+    concern.suggestedUnifiedFindingId,
+    concern.originKey,
+    concern.title
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /video_content_tracking_exposure|video content tracking|video privacy/.test(haystack);
 }
 
 function isFingerprintingConcern(
@@ -1041,6 +1099,98 @@ function isRawHighRiskFinancialProductConcern(
   );
 }
 
+const DERIVATIVES_LANGUAGE_SIGNAL_KEYS = new Set([
+  "financial.options_or_futures_language_present",
+  "financial.perpetuals_or_derivatives_language_present"
+]);
+
+function isDerivativesLanguageSignal(
+  concern: Pick<NormalizedConcern, "originKey" | "signalKey">
+) {
+  return (
+    DERIVATIVES_LANGUAGE_SIGNAL_KEYS.has(concern.originKey) ||
+    (typeof concern.signalKey === "string" && DERIVATIVES_LANGUAGE_SIGNAL_KEYS.has(concern.signalKey))
+  );
+}
+
+const SPORTSBOOK_GAMBLING_CONTEXT_PATTERN =
+  /\b(?:sportsbook|sports\s+betting|online\s+betting|betting\s+site|casino|online\s+casino|gambling|gaming|wager|wagering|fantasy\s+sports|daily\s+fantasy|draftkings|fanduel|betmgm|caesars|pointsbet|bet365|unibet|parlay|player\s+prop|prop\s+bet|moneyline|over\/under|spread\s+betting)\b/i;
+
+const SPORTS_FUTURES_AND_OPTIONS_PATTERN =
+  /\b(?:nfl|nba|mlb|nhl|super\s+bowl|ncaa|premier\s+league)\b.{0,60}\b(?:futures\s+odds|futures\s+betting|betting\s+options|parlay\s+options|prop\s+markets)\b|\bbetting\s+options\b|\bparlay\s+options\b|\bplayer\s+prop\s+markets\b|\bfutures\s+odds\b/i;
+
+function hasSportsbookGamblingContext(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const reviewerVisibleText = [
+    ...getEvidenceTextCandidates(rawEvidence),
+    ...getEvidenceUrlCandidates(rawEvidence)
+  ].join(" ");
+
+  return (
+    SPORTSBOOK_GAMBLING_CONTEXT_PATTERN.test(reviewerVisibleText) ||
+    SPORTS_FUTURES_AND_OPTIONS_PATTERN.test(reviewerVisibleText)
+  );
+}
+
+const TRUE_FINANCIAL_DERIVATIVES_CONTEXT_PATTERN =
+  /\b(?:options?\s+contract|call\s+option|put\s+option|strike\s+price|strike|expir(?:y|ation\s+date)|maturity|futures?\s+contract|commodities?\s+futures|equity\s+options|index\s+futures|perpetual\s+swap|perps|derivatives?\s+exchange|derivatives?\s+market|underlying\s+(?:asset|security)|hedg(?:e|ing)|liquidat(?:e|ion)|order\s+book|limit\s+order|market\s+order|cfd|contract\s+for\s+difference)\b/i;
+
+function hasTrueFinancialDerivativesContext(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const reviewerVisibleText = [
+    ...getEvidenceTextCandidates(rawEvidence),
+    ...getEvidenceUrlCandidates(rawEvidence)
+  ].join(" ");
+
+  return TRUE_FINANCIAL_DERIVATIVES_CONTEXT_PATTERN.test(reviewerVisibleText);
+}
+
+const PREDICTION_MARKET_CONTEXT_PATTERN =
+  /\b(?:event\s+contracts?\b|prediction\s+market\s+(?:exchange|platform)|trade\s+outcomes?\b|economic\s+event\s+contract|political\s+event\s+contract)\b/i;
+
+const PREDICTION_MARKET_REGULATORY_PATTERN =
+  /\b(?:CFTC|Commodity\s+Futures\s+Trading\s+Commission|Designated\s+Contract\s+Market|DCM|NFA|National\s+Futures\s+Association)\b/i;
+
+function hasPredictionMarketContext(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const reviewerVisibleText = [
+    ...getEvidenceTextCandidates(rawEvidence),
+    ...getEvidenceUrlCandidates(rawEvidence)
+  ].join(" ");
+
+  return (
+    PREDICTION_MARKET_CONTEXT_PATTERN.test(reviewerVisibleText) ||
+    PREDICTION_MARKET_REGULATORY_PATTERN.test(reviewerVisibleText)
+  );
+}
+
+function hasConcreteOfferEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const offerSnippets = rawEvidence.offerSnippets;
+  if (Array.isArray(offerSnippets) && offerSnippets.some((entry) => typeof entry === "string" && entry.trim().length > 0)) {
+    return true;
+  }
+
+  const primaryOfferSnippet = rawEvidence.primaryOfferSnippet;
+  if (typeof primaryOfferSnippet === "string" && primaryOfferSnippet.trim().length > 0) {
+    return true;
+  }
+
+  return false;
+}
+
 const NEGATIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "earnings_claim_without_adjacent_disclosure",
   "financial_urgency_pressure_tactic_detected",
@@ -1093,7 +1243,27 @@ function hasNonFinancialEditorialOrRetailContext(rawEvidence: Record<string, unk
 }
 
 function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | undefined) {
-  if (!rawEvidence || !hasSubstantivePageOrSnippetEvidence(rawEvidence)) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const domainIndustryPrimary = getFirstString(rawEvidence, [
+    "domainIndustryPrimary",
+    "domain_industry_primary"
+  ]);
+  if (domainIndustryPrimary === "finance" || domainIndustryPrimary === "crypto") {
+    return true;
+  }
+
+  const investorOrSecuritiesPromotion = getBooleanEvidence(rawEvidence, [
+    "investorOrSecuritiesPromotion",
+    "investor_or_securities_promotion"
+  ]);
+  if (investorOrSecuritiesPromotion === true) {
+    return true;
+  }
+
+  if (!hasSubstantivePageOrSnippetEvidence(rawEvidence)) {
     return false;
   }
 
@@ -1603,6 +1773,42 @@ export function deriveConcernPolicy(input: {
     };
   }
 
+  if (isVideoContentTrackingConcern(input.concern)) {
+    if (!hasVideoContentSurfaceEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_specific_runtime_anchor"],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    if (!hasMetaPixelEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_third_party_tracking_artifact"],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    if (!hasSamePageVideoTrackingCorrelation(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_specific_runtime_anchor"],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: hasVideoPayloadFieldHints(input.rawEvidence) ? "strong" : "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
   if (isFingerprintingConcern(input.concern)) {
     if (!hasStrongFingerprintingEvidence(input.rawEvidence)) {
       return {
@@ -1739,6 +1945,38 @@ export function deriveConcernPolicy(input: {
   if (
     isRawHighRiskFinancialProductConcern(input.concern) &&
     !hasFinancialOfferContext(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "suppress",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "blocked"
+    };
+  }
+
+  if (
+    isRawHighRiskFinancialProductConcern(input.concern) &&
+    isDerivativesLanguageSignal(input.concern) &&
+    hasSportsbookGamblingContext(input.rawEvidence) &&
+    !hasTrueFinancialDerivativesContext(input.rawEvidence) &&
+    !hasPredictionMarketContext(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "suppress",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "blocked"
+    };
+  }
+
+  if (
+    isRawHighRiskFinancialProductConcern(input.concern) &&
+    input.concern.originType === "section_review" &&
+    input.rawEvidence?.sectionReviewIssue === true &&
+    hasSportsbookGamblingContext(input.rawEvidence) &&
+    !hasTrueFinancialDerivativesContext(input.rawEvidence) &&
+    !hasPredictionMarketContext(input.rawEvidence) &&
+    !hasConcreteOfferEvidence(input.rawEvidence)
   ) {
     return {
       allowedNarrativeTier: "weak",

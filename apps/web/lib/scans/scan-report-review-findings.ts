@@ -1399,10 +1399,72 @@ function getRepresentativeAccessibilityExamplesForSignal(input: {
   }));
 }
 
+function getDomainMacroFallbackFields(
+  macroEnrichment: Record<string, unknown> | null | undefined
+): { domainIndustryPrimary: string | null; investorOrSecuritiesPromotion: boolean | null } {
+  if (!macroEnrichment) {
+    return { domainIndustryPrimary: null, investorOrSecuritiesPromotion: null };
+  }
+
+  const normalizedOutput =
+    macroEnrichment.normalized_output_json && typeof macroEnrichment.normalized_output_json === "object"
+      ? (macroEnrichment.normalized_output_json as Record<string, unknown>)
+      : null;
+
+  const monetizationSignals =
+    normalizedOutput?.monetization_signals && typeof normalizedOutput.monetization_signals === "object"
+      ? (normalizedOutput.monetization_signals as Record<string, unknown>)
+      : null;
+
+  const domainIndustryPrimary =
+    typeof normalizedOutput?.industry_primary === "string" ? normalizedOutput.industry_primary : null;
+
+  const investorOrSecuritiesPromotion =
+    typeof monetizationSignals?.investor_or_securities_promotion === "boolean"
+      ? monetizationSignals.investor_or_securities_promotion
+      : null;
+
+  return { domainIndustryPrimary, investorOrSecuritiesPromotion };
+}
+
+function getSignalHitMatchedTexts(signalKey: string, signalHitRows: Array<Record<string, unknown>> | undefined): string[] {
+  if (!signalHitRows || signalHitRows.length === 0) {
+    return [];
+  }
+
+  const texts: string[] = [];
+  for (const row of signalHitRows) {
+    if (getRecordString(row, "signal_key") !== signalKey && getRecordString(row, "signalKey") !== signalKey) {
+      continue;
+    }
+
+    const dbMatchedText = getRecordString(row, "matched_text") ?? getRecordString(row, "matchedText");
+    if (dbMatchedText) {
+      texts.push(dbMatchedText);
+      continue;
+    }
+
+    const payload = row.payload;
+    if (payload && typeof payload === "object") {
+      const matchedTexts = (payload as Record<string, unknown>).matchedTexts;
+      if (Array.isArray(matchedTexts)) {
+        for (const text of matchedTexts) {
+          if (typeof text === "string" && text.trim().length > 0) {
+            texts.push(text.trim());
+          }
+        }
+      }
+    }
+  }
+
+  return uniqueStrings(texts);
+}
+
 export function buildReviewFindings(input: {
   allSignals?: Array<{ key: string; value: unknown }>;
   categoryId?: string;
   issues: CanonicalReviewIssue[];
+  macroEnrichment?: Record<string, unknown> | null;
   mergedSignals?: Array<{
     key: string;
     value: boolean | number | string | string[] | null;
@@ -1411,6 +1473,7 @@ export function buildReviewFindings(input: {
   policyEnrichment?: Array<Record<string, unknown>>;
   prioritizedAccessibilityRuleRows: AccessibilityRuleEvidenceRow[];
   runtimeArtifacts?: Record<string, unknown> | null;
+  signalHitRows?: Array<Record<string, unknown>>;
   snapshot?: Record<string, unknown> | null;
   sectionId: string;
   sectionItems: CanonicalSignalItem[];
@@ -1462,8 +1525,8 @@ export function buildReviewFindings(input: {
         signalKey: item.key
       });
 
-      const baseFallbackEvidence =
-        isRightsFrictionSignal(item.key)
+      const baseFallbackEvidence = {
+        ...(isRightsFrictionSignal(item.key)
           ? {
               consentBlockerPageTitle:
                 typeof input.runtimeArtifacts?.consent_blocker_page_title === "string"
@@ -1609,10 +1672,13 @@ export function buildReviewFindings(input: {
                 }
               : {
                   accessibilityRuleExamples,
+                  matchedTexts: getSignalHitMatchedTexts(item.key, input.signalHitRows),
                   signalKey: item.key,
                   signalLabel: item.label,
                   signalValue: item.value
-                };
+                }),
+        ...getDomainMacroFallbackFields(input.macroEnrichment)
+      };
       const hybridFallbackEvidence = getHybridSignalFallbackEvidence({
         runtimeArtifacts: input.runtimeArtifacts,
         signalKey: item.key,
