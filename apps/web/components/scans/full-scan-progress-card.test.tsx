@@ -7,7 +7,7 @@ import {
   type ScannerExecutionSummary,
   type ScannerStageOutcome
 } from "@website-signal-risk-scanner/shared";
-import { FullScanProgressCard, getNextDisplayedProgressValue } from "./full-scan-progress-card";
+import { FullScanProgressCard, getNextDisplayedProgressValue, getProgressValue } from "./full-scan-progress-card";
 
 function makeStage(
   stage: ScannerStageOutcome["stage"],
@@ -182,6 +182,62 @@ test("keeps displayed progress monotonic across lower refresh targets", () => {
     }),
     64
   );
+});
+
+test("keeps final scan stages moving between worker updates", () => {
+  const runtimeCompletedAt = "2026-03-22T22:14:30.000Z";
+  const summary: ScannerExecutionSummary = {
+    ...makeSummary(),
+    stages: [
+      makeStage("setup_load", "2026-03-22T22:14:03.000Z"),
+      makeStage("baseline_lookup", "2026-03-22T22:14:05.000Z"),
+      makeStage("crawl_discovery", "2026-03-22T22:14:10.000Z"),
+      makeStage("runtime_snapshot_capture", runtimeCompletedAt)
+    ]
+  };
+
+  assert.equal(
+    getProgressValue({
+      buildPhaseSummaries: [],
+      events: [],
+      executionSummary: summary,
+      nowMs: Date.parse(runtimeCompletedAt),
+      status: "running"
+    }),
+    85
+  );
+  assert.ok(
+    getProgressValue({
+      buildPhaseSummaries: [],
+      events: [],
+      executionSummary: summary,
+      nowMs: Date.parse(runtimeCompletedAt) + 35_000,
+      status: "running"
+    }) > 90
+  );
+});
+
+test("lets persistence progress approach completion without reaching 100", () => {
+  const signalCompletedAt = "2026-03-22T22:15:30.000Z";
+  const summary: ScannerExecutionSummary = {
+    ...makeSummary(),
+    stages: [
+      makeStage("setup_load", "2026-03-22T22:14:03.000Z"),
+      makeStage("baseline_lookup", "2026-03-22T22:14:05.000Z"),
+      makeStage("crawl_discovery", "2026-03-22T22:14:10.000Z"),
+      makeStage("runtime_snapshot_capture", "2026-03-22T22:14:30.000Z"),
+      makeStage("signal_derivation", signalCompletedAt)
+    ]
+  };
+  const progressValue = getProgressValue({
+    buildPhaseSummaries: [],
+    events: [],
+    executionSummary: summary,
+    nowMs: Date.parse(signalCompletedAt) + 60_000,
+    status: "running"
+  });
+
+  assert.equal(progressValue, 99);
 });
 
 test("surfaces early tier results while a scan is still running", () => {

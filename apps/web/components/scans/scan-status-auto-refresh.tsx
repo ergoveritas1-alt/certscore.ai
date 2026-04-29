@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import React, { useEffect, useRef } from "react";
 
 type ScanStatusAutoRefreshProps = {
@@ -21,6 +22,25 @@ export function ScanStatusAutoRefresh({
   status
 }: ScanStatusAutoRefreshProps) {
   const shouldRefresh = shouldAutoRefreshScanStatus({ pendingPostCompletionWork, status });
+
+  if (!shouldRefresh) {
+    return null;
+  }
+
+  const statusLabel = pendingPostCompletionWork ? "finalizing findings" : status;
+
+  return (
+    <>
+      {typeof window !== "undefined" ? <ScanStatusRefreshEffect shouldRefresh={shouldRefresh} /> : null}
+      <p className="text-sm text-slate-500">
+        Refreshing status automatically while this scan is {statusLabel}.
+      </p>
+    </>
+  );
+}
+
+function ScanStatusRefreshEffect({ shouldRefresh }: { shouldRefresh: boolean }) {
+  const router = useRouter();
   const lastInteractionAtRef = useRef(Date.now());
   const AUTO_REFRESH_INTERACTION_GRACE_MS = 12_000;
 
@@ -59,25 +79,20 @@ export function ScanStatusAutoRefresh({
         return;
       }
 
-      // Use a normal page reload here instead of router.refresh() so transient
-      // dev-server fetch failures do not throw the scan page into a runtime overlay.
-      window.location.reload();
+      if (process.env.NODE_ENV === "development") {
+        // Use a normal page reload in dev so transient fetch failures do not
+        // throw the scan page into a runtime overlay.
+        window.location.reload();
+        return;
+      }
+
+      router.refresh();
     }, 5000);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [shouldRefresh]);
+  }, [router, shouldRefresh]);
 
-  if (!shouldRefresh) {
-    return null;
-  }
-
-  const statusLabel = pendingPostCompletionWork ? "finalizing findings" : status;
-
-  return (
-    <p className="text-sm text-slate-500">
-      Refreshing status automatically while this scan is {statusLabel}.
-    </p>
-  );
+  return null;
 }

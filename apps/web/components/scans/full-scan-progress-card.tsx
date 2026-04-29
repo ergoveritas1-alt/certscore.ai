@@ -350,10 +350,11 @@ function buildLatestActivityLine(input: {
   return [prefix, latestEvent.message, queueWaitLabel, metadata].filter(Boolean).join(" · ");
 }
 
-function getProgressValue(input: {
+export function getProgressValue(input: {
   buildPhaseSummaries: BuildPhaseSummary[];
   executionSummary: ScannerExecutionSummary | null;
   events: ScanEventRow[];
+  nowMs?: number;
   status: string;
 }) {
   const milestoneStops = [6, 28, 44, 62, 82, 94, 98];
@@ -396,7 +397,58 @@ function getProgressValue(input: {
 
   const stageEventCount = activeStageKey ? input.events.filter((event) => STAGE_EVENT_MATCHERS[activeStageKey]?.(event.eventType)).length : 0;
   const eventRatio = Math.min(0.65, Math.max(0.25, stageEventCount / 6));
-  return Math.round(base + (nextStop - base) * eventRatio);
+  const eventProgressValue = Math.round(base + (nextStop - base) * eventRatio);
+  const elapsedProgressValue = getElapsedActiveStageProgressValue({
+    activeStageIndex: effectivePendingStageIndex,
+    activeStageKey,
+    base,
+    completedStages: input.executionSummary?.stages ?? [],
+    events: input.events,
+    nextStop,
+    nowMs: input.nowMs
+  });
+
+  return Math.max(eventProgressValue, elapsedProgressValue ?? eventProgressValue);
+}
+
+function getElapsedActiveStageProgressValue(input: {
+  activeStageIndex: number;
+  activeStageKey: string | null;
+  base: number;
+  completedStages: ScannerExecutionSummary["stages"];
+  events: ScanEventRow[];
+  nextStop: number;
+  nowMs?: number;
+}) {
+  if (
+    input.nowMs === undefined ||
+    input.activeStageKey === null ||
+    (input.activeStageKey !== "signal_derivation" && input.activeStageKey !== "persistence_diff_finalization")
+  ) {
+    return null;
+  }
+
+  const previousStageKey = SCAN_EXECUTION_STAGES[input.activeStageIndex - 1] ?? null;
+  const previousStage = previousStageKey
+    ? input.completedStages.find((stage) => stage.stage === previousStageKey) ?? null
+    : null;
+  const latestActiveStageEvent =
+    [...input.events]
+      .reverse()
+      .find((event) => STAGE_EVENT_MATCHERS[input.activeStageKey ?? ""]?.(event.eventType)) ?? null;
+  const startedAtMs =
+    getEventTimeMs(latestActiveStageEvent) ??
+    (previousStage?.completedAt ? Date.parse(previousStage.completedAt) : null);
+
+  if (startedAtMs === null || !Number.isFinite(startedAtMs) || input.nowMs <= startedAtMs) {
+    return null;
+  }
+
+  const durationMs = input.activeStageKey === "signal_derivation" ? 45_000 : 24_000;
+  const cap = input.activeStageKey === "signal_derivation" ? input.nextStop - 1 : 99;
+  const ratio = Math.min(1, (input.nowMs - startedAtMs) / durationMs);
+
+  return Math.min(cap, Math.round(input.base + (cap - input.base) * ratio));
 }
 
 function getPendingStageIndex(executionSummary: ScannerExecutionSummary | null) {
@@ -862,9 +914,10 @@ export function FullScanProgressCard({
         buildPhaseSummaries,
         executionSummary,
         events,
+        nowMs,
         status
       }),
-    [buildPhaseSummaries, events, executionSummary, status]
+    [buildPhaseSummaries, events, executionSummary, nowMs, status]
   );
   const progressDisplayCacheKey = useMemo(
     () =>
