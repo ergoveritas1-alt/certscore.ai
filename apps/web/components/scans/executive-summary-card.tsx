@@ -382,6 +382,9 @@ export function buildRegulatoryLenses(
     findings.find((finding) => finding.id === "adtech_cookie_pre_consent") ??
     findings.find((finding) => /pre[- ]consent|before consent/i.test(`${finding.label} ${finding.shortSummary}`));
   const replayFinding = findings.find((finding) => finding.id === "session_recording_services_detected");
+  const sensitiveTrackingFinding =
+    findings.find((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present") ??
+    findings.find((finding) => finding.id === "session_replay_on_sensitive_input_surface");
   const consentFinding =
     findings.find((finding) => finding.id === "consent_dark_patterns_detected") ??
     findings.find((finding) => finding.id === "asymmetric_consent_ui") ??
@@ -454,6 +457,12 @@ export function buildRegulatoryLenses(
           lens: "GDPR / ePrivacy",
           reason: "session_recording"
         })
+      : null,
+    sensitiveTrackingFinding
+      ? buildRegulatoryLensFindingFromCertFinding(sensitiveTrackingFinding, sensitiveTrackingFinding.shortSummary, {
+          lens: "GDPR / ePrivacy",
+          reason: "sensitive_data_tracking"
+        })
       : null
   ].filter((item): item is RegulatoryLensFinding => Boolean(item));
 
@@ -484,6 +493,12 @@ export function buildRegulatoryLenses(
           lens: "CCPA / CPRA",
           reason: "policy_clarity"
         })
+      : null,
+    sensitiveTrackingFinding
+      ? buildRegulatoryLensFindingFromCertFinding(sensitiveTrackingFinding, sensitiveTrackingFinding.shortSummary, {
+          lens: "CCPA / CPRA",
+          reason: "sensitive_data_tracking"
+        })
       : null
   ].filter((item): item is RegulatoryLensFinding => Boolean(item));
 
@@ -505,6 +520,12 @@ export function buildRegulatoryLenses(
           lens: "FTC",
           reason: "pre_consent_tracking"
         })
+      : null,
+    sensitiveTrackingFinding
+      ? buildRegulatoryLensFindingFromCertFinding(sensitiveTrackingFinding, sensitiveTrackingFinding.shortSummary, {
+          lens: "FTC",
+          reason: "sensitive_data_tracking"
+        })
       : null
   ].filter((item): item is RegulatoryLensFinding => Boolean(item));
 
@@ -513,12 +534,14 @@ export function buildRegulatoryLenses(
       (hasTrackingConcern ? 32 : 0) -
       (beforeConsentCookieCount > 0 ? 14 : 0) -
       (hasConsentConcern ? (hasTrackingConcern || beforeConsentCookieCount > 0 ? 16 : 6) : 0) -
+      (sensitiveTrackingFinding ? 12 : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
   const cpraScore = clampScore(
     82 -
       (hasTrackingConcern ? 24 : 0) -
       (beforeConsentCookieCount > 0 ? 12 : 0) -
+      (sensitiveTrackingFinding ? 14 : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0) -
       (findingIds.has("policy_clarity_risk") ? 8 : 0)
   );
@@ -527,6 +550,7 @@ export function buildRegulatoryLenses(
       (hasConsentConcern ? 24 : 0) -
       (hasTrackingConcern ? 18 : 0) -
       (hasSensitiveHealthTrackingRisk ? 16 : 0) -
+      (sensitiveTrackingFinding ? 12 : 0) -
       (beforeConsentCookieCount > 0 ? 8 : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
@@ -542,7 +566,9 @@ export function buildRegulatoryLenses(
       findings: privacyTrackingNotes,
       ratingLabel: gdprTone.label,
       score: gdprScore,
-      summary: hasTrackingConcern || hasPreConsentCookieConcern
+      summary: sensitiveTrackingFinding
+        ? "Sensitive-data collection and tracking exposure are the main issue."
+        : hasTrackingConcern || hasPreConsentCookieConcern
         ? "Consent and pre-consent tracking risk is the main issue."
         : "No major consent-triggering issue surfaced in the top findings.",
       toneClass: gdprTone.toneClass
@@ -553,7 +579,9 @@ export function buildRegulatoryLenses(
       findings: cpraNotes,
       ratingLabel: cpraTone.label,
       score: cpraScore,
-      summary: replayFinding || hasTrackingConcern || hasPreConsentCookieConcern
+      summary: sensitiveTrackingFinding
+        ? "Sensitive-data collection and downstream third-party exposure drive this score."
+        : replayFinding || hasTrackingConcern || hasPreConsentCookieConcern
         ? "Third-party collection and disclosure posture drives this score."
         : "No strong sale/share-style signal surfaced in the top findings.",
       toneClass: cpraTone.toneClass
@@ -566,6 +594,8 @@ export function buildRegulatoryLenses(
       score: ftcScore,
       summary: hasStrongDarkPatternConcern
         ? "Choice architecture and disclosure clarity are the main FTC-style concerns."
+        : sensitiveTrackingFinding
+          ? "Sensitive-data collection alongside third-party tracking should be reviewed for unfairness or deception risk."
         : hasSensitiveGamblingTrackingRisk
           ? "High-risk gambling, financial-behavior, and advertising flows elevate FTC unfairness or deception risk."
         : hasSensitiveHealthTrackingRisk
@@ -993,7 +1023,7 @@ function RegulatoryRatingBar(input: { score: number; toneClass: string }) {
   const ratingBucket = Math.max(0, Math.min(5, input.score / 20));
 
   return (
-    <div className="flex items-center gap-1.5">
+    <span className="flex items-center gap-1.5">
       {Array.from({ length: 5 }, (_, index) => {
         const segmentFill = Math.max(0, Math.min(1, ratingBucket - index));
 
@@ -1009,7 +1039,7 @@ function RegulatoryRatingBar(input: { score: number; toneClass: string }) {
           </span>
         );
       })}
-    </div>
+    </span>
   );
 }
 
@@ -1313,10 +1343,52 @@ function getFindingCardTone(finding: CertScoreFinding, isFirst: boolean) {
   };
 }
 
+function getFindingTitleIconKey(findingId: string) {
+  switch (findingId) {
+    case "pre_consent_tracking_detected":
+      return "pulse-tracking";
+    case "third_party_tracking_pre_consent":
+      return "arrow-transfer";
+    case "session_recording_services_detected":
+      return "video-capture";
+    case "session_replay_on_sensitive_input_surface":
+      return "shield-video";
+    case "sensitive_data_collection_with_third_party_tracking_present":
+      return "shield-network";
+    case "consent_dark_patterns_detected":
+    case "asymmetric_consent_ui":
+      return "shield-balance";
+    case "reject_option_missing_or_hidden":
+    case "forced_consent_interaction":
+      return "circle-x";
+    case "identifier_transmission_detected":
+      return "chain-link";
+    case "device_data_collection_detected":
+    case "telemetry_rich_identification_observed":
+      return "device-telemetry";
+    case "analytics_cookie_pre_consent":
+    case "adtech_cookie_pre_consent":
+    case "third_party_cookie_pre_consent":
+    case "storage_before_consent":
+      return "cookie-storage";
+    case "probable_fingerprinting":
+      return "fingerprint";
+    case "leveraged_or_high_risk_product_promotion":
+      return "up-arrow";
+    case "accessibility_risk_score":
+      return "accessibility-figure";
+    case "access_limited_no_reliable_findings":
+      return "warning-triangle";
+    default:
+      return "default-circle";
+  }
+}
+
 function FindingTitleIcon(input: { finding: CertScoreFinding }) {
   const common = "h-4 w-4";
+  const iconKey = getFindingTitleIconKey(input.finding.id);
 
-  if (input.finding.id === "pre_consent_tracking_detected") {
+  if (iconKey === "pulse-tracking") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-rose-600`} aria-hidden="true">
         <path d="M4 12h4l2-4 4 8 2-4h4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
@@ -1324,7 +1396,7 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
     );
   }
 
-  if (input.finding.id === "third_party_tracking_pre_consent") {
+  if (iconKey === "arrow-transfer") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-rose-600`} aria-hidden="true">
         <path d="M5 12h6m2 0h6M14 7l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
@@ -1332,7 +1404,7 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
     );
   }
 
-  if (input.finding.id === "session_recording_services_detected") {
+  if (iconKey === "video-capture") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
         <rect x="4" y="6" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
@@ -1341,7 +1413,28 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
     );
   }
 
-  if (input.finding.id === "consent_dark_patterns_detected" || input.finding.id === "asymmetric_consent_ui") {
+  if (iconKey === "shield-video") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-rose-700`} aria-hidden="true">
+        <path d="M12 3l6 2.7v5.6c0 4-2.4 7.2-6 9.7-3.6-2.5-6-5.7-6-9.7V5.7L12 3Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+        <path d="M10 10.5h3.8M14 9l2 1.5-2 1.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "shield-network") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-rose-700`} aria-hidden="true">
+        <path d="M12 3l6 2.7v5.6c0 4-2.4 7.2-6 9.7-3.6-2.5-6-5.7-6-9.7V5.7L12 3Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+        <circle cx="9" cy="10" r="1.1" fill="currentColor" />
+        <circle cx="15.2" cy="9" r="1.1" fill="currentColor" />
+        <circle cx="12.2" cy="14.6" r="1.1" fill="currentColor" />
+        <path d="M10 10.4l4.1-1M9.7 11l2 2.8M14.6 9.8l-1.7 3.7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "shield-balance") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
         <path d="M12 3l7 3v6c0 4.2-2.8 7.5-7 9-4.2-1.5-7-4.8-7-9V6l7-3Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
@@ -1350,7 +1443,7 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
     );
   }
 
-  if (input.finding.id === "reject_option_missing_or_hidden" || input.finding.id === "forced_consent_interaction") {
+  if (iconKey === "circle-x") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
         <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1.8" />
@@ -1359,7 +1452,7 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
     );
   }
 
-  if (input.finding.id === "identifier_transmission_detected") {
+  if (iconKey === "chain-link") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
         <path d="M7.5 14.5 14 8a3 3 0 1 1 4.2 4.2l-6.5 6.5a4.5 4.5 0 0 1-6.4-6.4l5.8-5.8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -1367,7 +1460,7 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
     );
   }
 
-  if (input.finding.id === "device_data_collection_detected" || input.finding.id === "telemetry_rich_identification_observed") {
+  if (iconKey === "device-telemetry") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
         <rect x="4.5" y="5" width="15" height="10.5" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
@@ -1377,12 +1470,7 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
     );
   }
 
-  if (
-    input.finding.id === "analytics_cookie_pre_consent" ||
-    input.finding.id === "adtech_cookie_pre_consent" ||
-    input.finding.id === "third_party_cookie_pre_consent" ||
-    input.finding.id === "storage_before_consent"
-  ) {
+  if (iconKey === "cookie-storage") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
         <path d="M12 4a8 8 0 1 0 8 8c0-.7-.1-1.4-.3-2.1-.7.6-1.6 1.1-2.6 1.1-2.2 0-4-1.8-4-4 0-1 .4-1.9 1.1-2.6A8.2 8.2 0 0 0 12 4Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
@@ -1393,7 +1481,7 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
     );
   }
 
-  if (input.finding.id === "probable_fingerprinting") {
+  if (iconKey === "fingerprint") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
         <path d="M12 4c2.6 0 4.8 2.2 4.8 4.8v2.3c0 3.2-1.8 6.2-4.8 8.9-3-2.7-4.8-5.7-4.8-8.9V8.8C7.2 6.2 9.4 4 12 4Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
@@ -1402,7 +1490,7 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
     );
   }
 
-  if (input.finding.id === "leveraged_or_high_risk_product_promotion") {
+  if (iconKey === "up-arrow") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
         <path d="M12 3v12M7 9l5-5 5 5M5 21h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -1410,7 +1498,16 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
     );
   }
 
-  if (input.finding.id === "access_limited_no_reliable_findings") {
+  if (iconKey === "accessibility-figure") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-amber-700`} aria-hidden="true">
+        <circle cx="12" cy="5.5" r="1.7" fill="currentColor" />
+        <path d="M6 9.5h12M12 9.5v9M8.5 20l3.5-5 3.5 5M9.5 9.5 7 14M14.5 9.5 17 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "warning-triangle") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-amber-700`} aria-hidden="true">
         <path d="M12 4l8 14H4L12 4Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
@@ -1691,7 +1788,10 @@ export function ExecutiveSummaryCard(input: {
                     </span>
                   </div>
                   <div className="mt-2.5 flex items-start gap-2.5">
-                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50">
+                      <div
+                        data-finding-icon={getFindingTitleIconKey(finding.id)}
+                        className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50"
+                      >
                       <FindingTitleIcon finding={finding} />
                     </div>
                     <p data-testid="executive-finding-label" className="pt-0.5 text-[17px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">
@@ -1779,22 +1879,22 @@ export function ExecutiveSummaryCard(input: {
                   {regulatoryLenses.map((lens) => (
                     <details key={lens.acronym} className="group rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3">
                       <summary className="relative grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2">
-                        <div className="min-w-0 self-start">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-slate-900">{lens.acronym}</p>
+                        <span className="min-w-0 self-start">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold text-slate-900">{lens.acronym}</span>
                             <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
                               {lens.ratingLabel}
                             </span>
-                          </div>
-                        </div>
-                        <div className="shrink-0 self-start text-right">
-                          <p className="text-xl font-semibold tracking-tight text-slate-900">{lens.score ?? "—"}</p>
+                          </span>
+                        </span>
+                        <span className="shrink-0 self-start text-right">
+                          <span className="block text-xl font-semibold tracking-tight text-slate-900">{lens.score ?? "—"}</span>
                           {typeof lens.score === "number" ? (
                             <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
                           ) : null}
-                        </div>
-                        <p className="col-span-2 min-w-0 pr-6 text-xs leading-5 text-slate-600">{lens.summary}</p>
-                        <p className="absolute bottom-0 right-0 text-right text-slate-400 transition-transform group-open:rotate-180">⌄</p>
+                        </span>
+                        <span className="col-span-2 min-w-0 pr-6 text-xs leading-5 text-slate-600">{lens.summary}</span>
+                        <span className="absolute bottom-0 right-0 text-right text-slate-400 transition-transform group-open:rotate-180">⌄</span>
                       </summary>
                       <div className="mt-3 border-t border-slate-200 pt-3">
                         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>

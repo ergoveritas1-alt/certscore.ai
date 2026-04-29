@@ -75,6 +75,7 @@ import { buildReviewFindingCandidatesFromMergedSignals } from "./merged-signals"
 import { buildScanDomainContext, type ScanDomainContext } from "./scan-domain-context";
 import {
   formatRepresentativeAccessibilityCoverage,
+  formatRepresentativeAccessibilityExampleSnippets,
   getRepresentativeAccessibilityExampleCoverage,
   hasExternallyPromotableAccessibilityExamples
 } from "./accessibility-evidence";
@@ -398,7 +399,6 @@ const RIGHTS_GAP_FINDING_IDS = new Set([
   "missing_dsar_high_exposure",
   "rights_fulfillment_friction",
   "cookie_disclosure_gap",
-  "missing_retention_disclosure",
   "missing_transfer_disclosure",
   "data_categories_disclosure_missing",
   "third_party_recipient_disclosure_missing",
@@ -1394,6 +1394,7 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     accessibilityExampleCoverage.representativeExampleCount > 0
       ? formatRepresentativeAccessibilityCoverage(accessibilityExampleCoverage)
       : null;
+  const accessibilityExampleSnippets = formatRepresentativeAccessibilityExampleSnippets(normalizedFallbackEvidence);
   const contradictionEvidence = getContradictionEvidenceBundle(normalizedFallbackEvidence);
   const fallbackSignalKey =
     typeof normalizedFallbackEvidence.signalKey === "string"
@@ -1441,6 +1442,9 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     typeof normalizedFallbackEvidence.sourceUrl === "string" ? normalizedFallbackEvidence.sourceUrl : null,
     typeof normalizedFallbackEvidence.pageUrl === "string" ? normalizedFallbackEvidence.pageUrl : null
   ]);
+  const sensitivePayloadViolations = Array.isArray(normalizedFallbackEvidence.sensitivePayloadViolations)
+    ? (normalizedFallbackEvidence.sensitivePayloadViolations as Array<Record<string, unknown>>)
+    : [];
 
   const snippets = uniqueStrings([
     isMeaningfulPolicyText(normalizedFallbackEvidence.consentBlockerTextSnippet)
@@ -1469,7 +1473,32 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       : isMeaningfulPolicyText(normalizedFallbackEvidence.signalValue)
         ? normalizedFallbackEvidence.signalValue
         : null,
-    accessibilityCoverageSummary
+    ...sensitivePayloadViolations.map((row) => {
+      const matchSnippet = typeof row.matchSnippet === "string" ? row.matchSnippet.trim() : null;
+      if (matchSnippet) {
+        return matchSnippet;
+      }
+
+      const detectedType =
+        typeof row.detectedType === "string" ? row.detectedType.replace(/_detected$/i, "").replace(/_/g, " ") : null;
+      const sourceField = typeof row.sourceField === "string" ? row.sourceField.trim() : null;
+      const requestMethod = typeof row.requestMethod === "string" ? row.requestMethod.trim().toUpperCase() : null;
+      const requestUrl = typeof row.requestUrl === "string" ? row.requestUrl.trim() : null;
+      const vendorHost = typeof row.vendorHost === "string" ? row.vendorHost.trim() : null;
+      const evidenceStrength = typeof row.evidenceStrength === "string" ? row.evidenceStrength.trim() : null;
+
+      const parts = uniqueStrings([
+        detectedType ? `${detectedType} data` : null,
+        sourceField ? `field ${sourceField}` : null,
+        requestMethod && requestUrl ? `${requestMethod} ${requestUrl}` : requestUrl,
+        vendorHost && vendorHost !== getHostnameFromUrl(requestUrl) ? `host ${vendorHost}` : null,
+        evidenceStrength ? `${evidenceStrength} evidence` : null
+      ]);
+
+      return parts.length > 0 ? parts.join(" | ") : null;
+    }),
+    accessibilityCoverageSummary,
+    ...accessibilityExampleSnippets
   ])
     .map((snippet) => normalizePolicySnippet(snippet))
     .filter((snippet): snippet is string => typeof snippet === "string" && !/^topic:[a-z0-9_:-]+$/i.test(snippet));
@@ -1619,6 +1648,44 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (Array.isArray(normalizedFallbackEvidence.metaPixelRuntimePhases)) {
     entities.metaPixelRuntimePhases = uniqueStrings(normalizedFallbackEvidence.metaPixelRuntimePhases as string[]);
   }
+  const sensitivePayloadRequestUrls = uniqueStrings(
+    sensitivePayloadViolations.map((row) => (typeof row.requestUrl === "string" ? row.requestUrl : null))
+  ).filter(isConcreteHttpEvidenceUrl);
+  if (sensitivePayloadRequestUrls.length > 0) {
+    entities.request_urls = sensitivePayloadRequestUrls;
+  }
+  const sensitivePayloadRequestDomains = uniqueStrings(
+    sensitivePayloadViolations.map((row) => {
+      if (typeof row.vendorHost === "string" && row.vendorHost.trim().length > 0) {
+        return row.vendorHost.trim();
+      }
+
+      return typeof row.requestUrl === "string" ? getHostnameFromUrl(row.requestUrl) : null;
+    })
+  );
+  if (sensitivePayloadRequestDomains.length > 0) {
+    entities.request_domains = sensitivePayloadRequestDomains;
+    entities.third_party_domains = sensitivePayloadRequestDomains;
+    entities.vendors = sensitivePayloadRequestDomains;
+  }
+  const sensitivePayloadDataTypes = uniqueStrings(
+    sensitivePayloadViolations.map((row) => (typeof row.detectedType === "string" ? row.detectedType.trim() : null))
+  );
+  if (sensitivePayloadDataTypes.length > 0) {
+    entities.sensitive_data_types = sensitivePayloadDataTypes;
+  }
+  const sensitivePayloadSourceFields = uniqueStrings(
+    sensitivePayloadViolations.map((row) => (typeof row.sourceField === "string" ? row.sourceField.trim() : null))
+  );
+  if (sensitivePayloadSourceFields.length > 0) {
+    entities.sensitive_source_fields = sensitivePayloadSourceFields;
+  }
+  const sensitivePayloadSourceLocations = uniqueStrings(
+    sensitivePayloadViolations.map((row) => (typeof row.sourceLocation === "string" ? row.sourceLocation.trim() : null))
+  );
+  if (sensitivePayloadSourceLocations.length > 0) {
+    entities.sensitive_source_locations = sensitivePayloadSourceLocations;
+  }
   const runtimeRequestUrls = uniqueStrings([
     ...(Array.isArray(normalizedFallbackEvidence.requestUrls) ? (normalizedFallbackEvidence.requestUrls as string[]) : []),
     ...(Array.isArray(normalizedFallbackEvidence.runtimeEvidenceUrls) ? (normalizedFallbackEvidence.runtimeEvidenceUrls as string[]) : []),
@@ -1627,6 +1694,7 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     ...(Array.isArray(normalizedFallbackEvidence.preconsent_tracker_evidence_urls)
       ? (normalizedFallbackEvidence.preconsent_tracker_evidence_urls as string[])
       : []),
+    ...sensitivePayloadRequestUrls,
     ...(isPreconsentRuntimeSignal && Array.isArray(normalizedFallbackEvidence.sourceUrls)
       ? (normalizedFallbackEvidence.sourceUrls as string[])
       : []),
@@ -3028,6 +3096,18 @@ function hasConcretePayloadEvidence(fallbackEvidence?: Record<string, unknown> |
       typeof row === "object" &&
       (row as { evidenceStrength?: unknown }).evidenceStrength !== "detector_only"
   );
+}
+
+function getHostnameFromUrl(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return null;
+  }
 }
 
 function getNormalizedConcernStrengthFlags(rows: Array<Record<string, unknown> | null | undefined>) {

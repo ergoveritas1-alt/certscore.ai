@@ -34,12 +34,14 @@ const SECTION_ORDER: CertScoreFindingSection[] = [
   "Fingerprinting",
   "Navigation & Redirects",
   "Runtime & Diagnostics",
+  "Accessibility",
   "Financial & Claims"
 ];
 
 const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SCORE_FINDING_REGISTRY> = {
   accept_more_prominent_than_reject: "asymmetric_consent_ui",
   accept_only_banner: "consent_dark_patterns_detected",
+  contrast_failures: "accessibility_risk_score",
   dismiss_without_reject: "consent_dark_patterns_detected",
   earnings_claim_without_adjacent_disclosure: "earnings_claim_without_adjacent_disclosure",
   fingerprinting_observed: "probable_fingerprinting",
@@ -279,6 +281,14 @@ function formatQuotedSnippet(snippet: string) {
   return normalized.length > 140 ? truncateAtWordBoundary(normalized, 137) : normalized;
 }
 
+function formatSensitiveDataType(value: string) {
+  return value.replace(/_detected$/i, "").replace(/_/g, " ").trim();
+}
+
+function formatSensitiveSourceLocation(value: string) {
+  return value.replace(/_/g, " ").trim();
+}
+
 function buildExecutiveEvidenceDetails(
   packet: UnifiedFindingDisplayPacket,
   findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
@@ -354,6 +364,33 @@ function buildExecutiveEvidenceDetails(
   if (runtimeRequestUrls.length > 0) {
     details.runtimeRequestUrls = runtimeRequestUrls;
   }
+  if (
+    findingId === "sensitive_data_collection_with_third_party_tracking_present" ||
+    findingId === "session_replay_on_sensitive_input_surface"
+  ) {
+    const packetDataTypes =
+      packet.details?.family === "sensitive_data" && "dataTypes" in packet.details
+        ? packet.details.dataTypes
+        : [];
+    const sensitiveDataTypes = uniqueStrings([
+      ...getEntityValues(packet, /sensitive.*data.*type/i),
+      ...(Array.isArray(packetDataTypes) ? packetDataTypes : [])
+    ])
+      .map(formatSensitiveDataType)
+      .filter((value) => value.length > 0);
+    const sensitiveFieldContexts = uniqueStrings([
+      ...getEntityValues(packet, /sensitive.*source.*field/i).map((value) => `field:${value}`),
+      ...getEntityValues(packet, /sensitive.*source.*location/i).map(
+        (value) => `location:${formatSensitiveSourceLocation(value)}`
+      )
+    ]);
+    if (sensitiveDataTypes.length > 0) {
+      details.sensitiveDataTypes = sensitiveDataTypes;
+    }
+    if (sensitiveFieldContexts.length > 0) {
+      details.sensitiveFieldContexts = sensitiveFieldContexts;
+    }
+  }
   if (sourceSignals.length > 0) {
     details.sourceSignals = sourceSignals;
   }
@@ -393,6 +430,31 @@ function buildExecutiveShortSummary(
   packet: UnifiedFindingDisplayPacket,
   findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
 ) {
+  if (findingId === "session_replay_on_sensitive_input_surface") {
+    const vendors = getSessionReplayVendors(packet);
+    const vendorText = vendors.length > 0 ? `${formatVendorList(vendors)} session replay` : "Session replay";
+    return `${vendorText} was observed on a sensitive-data input surface.`;
+  }
+
+  if (findingId === "sensitive_data_collection_with_third_party_tracking_present") {
+    const packetDataTypes =
+      packet.details?.family === "sensitive_data" && "dataTypes" in packet.details
+        ? packet.details.dataTypes
+        : [];
+    const dataTypes = uniqueStrings(
+      Array.isArray(packetDataTypes) ? packetDataTypes : []
+    )
+      .map((value) => value.replace(/_/g, " "))
+      .slice(0, 2);
+    const requestDomains = uniqueStrings([
+      ...getEntityValues(packet, /request.*domain|third.*party.*domain|vendor/i)
+    ]).slice(0, 2);
+
+    const dataTypeText = dataTypes.length > 0 ? `${formatVendorList(dataTypes)} ` : "";
+    const domainText = requestDomains.length > 0 ? ` alongside requests to ${formatVendorList(requestDomains)}` : "";
+    return `Sensitive ${dataTypeText}data collection was retained${domainText}.`;
+  }
+
   if (findingId === "session_recording_services_detected") {
     const vendors = getSessionReplayVendors(packet);
     const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);

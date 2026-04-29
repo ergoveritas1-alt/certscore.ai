@@ -1199,6 +1199,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   let preconsentResult: { data: Array<Record<string, unknown>>; error: { message?: string; code?: string | null } | null };
   let signalHitsResult: { data: Array<Record<string, unknown>>; error: { message?: string; code?: string | null } | null };
   let pageEvidenceResult: { data: Array<Record<string, unknown>>; error: { message?: string; code?: string | null } | null };
+  let accessibilityRuleExamplesResult: { data: Array<Record<string, unknown>>; error: { message?: string; code?: string | null } | null };
 
   try {
     [
@@ -1214,7 +1215,8 @@ export async function loadCompletedScanArtifacts(scanId: string) {
       policyReviewQueue,
       preconsentResult,
       signalHitsResult,
-      pageEvidenceResult
+      pageEvidenceResult,
+      accessibilityRuleExamplesResult
     ] = await Promise.all([
       queryOne<Record<string, unknown>>(
         `select id, status, created_at, completed_at, error_message from scans where id = $1`,
@@ -1300,6 +1302,10 @@ export async function loadCompletedScanArtifacts(scanId: string) {
            from scan_page_evidence
           where scan_id = $1`,
         [scanId]
+      ),
+      optionalMany<Record<string, unknown>>(
+        `select * from scan_accessibility_rule_examples where scan_id = $1 order by created_at asc`,
+        [scanId]
       )
     ]);
   } catch (error) {
@@ -1311,6 +1317,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   const preconsentError = preconsentResult.error;
   const signalHitsError = signalHitsResult.error;
   const pageEvidenceError = pageEvidenceResult.error;
+  const accessibilityRuleExamplesError = accessibilityRuleExamplesResult.error;
 
   if (documentSourcesError && !isMissingOptionalTableError(documentSourcesError)) {
     throw new Error(`Failed to load document sources ${scanId}: ${documentSourcesError.message}`);
@@ -1326,6 +1333,9 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   }
   if (pageEvidenceError && !isMissingOptionalTableError(pageEvidenceError)) {
     throw new Error(`Failed to load page evidence ${scanId}: ${pageEvidenceError.message}`);
+  }
+  if (accessibilityRuleExamplesError && !isMissingOptionalTableError(accessibilityRuleExamplesError)) {
+    throw new Error(`Failed to load accessibility rule examples ${scanId}: ${accessibilityRuleExamplesError.message}`);
   }
 
   const runtimeArtifactsRecord = runtimeArtifacts ?? null;
@@ -1386,6 +1396,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   });
 
   return {
+    accessibilityRuleExamples: accessibilityRuleExamplesError ? [] : accessibilityRuleExamplesResult.data,
     documentSources: normalizedDocumentSources,
     mergedSignals,
     pageEvidence: loadedPageEvidence.length > 0 ? loadedPageEvidence : fallbackFinancialEvidence.pageEvidence,

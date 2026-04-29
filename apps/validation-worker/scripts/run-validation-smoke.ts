@@ -51,8 +51,7 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
     scanId: "8ff70326-b21a-42c4-84f5-6e0f5c4e45ab",
     expectedFindings: [
       { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "high" },
-      { ruleKey: "cookie_runtime.disclosure_gap", severity: "medium" },
-      { ruleKey: "section_review.no_retention_periods_noted", severity: "medium" }
+      { ruleKey: "cookie_runtime.disclosure_gap", severity: "medium" }
     ]
   },
   {
@@ -98,7 +97,7 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
     label: "alz",
     maxValidationMs: 20_000,
     scanId: "22214ea0-f5cc-480e-8275-ac0c635a55e8",
-    expectedFindings: [{ ruleKey: "section_review.no_retention_periods_noted", severity: "medium" }]
+    expectedFindings: []
   },
   {
     hostname: "kurier.at",

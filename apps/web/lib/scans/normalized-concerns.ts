@@ -619,6 +619,44 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
   const policySnippets = new Set<string>();
   const runtimeArtifacts = new Set<string>();
 
+  if (Array.isArray(rawEvidence.accessibilityRuleExamples)) {
+    for (const entry of rawEvidence.accessibilityRuleExamples) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+
+      const example = entry as Record<string, unknown>;
+      const pageUrl = getStringValue(example.pageUrl ?? example.page_url);
+      const ruleCode = getStringValue(example.ruleCode ?? example.rule_code);
+      const ruleGroup = getStringValue(example.ruleGroup ?? example.rule_group);
+      const help = getStringValue(example.help ?? example.label);
+      const impact = getStringValue(example.impact ?? example.axeImpact ?? example.axe_impact);
+      const severity = getStringValue(example.severity);
+      const nodeCount = getNumberValue(example.nodeCount ?? example.node_count ?? example.affectedNodeCount ?? example.affected_node_count);
+      const selectors = [
+        ...getStringArrayEvidence(example.representativeSelectors),
+        ...getStringArrayEvidence(example.representative_selectors)
+      ];
+
+      if (pageUrl) {
+        pageUrls.add(pageUrl);
+      }
+      addEntity(entities, "accessibilityRuleCodes", ruleCode ? [ruleCode] : []);
+      addEntity(entities, "accessibilityRuleGroups", ruleGroup ? [ruleGroup] : []);
+      addEntity(entities, "accessibilitySelectors", selectors.slice(0, 3));
+      addEntity(entities, "accessibilityImpacts", impact ? [impact] : []);
+      addEntity(entities, "accessibilitySeverities", severity ? [severity] : []);
+      if (typeof nodeCount === "number") {
+        counts.accessibilityExampleNodeCount = (counts.accessibilityExampleNodeCount ?? 0) + nodeCount;
+      }
+      if (pageUrl && ruleCode && ruleGroup && selectors[0] && typeof nodeCount === "number" && impact && severity && help) {
+        runtimeArtifacts.add(
+          `Axe example: ${ruleCode}/${ruleGroup} on ${pageUrl}; selector ${selectors[0]}; nodes ${nodeCount}; impact ${impact}; severity ${severity}; help: ${help}.`
+        );
+      }
+    }
+  }
+
   for (const [key, value] of Object.entries(rawEvidence)) {
     if (typeof value === "string") {
       if (/^https?:\/\//i.test(value.trim())) {

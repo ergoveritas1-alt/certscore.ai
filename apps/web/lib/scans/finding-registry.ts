@@ -6,6 +6,7 @@ export type CertScoreFindingSection =
   | "Fingerprinting"
   | "Navigation & Redirects"
   | "Runtime & Diagnostics"
+  | "Accessibility"
   | "Financial & Claims";
 
 export type CertScoreFindingSeverity = "critical" | "high" | "medium" | "low";
@@ -29,6 +30,8 @@ export type CertScoreFindingEvidenceDetails = {
   pageUrls?: string[];
   runtimeRequestUrls?: string[];
   runtimeVendors?: string[];
+  sensitiveDataTypes?: string[];
+  sensitiveFieldContexts?: string[];
   evidenceFlags?: string[];
   sourceSignals?: string[];
   sourceUrls?: string[];
@@ -157,6 +160,26 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     defaultSurfacePriority: 89,
     whyItMatters: "Session replay or recording tools can capture detailed on-page behavior and require careful consent, masking, and disclosure controls.",
     remediation: "Audit replay tooling, ensure sensitive fields are masked, gate it behind consent where required, and disclose it clearly."
+  },
+  session_replay_on_sensitive_input_surface: {
+    id: "session_replay_on_sensitive_input_surface",
+    label: "Session replay observed on a sensitive input surface",
+    section: "Privacy & Tracking",
+    defaultSurfacePriority: 99,
+    whyItMatters:
+      "Session replay on pages that collect health, financial, identity, or other sensitive data can materially increase privacy and data-handling risk, especially if masking or consent controls are weak.",
+    remediation:
+      "Disable session replay on sensitive forms unless it is clearly necessary, confirm that sensitive fields are fully masked, and gate collection behind the appropriate consent and disclosure controls."
+  },
+  sensitive_data_collection_with_third_party_tracking_present: {
+    id: "sensitive_data_collection_with_third_party_tracking_present",
+    label: "Sensitive-data collection with third-party tracking present",
+    section: "Privacy & Tracking",
+    defaultSurfacePriority: 98,
+    whyItMatters:
+      "Collecting sensitive data on pages that also load third-party tracking can increase exposure by linking sensitive form activity with analytics, advertising, or profiling infrastructure.",
+    remediation:
+      "Review the page or form where sensitive data is collected, remove non-essential third-party tracking from that flow, and confirm that only tightly controlled collection endpoints remain."
   },
   video_content_tracking_exposure: {
     id: "video_content_tracking_exposure",
@@ -291,6 +314,16 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     defaultSurfacePriority: 57,
     whyItMatters: "Interstitials can block access and create pressure to act.",
     remediation: "Avoid full-page interruptions for non-essential messaging."
+  },
+  accessibility_risk_score: {
+    id: "accessibility_risk_score",
+    label: "Representative accessibility barriers detected",
+    section: "Accessibility",
+    defaultSurfacePriority: 72,
+    whyItMatters:
+      "Representative WCAG examples make accessibility risk reviewable because they identify the page, rule, impacted node, and severity behind the automated signal.",
+    remediation:
+      "Fix the retained WCAG rule examples first, then rerun the accessibility scan to confirm representative barriers no longer reproduce."
   },
   guaranteed_outcome_claim_detected: {
     id: "guaranteed_outcome_claim_detected",

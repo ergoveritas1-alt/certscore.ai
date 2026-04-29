@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { choosePreferredUrlscanSource, isUrlscanResultThin } from "./urlscan-fallback";
+import { choosePreferredUrlscanSource, fetchUrlscanResult, isUrlscanResultThin } from "./urlscan-fallback";
 
 test("thin region-error urlscan results are identified as weak", () => {
   assert.equal(
@@ -72,4 +72,29 @@ test("preferred urlscan source promotes richer same-host homepage results", () =
 
   assert.equal(selected?.resultApiUrl, promoted.resultApiUrl);
   assert.equal(selected?.reportUrl, promoted.reportUrl);
+});
+
+test("urlscan result fetches bypass the Next data cache", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: RequestInit[] = [];
+
+  globalThis.fetch = (async (_url, init) => {
+    calls.push(init ?? {});
+    return new Response(JSON.stringify({ page: { url: "https://example.com/" } }), {
+      headers: {
+        "content-type": "application/json"
+      },
+      status: 200
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await fetchUrlscanResult("https://urlscan.io/api/v1/result/example/");
+
+    assert.equal(result?.page && typeof result.page === "object", true);
+    assert.equal(calls[0]?.cache, "no-store");
+    assert.equal("next" in (calls[0] ?? {}), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

@@ -23,7 +23,6 @@ const DEFAULT_TARGET_FINDINGS = [
   "privacy_contact_channel_missing",
   "cookie_disclosure_gap",
   "missing_dsar_mechanism",
-  "missing_retention_disclosure",
   "missing_transfer_disclosure"
 ];
 

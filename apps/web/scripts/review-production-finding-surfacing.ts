@@ -7,7 +7,6 @@ const DEFAULT_REVIEW_FINDINGS = [
   "cookie_policy_present",
   "guaranteed_outcome_claim_detected",
   "missing_dsar_mechanism",
-  "missing_retention_disclosure",
   "missing_transfer_disclosure",
   "policy_clarity_risk",
   "privacy_contact_channel_missing",
@@ -25,8 +24,6 @@ const EXPECTED_BEHAVIOR: Record<string, string> = {
     "Confirmed only with retained financial context plus guaranteed outcome claim evidence.",
   missing_dsar_mechanism:
     "Confirmed only with structured validation, readable fetched policy evidence, and a concrete policy URL; demote when a DSAR path is visible.",
-  missing_retention_disclosure:
-    "Confirmed only with structured validation, readable fetched policy evidence, and a concrete policy URL; demote when retention language is visible.",
   missing_transfer_disclosure:
     "Confirmed only with structured validation, readable fetched policy evidence, and a concrete policy URL; demote when transfer mechanism language is visible.",
   policy_clarity_risk:

@@ -134,6 +134,109 @@ test("session replay snapshot signal retains persisted tracker vendor provenance
   assert.ok(packet?.evidence?.flags?.includes("commerce.session_replay_tool_detected"));
 });
 
+test("high-sensitivity snapshot signal specializes when merged tracking context is retained", () => {
+  const candidates = buildReviewFindings({
+    issues: [],
+    mergedSignals: [
+      {
+        key: "commerce.high_sensitivity_data_collection_detected",
+        selectedPopulation: { value: true },
+        value: true
+      },
+      {
+        key: "commerce.retargeting_pixel_detected",
+        selectedPopulation: { value: true },
+        value: true
+      }
+    ],
+    prioritizedAccessibilityRuleRows: [],
+    runtimeArtifacts: {
+      sensitive_payload_violations: [
+        {
+          detectedType: "phone_detected",
+          evidenceStrength: "confirmed",
+          matchSnippet: "intellimizeClientIp=***-***-4248",
+          requestUrl: "https://log.intellimize.co/logger",
+          vendorHost: "log.intellimize.co"
+        }
+      ]
+    },
+    sectionId: "privacy_and_data_use",
+    sectionItems: [
+      {
+        key: "commerce.high_sensitivity_data_collection_detected",
+        label: "High-sensitivity data collection detected",
+        relation: "primary",
+        source: "snapshot_signal",
+        value: true
+      }
+    ],
+    trackerVendors: []
+  });
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    mergedSignals: [
+      {
+        confidence: 1,
+        evidenceRefs: [],
+        key: "commerce.high_sensitivity_data_collection_detected",
+        label: "High-sensitivity data collection detected",
+        observedAt: null,
+        populationStatus: "present",
+        populations: [],
+        reportSignalSource: "snapshot_signal",
+        selectedPopulation: {
+          confidence: 1,
+          evidenceRefs: [],
+          key: "commerce.high_sensitivity_data_collection_detected",
+          label: "High-sensitivity data collection detected",
+          observedAt: null,
+          populationStatus: "present",
+          provenance: [],
+          reportSignalSource: "snapshot_signal",
+          source: "scanner",
+          value: true,
+          valueType: "boolean"
+        },
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        confidence: 1,
+        evidenceRefs: [],
+        key: "commerce.retargeting_pixel_detected",
+        label: "Retargeting pixel detected",
+        observedAt: null,
+        populationStatus: "present",
+        populations: [],
+        reportSignalSource: "snapshot_signal",
+        selectedPopulation: {
+          confidence: 1,
+          evidenceRefs: [],
+          key: "commerce.retargeting_pixel_detected",
+          label: "Retargeting pixel detected",
+          observedAt: null,
+          populationStatus: "present",
+          provenance: [],
+          reportSignalSource: "snapshot_signal",
+          source: "scanner",
+          value: true,
+          valueType: "boolean"
+        },
+        value: true,
+        valueType: "boolean"
+      }
+    ],
+    reviewFindingCandidates: candidates,
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "sensitive_data_collection_with_third_party_tracking_present");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.deepEqual(packet?.evidence?.entities?.request_domains, ["log.intellimize.co"]);
+  assert.ok(packet?.evidence?.snippets?.includes("intellimizeClientIp=***-***-4248"));
+});
+
 test("initial cookie inventory routes to audit-only preconsent packet instead of raw executive bridge", () => {
   const issues = buildSectionReviewIssues({
     accessibilityIssueRows: [],

@@ -318,6 +318,47 @@ function buildSessionReplayTrackerFallbackEvidence(input: {
   };
 }
 
+function buildHighSensitivitySignalFallbackEvidence(input: {
+  mergedSignals?: Array<{
+    key: string;
+    value: boolean | number | string | string[] | null;
+    selectedPopulation?: { value?: boolean | number | string | string[] | null } | null;
+  }>;
+  runtimeArtifacts?: Record<string, unknown> | null;
+  signalKey: string;
+  signalLabel: string;
+  signalValue: unknown;
+  trackerVendors?: TrackerVendorEvidenceRow[];
+}) {
+  const sensitivePayloadViolations = Array.isArray(input.runtimeArtifacts?.sensitive_payload_violations)
+    ? input.runtimeArtifacts.sensitive_payload_violations.slice(0, 3)
+    : [];
+  const retargetingPixelDetected =
+    findMergedSignalValue(input.mergedSignals, "commerce.retargeting_pixel_detected") === true ||
+    input.runtimeArtifacts?.retargeting_pixel_detected === true ||
+    input.runtimeArtifacts?.retargetingPixelDetected === true;
+  const sessionReplayFallbackEvidence = buildSessionReplayTrackerFallbackEvidence({
+    signalKey: input.signalKey,
+    signalLabel: input.signalLabel,
+    signalValue: input.signalValue,
+    trackerVendors: input.trackerVendors
+  });
+
+  return {
+    ...(sessionReplayFallbackEvidence ?? {}),
+    ...(retargetingPixelDetected
+      ? {
+          retargetingPixelArtifactPresent: true,
+          retargetingPixelDetected: true
+        }
+      : {}),
+    sensitivePayloadViolations,
+    signalKey: input.signalKey,
+    signalLabel: input.signalLabel,
+    signalValue: input.signalValue
+  };
+}
+
 function mergeStringArrayEvidence(left: unknown, right: unknown) {
   return uniqueStrings([
     ...(Array.isArray(left) ? left.filter((entry): entry is string => typeof entry === "string") : []),
@@ -470,10 +511,13 @@ export type AccessibilityRuleEvidenceRow = {
   description: string | null;
   help: string | null;
   helpUrl: string | null;
+  impact: string | null;
+  nodeCount: number;
   pageUrl: string | null;
   representativeSelectors: string[];
   ruleCode: string;
   ruleGroup: string;
+  severity: string;
   weightedPriority: number;
 };
 
@@ -1392,10 +1436,13 @@ function getRepresentativeAccessibilityExamplesForSignal(input: {
     description: row.description,
     help: row.help,
     helpUrl: row.helpUrl,
+    impact: row.impact,
+    nodeCount: row.nodeCount,
     pageUrl: row.pageUrl,
     representativeSelectors: row.representativeSelectors.slice(0, 3),
     ruleCode: row.ruleCode,
-    ruleGroup: row.ruleGroup
+    ruleGroup: row.ruleGroup,
+    severity: row.severity
   }));
 }
 
@@ -1583,25 +1630,29 @@ export function buildReviewFindings(input: {
                   signalValue: item.value
                 }
             : /commerce\.high_sensitivity_data_collection_detected/i.test(item.key)
-              ? {
-                  sensitivePayloadViolations: Array.isArray(input.runtimeArtifacts?.sensitive_payload_violations)
-                    ? input.runtimeArtifacts.sensitive_payload_violations.slice(0, 3)
-                    : [],
+              ? (
+                buildHighSensitivitySignalFallbackEvidence({
+                  mergedSignals: input.mergedSignals,
+                  runtimeArtifacts: input.runtimeArtifacts,
+                  signalKey: item.key,
+                  signalLabel: item.label,
+                  signalValue: item.value,
+                  trackerVendors: input.trackerVendors
+                })
+              )
+            : /(?:commerce|privacy)\.session_replay_|session_replay.*detected/i.test(item.key)
+              ? (
+                buildSessionReplayTrackerFallbackEvidence({
+                  signalKey: item.key,
+                  signalLabel: item.label,
+                  signalValue: item.value,
+                  trackerVendors: input.trackerVendors
+                }) ?? {
                   signalKey: item.key,
                   signalLabel: item.label,
                   signalValue: item.value
                 }
-          : /(?:commerce|privacy)\.session_replay_|session_replay.*detected/i.test(item.key)
-            ? buildSessionReplayTrackerFallbackEvidence({
-                signalKey: item.key,
-                signalLabel: item.label,
-                signalValue: item.value,
-                trackerVendors: input.trackerVendors
-              }) ?? {
-                signalKey: item.key,
-                signalLabel: item.label,
-                signalValue: item.value
-              }
+              )
           : isChildContextSignalKey(item.key)
               ? buildChildContextFallbackEvidence({
                   signalKey: item.key,

@@ -25,7 +25,6 @@ type TargetFinding =
   | "behavioral_analytics_disclosure_present"
   | "cookie_policy_present"
   | "guaranteed_outcome_claim_detected"
-  | "missing_retention_disclosure"
   | "missing_transfer_disclosure"
   | "missing_dsar_mechanism"
   | "targeted_advertising_disclosure_present"
@@ -137,7 +136,6 @@ function normalizeFinding(value: string | null): TargetFinding | "all" {
     value === "behavioral_analytics_disclosure_present" ||
     value === "cookie_policy_present" ||
     value === "guaranteed_outcome_claim_detected" ||
-    value === "missing_retention_disclosure" ||
     value === "missing_transfer_disclosure" ||
     value === "missing_dsar_mechanism" ||
     value === "targeted_advertising_disclosure_present" ||
@@ -1059,7 +1057,6 @@ async function loadCandidates(finding: TargetFinding, input: { domains: string[]
     behavioral_analytics_disclosure_present: `exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'privacy.behavioral_analytics_disclosure_present' and sig.signal_value_json = 'true'::jsonb)`,
     cookie_policy_present: `ss.cookie_policy_present is true or exists (select 1 from scan_signals sig where sig.scan_id = s.id and sig.signal_key = 'disclosure.cookie_policy_present')`,
     guaranteed_outcome_claim_detected: `exists (select 1 from validation_runs vr join validation_run_findings vf on vf.validation_run_id = vr.id where vr.scan_id = s.id and vf.rule_key = 'financial_review.guaranteed_outcome_claim_detected')`,
-    missing_retention_disclosure: `exists (select 1 from validation_runs vr join validation_run_findings vf on vf.validation_run_id = vr.id where vr.scan_id = s.id and vf.rule_key = 'section_review.no_retention_periods_noted')`,
     missing_transfer_disclosure: `exists (select 1 from validation_runs vr join validation_run_findings vf on vf.validation_run_id = vr.id where vr.scan_id = s.id and vf.rule_key = 'section_review.no_transfer_mechanism_noted')`,
     missing_dsar_mechanism: `exists (select 1 from validation_runs vr join validation_run_findings vf on vf.validation_run_id = vr.id where vr.scan_id = s.id and vf.rule_key = 'section_review.no_dsar_mechanism')`
   };
@@ -1332,7 +1329,6 @@ function localAssessment(finding: TargetFinding, row: CandidateRow): LiveProbe {
   }
 
   if (
-    finding === "missing_retention_disclosure" ||
     finding === "missing_transfer_disclosure" ||
     finding === "missing_dsar_mechanism"
   ) {
@@ -1395,7 +1391,6 @@ async function main() {
           "behavioral_analytics_disclosure_present",
           "cookie_policy_present",
           "guaranteed_outcome_claim_detected",
-          "missing_retention_disclosure",
           "missing_transfer_disclosure",
           "missing_dsar_mechanism"
         ]
@@ -1458,8 +1453,6 @@ async function main() {
               ? await probeCookiePolicy(candidate)
             : findingId === "guaranteed_outcome_claim_detected"
               ? await probeGuaranteedOutcomeClaim(candidate)
-            : findingId === "missing_retention_disclosure"
-              ? await probeMissingPolicyDisclosure(candidate, "retention")
             : findingId === "missing_transfer_disclosure"
               ? await probeMissingPolicyDisclosure(candidate, "transfer")
             : findingId === "missing_dsar_mechanism"

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 type CopyJsonButtonProps = {
   payload: string;
@@ -14,11 +14,20 @@ export function CopyJsonButton({
   label = "Copy JSON"
 }: CopyJsonButtonProps) {
   const [copied, setCopied] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   async function handleCopy() {
     await navigator.clipboard.writeText(payload);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
+  }
+
+  if (!mounted) {
+    return <span aria-hidden="true" className={className} />;
   }
 
   return (

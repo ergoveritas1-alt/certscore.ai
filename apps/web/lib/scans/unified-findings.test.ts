@@ -1434,7 +1434,9 @@ test("specializes high-sensitivity replay evidence into a sensitive replay packe
             {
               detectedType: "financial_information",
               evidenceStrength: "suspected",
-              requestUrl: "https://collector.example.com/submit"
+              matchSnippet: "accountNumber=***1234",
+              requestUrl: "https://collector.example.com/submit",
+              vendorHost: "collector.example.com"
             }
           ],
           sessionReplayVendorArtifactPresent: true,
@@ -1459,6 +1461,9 @@ test("specializes high-sensitivity replay evidence into a sensitive replay packe
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
   assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
+  assert.ok(packet?.evidence?.snippets?.includes("accountNumber=***1234"));
+  assert.deepEqual(packet?.evidence?.entities?.request_domains, ["collector.example.com"]);
+  assert.deepEqual(packet?.evidence?.entities?.request_urls, ["https://collector.example.com/submit"]);
 });
 
 test("surfaces direct session replay observation when runtime vendor provenance is retained", () => {
@@ -1504,7 +1509,9 @@ test("specializes high-sensitivity third-party tracking evidence into a sensitiv
             {
               detectedType: "health_information",
               evidenceStrength: "suspected",
-              requestUrl: "https://tracker.example.net/collect"
+              matchSnippet: "condition=asthma",
+              requestUrl: "https://tracker.example.net/collect",
+              vendorHost: "tracker.example.net"
             }
           ],
           retargetingPixelArtifactPresent: true,
@@ -1528,6 +1535,34 @@ test("specializes high-sensitivity third-party tracking evidence into a sensitiv
   assert.equal(packet?.unifiedFindingId, "sensitive_data_collection_with_third_party_tracking_present");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
+  assert.ok(packet?.evidence?.snippets?.includes("condition=asthma"));
+  assert.deepEqual(packet?.evidence?.entities?.request_domains, ["tracker.example.net"]);
+  assert.deepEqual(packet?.evidence?.entities?.request_urls, ["https://tracker.example.net/collect"]);
+});
+
+test("does not surface generic high-sensitivity signal without concrete payload evidence", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "High-sensitivity data collection signal triggered without retained evidence.",
+        fallbackEvidence: {
+          signalKey: "commerce.high_sensitivity_data_collection_detected",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "commerce.high_sensitivity_data_collection_detected",
+        signalLabel: "High-sensitivity data collection detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "High-sensitivity data collection detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packets.length, 0);
 });
 
 test("structured policy enrichment can surface missing data-category disclosure as a unified packet", () => {
@@ -2991,6 +3026,73 @@ test("surfaces accessibility risk score when representative axe examples are sev
   assert.equal(packet?.evidence?.counts?.representativeAxeRuleCount, 1);
   assert.deepEqual(packet?.evidence?.entities?.maxAxeImpact, ["serious"]);
   assert.ok(packet?.evidence?.snippets?.some((snippet) => /Representative axe examples: 1 rule across 1 page; max impact: serious\./.test(snippet)));
+});
+
+test("keeps contrast failures audit-only when evidence is only a bare count", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-contrast-count",
+    ruleKey: "accessibility_review.contrast_failures",
+    severity: "low",
+    title: "Contrast failures",
+    evidence: {
+      count: 1
+    }
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "contrast_failures");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_representative_accessibility_examples"), true);
+  assert.equal(packet?.evidence?.counts?.count, 1);
+});
+
+test("surfaces contrast failures with complete representative axe evidence", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-contrast-examples",
+    ruleKey: "accessibility_review.contrast_failures",
+    severity: "high",
+    title: "Contrast failures",
+    evidence: {
+      accessibilityRuleExamples: [
+        {
+          description: "Detected 2 elements with insufficient color contrast.",
+          help: "Elements must meet minimum color contrast ratio thresholds",
+          helpUrl: "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+          impact: "serious",
+          nodeCount: 2,
+          pageUrl: "https://example.com/",
+          representativeSelectors: [".hero-title"],
+          ruleCode: "color-contrast",
+          ruleGroup: "wcag2aa",
+          severity: "high"
+        }
+      ],
+      count: 2
+    }
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "contrast_failures");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), true);
+  assert.equal(packet?.evidence?.counts?.representativeAxeExampleCount, 1);
+  assert.ok(
+    packet?.evidence?.snippets?.some((snippet) =>
+      /Axe example: color-contrast\/wcag2aa on https:\/\/example\.com\/; selector \.hero-title; nodes 2; impact serious; severity high; help: Elements must meet minimum color contrast ratio thresholds\./.test(
+        snippet
+      )
+    )
+  );
 });
 
 test("surfaces missing sale or sharing controls as a domain-level rights finding", () => {

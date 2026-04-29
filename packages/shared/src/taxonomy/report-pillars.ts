@@ -2615,13 +2615,6 @@ export const REPORT_UNIFIED_FINDINGS = [
     validationRuleKeys: ["cookie_runtime.disclosure_gap"]
   }),
   defineReportUnifiedFinding({
-    id: "missing_retention_disclosure",
-    label: "Missing retention disclosure",
-    owner: "data_handling_disclosures",
-    overlays: ["governance_accountability_transfers", "notice_rights_baseline"],
-    validationRuleKeys: ["section_review.no_retention_periods_noted"]
-  }),
-  defineReportUnifiedFinding({
     id: "missing_transfer_disclosure",
     label: "Missing transfer disclosure",
     owner: "data_handling_disclosures",

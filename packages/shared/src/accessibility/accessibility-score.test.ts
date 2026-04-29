@@ -22,6 +22,8 @@ function makeFinding(
     wcag: [],
     affectedNodeCount,
     pageUrl: "https://example.com/",
+    representativeSelectors: [".example"],
+    helpUrl: "https://example.com/help",
     evidenceSummary: "Test summary",
     remediation: "Test remediation",
     ...rest

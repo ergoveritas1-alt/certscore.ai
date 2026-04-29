@@ -8,7 +8,6 @@ import {
   classifyPreconsentPromotionBlockers,
   classifyPrivacyContactMissingPromotionBlockers,
   classifyPrivacyRightsPathPromotionBlockers,
-  classifyRetentionDisclosurePromotionBlockers,
   summarizePromotionBlockers
 } from "./production-promotion-blockers";
 
@@ -98,59 +97,6 @@ test("DSAR blocker classifier demotes retained rights mechanisms", () => {
   assert.equal(assessment.promotionReady, false);
   assert.ok(assessment.blockers.includes("dsar_mechanism_present"));
   assert.ok(assessment.blockers.includes("rights_signals_present"));
-});
-
-test("retention blocker classifier promotes explicit fetched absence evidence", () => {
-  const assessment = classifyRetentionDisclosurePromotionBlockers({
-    policyEvidenceSnippets: {
-      retention_absence:
-        "The privacy policy explains how personal information is collected, used, shared, protected, and processed, but no concrete retention periods were identified."
-    },
-    policyExtractionStatus: "fetched",
-    policyPageUrl: "https://example.test/privacy",
-    policyRetentionDisclosure: "absent",
-    policyRetentionPeriods: [],
-    policySemanticConfidence: 0.82,
-    sectionReviewNoRetentionPeriodsNoted: true
-  });
-
-  assert.equal(assessment.promotionReady, true);
-  assert.deepEqual(assessment.blockers, []);
-});
-
-test("retention blocker classifier demotes retained retention language", () => {
-  const assessment = classifyRetentionDisclosurePromotionBlockers({
-    policyEvidenceSnippets: {
-      retention:
-        "We retain personal information as long as necessary to provide services and meet legal obligations."
-    },
-    policyExtractionStatus: "fetched",
-    policyPageUrl: "https://example.test/privacy",
-    policyRetentionDisclosure: "present",
-    policyRetentionPeriods: ["as long as necessary"],
-    policySemanticConfidence: 0.82,
-    sectionReviewNoRetentionPeriodsNoted: true
-  });
-
-  assert.equal(assessment.promotionReady, false);
-  assert.ok(assessment.blockers.includes("retention_periods_present"));
-  assert.ok(assessment.blockers.includes("retention_disclosure_present"));
-  assert.ok(assessment.blockers.includes("retention_language_visible"));
-});
-
-test("retention blocker classifier blocks generic absence evidence", () => {
-  const assessment = classifyRetentionDisclosurePromotionBlockers({
-    policyEvidenceSnippets: {
-      generic_absence: "The privacy policy was reviewed and no requested disclosure or mechanism was found."
-    },
-    policyExtractionStatus: "fetched",
-    policyPageUrl: "https://example.test/privacy",
-    policySemanticConfidence: 0.82,
-    sectionReviewNoRetentionPeriodsNoted: true
-  });
-
-  assert.equal(assessment.promotionReady, false);
-  assert.ok(assessment.blockers.includes("missing_substantive_privacy_policy_text"));
 });
 
 test("privacy-rights path blocker classifier promotes actionable retained rights evidence", () => {
@@ -501,7 +447,7 @@ test("policy clarity blocker classifier requires substantive text and calibrated
     policyAmbiguityScore: 78,
     policyEvidenceSnippets: {
       policy_clarity:
-        "The policy uses broad collection and sharing language while omitting concrete retention, rights handling, and contact details."
+        "The policy uses broad collection and sharing language while omitting concrete rights handling, contact details, and operational limits."
     },
     policyPageUrl: "https://example.test/privacy",
     policySemanticConfidence: 0.72

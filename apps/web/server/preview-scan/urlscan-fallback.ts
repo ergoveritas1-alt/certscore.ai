@@ -205,17 +205,15 @@ export function choosePreferredUrlscanSource(input: {
   }, null as UrlscanFallbackSource | null);
 }
 
-async function fetchJson(url: string, revalidateSeconds: number) {
+async function fetchJson(url: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2500);
 
   try {
     const response = await fetch(url, {
+      cache: "no-store",
       headers: {
         accept: "application/json"
-      },
-      next: {
-        revalidate: revalidateSeconds
       },
       signal: controller.signal
     });
@@ -238,7 +236,7 @@ export async function fetchUrlscanResult(resultApiUrl: string | null) {
     return null;
   }
 
-  return fetchJson(resultApiUrl, 900);
+  return fetchJson(resultApiUrl);
 }
 
 export async function searchUrlscanCandidates(input: {
@@ -255,7 +253,7 @@ export async function searchUrlscanCandidates(input: {
     ? `domain:${hostname}`
     : `page.domain:"${hostname}"`;
   const searchUrl = `https://urlscan.io/api/v1/search/?q=${encodeURIComponent(query)}&size=${input.limit ?? 5}`;
-  const payload = await fetchJson(searchUrl, 900);
+  const payload = await fetchJson(searchUrl);
   const hits = getArray(payload, "results") as UrlscanSearchHit[];
 
   const candidates: Array<UrlscanFallbackSource | null> = await Promise.all(hits.map(async (hit) => {

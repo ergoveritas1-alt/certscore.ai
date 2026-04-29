@@ -208,7 +208,6 @@ const RIGHTS_GAP_IDS = [
   "missing_dsar_high_exposure",
   "rights_fulfillment_friction",
   "cookie_disclosure_gap",
-  "missing_retention_disclosure",
   "missing_transfer_disclosure",
   "sale_sharing_controls_missing"
 ] as const satisfies ReportUnifiedFindingId[];
@@ -344,7 +343,6 @@ const CONFIRMED_RIGHTS_GAP_IDS = [
 const WEAK_REVIEW_RIGHTS_GAP_IDS = [
   "cookie_disclosure_gap",
   "missing_dsar_mechanism",
-  "missing_retention_disclosure",
   "missing_transfer_disclosure",
   "privacy_contact_channel_missing"
 ] as const satisfies ReportUnifiedFindingId[];
@@ -1219,7 +1217,6 @@ function hasFinancialContextAndBacking(packet: UnifiedFindingPacket) {
 function hasStructuredPolicyAbsenceBacking(packet: UnifiedFindingPacket) {
   if (
     packet.unifiedFindingId !== "missing_dsar_mechanism" &&
-    packet.unifiedFindingId !== "missing_retention_disclosure" &&
     packet.unifiedFindingId !== "missing_transfer_disclosure"
   ) {
     return false;
@@ -1230,10 +1227,6 @@ function hasStructuredPolicyAbsenceBacking(packet: UnifiedFindingPacket) {
   }
 
   if (packet.unifiedFindingId === "missing_dsar_mechanism" && !hasSpecificDsarAbsenceBacking(packet)) {
-    return false;
-  }
-
-  if (packet.unifiedFindingId === "missing_retention_disclosure" && !hasSpecificRetentionAbsenceBacking(packet)) {
     return false;
   }
 
@@ -1330,36 +1323,6 @@ function hasSpecificDsarAbsenceBacking(packet: UnifiedFindingPacket) {
   );
 }
 
-function hasSpecificRetentionAbsenceBacking(packet: UnifiedFindingPacket) {
-  const evidenceText = getEvidenceSnippetText(packet);
-  const evidenceFlags = new Set(packet.evidence?.flags ?? []);
-  const retentionDisclosure = [
-    ...getEvidenceEntityValues(packet, "policyRetentionDisclosure"),
-    ...getEvidenceEntityValues(packet, "policy_retention_disclosure")
-  ];
-  const retentionPeriods = [
-    ...getEvidenceEntityValues(packet, "policyRetentionPeriods"),
-    ...getEvidenceEntityValues(packet, "policy_retention_periods")
-  ];
-
-  if (retentionPeriods.length > 0) {
-    return false;
-  }
-
-  if (retentionDisclosure.some((value) => /^(?:present|specific|found)$/i.test(value.trim()))) {
-    return false;
-  }
-
-  return (
-    evidenceFlags.has("policy_field:retention:absent") ||
-    evidenceFlags.has("policy_field:retention_periods:absent") ||
-    retentionDisclosure.some((value) => /^(?:absent|none|missing|not_found)$/i.test(value.trim())) ||
-    /\b(?:no|lacks?|without|absent|missing|did not (?:identify|find|detect)|omits?) (?:concrete |specific |clear )?(?:data )?(?:retention|retain|retention periods?|storage periods?|how long)\b/i.test(
-      evidenceText
-    )
-  );
-}
-
 function hasContradictoryMissingDisclosureCue(packet: UnifiedFindingPacket) {
   const evidenceText = (packet.evidence?.snippets ?? []).join(" ").toLowerCase();
   const evidenceFlags = new Set(packet.evidence?.flags ?? []);
@@ -1373,22 +1336,6 @@ function hasContradictoryMissingDisclosureCue(packet: UnifiedFindingPacket) {
     (
       getEvidenceEntityValues(packet, "policyDsarMechanism").some((value) => !/^(?:none|unknown|absent|null|missing|not_found)$/i.test(value.trim())) ||
       getEvidenceEntityValues(packet, "policyRightsSignals").length > 0
-    )
-  ) {
-    return true;
-  }
-
-  if (packet.unifiedFindingId === "missing_retention_disclosure" && evidenceFlags.has("policy_field:retention:found")) {
-    return true;
-  }
-
-  if (
-    packet.unifiedFindingId === "missing_retention_disclosure" &&
-    (
-      getEvidenceEntityValues(packet, "policyRetentionPeriods").length > 0 ||
-      getEvidenceEntityValues(packet, "policy_retention_periods").length > 0 ||
-      getEvidenceEntityValues(packet, "policyRetentionDisclosure").some((value) => /^(?:present|specific|found)$/i.test(value.trim())) ||
-      getEvidenceEntityValues(packet, "policy_retention_disclosure").some((value) => /^(?:present|specific|found)$/i.test(value.trim()))
     )
   ) {
     return true;
@@ -1415,15 +1362,6 @@ function hasContradictoryMissingDisclosureCue(packet: UnifiedFindingPacket) {
         evidenceText
       ) &&
       !/\b(?:no|lacks?|without|absent|missing) (?:concrete |specific |details? (?:on|about) )?(?:dsar|rights?|request|portal|form|mechanism|path|data rights?)\b/i.test(evidenceText)
-    );
-  }
-
-  if (packet.unifiedFindingId === "missing_retention_disclosure") {
-    return (
-      /\b(retain|retention|stores? (?:data|personal data|personal information|information)|stored (?:as|for)|as long as necessary|as needed)\b/i.test(
-        evidenceText
-      ) &&
-      !/\bno (?:concrete |specific |clear )?(?:retention|retention periods?|retain|stored?|storage)\b/i.test(evidenceText)
     );
   }
 

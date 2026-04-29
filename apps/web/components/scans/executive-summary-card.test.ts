@@ -882,12 +882,67 @@ test("ExecutiveSummaryCard keeps regulatory copy packet-derived when unified fin
   );
 
   assert.match(html, /No major consent-triggering issue surfaced in the top findings\./);
-  assert.match(html, /CCPA \/ CPRA[\s\S]*?<p class="text-xl font-semibold tracking-tight text-slate-900">82<\/p>/);
+  assert.match(html, /CCPA \/ CPRA/);
+  assert.match(html, /<span class="block text-xl font-semibold tracking-tight text-slate-900">82<\/span>/);
   assert.match(html, /No strong sale\/share-style signal surfaced in the top findings\./);
-  assert.match(html, /FTC[\s\S]*?<p class="text-xl font-semibold tracking-tight text-slate-900">80<\/p>/);
+  assert.match(html, /FTC/);
+  assert.match(html, /<span class="block text-xl font-semibold tracking-tight text-slate-900">80<\/span>/);
   assert.match(html, /No strong unfairness\/deception cue surfaced in the top findings\./);
   assert.doesNotMatch(html, /Consent and pre-consent tracking risk is the main issue\./);
   assert.doesNotMatch(html, /Pre-consent tracking and third-party collection should be reviewed for unfairness or deception risk\./);
+});
+
+test("ExecutiveSummaryCard assigns distinct themed icons to sensitive-data and accessibility top findings", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [
+        makeFinding("sensitive_data_collection_with_third_party_tracking_present", "Sensitive-data collection with third-party tracking present", {
+          severity: "medium",
+          shortSummary: "Sensitive data collection was retained alongside third-party tracking."
+        }),
+        makeFinding("accessibility_risk_score", "Representative accessibility barriers detected", {
+          section: "Accessibility",
+          severity: "low",
+          shortSummary: "Representative accessibility barriers were retained."
+        })
+      ],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Watch",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 72,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 1,
+      thirdPartyDomains: ["log.intellimize.co"],
+      topFindings: [
+        makeFinding("sensitive_data_collection_with_third_party_tracking_present", "Sensitive-data collection with third-party tracking present", {
+          severity: "medium",
+          shortSummary: "Sensitive data collection was retained alongside third-party tracking."
+        }),
+        makeFinding("accessibility_risk_score", "Representative accessibility barriers detected", {
+          section: "Accessibility",
+          severity: "low",
+          shortSummary: "Representative accessibility barriers were retained."
+        })
+      ],
+      topObservedEntities: [],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /data-finding-icon=\"shield-network\"/);
+  assert.match(html, /data-finding-icon=\"accessibility-figure\"/);
 });
 
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {

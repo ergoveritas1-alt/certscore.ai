@@ -1236,6 +1236,21 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
           matched_signature_id,
           evidence_urls
         from jsonb_populate_recordset(null::scan_preconsent_violations, $1::jsonb)
+        on conflict (scan_id, vendor_name) do update
+          set organization_id = excluded.organization_id,
+              domain_id = excluded.domain_id,
+              vendor_category = excluded.vendor_category,
+              detection_source = excluded.detection_source,
+              confidence = greatest(scan_preconsent_violations.confidence, excluded.confidence),
+              first_party_or_third_party = excluded.first_party_or_third_party,
+              collection_endpoint_type = excluded.collection_endpoint_type,
+              script_host = coalesce(excluded.script_host, scan_preconsent_violations.script_host),
+              matched_signature_id = coalesce(excluded.matched_signature_id, scan_preconsent_violations.matched_signature_id),
+              evidence_urls = (
+                select coalesce(array_agg(distinct url order by url), '{}'::text[])
+                  from unnest(coalesce(scan_preconsent_violations.evidence_urls, '{}'::text[]) || coalesce(excluded.evidence_urls, '{}'::text[])) as merged(url)
+                 where length(trim(url)) > 0
+              )
       `,
       [JSON.stringify([...preconsentRows.values()])]
     ).catch((error) => {

@@ -22,6 +22,8 @@ export type NormalizedAccessibilityFinding = {
   wcag: string[];
   affectedNodeCount: number;
   pageUrl: string;
+  representativeSelectors: string[];
+  helpUrl: string;
   evidenceSummary: string;
   remediation: string;
   benchmark?: {

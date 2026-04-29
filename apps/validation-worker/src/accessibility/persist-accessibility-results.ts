@@ -97,10 +97,10 @@ async function persistToLegacyTable(
         finding.severity,
         finding.axeImpact,
         finding.label,
-        "",
+        finding.helpUrl,
         finding.evidenceSummary,
         finding.affectedNodeCount,
-        JSON.stringify([])
+        JSON.stringify(finding.representativeSelectors)
       ]
     );
   }

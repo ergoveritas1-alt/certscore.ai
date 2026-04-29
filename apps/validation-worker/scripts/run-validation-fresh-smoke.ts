@@ -59,8 +59,7 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
     expectedFindings: [
       { ruleKey: "cookie_runtime.disclosure_gap", severity: "high" },
       { ruleKey: "runtime_privacy.consent_interface_obstructive", severity: "high" },
-      { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "high" },
-      { ruleKey: "section_review.no_retention_periods_noted", severity: "medium" }
+      { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "high" }
     ]
   },
   {
@@ -114,8 +113,7 @@ const REPRESENTATIVE_TARGETS: RepresentativeTarget[] = [
     maxVerdictMs: 15_000,
     expectedFindings: [
       { ruleKey: "runtime_privacy.consent_interface_obstructive", severity: "high" },
-      { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "high" },
-      { ruleKey: "section_review.no_retention_periods_noted", severity: "medium" }
+      { ruleKey: "runtime_privacy.preconsent_tracking_observed", severity: "high" }
     ]
   },
   {

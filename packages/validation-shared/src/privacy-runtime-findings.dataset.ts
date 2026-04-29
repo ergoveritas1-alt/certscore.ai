@@ -33,7 +33,6 @@ export const PRIVACY_RUNTIME_FINDING_IDS = [
   "behavioral_analytics_disclosure_present",
   "cookie_policy_present",
   "guaranteed_outcome_claim_detected",
-  "missing_retention_disclosure",
   "missing_transfer_disclosure",
   "missing_dsar_mechanism"
 ] as const;
@@ -73,7 +72,6 @@ export const PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS = [
   "behavioral_analytics_disclosure_present",
   "cookie_policy_present",
   "guaranteed_outcome_claim_detected",
-  "missing_retention_disclosure",
   "missing_transfer_disclosure",
   "missing_dsar_mechanism"
 ] as const satisfies readonly PrivacyRuntimeFindingId[];
@@ -879,33 +877,6 @@ const PRODUCTION_FINDING_CONFIGS: ProductionFindingConfig[] = [
   },
   {
     findingGroup: "production_surfaced_calibration",
-    findingId: "missing_retention_disclosure",
-    positiveEvidenceFor: (index) => ({
-      artifactRefs: [`s3://privacy-runtime/reviewed-missing-retention-${index}/section-review.json`],
-      policyAnchor: {
-        claimType: "missing_retention_disclosure",
-        confidence: 0.82,
-        extractionStatus: "fetched",
-        sourceUrl: `https://reviewed-missing-retention-${index}.example.test/privacy`,
-        snippet: "The privacy policy describes collection and use but no concrete retention periods were noted."
-      },
-      signalKey: "section_review.no_retention_periods_noted",
-      snapshotEvidence: {
-        policy_retention_periods_count: 0,
-        section_review_no_retention_periods_noted: true
-      },
-      urlAssessment: {
-        assessment: "supports_promotion",
-        rationale: "Reviewed primary privacy policy lacks concrete retention periods, and section-review evidence confirms the absence.",
-        reviewedAt: "2026-04-24",
-        reviewedUrl: `https://reviewed-missing-retention-${index}.example.test/privacy`
-      }
-    }),
-    positiveNotes: "Section review found a primary privacy policy but no concrete retention periods.",
-    signalKey: "section_review.no_retention_periods_noted"
-  },
-  {
-    findingGroup: "production_surfaced_calibration",
     findingId: "missing_transfer_disclosure",
     positiveEvidenceFor: (index) => ({
       artifactRefs: [`s3://privacy-runtime/reviewed-missing-transfer-${index}/section-review.json`],
@@ -987,7 +958,6 @@ const PRODUCTION_REVIEWED_URLS: Record<(typeof PRIVACY_RUNTIME_TOP_PRODUCTION_FI
   behavioral_analytics_disclosure_present: "https://www.acorns.com/privacy/",
   cookie_policy_present: "https://ftmo.com/en/cookies/",
   guaranteed_outcome_claim_detected: "https://tradesbyfin.com/",
-  missing_retention_disclosure: "https://bestforex-signals.com/privacy-policy",
   missing_transfer_disclosure: "https://bestforex-signals.com/privacy-policy",
   missing_dsar_mechanism: "https://devbankuk.com/",
   weak_cookie_security_attributes: "https://www.acorns.com/"

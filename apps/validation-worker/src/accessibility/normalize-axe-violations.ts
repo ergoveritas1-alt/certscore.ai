@@ -106,6 +106,19 @@ function sanitizeSelectors(selectors: unknown[]): string[] {
   return safe;
 }
 
+function extractRepresentativeSelectors(nodes: AxeViolationLike["nodes"]): string[] {
+  if (!Array.isArray(nodes)) {
+    return [];
+  }
+
+  return sanitizeSelectors(
+    nodes.flatMap((node) => {
+      const target = node.target;
+      return Array.isArray(target) ? target : [];
+    })
+  );
+}
+
 export function normalizeAxeViolations(
   violations: AxeViolationLike[],
   pageUrl: string
@@ -117,6 +130,7 @@ export function normalizeAxeViolations(
     const impact = violation.impact ?? "unknown";
     const findingId = mapAxeRuleIdToFindingId(violation.id);
     const wcag = extractWcagCriteria(violation.tags);
+    const representativeSelectors = extractRepresentativeSelectors(violation.nodes);
 
     findings.push({
       id: findingId,
@@ -133,6 +147,8 @@ export function normalizeAxeViolations(
       wcag,
       affectedNodeCount: nodeCount,
       pageUrl,
+      representativeSelectors,
+      helpUrl: violation.helpUrl ?? "",
       evidenceSummary: getEvidenceSummary(violation),
       remediation: getRemediation(findingId, violation.id)
     });

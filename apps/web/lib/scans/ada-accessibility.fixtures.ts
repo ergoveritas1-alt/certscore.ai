@@ -6,11 +6,14 @@ export const ADA_ACCESSIBILITY_FIXTURES = {
   singleModerateAxeExample: {
     accessibilityRuleExamples: [
       {
+        help: "Elements must meet minimum color contrast ratio thresholds",
         impact: "moderate",
         nodeCount: 1,
         pageUrl: "https://example.com/",
         representativeSelectors: [".hero-title"],
-        ruleCode: "color-contrast"
+        ruleCode: "color-contrast",
+        ruleGroup: "wcag2aa",
+        severity: "medium"
       }
     ],
     pageUrl: "https://example.com/",
@@ -23,11 +26,14 @@ export const ADA_ACCESSIBILITY_FIXTURES = {
   seriousAxeExample: {
     accessibilityRuleExamples: [
       {
+        help: "Buttons must have discernible text",
         impact: "serious",
         nodeCount: 2,
         pageUrl: "https://example.com/",
         representativeSelectors: ["button[aria-label='']"],
-        ruleCode: "button-name"
+        ruleCode: "button-name",
+        ruleGroup: "wcag2a",
+        severity: "high"
       }
     ],
     pageUrl: "https://example.com/",
@@ -40,18 +46,24 @@ export const ADA_ACCESSIBILITY_FIXTURES = {
   multiRuleAxeExamples: {
     accessibilityRuleExamples: [
       {
+        help: "Elements must meet minimum color contrast ratio thresholds",
         impact: "moderate",
         nodeCount: 2,
         pageUrl: "https://example.com/",
         representativeSelectors: [".hero-title"],
-        ruleCode: "color-contrast"
+        ruleCode: "color-contrast",
+        ruleGroup: "wcag2aa",
+        severity: "medium"
       },
       {
+        help: "Images must have alternate text",
         impact: "moderate",
         nodeCount: 1,
         pageUrl: "https://example.com/products",
         representativeSelectors: ["img.product-photo"],
-        ruleCode: "image-alt"
+        ruleCode: "image-alt",
+        ruleGroup: "wcag2a",
+        severity: "medium"
       }
     ],
     pageUrl: "https://example.com/",

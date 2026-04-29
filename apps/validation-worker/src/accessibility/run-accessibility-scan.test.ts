@@ -54,6 +54,8 @@ test("normalizeAxeViolations handles many contrast failures", () => {
   assert.equal(findings[0]?.id, "low_color_contrast");
   assert.equal(findings[0]?.affectedNodeCount, 25);
   assert.equal(findings[0]?.severity, "high");
+  assert.deepEqual(findings[0]?.representativeSelectors, [".text-0", ".text-1", ".text-2"]);
+  assert.equal(findings[0]?.helpUrl, "https://dequeuniversity.com/rules/axe/4.10/color-contrast");
 });
 
 test("normalizeAxeViolations handles critical ARIA issue", () => {

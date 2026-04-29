@@ -607,8 +607,12 @@ function deriveConsentGatingPolicyAnchorFromRows(rows: Array<Record<string, unkn
 function derivePreconsentObservationType(
   preconsentRows: Array<{ vendorCategory: string; vendorName: string }>
 ): PolicyBehaviorRuntimeObservationType | null {
-  const categories = preconsentRows.map((row) => row.vendorCategory.toLowerCase());
-  const vendorNames = preconsentRows.map((row) => row.vendorName.toLowerCase());
+  const categories = preconsentRows
+    .map((row) => (typeof row.vendorCategory === "string" ? row.vendorCategory.toLowerCase() : ""))
+    .filter((value) => value.length > 0);
+  const vendorNames = preconsentRows
+    .map((row) => (typeof row.vendorName === "string" ? row.vendorName.toLowerCase() : ""))
+    .filter((value) => value.length > 0);
   const haystack = [...categories, ...vendorNames].join(" ");
 
   if (/advertis|marketing|adtech|retarget|targeting|social|doubleclick|facebook|linkedin|reddit|tiktok|snap/.test(haystack)) {
@@ -927,8 +931,9 @@ type AccessibilityRuleEvidenceRow = {
   family: string;
   help: string | null;
   helpUrl: string | null;
-  impact: string;
+  impact: string | null;
   instanceCount: number;
+  nodeCount: number;
   pageUrl: string | null;
   remediation: string;
   representativeSelectors: string[];
@@ -1130,8 +1135,11 @@ function deriveAccessibilityRuleEvidenceRows(input: {
       description: null,
       help: null,
       helpUrl: null,
+      impact: null,
+      nodeCount: rule.instanceCount,
       pageUrl: null,
       representativeSelectors: [],
+      severity: rule.severity,
       weightedPriority
     };
   });
@@ -4619,12 +4627,30 @@ export function SharedScanDetailView({
 }: SharedScanDetailViewProps) {
   const previewPayload = previewPayloadOverride ?? scanRecord.previewPayload ?? null;
   const snapshot = scanRecord.snapshot;
+  const isZeroCoveragePreviewCompletion =
+    scanRecord.scan.scanType === "preview" &&
+    scanRecord.scan.status === "completed" &&
+    !snapshot &&
+    scanRecord.scan.pagesScanned === 0;
   const unverifiedHomepageReview = snapshot
     ? deriveUnverifiedHomepageReview(snapshot, scanRecord.events, scanRecord.policyEnrichment)
     : null;
+  const zeroCoveragePreviewNotice = isZeroCoveragePreviewCompletion
+    ? buildPreviewExecutiveAccessLimitationNotice({
+        resultState: {
+          code: "scanner_heartbeat_degraded",
+          coverageLevel: "limited_none",
+          message:
+            "This preview completed before the scanner captured any public pages, so CertScore withheld substantive privacy and consent conclusions.",
+          title: "Preview completed without verified site coverage"
+        },
+        review: null
+      })
+    : null;
   const requestedExecutiveAccessLimitationNotice =
     executiveAccessLimitationOverride ??
-    (snapshot ? deriveExecutiveAccessLimitationNotice(snapshot, scanRecord.events, scanRecord.policyEnrichment) : null);
+    (snapshot ? deriveExecutiveAccessLimitationNotice(snapshot, scanRecord.events, scanRecord.policyEnrichment) : null) ??
+    zeroCoveragePreviewNotice;
   const suppressLimitedSurfaceReview =
     scanRecord.accessPostureSummary?.accessPostureClass === "early_loss" &&
     scanRecord.accessPostureSummary?.stopTier === "tier1_front_door";
@@ -4825,7 +4851,7 @@ export function SharedScanDetailView({
     domain: scanRecord.scan.domainHostname,
     finalHost: certScoreSummary.finalHost,
     legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
-    pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned),
+    pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned) ?? scanRecord.scan.pagesScanned,
     policyEnrichmentCount: scanRecord.policyEnrichment.length,
     posture: executiveAccessLimitationNotice ? "Watch" : executiveFindingsProjection.posture,
     requestedHost: certScoreSummary.requestedHost,

@@ -808,7 +808,6 @@ test("high-exposure rights gaps confirm when structured validation strongly back
 test("latest policy absence findings confirm only with structured validation and fetched policy evidence", () => {
   const absenceFindingIds = [
     "missing_dsar_mechanism",
-    "missing_retention_disclosure",
     "missing_transfer_disclosure"
   ] as const satisfies readonly ReportUnifiedFindingId[];
 
@@ -826,16 +825,10 @@ test("latest policy absence findings confirm only with structured validation and
                 flags: ["policy_field:dsar_path:absent"],
                 snippets: ["The privacy policy was reviewed and no concrete DSAR request mechanism was found."]
               }
-            : findingId === "missing_retention_disclosure"
-              ? {
-                  entities: { policyRetentionDisclosure: ["absent"] },
-                  flags: ["policy_field:retention:absent"],
-                  snippets: ["The privacy policy was reviewed and no concrete retention periods were found."]
-                }
-              : {
-                  flags: [],
-                  snippets: ["The privacy policy was reviewed and no concrete requested disclosure or mechanism was found."]
-                };
+            : {
+                flags: [],
+                snippets: ["The privacy policy was reviewed and no concrete requested disclosure or mechanism was found."]
+              };
         return makePacket(findingId, {
           confidenceInputs: {
             ...makePacket(findingId).confidenceInputs,
@@ -862,154 +855,6 @@ test("latest policy absence findings confirm only with structured validation and
     assert.equal(decision?.reportLane, "main", findingId);
     assert.ok(decision?.appliedRules.includes("evidence.rights_gap.confirmed_structured_policy_absence"), findingId);
   }
-});
-
-test("latest policy absence findings stay review-level when policy evidence is incomplete", () => {
-  const evaluation = evaluateUnifiedFindingSurfacing({
-    packets: [
-      makePacket("missing_retention_disclosure", {
-        confidenceInputs: {
-          ...makePacket("missing_retention_disclosure").confidenceInputs,
-          hasStructuredValidationEvidence: true
-        }
-      })
-    ]
-  });
-
-  const decision = evaluation.debugDecisions[0];
-  assert.equal(decision?.decisionState, "review");
-  assert.equal(decision?.reportLane, "confidence_and_coverage");
-  assert.equal(decision?.surfaceTier, "support");
-  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
-});
-
-test("latest policy absence findings stay in confidence coverage when policy extraction is structurally weak", () => {
-  const evaluation = evaluateUnifiedFindingSurfacing({
-    packets: [
-      makePacket("missing_retention_disclosure", {
-        confidenceInputs: {
-          ...makePacket("missing_retention_disclosure").confidenceInputs,
-          hasPolicyTextEvidence: true,
-          hasReadableSurfaceSnippetEvidence: true,
-          hasStructuredValidationEvidence: true
-        },
-        evidence: {
-          ...makePacket("missing_retention_disclosure").evidence,
-          counts: {
-            policy_coverage_ratio: 0.05,
-            policy_semantic_confidence: 0.8
-          },
-          flags: ["policy_extraction_status:structurally_weak"],
-          pageUrls: ["https://example.com/privacy"],
-          snippets: ["A sparse privacy page was found, but it did not contain enough substantive policy text."],
-          sourceUrls: ["https://example.com/privacy"]
-        }
-      })
-    ]
-  });
-
-  const decision = evaluation.debugDecisions[0];
-  assert.equal(decision?.decisionState, "review");
-  assert.equal(decision?.reportLane, "confidence_and_coverage");
-  assert.equal(decision?.surfaceTier, "support");
-  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
-});
-
-test("missing-retention findings do not confirm when retained evidence names retention behavior", () => {
-  const evaluation = evaluateUnifiedFindingSurfacing({
-    packets: [
-      makePacket("missing_retention_disclosure", {
-        confidenceInputs: {
-          ...makePacket("missing_retention_disclosure").confidenceInputs,
-          hasPolicyTextEvidence: true,
-          hasReadableSurfaceSnippetEvidence: true,
-          hasStructuredValidationEvidence: true
-        },
-        evidence: {
-          ...makePacket("missing_retention_disclosure").evidence,
-          counts: {
-            policy_coverage_ratio: 0.62
-          },
-          pageUrls: ["https://example.com/privacy-policy"],
-          snippets: [
-            "The policy says the company stores data as needed and applies security measures, but no separate retention-period table was extracted."
-          ],
-          sourceUrls: ["https://example.com/privacy-policy"]
-        }
-      })
-    ]
-  });
-
-  const decision = evaluation.debugDecisions[0];
-  assert.equal(decision?.decisionState, "review");
-  assert.equal(decision?.reportLane, "confidence_and_coverage");
-  assert.equal(decision?.surfaceTier, "support");
-  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
-});
-
-test("missing-retention findings require retention-specific absence evidence", () => {
-  const evaluation = evaluateUnifiedFindingSurfacing({
-    packets: [
-      makePacket("missing_retention_disclosure", {
-        confidenceInputs: {
-          ...makePacket("missing_retention_disclosure").confidenceInputs,
-          hasPolicyTextEvidence: true,
-          hasReadableSurfaceSnippetEvidence: true,
-          hasStructuredValidationEvidence: true
-        },
-        evidence: {
-          ...makePacket("missing_retention_disclosure").evidence,
-          counts: {
-            policy_coverage_ratio: 0.72,
-            policy_semantic_confidence: 0.82
-          },
-          pageUrls: ["https://example.com/privacy-policy"],
-          snippets: ["The privacy policy was reviewed and no requested disclosure or mechanism was found."],
-          sourceUrls: ["https://example.com/privacy-policy"]
-        }
-      })
-    ]
-  });
-
-  const decision = evaluation.debugDecisions[0];
-  assert.equal(decision?.decisionState, "review");
-  assert.equal(decision?.reportLane, "confidence_and_coverage");
-  assert.equal(decision?.surfaceTier, "support");
-  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
-});
-
-test("missing-retention findings do not confirm when retention periods are retained", () => {
-  const evaluation = evaluateUnifiedFindingSurfacing({
-    packets: [
-      makePacket("missing_retention_disclosure", {
-        confidenceInputs: {
-          ...makePacket("missing_retention_disclosure").confidenceInputs,
-          hasPolicyTextEvidence: true,
-          hasReadableSurfaceSnippetEvidence: true,
-          hasStructuredValidationEvidence: true
-        },
-        evidence: {
-          ...makePacket("missing_retention_disclosure").evidence,
-          counts: {
-            policy_coverage_ratio: 0.72,
-            policy_semantic_confidence: 0.82
-          },
-          entities: {
-            policyRetentionPeriods: ["account data retained for 7 years"]
-          },
-          pageUrls: ["https://example.com/privacy-policy"],
-          snippets: ["The policy says account data is retained for seven years for legal and compliance obligations."],
-          sourceUrls: ["https://example.com/privacy-policy"]
-        }
-      })
-    ]
-  });
-
-  const decision = evaluation.debugDecisions[0];
-  assert.equal(decision?.decisionState, "review");
-  assert.equal(decision?.reportLane, "confidence_and_coverage");
-  assert.equal(decision?.surfaceTier, "support");
-  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
 });
 
 test("missing DSAR and transfer findings do not confirm when retained evidence contradicts the absence", () => {

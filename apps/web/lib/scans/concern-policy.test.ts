@@ -1475,6 +1475,25 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "generic high-sensitivity signal without payload evidence is blocked",
+      concern: makeConcern({
+        originKey: "commerce.high_sensitivity_data_collection_detected",
+        suggestedUnifiedFindingId: undefined,
+        title: "High-sensitivity data collection detected"
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        signalKey: "commerce.high_sensitivity_data_collection_detected",
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: ["missing_specific_runtime_anchor", "runtime_tracking_review_incomplete"]
+      }
+    },
+    {
       name: "sensitive replay concern without sensitive payload evidence stays audit-only",
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",

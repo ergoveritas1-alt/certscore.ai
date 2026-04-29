@@ -64,11 +64,83 @@ export function getAccessibilityNumberValue(entry: AccessibilityRuleExampleLike,
   return null;
 }
 
-function hasStringArrayValue(entry: AccessibilityRuleExampleLike, keys: string[]) {
-  return keys.some((key) => {
+function getAccessibilityStringArrayValue(entry: AccessibilityRuleExampleLike, keys: string[]) {
+  for (const key of keys) {
     const value = entry[key];
-    return Array.isArray(value) && value.some((item) => typeof item === "string" && item.trim().length > 0);
-  });
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    }
+    if (typeof value === "string" && value.trim().length > 0) {
+      try {
+        const parsed = JSON.parse(value) as unknown;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+        }
+      } catch {
+        return [value.trim()];
+      }
+    }
+  }
+
+  return [];
+}
+
+export function isCompleteRepresentativeAccessibilityExample(entry: AccessibilityRuleExampleLike) {
+  const pageUrl = getAccessibilityStringValue(entry, ["pageUrl", "page_url"]);
+  const ruleCode = getAccessibilityStringValue(entry, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
+  const ruleGroup = getAccessibilityStringValue(entry, ["ruleGroup", "rule_group", "wcag"]);
+  const selectors = getAccessibilityStringArrayValue(entry, ["representativeSelectors", "representative_selectors"]);
+  const nodeCount = getAccessibilityNumberValue(entry, ["nodeCount", "node_count", "affectedNodeCount", "affected_node_count"]);
+  const impact = getAccessibilityStringValue(entry, ["impact", "axeImpact", "axe_impact"]);
+  const severity = getAccessibilityStringValue(entry, ["severity"]);
+  const help = getAccessibilityStringValue(entry, ["help", "label"]);
+
+  return Boolean(
+    pageUrl &&
+    /^https?:\/\//i.test(pageUrl) &&
+    ruleCode &&
+    ruleGroup &&
+    selectors.length > 0 &&
+    typeof nodeCount === "number" &&
+    nodeCount > 0 &&
+    impact &&
+    severity &&
+    help
+  );
+}
+
+function formatRepresentativeExampleSnippet(entry: AccessibilityRuleExampleLike) {
+  const pageUrl = getAccessibilityStringValue(entry, ["pageUrl", "page_url"]);
+  const ruleCode = getAccessibilityStringValue(entry, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
+  const ruleGroup = getAccessibilityStringValue(entry, ["ruleGroup", "rule_group", "wcag"]);
+  const selectors = getAccessibilityStringArrayValue(entry, ["representativeSelectors", "representative_selectors"]);
+  const nodeCount = getAccessibilityNumberValue(entry, ["nodeCount", "node_count", "affectedNodeCount", "affected_node_count"]);
+  const impact = getAccessibilityStringValue(entry, ["impact", "axeImpact", "axe_impact"]);
+  const severity = getAccessibilityStringValue(entry, ["severity"]);
+  const help = getAccessibilityStringValue(entry, ["help", "label"]);
+  const selector = selectors[0];
+
+  if (!pageUrl || !ruleCode || !ruleGroup || !selector || typeof nodeCount !== "number" || !impact || !severity || !help) {
+    return null;
+  }
+
+  return `Axe example: ${ruleCode}/${ruleGroup} on ${pageUrl}; selector ${selector}; nodes ${nodeCount}; impact ${impact}; severity ${severity}; help: ${help}.`;
+}
+
+export function formatRepresentativeAccessibilityExampleSnippets(
+  rawEvidence: Record<string, unknown> | null | undefined,
+  limit = 3
+) {
+  if (!rawEvidence || !Array.isArray(rawEvidence.accessibilityRuleExamples)) {
+    return [] as string[];
+  }
+
+  return rawEvidence.accessibilityRuleExamples
+    .filter((entry): entry is AccessibilityRuleExampleLike => Boolean(entry) && typeof entry === "object")
+    .filter(isCompleteRepresentativeAccessibilityExample)
+    .map(formatRepresentativeExampleSnippet)
+    .filter((snippet): snippet is string => typeof snippet === "string")
+    .slice(0, limit);
 }
 
 export function getRepresentativeAccessibilityExampleCoverage(
@@ -100,14 +172,10 @@ export function getRepresentativeAccessibilityExampleCoverage(
     const example = entry as AccessibilityRuleExampleLike;
     const pageUrl = getAccessibilityStringValue(example, ["pageUrl", "page_url"]);
     const ruleId = getAccessibilityStringValue(example, ["ruleId", "rule_id", "ruleCode", "rule_code"]);
-    const selector =
-      getAccessibilityStringValue(example, ["selector", "target"]) ??
-      (hasStringArrayValue(example, ["representativeSelectors", "representative_selectors"]) ? "representative_selector" : null);
-    const snippet = getAccessibilityStringValue(example, ["snippet", "message", "description", "help"]);
-    const nodeCount = getAccessibilityNumberValue(example, ["nodeCount", "node_count"]);
-    const impact = getAccessibilityStringValue(example, ["impact", "severity"]);
+    const nodeCount = getAccessibilityNumberValue(example, ["nodeCount", "node_count", "affectedNodeCount", "affected_node_count"]);
+    const impact = getAccessibilityStringValue(example, ["impact", "axeImpact", "axe_impact", "severity"]);
 
-    if (!pageUrl || !ruleId || (!selector && !snippet && !(typeof nodeCount === "number" && nodeCount > 0))) {
+    if (!pageUrl || !ruleId || !isCompleteRepresentativeAccessibilityExample(example)) {
       continue;
     }
 
@@ -163,7 +231,10 @@ export function normalizePersistedAccessibilityRuleExamples(
     impact: example.impact,
     nodeCount: example.node_count,
     pageUrl: example.page_url,
-    representativeSelectors: example.representative_selectors ?? [],
+    representativeSelectors: getAccessibilityStringArrayValue(
+      example as unknown as AccessibilityRuleExampleLike,
+      ["representative_selectors", "representativeSelectors"]
+    ),
     ruleCode: example.rule_code,
     ruleGroup: example.rule_group,
     severity: example.severity

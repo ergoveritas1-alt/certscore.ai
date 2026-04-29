@@ -729,7 +729,7 @@ function isHighSensitivityConcern(
     .join(" ")
     .toLowerCase();
 
-  return /session_replay_on_sensitive_input_surface|sensitive_data_collection_with_third_party_tracking_present/.test(
+  return /high_sensitivity_data_collection_detected|session_replay_on_sensitive_input_surface|sensitive_data_collection_with_third_party_tracking_present/.test(
     haystack
   );
 }

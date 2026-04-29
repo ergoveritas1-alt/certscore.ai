@@ -427,7 +427,6 @@ function getFindingSelectionScore(input: {
 
 function collapseSingletonRuleFindings<T extends { evidence?: Record<string, unknown>; pageUrl: string | null; ruleKey: string; severity: string }>(findings: T[]) {
   const singletonRuleKeys = new Set<string>([
-    "section_review.no_retention_periods_noted",
     "section_review.no_transfer_mechanism_noted",
     "scan_report_review.low_confidence_critical_fields",
     "section_review.low_confidence_critical_fields",
@@ -1191,6 +1190,7 @@ export function promoteSectionFinancialReviewFindings(findings: ValidationFindin
 }
 
 type ValidationArtifactBundle = {
+  accessibilityRuleExamples?: Array<Record<string, unknown>>;
   documentSources?: Array<Record<string, unknown>>;
   macroEnrichment?: Record<string, unknown> | null;
   pageEvidence: Array<Record<string, unknown>>;
@@ -1208,6 +1208,49 @@ type ValidationArtifactBundle = {
   snapshot: Record<string, unknown> | null;
   trackerVendors: Array<Record<string, unknown>>;
 };
+
+function getAccessibilityStringValue(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function getAccessibilityNumberValue(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function getAccessibilityStringArrayValue(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+    }
+    if (typeof value === "string" && value.trim().length > 0) {
+      try {
+        const parsed = JSON.parse(value) as unknown;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+        }
+      } catch {
+        return [value.trim()];
+      }
+    }
+  }
+
+  return [];
+}
 
 function deriveAccessFindings(input: {
   documentSources?: Array<Record<string, unknown>>;
@@ -4035,11 +4078,6 @@ function derivePolicySectionFindings(input: {
       pageType,
       pageUrl
     });
-    const matchedDocumentSourceHasRetentionCue = hasMatchingDocumentSourceRetentionCue({
-      documentSources: input.documentSources,
-      pageType,
-      pageUrl
-    });
     const baseEvidence = {
       policy_extraction_status: policyExtractionStatus,
       page_type: pageType,
@@ -4317,31 +4355,6 @@ function derivePolicySectionFindings(input: {
 
     if (
       pageType === "privacy_policy" &&
-      !hasRetentionDisclosureEvidence({ enrichment, retentionPeriods, summaryShort }) &&
-      !matchedDocumentSourceHasRetentionCue &&
-      !domainPolicyCoverage.hasRetentionDisclosure &&
-      !isSupplementalSupportPage
-    ) {
-      findings.push(
-        buildSectionIssueFinding({
-          description: "The primary privacy policy did not disclose any concrete retention periods for collected data.",
-          evidence: {
-            ...baseEvidence,
-            domain_policy_coverage: domainPolicyCoverage,
-            matched_document_source_retention_cue: matchedDocumentSourceHasRetentionCue,
-            policy_retention_periods: retentionPeriods
-          },
-          pageType,
-          pageUrl,
-          ruleKey: "section_review.no_retention_periods_noted",
-          severity: "medium",
-          title: "No retention periods noted in primary privacy policy"
-        })
-      );
-    }
-
-    if (
-      pageType === "privacy_policy" &&
       transferMechanisms.length === 0 &&
       !stringIncludesTransferCue(summaryShort) &&
       policyExtractionStatus === "fetched" &&
@@ -4402,7 +4415,75 @@ function derivePolicySectionFindings(input: {
   return findings;
 }
 
-function deriveAccessibilitySectionFindings(input: { snapshot: Record<string, unknown> | null }) {
+function getRepresentativeAccessibilityRuleExamples(input: {
+  examples?: Array<Record<string, unknown>>;
+  ruleCodes: string[];
+  ruleGroups: string[];
+}) {
+  const ruleCodes = new Set(input.ruleCodes);
+  const ruleGroups = new Set(input.ruleGroups);
+
+  return (input.examples ?? [])
+    .filter((row) => {
+      const ruleCode = getAccessibilityStringValue(row, ["rule_code", "ruleCode", "axe_rule_id", "axeRuleId"]);
+      const ruleGroup = getAccessibilityStringValue(row, ["rule_group", "ruleGroup"]);
+      return (ruleCode !== null && ruleCodes.has(ruleCode)) || (ruleGroup !== null && ruleGroups.has(ruleGroup));
+    })
+    .map((row) => {
+      const ruleCode = getAccessibilityStringValue(row, ["rule_code", "ruleCode", "axe_rule_id", "axeRuleId"]);
+      const ruleGroup = getAccessibilityStringValue(row, ["rule_group", "ruleGroup"]);
+      const pageUrl = getAccessibilityStringValue(row, ["page_url", "pageUrl"]);
+      const selectors = getAccessibilityStringArrayValue(row, ["representative_selectors", "representativeSelectors"]);
+      const nodeCount = getAccessibilityNumberValue(row, ["node_count", "nodeCount", "affected_node_count", "affectedNodeCount"]);
+      const impact = getAccessibilityStringValue(row, ["impact", "axe_impact", "axeImpact"]);
+      const severity = getAccessibilityStringValue(row, ["severity"]);
+      const help = getAccessibilityStringValue(row, ["help", "label"]);
+      const helpUrl = getAccessibilityStringValue(row, ["help_url", "helpUrl"]);
+      const description = getAccessibilityStringValue(row, ["description", "evidence_summary", "evidenceSummary"]);
+
+      return {
+        description,
+        help,
+        helpUrl,
+        impact,
+        nodeCount,
+        pageUrl,
+        representativeSelectors: selectors,
+        ruleCode,
+        ruleGroup,
+        severity
+      };
+    })
+    .filter(
+      (row): row is {
+        description: string | null;
+        help: string;
+        helpUrl: string | null;
+        impact: string;
+        nodeCount: number;
+        pageUrl: string;
+        representativeSelectors: string[];
+        ruleCode: string;
+        ruleGroup: string;
+        severity: string;
+      } =>
+        Boolean(row.pageUrl) &&
+        Boolean(row.ruleCode) &&
+        Boolean(row.ruleGroup) &&
+        row.representativeSelectors.length > 0 &&
+        typeof row.nodeCount === "number" &&
+        row.nodeCount > 0 &&
+        Boolean(row.impact) &&
+        Boolean(row.severity) &&
+        Boolean(row.help)
+    )
+    .slice(0, 3);
+}
+
+function deriveAccessibilitySectionFindings(input: {
+  accessibilityRuleExamples?: Array<Record<string, unknown>>;
+  snapshot: Record<string, unknown> | null;
+}) {
   const snapshot = input.snapshot;
   if (!snapshot) {
     return [];
@@ -4412,30 +4493,39 @@ function deriveAccessibilitySectionFindings(input: { snapshot: Record<string, un
     {
       count: getSnapshotNumber(snapshot, "wcag_contrast_failures_count"),
       description: "Contrast failures can make text and controls hard to perceive for low-vision users.",
+      examples: getRepresentativeAccessibilityRuleExamples({
+        examples: input.accessibilityRuleExamples,
+        ruleCodes: ["color-contrast"],
+        ruleGroups: ["contrast"]
+      }),
       ruleKey: "accessibility_review.contrast_failures",
       title: "Contrast failures"
     },
     {
       count: getSnapshotNumber(snapshot, "wcag_missing_alt_count"),
       description: "Missing alt text reduces screen-reader access to informative images.",
+      examples: [] as ReturnType<typeof getRepresentativeAccessibilityRuleExamples>,
       ruleKey: "accessibility_review.missing_alt_text",
       title: "Missing alt text"
     },
     {
       count: getSnapshotNumber(snapshot, "wcag_keyboard_navigation_issue_count") + getSnapshotNumber(snapshot, "wcag_focus_indicator_issue_count"),
       description: "Keyboard and focus issues make navigation harder without a mouse.",
+      examples: [] as ReturnType<typeof getRepresentativeAccessibilityRuleExamples>,
       ruleKey: "accessibility_review.navigation_issues",
       title: "Navigation issues"
     },
     {
       count: getSnapshotNumber(snapshot, "wcag_aria_error_count"),
       description: "ARIA issues can break semantics or assistive-technology interpretation.",
+      examples: [] as ReturnType<typeof getRepresentativeAccessibilityRuleExamples>,
       ruleKey: "accessibility_review.aria_problems",
       title: "ARIA problems"
     },
     {
       count: getSnapshotNumber(snapshot, "wcag_form_label_error_count"),
       description: "Form label issues make inputs less understandable and harder to complete.",
+      examples: [] as ReturnType<typeof getRepresentativeAccessibilityRuleExamples>,
       ruleKey: "accessibility_review.form_label_issues",
       title: "Form label issues"
     }
@@ -4445,7 +4535,9 @@ function deriveAccessibilitySectionFindings(input: { snapshot: Record<string, un
     buildSectionIssueFinding({
       description: row.description,
       evidence: {
-        count: row.count
+        accessibilityRuleExamples: row.examples,
+        count: row.count,
+        representativeAxeExampleCount: row.examples.length
       },
       pageType: null,
       pageUrl: null,
@@ -4581,6 +4673,7 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
       snapshot: input.snapshot
     }),
     ...deriveAccessibilitySectionFindings({
+      accessibilityRuleExamples: input.accessibilityRuleExamples ?? [],
       snapshot: input.snapshot
     })
   );

@@ -162,6 +162,29 @@ test("high-sensitivity candidates with third-party tracking specialize into sens
   assert.equal(concern.promotionEligibility, "eligible");
 });
 
+test("generic high-sensitivity candidates without concrete payload evidence are suppressed", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Sensitive input signal triggered without retained payload artifacts.",
+    fallbackEvidence: {
+      signalKey: "commerce.high_sensitivity_data_collection_detected",
+      signalValue: true
+    },
+    observedValue: "Yes",
+    severity: "high",
+    signalKey: "commerce.high_sensitivity_data_collection_detected",
+    signalLabel: "High-sensitivity data collection detected",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "High-sensitivity data collection detected"
+  });
+
+  assert.equal(concern.suggestedUnifiedFindingId, undefined);
+  assert.equal(concern.allowedNarrativeTier, "weak");
+  assert.equal(concern.promotionEligibility, "blocked");
+  assert.equal(concern.externalSurfacingEligibility, "suppress");
+  assert.deepEqual(concern.negativeEvidenceFlags, ["missing_specific_runtime_anchor", "runtime_tracking_review_incomplete"]);
+});
+
 test("keyboard and form accessibility signals can specialize into workflow-level barriers", () => {
   const keyboardConcern = normalizeConcernFromReviewFindingCandidate({
     description: "Keyboard issues were detected on the tested flow.",

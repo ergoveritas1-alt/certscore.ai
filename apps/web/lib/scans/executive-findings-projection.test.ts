@@ -582,6 +582,52 @@ test("keeps DOJ ADA regulatory lens minimal for score-only accessibility packets
   assert.equal(adaLens?.score, null);
 });
 
+test("projects surfaced contrast failures with representative axe evidence into executive findings", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("contrast_failures", {
+      confidenceBand: "high",
+      details: {
+        family: "accessibility",
+        kind: "contrast_failures",
+        ruleExamples: ["color-contrast"]
+      },
+      evidence: {
+        counts: {
+          representativeAxeExampleCount: 1,
+          representativeAxePageCount: 1,
+          representativeAxeRuleCount: 1
+        },
+        entities: {
+          accessibilityRuleCodes: ["color-contrast"],
+          accessibilityRuleGroups: ["wcag2aa"],
+          accessibilitySelectors: ["p.low-contrast"],
+          accessibilitySeverities: ["high"],
+          accessibilityImpacts: ["serious"],
+          maxAxeImpact: ["serious"]
+        },
+        fetchQuality: null,
+        flags: ["representative_accessibility_examples_retained"],
+        pageUrls: ["https://example.com/"],
+        snippets: [
+          "Axe example: color-contrast/wcag2aa on https://example.com/; selector p.low-contrast; nodes 1; impact serious; severity high; help: Elements must meet minimum color contrast ratio thresholds."
+        ],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "Representative color contrast failures were retained from axe evidence."
+    })
+  ]);
+
+  const finding = projection.findings.find((candidate) => candidate.id === "accessibility_risk_score");
+
+  assert.ok(finding);
+  assert.equal(finding?.section, "Accessibility");
+  assert.equal(finding?.severity, "high");
+  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
+  assert.ok(finding?.evidencePreview.some((snippet) => /color-contrast\/wcag2aa/i.test(snippet)));
+  assert.ok(finding?.evidenceDetails?.evidenceFlags?.includes("representative_accessibility_examples_retained"));
+});
+
 test("records surfaced packets that are not yet mapped into executive findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("some_unmapped_surface", {
@@ -591,4 +637,142 @@ test("records surfaced packets that are not yet mapped into executive findings",
 
   assert.deepEqual(projection.findings, []);
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, ["some_unmapped_surface"]);
+});
+
+test("projects sensitive data with third-party tracking into executive findings and top findings", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("sensitive_data_collection_with_third_party_tracking_present", {
+      confidenceBand: "high",
+      details: {
+        family: "sensitive_data",
+        kind: "sensitive_data_collection_with_third_party_tracking_present",
+        dataTypes: ["phone_detected"]
+      },
+      evidence: {
+        counts: {},
+        entities: {
+          request_domains: ["log.intellimize.co"],
+          request_urls: ["https://log.intellimize.co/logger"],
+          runtimeRequestUrls: ["https://log.intellimize.co/logger"],
+          sensitive_data_types: ["phone_detected"],
+          sensitive_source_fields: ["intellimizeClientIp"],
+          sensitive_source_locations: ["request_body"],
+          third_party_domains: ["log.intellimize.co"],
+          vendors: ["log.intellimize.co"]
+        },
+        fetchQuality: "thin_content",
+        flags: ["commerce.high_sensitivity_data_collection_detected"],
+        pageUrls: [],
+        snippets: ["intellimizeClientIp=***-***-4248"],
+        sourceUrls: []
+      },
+      severity: "medium",
+      summary: "Sensitive-data collection with third-party tracking was retained."
+    }),
+    makePacket("contrast_failures", {
+      confidenceBand: "high",
+      details: {
+        family: "accessibility",
+        kind: "contrast_failures",
+        ruleExamples: ["color-contrast"]
+      },
+      evidence: {
+        counts: {
+          representativeAxeExampleCount: 1
+        },
+        entities: {},
+        fetchQuality: "verified_content",
+        flags: ["representative_accessibility_examples_retained"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Representative color contrast failures were retained."],
+        sourceUrls: []
+      },
+      severity: "low",
+      summary: "Representative color contrast failures were retained."
+    })
+  ]);
+
+  const finding = projection.findings.find(
+    (candidate) => candidate.id === "sensitive_data_collection_with_third_party_tracking_present"
+  );
+
+  assert.ok(finding);
+  assert.equal(finding?.section, "Privacy & Tracking");
+  assert.equal(finding?.severity, "medium");
+  assert.ok(finding?.shortSummary.includes("log.intellimize.co"));
+  assert.deepEqual(
+    finding?.evidenceDetails?.runtimeRequestUrls,
+    ["https://log.intellimize.co/logger"]
+  );
+  assert.deepEqual(finding?.evidenceDetails?.sensitiveDataTypes, ["phone"]);
+  assert.deepEqual(finding?.evidenceDetails?.sensitiveFieldContexts, [
+    "field:intellimizeClientIp",
+    "location:request body"
+  ]);
+  assert.ok(
+    projection.topFindings.some(
+      (candidate) => candidate.id === "sensitive_data_collection_with_third_party_tracking_present"
+    )
+  );
+  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
+  assert.ok(
+    projection.trace.packets.some(
+      (packet) =>
+        packet.unifiedFindingId === "sensitive_data_collection_with_third_party_tracking_present" &&
+        packet.executiveFindingId === "sensitive_data_collection_with_third_party_tracking_present" &&
+        packet.inTopFindings
+    )
+  );
+});
+
+test("surfaces sensitive-data tracking in regulatory lenses", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("sensitive_data_collection_with_third_party_tracking_present", {
+      confidenceBand: "high",
+      details: {
+        family: "sensitive_data",
+        kind: "sensitive_data_collection_with_third_party_tracking_present",
+        dataTypes: ["phone_detected"]
+      },
+      evidence: {
+        counts: {},
+        entities: {
+          request_domains: ["log.intellimize.co"],
+          request_urls: ["https://log.intellimize.co/logger"],
+          runtimeRequestUrls: ["https://log.intellimize.co/logger"],
+          sensitive_data_types: ["phone_detected"],
+          sensitive_source_fields: ["intellimizeClientIp"],
+          sensitive_source_locations: ["request_body"],
+          third_party_domains: ["log.intellimize.co"],
+          vendors: ["log.intellimize.co"]
+        },
+        fetchQuality: "thin_content",
+        flags: ["commerce.high_sensitivity_data_collection_detected"],
+        pageUrls: [],
+        snippets: ["intellimizeClientIp=***-***-4248"],
+        sourceUrls: []
+      },
+      severity: "medium",
+      summary: "Sensitive-data collection with third-party tracking was retained."
+    })
+  ]);
+
+  const lenses = buildRegulatoryLenses(projection.findings, {
+    beforeConsentCookieCount: 0,
+    thirdPartyRequestCount: 1
+  });
+
+  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
+  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA");
+  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
+
+  assert.ok(gdprLens?.findings.some((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present"));
+  assert.equal(gdprLens?.summary, "Sensitive-data collection and tracking exposure are the main issue.");
+  assert.ok(cpraLens?.findings.some((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present"));
+  assert.equal(cpraLens?.summary, "Sensitive-data collection and downstream third-party exposure drive this score.");
+  assert.ok(ftcLens?.findings.some((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present"));
+  assert.equal(
+    ftcLens?.summary,
+    "Sensitive-data collection alongside third-party tracking should be reviewed for unfairness or deception risk."
+  );
 });

@@ -19,6 +19,7 @@ import {
 } from "./pipeline";
 
 function buildArtifacts(overrides?: {
+  accessibilityRuleExamples?: Array<Record<string, unknown>>;
   documentSources?: Array<Record<string, unknown>>;
   macroEnrichment?: Record<string, unknown>;
   pageEvidence?: Array<Record<string, unknown>>;
@@ -34,6 +35,7 @@ function buildArtifacts(overrides?: {
   trackerVendors?: Array<Record<string, unknown>>;
 }) {
   return {
+    accessibilityRuleExamples: overrides?.accessibilityRuleExamples ?? [],
     documentSources: overrides?.documentSources ?? [],
     macroEnrichment: overrides?.macroEnrichment ?? null,
     pageEvidence: overrides?.pageEvidence ?? [],
@@ -81,7 +83,7 @@ function buildArtifacts(overrides?: {
 test("deriveValidationFindings emits queue issues plus section review rows", () => {
   const findings = deriveValidationFindings(buildArtifacts());
 
-  assert.equal(findings.length, 5);
+  assert.equal(findings.length, 4);
   assert.equal(findings[0]?.ruleKey, "scan_report_review.policy_behavior_conflict_candidate");
   assert.equal(findings[0]?.category, "scan_report_review");
   assert.equal(findings[0]?.findingFamily, "policy_review_queue");
@@ -89,11 +91,51 @@ test("deriveValidationFindings emits queue issues plus section review rows", () 
   assert.equal(findings[0]?.title, "Possible policy-to-behavior conflict");
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.no_dsar_mechanism"));
   assert.ok(findings.some((finding) => finding.ruleKey === "section_review.missing_dsar_high_exposure"));
-  assert.ok(findings.some((finding) => finding.ruleKey === "section_review.no_retention_periods_noted"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.no_transfer_mechanism_noted"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.clarity_risk_42"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.confidence_81"));
   assert.ok(findings.some((finding) => finding.ruleKey === "accessibility_review.contrast_failures"));
+});
+
+test("contrast validation finding exports representative axe evidence when retained", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      accessibilityRuleExamples: [
+        {
+          description: "Detected 2 elements with insufficient color contrast.",
+          help: "Elements must meet minimum color contrast ratio thresholds",
+          help_url: "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+          impact: "serious",
+          node_count: 2,
+          page_url: "https://example.com/",
+          representative_selectors: [".hero-title"],
+          rule_code: "color-contrast",
+          rule_group: "wcag2aa",
+          severity: "high"
+        }
+      ],
+      snapshot: {
+        wcag_contrast_failures_count: 2
+      }
+    })
+  );
+
+  const contrast = findings.find((finding) => finding.ruleKey === "accessibility_review.contrast_failures");
+  assert.equal(contrast?.evidence.representativeAxeExampleCount, 1);
+  assert.deepEqual(contrast?.evidence.accessibilityRuleExamples, [
+    {
+      description: "Detected 2 elements with insufficient color contrast.",
+      help: "Elements must meet minimum color contrast ratio thresholds",
+      helpUrl: "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+      impact: "serious",
+      nodeCount: 2,
+      pageUrl: "https://example.com/",
+      representativeSelectors: [".hero-title"],
+      ruleCode: "color-contrast",
+      ruleGroup: "wcag2aa",
+      severity: "high"
+    }
+  ]);
 });
 
 test("promoteSectionFinancialReviewFindings upgrades section-level earnings claims into financial review findings", () => {
@@ -345,7 +387,7 @@ test("does not emit blocked-access finding for vendor interstitials when browser
   assert.equal(findings.some((item) => item.ruleKey === "access_review.legal_coverage_unverified"), true);
 });
 
-test("lookout-style bundle surfaces runtime tracking, cookie gap, and retention findings", () => {
+test("lookout-style bundle surfaces runtime tracking and cookie gap findings", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       documentSources: [
@@ -478,8 +520,7 @@ test("lookout-style bundle surfaces runtime tracking, cookie gap, and retention 
     findings.map((finding) => finding.ruleKey),
     [
       "runtime_privacy.preconsent_tracking_observed",
-      "cookie_runtime.disclosure_gap",
-      "section_review.no_retention_periods_noted"
+      "cookie_runtime.disclosure_gap"
     ]
   );
   assert.equal(findings.find((finding) => finding.ruleKey === "cookie_runtime.disclosure_gap")?.severity, "medium");
@@ -524,7 +565,7 @@ test("adidas-style blocked bundle only surfaces blocked-access finding", () => {
   assert.deepEqual(findings.map((finding) => finding.ruleKey), ["access_review.public_access_blocked"]);
 });
 
-test("alz doc-ready bundle only surfaces retention finding", () => {
+test("alz doc-ready bundle does not surface retired retention findings", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       documentSources: [
@@ -606,10 +647,10 @@ test("alz doc-ready bundle only surfaces retention finding", () => {
     })
   );
 
-  assert.deepEqual(findings.map((finding) => finding.ruleKey), ["section_review.no_retention_periods_noted"]);
+  assert.deepEqual(findings.map((finding) => finding.ruleKey), []);
 });
 
-test("supplemental policy disclosures suppress the primary-policy retention finding", () => {
+test("supplemental policy disclosures do not reintroduce retired retention findings", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       documentSources: [
@@ -684,7 +725,7 @@ test("supplemental policy disclosures suppress the primary-policy retention find
     })
   );
 
-  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.no_retention_periods_noted"));
+  assert.deepEqual(findings.map((finding) => finding.ruleKey), ["section_review.no_transfer_mechanism_noted"]);
 });
 
 test("hobbylobby-style captcha bundle surfaces blocked access plus runtime tracking", () => {
@@ -4652,7 +4693,6 @@ test("rich semantics suppress extraction-noise findings while preserving substan
   assert.ok(!findings.some((finding) => finding.ruleKey === "policy_runtime.disclosure_likely_obstructed"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.clarity_risk_68"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.confidence_58"));
-  assert.ok(findings.some((finding) => finding.ruleKey === "section_review.no_retention_periods_noted"));
   assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.no_transfer_mechanism_noted"));
 });
 
@@ -4720,7 +4760,7 @@ test("rich terms semantics suppress rule-only and clarity-noise findings", () =>
   assert.equal(findings.some((finding) => finding.ruleKey === "section_review.clarity_risk_78"), false);
 });
 
-test("cnn-style runtime findings suppress low-signal policy noise and collapse duplicate retention findings", () => {
+test("cnn-style runtime findings suppress low-signal policy noise", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       policyEnrichments: [
@@ -4816,7 +4856,7 @@ test("cnn-style runtime findings suppress low-signal policy noise and collapse d
   assert.equal(findings.some((finding) => finding.ruleKey === "scan_report_review.low_confidence_critical_fields"), false);
   assert.equal(findings.some((finding) => finding.ruleKey === "section_review.low_confidence_critical_fields"), false);
   assert.equal(findings.some((finding) => finding.ruleKey === "section_review.low_extraction_confidence"), false);
-  assert.equal(findings.filter((finding) => finding.ruleKey === "section_review.no_retention_periods_noted").length, 1);
+  assert.equal(findings.some((finding) => finding.ruleKey.startsWith("section_review.")), false);
 });
 
 test("promotes pre-consent runtime evidence into a runtime privacy finding", () => {
@@ -5953,7 +5993,7 @@ test("semantic cookie-policy topics without parsed rows suppress disclosure gap"
   assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.cookie_policy_obstructed"));
 });
 
-test("primary privacy policy prose retention disclosure suppresses retention finding", () => {
+test("primary privacy policy prose retention disclosure does not reintroduce retired retention findings", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       policyEnrichments: [
@@ -5972,10 +6012,10 @@ test("primary privacy policy prose retention disclosure suppresses retention fin
     })
   );
 
-  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.no_retention_periods_noted"));
+  assert.deepEqual(findings.map((finding) => finding.ruleKey), []);
 });
 
-test("matched ready privacy document source retention cue suppresses retention finding", () => {
+test("matched ready privacy document source retention cue does not reintroduce retired retention findings", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       documentSources: [
@@ -6003,7 +6043,7 @@ test("matched ready privacy document source retention cue suppresses retention f
     })
   );
 
-  assert.ok(!findings.some((finding) => finding.ruleKey === "section_review.no_retention_periods_noted"));
+  assert.deepEqual(findings.map((finding) => finding.ruleKey), []);
 });
 
 test("duplicate runtime cookies and prefix overlaps do not create duplicate cookie disclosure findings", () => {
