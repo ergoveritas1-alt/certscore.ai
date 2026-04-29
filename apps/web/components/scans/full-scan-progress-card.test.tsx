@@ -363,6 +363,35 @@ test("runtime elapsed progress overtakes event progress before a visible stall",
   assert.ok(progress > 63);
 });
 
+test("runtime phase can carry most of the visible scan progress", () => {
+  const runtimeStartedAt = "2026-03-22T22:14:30.000Z";
+  const summary: ScannerExecutionSummary = {
+    ...makeSummary(),
+    stages: [
+      makeStage("setup_load", "2026-03-22T22:14:10.000Z"),
+      makeStage("baseline_lookup", "2026-03-22T22:14:20.000Z"),
+      makeStage("crawl_discovery", runtimeStartedAt)
+    ]
+  };
+  const progress = getProgressValue({
+    buildPhaseSummaries: [],
+    events: [
+      {
+        createdAt: "2026-03-22T22:14:38.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        message: "Runtime snapshot update.",
+        metadataJson: {}
+      }
+    ],
+    executionSummary: summary,
+    nowMs: Date.parse(runtimeStartedAt) + 42_000,
+    status: "running"
+  });
+
+  assert.ok(progress > 85);
+  assert.ok(progress < 93);
+});
+
 test("keeps final scan stages moving between worker updates", () => {
   const runtimeCompletedAt = "2026-03-22T22:14:30.000Z";
   const summary: ScannerExecutionSummary = {
@@ -401,8 +430,8 @@ test("keeps final scan stages moving between worker updates", () => {
   });
 
   assert.ok(earlyTailProgress > 75);
-  assert.ok(earlyTailProgress < 82);
-  assert.ok(laterTailProgress > 90);
+  assert.ok(earlyTailProgress < 90);
+  assert.ok(laterTailProgress > 95);
 });
 
 test("keeps persistence progress moving through the final tail without reaching 100", () => {

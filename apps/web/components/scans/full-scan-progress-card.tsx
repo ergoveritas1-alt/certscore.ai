@@ -498,9 +498,9 @@ function getActiveStageTimingConfig(activeStageKey: string, nextStop: number) {
     case "crawl_discovery":
       return { cap: nextStop - 0.5, durationMs: 180_000 };
     case "runtime_snapshot_capture":
-      return { cap: nextStop - 0.5, durationMs: 90_000 };
+      return { cap: 92, durationMs: 60_000 };
     case "signal_derivation":
-      return { cap: 96, durationMs: 300_000 };
+      return { cap: 97, durationMs: 90_000 };
     case "persistence_diff_finalization":
       return { cap: 99, durationMs: 240_000 };
     default:
