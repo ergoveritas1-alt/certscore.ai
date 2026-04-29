@@ -786,10 +786,29 @@ export type KeyPageDiscoverySummary = {
 
 export type ConsentInteractionEvidenceStep = {
   action: "accept" | "reject" | "preferences" | "save" | "toggle";
+  actionType?:
+    | "accept_all"
+    | "reject_all"
+    | "essential_only"
+    | "opt_out"
+    | "manage_then_reject"
+    | "manage_preferences"
+    | "save_preferences"
+    | "toggle_off"
+    | "unknown";
+  bannerVendor?: string | null;
+  clickedAtMs?: number | null;
+  clickedLabel?: string | null;
+  cmpDetected?: string | null;
+  pageUrlAtClick?: string | null;
+  resultingUrlIfChanged?: string | null;
   selectorHint: string | null;
+  selector?: string | null;
   stepIndex: number;
+  success?: boolean | null;
   text: string;
   urlAfterClick: string | null;
+  visibleText?: string | null;
 };
 
 export type CookieAttributeSummary = {
@@ -861,7 +880,9 @@ export type ScanRuntimeArtifact = {
   consentPostAcceptThirdPartyCookieCount: number | null;
   consentPostAcceptTrackerEvidenceUrls: string[];
   consentPostAcceptTrackerVendorNames: string[];
+  sensitiveFieldEvidence?: SensitiveFieldEvidence[];
   sensitivePayloadViolations: SensitivePayloadViolation[];
+  coverageLimitationEvidence?: CoverageLimitationEvidence | null;
   keyPageDiscoverySummary: KeyPageDiscoverySummary | null;
   cookieAttributeSummary?: CookieAttributeSummary | null;
   gpcVerification?: GpcVerification | null;
@@ -880,6 +901,46 @@ export type ScanRuntimeArtifact = {
       | "network_snapshot_assembly";
     startedAt: string;
   }>;
+};
+
+export type CoverageLimitationEvidence = {
+  coverageFlags: string[];
+  coverageLevel: string | null;
+  explanation: string | null;
+  finalUrl: string | null;
+  homepageHttpStatus: number | null;
+  initialDocumentStatus: string | null;
+  finalDocumentStatus: string | null;
+  originLikelyReached: boolean | null;
+  pageAccessBlocked: boolean;
+  requestedPageCount: number | null;
+  scannedPageCount: number | null;
+  runtimeSignalsRetained: {
+    cookieCount: number | null;
+    preconsentEvidenceUrlCount: number;
+    requestDomainSamples: string[];
+    scriptTagCount: number;
+    thirdPartyRequestCount: number;
+    trackerVendorSamples: string[];
+  };
+  challengeLikeSignalsDetected: boolean | null;
+  timedOut: boolean | null;
+};
+
+export type SensitiveFieldEvidence = {
+  autocomplete: string | null;
+  confidence: "strong" | "medium" | "weak";
+  dataType: "ssn" | "government_id" | "health_information" | "financial_information" | "geolocation";
+  fieldType: string | null;
+  formAction: string | null;
+  inputId: string | null;
+  inputName: string | null;
+  labelText: string | null;
+  matchSnippet: string;
+  nearbyText: string | null;
+  pageUrl: string | null;
+  placeholder: string | null;
+  signalKey: string;
 };
 
 export type SensitivePayloadViolation = {

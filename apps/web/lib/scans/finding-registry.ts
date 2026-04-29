@@ -36,6 +36,12 @@ export type CertScoreFindingEvidenceDetails = {
   sourceSignals?: string[];
   sourceUrls?: string[];
   timing?: Record<string, number | null>;
+  consentInteraction?: Record<string, unknown>;
+  promotionDecision?: Record<string, unknown>;
+  rejectEvidenceDiff?: Record<string, unknown>;
+  postRejectNonEssentialRequests?: Array<Record<string, unknown>>;
+  confidenceRisks?: string[];
+  suppressionChecks?: Record<string, unknown>;
 };
 
 export type CertScoreFinding = CertScoreFindingDefinition & {
@@ -56,6 +62,14 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     defaultSurfacePriority: 100,
     whyItMatters: "This is one of the clearest automated signals that non-essential activity began before the user could choose.",
     remediation: "Delay non-essential requests until consent state is established."
+  },
+  reject_tracking_persists_after_reject: {
+    id: "reject_tracking_persists_after_reject",
+    label: "Non-essential tracking continued after reject",
+    section: "Privacy & Tracking",
+    defaultSurfacePriority: 97,
+    whyItMatters: "Tracking that still fires after an explicit reject interaction suggests the site's consent outcome is not being enforced as presented.",
+    remediation: "Compare baseline and post-reject vendor activity, suppress non-essential requests after reject, and verify the live reject path with concrete request-level evidence."
   },
   third_party_tracking_pre_consent: {
     id: "third_party_tracking_pre_consent",
@@ -129,6 +143,16 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "Blocking normal use increases friction and can undermine meaningful choice.",
     remediation: "Allow non-essential browsing access without forcing a consent choice."
   },
+  blocking_overlay_observed: {
+    id: "blocking_overlay_observed",
+    label: "Blocking consent overlay observed",
+    section: "Consent Experience",
+    defaultSurfacePriority: 87,
+    whyItMatters:
+      "A blocking consent or cookie overlay is common, but it becomes important executive context when users cannot reach page content, cannot easily dismiss the overlay, or cannot reject as easily as they can accept.",
+    remediation:
+      "Keep consent controls clear and comparable, preserve a usable reject or manage path, and avoid blocking normal page access unless the choice architecture remains balanced."
+  },
   content_obstructed_by_overlay: {
     id: "content_obstructed_by_overlay",
     label: "Content was obstructed by an overlay",
@@ -180,6 +204,16 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
       "Collecting sensitive data on pages that also load third-party tracking can increase exposure by linking sensitive form activity with analytics, advertising, or profiling infrastructure.",
     remediation:
       "Review the page or form where sensitive data is collected, remove non-essential third-party tracking from that flow, and confirm that only tightly controlled collection endpoints remain."
+  },
+  sensitive_collection_surface_observed: {
+    id: "sensitive_collection_surface_observed",
+    label: "Sensitive collection surface observed",
+    section: "Privacy & Tracking",
+    defaultSurfacePriority: 52,
+    whyItMatters:
+      "Sensitive input fields are important handling context, even when the retained evidence does not show third-party transmission or replay on that surface.",
+    remediation:
+      "Review the affected form, minimize sensitive fields where possible, and keep non-essential tracking or replay tooling out of the collection flow."
   },
   video_content_tracking_exposure: {
     id: "video_content_tracking_exposure",
@@ -332,22 +366,6 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     defaultSurfacePriority: 92,
     whyItMatters: "Guaranteed-results language on public financial promotions can materially increase commercial-claims and enforcement risk.",
     remediation: "Remove or qualify guaranteed-results language and place balancing disclosure directly adjacent to the claim."
-  },
-  earnings_claim_without_adjacent_disclosure: {
-    id: "earnings_claim_without_adjacent_disclosure",
-    label: "Earnings claim without nearby disclosure",
-    section: "Financial & Claims",
-    defaultSurfacePriority: 90,
-    whyItMatters: "Performance or earnings language without nearby balancing disclosure is a strong commercial-claims review trigger.",
-    remediation: "Pair performance or earnings claims with clear adjacent disclosure that explains limits, assumptions, and variability."
-  },
-  pricing_or_fee_transparency_unclear: {
-    id: "pricing_or_fee_transparency_unclear",
-    label: "Pricing or fee transparency unclear",
-    section: "Financial & Claims",
-    defaultSurfacePriority: 78,
-    whyItMatters: "Pricing or fee promotion language without clear nearby terms can mislead users and raise disclosure risk.",
-    remediation: "Place pricing, fee, and term disclosures directly next to the promotional claim or offer."
   },
   regulatory_registration_disclosure_absent: {
     id: "regulatory_registration_disclosure_absent",

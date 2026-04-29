@@ -9,15 +9,15 @@ import {
 import { FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED } from "./financial-commercial-claims.dataset";
 
 test("deriveFinancialCommercialExpectedFindingIds mirrors the current deterministic emission intent", () => {
-  const earningsExample = FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED.find((entry) => entry.id === "earnings-claim-no-disclosure");
-  assert.ok(earningsExample);
+  const guaranteeExample = FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED.find((entry) => entry.id === "tradestem-guaranteed-profit-positive");
+  assert.ok(guaranteeExample);
 
   const findingIds = deriveFinancialCommercialExpectedFindingIds({
-    candidate: earningsExample.input,
-    classification: earningsExample.expected
+    candidate: guaranteeExample.input,
+    classification: guaranteeExample.expected
   });
 
-  assert.deepEqual(findingIds, ["earnings_claim_without_adjacent_disclosure"]);
+  assert.deepEqual(findingIds, ["guaranteed_outcome_claim_detected"]);
 });
 
 test("deriveFinancialCommercialExpectedCardMode omits non-commercial negatives", () => {
@@ -33,12 +33,12 @@ test("deriveFinancialCommercialExpectedCardMode omits non-commercial negatives",
 });
 
 test("evaluateFinancialCommercialClaimsDatasetExample matches declared expectations for seeded examples", () => {
-  const example = FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED.find((entry) => entry.id === "pricing-cta-no-fee-detail");
+  const example = FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED.find((entry) => entry.id === "grailwealth-backtest-million-positive");
   assert.ok(example);
 
   const result = evaluateFinancialCommercialClaimsDatasetExample(example);
   assert.equal(result.isMatch, true);
-  assert.deepEqual(result.derivedFindingIds, ["pricing_or_fee_transparency_unclear"]);
+  assert.deepEqual(result.derivedFindingIds, ["simulated_performance_without_disclosure"]);
   assert.equal(result.derivedCardMode, "findings");
 });
 
@@ -52,4 +52,3 @@ test("evaluateFinancialCommercialClaimsDataset keeps the seeded corpus aligned w
   assert.equal(summary.shouldShowCardMatchCount, FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED.length);
   assert.deepEqual(summary.mismatches, []);
 });
-

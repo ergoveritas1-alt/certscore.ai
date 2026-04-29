@@ -7,7 +7,7 @@ import {
   type ScannerExecutionSummary,
   type ScannerStageOutcome
 } from "@website-signal-risk-scanner/shared";
-import { FullScanProgressCard } from "./full-scan-progress-card";
+import { FullScanProgressCard, getNextDisplayedProgressValue } from "./full-scan-progress-card";
 
 function makeStage(
   stage: ScannerStageOutcome["stage"],
@@ -87,10 +87,19 @@ test("renders the rich full-scan progress dashboard for running scans", () => {
 
   assert.match(html, /Full scan in progress/);
   assert.match(html, /style="width:\d+(\.\d+)?%"/);
-  assert.match(html, /Live scan · 3\/7 milestones complete/);
-  assert.match(html, /Current milestone:/);
-  assert.match(html, /Recent milestone updates/);
-  assert.match(html, /Progress updates automatically while the scan is queued or running\./);
+  assert.match(html, /Live scan · 3 updates/);
+  assert.match(html, /Current: Runtime snapshot capture/);
+  assert.match(html, /Latest: Live scan/);
+  assert.match(html, /Activity: 3 worker updates/);
+  assert.match(html, /1\/1 runtime phase closed/);
+  assert.match(html, /Current: Runtime snapshot capture · Running/);
+  assert.doesNotMatch(html, /milestones complete/);
+  assert.match(html, /bg-gradient-to-r/);
+  assert.doesNotMatch(html, /animate-\[status-sheen-overlay_1\.35s_linear_infinite\]/);
+  assert.match(html, /title="Signal derivation: Pending"/);
+  assert.doesNotMatch(html, /Milestone details/);
+  assert.doesNotMatch(html, /Recent milestone updates/);
+  assert.doesNotMatch(html, /Progress updates automatically while the scan is queued or running\./);
   assert.doesNotMatch(html, /Status<\/p>/);
   assert.doesNotMatch(html, /Live update/);
 });
@@ -121,9 +130,58 @@ test("keeps queued scans anchored to queue pickup messaging", () => {
 
   assert.match(html, /Full scan queued/);
   assert.match(html, /Queued\.\.\./);
-  assert.match(html, /Queued · 0\/7 milestones complete · Scan queued and waiting for worker pickup\./);
+  assert.match(html, /Queued · 1 update · Scan queued and waiting for worker pickup\./);
+  assert.match(html, /Activity: 2 worker updates/);
+  assert.doesNotMatch(html, /milestones complete/);
   assert.doesNotMatch(html, /Unified finding derivation completed\./);
   assert.doesNotMatch(html, /Scanning\.\.\./);
+});
+
+test("uses runtime events to avoid front-loaded progress skew", () => {
+  const html = renderToStaticMarkup(
+    <FullScanProgressCard
+      buildPhaseSummaries={[]}
+      createdAt="2026-03-22T22:14:00.000Z"
+      events={[
+        {
+          createdAt: "2026-03-22T22:14:01.000Z",
+          eventType: SCAN_EVENT_TYPES.fullStarted,
+          message: "Structured snapshot scan started.",
+          metadataJson: {}
+        },
+        {
+          createdAt: "2026-03-22T22:14:30.000Z",
+          eventType: "runtime.build_phase_diagnostic",
+          message: "Runtime browser capture is collecting page evidence.",
+          metadataJson: { phase: "browser_capture" }
+        }
+      ]}
+      executionSummary={null}
+      status="running"
+    />
+  );
+
+  assert.match(html, /style="width:1%"/);
+  assert.match(html, /Runtime browser capture is collecting page evidence\./);
+  assert.match(html, /Current: Runtime snapshot capture · Running/);
+  assert.match(html, /Next: Signal derivation/);
+});
+
+test("keeps displayed progress monotonic across lower refresh targets", () => {
+  assert.equal(
+    getNextDisplayedProgressValue({
+      currentValue: 62,
+      targetValue: 12
+    }),
+    62
+  );
+  assert.equal(
+    getNextDisplayedProgressValue({
+      currentValue: 62,
+      targetValue: 95
+    }),
+    64
+  );
 });
 
 test("surfaces early tier results while a scan is still running", () => {

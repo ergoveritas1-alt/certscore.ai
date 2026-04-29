@@ -8,8 +8,22 @@ Use this check after queueing a real scan to verify that the scanner, nano docum
 
 From the validation worker package:
 
+Start with the compact summary so we do not dump raw event payloads into Codex:
+
+```bash
+pnpm summarize:signal-enrichment --scan-id <scan-id>
+```
+
+Escalate to the fuller inspector only when the summary points to something suspicious:
+
 ```bash
 pnpm inspect:signal-enrichment --scan-id <scan-id>
+```
+
+If you only need the noisy `scan_events` side of the workflow, use the event-only guardrail:
+
+```bash
+pnpm summarize:signal-events --scan-id <scan-id>
 ```
 
 JSON output is also available:
@@ -68,3 +82,5 @@ If the inspector shows something suspicious:
 - This check validates persisted state, not model quality.
 - It does not verify that every surfaced finding is semantically correct.
 - It is best used together with a manual spot check of one privacy-heavy scan and one simpler brochureware scan.
+- The summary command intentionally truncates event messages and metadata previews so the output stays safe to paste into Codex without replaying large enrichment payloads.
+- The event-only command is the safest option when you suspect one event family is emitting large metadata blobs.

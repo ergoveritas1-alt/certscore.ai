@@ -172,6 +172,37 @@ test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards 
   assert.equal(lenses[2]?.ratingLabel, "Needs work");
 });
 
+test("buildRegulatoryLenses retains reject-path tracking failure as dedicated regulatory evidence", () => {
+  const lenses = buildRegulatoryLenses([
+    makeFinding("reject_tracking_persists_after_reject", "Non-essential tracking continued after reject", {
+      confidence: "strong",
+      directVsInferred: "direct",
+      evidenceDetails: {
+        counts: {
+          consentBaselineThirdPartyCookieCount: 4,
+          consentPostRejectThirdPartyCookieCount: 4
+        },
+        runtimeRequestUrls: [
+          "https://example.com/baseline.js",
+          "https://example.com/post-reject.js"
+        ],
+        runtimeVendors: ["Google Ads", "Adobe Analytics"]
+      },
+      severity: "critical",
+      shortSummary: "Tracking requests still appeared after the reject interaction, suggesting the consent outcome did not suppress non-essential vendors."
+    })
+  ], {
+    beforeConsentCookieCount: 0,
+    thirdPartyRequestCount: 2
+  });
+
+  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
+  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
+
+  assert.ok(gdprLens?.findings.some((finding) => /reject interaction/i.test(finding.label)));
+  assert.ok(ftcLens?.findings.some((finding) => /reject interaction/i.test(finding.label)));
+});
+
 test("buildRegulatoryLenses uses gambling-specific FTC copy for sensitive tracking on sportsbook benchmarks", () => {
   const lenses = buildRegulatoryLenses(
     [
@@ -224,10 +255,7 @@ test("buildRegulatoryLenses does not activate financial claims lens from gamblin
   );
 
   const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
-  assert.ok(financialLens);
-  assert.equal(financialLens?.minimal, true);
-  assert.equal(financialLens?.ratingLabel, "Audit-only");
-  assert.equal(financialLens?.findings.length, 0);
+  assert.equal(financialLens, undefined);
 });
 
 test("buildRegulatoryLenses treats pre-consent cookie findings as GDPR tracking risk", () => {
@@ -436,18 +464,14 @@ test("buildRegulatoryLenses surfaces scored ADA lens when any WCAG errors are pr
   const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
   const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
   assert.ok(adaLens);
-  assert.ok(financialLens);
   assert.ok(!adaLens?.minimal);
-  assert.equal(financialLens?.minimal, true);
   assert.equal(adaLens?.ratingLabel, "Strong");
   assert.equal(typeof adaLens?.score, "number");
   assert.equal(adaLens?.summary, "Accessibility barriers and disclosure gaps are the main issue.");
-  assert.equal(financialLens?.ratingLabel, "Audit-only");
-  assert.equal(financialLens?.score, null);
-  assert.equal(financialLens?.summary, "");
+  assert.equal(financialLens, undefined);
 });
 
-test("buildRegulatoryLenses keeps ADA and financial claims minimal when accessibility signals remain low-signal", () => {
+test("buildRegulatoryLenses keeps ADA minimal and omits blank financial claims when accessibility signals remain low-signal", () => {
   const lenses = buildRegulatoryLenses(
     [],
     {
@@ -474,15 +498,11 @@ test("buildRegulatoryLenses keeps ADA and financial claims minimal when accessib
   const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
   const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
   assert.ok(adaLens);
-  assert.ok(financialLens);
   assert.equal(adaLens?.minimal, true);
-  assert.equal(financialLens?.minimal, true);
   assert.equal(adaLens?.ratingLabel, "Audit-only");
   assert.equal(adaLens?.score, null);
   assert.equal(adaLens?.summary, "");
-  assert.equal(financialLens?.ratingLabel, "Audit-only");
-  assert.equal(financialLens?.score, null);
-  assert.equal(financialLens?.summary, "");
+  assert.equal(financialLens, undefined);
 });
 
 test("buildRegulatoryLensesFromUnifiedPackets explains representative DOJ ADA axe coverage", () => {
@@ -661,13 +681,13 @@ test("buildRegulatoryLenses promotes retained financial-promotion findings into 
 test("buildRegulatoryLenses places financial claims directly below DOJ / ADA accessibility in regulatory findings", () => {
   const lenses = buildRegulatoryLenses(
     [
-      makeFinding("earnings_claim_without_adjacent_disclosure", "Earnings claim without nearby disclosure", {
+      makeFinding("guaranteed_outcome_claim_detected", "Guaranteed outcome claim detected", {
         severity: "high",
-        shortSummary: "Earn up to $5,000 per month language surfaced near signup copy."
+        shortSummary: "Guaranteed returns language surfaced near signup copy."
       }),
-      makeFinding("pricing_or_fee_transparency_unclear", "Pricing or fee transparency unclear", {
+      makeFinding("simulated_performance_without_disclosure", "Simulated performance without disclosure", {
         severity: "medium",
-        shortSummary: "Pricing details were not clearly visible near the conversion path."
+        shortSummary: "Backtested performance language surfaced without nearby disclosure."
       })
     ],
     {
@@ -695,8 +715,8 @@ test("buildRegulatoryLenses places financial claims directly below DOJ / ADA acc
   assert.equal(financialLens?.detailTitle, "Claims, urgency, and pricing disclosures");
   assert.match(financialLens?.summary ?? "", /claims|pricing/i);
   assert.equal(financialLens?.minimal, undefined);
-  assert.match(regulatoryFindingLabels(financialLens?.findings ?? []).join(" "), /Earnings-style claim surfaced/);
-  assert.match(regulatoryFindingLabels(financialLens?.findings ?? []).join(" "), /Pricing or fee disclosure remains unclear/);
+  assert.match(regulatoryFindingLabels(financialLens?.findings ?? []).join(" "), /Guaranteed or certain-outcome claim surfaced/);
+  assert.match(regulatoryFindingLabels(financialLens?.findings ?? []).join(" "), /Simulated or hypothetical performance language surfaced/);
 });
 
 test("ExecutiveSummaryCard builds regulatory lenses from all findings instead of only top findings", () => {
@@ -704,11 +724,11 @@ test("ExecutiveSummaryCard builds regulatory lenses from all findings instead of
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
       allFindings: [
-        makeFinding("earnings_claim_without_adjacent_disclosure", "Earnings claim without nearby disclosure", {
+        makeFinding("guaranteed_outcome_claim_detected", "Guaranteed outcome claim detected", {
           section: "Privacy & Tracking",
           defaultSurfacePriority: 97,
           severity: "high",
-          shortSummary: "Earn up to $5,000 per month language surfaced near signup copy."
+          shortSummary: "Guaranteed returns language surfaced near signup copy."
         })
       ],
       beforeConsentCookieCount: 12,
@@ -754,7 +774,7 @@ test("ExecutiveSummaryCard builds regulatory lenses from all findings instead of
   );
 
   assert.match(html, /Financial &amp; commercial claims/);
-  assert.match(html, /Earnings-style claim surfaced without nearby balancing disclosure\./);
+  assert.match(html, /Guaranteed or certain-outcome claim surfaced\./);
 });
 
 test("ExecutiveSummaryCard renders fractional regulatory rating bar segments", () => {

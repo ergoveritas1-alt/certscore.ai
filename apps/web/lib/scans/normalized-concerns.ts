@@ -91,6 +91,7 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "model_suspicion_without_structured_support"
   | "missing_concrete_preconsent_artifact"
   | "missing_preconsent_sequence_evidence"
+  | "missing_post_reject_timing_evidence"
   | "missing_concrete_sensitive_payload"
   | "missing_third_party_tracking_artifact"
   | "clear_pricing_terms_context_observed"
@@ -502,6 +503,7 @@ export function inferSpecializedUnifiedFindingId(input: {
       input.signalKey === "commerce.form_collects_health_information" ||
       input.signalKey === "commerce.form_collects_financial_information" ||
       input.signalKey === "commerce.form_collects_government_id" ||
+      input.signalKey === "commerce.form_collects_geolocation" ||
       input.signalKey === "commerce.form_collects_ssn")
   ) {
     if (hasConcreteReplayArtifact(rawEvidence)) {
@@ -511,6 +513,8 @@ export function inferSpecializedUnifiedFindingId(input: {
     if (hasThirdPartyTrackingEvidence(rawEvidence)) {
       return "sensitive_data_collection_with_third_party_tracking_present";
     }
+
+    return "sensitive_collection_surface_observed";
   }
 
   if (currentId === "account_exit_terms_missing") {
@@ -1296,20 +1300,6 @@ const FINANCIAL_COMPANION_DEFINITIONS: Record<string, FinancialCompanionDefiniti
     severity: "high",
     title: "Guaranteed outcome claim detected"
   },
-  earnings_claim_without_adjacent_disclosure: {
-    description:
-      "The scan retained performance, earnings, return, or accuracy language without adjacent balancing disclosure evidence.",
-    id: "earnings_claim_without_adjacent_disclosure",
-    severity: "high",
-    title: "Earnings claim without adjacent disclosure"
-  },
-  pricing_or_fee_transparency_unclear: {
-    description:
-      "The scan retained fee, subscription, promotional price, or cost-recovery language without enough adjacent fee disclosure context.",
-    id: "pricing_or_fee_transparency_unclear",
-    severity: "medium",
-    title: "Pricing or fee transparency unclear"
-  },
   regulatory_registration_disclosure_absent: {
     description:
       "The scan retained trading-signal, forex, copy-trading, or advisory context without clear registration or unregistered-status disclosure evidence.",
@@ -1411,12 +1401,6 @@ function deriveFinancialCompanionFindingIds(concern: NormalizedConcern) {
   const ids = new Set<string>();
   if (hasGuarantee) {
     ids.add("guaranteed_outcome_claim_detected");
-  }
-  if ((hasPerformanceClaim || hasGuarantee) && !hasPastPerformanceDisclosure) {
-    ids.add("earnings_claim_without_adjacent_disclosure");
-  }
-  if (hasFeeClaim && !hasClearFeeDisclosure) {
-    ids.add("pricing_or_fee_transparency_unclear");
   }
   if (hasGuarantee && hasTestimonial) {
     ids.add("unsubstantiated_testimonial_near_performance_claim");

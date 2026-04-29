@@ -729,7 +729,7 @@ function isHighSensitivityConcern(
     .join(" ")
     .toLowerCase();
 
-  return /high_sensitivity_data_collection_detected|session_replay_on_sensitive_input_surface|sensitive_data_collection_with_third_party_tracking_present/.test(
+  return /high_sensitivity_data_collection_detected|form_collects_(ssn|government_id|health_information|financial_information|geolocation)|session_replay_on_sensitive_input_surface|sensitive_data_collection_with_third_party_tracking_present/.test(
     haystack
   );
 }
@@ -811,6 +811,74 @@ function isPreconsentConcern(
     .toLowerCase();
 
   return /preconsent|tracking_before_consent|trackers_before_consent/.test(haystack);
+}
+
+function isRejectTrackingPersistenceConcern(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
+) {
+  const haystack = [
+    concern.canonicalConcernKey,
+    concern.suggestedUnifiedFindingId,
+    concern.originKey,
+    concern.title
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /reject_did_not_reduce_tracking|reject_tracking_persists_after_reject|reject.*tracking/.test(haystack);
+}
+
+function getObjectArrayEvidence(rawEvidence: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = rawEvidence?.[key];
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry));
+    }
+  }
+  return [];
+}
+
+function getObjectEvidence(rawEvidence: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = rawEvidence?.[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function hasConfirmedRejectTimingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const suppressionChecks = getObjectEvidence(rawEvidence, ["suppressionChecks", "suppression_checks"]);
+  if (suppressionChecks?.post_reject_window_available !== true) {
+    return false;
+  }
+
+  const rows = getObjectArrayEvidence(rawEvidence, [
+    "postRejectNonEssentialRequests",
+    "post_reject_non_essential_requests",
+    "consent_reject_post_reject_non_essential_requests"
+  ]);
+  if (rows.length === 0) {
+    return false;
+  }
+
+  return rows.some((row) => {
+    const category = typeof row.category === "string" ? row.category : "";
+    const url = typeof row.url === "string" ? row.url : "";
+    const vendor = typeof row.vendor === "string" ? row.vendor : "";
+    const msAfterReject = row.ms_after_reject ?? row.msAfterReject;
+    const tsMs = row.ts_ms ?? row.tsMs;
+    return (
+      typeof tsMs === "number" &&
+      typeof msAfterReject === "number" &&
+      msAfterReject >= 500 &&
+      /^(advertising|analytics|session_replay|marketing_automation)$/i.test(category) &&
+      vendor.trim().length > 0 &&
+      /^https?:\/\//i.test(url)
+    );
+  });
 }
 
 function isRetargetingConcern(
@@ -929,6 +997,12 @@ function isAccessibilityIssueFindingConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
   return ACCESSIBILITY_PAGE_ATTRIBUTION_IDS.has(concern.suggestedUnifiedFindingId ?? "");
+}
+
+function isContrastFailuresConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "contrast_failures";
 }
 
 function isBoundedKeyPageDiscoveryUnresolvedConcern(
@@ -1191,7 +1265,6 @@ function hasConcreteOfferEvidence(rawEvidence: Record<string, unknown> | null | 
 }
 
 const NEGATIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
-  "earnings_claim_without_adjacent_disclosure",
   "financial_urgency_pressure_tactic_detected",
   "guaranteed_outcome_claim_detected",
   "performance_claims_without_context",
@@ -1215,7 +1288,6 @@ const NEGATIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "yield_or_return_claims_high_risk",
   "high_risk_product_risk_disclosure_missing",
   "ai_financial_advice_or_trading_claims_without_disclosure",
-  "pricing_or_fee_transparency_unclear",
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected"
 ]);
@@ -1358,6 +1430,20 @@ function getNumberEvidence(
   }
 
   return null;
+}
+
+function hasPositiveContrastFailureCount(rawEvidence: Record<string, unknown> | null | undefined) {
+  const count = getNumberEvidence(rawEvidence, [
+    "count",
+    "instanceCount",
+    "nodeCount",
+    "signalValue",
+    "value",
+    "wcagContrastFailuresCount",
+    "wcag_contrast_failures_count"
+  ]);
+
+  return typeof count === "number" && count > 0;
 }
 
 function getCoverageGapPresenceValue(
@@ -1798,6 +1884,24 @@ export function deriveConcernPolicy(input: {
     };
   }
 
+  if (isRejectTrackingPersistenceConcern(input.concern)) {
+    if (!hasConfirmedRejectTimingEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_post_reject_timing_evidence"],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: "strong",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
   if (isVideoContentTrackingConcern(input.concern)) {
     if (!hasVideoContentSurfaceEvidence(input.rawEvidence)) {
       return {
@@ -2037,18 +2141,6 @@ export function deriveConcernPolicy(input: {
     };
   }
 
-  if (
-    input.concern.suggestedUnifiedFindingId === "pricing_or_fee_transparency_unclear" &&
-    hasClearPricingTermsContext(input.rawEvidence)
-  ) {
-    return {
-      allowedNarrativeTier: "weak",
-      externalSurfacingEligibility: "audit_only",
-      negativeEvidenceFlags: [...negativeEvidenceFlags, "clear_pricing_terms_context_observed"],
-      promotionEligibility: "internal_only"
-    };
-  }
-
   if (isSurfaceIntegrityConcern(input.concern)) {
     if (!hasPageAttribution || !hasSubstantivePageOrSnippetEvidence(input.rawEvidence)) {
       return {
@@ -2101,6 +2193,15 @@ export function deriveConcernPolicy(input: {
     isAccessibilityIssueFindingConcern(input.concern) &&
     !hasRepresentativeAccessibilityExamples(input.rawEvidence)
   ) {
+    if (isContrastFailuresConcern(input.concern) && hasPositiveContrastFailureCount(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "moderate",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "eligible"
+      };
+    }
+
     const coverage = getRepresentativeAccessibilityExampleCoverage(input.rawEvidence);
     negativeEvidenceFlags.add(
       coverage.representativeExampleCount > 0

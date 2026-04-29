@@ -13,7 +13,7 @@ import {
   buildSnapshotDisclosureFallbackEvidence,
   isChildContextSignalKey
 } from "./signal-fallback-evidence";
-import { getHybridSignalFallbackEvidence } from "./hybrid-runtime-evidence";
+import { getHybridRuntimeEvidence, getHybridSignalFallbackEvidence } from "./hybrid-runtime-evidence";
 import {
   findMergedSignalValue,
   isSignalValuePopulated
@@ -96,6 +96,27 @@ function getRecordStringArray(record: Record<string, unknown> | null | undefined
 function getRecordString(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getRecordObject(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function getRecordObjectArray(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return Array.isArray(value)
+    ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+    : [];
+}
+
+function firstRecordObject(...values: Array<unknown>) {
+  for (const value of values) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
 }
 
 function collectTextCandidates(value: unknown, output: string[], depth = 0) {
@@ -259,6 +280,383 @@ function hostToEvidenceUrl(host: string | null | undefined) {
   return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(normalized) ? `https://${normalized}` : null;
 }
 
+function getHostnameFromEvidenceUrl(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function classifyPostRejectRequestUrl(url: string, fallbackVendor?: string | null) {
+  const hostname = getHostnameFromEvidenceUrl(url);
+  if (/px\.ads\.linkedin\.com$|snap\.licdn\.com$/i.test(hostname ?? "")) {
+    return { category: "advertising", confidence: "high", hostname, vendor: "LinkedIn Insight Tag" };
+  }
+  if (/alb\.reddit\.com$|pixel-config\.reddit\.com$/i.test(hostname ?? "")) {
+    return { category: "advertising", confidence: "high", hostname, vendor: "Reddit Pixel" };
+  }
+  if (/(^|\.)clarity\.ms$/i.test(hostname ?? "")) {
+    return { category: "session_replay", confidence: "high", hostname, vendor: "Microsoft Clarity" };
+  }
+  if (/googleads\.g\.doubleclick\.net$|www\.googleadservices\.com$/i.test(hostname ?? "")) {
+    return { category: "advertising", confidence: "high", hostname, vendor: "Google Ads" };
+  }
+  if (/(^|\.)googletagmanager\.com$/i.test(hostname ?? "")) {
+    return { category: "tag_manager", confidence: "high", hostname, vendor: "Google Tag Manager" };
+  }
+  if (/munchkin\.marketo\.net$/i.test(hostname ?? "")) {
+    return { category: "marketing_automation", confidence: "high", hostname, vendor: "Marketo" };
+  }
+
+  const vendor = fallbackVendor && fallbackVendor.trim().length > 0 ? fallbackVendor.trim() : "Unknown vendor";
+  return { category: inferVendorCategory(vendor), confidence: "low", hostname, vendor };
+}
+
+function getConsentOutcomeSummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
+  return firstRecordObject(hybrid?.consentOutcomeSummary, runtimeArtifacts?.consent_outcome_summary);
+}
+
+function getConsentSummaryObject(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  camelKey: string,
+  snakeKey: string
+) {
+  const consentOutcomeSummary = getConsentOutcomeSummary(runtimeArtifacts);
+  return firstRecordObject(consentOutcomeSummary?.[camelKey], runtimeArtifacts?.[snakeKey]);
+}
+
+function getConsentSummaryObjectArray(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  camelKey: string,
+  snakeKey: string
+) {
+  const consentOutcomeSummary = getConsentOutcomeSummary(runtimeArtifacts);
+  const value = consentOutcomeSummary?.[camelKey] ?? runtimeArtifacts?.[snakeKey];
+  return Array.isArray(value)
+    ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+    : [];
+}
+
+function getConsentSummaryStringArray(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  camelKey: string,
+  snakeKey: string
+) {
+  const consentOutcomeSummary = getConsentOutcomeSummary(runtimeArtifacts);
+  const value = consentOutcomeSummary?.[camelKey] ?? runtimeArtifacts?.[snakeKey];
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
+}
+
+function getRuntimeArtifactObjectArray(runtimeArtifacts: Record<string, unknown> | null | undefined, ...keys: string[]) {
+  for (const key of keys) {
+    const value = runtimeArtifacts?.[key];
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry));
+    }
+  }
+  return [];
+}
+
+function buildConsentInteractionFromOptOutLog(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const optOutLog = getRuntimeArtifactObjectArray(runtimeArtifacts, "consent_opt_out_evidence_log", "consentOptOutEvidenceLog");
+  const clickedStep = optOutLog.find((step) => step.action !== "preferences") ?? optOutLog[0] ?? null;
+  if (!clickedStep) {
+    return null;
+  }
+
+  return {
+    action_type: clickedStep.actionType ?? clickedStep.action_type ?? clickedStep.action ?? "unknown",
+    clicked_at_ms: clickedStep.clickedAtMs ?? clickedStep.clicked_at_ms ?? null,
+    clicked_label: clickedStep.clickedLabel ?? clickedStep.clicked_label ?? clickedStep.text ?? null,
+    page_url_at_click: clickedStep.pageUrlAtClick ?? clickedStep.page_url_at_click ?? null,
+    resulting_url_if_changed: clickedStep.resultingUrlIfChanged ?? clickedStep.resulting_url_if_changed ?? null,
+    selector: clickedStep.selector ?? clickedStep.selectorHint ?? null,
+    success: runtimeArtifacts?.consent_reject_interaction_succeeded === true,
+    visible_text: clickedStep.visibleText ?? clickedStep.visible_text ?? clickedStep.text ?? null
+  };
+}
+
+function inferVendorCategory(vendor: string) {
+  if (/clarity|hotjar|fullstory|mouseflow|contentsquare|session/i.test(vendor)) {
+    return "session_replay";
+  }
+  if (/marketo|munchkin/i.test(vendor)) {
+    return "marketing_automation";
+  }
+  if (/tag manager|gtm/i.test(vendor)) {
+    return "tag_manager";
+  }
+  if (/linkedin|reddit|google ads|doubleclick|meta|facebook|tiktok|pinterest|pixel/i.test(vendor)) {
+    return "advertising";
+  }
+  if (/analytics|adobe/i.test(vendor)) {
+    return "analytics";
+  }
+  return "unknown";
+}
+
+function normalizePostRejectNonEssentialRequestRows(rows: Array<Record<string, unknown>>) {
+  return rows.map((row) => {
+    const url = typeof row.url === "string" ? row.url : "";
+    const classified = classifyPostRejectRequestUrl(url, typeof row.vendor === "string" ? row.vendor : null);
+    return {
+      ...row,
+      category: classified.confidence === "high" ? classified.category : typeof row.category === "string" && row.category.trim().length > 0 ? row.category : classified.category,
+      hostname: classified.hostname ?? (typeof row.hostname === "string" ? row.hostname : null),
+      phase: typeof row.phase === "string" ? row.phase : "post_reject",
+      url,
+      vendor: classified.vendor,
+      vendor_attribution_confidence: classified.confidence
+    };
+  });
+}
+
+function buildRejectTrackingEvidenceFallback(input: {
+  baselineTrackerEvidenceUrls: string[];
+  baselineTrackerVendors: string[];
+  newTrackerVendors: string[];
+  persistedTrackerVendors: string[];
+  postRejectTrackerEvidenceUrls: string[];
+  postRejectTrackerVendors: string[];
+  runtimeArtifacts: Record<string, unknown> | null | undefined;
+}) {
+  const reconciledBaselineVendors = uniqueStrings([
+    ...input.baselineTrackerVendors,
+    ...getRecordStringArray(input.runtimeArtifacts, "preconsent_tracker_vendors"),
+    ...getRecordStringArray(input.runtimeArtifacts, "preconsentTrackerVendors"),
+    ...getRecordStringArray(input.runtimeArtifacts, "runtime_vendors_before_reject"),
+    ...getRecordStringArray(input.runtimeArtifacts, "runtimeVendorsBeforeReject"),
+    ...getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_vendor_names")
+  ]);
+  const baselineReconstructionIncomplete = reconciledBaselineVendors.length === 0;
+  const consentInteraction =
+    getConsentSummaryObject(input.runtimeArtifacts, "consentInteraction", "consent_reject_interaction_trace") ??
+    buildConsentInteractionFromOptOutLog(input.runtimeArtifacts);
+  const retainedRejectEvidenceDiff =
+    getConsentSummaryObject(input.runtimeArtifacts, "rejectEvidenceDiff", "consent_reject_evidence_diff") ?? {
+      baseline_vendors: reconciledBaselineVendors,
+      baseline_reconstruction_status: baselineReconstructionIncomplete ? "incomplete" : "reconciled",
+      post_reject_vendors: input.postRejectTrackerVendors,
+      new_after_reject_vendors: input.newTrackerVendors,
+      persisting_after_reject_vendors: input.persistedTrackerVendors,
+      baseline_request_count: input.baselineTrackerEvidenceUrls.length,
+      post_reject_request_count: input.postRejectTrackerEvidenceUrls.length,
+      baseline_cookie_count:
+        typeof input.runtimeArtifacts?.consent_baseline_cookie_count === "number"
+          ? input.runtimeArtifacts.consent_baseline_cookie_count
+          : 0,
+      post_reject_cookie_count:
+        typeof input.runtimeArtifacts?.consent_post_reject_cookie_count === "number"
+          ? input.runtimeArtifacts.consent_post_reject_cookie_count
+          : 0,
+      baseline_third_party_cookie_count:
+        typeof input.runtimeArtifacts?.consent_baseline_third_party_cookie_count === "number"
+          ? input.runtimeArtifacts.consent_baseline_third_party_cookie_count
+          : 0,
+      post_reject_third_party_cookie_count:
+        typeof input.runtimeArtifacts?.consent_post_reject_third_party_cookie_count === "number"
+          ? input.runtimeArtifacts.consent_post_reject_third_party_cookie_count
+          : 0
+    };
+  const retainedBaselineVendors = Array.isArray(retainedRejectEvidenceDiff.baseline_vendors)
+    ? retainedRejectEvidenceDiff.baseline_vendors.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+  const rejectEvidenceDiff = {
+    ...retainedRejectEvidenceDiff,
+    baseline_vendors: retainedBaselineVendors.length > 0 ? retainedBaselineVendors : reconciledBaselineVendors,
+    baseline_reconstruction_status:
+      retainedBaselineVendors.length > 0 || reconciledBaselineVendors.length > 0
+        ? (typeof retainedRejectEvidenceDiff.baseline_reconstruction_status === "string"
+            ? retainedRejectEvidenceDiff.baseline_reconstruction_status
+            : "reconciled")
+        : "incomplete"
+  };
+  const retainedPostRejectNonEssentialRequests = getConsentSummaryObjectArray(
+    input.runtimeArtifacts,
+    "postRejectNonEssentialRequests",
+    "consent_reject_post_reject_non_essential_requests"
+  );
+  const postRejectNonEssentialRequests: Array<Record<string, unknown>> =
+    retainedPostRejectNonEssentialRequests.length > 0
+      ? normalizePostRejectNonEssentialRequestRows(retainedPostRejectNonEssentialRequests)
+      : normalizePostRejectNonEssentialRequestRows(input.postRejectTrackerEvidenceUrls.map((url, index) => {
+          const classified = classifyPostRejectRequestUrl(url, input.postRejectTrackerVendors[index] ?? input.postRejectTrackerVendors[0] ?? null);
+          return {
+            vendor: classified.vendor,
+            hostname: classified.hostname,
+            category: classified.category,
+            url,
+            ts_ms: null,
+            ms_after_reject: null,
+            phase: "unknown",
+            resource_type: null,
+            initiator: null,
+            vendor_attribution_confidence: classified.confidence,
+            why_non_essential: `${classified.vendor} is likely non-essential, but the scanner did not retain a clean post-reject timestamp for this request.`
+          };
+        }));
+  const suppressionChecks =
+    getConsentSummaryObject(input.runtimeArtifacts, "suppressionChecks", "consent_reject_suppression_checks") ?? {};
+  const vendorClassifications = getConsentSummaryObjectArray(
+    input.runtimeArtifacts,
+    "vendorClassifications",
+    "consent_reject_vendor_classifications"
+  );
+  const requestTimingBuckets = getConsentSummaryObjectArray(
+    input.runtimeArtifacts,
+    "requestTimingBuckets",
+    "consent_reject_request_timing_buckets"
+  );
+  const confidenceRisks = getConsentSummaryStringArray(
+    input.runtimeArtifacts,
+    "confidenceRisks",
+    "consent_reject_confidence_risks"
+  );
+  const hasNonEssentialAfterReject =
+    postRejectNonEssentialRequests.length > 0 ||
+    input.postRejectTrackerVendors.some((vendor) =>
+      /linkedin|reddit|clarity|marketo|munchkin|google ads|doubleclick|meta|facebook|tiktok|pinterest|analytics|adobe/i.test(vendor)
+    );
+  const hasRequestAfter500Ms = postRejectNonEssentialRequests.some((row) => {
+    const value = row.ms_after_reject ?? row.msAfterReject;
+    return typeof value === "number" && value >= 500;
+  });
+  const hasPromotionGradeRequest = postRejectNonEssentialRequests.some((row) => {
+    const vendor = typeof row.vendor === "string" ? row.vendor : "";
+    const url = typeof row.url === "string" ? row.url : "";
+    const category = typeof row.category === "string" ? row.category : "";
+    const tsMs = row.ts_ms ?? row.tsMs;
+    const msAfterReject = row.ms_after_reject ?? row.msAfterReject;
+    return (
+      typeof tsMs === "number" &&
+      typeof msAfterReject === "number" &&
+      msAfterReject >= 500 &&
+      vendor.trim().length > 0 &&
+      /^https?:\/\//i.test(url) &&
+      /^(advertising|analytics|session_replay|marketing_automation)$/i.test(category)
+    );
+  });
+  const requiredVendorClassificationSatisfied = hasPromotionGradeRequest;
+  const rejectClickConfirmed =
+    suppressionChecks.reject_click_confirmed === true ||
+    input.runtimeArtifacts?.consent_reject_interaction_succeeded === true ||
+    consentInteraction?.success === true;
+  const postRejectWindowAvailable =
+    suppressionChecks.post_reject_window_available === true || requestTimingBuckets.some((row) => row.phase === "post_reject");
+  const requiredTimingSatisfied =
+    postRejectWindowAvailable &&
+    hasPromotionGradeRequest;
+  const cmpInitializationOnly = suppressionChecks.cmp_initialization_only === true;
+  const navigationOrReloadAmbiguous = suppressionChecks.navigation_or_reload_ambiguous === true;
+  const baselineContradictionDetected =
+    suppressionChecks.baseline_contradiction_detected === true ||
+    (input.baselineTrackerVendors.length === 0 && input.baselineTrackerEvidenceUrls.length > 0 && input.postRejectTrackerVendors.length > 0);
+  const confirmed =
+    rejectClickConfirmed &&
+    requiredTimingSatisfied &&
+    requiredVendorClassificationSatisfied &&
+    !cmpInitializationOnly &&
+    !navigationOrReloadAmbiguous &&
+    !baselineContradictionDetected;
+  const review =
+    rejectClickConfirmed &&
+    hasNonEssentialAfterReject &&
+    !cmpInitializationOnly &&
+    !baselineContradictionDetected &&
+    !navigationOrReloadAmbiguous;
+  const firstPostRejectMs = postRejectNonEssentialRequests
+    .map((row) => row.ms_after_reject ?? row.msAfterReject)
+    .find((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const runtimeEvidenceUrls = uniqueStrings([
+    ...input.baselineTrackerEvidenceUrls,
+    ...input.postRejectTrackerEvidenceUrls,
+    ...postRejectNonEssentialRequests.map((row) => (typeof row.url === "string" ? row.url : null))
+  ]);
+
+  return {
+    confidenceRisks: uniqueStrings([
+      ...confidenceRisks,
+      baselineReconstructionIncomplete ? "Baseline vendor reconstruction incomplete; before/after comparison may be incomplete." : null,
+      !hasRequestAfter500Ms ? "No classified non-essential request fired at least 500ms after reject." : null,
+      !requiredTimingSatisfied ? "Post-reject timing unavailable; cannot confirm persistence after reject." : null,
+      navigationOrReloadAmbiguous ? "Navigation or reload makes reject attribution ambiguous." : null,
+      baselineContradictionDetected ? "Baseline/post-reject comparison is internally contradictory." : null
+    ]),
+    consentBaselineCookieCount:
+      typeof input.runtimeArtifacts?.consent_baseline_cookie_count === "number"
+        ? input.runtimeArtifacts.consent_baseline_cookie_count
+        : null,
+    consentBaselineThirdPartyCookieCount:
+      typeof input.runtimeArtifacts?.consent_baseline_third_party_cookie_count === "number"
+        ? input.runtimeArtifacts.consent_baseline_third_party_cookie_count
+        : null,
+    consentBaselineTrackerEvidenceUrls: input.baselineTrackerEvidenceUrls,
+    consentInteraction,
+    consentOptOutClicks:
+      typeof input.runtimeArtifacts?.consent_opt_out_clicks === "number" ? input.runtimeArtifacts.consent_opt_out_clicks : null,
+    consentOptOutEvidenceLog:
+      Array.isArray(input.runtimeArtifacts?.consent_opt_out_evidence_log) ? input.runtimeArtifacts.consent_opt_out_evidence_log : [],
+    consentPostRejectCookieCount:
+      typeof input.runtimeArtifacts?.consent_post_reject_cookie_count === "number"
+        ? input.runtimeArtifacts.consent_post_reject_cookie_count
+        : null,
+    consentPostRejectThirdPartyCookieCount:
+      typeof input.runtimeArtifacts?.consent_post_reject_third_party_cookie_count === "number"
+        ? input.runtimeArtifacts.consent_post_reject_third_party_cookie_count
+        : null,
+    consentPostRejectTrackerEvidenceUrls: input.postRejectTrackerEvidenceUrls,
+    consentRejectReducedTracking: false,
+    firstPostRejectMs,
+    persisted_tracker_vendors: uniqueStrings([
+      ...input.persistedTrackerVendors,
+      ...input.newTrackerVendors,
+      ...input.postRejectTrackerVendors
+    ]),
+    post_reject_tracker_vendors: input.postRejectTrackerVendors,
+    postRejectNonEssentialRequests,
+    reject_did_not_reduce_tracking: true,
+    rejectEvidenceConfidence: confirmed ? "confirmed" : review ? "review" : "suppress",
+    rejectEvidenceDiff,
+    promotionDecision: {
+      promoted: confirmed,
+      reason: confirmed
+        ? "Reject click, post-reject timing, vendor classification, and retained request URL satisfied promotion requirements."
+        : !requiredTimingSatisfied
+          ? "Post-reject timing unavailable; cannot confirm persistence after reject."
+          : !requiredVendorClassificationSatisfied
+            ? "Post-reject request vendor classification or retained URL did not satisfy promotion requirements."
+            : !rejectClickConfirmed
+              ? "Reject click was not confirmed."
+              : "Reject-path evidence did not satisfy promotion requirements.",
+      requiredTimingSatisfied,
+      requiredVendorClassificationSatisfied,
+      requiredRejectClickSatisfied: rejectClickConfirmed
+    },
+    requestTimingBuckets,
+    runtimeEvidenceUrls,
+    runtimeVendors: uniqueStrings([
+      ...input.postRejectTrackerVendors,
+      ...postRejectNonEssentialRequests.map((row) => (typeof row.vendor === "string" ? row.vendor : null))
+    ]),
+    supportingSignals: ["consent_reject_reduced_tracking"],
+    suppressionChecks: {
+      reject_click_confirmed: rejectClickConfirmed,
+      post_reject_window_available: postRejectWindowAvailable,
+      non_essential_vendor_after_reject: hasNonEssentialAfterReject,
+      cmp_initialization_only: cmpInitializationOnly,
+      navigation_or_reload_ambiguous: navigationOrReloadAmbiguous,
+      baseline_contradiction_detected: baselineContradictionDetected
+    },
+    unifiedFindingId: "reject_did_not_reduce_tracking",
+    vendorClassifications
+  };
+}
+
 function buildSessionReplayTrackerFallbackEvidence(input: {
   signalKey: string;
   signalLabel: string;
@@ -319,6 +717,7 @@ function buildSessionReplayTrackerFallbackEvidence(input: {
 }
 
 function buildHighSensitivitySignalFallbackEvidence(input: {
+  matchedTexts?: string[];
   mergedSignals?: Array<{
     key: string;
     value: boolean | number | string | string[] | null;
@@ -330,9 +729,53 @@ function buildHighSensitivitySignalFallbackEvidence(input: {
   signalValue: unknown;
   trackerVendors?: TrackerVendorEvidenceRow[];
 }) {
-  const sensitivePayloadViolations = Array.isArray(input.runtimeArtifacts?.sensitive_payload_violations)
+  const retainedSensitiveFieldEvidence = [
+    ...(Array.isArray(input.runtimeArtifacts?.sensitive_field_evidence)
+      ? input.runtimeArtifacts.sensitive_field_evidence
+      : []),
+    ...(Array.isArray(input.runtimeArtifacts?.sensitiveFieldEvidence)
+      ? input.runtimeArtifacts.sensitiveFieldEvidence
+      : [])
+  ].filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry));
+  const matchingSensitiveFieldEvidence = retainedSensitiveFieldEvidence
+    .filter((entry) => typeof entry.signalKey === "string" ? entry.signalKey === input.signalKey : true)
+    .slice(0, 5);
+  const retainedSensitivePayloadViolations = Array.isArray(input.runtimeArtifacts?.sensitive_payload_violations)
     ? input.runtimeArtifacts.sensitive_payload_violations.slice(0, 3)
     : [];
+  const matchedTexts = uniqueStrings([
+    ...(input.matchedTexts ?? []),
+    ...matchingSensitiveFieldEvidence.map((entry) => typeof entry.matchSnippet === "string" ? entry.matchSnippet : null)
+  ]).slice(0, 3);
+  const sensitiveCollectionTypeBySignalKey: Record<string, string> = {
+    "commerce.form_collects_financial_information": "financial_information",
+    "commerce.form_collects_geolocation": "geolocation",
+    "commerce.form_collects_government_id": "government_id",
+    "commerce.form_collects_health_information": "health_information",
+    "commerce.form_collects_ssn": "ssn"
+  };
+  const signalCollectionType = sensitiveCollectionTypeBySignalKey[input.signalKey] ?? "high_sensitivity_data";
+  const sensitivePayloadViolations =
+    retainedSensitivePayloadViolations.length > 0
+      ? retainedSensitivePayloadViolations
+      : (matchingSensitiveFieldEvidence.length > 0 ? matchingSensitiveFieldEvidence : matchedTexts).map((entry) => {
+        const matchedText = typeof entry === "string" ? entry : typeof entry.matchSnippet === "string" ? entry.matchSnippet : "";
+        return {
+          detectedType: typeof entry === "object" && typeof entry.dataType === "string" ? entry.dataType : signalCollectionType,
+          evidenceSource: typeof entry === "string" ? "snapshot_signal_match" : "sensitive_field_evidence",
+          evidenceStrength: "form_field_signal",
+          matchSnippet: matchedText,
+          requestUrl: "",
+          sourceField:
+            typeof entry === "object" && typeof entry.inputName === "string"
+              ? entry.inputName
+              : typeof entry === "object" && typeof entry.inputId === "string"
+                ? entry.inputId
+                : null,
+          sourceLocation: "form_field",
+          signalKey: input.signalKey
+        };
+      });
   const retargetingPixelDetected =
     findMergedSignalValue(input.mergedSignals, "commerce.retargeting_pixel_detected") === true ||
     input.runtimeArtifacts?.retargeting_pixel_detected === true ||
@@ -352,6 +795,14 @@ function buildHighSensitivitySignalFallbackEvidence(input: {
           retargetingPixelDetected: true
         }
       : {}),
+    ...(matchedTexts.length > 0
+      ? {
+          sensitiveCollectionMatchedTexts: matchedTexts,
+          sensitiveCollectionSignalKey: input.signalKey
+        }
+      : {}),
+    sensitiveCollectionDataTypes: [signalCollectionType],
+    sensitiveFieldEvidence: matchingSensitiveFieldEvidence,
     sensitivePayloadViolations,
     signalKey: input.signalKey,
     signalLabel: input.signalLabel,
@@ -1099,6 +1550,7 @@ export function buildSectionReviewIssues(input: {
         const persistedTrackerVendors = getRecordStringArray(input.runtimeArtifacts, "consent_reject_persisted_tracker_vendor_names");
         const newTrackerVendors = getRecordStringArray(input.runtimeArtifacts, "consent_reject_new_tracker_vendor_names");
         const postRejectTrackerVendors = getRecordStringArray(input.runtimeArtifacts, "consent_post_reject_tracker_vendor_names");
+        const postRejectTrackerEvidenceUrls = getRecordStringArray(input.runtimeArtifacts, "consent_post_reject_tracker_evidence_urls");
 
         let fallbackEvidence: Record<string, unknown> | undefined;
         if (finding.title === "Trackers fired before consent interaction") {
@@ -1118,12 +1570,15 @@ export function buildSectionReviewIssues(input: {
             tracking_before_consent_detected: true
           };
         } else if (finding.title === "Reject interaction did not reduce tracking") {
-          fallbackEvidence = {
-            persisted_tracker_vendors: uniqueStrings([...persistedTrackerVendors, ...newTrackerVendors, ...postRejectTrackerVendors]),
-            post_reject_tracker_vendors: postRejectTrackerVendors,
-            reject_did_not_reduce_tracking: true,
-            runtimeEvidenceUrls: baselineTrackerEvidenceUrls
-          };
+          fallbackEvidence = buildRejectTrackingEvidenceFallback({
+            baselineTrackerEvidenceUrls,
+            baselineTrackerVendors,
+            newTrackerVendors,
+            persistedTrackerVendors,
+            postRejectTrackerEvidenceUrls,
+            postRejectTrackerVendors,
+            runtimeArtifacts: input.runtimeArtifacts
+          });
         } else if (finding.title === "Reject interaction did not reduce third-party cookies") {
           fallbackEvidence = {
             consent_post_reject_third_party_cookie_count: input.runtimeArtifacts?.consent_post_reject_third_party_cookie_count ?? null,
@@ -1419,14 +1874,17 @@ function getRepresentativeAccessibilityExamplesForSignal(input: {
   signalKey: string;
 }) {
   const matches = input.rows.filter((row) => {
+    const ruleCode = row.ruleCode.toLowerCase();
+    const ruleGroup = row.ruleGroup.toLowerCase();
+
     if (/wcag_contrast_failures_count/i.test(input.signalKey)) {
-      return row.ruleCode === "color-contrast" || row.ruleGroup === "contrast";
+      return /contrast/.test(ruleCode) || /contrast/.test(ruleGroup);
     }
     if (/wcag_form_label_error_count/i.test(input.signalKey)) {
-      return row.ruleCode === "label" || row.ruleGroup === "label";
+      return ruleCode === "label" || ruleGroup === "label";
     }
     if (/wcag_link_name_error_count/i.test(input.signalKey)) {
-      return row.ruleCode === "link-name" || row.ruleGroup === "link";
+      return ruleCode === "link-name" || ruleGroup === "link";
     }
 
     return false;
@@ -1629,9 +2087,10 @@ export function buildReviewFindings(input: {
                   signalLabel: item.label,
                   signalValue: item.value
                 }
-            : /commerce\.high_sensitivity_data_collection_detected/i.test(item.key)
+            : /commerce\.(?:high_sensitivity_data_collection_detected|form_collects_(?:ssn|government_id|health_information|financial_information|geolocation))/i.test(item.key)
               ? (
                 buildHighSensitivitySignalFallbackEvidence({
+                  matchedTexts: getSignalHitMatchedTexts(item.key, input.signalHitRows),
                   mergedSignals: input.mergedSignals,
                   runtimeArtifacts: input.runtimeArtifacts,
                   signalKey: item.key,
@@ -1703,6 +2162,9 @@ export function buildReviewFindings(input: {
                 }
               : {
                   accessibilityRuleExamples,
+                  ...(/accessibility\.wcag_contrast_failures_count/i.test(item.key) && typeof item.value === "number"
+                    ? { count: item.value }
+                    : {}),
                   matchedTexts: getSignalHitMatchedTexts(item.key, input.signalHitRows),
                   signalKey: item.key,
                   signalLabel: item.label,

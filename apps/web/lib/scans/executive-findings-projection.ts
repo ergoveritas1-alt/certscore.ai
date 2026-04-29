@@ -43,7 +43,6 @@ const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SC
   accept_only_banner: "consent_dark_patterns_detected",
   contrast_failures: "accessibility_risk_score",
   dismiss_without_reject: "consent_dark_patterns_detected",
-  earnings_claim_without_adjacent_disclosure: "earnings_claim_without_adjacent_disclosure",
   fingerprinting_observed: "probable_fingerprinting",
   forced_consent_wall: "forced_consent_interaction",
   guaranteed_outcome_claim_detected: "guaranteed_outcome_claim_detected",
@@ -51,7 +50,7 @@ const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SC
   policy_behavior_conflict: "policy_behavior_contradiction_detected",
   policy_clarity_risk: "policy_clarity_risk",
   preconsent_tracking: "pre_consent_tracking_detected",
-  pricing_or_fee_transparency_unclear: "pricing_or_fee_transparency_unclear",
+  reject_did_not_reduce_tracking: "reject_tracking_persists_after_reject",
   reject_button_missing: "reject_option_missing_or_hidden",
   session_replay_observed: "session_recording_services_detected",
   session_replay_undisclosed: "session_recording_services_detected",
@@ -84,6 +83,21 @@ function getEntityUrlValues(packet: UnifiedFindingDisplayPacket, pattern: RegExp
   return getEntityValues(packet, pattern).filter((value) => /^https?:\/\//i.test(value));
 }
 
+function getEntityJsonObjects(packet: UnifiedFindingDisplayPacket, key: string) {
+  return (packet.evidence?.entities?.[key] ?? []).flatMap((value) => {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? [parsed as Record<string, unknown>] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function getFirstEntityJsonObject(packet: UnifiedFindingDisplayPacket, key: string) {
+  return getEntityJsonObjects(packet, key)[0] ?? null;
+}
+
 function mapConfidenceBandToExecutiveConfidence(
   band: UnifiedFindingDisplayPacket["confidenceBand"]
 ): CertScoreFindingConfidence {
@@ -94,6 +108,16 @@ function mapConfidenceBandToExecutiveConfidence(
     return "good";
   }
   return "moderate";
+}
+
+function mapExecutiveConfidence(
+  packet: UnifiedFindingDisplayPacket,
+  findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
+): CertScoreFindingConfidence {
+  if (findingId === "reject_tracking_persists_after_reject" && !packet.evidence?.flags?.includes("reject_evidence_confirmed")) {
+    return "moderate";
+  }
+  return mapConfidenceBandToExecutiveConfidence(packet.confidenceBand);
 }
 
 function mapVerificationStateToDirectness(
@@ -114,6 +138,16 @@ function mapSeverity(
 ): CertScoreFindingSeverity {
   if (findingId === "pre_consent_tracking_detected" && packet.severity === "high") {
     return "critical";
+  }
+  if (
+    findingId === "reject_tracking_persists_after_reject" &&
+    packet.severity === "high" &&
+    packet.evidence?.flags?.includes("reject_evidence_confirmed")
+  ) {
+    return "critical";
+  }
+  if (findingId === "reject_tracking_persists_after_reject" && !packet.evidence?.flags?.includes("reject_evidence_confirmed")) {
+    return "medium";
   }
   if (packet.severity === "high") {
     return "high";
@@ -147,6 +181,18 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
     packet.observedValue,
     ...(evidenceDetails?.runtimeVendors ?? []).map((vendor) => `Runtime vendor: ${vendor}`),
     ...(evidenceDetails?.runtimeRequestUrls ?? []).slice(0, 2).map((url) => `Runtime request: ${url}`),
+    findingId === "reject_tracking_persists_after_reject" && evidenceDetails?.consentInteraction
+      ? `Reject action detected: ${String(evidenceDetails.consentInteraction.action_type ?? "unknown")} via ${String(evidenceDetails.consentInteraction.selector ?? "unknown selector")}.`
+      : null,
+    findingId === "reject_tracking_persists_after_reject" && evidenceDetails?.postRejectNonEssentialRequests
+      ? `Post-reject non-essential request count: ${evidenceDetails.postRejectNonEssentialRequests.length}.`
+      : null,
+    ...(findingId === "reject_tracking_persists_after_reject"
+      ? (evidenceDetails?.postRejectNonEssentialRequests ?? []).slice(0, 2).flatMap((row) => [
+          typeof row.ms_after_reject === "number" ? `First post-reject tracker request: ${row.ms_after_reject}ms after reject.` : null,
+          typeof row.url === "string" ? `Sample URL: ${row.url}` : null
+        ])
+      : []),
     ...(evidenceDetails?.offerSnippets ?? []).slice(0, 2).map((snippet) => `Offer: ${truncateDisplaySnippet(snippet)}`),
     ...(evidenceDetails?.disclosureFindings ?? []).slice(0, 2),
     ...(evidenceDetails?.sourceUrls ?? []).slice(0, 2).map((url) => `Source: ${url}`),
@@ -312,7 +358,9 @@ function buildExecutiveEvidenceDetails(
     packet.primaryPageUrl,
     packet.sourceUrl,
     ...(packet.evidence?.pageUrls ?? [])
-  ]);
+  ]).filter((url) =>
+    findingId === "reject_tracking_persists_after_reject" ? !runtimeRequestUrls.includes(url) : true
+  );
   const evidenceSnippets = uniqueStrings(packet.evidence?.snippets ?? []).map((snippet) => truncateDisplaySnippet(snippet)).slice(0, 5);
   const sourceSignals = uniqueStrings(
     packet.sourceRefs.flatMap((sourceRef) => {
@@ -423,6 +471,37 @@ function buildExecutiveEvidenceDetails(
     }
   }
 
+  if (findingId === "reject_tracking_persists_after_reject") {
+    const consentInteraction = getFirstEntityJsonObject(packet, "consentInteraction");
+    const promotionDecision = getFirstEntityJsonObject(packet, "promotionDecision");
+    const rejectEvidenceDiff = getFirstEntityJsonObject(packet, "rejectEvidenceDiff");
+    const postRejectNonEssentialRequests = getEntityJsonObjects(packet, "postRejectNonEssentialRequests");
+    const suppressionChecks = getFirstEntityJsonObject(packet, "suppressionChecks");
+    const confidenceRisks = getEntityValues(packet, /^confidenceRisks$/i);
+    if (consentInteraction) {
+      details.consentInteraction = consentInteraction;
+    }
+    if (promotionDecision) {
+      details.promotionDecision = promotionDecision;
+    }
+    if (rejectEvidenceDiff) {
+      details.rejectEvidenceDiff = rejectEvidenceDiff;
+    }
+    if (postRejectNonEssentialRequests.length > 0) {
+      details.postRejectNonEssentialRequests = postRejectNonEssentialRequests.slice(0, 20);
+    }
+    if (confidenceRisks.length > 0) {
+      details.confidenceRisks = confidenceRisks;
+    }
+    if (suppressionChecks) {
+      details.suppressionChecks = suppressionChecks;
+    }
+    details.evidenceFlags = uniqueStrings([
+      ...(details.evidenceFlags ?? []),
+      "reject_path_tracking_not_reduced"
+    ]);
+  }
+
   return Object.keys(details).length > 0 ? details : undefined;
 }
 
@@ -452,7 +531,7 @@ function buildExecutiveShortSummary(
 
     const dataTypeText = dataTypes.length > 0 ? `${formatVendorList(dataTypes)} ` : "";
     const domainText = requestDomains.length > 0 ? ` alongside requests to ${formatVendorList(requestDomains)}` : "";
-    return `Sensitive ${dataTypeText}data collection was retained${domainText}.`;
+    return `Sensitive ${dataTypeText}input evidence was retained${domainText}; review whether any field values are transmitted before treating this as payload exposure.`;
   }
 
   if (findingId === "session_recording_services_detected") {
@@ -470,6 +549,17 @@ function buildExecutiveShortSummary(
     }
 
     return "Session recording services were observed during runtime collection.";
+  }
+
+  if (findingId === "reject_tracking_persists_after_reject") {
+    const vendors = uniqueStrings([
+      ...getEntityValues(packet, /runtime.*vendor|vendor|persisted.*tracker.*vendor|post.*reject.*tracker.*vendor/i)
+    ]).slice(0, 3);
+    const vendorText = vendors.length > 0 ? ` for ${formatVendorList(vendors)}` : "";
+    if (packet.evidence?.flags?.includes("reject_evidence_confirmed")) {
+      return `Non-essential tracking requests fired after the reject interaction${vendorText}.`;
+    }
+    return "Tracking requests were observed during the consent flow, but post-reject timing was not retained.";
   }
 
   if (findingId === "leveraged_or_high_risk_product_promotion") {
@@ -503,7 +593,7 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
     defaultSurfacePriority: definition.defaultSurfacePriority,
     whyItMatters: definition.whyItMatters,
     remediation: definition.remediation,
-    confidence: mapConfidenceBandToExecutiveConfidence(packet.confidenceBand),
+    confidence: mapExecutiveConfidence(packet, findingId),
     directVsInferred: mapVerificationStateToDirectness(packet.presentationDecision.verificationState),
     ...(evidenceDetails ? { evidenceDetails } : {}),
     evidencePreview: buildEvidencePreview(packet, findingId),

@@ -14,6 +14,24 @@ type ScanSignalRow = {
   signal_key: string;
 };
 
+type EventSample = {
+  createdAt: string;
+  eventType: string;
+  message: string | null;
+  metadataPreview: unknown;
+  metadataBytes: number;
+};
+
+type EventTypeDiagnostic = {
+  count: number;
+  firstAt: string;
+  lastAt: string;
+  maxMetadataBytes: number;
+  sampleMessages: string[];
+  sampleMetadataKeys: string[];
+  totalMetadataBytes: number;
+};
+
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const message = error?.message ?? "";
   return error?.code === "PGRST205" || message.includes("schema cache") || message.includes("Could not find the table");
@@ -40,6 +58,15 @@ function getArgValue(flag: string) {
 
 function hasFlag(flag: string) {
   return process.argv.includes(flag);
+}
+
+function parsePositiveInt(value: string | null, fallback: number) {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function countBy<T>(values: T[], keyFn: (value: T) => string) {
@@ -94,6 +121,131 @@ function getRecordNumber(record: unknown, key: string) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function summarizeString(value: string, maxLength: number) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+function buildMetadataPreview(value: unknown, maxLength: number): unknown {
+  if (value == null) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return summarizeString(value, maxLength);
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 5).map((entry) => buildMetadataPreview(entry, maxLength));
+  }
+
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).slice(0, 10);
+    return Object.fromEntries(entries.map(([key, entryValue]) => [key, buildMetadataPreview(entryValue, maxLength)]));
+  }
+
+  return String(value);
+}
+
+function getMetadataBytes(value: unknown) {
+  if (value == null) {
+    return 0;
+  }
+
+  try {
+    return Buffer.byteLength(JSON.stringify(value), "utf8");
+  } catch {
+    return Buffer.byteLength(String(value), "utf8");
+  }
+}
+
+function buildEventSamples(events: ScanEventRow[], sampleLimit: number, metadataPreviewLength: number) {
+  const selectedEventTypes = new Set([
+    "signals.nano_doc_retrieval_started",
+    "signals.nano_doc_retrieval_completed",
+    "signals.nano_doc_enrichment_started",
+    "signals.nano_doc_enrichment_completed",
+    "signals.merge_started",
+    "signals.merge_completed",
+    "findings.unified_derivation_started",
+    "findings.unified_derivation_completed"
+  ]);
+
+  const samples: EventSample[] = [];
+  const counts = new Map<string, number>();
+
+  for (const event of events) {
+    const currentCount = counts.get(event.event_type) ?? 0;
+    if (!selectedEventTypes.has(event.event_type) || currentCount >= sampleLimit) {
+      continue;
+    }
+
+    samples.push({
+      createdAt: event.created_at,
+      eventType: event.event_type,
+      message: event.message ? summarizeString(event.message, 180) : null,
+      metadataPreview: buildMetadataPreview(event.metadata_json, metadataPreviewLength),
+      metadataBytes: getMetadataBytes(event.metadata_json)
+    });
+    counts.set(event.event_type, currentCount + 1);
+  }
+
+  return samples;
+}
+
+function buildEventTypeDiagnostics(events: ScanEventRow[]) {
+  const diagnostics = new Map<string, EventTypeDiagnostic>();
+
+  for (const event of events) {
+    const metadataBytes = getMetadataBytes(event.metadata_json);
+    const existing = diagnostics.get(event.event_type);
+    const sampleMessages = existing?.sampleMessages ?? [];
+    const sampleMetadataKeys = existing?.sampleMetadataKeys ?? [];
+    const metadataKeys =
+      event.metadata_json && typeof event.metadata_json === "object" && !Array.isArray(event.metadata_json)
+        ? Object.keys(event.metadata_json as Record<string, unknown>)
+        : [];
+
+    if (event.message) {
+      const candidate = summarizeString(event.message, 120);
+      if (!sampleMessages.includes(candidate) && sampleMessages.length < 3) {
+        sampleMessages.push(candidate);
+      }
+    }
+
+    for (const key of metadataKeys) {
+      if (!sampleMetadataKeys.includes(key) && sampleMetadataKeys.length < 8) {
+        sampleMetadataKeys.push(key);
+      }
+    }
+
+    diagnostics.set(event.event_type, {
+      count: (existing?.count ?? 0) + 1,
+      firstAt: existing?.firstAt ?? event.created_at,
+      lastAt: event.created_at,
+      maxMetadataBytes: Math.max(existing?.maxMetadataBytes ?? 0, metadataBytes),
+      sampleMessages,
+      sampleMetadataKeys,
+      totalMetadataBytes: (existing?.totalMetadataBytes ?? 0) + metadataBytes
+    });
+  }
+
+  return [...diagnostics.entries()]
+    .map(([eventType, diagnostic]) => ({
+      eventType,
+      ...diagnostic
+    }))
+    .sort((left, right) => right.totalMetadataBytes - left.totalMetadataBytes || right.count - left.count || left.eventType.localeCompare(right.eventType));
+}
+
 function getDocumentSourceStatusCount(rows: Array<Record<string, unknown>>, status: string) {
   return rows.filter((row) => {
     const value = row.source_status;
@@ -140,7 +292,10 @@ function getExtractionSkipCounts(rows: Array<Record<string, unknown>>) {
 
 async function main() {
   const scanId = getArgValue("--scan-id");
+  const eventsOnly = hasFlag("--events-only");
   const json = hasFlag("--json");
+  const summary = hasFlag("--summary");
+  const sampleLimit = parsePositiveInt(getArgValue("--sample-limit"), 2);
 
   if (!scanId) {
     throw new Error("Provide --scan-id.");
@@ -288,6 +443,8 @@ async function main() {
   const scannerSignalCount = signalRows.filter((row) => !row.population_source || row.population_source === "scanner").length;
   const nanoSignalCount = signalRows.filter((row) => row.population_source === "nano").length;
   const validationSignalCount = signalRows.filter((row) => row.population_source === "validation").length;
+  const eventTypeDiagnostics = buildEventTypeDiagnostics(events);
+  const eventSamples = buildEventSamples(events, sampleLimit, 180);
   const workflow = deriveSignalEnrichmentWorkflowState({
     documentSourceCount: readyDocumentSourceCount,
     events: eventRows,
@@ -335,6 +492,14 @@ async function main() {
     documentSourcesByExtractionStatus: countBy(documentRows, (row) => String(row.extraction_status ?? "unknown")),
     documentSourcesByType: countBy(documentRows, (row) => String(row.document_type ?? "unknown")),
     eventCounts: countBy(eventRows, (row) => row.eventType),
+    eventDiagnostics: {
+      sampleLimit,
+      totalEventCount: events.length,
+      totalMetadataBytes: eventTypeDiagnostics.reduce((sum, row) => sum + row.totalMetadataBytes, 0),
+      uniqueEventTypes: eventTypeDiagnostics.length,
+      topEventTypesByMetadataBytes: eventTypeDiagnostics.slice(0, 8),
+      samples: eventSamples
+    },
     signalCountsBySource: countBy(signalRows, (row) => String(row.population_source ?? "scanner")),
     nanoDocRetrievalDiagnostics: (() => {
       const event = [...((events ?? []) as ScanEventRow[])].reverse().find((row) => row.event_type === "signals.nano_doc_retrieval_completed");
@@ -356,6 +521,83 @@ async function main() {
 
   if (json) {
     console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+
+  if (eventsOnly) {
+    printHeader("Signal Event Summary");
+    console.log(`scanId: ${payload.scan.id}`);
+    console.log(`status: ${payload.scan.status}`);
+    console.log(`events: total=${payload.eventDiagnostics.totalEventCount} | types=${payload.eventDiagnostics.uniqueEventTypes} | metadataBytes=${payload.eventDiagnostics.totalMetadataBytes}`);
+
+    printHeader("Top Event Types");
+    for (const row of payload.eventDiagnostics.topEventTypesByMetadataBytes) {
+      console.log(
+        `- ${row.eventType}: count=${row.count} | metadataBytes=${row.totalMetadataBytes} | maxMetadataBytes=${row.maxMetadataBytes} | firstAt=${row.firstAt} | lastAt=${row.lastAt}`
+      );
+      if (row.sampleMetadataKeys.length > 0) {
+        console.log(`  metadataKeys=${row.sampleMetadataKeys.join(",")}`);
+      }
+      if (row.sampleMessages.length > 0) {
+        console.log(`  sampleMessages=${JSON.stringify(row.sampleMessages)}`);
+      }
+    }
+
+    if (payload.eventDiagnostics.samples.length > 0) {
+      printHeader("Representative Event Samples");
+      for (const sample of payload.eventDiagnostics.samples) {
+        console.log(
+          `- ${sample.createdAt} | ${sample.eventType} | metadataBytes=${sample.metadataBytes} | message=${sample.message ?? "null"}`
+        );
+        console.log(`  metadataPreview=${JSON.stringify(sample.metadataPreview)}`);
+      }
+    }
+
+    return;
+  }
+
+  if (summary) {
+    printHeader("Signal Enrichment Summary");
+    console.log(`scanId: ${payload.scan.id}`);
+    console.log(`status: ${payload.scan.status}`);
+    console.log(`actualMode: ${payload.workflow.actualMode}`);
+    console.log(`mergedSignalsReady: ${payload.workflow.mergedSignalsReady}`);
+    console.log(`findingsReady: ${payload.workflow.findingsReady}`);
+    console.log(
+      `documents: ready=${readyDocumentSourceCount} | rejected=${rejectedDocumentSourceCount} | total=${documentRows.length}`
+    );
+    console.log(
+      `signals: nano=${nanoSignalCount} | scanner=${scannerSignalCount} | validation=${validationSignalCount} | total=${signalRows.length}`
+    );
+    console.log(
+      `events: total=${payload.eventDiagnostics.totalEventCount} | types=${payload.eventDiagnostics.uniqueEventTypes} | metadataBytes=${payload.eventDiagnostics.totalMetadataBytes}`
+    );
+    console.log(
+      `timings: scanner=${formatDurationMs(payload.workflow.timings.scannerDurationMs)} | docRetrieval=${formatDurationMs(payload.workflow.timings.nanoDocRetrievalDurationMs)} | docSignals=${formatDurationMs(payload.workflow.timings.nanoDocSignalsDurationMs)} | merge=${formatDurationMs(payload.workflow.timings.signalMergeDurationMs)} | findings=${formatDurationMs(payload.workflow.timings.unifiedFindingsDurationMs)}`
+    );
+
+    printHeader("Top Event Types");
+    for (const row of payload.eventDiagnostics.topEventTypesByMetadataBytes) {
+      console.log(
+        `- ${row.eventType}: count=${row.count} | metadataBytes=${row.totalMetadataBytes} | maxMetadataBytes=${row.maxMetadataBytes} | firstAt=${row.firstAt} | lastAt=${row.lastAt}`
+      );
+    }
+
+    if (payload.nanoDocRetrievalDiagnostics) {
+      printHeader("Retrieval Diagnostics");
+      console.log(JSON.stringify(payload.nanoDocRetrievalDiagnostics, null, 2));
+    }
+
+    if (payload.eventDiagnostics.samples.length > 0) {
+      printHeader("Representative Event Samples");
+      for (const sample of payload.eventDiagnostics.samples) {
+        console.log(
+          `- ${sample.createdAt} | ${sample.eventType} | metadataBytes=${sample.metadataBytes} | message=${sample.message ?? "null"}`
+        );
+        console.log(`  metadataPreview=${JSON.stringify(sample.metadataPreview)}`);
+      }
+    }
+
     return;
   }
 
@@ -429,6 +671,22 @@ async function main() {
 
   printHeader("Event Counts");
   console.log(JSON.stringify(payload.eventCounts, null, 2));
+
+  printHeader("Event Diagnostics");
+  console.log(
+    JSON.stringify(
+      {
+        sampleLimit: payload.eventDiagnostics.sampleLimit,
+        totalEventCount: payload.eventDiagnostics.totalEventCount,
+        totalMetadataBytes: payload.eventDiagnostics.totalMetadataBytes,
+        uniqueEventTypes: payload.eventDiagnostics.uniqueEventTypes,
+        topEventTypesByMetadataBytes: payload.eventDiagnostics.topEventTypesByMetadataBytes,
+        samples: payload.eventDiagnostics.samples
+      },
+      null,
+      2
+    )
+  );
 }
 
 main().catch((error) => {

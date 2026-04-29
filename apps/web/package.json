@@ -34,6 +34,7 @@
     "status:tranco-session": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/tranco-calibration-status.ts",
     "watch:tranco-status": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/watch-tranco-status.ts",
     "eval:build-finding-corpus": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/eval/build-finding-corpus.ts",
+    "eval:inspect-coverage-edge-corpus": "node ./scripts/eval/inspect-coverage-edge-corpus.mjs",
     "dev": "NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=2048} next dev --turbo --port 3000",
     "dev:validation:local": "NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=2048} next dev --turbo --port 3003",
     "typecheck": "next typegen . && tsc --noEmit",

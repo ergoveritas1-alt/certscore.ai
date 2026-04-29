@@ -149,6 +149,30 @@ describe("coverage helpers", () => {
     assert.ok(flags.includes("blocked"));
     assert.ok(flags.some((f) => f.startsWith("redirected")));
   });
+
+  it("exports retained runtime context for coverage-limited challenge examples", () => {
+    const ef = makeEnrichedFinding({
+      status: "audit_only",
+      scanContext: makeScanContext({
+        snapshot: { partial_scan: true, coverage_level: "limited_partial" },
+        runtimeArtifacts: {
+          coverage_limitation_evidence: {
+            coverageFlags: ["limited_partial", "incomplete_pages"],
+            runtimeSignalsRetained: {
+              thirdPartyRequestCount: 12,
+              preconsentEvidenceUrlCount: 2,
+              requestDomainSamples: ["analytics.example"],
+              scriptTagCount: 8,
+              trackerVendorSamples: ["Example Analytics"]
+            }
+          }
+        }
+      })
+    });
+    const ex = buildChallengeExample(ef);
+    assert.deepEqual(ex.coverage_limitation_evidence?.coverageFlags, ["limited_partial", "incomplete_pages"]);
+    assert.ok(ex.known_limitations.some((limitation) => /Runtime signals were retained/i.test(limitation)));
+  });
 });
 
 describe("classification helpers", () => {
@@ -240,6 +264,54 @@ describe("buildPositiveExample", () => {
     assert.equal(ex.confidence, "strong");
     assert.equal(ex.direct_vs_inferred, "direct");
     assert.ok(ex.evidence.counts.requests);
+  });
+
+  it("exports consent runtime request metadata when snippets are absent", () => {
+    const ef = makeEnrichedFinding({
+      packet: makePacket({
+        unifiedFindingId: "reject_did_not_reduce_tracking",
+        details: {
+          family: "consent_tracking",
+          kind: "reject_did_not_reduce_tracking",
+          requestUrls: [
+            "https://example.com/baseline.js",
+            "https://example.com/post-reject.js"
+          ],
+          vendors: ["Google Ads", "Adobe Analytics"]
+        },
+        evidence: {
+          entities: {
+            runtimeRequestUrls: [
+              "https://example.com/baseline.js",
+              "https://example.com/post-reject.js"
+            ]
+          },
+          snippets: []
+        }
+      }) as unknown as EnrichedFinding["packet"],
+      scanContext: makeScanContext({
+        runtimeArtifacts: {
+          consent_opt_out_evidence_log: [
+            {
+              action: "reject",
+              stepIndex: 1,
+              text: "Reject all",
+              urlAfterClick: "https://example.com/"
+            }
+          ]
+        }
+      })
+    });
+
+    const ex = buildPositiveExample(ef);
+
+    assert.deepEqual(ex.evidence.request_samples, [
+      "https://example.com/baseline.js",
+      "https://example.com/post-reject.js"
+    ]);
+    assert.ok(ex.evidence.runtime_anchors.some((entry) => entry.includes("Runtime request: https://example.com/baseline.js")));
+    assert.ok(ex.evidence.runtime_anchors.some((entry) => entry.includes("Opt-out path: step 1 | reject | Reject all")));
+    assert.ok(ex.evidence.evidence_snippets.length > 0);
   });
 });
 

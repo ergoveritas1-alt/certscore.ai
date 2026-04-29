@@ -11,6 +11,8 @@ export type DomainBenchmarkEstimate = {
   rationale: string;
 };
 
+const GENERIC_UNKNOWN_INDUSTRY_PATTERN = /general web|placeholder|brand landing|unknown|generic/i;
+
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -42,6 +44,127 @@ function extractJsonObject(text: string) {
   } catch {
     return null;
   }
+}
+
+function getRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function getStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
+}
+
+function normalizeToken(value: string | null) {
+  return value?.trim().toLowerCase().replace(/[_-]+/g, " ") ?? null;
+}
+
+function formatMacroIndustryLabel(input: {
+  businessModels: string[];
+  companyName: string | null;
+  industryPrimary: string;
+  siteType: string | null;
+}) {
+  const primary = normalizeToken(input.industryPrimary);
+  const siteType = normalizeToken(input.siteType);
+  const businessModels = input.businessModels.map((value) => normalizeToken(value)).filter((value): value is string => Boolean(value));
+
+  if (primary === "media") {
+    const hasStreaming =
+      businessModels.some((value) => /subscription|streaming|video|content/.test(value)) ||
+      /abc|network|tv|stream|news/i.test(input.companyName ?? "");
+    return hasStreaming ? "Media / publisher / streaming & news" : "Media / publisher";
+  }
+
+  if (primary === "education") {
+    return businessModels.some((value) => /course|training|download/.test(value))
+      ? "Education / online courses"
+      : "Education";
+  }
+
+  if (primary === "ecommerce" || businessModels.some((value) => /commerce|shop|retail/.test(value))) {
+    return "Commerce / retail";
+  }
+
+  if (primary === "saas" || siteType === "web app") {
+    return "SaaS / web application";
+  }
+
+  return primary ? `${primary.charAt(0).toUpperCase()}${primary.slice(1)}` : null;
+}
+
+export function buildDomainBenchmarkEstimateFromMacroEnrichment(value: unknown): DomainBenchmarkEstimate | null {
+  const record = getRecord(value);
+  const normalizedOutput = getRecord(record?.normalized_output_json) ?? getRecord(record?.raw_response_json);
+  if (!normalizedOutput) {
+    return null;
+  }
+
+  const industryPrimary = getString(normalizedOutput.industry_primary);
+  const confidence = getFiniteNumber(normalizedOutput.confidence) ?? getFiniteNumber(record?.confidence);
+  if (!industryPrimary || (typeof confidence === "number" && confidence < 0.6)) {
+    return null;
+  }
+
+  const companyName = getString(normalizedOutput.company_name);
+  const siteType = getString(normalizedOutput.site_type);
+  const businessModels = getStringArray(normalizedOutput.business_model);
+  const industry = formatMacroIndustryLabel({
+    businessModels,
+    companyName,
+    industryPrimary,
+    siteType
+  });
+  if (!industry) {
+    return null;
+  }
+
+  const normalizedIndustry = normalizeToken(industryPrimary);
+  const benchmark =
+    normalizedIndustry === "media"
+      ? {
+          expectedCookiesBeforeConsent: 4,
+          expectedOverallScore: 70,
+          expectedThirdPartyRequests: 55,
+          estimatedRankLabel: "Large media publisher"
+        }
+      : normalizedIndustry === "education"
+        ? {
+            expectedCookiesBeforeConsent: 2,
+            expectedOverallScore: 76,
+            expectedThirdPartyRequests: 18,
+            estimatedRankLabel: "Specialized content / education"
+          }
+        : {
+            expectedCookiesBeforeConsent: 2,
+            expectedOverallScore: 72,
+            expectedThirdPartyRequests: 24,
+            estimatedRankLabel: "Typical category peer"
+          };
+
+  return {
+    confidence: confidence !== null && confidence >= 0.75 ? "high" : "medium",
+    industry,
+    rationale: `Matched scan macro enrichment${companyName ? ` for ${companyName}` : ""}: ${industryPrimary}${siteType ? `, ${siteType}` : ""}.`,
+    ...benchmark
+  };
+}
+
+export function shouldPreferMacroBenchmarkEstimate(input: {
+  currentEstimate: DomainBenchmarkEstimate | null;
+  macroEstimate: DomainBenchmarkEstimate | null;
+}) {
+  if (!input.macroEstimate) {
+    return false;
+  }
+
+  if (!input.currentEstimate) {
+    return true;
+  }
+
+  return (
+    GENERIC_UNKNOWN_INDUSTRY_PATTERN.test(input.currentEstimate.industry) ||
+    GENERIC_UNKNOWN_INDUSTRY_PATTERN.test(input.currentEstimate.rationale)
+  );
 }
 
 export function normalizeDomainBenchmarkEstimate(value: unknown): DomainBenchmarkEstimate | null {

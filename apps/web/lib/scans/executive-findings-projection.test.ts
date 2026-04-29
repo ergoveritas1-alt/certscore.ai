@@ -99,12 +99,6 @@ test("projects surfaced unified findings into executive findings and regulatory 
       severity: "high",
       summary: "6 third-party requests fired before any consent action."
     }),
-    makePacket("earnings_claim_without_adjacent_disclosure", {
-      confidenceBand: "high",
-      details: { family: "financial_promotion", kind: "earnings_claim_without_adjacent_disclosure" },
-      severity: "high",
-      summary: "Earnings claim surfaced without nearby disclosure."
-    }),
     makePacket("policy_behavior_conflict", {
       details: { family: "contradiction", kind: "policy_behavior_conflict" },
       severity: "high",
@@ -146,7 +140,6 @@ test("projects surfaced unified findings into executive findings and regulatory 
     projection.findings.map((finding) => finding.id).sort(),
     [
       "asymmetric_consent_ui",
-      "earnings_claim_without_adjacent_disclosure",
       "policy_behavior_contradiction_detected",
       "pre_consent_tracking_detected"
     ]
@@ -177,13 +170,6 @@ test("projects surfaced unified findings into executive findings and regulatory 
         unifiedFindingId: "preconsent_tracking"
       },
       {
-        executiveFindingId: "earnings_claim_without_adjacent_disclosure",
-        inExecutiveFindings: true,
-        inRegulatoryLensInput: true,
-        status: "surface",
-        unifiedFindingId: "earnings_claim_without_adjacent_disclosure"
-      },
-      {
         executiveFindingId: "policy_behavior_contradiction_detected",
         inExecutiveFindings: true,
         inRegulatoryLensInput: true,
@@ -200,15 +186,194 @@ test("projects surfaced unified findings into executive findings and regulatory 
     ]
   );
 
-  const financialLens = buildRegulatoryLenses(projection.findings, {
-    beforeConsentCookieCount: 0,
-    thirdPartyRequestCount: 6
-  }).find((lens) => lens.acronym === "Financial & commercial claims");
+  assert.equal(
+    buildRegulatoryLenses(projection.findings, {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 6
+    }).some((lens) => lens.acronym === "Financial & commercial claims"),
+    false
+  );
+});
 
-  assert.ok(financialLens);
-  assert.equal(financialLens?.minimal, undefined);
-  assert.equal(financialLens?.ratingLabel, "Watch");
-  assert.match(financialLens?.summary ?? "", /High-confidence claims or earnings language surfaced/i);
+test("projects reject-path tracking failure into executive findings with dedicated evidence", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("reject_did_not_reduce_tracking", {
+      confidenceBand: "high",
+      details: {
+        family: "consent_tracking",
+        kind: "reject_did_not_reduce_tracking",
+        requestUrls: [
+          "https://example.com/baseline.js",
+          "https://example.com/post-reject.js"
+        ],
+        vendors: ["Google Ads", "Adobe Analytics"]
+      },
+      evidence: {
+        counts: {
+          consentBaselineThirdPartyCookieCount: 3,
+          consentOptOutClicks: 1,
+          consentPostRejectThirdPartyCookieCount: 3
+        },
+        entities: {
+          consentInteraction: [
+            JSON.stringify({
+              action_type: "reject_all",
+              clicked_label: "Reject all",
+              selector: "button#reject",
+              clicked_at_ms: 1000,
+              success: true
+            })
+          ],
+          rejectEvidenceDiff: [
+            JSON.stringify({
+              baseline_vendors: ["Google Ads", "Adobe Analytics"],
+              post_reject_vendors: ["Google Ads", "Adobe Analytics"],
+              new_after_reject_vendors: [],
+              persisting_after_reject_vendors: ["Google Ads", "Adobe Analytics"],
+              baseline_request_count: 1,
+              post_reject_request_count: 1,
+              baseline_cookie_count: 3,
+              post_reject_cookie_count: 3,
+              baseline_third_party_cookie_count: 3,
+              post_reject_third_party_cookie_count: 3
+            })
+          ],
+          postRejectNonEssentialRequests: [
+            JSON.stringify({
+              vendor: "Google Ads",
+              hostname: "googleadservices.com",
+              category: "advertising",
+              url: "https://example.com/post-reject.js",
+              ts_ms: 1842,
+              ms_after_reject: 842,
+              resource_type: "script",
+              initiator: null,
+              why_non_essential: "Google Ads is classified as advertising."
+            })
+          ],
+          suppressionChecks: [
+            JSON.stringify({
+              reject_click_confirmed: true,
+              post_reject_window_available: true,
+              non_essential_vendor_after_reject: true,
+              cmp_initialization_only: false,
+              navigation_or_reload_ambiguous: false,
+              baseline_contradiction_detected: false
+            })
+          ],
+          persisted_tracker_vendors: ["Google Ads", "Adobe Analytics"],
+          runtimeRequestUrls: [
+            "https://example.com/baseline.js",
+            "https://example.com/post-reject.js"
+          ]
+        },
+        fetchQuality: null,
+        flags: ["reject_did_not_reduce_tracking", "reject_evidence_confirmed"],
+        pageUrls: ["https://example.com/"],
+        snippets: [
+          "Reject flow retained tracking after opt-out. Baseline vendors: Google Ads, Adobe Analytics. Post-reject vendors: Google Ads, Adobe Analytics."
+        ],
+        sourceUrls: ["https://example.com/post-reject.js"]
+      },
+      severity: "high",
+      summary: "Tracking requests still appeared after the reject interaction."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "reject_tracking_persists_after_reject");
+
+  assert.ok(finding);
+  assert.equal(finding?.directVsInferred, "direct");
+  assert.deepEqual(finding?.evidenceDetails?.runtimeRequestUrls, [
+    "https://example.com/baseline.js",
+    "https://example.com/post-reject.js"
+  ]);
+  assert.deepEqual(finding?.evidenceDetails?.counts, {
+    consentBaselineThirdPartyCookieCount: 3,
+    consentOptOutClicks: 1,
+    consentPostRejectThirdPartyCookieCount: 3
+  });
+  assert.ok(finding?.evidenceDetails?.evidenceFlags?.includes("reject_path_tracking_not_reduced"));
+  assert.equal(finding?.evidenceDetails?.consentInteraction?.action_type, "reject_all");
+  assert.equal(finding?.evidenceDetails?.postRejectNonEssentialRequests?.[0]?.ms_after_reject, 842);
+  assert.equal(finding?.evidenceDetails?.suppressionChecks?.reject_click_confirmed, true);
+  assert.equal(projection.trace.packets[0]?.executiveFindingId, "reject_tracking_persists_after_reject");
+  assert.equal(projection.trace.packets[0]?.inRegulatoryLensInput, true);
+});
+
+test("downgrades reject-path tracking projection when post-reject timing is missing", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("reject_did_not_reduce_tracking", {
+      confidenceBand: "moderate",
+      details: {
+        family: "consent_tracking",
+        kind: "reject_did_not_reduce_tracking",
+        requestUrls: [
+          "https://munchkin.marketo.net/munchkin.js",
+          "https://px.ads.linkedin.com/collect?v=2"
+        ],
+        vendors: ["Marketo", "LinkedIn Insight Tag"]
+      },
+      evidence: {
+        counts: {
+          consentOptOutClicks: 1
+        },
+        entities: {
+          promotionDecision: [
+            JSON.stringify({
+              promoted: false,
+              reason: "Post-reject timing unavailable; cannot confirm persistence after reject.",
+              requiredTimingSatisfied: false,
+              requiredVendorClassificationSatisfied: true,
+              requiredRejectClickSatisfied: true
+            })
+          ],
+          postRejectNonEssentialRequests: [
+            JSON.stringify({
+              vendor: "LinkedIn Insight Tag",
+              hostname: "px.ads.linkedin.com",
+              category: "advertising",
+              url: "https://px.ads.linkedin.com/collect?v=2",
+              ts_ms: null,
+              ms_after_reject: null,
+              phase: "unknown",
+              vendor_attribution_confidence: "high"
+            })
+          ],
+          suppressionChecks: [
+            JSON.stringify({
+              reject_click_confirmed: true,
+              post_reject_window_available: false,
+              non_essential_vendor_after_reject: true,
+              cmp_initialization_only: false,
+              navigation_or_reload_ambiguous: false,
+              baseline_contradiction_detected: false
+            })
+          ],
+          runtimeRequestUrls: [
+            "https://munchkin.marketo.net/munchkin.js",
+            "https://px.ads.linkedin.com/collect?v=2"
+          ]
+        },
+        fetchQuality: null,
+        flags: ["reject_did_not_reduce_tracking", "reject_evidence_review"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Tracking requests appeared after the reject interaction; review timing and vendor classification."],
+        sourceUrls: ["https://px.ads.linkedin.com/collect?v=2"]
+      },
+      severity: "high",
+      summary: "Tracking requests appeared after the reject interaction."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "reject_tracking_persists_after_reject");
+
+  assert.ok(finding);
+  assert.equal(finding?.severity, "medium");
+  assert.equal(finding?.confidence, "moderate");
+  assert.equal(finding?.shortSummary, "Tracking requests were observed during the consent flow, but post-reject timing was not retained.");
+  assert.equal(finding?.evidenceDetails?.promotionDecision?.promoted, false);
+  assert.equal(finding?.evidenceDetails?.suppressionChecks?.post_reject_window_available, false);
 });
 
 test("projects surfaced scanner-level financial promotion into executive findings without validation rows", () => {
@@ -260,18 +425,11 @@ test("projects financial companion findings into executive findings", () => {
       severity: "high",
       summary: "Testimonial appeared near performance claim."
     }),
-    makePacket("earnings_claim_without_adjacent_disclosure", {
-      confidenceBand: "high",
-      details: { family: "financial_promotion", kind: "earnings_claim_without_adjacent_disclosure" },
-      severity: "high",
-      summary: "Earnings claim surfaced without nearby disclosure."
-    })
   ]);
 
   assert.deepEqual(
     projection.findings.map((finding) => finding.id).sort(),
     [
-      "earnings_claim_without_adjacent_disclosure",
       "guaranteed_outcome_claim_detected",
       "regulatory_registration_disclosure_absent",
       "unsubstantiated_testimonial_near_performance_claim"
@@ -374,6 +532,61 @@ test("keeps runtime-backed session recording in top findings when consent issues
     projection.topFindings.find((finding) => finding.id === "session_recording_services_detected")?.shortSummary,
     "Microsoft Clarity session recording was observed during runtime collection."
   );
+});
+
+test("projects blocking overlay context into executive top findings without violation framing", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("blocking_overlay_observed", {
+      confidenceBand: "moderate",
+      details: { family: "context", kind: "blocking_overlay_observed" },
+      evidence: {
+        counts: {},
+        entities: {
+          blockingOverlayType: ["cookie_wall"],
+          overlayBehavior: ["interaction_blocked", "page_access_blocked_until_choice"],
+          overlayControls: ["accept:present", "reject:absent", "manage:present", "close:absent"],
+          rejectDepthClass: ["second_layer"]
+        },
+        fetchQuality: null,
+        flags: ["blocking_overlay_observed", "overlay_interaction_blocked", "overlay_reject_second_layer"],
+        pageUrls: [],
+        snippets: [
+          "A blocking cookie wall overlay was observed. This is common, but it increases concern when users cannot reject as easily as accept or when tracking begins before a choice is made.",
+          "Overlay controls detected: accept present, reject absent, manage present, close absent."
+        ],
+        sourceUrls: []
+      },
+      presentationDecision: {
+        confidenceRationale: "Overlay control evidence was retained.",
+        downgradeReasons: [],
+        rationale: "A blocking consent overlay was observed with retained control-state evidence.",
+        status: "surface",
+        verificationLabel: "Runtime",
+        verificationState: "runtime"
+      },
+      severity: "medium",
+      summary: "A blocking consent overlay was observed with an imbalanced choice path.",
+      surfacingDecision: {
+        ...makePacket("blocking_overlay_observed").surfacingDecision,
+        decisionState: "support_only",
+        family: "context",
+        reportLane: "confidence_and_coverage",
+        surfaceTier: "support"
+      }
+    }),
+    makePacket("privacy_contact_channel_missing", { severity: "medium" }),
+    makePacket("policy_clarity_risk", { severity: "medium" }),
+    makePacket("cookie_policy_present", { severity: "medium" }),
+    makePacket("privacy_rights_path_present", { severity: "medium" })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "blocking_overlay_observed");
+  assert.equal(finding?.label, "Blocking consent overlay observed");
+  assert.equal(finding?.section, "Consent Experience");
+  assert.equal(finding?.severity, "medium");
+  assert.ok(finding?.whyItMatters.includes("common"));
+  assert.ok(!/violation/i.test(`${finding?.label} ${finding?.whyItMatters}`));
+  assert.ok(projection.topFindings.some((entry) => entry.id === "blocking_overlay_observed"));
 });
 
 test("projects video content tracking exposure into executive findings", () => {
@@ -700,6 +913,7 @@ test("projects sensitive data with third-party tracking into executive findings 
   assert.equal(finding?.section, "Privacy & Tracking");
   assert.equal(finding?.severity, "medium");
   assert.ok(finding?.shortSummary.includes("log.intellimize.co"));
+  assert.match(finding?.shortSummary ?? "", /review whether any field values are transmitted/i);
   assert.deepEqual(
     finding?.evidenceDetails?.runtimeRequestUrls,
     ["https://log.intellimize.co/logger"]

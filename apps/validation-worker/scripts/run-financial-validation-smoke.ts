@@ -54,8 +54,7 @@ const FINANCIAL_TARGETS: FinancialSmokeTarget[] = [
     label: "fxculturetrading",
     scanId: "933f0d2c-ff7f-4e15-97b3-0322f92ad48f",
     expectedFindings: [
-      { ruleKey: "financial_review.earnings_claim_without_adjacent_disclosure", severity: "high" },
-      { ruleKey: "financial_review.pricing_or_fee_transparency_unclear", severity: "medium" }
+      { ruleKey: "financial_review.unqualified_superlative_claim_detected", severity: "medium" }
     ]
   }
 ];

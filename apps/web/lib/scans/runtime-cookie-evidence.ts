@@ -306,9 +306,30 @@ export function buildRuntimeCookieInventory(input: {
   const rows = [...rowsByKey.values()];
   const beforeConsentRows = rows.filter((row) => row.timingEvidence === "before_consent_cookie_write");
   const nonEssentialRows = rows.filter((row) => row.nonEssential);
-  const unmatchedRows = getObjectArray(hybrid?.unmatchedRuntimeCookies ?? hybrid?.unmatched_runtime_cookies)
+  const runtimePolicyReconciliationRows = getObjectArray(
+    hybrid?.runtimePolicyReconciliations ?? hybrid?.runtime_policy_reconciliations
+  );
+  const genericCookieGapUnmatchedRows = runtimePolicyReconciliationRows
+    .filter((row) => {
+      const signalKey = getString(row.signalKey ?? row.signal_key);
+      const findingId = getString(row.findingId ?? row.finding_id);
+      const subjectKind = getString(row.subjectKind ?? row.subject_kind);
+      return (
+        subjectKind === "cookie" &&
+        (signalKey === "privacy.cookie_runtime_disclosure_gap_detected" || findingId === "cookie_disclosure_gap")
+      );
+    })
+    .flatMap((row) => getObjectArray(row.unmatchedRuntimeItems ?? row.unmatched_runtime_items));
+  const unmatchedRows = [
+    ...getObjectArray(hybrid?.unmatchedRuntimeCookies ?? hybrid?.unmatched_runtime_cookies),
+    ...genericCookieGapUnmatchedRows
+  ]
     .map((row) => normalizeCookieWriteRow(row, hybrid))
-    .filter((row): row is RuntimeCookieEvidenceRow => Boolean(row));
+    .filter((row): row is RuntimeCookieEvidenceRow => Boolean(row))
+    .filter((row, index, allRows) => {
+      const key = `${row.cookieName}\u0000${row.domain ?? ""}`;
+      return allRows.findIndex((candidate) => `${candidate.cookieName}\u0000${candidate.domain ?? ""}` === key) === index;
+    });
   const unmatchedCookieNames = uniqueStrings([
     ...getStringArray(hybrid?.unmatchedCookieNames ?? hybrid?.unmatched_cookie_names),
     ...unmatchedRows.map((row) => row.cookieName)

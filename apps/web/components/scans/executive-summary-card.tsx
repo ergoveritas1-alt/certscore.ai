@@ -98,11 +98,9 @@ type RegulatoryLensFinding = {
 
 const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
   "guaranteed_outcome_claim_detected",
-  "earnings_claim_without_adjacent_disclosure",
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected",
   "financial_urgency_pressure_tactic_detected",
-  "pricing_or_fee_transparency_unclear",
   "leveraged_or_high_risk_product_promotion",
   "regulatory_registration_disclosure_absent",
   "unsubstantiated_testimonial_near_performance_claim"
@@ -112,16 +110,12 @@ function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
   switch (finding.id) {
     case "guaranteed_outcome_claim_detected":
       return "Guaranteed or certain-outcome claim surfaced.";
-    case "earnings_claim_without_adjacent_disclosure":
-      return "Earnings-style claim surfaced without nearby balancing disclosure.";
     case "simulated_performance_without_disclosure":
       return "Simulated or hypothetical performance language surfaced without nearby disclosure.";
     case "unqualified_superlative_claim_detected":
       return "Unqualified superiority or best-in-class claim surfaced.";
     case "financial_urgency_pressure_tactic_detected":
       return "Urgency language appears tied to a conversion step.";
-    case "pricing_or_fee_transparency_unclear":
-      return "Pricing or fee disclosure remains unclear near the offer path.";
     case "leveraged_or_high_risk_product_promotion":
       return "High-risk financial product promotion language surfaced.";
     case "regulatory_registration_disclosure_absent":
@@ -238,21 +232,10 @@ function buildMinimalRegulatoryLens(input: {
   } satisfies RegulatoryLens;
 }
 
-function buildMinimalFinancialClaimsLens() {
-  return buildMinimalRegulatoryLens({
-    acronym: "Financial & commercial claims",
-    detailTitle: "Claims, urgency, and pricing disclosures",
-    ratingLabel: "Audit-only",
-    score: null,
-    summary: "",
-    toneClass: "border-slate-200 bg-slate-50 text-slate-700"
-  });
-}
-
 function buildFinancialClaimsLens(input: {
   findings: CertScoreFinding[];
   forceScored?: boolean;
-}) {
+}): RegulatoryLens | null {
   const financialFindings = input.findings.map((finding) =>
     buildRegulatoryLensFindingFromCertFinding(finding, getFinancialClaimsFindingSummary(finding), {
       lens: "Financial & commercial claims"
@@ -260,7 +243,7 @@ function buildFinancialClaimsLens(input: {
   );
 
   if (financialFindings.length === 0) {
-    return buildMinimalFinancialClaimsLens();
+    return null;
   }
 
   const financialSeverityPenalty = input.findings.reduce((total, finding) => {
@@ -284,8 +267,7 @@ function buildFinancialClaimsLens(input: {
     findings: financialFindings,
     ratingLabel: financialTone.label,
     score: financialScore,
-    summary: input.findings.some((finding) => finding.id === "guaranteed_outcome_claim_detected") ||
-      input.findings.some((finding) => finding.id === "earnings_claim_without_adjacent_disclosure")
+    summary: input.findings.some((finding) => finding.id === "guaranteed_outcome_claim_detected")
       ? "High-confidence claims or earnings language surfaced without enough balancing disclosure."
       : "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
     toneClass: financialTone.toneClass
@@ -376,12 +358,14 @@ export function buildRegulatoryLenses(
     );
   const trackingFinding =
     findings.find((finding) => finding.id === "pre_consent_tracking_detected") ??
+    findings.find((finding) => finding.id === "reject_tracking_persists_after_reject") ??
     findings.find((finding) => finding.id === "third_party_tracking_pre_consent") ??
     findings.find((finding) => finding.id === "third_party_cookie_pre_consent") ??
     findings.find((finding) => finding.id === "analytics_cookie_pre_consent") ??
     findings.find((finding) => finding.id === "adtech_cookie_pre_consent") ??
     findings.find((finding) => /pre[- ]consent|before consent/i.test(`${finding.label} ${finding.shortSummary}`));
   const replayFinding = findings.find((finding) => finding.id === "session_recording_services_detected");
+  const rejectTrackingFinding = findings.find((finding) => finding.id === "reject_tracking_persists_after_reject");
   const sensitiveTrackingFinding =
     findings.find((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present") ??
     findings.find((finding) => finding.id === "session_replay_on_sensitive_input_surface");
@@ -394,6 +378,7 @@ export function buildRegulatoryLenses(
   const hasTrackingConcern =
     options?.unifiedContext?.hasTrackingConcern ??
     (findingIds.has("pre_consent_tracking_detected") ||
+      findingIds.has("reject_tracking_persists_after_reject") ||
       findingIds.has("third_party_tracking_pre_consent") ||
       findingIds.has("third_party_cookie_pre_consent") ||
       findingIds.has("analytics_cookie_pre_consent") ||
@@ -406,7 +391,8 @@ export function buildRegulatoryLenses(
     findingIds.has("consent_dark_patterns_detected") ||
     findingIds.has("asymmetric_consent_ui") ||
     findingIds.has("reject_option_missing_or_hidden") ||
-    findingIds.has("forced_consent_interaction");
+    findingIds.has("forced_consent_interaction") ||
+    findingIds.has("reject_tracking_persists_after_reject");
   const hasStrongDarkPatternConcern =
     findingIds.has("consent_dark_patterns_detected") || findingIds.has("asymmetric_consent_ui");
   const riskDriverKeys = new Set(options?.regulatoryRisk?.topRiskDrivers.map((driver) => driver.key) ?? []);
@@ -442,6 +428,12 @@ export function buildRegulatoryLenses(
           reason: "pre_consent_tracking"
         })
       : null,
+    rejectTrackingFinding && rejectTrackingFinding.id !== trackingFinding?.id
+      ? buildRegulatoryLensFindingFromCertFinding(rejectTrackingFinding, rejectTrackingFinding.shortSummary, {
+          lens: "GDPR / ePrivacy",
+          reason: "reject_tracking_failure"
+        })
+      : null,
     beforeConsentCookieCount > 0
       ? buildObservedCountLensFinding({
           count: beforeConsentCookieCount,
@@ -471,6 +463,12 @@ export function buildRegulatoryLenses(
       ? buildRegulatoryLensFindingFromCertFinding(trackingFinding, trackingFinding.shortSummary, {
           lens: "CCPA / CPRA",
           reason: "pre_consent_tracking"
+        })
+      : null,
+    rejectTrackingFinding && rejectTrackingFinding.id !== trackingFinding?.id
+      ? buildRegulatoryLensFindingFromCertFinding(rejectTrackingFinding, rejectTrackingFinding.shortSummary, {
+          lens: "CCPA / CPRA",
+          reason: "reject_tracking_failure"
         })
       : null,
     thirdPartyRequestCount > 0
@@ -507,6 +505,12 @@ export function buildRegulatoryLenses(
       ? buildRegulatoryLensFindingFromCertFinding(consentFinding, consentFinding.shortSummary, {
           lens: "FTC",
           reason: "consent_choice_architecture"
+        })
+      : null,
+    rejectTrackingFinding
+      ? buildRegulatoryLensFindingFromCertFinding(rejectTrackingFinding, rejectTrackingFinding.shortSummary, {
+          lens: "FTC",
+          reason: "reject_tracking_failure"
         })
       : null,
     replayFinding
@@ -669,10 +673,13 @@ export function buildRegulatoryLenses(
       })
     );
 
-    lenses.push(buildFinancialClaimsLens({
+    const financialClaimsLens = buildFinancialClaimsLens({
       findings: financialClaimFindings,
       forceScored: financialRegulatoryBenchmarkActive
-    }));
+    });
+    if (financialClaimsLens) {
+      lenses.push(financialClaimsLens);
+    }
 
     return lenses;
   }
@@ -805,10 +812,13 @@ export function buildRegulatoryLenses(
     toneClass: adaTone.toneClass
   });
 
-  lenses.push(buildFinancialClaimsLens({
+  const financialClaimsLens = buildFinancialClaimsLens({
     findings: financialClaimFindings,
     forceScored: financialRegulatoryBenchmarkActive
-  }));
+  });
+  if (financialClaimsLens) {
+    lenses.push(financialClaimsLens);
+  }
 
   return lenses;
 }
@@ -1087,12 +1097,7 @@ function RegulatoryLensFindingCard(input: {
           </span>
         </summary>
         <div className="relative mt-2 w-full rounded-lg bg-slate-950">
-          <CopyJsonButton
-            payload={evidencePayload}
-            label="Copy evidence JSON"
-            className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-200 shadow-sm transition-colors hover:border-slate-500 hover:text-white"
-          />
-          <pre className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words px-3 py-3 pr-12 text-[11px] leading-5 text-slate-100">
+          <pre className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words px-3 py-3 text-[11px] leading-5 text-slate-100">
             {evidencePayload}
           </pre>
         </div>
@@ -1346,6 +1351,7 @@ function getFindingCardTone(finding: CertScoreFinding, isFirst: boolean) {
 function getFindingTitleIconKey(findingId: string) {
   switch (findingId) {
     case "pre_consent_tracking_detected":
+    case "reject_tracking_persists_after_reject":
       return "pulse-tracking";
     case "third_party_tracking_pre_consent":
       return "arrow-transfer";
@@ -1658,6 +1664,8 @@ export function ExecutiveSummaryCard(input: {
     .slice(0, 6)
     .map((entity) => `${entity.label} · ${formatCategoryLabel(entity.category)} · ${entity.requestCount} req`);
   const fingerprintEvidence = input.fingerprintReasons.filter(Boolean);
+  const shouldShowFingerprintSnapshot =
+    fingerprintEvidence.length > 0 || input.fingerprintLabel !== "None detected";
   const vendorEvidence = [
     ...namedVendors,
     ...input.unresolvedVendorHosts.slice(0, Math.max(0, 8 - namedVendors.length))
@@ -1847,15 +1855,17 @@ export function ExecutiveSummaryCard(input: {
                     items={[...vendorEvidence, ...thirdPartyDomains]}
                   />
                 </div>
-                <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Fingerprinting</p>
-                  <p className="mt-2 text-sm text-slate-800">{input.fingerprintNarrative}</p>
-                  <DetailDisclosure
-                    summary={`${fingerprintEvidence.length} fingerprint indicators retained`}
-                    title="Fingerprint evidence"
-                    items={fingerprintEvidence}
-                  />
-                </div>
+                {shouldShowFingerprintSnapshot ? (
+                  <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Fingerprinting</p>
+                    <p className="mt-2 text-sm text-slate-800">{input.fingerprintNarrative}</p>
+                    <DetailDisclosure
+                      summary={`${fingerprintEvidence.length} fingerprint indicators retained`}
+                      title="Fingerprint evidence"
+                      items={fingerprintEvidence}
+                    />
+                  </div>
+                ) : null}
               </div>
               {categorySummary ? (
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">

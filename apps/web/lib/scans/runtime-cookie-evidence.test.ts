@@ -113,3 +113,41 @@ test("builds cookie disclosure gap evidence from runtime and policy inventory", 
   assert.equal(evidence.unmatched_cookie_count, 1);
   assert.equal(evidence.unmatched_third_party_cookie_count, 1);
 });
+
+test("hydrates unmatched cookies from generic runtime policy reconciliation evidence", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        {
+          cookieName: "_ga",
+          domain: ".example.com",
+          thirdParty: false
+        },
+        {
+          cookieName: "_fbp",
+          domain: ".example.com",
+          thirdParty: true
+        }
+      ],
+      runtimePolicyReconciliations: [
+        {
+          findingId: "cookie_disclosure_gap",
+          signalKey: "privacy.cookie_runtime_disclosure_gap_detected",
+          subjectKind: "cookie",
+          unmatchedRuntimeItems: [
+            {
+              cookieName: "_fbp",
+              domain: ".example.com",
+              thirdParty: true,
+              vendor: "Meta Pixel"
+            }
+          ]
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(inventory.unmatchedCookieNames, ["_fbp"]);
+  assert.equal(inventory.unmatchedRows[0]?.cookieName, "_fbp");
+  assert.equal(inventory.unmatchedRows[0]?.party, "third_party");
+});

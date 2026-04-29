@@ -77,6 +77,7 @@ type CorpusConfig = {
   dryRun: boolean;
   includeSuppressed: boolean;
   includeMixed: boolean;
+  includeAnonymousScans: boolean;
 };
 
 export type ScanContext = {
@@ -132,6 +133,7 @@ type PositiveExample = {
     conflict_bridge: string | null;
   };
   coverage_flags: string[];
+  coverage_limitation_evidence: Record<string, unknown> | null;
   known_limitations: string[];
   selection_reason: string;
 };
@@ -160,6 +162,7 @@ type ChallengeExample = {
   evidence_present: Record<string, unknown>;
   evidence_missing: string[];
   coverage_flags: string[];
+  coverage_limitation_evidence: Record<string, unknown> | null;
   known_limitations: string[];
   why_this_could_be_false_positive: string;
   why_it_might_still_be_valid: string;
@@ -212,6 +215,31 @@ function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.filter((v): v is string => typeof v === "string" && v.trim().length > 0))];
 }
 
+function formatConsentEvidenceStep(value: unknown, prefix: string): string | null {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return `${prefix}: ${value.trim()}`;
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const row = value as Record<string, unknown>;
+  const action = typeof row.action === "string" ? row.action.trim() : null;
+  const text = typeof row.text === "string" ? row.text.trim() : null;
+  const urlAfterClick = typeof row.urlAfterClick === "string" ? row.urlAfterClick.trim() : null;
+  const stepIndex = typeof row.stepIndex === "number" && Number.isFinite(row.stepIndex) ? row.stepIndex : null;
+
+  const parts = uniqueStrings([
+    stepIndex !== null ? `step ${stepIndex}` : null,
+    action,
+    text,
+    urlAfterClick ? `after ${urlAfterClick}` : null
+  ]);
+
+  return parts.length > 0 ? `${prefix}: ${parts.join(" | ")}` : null;
+}
+
 function getSnapshotString(snapshot: Record<string, unknown> | null, keys: string[]): string | null {
   if (!snapshot) return null;
   for (const key of keys) {
@@ -252,7 +280,7 @@ async function loadRecentScans(config: CorpusConfig): Promise<ScanRow[]> {
     from scans s
     where s.status = 'completed'
       and s.scan_type = 'full'
-      and s.organization_id is not null
+      ${config.includeAnonymousScans ? "" : "and s.organization_id is not null"}
       ${since ? "and s.completed_at >= $1" : ""}
     order by s.completed_at desc nulls last
     limit ${config.limitScans}
@@ -465,9 +493,71 @@ function getKnownLimitations(context: ScanContext): string[] {
   const lims: string[] = [];
   const flags = getCoverageFlags(context);
   if (flags.length > 0) lims.push(...flags.map((f) => `Scan coverage issue: ${f}`));
+  const coverageLimitationEvidence = getCoverageLimitationEvidence(context);
+  const retained = coverageLimitationEvidence?.runtimeSignalsRetained;
+  if (retained && typeof retained === "object") {
+    const thirdPartyRequestCount = getRecordNumber(retained as Record<string, unknown>, ["thirdPartyRequestCount"]);
+    const preconsentEvidenceUrlCount = getRecordNumber(retained as Record<string, unknown>, ["preconsentEvidenceUrlCount"]);
+    if ((thirdPartyRequestCount ?? 0) > 0 || (preconsentEvidenceUrlCount ?? 0) > 0) {
+      lims.push("Runtime signals were retained before or during limited page coverage.");
+    }
+  }
   if (!context.snapshot) lims.push("Missing snapshot");
   if (!context.runtimeArtifacts) lims.push("Missing runtime artifacts");
   return lims;
+}
+
+function getRecordNumber(record: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() !== "") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+function getCoverageLimitationEvidence(context: ScanContext): Record<string, unknown> | null {
+  const runtimeArtifacts = context.runtimeArtifacts;
+  const retained =
+    runtimeArtifacts?.coverage_limitation_evidence ??
+    runtimeArtifacts?.coverageLimitationEvidence;
+  if (retained && typeof retained === "object" && !Array.isArray(retained)) {
+    return retained as Record<string, unknown>;
+  }
+
+  const flags = getCoverageFlags(context);
+  if (flags.length === 0) return null;
+  const runtimeSignalsRetained = {
+    cookieCount: getRecordNumber(runtimeArtifacts ?? {}, ["initial_cookie_count", "initialCookieCount"]),
+    preconsentEvidenceUrlCount: Array.isArray(runtimeArtifacts?.consent_baseline_tracker_evidence_urls)
+      ? runtimeArtifacts.consent_baseline_tracker_evidence_urls.length
+      : Array.isArray(runtimeArtifacts?.consentBaselineTrackerEvidenceUrls)
+        ? runtimeArtifacts.consentBaselineTrackerEvidenceUrls.length
+        : 0,
+    requestDomainSamples: Array.isArray(runtimeArtifacts?.third_party_request_domains)
+      ? runtimeArtifacts.third_party_request_domains.slice(0, 10)
+      : Array.isArray(runtimeArtifacts?.thirdPartyRequestDomains)
+        ? runtimeArtifacts.thirdPartyRequestDomains.slice(0, 10)
+        : [],
+    scriptTagCount: getRecordNumber(runtimeArtifacts ?? {}, ["script_tag_count", "scriptTagCount"]) ?? 0,
+    thirdPartyRequestCount: getRecordNumber(runtimeArtifacts ?? {}, ["third_party_request_count", "thirdPartyRequestCount"]) ?? 0,
+    trackerVendorSamples: Array.isArray(runtimeArtifacts?.consent_baseline_tracker_vendor_names)
+      ? runtimeArtifacts.consent_baseline_tracker_vendor_names.slice(0, 10)
+      : Array.isArray(runtimeArtifacts?.consentBaselineTrackerVendorNames)
+        ? runtimeArtifacts.consentBaselineTrackerVendorNames.slice(0, 10)
+        : []
+  };
+  return {
+    coverageFlags: flags,
+    coverageLevel: context.snapshot ? getSnapshotString(context.snapshot, ["coverage_level", "coverageLevel"]) : null,
+    explanation: "Scan coverage limitations may have prevented full page-text evidence capture.",
+    finalUrl: context.finalUrl,
+    homepageHttpStatus: context.snapshot ? getSnapshotNumber(context.snapshot, ["homepage_http_status", "homepageHttpStatus"]) : null,
+    runtimeSignalsRetained
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -477,6 +567,9 @@ function getKnownLimitations(context: ScanContext): string[] {
 export function buildPositiveExample(enriched: EnrichedFinding): PositiveExample {
   const { scanContext, packet, executiveFinding } = enriched;
   const s = scanContext.snapshot;
+  const runtimeArtifacts = scanContext.runtimeArtifacts;
+  const packetDetails =
+    packet.details && typeof packet.details === "object" ? (packet.details as Record<string, unknown>) : null;
 
   const conflictBridge =
     packet.details?.family === "contradiction"
@@ -531,15 +624,38 @@ export function buildPositiveExample(enriched: EnrichedFinding): PositiveExample
     ...(entities.third_party_domains ?? [])
   ]);
 
+  const detailRequestUrls =
+    packet.details?.family === "consent_tracking" && Array.isArray(packetDetails?.requestUrls)
+      ? (packetDetails.requestUrls as string[])
+      : [];
   const requestSamples = uniqueStrings([
     ...(entities.request_urls ?? []),
-    ...(entities.tracking_urls ?? [])
+    ...(entities.tracking_urls ?? []),
+    ...(entities.runtimeRequestUrls ?? []),
+    ...detailRequestUrls
   ]).slice(0, 5);
 
   const cookieSamples = uniqueStrings([
     ...(entities.cookie_names ?? []),
     ...(entities.initial_cookies ?? [])
   ]).slice(0, 5);
+
+  if (packet.details?.family === "consent_tracking") {
+    const detailVendors = Array.isArray(packetDetails?.vendors) ? (packetDetails.vendors as string[]) : [];
+    const optOutLog = Array.isArray(runtimeArtifacts?.consent_opt_out_evidence_log)
+      ? runtimeArtifacts.consent_opt_out_evidence_log
+      : Array.isArray(runtimeArtifacts?.consentOptOutEvidenceLog)
+        ? runtimeArtifacts.consentOptOutEvidenceLog
+        : [];
+    runtimeAnchors.push(
+      ...requestSamples.map((url) => `Runtime request: ${url}`),
+      ...(detailVendors.length > 0 ? [`Runtime vendors: ${detailVendors.slice(0, 5).join(", ")}`] : []),
+      ...optOutLog.slice(0, 3).map((entry) => formatConsentEvidenceStep(entry, "Opt-out path"))
+    );
+  }
+
+  const evidenceSnippets = (packet.evidence?.snippets ?? []).map((snippet) => String(snippet).slice(0, 500));
+  const exportedEvidenceSnippets = evidenceSnippets.length > 0 ? evidenceSnippets : runtimeAnchors.map((entry) => entry.slice(0, 500));
 
   const regulatoryLanes: string[] = [];
   const r = scanContext.regulatoryRisk;
@@ -570,7 +686,7 @@ export function buildPositiveExample(enriched: EnrichedFinding): PositiveExample
       .map((ref) => (ref as { key: string }).key) ?? [],
     evidence: {
       counts: packet.evidence?.counts ?? {},
-      evidence_snippets: (packet.evidence?.snippets ?? []).map((s) => String(s).slice(0, 500)),
+      evidence_snippets: exportedEvidenceSnippets,
       vendors,
       request_domains: requestDomains,
       request_samples: requestSamples,
@@ -582,6 +698,7 @@ export function buildPositiveExample(enriched: EnrichedFinding): PositiveExample
       conflict_bridge: typeof conflictBridge === "string" ? conflictBridge : null
     },
     coverage_flags: getCoverageFlags(scanContext),
+    coverage_limitation_evidence: getCoverageLimitationEvidence(scanContext),
     known_limitations: getKnownLimitations(scanContext),
     selection_reason: buildPositiveSelectionReason(enriched)
   };
@@ -676,6 +793,7 @@ export function buildChallengeExample(enriched: EnrichedFinding): ChallengeExamp
     evidence_present: evidencePresent,
     evidence_missing: evidenceMissing,
     coverage_flags: getCoverageFlags(scanContext),
+    coverage_limitation_evidence: getCoverageLimitationEvidence(scanContext),
     known_limitations: getKnownLimitations(scanContext),
     why_this_could_be_false_positive: whyFp,
     why_it_might_still_be_valid: whyValid,
@@ -1159,7 +1277,8 @@ async function main() {
     outDir: getArgValue("--out-dir") ?? `artifacts/eval/finding-corpus/${new Date().toISOString().slice(0, 10)}`,
     dryRun: hasFlag("--dry-run"),
     includeSuppressed: !hasFlag("--no-include-suppressed"),
-    includeMixed: !hasFlag("--no-include-mixed")
+    includeMixed: !hasFlag("--no-include-mixed"),
+    includeAnonymousScans: hasFlag("--include-anonymous-scans")
   };
 
   console.info("[eval] Corpus builder starting...");

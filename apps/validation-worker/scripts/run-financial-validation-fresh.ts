@@ -44,16 +44,14 @@ const FINANCIAL_TARGETS: FinancialFreshTarget[] = [
     hostname: "backtestr.xyz",
     label: "backtestr",
     expectedFindings: [
-      { ruleKey: "financial_review.simulated_performance_without_disclosure", severity: "high" },
-      { ruleKey: "financial_review.pricing_or_fee_transparency_unclear", severity: "medium" }
+      { ruleKey: "financial_review.simulated_performance_without_disclosure", severity: "high" }
     ]
   },
   {
     hostname: "fxculturetrading.com",
     label: "fxculturetrading",
     expectedFindings: [
-      { ruleKey: "financial_review.earnings_claim_without_adjacent_disclosure", severity: "high" },
-      { ruleKey: "financial_review.pricing_or_fee_transparency_unclear", severity: "medium" }
+      { ruleKey: "financial_review.unqualified_superlative_claim_detected", severity: "medium" }
     ]
   }
 ];

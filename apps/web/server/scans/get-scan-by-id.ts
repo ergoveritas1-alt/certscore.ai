@@ -58,8 +58,10 @@ import {
 import { repairFindingFamilyPacketEvents } from "./family-packet-event-repair";
 import {
   DOMAIN_BENCHMARK_EVENT_TYPE,
+  buildDomainBenchmarkEstimateFromMacroEnrichment,
   generateDomainBenchmarkEstimate,
   normalizeDomainBenchmarkEstimate,
+  shouldPreferMacroBenchmarkEstimate,
   type DomainBenchmarkEstimate
 } from "./domain-benchmark-estimate";
 import { getFullScanUrlscanSupplement } from "./urlscan-supplement";
@@ -222,11 +224,24 @@ async function resolveDomainBenchmarkEstimate(input: {
   currentEvents: ScanEventRecord[];
   domainHostname: string | null;
   domainId: string | null;
+  macroEnrichment?: Record<string, unknown> | null;
   organizationId: string | null;
   scanId: string;
 }): Promise<DomainBenchmarkEstimate | null> {
+  const macroEstimate = buildDomainBenchmarkEstimateFromMacroEnrichment(input.macroEnrichment);
   const currentEvent = [...input.currentEvents].reverse().find((event) => event.eventType === DOMAIN_BENCHMARK_EVENT_TYPE);
   const currentEstimate = normalizeDomainBenchmarkEstimate(currentEvent?.metadataJson);
+  if (shouldPreferMacroBenchmarkEstimate({ currentEstimate, macroEstimate })) {
+    await insertScanEventRecord({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      eventType: DOMAIN_BENCHMARK_EVENT_TYPE,
+      message: "Estimated domain benchmark for executive summary from scan macro enrichment.",
+      metadataJson: macroEstimate
+    });
+    return macroEstimate;
+  }
   if (currentEstimate) {
     return currentEstimate;
   }
@@ -238,9 +253,32 @@ async function resolveDomainBenchmarkEstimate(input: {
       scanId: input.scanId
     });
     const cachedEstimate = normalizeDomainBenchmarkEstimate(recentDomainEvent?.metadata_json);
+    if (shouldPreferMacroBenchmarkEstimate({ currentEstimate: cachedEstimate, macroEstimate })) {
+      await insertScanEventRecord({
+        scanId: input.scanId,
+        domainId: input.domainId,
+        organizationId: input.organizationId,
+        eventType: DOMAIN_BENCHMARK_EVENT_TYPE,
+        message: "Estimated domain benchmark for executive summary from scan macro enrichment.",
+        metadataJson: macroEstimate
+      });
+      return macroEstimate;
+    }
     if (cachedEstimate) {
       return cachedEstimate;
     }
+  }
+
+  if (macroEstimate) {
+    await insertScanEventRecord({
+      scanId: input.scanId,
+      domainId: input.domainId,
+      organizationId: input.organizationId,
+      eventType: DOMAIN_BENCHMARK_EVENT_TYPE,
+      message: "Estimated domain benchmark for executive summary from scan macro enrichment.",
+      metadataJson: macroEstimate
+    });
+    return macroEstimate;
   }
 
   if (!input.domainHostname) {
@@ -1111,6 +1149,7 @@ async function loadScanDetailRecord(input: {
     currentEvents: normalizedEvents,
     domainHostname,
     domainId: scanRow.domain_id,
+    macroEnrichment: macroEnrichment as Record<string, unknown> | null,
     organizationId: scanOrganizationId,
     scanId: input.scanId
   });

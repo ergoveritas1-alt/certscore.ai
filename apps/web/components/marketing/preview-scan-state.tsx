@@ -67,6 +67,7 @@ export function PreviewScanState({ initialScan }: PreviewScanStateProps) {
           createdAt={scan.createdAt}
           events={scan.events}
           executionSummary={scan.executionSummary}
+          scanId={scan.scanId}
           status={scan.status}
         />
       </div>

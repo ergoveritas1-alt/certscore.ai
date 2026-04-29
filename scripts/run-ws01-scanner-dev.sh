@@ -42,4 +42,5 @@ export S3_BUCKET="${S3_BUCKET:-scan-artifacts}"
 echo "[run-ws01-scanner-dev] starting WS01 scanner with database host from DATABASE_URL"
 
 cd "$WS01_SCANNER_DIR"
-exec pnpm dev
+pnpm --dir "$WS01_ROOT" --filter @signal-scanner/scan-core build
+exec node --env-file="${SCANNER_ENV_FILE:-.env.local.ws01}" --enable-source-maps --import tsx ./src/index.ts

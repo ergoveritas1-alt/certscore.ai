@@ -5,7 +5,6 @@ import {
   SCAN_EXECUTION_STAGES,
   type ScannerExecutionSummary
 } from "@website-signal-risk-scanner/shared";
-import { Badge } from "@website-signal-risk-scanner/ui";
 import React, { useEffect, useMemo, useState } from "react";
 import { formatMetadataPreview } from "../../lib/scans/activity-feed";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
@@ -17,6 +16,7 @@ type FullScanProgressCardProps = {
   createdAt: string;
   events: ScanEventRow[];
   executionSummary: ScannerExecutionSummary | null;
+  scanId?: string | null;
   status: string;
 };
 
@@ -56,6 +56,13 @@ type EarlyResultItem = {
   value: string;
 };
 
+type CompactProgressSummary = {
+  currentLine: string;
+  latestLine: string;
+  activityLine: string;
+  nextLine: string | null;
+};
+
 const STAGE_LABELS: Record<string, string> = {
   queue_wait: "Queue wait",
   setup_load: "Setup load",
@@ -93,6 +100,33 @@ const STAGE_EVENT_MATCHERS: Record<string, (eventType: string) => boolean> = {
     eventType === SCAN_EVENT_TYPES.fullCompleted ||
     eventType === SCAN_EVENT_TYPES.fullFailed
 };
+
+const progressDisplayCache = new Map<string, number>();
+const PROGRESS_STORAGE_PREFIX = "certscore:scan-progress:";
+
+function readStoredProgressValue(cacheKey: string) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storedValue = window.sessionStorage.getItem(`${PROGRESS_STORAGE_PREFIX}${cacheKey}`);
+  if (!storedValue) {
+    return null;
+  }
+
+  const parsedValue = Number.parseFloat(storedValue);
+  return Number.isFinite(parsedValue) ? Math.min(Math.max(parsedValue, 0), 100) : null;
+}
+
+function writeStoredProgressValue(cacheKey: string, value: number) {
+  progressDisplayCache.set(cacheKey, value);
+
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.setItem(`${PROGRESS_STORAGE_PREFIX}${cacheKey}`, String(Math.min(Math.max(value, 0), 100)));
+}
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -164,48 +198,66 @@ function getStatusDotClassName(state: DashboardRow["state"]) {
   }
 }
 
-function getBadgeTone(state: DashboardRow["state"]): "neutral" | "success" | "warning" {
-  switch (state) {
-    case "success":
-      return "success";
-    case "warning":
-      return "warning";
-    default:
-      return "neutral";
-  }
-}
-
 function getProgressBarClassName(input: {
   executionSummary: ScannerExecutionSummary | null;
+  progressValue: number;
   status: string;
 }) {
   if (input.status === "failed") {
-    return "bg-rose-500";
+    return "bg-gradient-to-r from-rose-500 to-rose-400";
   }
 
   if (input.status === "completed") {
-    return "bg-emerald-500";
+    return "bg-gradient-to-r from-emerald-500 to-teal-400";
   }
 
   const completedStages = new Set(input.executionSummary?.stages.map((stage) => stage.stage) ?? []);
 
   if (completedStages.has("persistence_diff_finalization")) {
-    return "bg-emerald-500";
+    return "bg-gradient-to-r from-teal-500 to-emerald-400";
   }
 
   if (completedStages.has("signal_derivation")) {
-    return "bg-indigo-500";
+    return "bg-gradient-to-r from-blue-500 to-indigo-500";
   }
 
   if (completedStages.has("runtime_snapshot_capture")) {
-    return "bg-sky-500";
+    return "bg-gradient-to-r from-cyan-500 to-blue-500";
   }
 
   if (completedStages.has("crawl_discovery")) {
-    return "bg-cyan-500";
+    return "bg-gradient-to-r from-sky-500 to-cyan-400";
   }
 
-  return "bg-amber-500";
+  if (input.progressValue >= 82) {
+    return "bg-gradient-to-r from-blue-500 to-indigo-500";
+  }
+
+  if (input.progressValue >= 62) {
+    return "bg-gradient-to-r from-cyan-500 to-blue-500";
+  }
+
+  if (input.progressValue >= 44) {
+    return "bg-gradient-to-r from-sky-500 to-cyan-400";
+  }
+
+  if (input.progressValue >= 28) {
+    return "bg-gradient-to-r from-amber-400 to-sky-500";
+  }
+
+  return "bg-gradient-to-r from-amber-500 to-amber-400";
+}
+
+function getProgressGlowClassName(status: string) {
+  if (status === "failed") {
+    return "shadow-[0_0_18px_rgba(244,63,94,0.32)]";
+  }
+
+  if (status === "completed") {
+    return "shadow-[0_0_18px_rgba(16,185,129,0.28)]";
+  }
+
+  return "shadow-[0_0_18px_rgba(14,165,233,0.28)]";
 }
 
 function getLatestEventForStage(events: ScanEventRow[], stageKey: string) {
@@ -257,8 +309,6 @@ function buildLatestActivityLine(input: {
   executionSummary: ScannerExecutionSummary | null;
   status: string;
 }) {
-  const completedStageCount = input.executionSummary?.stages.length ?? 0;
-  const totalStageCount = SCAN_EXECUTION_STAGES.length + 1;
   const latestEvent =
     input.status === "queued" ? getLatestEventForStage(input.events, "queue_wait") : input.events.at(-1);
   const fullQueued = getLatestEventForStage(input.events, "queue_wait");
@@ -274,34 +324,39 @@ function buildLatestActivityLine(input: {
 
   if (input.events.length === 0) {
     return input.status === "queued"
-      ? `Queued for worker pickup · 0/${totalStageCount} milestones complete.`
-      : `Waiting for first worker update · ${completedStageCount}/${totalStageCount} milestones complete.`;
+      ? "Queued for worker pickup."
+      : "Waiting for first worker update.";
   }
 
   if (!latestEvent) {
     return input.status === "queued"
-      ? `Queued for worker pickup · 0/${totalStageCount} milestones complete.`
-      : `Waiting for first worker update · ${completedStageCount}/${totalStageCount} milestones complete.`;
+      ? "Queued for worker pickup."
+      : "Waiting for first worker update.";
   }
 
+  const visibleEventCount =
+    input.status === "queued"
+      ? input.events.filter((event) => STAGE_EVENT_MATCHERS.queue_wait?.(event.eventType) ?? false).length
+      : input.events.length;
   const metadata = formatMetadataPreview(latestEvent.metadataJson).join(" · ");
   const prefix =
     input.status === "queued"
-      ? `Queued · ${completedStageCount}/${totalStageCount} milestones complete`
+      ? `Queued · ${visibleEventCount} update${visibleEventCount === 1 ? "" : "s"}`
       : input.status === "completed"
         ? "Scan complete"
         : input.status === "failed"
           ? "Scan failed"
-          : `Live scan · ${completedStageCount}/${totalStageCount} milestones complete`;
+          : `Live scan · ${visibleEventCount} update${visibleEventCount === 1 ? "" : "s"}`;
   return [prefix, latestEvent.message, queueWaitLabel, metadata].filter(Boolean).join(" · ");
 }
 
 function getProgressValue(input: {
   buildPhaseSummaries: BuildPhaseSummary[];
   executionSummary: ScannerExecutionSummary | null;
+  events: ScanEventRow[];
   status: string;
 }) {
-  const milestoneStops = [8, 18, 30, 48, 72, 88, 97];
+  const milestoneStops = [6, 28, 44, 62, 82, 94, 98];
 
   if (input.status === "completed") {
     return 100;
@@ -318,28 +373,49 @@ function getProgressValue(input: {
 
   const completedCount = input.executionSummary?.stages.length ?? 0;
   const pendingStageIndex = getPendingStageIndex(input.executionSummary);
-  const base = milestoneStops[Math.min(completedCount, milestoneStops.length - 1)] ?? 12;
+  const inferredStageIndex = getInferredActiveStageIndex(input.events);
+  const effectivePendingStageIndex = Math.max(pendingStageIndex, inferredStageIndex);
+  const baseIndex = Math.min(Math.max(completedCount, inferredStageIndex), milestoneStops.length - 1);
+  const base = milestoneStops[baseIndex] ?? 12;
 
-  if (pendingStageIndex <= 0) {
+  if (effectivePendingStageIndex < 0) {
     return base;
   }
 
-  const activeStageKey = SCAN_EXECUTION_STAGES[pendingStageIndex] ?? null;
-  const nextStop = milestoneStops[Math.min(pendingStageIndex + 1, milestoneStops.length - 1)] ?? 96;
+  const activeStageKey = SCAN_EXECUTION_STAGES[effectivePendingStageIndex] ?? null;
+  const nextStop = milestoneStops[Math.min(effectivePendingStageIndex + 1, milestoneStops.length - 1)] ?? 96;
 
   if (activeStageKey === "runtime_snapshot_capture") {
     const runtimeCompleted = input.buildPhaseSummaries.filter((phase) => phase.completedAt).length;
     const runtimeTotal = Math.max(input.buildPhaseSummaries.length, 4);
-    const ratio = Math.min(1, runtimeCompleted / runtimeTotal);
+    const stageEventCount = activeStageKey ? input.events.filter((event) => STAGE_EVENT_MATCHERS[activeStageKey]?.(event.eventType)).length : 0;
+    const eventRatio = Math.min(0.35, stageEventCount / 10);
+    const ratio = Math.min(0.92, runtimeCompleted / runtimeTotal + eventRatio);
     return Math.round(base + (nextStop - base) * ratio);
   }
 
-  return Math.round(base + (nextStop - base) * 0.35);
+  const stageEventCount = activeStageKey ? input.events.filter((event) => STAGE_EVENT_MATCHERS[activeStageKey]?.(event.eventType)).length : 0;
+  const eventRatio = Math.min(0.65, Math.max(0.25, stageEventCount / 6));
+  return Math.round(base + (nextStop - base) * eventRatio);
 }
 
 function getPendingStageIndex(executionSummary: ScannerExecutionSummary | null) {
   const completedStages = new Set(executionSummary?.stages.map((stage) => stage.stage) ?? []);
   return SCAN_EXECUTION_STAGES.findIndex((stage) => !completedStages.has(stage));
+}
+
+function getInferredActiveStageIndex(events: ScanEventRow[]) {
+  let inferredIndex = -1;
+
+  for (const event of events) {
+    for (const [index, stageKey] of SCAN_EXECUTION_STAGES.entries()) {
+      if (STAGE_EVENT_MATCHERS[stageKey]?.(event.eventType)) {
+        inferredIndex = Math.max(inferredIndex, index);
+      }
+    }
+  }
+
+  return inferredIndex;
 }
 
 function buildRuntimeSublines(phases: BuildPhaseSummary[]) {
@@ -500,6 +576,56 @@ function buildEarlyResultItems(input: {
   return items.slice(0, 12);
 }
 
+function buildCompactProgressSummary(input: {
+  activeRow: DashboardRow | null;
+  buildPhaseSummaries: BuildPhaseSummary[];
+  dashboardRows: DashboardRow[];
+  events: ScanEventRow[];
+  latestActivityLine: string;
+  nowMs: number;
+  progressValue: number;
+}) {
+  const activeDuration = input.activeRow
+    ? formatDurationMs(
+        input.activeRow.durationMs,
+        input.activeRow.state === "active" ? input.nowMs : undefined,
+        input.activeRow.startedAt
+      )
+    : null;
+  const currentLine = input.activeRow
+    ? `Current: ${input.activeRow.label} · ${input.activeRow.statusLabel}${activeDuration ? ` · ${activeDuration}` : ""} · ${input.progressValue}%`
+    : `Current: Waiting for next worker update · ${input.progressValue}%`;
+  const latestLine = `Latest: ${input.latestActivityLine}`;
+  const runtimePhaseCount = input.buildPhaseSummaries.length;
+  const runtimePhaseCompletedCount = input.buildPhaseSummaries.filter((phase) => phase.completedAt).length;
+  const activeRowKey = input.activeRow?.key ?? null;
+  const activeEventCount = input.activeRow
+    ? input.events.filter((event) => (activeRowKey ? STAGE_EVENT_MATCHERS[activeRowKey]?.(event.eventType) : false)).length
+    : input.events.length;
+  const activityLine = [
+    `Activity: ${input.events.length} worker update${input.events.length === 1 ? "" : "s"}`,
+    runtimePhaseCount > 0
+      ? `${runtimePhaseCompletedCount}/${runtimePhaseCount} runtime phase${runtimePhaseCount === 1 ? "" : "s"} closed`
+      : null,
+    input.activeRow && activeEventCount > 0
+      ? `${activeEventCount} current-stage signal${activeEventCount === 1 ? "" : "s"}`
+      : null
+  ].filter(Boolean).join(" · ");
+  const activeRowIndex = input.activeRow ? input.dashboardRows.findIndex((row) => row.key === input.activeRow?.key) : -1;
+  const nextRow =
+    input.dashboardRows.find((row, index) => row.state === "pending" && index > activeRowIndex) ??
+    input.dashboardRows.find((row) => row.state === "pending") ??
+    null;
+  const nextLine = nextRow ? `Next: ${nextRow.label}` : null;
+
+  return {
+    activityLine,
+    currentLine,
+    latestLine,
+    nextLine
+  } satisfies CompactProgressSummary;
+}
+
 function getQueueRow(input: {
   createdAt: string;
   events: ScanEventRow[];
@@ -548,6 +674,7 @@ function getStageRows(input: {
   status: string;
 }) {
   const pendingStageIndex = getPendingStageIndex(input.executionSummary);
+  const effectivePendingStageIndex = Math.max(pendingStageIndex, getInferredActiveStageIndex(input.events));
   const completedStageMap = new Map(input.executionSummary?.stages.map((stage) => [stage.stage, stage]) ?? []);
 
   return SCAN_EXECUTION_STAGES.map((stageKey, index) => {
@@ -556,9 +683,9 @@ function getStageRows(input: {
     const isActive =
       completedStage === null &&
       input.status === "running" &&
-      pendingStageIndex !== -1 &&
-      pendingStageIndex === index;
-    const isFailed = completedStage?.outcome === "failed" || (input.status === "failed" && pendingStageIndex === index);
+      effectivePendingStageIndex !== -1 &&
+      effectivePendingStageIndex === index;
+    const isFailed = completedStage?.outcome === "failed" || (input.status === "failed" && effectivePendingStageIndex === index);
     const isWarning = completedStage?.outcome === "degraded";
     const state: DashboardRow["state"] = completedStage
       ? completedStage.outcome === "success"
@@ -632,11 +759,66 @@ function getCardTitle(status: string) {
   return "Full scan in progress";
 }
 
+function getProgressDisplayCacheKey(input: {
+  createdAt: string;
+  scanId?: string | null;
+}) {
+  if (input.scanId) {
+    return input.scanId;
+  }
+
+  return input.createdAt;
+}
+
+function getInitialDisplayedProgressValue(input: {
+  cacheKey: string;
+  progressValue: number;
+  status: string;
+}) {
+  const memoryValue = progressDisplayCache.get(input.cacheKey);
+  const storageValue = readStoredProgressValue(input.cacheKey);
+  const cachedValue =
+    typeof memoryValue === "number" || typeof storageValue === "number"
+      ? Math.max(memoryValue ?? 0, storageValue ?? 0)
+      : null;
+  if (typeof cachedValue === "number" && Number.isFinite(cachedValue)) {
+    return Math.min(Math.max(cachedValue, 0), 100);
+  }
+
+  if (input.status === "queued") {
+    return Math.min(input.progressValue, 1);
+  }
+
+  if (input.status === "running") {
+    return Math.min(input.progressValue, 1);
+  }
+
+  return input.progressValue;
+}
+
+export function getNextDisplayedProgressValue(input: {
+  currentValue: number;
+  targetValue: number;
+}) {
+  if (input.targetValue <= input.currentValue) {
+    return input.currentValue;
+  }
+
+  const delta = input.targetValue - input.currentValue;
+  if (Math.abs(delta) <= 1) {
+    return input.targetValue;
+  }
+
+  const step = Math.abs(delta) > 32 ? 2 : 1;
+  return input.currentValue + step;
+}
+
 export function FullScanProgressCard({
   buildPhaseSummaries,
   createdAt,
   events,
   executionSummary,
+  scanId,
   status
 }: FullScanProgressCardProps) {
   const initialNowMs = Date.parse(events.at(-1)?.createdAt ?? createdAt);
@@ -679,17 +861,67 @@ export function FullScanProgressCard({
       getProgressValue({
         buildPhaseSummaries,
         executionSummary,
+        events,
         status
       }),
-    [buildPhaseSummaries, executionSummary, status]
+    [buildPhaseSummaries, events, executionSummary, status]
   );
+  const progressDisplayCacheKey = useMemo(
+    () =>
+      getProgressDisplayCacheKey({
+        createdAt,
+        scanId
+      }),
+    [createdAt, scanId]
+  );
+  const [displayedProgressValue, setDisplayedProgressValue] = useState(() =>
+    getInitialDisplayedProgressValue({
+      cacheKey: progressDisplayCacheKey,
+      progressValue,
+      status
+    })
+  );
+
+  useEffect(() => {
+    if (status === "completed" || status === "failed") {
+      setDisplayedProgressValue((currentValue) => {
+        const nextValue = status === "completed" ? 100 : Math.max(currentValue, progressValue);
+        writeStoredProgressValue(progressDisplayCacheKey, nextValue);
+        return nextValue;
+      });
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setDisplayedProgressValue((currentValue) => {
+        const cachedValue = progressDisplayCache.get(progressDisplayCacheKey);
+        const storedValue = readStoredProgressValue(progressDisplayCacheKey);
+        const monotonicCurrent =
+          typeof cachedValue === "number" || typeof storedValue === "number"
+            ? Math.max(currentValue, cachedValue ?? 0, storedValue ?? 0)
+            : currentValue;
+        const nextValue = getNextDisplayedProgressValue({
+          currentValue: monotonicCurrent,
+          targetValue: progressValue
+        });
+        writeStoredProgressValue(progressDisplayCacheKey, nextValue);
+        return nextValue;
+      });
+    }, 300);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [progressDisplayCacheKey, progressValue, status]);
+
   const progressBarClassName = useMemo(
     () =>
       getProgressBarClassName({
         executionSummary,
+        progressValue: displayedProgressValue,
         status
       }),
-    [executionSummary, status]
+    [displayedProgressValue, executionSummary, status]
   );
   const dashboardRows = useMemo(
     () => [
@@ -709,11 +941,19 @@ export function FullScanProgressCard({
     [buildPhaseSummaries, createdAt, events, executionSummary, status]
   );
   const activeRow = dashboardRows.find((row) => row.state === "active") ?? null;
-  const completedRows = dashboardRows.filter((row) => row.state === "success" || row.state === "warning");
-  const recentRows = [...dashboardRows]
-    .filter((row) => row.latestEvent || row.state === "active" || row.state === "failed")
-    .slice(-4)
-    .reverse();
+  const compactSummary = useMemo(
+    () =>
+      buildCompactProgressSummary({
+        activeRow,
+        buildPhaseSummaries,
+        dashboardRows,
+        events,
+        latestActivityLine,
+        nowMs,
+        progressValue: displayedProgressValue
+      }),
+    [activeRow, buildPhaseSummaries, dashboardRows, displayedProgressValue, events, latestActivityLine, nowMs]
+  );
 
   return (
     <CollapsibleSectionCard
@@ -725,21 +965,39 @@ export function FullScanProgressCard({
       }
       defaultOpen
       className="min-w-0"
-      contentClassName="min-w-0 space-y-4"
+      contentClassName="min-w-0 space-y-3"
     >
-      <div className="h-5 overflow-hidden rounded-full bg-slate-100">
+      <div className="relative h-7 overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200">
         <div
-          className={`h-full rounded-full transition-[width,background-color] duration-500 ${progressBarClassName}`}
-          style={{ width: `${progressValue}%` }}
+          className={`h-full rounded-full transition-[width,background-color,box-shadow] duration-700 ${progressBarClassName} ${getProgressGlowClassName(status)}`}
+          style={{ width: `${displayedProgressValue}%` }}
         />
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-between px-1.5">
+          {dashboardRows.map((row) => (
+            <span
+              key={`marker-${row.key}`}
+              className={`h-3 w-3 rounded-full border-2 border-white ${getStatusDotClassName(row.state)} shadow-sm`}
+              title={`${row.label}: ${row.statusLabel}`}
+            />
+          ))}
+        </div>
       </div>
 
-      <div className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-        <div className="min-w-0 max-w-full overflow-hidden rounded-xl bg-white/60 px-3 py-2 font-mono text-[13px] text-slate-600">
+      <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+        <div className="min-w-0 rounded-lg bg-white/70 px-2.5 py-2 font-mono text-[12px] text-slate-600">
           <LiveActivityLine
             line={latestActivityLine}
             status={status === "queued" || status === "running" || status === "completed" || status === "failed" ? status : "running"}
           />
+        </div>
+        <div className="mt-2 grid gap-1 text-xs text-slate-600 lg:grid-cols-2">
+          <p className="truncate">
+            {compactSummary.currentLine}
+            {compactSummary.nextLine ? ` · ${compactSummary.nextLine}` : ""}
+          </p>
+          <p className="truncate">
+            {compactSummary.latestLine} · {compactSummary.activityLine}
+          </p>
         </div>
       </div>
 
@@ -760,69 +1018,6 @@ export function FullScanProgressCard({
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <span className={`inline-flex h-2.5 w-2.5 rounded-full ${getStatusDotClassName(activeRow?.state ?? "pending")}`} />
-            <p className="text-sm font-semibold text-slate-950">
-              {activeRow ? `Current milestone: ${activeRow.label}` : "Current milestone"}
-            </p>
-          </div>
-          <div className="space-y-2.5">
-            <p className="text-sm text-slate-700">{activeRow?.message ?? "Waiting for the next milestone update."}</p>
-            <p className="text-xs text-slate-500">
-              {activeRow
-                ? `${activeRow.statusLabel} · ${formatDurationMs(
-                    activeRow.durationMs,
-                    activeRow.state === "active" ? nowMs : undefined,
-                    activeRow.startedAt
-                  )}`
-                : `${completedRows.length}/${dashboardRows.length} milestones completed`}
-            </p>
-            {activeRow?.latestEvent ? (
-              <p className="font-mono text-[12px] text-slate-500">evt={activeRow.latestEvent.eventType}</p>
-            ) : null}
-            {(activeRow?.sublines ?? []).slice(0, 4).map((line) => (
-              <p key={`active-${line}`} className="text-xs text-slate-500">
-                {line}
-              </p>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-slate-950">Recent milestone updates</p>
-            <Badge tone="neutral">{completedRows.length}/{dashboardRows.length} complete</Badge>
-          </div>
-          <div className="space-y-3">
-            {recentRows.map((row) => (
-              <div key={row.key} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-flex h-2.5 w-2.5 rounded-full ${getStatusDotClassName(row.state)}`} />
-                      <p className="truncate text-sm font-medium text-slate-900">{row.label}</p>
-                    </div>
-                    <p className="mt-1 text-sm text-slate-700">{row.message}</p>
-                  </div>
-                  <Badge tone={getBadgeTone(row.state)}>{row.statusLabel}</Badge>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-                  <span>{formatDurationMs(row.durationMs, row.state === "active" ? nowMs : undefined, row.startedAt)}</span>
-                  {row.startedAt ? <span>started {formatDateTime(row.startedAt)}</span> : null}
-                  {row.completedAt && row.state !== "active" ? <span>ended {formatDateTime(row.completedAt)}</span> : null}
-                </div>
-                {row.latestEvent ? (
-                  <p className="mt-2 font-mono text-[12px] text-slate-500">evt={row.latestEvent.eventType}</p>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <p className="text-xs text-slate-500">Progress updates automatically while the scan is queued or running.</p>
     </CollapsibleSectionCard>
   );
 }

@@ -57,6 +57,9 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
   if (ranked.some((finding) => finding.id === "session_recording_services_detected")) {
     forcedIds.add("session_recording_services_detected");
   }
+  if (ranked.some((finding) => finding.id === "blocking_overlay_observed")) {
+    forcedIds.add("blocking_overlay_observed");
+  }
 
   for (const finding of ranked) {
     if (suppressedIds.has(finding.id)) {

@@ -12,7 +12,7 @@ export function isRightsFrictionSignal(key: string) {
 }
 
 export function isHighSensitivitySignal(key: string) {
-  return /commerce\.high_sensitivity_data_collection_detected/i.test(key);
+  return /commerce\.(?:high_sensitivity_data_collection_detected|form_collects_(?:ssn|government_id|health_information|financial_information|geolocation))/i.test(key);
 }
 
 export function isSessionReplaySignal(key: string) {

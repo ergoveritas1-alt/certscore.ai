@@ -138,7 +138,7 @@ test("contrast validation finding exports representative axe evidence when retai
   ]);
 });
 
-test("promoteSectionFinancialReviewFindings upgrades section-level earnings claims into financial review findings", () => {
+test("promoteSectionFinancialReviewFindings does not upgrade retired section-level earnings findings", () => {
   const promoted = promoteSectionFinancialReviewFindings([
     {
       category: "scan_report_review",
@@ -167,15 +167,9 @@ test("promoteSectionFinancialReviewFindings upgrades section-level earnings clai
     }
   ]);
 
-  assert.equal(promoted.length, 2);
+  assert.equal(promoted.length, 1);
   const finding = promoted.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
-  assert.ok(finding);
-  assert.equal(finding?.severity, "high");
-  assert.equal(finding?.pageUrl, "https://fxculturetrading.com/");
-  assert.equal(finding?.evidence.pageClassification, "financial_offer");
-  assert.deepEqual(finding?.evidence.policySnippets, [
-    "Join My Free Trading Community And Learn & Profit From My Trading Ideas Daily"
-  ]);
+  assert.equal(finding, undefined);
 });
 
 test("deriveUnifiedFindingsWithWorkflowEvents emits completed event metadata on success", async () => {
@@ -1964,7 +1958,7 @@ test("deriveValidationFindings infers trading-signal claim and registration tran
     })
   );
 
-  assert.ok(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"));
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
   const registrationFinding = findings.find((item) => item.ruleKey === "regulatory.registration_transparency_disclosure_absent");
   assert.ok(registrationFinding);
   assert.equal(registrationFinding?.severity, "high");
@@ -2139,7 +2133,7 @@ test("deriveValidationFindings promotes simulated performance and fee-opacity fi
 
   assert.ok(findings.some((item) => item.ruleKey === "financial_review.simulated_performance_without_disclosure"));
   assert.ok(findings.some((item) => item.ruleKey === "financial_review.financial_urgency_pressure_tactic_detected"));
-  assert.ok(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"));
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"), false);
   const simulatedFinding = findings.find((item) => item.ruleKey === "financial_review.simulated_performance_without_disclosure");
   assert.equal(simulatedFinding?.evidence.pageClassification, "pricing_or_fees");
 });
@@ -2233,10 +2227,8 @@ test("deriveValidationFindings merges page-level financial signals into earnings
   const earningsFinding = findings.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
   const pricingFinding = findings.find((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear");
 
-  assert.ok(earningsFinding);
-  assert.ok(pricingFinding);
-  assert.equal(earningsFinding?.evidence.pageClassification, "financial_offer");
-  assert.equal(pricingFinding?.evidence.pageClassification, "financial_offer");
+  assert.equal(earningsFinding, undefined);
+  assert.equal(pricingFinding, undefined);
 });
 
 test("deriveValidationFindings prefers substantive financial claim snippets over bare free-price tokens", () => {
@@ -2292,15 +2284,7 @@ test("deriveValidationFindings prefers substantive financial claim snippets over
   );
 
   const earningsFinding = findings.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
-  assert.ok(earningsFinding);
-  assert.equal(
-    earningsFinding?.evidence.matchedSnippet,
-    "Start making profit with our forex system and target 8.9% monthly profit."
-  );
-  assert.deepEqual(earningsFinding?.evidence.policySnippets, [
-    "Start making profit with our forex system and target 8.9% monthly profit.",
-    "Free"
-  ]);
+  assert.equal(earningsFinding, undefined);
 });
 
 test("deriveValidationFindings prefers the stronger suspicious finance page for duplicated financial claims", () => {
@@ -2378,12 +2362,7 @@ test("deriveValidationFindings prefers the stronger suspicious finance page for 
   );
 
   const earningsFinding = findings.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
-  assert.ok(earningsFinding);
-  assert.equal(earningsFinding?.pageUrl, "https://example.com/funded-trader");
-  assert.equal(
-    earningsFinding?.evidence.matchedSnippet,
-    "Our funded trader package delivered 12% monthly profit for active forex clients."
-  );
+  assert.equal(earningsFinding, undefined);
 });
 
 test("deriveValidationFindings suppresses token-only financial evidence fragments", () => {
@@ -2736,11 +2715,8 @@ test("deriveValidationFindings prefers affirmative earnings copy over loss-mitig
   const earningsFinding = findings.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
   const pricingFinding = findings.find((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear");
 
-  assert.equal(
-    earningsFinding?.evidence.matchedSnippet,
-    "The forex copy trading is a progressive trend in online trading that enables any beginner to get access to the financial market and start making profit."
-  );
-  assert.equal(pricingFinding?.evidence.matchedSnippet, "Free demo account");
+  assert.equal(earningsFinding, undefined);
+  assert.equal(pricingFinding, undefined);
 });
 
 test("deriveValidationFindings does not upgrade ordinary profitable-trader copy into guaranteed outcomes", () => {
@@ -2830,7 +2806,7 @@ test("deriveValidationFindings does not upgrade ordinary profitable-trader copy 
     })
   );
 
-  assert.ok(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"));
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
   assert.equal(findings.some((item) => item.ruleKey === "financial_review.guaranteed_outcome_claim_detected"), false);
 });
 
@@ -3129,7 +3105,7 @@ test("deriveValidationFindings treats strong returns language as an earnings cla
     })
   );
 
-  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), true);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
 });
 
 test("deriveValidationFindings prefers structured performance snippets over title-like superlatives", () => {
@@ -3192,7 +3168,7 @@ test("deriveValidationFindings prefers structured performance snippets over titl
     })
   );
 
-  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), true);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
 });
 
 test("deriveValidationFindings preserves earnings findings on mixed suspicious finance pages with simulated-proof snippets", () => {
@@ -3301,7 +3277,7 @@ test("deriveValidationFindings preserves earnings findings on mixed suspicious f
     })
   );
 
-  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), true);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
   assert.equal(findings.some((item) => item.ruleKey === "financial_review.simulated_performance_without_disclosure"), true);
 });
 
@@ -3420,15 +3396,7 @@ test("deriveValidationFindings keeps locality-sensitive homepage findings separa
   const earningsFinding = findings.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
   const simulatedFinding = findings.find((item) => item.ruleKey === "financial_review.simulated_performance_without_disclosure");
 
-  assert.ok(earningsFinding);
-  assert.equal(
-    earningsFinding?.evidence.matchedSnippet,
-    "Earn 50 to 100 pips average profit per day from one forex trading signal."
-  );
-  assert.deepEqual(earningsFinding?.evidence.policySnippets, [
-    "Earn 50 to 100 pips average profit per day from one forex trading signal.",
-    "VIP access only 99 EUR per month."
-  ]);
+  assert.equal(earningsFinding, undefined);
   assert.ok(simulatedFinding);
   assert.equal(
     simulatedFinding?.evidence.matchedSnippet,
@@ -3492,7 +3460,7 @@ test("deriveValidationFindings does not let global risk boilerplate suppress a l
   );
 
   const earningsFinding = findings.find((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure");
-  assert.ok(earningsFinding);
+  assert.equal(earningsFinding, undefined);
 });
 
 test("deriveValidationFindings lets fee-term disclosure suppress pricing opacity without suppressing earnings", () => {
@@ -3559,7 +3527,7 @@ test("deriveValidationFindings lets fee-term disclosure suppress pricing opacity
   );
 
   assert.equal(findings.some((item) => item.ruleKey === "financial_review.pricing_or_fee_transparency_unclear"), false);
-  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), true);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
 });
 
 test("deriveValidationFindings suppresses mainstream investment account growth copy without speculative marketing cues", () => {

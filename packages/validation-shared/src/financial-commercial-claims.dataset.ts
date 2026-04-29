@@ -13,11 +13,9 @@ const DATASET_BUCKETS = [
 
 const EMITTABLE_FINDING_IDS = [
   "guaranteed_outcome_claim_detected",
-  "earnings_claim_without_adjacent_disclosure",
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected",
-  "financial_urgency_pressure_tactic_detected",
-  "pricing_or_fee_transparency_unclear"
+  "financial_urgency_pressure_tactic_detected"
 ] as const;
 
 const CARD_EXPECTATION_MODES = ["findings", "not_applicable", "omit"] as const;
@@ -70,4 +68,3 @@ const legacy = require("../legacy/financial-commercial-claims.dataset.js") as Le
 export const FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED = legacy.FINANCIAL_COMMERCIAL_CLAIMS_DATASET_SEED;
 export const summarizeFinancialCommercialClaimsDataset = legacy.summarizeFinancialCommercialClaimsDataset;
 export const toFinancialCommercialClaimsJsonl = legacy.toFinancialCommercialClaimsJsonl;
-

@@ -39,3 +39,42 @@ test("compacts long strings for readability", () => {
 
   assert.match(compacted.runtimeEvidence[0] ?? "", /\[truncated 20 chars\]$/);
 });
+
+test("collapses repeated URL aliases into one display list", () => {
+  const compacted = compactEvidenceJsonForDisplay({
+    evidence: {
+      pageUrls: ["https://example.test/"],
+      sourceUrls: ["https://tracker.test/pixel.js", "https://tracker.test/pixel.js"],
+      entities: {
+        runtimeRequestUrls: ["https://tracker.test/pixel.js"],
+        preconsent_cookie_initiator_urls: ["https://tracker.test/pixel.js", "https://cdn.test/tag.js"]
+      },
+      runtimeRequestUrls: ["https://tracker.test/pixel.js", "https://cdn.test/tag.js"]
+    },
+    sourceUrl: "https://tracker.test/pixel.js"
+  }) as {
+    evidence: {
+      urls: string[];
+      pageUrls?: string[];
+      sourceUrls?: string[];
+      runtimeRequestUrls?: string[];
+      entities: {
+        runtimeRequestUrls?: string[];
+        preconsent_cookie_initiator_urls?: string[];
+      };
+    };
+    sourceUrl?: string;
+  };
+
+  assert.deepEqual(compacted.evidence.urls, [
+    "https://example.test/",
+    "https://tracker.test/pixel.js",
+    "https://cdn.test/tag.js"
+  ]);
+  assert.equal(compacted.evidence.pageUrls, undefined);
+  assert.equal(compacted.evidence.sourceUrls, undefined);
+  assert.equal(compacted.evidence.runtimeRequestUrls, undefined);
+  assert.equal(compacted.evidence.entities.runtimeRequestUrls, undefined);
+  assert.equal(compacted.evidence.entities.preconsent_cookie_initiator_urls, undefined);
+  assert.equal(compacted.sourceUrl, undefined);
+});

@@ -38,6 +38,7 @@ import {
   deriveCertScoreFindings,
 } from "../../lib/scans/derive-findings";
 import { buildScanCalibrationSummary } from "../../lib/scans/calibration-summary";
+import { compactEvidenceJsonForDisplay } from "../../lib/scans/compact-evidence-json";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { getHybridRuntimeEvidence } from "../../lib/scans/hybrid-runtime-evidence";
 import { buildSupplementalRuntimeUnifiedFindingPackets } from "../../lib/scans/supplemental-runtime-unified-findings";
@@ -1605,7 +1606,7 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
   const evidenceSummary = summarizeEvidence(input.finding);
   const confidenceRationale = input.finding.presentationDecision.confidenceRationale;
   const collapsedSummary = getCollapsedFindingSummary(input.finding);
-  const findingJsonPayload = JSON.stringify(input.finding, null, 2);
+  const findingJsonPayload = JSON.stringify(compactEvidenceJsonForDisplay(input.finding), null, 2);
   const positiveSurfaceFinding = isPositiveSurfaceFinding(input.finding);
 
   return (
@@ -3540,7 +3541,7 @@ function CategoryFindingSummaryCard(input: { finding: UnifiedFindingDisplayPacke
   const summary = getCollapsedFindingSummary(input.finding) ?? input.finding.presentation.whyThisMatters;
   const whyItMatters = input.finding.presentation.whyThisMatters;
   const suggestedFix = input.finding.presentation.suggestedFix;
-  const findingJsonPayload = JSON.stringify(input.finding, null, 2);
+  const findingJsonPayload = JSON.stringify(compactEvidenceJsonForDisplay(input.finding), null, 2);
   const positiveSurfaceFinding = isPositiveSurfaceFinding(input.finding);
 
   return (
@@ -4449,11 +4450,9 @@ function ResultCategorySection(input: {
 
 const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
   "guaranteed_outcome_claim_detected",
-  "earnings_claim_without_adjacent_disclosure",
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected",
   "financial_urgency_pressure_tactic_detected",
-  "pricing_or_fee_transparency_unclear",
   "leveraged_or_high_risk_product_promotion",
   "regulatory_registration_disclosure_absent",
   "unsubstantiated_testimonial_near_performance_claim"
@@ -4697,6 +4696,15 @@ export function SharedScanDetailView({
   const executiveFingerprintReasons = uniqueStrings([
     ...getRecordStringArray(hybridFingerprintSummary, "reasons")
   ]);
+  const executiveFingerprintCategories = getRecordObjectArray(hybridFingerprintSummary, "attributeCategories").map((row) => ({
+    count: typeof row.count === "number" ? row.count : 0,
+    firstSeenMs: typeof row.firstSeenMs === "number" ? row.firstSeenMs : null,
+    name: typeof row.name === "string" ? row.name : "unknown"
+  }));
+  const shouldShowFingerprintingPanel =
+    executiveFingerprintCategories.length > 0 ||
+    executiveFingerprintReasons.length > 0 ||
+    certScoreSummary.fingerprintLabel !== "None detected";
   const lightweightHeroMetrics = null;
   const cookiesSeenCount = Math.max(
     getRecordNumber(hybridStorageSummary, "cookiesSeenCount") ?? 0,
@@ -4895,6 +4903,7 @@ export function SharedScanDetailView({
           createdAt={scanRecord.scan.createdAt}
           events={scanRecord.events}
           executionSummary={scanRecord.scan.executionSummary}
+          scanId={scanRecord.scan.id}
           status={scanRecord.scan.status}
         />
       ) : null}
@@ -5008,17 +5017,15 @@ export function SharedScanDetailView({
                 vendorCategoryCounts={executiveVendorCategoryCounts}
                 vendors={executiveResolvedVendorNames}
               />
-              <FingerprintingPanel
-                categories={getRecordObjectArray(hybridFingerprintSummary, "attributeCategories").map((row) => ({
-                  count: typeof row.count === "number" ? row.count : 0,
-                  firstSeenMs: typeof row.firstSeenMs === "number" ? row.firstSeenMs : null,
-                  name: typeof row.name === "string" ? row.name : "unknown"
-                }))}
-                confidence={typeof hybridFingerprintSummary?.confidence === "string" ? hybridFingerprintSummary.confidence : null}
-                label={certScoreSummary.fingerprintLabel}
-                narrative={certScoreSummary.fingerprintNarrative}
-                reasons={executiveFingerprintReasons}
-              />
+              {shouldShowFingerprintingPanel ? (
+                <FingerprintingPanel
+                  categories={executiveFingerprintCategories}
+                  confidence={typeof hybridFingerprintSummary?.confidence === "string" ? hybridFingerprintSummary.confidence : null}
+                  label={certScoreSummary.fingerprintLabel}
+                  narrative={certScoreSummary.fingerprintNarrative}
+                  reasons={executiveFingerprintReasons}
+                />
+              ) : null}
               <CookieStoragePanel
                 adtechCookieNames={certScoreSummary.adtechCookieNames}
                 analyticsCookieNames={certScoreSummary.analyticsCookieNames}

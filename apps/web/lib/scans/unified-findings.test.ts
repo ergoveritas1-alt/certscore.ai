@@ -129,6 +129,55 @@ test("hash-only sanitized network evidence does not create direct runtime uplift
   assert.ok(packet?.evidence?.flags?.includes("sanitized_network_evidence_hashed"));
 });
 
+test("blocking overlay evidence stays contextual with retained consent controls", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed intrusive or blocking runtime behavior that may interfere with normal page use.",
+        fallbackEvidence: {
+          hybridConsentSummary: {
+            acceptPresent: true,
+            bannerPresent: true,
+            closePresent: true,
+            cmpVendor: "OneTrust",
+            managePresent: true,
+            pageInteractionBlocked: true,
+            rejectPresent: true
+          },
+          hybridUiSummary: {
+            firstVisibleMs: 320,
+            forcedActionRequired: false,
+            overlayDetected: true,
+            scrollLocked: true,
+            viewportCoveragePercent: 82
+          },
+          overlay_blocking_detected: true,
+          signalKey: "privacy.overlay_blocking_detected",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "medium",
+        signalKey: "privacy.overlay_blocking_detected",
+        signalLabel: "Overlay blocking detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Overlay blocking detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "blocking_overlay_observed");
+  assert.equal(packet?.surfacingDecision.decisionState, "support_only");
+  assert.equal(packet?.surfacingDecision.reportLane, "confidence_and_coverage");
+  assert.ok(packet?.evidence?.flags?.includes("blocking_overlay_observed"));
+  assert.deepEqual(packet?.evidence?.entities?.blockingOverlayType, ["consent_modal"]);
+  assert.deepEqual(packet?.evidence?.entities?.rejectDepthClass, ["same_layer"]);
+  assert.deepEqual(packet?.evidence?.entities?.overlayVendors, ["OneTrust"]);
+  assert.ok(packet?.evidence?.snippets?.some((snippet) => /common, but it increases concern/i.test(snippet)));
+});
+
 test("resolves validation-backed unified findings without a direct signal candidate", () => {
   const validationFinding = makeValidationFinding({
     id: "val-2",
@@ -194,10 +243,8 @@ test("resolves financial-review validation findings into the matching unified fi
 
 test("routes corpus-derived financial claim findings through normalized concerns before surfacing", () => {
   const corpusDerivedFindingIds = [
-    "earnings_claim_without_adjacent_disclosure",
     "financial_urgency_pressure_tactic_detected",
     "guaranteed_outcome_claim_detected",
-    "pricing_or_fee_transparency_unclear",
     "simulated_performance_without_disclosure",
     "unqualified_superlative_claim_detected"
   ] as const;
@@ -538,75 +585,6 @@ test("surfaces gambling section-review issue with offer evidence through high-ri
   assert.equal(packet?.concernContext?.originTypes.includes("section_review"), true);
   assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), true);
   assert.equal(packet?.presentationDecision.status, "surface");
-});
-
-test("keeps editorial earnings validation findings audit-only without offer context", () => {
-  const validationFinding = makeValidationFinding({
-    id: "val-yahoo-editorial-earnings",
-    description: "Editorial market coverage mentioned earnings without a buyer-facing offer path.",
-    evidence: {
-      claimText: "Company earnings beat analyst expectations.",
-      matchedSnippet: "Company earnings beat analyst expectations in quarterly results.",
-      pageClassification: "news_or_editorial",
-      pageType: "homepage",
-      pageUrl: "https://www.yahoo.com/",
-      policySnippets: ["Company earnings beat analyst expectations in quarterly results."],
-      sourceUrls: ["https://www.yahoo.com/"],
-      supportingSignals: ["financial.performance_claim_text_present"],
-      unifiedFindingId: "earnings_claim_without_adjacent_disclosure"
-    },
-    pageUrl: "https://www.yahoo.com/",
-    ruleKey: "financial_review.earnings_claim_without_adjacent_disclosure",
-    severity: "high",
-    title: "Earnings claim without adjacent disclosure"
-  });
-
-  const [packet] = buildUnifiedFindingDisplayPackets({
-    reviewFindingCandidates: [],
-    validationFindings: [validationFinding],
-    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
-  });
-
-  assert.equal(packet?.unifiedFindingId, "earnings_claim_without_adjacent_disclosure");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.equal(packet?.concernContext?.promotionEligibilities.includes("internal_only"), true);
-});
-
-test("keeps retail discount snippets out of financial claims surfacing", () => {
-  const validationFinding = makeValidationFinding({
-    id: "val-yahoo-retail-discount",
-    description: "Homepage entertainment and retail deal snippets were misread as financial promotion evidence.",
-    evidence: {
-      claimText: "The scan retained an earnings or performance-style claim on a public-facing financial promotion surface without nearby balancing disclosure evidence.",
-      matchedSnippet: "Amazon is selling a hydrating eyelash serum for 76% off — plus 12 other incredible deals",
-      pageClassification: "financial_offer",
-      pageType: "homepage",
-      pageUrl: "https://yahoo.com/",
-      policySnippets: [
-        "Stagecoach 2026 lineup includes Post Malone, Lainey Wilson and Ella Langley as the country music festival returns to the desert this weekend",
-        "Amazon is selling a hydrating eyelash serum for 76% off — plus 12 other incredible deals",
-        "76% off"
-      ],
-      sourceUrls: ["https://yahoo.com/"],
-      supportingSignals: ["financial.performance_claim_text_present"],
-      unifiedFindingId: "earnings_claim_without_adjacent_disclosure"
-    },
-    pageUrl: "https://yahoo.com/",
-    ruleKey: "financial_review.earnings_claim_without_adjacent_disclosure",
-    severity: "high",
-    title: "Earnings claim without adjacent disclosure"
-  });
-
-  const [packet] = buildUnifiedFindingDisplayPackets({
-    reviewFindingCandidates: [],
-    validationFindings: [validationFinding],
-    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
-  });
-
-  assert.equal(packet?.unifiedFindingId, "earnings_claim_without_adjacent_disclosure");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.notEqual(packet?.surfacingDecision.decisionState, "confirmed");
-  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("audit_only"), true);
 });
 
 test("keeps direct runtime findings surfaced under thin coverage", () => {
@@ -1538,6 +1516,138 @@ test("specializes high-sensitivity third-party tracking evidence into a sensitiv
   assert.ok(packet?.evidence?.snippets?.includes("condition=asthma"));
   assert.deepEqual(packet?.evidence?.entities?.request_domains, ["tracker.example.net"]);
   assert.deepEqual(packet?.evidence?.entities?.request_urls, ["https://tracker.example.net/collect"]);
+});
+
+const sensitiveCollectionPacketCases = [
+  {
+    detectedType: "ssn",
+    label: "SSN collection detected",
+    signalKey: "commerce.form_collects_ssn",
+    snippet: "Social Security Number"
+  },
+  {
+    detectedType: "government_id",
+    label: "Government ID collection detected",
+    signalKey: "commerce.form_collects_government_id",
+    snippet: "Driver license number"
+  },
+  {
+    detectedType: "health_information",
+    label: "Health information collection detected",
+    signalKey: "commerce.form_collects_health_information",
+    snippet: "Medical condition"
+  },
+  {
+    detectedType: "financial_information",
+    label: "Financial information collection detected",
+    signalKey: "commerce.form_collects_financial_information",
+    snippet: "Bank account number"
+  },
+  {
+    detectedType: "geolocation",
+    label: "Geolocation collection detected",
+    signalKey: "commerce.form_collects_geolocation",
+    snippet: "Use my current location"
+  }
+] as const;
+
+for (const sensitiveCase of sensitiveCollectionPacketCases) {
+  test(`${sensitiveCase.signalKey} specializes with retained field text`, () => {
+    const [packet] = buildUnifiedFindingDisplayPackets({
+      reviewFindingCandidates: [
+        {
+          description: `${sensitiveCase.label} and third-party tracking were retained together.`,
+          fallbackEvidence: {
+            retargetingPixelArtifactPresent: true,
+            runtimeEvidenceArtifacts: ["request:https://pixel.example.net/collect"],
+            sensitiveCollectionDataTypes: [sensitiveCase.detectedType],
+            sensitiveCollectionMatchedTexts: [sensitiveCase.snippet],
+            sensitiveCollectionSignalKey: sensitiveCase.signalKey,
+            sensitivePayloadViolations: [
+              {
+                detectedType: sensitiveCase.detectedType,
+                evidenceSource: "snapshot_signal_match",
+                evidenceStrength: "form_field_signal",
+                matchSnippet: sensitiveCase.snippet,
+                signalKey: sensitiveCase.signalKey
+              }
+            ],
+            signalKey: sensitiveCase.signalKey,
+            signalValue: true
+          },
+          observedValue: "Yes",
+          severity: "high",
+          signalKey: sensitiveCase.signalKey,
+          signalLabel: sensitiveCase.label,
+          signalSource: "snapshot_signal",
+          sourceType: "signal",
+          title: sensitiveCase.label
+        }
+      ],
+      validationFindings: [],
+      validationFindingLookup: new Map()
+    });
+
+    assert.equal(packet?.unifiedFindingId, "sensitive_data_collection_with_third_party_tracking_present");
+    assert.equal(packet?.presentationDecision.status, "surface");
+    assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
+    assert.ok(packet?.evidence?.snippets?.includes(sensitiveCase.snippet));
+    assert.deepEqual(packet?.evidence?.entities?.sensitive_data_types, [sensitiveCase.detectedType]);
+  });
+}
+
+test("retains sensitive collection field evidence as support-only without tracking context", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Sensitive field evidence was retained without replay or tracking context.",
+        fallbackEvidence: {
+          sensitiveFieldEvidence: [
+            {
+              confidence: "strong",
+              dataType: "government_id",
+              inputName: "passport_number",
+              labelText: "Passport number",
+              matchSnippet: "Passport number",
+              pageUrl: "https://example.com/apply",
+              signalKey: "commerce.form_collects_government_id"
+            }
+          ],
+          sensitivePayloadViolations: [
+            {
+              detectedType: "government_id",
+              evidenceSource: "sensitive_field_evidence",
+              evidenceStrength: "form_field_signal",
+              matchSnippet: "Passport number",
+              requestUrl: "",
+              sourceField: "passport_number",
+              sourceLocation: "form_field",
+              signalKey: "commerce.form_collects_government_id"
+            }
+          ],
+          sourceUrls: ["https://example.com/apply"],
+          signalKey: "commerce.form_collects_government_id",
+          signalValue: true,
+          unifiedFindingId: "sensitive_collection_surface_observed"
+        },
+        observedValue: "Yes",
+        severity: "medium",
+        signalKey: "commerce.form_collects_government_id",
+        signalLabel: "Government ID collection detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Government ID collection detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "sensitive_collection_surface_observed");
+  assert.equal(packet?.surfacingDecision.decisionState, "support_only");
+  assert.equal(packet?.surfacingDecision.reportLane, "confidence_and_coverage");
+  assert.ok(packet?.evidence?.snippets?.includes("Passport number"));
+  assert.deepEqual(packet?.evidence?.entities?.sensitive_data_types, ["government_id"]);
 });
 
 test("does not surface generic high-sensitivity signal without concrete payload evidence", () => {
@@ -3028,7 +3138,7 @@ test("surfaces accessibility risk score when representative axe examples are sev
   assert.ok(packet?.evidence?.snippets?.some((snippet) => /Representative axe examples: 1 rule across 1 page; max impact: serious\./.test(snippet)));
 });
 
-test("keeps contrast failures audit-only when evidence is only a bare count", () => {
+test("surfaces contrast failures when automated axe count evidence is present", () => {
   const validationFinding = makeValidationFinding({
     id: "val-contrast-count",
     ruleKey: "accessibility_review.contrast_failures",
@@ -3046,8 +3156,8 @@ test("keeps contrast failures audit-only when evidence is only a bare count", ()
   });
 
   assert.equal(packet?.unifiedFindingId, "contrast_failures");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_representative_accessibility_examples"), true);
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_representative_accessibility_examples"), false);
   assert.equal(packet?.evidence?.counts?.count, 1);
 });
 
@@ -5796,8 +5906,8 @@ test("financial merged signals promote companion findings through normalized con
   const packetIds = new Set(packets.map((packet) => packet.unifiedFindingId));
 
   assert.equal(packetIds.has("guaranteed_outcome_claim_detected"), true);
-  assert.equal(packetIds.has("earnings_claim_without_adjacent_disclosure"), true);
-  assert.equal(packetIds.has("pricing_or_fee_transparency_unclear"), true);
+  assert.equal(packetIds.has("earnings_claim_without_adjacent_disclosure"), false);
+  assert.equal(packetIds.has("pricing_or_fee_transparency_unclear"), false);
   assert.equal(packetIds.has("unsubstantiated_testimonial_near_performance_claim"), true);
   assert.equal(packetIds.has("regulatory_registration_disclosure_absent"), true);
   assert.equal(
@@ -5805,8 +5915,6 @@ test("financial merged signals promote companion findings through normalized con
       .filter((packet) =>
         [
           "guaranteed_outcome_claim_detected",
-          "earnings_claim_without_adjacent_disclosure",
-          "pricing_or_fee_transparency_unclear",
           "unsubstantiated_testimonial_near_performance_claim",
           "regulatory_registration_disclosure_absent"
         ].includes(packet.unifiedFindingId)

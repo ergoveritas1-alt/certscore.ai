@@ -44,11 +44,9 @@ const CORE_PAGE_TYPES = [
 
 const EMITTABLE_FINDING_IDS: FinancialCommercialClaimsEmittableFindingId[] = [
   "guaranteed_outcome_claim_detected",
-  "earnings_claim_without_adjacent_disclosure",
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected",
-  "financial_urgency_pressure_tactic_detected",
-  "pricing_or_fee_transparency_unclear"
+  "financial_urgency_pressure_tactic_detected"
 ];
 
 function incrementCount(map: Map<string, number>, key: string) {

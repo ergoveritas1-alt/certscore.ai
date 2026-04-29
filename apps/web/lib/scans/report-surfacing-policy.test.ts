@@ -245,6 +245,66 @@ test("keeps audit-only pre-consent tracking out of main surfacing", () => {
   assert.equal(decision?.reportLane, "suppressed");
 });
 
+test("blocking overlay stays support-only and supports stronger consent findings", () => {
+  const overlayPacket = makePacket("blocking_overlay_observed", {
+    confidenceInputs: {
+      ...makePacket("blocking_overlay_observed").confidenceInputs,
+      hasDirectRuntimeEvidence: true
+    },
+    details: {
+      family: "context",
+      kind: "blocking_overlay_observed"
+    },
+    evidence: {
+      ...makePacket("blocking_overlay_observed").evidence,
+      flags: ["blocking_overlay_observed", "overlay_interaction_blocked"],
+      snippets: ["A blocking consent overlay was observed with accept and reject controls on the same layer."]
+    }
+  });
+
+  const standalone = evaluateUnifiedFindingSurfacing({
+    packets: [overlayPacket]
+  });
+
+  const paired = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("preconsent_tracking", {
+        confidenceInputs: {
+          ...makePacket("preconsent_tracking").confidenceInputs,
+          hasDirectRuntimeEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking"
+        },
+        evidence: {
+          ...makePacket("preconsent_tracking").evidence,
+          entities: {
+            runtimeRequestUrls: ["https://tracker.example/collect"]
+          },
+          sourceUrls: ["https://tracker.example/collect"]
+        },
+        severity: "high"
+      }),
+      overlayPacket
+    ]
+  });
+
+  const standaloneDecision = standalone.debugDecisions.find((decision) => decision.unifiedFindingId === "blocking_overlay_observed");
+  const pairedOverlayDecision = paired.debugDecisions.find((decision) => decision.unifiedFindingId === "blocking_overlay_observed");
+  const pairedTrackingDecision = paired.debugDecisions.find((decision) => decision.unifiedFindingId === "preconsent_tracking");
+
+  assert.equal(standaloneDecision?.decisionState, "support_only");
+  assert.equal(standaloneDecision?.reportLane, "confidence_and_coverage");
+  assert.equal(pairedTrackingDecision?.decisionState, "review");
+  assert.equal(pairedTrackingDecision?.reportLane, "main");
+  assert.equal(pairedTrackingDecision?.supports.includes("blocking_overlay_observed"), true);
+  assert.equal(pairedOverlayDecision?.decisionState, "support_only");
+  assert.equal(pairedOverlayDecision?.supportTargetId, "preconsent_tracking");
+  assert.equal(pairedOverlayDecision?.reportLane, "main");
+});
+
 test("keeps audit-only consent contradiction out of main surfacing", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
@@ -1128,6 +1188,37 @@ test("cookie disclosure gaps confirm only with promotion-grade runtime inventory
       })
     ]
   });
+  const blockedPolicySurfaceEvaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("cookie_disclosure_gap", {
+        confidenceInputs: {
+          ...makePacket("cookie_disclosure_gap").confidenceInputs,
+          hasDirectRuntimeEvidence: true,
+          hasStructuredValidationEvidence: true
+        },
+        concernContext: {
+          assertionLevels: [],
+          evidenceStrengthFlags: [],
+          externalSurfacingEligibilities: ["eligible"],
+          negativeEvidenceFlags: ["blocked_or_interstitial_evidence_observed"],
+          originTypes: [],
+          promotionEligibilities: ["eligible"]
+        },
+        evidence: {
+          ...makePacket("cookie_disclosure_gap").evidence,
+          counts: {
+            unmatched_third_party_cookie_count: 3
+          },
+          entities: {
+            runtime_cookie_names: ["_ga", "_fbp", "li_sugr"],
+            unmatched_cookie_names: ["_fbp", "li_sugr"]
+          },
+          fetchQuality: "blocked_interstitial",
+          sourceUrls: ["https://example.com/legal/cookie-policy"]
+        }
+      })
+    ]
+  });
 
   assert.equal(confirmedEvaluation.debugDecisions[0]?.decisionState, "confirmed");
   assert.equal(confirmedEvaluation.debugDecisions[0]?.reportLane, "main");
@@ -1137,6 +1228,8 @@ test("cookie disclosure gaps confirm only with promotion-grade runtime inventory
   assert.equal(weakRuntimeEvaluation.debugDecisions[0]?.reportLane, "confidence_and_coverage");
   assert.equal(weakPolicyUrlEvaluation.debugDecisions[0]?.decisionState, "review");
   assert.equal(weakPolicyUrlEvaluation.debugDecisions[0]?.reportLane, "confidence_and_coverage");
+  assert.equal(blockedPolicySurfaceEvaluation.debugDecisions[0]?.decisionState, "review");
+  assert.equal(blockedPolicySurfaceEvaluation.debugDecisions[0]?.reportLane, "confidence_and_coverage");
 });
 
 test("positive financial disclosure findings are suppressed unless they support a stronger financial story", () => {
@@ -1185,10 +1278,8 @@ test("negative financial-promotion risks confirm when backed by retained financi
 
 test("corpus-derived negative financial-promotion findings use the confirmed financial-risk policy", () => {
   const corpusDerivedFindingIds = [
-    "earnings_claim_without_adjacent_disclosure",
     "financial_urgency_pressure_tactic_detected",
     "guaranteed_outcome_claim_detected",
-    "pricing_or_fee_transparency_unclear",
     "simulated_performance_without_disclosure",
     "unqualified_superlative_claim_detected"
   ] as const satisfies readonly ReportUnifiedFindingId[];

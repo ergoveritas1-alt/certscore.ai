@@ -1435,7 +1435,7 @@ function computeSupportStrength(input: {
       score += 0.04;
     }
   }
-  if (/high-sensitivity data collection detected|high_sensitivity_data_collection_detected/i.test(input.haystack)) {
+  if (/high-sensitivity data collection detected|high_sensitivity_data_collection_detected|sensitive_data_collection_with_third_party_tracking_present|sensitive collection surface observed/i.test(input.haystack)) {
     const payloadViolations = getSensitivePayloadViolations(evidence);
     const confirmedViolations = payloadViolations.filter((violation) => violation.evidenceStrength === "confirmed");
     const suspectedViolations = payloadViolations.filter((violation) => violation.evidenceStrength !== "confirmed");
@@ -1815,7 +1815,7 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
       fetchEvidence.discoverySource && !fetchEvidence.guessedOnly ? (strongerRenderedDiscovery ? "0.80" : "0.75") : "0.70";
   }
 
-  if (/high-sensitivity data collection detected|high_sensitivity_data_collection_detected/i.test(input.haystack)) {
+  if (/high-sensitivity data collection detected|high_sensitivity_data_collection_detected|sensitive_data_collection_with_third_party_tracking_present|sensitive collection surface observed/i.test(input.haystack)) {
     const payloadViolations = getSensitivePayloadViolations(input.evidence);
     const confirmedViolations = payloadViolations.filter((violation) => violation.evidenceStrength === "confirmed");
     const suspectedViolations = payloadViolations.filter((violation) => violation.evidenceStrength !== "confirmed");
@@ -1873,9 +1873,9 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
         url: "https://www.w3.org/TR/privacy-principles/#data-minimization"
       };
       presentation.whyThisMatters =
-        "The scan observed requests to third-party endpoints associated with tracking or measurement behavior. Depending on implementation, these requests may carry identifiers or page-derived metadata, but the retained evidence does not by itself confirm transmission of high-sensitivity user input.";
+        "The scan retained sensitive-field or tracking-context evidence, but the retained evidence does not by itself confirm transmission of high-sensitivity user input.";
       presentation.suggestedFix =
-        "Audit the relevant third-party requests and payload construction logic to determine whether user-entered or sensitive page-derived values are being transmitted. If so, block those fields from collection, redact them before dispatch, or prevent the third-party integration from loading on sensitive flows.";
+        "Audit the affected form and any nearby third-party requests to determine whether user-entered or sensitive page-derived values are being transmitted. If so, block those fields from collection, redact them before dispatch, or prevent the third-party integration from loading on sensitive flows.";
       presentation.confidenceScore = "0.4";
     }
   }

@@ -32,9 +32,7 @@ type HostEvaluation = {
 };
 
 const SUSPICIOUS_FINANCIAL_RULE_KEYS = new Set([
-  "financial_review.earnings_claim_without_adjacent_disclosure",
   "financial_review.simulated_performance_without_disclosure",
-  "financial_review.pricing_or_fee_transparency_unclear",
   "financial_review.unqualified_superlative_claim_detected",
   "financial_review.guaranteed_outcome_claim_detected"
 ]);

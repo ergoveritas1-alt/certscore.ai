@@ -34,6 +34,9 @@ pnpm eval:build-finding-corpus --since 2024-01-01 --limit-scans 200 --top-n-find
 
 # Filter to a specific finding
 pnpm eval:build-finding-corpus --finding-id pre_consent_tracking_detected
+
+# Inspect coverage-edge findings after export
+pnpm eval:inspect-coverage-edge-corpus -- artifacts/eval/finding-corpus/2026-04-29
 ```
 
 ### CLI options
@@ -50,6 +53,7 @@ pnpm eval:build-finding-corpus --finding-id pre_consent_tracking_detected
 | `--dry-run` | false | Compute selections but do not write files |
 | `--no-include-suppressed` | — | Exclude suppressed from challenge set |
 | `--no-include-mixed` | — | Exclude audit_only/review from challenge set |
+| `--include-anonymous-scans` | false | Include local/dev full scans without `organization_id`; use only for local eval refreshes |
 
 ## Output structure
 
@@ -85,3 +89,15 @@ node --import tsx --test apps/web/scripts/eval/build-finding-corpus.test.ts
 ```
 
 Tests use fixtures only — no live DB required.
+
+## Coverage-edge inspection
+
+After generating a corpus, run `pnpm eval:inspect-coverage-edge-corpus -- <out-dir>` to verify that coverage-edge challenge examples for:
+
+- `cookie_disclosure_gap`
+- `pre_consent_tracking_detected`
+- `rtb_cookie_sync_observed`
+- `simulated_performance_without_disclosure`
+- `unqualified_superlative_claim_detected`
+
+have explicit `coverage_limitation_evidence` when strong challenge examples lack snippets. The script exits non-zero when any strong zero-snippet challenge remains unexplained.

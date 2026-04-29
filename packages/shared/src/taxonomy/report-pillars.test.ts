@@ -492,10 +492,7 @@ test("maps signals and validation rules into unified findings", () => {
     getReportUnifiedFindingForValidationRule("financial_review.guaranteed_outcome_claim_detected")?.id,
     "guaranteed_outcome_claim_detected"
   );
-  assert.equal(
-    getReportUnifiedFindingForValidationRule("financial_review.earnings_claim_without_adjacent_disclosure")?.id,
-    "earnings_claim_without_adjacent_disclosure"
-  );
+  assert.equal(getReportUnifiedFindingForValidationRule("financial_review.earnings_claim_without_adjacent_disclosure"), null);
   assert.equal(
     getReportUnifiedFindingForValidationRule("financial_review.simulated_performance_without_disclosure")?.id,
     "simulated_performance_without_disclosure"
@@ -508,10 +505,7 @@ test("maps signals and validation rules into unified findings", () => {
     getReportUnifiedFindingForValidationRule("financial_review.financial_urgency_pressure_tactic_detected")?.id,
     "financial_urgency_pressure_tactic_detected"
   );
-  assert.equal(
-    getReportUnifiedFindingForValidationRule("financial_review.pricing_or_fee_transparency_unclear")?.id,
-    "pricing_or_fee_transparency_unclear"
-  );
+  assert.equal(getReportUnifiedFindingForValidationRule("financial_review.pricing_or_fee_transparency_unclear"), null);
   assert.equal(
     getReportUnifiedFindingForSignal("snapshot_signal", "privacy.children_privacy_context_without_supporting_disclosure")?.id,
     "children_privacy_context_without_supporting_disclosure"

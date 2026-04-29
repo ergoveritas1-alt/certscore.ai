@@ -7,23 +7,22 @@ import {
 
 test("buildFinancialCommercialClaimsDraft infers homepage earnings and pricing findings from a live-style trading snippet", () => {
   const draft = buildFinancialCommercialClaimsDraft({
-    adjacentAfter: "Get funded and start now with commission-free access.",
+    adjacentAfter: "Get funded and start now with limited spots available.",
     adjacentBefore: "FX Culture Trading",
-    blockHeading: "Profit from forex moves",
-    blockText: "Profit from forex moves with high leverage strategies, free signals, and copy trading insights.",
+    blockHeading: "Guaranteed forex moves",
+    blockText: "Guaranteed forex signals with high leverage strategies, limited spots, and copy trading insights.",
     pageType: "homepage",
     pageUrl: "https://fxculturetrading.com/"
   });
 
   assert.equal(draft.expected.claimPresent, true);
-  assert.equal(draft.id, "fxculturetrading-home-profit-forex-moves");
-  assert.equal(draft.expected.claimType, "earnings_claim");
+  assert.equal(draft.id, "fxculturetrading-home-guaranteed-forex-moves");
+  assert.equal(draft.expected.claimType, "guarantee_or_high_return_claim");
   assert.equal(draft.expected.contextType, "financial_offer");
   assert.equal(draft.expected.pricingPresent, true);
   assert.deepEqual(draft.pageExpectation.expectedFindingIds.sort(), [
-    "earnings_claim_without_adjacent_disclosure",
     "financial_urgency_pressure_tactic_detected",
-    "pricing_or_fee_transparency_unclear"
+    "guaranteed_outcome_claim_detected"
   ]);
   assert.equal(draft.pageExpectation.expectedCardMode, "findings");
 });

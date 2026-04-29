@@ -443,13 +443,6 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     validationRuleKeys: ["financial_review.guaranteed_outcome_claim_detected"]
   }),
   defineReportUnifiedFinding({
-    id: "earnings_claim_without_adjacent_disclosure",
-    label: "Earnings claim without adjacent disclosure",
-    owner: "consumer_financial_marketing_claims",
-    mirrors: ["performance_claim_context_and_risk_disclosure", "disclosures_claim_substantiation"],
-    validationRuleKeys: ["financial_review.earnings_claim_without_adjacent_disclosure"]
-  }),
-  defineReportUnifiedFinding({
     id: "simulated_performance_without_disclosure",
     label: "Simulated performance without disclosure",
     owner: "performance_claim_context_and_risk_disclosure",
@@ -469,13 +462,6 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     owner: "consumer_financial_marketing_claims",
     mirrors: ["urgency_scarcity_pressure_tactics", "disclosures_claim_substantiation"],
     validationRuleKeys: ["financial_review.financial_urgency_pressure_tactic_detected"]
-  }),
-  defineReportUnifiedFinding({
-    id: "pricing_or_fee_transparency_unclear",
-    label: "Pricing or fee transparency unclear",
-    owner: "fee_disclosure_clarity",
-    mirrors: ["consumer_choice_and_cost_transparency", "disclosures_claim_substantiation"],
-    validationRuleKeys: ["financial_review.pricing_or_fee_transparency_unclear"]
   }),
   defineReportUnifiedFinding({
     id: "investment_risk_disclosure_missing",
@@ -2747,6 +2733,15 @@ export const REPORT_UNIFIED_FINDINGS = [
     aliases: ["No consent surface detected", "No user-facing consent surface detected"]
   }),
   defineReportUnifiedFinding({
+    id: "reject_did_not_reduce_tracking",
+    label: "Tracking observed around reject interaction",
+    owner: "enforcement_outcomes_after_user_choice",
+    mirrors: ["third_party_network_cookie_surface"],
+    overlays: ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "consent_reject_reduced_tracking" }],
+    aliases: ["Reject interaction did not reduce tracking", "Reject path did not reduce tracking"]
+  }),
+  defineReportUnifiedFinding({
     id: "reject_did_not_reduce_third_party_cookies",
     label: "Reject did not reduce third-party cookies",
     owner: "enforcement_outcomes_after_user_choice",
@@ -2926,6 +2921,20 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "sensitive_data_third_party_exposure_context",
     mirrors: ["adtech_analytics_replay_footprint", "identity_financial_data_collection", "health_location_other_sensitive_data_collection"],
     overlays: ["tracking_profiling_sensitive_data_risk", "profiling_high_risk_data_use_signals"]
+  }),
+  defineReportUnifiedFinding({
+    id: "sensitive_collection_surface_observed",
+    label: "Sensitive collection surface observed",
+    owner: "collection_surface_entry_points_and_handling_context",
+    mirrors: ["identity_financial_data_collection", "health_location_other_sensitive_data_collection", "sensitive_data_third_party_exposure_context"],
+    overlays: ["tracking_profiling_sensitive_data_risk", "profiling_high_risk_data_use_signals"],
+    signalMappings: [
+      { source: "snapshot_signal", key: "commerce.form_collects_ssn" },
+      { source: "snapshot_signal", key: "commerce.form_collects_government_id" },
+      { source: "snapshot_signal", key: "commerce.form_collects_health_information" },
+      { source: "snapshot_signal", key: "commerce.form_collects_financial_information" },
+      { source: "snapshot_signal", key: "commerce.form_collects_geolocation" }
+    ]
   }),
   defineReportUnifiedFinding({
     id: "minors_or_age_gated_collection_context",

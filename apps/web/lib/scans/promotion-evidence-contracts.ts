@@ -537,14 +537,36 @@ export function hasConcreteSensitivePayloadArtifact(rawEvidence: Record<string, 
       ? rawEvidence.sensitive_payload_violations
       : [];
 
-  return rows.some(
-    (entry) =>
-      Boolean(entry) &&
-      typeof entry === "object" &&
-      typeof (entry as { requestUrl?: unknown }).requestUrl === "string" &&
-      ((entry as { requestUrl?: string }).requestUrl?.length ?? 0) > 0 &&
-      (entry as { evidenceStrength?: unknown }).evidenceStrength !== "detector_only"
-  );
+  return rows.some((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return false;
+    }
+
+    const row = entry as {
+      detectedType?: unknown;
+      evidenceStrength?: unknown;
+      matchSnippet?: unknown;
+      requestUrl?: unknown;
+      sourceField?: unknown;
+    };
+    if (row.evidenceStrength === "detector_only") {
+      return false;
+    }
+
+    const requestUrl = typeof row.requestUrl === "string" ? row.requestUrl : "";
+    if (requestUrl.length > 0) {
+      return true;
+    }
+
+    const evidenceStrength = typeof row.evidenceStrength === "string" ? row.evidenceStrength : "";
+    const hasFieldEvidence =
+      typeof row.detectedType === "string" &&
+      row.detectedType.trim().length > 0 &&
+      ((typeof row.matchSnippet === "string" && row.matchSnippet.trim().length > 0) ||
+        (typeof row.sourceField === "string" && row.sourceField.trim().length > 0));
+
+    return hasFieldEvidence && /form_field_signal|matched_signal_text|confirmed|suspected/i.test(evidenceStrength);
+  });
 }
 
 export function evaluatePolicyBehaviorConflictContract(rawEvidence: Record<string, unknown> | null | undefined): ContractDecision | null {

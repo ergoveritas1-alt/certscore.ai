@@ -134,6 +134,407 @@ test("session replay snapshot signal retains persisted tracker vendor provenance
   assert.ok(packet?.evidence?.flags?.includes("commerce.session_replay_tool_detected"));
 });
 
+test("contrast snapshot signal surfaces from persisted axe count and representative examples", () => {
+  const candidates = buildReviewFindings({
+    issues: [],
+    prioritizedAccessibilityRuleRows: [
+      {
+        description: "Detected contrast failures in large text.",
+        help: "Elements must meet enhanced color contrast ratio thresholds",
+        helpUrl: "https://dequeuniversity.com/rules/axe/4.10/color-contrast-enhanced",
+        impact: "serious",
+        nodeCount: 2,
+        pageUrl: "https://example.com/",
+        representativeSelectors: [".hero-title"],
+        ruleCode: "color-contrast-enhanced",
+        ruleGroup: "wcag2aaa",
+        severity: "high",
+        weightedPriority: 32
+      }
+    ],
+    sectionId: "perceivability_barriers",
+    sectionItems: [
+      {
+        key: "accessibility.wcag_contrast_failures_count",
+        label: "WCAG contrast failures",
+        relation: "primary",
+        source: "snapshot_signal",
+        value: 2
+      }
+    ]
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: candidates,
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+  const packet = packets.find((finding) => finding.unifiedFindingId === "contrast_failures");
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.evidence?.counts?.count, 2);
+  assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), true);
+  assert.ok(packet?.evidence?.snippets?.some((snippet) => /color-contrast-enhanced\/wcag2aaa/i.test(snippet)));
+});
+
+test("consent audit reject-tracking finding retains post-reject runtime evidence", () => {
+  const issues = buildSectionReviewIssues({
+    accessibilityIssueRows: [],
+    consentAuditFindings: [
+      {
+        title: "Reject interaction did not reduce tracking",
+        description: "Reject flow still showed tracker activity after opt-out.",
+        severity: "high"
+      } as never
+    ],
+    policyBehaviorContradictions: [],
+    preconsentViolationRows: [],
+    runtimeArtifacts: {
+      consent_baseline_tracker_vendor_names: ["Google Ads"],
+      consent_baseline_tracker_evidence_urls: ["https://example.com/baseline.js"],
+      consent_post_reject_tracker_vendor_names: ["Google Ads"],
+      consent_post_reject_tracker_evidence_urls: ["https://example.com/post-reject.js"],
+      consent_reject_persisted_tracker_vendor_names: ["Google Ads"],
+      consent_reject_interaction_succeeded: true,
+      consent_reject_post_reject_non_essential_requests: [
+        {
+          vendor: "Google Ads",
+          hostname: "googleadservices.com",
+          category: "advertising",
+          url: "https://example.com/post-reject.js",
+          ts_ms: 1842,
+          ms_after_reject: 842,
+          resource_type: "script",
+          initiator: null,
+          why_non_essential: "Google Ads is classified as advertising."
+        }
+      ],
+      consent_reject_request_timing_buckets: [
+        {
+          url: "https://example.com/post-reject.js",
+          phase: "post_reject",
+          msAfterReject: 842
+        }
+      ],
+      consent_reject_suppression_checks: {
+        reject_click_confirmed: true,
+        post_reject_window_available: true,
+        non_essential_vendor_after_reject: true,
+        cmp_initialization_only: false,
+        navigation_or_reload_ambiguous: false,
+        baseline_contradiction_detected: false
+      },
+      consent_opt_out_evidence_log: [
+        {
+          action: "reject",
+          actionType: "reject_all",
+          clickedAtMs: 1000,
+          selector: "button#reject",
+          stepIndex: 1,
+          text: "Reject all",
+          urlAfterClick: "https://example.com/"
+        }
+      ]
+    },
+    scanReportReviewIssues: [],
+    sectionId: "consent_controls_enforcement",
+    snapshot: {}
+  });
+
+  const candidates = buildReviewFindings({
+    issues,
+    prioritizedAccessibilityRuleRows: [],
+    runtimeArtifacts: {
+      consent_baseline_tracker_vendor_names: ["Google Ads"],
+      consent_baseline_tracker_evidence_urls: ["https://example.com/baseline.js"],
+      consent_post_reject_tracker_vendor_names: ["Google Ads"],
+      consent_post_reject_tracker_evidence_urls: ["https://example.com/post-reject.js"],
+      consent_reject_persisted_tracker_vendor_names: ["Google Ads"],
+      consent_reject_interaction_succeeded: true,
+      consent_reject_post_reject_non_essential_requests: [
+        {
+          vendor: "Google Ads",
+          hostname: "googleadservices.com",
+          category: "advertising",
+          url: "https://example.com/post-reject.js",
+          ts_ms: 1842,
+          ms_after_reject: 842,
+          resource_type: "script",
+          initiator: null,
+          why_non_essential: "Google Ads is classified as advertising."
+        }
+      ],
+      consent_reject_request_timing_buckets: [
+        {
+          url: "https://example.com/post-reject.js",
+          phase: "post_reject",
+          msAfterReject: 842
+        }
+      ],
+      consent_reject_suppression_checks: {
+        reject_click_confirmed: true,
+        post_reject_window_available: true,
+        non_essential_vendor_after_reject: true,
+        cmp_initialization_only: false,
+        navigation_or_reload_ambiguous: false,
+        baseline_contradiction_detected: false
+      },
+      consent_opt_out_evidence_log: [
+        {
+          action: "reject",
+          actionType: "reject_all",
+          clickedAtMs: 1000,
+          selector: "button#reject",
+          stepIndex: 1,
+          text: "Reject all",
+          urlAfterClick: "https://example.com/"
+        }
+      ]
+    },
+    sectionId: "consent_controls_enforcement",
+    sectionItems: []
+  });
+  const candidate = candidates.find((finding) => finding.title === "Reject interaction did not reduce tracking");
+  const packet = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: candidates,
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  }).find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
+
+  assert.deepEqual(candidate?.fallbackEvidence?.runtimeEvidenceUrls, [
+    "https://example.com/baseline.js",
+    "https://example.com/post-reject.js"
+  ]);
+  assert.deepEqual(candidate?.fallbackEvidence?.consentPostRejectTrackerEvidenceUrls, ["https://example.com/post-reject.js"]);
+  assert.deepEqual(candidate?.fallbackEvidence?.consentOptOutEvidenceLog, [
+    {
+      action: "reject",
+      actionType: "reject_all",
+      clickedAtMs: 1000,
+      selector: "button#reject",
+      stepIndex: 1,
+      text: "Reject all",
+      urlAfterClick: "https://example.com/"
+    }
+  ]);
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.ok(packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
+  assert.equal(packet?.details?.family, "consent_tracking");
+});
+
+test("consent audit reject-tracking finding suppresses when reject click or timing is missing", () => {
+  const candidates = buildReviewFindings({
+    issues: buildSectionReviewIssues({
+      accessibilityIssueRows: [],
+      consentAuditFindings: [
+        {
+          title: "Reject interaction did not reduce tracking",
+          description: "Reject flow still showed tracker activity after opt-out.",
+          severity: "high"
+        } as never
+      ],
+      policyBehaviorContradictions: [],
+      preconsentViolationRows: [],
+      runtimeArtifacts: {
+        consent_baseline_tracker_vendor_names: ["Google Ads"],
+        consent_post_reject_tracker_vendor_names: ["Google Ads"],
+        consent_post_reject_tracker_evidence_urls: ["https://example.com/post-reject.js"],
+        consent_reject_suppression_checks: {
+          reject_click_confirmed: false,
+          post_reject_window_available: false,
+          non_essential_vendor_after_reject: true,
+          cmp_initialization_only: false,
+          navigation_or_reload_ambiguous: false,
+          baseline_contradiction_detected: false
+        }
+      },
+      scanReportReviewIssues: [],
+      sectionId: "consent_controls_enforcement",
+      snapshot: {}
+    }),
+    prioritizedAccessibilityRuleRows: [],
+    runtimeArtifacts: {
+      consent_baseline_tracker_vendor_names: ["Google Ads"],
+      consent_post_reject_tracker_vendor_names: ["Google Ads"],
+      consent_post_reject_tracker_evidence_urls: ["https://example.com/post-reject.js"],
+      consent_reject_suppression_checks: {
+        reject_click_confirmed: false,
+        post_reject_window_available: false,
+        non_essential_vendor_after_reject: true,
+        cmp_initialization_only: false,
+        navigation_or_reload_ambiguous: false,
+        baseline_contradiction_detected: false
+      }
+    },
+    sectionId: "consent_controls_enforcement",
+    sectionItems: []
+  });
+
+  const packet = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: candidates,
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  }).find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
+
+  assert.equal(packet?.presentationDecision.status, "suppress");
+  assert.equal(packet?.surfacingDecision.decisionState, "suppressed");
+  assert.ok(packet?.evidence?.flags?.includes("reject_evidence_suppress"));
+});
+
+test("consent audit reject-tracking finding downgrades when post-reject timing is unavailable", () => {
+  const runtimeArtifacts = {
+    consent_baseline_tracker_vendor_names: ["Marketo"],
+    consent_baseline_tracker_evidence_urls: ["https://munchkin.marketo.net/munchkin.js"],
+    consent_post_reject_tracker_vendor_names: [
+      "Google Ads",
+      "Google Tag Manager",
+      "LinkedIn Insight Tag",
+      "Marketo",
+      "Microsoft Clarity",
+      "Reddit Pixel"
+    ],
+    consent_post_reject_tracker_evidence_urls: [
+      "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/1",
+      "https://www.googletagmanager.com/gtm.js?id=GTM-TEST",
+      "https://px.ads.linkedin.com/collect?v=2",
+      "https://munchkin.marketo.net/165/munchkin.js",
+      "https://c.clarity.ms/c.gif",
+      "https://alb.reddit.com/rp.gif"
+    ],
+    consent_reject_suppression_checks: {
+      reject_click_confirmed: true,
+      post_reject_window_available: false,
+      non_essential_vendor_after_reject: true,
+      cmp_initialization_only: false,
+      navigation_or_reload_ambiguous: false,
+      baseline_contradiction_detected: false
+    },
+    consent_opt_out_evidence_log: [
+      {
+        action: "reject",
+        actionType: "essential_only",
+        clickedAtMs: 1000,
+        selector: "button#onetrust-reject-all-handler",
+        text: "Essential only"
+      }
+    ]
+  };
+  const candidates = buildReviewFindings({
+    issues: buildSectionReviewIssues({
+      accessibilityIssueRows: [],
+      consentAuditFindings: [
+        {
+          title: "Reject interaction did not reduce tracking",
+          description: "Reject flow still showed tracker activity after opt-out.",
+          severity: "high"
+        } as never
+      ],
+      policyBehaviorContradictions: [],
+      preconsentViolationRows: [],
+      runtimeArtifacts,
+      scanReportReviewIssues: [],
+      sectionId: "consent_controls_enforcement",
+      snapshot: {}
+    }),
+    prioritizedAccessibilityRuleRows: [],
+    runtimeArtifacts,
+    sectionId: "consent_controls_enforcement",
+    sectionItems: []
+  });
+  const candidate = candidates.find((finding) => finding.title === "Reject interaction did not reduce tracking");
+  const fallbackEvidence = candidate?.fallbackEvidence as Record<string, unknown> | undefined;
+  const packet = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: candidates,
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  }).find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
+
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.notEqual(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.equal(packet?.surfacingDecision.reportLane, "confidence_and_coverage");
+  assert.ok(packet?.evidence?.flags?.includes("reject_evidence_review"));
+  assert.ok(!packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
+  assert.ok(packet?.concernContext?.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"));
+  assert.equal((fallbackEvidence?.promotionDecision as Record<string, unknown> | undefined)?.promoted, false);
+  assert.equal((fallbackEvidence?.promotionDecision as Record<string, unknown> | undefined)?.requiredTimingSatisfied, false);
+  assert.deepEqual((fallbackEvidence?.rejectEvidenceDiff as Record<string, unknown> | undefined)?.baseline_vendors, ["Marketo"]);
+  assert.equal((fallbackEvidence?.rejectEvidenceDiff as Record<string, unknown> | undefined)?.baseline_reconstruction_status, "reconciled");
+  assert.ok((fallbackEvidence?.confidenceRisks as string[] | undefined)?.includes("Post-reject timing unavailable; cannot confirm persistence after reject."));
+});
+
+test("consent audit reject-tracking evidence maps post-reject vendors from request hostnames", () => {
+  const runtimeArtifacts = {
+    consent_baseline_tracker_vendor_names: ["Marketo"],
+    consent_post_reject_tracker_vendor_names: [
+      "Google Ads",
+      "Google Ads",
+      "Google Ads",
+      "Google Ads",
+      "Google Ads",
+      "Google Ads"
+    ],
+    consent_post_reject_tracker_evidence_urls: [
+      "https://px.ads.linkedin.com/collect?v=2",
+      "https://alb.reddit.com/rp.gif",
+      "https://c.clarity.ms/c.gif",
+      "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/1",
+      "https://www.googletagmanager.com/gtm.js?id=GTM-TEST",
+      "https://munchkin.marketo.net/165/munchkin.js"
+    ],
+    consent_reject_suppression_checks: {
+      reject_click_confirmed: true,
+      post_reject_window_available: false,
+      non_essential_vendor_after_reject: true,
+      cmp_initialization_only: false,
+      navigation_or_reload_ambiguous: false,
+      baseline_contradiction_detected: false
+    }
+  };
+  const candidates = buildReviewFindings({
+    issues: buildSectionReviewIssues({
+      accessibilityIssueRows: [],
+      consentAuditFindings: [
+        {
+          title: "Reject interaction did not reduce tracking",
+          description: "Reject flow still showed tracker activity after opt-out.",
+          severity: "high"
+        } as never
+      ],
+      policyBehaviorContradictions: [],
+      preconsentViolationRows: [],
+      runtimeArtifacts,
+      scanReportReviewIssues: [],
+      sectionId: "consent_controls_enforcement",
+      snapshot: {}
+    }),
+    prioritizedAccessibilityRuleRows: [],
+    runtimeArtifacts,
+    sectionId: "consent_controls_enforcement",
+    sectionItems: []
+  });
+  const candidate = candidates.find((finding) => finding.title === "Reject interaction did not reduce tracking");
+  const requests = (candidate?.fallbackEvidence?.postRejectNonEssentialRequests ?? []) as Array<Record<string, unknown>>;
+
+  assert.deepEqual(requests.map((request) => request.vendor), [
+    "LinkedIn Insight Tag",
+    "Reddit Pixel",
+    "Microsoft Clarity",
+    "Google Ads",
+    "Google Tag Manager",
+    "Marketo"
+  ]);
+  assert.deepEqual(requests.map((request) => request.hostname), [
+    "px.ads.linkedin.com",
+    "alb.reddit.com",
+    "c.clarity.ms",
+    "googleads.g.doubleclick.net",
+    "www.googletagmanager.com",
+    "munchkin.marketo.net"
+  ]);
+  assert.ok(requests.every((request) => request.vendor_attribution_confidence === "high"));
+});
+
 test("high-sensitivity snapshot signal specializes when merged tracking context is retained", () => {
   const candidates = buildReviewFindings({
     issues: [],

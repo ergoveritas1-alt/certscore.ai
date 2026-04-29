@@ -137,12 +137,14 @@ Local validation execution also requires the standalone scanner service from `WS
    - `Merged signals` becomes `Ready`
    - `Findings` becomes `Ready`
 5. Run:
-   - `pnpm --filter @website-signal-risk-scanner/validation-worker inspect:signal-enrichment --scan-id <scan-id>`
+   - `pnpm --filter @website-signal-risk-scanner/validation-worker summarize:signal-enrichment --scan-id <scan-id>`
+   - optionally escalate to `pnpm --filter @website-signal-risk-scanner/validation-worker inspect:signal-enrichment --scan-id <scan-id>`
 6. Confirm the inspector reports:
    - document sources present for privacy/terms/cookie pages when available
    - nano signals persisted in `scan_signals`
    - workflow stage completion events
 7. If the pipeline looks wrong, inspect:
+   - `pnpm --filter @website-signal-risk-scanner/validation-worker summarize:signal-events --scan-id <scan-id>`
    - `scan_document_sources`
    - `scan_signals`
    - `scan_events`

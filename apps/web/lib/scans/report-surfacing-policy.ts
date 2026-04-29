@@ -75,6 +75,7 @@ export type SurfacingPolicyRuleId =
   | "precedence.present_surface_beats_weak_absence"
   | "precedence.sensitive_replay_beats_generic_replay"
   | "precedence.task_blocking_beats_wcag_summary"
+  | "precedence.blocking_overlay_supports_consent_risk"
   | "precedence.sensitive_tracking_combo_beats_generic_sensitivity"
   | "support.orphan_positive_surface_retained"
   | "support.orphan_support_promoted_to_review"
@@ -226,6 +227,7 @@ const CONSENT_TRACKING_IDS = [
   "preconsent_tracking",
   "consent_mechanism_absent",
   "consent_surface_missing",
+  "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
   "gpc_signal_not_honored",
   "weak_cookie_security_attributes",
@@ -244,6 +246,7 @@ const CONSENT_TRACKING_IDS = [
 ] as const satisfies ReportUnifiedFindingId[];
 
 const CONFIRMED_CONSENT_RUNTIME_FAILURE_IDS = [
+  "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
   "gpc_signal_not_honored"
 ] as const satisfies ReportUnifiedFindingId[];
@@ -268,6 +271,7 @@ const SUPPORT_ONLY_CONSENT_TRACKING_CONTEXT_IDS = [
 const SENSITIVE_DATA_IDS = [
   "session_replay_on_sensitive_input_surface",
   "sensitive_data_collection_with_third_party_tracking_present",
+  "sensitive_collection_surface_observed",
   "minors_or_age_gated_collection_context",
   "children_privacy_context_without_supporting_disclosure"
 ] as const satisfies ReportUnifiedFindingId[];
@@ -357,7 +361,6 @@ const SUPPORT_ONLY_FINANCIAL_CONTEXT_IDS = [
 ] as const satisfies ReportUnifiedFindingId[];
 
 const NEGATIVE_FINANCIAL_RISK_IDS = [
-  "earnings_claim_without_adjacent_disclosure",
   "financial_urgency_pressure_tactic_detected",
   "guaranteed_outcome_claim_detected",
   "performance_claims_without_context",
@@ -381,7 +384,6 @@ const NEGATIVE_FINANCIAL_RISK_IDS = [
   "yield_or_return_claims_high_risk",
   "high_risk_product_risk_disclosure_missing",
   "ai_financial_advice_or_trading_claims_without_disclosure",
-  "pricing_or_fee_transparency_unclear",
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected"
 ] as const satisfies ReportUnifiedFindingId[];
@@ -557,6 +559,13 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialLane: "main",
     orphanedSupportFallback: "suppressed"
   },
+  reject_did_not_reduce_tracking: {
+    findingId: "reject_did_not_reduce_tracking",
+    family: "consent_tracking",
+    initialState: "review",
+    initialTier: "headline",
+    initialLane: "main"
+  },
   consent_gated_tracking_claim_conflict: {
     findingId: "consent_gated_tracking_claim_conflict",
     family: "contradiction",
@@ -665,6 +674,13 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialTier: "headline",
     initialLane: "main"
   },
+  sensitive_collection_surface_observed: {
+    findingId: "sensitive_collection_surface_observed",
+    family: "sensitive_data",
+    initialState: "support_only",
+    initialTier: "support",
+    initialLane: "confidence_and_coverage"
+  },
   keyboard_only_task_completion_blocked: {
     findingId: "keyboard_only_task_completion_blocked",
     family: "accessibility",
@@ -700,13 +716,6 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialTier: "headline",
     initialLane: "main"
   },
-  earnings_claim_without_adjacent_disclosure: {
-    findingId: "earnings_claim_without_adjacent_disclosure",
-    family: "financial_promotion",
-    initialState: "review",
-    initialTier: "section",
-    initialLane: "main"
-  },
   simulated_performance_without_disclosure: {
     findingId: "simulated_performance_without_disclosure",
     family: "financial_promotion",
@@ -723,13 +732,6 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
   },
   financial_urgency_pressure_tactic_detected: {
     findingId: "financial_urgency_pressure_tactic_detected",
-    family: "financial_promotion",
-    initialState: "review",
-    initialTier: "section",
-    initialLane: "main"
-  },
-  pricing_or_fee_transparency_unclear: {
-    findingId: "pricing_or_fee_transparency_unclear",
     family: "financial_promotion",
     initialState: "review",
     initialTier: "section",
@@ -852,6 +854,36 @@ const EXPLICIT_PRECEDENCE_RULES: PrecedenceRule[] = [
     primaryFindingId: "critical_form_completion_barrier",
     reason: "A task-completion accessibility finding should lead over a generic WCAG summary.",
     supportingFindingId: "wcag_issue_summary"
+  },
+  {
+    appliedRule: "precedence.blocking_overlay_supports_consent_risk",
+    primaryFindingId: "forced_consent_wall",
+    reason: "A blocking overlay is supporting consent-context evidence when a forced consent or cookie-wall finding carries the main narrative.",
+    supportingFindingId: "blocking_overlay_observed"
+  },
+  {
+    appliedRule: "precedence.blocking_overlay_supports_consent_risk",
+    primaryFindingId: "accept_only_banner",
+    reason: "A blocking overlay is supporting consent-context evidence when the choice surface lacks a reject or manage path.",
+    supportingFindingId: "blocking_overlay_observed"
+  },
+  {
+    appliedRule: "precedence.blocking_overlay_supports_consent_risk",
+    primaryFindingId: "reject_button_missing",
+    reason: "A blocking overlay is supporting consent-context evidence when the reject path is missing or hidden.",
+    supportingFindingId: "blocking_overlay_observed"
+  },
+  {
+    appliedRule: "precedence.blocking_overlay_supports_consent_risk",
+    primaryFindingId: "accept_more_prominent_than_reject",
+    reason: "A blocking overlay is supporting consent-context evidence when accept and reject paths appear imbalanced.",
+    supportingFindingId: "blocking_overlay_observed"
+  },
+  {
+    appliedRule: "precedence.blocking_overlay_supports_consent_risk",
+    primaryFindingId: "preconsent_tracking",
+    reason: "A blocking overlay is supporting runtime context when tracking began while the choice surface was unresolved.",
+    supportingFindingId: "blocking_overlay_observed"
   },
   {
     appliedRule: "precedence.contradiction_beats_generic_absence",
@@ -1405,6 +1437,13 @@ function hasCookieDisclosureGapBacking(packet: UnifiedFindingPacket) {
     return false;
   }
 
+  if (
+    packet.evidence?.fetchQuality === "blocked_interstitial" ||
+    packet.concernContext?.negativeEvidenceFlags.includes("blocked_or_interstitial_evidence_observed")
+  ) {
+    return false;
+  }
+
   const urls = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])];
   const unmatchedThirdPartyCookieCount = getEvidenceCount(packet, [
     "unmatched_third_party_cookie_count",
@@ -1504,6 +1543,7 @@ function overrideDecision(
 
 function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   const { packet, decision } = context;
+  const evidenceFlags = new Set(packet.evidence?.flags ?? []);
   const negativeFlags = getNegativeEvidenceFlags(packet);
   const policyExtractionDetails = packet.details?.family === "policy_extraction" ? packet.details : null;
   const contradictoryPositiveFindingIdByNegative = new Map<string, string>([
@@ -1523,6 +1563,34 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       ruleId: "unknown.conservative_fallback"
     });
     return;
+  }
+
+  if (packet.unifiedFindingId === "reject_did_not_reduce_tracking") {
+    if (evidenceFlags.has("reject_evidence_suppress")) {
+      overrideDecision(decision, {
+        state: "suppressed",
+        lane: "suppressed",
+        tier: "support",
+        reason:
+          "Reject-path tracking evidence was suppressed because the reject click, post-reject timing window, or attribution context was not defensible.",
+        ruleId: "evidence.consent_behavior.suppress_low_confidence_interface_context"
+      });
+      return;
+    }
+    if (
+      evidenceFlags.has("reject_evidence_review") ||
+      packet.concernContext?.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence")
+    ) {
+      overrideDecision(decision, {
+        state: "support_only",
+        lane: "confidence_and_coverage",
+        tier: "support",
+        reason:
+          "Reject-path tracking evidence is retained for analyst review because post-reject timing or vendor classification did not satisfy promotion requirements.",
+        ruleId: "evidence.normalized_concern.audit_only"
+      });
+      return;
+    }
   }
 
   if (
@@ -1887,6 +1955,38 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (context.policy.family === "consent_tracking") {
+    if (packet.unifiedFindingId === "reject_did_not_reduce_tracking") {
+      if (evidenceFlags.has("reject_evidence_suppress")) {
+        overrideDecision(decision, {
+          state: "suppressed",
+          lane: "suppressed",
+          tier: "support",
+          reason:
+            "Reject-path tracking evidence was retained only as support because the interaction, timing window, vendor classification, or baseline comparison was not defensible enough for a main finding.",
+          ruleId: "evidence.consent_behavior.suppress_low_confidence_interface_context"
+        });
+      } else if (evidenceFlags.has("reject_evidence_confirmed")) {
+        overrideDecision(decision, {
+          state: "confirmed",
+          lane: "main",
+          tier: "headline",
+          reason:
+            "The reject interaction succeeded and classified non-essential tracking requests were retained at least 500ms after reject, so the finding can stand as a confirmed consent-control failure.",
+          ruleId: "evidence.consent_behavior.confirmed_specific_runtime_failure"
+        });
+      } else {
+        overrideDecision(decision, {
+          state: "support_only",
+          lane: "confidence_and_coverage",
+          tier: "support",
+          reason:
+            "Tracking appeared after the reject interaction, but timing or vendor classification needs analyst review before calling it a confirmed suppression failure.",
+          ruleId: "evidence.consent_behavior.review_runtime_without_effect_evidence"
+        });
+      }
+      return;
+    }
+
     if (packet.unifiedFindingId === "fingerprinting_observed") {
       if (packet.confidenceBand === "high" && hasConcreteRuntimeEvidence(packet)) {
         overrideDecision(decision, {
@@ -1978,6 +2078,17 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (context.policy.family === "sensitive_data") {
+    if (packet.unifiedFindingId === "sensitive_collection_surface_observed") {
+      overrideDecision(decision, {
+        state: "support_only",
+        lane: "confidence_and_coverage",
+        tier: "support",
+        reason: "Sensitive collection field evidence is useful context, but should not surface as a standalone risk without replay, tracking, or transmission evidence.",
+        ruleId: "evidence.sensitive.review_when_context_only"
+      });
+      return;
+    }
+
     if (packet.confidenceInputs.hasConcretePayloadEvidence || hasConcreteRuntimeEvidence(packet)) {
       overrideDecision(decision, {
         state: "confirmed",
@@ -2068,6 +2179,18 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (context.policy.family === "context") {
+    if (packet.unifiedFindingId === "blocking_overlay_observed") {
+      overrideDecision(decision, {
+        state: "support_only",
+        lane: "confidence_and_coverage",
+        tier: "support",
+        reason:
+          "A blocking overlay is common consent or UX context and should support stronger choice, forced-consent, or pre-consent tracking findings rather than surface as a standalone violation.",
+        ruleId: "evidence.context.keep_review"
+      });
+      return;
+    }
+
     overrideDecision(decision, {
       state: "review",
       lane: "confidence_and_coverage",
@@ -2256,6 +2379,18 @@ function applyCrossFindingRules(decisionsById: Map<string, MutableDecision>, pac
       decision.appliedRules.push("support.orphan_positive_surface_retained");
       decision.decisionReasons.push(
         "No stronger lead finding required this positive surface as support, so it was retained in confidence-and-coverage instead of the ranked findings model."
+      );
+      continue;
+    }
+
+    if (findingId === "blocking_overlay_observed" || findingId === "sensitive_collection_surface_observed") {
+      decision.reportLane = "confidence_and_coverage";
+      decision.surfaceTier = "support";
+      decision.appliedRules.push("evidence.context.keep_review");
+      decision.decisionReasons.push(
+        findingId === "blocking_overlay_observed"
+          ? "No stronger consent or tracking finding required the blocking overlay as support, so it remains supporting context rather than a standalone finding."
+          : "No stronger tracking, replay, or transmission finding required the sensitive collection surface as support, so it remains supporting context rather than a standalone finding."
       );
       continue;
     }

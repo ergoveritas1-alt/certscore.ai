@@ -741,88 +741,6 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
-      name: "editorial earnings claim without offer context stays audit-only without domain classification",
-      concern: makeConcern({
-        originKey: "financial_review.earnings_claim_without_adjacent_disclosure",
-        originType: "validation_rule",
-        suggestedUnifiedFindingId: "earnings_claim_without_adjacent_disclosure",
-        title: "Earnings claim without adjacent disclosure"
-      }),
-      evidenceStrengthFlags: ["structured_validation", "page_attributed", "policy_text"] as const,
-      rawEvidence: {
-        claimText: "Yahoo Finance: Company earnings beat analyst expectations.",
-        matchedSnippet: "Company earnings beat analyst expectations in quarterly results.",
-        pageClassification: "news_or_editorial",
-        pageType: "homepage",
-        pageUrl: "https://www.yahoo.com/",
-        policySnippets: ["Company earnings beat analyst expectations in quarterly results."],
-        signalKey: "financial.performance_claim_text_present",
-        sourceUrls: ["https://www.yahoo.com/"]
-      },
-      expected: {
-        allowedNarrativeTier: "weak",
-        promotionEligibility: "internal_only",
-        externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: ["missing_behavior_side_evidence"]
-      }
-    },
-    {
-      name: "retail discount and entertainment news snippets do not create financial offer context",
-      concern: makeConcern({
-        originKey: "financial_review.earnings_claim_without_adjacent_disclosure",
-        originType: "validation_rule",
-        suggestedUnifiedFindingId: "earnings_claim_without_adjacent_disclosure",
-        title: "Earnings claim without adjacent disclosure"
-      }),
-      evidenceStrengthFlags: ["structured_validation", "page_attributed", "policy_text"] as const,
-      rawEvidence: {
-        claimText: "The scan retained an earnings or performance-style claim on a public-facing financial promotion surface without nearby balancing disclosure evidence.",
-        matchedSnippet: "Amazon is selling a hydrating eyelash serum for 76% off — plus 12 other incredible deals",
-        pageClassification: "financial_offer",
-        pageType: "homepage",
-        pageUrl: "https://yahoo.com/",
-        policySnippets: [
-          "Stagecoach 2026 lineup includes Post Malone, Lainey Wilson and Ella Langley as the country music festival returns to the desert this weekend",
-          "Amazon is selling a hydrating eyelash serum for 76% off — plus 12 other incredible deals",
-          "76% off"
-        ],
-        sourceUrls: ["https://yahoo.com/"],
-        supportingSignals: ["financial.performance_claim_text_present"]
-      },
-      expected: {
-        allowedNarrativeTier: "weak",
-        promotionEligibility: "internal_only",
-        externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: ["missing_behavior_side_evidence"]
-      }
-    },
-    {
-      name: "validation financial finding on non-finance domain is suppressed via macro enrichment",
-      concern: makeConcern({
-        originKey: "financial_review.earnings_claim_without_adjacent_disclosure",
-        originType: "validation_rule",
-        suggestedUnifiedFindingId: "earnings_claim_without_adjacent_disclosure",
-        title: "Earnings claim without adjacent disclosure"
-      }),
-      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
-      rawEvidence: {
-        claimText: "The world's largest running event returns to London this summer.",
-        domainIndustryPrimary: "beverage",
-        matchedSnippet: "The world's largest running event returns to London this summer.",
-        pageClassification: "financial_offer",
-        pageType: "homepage",
-        pageUrl: "https://www.redbull.com/",
-        signalKey: "financial.performance_claim_text_present",
-        sourceUrls: ["https://www.redbull.com/"]
-      },
-      expected: {
-        allowedNarrativeTier: "weak",
-        promotionEligibility: "blocked",
-        externalSurfacingEligibility: "suppress",
-        negativeEvidenceFlags: ["missing_behavior_side_evidence"]
-      }
-    },
-    {
       name: "validation leveraged product finding on media domain is suppressed via macro enrichment",
       concern: makeConcern({
         originKey: "financial_review.leveraged_or_high_risk_product_promotion",
@@ -1493,6 +1411,31 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         negativeEvidenceFlags: ["missing_specific_runtime_anchor", "runtime_tracking_review_incomplete"]
       }
     },
+    ...[
+      ["commerce.form_collects_ssn", "SSN collection detected"],
+      ["commerce.form_collects_government_id", "Government ID collection detected"],
+      ["commerce.form_collects_health_information", "Health information collection detected"],
+      ["commerce.form_collects_financial_information", "Financial information collection detected"],
+      ["commerce.form_collects_geolocation", "Geolocation collection detected"]
+    ].map(([signalKey, title]) => ({
+      name: `${signalKey} without retained field evidence is blocked`,
+      concern: makeConcern({
+        originKey: signalKey,
+        suggestedUnifiedFindingId: undefined,
+        title
+      }),
+      evidenceStrengthFlags: ["fallback_only"] as const,
+      rawEvidence: {
+        signalKey,
+        signalValue: true
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "blocked",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: ["missing_specific_runtime_anchor", "runtime_tracking_review_incomplete"]
+      }
+    })),
     {
       name: "sensitive replay concern without sensitive payload evidence stays audit-only",
       concern: makeConcern({
@@ -1609,6 +1552,25 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         promotionEligibility: "internal_only",
         externalSurfacingEligibility: "audit_only",
         negativeEvidenceFlags: ["accessibility_examples_below_promotion_threshold"]
+      }
+    },
+    {
+      name: "contrast failures with automated count evidence can promote",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "accessibility_review.contrast_failures",
+        suggestedUnifiedFindingId: "contrast_failures",
+        title: "Contrast failures"
+      }),
+      evidenceStrengthFlags: ["structured_validation"] as const,
+      rawEvidence: {
+        count: 2
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
       }
     },
     {
@@ -1930,29 +1892,6 @@ test("deriveConcernPolicy keeps necessary pre-consent cookie evidence audit-only
   assert.equal(policy.promotionEligibility, "internal_only");
   assert.equal(policy.externalSurfacingEligibility, "audit_only");
   assert.ok(policy.negativeEvidenceFlags.includes("missing_concrete_preconsent_artifact"));
-});
-
-test("deriveConcernPolicy keeps pricing unclear audit-only when evidence shows clear pricing terms context", () => {
-  const policy = deriveConcernPolicy({
-    concern: makeConcern({
-      originKey: "financial.pricing_or_fee_transparency_unclear",
-      suggestedUnifiedFindingId: "pricing_or_fee_transparency_unclear",
-      title: "Pricing or fee transparency unclear"
-    }),
-    evidenceStrengthFlags: ["policy_text", "page_attributed"],
-    rawEvidence: {
-      pageUrl: "https://example.com/pricing",
-      pageClassification: "pricing_or_fees",
-      policySnippets: [
-        "The subscription costs $49 per month. Billing renews monthly and you may cancel under the terms of service."
-      ]
-    }
-  });
-
-  assert.equal(policy.allowedNarrativeTier, "weak");
-  assert.equal(policy.promotionEligibility, "internal_only");
-  assert.equal(policy.externalSurfacingEligibility, "audit_only");
-  assert.ok(policy.negativeEvidenceFlags.includes("clear_pricing_terms_context_observed"));
 });
 
 test("deriveConcernPolicy keeps thin fingerprinting evidence audit-only", () => {

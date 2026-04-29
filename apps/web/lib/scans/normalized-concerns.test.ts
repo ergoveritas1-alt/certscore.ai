@@ -162,6 +162,68 @@ test("high-sensitivity candidates with third-party tracking specialize into sens
   assert.equal(concern.promotionEligibility, "eligible");
 });
 
+const sensitiveCollectionCases = [
+  {
+    detectedType: "ssn",
+    label: "SSN collection detected",
+    signalKey: "commerce.form_collects_ssn",
+    snippet: "Social Security Number"
+  },
+  {
+    detectedType: "government_id",
+    label: "Government ID collection detected",
+    signalKey: "commerce.form_collects_government_id",
+    snippet: "Driver license number"
+  },
+  {
+    detectedType: "health_information",
+    label: "Health information collection detected",
+    signalKey: "commerce.form_collects_health_information",
+    snippet: "Medical condition"
+  },
+  {
+    detectedType: "financial_information",
+    label: "Financial information collection detected",
+    signalKey: "commerce.form_collects_financial_information",
+    snippet: "Bank account number"
+  },
+  {
+    detectedType: "geolocation",
+    label: "Geolocation collection detected",
+    signalKey: "commerce.form_collects_geolocation",
+    snippet: "Use my current location"
+  }
+] as const;
+
+for (const sensitiveCase of sensitiveCollectionCases) {
+  test(`${sensitiveCase.signalKey} with tracking context specializes into sensitive tracking findings`, () => {
+    const concern = normalizeConcernFromReviewFindingCandidate({
+      description: `${sensitiveCase.label} appears to coexist with third-party tracking.`,
+      fallbackEvidence: {
+        retargetingPixelArtifactPresent: true,
+        runtimeEvidenceArtifacts: ["request:https://tracker.example.net/pixel"],
+        sensitivePayloadViolations: [
+          {
+            detectedType: sensitiveCase.detectedType,
+            evidenceStrength: "form_field_signal",
+            matchSnippet: sensitiveCase.snippet
+          }
+        ]
+      },
+      observedValue: "Yes",
+      severity: "high",
+      signalKey: sensitiveCase.signalKey,
+      signalLabel: sensitiveCase.label,
+      signalSource: "snapshot_signal",
+      sourceType: "signal",
+      title: sensitiveCase.label
+    });
+
+    assert.equal(concern.suggestedUnifiedFindingId, "sensitive_data_collection_with_third_party_tracking_present");
+    assert.equal(concern.promotionEligibility, "eligible");
+  });
+}
+
 test("generic high-sensitivity candidates without concrete payload evidence are suppressed", () => {
   const concern = normalizeConcernFromReviewFindingCandidate({
     description: "Sensitive input signal triggered without retained payload artifacts.",

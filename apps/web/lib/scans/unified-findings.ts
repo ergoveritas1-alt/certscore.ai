@@ -296,6 +296,26 @@ function normalizeUnifiedFindingEvidenceRecord(
   assignCanonicalField("policySummaryShort", ["policy_summary_short"]);
   assignCanonicalField("runtimeEvidence", ["runtime_evidence"]);
   assignCanonicalField("runtimeEvidenceArtifacts", ["runtime_evidence_artifacts"]);
+  assignCanonicalField("hybridConsentSummary", ["hybrid_consent_summary"]);
+  assignCanonicalField("hybridUiSummary", ["hybrid_ui_summary"]);
+  assignCanonicalField("blockingOverlayType", ["blocking_overlay_type"]);
+  assignCanonicalField("overlayConfidence", ["overlay_confidence"]);
+  assignCanonicalField("rejectDepthClass", ["reject_depth_class"]);
+  assignCanonicalField("consentBaselineTrackerEvidenceUrls", ["consent_baseline_tracker_evidence_urls"]);
+  assignCanonicalField("consentPostRejectTrackerEvidenceUrls", ["consent_post_reject_tracker_evidence_urls"]);
+  assignCanonicalField("consentOptInEvidenceLog", ["consent_opt_in_evidence_log"]);
+  assignCanonicalField("consentOptOutEvidenceLog", ["consent_opt_out_evidence_log"]);
+  assignCanonicalField("consentInteraction", ["consent_interaction", "consent_reject_interaction_trace"]);
+  assignCanonicalField("confidenceRisks", ["confidence_risks", "consent_reject_confidence_risks"]);
+  assignCanonicalField("postRejectNonEssentialRequests", [
+    "post_reject_non_essential_requests",
+    "consent_reject_post_reject_non_essential_requests"
+  ]);
+  assignCanonicalField("promotionDecision", ["promotion_decision"]);
+  assignCanonicalField("rejectEvidenceDiff", ["reject_evidence_diff", "consent_reject_evidence_diff"]);
+  assignCanonicalField("requestTimingBuckets", ["request_timing_buckets", "consent_reject_request_timing_buckets"]);
+  assignCanonicalField("suppressionChecks", ["suppression_checks", "consent_reject_suppression_checks"]);
+  assignCanonicalField("vendorClassifications", ["vendor_classifications", "consent_reject_vendor_classifications"]);
   assignCanonicalField("sourceUrl", ["source_url"]);
   assignCanonicalField("sourceUrls", ["source_urls"]);
 
@@ -304,6 +324,276 @@ function normalizeUnifiedFindingEvidenceRecord(
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
+function formatConsentEvidenceStepSnippet(step: unknown, prefix: string) {
+  if (typeof step === "string" && step.trim().length > 0) {
+    return `${prefix}: ${step.trim()}`;
+  }
+
+  if (!step || typeof step !== "object") {
+    return null;
+  }
+
+  const record = step as Record<string, unknown>;
+  const action = typeof record.action === "string" ? record.action.trim() : prefix.toLowerCase();
+  const text = typeof record.text === "string" ? record.text.trim() : null;
+  const selectorHint = typeof record.selectorHint === "string" ? record.selectorHint.trim() : null;
+  const urlAfterClick = typeof record.urlAfterClick === "string" ? record.urlAfterClick.trim() : null;
+  const stepIndex = typeof record.stepIndex === "number" && Number.isFinite(record.stepIndex) ? record.stepIndex : null;
+
+  const parts = uniqueStrings([
+    stepIndex !== null ? `step ${stepIndex}` : null,
+    action.length > 0 ? action : null,
+    text,
+    selectorHint ? `selector ${selectorHint}` : null,
+    urlAfterClick ? `after ${urlAfterClick}` : null
+  ]);
+
+  return parts.length > 0 ? `${prefix}: ${parts.join(" | ")}` : null;
+}
+
+function getConsentTrackingEvidenceSnippets(normalizedFallbackEvidence: Record<string, unknown>) {
+  const rejectEvidenceDiff =
+    normalizedFallbackEvidence.rejectEvidenceDiff && typeof normalizedFallbackEvidence.rejectEvidenceDiff === "object"
+      ? (normalizedFallbackEvidence.rejectEvidenceDiff as Record<string, unknown>)
+      : null;
+  const baselineVendors = uniqueStrings(
+    Array.isArray(rejectEvidenceDiff?.baseline_vendors)
+      ? (rejectEvidenceDiff?.baseline_vendors as string[])
+      : Array.isArray(normalizedFallbackEvidence.preconsent_tracker_vendors)
+      ? (normalizedFallbackEvidence.preconsent_tracker_vendors as string[])
+      : Array.isArray(normalizedFallbackEvidence.runtimeVendors)
+        ? (normalizedFallbackEvidence.runtimeVendors as string[])
+        : []
+  );
+  const persistedVendors = uniqueStrings(
+    Array.isArray(normalizedFallbackEvidence.persisted_tracker_vendors)
+      ? (normalizedFallbackEvidence.persisted_tracker_vendors as string[])
+      : []
+  );
+  const postRejectVendors = uniqueStrings(
+    Array.isArray(rejectEvidenceDiff?.post_reject_vendors)
+      ? (rejectEvidenceDiff?.post_reject_vendors as string[])
+      : Array.isArray(normalizedFallbackEvidence.post_reject_tracker_vendors)
+      ? (normalizedFallbackEvidence.post_reject_tracker_vendors as string[])
+      : []
+  );
+  const baselineUrls = uniqueStrings(
+    Array.isArray(normalizedFallbackEvidence.consentBaselineTrackerEvidenceUrls)
+      ? (normalizedFallbackEvidence.consentBaselineTrackerEvidenceUrls as string[])
+      : []
+  );
+  const postRejectUrls = uniqueStrings(
+    Array.isArray(normalizedFallbackEvidence.consentPostRejectTrackerEvidenceUrls)
+      ? (normalizedFallbackEvidence.consentPostRejectTrackerEvidenceUrls as string[])
+      : []
+  );
+  const optOutLog = Array.isArray(normalizedFallbackEvidence.consentOptOutEvidenceLog)
+    ? normalizedFallbackEvidence.consentOptOutEvidenceLog
+    : [];
+  const postRejectNonEssentialRequests = Array.isArray(normalizedFallbackEvidence.postRejectNonEssentialRequests)
+    ? normalizedFallbackEvidence.postRejectNonEssentialRequests.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row))
+    : [];
+  const firstRequestMs = postRejectNonEssentialRequests
+    .map((row) => row.ms_after_reject ?? row.msAfterReject)
+    .find((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const baselineVendorSummary =
+    baselineVendors.length > 0
+      ? baselineVendors.slice(0, 4).join(", ")
+      : baselineUrls.length > 0
+        ? "tracked baseline requests were retained without vendor labels"
+        : "not retained in this reject packet";
+  const confidence = typeof normalizedFallbackEvidence.rejectEvidenceConfidence === "string"
+    ? normalizedFallbackEvidence.rejectEvidenceConfidence
+    : null;
+
+  return uniqueStrings([
+    normalizedFallbackEvidence.reject_did_not_reduce_tracking === true
+      ? confidence === "confirmed"
+        ? `Non-essential tracking requests continued after the reject interaction. Baseline vendors: ${baselineVendorSummary}. Post-reject vendors: ${postRejectVendors.slice(0, 4).join(", ") || persistedVendors.slice(0, 4).join(", ") || "not vendor-classified"}.`
+        : `Tracking requests appeared after the reject interaction; review timing and vendor classification. Baseline vendors: ${baselineVendorSummary}. Post-reject vendors: ${postRejectVendors.slice(0, 4).join(", ") || persistedVendors.slice(0, 4).join(", ") || "not vendor-classified"}.`
+      : null,
+    postRejectNonEssentialRequests.length > 0
+      ? `Post-reject non-essential request count: ${postRejectNonEssentialRequests.length}.`
+      : null,
+    typeof firstRequestMs === "number" ? `First post-reject tracker request: ${firstRequestMs}ms after reject.` : null,
+    baselineUrls[0] ? `Baseline runtime request: ${baselineUrls[0]}` : null,
+    postRejectUrls[0] ? `Post-reject runtime request: ${postRejectUrls[0]}` : null,
+    ...postRejectNonEssentialRequests.slice(0, 4).map((row) =>
+      typeof row.url === "string" ? `Sample post-reject URL: ${row.url}` : null
+    ),
+    ...optOutLog.slice(0, 3).map((entry) => formatConsentEvidenceStepSnippet(entry, "Opt-out path"))
+  ]);
+}
+
+function getRecordValue(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function getBooleanValue(record: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getNumberValue(record: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getStringValue(record: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function getOverlayConsentSummary(normalizedFallbackEvidence: Record<string, unknown>) {
+  return getRecordValue(normalizedFallbackEvidence.hybridConsentSummary);
+}
+
+function getOverlayUiSummary(normalizedFallbackEvidence: Record<string, unknown>) {
+  return getRecordValue(normalizedFallbackEvidence.hybridUiSummary);
+}
+
+function inferBlockingOverlayType(
+  normalizedFallbackEvidence: Record<string, unknown>,
+  consentSummary: Record<string, unknown> | null,
+  uiSummary: Record<string, unknown> | null
+) {
+  const explicit = typeof normalizedFallbackEvidence.blockingOverlayType === "string"
+    ? normalizedFallbackEvidence.blockingOverlayType.trim()
+    : null;
+  if (
+    explicit &&
+    ["consent_modal", "cookie_wall", "generic_popup", "age_gate", "newsletter", "unknown"].includes(explicit)
+  ) {
+    return explicit;
+  }
+
+  if (getBooleanValue(consentSummary, ["cookieWallDetected", "cookie_wall_detected"]) === true) {
+    return "cookie_wall";
+  }
+  if (
+    getBooleanValue(consentSummary, ["bannerPresent", "banner_present"]) === true ||
+    getBooleanValue(uiSummary, ["forcedActionRequired", "forced_action_required"]) === true
+  ) {
+    return "consent_modal";
+  }
+  if ((getNumberValue(uiSummary, ["popupCount", "popup_count"]) ?? 0) > 0) {
+    return "generic_popup";
+  }
+  return "unknown";
+}
+
+function getRejectDepthClass(consentSummary: Record<string, unknown> | null, normalizedFallbackEvidence: Record<string, unknown>) {
+  const explicit = typeof normalizedFallbackEvidence.rejectDepthClass === "string"
+    ? normalizedFallbackEvidence.rejectDepthClass.trim()
+    : null;
+  if (explicit && ["same_layer", "second_layer", "hidden", "missing", "unknown"].includes(explicit)) {
+    return explicit;
+  }
+
+  if (getBooleanValue(consentSummary, ["rejectPresent", "reject_present"]) === true) {
+    return "same_layer";
+  }
+  if (getBooleanValue(consentSummary, ["managePresent", "manage_present"]) === true) {
+    return "second_layer";
+  }
+  if (getBooleanValue(consentSummary, ["acceptPresent", "accept_present"]) === true) {
+    return "missing";
+  }
+  return "unknown";
+}
+
+function getOverlayEvidenceFacts(normalizedFallbackEvidence: Record<string, unknown>) {
+  if (
+    normalizedFallbackEvidence.overlay_blocking_detected !== true &&
+    normalizedFallbackEvidence.blocking_overlay_observed !== true &&
+    normalizedFallbackEvidence.signalKey !== "privacy.overlay_blocking_detected"
+  ) {
+    return null;
+  }
+
+  const consentSummary = getOverlayConsentSummary(normalizedFallbackEvidence);
+  const uiSummary = getOverlayUiSummary(normalizedFallbackEvidence);
+  const overlayType = inferBlockingOverlayType(normalizedFallbackEvidence, consentSummary, uiSummary);
+  const acceptPresent = getBooleanValue(consentSummary, ["acceptPresent", "accept_present"]);
+  const rejectPresent = getBooleanValue(consentSummary, ["rejectPresent", "reject_present"]);
+  const managePresent = getBooleanValue(consentSummary, ["managePresent", "manage_present"]);
+  const closePresent = getBooleanValue(consentSummary, ["closePresent", "close_present"]);
+  const interactionBlocked =
+    getBooleanValue(consentSummary, ["pageInteractionBlocked", "page_interaction_blocked"]) ??
+    getBooleanValue(uiSummary, ["forcedActionRequired", "forced_action_required"]) ??
+    getBooleanValue(uiSummary, ["scrollLocked", "scroll_locked"]) ??
+    false;
+  const pageAccessBlockedUntilChoice =
+    getBooleanValue(consentSummary, ["cookieWallDetected", "cookie_wall_detected"]) === true ||
+    getBooleanValue(uiSummary, ["forcedActionRequired", "forced_action_required"]) === true;
+  const dismissAvailable = closePresent === true || getBooleanValue(consentSummary, ["dismissPresent", "dismiss_present"]) === true;
+  const rejectDepthClass = getRejectDepthClass(consentSummary, normalizedFallbackEvidence);
+  const overlayConfidence = typeof normalizedFallbackEvidence.overlayConfidence === "string"
+    ? normalizedFallbackEvidence.overlayConfidence
+    : pageAccessBlockedUntilChoice || interactionBlocked
+      ? "strong"
+      : "medium";
+  const firstVisibleMs = getNumberValue(uiSummary, ["firstVisibleMs", "first_visible_ms"]);
+  const viewportCoveragePercent = getNumberValue(uiSummary, [
+    "viewportCoveragePercent",
+    "viewport_coverage_percent",
+    "overlayViewportCoveragePercent"
+  ]);
+  const cmpVendor =
+    getStringValue(consentSummary, ["cmpVendor", "cmp_vendor", "vendor"]) ??
+    getStringValue(uiSummary, ["cmpVendor", "cmp_vendor"]);
+
+  return {
+    acceptPresent,
+    blockingOverlayObserved: true,
+    closePresent,
+    cmpVendor,
+    dismissAvailable,
+    firstVisibleMs,
+    interactionBlocked,
+    managePresent,
+    overlayConfidence,
+    overlayType,
+    pageAccessBlockedUntilChoice,
+    rejectDepthClass,
+    rejectPresent,
+    viewportCoveragePercent
+  };
+}
+
+function formatOverlayEvidenceSnippets(normalizedFallbackEvidence: Record<string, unknown>) {
+  const facts = getOverlayEvidenceFacts(normalizedFallbackEvidence);
+  if (!facts) {
+    return [];
+  }
+
+  return uniqueStrings([
+    `A blocking ${facts.overlayType.replace(/_/g, " ")} overlay was observed. This is common, but it increases concern when users cannot reject as easily as accept or when tracking begins before a choice is made.`,
+    facts.interactionBlocked ? "The overlay blocked page interaction or scrolling while it was unresolved." : null,
+    facts.pageAccessBlockedUntilChoice ? "Page access appeared blocked until the user made an overlay choice." : null,
+    `Overlay controls detected: accept ${facts.acceptPresent === true ? "present" : facts.acceptPresent === false ? "absent" : "unknown"}, reject ${facts.rejectPresent === true ? "present" : facts.rejectPresent === false ? "absent" : "unknown"}, manage ${facts.managePresent === true ? "present" : facts.managePresent === false ? "absent" : "unknown"}, close ${facts.closePresent === true ? "present" : facts.closePresent === false ? "absent" : "unknown"}.`,
+    `Reject path classification: ${facts.rejectDepthClass}.`,
+    facts.cmpVendor ? `CMP/vendor detected: ${facts.cmpVendor}.` : null,
+    typeof facts.viewportCoveragePercent === "number" ? `Overlay viewport coverage: ${facts.viewportCoveragePercent}%.` : null,
+    typeof facts.firstVisibleMs === "number" ? `Overlay first visible at ${facts.firstVisibleMs}ms.` : null
+  ]);
 }
 
 function getPolicyFieldCoverageFlags(record: Record<string, unknown> | null | undefined) {
@@ -420,6 +710,7 @@ const CONSENT_TRACKING_FINDING_IDS = new Set([
   "preconsent_tracking",
   "consent_mechanism_absent",
   "consent_surface_missing",
+  "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
   "rtb_cookie_sync_observed",
   "gpc_signal_not_honored",
@@ -440,6 +731,7 @@ const CONSENT_TRACKING_FINDING_IDS = new Set([
 const SENSITIVE_DATA_FINDING_IDS = new Set([
   "session_replay_on_sensitive_input_surface",
   "sensitive_data_collection_with_third_party_tracking_present",
+  "sensitive_collection_surface_observed",
   "minors_or_age_gated_collection_context",
   "children_privacy_context_without_supporting_disclosure"
 ]);
@@ -471,7 +763,6 @@ const CONTRADICTORY_SURFACE_FINDING_PAIRS: ReadonlyMap<string, string> = new Map
 const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "ai_financial_advice_or_trading_claims_without_disclosure",
   "apr_or_interest_rate_disclosure_present",
-  "earnings_claim_without_adjacent_disclosure",
   "fee_disclosure_missing_or_opaque",
   "fee_disclosure_present",
   "financial_urgency_pressure_tactic_detected",
@@ -489,7 +780,6 @@ const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "operator_contact_path_present",
   "past_performance_disclaimer_present",
   "performance_claims_without_context",
-  "pricing_or_fee_transparency_unclear",
   "promo_to_terms_conflict",
   "pump_and_dump_language_present",
   "registration_claim_support_missing",
@@ -505,7 +795,6 @@ const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
 
 const DECEPTIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "ai_financial_advice_or_trading_claims_without_disclosure",
-  "earnings_claim_without_adjacent_disclosure",
   "financial_urgency_pressure_tactic_detected",
   "guaranteed_outcome_claim_detected",
   "guaranteed_or_high_return_claims_present",
@@ -514,7 +803,6 @@ const DECEPTIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "investment_risk_disclosure_missing",
   "investment_urgency_countdown_present",
   "performance_claims_without_context",
-  "pricing_or_fee_transparency_unclear",
   "pump_and_dump_language_present",
   "regulatory_registration_disclosure_absent",
   "simulated_performance_without_disclosure",
@@ -1459,6 +1747,8 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     contradictionEvidence?.runtimeSummary,
     contradictionEvidence?.conflictBridge.reasoning,
     ...(contradictionEvidence?.runtimeEvidenceArtifacts ?? []),
+    ...getConsentTrackingEvidenceSnippets(normalizedFallbackEvidence),
+    ...formatOverlayEvidenceSnippets(normalizedFallbackEvidence),
     Array.isArray(normalizedFallbackEvidence.policySnippets) && normalizedFallbackEvidence.policySnippets.length > 0
       ? null
       : isMeaningfulPolicyText(normalizedFallbackEvidence.policySummaryShort)
@@ -1508,6 +1798,10 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     "consentFrictionDelta",
     "consentOptInClicks",
     "consentOptOutClicks",
+    "consentBaselineCookieCount",
+    "consentBaselineThirdPartyCookieCount",
+    "consentPostRejectCookieCount",
+    "consentPostRejectThirdPartyCookieCount",
     "keyPageAttemptCount",
     "policyCoverageRatio",
     "policy_coverage_ratio",
@@ -1520,7 +1814,9 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     "firstRequestMs",
     "firstThirdPartyRequestMs",
     "firstCookieSeenMs",
-    "cmpVisibleMs"
+    "cmpVisibleMs",
+    "firstPostRejectMs",
+    "count"
   ]) {
     const value = normalizedFallbackEvidence[key];
     if (typeof value === "number" && Number.isFinite(value)) {
@@ -1691,6 +1987,12 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     ...(Array.isArray(normalizedFallbackEvidence.runtimeEvidenceUrls) ? (normalizedFallbackEvidence.runtimeEvidenceUrls as string[]) : []),
     ...(Array.isArray(normalizedFallbackEvidence.runtimeRequestUrls) ? (normalizedFallbackEvidence.runtimeRequestUrls as string[]) : []),
     ...(Array.isArray(normalizedFallbackEvidence.metaPixelRequestUrls) ? (normalizedFallbackEvidence.metaPixelRequestUrls as string[]) : []),
+    ...(Array.isArray(normalizedFallbackEvidence.consentBaselineTrackerEvidenceUrls)
+      ? (normalizedFallbackEvidence.consentBaselineTrackerEvidenceUrls as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.consentPostRejectTrackerEvidenceUrls)
+      ? (normalizedFallbackEvidence.consentPostRejectTrackerEvidenceUrls as string[])
+      : []),
     ...(Array.isArray(normalizedFallbackEvidence.preconsent_tracker_evidence_urls)
       ? (normalizedFallbackEvidence.preconsent_tracker_evidence_urls as string[])
       : []),
@@ -1702,6 +2004,88 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   ]).filter(isConcreteHttpEvidenceUrl);
   if (runtimeRequestUrls.length > 0) {
     entities.runtimeRequestUrls = runtimeRequestUrls;
+  }
+  const stringifyEvidenceRows = (rows: unknown) =>
+    Array.isArray(rows)
+      ? uniqueStrings(
+          rows
+            .filter((row) => row && typeof row === "object")
+            .map((row) => {
+              try {
+                return JSON.stringify(row);
+              } catch {
+                return null;
+              }
+            })
+        ).slice(0, 20)
+      : [];
+  const overlayFacts = getOverlayEvidenceFacts(normalizedFallbackEvidence);
+  if (overlayFacts) {
+    entities.blockingOverlayType = [overlayFacts.overlayType];
+    entities.overlayConfidence = [overlayFacts.overlayConfidence];
+    entities.rejectDepthClass = [overlayFacts.rejectDepthClass];
+    entities.overlayControls = uniqueStrings([
+      `accept:${overlayFacts.acceptPresent === true ? "present" : overlayFacts.acceptPresent === false ? "absent" : "unknown"}`,
+      `reject:${overlayFacts.rejectPresent === true ? "present" : overlayFacts.rejectPresent === false ? "absent" : "unknown"}`,
+      `manage:${overlayFacts.managePresent === true ? "present" : overlayFacts.managePresent === false ? "absent" : "unknown"}`,
+      `close:${overlayFacts.closePresent === true ? "present" : overlayFacts.closePresent === false ? "absent" : "unknown"}`
+    ]);
+    entities.overlayBehavior = uniqueStrings([
+      overlayFacts.interactionBlocked ? "interaction_blocked" : null,
+      overlayFacts.pageAccessBlockedUntilChoice ? "page_access_blocked_until_choice" : null,
+      overlayFacts.dismissAvailable ? "dismiss_available" : null
+    ]);
+    if (overlayFacts.cmpVendor) {
+      entities.overlayVendors = [overlayFacts.cmpVendor];
+    }
+    const overlaySummaryRows = stringifyEvidenceRows([overlayFacts]);
+    if (overlaySummaryRows.length > 0) {
+      entities.blockingOverlayEvidence = overlaySummaryRows;
+    }
+    if (typeof overlayFacts.firstVisibleMs === "number") {
+      counts.overlayFirstVisibleMs = overlayFacts.firstVisibleMs;
+    }
+    if (typeof overlayFacts.viewportCoveragePercent === "number") {
+      counts.overlayViewportCoveragePercent = overlayFacts.viewportCoveragePercent;
+    }
+  }
+  const consentInteractionRows = stringifyEvidenceRows(
+    normalizedFallbackEvidence.consentInteraction ? [normalizedFallbackEvidence.consentInteraction] : []
+  );
+  if (consentInteractionRows.length > 0) {
+    entities.consentInteraction = consentInteractionRows;
+  }
+  const rejectEvidenceDiffRows = stringifyEvidenceRows(
+    normalizedFallbackEvidence.rejectEvidenceDiff ? [normalizedFallbackEvidence.rejectEvidenceDiff] : []
+  );
+  if (rejectEvidenceDiffRows.length > 0) {
+    entities.rejectEvidenceDiff = rejectEvidenceDiffRows;
+  }
+  const postRejectNonEssentialRows = stringifyEvidenceRows(normalizedFallbackEvidence.postRejectNonEssentialRequests);
+  if (postRejectNonEssentialRows.length > 0) {
+    entities.postRejectNonEssentialRequests = postRejectNonEssentialRows;
+  }
+  const promotionDecisionRows = stringifyEvidenceRows(
+    normalizedFallbackEvidence.promotionDecision ? [normalizedFallbackEvidence.promotionDecision] : []
+  );
+  if (promotionDecisionRows.length > 0) {
+    entities.promotionDecision = promotionDecisionRows;
+  }
+  const confidenceRisks = Array.isArray(normalizedFallbackEvidence.confidenceRisks)
+    ? uniqueStrings(normalizedFallbackEvidence.confidenceRisks as string[])
+    : [];
+  if (confidenceRisks.length > 0) {
+    entities.confidenceRisks = confidenceRisks;
+  }
+  const suppressionCheckRows = stringifyEvidenceRows(
+    normalizedFallbackEvidence.suppressionChecks ? [normalizedFallbackEvidence.suppressionChecks] : []
+  );
+  if (suppressionCheckRows.length > 0) {
+    entities.suppressionChecks = suppressionCheckRows;
+  }
+  const vendorClassificationRows = stringifyEvidenceRows(normalizedFallbackEvidence.vendorClassifications);
+  if (vendorClassificationRows.length > 0) {
+    entities.vendorClassifications = vendorClassificationRows;
   }
   const runtimeCookieNames = uniqueStrings([
     ...(Array.isArray(normalizedFallbackEvidence.runtimeCookieNames) ? (normalizedFallbackEvidence.runtimeCookieNames as string[]) : []),
@@ -1872,6 +2256,16 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       : null,
     normalizedFallbackEvidence.keyPageGuessedOnly === true ? "guessed_only" : null,
     normalizedFallbackEvidence.consentRedirectOrAuthRequired === true ? "redirect_or_auth_required" : null,
+    normalizedFallbackEvidence.rejectEvidenceConfidence === "confirmed" ? "reject_evidence_confirmed" : null,
+    normalizedFallbackEvidence.rejectEvidenceConfidence === "review" ? "reject_evidence_review" : null,
+    normalizedFallbackEvidence.rejectEvidenceConfidence === "suppress" ? "reject_evidence_suppress" : null,
+    normalizedFallbackEvidence.reject_did_not_reduce_tracking === true ? "reject_did_not_reduce_tracking" : null,
+    overlayFacts ? "blocking_overlay_observed" : null,
+    overlayFacts?.interactionBlocked ? "overlay_interaction_blocked" : null,
+    overlayFacts?.pageAccessBlockedUntilChoice ? "overlay_page_access_blocked_until_choice" : null,
+    overlayFacts?.rejectDepthClass === "missing" ? "overlay_reject_missing" : null,
+    overlayFacts?.rejectDepthClass === "hidden" ? "overlay_reject_hidden" : null,
+    overlayFacts?.rejectDepthClass === "second_layer" ? "overlay_reject_second_layer" : null,
     normalizedFallbackEvidence.gpcVerification &&
     typeof normalizedFallbackEvidence.gpcVerification === "object" &&
     (normalizedFallbackEvidence.gpcVerification as { status?: unknown }).status === "ignored"
@@ -3966,6 +4360,10 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Block non-essential trackers until consent is captured and verify the reject path suppresses them.",
     whyThisMatters: "Tracking before a clear user choice can undermine consent expectations and create immediate transparency risk."
   },
+  reject_did_not_reduce_tracking: {
+    suggestedFix: "Verify the reject path actually suppresses the non-essential vendors that were present at baseline, and re-test the post-reject runtime path with concrete request-level evidence.",
+    whyThisMatters: "If non-essential tracking persists after reject, the site may be signaling a meaningful choice that is not actually enforced."
+  },
   consent_mechanism_absent: {
     suggestedFix: "Add a clear consent control surface before non-essential tracking starts, and make sure users can reject or manage that tracking without extra friction.",
     whyThisMatters: "If no consent controls are presented, users may not get a meaningful chance to manage non-essential tracking before it begins."
@@ -4001,6 +4399,10 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   sensitive_data_collection_with_third_party_tracking_present: {
     suggestedFix: "Review the page or form where sensitive data is collected and suppress third-party advertising, replay, or analytics tooling unless it is clearly necessary and tightly controlled.",
     whyThisMatters: "Collecting sensitive data on pages that also load third-party tracking can materially increase privacy and data-handling risk."
+  },
+  sensitive_collection_surface_observed: {
+    suggestedFix: "Review the affected form fields, minimize sensitive collection where possible, and keep non-essential tracking or replay tooling out of that flow.",
+    whyThisMatters: "Sensitive input fields are important handling context, but field evidence alone does not prove third-party transmission."
   },
   data_categories_disclosure_missing: {
     suggestedFix: "Add a clear explanation of the main categories of personal or sensitive data the site collects, especially on the primary privacy notice.",
@@ -4160,12 +4562,6 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     whyThisMatters:
       "Guaranteed-outcome framing can materially distort how users judge risk because it implies certainty where real financial offers usually carry variability and downside."
   },
-  earnings_claim_without_adjacent_disclosure: {
-    suggestedFix:
-      "Keep earnings or performance-style claims close to concrete balancing context, including risk, variability, eligibility, and any material assumptions needed to interpret the promoted outcome.",
-    whyThisMatters:
-      "When earnings-style claims appear without nearby balancing context, users may overread the promoted outcome as typical, easy, or likely."
-  },
   simulated_performance_without_disclosure: {
     suggestedFix:
       "Qualify simulated, hypothetical, or backtested performance language where it appears and keep clear disclosure nearby that the results are not live realized outcomes.",
@@ -4189,12 +4585,6 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
       "Reduce deadline, scarcity, or act-now language around financial promotions unless the page also gives users enough room to review risks, terms, and limitations.",
     whyThisMatters:
       "Urgency tactics can push users toward faster decisions on higher-risk financial offers before they absorb material disclosures."
-  },
-  pricing_or_fee_transparency_unclear: {
-    suggestedFix:
-      "Retain clearer nearby fee terms, pricing conditions, and cost qualifiers wherever a financial or quasi-financial offer promotes affordability, plans, or account pricing.",
-    whyThisMatters:
-      "Opaque pricing or fee framing makes it harder for users and reviewers to understand the real cost of the promoted offer."
   },
   operator_contact_path_present: {
     suggestedFix: "Keep the operator contact path easy to find and make sure the listed email, form, phone, or support route remains current.",
