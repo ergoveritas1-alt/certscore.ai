@@ -444,11 +444,12 @@ function getElapsedActiveStageProgressValue(input: {
     return null;
   }
 
-  const durationMs = input.activeStageKey === "signal_derivation" ? 45_000 : 24_000;
-  const cap = input.activeStageKey === "signal_derivation" ? input.nextStop - 1 : 99;
-  const ratio = Math.min(1, (input.nowMs - startedAtMs) / durationMs);
+  const durationMs = input.activeStageKey === "signal_derivation" ? 300_000 : 240_000;
+  const cap = input.activeStageKey === "signal_derivation" ? 96 : 99;
+  const linearRatio = Math.min(1, (input.nowMs - startedAtMs) / durationMs);
+  const ratio = Math.sqrt(linearRatio);
 
-  return Math.min(cap, Math.round(input.base + (cap - input.base) * ratio));
+  return Math.min(cap, Math.round((input.base + (cap - input.base) * ratio) * 10) / 10);
 }
 
 function getPendingStageIndex(executionSummary: ScannerExecutionSummary | null) {

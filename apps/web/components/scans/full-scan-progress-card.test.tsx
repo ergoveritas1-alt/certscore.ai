@@ -206,18 +206,27 @@ test("keeps final scan stages moving between worker updates", () => {
     }),
     75
   );
-  assert.ok(
-    getProgressValue({
+  const earlyTailProgress = getProgressValue({
       buildPhaseSummaries: [],
       events: [],
       executionSummary: summary,
       nowMs: Date.parse(runtimeCompletedAt) + 35_000,
       status: "running"
-    }) > 80
-  );
+    });
+  const laterTailProgress = getProgressValue({
+    buildPhaseSummaries: [],
+    events: [],
+    executionSummary: summary,
+    nowMs: Date.parse(runtimeCompletedAt) + 180_000,
+    status: "running"
+  });
+
+  assert.ok(earlyTailProgress > 75);
+  assert.ok(earlyTailProgress < 82);
+  assert.ok(laterTailProgress > 90);
 });
 
-test("lets persistence progress approach completion without reaching 100", () => {
+test("keeps persistence progress moving through the final tail without reaching 100", () => {
   const signalCompletedAt = "2026-03-22T22:15:30.000Z";
   const summary: ScannerExecutionSummary = {
     ...makeSummary(),
@@ -229,15 +238,25 @@ test("lets persistence progress approach completion without reaching 100", () =>
       makeStage("signal_derivation", signalCompletedAt)
     ]
   };
-  const progressValue = getProgressValue({
+  const oneMinuteProgressValue = getProgressValue({
     buildPhaseSummaries: [],
     events: [],
     executionSummary: summary,
     nowMs: Date.parse(signalCompletedAt) + 60_000,
     status: "running"
   });
+  const threeMinuteProgressValue = getProgressValue({
+    buildPhaseSummaries: [],
+    events: [],
+    executionSummary: summary,
+    nowMs: Date.parse(signalCompletedAt) + 180_000,
+    status: "running"
+  });
 
-  assert.equal(progressValue, 99);
+  assert.ok(oneMinuteProgressValue > 90);
+  assert.ok(oneMinuteProgressValue < 96);
+  assert.ok(threeMinuteProgressValue > oneMinuteProgressValue);
+  assert.ok(threeMinuteProgressValue < 100);
 });
 
 test("surfaces early tier results while a scan is still running", () => {
