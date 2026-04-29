@@ -270,6 +270,15 @@ function getLatestEventForStage(events: ScanEventRow[], stageKey: string) {
   return matchingEvents.at(-1) ?? null;
 }
 
+function getFirstEventForStage(events: ScanEventRow[], stageKey: string) {
+  const matches = STAGE_EVENT_MATCHERS[stageKey];
+  if (!matches) {
+    return null;
+  }
+
+  return events.find((event) => matches(event.eventType)) ?? null;
+}
+
 function getEventTimeMs(event: ScanEventRow | null) {
   if (!event) {
     return null;
@@ -352,6 +361,7 @@ function buildLatestActivityLine(input: {
 
 export function getProgressValue(input: {
   buildPhaseSummaries: BuildPhaseSummary[];
+  createdAt?: string;
   executionSummary: ScannerExecutionSummary | null;
   events: ScanEventRow[];
   nowMs?: number;
@@ -369,7 +379,11 @@ export function getProgressValue(input: {
   }
 
   if (input.status === "queued") {
-    return 8;
+    return getElapsedQueuedProgressValue({
+      createdAt: input.createdAt,
+      events: input.events,
+      nowMs: input.nowMs
+    });
   }
 
   const completedCount = input.executionSummary?.stages.length ?? 0;
@@ -422,6 +436,23 @@ export function getProgressValue(input: {
   return Math.max(eventProgressValue, elapsedProgressValue ?? eventProgressValue);
 }
 
+function getElapsedQueuedProgressValue(input: {
+  createdAt?: string;
+  events: ScanEventRow[];
+  nowMs?: number;
+}) {
+  const queuedEvent = getLatestEventForStage(input.events, "queue_wait");
+  const startedAtMs = getEventTimeMs(queuedEvent) ?? (input.createdAt ? Date.parse(input.createdAt) : null);
+
+  if (input.nowMs === undefined || startedAtMs === null || !Number.isFinite(startedAtMs) || input.nowMs <= startedAtMs) {
+    return 8;
+  }
+
+  const linearRatio = Math.min(1, (input.nowMs - startedAtMs) / 180_000);
+  const ratio = Math.sqrt(linearRatio);
+  return Math.round((8 + (20 - 8) * ratio) * 10) / 10;
+}
+
 function getElapsedActiveStageProgressValue(input: {
   activeStageIndex: number;
   activeStageKey: string | null;
@@ -442,13 +473,10 @@ function getElapsedActiveStageProgressValue(input: {
   const previousStage = previousStageKey
     ? input.completedStages.find((stage) => stage.stage === previousStageKey) ?? null
     : null;
-  const latestActiveStageEvent =
-    [...input.events]
-      .reverse()
-      .find((event) => STAGE_EVENT_MATCHERS[input.activeStageKey ?? ""]?.(event.eventType)) ?? null;
+  const firstActiveStageEvent = getFirstEventForStage(input.events, input.activeStageKey);
   const startedAtMs =
-    getEventTimeMs(latestActiveStageEvent) ??
-    (previousStage?.completedAt ? Date.parse(previousStage.completedAt) : null);
+    (previousStage?.completedAt ? Date.parse(previousStage.completedAt) : null) ??
+    getEventTimeMs(firstActiveStageEvent);
 
   if (startedAtMs === null || !Number.isFinite(startedAtMs) || input.nowMs <= startedAtMs) {
     return null;
@@ -470,7 +498,7 @@ function getActiveStageTimingConfig(activeStageKey: string, nextStop: number) {
     case "crawl_discovery":
       return { cap: nextStop - 0.5, durationMs: 180_000 };
     case "runtime_snapshot_capture":
-      return { cap: nextStop - 0.5, durationMs: 240_000 };
+      return { cap: nextStop - 0.5, durationMs: 90_000 };
     case "signal_derivation":
       return { cap: 96, durationMs: 300_000 };
     case "persistence_diff_finalization":
@@ -799,7 +827,7 @@ function getStageRows(input: {
       label: formatStageLabel(stageKey),
       latestEvent,
       message,
-      startedAt: completedStage?.startedAt ?? (isActive ? latestEvent?.createdAt ?? null : null),
+      startedAt: completedStage?.startedAt ?? (isActive ? getFirstEventForStage(input.events, stageKey)?.createdAt ?? null : null),
       state,
       statusLabel: completedStage
         ? completedStage.outcome === "success"
@@ -879,7 +907,7 @@ export function getNextDisplayedProgressValue(input: {
     return input.targetValue;
   }
 
-  const step = Math.abs(delta) > 32 ? 2 : 1;
+  const step = Math.abs(delta) > 32 ? 0.75 : 0.5;
   return input.currentValue + step;
 }
 
@@ -930,6 +958,7 @@ export function FullScanProgressCard({
     () =>
       getProgressValue({
         buildPhaseSummaries,
+        createdAt,
         executionSummary,
         events,
         nowMs,

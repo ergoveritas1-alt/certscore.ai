@@ -137,6 +137,40 @@ test("keeps queued scans anchored to queue pickup messaging", () => {
   assert.doesNotMatch(html, /Scanning\.\.\./);
 });
 
+test("keeps queued progress moving while waiting for worker pickup", () => {
+  const queuedAt = "2026-04-18T10:43:07.000Z";
+  const events = [
+    {
+      createdAt: queuedAt,
+      eventType: SCAN_EVENT_TYPES.fullQueued,
+      message: "Scan queued and waiting for worker pickup.",
+      metadataJson: { profile: "preview", pagesRequested: 1 }
+    }
+  ];
+
+  assert.equal(
+    getProgressValue({
+      buildPhaseSummaries: [],
+      createdAt: queuedAt,
+      events,
+      executionSummary: null,
+      nowMs: Date.parse(queuedAt),
+      status: "queued"
+    }),
+    8
+  );
+  assert.ok(
+    getProgressValue({
+      buildPhaseSummaries: [],
+      createdAt: queuedAt,
+      events,
+      executionSummary: null,
+      nowMs: Date.parse(queuedAt) + 45_000,
+      status: "queued"
+    }) > 13
+  );
+});
+
 test("uses runtime events to avoid front-loaded progress skew", () => {
   const html = renderToStaticMarkup(
     <FullScanProgressCard
@@ -180,7 +214,7 @@ test("keeps displayed progress monotonic across lower refresh targets", () => {
       currentValue: 62,
       targetValue: 95
     }),
-    64
+    62.75
   );
 });
 
@@ -251,6 +285,82 @@ test("keeps crawl-stage progress moving during quiet discovery work", () => {
   assert.ok(initialProgress >= 46);
   assert.ok(laterProgress > initialProgress);
   assert.ok(laterProgress < 57);
+});
+
+test("does not reset active-stage elapsed progress when newer stage events arrive", () => {
+  const runtimeStartedAt = "2026-03-22T22:14:30.000Z";
+  const summary: ScannerExecutionSummary = {
+    ...makeSummary(),
+    stages: [
+      makeStage("setup_load", "2026-03-22T22:14:10.000Z"),
+      makeStage("baseline_lookup", "2026-03-22T22:14:20.000Z"),
+      makeStage("crawl_discovery", runtimeStartedAt)
+    ]
+  };
+  const earlyProgress = getProgressValue({
+    buildPhaseSummaries: [],
+    events: [
+      {
+        createdAt: "2026-03-22T22:14:45.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        message: "Runtime snapshot update.",
+        metadataJson: {}
+      }
+    ],
+    executionSummary: summary,
+    nowMs: Date.parse(runtimeStartedAt) + 45_000,
+    status: "running"
+  });
+  const laterProgress = getProgressValue({
+    buildPhaseSummaries: [],
+    events: [
+      {
+        createdAt: "2026-03-22T22:14:45.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        message: "Runtime snapshot update.",
+        metadataJson: {}
+      },
+      {
+        createdAt: "2026-03-22T22:15:15.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        message: "Another runtime snapshot update.",
+        metadataJson: {}
+      }
+    ],
+    executionSummary: summary,
+    nowMs: Date.parse(runtimeStartedAt) + 75_000,
+    status: "running"
+  });
+
+  assert.ok(laterProgress > earlyProgress);
+});
+
+test("runtime elapsed progress overtakes event progress before a visible stall", () => {
+  const runtimeStartedAt = "2026-03-22T22:14:30.000Z";
+  const summary: ScannerExecutionSummary = {
+    ...makeSummary(),
+    stages: [
+      makeStage("setup_load", "2026-03-22T22:14:10.000Z"),
+      makeStage("baseline_lookup", "2026-03-22T22:14:20.000Z"),
+      makeStage("crawl_discovery", runtimeStartedAt)
+    ]
+  };
+  const progress = getProgressValue({
+    buildPhaseSummaries: [],
+    events: [
+      {
+        createdAt: "2026-03-22T22:14:38.000Z",
+        eventType: "runtime.build_phase_diagnostic",
+        message: "Runtime snapshot update.",
+        metadataJson: {}
+      }
+    ],
+    executionSummary: summary,
+    nowMs: Date.parse(runtimeStartedAt) + 20_000,
+    status: "running"
+  });
+
+  assert.ok(progress > 63);
 });
 
 test("keeps final scan stages moving between worker updates", () => {

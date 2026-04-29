@@ -79,13 +79,6 @@ function ScanStatusRefreshEffect({ shouldRefresh }: { shouldRefresh: boolean }) 
         return;
       }
 
-      if (process.env.NODE_ENV === "development") {
-        // Use a normal page reload in dev so transient fetch failures do not
-        // throw the scan page into a runtime overlay.
-        window.location.reload();
-        return;
-      }
-
       router.refresh();
     }, 5000);
 
