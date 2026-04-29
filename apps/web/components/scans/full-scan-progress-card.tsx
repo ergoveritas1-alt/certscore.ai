@@ -357,7 +357,7 @@ export function getProgressValue(input: {
   nowMs?: number;
   status: string;
 }) {
-  const milestoneStops = [6, 28, 44, 62, 82, 94, 98];
+  const milestoneStops = [8, 29, 43, 57, 71, 86, 99];
 
   if (input.status === "completed") {
     return 100;

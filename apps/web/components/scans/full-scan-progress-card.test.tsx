@@ -204,7 +204,7 @@ test("keeps final scan stages moving between worker updates", () => {
       nowMs: Date.parse(runtimeCompletedAt),
       status: "running"
     }),
-    85
+    75
   );
   assert.ok(
     getProgressValue({
@@ -213,7 +213,7 @@ test("keeps final scan stages moving between worker updates", () => {
       executionSummary: summary,
       nowMs: Date.parse(runtimeCompletedAt) + 35_000,
       status: "running"
-    }) > 90
+    }) > 80
   );
 });
 
