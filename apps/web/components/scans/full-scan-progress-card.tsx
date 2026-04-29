@@ -392,7 +392,18 @@ export function getProgressValue(input: {
     const stageEventCount = activeStageKey ? input.events.filter((event) => STAGE_EVENT_MATCHERS[activeStageKey]?.(event.eventType)).length : 0;
     const eventRatio = Math.min(0.35, stageEventCount / 10);
     const ratio = Math.min(0.92, runtimeCompleted / runtimeTotal + eventRatio);
-    return Math.round(base + (nextStop - base) * ratio);
+    const eventProgressValue = Math.round(base + (nextStop - base) * ratio);
+    const elapsedProgressValue = getElapsedActiveStageProgressValue({
+      activeStageIndex: effectivePendingStageIndex,
+      activeStageKey,
+      base,
+      completedStages: input.executionSummary?.stages ?? [],
+      events: input.events,
+      nextStop,
+      nowMs: input.nowMs
+    });
+
+    return Math.max(eventProgressValue, elapsedProgressValue ?? eventProgressValue);
   }
 
   const stageEventCount = activeStageKey ? input.events.filter((event) => STAGE_EVENT_MATCHERS[activeStageKey]?.(event.eventType)).length : 0;
@@ -422,8 +433,7 @@ function getElapsedActiveStageProgressValue(input: {
 }) {
   if (
     input.nowMs === undefined ||
-    input.activeStageKey === null ||
-    (input.activeStageKey !== "signal_derivation" && input.activeStageKey !== "persistence_diff_finalization")
+    input.activeStageKey === null
   ) {
     return null;
   }
@@ -444,12 +454,30 @@ function getElapsedActiveStageProgressValue(input: {
     return null;
   }
 
-  const durationMs = input.activeStageKey === "signal_derivation" ? 300_000 : 240_000;
-  const cap = input.activeStageKey === "signal_derivation" ? 96 : 99;
-  const linearRatio = Math.min(1, (input.nowMs - startedAtMs) / durationMs);
+  const timingConfig = getActiveStageTimingConfig(input.activeStageKey, input.nextStop);
+  const linearRatio = Math.min(1, (input.nowMs - startedAtMs) / timingConfig.durationMs);
   const ratio = Math.sqrt(linearRatio);
 
-  return Math.min(cap, Math.round((input.base + (cap - input.base) * ratio) * 10) / 10);
+  return Math.min(timingConfig.cap, Math.round((input.base + (timingConfig.cap - input.base) * ratio) * 10) / 10);
+}
+
+function getActiveStageTimingConfig(activeStageKey: string, nextStop: number) {
+  switch (activeStageKey) {
+    case "setup_load":
+      return { cap: nextStop - 0.5, durationMs: 90_000 };
+    case "baseline_lookup":
+      return { cap: nextStop - 0.5, durationMs: 120_000 };
+    case "crawl_discovery":
+      return { cap: nextStop - 0.5, durationMs: 180_000 };
+    case "runtime_snapshot_capture":
+      return { cap: nextStop - 0.5, durationMs: 240_000 };
+    case "signal_derivation":
+      return { cap: 96, durationMs: 300_000 };
+    case "persistence_diff_finalization":
+      return { cap: 99, durationMs: 240_000 };
+    default:
+      return { cap: nextStop - 0.5, durationMs: 120_000 };
+  }
 }
 
 function getPendingStageIndex(executionSummary: ScannerExecutionSummary | null) {
@@ -824,20 +852,9 @@ function getProgressDisplayCacheKey(input: {
 }
 
 function getInitialDisplayedProgressValue(input: {
-  cacheKey: string;
   progressValue: number;
   status: string;
 }) {
-  const memoryValue = progressDisplayCache.get(input.cacheKey);
-  const storageValue = readStoredProgressValue(input.cacheKey);
-  const cachedValue =
-    typeof memoryValue === "number" || typeof storageValue === "number"
-      ? Math.max(memoryValue ?? 0, storageValue ?? 0)
-      : null;
-  if (typeof cachedValue === "number" && Number.isFinite(cachedValue)) {
-    return Math.min(Math.max(cachedValue, 0), 100);
-  }
-
   if (input.status === "queued") {
     return Math.min(input.progressValue, 1);
   }
@@ -930,11 +947,24 @@ export function FullScanProgressCard({
   );
   const [displayedProgressValue, setDisplayedProgressValue] = useState(() =>
     getInitialDisplayedProgressValue({
-      cacheKey: progressDisplayCacheKey,
       progressValue,
       status
     })
   );
+
+  useEffect(() => {
+    if (status !== "queued" && status !== "running") {
+      return;
+    }
+
+    const cachedValue = progressDisplayCache.get(progressDisplayCacheKey);
+    const storedValue = readStoredProgressValue(progressDisplayCacheKey);
+    if (typeof cachedValue !== "number" && typeof storedValue !== "number") {
+      return;
+    }
+
+    setDisplayedProgressValue((currentValue) => Math.max(currentValue, cachedValue ?? 0, storedValue ?? 0));
+  }, [progressDisplayCacheKey, status]);
 
   useEffect(() => {
     if (status === "completed" || status === "failed") {

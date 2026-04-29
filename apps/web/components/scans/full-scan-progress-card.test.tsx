@@ -184,6 +184,75 @@ test("keeps displayed progress monotonic across lower refresh targets", () => {
   );
 });
 
+test("keeps early active stages moving without extra worker events", () => {
+  const startedAt = "2026-03-22T22:14:00.000Z";
+  const summary: ScannerExecutionSummary = {
+    ...makeSummary(),
+    stages: []
+  };
+  const initialProgress = getProgressValue({
+    buildPhaseSummaries: [],
+    events: [
+      {
+        createdAt: startedAt,
+        eventType: SCAN_EVENT_TYPES.fullStarted,
+        message: "Structured snapshot scan started.",
+        metadataJson: {}
+      }
+    ],
+    executionSummary: summary,
+    nowMs: Date.parse(startedAt),
+    status: "running"
+  });
+  const laterProgress = getProgressValue({
+    buildPhaseSummaries: [],
+    events: [
+      {
+        createdAt: startedAt,
+        eventType: SCAN_EVENT_TYPES.fullStarted,
+        message: "Structured snapshot scan started.",
+        metadataJson: {}
+      }
+    ],
+    executionSummary: summary,
+    nowMs: Date.parse(startedAt) + 45_000,
+    status: "running"
+  });
+
+  assert.ok(initialProgress >= 13);
+  assert.ok(laterProgress > initialProgress);
+  assert.ok(laterProgress < 29);
+});
+
+test("keeps crawl-stage progress moving during quiet discovery work", () => {
+  const baselineCompletedAt = "2026-03-22T22:14:30.000Z";
+  const summary: ScannerExecutionSummary = {
+    ...makeSummary(),
+    stages: [
+      makeStage("setup_load", "2026-03-22T22:14:10.000Z"),
+      makeStage("baseline_lookup", baselineCompletedAt)
+    ]
+  };
+  const initialProgress = getProgressValue({
+    buildPhaseSummaries: [],
+    events: [],
+    executionSummary: summary,
+    nowMs: Date.parse(baselineCompletedAt),
+    status: "running"
+  });
+  const laterProgress = getProgressValue({
+    buildPhaseSummaries: [],
+    events: [],
+    executionSummary: summary,
+    nowMs: Date.parse(baselineCompletedAt) + 90_000,
+    status: "running"
+  });
+
+  assert.ok(initialProgress >= 46);
+  assert.ok(laterProgress > initialProgress);
+  assert.ok(laterProgress < 57);
+});
+
 test("keeps final scan stages moving between worker updates", () => {
   const runtimeCompletedAt = "2026-03-22T22:14:30.000Z";
   const summary: ScannerExecutionSummary = {
