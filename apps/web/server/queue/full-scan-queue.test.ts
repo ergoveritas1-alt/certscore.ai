@@ -9,6 +9,15 @@ test("disables scanning when no scanner heartbeat is present", () => {
   assert.match(availability.reason ?? "", /no healthy scanner service heartbeat/i);
 });
 
+test("allows degraded scanning when scanner wake-up automation is expected", () => {
+  const availability = getFullScanQueueAvailabilityFromHeartbeat(null, Date.parse("2026-03-21T12:00:00.000Z"), {
+    allowDegradedScanner: true
+  });
+
+  assert.equal(availability.enabled, true);
+  assert.match(availability.reason ?? "", /accepting queued work/i);
+});
+
 test("enables scanning when the scanner heartbeat is fresh", () => {
   const availability = getFullScanQueueAvailabilityFromHeartbeat(
     "2026-03-21T11:59:10.000Z",

@@ -20,7 +20,9 @@ type ScanQueueProvenance = {
 };
 
 export async function createAnonymousFullScan(input: { hostname: string; normalizedUrl: string; provenance?: ScanQueueProvenance }) {
-  const fullScanQueueAvailability = await getFullScanQueueAvailability();
+  const fullScanQueueAvailability = await getFullScanQueueAvailability({
+    allowDegradedScanner: process.env.FULL_SCAN_QUEUE_ALLOW_DEGRADED_HEARTBEAT === "true"
+  });
 
   if (!fullScanQueueAvailability.enabled) {
     throw new Error(fullScanQueueAvailability.reason ?? "Full scan queue is unavailable.");
@@ -52,6 +54,7 @@ export async function createAnonymousFullScan(input: { hostname: string; normali
     metadataJson: {
       pagesRequested,
       profile: planLimits.scanProfile,
+      queueAvailabilityReason: fullScanQueueAvailability.reason,
       source: input.provenance?.source ?? scanConfig.source,
       originIp: input.provenance?.originIp ?? null,
       githubRunId: input.provenance?.githubRunId ?? null,

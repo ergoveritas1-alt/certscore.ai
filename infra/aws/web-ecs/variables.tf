@@ -214,6 +214,18 @@ variable "web_desired_count" {
   default     = 1
 }
 
+variable "full_scan_queue_allow_degraded_heartbeat" {
+  description = "Allow the web app to accept full-scan queue requests when scanner heartbeat is stale; requires external worker wake-up monitoring."
+  type        = bool
+  default     = false
+}
+
+variable "alarm_actions" {
+  description = "SNS topic ARNs or other CloudWatch alarm action ARNs for public web availability alarms."
+  type        = list(string)
+  default     = []
+}
+
 variable "tags" {
   description = "Tags applied to future public web infrastructure."
   type        = map(string)

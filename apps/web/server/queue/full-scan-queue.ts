@@ -8,6 +8,10 @@ type ScannerServiceHeartbeatSnapshot = {
   lastHeartbeatAt: string | null;
 };
 
+type FullScanQueueAvailabilityOptions = {
+  allowDegradedScanner?: boolean;
+};
+
 function normalizeHeartbeatValue(value: unknown) {
   if (typeof value === "string") {
     const timestamp = new Date(value).getTime();
@@ -26,11 +30,23 @@ export async function enqueueFullScanJob(_scanId: string) {
   return;
 }
 
-export function getFullScanQueueAvailabilityFromHeartbeat(lastHeartbeatAt: string | null, nowMs = Date.now()) {
+export function getFullScanQueueAvailabilityFromHeartbeat(
+  lastHeartbeatAt: string | null,
+  nowMs = Date.now(),
+  options: FullScanQueueAvailabilityOptions = {}
+) {
   const heartbeatAgeMs = lastHeartbeatAt ? nowMs - new Date(lastHeartbeatAt).getTime() : null;
   const workerHealthy = typeof heartbeatAgeMs === "number" && Number.isFinite(heartbeatAgeMs) && heartbeatAgeMs <= SCANNER_HEARTBEAT_WINDOW_MS;
 
   if (!workerHealthy) {
+    if (options.allowDegradedScanner) {
+      return {
+        enabled: true as const,
+        reason:
+          "Scanning is accepting queued work while the scanner service is cold or degraded. A worker wake-up monitor must start scanner capacity."
+      };
+    }
+
     return {
       enabled: false as const,
       reason:
@@ -158,15 +174,22 @@ export async function getLastScannerServiceHeartbeat(): Promise<ScannerServiceHe
   });
 }
 
-export async function getFullScanQueueAvailability() {
+export async function getFullScanQueueAvailability(options: FullScanQueueAvailabilityOptions = {}) {
   const heartbeat = await getLastScannerServiceHeartbeat();
 
   if (heartbeat.errorMessage) {
+    if (options.allowDegradedScanner) {
+      return {
+        enabled: true as const,
+        reason: heartbeat.errorMessage
+      };
+    }
+
     return {
       enabled: false as const,
       reason: heartbeat.errorMessage
     };
   }
 
-  return getFullScanQueueAvailabilityFromHeartbeat(heartbeat.lastHeartbeatAt);
+  return getFullScanQueueAvailabilityFromHeartbeat(heartbeat.lastHeartbeatAt, Date.now(), options);
 }

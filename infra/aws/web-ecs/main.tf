@@ -36,6 +36,7 @@ locals {
       { name = "HOSTNAME", value = "0.0.0.0" },
       { name = "NEXT_PUBLIC_AUTH_GOOGLE_ENABLED", value = var.next_public_auth_google_enabled },
       { name = "CERTSCORE_ADMIN_EMAILS", value = var.certscore_admin_emails },
+      { name = "FULL_SCAN_QUEUE_ALLOW_DEGRADED_HEARTBEAT", value = tostring(var.full_scan_queue_allow_degraded_heartbeat) },
       { name = "S3_BUCKET", value = var.s3_bucket },
       { name = "S3_REGION", value = var.s3_region }
     ],
@@ -455,6 +456,50 @@ resource "aws_ecs_service" "certscore" {
   health_check_grace_period_seconds = 90
 
   depends_on = [aws_lb_listener.http, aws_lb_listener.https]
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "certscore_no_healthy_targets" {
+  alarm_name          = "${local.prefix}-certscore-no-healthy-targets"
+  alarm_description   = "CertScore public web target group has no healthy ALB targets."
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "HealthyHostCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = 60
+  statistic           = "Minimum"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+
+  dimensions = {
+    LoadBalancer = aws_lb.web.arn_suffix
+    TargetGroup  = aws_lb_target_group.certscore.arn_suffix
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "certscore_unhealthy_targets" {
+  alarm_name          = "${local.prefix}-certscore-unhealthy-targets"
+  alarm_description   = "CertScore public web target group has unhealthy ALB targets."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "UnHealthyHostCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+
+  dimensions = {
+    LoadBalancer = aws_lb.web.arn_suffix
+    TargetGroup  = aws_lb_target_group.certscore.arn_suffix
+  }
 
   tags = local.common_tags
 }

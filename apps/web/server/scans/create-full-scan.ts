@@ -73,7 +73,9 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   error: string | null;
   scanId: string | null;
 }> {
-  const fullScanQueueAvailability = await getFullScanQueueAvailability();
+  const fullScanQueueAvailability = await getFullScanQueueAvailability({
+    allowDegradedScanner: process.env.FULL_SCAN_QUEUE_ALLOW_DEGRADED_HEARTBEAT === "true"
+  });
 
   if (!fullScanQueueAvailability.enabled) {
     return {
@@ -219,6 +221,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       metadataJson: {
         pagesRequested,
         profile: planLimits.scanProfile,
+        queueAvailabilityReason: fullScanQueueAvailability.reason,
         source: input.provenance?.source ?? scanConfig.source,
         originIp: input.provenance?.originIp ?? null,
         githubRunId: input.provenance?.githubRunId ?? null,
