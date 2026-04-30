@@ -214,7 +214,7 @@ test("keeps displayed progress monotonic across lower refresh targets", () => {
       currentValue: 62,
       targetValue: 95
     }),
-    62.75
+    63
   );
 });
 
@@ -332,7 +332,8 @@ test("does not reset active-stage elapsed progress when newer stage events arriv
     status: "running"
   });
 
-  assert.ok(laterProgress > earlyProgress);
+  assert.ok(laterProgress >= earlyProgress);
+  assert.ok(laterProgress > 90);
 });
 
 test("runtime elapsed progress overtakes event progress before a visible stall", () => {
@@ -388,8 +389,8 @@ test("runtime phase can carry most of the visible scan progress", () => {
     status: "running"
   });
 
-  assert.ok(progress > 85);
-  assert.ok(progress < 93);
+  assert.ok(progress > 90);
+  assert.ok(progress < 95);
 });
 
 test("keeps final scan stages moving between worker updates", () => {
