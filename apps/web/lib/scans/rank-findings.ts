@@ -57,6 +57,15 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
   if (ranked.some((finding) => finding.id === "session_recording_services_detected")) {
     forcedIds.add("session_recording_services_detected");
   }
+  if (
+    ranked.some(
+      (finding) =>
+        finding.id === "reject_tracking_persists_after_reject" &&
+        (finding.severity === "critical" || finding.severity === "high")
+    )
+  ) {
+    forcedIds.add("reject_tracking_persists_after_reject");
+  }
   if (ranked.some((finding) => finding.id === "blocking_overlay_observed")) {
     forcedIds.add("blocking_overlay_observed");
   }

@@ -16,6 +16,7 @@ import {
   upsertUsageCounter,
   updateDomainLatestScan
 } from "./repository";
+import { buildQueuedFullScanConfig } from "./full-scan-config";
 
 export type CreateFullScanActionState = {
   error: string | null;
@@ -185,21 +186,13 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   }
 
   const pagesRequested = domainRecord.domain.maxPagesOverride ?? planLimits.maxPagesPerScan;
-  const scanConfig = {
-    freshBrowserRequired: true,
-    maxRequestedTier: "tier5_full_scan",
-    post403Policy: {
-      maxHomepageRetriesAfter403: 0,
-      maxPassiveVerificationFetchesAfter403: 4,
-      passiveOnlyAfter403: true,
-      stopOnHomepage403: true,
-      verifiedSurfaceTargetsAfter403: ["privacy_policy", "terms_of_service", "cookie_policy", "contact_page"]
-    },
-    processor: "queued-full-scan-v1",
-    profile: planLimits.scanProfile,
+  const scanConfig = buildQueuedFullScanConfig({
+    hostname: domainRecord.domain.hostname,
     maxPages: pagesRequested,
+    normalizedUrl: domainRecord.domain.normalizedUrl,
+    profile: planLimits.scanProfile,
     source: input.source ?? "manual-dashboard"
-  };
+  });
 
   let scan;
 

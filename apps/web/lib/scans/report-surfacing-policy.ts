@@ -3,6 +3,9 @@ import {
   type ReportUnifiedFindingId
 } from "../../../../packages/shared/src/taxonomy/report-pillars";
 import type { UnifiedFindingPacket } from "./unified-findings";
+import {
+  REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL
+} from "./reject-tracking-policy";
 
 export const REPORT_SURFACING_POLICY_VERSION = "v1";
 
@@ -1565,7 +1568,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     return;
   }
 
-  if (packet.unifiedFindingId === "reject_did_not_reduce_tracking") {
+  if (packet.unifiedFindingId === "reject_did_not_reduce_tracking" || packet.unifiedFindingId === "reject_did_not_reduce_third_party_cookies") {
     if (evidenceFlags.has("reject_evidence_suppress")) {
       overrideDecision(decision, {
         state: "suppressed",
@@ -1955,7 +1958,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   }
 
   if (context.policy.family === "consent_tracking") {
-    if (packet.unifiedFindingId === "reject_did_not_reduce_tracking") {
+    if (packet.unifiedFindingId === "reject_did_not_reduce_tracking" || packet.unifiedFindingId === "reject_did_not_reduce_third_party_cookies") {
       if (evidenceFlags.has("reject_evidence_suppress")) {
         overrideDecision(decision, {
           state: "suppressed",
@@ -1971,7 +1974,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
           lane: "main",
           tier: "headline",
           reason:
-            "The reject interaction succeeded and classified non-essential tracking requests were retained at least 500ms after reject, so the finding can stand as a confirmed consent-control failure.",
+            `The reject interaction succeeded and classified non-essential tracking requests were retained at least ${REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL} after reject, so the finding can stand as a confirmed consent-control failure.`,
           ruleId: "evidence.consent_behavior.confirmed_specific_runtime_failure"
         });
       } else {

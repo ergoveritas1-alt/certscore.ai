@@ -39,6 +39,10 @@ import {
 } from "../../lib/scans/derive-findings";
 import { buildScanCalibrationSummary } from "../../lib/scans/calibration-summary";
 import { compactEvidenceJsonForDisplay } from "../../lib/scans/compact-evidence-json";
+import {
+  dedupeHeadlineFindings,
+  deriveConsentAuditFindings
+} from "../../lib/scans/consent-audit-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { getHybridRuntimeEvidence } from "../../lib/scans/hybrid-runtime-evidence";
 import { buildSupplementalRuntimeUnifiedFindingPackets } from "../../lib/scans/supplemental-runtime-unified-findings";
@@ -398,144 +402,6 @@ type PolicyBehaviorContradiction = {
   status: "contradiction" | "violation risk" | "likely contradiction";
   title: string;
 };
-
-function deriveConsentAuditFindings(
-  snapshot: Record<string, unknown> | null,
-  runtimeArtifacts: Record<string, unknown> | null
-) {
-  if (!getRecordBoolean(runtimeArtifacts, "consent_audit_completed")) {
-    return [] as PreviewSampleFinding[];
-  }
-
-  const findings: PreviewSampleFinding[] = [];
-  const rejectWorked = getRecordBoolean(runtimeArtifacts, "consent_reject_interaction_succeeded");
-  const acceptWorked = getRecordBoolean(runtimeArtifacts, "consent_accept_interaction_succeeded");
-  const rejectReducedTracking = runtimeArtifacts?.consent_reject_reduced_tracking;
-  const rejectReducedThirdPartyCookies = runtimeArtifacts?.consent_reject_reduced_third_party_cookies;
-  const baselineTrackerVendors = getRecordStringArray(runtimeArtifacts, "consent_baseline_tracker_vendor_names");
-  const baselineTrackerEvidenceUrls = getRecordStringArray(runtimeArtifacts, "consent_baseline_tracker_evidence_urls");
-  const postRejectTrackerVendors = getRecordStringArray(runtimeArtifacts, "consent_post_reject_tracker_vendor_names");
-  const rejectPersistedTrackerVendors = getRecordStringArray(runtimeArtifacts, "consent_reject_persisted_tracker_vendor_names");
-  const rejectNewTrackerVendors = getRecordStringArray(runtimeArtifacts, "consent_reject_new_tracker_vendor_names");
-
-  if ((getRecordNumber(runtimeArtifacts, "consent_preconsent_violation_count") ?? 0) > 0) {
-    findings.push({
-      affectedPage: "Homepage",
-      category: "privacy",
-      severity: "high",
-      title: "Trackers fired before consent interaction",
-      description:
-        baselineTrackerVendors.length > 0
-          ? baselineTrackerEvidenceUrls.length > 0
-            ? `The first page render triggered tracker vendors before consent interaction: ${baselineTrackerVendors.join(", ")}. Evidence URLs were captured for ${baselineTrackerEvidenceUrls.length} request${baselineTrackerEvidenceUrls.length === 1 ? "" : "s"}.`
-            : `The first page render triggered tracker vendors before consent interaction: ${baselineTrackerVendors.join(", ")}.`
-          : "The first page render triggered tracking activity before a consent interaction was completed."
-    });
-  }
-
-  if (rejectWorked && rejectReducedTracking === false) {
-    findings.push({
-      affectedPage: "Homepage",
-      category: "privacy",
-      severity: "high",
-      title: "Reject interaction did not reduce tracking",
-      description:
-        rejectNewTrackerVendors.length > 0
-          ? `The consent audit completed a reject interaction, but new tracker vendors still appeared after rejection: ${rejectNewTrackerVendors.join(", ")}.`
-          : rejectPersistedTrackerVendors.length > 0
-            ? `The consent audit completed a reject interaction, but these tracker vendors still remained after rejection: ${rejectPersistedTrackerVendors.join(", ")}.`
-            : postRejectTrackerVendors.length > baselineTrackerVendors.length
-              ? `The consent audit completed a reject interaction, but tracking vendors increased from ${baselineTrackerVendors.length} to ${postRejectTrackerVendors.length} after rejection.`
-              : "The consent audit completed a reject interaction, but tracking activity still remained after rejection."
-    });
-  }
-
-  if (rejectWorked && rejectReducedThirdPartyCookies === false) {
-    const baselineCookieCount = getRecordNumber(runtimeArtifacts, "consent_baseline_third_party_cookie_count");
-    const postRejectCookieCount = getRecordNumber(runtimeArtifacts, "consent_post_reject_third_party_cookie_count");
-
-    findings.push({
-      affectedPage: "Homepage",
-      category: "privacy",
-      severity: "medium",
-      title: "Reject interaction did not reduce third-party cookies",
-      description:
-        baselineCookieCount !== null && postRejectCookieCount !== null
-          ? `Third-party cookies changed from ${baselineCookieCount} before interaction to ${postRejectCookieCount} after reject, indicating reject did not suppress that cookie activity.`
-          : "Third-party cookie activity was still present after the reject interaction completed."
-    });
-  }
-
-  if (!getSnapshotBoolean(snapshot ?? {}, "cookie_banner_present") && rejectWorked) {
-    findings.push({
-      affectedPage: "Homepage",
-      category: "privacy",
-      severity: "medium",
-      title: "Consent surface required deeper interaction sweep",
-      description:
-        "The initial homepage pass did not surface a banner clearly, but the consent interaction audit later found and used a working consent control."
-    });
-  }
-
-  if (rejectWorked && acceptWorked === false) {
-    findings.push({
-      affectedPage: "Homepage",
-      category: "privacy",
-      severity: "low",
-      title: "Accept flow was unavailable after reject in-session",
-      description:
-        "The audit could complete a reject interaction, but an accept path was not available afterward in the same session, limiting direct within-session comparison."
-    });
-  }
-
-  return findings;
-}
-
-function getFindingTopicKey(finding: PreviewSampleFinding) {
-  const haystack = `${finding.title} ${finding.description}`.toLowerCase();
-
-  if (haystack.includes("before consent") || haystack.includes("pre-consent")) {
-    return "preconsent_tracking";
-  }
-
-  if (haystack.includes("contradiction") || haystack.includes("conflicts with runtime behavior")) {
-    return "policy_behavior_contradiction";
-  }
-
-  if (haystack.includes("reject interaction")) {
-    return "reject_interaction";
-  }
-
-  if (haystack.includes("session replay")) {
-    return "session_replay";
-  }
-
-  if (haystack.includes("advertising stack") || haystack.includes("tracker")) {
-    return "tracker_stack";
-  }
-
-  if (haystack.includes("accessibility")) {
-    return "accessibility";
-  }
-
-  return finding.title.toLowerCase();
-}
-
-function dedupeHeadlineFindings(findings: PreviewSampleFinding[]) {
-  const seen = new Set<string>();
-  const deduped: PreviewSampleFinding[] = [];
-
-  for (const finding of findings) {
-    const key = `${finding.category}:${getFindingTopicKey(finding)}`;
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    deduped.push(finding);
-  }
-
-  return deduped;
-}
 
 function getPolicySnippetValues(row: Record<string, unknown> | null) {
   if (!row) {

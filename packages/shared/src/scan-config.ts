@@ -14,9 +14,10 @@ export type SharedPost403PolicyConfig = {
 export type SharedScanConfig = {
   crawlerIdentity?: SharedCrawlerIdentityConfig;
   execution?: Record<string, unknown>;
+  freshBrowserRequired?: boolean;
   hostname?: string;
   maxPages?: number;
-  maxRequestedTier?: number;
+  maxRequestedTier?: number | string;
   normalizedUrl?: string;
   post403Policy?: SharedPost403PolicyConfig;
   processor?: string;
@@ -28,9 +29,10 @@ export type SharedScanConfig = {
 type BuildSharedFullScanConfigInput = {
   crawlerIdentity?: SharedCrawlerIdentityConfig;
   execution?: Record<string, unknown>;
+  freshBrowserRequired?: boolean;
   hostname?: string;
   maxPages: number;
-  maxRequestedTier?: number;
+  maxRequestedTier?: number | string;
   normalizedUrl?: string;
   post403Policy?: SharedPost403PolicyConfig;
   processor: string;
@@ -43,8 +45,11 @@ export function buildSharedFullScanConfig(input: BuildSharedFullScanConfigInput)
   return {
     ...(input.crawlerIdentity ? { crawlerIdentity: input.crawlerIdentity } : {}),
     ...(input.execution ? { execution: input.execution } : {}),
+    ...(typeof input.freshBrowserRequired === "boolean" ? { freshBrowserRequired: input.freshBrowserRequired } : {}),
     ...(input.hostname ? { hostname: input.hostname } : {}),
-    ...(typeof input.maxRequestedTier === "number" ? { maxRequestedTier: input.maxRequestedTier } : {}),
+    ...(typeof input.maxRequestedTier === "number" || typeof input.maxRequestedTier === "string"
+      ? { maxRequestedTier: input.maxRequestedTier }
+      : {}),
     ...(input.normalizedUrl ? { normalizedUrl: input.normalizedUrl } : {}),
     ...(input.post403Policy ? { post403Policy: input.post403Policy } : {}),
     ...(input.triggerMode ? { triggerMode: input.triggerMode } : {}),

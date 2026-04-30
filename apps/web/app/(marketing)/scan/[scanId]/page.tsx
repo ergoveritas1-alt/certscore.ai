@@ -32,6 +32,7 @@ export default async function PublicScanDetailPage({ params }: PublicScanDetailP
     scanId: scanRecord.scan.id
   });
   const pendingPostCompletionWork = hasPendingPostCompletionFindingWork({
+    reportFindingsDerived: true,
     signalEnrichmentWorkflow: scanRecord.signalEnrichmentWorkflow,
     status: scanRecord.scan.status
   });

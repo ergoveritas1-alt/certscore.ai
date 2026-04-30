@@ -1,9 +1,18 @@
 import { closePools, query, queryOne } from "@website-signal-risk-scanner/db";
 import { SCAN_EVENT_TYPES, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { buildScanCalibrationSummary } from "../lib/scans/calibration-summary";
+import {
+  dedupeHeadlineFindings,
+  deriveConsentAuditFindings
+} from "../lib/scans/consent-audit-findings";
 import { deriveCertScoreFindings } from "../lib/scans/derive-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../lib/scans/executive-findings-projection";
+import { withHybridRuntimeArtifactFallbacks } from "../lib/scans/hybrid-runtime-evidence";
 import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../lib/scans/nano-document-sources";
+import {
+  buildReviewFindings,
+  buildSectionReviewIssues
+} from "../lib/scans/scan-report-review-findings";
 import { buildUnifiedFindingDisplayPackets } from "../lib/scans/unified-findings";
 import { repairFindingFamilyPacketEvents } from "../server/scans/family-packet-event-repair";
 import { loadMergedSignalsByScanId } from "../server/scans/merged-signal-summary";
@@ -150,6 +159,18 @@ function diffMs(start: string | null | undefined, end: string | null | undefined
   }
 
   return Math.max(0, endMs - startMs);
+}
+
+function stripDbRecord(record: Record<string, unknown> | null | undefined) {
+  if (!record) {
+    return null;
+  }
+
+  const next = { ...record };
+  delete next.id;
+  delete next.created_at;
+  delete next.updated_at;
+  return next;
 }
 
 function getScanConfig(input: {
@@ -362,6 +383,7 @@ async function summarizeScan(input: {
     snapshot,
     events,
     policyEnrichment,
+    runtimeArtifactsRow,
     signalResult,
     findingsResult,
     scanRow
@@ -373,6 +395,7 @@ async function summarizeScan(input: {
       { readOnly: true }
     ).then((result) => result.rows),
     query<Record<string, unknown>>(`select * from policy_enrichment where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [input.scanId], { readOnly: true }),
     query<ScanSignalRow>(
       `select signal_key, population_source from scan_signals where scan_id = $1 order by signal_key asc`,
       [input.scanId],
@@ -450,6 +473,10 @@ async function summarizeScan(input: {
   }
 
   const normalizedDocumentSources = (documentSourcesError ? [] : documentSourcesResult.data) as Array<Record<string, unknown>>;
+  const normalizedRuntimeArtifacts = runtimeArtifactsRow
+    ? withHybridRuntimeArtifactFallbacks(stripDbRecord(runtimeArtifactsRow) ?? runtimeArtifactsRow) ??
+      stripDbRecord(runtimeArtifactsRow)
+    : null;
   const readyDocumentSourceCount = getDocumentSourceStatusCount(normalizedDocumentSources, "ready");
   const rejectedDocumentSourceCount = getDocumentSourceStatusCount(normalizedDocumentSources, "rejected");
   const signalRows = (signals ?? []) as ScanSignalRow[];
@@ -485,11 +512,31 @@ async function summarizeScan(input: {
     })),
     policyEnrichment: normalizedPolicyRows
   });
+  const consentAuditFindings = dedupeHeadlineFindings(deriveConsentAuditFindings(snapshot, normalizedRuntimeArtifacts));
+  const consentReviewIssues = buildSectionReviewIssues({
+    accessibilityIssueRows: [],
+    consentAuditFindings,
+    pageEvidenceRows: [],
+    policyBehaviorContradictions: [],
+    preconsentViolationRows: [],
+    runtimeArtifacts: normalizedRuntimeArtifacts,
+    scanReportReviewIssues: [],
+    sectionId: "consent_controls_enforcement",
+    signalHitRows: [],
+    snapshot: snapshot ?? {}
+  });
+  const reviewFindingCandidates = buildReviewFindings({
+    issues: consentReviewIssues,
+    prioritizedAccessibilityRuleRows: [],
+    runtimeArtifacts: normalizedRuntimeArtifacts,
+    sectionId: "consent_controls_enforcement",
+    sectionItems: []
+  });
 
   const displayPackets = buildUnifiedFindingDisplayPackets({
     mergedSignals: mergedSignalsByScanId.get(input.scanId) ?? [],
     policyEnrichment: normalizedPolicyRows,
-    reviewFindingCandidates: [],
+    reviewFindingCandidates,
     scanEvents: repairedEvents,
     validationFindings: [],
     validationFindingLookup: new Map()
@@ -509,7 +556,7 @@ async function summarizeScan(input: {
       eventType: event.eventType,
       metadataJson: event.metadataJson
     })),
-    runtimeArtifacts: snapshot,
+    runtimeArtifacts: normalizedRuntimeArtifacts,
     snapshot,
     scan: {
       completedAt: typeof scanRow?.completed_at === "string" ? scanRow.completed_at : null,

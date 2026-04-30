@@ -777,6 +777,155 @@ test("ExecutiveSummaryCard builds regulatory lenses from all findings instead of
   assert.match(html, /Guaranteed or certain-outcome claim surfaced\./);
 });
 
+test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-findings list", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 1,
+      domainBenchmark: null,
+      finalHost: "inc.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No fingerprinting evidence detected.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: ["Google Ads"],
+      requestedHost: "inc.com",
+      resolvedVendorNames: ["Google Ads", "Microsoft Clarity"],
+      score: 58,
+      sessionReplayVendorNames: ["Microsoft Clarity"],
+      thirdPartyRequestCount: 64,
+      thirdPartyDomains: ["securepubads.g.doubleclick.net"],
+      topFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+          severity: "critical"
+        }),
+        makeFinding("reject_tracking_persists_after_reject", "Non-essential tracking continued after reject"),
+        makeFinding("session_recording_services_detected", "Session recording services detected"),
+        makeFinding("accessibility_risk_score", "Representative accessibility barriers detected", {
+          section: "Accessibility"
+        })
+      ],
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 60
+      },
+      agencyMappings: [],
+      regulatoryRisk: makeRegulatoryRisk(),
+      topObservedEntities: [{ label: "Google Ads", category: "ads", requestCount: 12 }],
+      trackerSummary: "2 vendors across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { ads: 1 }
+    })
+  );
+
+  assert.match(html, /data-testid="executive-top-findings-list"/);
+  assert.match(html, /max-h-\[31\.5rem\]/);
+  assert.match(html, /Tracking started before consent/);
+  assert.match(html, /Non-essential tracking continued after reject/);
+  assert.match(html, /Session recording services detected/);
+  assert.match(html, /Representative accessibility barriers detected/);
+});
+
+test("ExecutiveSummaryCard renders compact reject-path JSON evidence", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 1,
+      domainBenchmark: null,
+      finalHost: "inc.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No fingerprinting evidence detected.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: ["Google Ads"],
+      requestedHost: "inc.com",
+      resolvedVendorNames: ["Google Ads", "Microsoft Clarity"],
+      score: 58,
+      sessionReplayVendorNames: ["Microsoft Clarity"],
+      thirdPartyRequestCount: 64,
+      thirdPartyDomains: ["securepubads.g.doubleclick.net"],
+      topFindings: [
+        makeFinding("reject_tracking_persists_after_reject", "Non-essential tracking continued after reject", {
+          confidence: "good",
+          evidenceDetails: {
+            counts: {
+              consentOptOutClicks: 1,
+              firstPostRejectMs: 43
+            },
+            evidenceFlags: [
+              "reject_evidence_confirmed",
+              "explicit_policy_snippet_retained",
+              "reject_path_tracking_not_reduced"
+            ],
+            runtimeVendors: [
+              "Google Ads",
+              "{\"vendor\":\"Google Ads\",\"sampleUrls\":[\"https://example.com/verbose.js\"]}"
+            ],
+            consentInteraction: {
+              success: true,
+              selector: "a[aria-label=\"Read more\"]",
+              action_type: "reject_all",
+              clicked_label: "Reject all",
+              clicked_at_ms: 5470,
+              page_url_at_click: "https://www.inc.com/"
+            },
+            rejectEvidenceDiff: {
+              baseline_vendors: ["Google Ads", "Microsoft Clarity"],
+              post_reject_vendors: ["Google Ads"],
+              persisting_after_reject_vendors: ["Google Ads"],
+              baseline_request_count: 123,
+              post_reject_request_count: 52,
+              baseline_reconstruction_status: "reconciled"
+            },
+            postRejectNonEssentialRequests: [
+              {
+                vendor: "Google Ads",
+                category: "advertising",
+                hostname: "securepubads.g.doubleclick.net",
+                ms_after_reject: 1226,
+                resource_type: "script",
+                url: "https://securepubads.g.doubleclick.net/pagead/managed/js/gpt.js",
+                why_non_essential: "Google Ads is classified as advertising.",
+                ts_ms: 6696
+              }
+            ],
+            suppressionChecks: {
+              reject_click_confirmed: true,
+              non_essential_vendor_after_reject: true
+            }
+          },
+          evidenceRefs: ["https://securepubads.g.doubleclick.net/pagead/managed/js/gpt.js"],
+          shortSummary: "Non-essential tracking requests fired after the reject interaction for Google Ads."
+        })
+      ],
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 0
+      },
+      agencyMappings: [],
+      regulatoryRisk: makeRegulatoryRisk(),
+      topObservedEntities: [{ label: "Google Ads", category: "ads", requestCount: 12 }],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { ads: 1 }
+    })
+  );
+
+  assert.match(html, /postRejectNonEssentialRequests/);
+  assert.match(html, /ms_after_reject/);
+  assert.match(html, /reject_path_tracking_not_reduced/);
+  assert.doesNotMatch(html, /why_non_essential/);
+  assert.doesNotMatch(html, /sampleUrls/);
+  assert.doesNotMatch(html, /aria-label/);
+  assert.doesNotMatch(html, /baseline_reconstruction_status/);
+});
+
 test("ExecutiveSummaryCard renders fractional regulatory rating bar segments", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {

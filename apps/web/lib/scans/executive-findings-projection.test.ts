@@ -301,6 +301,124 @@ test("projects reject-path tracking failure into executive findings with dedicat
   assert.equal(projection.trace.packets[0]?.inRegulatoryLensInput, true);
 });
 
+test("projects confirmed reject-path tracking into top findings and regulatory lenses with clean vendor copy", () => {
+  const packet = makePacket("reject_did_not_reduce_tracking", {
+    confidenceBand: "high",
+    details: {
+      family: "consent_tracking",
+      kind: "reject_did_not_reduce_tracking",
+      requestUrls: ["https://securepubads.g.doubleclick.net/pagead/adview"],
+      vendors: ["Google Ads"]
+    },
+    evidence: {
+      counts: {
+        consentOptOutClicks: 1
+      },
+      entities: {
+        postRejectNonEssentialRequests: [
+          JSON.stringify({
+            vendor: "Google Ads",
+            hostname: "securepubads.g.doubleclick.net",
+            category: "advertising",
+            url: "https://securepubads.g.doubleclick.net/pagead/adview",
+            ts_ms: 1708,
+            ms_after_reject: 708
+          })
+        ],
+        post_reject_tracker_vendors: ["Google Ads"],
+        vendorClassifications: [
+          JSON.stringify({
+            reason: "Google Ads is classified as advertising tracking/measurement rather than essential site operation.",
+            vendor: "Google Ads",
+            category: "advertising",
+            hostname: "securepubads.g.doubleclick.net"
+          })
+        ]
+      },
+      fetchQuality: null,
+      flags: ["reject_did_not_reduce_tracking", "reject_evidence_confirmed"],
+      pageUrls: ["https://example.com/"],
+      snippets: ["Reject flow retained tracking after opt-out."],
+      sourceUrls: ["https://securepubads.g.doubleclick.net/pagead/adview"]
+    },
+    severity: "high",
+    summary: "The consent audit completed a reject interaction, but these tracker vendors still remained after rejection: Google Ads."
+  });
+  const projection = projectExecutiveFindingsFromUnifiedPackets([packet]);
+  const finding = projection.findings.find((entry) => entry.id === "reject_tracking_persists_after_reject");
+  const lenses = buildRegulatoryLensesFromUnifiedPackets([packet], {
+    beforeConsentCookieCount: 0,
+    thirdPartyRequestCount: 0
+  });
+  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
+  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA");
+  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
+
+  assert.ok(finding);
+  assert.equal(finding?.shortSummary, "Non-essential tracking requests fired after the reject interaction for Google Ads.");
+  assert.ok(!finding?.shortSummary.includes("{"));
+  assert.ok(projection.topFindings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
+  assert.equal(projection.trace.packets[0]?.inRegulatoryLensInput, true);
+  assert.ok(gdprLens?.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
+  assert.ok(cpraLens?.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
+  assert.ok(ftcLens?.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
+});
+
+test("keeps confirmed reject-path tracking in top findings alongside pre-consent and session replay", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      severity: "high",
+      summary: "Tracking started before consent."
+    }),
+    makePacket("session_replay_observed", {
+      confidenceBand: "moderate",
+      details: { family: "consent_tracking", kind: "session_replay_observed" },
+      severity: "high",
+      summary: "Session replay was observed."
+    }),
+    makePacket("reject_did_not_reduce_tracking", {
+      confidenceBand: "high",
+      details: {
+        family: "consent_tracking",
+        kind: "reject_did_not_reduce_tracking",
+        vendors: ["Google Ads"]
+      },
+      evidence: {
+        entities: {
+          postRejectNonEssentialRequests: [
+            JSON.stringify({
+              vendor: "Google Ads",
+              hostname: "securepubads.g.doubleclick.net",
+              category: "advertising",
+              ms_after_reject: 1226
+            })
+          ],
+          post_reject_tracker_vendors: ["Google Ads"]
+        },
+        fetchQuality: null,
+        flags: ["reject_did_not_reduce_tracking", "reject_evidence_confirmed"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Reject flow retained tracking after opt-out."],
+        sourceUrls: ["https://securepubads.g.doubleclick.net/pagead/adview"]
+      },
+      severity: "high",
+      summary: "Tracking requests still appeared after the reject interaction."
+    }),
+    makePacket("contrast_failures", {
+      confidenceBand: "high",
+      details: { family: "accessibility", kind: "contrast_failures" },
+      severity: "high",
+      summary: "Representative accessibility barriers detected."
+    })
+  ]);
+
+  assert.ok(projection.topFindings.some((entry) => entry.id === "pre_consent_tracking_detected"));
+  assert.ok(projection.topFindings.some((entry) => entry.id === "session_recording_services_detected"));
+  assert.ok(projection.topFindings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
+});
+
 test("downgrades reject-path tracking projection when post-reject timing is missing", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("reject_did_not_reduce_tracking", {

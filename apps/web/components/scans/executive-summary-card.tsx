@@ -128,6 +128,13 @@ function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
 }
 
 function buildFindingEvidencePayload(finding: CertScoreFinding, context?: Record<string, unknown>) {
+  if (finding.id === "reject_tracking_persists_after_reject") {
+    return {
+      context,
+      ...compactRejectEvidenceJsonPayload(finding)
+    };
+  }
+
   return {
     context,
     confidence: finding.confidence,
@@ -1531,7 +1538,7 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
 
 function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const reference = getFindingReferenceLink(input.finding);
-  const jsonPayload = JSON.stringify(input.finding, null, 2);
+  const jsonPayload = JSON.stringify(buildFindingEvidenceJsonPayload(input.finding), null, 2);
   const tone = getFindingCardTone(input.finding, false);
 
   return (
@@ -1576,6 +1583,122 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
       </div>
     </details>
   );
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function compactObject<T extends Record<string, unknown>>(value: T, keys: string[]) {
+  return Object.fromEntries(
+    keys.flatMap((key) => {
+      const item = value[key];
+      return item === undefined || item === null || item === "" ? [] : [[key, item]];
+    })
+  );
+}
+
+function compactRejectRequest(value: Record<string, unknown>) {
+  return compactObject(value, [
+    "vendor",
+    "category",
+    "hostname",
+    "ms_after_reject",
+    "resource_type",
+    "url",
+    "vendor_attribution_confidence"
+  ]);
+}
+
+function compactRejectEvidenceDiff(value: Record<string, unknown>) {
+  return compactObject(value, [
+    "baseline_vendors",
+    "post_reject_vendors",
+    "persisting_after_reject_vendors",
+    "baseline_request_count",
+    "post_reject_request_count",
+    "baseline_cookie_count",
+    "post_reject_cookie_count",
+    "baseline_third_party_cookie_count",
+    "post_reject_third_party_cookie_count",
+    "storage_state_changed"
+  ]);
+}
+
+function compactRejectConsentInteraction(value: Record<string, unknown>) {
+  return compactObject(value, [
+    "success",
+    "action_type",
+    "clicked_label",
+    "clicked_at_ms",
+    "page_url_at_click",
+    "final_url"
+  ]);
+}
+
+function compactRejectEvidenceJsonPayload(finding: CertScoreFinding) {
+  const details = finding.evidenceDetails ?? {};
+  const postRejectRequests = (details.postRejectNonEssentialRequests ?? [])
+    .filter(isPlainObject)
+    .map(compactRejectRequest)
+    .slice(0, 8);
+  const requestUrls = Array.from(
+    new Set([
+      ...postRejectRequests.flatMap((request) => (typeof request.url === "string" ? [request.url] : [])),
+      ...finding.evidenceRefs
+    ])
+  ).slice(0, 8);
+
+  return {
+    id: finding.id,
+    label: finding.label,
+    severity: finding.severity,
+    confidence: finding.confidence,
+    directVsInferred: finding.directVsInferred,
+    shortSummary: finding.shortSummary,
+    whyItMatters: finding.whyItMatters,
+    remediation: finding.remediation,
+    evidence: {
+      counts: details.counts ?? {},
+      vendors: Array.from(
+        new Set([
+          ...(details.runtimeVendors ?? []).filter((vendor) => !vendor.trim().startsWith("{")),
+          ...postRejectRequests.flatMap((request) => (typeof request.vendor === "string" ? [request.vendor] : []))
+        ])
+      ),
+      evidenceFlags: (details.evidenceFlags ?? []).filter((flag) =>
+        /reject|confirmed|not_reduced|contradiction/i.test(flag)
+      ),
+      consentInteraction: details.consentInteraction && isPlainObject(details.consentInteraction)
+        ? compactRejectConsentInteraction(details.consentInteraction)
+        : undefined,
+      promotionDecision: details.promotionDecision && isPlainObject(details.promotionDecision)
+        ? compactObject(details.promotionDecision, [
+            "promoted",
+            "reason",
+            "requiredTimingSatisfied",
+            "requiredVendorClassificationSatisfied",
+            "requiredRejectClickSatisfied"
+          ])
+        : undefined,
+      rejectEvidenceDiff: details.rejectEvidenceDiff && isPlainObject(details.rejectEvidenceDiff)
+        ? compactRejectEvidenceDiff(details.rejectEvidenceDiff)
+        : undefined,
+      postRejectNonEssentialRequests: postRejectRequests,
+      suppressionChecks: details.suppressionChecks ?? undefined,
+      requestUrls
+    },
+    evidencePreview: finding.evidencePreview,
+    evidenceRefs: finding.evidenceRefs
+  };
+}
+
+function buildFindingEvidenceJsonPayload(finding: CertScoreFinding) {
+  if (finding.id === "reject_tracking_persists_after_reject") {
+    return compactRejectEvidenceJsonPayload(finding);
+  }
+
+  return finding;
 }
 
 export function ExecutiveSummaryCard(input: {
@@ -1655,9 +1778,8 @@ export function ExecutiveSummaryCard(input: {
   const filteredTopFindings = input.topFindings.filter((finding) => !suppressedTopFindingIds.has(finding.id));
   const regulatoryFindingInput =
     Array.isArray(input.allFindings) && input.allFindings.length > 0 ? input.allFindings : input.topFindings;
-  const primaryFindings = filteredTopFindings.slice(0, 5);
-  const secondaryFindings = filteredTopFindings
-    .slice(5, 8);
+  const executiveHeadlineFindings = filteredTopFindings.slice(0, 3);
+  const hasScrollableTopFindings = filteredTopFindings.length > 3;
   const namedVendors = input.resolvedVendorNames.slice(0, 8);
   const thirdPartyDomains = input.thirdPartyDomains.slice(0, 9);
   const vendorMixDetails = input.topObservedEntities
@@ -1672,7 +1794,7 @@ export function ExecutiveSummaryCard(input: {
   ];
   const executiveHeadline = input.accessLimitationNotice
     ? input.accessLimitationNotice.message
-    : formatTopFindingHeadline(primaryFindings);
+    : formatTopFindingHeadline(executiveHeadlineFindings);
   const narrativePresentation = deriveExecutiveNarrativePresentation({
     accessLimitationNotice: input.accessLimitationNotice,
     executiveHeadline,
@@ -1684,7 +1806,7 @@ export function ExecutiveSummaryCard(input: {
     posture: input.posture as ExecutivePosture,
     requestedHost: input.requestedHost,
     scanOutcome: input.scanOutcome,
-    topFindingSections: primaryFindings.map((finding) => finding.section),
+    topFindingSections: executiveHeadlineFindings.map((finding) => finding.section),
     verifiedPublicSurfacesCount: input.verifiedPublicSurfacesCount
   });
   const regulatoryCounts = {
@@ -1781,9 +1903,16 @@ export function ExecutiveSummaryCard(input: {
             </div>
           </div>
 
-          <div className="grid gap-3">
-            {primaryFindings.length > 0 ? (
-              primaryFindings.map((finding, index) => (
+          <div
+            className={
+              hasScrollableTopFindings
+                ? "grid max-h-[31.5rem] gap-3 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]"
+                : "grid gap-3"
+            }
+            data-testid="executive-top-findings-list"
+          >
+            {filteredTopFindings.length > 0 ? (
+              filteredTopFindings.map((finding, index) => (
                 <div key={finding.id} className={`overflow-hidden rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${getFindingCardTone(finding, index === 0).card}`}>
                   <div className={`h-1 w-full ${getFindingCardTone(finding, index === 0).band}`} />
                   <div className="px-4 py-3">
@@ -1816,16 +1945,6 @@ export function ExecutiveSummaryCard(input: {
               </div>
             )}
           </div>
-          {secondaryFindings.length > 0 ? (
-            <div className="grid gap-3 md:grid-cols-3">
-              {secondaryFindings.map((finding) => (
-                <div key={finding.id} className="rounded-[1.25rem] border border-slate-200 bg-slate-50/70 px-4 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{finding.severity}</p>
-                  <p className="mt-2 text-sm font-semibold tracking-tight text-slate-950">{finding.label}</p>
-                </div>
-              ))}
-            </div>
-          ) : null}
         </div>
 
         <div className="space-y-4 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]">

@@ -9,6 +9,10 @@ import { buildReviewFindings, buildSectionReviewIssues } from "./scan-report-rev
 import { buildSupplementalRuntimeUnifiedFindingPackets } from "./supplemental-runtime-unified-findings";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import { deriveConcernPolicy } from "./concern-policy";
+import {
+  dedupeHeadlineFindings,
+  deriveConsentAuditFindings
+} from "./consent-audit-findings";
 
 function packet(id: string, categoryId: string, relation: "owner" | "mirror" | "overlay") {
   return {
@@ -321,6 +325,163 @@ test("consent audit reject-tracking finding retains post-reject runtime evidence
   assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
   assert.ok(packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
   assert.equal(packet?.details?.family, "consent_tracking");
+});
+
+test("consent audit reject-tracking finding confirms near-immediate post-reject evidence at policy threshold", () => {
+  const makeRuntimeArtifacts = (msAfterReject: number) => ({
+    consent_baseline_tracker_vendor_names: ["Google Ads"],
+    consent_baseline_tracker_evidence_urls: ["https://example.com/baseline.js"],
+    consent_post_reject_tracker_vendor_names: ["Google Ads"],
+    consent_post_reject_tracker_evidence_urls: ["https://example.com/post-reject.js"],
+    consent_reject_persisted_tracker_vendor_names: ["Google Ads"],
+    consent_reject_interaction_succeeded: true,
+    consent_reject_post_reject_non_essential_requests: [
+      {
+        vendor: "Google Ads",
+        hostname: "googleadservices.com",
+        category: "advertising",
+        url: "https://example.com/post-reject.js",
+        ts_ms: 1257,
+        ms_after_reject: msAfterReject,
+        resource_type: "script",
+        initiator: null,
+        why_non_essential: "Google Ads is classified as advertising."
+      }
+    ],
+    consent_reject_request_timing_buckets: [
+      {
+        bucket: "after_reject_0_1s",
+        evidence_urls: ["https://example.com/post-reject.js"],
+        request_count: 1,
+        tracker_request_count: 1,
+        tracker_vendor_names: ["Google Ads"]
+      }
+    ],
+    consent_reject_suppression_checks: {
+      reject_click_confirmed: true,
+      post_reject_window_available: true,
+      non_essential_vendor_after_reject: true,
+      cmp_initialization_only: false,
+      navigation_or_reload_ambiguous: false,
+      baseline_contradiction_detected: false
+    },
+    consent_opt_out_evidence_log: [
+      {
+        action: "reject",
+        actionType: "reject_all",
+        clickedAtMs: 1000,
+        selector: "button#reject",
+        stepIndex: 1,
+        text: "Reject all",
+        urlAfterClick: "https://example.com/"
+      }
+    ]
+  });
+  const buildPacket = (msAfterReject: number) => {
+    const runtimeArtifacts = makeRuntimeArtifacts(msAfterReject);
+    const candidates = buildReviewFindings({
+      issues: buildSectionReviewIssues({
+        accessibilityIssueRows: [],
+        consentAuditFindings: [
+          {
+            title: "Reject interaction did not reduce tracking",
+            description: "Reject flow still showed tracker activity after opt-out.",
+            severity: "high"
+          } as never
+        ],
+        policyBehaviorContradictions: [],
+        preconsentViolationRows: [],
+        runtimeArtifacts,
+        scanReportReviewIssues: [],
+        sectionId: "consent_controls_enforcement",
+        snapshot: {}
+      }),
+      prioritizedAccessibilityRuleRows: [],
+      runtimeArtifacts,
+      sectionId: "consent_controls_enforcement",
+      sectionItems: []
+    });
+
+    return buildUnifiedFindingDisplayPackets({
+      reviewFindingCandidates: candidates,
+      validationFindings: [],
+      validationFindingLookup: new Map()
+    }).find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
+  };
+
+  const confirmedPacket = buildPacket(257);
+  const reviewPacket = buildPacket(249);
+
+  assert.equal(confirmedPacket?.presentationDecision.status, "surface");
+  assert.equal(confirmedPacket?.surfacingDecision.decisionState, "confirmed");
+  assert.ok(confirmedPacket?.evidence?.flags?.includes("reject_evidence_confirmed"));
+  assert.equal(reviewPacket?.presentationDecision.status, "audit_only");
+  assert.notEqual(reviewPacket?.surfacingDecision.decisionState, "confirmed");
+  assert.ok(reviewPacket?.evidence?.flags?.includes("reject_evidence_review"));
+  assert.ok(reviewPacket?.concernContext?.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"));
+});
+
+test("consent audit derives reject-tracking concern from structured post-reject request evidence", () => {
+  const runtimeArtifacts = {
+    consent_audit_completed: true,
+    consent_baseline_tracker_vendor_names: ["Google Ads"],
+    consent_baseline_tracker_evidence_urls: ["https://example.com/baseline.js"],
+    consent_post_reject_tracker_vendor_names: ["Google Ads"],
+    consent_post_reject_tracker_evidence_urls: ["https://example.com/post-reject.js"],
+    consent_reject_interaction_succeeded: true,
+    consent_reject_post_reject_non_essential_requests: [
+      {
+        vendor: "Google Ads",
+        hostname: "googleadservices.com",
+        category: "advertising",
+        url: "https://example.com/post-reject.js",
+        ts_ms: 1708,
+        ms_after_reject: 708,
+        resource_type: "script"
+      }
+    ],
+    consent_reject_request_timing_buckets: [
+      {
+        bucket: "after_reject_0_1s",
+        evidence_urls: ["https://example.com/post-reject.js"],
+        request_count: 1
+      }
+    ],
+    consent_reject_suppression_checks: {
+      reject_click_confirmed: true,
+      post_reject_window_available: true,
+      non_essential_vendor_after_reject: true,
+      cmp_initialization_only: false,
+      navigation_or_reload_ambiguous: false,
+      baseline_contradiction_detected: false
+    }
+  };
+  const consentAuditFindings = dedupeHeadlineFindings(deriveConsentAuditFindings({}, runtimeArtifacts));
+  const candidates = buildReviewFindings({
+    issues: buildSectionReviewIssues({
+      accessibilityIssueRows: [],
+      consentAuditFindings,
+      policyBehaviorContradictions: [],
+      preconsentViolationRows: [],
+      runtimeArtifacts,
+      scanReportReviewIssues: [],
+      sectionId: "consent_controls_enforcement",
+      snapshot: {}
+    }),
+    prioritizedAccessibilityRuleRows: [],
+    runtimeArtifacts,
+    sectionId: "consent_controls_enforcement",
+    sectionItems: []
+  });
+  const packet = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: candidates,
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  }).find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.ok(packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
 });
 
 test("consent audit reject-tracking finding suppresses when reject click or timing is missing", () => {

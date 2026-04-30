@@ -59,6 +59,10 @@ import {
   isFunctionalCookieExcludedFromTrackingEvidence,
   isNonEssentialCookieCategory
 } from "./runtime-cookie-evidence";
+import {
+  REJECT_TRACKING_CONFIRMATION_MIN_MS,
+  REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL
+} from "./reject-tracking-policy";
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
@@ -522,9 +526,9 @@ function buildRejectTrackingEvidenceFallback(input: {
     input.postRejectTrackerVendors.some((vendor) =>
       /linkedin|reddit|clarity|marketo|munchkin|google ads|doubleclick|meta|facebook|tiktok|pinterest|analytics|adobe/i.test(vendor)
     );
-  const hasRequestAfter500Ms = postRejectNonEssentialRequests.some((row) => {
+  const hasRequestAfterConfirmationThreshold = postRejectNonEssentialRequests.some((row) => {
     const value = row.ms_after_reject ?? row.msAfterReject;
-    return typeof value === "number" && value >= 500;
+    return typeof value === "number" && value >= REJECT_TRACKING_CONFIRMATION_MIN_MS;
   });
   const hasPromotionGradeRequest = postRejectNonEssentialRequests.some((row) => {
     const vendor = typeof row.vendor === "string" ? row.vendor : "";
@@ -535,7 +539,7 @@ function buildRejectTrackingEvidenceFallback(input: {
     return (
       typeof tsMs === "number" &&
       typeof msAfterReject === "number" &&
-      msAfterReject >= 500 &&
+      msAfterReject >= REJECT_TRACKING_CONFIRMATION_MIN_MS &&
       vendor.trim().length > 0 &&
       /^https?:\/\//i.test(url) &&
       /^(advertising|analytics|session_replay|marketing_automation)$/i.test(category)
@@ -547,7 +551,12 @@ function buildRejectTrackingEvidenceFallback(input: {
     input.runtimeArtifacts?.consent_reject_interaction_succeeded === true ||
     consentInteraction?.success === true;
   const postRejectWindowAvailable =
-    suppressionChecks.post_reject_window_available === true || requestTimingBuckets.some((row) => row.phase === "post_reject");
+    suppressionChecks.post_reject_window_available === true ||
+    requestTimingBuckets.some((row) => {
+      const phase = typeof row.phase === "string" ? row.phase : "";
+      const bucket = typeof row.bucket === "string" ? row.bucket : "";
+      return phase === "post_reject" || bucket.startsWith("after_reject_");
+    });
   const requiredTimingSatisfied =
     postRejectWindowAvailable &&
     hasPromotionGradeRequest;
@@ -582,7 +591,9 @@ function buildRejectTrackingEvidenceFallback(input: {
     confidenceRisks: uniqueStrings([
       ...confidenceRisks,
       baselineReconstructionIncomplete ? "Baseline vendor reconstruction incomplete; before/after comparison may be incomplete." : null,
-      !hasRequestAfter500Ms ? "No classified non-essential request fired at least 500ms after reject." : null,
+      !hasRequestAfterConfirmationThreshold
+        ? `No classified non-essential request fired at least ${REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL} after reject.`
+        : null,
       !requiredTimingSatisfied ? "Post-reject timing unavailable; cannot confirm persistence after reject." : null,
       navigationOrReloadAmbiguous ? "Navigation or reload makes reject attribution ambiguous." : null,
       baselineContradictionDetected ? "Baseline/post-reject comparison is internally contradictory." : null
@@ -1580,10 +1591,22 @@ export function buildSectionReviewIssues(input: {
             runtimeArtifacts: input.runtimeArtifacts
           });
         } else if (finding.title === "Reject interaction did not reduce third-party cookies") {
+          const rejectFallback = buildRejectTrackingEvidenceFallback({
+            baselineTrackerEvidenceUrls,
+            baselineTrackerVendors,
+            newTrackerVendors,
+            persistedTrackerVendors,
+            postRejectTrackerEvidenceUrls,
+            postRejectTrackerVendors,
+            runtimeArtifacts: input.runtimeArtifacts
+          });
           fallbackEvidence = {
-            consent_post_reject_third_party_cookie_count: input.runtimeArtifacts?.consent_post_reject_third_party_cookie_count ?? null,
+            ...rejectFallback,
+            consent_post_reject_third_party_cookie_count:
+              input.runtimeArtifacts?.consent_post_reject_third_party_cookie_count ?? null,
             consent_reject_reduced_third_party_cookies: false,
-            consentBaselineTrackerEvidenceUrls: baselineTrackerEvidenceUrls
+            supportingSignals: ["consent_reject_reduced_third_party_cookies"],
+            unifiedFindingId: "reject_did_not_reduce_third_party_cookies"
           };
         }
 

@@ -40,6 +40,9 @@ import {
   getRepresentativeAccessibilityExampleCoverage,
   hasExternallyPromotableAccessibilityExamples
 } from "./accessibility-evidence";
+import {
+  REJECT_TRACKING_CONFIRMATION_MIN_MS
+} from "./reject-tracking-policy";
 
 const ACCESSIBILITY_PAGE_ATTRIBUTION_IDS = new Set([
   "wcag_issue_summary",
@@ -826,7 +829,7 @@ function isRejectTrackingPersistenceConcern(
     .join(" ")
     .toLowerCase();
 
-  return /reject_did_not_reduce_tracking|reject_tracking_persists_after_reject|reject.*tracking/.test(haystack);
+  return /reject_did_not_reduce_tracking|reject_did_not_reduce_third_party_cookies|reject_tracking_persists_after_reject|reject.*tracking|reject.*third[-_ ]party.*cookies/.test(haystack);
 }
 
 function getObjectArrayEvidence(rawEvidence: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -873,7 +876,7 @@ function hasConfirmedRejectTimingEvidence(rawEvidence: Record<string, unknown> |
     return (
       typeof tsMs === "number" &&
       typeof msAfterReject === "number" &&
-      msAfterReject >= 500 &&
+      msAfterReject >= REJECT_TRACKING_CONFIRMATION_MIN_MS &&
       /^(advertising|analytics|session_replay|marketing_automation)$/i.test(category) &&
       vendor.trim().length > 0 &&
       /^https?:\/\//i.test(url)

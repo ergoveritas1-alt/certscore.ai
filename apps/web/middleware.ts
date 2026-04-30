@@ -1,50 +1,30 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { getAuth } from "./server/better-auth/auth";
 
-function applyAuthHeaders(response: NextResponse, headers: Headers | undefined) {
-  if (!headers) {
-    return response;
-  }
+const sessionCookieNames = new Set([
+  "session_token",
+  "certscore.session_token",
+  "__Secure-certscore.session_token",
+  "certscore_session"
+]);
 
-  for (const [key, value] of headers.entries()) {
-    if (key.toLowerCase() === "set-cookie") {
-      response.headers.append(key, value);
-      continue;
-    }
-
-    response.headers.set(key, value);
-  }
-
-  return response;
+function hasSessionCookie(request: NextRequest) {
+  return request.cookies.getAll().some((cookie) => sessionCookieNames.has(cookie.name));
 }
 
 export async function middleware(request: NextRequest) {
-  const sessionResult = await getAuth().api.getSession({
-    headers: request.headers,
-    query: {
-      disableCookieCache: true
-    },
-    returnHeaders: true
-  });
-
-  if (sessionResult?.response?.session && sessionResult.response.user) {
-    return applyAuthHeaders(
-      NextResponse.next({
-        request
-      }),
-      sessionResult.headers
-    );
+  if (hasSessionCookie(request)) {
+    return NextResponse.next({
+      request
+    });
   }
 
   const loginUrl = request.nextUrl.clone();
   loginUrl.pathname = "/login";
   loginUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
-  return applyAuthHeaders(NextResponse.redirect(loginUrl), sessionResult?.headers);
+  return NextResponse.redirect(loginUrl);
 }
 
 export const config = {
   matcher: ["/app/:path*"]
 };
-
-export const runtime = "nodejs";

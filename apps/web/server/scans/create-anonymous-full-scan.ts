@@ -6,6 +6,7 @@ import { ensureValidationRunForManualScan } from "../validation/repository";
 import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan-repository";
 import { setPreviewDomainLatestScan } from "../preview-scan/db";
 import { createQueuedFullScan, insertQueuedFullScanEvent } from "./repository";
+import { buildQueuedFullScanConfig } from "./full-scan-config";
 
 type ScanQueueProvenance = {
   githubActor?: string | null;
@@ -28,23 +29,13 @@ export async function createAnonymousFullScan(input: { hostname: string; normali
   const planLimits = await getPlanLimits("free");
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
   const pagesRequested = planLimits.maxPagesPerScan;
-  const scanConfig = {
-    freshBrowserRequired: true,
+  const scanConfig = buildQueuedFullScanConfig({
     hostname: input.hostname,
-    maxRequestedTier: "tier5_full_scan",
-    normalizedUrl: input.normalizedUrl,
-    post403Policy: {
-      maxHomepageRetriesAfter403: 0,
-      maxPassiveVerificationFetchesAfter403: 4,
-      passiveOnlyAfter403: true,
-      stopOnHomepage403: true,
-      verifiedSurfaceTargetsAfter403: ["privacy_policy", "terms_of_service", "cookie_policy", "contact_page"]
-    },
-    processor: "queued-full-scan-v1",
-    profile: planLimits.scanProfile,
     maxPages: pagesRequested,
+    normalizedUrl: input.normalizedUrl,
+    profile: planLimits.scanProfile,
     source: "marketing-anonymous-full-scan"
-  };
+  });
 
   const scan = await createQueuedFullScan({
     domainId: domain.id,

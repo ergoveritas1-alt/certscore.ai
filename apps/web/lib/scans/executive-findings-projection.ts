@@ -259,6 +259,37 @@ function formatVendorList(vendors: string[]) {
   return `${vendors.slice(0, -1).join(", ")}, and ${vendors[vendors.length - 1]}`;
 }
 
+function isDisplayVendorName(value: string) {
+  const normalized = value.trim();
+  return (
+    normalized.length > 0 &&
+    normalized.length <= 80 &&
+    !/^[\[{]/.test(normalized) &&
+    !/^https?:\/\//i.test(normalized) &&
+    !/[{}[\]"]/g.test(normalized)
+  );
+}
+
+function getRejectTrackingVendors(packet: UnifiedFindingDisplayPacket) {
+  const directVendorValues = uniqueStrings([
+    ...getEntityValues(packet, /^(?:runtimeVendors|persisted_tracker_vendors|post_reject_tracker_vendors)$/i),
+    ...getEntityValues(packet, /^postRejectNonEssentialRequests$/i).flatMap((value) => {
+      try {
+        const parsed: unknown = JSON.parse(value);
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? typeof (parsed as { vendor?: unknown }).vendor === "string"
+            ? (parsed as { vendor: string }).vendor
+            : null
+          : null;
+      } catch {
+        return null;
+      }
+    })
+  ]);
+
+  return directVendorValues.filter(isDisplayVendorName);
+}
+
 function getSessionReplayVendors(packet: UnifiedFindingDisplayPacket) {
   const entityValues = getEntityValues(packet, /vendor/i);
   const reviewerVisibleText = uniqueStrings([
@@ -552,9 +583,7 @@ function buildExecutiveShortSummary(
   }
 
   if (findingId === "reject_tracking_persists_after_reject") {
-    const vendors = uniqueStrings([
-      ...getEntityValues(packet, /runtime.*vendor|vendor|persisted.*tracker.*vendor|post.*reject.*tracker.*vendor/i)
-    ]).slice(0, 3);
+    const vendors = getRejectTrackingVendors(packet).slice(0, 3);
     const vendorText = vendors.length > 0 ? ` for ${formatVendorList(vendors)}` : "";
     if (packet.evidence?.flags?.includes("reject_evidence_confirmed")) {
       return `Non-essential tracking requests fired after the reject interaction${vendorText}.`;

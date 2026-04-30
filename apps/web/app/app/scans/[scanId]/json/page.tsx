@@ -86,6 +86,7 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
     scanId: scanRecord.scan.id
   });
   const pendingPostCompletionWork = hasPendingPostCompletionFindingWork({
+    reportFindingsDerived: true,
     signalEnrichmentWorkflow: scanRecord.signalEnrichmentWorkflow,
     status: scanRecord.scan.status
   });
