@@ -357,6 +357,10 @@ async function waitForSyntheticScan(input: { scanId: string; timeoutMinutes: num
 async function runSyntheticScanCheck(input: { baseUrl: string; domain: string; findings: string[]; timeoutMinutes: number }) {
   try {
     const scanId = await queueSyntheticScan({ baseUrl: input.baseUrl, domain: input.domain });
+    await wakeScannerCapacity({
+      findings: input.findings,
+      queuedCount: 1
+    });
     await waitForSyntheticScan({ scanId, timeoutMinutes: input.timeoutMinutes });
   } catch (error) {
     input.findings.push(`Synthetic homepage scan failed: ${error instanceof Error ? error.message : String(error)}`);
