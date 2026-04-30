@@ -34,6 +34,70 @@ function getDocumentUrl(row: Record<string, unknown>, extracted: Record<string, 
   );
 }
 
+function getHostname(url: string | null) {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+function normalizeHostname(value: string | null | undefined) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim().toLowerCase().replace(/^www\./, "") : null;
+}
+
+function isSameOrSubdomain(hostname: string, expectedHostname: string) {
+  return hostname === expectedHostname || hostname.endsWith(`.${expectedHostname}`);
+}
+
+function isAllowedVendorPolicyOwner(input: { policyHostname: string; scannedHostname: string }) {
+  const groups = [
+    ["google.com", "youtube.com", "googleadservices.com", "doubleclick.net", "blogger.com"],
+    ["microsoft.com", "live.com", "msn.com", "bing.com", "linkedin.com"],
+    ["meta.com", "facebook.com", "instagram.com", "whatsapp.com"],
+    ["apple.com", "icloud.com"]
+  ];
+
+  return groups.some(
+    (group) =>
+      group.some((host) => isSameOrSubdomain(input.policyHostname, host)) &&
+      group.some((host) => isSameOrSubdomain(input.scannedHostname, host))
+  );
+}
+
+function isObviousThirdPartyPolicyDocument(input: { scannedHostname?: string | null; url: string }) {
+  const scannedHostname = normalizeHostname(input.scannedHostname);
+  const policyHostname = getHostname(input.url);
+  if (!scannedHostname || !policyHostname || isSameOrSubdomain(policyHostname, scannedHostname)) {
+    return false;
+  }
+
+  const genericPolicyHostnames = [
+    "policies.google.com",
+    "privacy.google.com",
+    "support.google.com",
+    "privacy.microsoft.com",
+    "support.microsoft.com",
+    "www.microsoft.com",
+    "privacy.apple.com",
+    "support.apple.com",
+    "www.apple.com",
+    "privacy.meta.com",
+    "www.facebook.com",
+    "www.instagram.com"
+  ];
+
+  if (!genericPolicyHostnames.some((hostname) => isSameOrSubdomain(policyHostname, hostname))) {
+    return false;
+  }
+
+  return !isAllowedVendorPolicyOwner({ policyHostname, scannedHostname });
+}
+
 function getPolicyInputPageType(row: Record<string, unknown>) {
   return getString(row.page_type) ?? getString(row.pageType) ?? getString(row.source_document_type);
 }
@@ -125,7 +189,10 @@ function getPolicyInputStrengthScore(row: Record<string, unknown>) {
   return score;
 }
 
-export function buildNanoPolicyInputsFromDocumentSources(documentSources: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+export function buildNanoPolicyInputsFromDocumentSources(
+  documentSources: Array<Record<string, unknown>>,
+  options: { scannedHostname?: string | null } = {}
+): Array<Record<string, unknown>> {
   function hasSemanticPayload(extracted: Record<string, unknown>) {
     return [
       "policy_actionable_flags",
@@ -163,6 +230,9 @@ export function buildNanoPolicyInputsFromDocumentSources(documentSources: Array<
     if (typeof pageType !== "string" || typeof pageUrl !== "string") {
       continue;
     }
+    if (isObviousThirdPartyPolicyDocument({ scannedHostname: options.scannedHostname, url: pageUrl })) {
+      continue;
+    }
 
     rows.push({
       ...extracted,
@@ -187,8 +257,11 @@ export function buildNanoPolicyInputsFromDocumentSources(documentSources: Array<
 export function mergeNanoPolicyInputsWithFallback(input: {
   documentSources: Array<Record<string, unknown>>;
   fallbackRows: Array<Record<string, unknown>>;
+  scannedHostname?: string | null;
 }) {
-  const documentRows = buildNanoPolicyInputsFromDocumentSources(input.documentSources);
+  const documentRows = buildNanoPolicyInputsFromDocumentSources(input.documentSources, {
+    scannedHostname: input.scannedHostname
+  });
   const strongestByPageType = new Map<string, Record<string, unknown>>();
   const passthroughRows: Array<Record<string, unknown>> = [];
 
@@ -208,7 +281,10 @@ export function mergeNanoPolicyInputsWithFallback(input: {
   return [...strongestByPageType.values(), ...passthroughRows];
 }
 
-export function shouldPreferNanoDocumentSources(documentSources: Array<Record<string, unknown>>) {
+export function shouldPreferNanoDocumentSources(
+  documentSources: Array<Record<string, unknown>>,
+  options: { scannedHostname?: string | null } = {}
+) {
   return documentSources.some((row) => {
     const sourceStatus = getString(row.source_status) ?? getString(row.sourceStatus);
     const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus);
@@ -216,6 +292,12 @@ export function shouldPreferNanoDocumentSources(documentSources: Array<Record<st
       return false;
     }
 
-    return extractionStatus === "ready";
+    if (extractionStatus !== "ready") {
+      return false;
+    }
+
+    const extracted = getRecord(row.extracted_fields_json) ?? getRecord(row.extractedFieldsJson) ?? {};
+    const pageUrl = getDocumentUrl(row, extracted);
+    return typeof pageUrl !== "string" || !isObviousThirdPartyPolicyDocument({ scannedHostname: options.scannedHostname, url: pageUrl });
   });
 }

@@ -41,6 +41,67 @@ test("buildNanoPolicyInputsFromDocumentSources normalizes ready document rows in
   assert.equal(rows[0]?.source_document_source, "nano_doc_retrieval");
 });
 
+test("buildNanoPolicyInputsFromDocumentSources rejects obvious third-party vendor policy hubs for unrelated domains", () => {
+  const rows = buildNanoPolicyInputsFromDocumentSources(
+    [
+      {
+        canonical_url: "https://policies.google.com/privacy",
+        document_type: "privacy_policy",
+        extracted_fields_json: {
+          policy_dsar_mechanism: "present",
+          policy_summary_short: "Google privacy policy."
+        },
+        extraction_status: "ready",
+        id: "doc-google",
+        semantic_confidence: 0.8,
+        source: "ws01_preflight",
+        source_status: "ready"
+      },
+      {
+        canonical_url: "https://www.webmd.com/about-webmd-policies/cookie-policy",
+        document_type: "cookie_policy",
+        extracted_fields_json: {
+          policy_summary_short: "WebMD cookie policy.",
+          policy_actionable_flags: []
+        },
+        extraction_status: "ready",
+        id: "doc-webmd",
+        semantic_confidence: 0.66,
+        source: "ws01_preflight",
+        source_status: "ready"
+      }
+    ],
+    { scannedHostname: "www.webmd.com" }
+  );
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.page_type, "cookie_policy");
+  assert.equal(rows[0]?.page_url, "https://www.webmd.com/about-webmd-policies/cookie-policy");
+});
+
+test("buildNanoPolicyInputsFromDocumentSources allows same vendor policy hubs for owned domains", () => {
+  const rows = buildNanoPolicyInputsFromDocumentSources(
+    [
+      {
+        canonical_url: "https://policies.google.com/privacy",
+        document_type: "privacy_policy",
+        extracted_fields_json: {
+          policy_dsar_mechanism: "present",
+          policy_summary_short: "Google privacy policy."
+        },
+        extraction_status: "ready",
+        id: "doc-google",
+        semantic_confidence: 0.8,
+        source_status: "ready"
+      }
+    ],
+    { scannedHostname: "youtube.com" }
+  );
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.page_url, "https://policies.google.com/privacy");
+});
+
 test("shouldPreferNanoDocumentSources prefers document-source ownership once retrieval rows exist", () => {
   assert.equal(
     shouldPreferNanoDocumentSources([
@@ -53,6 +114,27 @@ test("shouldPreferNanoDocumentSources prefers document-source ownership once ret
     true
   );
   assert.equal(shouldPreferNanoDocumentSources([]), false);
+});
+
+test("shouldPreferNanoDocumentSources ignores ready third-party vendor policy hubs for unrelated domains", () => {
+  assert.equal(
+    shouldPreferNanoDocumentSources(
+      [
+        {
+          canonical_url: "https://policies.google.com/terms",
+          document_type: "terms_of_service",
+          extracted_fields_json: {
+            policy_summary_short: "Google terms."
+          },
+          extraction_status: "ready",
+          id: "doc-google-terms",
+          source_status: "ready"
+        }
+      ],
+      { scannedHostname: "webmd.com" }
+    ),
+    false
+  );
 });
 
 test("mergeNanoPolicyInputsWithFallback keeps document-backed rows and falls back only for missing page types", () => {

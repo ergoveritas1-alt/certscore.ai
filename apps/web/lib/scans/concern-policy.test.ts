@@ -1380,10 +1380,10 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         sensitivePayloadViolations: [
           {
             evidenceStrength: "suspected",
-            requestUrl: "https://tracker.example.com/collect"
+            requestUrl: "https://tracker.example.com/collect",
+            vendorHost: "tracker.example.com"
           }
-        ],
-        retargetingPixelArtifactPresent: true
+        ]
       },
       expected: {
         allowedNarrativeTier: "strong",
@@ -1489,8 +1489,10 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       rawEvidence: {
         sensitivePayloadViolations: [
           {
+            detectedType: "government_id",
             evidenceStrength: "suspected",
-            requestUrl: "https://collector.example.com/submit"
+            matchSnippet: "Passport number",
+            sourceField: "passport_number"
           }
         ]
       },
@@ -1957,6 +1959,110 @@ test("deriveConcernPolicy promotes same-page video content tracking exposure", (
   assert.equal(policy.allowedNarrativeTier, "strong");
   assert.equal(policy.promotionEligibility, "eligible");
   assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy promotes RTB cookie sync only with concrete request-level support", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "runtime_privacy.rtb_cookie_sync_observed",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "rtb_cookie_sync_observed",
+      title: "RTB cookie sync observed"
+    }),
+    evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
+    rawEvidence: {
+      preconsent_tracking_detected: true,
+      rtb_cookie_sync_evidence: [
+        {
+          hostname: "sync-t1.taboola.com",
+          pathSample: "/sg/pubmatic-network/1/rtb-h/",
+          queryKeysSample: ["gdpr", "uid"],
+          reason: "sync_path",
+          runtimePhase: "pre_consent",
+          urlSample: "https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/"
+        }
+      ],
+      rtb_cookie_sync_vendors: ["PubMatic"]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "strong");
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy suppresses cookie disclosure gaps backed only by ignored runtime cookies", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "cookie_runtime.disclosure_gap",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "cookie_disclosure_gap",
+      title: "Cookie disclosure gap"
+    }),
+    evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
+    rawEvidence: {
+      ignored_runtime_cookie_names: ["awsalb", "awsalbcors"],
+      runtime_cookie_names: ["__cf_bm", "optanonconsent", "geo_country", "trp-country", "trp-language"],
+      unmatched_third_party_cookie_count: 0
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "blocked");
+  assert.equal(policy.externalSurfacingEligibility, "suppress");
+  assert.ok(policy.negativeEvidenceFlags.includes("runtime_cookie_inventory_ignored_only"));
+});
+
+test("deriveConcernPolicy keeps cookie disclosure gaps eligible for substantive unmatched cookies", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "cookie_runtime.disclosure_gap",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "cookie_disclosure_gap",
+      title: "Cookie disclosure gap"
+    }),
+    evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
+    rawEvidence: {
+      ignored_runtime_cookie_names: ["awsalbcors"],
+      runtime_cookie_names: ["optanonconsent", "_fbp"],
+      unmatched_cookie_names: ["_fbp"],
+      unmatched_third_party_cookie_count: 1
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "moderate");
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy keeps RTB cookie sync audit-only for vendor names or generic adtech without sync evidence", () => {
+  for (const rawEvidence of [
+    {
+      preconsent_tracking_detected: true,
+      rtb_cookie_sync_vendors: ["PubMatic", "OpenX"]
+    },
+    {
+      preconsent_tracking_detected: true,
+      runtimeRequestUrls: ["https://cdn.generic-adtech.example/library.js"],
+      runtimeVendors: ["Generic Adtech"]
+    }
+  ]) {
+    const policy = deriveConcernPolicy({
+      concern: makeConcern({
+        originKey: "runtime_privacy.rtb_cookie_sync_observed",
+        originType: "validation_rule",
+        suggestedUnifiedFindingId: "rtb_cookie_sync_observed",
+        title: "RTB cookie sync observed"
+      }),
+      evidenceStrengthFlags: ["structured_validation"],
+      rawEvidence
+    });
+
+    assert.equal(policy.allowedNarrativeTier, "weak");
+    assert.equal(policy.promotionEligibility, "internal_only");
+    assert.equal(policy.externalSurfacingEligibility, "audit_only");
+    assert.ok(policy.negativeEvidenceFlags.includes("missing_specific_runtime_anchor"));
+  }
 });
 
 test("deriveConcernPolicy keeps uncorrelated video and Meta evidence audit-only", () => {

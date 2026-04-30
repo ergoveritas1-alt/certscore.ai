@@ -684,7 +684,7 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
       { readOnly: true }
     ).then((result) => result.rows),
     query<Record<string, unknown>>(
-      `select source_status, extraction_status, metadata_json
+      `select id, source, source_status, document_type, source_url, canonical_url, title, document_text, extraction_status, semantic_confidence, evidence_refs, extracted_fields_json, metadata_json
          from scan_document_sources
         where scan_id = $1
         order by created_at asc`,

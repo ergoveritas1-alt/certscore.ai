@@ -24,6 +24,33 @@ export type CertScoreFindingDefinition = {
 
 export type CertScoreFindingEvidenceDetails = {
   counts?: Record<string, number>;
+  policyRuntimeConflict?: {
+    policyAnchor: {
+      claimType: string | null;
+      sourceUrl: string | null;
+      snippet: string | null;
+    };
+    runtimeAnchor: {
+      observationType: string | null;
+      phase: string | null;
+      requestUrls: string[];
+      vendors: string[];
+    };
+    conflictBridge: {
+      conflictType: string | null;
+      reasoning: string | null;
+      supportsPromotion: boolean;
+    };
+    evidenceSufficiency: {
+      reviewStatus: string | null;
+      promotionEligible: boolean;
+    };
+    references: {
+      policySourceUrls: string[];
+      runtimeRequestUrls: string[];
+      validationRuleKeys: string[];
+    };
+  };
   disclosureFindings?: string[];
   evidenceSnippets?: string[];
   offerSnippets?: string[];
@@ -40,6 +67,7 @@ export type CertScoreFindingEvidenceDetails = {
   promotionDecision?: Record<string, unknown>;
   rejectEvidenceDiff?: Record<string, unknown>;
   postRejectNonEssentialRequests?: Array<Record<string, unknown>>;
+  rtbCookieSyncEvidence?: Array<Record<string, unknown>>;
   confidenceRisks?: string[];
   suppressionChecks?: Record<string, unknown>;
 };
@@ -78,6 +106,22 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     defaultSurfacePriority: 98,
     whyItMatters: "External vendors firing before consent increases privacy and compliance risk.",
     remediation: "Block third-party analytics and adtech until consent is granted."
+  },
+  rtb_cookie_sync_observed: {
+    id: "rtb_cookie_sync_observed",
+    label: "RTB cookie sync observed",
+    section: "Vendors & Requests",
+    defaultSurfacePriority: 94,
+    whyItMatters: "Cookie-sync and identity-sync requests can transmit advertising identifiers across multiple third parties during the initial page load.",
+    remediation: "Inventory the sync endpoints, suppress non-essential RTB or identity-sync calls until consent permits them, and verify the request path after deployment."
+  },
+  cookie_disclosure_gap: {
+    id: "cookie_disclosure_gap",
+    label: "Cookie disclosure gap",
+    section: "Privacy & Tracking",
+    defaultSurfacePriority: 91,
+    whyItMatters: "When observed cookie activity is not covered by retained cookie-policy evidence, users cannot reliably understand what tracking is happening or why.",
+    remediation: "Reconcile runtime cookie behavior with the cookie policy so observed cookies, providers, and purposes are disclosed accurately."
   },
   storage_before_consent: {
     id: "storage_before_consent",

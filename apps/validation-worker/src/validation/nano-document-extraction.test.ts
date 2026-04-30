@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeNanoDocumentExtraction } from "./nano-document-extraction";
+import { buildDeterministicNanoDocumentExtraction, normalizeNanoDocumentExtraction } from "./nano-document-extraction";
 
 test("normalizeNanoDocumentExtraction maps parsed nano output into policy-style fields", () => {
   const result = normalizeNanoDocumentExtraction({
@@ -63,6 +63,36 @@ test("normalizeNanoDocumentExtraction backfills strong mention topics and email 
     { topic: "targeted_advertising_disclosure" },
     { topic: "third_party_advertising_disclosure" }
   ]);
+});
+
+test("buildDeterministicNanoDocumentExtraction keeps rendered policy-center text usable when LLM is unavailable", () => {
+  const result = buildDeterministicNanoDocumentExtraction({
+    documentText: `
+      Klaviyo Privacy Policy. We collect personal data and personal information to provide our services.
+      We use cookies and pixels for targeted advertising and analytics. We support Global Privacy Control.
+      California residents may opt out of sale or sharing and may request access, deletion, correction, portability, and opt-out rights.
+      Contact privacy@klaviyo.com for privacy questions. We retain personal data for as long as reasonably necessary.
+    `.repeat(4),
+    metadataReason: "openai_429",
+    row: {
+      canonical_url: "https://privacy.klaviyo.com/policies/?name=klaviyo-privacy-policy",
+      document_type: "privacy_policy",
+      title: "Klaviyo Privacy Policy"
+    }
+  });
+
+  assert.equal(result.extractionStatus, "ready");
+  assert.equal(result.metadata.extraction_mode, "deterministic_document_semantics");
+  assert.equal(result.metadata.extraction_fallback_reason, "openai_429");
+  assert.equal(result.extractedFields.policy_structurally_weak, false);
+  assert.equal(result.extractedFields.policy_snippet_count, 1);
+  assert.equal(result.extractedFields.policy_coverage_ratio, 0.62);
+  assert.deepEqual(result.extractedFields.policy_mentions, [
+    { topic: "gpc_disclosure" },
+    { topic: "tracking_technologies_disclosure" },
+    { topic: "targeted_advertising_disclosure" }
+  ]);
+  assert.ok((result.extractedFields.policy_rights_signals as string[]).includes("access_request"));
 });
 
 test("normalizeNanoDocumentExtraction infers transfer, rights, do-not-sell, and cookie table structure from document text", () => {

@@ -206,6 +206,40 @@ test("policy behavior conflict contract blocks incomplete contradiction fixtures
   }
 });
 
+test("policy behavior conflict contract does not infer promotion without an explicit stored bridge", () => {
+  const decision = evaluatePolicyBehaviorConflictContract({
+    contradictionEvidence: {
+      claim: "We honor Global Privacy Control.",
+      contradictionBasis: "GPC traffic continued.",
+      policyAnchor: {
+        claimType: "gpc_honored",
+        confidence: 0.86,
+        extractionStatus: "fetched",
+        normalizedClaim: "We honor Global Privacy Control.",
+        snippet: "We honor Global Privacy Control.",
+        sourceUrl: "https://example.com/privacy"
+      },
+      runtimeAnchor: {
+        confidence: 0.84,
+        cookies: ["_fbp"],
+        observationType: "gpc_signal_not_honored",
+        phase: "gpc_enabled",
+        requests: ["https://www.facebook.com/tr?id=123"],
+        sourceUrl: "https://example.com/",
+        storageArtifacts: [],
+        vendors: ["Meta Pixel"]
+      },
+      runtimeEvidenceArtifacts: ["Meta Pixel request observed with GPC enabled."],
+      runtimeVendors: ["Meta Pixel"]
+    }
+  });
+
+  assert.equal(decision?.promotionEligibility, "internal_only");
+  assert.equal(decision?.externalSurfacingEligibility, "audit_only");
+  assert.ok(decision?.negativeEvidenceFlags.includes("missing_explicit_contradiction_basis"));
+  assert.ok(decision?.negativeEvidenceFlags.includes("insufficient_evidence_for_policy_behavior_conflict"));
+});
+
 test("schwab regression fixture is downgraded instead of promoted", () => {
   const decision = evaluatePolicyBehaviorConflictContract(POLICY_BEHAVIOR_CONFLICT_FIXTURES.negativeSchwabLike);
 
@@ -284,6 +318,52 @@ test("consent-gated tracking conflict contract accepts complete policy, runtime 
     externalSurfacingEligibility: "eligible",
     negativeEvidenceFlags: []
   });
+});
+
+test("consent-gated tracking conflict contract accepts cookie-choice policy anchors", () => {
+  const decision = evaluateConsentGatedTrackingConflictContract({
+    contradictionEvidence: {
+      claim: "Cookie notice explains cookie settings, third-party cookies, analytics, and marketing categories.",
+      contradictionBasis: "Marketing requests fired before the visitor completed a consent choice.",
+      conflictBridge: {
+        conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+        reasoning: "Choice-control policy evidence is paired with concrete pre-consent runtime request URLs.",
+        supportsPromotion: true
+      },
+      evidenceSufficiency: {
+        conflictBridgePresent: true,
+        policyAnchorPresent: true,
+        promotionEligible: true,
+        reviewStatus: "complete",
+        runtimeAnchorPresent: true
+      },
+      policyAnchor: {
+        claimType: "cookie_preferences_available",
+        confidence: 0.72,
+        extractionStatus: "fetched",
+        normalizedClaim: "The policy surface describes cookie, tracking, or privacy-choice controls available to visitors.",
+        snippet: "Cookie notice explains cookie settings, third-party cookies, analytics, and marketing categories.",
+        sourceUrl: "https://example.com/cookie-policy"
+      },
+      runtimeAnchor: {
+        confidence: 0.82,
+        cookies: [],
+        observationType: "marketing_vendor_fired_pre_consent",
+        phase: "pre_consent",
+        requests: ["https://js.hs-scripts.com/example.js"],
+        sourceUrl: "https://example.com/",
+        storageArtifacts: [],
+        vendors: ["HubSpot"]
+      },
+      runtimeEvidenceArtifacts: ["https://js.hs-scripts.com/example.js"],
+      runtimeVendors: ["HubSpot"],
+      sourceUrls: ["https://example.com/cookie-policy"]
+    }
+  });
+
+  assert.equal(decision?.promotionEligibility, "eligible");
+  assert.equal(decision?.externalSurfacingEligibility, "eligible");
+  assert.equal(decision?.allowedNarrativeTier, "strong");
 });
 
 test("consent-gated tracking conflict contract stays audit-only without concrete runtime request URL", () => {

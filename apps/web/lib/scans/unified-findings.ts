@@ -113,7 +113,10 @@ export type UnifiedFindingDetails =
       runtimeObservationType?: string | null;
       runtimePhase?: string | null;
       conflictType?: string | null;
+      conflictBridgeReasoning?: string | null;
+      conflictSupportsPromotion?: boolean | null;
       contradictionReviewStatus?: string | null;
+      contradictionPromotionEligible?: boolean | null;
       policySnippet?: string | null;
       observedBehavior?: string | null;
       policySourceUrl?: string | null;
@@ -1540,7 +1543,10 @@ function buildUnifiedFindingDetails(input: {
       runtimeObservationType: contradictionEvidence?.runtimeAnchor.observationType ?? null,
       runtimePhase: contradictionEvidence?.runtimeAnchor.phase ?? null,
       conflictType: contradictionEvidence?.conflictBridge.conflictType ?? null,
+      conflictBridgeReasoning: contradictionEvidence?.conflictBridge.reasoning ?? null,
+      conflictSupportsPromotion: contradictionEvidence?.conflictBridge.supportsPromotion ?? null,
       contradictionReviewStatus: contradictionEvidence?.evidenceSufficiency.reviewStatus ?? null,
+      contradictionPromotionEligible: contradictionEvidence?.evidenceSufficiency.promotionEligible ?? null,
       policySnippet: explicitPolicySnippet,
       observedBehavior: contradictionEvidence?.runtimeSummary ?? input.summary,
       policySourceUrl: contradictionEvidence?.policySourceUrl ?? null,
@@ -1571,6 +1577,12 @@ function buildUnifiedFindingDetails(input: {
         : []),
       ...(Array.isArray(input.fallbackEvidence?.post_reject_tracker_vendors)
         ? (input.fallbackEvidence?.post_reject_tracker_vendors as string[])
+        : []),
+      ...(Array.isArray(input.linkedValidationFinding?.evidence?.rtb_cookie_sync_vendors)
+        ? (input.linkedValidationFinding?.evidence?.rtb_cookie_sync_vendors as string[])
+        : []),
+      ...(Array.isArray(input.fallbackEvidence?.rtb_cookie_sync_vendors)
+        ? (input.fallbackEvidence?.rtb_cookie_sync_vendors as string[])
         : [])
     ]);
 
@@ -2019,6 +2031,12 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
             })
         ).slice(0, 20)
       : [];
+  const rtbCookieSyncRows = stringifyEvidenceRows(
+    normalizedFallbackEvidence.rtbCookieSyncObservations ?? normalizedFallbackEvidence.rtb_cookie_sync_observations ?? normalizedFallbackEvidence.rtb_cookie_sync_evidence
+  );
+  if (rtbCookieSyncRows.length > 0) {
+    entities.rtbCookieSyncEvidence = rtbCookieSyncRows;
+  }
   const overlayFacts = getOverlayEvidenceFacts(normalizedFallbackEvidence);
   if (overlayFacts) {
     entities.blockingOverlayType = [overlayFacts.overlayType];

@@ -16,7 +16,7 @@ import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { CopyJsonButton } from "./copy-json-button";
 import { CookieStoragePanel } from "./cookie-storage-panel";
 import { DiagnosticsPanel } from "./diagnostics-panel";
-import { ExecutiveSummaryCard } from "./executive-summary-card";
+import { ExecutiveSummaryCard, type ExecutivePolicySurface, type ExecutiveScanInterruption } from "./executive-summary-card";
 import { FindingsSection } from "./findings-section";
 import { FullScanProgressCard } from "./full-scan-progress-card";
 import { FingerprintingPanel } from "./fingerprinting-panel";
@@ -417,9 +417,52 @@ function getPolicySnippetValues(row: Record<string, unknown> | null) {
   ]);
 }
 
+function getPolicyRowNumber(row: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function getPolicyRowString(row: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function hasContradictionGradePolicyExtraction(row: Record<string, unknown> | null) {
+  const policyPageUrl = row ? getPolicyPageUrl(row) : null;
+  const semanticConfidence = getPolicyRowNumber(row, ["policy_semantic_confidence", "policySemanticConfidence"]);
+  const coverageRatio = getPolicyRowNumber(row, ["policy_coverage_ratio", "policyCoverageRatio"]);
+  const extractionStatus = getPolicyRowString(row, ["policy_extraction_status", "policyExtractionStatus"]) ?? "fetched";
+  const snippetCount = getPolicyRowNumber(row, ["policy_snippet_count", "policySnippetCount"]);
+
+  return Boolean(
+    policyPageUrl &&
+      extractionStatus === "fetched" &&
+      (semanticConfidence === null || semanticConfidence >= 0.55) &&
+      (coverageRatio === null || coverageRatio >= 0.25) &&
+      (snippetCount === null || snippetCount > 0)
+  );
+}
+
 function deriveConsentGatingPolicyAnchor(row: Record<string, unknown> | null) {
   const snippets = getPolicySnippetValues(row);
   const policyPageUrl = row ? getPolicyPageUrl(row) : null;
+  const semanticConfidence = getPolicyRowNumber(row, ["policy_semantic_confidence", "policySemanticConfidence"]);
+
+  if (!hasContradictionGradePolicyExtraction(row)) {
+    return null;
+  }
 
   for (const snippet of snippets) {
     const lowerSnippet = snippet.toLowerCase();
@@ -434,6 +477,15 @@ function deriveConsentGatingPolicyAnchor(row: Record<string, unknown> | null) {
       /(consent|choice|permission|opt[-\s]?in).{0,80}(advertis(?:e|ing)|marketing|tracking|targeting|analytics)/.test(lowerSnippet);
     const rejectDisablesTracking =
       /(reject|decline|disable|turn off).{0,80}(analytics|advertis(?:e|ing)|marketing|tracking|targeting|non[-\s]?essential)/.test(lowerSnippet);
+    const vagueConsentReference =
+      /(?:we value your privacy|may use cookies|use cookies to improve|cookies and similar technologies)/.test(lowerSnippet) &&
+      !necessaryOnly &&
+      !marketingBeforeConsent &&
+      !rejectDisablesTracking;
+
+    if (vagueConsentReference) {
+      continue;
+    }
 
     let claimType: PolicyBehaviorConflictClaimType | null = null;
     if (necessaryOnly && mentionsConsent) {
@@ -448,8 +500,8 @@ function deriveConsentGatingPolicyAnchor(row: Record<string, unknown> | null) {
 
     return {
       claimType,
-      confidence: policyPageUrl ? 0.82 : 0.68,
-      extractionStatus: policyPageUrl ? "fetched" : "unknown",
+      confidence: semanticConfidence ?? 0.82,
+      extractionStatus: "fetched",
       normalizedClaim: snippet,
       snippet,
       sourceUrl: policyPageUrl
@@ -2093,6 +2145,164 @@ function deriveVerifiedPolicyInsights(policyEnrichments: Array<Record<string, un
       };
     })
     .filter((item) => item.summary || item.topics.length > 0 || item.flags.length > 0);
+}
+
+function deriveExecutivePolicySurfaces(policyEnrichments: Array<Record<string, unknown>>): ExecutivePolicySurface[] {
+  return policyEnrichments
+    .filter((row) => {
+      const pageType = String(getPolicyPageType(row) ?? "");
+      return pageType === "privacy_policy" || pageType === "terms_of_service" || pageType === "cookie_policy";
+    })
+    .map((row) => {
+      const pageType = String(getPolicyPageType(row) ?? "");
+      const pageUrl = getPolicyPageUrl(row);
+      const summary = getPolicySummaryText(row);
+      const policyMentions = getPolicyMentions(row);
+      const policyFlags = getPolicyActionableFlags(row);
+      const topics = Array.isArray(policyMentions)
+        ? policyMentions
+            .map((item) =>
+              item && typeof item === "object" && typeof (item as Record<string, unknown>).topic === "string"
+                ? humanizePolicyTopic(String((item as Record<string, unknown>).topic))
+                : null
+            )
+            .filter((value): value is string => Boolean(value))
+            .slice(0, 4)
+        : [];
+      const flags = Array.isArray(policyFlags)
+        ? policyFlags
+            .filter((value): value is string => typeof value === "string" && value !== "blocked_homepage_direct_policy_page")
+            .map((value) => humanizePolicyFlag(value))
+            .slice(0, 3)
+        : [];
+      const details = [
+        summary,
+        topics.length > 0 ? `Topics: ${topics.join(", ")}` : null,
+        flags.length > 0 ? `Flags: ${flags.join(", ")}` : null
+      ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+      return {
+        details,
+        pageLabel:
+          pageType === "privacy_policy"
+            ? "Privacy policy"
+            : pageType === "terms_of_service"
+              ? "Terms of service"
+              : "Cookie policy",
+        pageUrl
+      };
+    })
+    .filter((surface) => surface.pageUrl || surface.details.length > 0);
+}
+
+function pushUniqueInterruption(
+  interruptions: ExecutiveScanInterruption[],
+  seen: Set<string>,
+  label: string,
+  details: Array<string | null | undefined>
+) {
+  const normalizedDetails = details.filter((detail): detail is string => typeof detail === "string" && detail.trim().length > 0);
+  const key = `${label}:${normalizedDetails.join("|")}`;
+
+  if (seen.has(key)) {
+    return;
+  }
+
+  seen.add(key);
+  interruptions.push({ label, details: normalizedDetails });
+}
+
+function deriveExecutiveScanInterruptions(
+  snapshot: Record<string, unknown> | null | undefined,
+  scanEvents: ScanEventSummaryRecord[] = []
+): ExecutiveScanInterruption[] {
+  const interruptions: ExecutiveScanInterruption[] = [];
+  const seen = new Set<string>();
+
+  if (snapshot) {
+    const homepageFetchHttpStatus = getRecordNumber(snapshot, "homepage_fetch_http_status");
+    const homepageFetchStatus = getRecordString(snapshot, "homepage_fetch_status");
+    const blockVendorGuess = getRecordString(snapshot, "block_vendor_guess");
+    const blockPageClassification = getRecordString(snapshot, "block_page_classification");
+    const serverHeader = getRecordString(snapshot, "server_header");
+    const finalEffectiveUrl = getRecordString(snapshot, "final_effective_url");
+    const stopReasonDetail = getRecordString(snapshot, "stop_reason_detail");
+    const stopReasonLabel = getRecordString(snapshot, "stop_reason_label");
+    const stopReason = deriveScanStopReason({
+      accessPostureClass: getRecordString(snapshot, "access_posture_class"),
+      authWallDetected: snapshot.auth_wall_detected === true,
+      blockedFlag: snapshot.blocked_flag === true,
+      captchaFlag: snapshot.captcha_flag === true,
+      homepageFetchHttpStatus,
+      homepageFetchStatus,
+      normalizedBodyMissing: !(typeof snapshot.normalized_body_hash === "string" && snapshot.normalized_body_hash.trim().length > 0),
+      pagesScanned: getRecordNumber(snapshot, "pages_scanned"),
+      robotsAllowed: snapshot.robots_allowed === true ? true : snapshot.robots_allowed === false ? false : null,
+      robotsFetchHttpStatus: getRecordNumber(snapshot, "robots_fetch_http_status"),
+      robotsFetchStatus: getRecordString(snapshot, "robots_fetch_status"),
+      blockPageClassification: blockPageClassification as never,
+      blockVendorGuess: blockVendorGuess as never,
+      challengeSuspected: snapshot.challenge_suspected === true,
+      authWallSuspected: snapshot.auth_wall_suspected === true,
+      rateLimitSuspected: snapshot.rate_limit_suspected === true,
+      geoBlockSuspected: snapshot.geo_block_suspected === true,
+      fingerprintBlockSuspected: snapshot.fingerprint_block_suspected === true
+    });
+
+    if (typeof homepageFetchHttpStatus === "number" && homepageFetchHttpStatus >= 400) {
+      pushUniqueInterruption(interruptions, seen, `HTTP ${homepageFetchHttpStatus}`, [
+        homepageFetchStatus ? `Homepage status: ${homepageFetchStatus}` : null,
+        finalEffectiveUrl ? `Final URL: ${finalEffectiveUrl}` : null,
+        blockVendorGuess ? `Block vendor: ${blockVendorGuess}` : null,
+        blockPageClassification ? `Block page: ${blockPageClassification}` : null,
+        serverHeader ? `Server: ${serverHeader}` : null
+      ]);
+    }
+
+    if (snapshot.captcha_flag === true || snapshot.challenge_suspected === true) {
+      pushUniqueInterruption(interruptions, seen, "Captcha/security challenge", [
+        stopReason?.reason,
+        blockVendorGuess ? `Block vendor: ${blockVendorGuess}` : null,
+        blockPageClassification ? `Block page: ${blockPageClassification}` : null
+      ]);
+    }
+
+    if (snapshot.rate_limit_suspected === true || homepageFetchHttpStatus === 429) {
+      pushUniqueInterruption(interruptions, seen, "Rate limit suspected", [
+        homepageFetchHttpStatus === 429 ? "Homepage returned HTTP 429." : null,
+        stopReason?.reason
+      ]);
+    }
+
+    if (snapshot.auth_wall_detected === true || snapshot.auth_wall_suspected === true) {
+      pushUniqueInterruption(interruptions, seen, "Authentication wall", [stopReason?.reason, stopReasonDetail]);
+    }
+
+    if (snapshot.blocked_flag === true && homepageFetchHttpStatus !== 429) {
+      pushUniqueInterruption(interruptions, seen, stopReason?.outcomeTitle ?? "Blocked by site protection", [
+        stopReason?.reason,
+        stopReasonLabel,
+        stopReasonDetail
+      ]);
+    }
+  }
+
+  for (const event of scanEvents) {
+    if (event.eventType !== "access.limitations_detected") {
+      continue;
+    }
+
+    const metadata = event.metadataJson;
+    const challengeHeaders = getNestedRecord(metadata, "challengeHeaders");
+    pushUniqueInterruption(interruptions, seen, "Access limitation event", [
+      event.message,
+      getRecordBoolean(metadata, "botChallengeDetected") === true ? "Bot challenge detected." : null,
+      getRecordString(challengeHeaders, "server") ? `Server: ${getRecordString(challengeHeaders, "server")}` : null,
+      getRecordString(challengeHeaders, "cfMitigated") ? `Mitigation: ${getRecordString(challengeHeaders, "cfMitigated")}` : null
+    ]);
+  }
+
+  return interruptions.slice(0, 6);
 }
 
 function deriveLoggedNoResultsReason(scanEvents: ScanEventSummaryRecord[]) {
@@ -4660,6 +4870,7 @@ export function SharedScanDetailView({
     scanRecord.preconsentViolations.length > 0 ||
     scanRecord.trackerVendors.length > 0;
   const executiveSummaryBadgeCounts = deriveExecutiveSummaryBadgeCounts(findingEvidenceDiagnostics);
+  const coverageMicrocards = scanRecord.coverageMicrocards ?? [];
   const executiveFindingsProjection = projectExecutiveFindingsFromUnifiedPackets(findingEvidenceDiagnostics);
   const allExecutiveFindings = executiveFindingsProjection.findings;
   const executiveAccessLimitationNotice = selectExecutiveAccessLimitationNotice({
@@ -4821,6 +5032,7 @@ export function SharedScanDetailView({
             }}
             agencyMappings={scanRecord.agencyMappings}
             beforeConsentCookieCount={cookiesBeforeConsentCount}
+            coverageMicrocards={coverageMicrocards}
             coverageLevel={typeof scanRecord.snapshot?.coverage_level === "string" ? scanRecord.snapshot.coverage_level : null}
             domainBenchmark={scanRecord.domainBenchmark}
             finalHost={certScoreSummary.finalHost}
@@ -4848,6 +5060,8 @@ export function SharedScanDetailView({
             legalCoverageScore={getFiniteNumber(scanRecord.snapshot?.legal_coverage_score)}
             pagesScanned={getFiniteNumber(scanRecord.snapshot?.pages_scanned)}
             policyEnrichmentCount={scanRecord.policyEnrichment.length}
+            policySurfaces={deriveExecutivePolicySurfaces(scanRecord.policyEnrichment)}
+            scanInterruptions={deriveExecutiveScanInterruptions(scanRecord.snapshot, scanRecord.events)}
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
             lightweightHeroMetrics={lightweightHeroMetrics}
           />

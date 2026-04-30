@@ -143,10 +143,10 @@ test("high-sensitivity candidates with third-party tracking specialize into sens
         {
           detectedType: "health_information",
           evidenceStrength: "suspected",
-          requestUrl: "https://tracker.example.net/collect"
+          requestUrl: "https://tracker.example.net/collect",
+          vendorHost: "tracker.example.net"
         }
       ],
-      retargetingPixelArtifactPresent: true,
       runtimeEvidenceArtifacts: ["request:https://tracker.example.net/collect"]
     },
     observedValue: "Yes",
@@ -196,7 +196,7 @@ const sensitiveCollectionCases = [
 ] as const;
 
 for (const sensitiveCase of sensitiveCollectionCases) {
-  test(`${sensitiveCase.signalKey} with tracking context specializes into sensitive tracking findings`, () => {
+  test(`${sensitiveCase.signalKey} with disconnected tracking context stays a sensitive collection finding`, () => {
     const concern = normalizeConcernFromReviewFindingCandidate({
       description: `${sensitiveCase.label} appears to coexist with third-party tracking.`,
       fallbackEvidence: {
@@ -219,7 +219,7 @@ for (const sensitiveCase of sensitiveCollectionCases) {
       title: sensitiveCase.label
     });
 
-    assert.equal(concern.suggestedUnifiedFindingId, "sensitive_data_collection_with_third_party_tracking_present");
+    assert.equal(concern.suggestedUnifiedFindingId, "sensitive_collection_surface_observed");
     assert.equal(concern.promotionEligibility, "eligible");
   });
 }

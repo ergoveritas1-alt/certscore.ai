@@ -463,6 +463,31 @@ export function normalizeNanoDocumentExtraction(input: {
   };
 }
 
+export function buildDeterministicNanoDocumentExtraction(input: {
+  documentText: string;
+  metadataReason: string;
+  row: NanoDocumentSourceRow;
+}): NanoDocumentExtractionResult {
+  const normalized = normalizeNanoDocumentExtraction({
+    documentText: input.documentText,
+    parsed: {
+      policy_coverage_ratio: input.documentText.length >= 1_200 ? 0.62 : 0.35,
+      policy_snippet_count: input.documentText.length >= 1_200 ? 1 : 0,
+      policy_structurally_weak: input.documentText.length < 400
+    },
+    row: input.row
+  });
+
+  return {
+    ...normalized,
+    metadata: {
+      ...normalized.metadata,
+      extraction_fallback_reason: input.metadataReason,
+      extraction_mode: "deterministic_document_semantics"
+    }
+  };
+}
+
 export async function extractNanoDocumentSourceWithLlm(row: NanoDocumentSourceRow): Promise<NanoDocumentExtractionResult> {
   const env = getWorkerEnv();
   const documentText = getString(row.document_text) ?? getString(row.documentText);
@@ -474,7 +499,11 @@ export async function extractNanoDocumentSourceWithLlm(row: NanoDocumentSourceRo
   }
 
   if (!env.OPENAI_API_KEY) {
-    return { extractedFields: {}, extractionStatus: "insufficient", metadata: { reason: "missing_openai_api_key" }, semanticConfidence: null };
+    return buildDeterministicNanoDocumentExtraction({
+      documentText,
+      metadataReason: "missing_openai_api_key",
+      row
+    });
   }
 
   const response = await fetch(OPENAI_API_URL, {
@@ -512,7 +541,19 @@ export async function extractNanoDocumentSourceWithLlm(row: NanoDocumentSourceRo
 
   if (!response.ok) {
     const errorBody = await response.text().catch(() => "");
-    return { extractedFields: {}, extractionStatus: "failed", metadata: { error: `openai_${response.status}`, errorBody }, semanticConfidence: null };
+    const fallback = buildDeterministicNanoDocumentExtraction({
+      documentText,
+      metadataReason: `openai_${response.status}`,
+      row
+    });
+    return {
+      ...fallback,
+      metadata: {
+        ...fallback.metadata,
+        error: `openai_${response.status}`,
+        errorBody
+      }
+    };
   }
 
   const payload = (await response.json()) as {

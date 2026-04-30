@@ -82,6 +82,50 @@ function isConcreteHttpEvidenceUrl(value: string | null | undefined) {
   }
 }
 
+function hasConcreteRtbObservationRow(row: Record<string, unknown>) {
+  const hostname = typeof row.hostname === "string" ? row.hostname.trim() : "";
+  const pathSample = typeof row.pathSample === "string" ? row.pathSample : typeof row.path_sample === "string" ? row.path_sample : "";
+  const urlSample = typeof row.urlSample === "string" ? row.urlSample : typeof row.url_sample === "string" ? row.url_sample : "";
+  const reason = typeof row.reason === "string" ? row.reason : "";
+  const queryKeys = [
+    ...getStringArrayValues(row, ["queryKeysSample", "query_keys_sample", "parameterKeys", "parameter_keys"])
+  ];
+  const hasSyncPattern =
+    /sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid/i.test(`${hostname} ${pathSample} ${urlSample} ${reason}`) ||
+    /redirect_sync|identifier_query|known_sync_host|sync_path/i.test(reason);
+  const hasIdHints = queryKeys.some((key) =>
+    /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|gdpr|gdpr_consent|us_privacy|redir|redirect|callback)$/i.test(key)
+  );
+  return hostname.includes(".") && hasSyncPattern && (hasIdHints || /sync|idsync|match|redirect/i.test(`${pathSample} ${reason}`));
+}
+
+export function hasConcreteRtbCookieSyncEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const rows = getObjectArrayValues(rawEvidence, [
+    "rtbCookieSyncObservations",
+    "rtb_cookie_sync_observations",
+    "rtb_cookie_sync_evidence"
+  ]);
+  if (rows.some(hasConcreteRtbObservationRow)) {
+    return true;
+  }
+
+  const urls = getStringArrayValues(rawEvidence, ["runtimeRequestUrls", "requestUrls", "sourceUrls"]).filter(isConcreteHttpEvidenceUrl);
+  return urls.some((url) => {
+    try {
+      const parsed = new URL(url);
+      const text = `${parsed.hostname} ${parsed.pathname}`;
+      return /sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid/i.test(text) &&
+        [...parsed.searchParams.keys()].some((key) => /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|gdpr|gdpr_consent|us_privacy|redir|redirect|callback)$/i.test(key));
+    } catch {
+      return false;
+    }
+  });
+}
+
 function hasPromotionGradePreconsentCookieEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   const cookieRows = getObjectArrayValues(rawEvidence, ["preconsent_cookie_evidence", "preconsentCookieEvidence"]);
   const hasBeforeConsentWrite = cookieRows.some((row) => {
@@ -569,6 +613,44 @@ export function hasConcreteSensitivePayloadArtifact(rawEvidence: Record<string, 
   });
 }
 
+export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
+  const rows = Array.isArray(rawEvidence?.sensitivePayloadViolations)
+    ? rawEvidence.sensitivePayloadViolations
+    : Array.isArray(rawEvidence?.sensitive_payload_violations)
+      ? rawEvidence.sensitive_payload_violations
+      : [];
+
+  return rows.some((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return false;
+    }
+
+    const row = entry as {
+      evidenceStrength?: unknown;
+      requestUrl?: unknown;
+      vendorHost?: unknown;
+    };
+    if (row.evidenceStrength === "detector_only") {
+      return false;
+    }
+
+    if (typeof row.vendorHost === "string" && row.vendorHost.trim().includes(".")) {
+      return true;
+    }
+
+    if (typeof row.requestUrl !== "string") {
+      return false;
+    }
+
+    try {
+      const parsed = new URL(row.requestUrl);
+      return (parsed.protocol === "https:" || parsed.protocol === "http:") && parsed.hostname.includes(".");
+    } catch {
+      return false;
+    }
+  });
+}
+
 export function evaluatePolicyBehaviorConflictContract(rawEvidence: Record<string, unknown> | null | undefined): ContractDecision | null {
   const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
   if (!contradictionEvidence) {
@@ -696,6 +778,7 @@ export function evaluateConsentGatedTrackingConflictContract(rawEvidence: Record
   const { policyAnchor, runtimeAnchor, conflictBridge } = contradictionEvidence;
   const allowedConflictType = getAllowedConflictType(policyAnchor.claimType, runtimeAnchor.observationType);
   const consentGatingClaim =
+    policyAnchor.claimType === "cookie_preferences_available" ||
     policyAnchor.claimType === "only_necessary_cookies_before_choice" ||
     policyAnchor.claimType === "no_marketing_tracking_before_consent";
   const preconsentRuntime =

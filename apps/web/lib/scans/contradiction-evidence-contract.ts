@@ -117,6 +117,7 @@ function normalizeContradictionEvidenceRecord(
 
 export type PolicyBehaviorConflictClaimType =
   | "gpc_honored"
+  | "cookie_preferences_available"
   | "no_sale_share_without_opt_out_or_consent"
   | "no_marketing_tracking_before_consent"
   | "only_necessary_cookies_before_choice"
@@ -134,6 +135,7 @@ export type PolicyBehaviorRuntimeObservationType =
   | "sale_share_like_behavior_observed";
 
 export type PolicyBehaviorConflictType =
+  | "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice"
   | "declared_opt_out_honored_but_tracking_persisted_under_opt_out"
   | "declared_no_marketing_before_consent_but_marketing_vendor_fired_pre_consent"
   | "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired"
@@ -217,6 +219,11 @@ const POLICY_BEHAVIOR_CONFLICT_MAP: Record<
   gpc_honored: {
     gpc_signal_not_honored: "declared_opt_out_honored_but_tracking_persisted_under_opt_out"
   },
+  cookie_preferences_available: {
+    marketing_vendor_fired_pre_consent: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+    analytics_vendor_fired_pre_consent: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+    adtech_cookie_set_under_opt_out: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice"
+  },
   no_sale_share_without_opt_out_or_consent: {
     sale_share_like_behavior_observed: "declared_no_sale_share_but_sale_share_like_behavior_observed"
   },
@@ -242,6 +249,7 @@ const POLICY_BEHAVIOR_CONFLICT_MAP: Record<
 function normalizeClaimType(value: string | null): PolicyBehaviorConflictClaimType | null {
   switch (value) {
     case "gpc_honored":
+    case "cookie_preferences_available":
     case "no_sale_share_without_opt_out_or_consent":
     case "no_marketing_tracking_before_consent":
     case "only_necessary_cookies_before_choice":
@@ -462,10 +470,12 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
       ? normalizeContradictionEvidenceRecord(normalizedRecord.contradictionEvidence as Record<string, unknown>)
       : null;
   const source = nested ?? normalizedRecord;
+  const explicitConflictBridgeRecord = getNestedRecord(source, ["conflictBridge", "conflict_bridge"]);
+  const explicitSufficiencyRecord = getNestedRecord(source, ["evidenceSufficiency", "evidence_sufficiency"]);
   const policyAnchorSource = normalizeContradictionEvidenceRecord(getNestedRecord(source, ["policyAnchor", "policy_anchor"]) ?? source);
   const runtimeAnchorSource = normalizeContradictionEvidenceRecord(getNestedRecord(source, ["runtimeAnchor", "runtime_anchor"]) ?? source);
-  const conflictBridgeSource = normalizeContradictionEvidenceRecord(getNestedRecord(source, ["conflictBridge", "conflict_bridge"]) ?? source);
-  const sufficiencySource = normalizeContradictionEvidenceRecord(getNestedRecord(source, ["evidenceSufficiency", "evidence_sufficiency"]) ?? source);
+  const conflictBridgeSource = normalizeContradictionEvidenceRecord(explicitConflictBridgeRecord ?? source);
+  const sufficiencySource = normalizeContradictionEvidenceRecord(explicitSufficiencyRecord ?? source);
 
   const claim = getFirstString(source, ["claim"]);
   const contradictionBasis = getFirstString(source, ["contradictionBasis"]);
@@ -552,13 +562,10 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
       ) ?? inferredConflictType,
     reasoning:
       getFirstString(conflictBridgeSource, ["bridgeReasoning", "reasoning", "explanation"]) ??
-      getFirstString(source, ["reasoning", "explanation"]) ??
-      (inferredConflictType
-        ? `Policy claim ${policyClaimType} conflicts with runtime observation ${runtimeObservationType}.`
-        : null),
+      getFirstString(source, ["reasoning", "explanation"]),
     supportsPromotion:
       getFirstBoolean(conflictBridgeSource, ["supportsPromotion"]) ??
-      Boolean(inferredConflictType)
+      false
   };
 
   const derivedPolicyAnchorPresent = Boolean(
@@ -577,6 +584,7 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
         runtimeEvidenceArtifacts.length > 0)
   );
   const derivedConflictBridgePresent = Boolean(
+    explicitConflictBridgeRecord &&
     conflictBridge.conflictType &&
       conflictBridge.reasoning &&
       conflictBridge.supportsPromotion &&
@@ -586,9 +594,10 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
     normalizeEvidenceStatus(
       getFirstString(sufficiencySource, ["reviewStatus"])
     ) ??
-    (derivedPolicyAnchorPresent && derivedRuntimeAnchorPresent && derivedConflictBridgePresent
+    (explicitSufficiencyRecord && derivedPolicyAnchorPresent && derivedRuntimeAnchorPresent && derivedConflictBridgePresent
       ? "complete"
       : "insufficient_evidence_for_policy_behavior_conflict");
+  const explicitPromotionEligible = getFirstBoolean(sufficiencySource, ["promotionEligible"]);
 
   const evidenceSufficiency: ContradictionEvidenceSufficiency = {
     policyAnchorPresent:
@@ -598,8 +607,8 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
     conflictBridgePresent:
       getFirstBoolean(sufficiencySource, ["conflictBridgePresent"]) ?? derivedConflictBridgePresent,
     promotionEligible:
-      getFirstBoolean(sufficiencySource, ["promotionEligible"]) ??
-      (derivedPolicyAnchorPresent && derivedRuntimeAnchorPresent && derivedConflictBridgePresent),
+      explicitPromotionEligible ??
+      Boolean(explicitSufficiencyRecord && derivedPolicyAnchorPresent && derivedRuntimeAnchorPresent && derivedConflictBridgePresent),
     reviewStatus
   };
 

@@ -1897,8 +1897,8 @@ function getRepresentativeAccessibilityExamplesForSignal(input: {
   signalKey: string;
 }) {
   const matches = input.rows.filter((row) => {
-    const ruleCode = row.ruleCode.toLowerCase();
-    const ruleGroup = row.ruleGroup.toLowerCase();
+    const ruleCode = typeof row.ruleCode === "string" ? row.ruleCode.toLowerCase() : "";
+    const ruleGroup = typeof row.ruleGroup === "string" ? row.ruleGroup.toLowerCase() : "";
 
     if (/wcag_contrast_failures_count/i.test(input.signalKey)) {
       return /contrast/.test(ruleCode) || /contrast/.test(ruleGroup);

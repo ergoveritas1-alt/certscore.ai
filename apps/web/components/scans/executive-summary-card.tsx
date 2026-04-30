@@ -30,6 +30,17 @@ type UnifiedRegulatoryContext = {
   thirdPartyRequestCount?: number;
 };
 
+export type ExecutivePolicySurface = {
+  details: string[];
+  pageLabel: string;
+  pageUrl: string | null;
+};
+
+export type ExecutiveScanInterruption = {
+  details: string[];
+  label: string;
+};
+
 function getPostureClasses(posture: "Clear" | "Watch" | "Action Needed") {
   if (posture === "Action Needed") {
     return "border-rose-200 bg-rose-50/90 text-rose-950";
@@ -365,6 +376,7 @@ export function buildRegulatoryLenses(
     );
   const trackingFinding =
     findings.find((finding) => finding.id === "pre_consent_tracking_detected") ??
+    findings.find((finding) => finding.id === "rtb_cookie_sync_observed") ??
     findings.find((finding) => finding.id === "reject_tracking_persists_after_reject") ??
     findings.find((finding) => finding.id === "third_party_tracking_pre_consent") ??
     findings.find((finding) => finding.id === "third_party_cookie_pre_consent") ??
@@ -373,6 +385,7 @@ export function buildRegulatoryLenses(
     findings.find((finding) => /pre[- ]consent|before consent/i.test(`${finding.label} ${finding.shortSummary}`));
   const replayFinding = findings.find((finding) => finding.id === "session_recording_services_detected");
   const rejectTrackingFinding = findings.find((finding) => finding.id === "reject_tracking_persists_after_reject");
+  const cookieDisclosureFinding = findings.find((finding) => finding.id === "cookie_disclosure_gap");
   const sensitiveTrackingFinding =
     findings.find((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present") ??
     findings.find((finding) => finding.id === "session_replay_on_sensitive_input_surface");
@@ -385,6 +398,8 @@ export function buildRegulatoryLenses(
   const hasTrackingConcern =
     options?.unifiedContext?.hasTrackingConcern ??
     (findingIds.has("pre_consent_tracking_detected") ||
+      findingIds.has("rtb_cookie_sync_observed") ||
+      findingIds.has("cookie_disclosure_gap") ||
       findingIds.has("reject_tracking_persists_after_reject") ||
       findingIds.has("third_party_tracking_pre_consent") ||
       findingIds.has("third_party_cookie_pre_consent") ||
@@ -462,6 +477,12 @@ export function buildRegulatoryLenses(
           lens: "GDPR / ePrivacy",
           reason: "sensitive_data_tracking"
         })
+      : null,
+    cookieDisclosureFinding
+      ? buildRegulatoryLensFindingFromCertFinding(cookieDisclosureFinding, cookieDisclosureFinding.shortSummary, {
+          lens: "GDPR / ePrivacy",
+          reason: "cookie_disclosure_gap"
+        })
       : null
   ].filter((item): item is RegulatoryLensFinding => Boolean(item));
 
@@ -504,6 +525,12 @@ export function buildRegulatoryLenses(
           lens: "CCPA / CPRA",
           reason: "sensitive_data_tracking"
         })
+      : null,
+    cookieDisclosureFinding
+      ? buildRegulatoryLensFindingFromCertFinding(cookieDisclosureFinding, cookieDisclosureFinding.shortSummary, {
+          lens: "CCPA / CPRA",
+          reason: "cookie_disclosure_gap"
+        })
       : null
   ].filter((item): item is RegulatoryLensFinding => Boolean(item));
 
@@ -537,12 +564,19 @@ export function buildRegulatoryLenses(
           lens: "FTC",
           reason: "sensitive_data_tracking"
         })
+      : null,
+    cookieDisclosureFinding
+      ? buildRegulatoryLensFindingFromCertFinding(cookieDisclosureFinding, cookieDisclosureFinding.shortSummary, {
+          lens: "FTC",
+          reason: "cookie_disclosure_gap"
+        })
       : null
   ].filter((item): item is RegulatoryLensFinding => Boolean(item));
 
   const gdprScore = clampScore(
     84 -
       (hasTrackingConcern ? 32 : 0) -
+      (findingIds.has("cookie_disclosure_gap") ? 10 : 0) -
       (beforeConsentCookieCount > 0 ? 14 : 0) -
       (hasConsentConcern ? (hasTrackingConcern || beforeConsentCookieCount > 0 ? 16 : 6) : 0) -
       (sensitiveTrackingFinding ? 12 : 0) -
@@ -551,6 +585,7 @@ export function buildRegulatoryLenses(
   const cpraScore = clampScore(
     82 -
       (hasTrackingConcern ? 24 : 0) -
+      (findingIds.has("cookie_disclosure_gap") ? 12 : 0) -
       (beforeConsentCookieCount > 0 ? 12 : 0) -
       (sensitiveTrackingFinding ? 14 : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0) -
@@ -560,6 +595,7 @@ export function buildRegulatoryLenses(
     80 -
       (hasConsentConcern ? 24 : 0) -
       (hasTrackingConcern ? 18 : 0) -
+      (findingIds.has("cookie_disclosure_gap") ? 10 : 0) -
       (hasSensitiveHealthTrackingRisk ? 16 : 0) -
       (sensitiveTrackingFinding ? 12 : 0) -
       (beforeConsentCookieCount > 0 ? 8 : 0) -
@@ -613,8 +649,10 @@ export function buildRegulatoryLenses(
           ? "Health-context tracking and advertising/data-broker flows elevate FTC unfairness or deception risk."
         : hasConsentConcern
           ? "Consent-choice design should be reviewed for clarity."
-          : hasTrackingConcern || counts.beforeConsentCookieCount > 0
-            ? "Pre-consent tracking and third-party collection should be reviewed for unfairness or deception risk."
+        : cookieDisclosureFinding
+          ? "Cookie disclosures should be reviewed against observed runtime tracking behavior."
+        : hasTrackingConcern || counts.beforeConsentCookieCount > 0
+          ? "Pre-consent tracking and third-party collection should be reviewed for unfairness or deception risk."
             : "No strong unfairness/deception cue surfaced in the top findings.",
       toneClass: ftcTone.toneClass
     }
@@ -1729,6 +1767,10 @@ export function ExecutiveSummaryCard(input: {
   } | null;
   agencyMappings?: AgencyMapping[];
   beforeConsentCookieCount: number;
+  coverageMicrocards?: Array<{
+    label: string;
+    tone?: "amber" | "slate";
+  }> | null;
   coverageLevel?: string | null;
   domainBenchmark: DomainBenchmarkCardData;
   finalHost: string | null;
@@ -1756,6 +1798,8 @@ export function ExecutiveSummaryCard(input: {
   legalCoverageScore?: number | null;
   pagesScanned?: number | null;
   policyEnrichmentCount?: number | null;
+  policySurfaces?: ExecutivePolicySurface[] | null;
+  scanInterruptions?: ExecutiveScanInterruption[] | null;
   verifiedPublicSurfacesCount?: number | null;
   lightweightHeroMetrics?: Array<{
     accent?: "sky" | "amber" | "emerald" | "slate";
@@ -1792,6 +1836,9 @@ export function ExecutiveSummaryCard(input: {
     ...namedVendors,
     ...input.unresolvedVendorHosts.slice(0, Math.max(0, 8 - namedVendors.length))
   ];
+  const policySurfaces = input.policySurfaces ?? [];
+  const coveredPolicySurfaceUrlCount = new Set(policySurfaces.map((surface) => surface.pageUrl).filter(Boolean)).size;
+  const scanInterruptions = input.scanInterruptions ?? [];
   const executiveHeadline = input.accessLimitationNotice
     ? input.accessLimitationNotice.message
     : formatTopFindingHeadline(executiveHeadlineFindings);
@@ -1857,6 +1904,22 @@ export function ExecutiveSummaryCard(input: {
               >
                 <span className="font-medium text-slate-950">{narrativePresentation.summaryLabel}</span>{" "}
                 {narrativePresentation.summaryMessage}
+                {input.coverageMicrocards && input.coverageMicrocards.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {input.coverageMicrocards.map((card) => (
+                      <span
+                        key={card.label}
+                        className={
+                          card.tone === "amber"
+                            ? "inline-flex rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-950"
+                            : "inline-flex rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700"
+                        }
+                      >
+                        {card.label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -1962,7 +2025,6 @@ export function ExecutiveSummaryCard(input: {
             <>
               <div className="space-y-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
-                <p className="text-sm leading-6 text-slate-600">Quick context for vendor footprint, fingerprinting, and regulator-style review.</p>
               </div>
               <div className="space-y-3">
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
@@ -1974,6 +2036,61 @@ export function ExecutiveSummaryCard(input: {
                     items={[...vendorEvidence, ...thirdPartyDomains]}
                   />
                 </div>
+                {policySurfaces.length > 0 ? (
+                  <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Policy Surfaces</p>
+                    <p className="mt-2 text-sm text-slate-800">
+                      {coveredPolicySurfaceUrlCount} surface URL{coveredPolicySurfaceUrlCount === 1 ? "" : "s"} covered
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {policySurfaces.map((surface) => (
+                        <details key={`${surface.pageLabel}:${surface.pageUrl ?? "unknown"}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
+                            <span>{surface.pageLabel}</span>
+                            <span className="text-slate-400 transition-transform group-open:rotate-180">⌄</span>
+                          </summary>
+                          <div className="mt-3 space-y-2 text-xs leading-5 text-slate-600">
+                            {surface.pageUrl ? <p className="break-words font-medium text-slate-800">{surface.pageUrl}</p> : null}
+                            {surface.details.length > 0 ? (
+                              <ul className="space-y-1">
+                                {surface.details.map((detail) => (
+                                  <li key={detail}>{detail}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p>No additional policy details were retained for this surface.</p>
+                            )}
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {scanInterruptions.length > 0 ? (
+                  <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Scan Interruption</p>
+                    <p className="mt-2 text-sm text-slate-800">
+                      {scanInterruptions.length} interruption event{scanInterruptions.length === 1 ? "" : "s"} retained
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {scanInterruptions.map((event) => (
+                        <details key={`${event.label}:${event.details.join("|")}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
+                            <span>{event.label}</span>
+                            <span className="text-slate-400 transition-transform group-open:rotate-180">⌄</span>
+                          </summary>
+                          <div className="mt-3 space-y-1.5 text-xs leading-5 text-slate-600">
+                            {event.details.length > 0 ? (
+                              event.details.map((detail) => <p key={detail}>{detail}</p>)
+                            ) : (
+                              <p>No additional interruption details were retained.</p>
+                            )}
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {shouldShowFingerprintSnapshot ? (
                   <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Fingerprinting</p>

@@ -15,6 +15,8 @@ import {
   resolveReusableNanoDocumentExtractions,
   selectNanoDocCandidates,
   selectPendingNanoDocumentSourcesForExtraction,
+  shouldRenderNanoDocumentFallback,
+  shouldRetryRejectedNanoDocumentSource,
   shouldQueueNanoDocumentSourceForExtraction
 } from "./pipeline";
 
@@ -938,6 +940,140 @@ test("isolateLikelyLegalDocumentText trims legal page chrome around the main leg
   assert.equal(text.includes("Data Privacy Framework"), true);
 });
 
+test("shouldRenderNanoDocumentFallback recognizes compact JavaScript main-policy shells", () => {
+  assert.equal(
+    shouldRenderNanoDocumentFallback({
+      canonicalUrl: "https://privacy.klaviyo.com/policies/?name=klaviyo-privacy-policy",
+      documentType: "privacy_policy",
+      html: `
+        <html>
+          <head><title>Klaviyo Privacy Center</title></head>
+          <body>
+            <noscript>If you're seeing this message, enable JS.</noscript>
+            <div id="root"></div>
+            <script src="/main.21f5d7b325a56e8674e9.js"></script>
+            <script>window.api="https://privacy-center-api.transcend.io"</script>
+          </body>
+        </html>
+      `,
+      text: "Klaviyo Privacy Center If you're seeing this message, enable JS.",
+      title: "Klaviyo Privacy Center"
+    }),
+    true
+  );
+
+  assert.equal(
+    shouldRenderNanoDocumentFallback({
+      canonicalUrl: "https://privacy.klaviyo.com/policies/?name=klaviyo-privacy-policy",
+      documentType: "privacy_policy",
+      html: `
+        <html>
+          <head></head>
+          <body>
+            <noscript>If you're seeing this message, enable JS.</noscript>
+            <div id="root"></div>
+            <script src="/main.21f5d7b325a56e8674e9.js"></script>
+          </body>
+        </html>
+      `,
+      text: "If you're seeing this message, enable JS.",
+      title: null
+    }),
+    true
+  );
+
+  assert.equal(
+    shouldRenderNanoDocumentFallback({
+      canonicalUrl: "https://privacy.example.com/policies/?name=example-terms-of-service",
+      documentType: "terms_of_service",
+      html: `
+        <html>
+          <head><title>Example Legal Center</title></head>
+          <body>
+            <noscript>Please enable JavaScript to view these terms.</noscript>
+            <div id="app"></div>
+            <script src="/main.9cf4.js"></script>
+            <script>window.api="https://privacy-center-api.transcend.io"</script>
+          </body>
+        </html>
+      `,
+      text: "Example Legal Center Terms of Service Please enable JavaScript to view these terms.",
+      title: "Example Legal Center"
+    }),
+    true
+  );
+
+  assert.equal(
+    shouldRenderNanoDocumentFallback({
+      canonicalUrl: "https://privacy.example.com/policies/?name=example-cookie-policy",
+      documentType: "cookie_policy",
+      html: `
+        <html>
+          <head><title>Example Privacy Center</title></head>
+          <body>
+            <noscript>Please enable JavaScript to view this cookie notice.</noscript>
+            <div id="root"></div>
+            <script src="/bundle.js"></script>
+            <script>window.api="https://privacy-center-api.transcend.io"</script>
+          </body>
+        </html>
+      `,
+      text: "Example Privacy Center Cookie Policy Please enable JavaScript to view this cookie notice.",
+      title: "Example Privacy Center"
+    }),
+    true
+  );
+
+  assert.equal(
+    shouldRenderNanoDocumentFallback({
+      canonicalUrl: "https://example.com/privacy",
+      documentType: "privacy_policy",
+      html: "<html><title>Privacy Policy</title><body><h1>Privacy Policy</h1><p>We describe personal data rights.</p></body></html>",
+      text: "Privacy Policy We describe personal data rights.",
+      title: "Privacy Policy"
+    }),
+    false
+  );
+
+  assert.equal(
+    shouldRenderNanoDocumentFallback({
+      canonicalUrl: "https://example.com/products",
+      documentType: "privacy_policy",
+      html: "<html><body><div id=\"root\"></div><script src=\"/main.js\"></script></body></html>",
+      text: "Example product page",
+      title: "Example"
+    }),
+    false
+  );
+});
+
+test("shouldRetryRejectedNanoDocumentSource retries old insufficient JS-shell legal documents", () => {
+  assert.equal(
+    shouldRetryRejectedNanoDocumentSource({
+      document_type: "privacy_policy",
+      extraction_status: "insufficient",
+      metadata_json: {
+        rejection_reason: "insufficient_document_text"
+      },
+      source_status: "rejected"
+    }),
+    true
+  );
+
+  assert.equal(
+    shouldRetryRejectedNanoDocumentSource({
+      document_type: "privacy_policy",
+      extraction_status: "insufficient",
+      metadata_json: {
+        rejection_reason: "insufficient_document_text",
+        retrieval_fallback_reason: "javascript_policy_center_shell"
+      },
+      source_status: "rejected"
+    }),
+    false
+  );
+});
+
 test("dedupeNanoDocumentSources keeps one row per canonical url and document type", () => {
   const rows = dedupeNanoDocumentSources([
     {
@@ -1220,12 +1356,41 @@ test("buildNanoDocCandidateUrls falls back to broader legal-hub seed urls when n
     "https://example.com/legal/terms-of-service",
     "https://example.com/cookie-policy",
     "https://example.com/cookies",
+    "https://example.com/policies/cookies-and-tracking",
+    "https://example.com/policies/terms-and-policies",
     "https://example.com/responsible-gaming",
     "https://example.com/responsible-gambling",
     "https://example.com/your-privacy-choices"
   ]) {
     assert.equal(candidates.some((candidate) => candidate.url === url), true, url);
   }
+});
+
+test("buildNanoDocCandidateUrls prioritizes common policy-hub cookie notice paths", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [],
+    domainHostname: "fandango.com",
+    pages: []
+  });
+
+  assert.equal(
+    candidates.some(
+      (candidate) =>
+        candidate.documentType === "cookie_policy" &&
+        candidate.priorityTier === "priority" &&
+        candidate.url === "https://fandango.com/policies/cookies-and-tracking"
+    ),
+    true
+  );
+  assert.equal(
+    candidates.some(
+      (candidate) =>
+        candidate.documentType === "terms_of_service" &&
+        candidate.priorityTier === "priority" &&
+        candidate.url === "https://fandango.com/policies/terms-and-policies"
+    ),
+    true
+  );
 });
 
 test("buildNanoDocCandidateUrls reuses recent domain legal docs before discovery fallback", () => {
@@ -1266,6 +1431,70 @@ test("buildNanoDocCandidateUrls reuses recent domain legal docs before discovery
       url: "https://www.example.com/legal/terms"
     }
   ]);
+});
+
+test("buildNanoDocCandidateUrls rejects browser cookie-help pages from recent domain candidates", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [],
+    domainHostname: "fandango.com",
+    pages: [],
+    recentDomainDocumentCandidates: [
+      {
+        canonical_url:
+          "https://support.mozilla.org/en-US/kb/enhanced-tracking-protection-firefox-desktop?redirectslug=enable-and-disable-cookies-website-preferences",
+        document_type: "cookie_policy",
+        title: "Enhanced Tracking Protection in Firefox for desktop | Firefox Help"
+      },
+      {
+        canonical_url:
+          "https://support.microsoft.com/en-us/windows/manage-cookies-in-microsoft-edge-view-allow-block-delete-and-use-168dab11-0753-043d-7c16-ede5947fc64d",
+        document_type: "cookie_policy",
+        title: "Manage cookies in Microsoft Edge: View, allow, block, delete and use - Microsoft Support"
+      },
+      {
+        canonical_url: "https://www.fandango.com/policies/fanclub-terms",
+        document_type: "terms_of_service",
+        title: "FanClub Program Terms | Fandango"
+      }
+    ]
+  });
+
+  assert.equal(candidates.some((candidate) => candidate.url.includes("support.mozilla.org")), false);
+  assert.equal(candidates.some((candidate) => candidate.url.includes("support.microsoft.com")), false);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://fandango.com/cookie-policy"), true);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://fandango.com/cookies"), true);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://www.fandango.com/policies/fanclub-terms"), true);
+});
+
+test("buildNanoDocCandidateUrls rejects generic third-party policy hubs for unrelated domains", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [
+      {
+        candidate_url: "https://policies.google.com/privacy",
+        page_type: "privacy_policy",
+        candidate_score: 98
+      },
+      {
+        candidate_url: "https://policies.google.com/terms",
+        page_type: "terms_of_service",
+        candidate_score: 97
+      },
+      {
+        candidate_url: "https://www.webmd.com/about-webmd-policies/cookie-policy",
+        page_type: "cookie_policy",
+        candidate_score: 96
+      }
+    ],
+    domainHostname: "webmd.com",
+    pages: []
+  });
+
+  assert.equal(candidates.some((candidate) => candidate.url === "https://policies.google.com/privacy"), false);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://policies.google.com/terms"), false);
+  assert.equal(
+    candidates.some((candidate) => candidate.url === "https://www.webmd.com/about-webmd-policies/cookie-policy"),
+    true
+  );
 });
 
 test("buildNanoDocCandidateUrls prefers current scan legal pages over recent domain history", () => {
@@ -1411,7 +1640,7 @@ test("buildNanoDocCandidateUrls supplements recent domain docs when a document t
     true
   );
   assert.equal(
-    candidates.some((candidate) => candidate.url === "https://example.com/legal/enterprise-end-user-agreement"),
+    candidates.some((candidate) => candidate.url === "https://example.com/policies/terms-and-policies"),
     true
   );
 });
@@ -5051,7 +5280,7 @@ test("pre-consent runtime finding narrows framing when privacy controls are expl
   });
 });
 
-test("promotes RTB identity-sync runtime footprint as a generic adtech finding", () => {
+test("promotes RTB cookie sync only with compact request-level sync evidence", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       policyReviewQueue: [],
@@ -5072,6 +5301,18 @@ test("promotes RTB identity-sync runtime footprint as a generic adtech finding",
           networkSummary: {
             totalRequestCount: 200
           },
+          rtbCookieSyncObservations: [
+            {
+              hostname: "sync-t1.taboola.com",
+              pathSample: "/sg/pubmatic-network/1/rtb-h/",
+              queryKeysSample: ["gdpr", "uid"],
+              reason: "sync_path",
+              runtimePhase: "pre_consent",
+              statusCode: 302,
+              urlSample: "https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/",
+              vendor: "PubMatic"
+            }
+          ],
           requestObservations: [
             {
               domain: "static.criteo.net",
@@ -5115,6 +5356,22 @@ test("promotes RTB identity-sync runtime footprint as a generic adtech finding",
   const finding = findings.find((item) => item.ruleKey === "runtime_privacy.rtb_cookie_sync_observed");
   assert.ok(finding);
   assert.equal(finding?.severity, "high");
+  assert.deepEqual(finding?.evidence.rtb_cookie_sync_evidence, [
+    {
+      category: "rtb_exchange",
+      hostname: "sync-t1.taboola.com",
+      pathSample: "/sg/pubmatic-network/1/rtb-h/",
+      queryKeysSample: ["gdpr", "uid"],
+      reason: "sync_path",
+      redirectTargetHost: null,
+      resourceType: null,
+      runtimePhase: "pre_consent",
+      statusCode: 302,
+      tsMs: 0,
+      urlSample: "https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/",
+      vendor: "PubMatic"
+    }
+  ]);
   assert.deepEqual(finding?.evidence.rtb_cookie_sync_domains, [
     "cdn.id5-sync.com",
     "cm.g.doubleclick.net",
@@ -5126,15 +5383,154 @@ test("promotes RTB identity-sync runtime footprint as a generic adtech finding",
     "vtrk.dv.tech"
   ]);
   assert.deepEqual(finding?.evidence.runtimeRequestUrls, [
-    "https://static.criteo.net/js/ld/publishertag.js",
-    "https://cdn.id5-sync.com/api/1.0/id5-api.js"
+    "https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/"
   ]);
+});
+
+test("does not promote RTB cookie sync from generic adtech domains without sync evidence", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyReviewQueue: [],
+      runtimeArtifacts: {
+        third_party_request_count: 182,
+        third_party_request_domains: ["securepubads.g.doubleclick.net", "static.criteo.net", "cdn.id5-sync.com"],
+        hybrid_runtime_evidence: {
+          networkSummary: {
+            totalRequestCount: 200
+          },
+          rtbCookieSyncObservations: [
+            {
+              hostname: "dynamic.criteo.com",
+              pathSample: "/js/ld/ld.js",
+              queryKeysSample: [],
+              reason: "known_sync_host",
+              runtimePhase: "post_consent",
+              statusCode: 200,
+              urlSample: "https://dynamic.criteo.com/js/ld/ld.js",
+              vendor: "Criteo"
+            },
+            {
+              hostname: "tags.crwdcntrl.net",
+              pathSample: "/lt/c/16589/sync.min.js",
+              queryKeysSample: [],
+              reason: "known_sync_host",
+              runtimePhase: "post_consent",
+              statusCode: 200,
+              urlSample: "https://tags.crwdcntrl.net/lt/c/16589/sync.min.js",
+              vendor: "Lotame"
+            }
+          ],
+          requestObservations: [
+            {
+              domain: "static.criteo.net",
+              pathSample: "/js/ld/publishertag.js",
+              queryKeysSample: [],
+              thirdParty: true
+            },
+            {
+              domain: "cdn.id5-sync.com",
+              pathSample: "/api/1.0/id5-api.js",
+              queryKeysSample: [],
+              thirdParty: true
+            }
+          ],
+          vendorSummary: {
+            normalizedVendors: ["Google Ad Manager", "Criteo", "ID5"],
+            rawThirdPartyDomains: ["static.criteo.net", "cdn.id5-sync.com"]
+          }
+        }
+      },
+      snapshot: {
+        cookie_count_total: 32,
+        preconsent_tracking_detected: true,
+        third_party_cookie_count: 31,
+        tracker_count_total: 4,
+        tracker_vendor_count: 4
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Google Ad Manager"
+        },
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Criteo"
+        }
+      ]
+    })
+  );
+
+  assert.equal(findings.some((item) => item.ruleKey === "runtime_privacy.rtb_cookie_sync_observed"), false);
+});
+
+test("promotes RTB cookie sync from explicit sync observations even when vendor registry does not classify the host", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyReviewQueue: [],
+      runtimeArtifacts: {
+        third_party_request_count: 87,
+        third_party_request_domains: ["www.ebayadservices.com"],
+        hybrid_runtime_evidence: {
+          networkSummary: {
+            totalRequestCount: 100
+          },
+          rtbCookieSyncObservations: [
+            {
+              hostname: "www.ebayadservices.com",
+              pathSample: "/marketingtracking/v1/sync",
+              queryKeysSample: ["guid", "uid"],
+              reason: "sync_path",
+              resourceType: "image",
+              runtimePhase: "post_consent",
+              statusCode: 200,
+              urlSample: "https://www.ebayadservices.com/marketingtracking/v1/sync",
+              vendor: null
+            }
+          ],
+          requestObservations: [],
+          vendorSummary: {
+            normalizedVendors: [],
+            rawThirdPartyDomains: ["www.ebayadservices.com"]
+          }
+        }
+      },
+      snapshot: {
+        cookie_count_total: 18,
+        preconsent_tracking_detected: true,
+        third_party_cookie_count: 1,
+        tracker_count_total: 1,
+        tracker_vendor_count: 0
+      },
+      trackerVendors: []
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "runtime_privacy.rtb_cookie_sync_observed");
+  assert.ok(finding);
+  assert.equal(finding?.severity, "medium");
+  assert.deepEqual(finding?.evidence.runtimeRequestUrls, ["https://www.ebayadservices.com/marketingtracking/v1/sync"]);
 });
 
 test("promotes CMP-gated tracking conflict when consent UI and policy coverage coexist with pre-consent adtech", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       policyReviewQueue: [],
+      policySemanticInputs: [
+        {
+          page_type: "cookie_policy",
+          page_url: "https://example.com/cookie-policy",
+          policy_mentions: [{ topic: "tracking_technologies_disclosure" }],
+          policy_summary_short: "Cookie notice explains cookie settings, third-party cookies, analytics, and marketing categories."
+        }
+      ],
+      preconsentViolations: [
+        {
+          evidence_urls: ["https://js.hs-scripts.com/48163345.js"],
+          vendor_name: "HubSpot"
+        }
+      ],
       runtimeArtifacts: {
         consent_actionable_choice_observed: true,
         consent_surface_observed: true,
@@ -5193,6 +5589,19 @@ test("promotes CMP-gated tracking conflict when consent UI and policy coverage c
   assert.equal(finding?.evidence.cmp_vendor_name, "OneTrust");
   assert.equal(finding?.evidence.consent_actionable_choice_observed, true);
   assert.equal(finding?.evidence.preconsent_tracking_detected, true);
+  assert.deepEqual(
+    (finding?.evidence.contradictionEvidence as Record<string, unknown> | undefined)?.conflictBridge,
+    {
+      conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+      reasoning:
+        "Choice-control policy evidence is paired with concrete pre-consent runtime request URLs and attributed non-essential vendors.",
+      supportsPromotion: true
+    }
+  );
+  assert.deepEqual(finding?.evidence.runtimeRequestUrls, [
+    "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+    "https://js.hs-scripts.com/48163345.js"
+  ]);
 });
 
 test("promotes obstructive consent interface findings when reject path is hidden behind a cookie wall", () => {
@@ -5709,7 +6118,7 @@ test("undisclosed runtime cookie triggers cookie disclosure gap", () => {
   assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.cookie_policy_obstructed"));
 });
 
-test("infrastructure load-balancer cookies do not trigger a disclosure gap on their own", () => {
+test("infrastructure and security cookies do not trigger a disclosure gap on their own", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       policyEnrichments: [
@@ -5734,12 +6143,77 @@ test("infrastructure load-balancer cookies do not trigger a disclosure gap on th
       policyReviewQueue: [],
       snapshot: {},
       runtimeArtifacts: {
-        initial_cookie_names: ["AWSALBCORS"]
+        initial_cookie_names: ["AWSALBCORS", "__cf_bm", "cf_clearance"]
       } as Record<string, unknown>
     })
   );
 
   assert.ok(!findings.some((finding) => finding.ruleKey === "cookie_runtime.disclosure_gap"));
+});
+
+test("consent and localization cookies do not trigger a disclosure gap on their own", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "cookie-1",
+          page_type: "cookie_policy",
+          page_url: "https://www.example.com/cookies",
+          policy_actionable_flags: [],
+          policy_semantic_confidence: 0.92,
+          policy_cookie_disclosures: [
+            {
+              vendor: "google.com",
+              cookies: ["_ga"],
+              cookie_type: "measurement_performance"
+            }
+          ]
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {},
+      runtimeArtifacts: {
+        hybrid_runtime_evidence: {
+          cookieWriteObservations: [
+            { cookieName: "OptanonConsent", thirdParty: false },
+            { cookieName: "OptanonAlertBoxClosed", thirdParty: false },
+            { cookieName: "geo_country", thirdParty: false },
+            { cookieName: "trp-country", thirdParty: false },
+            { cookieName: "trp-language", thirdParty: false },
+            { cookieName: "AWSALBCORS", thirdParty: true }
+          ]
+        }
+      } as Record<string, unknown>
+    })
+  );
+
+  assert.ok(!findings.some((finding) => finding.ruleKey === "cookie_runtime.disclosure_gap"));
+  assert.ok(!findings.some((finding) => finding.ruleKey === "cookie_runtime.cookie_policy_obstructed"));
+});
+
+test("low-confidence cookie policy with only ignored runtime cookies is coverage-limited", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyEnrichments: [
+        {
+          id: "cookie-1",
+          page_type: "cookie_policy",
+          page_url: "https://www.example.com/cookies",
+          policy_actionable_flags: ["low_confidence", "llm_provider_error"],
+          policy_semantic_confidence: 0.2,
+          policy_cookie_disclosures: []
+        }
+      ],
+      policyReviewQueue: [],
+      snapshot: {},
+      runtimeArtifacts: {
+        initial_cookie_names: ["OptanonConsent", "geo_country", "trp-country", "trp-language", "AWSALB"]
+      } as Record<string, unknown>
+    })
+  );
+
+  assert.ok(!findings.some((finding) => finding.ruleKey === "cookie_runtime.disclosure_gap"));
+  assert.ok(!findings.some((finding) => finding.ruleKey === "cookie_runtime.cookie_policy_obstructed"));
 });
 
 test("cookie disclosure gap ignores infrastructure cookies and keeps substantive unmatched cookies", () => {

@@ -54,12 +54,107 @@ function isSupportedDocumentType(value: string | null): value is SupportedDocume
   return value === "privacy_policy" || value === "terms_of_service" || value === "cookie_policy";
 }
 
+function getUrlHostname(url: string) {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function normalizeHostname(value: string | null | undefined) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim().toLowerCase().replace(/^www\./, "") : null;
+}
+
+function isSameOrSubdomain(hostname: string, expectedHostname: string) {
+  return hostname === expectedHostname || hostname.endsWith(`.${expectedHostname}`);
+}
+
+function isAllowedVendorPolicyOwner(input: { policyHostname: string; scannedHostname: string }) {
+  const groups = [
+    ["google.com", "youtube.com", "googleadservices.com", "doubleclick.net", "blogger.com"],
+    ["microsoft.com", "live.com", "msn.com", "bing.com", "linkedin.com"],
+    ["meta.com", "facebook.com", "instagram.com", "whatsapp.com"],
+    ["apple.com", "icloud.com"]
+  ];
+
+  return groups.some(
+    (group) =>
+      group.some((host) => isSameOrSubdomain(input.policyHostname, host)) &&
+      group.some((host) => isSameOrSubdomain(input.scannedHostname, host))
+  );
+}
+
+function isObviousThirdPartyPolicyDocument(input: { domainHostname?: string | null; url: string }) {
+  const scannedHostname = normalizeHostname(input.domainHostname);
+  const policyHostname = getUrlHostname(input.url);
+  if (!scannedHostname || !policyHostname || isSameOrSubdomain(policyHostname, scannedHostname)) {
+    return false;
+  }
+
+  const genericPolicyHostnames = [
+    "policies.google.com",
+    "privacy.google.com",
+    "support.google.com",
+    "privacy.microsoft.com",
+    "support.microsoft.com",
+    "microsoft.com",
+    "privacy.apple.com",
+    "support.apple.com",
+    "apple.com",
+    "privacy.meta.com",
+    "facebook.com",
+    "instagram.com"
+  ];
+
+  if (!genericPolicyHostnames.some((hostname) => isSameOrSubdomain(policyHostname, hostname))) {
+    return false;
+  }
+
+  return !isAllowedVendorPolicyOwner({ policyHostname, scannedHostname });
+}
+
 function looksLikeMachineLegalEndpoint(url: string) {
   const haystack = url.toLowerCase();
   return (
     /agreementservice|agreementtype=|[?&](country|language|locale)=/.test(haystack) ||
     /\/api\/|\/graphql\b|\/rest\/|\/v\d+\//.test(haystack)
   );
+}
+
+function isLikelyBrowserCookieHelpDocument(input: {
+  anchorText?: string | null;
+  documentType: string | null;
+  title?: string | null;
+  url: string;
+}) {
+  if (input.documentType !== "cookie_policy") {
+    return false;
+  }
+
+  const hostname = getUrlHostname(input.url);
+  const haystack = `${input.anchorText ?? ""} ${input.title ?? ""} ${input.url}`.toLowerCase();
+  const isBrowserSupportHost =
+    /(^|\.)support\.(mozilla|microsoft|google|apple)\.com$/.test(hostname) ||
+    hostname === "support.mozilla.org" ||
+    hostname === "help.opera.com" ||
+    hostname === "support.brave.com";
+  const looksLikeBrowserInstructions =
+    /browser|firefox|edge|chrome|safari|opera|brave|internet explorer|enhanced tracking protection|enable(?: and disable)? cookies|disable cookies|manage cookies|delete cookies|block cookies|clear cookies|website preferences/.test(
+      haystack
+    );
+
+  return isBrowserSupportHost && looksLikeBrowserInstructions;
+}
+
+function isRejectedNanoDocCandidate(input: {
+  anchorText?: string | null;
+  domainHostname?: string | null;
+  documentType: string | null;
+  title?: string | null;
+  url: string;
+}) {
+  return isLikelyBrowserCookieHelpDocument(input) || isObviousThirdPartyPolicyDocument(input);
 }
 
 function isSupplementalPrivacySurface(input: { anchorText?: string | null; url: string }) {
@@ -266,7 +361,11 @@ async function buildHomepageDiscoveryCandidates(input: { domainHostname: string 
   }
 
   const homepageUrl = normalizeDocUrl(`https://${input.domainHostname}/`) ?? `https://${input.domainHostname}/`;
-  const legalHubUrl = normalizeDocUrl(`https://${input.domainHostname}/legal`) ?? `https://${input.domainHostname}/legal`;
+  const legalHubFallbackUrls = [
+    `https://${input.domainHostname}/legal`,
+    `https://${input.domainHostname}/policies`,
+    `https://${input.domainHostname}/policies/terms-and-policies`
+  ].map((url) => normalizeDocUrl(url) ?? url);
   const homepageCandidates = await fetchRenderedLegalCandidates(homepageUrl, "homepage_rendered_link");
   const legalHubCandidates = homepageCandidates.filter((candidate) => looksLikeLegalHub({
     anchorText: candidate.anchorText,
@@ -275,7 +374,7 @@ async function buildHomepageDiscoveryCandidates(input: { domainHostname: string 
 
   const legalHubTargets = new Set<string>(
     [
-      legalHubUrl,
+      ...legalHubFallbackUrls,
       ...legalHubCandidates.map((candidate) => candidate.url)
     ].map((candidate) => normalizeDocUrl(candidate) ?? candidate)
   );
@@ -412,17 +511,27 @@ function buildSeedFallbackCandidates(domainHostname: string | null) {
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy-policy` },
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy-notice` },
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/privacy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/policies/privacy-policy` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/policies/privacy-notice` },
+    { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/policies/privacy` },
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/documents/privacy-notice` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/terms` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/terms-of-service` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/terms-of-use` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/terms-of-service` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/terms` },
+    { documentType: "terms_of_service", priorityTier: "priority", url: `https://${domainHostname}/policies/terms-and-policies` },
+    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/policies/terms-of-service` },
+    { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/policies/terms-of-use` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/legal/enterprise-end-user-agreement` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/documents/terms-of-use` },
     { documentType: "terms_of_service", priorityTier: "secondary", url: `https://${domainHostname}/documents/us-terms-of-use` },
     { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/legal/cookie-policy` },
     { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookie-policy` },
+    { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/policies/cookie-policy` },
+    { documentType: "cookie_policy", priorityTier: "priority", url: `https://${domainHostname}/policies/cookie-notice` },
+    { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/policies/cookies` },
+    { documentType: "cookie_policy", priorityTier: "priority", url: `https://${domainHostname}/policies/cookies-and-tracking` },
     { documentType: "cookie_policy", priorityTier: "secondary", url: `https://${domainHostname}/cookies` },
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/do-not-sell` },
     { documentType: "privacy_policy", priorityTier: "secondary", url: `https://${domainHostname}/ccpa` },
@@ -482,7 +591,7 @@ function limitNanoDocCandidates(candidates: NanoDocCandidate[]) {
         ? 3
         : candidate.documentType === "terms_of_service"
           ? 3
-          : 2;
+          : 4;
     if (currentCount >= limit) {
       continue;
     }
@@ -505,7 +614,16 @@ export function buildNanoDocCandidateUrls(input: {
     .map((candidate): NanoDocCandidate | null => {
       const url = normalizeDocUrl(getString(candidate.canonical_url) ?? getString(candidate.source_url));
       const documentType = getString(candidate.document_type);
-      if (!url || !isSupportedDocumentType(documentType)) {
+      if (
+        !url ||
+        !isSupportedDocumentType(documentType) ||
+        isRejectedNanoDocCandidate({
+          documentType,
+          title: getString(candidate.title),
+          domainHostname: input.domainHostname,
+          url
+        })
+      ) {
         return null;
       }
 
@@ -525,6 +643,15 @@ export function buildNanoDocCandidateUrls(input: {
   );
   const orderedEvidence = evidenceCandidates
     .filter((candidate) => isSupportedDocumentType(candidate.documentType ?? null))
+    .filter(
+      (candidate) =>
+        !isRejectedNanoDocCandidate({
+          anchorText: candidate.anchorText,
+          domainHostname: input.domainHostname,
+          documentType: candidate.documentType ?? null,
+          url: candidate.url
+        })
+    )
     .sort((left, right) => (right.score ?? right.candidateScore ?? 0) - (left.score ?? left.candidateScore ?? 0) || left.url.localeCompare(right.url))
     .map((candidate) => ({
       documentType: candidate.documentType!,
@@ -610,6 +737,7 @@ function extractJson(raw: string) {
 
 function normalizeSelectedCandidates(input: {
   available: DiscoveryInputCandidate[];
+  domainHostname?: string | null;
   parsed: Record<string, unknown>;
 }) {
   const availableByUrl = new Map(input.available.map((candidate) => [candidate.url, candidate] as const));
@@ -635,6 +763,16 @@ function normalizeSelectedCandidates(input: {
 
     const available = availableByUrl.get(selectedUrl);
     if (!available) {
+      continue;
+    }
+    if (
+      isRejectedNanoDocCandidate({
+        anchorText: available.anchorText,
+        domainHostname: input.domainHostname,
+        documentType: selectedType,
+        url: selectedUrl
+      })
+    ) {
       continue;
     }
 
@@ -699,7 +837,7 @@ export async function rankNanoDocDiscoveryCandidatesWithLlm(input: {
         {
           role: "system",
           content:
-            "You rank public-facing legal-document discovery candidates for a website. Return JSON only. Select only from the provided candidate URLs. Prefer real rendered legal pages over guessed patterns. Focus on privacy_policy first, then cookie_policy, then terms_of_service. Same-brand privacy help, privacy center, and privacy choice/settings pages are acceptable supplemental privacy_policy selections. Avoid login, app, generic support, generic account, marketing, and non-legal destinations. Return at most 3 privacy_policy URLs, 1 cookie_policy URL, and 1 terms_of_service URL in selected_candidates."
+            "You rank public-facing legal-document discovery candidates for a website. Return JSON only. Select only from the provided candidate URLs. Prefer real rendered legal pages over guessed patterns. Focus on privacy_policy first, then cookie_policy, then terms_of_service. Same-brand privacy help, privacy center, and privacy choice/settings pages are acceptable supplemental privacy_policy selections. A cookie_policy must be the scanned site's own cookie notice/settings/disclosure page; do not select browser cookie-management help pages such as Mozilla Firefox, Microsoft Edge, Chrome, Safari, or generic support articles about enabling, disabling, deleting, blocking, or managing cookies. Avoid login, app, generic support, generic account, marketing, and non-legal destinations. Return at most 3 privacy_policy URLs, 1 cookie_policy URL, and 1 terms_of_service URL in selected_candidates."
         },
         {
           role: "user",
@@ -733,6 +871,7 @@ export async function rankNanoDocDiscoveryCandidatesWithLlm(input: {
   const parsed = JSON.parse(extractJson(payload.choices?.[0]?.message?.content ?? "{}")) as Record<string, unknown>;
   return normalizeSelectedCandidates({
     available,
+    domainHostname: input.domainHostname,
     parsed
   });
 }

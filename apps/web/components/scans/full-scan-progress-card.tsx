@@ -57,6 +57,7 @@ type EarlyResultItem = {
 };
 
 type CompactProgressSummary = {
+  chattyLine: string;
   currentLine: string;
   latestLine: string;
   activityLine: string;
@@ -726,8 +727,20 @@ function buildCompactProgressSummary(input: {
     input.dashboardRows.find((row) => row.state === "pending") ??
     null;
   const nextLine = nextRow ? `Next: ${nextRow.label}` : null;
+  const chattyLine = [
+    input.activeRow
+      ? `Checking ${input.activeRow.label.toLowerCase()} (${input.activeRow.statusLabel.toLowerCase()}${activeDuration ? `, ${activeDuration}` : ""}, ${input.progressValue}%)`
+      : `Waiting for the next worker update (${input.progressValue}%)`,
+    nextRow ? `then ${nextRow.label.toLowerCase()}` : null,
+    input.latestActivityLine,
+    `${input.events.length} worker update${input.events.length === 1 ? "" : "s"}`,
+    runtimePhaseCount > 0 ? `${runtimePhaseCompletedCount}/${runtimePhaseCount} runtime phase${runtimePhaseCount === 1 ? "" : "s"} closed` : null
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return {
+    chattyLine,
     activityLine,
     currentLine,
     latestLine,
@@ -1099,18 +1112,9 @@ export function FullScanProgressCard({
       <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
         <div className="min-w-0 rounded-lg bg-white/70 px-2.5 py-2 font-mono text-[12px] text-slate-600">
           <LiveActivityLine
-            line={latestActivityLine}
+            line={compactSummary.chattyLine}
             status={status === "queued" || status === "running" || status === "completed" || status === "failed" ? status : "running"}
           />
-        </div>
-        <div className="mt-2 grid gap-1 text-xs text-slate-600 lg:grid-cols-2">
-          <p className="truncate">
-            {compactSummary.currentLine}
-            {compactSummary.nextLine ? ` · ${compactSummary.nextLine}` : ""}
-          </p>
-          <p className="truncate">
-            {compactSummary.latestLine} · {compactSummary.activityLine}
-          </p>
         </div>
       </div>
 

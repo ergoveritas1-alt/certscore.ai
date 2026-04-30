@@ -7,7 +7,9 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import {
   hasConcreteReplayArtifact,
-  hasConcreteSensitivePayloadArtifact
+  hasConcreteRtbCookieSyncEvidence,
+  hasConcreteSensitivePayloadArtifact,
+  hasConcreteSensitiveThirdPartyTrackingArtifact
 } from "./promotion-evidence-contracts";
 import {
   derivePolicyPageTypeFromEvidence,
@@ -94,6 +96,7 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "missing_post_reject_timing_evidence"
   | "missing_concrete_sensitive_payload"
   | "missing_third_party_tracking_artifact"
+  | "runtime_cookie_inventory_ignored_only"
   | "clear_pricing_terms_context_observed"
   | "missing_representative_accessibility_examples"
   | "accessibility_examples_below_promotion_threshold";
@@ -242,34 +245,19 @@ function hasThirdPartyTrackingEvidence(rawEvidence: Record<string, unknown> | nu
     return false;
   }
 
-  const directFlags = [
-    rawEvidence.adNetworkGoogleAds === true,
-    rawEvidence.ad_network_google_ads === true,
-    rawEvidence.adNetworkMetaAds === true,
-    rawEvidence.ad_network_meta_ads === true,
-    rawEvidence.retargetingPixelDetected === true,
-    rawEvidence.retargeting_pixel_detected === true,
-    rawEvidence.retargetingPixelArtifactPresent === true,
-    rawEvidence.retargeting_pixel_artifact_present === true,
-    rawEvidence.sessionReplayToolDetected === true,
-    rawEvidence.session_replay_tool_detected === true,
-    rawEvidence.sessionReplayVendorArtifactPresent === true,
-    rawEvidence.session_replay_vendor_artifact_present === true
-  ];
-
-  if (directFlags.some(Boolean)) {
+  if (hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence)) {
     return true;
   }
 
-  const entities = [
-    ...(Array.isArray(rawEvidence.runtimeVendors) ? rawEvidence.runtimeVendors : []),
-    ...(Array.isArray(rawEvidence.runtime_vendors) ? rawEvidence.runtime_vendors : []),
-    ...(Array.isArray(rawEvidence.relatedVendors) ? rawEvidence.relatedVendors : []),
-    ...(Array.isArray(rawEvidence.preconsent_tracker_vendors) ? rawEvidence.preconsent_tracker_vendors : []),
-    ...(Array.isArray(rawEvidence.persisted_tracker_vendors) ? rawEvidence.persisted_tracker_vendors : [])
-  ];
+  if (
+    (rawEvidence.sensitiveContextTrackingDetected === true ||
+      rawEvidence.sensitive_context_tracking_detected === true) &&
+    hasConcretePayloadEvidence(rawEvidence)
+  ) {
+    return true;
+  }
 
-  return entities.some((value) => typeof value === "string" && value.trim().length > 0);
+  return false;
 }
 
 function getPolicyArrayValue(rawEvidence: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -698,6 +686,22 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
+    if (/rtbCookieSyncObservations|rtb_cookie_sync_observations|rtb_cookie_sync_evidence/i.test(key) && Array.isArray(value)) {
+      const compactRows = value.flatMap((entry) => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+          return [];
+        }
+        try {
+          return [JSON.stringify(entry)];
+        } catch {
+          return [];
+        }
+      });
+      addEntity(entities, "rtbCookieSyncEvidence", compactRows.slice(0, 12));
+      runtimeArtifacts.add(`${compactRows.length} compact RTB cookie-sync request observation${compactRows.length === 1 ? "" : "s"} retained.`);
+      continue;
+    }
+
     const stringValues = getStringArrayEvidence(value);
     if (stringValues.length === 0) {
       continue;
@@ -1081,6 +1085,9 @@ function deriveEvidenceStrengthFlags(input: {
   const flags = new Set<NormalizedConcernEvidenceStrengthFlag>();
 
   if (input.bundle.runtimeArtifacts.length > 0) {
+    flags.add("direct_runtime");
+  }
+  if (hasConcreteRtbCookieSyncEvidence(input.rawEvidence)) {
     flags.add("direct_runtime");
   }
   if (input.bundle.policySnippets.length > 0) {

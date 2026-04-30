@@ -47,11 +47,13 @@ const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SC
   forced_consent_wall: "forced_consent_interaction",
   guaranteed_outcome_claim_detected: "guaranteed_outcome_claim_detected",
   leveraged_or_high_risk_product_promotion: "leveraged_or_high_risk_product_promotion",
+  cookie_disclosure_gap: "cookie_disclosure_gap",
   policy_behavior_conflict: "policy_behavior_contradiction_detected",
   policy_clarity_risk: "policy_clarity_risk",
   preconsent_tracking: "pre_consent_tracking_detected",
   reject_did_not_reduce_tracking: "reject_tracking_persists_after_reject",
   reject_button_missing: "reject_option_missing_or_hidden",
+  rtb_cookie_sync_observed: "rtb_cookie_sync_observed",
   session_replay_observed: "session_recording_services_detected",
   session_replay_undisclosed: "session_recording_services_detected",
   video_content_tracking_exposure: "video_content_tracking_exposure"
@@ -353,6 +355,61 @@ function getFinancialPromotionOfferSnippets(packet: UnifiedFindingDisplayPacket)
   );
 }
 
+function buildPolicyRuntimeConflictDetails(packet: UnifiedFindingDisplayPacket) {
+  if (packet.details?.family !== "contradiction") {
+    return null;
+  }
+
+  const policySourceUrls = uniqueStrings([
+    packet.details.policySourceUrl,
+    packet.primaryPageUrl,
+    packet.sourceUrl,
+    ...(packet.evidence?.pageUrls ?? []),
+    ...(packet.evidence?.sourceUrls ?? []).filter((url) => !getEntityUrlValues(packet, /runtime.*request|request.*url/i).includes(url))
+  ]).filter((url) => /^https?:\/\//i.test(url));
+  const runtimeRequestUrls = uniqueStrings([
+    ...(packet.details.runtimeEvidenceArtifacts ?? []),
+    ...getEntityUrlValues(packet, /runtime.*request|request.*url|preconsent.*tracker.*evidence|evidence.*url/i)
+  ]).filter((url) => /^https?:\/\//i.test(url));
+  const runtimeVendors = uniqueStrings([
+    ...(packet.details.vendors ?? []),
+    ...getEntityValues(packet, /runtime.*vendor|vendor|preconsent.*tracker.*vendor|relatedVendors/i)
+  ]).filter(isDisplayVendorName);
+  const validationRuleKeys = uniqueStrings(
+    packet.sourceRefs.flatMap((sourceRef) => (sourceRef.kind === "validation" ? [sourceRef.ruleKey] : []))
+  );
+
+  return {
+    policyAnchor: {
+      claimType: packet.details.policyClaimType ?? null,
+      sourceUrl: packet.details.policySourceUrl ?? policySourceUrls[0] ?? null,
+      snippet: packet.details.policySnippet ? truncateDisplaySnippet(packet.details.policySnippet) : null
+    },
+    runtimeAnchor: {
+      observationType: packet.details.runtimeObservationType ?? null,
+      phase: packet.details.runtimePhase ?? null,
+      requestUrls: runtimeRequestUrls.slice(0, 5),
+      vendors: runtimeVendors.slice(0, 8)
+    },
+    conflictBridge: {
+      conflictType: packet.details.conflictType ?? null,
+      reasoning: packet.details.conflictBridgeReasoning ?? packet.details.contradictionBasis ?? null,
+      supportsPromotion: packet.details.conflictSupportsPromotion === true
+    },
+    evidenceSufficiency: {
+      reviewStatus: packet.details.contradictionReviewStatus ?? null,
+      promotionEligible:
+        packet.details.contradictionPromotionEligible === true ||
+        packet.concernContext?.promotionEligibilities.includes("eligible") === true
+    },
+    references: {
+      policySourceUrls: policySourceUrls.slice(0, 3),
+      runtimeRequestUrls: runtimeRequestUrls.slice(0, 5),
+      validationRuleKeys
+    }
+  };
+}
+
 function formatQuotedSnippet(snippet: string) {
   const normalized = snippet.replace(/\s+/g, " ").trim();
   return normalized.length > 140 ? truncateAtWordBoundary(normalized, 137) : normalized;
@@ -409,6 +466,12 @@ function buildExecutiveEvidenceDetails(
 
   if (Object.keys(counts).length > 0) {
     details.counts = counts;
+  }
+  if (findingId === "policy_behavior_contradiction_detected") {
+    const policyRuntimeConflict = buildPolicyRuntimeConflictDetails(packet);
+    if (policyRuntimeConflict) {
+      details.policyRuntimeConflict = policyRuntimeConflict;
+    }
   }
   if (evidenceSnippets.length > 0) {
     details.evidenceSnippets = evidenceSnippets;
@@ -502,6 +565,13 @@ function buildExecutiveEvidenceDetails(
     }
   }
 
+  if (findingId === "rtb_cookie_sync_observed") {
+    const rows = getEntityJsonObjects(packet, "rtbCookieSyncEvidence");
+    if (rows.length > 0) {
+      details.rtbCookieSyncEvidence = rows.slice(0, 12);
+    }
+  }
+
   if (findingId === "reject_tracking_persists_after_reject") {
     const consentInteraction = getFirstEntityJsonObject(packet, "consentInteraction");
     const promotionDecision = getFirstEntityJsonObject(packet, "promotionDecision");
@@ -580,6 +650,14 @@ function buildExecutiveShortSummary(
     }
 
     return "Session recording services were observed during runtime collection.";
+  }
+
+  if (findingId === "rtb_cookie_sync_observed") {
+    const hosts = uniqueStrings([
+      ...getEntityValues(packet, /rtb.*domain|runtime.*vendor|vendor/i)
+    ]).slice(0, 3);
+    const hostText = hosts.length > 0 ? ` involving ${formatVendorList(hosts)}` : "";
+    return `Request-level RTB or identity-sync evidence was retained${hostText}.`;
   }
 
   if (findingId === "reject_tracking_persists_after_reject") {

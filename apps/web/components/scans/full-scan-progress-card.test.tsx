@@ -88,11 +88,13 @@ test("renders the rich full-scan progress dashboard for running scans", () => {
   assert.match(html, /Full scan in progress/);
   assert.match(html, /style="width:\d+(\.\d+)?%"/);
   assert.match(html, /Live scan · 3 updates/);
-  assert.match(html, /Current: Runtime snapshot capture/);
-  assert.match(html, /Latest: Live scan/);
-  assert.match(html, /Activity: 3 worker updates/);
+  assert.match(html, /Checking runtime snapshot capture/);
+  assert.match(html, /then signal derivation/);
+  assert.match(html, /3 worker updates/);
   assert.match(html, /1\/1 runtime phase closed/);
-  assert.match(html, /Current: Runtime snapshot capture · Running/);
+  assert.doesNotMatch(html, /Current: Runtime snapshot capture/);
+  assert.doesNotMatch(html, /Latest: Live scan/);
+  assert.doesNotMatch(html, /Activity: 3 worker updates/);
   assert.doesNotMatch(html, /milestones complete/);
   assert.match(html, /bg-gradient-to-r/);
   assert.doesNotMatch(html, /animate-\[status-sheen-overlay_1\.35s_linear_infinite\]/);
@@ -131,7 +133,9 @@ test("keeps queued scans anchored to queue pickup messaging", () => {
   assert.match(html, /Full scan queued/);
   assert.match(html, /Queued\.\.\./);
   assert.match(html, /Queued · 1 update · Scan queued and waiting for worker pickup\./);
-  assert.match(html, /Activity: 2 worker updates/);
+  assert.match(html, /Checking queue wait/);
+  assert.match(html, /then setup load/);
+  assert.match(html, /2 worker updates/);
   assert.doesNotMatch(html, /milestones complete/);
   assert.doesNotMatch(html, /Unified finding derivation completed\./);
   assert.doesNotMatch(html, /Scanning\.\.\./);
@@ -197,8 +201,8 @@ test("uses runtime events to avoid front-loaded progress skew", () => {
 
   assert.match(html, /style="width:1%"/);
   assert.match(html, /Runtime browser capture is collecting page evidence\./);
-  assert.match(html, /Current: Runtime snapshot capture · Running/);
-  assert.match(html, /Next: Signal derivation/);
+  assert.match(html, /Checking runtime snapshot capture/);
+  assert.match(html, /then signal derivation/);
 });
 
 test("keeps displayed progress monotonic across lower refresh targets", () => {

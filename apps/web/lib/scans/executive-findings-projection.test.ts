@@ -195,6 +195,237 @@ test("projects surfaced unified findings into executive findings and regulatory 
   );
 });
 
+test("projects RTB cookie sync into executive and privacy regulatory lenses", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("rtb_cookie_sync_observed", {
+      confidenceBand: "high",
+      details: {
+        family: "consent_tracking",
+        kind: "rtb_cookie_sync_observed",
+        requestUrls: ["https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/"],
+        vendors: ["PubMatic"]
+      },
+      evidence: {
+        counts: { rtb_cookie_sync_observation_count: 1 },
+        entities: {
+          rtbCookieSyncEvidence: [
+            JSON.stringify({
+              hostname: "sync-t1.taboola.com",
+              pathSample: "/sg/pubmatic-network/1/rtb-h/",
+              queryKeysSample: ["gdpr", "uid"],
+              reason: "sync_path",
+              runtimePhase: "pre_consent",
+              urlSample: "https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/"
+            })
+          ],
+          runtimeRequestUrls: ["https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/"],
+          runtimeVendors: ["PubMatic"]
+        },
+        fetchQuality: null,
+        flags: ["preconsent_tracking_detected"],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "Request-level RTB or identity-sync evidence was retained."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "rtb_cookie_sync_observed");
+  assert.ok(finding);
+  assert.equal(finding.section, "Vendors & Requests");
+  assert.equal(finding.evidenceDetails?.rtbCookieSyncEvidence?.[0]?.hostname, "sync-t1.taboola.com");
+  assert.ok(projection.topFindings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
+
+  const lenses = buildRegulatoryLenses(projection.findings, {
+    beforeConsentCookieCount: 0,
+    thirdPartyRequestCount: 1
+  });
+  assert.ok(lenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
+  assert.ok(lenses.find((lens) => lens.acronym === "CCPA / CPRA")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
+  assert.ok(lenses.find((lens) => lens.acronym === "FTC")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
+});
+
+test("projects policy runtime conflicts with compact canonical evidence references", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("consent_gated_tracking_claim_conflict", {
+      confidenceBand: "high",
+      concernContext: {
+        assertionLevels: ["strong"],
+        evidenceStrengthFlags: ["policy_text", "direct_runtime", "structured_validation"],
+        externalSurfacingEligibilities: ["eligible"],
+        negativeEvidenceFlags: [],
+        originTypes: ["validation_rule"],
+        promotionEligibilities: ["eligible"]
+      },
+      details: {
+        family: "contradiction",
+        kind: "consent_gated_tracking_claim_conflict",
+        claim: "The policy surface describes cookie, tracking, or privacy-choice controls available to visitors.",
+        contradictionBasis:
+          "The policy and consent surfaces describe visitor choice controls, but non-essential marketing requests were observed before a visitor choice was completed.",
+        policyClaimType: "cookie_preferences_available",
+        runtimeObservationType: "marketing_vendor_fired_pre_consent",
+        runtimePhase: "pre_consent",
+        conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+        conflictBridgeReasoning:
+          "Choice-control policy evidence is paired with concrete pre-consent runtime request URLs and attributed non-essential vendors.",
+        conflictSupportsPromotion: true,
+        contradictionReviewStatus: "complete",
+        contradictionPromotionEligible: true,
+        policySnippet: "Cookie notice explains cookie settings, third-party cookies, analytics, and marketing categories.",
+        policySourceUrl: "https://privacy.klaviyo.com/policies/?name=klaviyo-cookie-notice",
+        runtimeEvidenceArtifacts: [
+          "https://js.hs-scripts.com/48163345.js",
+          "https://static-tracking.klaviyo.com/onsite/js/example.js"
+        ],
+        vendors: ["HubSpot", "Klaviyo"]
+      },
+      evidence: {
+        entities: {
+          runtimeRequestUrls: [
+            "https://js.hs-scripts.com/48163345.js",
+            "https://static-tracking.klaviyo.com/onsite/js/example.js"
+          ],
+          runtimeVendors: ["HubSpot", "Klaviyo"]
+        },
+        fetchQuality: null,
+        flags: ["policy_runtime.consent_gated_tracking_claim_conflict"],
+        pageUrls: ["https://privacy.klaviyo.com/policies/?name=klaviyo-cookie-notice"],
+        snippets: [
+          "Cookie notice explains cookie settings, third-party cookies, analytics, and marketing categories.",
+          "Choice-control policy evidence is paired with concrete pre-consent runtime request URLs and attributed non-essential vendors."
+        ],
+        sourceUrls: [
+          "https://privacy.klaviyo.com/policies/?name=klaviyo-cookie-notice",
+          "https://js.hs-scripts.com/48163345.js"
+        ]
+      },
+      sourceRefs: [
+        {
+          kind: "validation",
+          ruleKey: "runtime_privacy.consent_gated_tracking_claim_conflict",
+          title: "Consent-gated tracking claim conflicts with runtime behavior"
+        }
+      ],
+      severity: "high",
+      summary: "Policy and runtime behavior conflict."
+    })
+  ]);
+
+  const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
+  const compact = finding?.evidenceDetails?.policyRuntimeConflict;
+  assert.equal(compact?.policyAnchor.claimType, "cookie_preferences_available");
+  assert.equal(compact?.policyAnchor.sourceUrl, "https://privacy.klaviyo.com/policies/?name=klaviyo-cookie-notice");
+  assert.equal(compact?.runtimeAnchor.observationType, "marketing_vendor_fired_pre_consent");
+  assert.deepEqual(compact?.runtimeAnchor.requestUrls, [
+    "https://js.hs-scripts.com/48163345.js",
+    "https://static-tracking.klaviyo.com/onsite/js/example.js"
+  ]);
+  assert.deepEqual(compact?.runtimeAnchor.vendors, ["HubSpot", "Klaviyo"]);
+  assert.equal(compact?.conflictBridge.supportsPromotion, true);
+  assert.equal(compact?.evidenceSufficiency.reviewStatus, "complete");
+  assert.equal(compact?.evidenceSufficiency.promotionEligible, true);
+  assert.deepEqual(compact?.references.validationRuleKeys, [
+    "runtime_privacy.consent_gated_tracking_claim_conflict"
+  ]);
+});
+
+test("projects confirmed cookie disclosure gaps into executive and privacy regulatory lenses", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("cookie_disclosure_gap", {
+      confidenceBand: "high",
+      details: {
+        family: "rights_gap",
+        kind: "cookie_disclosure_gap"
+      },
+      evidence: {
+        counts: {
+          unmatched_third_party_cookie_count: 1
+        },
+        entities: {
+          runtime_cookie_names: ["_ga", "_fbp"],
+          unmatched_cookie_categories: ["advertising"],
+          unmatched_cookie_names: ["_fbp"],
+          unmatched_runtime_cookies: [
+            JSON.stringify({
+              category: "advertising",
+              cookieName: "_fbp",
+              domain: ".example.com",
+              party: "third_party"
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: ["https://example.com/legal/cookie-policy"],
+        snippets: ["The retained cookie policy disclosed analytics cookies, but not the observed Meta advertising cookie."],
+        sourceUrls: ["https://example.com/legal/cookie-policy"]
+      },
+      severity: "high",
+      summary: "Runtime cookie activity was not covered by the retained cookie policy."
+    })
+  ]);
+
+  assert.ok(projection.findings.some((entry) => entry.id === "cookie_disclosure_gap"));
+  assert.ok(projection.topFindings.some((entry) => entry.id === "cookie_disclosure_gap"));
+
+  const lenses = buildRegulatoryLenses(projection.findings, {
+    beforeConsentCookieCount: 0,
+    thirdPartyRequestCount: 1
+  });
+  assert.ok(lenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((entry) => entry.id === "cookie_disclosure_gap"));
+  assert.ok(lenses.find((lens) => lens.acronym === "CCPA / CPRA")?.findings.some((entry) => entry.id === "cookie_disclosure_gap"));
+  assert.ok(lenses.find((lens) => lens.acronym === "FTC")?.findings.some((entry) => entry.id === "cookie_disclosure_gap"));
+});
+
+test("keeps confirmed cookie disclosure gaps in top findings alongside higher-ranked homepage issues", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      severity: "high",
+      summary: "Trackers fired before consent interaction."
+    }),
+    makePacket("policy_behavior_conflict", {
+      details: { family: "contradiction", kind: "policy_behavior_conflict" },
+      severity: "high",
+      summary: "Observed runtime behavior appears to conflict with policy representations."
+    }),
+    makePacket("contrast_failures", {
+      confidenceBand: "high",
+      details: { family: "accessibility", kind: "contrast_failures" },
+      severity: "medium",
+      summary: "Representative accessibility barriers were retained."
+    }),
+    makePacket("cookie_disclosure_gap", {
+      confidenceBand: "high",
+      details: { family: "rights_gap", kind: "cookie_disclosure_gap" },
+      evidence: {
+        counts: {
+          unmatched_third_party_cookie_count: 20
+        },
+        entities: {
+          runtime_cookie_names: ["demdex", "mbox"],
+          unmatched_cookie_names: ["demdex", "mbox"]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: ["https://example.com/cookie-policy"],
+        snippets: ["Runtime cookies were not covered by the retained cookie policy."],
+        sourceUrls: ["https://example.com/cookie-policy"]
+      },
+      severity: "high",
+      summary: "Runtime cookie activity was not covered by the retained cookie policy."
+    })
+  ]);
+
+  const topFindingIds = projection.topFindings.map((finding) => finding.id);
+  assert.ok(topFindingIds.includes("cookie_disclosure_gap"));
+  assert.equal(projection.trace.packets.find((packet) => packet.unifiedFindingId === "cookie_disclosure_gap")?.inTopFindings, true);
+});
+
 test("projects reject-path tracking failure into executive findings with dedicated evidence", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("reject_did_not_reduce_tracking", {

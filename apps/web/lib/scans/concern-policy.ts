@@ -19,9 +19,11 @@ import {
   evaluatePolicyBehaviorConflictContract,
   evaluateStrongEvidenceContract,
   hasConcretePreconsentArtifact,
+  hasConcreteRtbCookieSyncEvidence,
   hasConcreteReplayArtifact,
   hasConcreteRetargetingArtifact,
   hasConcreteSensitivePayloadArtifact,
+  hasConcreteSensitiveThirdPartyTrackingArtifact,
   hasPreconsentSequenceEvidence,
   hasStrongAccessibilitySupportPathMissingEvidence,
   hasStrongFingerprintingEvidence,
@@ -767,6 +769,64 @@ function isDsarConcern(concern: Pick<NormalizedConcern, "canonicalConcernKey" | 
   return /dsar|privacy-rights|missing_dsar|no dsar mechanism/.test(haystack);
 }
 
+function isCookieDisclosureGapConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "cookie_disclosure_gap";
+}
+
+function getStringArrayEvidence(
+  evidence: Record<string, unknown> | null | undefined,
+  keys: string[]
+) {
+  for (const key of keys) {
+    const value = evidence?.[key];
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+    }
+  }
+  return [];
+}
+
+function getCookieDisclosureNumberEvidence(
+  evidence: Record<string, unknown> | null | undefined,
+  keys: string[]
+) {
+  for (const key of keys) {
+    const value = evidence?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string" && value.trim().length > 0) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return null;
+}
+
+function isIgnoredRuntimeCookieName(value: string) {
+  return /^(awsalb|awsalbcors|__cf_bm|cf_clearance|optanonconsent|optanonalertboxclosed|geo_country|trp-country|trp-language)$/i.test(value.trim());
+}
+
+function hasOnlyIgnoredCookieDisclosureGapEvidence(evidence: Record<string, unknown> | null | undefined) {
+  const runtimeCookieNames = getStringArrayEvidence(evidence, ["runtime_cookie_names", "runtimeCookieNames"]);
+  const unmatchedCookieNames = getStringArrayEvidence(evidence, ["unmatched_cookie_names", "unmatchedCookieNames"]);
+  const unmatchedThirdPartyCookieCount = getCookieDisclosureNumberEvidence(evidence, [
+    "unmatched_third_party_cookie_count",
+    "unmatchedThirdPartyCookieCount"
+  ]);
+  const candidateCookieNames = unmatchedCookieNames.length > 0 ? unmatchedCookieNames : runtimeCookieNames;
+
+  return (
+    candidateCookieNames.length > 0 &&
+    candidateCookieNames.every(isIgnoredRuntimeCookieName) &&
+    (unmatchedThirdPartyCookieCount ?? 0) === 0
+  );
+}
+
 function isStructuredPolicyDisclosureGapConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
@@ -814,6 +874,19 @@ function isPreconsentConcern(
     .toLowerCase();
 
   return /preconsent|tracking_before_consent|trackers_before_consent/.test(haystack);
+}
+
+function isRtbCookieSyncConcern(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
+) {
+  const haystack = [
+    concern.canonicalConcernKey,
+    concern.suggestedUnifiedFindingId,
+    concern.originKey,
+    concern.title
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  return /rtb_cookie_sync|cookie sync|identity-sync|identity sync/.test(haystack);
 }
 
 function isRejectTrackingPersistenceConcern(
@@ -1774,12 +1847,7 @@ export function deriveConcernPolicy(input: {
       };
     }
 
-    if (
-      !hasConcreteRetargetingArtifact(input.rawEvidence) &&
-      !hasConcreteReplayArtifact(input.rawEvidence) &&
-      !hasConcreteSanitizedNetworkEvidence(input.rawEvidence) &&
-      !hasSensitiveContextTrackingEvidence
-    ) {
+    if (!hasConcreteSensitiveThirdPartyTrackingArtifact(input.rawEvidence) && !hasSensitiveContextTrackingEvidence) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
@@ -2391,6 +2459,24 @@ export function deriveConcernPolicy(input: {
     };
   }
 
+  if (isRtbCookieSyncConcern(input.concern)) {
+    if (!hasConcreteRtbCookieSyncEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_specific_runtime_anchor"],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: hasPreconsentSequenceEvidence(input.rawEvidence) ? "strong" : "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
   if (isPreconsentConcern(input.concern)) {
     if (input.concern.originType !== "validation_rule") {
       if (!hasConcretePreconsentArtifact(input.rawEvidence)) {
@@ -2414,6 +2500,24 @@ export function deriveConcernPolicy(input: {
 
     return {
       allowedNarrativeTier: hasStrongConsentTimingEvidence ? "strong" : "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
+  if (isCookieDisclosureGapConcern(input.concern)) {
+    if (hasOnlyIgnoredCookieDisclosureGapEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "suppress",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "runtime_cookie_inventory_ignored_only"],
+        promotionEligibility: "blocked"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: "moderate",
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "eligible"

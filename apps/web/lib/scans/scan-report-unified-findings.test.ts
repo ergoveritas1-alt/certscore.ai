@@ -181,6 +181,39 @@ test("contrast snapshot signal surfaces from persisted axe count and representat
   assert.ok(packet?.evidence?.snippets?.some((snippet) => /color-contrast-enhanced\/wcag2aaa/i.test(snippet)));
 });
 
+test("accessibility snapshot signal tolerates persisted axe rows without rule metadata", () => {
+  assert.doesNotThrow(() =>
+    buildReviewFindings({
+      issues: [],
+      prioritizedAccessibilityRuleRows: [
+        {
+          description: "Persisted axe evidence row without normalized rule metadata.",
+          help: null,
+          helpUrl: null,
+          impact: null,
+          nodeCount: 1,
+          pageUrl: "https://example.com/",
+          representativeSelectors: [],
+          ruleCode: undefined,
+          ruleGroup: undefined,
+          severity: "medium",
+          weightedPriority: 1
+        } as never
+      ],
+      sectionId: "perceivability_barriers",
+      sectionItems: [
+        {
+          key: "accessibility.wcag_contrast_failures_count",
+          label: "WCAG contrast failures",
+          relation: "primary",
+          source: "snapshot_signal",
+          value: 1
+        }
+      ]
+    })
+  );
+});
+
 test("consent audit reject-tracking finding retains post-reject runtime evidence", () => {
   const issues = buildSectionReviewIssues({
     accessibilityIssueRows: [],

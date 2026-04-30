@@ -746,6 +746,111 @@ function buildDomainPolicyCoverageSummary(policySemanticRows: Array<Record<strin
   };
 }
 
+function getConsentChoicePolicyAnchor(policySemanticRows: Array<Record<string, unknown>>) {
+  const rankedRows = policySemanticRows
+    .map((row) => {
+      const pageType = getString(row.page_type) ?? getString(row.pageType);
+      const pageUrl = getString(row.page_url) ?? getString(row.pageUrl) ?? getString(row.source_url) ?? getString(row.sourceUrl);
+      const summary = getString(row.policy_summary_short) ?? getString(row.policySummaryShort);
+      const topics = getPolicyMentionTopics(row);
+      const rightsSignals = getPolicyRightsSignals(row);
+      const doNotSell = getString(row.policy_do_not_sell) ?? getString(row.policyDoNotSell);
+      const privacyContactChannel =
+        getString(row.privacy_contact_channel_type) ?? getString(row.privacyContactChannelType);
+      const hasChoiceSignal =
+        topics.some((topic) =>
+          /gpc_disclosure|targeted_advertising_disclosure|third_party_advertising_disclosure|tracking_technologies_disclosure|session_replay_disclosure/i.test(
+            topic
+          )
+        ) ||
+        rightsSignals.some((signal) => /opt[-_]?out|privacy_controls/i.test(signal)) ||
+        doNotSell === "present_link" ||
+        doNotSell === "present_text" ||
+        (typeof summary === "string" && /cookie settings|cookie preferences|your choices about cookies|privacy choices|opt[- ]out/i.test(summary));
+      const score =
+        (pageType === "cookie_policy" ? 30 : pageType === "privacy_policy" ? 20 : 0) +
+        (pageUrl && /privacy\.[^/]+\/policies/i.test(pageUrl) ? 10 : 0) +
+        (hasChoiceSignal ? 10 : 0) +
+        (privacyContactChannel && privacyContactChannel !== "none" && privacyContactChannel !== "unknown" ? 1 : 0);
+
+      return { hasChoiceSignal, pageType, pageUrl, score, summary };
+    })
+    .filter((row) => row.hasChoiceSignal && row.pageUrl && row.summary)
+    .sort((left, right) => right.score - left.score);
+
+  const selected = rankedRows[0];
+  if (!selected?.pageUrl || !selected.summary) {
+    return null;
+  }
+
+  return {
+    confidence: 0.72,
+    extractionStatus: "fetched",
+    normalizedClaim: "The policy surface describes cookie, tracking, or privacy-choice controls available to visitors.",
+    snippet: selected.summary,
+    sourceUrl: selected.pageUrl
+  };
+}
+
+function buildConsentGatedTrackingContradictionEvidence(input: {
+  policySemanticRows: Array<Record<string, unknown>>;
+  runtimeRequestUrls: string[];
+  runtimeVendors: string[];
+}) {
+  const policyAnchor = getConsentChoicePolicyAnchor(input.policySemanticRows);
+  const runtimeRequestUrls = input.runtimeRequestUrls.filter((value) => /^https?:\/\//i.test(value));
+  const runtimeVendors = input.runtimeVendors.filter((value) => value.trim().length > 0);
+
+  if (!policyAnchor || runtimeRequestUrls.length === 0 || runtimeVendors.length === 0) {
+    return null;
+  }
+
+  return {
+    claim: policyAnchor.normalizedClaim,
+    contradictionBasis:
+      "The policy and consent surfaces describe visitor choice controls, but non-essential advertising, analytics, or marketing requests were observed before a visitor choice was completed.",
+    conflictBridge: {
+      conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+      reasoning:
+        "Choice-control policy evidence is paired with concrete pre-consent runtime request URLs and attributed non-essential vendors.",
+      supportsPromotion: true
+    },
+    evidenceSufficiency: {
+      conflictBridgePresent: true,
+      policyAnchorPresent: true,
+      promotionEligible: true,
+      reviewStatus: "complete",
+      runtimeAnchorPresent: true
+    },
+    policyAnchor: {
+      claimType: "cookie_preferences_available",
+      confidence: policyAnchor.confidence,
+      extractionStatus: policyAnchor.extractionStatus,
+      normalizedClaim: policyAnchor.normalizedClaim,
+      snippet: policyAnchor.snippet,
+      sourceUrl: policyAnchor.sourceUrl
+    },
+    policySnippet: policyAnchor.snippet,
+    policySourceUrl: policyAnchor.sourceUrl,
+    runtimeAnchor: {
+      confidence: 0.82,
+      cookies: [],
+      observationType: "marketing_vendor_fired_pre_consent",
+      phase: "pre_consent",
+      requests: runtimeRequestUrls,
+      sourceUrl: null,
+      storageArtifacts: [],
+      vendors: runtimeVendors
+    },
+    runtimeEvidenceArtifacts: runtimeRequestUrls,
+    runtimeSummary:
+      "Non-essential advertising, analytics, or marketing requests were observed before the visitor completed a consent choice.",
+    runtimeVendors,
+    sourceUrls: [policyAnchor.sourceUrl],
+    supportingSignals: ["consent_choice_policy_anchor", "preconsent_runtime_request_urls"]
+  };
+}
+
 function hasStrongPrivacyGovernanceCuesForPartialExtraction(input: {
   domainPolicyCoverage: ReturnType<typeof buildDomainPolicyCoverageSummary>;
   enrichment: Record<string, unknown>;
@@ -2967,7 +3072,17 @@ function isInfrastructureRuntimeCookie(cookieName: string) {
     return false;
   }
 
-  return normalized === "awsalb" || normalized === "awsalbcors";
+  return (
+    normalized === "awsalb" ||
+    normalized === "awsalbcors" ||
+    normalized === "__cf_bm" ||
+    normalized === "cf_clearance" ||
+    normalized === "optanonconsent" ||
+    normalized === "optanonalertboxclosed" ||
+    normalized === "geo_country" ||
+    normalized === "trp-country" ||
+    normalized === "trp-language"
+  );
 }
 
 function inferCookieProvider(cookieName: string) {
@@ -3344,8 +3459,26 @@ function deriveRuntimePrivacyFindings(input: {
     ...preconsentViolationVendors,
     ...(Array.isArray(vendorSummary?.normalizedVendors) ? vendorSummary.normalizedVendors : [])
   ]);
+  const rtbCookieSyncObservations = getRtbCookieSyncObservations(hybrid, rtbDomains);
   const rtbRequestUrls = getRuntimeRequestUrlsForDomains(hybrid, rtbDomains);
-  const preconsentRuntimeRequestUrls = getRuntimeRequestUrlsForDomains(hybrid, rawThirdPartyDomains, { preconsentOnly: true });
+  const preconsentViolationEvidenceUrls = [
+    ...new Set(
+      input.preconsentViolations.flatMap((row) => {
+        const values = Array.isArray(row.evidence_urls)
+          ? row.evidence_urls
+          : Array.isArray(row.evidenceUrls)
+            ? row.evidenceUrls
+            : [];
+        return values.filter((value): value is string => typeof value === "string" && /^https?:\/\//i.test(value) && !isCmpEvidenceUrl(value));
+      })
+    )
+  ];
+  const preconsentRuntimeRequestUrls = [
+    ...new Set([
+      ...getRuntimeRequestUrlsForDomains(hybrid, rawThirdPartyDomains, { preconsentOnly: true }),
+      ...preconsentViolationEvidenceUrls
+    ])
+  ].slice(0, 20);
   const runtimeVendors = [
     ...new Set([...attributedPreconsentVendors, ...rtbVendors])
   ].sort();
@@ -3413,18 +3546,20 @@ function deriveRuntimePrivacyFindings(input: {
     })
   ];
 
-  if (rtbDomains.length >= 3 || rtbVendors.length >= 2) {
+  if (rtbCookieSyncObservations.length >= 1) {
     findings.push(
       buildRuntimePrivacyFinding({
         description:
-          "The scan observed multiple advertising exchange, identity-sync, or cookie-sync domains during initial runtime, indicating a programmatic adtech footprint that should be reviewed against consent gating and disclosure expectations.",
+          "The scan observed request-level advertising exchange, identity-sync, or cookie-sync activity during initial runtime, indicating a programmatic adtech footprint that should be reviewed against consent gating and disclosure expectations.",
         evidence: {
           preconsent_tracking_detected: preconsentTrackingDetected,
           rtb_cookie_sync_detected: true,
+          rtb_cookie_sync_evidence: rtbCookieSyncObservations,
           rtb_cookie_sync_domain_count: rtbDomains.length,
           rtb_cookie_sync_domains: rtbDomains,
+          rtb_cookie_sync_observation_count: rtbCookieSyncObservations.length,
           rtb_cookie_sync_vendors: rtbVendors,
-          runtimeRequestUrls: rtbRequestUrls,
+          runtimeRequestUrls: rtbCookieSyncObservations.map((row) => row.urlSample).filter((value) => /^https?:\/\//i.test(value)),
           runtimeVendors: rtbVendors,
           third_party_request_count: thirdPartyRequestCount,
           third_party_request_domain_count: rawThirdPartyDomains.length,
@@ -3432,8 +3567,8 @@ function deriveRuntimePrivacyFindings(input: {
         },
         pageUrl: null,
         ruleKey: "runtime_privacy.rtb_cookie_sync_observed",
-        severity: rtbDomains.length >= 5 || rtbVendors.length >= 3 ? "high" : "medium",
-        title: "Programmatic adtech and identity-sync activity observed"
+        severity: rtbCookieSyncObservations.length >= 3 || rtbDomains.length >= 3 || rtbVendors.length >= 2 ? "high" : "medium",
+        title: "RTB cookie sync observed"
       })
     );
   }
@@ -3447,6 +3582,12 @@ function deriveRuntimePrivacyFindings(input: {
     thirdPartyVendorsBeforeConsent.length > 0 ||
     preconsentViolationVendors.length > 0 ||
     rtbDomains.length > 0;
+  const consentGatedTrackingContradictionEvidence = buildConsentGatedTrackingContradictionEvidence({
+    policySemanticRows: input.policySemanticRows,
+    runtimeRequestUrls: [...new Set([...preconsentRuntimeRequestUrls, ...rtbRequestUrls])],
+    runtimeVendors
+  });
+
   if (cmpDetected && consentSurfaceObserved && consentActionableChoiceObserved && hasPolicyOrChoiceCoverage && hasThirdPartyAdtechBeforeConsent) {
     findings.push(
       buildRuntimePrivacyFinding({
@@ -3457,6 +3598,9 @@ function deriveRuntimePrivacyFindings(input: {
           cmp_vendor_name: cmpVendorName,
           consent_actionable_choice_observed: consentActionableChoiceObserved,
           consent_surface_observed: consentSurfaceObserved,
+          ...(consentGatedTrackingContradictionEvidence
+            ? { contradictionEvidence: consentGatedTrackingContradictionEvidence }
+            : {}),
           domain_policy_coverage: domainPolicyCoverage,
           preconsent_tracking_detected: preconsentTrackingDetected,
           preconsent_violation_vendors: attributedPreconsentVendors,
@@ -3523,6 +3667,101 @@ function getRtbOrIdentitySyncVendors(vendors: unknown[]) {
         .filter((value) => RTB_OR_IDENTITY_SYNC_VENDOR_PATTERN.test(value))
     )
   ].sort();
+}
+
+function getRtbCookieSyncObservations(hybrid: Record<string, unknown> | null, rtbDomains: string[]) {
+  if (!hybrid) {
+    return [];
+  }
+
+  const domainSet = new Set(rtbDomains.map((value) => value.trim().replace(/^\.+/, "").toLowerCase()));
+  const explicitRows = getRuntimeObjectArray(hybrid.rtbCookieSyncObservations ?? hybrid.rtb_cookie_sync_observations);
+  const compactRows = explicitRows.flatMap((row) => {
+    const hostname = typeof row.hostname === "string" ? row.hostname.trim().toLowerCase() : "";
+    const urlSample = typeof row.urlSample === "string" ? row.urlSample : typeof row.url_sample === "string" ? row.url_sample : "";
+    const pathSample = typeof row.pathSample === "string" ? row.pathSample : typeof row.path_sample === "string" ? row.path_sample : "/";
+    const reason = typeof row.reason === "string" ? row.reason : "known_sync_host";
+    const queryKeysSample = getRuntimeStringArray(row.queryKeysSample ?? row.query_keys_sample);
+    const redirectTargetHost =
+      typeof row.redirectTargetHost === "string"
+        ? row.redirectTargetHost
+        : typeof row.redirect_target_host === "string"
+          ? row.redirect_target_host
+          : null;
+    const hasConcreteSyncEvidence =
+      reason === "sync_path" ||
+      reason === "identifier_query" ||
+      reason === "redirect_sync" ||
+      /(?:^|\/|[-_:])(?:sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid|getuid\w*)(?:\/|[-_:]|$)|\/tap\.php$|\/track\/cmf(?:\/|$)|\/ibs:dpid/i.test(
+        `${hostname} ${pathSample}`
+      ) ||
+      queryKeysSample.some((key) =>
+        /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|gdpr|gdpr_consent|us_privacy|redir|redirect|redirect_url|callback)$/i.test(key)
+      ) ||
+      Boolean(redirectTargetHost && redirectTargetHost !== hostname);
+    if (!hostname || !hostname.includes(".")) {
+      return [];
+    }
+    if (!hasConcreteSyncEvidence) {
+      return [];
+    }
+    return [{
+      category: typeof row.category === "string" ? row.category : "rtb_exchange",
+      hostname,
+      pathSample,
+      queryKeysSample,
+      reason,
+      redirectTargetHost,
+      resourceType: typeof row.resourceType === "string" ? row.resourceType : typeof row.resource_type === "string" ? row.resource_type : null,
+      runtimePhase: typeof row.runtimePhase === "string" ? row.runtimePhase : typeof row.runtime_phase === "string" ? row.runtime_phase : "unknown",
+      statusCode:
+        typeof row.statusCode === "number" && Number.isFinite(row.statusCode)
+          ? row.statusCode
+          : typeof row.status_code === "number" && Number.isFinite(row.status_code)
+            ? row.status_code
+            : null,
+      tsMs: typeof row.tsMs === "number" && Number.isFinite(row.tsMs) ? row.tsMs : 0,
+      urlSample: urlSample || `https://${hostname}${pathSample}`,
+      vendor: typeof row.vendor === "string" ? row.vendor : null
+    }];
+  });
+
+  if (compactRows.length > 0) {
+    return compactRows.slice(0, 12);
+  }
+
+  const requestObservations = getRuntimeObjectArray(hybrid.requestObservations);
+  return requestObservations.flatMap((row) => {
+    const hostname = typeof row.domain === "string" ? row.domain.trim().replace(/^\.+/, "").toLowerCase() : "";
+    const pathSample = typeof row.pathSample === "string" ? row.pathSample : typeof row.path_sample === "string" ? row.path_sample : "/";
+    const queryKeysSample = getRuntimeStringArray(row.queryKeysSample ?? row.query_keys_sample ?? row.parameterKeys ?? row.parameter_keys);
+    const syncPattern = /sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid/i.test(`${hostname} ${pathSample}`);
+    const idHints = queryKeysSample.some((key) =>
+      /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|gdpr|gdpr_consent|us_privacy|redir|redirect|callback)$/i.test(key)
+    );
+    if (!hostname || !domainSet.has(hostname) || !syncPattern || !idHints) {
+      return [];
+    }
+    return [{
+      category: "rtb_exchange",
+      hostname,
+      pathSample,
+      queryKeysSample,
+      reason: "identifier_query",
+      redirectTargetHost: null,
+      resourceType: typeof row.resourceType === "string" ? row.resourceType : typeof row.resource_type === "string" ? row.resource_type : null,
+      runtimePhase: typeof row.runtimePhase === "string" ? row.runtimePhase : typeof row.runtime_phase === "string" ? row.runtime_phase : "unknown",
+      statusCode:
+        typeof row.statusCode === "number" && Number.isFinite(row.statusCode)
+          ? row.statusCode
+          : typeof row.status_code === "number" && Number.isFinite(row.status_code)
+            ? row.status_code
+            : null,
+      tsMs: typeof row.tsMs === "number" && Number.isFinite(row.tsMs) ? row.tsMs : 0,
+      urlSample: `https://${hostname}${pathSample}`,
+      vendor: null
+    }];
+  }).slice(0, 12);
 }
 
 function getRuntimeRequestUrlsForDomains(
@@ -4576,6 +4815,96 @@ export function looksLikeIntermediaryOrBlockPage(input: { canonicalUrl: string; 
   return url.includes("/login");
 }
 
+export function shouldRenderNanoDocumentFallback(input: {
+  canonicalUrl: string;
+  documentType: string;
+  html: string | null;
+  text: string | null;
+  title: string | null;
+}) {
+  if (!["privacy_policy", "cookie_policy", "terms_of_service"].includes(input.documentType)) {
+    return false;
+  }
+
+  const html = input.html?.toLowerCase() ?? "";
+  const text = input.text?.toLowerCase() ?? "";
+  const title = input.title?.toLowerCase() ?? "";
+  const url = input.canonicalUrl.toLowerCase();
+  const rawTextLength = input.text?.trim().length ?? 0;
+  const hasDocumentTypeUrlContext =
+    (input.documentType === "privacy_policy" && /privacy|privacy-policy|privacy-notice/.test(url)) ||
+    (input.documentType === "cookie_policy" && /cookie|cookies|cookie-notice|cookies-and-tracking/.test(url)) ||
+    (input.documentType === "terms_of_service" && /terms|terms-of-service|terms-of-use|legal/.test(url));
+  const hasLegalContext =
+    hasDocumentTypeUrlContext ||
+    /privacy policy|privacy notice|privacy center|cookie policy|cookie notice|terms of service|terms and conditions|legal/.test(
+      `${title}\n${text}\n${url}`
+    );
+  const looksLikeTranscendPrivacyCenter =
+    /privacy-center-api\.transcend\.io|transcend-cdn\.com|transcend\.io/.test(html) ||
+    (/privacy\.[^/]+\/policies/.test(url) && /privacy center/.test(`${title}\n${text}`));
+  const looksLikeJavascriptShell =
+    /enable javascript|enable js|noscript|id=["'](?:root|app)["']|<script[^>]+(?:main|bundle|app)[^>]*\.js/i.test(input.html ?? "") ||
+    /if you're seeing this message/.test(text);
+
+  return hasLegalContext && rawTextLength < 1_200 && (looksLikeTranscendPrivacyCenter || looksLikeJavascriptShell);
+}
+
+async function renderNanoDocumentFallback(input: {
+  canonicalUrl: string;
+  documentType: string;
+  referer?: string | null;
+  sourceUrl: string;
+}) {
+  try {
+    const { chromium } = await import("playwright");
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const context = await browser.newContext({
+        extraHTTPHeaders: input.referer ? { referer: input.referer } : undefined
+      });
+      const page = await context.newPage();
+      await page.goto(input.canonicalUrl, { timeout: 20_000, waitUntil: "domcontentloaded" });
+      await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => undefined);
+      await page.waitForTimeout(1_500);
+      const [renderedTitle, renderedUrl, renderedText] = await Promise.all([
+        page.title().catch(() => null),
+        Promise.resolve(page.url()),
+        page.locator("body").innerText({ timeout: 5_000 }).catch(() => "")
+      ]);
+      await context.close().catch(() => undefined);
+
+      const text = renderedText.replace(/\s+/g, " ").trim();
+      const hasLegalSignal =
+        /privacy policy|privacy notice|cookie policy|cookie notice|terms of service|terms and conditions|personal information|personal data|privacy rights/i.test(
+          text
+        );
+      if (text.length < 200 || !hasLegalSignal) {
+        return null;
+      }
+
+      const canonicalUrl = normalizeDocUrl(renderedUrl) ?? input.canonicalUrl;
+      return {
+        canonicalUrl,
+        documentText: text.slice(0, 50_000),
+        metadata: {
+          rendered_final_url: canonicalUrl,
+          rendered_text_length: text.length,
+          renderer: "playwright_chromium",
+          retrieval_fallback_reason: "javascript_policy_center_shell"
+        } satisfies Record<string, unknown>,
+        title: renderedTitle
+      };
+    } finally {
+      await browser.close().catch(() => undefined);
+    }
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "render_fallback_failed"
+    };
+  }
+}
+
 async function fetchNanoDocumentSource(input: {
   documentType: string;
   priorityTier?: "priority" | "secondary";
@@ -4600,6 +4929,52 @@ async function fetchNanoDocumentSource(input: {
     });
     const fetchedUrl = response.url || input.url;
     const canonicalUrl = normalizeDocUrl(fetchedUrl) ?? fetchedUrl;
+    const html = await response.text().catch(() => "");
+    const title = extractTitle(html);
+    const text = isolateLikelyLegalDocumentText({ html, title });
+    const renderedFallback = shouldRenderNanoDocumentFallback({
+      canonicalUrl,
+      documentType: input.documentType,
+      html,
+      text,
+      title
+    })
+      ? await renderNanoDocumentFallback({
+          canonicalUrl,
+          documentType: input.documentType,
+          referer: request.metadata.referer,
+          sourceUrl: input.url
+        })
+      : null;
+
+    if (renderedFallback && "documentText" in renderedFallback && typeof renderedFallback.documentText === "string") {
+      const renderedDocumentText = renderedFallback.documentText;
+      return {
+        outcome: "ready" as const,
+        row: {
+          canonical_url: renderedFallback.canonicalUrl,
+          document_text: renderedDocumentText,
+          document_type: input.documentType,
+          extraction_status: "pending",
+          evidence_refs: [renderedFallback.canonicalUrl],
+          extracted_fields_json: {
+            page_type: input.documentType,
+            page_url: renderedFallback.canonicalUrl
+          },
+          metadata_json: {
+            ...baseMetadata,
+            ...renderedFallback.metadata,
+            content_hash: buildNanoDocumentContentHash(renderedDocumentText),
+            http_status: response.status,
+            request_referer: request.metadata.referer
+          },
+          source: "nano_doc_retrieval",
+          source_status: "ready",
+          source_url: input.url,
+          title: renderedFallback.title ?? title
+        } satisfies Record<string, unknown>
+      };
+    }
 
     if (!response.ok) {
       return {
@@ -4616,6 +4991,7 @@ async function fetchNanoDocumentSource(input: {
           },
           metadata_json: {
             ...baseMetadata,
+            ...(renderedFallback && "error" in renderedFallback ? { render_fallback_error: renderedFallback.error } : {}),
             http_status: response.status,
             request_referer: request.metadata.referer,
             rejection_reason: "non_ok_http_status"
@@ -4627,10 +5003,6 @@ async function fetchNanoDocumentSource(input: {
         } satisfies Record<string, unknown>
       };
     }
-
-    const html = await response.text();
-    const title = extractTitle(html);
-    const text = isolateLikelyLegalDocumentText({ html, title });
 
     if (looksLikeIntermediaryOrBlockPage({ canonicalUrl, text, title })) {
       return {
@@ -4647,6 +5019,7 @@ async function fetchNanoDocumentSource(input: {
           },
           metadata_json: {
             ...baseMetadata,
+            ...(renderedFallback && "error" in renderedFallback ? { render_fallback_error: renderedFallback.error } : {}),
             http_status: response.status,
             request_referer: request.metadata.referer,
             rejection_reason: "intermediary_or_block_page"
@@ -4674,6 +5047,7 @@ async function fetchNanoDocumentSource(input: {
           },
           metadata_json: {
             ...baseMetadata,
+            ...(renderedFallback && "error" in renderedFallback ? { render_fallback_error: renderedFallback.error } : {}),
             http_status: response.status,
             request_referer: request.metadata.referer,
             rejection_reason: "insufficient_document_text"
@@ -4869,6 +5243,23 @@ export function getNanoDocumentSourceDedupKeys(row: Record<string, unknown>) {
 
 function getNanoDocumentCandidateDedupKey(candidate: { documentType: string; url: string }) {
   return `${candidate.documentType}::${normalizeDocUrl(candidate.url) ?? candidate.url}`;
+}
+
+export function shouldRetryRejectedNanoDocumentSource(row: Record<string, unknown>) {
+  const sourceStatus = getString(row.source_status) ?? getString(row.sourceStatus);
+  const extractionStatus = getString(row.extraction_status) ?? getString(row.extractionStatus);
+  const documentType = getString(row.document_type) ?? getString(row.documentType);
+  const metadata = getDocumentSourceMetadata(row);
+  const rejectionReason = getString(metadata.rejection_reason);
+  const fallbackReason = getString(metadata.retrieval_fallback_reason);
+
+  return Boolean(
+    sourceStatus === "rejected" &&
+      extractionStatus === "insufficient" &&
+      ["privacy_policy", "cookie_policy", "terms_of_service"].includes(documentType ?? "") &&
+      rejectionReason === "insufficient_document_text" &&
+      !fallbackReason
+  );
 }
 
 function hasReadyNanoDocumentOfType(rows: Array<Record<string, unknown>>, documentType: string) {
@@ -5368,7 +5759,11 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
     pages: artifacts.pages,
     recentDomainDocumentCandidates: artifacts.recentDomainDocumentCandidates
   });
-  const existingAttemptKeys = new Set(artifacts.existingDocumentSources.flatMap((row) => getNanoDocumentSourceDedupKeys(row)));
+  const existingAttemptKeys = new Set(
+    artifacts.existingDocumentSources
+      .filter((row) => !shouldRetryRejectedNanoDocumentSource(row))
+      .flatMap((row) => getNanoDocumentSourceDedupKeys(row))
+  );
   const pendingCandidates = candidates.filter((candidate) => !existingAttemptKeys.has(getNanoDocumentCandidateDedupKey(candidate)));
   const hasScannerDiscoveryInputs = artifacts.pages.length > 0 || artifacts.discoveryCandidates.length > 0;
   const shouldReenqueueForDiscovery = !hasScannerDiscoveryInputs && scanStatus !== "completed" && scanStatus !== "failed";

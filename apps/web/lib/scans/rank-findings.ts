@@ -51,6 +51,9 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
   if (ranked.some((finding) => finding.id === "pre_consent_tracking_detected")) {
     forcedIds.add("pre_consent_tracking_detected");
   }
+  if (ranked.some((finding) => finding.id === "cookie_disclosure_gap")) {
+    forcedIds.add("cookie_disclosure_gap");
+  }
   if (ranked.some((finding) => finding.id === "probable_fingerprinting")) {
     forcedIds.add("probable_fingerprinting");
   }

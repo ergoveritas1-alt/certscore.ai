@@ -12,6 +12,9 @@ test("classifies expanded non-essential cookie families", () => {
   assert.equal(classifyRuntimeCookieCategory("analytics_session_id", ".example.com"), "analytics");
   assert.equal(classifyRuntimeCookieCategory("_hjSession_123", ".example.com"), "session_replay");
   assert.equal(classifyRuntimeCookieCategory("__cf_bm", ".example.com"), "necessary");
+  assert.equal(classifyRuntimeCookieCategory("geo_country", ".troweprice.com"), "necessary");
+  assert.equal(classifyRuntimeCookieCategory("trp-country", ".troweprice.com"), "necessary");
+  assert.equal(classifyRuntimeCookieCategory("trp-language", ".troweprice.com"), "necessary");
   assert.equal(classifyRuntimeCookieCategory("cto_bundle", ".criteo.com"), "advertising");
   assert.equal(classifyRuntimeCookieCategory("cto_bundle"), "advertising");
   assert.equal(classifyRuntimeCookieCategory("demdex", ".demdex.net"), "dmp");
@@ -29,6 +32,9 @@ test("classifies expanded non-essential cookie families", () => {
 test("filters consent security and infrastructure cookies from tracking evidence", () => {
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("OptanonConsent", ".webmd.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("OptanonAlertBoxClosed", ".webmd.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("geo_country", ".troweprice.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("trp-country", ".troweprice.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("trp-language", ".troweprice.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("CookieConsent", ".example.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("euconsent-v2", ".example.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("notice_preferences", ".example.com"), true);

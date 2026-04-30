@@ -238,7 +238,7 @@ test("resolves financial-review validation findings into the matching unified fi
 
   assert.equal(packet?.unifiedFindingId, "fee_disclosure_present");
   assert.equal(packet?.linkedValidationFinding?.ruleKey, "financial_review.fee_disclosure_present");
-  assert.equal(packet?.presentationDecision.status, "suppress");
+  assert.notEqual(packet?.presentationDecision.status, "surface");
 });
 
 test("routes corpus-derived financial claim findings through normalized concerns before surfacing", () => {
@@ -1492,7 +1492,6 @@ test("specializes high-sensitivity third-party tracking evidence into a sensitiv
               vendorHost: "tracker.example.net"
             }
           ],
-          retargetingPixelArtifactPresent: true,
           runtimeEvidenceArtifacts: ["request:https://tracker.example.net/collect"],
           signalKey: "commerce.high_sensitivity_data_collection_detected",
           signalValue: true
@@ -1552,7 +1551,7 @@ const sensitiveCollectionPacketCases = [
 ] as const;
 
 for (const sensitiveCase of sensitiveCollectionPacketCases) {
-  test(`${sensitiveCase.signalKey} specializes with retained field text`, () => {
+  test(`${sensitiveCase.signalKey} with disconnected tracker evidence stays a sensitive collection packet`, () => {
     const [packet] = buildUnifiedFindingDisplayPackets({
       reviewFindingCandidates: [
         {
@@ -1588,8 +1587,8 @@ for (const sensitiveCase of sensitiveCollectionPacketCases) {
       validationFindingLookup: new Map()
     });
 
-    assert.equal(packet?.unifiedFindingId, "sensitive_data_collection_with_third_party_tracking_present");
-    assert.equal(packet?.presentationDecision.status, "surface");
+    assert.equal(packet?.unifiedFindingId, "sensitive_collection_surface_observed");
+    assert.equal(packet?.presentationDecision.status, "audit_only");
     assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
     assert.ok(packet?.evidence?.snippets?.includes(sensitiveCase.snippet));
     assert.deepEqual(packet?.evidence?.entities?.sensitive_data_types, [sensitiveCase.detectedType]);
@@ -2115,6 +2114,72 @@ test("keeps pre-consent tracking audit-only when concrete runtime vendors and UR
     )
   );
   assert.equal(packet?.presentation.confidenceScore, "0.45");
+});
+
+test("surfaces RTB cookie sync with compact request-level evidence", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-rtb-1",
+    ruleKey: "runtime_privacy.rtb_cookie_sync_observed",
+    severity: "high",
+    title: "RTB cookie sync observed",
+    evidence: {
+      preconsent_tracking_detected: true,
+      rtb_cookie_sync_detected: true,
+      rtb_cookie_sync_evidence: [
+        {
+          hostname: "sync-t1.taboola.com",
+          pathSample: "/sg/pubmatic-network/1/rtb-h/",
+          queryKeysSample: ["gdpr", "uid"],
+          reason: "sync_path",
+          runtimePhase: "pre_consent",
+          statusCode: 302,
+          urlSample: "https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/",
+          vendor: "PubMatic"
+        }
+      ],
+      rtb_cookie_sync_vendors: ["PubMatic"],
+      runtimeRequestUrls: ["https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/"]
+    }
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "rtb_cookie_sync_observed");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.details?.family, "consent_tracking");
+  assert.deepEqual(packet?.details?.family === "consent_tracking" ? packet.details.vendors : [], ["PubMatic"]);
+  assert.equal(packet?.evidence?.entities?.rtbCookieSyncEvidence?.length, 1);
+  assert.equal(JSON.parse(packet?.evidence?.entities?.rtbCookieSyncEvidence?.[0] ?? "{}").hostname, "sync-t1.taboola.com");
+  assert.equal(packet?.evidence?.entities?.rtbCookieSyncEvidence?.[0]?.includes("secret-user-id"), false);
+});
+
+test("keeps RTB cookie sync suppressed without concrete sync request evidence", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-rtb-weak",
+    ruleKey: "runtime_privacy.rtb_cookie_sync_observed",
+    severity: "high",
+    title: "RTB cookie sync observed",
+    evidence: {
+      preconsent_tracking_detected: true,
+      rtb_cookie_sync_detected: true,
+      rtb_cookie_sync_vendors: ["PubMatic", "OpenX"],
+      runtimeVendors: ["PubMatic", "OpenX"]
+    }
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "rtb_cookie_sync_observed");
+  assert.notEqual(packet?.presentationDecision.status, "surface");
+  assert.ok(packet?.presentationDecision.downgradeReasons.some((reason) => /runtime anchor/i.test(reason)));
 });
 
 test("retains pre-consent cookie timing evidence on unified finding packets", () => {

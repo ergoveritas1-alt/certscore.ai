@@ -28,6 +28,10 @@ import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToT
 import { deriveSupplementalSnapshotSignals } from "../../lib/scans/scan-detail-supplemental-signals";
 import { deriveSupplementalCoverageSignals, type SupplementalCoverageSignal } from "../../lib/scans/supplemental-coverage-signals";
 import { deriveSupplementalPolicySignals, type SupplementalPolicySignal } from "../../lib/scans/supplemental-policy-signals";
+import {
+  mergeNanoPolicyInputsWithFallback,
+  shouldPreferNanoDocumentSources
+} from "../../lib/scans/nano-document-sources";
 import { getPrimaryPolicyEnrichmentRow, getPolicyPageType } from "../../lib/scans/policy-enrichment-row";
 import { getHybridDerivedTrackerVendors } from "../../lib/scans/hybrid-runtime-evidence";
 import { buildMergedSignalRecords } from "../../lib/scans/merged-signals";
@@ -450,6 +454,21 @@ function stripTimestampFields(record: Record<string, unknown>) {
   return next;
 }
 
+function hasCaptchaOrSecurityDocumentSource(documentSources: Array<Record<string, unknown>>) {
+  return documentSources.some((source) => {
+    const text = [
+      typeof source.canonical_url === "string" ? source.canonical_url : "",
+      typeof source.source_url === "string" ? source.source_url : "",
+      typeof source.title === "string" ? source.title : "",
+      typeof source.document_text === "string" ? source.document_text.slice(0, 1000) : ""
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return /splashui\/captcha|captcha|security measure|verify yourself|verify you are human|request blocked|access denied/.test(text);
+  });
+}
+
 
 function normalizeSupplementalPolicySignals(signals: SupplementalPolicySignal[]): ScanSignalRecord[] {
   return signals.map((signal) => {
@@ -688,7 +707,17 @@ async function loadScanDetailRecord(input: {
   });
   const normalizedPolicyReviewQueue = ((policyReviewQueue ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row));
   const normalizedDocumentSources = ((documentSources ?? []) as Array<Record<string, unknown>>);
-  const primaryPolicyEnrichment = getPrimaryPolicyEnrichment(normalizedPolicyEnrichment);
+  const scannedHostname = snapshot && typeof (snapshot as Record<string, unknown>).domain === "string"
+    ? ((snapshot as Record<string, unknown>).domain as string)
+    : null;
+  const displayPolicyEnrichment = shouldPreferNanoDocumentSources(normalizedDocumentSources, { scannedHostname })
+    ? mergeNanoPolicyInputsWithFallback({
+        documentSources: normalizedDocumentSources,
+        fallbackRows: normalizedPolicyEnrichment,
+        scannedHostname
+      })
+    : normalizedPolicyEnrichment;
+  const primaryPolicyEnrichment = getPrimaryPolicyEnrichment(displayPolicyEnrichment);
   const previousPrimaryPolicyEnrichment = getPrimaryPolicyEnrichment((previousPolicyRows as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row)));
   const rawNormalizedEvents: ScanEventRecord[] = ((events ?? []) as ScanEventRow[]).map(
     (event) =>
@@ -730,7 +759,7 @@ async function loadScanDetailRecord(input: {
   );
   const normalizedEvents: ScanEventRecord[] = repairFindingFamilyPacketEvents({
     events: rawNormalizedEvents,
-    policyEnrichment: normalizedPolicyEnrichment
+    policyEnrichment: displayPolicyEnrichment
   });
   const displayState = deriveScanDisplayState(scanRow, normalizedEvents);
   const displayCreatedAt = deriveDisplayCreatedAt({
@@ -755,7 +784,7 @@ async function loadScanDetailRecord(input: {
   });
   const supplementalPolicySignals = normalizeSupplementalPolicySignals(deriveSupplementalPolicySignals({
     existingSignalKeys: normalizedSignals.map((signal) => signal.key),
-    policyEnrichment: normalizedPolicyEnrichment,
+    policyEnrichment: displayPolicyEnrichment,
     primaryPolicyEnrichment,
     snapshot: normalizedSnapshot
   }));
@@ -1223,9 +1252,12 @@ async function loadScanDetailRecord(input: {
     relatedPreviewSnapshot: normalizedRelatedPreviewSnapshot
       ? (normalizedRelatedPreviewSnapshot satisfies Exclude<RelatedPreviewSnapshotRecord, null>)
       : null,
-    policyEnrichment: normalizedPolicyEnrichment,
+    policyEnrichment: displayPolicyEnrichment,
     primaryPolicyEnrichment,
     policyReviewQueue: normalizedPolicyReviewQueue,
+    coverageMicrocards: hasCaptchaOrSecurityDocumentSource(normalizedDocumentSources)
+      ? [{ label: "CAPTCHA/security page", tone: "amber" as const }]
+      : [],
     signalHits: signalHits as ScanSignalHitRecord[],
     signalEnrichmentWorkflow,
     domainBenchmark,

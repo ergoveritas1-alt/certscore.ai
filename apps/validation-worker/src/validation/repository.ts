@@ -1347,12 +1347,14 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   const loadedPageEvidence = pageEvidenceError ? [] : pageEvidenceResult.data;
   const loadedSignalHits = signalHitsError ? [] : signalHitsResult.data;
   const normalizedDocumentSources = documentSourcesError ? [] : documentSourcesResult.data;
-  const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
+  const scannedHostname = typeof snapshot?.domain === "string" ? snapshot.domain : null;
+  const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources, { scannedHostname });
   const fallbackPolicyRows = policyEnrichments;
   const policySemanticInputs = preferDocumentSources
     ? mergeNanoPolicyInputsWithFallback({
         documentSources: normalizedDocumentSources,
-        fallbackRows: fallbackPolicyRows
+        fallbackRows: fallbackPolicyRows,
+        scannedHostname
       })
     : fallbackPolicyRows;
   const mergedSignals = buildMergedSignalRecords({
@@ -1441,11 +1443,13 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
 
   const normalizedDocumentSources = documentSourcesError ? [] : documentSourcesResult.data;
   const fallbackPolicyRows = policyEnrichments;
+  const scannedHostname = typeof snapshot?.domain === "string" ? snapshot.domain : null;
   const documentBackedPolicyInputs = mergeNanoPolicyInputsWithFallback({
     documentSources: normalizedDocumentSources,
-    fallbackRows: fallbackPolicyRows
+    fallbackRows: fallbackPolicyRows,
+    scannedHostname
   });
-  const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
+  const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources, { scannedHostname });
   return {
     documentSources: normalizedDocumentSources,
     policySemanticRows: preferDocumentSources ? documentBackedPolicyInputs : fallbackPolicyRows,
@@ -2194,12 +2198,14 @@ async function loadScanRecordForFindingCount(input: {
   const storedNanoSignalRows = rawSignalRows.filter((signal) => signal.population_source === "nano");
   const storedValidationSignalRows = rawSignalRows.filter((signal) => signal.population_source === "validation");
   const normalizedDocumentSources = (documentSources ?? []) as Array<Record<string, unknown>>;
-  const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
+  const scannedHostname = typeof snapshot?.domain === "string" ? snapshot.domain : null;
+  const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources, { scannedHostname });
   const fallbackPolicyRows = ((policyEnrichment ?? []) as Array<Record<string, unknown>>);
   const policySemanticRows = preferDocumentSources
     ? mergeNanoPolicyInputsWithFallback({
         documentSources: normalizedDocumentSources,
-        fallbackRows: fallbackPolicyRows
+        fallbackRows: fallbackPolicyRows,
+        scannedHostname
       })
     : fallbackPolicyRows;
   const normalizedPolicyRows = policySemanticRows.map((row, index) => {
