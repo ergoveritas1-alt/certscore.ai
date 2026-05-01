@@ -12,6 +12,7 @@ import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { buildValidationFindingLookup } from "./validation-review-linking";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
+import { getHybridDerivedSignalValue, getHybridSignalFallbackEvidence } from "./hybrid-runtime-evidence";
 import { getReportSignalValue, isSignalValuePopulated } from "./report-signal-values";
 import {
   buildReviewFindings,
@@ -88,6 +89,46 @@ export type ScanReportUnifiedFindingStateDependencies = {
 
 function getFiniteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function buildRuntimeDerivedReviewFindingCandidates(input: {
+  runtimeArtifacts: Record<string, unknown> | null;
+}): CanonicalReviewFinding[] {
+  const signalKey = "privacy.cross_domain_identifier_sharing_observed";
+  const signalLabel = "Identifiers shared across domains";
+  const signalValue = getHybridDerivedSignalValue(input.runtimeArtifacts, signalKey);
+
+  if (signalValue !== true) {
+    return [];
+  }
+
+  const fallbackEvidence = getHybridSignalFallbackEvidence({
+    runtimeArtifacts: input.runtimeArtifacts,
+    signalKey,
+    signalLabel,
+    signalValue
+  });
+
+  if (!fallbackEvidence) {
+    return [];
+  }
+
+  return [
+    {
+      categoryId: "adtech_analytics_replay_footprint",
+      description: "Identifier-like values were observed in requests to multiple external domains.",
+      fallbackEvidence,
+      id: `runtime-derived-signal-${signalKey}`,
+      linkedValidationFinding: null,
+      observedValue: signalLabel,
+      severity: "high",
+      signalKey,
+      signalLabel,
+      signalSource: "snapshot_signal",
+      sourceType: "signal",
+      title: signalLabel
+    }
+  ];
 }
 
 export function buildScanReportUnifiedFindingState(
@@ -257,6 +298,16 @@ export function buildScanReportUnifiedFindingState(
       ...section.issueFindings
     ])
   );
+  const runtimeDerivedReviewFindingCandidates = buildRuntimeDerivedReviewFindingCandidates({
+    runtimeArtifacts
+  }).filter(
+    (candidate) =>
+      !allReviewFindingCandidates.some(
+        (existing) =>
+          existing.signalKey === candidate.signalKey ||
+          existing.fallbackEvidence?.signalKey === candidate.signalKey
+      )
+  );
   const globalUnifiedFindings = dependencies.filterContradictoryPositiveSurfaceFindings(buildUnifiedFindingDisplayPackets({
     coverageSummary: {
       legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
@@ -267,7 +318,7 @@ export function buildScanReportUnifiedFindingState(
     macroEnrichment: scanRecord.macroEnrichment,
     mergedSignals: scanRecord.mergedSignals,
     policyEnrichment: scanRecord.policyEnrichment,
-    reviewFindingCandidates: allReviewFindingCandidates,
+    reviewFindingCandidates: [...allReviewFindingCandidates, ...runtimeDerivedReviewFindingCandidates],
     scanEvents: scanRecord.events,
     validationFindings: scanRecord.validationFindings,
     validationFindingLookup

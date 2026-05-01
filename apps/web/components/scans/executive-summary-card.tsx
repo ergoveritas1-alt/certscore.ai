@@ -1420,7 +1420,6 @@ function getFindingTitleIconKey(findingId: string) {
     case "analytics_cookie_pre_consent":
     case "adtech_cookie_pre_consent":
     case "third_party_cookie_pre_consent":
-    case "storage_before_consent":
       return "cookie-storage";
     case "probable_fingerprinting":
       return "fingerprint";
@@ -2028,6 +2027,51 @@ export function ExecutiveSummaryCard(input: {
               </div>
               <div className="space-y-3">
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Regulatory findings</p>
+                  <div className="mt-3 space-y-3">
+                    {regulatoryLenses.map((lens) => (
+                      <details key={lens.acronym} className="group rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3">
+                        <summary className="relative grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2">
+                          <span className="min-w-0 self-start">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-semibold text-slate-900">{lens.acronym}</span>
+                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
+                                {lens.ratingLabel}
+                              </span>
+                            </span>
+                          </span>
+                          <span className="shrink-0 self-start text-right">
+                            <span className="block text-xl font-semibold tracking-tight text-slate-900">{lens.score ?? "—"}</span>
+                            {typeof lens.score === "number" ? (
+                              <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
+                            ) : null}
+                          </span>
+                          <span className="col-span-2 min-w-0 pr-6 text-xs leading-5 text-slate-600">{lens.summary}</span>
+                          <span className="absolute bottom-0 right-0 text-right text-slate-400 transition-transform group-open:rotate-180">⌄</span>
+                        </summary>
+                        <div className="mt-3 border-t border-slate-200 pt-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
+                          <div className="mt-2 space-y-2">
+                            {lens.findings.length > 0 ? (
+                              lens.findings.map((item) => (
+                                <RegulatoryLensFindingCard
+                                  key={`${lens.acronym}-${item.id}-${item.label}`}
+                                  finding={item}
+                                  lens={lens}
+                                />
+                              ))
+                            ) : (
+                              <span className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700">
+                                No top-level issue mapped here
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Tracker footprint</p>
                   <p className="mt-2 text-sm text-slate-800">{input.trackerSummary}</p>
                   <DetailDisclosure
@@ -2119,51 +2163,6 @@ export function ExecutiveSummaryCard(input: {
                   />
                 </div>
               ) : null}
-              <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Regulatory findings</p>
-                <div className="mt-3 space-y-3">
-                  {regulatoryLenses.map((lens) => (
-                    <details key={lens.acronym} className="group rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3">
-                      <summary className="relative grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2">
-                        <span className="min-w-0 self-start">
-                          <span className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-semibold text-slate-900">{lens.acronym}</span>
-                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
-                              {lens.ratingLabel}
-                            </span>
-                          </span>
-                        </span>
-                        <span className="shrink-0 self-start text-right">
-                          <span className="block text-xl font-semibold tracking-tight text-slate-900">{lens.score ?? "—"}</span>
-                          {typeof lens.score === "number" ? (
-                            <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
-                          ) : null}
-                        </span>
-                        <span className="col-span-2 min-w-0 pr-6 text-xs leading-5 text-slate-600">{lens.summary}</span>
-                        <span className="absolute bottom-0 right-0 text-right text-slate-400 transition-transform group-open:rotate-180">⌄</span>
-                      </summary>
-                      <div className="mt-3 border-t border-slate-200 pt-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
-                        <div className="mt-2 space-y-2">
-                          {lens.findings.length > 0 ? (
-                            lens.findings.map((item) => (
-                              <RegulatoryLensFindingCard
-                                key={`${lens.acronym}-${item.id}-${item.label}`}
-                                finding={item}
-                                lens={lens}
-                              />
-                            ))
-                          ) : (
-                            <span className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700">
-                              No top-level issue mapped here
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </details>
-                  ))}
-                </div>
-              </div>
             </>
           )}
         </div>

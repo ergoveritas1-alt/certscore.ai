@@ -24,6 +24,17 @@ const DIRECTNESS_WEIGHT: Record<CertScoreFindingDirectness, number> = {
   inferred: 1
 };
 
+const TOP_FINDING_EXCLUDED_IDS = new Set<string>([
+  "blocking_overlay_observed",
+  "consent_dark_patterns_detected",
+  "content_obstructed_by_overlay",
+  "identifier_transmission_detected",
+  "multi_vendor_tracking_detected",
+  "non_cookie_tracking_detected",
+  "telemetry_rich_identification_observed",
+  "reject_option_missing_or_hidden"
+]);
+
 export function getFindingSurfaceScore(finding: CertScoreFinding) {
   return (
     SEVERITY_WEIGHT[finding.severity] * 100 +
@@ -38,7 +49,7 @@ export function rankFindings(findings: CertScoreFinding[]) {
 }
 
 export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
-  const ranked = rankFindings(findings);
+  const ranked = rankFindings(findings).filter((finding) => !TOP_FINDING_EXCLUDED_IDS.has(finding.id));
   const sectionCounts = new Map<string, number>();
   const selected: CertScoreFinding[] = [];
   const suppressedIds = new Set<string>();
@@ -59,6 +70,9 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
   }
   if (ranked.some((finding) => finding.id === "session_recording_services_detected")) {
     forcedIds.add("session_recording_services_detected");
+  }
+  if (ranked.some((finding) => finding.id === "cross_domain_identifier_sharing_observed")) {
+    forcedIds.add("cross_domain_identifier_sharing_observed");
   }
   if (
     ranked.some(

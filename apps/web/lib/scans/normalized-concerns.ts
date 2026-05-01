@@ -611,6 +611,42 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
   const policySnippets = new Set<string>();
   const runtimeArtifacts = new Set<string>();
 
+  const preSubmitTextCaptureRows = [
+    ...(
+      Array.isArray(rawEvidence.preSubmitTextCaptureEvidence)
+        ? rawEvidence.preSubmitTextCaptureEvidence
+        : Array.isArray(rawEvidence.pre_submit_text_capture_evidence)
+          ? rawEvidence.pre_submit_text_capture_evidence
+          : []
+    ),
+    ...(
+      Array.isArray(rawEvidence.signalValue) &&
+      rawEvidence.signalKey === "privacy.pre_submit_text_capture_detected"
+        ? rawEvidence.signalValue
+        : []
+    )
+  ].filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object");
+  for (const row of preSubmitTextCaptureRows) {
+    const pageUrl = getStringValue(row.pageUrl ?? row.page_url);
+    const requestDomain = getStringValue(row.requestDomain ?? row.request_domain);
+    const requestUrl = getStringValue(row.requestUrl ?? row.request_url);
+    const destinationClassification = getStringValue(row.destinationClassification ?? row.destination_classification);
+    const matchType = getStringValue(row.matchType ?? row.match_type);
+    if (pageUrl) {
+      pageUrls.add(pageUrl);
+    }
+    addEntity(entities, "preSubmitTextCaptureRequestDomains", requestDomain ? [requestDomain] : []);
+    addEntity(entities, "preSubmitTextCaptureClassifications", destinationClassification ? [destinationClassification] : []);
+    if (requestDomain && destinationClassification && matchType) {
+      runtimeArtifacts.add(
+        `Pre-submit probe observed ${matchType} sentinel in ${destinationClassification} request to ${requestDomain}${requestUrl ? ` (${requestUrl})` : ""}.`
+      );
+    }
+  }
+  if (preSubmitTextCaptureRows.length > 0) {
+    counts.preSubmitTextCaptureEvidenceCount = preSubmitTextCaptureRows.length;
+  }
+
   if (Array.isArray(rawEvidence.accessibilityRuleExamples)) {
     for (const entry of rawEvidence.accessibilityRuleExamples) {
       if (!entry || typeof entry !== "object") {

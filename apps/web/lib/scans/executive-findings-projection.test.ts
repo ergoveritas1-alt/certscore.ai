@@ -195,6 +195,86 @@ test("projects surfaced unified findings into executive findings and regulatory 
   );
 });
 
+test("keeps support and context findings out of executive top findings", () => {
+  const excludedExecutiveFindingIds = [
+    "asymmetric_consent_ui",
+    "blocking_overlay_observed",
+    "consent_dark_patterns_detected",
+    "content_obstructed_by_overlay",
+    "forced_consent_interaction",
+    "identifier_transmission_detected",
+    "multi_vendor_tracking_detected",
+    "non_cookie_tracking_detected",
+    "reject_option_missing_or_hidden",
+    "telemetry_rich_identification_observed"
+  ];
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("reject_button_missing", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "reject_button_missing" },
+      evidence: {
+        counts: {},
+        entities: {
+          rejectDepthClass: ["absent"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.dark_pattern_reject_button_missing"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Consent surface observed, but the reject option was not visible."],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "Reject option was missing from the observed consent surface."
+    }),
+    makePacket("content_obstructed_by_overlay", {
+      confidenceBand: "high",
+      severity: "high"
+    }),
+    makePacket("accept_more_prominent_than_reject", {
+      confidenceBand: "high",
+      severity: "high"
+    }),
+    makePacket("accept_only_banner", {
+      confidenceBand: "high",
+      severity: "high"
+    }),
+    makePacket("blocking_overlay_observed", {
+      confidenceBand: "high",
+      severity: "high"
+    }),
+    makePacket("forced_consent_wall", {
+      confidenceBand: "high",
+      severity: "high"
+    }),
+    makePacket("identifier_transmission_detected", {
+      confidenceBand: "high",
+      severity: "high"
+    }),
+    makePacket("multi_vendor_tracking_detected", {
+      confidenceBand: "high",
+      severity: "high"
+    }),
+    makePacket("non_cookie_tracking_detected", {
+      confidenceBand: "high",
+      severity: "high"
+    }),
+    makePacket("telemetry_rich_identification_observed", {
+      confidenceBand: "high",
+      severity: "high"
+    }),
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      severity: "high"
+    })
+  ]);
+
+  for (const findingId of excludedExecutiveFindingIds) {
+    assert.ok(projection.findings.some((finding) => finding.id === findingId));
+    assert.ok(!projection.topFindings.some((finding) => finding.id === findingId));
+  }
+});
+
 test("projects RTB cookie sync into executive and privacy regulatory lenses", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("rtb_cookie_sync_observed", {
@@ -873,17 +953,14 @@ test("keeps runtime-backed session recording in top findings when consent issues
 
   const topFindingIds = projection.topFindings.map((finding) => finding.id);
   assert.ok(topFindingIds.includes("session_recording_services_detected"));
-  assert.ok(
-    topFindingIds.indexOf("session_recording_services_detected") <
-      topFindingIds.indexOf("asymmetric_consent_ui")
-  );
+  assert.ok(!topFindingIds.includes("asymmetric_consent_ui"));
   assert.equal(
     projection.topFindings.find((finding) => finding.id === "session_recording_services_detected")?.shortSummary,
     "Microsoft Clarity session recording was observed during runtime collection."
   );
 });
 
-test("projects blocking overlay context into executive top findings without violation framing", () => {
+test("projects blocking overlay context without violation framing", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("blocking_overlay_observed", {
       confidenceBand: "moderate",
@@ -935,7 +1012,7 @@ test("projects blocking overlay context into executive top findings without viol
   assert.equal(finding?.severity, "medium");
   assert.ok(finding?.whyItMatters.includes("common"));
   assert.ok(!/violation/i.test(`${finding?.label} ${finding?.whyItMatters}`));
-  assert.ok(projection.topFindings.some((entry) => entry.id === "blocking_overlay_observed"));
+  assert.ok(!projection.topFindings.some((entry) => entry.id === "blocking_overlay_observed"));
 });
 
 test("projects video content tracking exposure into executive findings", () => {

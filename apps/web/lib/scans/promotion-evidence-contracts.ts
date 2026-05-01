@@ -82,6 +82,47 @@ function isConcreteHttpEvidenceUrl(value: string | null | undefined) {
   }
 }
 
+function getEtldPlusOneFromHostname(hostname: string | null | undefined) {
+  if (!hostname) {
+    return null;
+  }
+  const parts = hostname
+    .toLowerCase()
+    .split(".")
+    .filter(Boolean);
+  if (parts.length < 2) {
+    return null;
+  }
+  return parts.slice(-2).join(".");
+}
+
+function collectUrlEtldPlusOne(value: string | null | undefined) {
+  if (!value) {
+    return [];
+  }
+
+  const output = new Set<string>();
+  const inspect = (candidate: string) => {
+    try {
+      const parsed = new URL(candidate);
+      const etld = getEtldPlusOneFromHostname(parsed.hostname);
+      if (etld) {
+        output.add(etld);
+      }
+      for (const nestedValue of parsed.searchParams.values()) {
+        if (/^https?:\/\//i.test(nestedValue)) {
+          inspect(nestedValue);
+        }
+      }
+    } catch {
+      // Ignore malformed or redacted URL fragments.
+    }
+  };
+
+  inspect(value);
+  return [...output];
+}
+
 function hasConcreteRtbObservationRow(row: Record<string, unknown>) {
   const hostname = typeof row.hostname === "string" ? row.hostname.trim() : "";
   const pathSample = typeof row.pathSample === "string" ? row.pathSample : typeof row.path_sample === "string" ? row.path_sample : "";
@@ -124,6 +165,103 @@ export function hasConcreteRtbCookieSyncEvidence(rawEvidence: Record<string, unk
       return false;
     }
   });
+}
+
+function hasConcreteCrossDomainIdentifierSharingRow(row: Record<string, unknown>) {
+  const requestUrl = typeof row.requestUrlRedacted === "string"
+    ? row.requestUrlRedacted
+    : typeof row.request_url_redacted === "string"
+      ? row.request_url_redacted
+      : "";
+  const key = typeof row.key === "string" ? row.key.trim() : "";
+  const valueHash = typeof row.valueHash === "string"
+    ? row.valueHash
+    : typeof row.value_hash === "string"
+      ? row.value_hash
+      : "";
+  const destinationEtld = typeof row.destinationEtldPlusOne === "string"
+    ? row.destinationEtldPlusOne
+    : typeof row.destination_etld_plus_one === "string"
+      ? row.destination_etld_plus_one
+      : "";
+  const destinationDomain = typeof row.destinationDomain === "string"
+    ? row.destinationDomain
+    : typeof row.destination_domain === "string"
+      ? row.destination_domain
+      : "";
+  const repeatedAcrossEtlds = getStringArrayValues(row, ["repeatedAcrossEtlds", "repeated_across_etlds"]);
+  const sourcePageUrl = typeof row.sourcePageUrl === "string"
+    ? row.sourcePageUrl
+    : typeof row.source_page_url === "string"
+      ? row.source_page_url
+      : "";
+  const involvedEtlds = uniqueStrings([
+    destinationEtld,
+    ...repeatedAcrossEtlds,
+    ...collectUrlEtldPlusOne(sourcePageUrl),
+    ...collectUrlEtldPlusOne(requestUrl)
+  ]);
+  const destinationClassification = typeof row.destinationClassification === "string"
+    ? row.destinationClassification
+    : typeof row.destination_classification === "string"
+      ? row.destination_classification
+      : "";
+  const identifierClass = typeof row.identifierClass === "string"
+    ? row.identifierClass
+    : typeof row.identifier_class === "string"
+      ? row.identifier_class
+      : "";
+  const hasPromotionVendor =
+    /adtech|affiliate|analytics|identity_graph|rtb|marketing/i.test(destinationClassification) ||
+    /(?:mobilefuse|undertone|bidswitch|adnxs|rlcdn|criteo|rubiconproject|pubmatic|openx|casalemedia|adsrvr|yahoo|ay\.delivery)\./i.test(
+      `${destinationDomain} ${destinationEtld}`
+    ) ||
+    involvedEtlds.some((etld) => /(?:casalemedia|ay\.delivery|yahoo|bidswitch|mobilefuse|undertone)\.com|ay\.delivery/i.test(etld));
+  const hasDurableIdentifier = /durable_id|cookie_id|affiliate_click_id|session_id|unknown_identifier/i.test(identifierClass);
+  return (
+    key.length > 0 &&
+    /^[a-f0-9]{32,}$/i.test(valueHash) &&
+    destinationEtld.includes(".") &&
+    involvedEtlds.length >= 2 &&
+    hasPromotionVendor &&
+    hasDurableIdentifier &&
+    (requestUrl.includes("[redacted]") || requestUrl.includes("%5Bredacted%5D"))
+  );
+}
+
+export function hasConcreteCrossDomainIdentifierSharingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const rows = getObjectArrayValues(rawEvidence, [
+    "crossDomainIdentifierSharingEvidence",
+    "cross_domain_identifier_sharing_evidence"
+  ]);
+  if (!rows.some(hasConcreteCrossDomainIdentifierSharingRow)) {
+    return false;
+  }
+
+  const categories = getStringArrayValues(rawEvidence, [
+    "crossDomainIdentifierSharingDestinationCategories",
+    "cross_domain_identifier_sharing_destination_categories"
+  ]);
+  const destinationEtlds = getStringArrayValues(rawEvidence, [
+    "crossDomainIdentifierSharingDestinationEtlds",
+    "cross_domain_identifier_sharing_destination_etlds"
+  ]);
+  const rowEtlds = uniqueStrings(
+    rows.flatMap((row) => [
+      typeof row.destinationEtldPlusOne === "string" ? row.destinationEtldPlusOne : null,
+      typeof row.destination_etld_plus_one === "string" ? row.destination_etld_plus_one : null,
+      ...getStringArrayValues(row, ["repeatedAcrossEtlds", "repeated_across_etlds"]),
+      ...collectUrlEtldPlusOne(typeof row.sourcePageUrl === "string" ? row.sourcePageUrl : typeof row.source_page_url === "string" ? row.source_page_url : null),
+      ...collectUrlEtldPlusOne(typeof row.requestUrlRedacted === "string" ? row.requestUrlRedacted : typeof row.request_url_redacted === "string" ? row.request_url_redacted : null)
+    ])
+  );
+  return (
+    uniqueStrings([...destinationEtlds, ...rowEtlds]).length >= 2 &&
+    (
+      categories.some((category) => /adtech|affiliate|analytics|identity_graph|rtb|marketing/i.test(category)) ||
+      rowEtlds.some((etld) => /(?:casalemedia|ay\.delivery|yahoo|bidswitch|mobilefuse|undertone)\.com|ay\.delivery/i.test(etld))
+    )
+  );
 }
 
 function hasPromotionGradePreconsentCookieEvidence(rawEvidence: Record<string, unknown> | null | undefined) {

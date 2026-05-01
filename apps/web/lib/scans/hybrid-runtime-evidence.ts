@@ -74,6 +74,96 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function getEtldPlusOneFromHostname(hostname: string | null | undefined) {
+  if (!hostname) {
+    return null;
+  }
+  const parts = hostname
+    .toLowerCase()
+    .split(".")
+    .filter(Boolean);
+  if (parts.length < 2) {
+    return null;
+  }
+  return parts.slice(-2).join(".");
+}
+
+function collectUrlEtldPlusOne(value: string | null | undefined) {
+  if (!value) {
+    return [];
+  }
+
+  const output = new Set<string>();
+  const inspect = (candidate: string) => {
+    try {
+      const parsed = new URL(candidate);
+      const etld = getEtldPlusOneFromHostname(parsed.hostname);
+      if (etld) {
+        output.add(etld);
+      }
+      for (const nestedValue of parsed.searchParams.values()) {
+        if (/^https?:\/\//i.test(nestedValue)) {
+          inspect(nestedValue);
+        }
+      }
+    } catch {
+      // Ignore malformed or redacted URL fragments.
+    }
+  };
+
+  inspect(value);
+  return [...output];
+}
+
+function getCrossDomainIdentifierSharingRows(hybrid: Record<string, unknown> | null) {
+  return getObjectArray(
+    hybrid?.crossDomainIdentifierSharingEvidence ??
+      hybrid?.cross_domain_identifier_sharing_evidence
+  );
+}
+
+function getCrossDomainIdentifierSharingDestinationCategories(hybrid: Record<string, unknown> | null) {
+  return uniqueStrings([
+    ...getStringArray(
+      hybrid?.crossDomainIdentifierSharingVendorCategories ??
+        hybrid?.cross_domain_identifier_sharing_vendor_categories
+    ),
+    ...getCrossDomainIdentifierSharingRows(hybrid).flatMap((row) =>
+      getString(row.destinationClassification ?? row.destination_classification)
+    )
+  ]);
+}
+
+function getCrossDomainIdentifierSharingDestinationEtlds(hybrid: Record<string, unknown> | null) {
+  return uniqueStrings(
+    getCrossDomainIdentifierSharingRows(hybrid).flatMap((row) => [
+      getString(row.destinationEtldPlusOne ?? row.destination_etld_plus_one),
+      ...getStringArray(row.repeatedAcrossEtlds ?? row.repeated_across_etlds),
+      ...collectUrlEtldPlusOne(getString(row.sourcePageUrl ?? row.source_page_url)),
+      ...collectUrlEtldPlusOne(getString(row.requestUrlRedacted ?? row.request_url_redacted))
+    ])
+  );
+}
+
+function getCrossDomainIdentifierSharingRequestUrls(hybrid: Record<string, unknown> | null) {
+  return uniqueStrings(
+    getCrossDomainIdentifierSharingRows(hybrid).flatMap((row) =>
+      getString(row.requestUrlRedacted ?? row.request_url_redacted)
+    )
+  );
+}
+
+function hasCrossDomainIdentifierSharingEvidence(hybrid: Record<string, unknown> | null) {
+  if (!hybrid) {
+    return false;
+  }
+  const explicit = getBoolean(
+    hybrid.crossDomainIdentifierSharingObserved ??
+      hybrid.cross_domain_identifier_sharing_observed
+  );
+  return explicit === true || getCrossDomainIdentifierSharingRows(hybrid).length > 0;
+}
+
 function getExistingArray(record: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const values = getStringArray(record[key]);
@@ -803,6 +893,24 @@ function hasSessionReplayObserved(hybrid: Record<string, unknown> | null) {
 }
 
 export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unknown> | null | undefined, signalKey: string) {
+  if (signalKey === "privacy.pre_submit_text_capture_detected") {
+    const rows = getObjectArray(runtimeArtifacts?.pre_submit_text_capture_evidence ?? runtimeArtifacts?.preSubmitTextCaptureEvidence);
+    if (rows.length > 0) {
+      return rows.some((row) => {
+        const classification = String(row.destinationClassification ?? row.destination_classification ?? "");
+        const submitObserved = row.submitObserved ?? row.submit_observed;
+        return (
+          submitObserved === false &&
+          (classification === "third_party_tracking_hashed_identifier" ||
+            classification === "third_party_tracking_raw_identifier")
+        );
+      });
+    }
+    const explicit =
+      runtimeArtifacts?.pre_submit_text_capture_detected ?? runtimeArtifacts?.preSubmitTextCaptureDetected;
+    return typeof explicit === "boolean" ? explicit : undefined;
+  }
+
   const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
   if (!hybrid) {
     return undefined;
@@ -896,6 +1004,8 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
       return mediaSummary?.autoplayVideoObserved === true || mediaSummary?.autoplayAudioObserved === true;
     case "privacy.video_content_tracking_exposure_detected":
       return hasVideoContentTrackingExposure(hybrid);
+    case "privacy.cross_domain_identifier_sharing_observed":
+      return hasCrossDomainIdentifierSharingEvidence(hybrid);
     default:
       return undefined;
   }
@@ -1128,6 +1238,36 @@ export function getHybridSignalFallbackEvidence(input: {
         videoTitleSnippets: getVideoTitleSnippets(hybrid),
         hybridMediaSummary: mediaSummary
       };
+    case "privacy.cross_domain_identifier_sharing_observed": {
+      const crossDomainIdentifierSharingEvidence = getCrossDomainIdentifierSharingRows(hybrid);
+      const destinationEtlds = getCrossDomainIdentifierSharingDestinationEtlds(hybrid);
+      const destinationCategories = getCrossDomainIdentifierSharingDestinationCategories(hybrid);
+      const runtimeEvidenceUrls = getCrossDomainIdentifierSharingRequestUrls(hybrid);
+      return {
+        crossDomainIdentifierSharingDetected: crossDomainIdentifierSharingEvidence.length > 0,
+        crossDomainIdentifierSharingDestinationCategories: destinationCategories,
+        crossDomainIdentifierSharingDestinationCount: destinationEtlds.length,
+        crossDomainIdentifierSharingDestinationEtlds: destinationEtlds,
+        crossDomainIdentifierSharingEvidence,
+        identifierClasses: uniqueStrings(
+          crossDomainIdentifierSharingEvidence.flatMap((row) =>
+            getString(row.identifierClass ?? row.identifier_class)
+          )
+        ),
+        runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+        runtimeEvidenceUrls,
+        runtimeRequestUrls: runtimeEvidenceUrls,
+        signalKey: input.signalKey,
+        signalLabel: input.signalLabel,
+        signalValue: input.signalValue,
+        supportingSignals: ["privacy.cross_domain_identifier_sharing_observed"],
+        valueHashCount: uniqueStrings(
+          crossDomainIdentifierSharingEvidence.flatMap((row) =>
+            getString(row.valueHash ?? row.value_hash)
+          )
+        ).length
+      };
+    }
     default:
       return null;
   }

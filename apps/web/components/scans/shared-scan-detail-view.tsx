@@ -4578,7 +4578,6 @@ export function deriveExecutiveDisplayedScore(input: {
     const hasConsentWeightedFinding =
       findingIds.has("pre_consent_tracking_detected") ||
       findingIds.has("third_party_tracking_pre_consent") ||
-      findingIds.has("storage_before_consent") ||
       findingIds.has("third_party_cookie_pre_consent") ||
       findingIds.has("analytics_cookie_pre_consent") ||
       findingIds.has("adtech_cookie_pre_consent") ||
@@ -4641,7 +4640,6 @@ export function deriveExecutiveDisplayedScore(input: {
   const hasConsentWeightedFinding =
     findingIds.has("pre_consent_tracking_detected") ||
     findingIds.has("third_party_tracking_pre_consent") ||
-    findingIds.has("storage_before_consent") ||
     findingIds.has("third_party_cookie_pre_consent") ||
     findingIds.has("analytics_cookie_pre_consent") ||
     findingIds.has("adtech_cookie_pre_consent") ||

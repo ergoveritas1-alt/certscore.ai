@@ -150,6 +150,7 @@ export const SNAPSHOT_FIELD_TAXONOMY = buildSnapshotFieldMap([
     regulatoryTags: ["gdpr_eu_privacy", "ccpa_cpra", "state_privacy"],
     fields: [
       "preconsent_tracking_detected",
+      "pre_submit_text_capture_detected",
       "preconsent_violation_count",
       "preconsent_tracker_vendors",
       "preconsent_tracker_evidence_urls",
@@ -275,7 +276,8 @@ export const SNAPSHOT_FIELD_TAXONOMY = buildSnapshotFieldMap([
       "advertising_tracker_count",
       "ad_network_google_ads",
       "ad_network_meta_ads",
-      "retargeting_pixel_detected"
+      "retargeting_pixel_detected",
+      "cross_domain_identifier_sharing_observed"
     ]
   },
   {
@@ -482,6 +484,10 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
       subcategory: "Advertising & Retargeting"
     },
     "commerce.retargeting_pixel_detected": {
+      primaryCategory: "data_collection_third_party_ecosystem",
+      subcategory: "Advertising & Retargeting"
+    },
+    "privacy.cross_domain_identifier_sharing_observed": {
       primaryCategory: "data_collection_third_party_ecosystem",
       subcategory: "Advertising & Retargeting"
     },

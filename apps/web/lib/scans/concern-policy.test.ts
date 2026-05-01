@@ -1839,6 +1839,49 @@ test("deriveConcernPolicy promotes pre-consent evidence with vendor, URL, and se
   assert.equal(policy.externalSurfacingEligibility, "eligible");
 });
 
+test("deriveConcernPolicy promotes pre-submit capture only for no-submit third-party tracking evidence", () => {
+  const promoted = deriveConcernPolicy({
+    concern: {
+      canonicalConcernKey: "pre_submit_text_capture_detected",
+      originKey: "privacy.pre_submit_text_capture_detected",
+      originType: "compatibility_signal",
+      policyIsPrimarySource: null,
+      policyPageType: null,
+      suggestedUnifiedFindingId: "pre_submit_text_capture_detected",
+      title: "Pre-submit text capture detected"
+    },
+    evidenceStrengthFlags: ["direct_runtime", "page_attributed"],
+    rawEvidence: {
+      signalKey: "privacy.pre_submit_text_capture_detected",
+      signalValue: ["sha256 sentinel in third_party_tracking_hashed_identifier request to analytics.twitter.com"]
+    }
+  });
+  assert.equal(promoted.promotionEligibility, "eligible");
+
+  const retainedOnly = deriveConcernPolicy({
+    concern: {
+      canonicalConcernKey: "pre_submit_text_capture_detected",
+      originKey: "privacy.pre_submit_text_capture_detected",
+      originType: "compatibility_signal",
+      policyIsPrimarySource: null,
+      policyPageType: null,
+      suggestedUnifiedFindingId: "pre_submit_text_capture_detected",
+      title: "Pre-submit text capture detected"
+    },
+    evidenceStrengthFlags: ["direct_runtime", "page_attributed"],
+    rawEvidence: {
+      preSubmitTextCaptureEvidence: [
+        {
+          submitObserved: false,
+          destinationClassification: "first_party_autocomplete",
+          requestDomain: "typeahead.example.com"
+        }
+      ]
+    }
+  });
+  assert.equal(retainedOnly.promotionEligibility, "internal_only");
+});
+
 test("deriveConcernPolicy promotes non-essential pre-consent cookie evidence", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
@@ -1989,6 +2032,101 @@ test("deriveConcernPolicy promotes RTB cookie sync only with concrete request-le
   assert.equal(policy.allowedNarrativeTier, "strong");
   assert.equal(policy.promotionEligibility, "eligible");
   assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy promotes cross-domain identifier sharing only with concrete multi-destination runtime support", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.cross_domain_identifier_sharing_observed",
+      suggestedUnifiedFindingId: "cross_domain_identifier_sharing_observed",
+      title: "Identifiers shared across domains"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      crossDomainIdentifierSharingDestinationCategories: ["rtb", "identity_graph"],
+      crossDomainIdentifierSharingDestinationEtlds: ["adnxs.com", "rlcdn.com"],
+      crossDomainIdentifierSharingEvidence: [
+        {
+          destinationClassification: "rtb",
+          destinationDomain: "sync.adnxs.com",
+          destinationEtldPlusOne: "adnxs.com",
+          identifierClass: "durable_id",
+          key: "uid",
+          repeatedAcrossEtlds: ["adnxs.com", "rlcdn.com"],
+          requestUrlRedacted: "https://sync.adnxs.com/getuid?uid=%5Bredacted%5D",
+          valueHash: "a".repeat(64)
+        }
+      ]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "strong");
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy promotes cross-domain identifier sharing when redirect-chain urls retain multiple adtech domains", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.cross_domain_identifier_sharing_observed",
+      suggestedUnifiedFindingId: "cross_domain_identifier_sharing_observed",
+      title: "Identifiers shared across domains"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      crossDomainIdentifierSharingDestinationCategories: ["other"],
+      crossDomainIdentifierSharingDestinationEtlds: ["yahoo.com", "casalemedia.com", "ay.delivery"],
+      crossDomainIdentifierSharingEvidence: [
+        {
+          destinationClassification: "other",
+          destinationDomain: "ups.analytics.yahoo.com",
+          destinationEtldPlusOne: "yahoo.com",
+          identifierClass: "durable_id",
+          key: "uid",
+          repeatedAcrossEtlds: ["yahoo.com"],
+          requestUrlRedacted: "https://ups.analytics.yahoo.com/ups/58922/cms?uid=%5Bredacted%5D",
+          sourcePageUrl:
+            "https://ssum.casalemedia.com/usermatch?cb=https%3A%2F%2Fpbs-us-east.ay.delivery%2Fsetuid%3Fuid%3D",
+          valueHash: "c".repeat(64)
+        }
+      ]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "strong");
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy keeps weak cross-domain identifier evidence audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.cross_domain_identifier_sharing_observed",
+      suggestedUnifiedFindingId: "cross_domain_identifier_sharing_observed",
+      title: "Identifiers shared across domains"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      crossDomainIdentifierSharingDestinationCategories: ["other"],
+      crossDomainIdentifierSharingDestinationEtlds: ["example-cdn.com"],
+      crossDomainIdentifierSharingEvidence: [
+        {
+          destinationClassification: "other",
+          destinationEtldPlusOne: "example-cdn.com",
+          identifierClass: "unknown_identifier",
+          key: "uid",
+          repeatedAcrossEtlds: ["example-cdn.com"],
+          requestUrlRedacted: "https://cdn.example-cdn.com/pixel?uid=%5Bredacted%5D",
+          valueHash: "b".repeat(64)
+        }
+      ]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_specific_runtime_anchor"));
 });
 
 test("deriveConcernPolicy suppresses cookie disclosure gaps backed only by ignored runtime cookies", () => {

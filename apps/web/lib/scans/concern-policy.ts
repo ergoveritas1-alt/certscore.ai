@@ -18,6 +18,7 @@ import {
   evaluateConsentGatedTrackingConflictContract,
   evaluatePolicyBehaviorConflictContract,
   evaluateStrongEvidenceContract,
+  hasConcreteCrossDomainIdentifierSharingEvidence,
   hasConcretePreconsentArtifact,
   hasConcreteRtbCookieSyncEvidence,
   hasConcreteReplayArtifact,
@@ -876,6 +877,54 @@ function isPreconsentConcern(
   return /preconsent|tracking_before_consent|trackers_before_consent/.test(haystack);
 }
 
+function getPreSubmitTextCaptureEvidenceRows(rawEvidence: Record<string, unknown> | null | undefined) {
+  const direct = Array.isArray(rawEvidence?.preSubmitTextCaptureEvidence)
+    ? rawEvidence.preSubmitTextCaptureEvidence
+    : Array.isArray(rawEvidence?.pre_submit_text_capture_evidence)
+      ? rawEvidence.pre_submit_text_capture_evidence
+      : [];
+  const signalRows =
+    rawEvidence?.signalKey === "privacy.pre_submit_text_capture_detected" && Array.isArray(rawEvidence.signalValue)
+      ? rawEvidence.signalValue
+      : [];
+  return [...direct, ...signalRows].filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object");
+}
+
+function hasStrongPreSubmitTextCaptureEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (
+    rawEvidence?.signalKey === "privacy.pre_submit_text_capture_detected" &&
+    Array.isArray(rawEvidence.signalValue) &&
+    rawEvidence.signalValue.some(
+      (value) => typeof value === "string" && /third_party_tracking_(?:hashed|raw)_identifier/.test(value)
+    )
+  ) {
+    return true;
+  }
+
+  return getPreSubmitTextCaptureEvidenceRows(rawEvidence).some((row) => {
+    const classification = String(row.destinationClassification ?? row.destination_classification ?? "");
+    const submitObserved = row.submitObserved ?? row.submit_observed;
+    return (
+      submitObserved === false &&
+      (classification === "third_party_tracking_hashed_identifier" ||
+        classification === "third_party_tracking_raw_identifier")
+    );
+  });
+}
+
+function isPreSubmitTextCaptureConcern(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
+) {
+  const haystack = [
+    concern.canonicalConcernKey,
+    concern.suggestedUnifiedFindingId,
+    concern.originKey,
+    concern.title
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  return /pre_submit_text_capture_detected|pre-submit text capture/.test(haystack);
+}
+
 function isRtbCookieSyncConcern(
   concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
 ) {
@@ -971,6 +1020,12 @@ function isRetargetingConcern(
     .toLowerCase();
 
   return /retargeting_pixel|retargeting pixel|retargeting_pixel_observed/.test(haystack);
+}
+
+function isCrossDomainIdentifierSharingConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "cross_domain_identifier_sharing_observed";
 }
 
 function isVideoContentTrackingConcern(
@@ -1955,6 +2010,24 @@ export function deriveConcernPolicy(input: {
     };
   }
 
+  if (isCrossDomainIdentifierSharingConcern(input.concern)) {
+    if (!hasConcreteCrossDomainIdentifierSharingEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_specific_runtime_anchor"],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: "strong",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
   if (isRejectTrackingPersistenceConcern(input.concern)) {
     if (!hasConfirmedRejectTimingEvidence(input.rawEvidence)) {
       return {
@@ -2471,6 +2544,24 @@ export function deriveConcernPolicy(input: {
 
     return {
       allowedNarrativeTier: hasPreconsentSequenceEvidence(input.rawEvidence) ? "strong" : "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
+  if (isPreSubmitTextCaptureConcern(input.concern)) {
+    if (!hasStrongPreSubmitTextCaptureEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_third_party_tracking_artifact"],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: "strong",
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "eligible"

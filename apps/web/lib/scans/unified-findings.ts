@@ -2037,6 +2037,35 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (rtbCookieSyncRows.length > 0) {
     entities.rtbCookieSyncEvidence = rtbCookieSyncRows;
   }
+  const crossDomainIdentifierSharingRows = stringifyEvidenceRows(
+    normalizedFallbackEvidence.crossDomainIdentifierSharingEvidence ??
+      normalizedFallbackEvidence.cross_domain_identifier_sharing_evidence
+  );
+  if (crossDomainIdentifierSharingRows.length > 0) {
+    entities.crossDomainIdentifierSharingEvidence = crossDomainIdentifierSharingRows;
+  }
+  const crossDomainIdentifierDestinations = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.crossDomainIdentifierSharingDestinationEtlds)
+      ? (normalizedFallbackEvidence.crossDomainIdentifierSharingDestinationEtlds as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.cross_domain_identifier_sharing_destination_etlds)
+      ? (normalizedFallbackEvidence.cross_domain_identifier_sharing_destination_etlds as string[])
+      : [])
+  ]);
+  if (crossDomainIdentifierDestinations.length > 0) {
+    entities.crossDomainIdentifierSharingDestinations = crossDomainIdentifierDestinations;
+  }
+  const crossDomainIdentifierCategories = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.crossDomainIdentifierSharingDestinationCategories)
+      ? (normalizedFallbackEvidence.crossDomainIdentifierSharingDestinationCategories as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.cross_domain_identifier_sharing_destination_categories)
+      ? (normalizedFallbackEvidence.cross_domain_identifier_sharing_destination_categories as string[])
+      : [])
+  ]);
+  if (crossDomainIdentifierCategories.length > 0) {
+    entities.crossDomainIdentifierSharingCategories = crossDomainIdentifierCategories;
+  }
   const overlayFacts = getOverlayEvidenceFacts(normalizedFallbackEvidence);
   if (overlayFacts) {
     entities.blockingOverlayType = [overlayFacts.overlayType];
@@ -3432,6 +3461,17 @@ function selectObservedValue(packet: UnifiedFindingPacket) {
       : "Meta/Facebook tracking was observed on a video-content surface.";
   }
 
+  if (packet.unifiedFindingId === "cross_domain_identifier_sharing_observed") {
+    const destinations = uniqueStrings(
+      Object.entries(packet.evidence?.entities ?? {}).flatMap(([key, values]) =>
+        /crossDomainIdentifierSharingDestinations/i.test(key) ? values : []
+      )
+    );
+    return destinations.length > 0
+      ? `Identifier-like values were observed in requests to multiple external domains (${destinations.slice(0, 3).join(", ")}), which may indicate cross-site tracking, attribution, or data-sharing behavior under the tested scan conditions.`
+      : "Identifier-like values were observed in requests to multiple external domains, which may indicate cross-site tracking, attribution, or data-sharing behavior under the tested scan conditions.";
+  }
+
   if (packet.unifiedFindingId === "contact_support_path_present") {
     const descriptiveSnippet = (packet.evidence?.snippets ?? []).find(
       (value) =>
@@ -4401,6 +4441,10 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   rtb_cookie_sync_observed: {
     suggestedFix: "Inventory the advertising exchange, identity-sync, and cookie-sync endpoints that load during initial render, then gate non-essential programmatic adtech behind the consent state.",
     whyThisMatters: "A broad RTB or identity-sync footprint can transmit identifiers across multiple third parties before users have a meaningful chance to choose."
+  },
+  cross_domain_identifier_sharing_observed: {
+    suggestedFix: "Review the retained redacted request samples, confirm which vendors receive the identifier-like values, and gate or remove non-essential sharing where it is not clearly needed or disclosed.",
+    whyThisMatters: "Identifier-like values propagated across adtech, affiliate, analytics, identity, or marketing destinations can support cross-site tracking, attribution, or profiling."
   },
   weak_cookie_security_attributes: {
     suggestedFix: "Review the observed cookie set and tighten weak attributes such as missing Secure or HttpOnly flags and weak SameSite settings where appropriate.",

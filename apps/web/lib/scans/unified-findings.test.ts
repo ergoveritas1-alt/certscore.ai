@@ -5217,6 +5217,65 @@ test("does not surface video tracking exposure without same-page correlation", (
   assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_specific_runtime_anchor"), true);
 });
 
+test("surfaces cross-domain identifier sharing from concrete runtime evidence", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Identifier-like values were observed in requests to multiple external domains.",
+        fallbackEvidence: {
+          crossDomainIdentifierSharingDestinationCategories: ["rtb", "identity_graph"],
+          crossDomainIdentifierSharingDestinationEtlds: ["adnxs.com", "rlcdn.com"],
+          crossDomainIdentifierSharingEvidence: [
+            {
+              destinationClassification: "rtb",
+              destinationDomain: "sync.adnxs.com",
+              destinationEtldPlusOne: "adnxs.com",
+              identifierClass: "durable_id",
+              key: "uid",
+              repeatedAcrossEtlds: ["adnxs.com", "rlcdn.com"],
+              requestUrlRedacted: "https://sync.adnxs.com/getuid?uid=%5Bredacted%5D",
+              valueHash: "a".repeat(64)
+            },
+            {
+              destinationClassification: "identity_graph",
+              destinationDomain: "idsync.rlcdn.com",
+              destinationEtldPlusOne: "rlcdn.com",
+              identifierClass: "durable_id",
+              key: "uid",
+              repeatedAcrossEtlds: ["adnxs.com", "rlcdn.com"],
+              requestUrlRedacted: "https://idsync.rlcdn.com/sync?uid=%5Bredacted%5D",
+              valueHash: "a".repeat(64)
+            }
+          ],
+          runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+          runtimeEvidenceUrls: [
+            "https://sync.adnxs.com/getuid?uid=%5Bredacted%5D",
+            "https://idsync.rlcdn.com/sync?uid=%5Bredacted%5D"
+          ],
+          signalKey: "privacy.cross_domain_identifier_sharing_observed",
+          signalValue: true
+        },
+        observedValue: "Identifiers shared across domains",
+        severity: "high",
+        signalKey: "privacy.cross_domain_identifier_sharing_observed",
+        signalLabel: "Identifiers shared across domains",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Identifiers shared across domains"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "cross_domain_identifier_sharing_observed");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.concernContext?.assertionLevels.includes("strong"), true);
+  assert.deepEqual(packet?.evidence?.entities?.crossDomainIdentifierSharingDestinations, ["adnxs.com", "rlcdn.com"]);
+  assert.match(packet?.observedValue ?? "", /Identifier-like values were observed/i);
+  assert.doesNotMatch(packet?.observedValue ?? "", /leakage/i);
+});
+
 test("drops weak root-only cookie obstruction urls from final evidence packets", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

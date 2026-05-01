@@ -110,6 +110,89 @@ test("derives video content tracking exposure from same-page Meta Pixel evidence
   assert.equal(fallback?.samePageVideoTrackingCorrelation, true);
 });
 
+test("derives cross-domain identifier sharing evidence from hybrid runtime artifacts", () => {
+  const runtimeArtifacts = {
+    hybrid_runtime_evidence: {
+      crossDomainIdentifierSharingDestinationCategories: ["rtb", "identity_graph"],
+      crossDomainIdentifierSharingDestinationCount: 2,
+      crossDomainIdentifierSharingEvidence: [
+        {
+          destinationClassification: "rtb",
+          destinationDomain: "sync.adnxs.com",
+          destinationEtldPlusOne: "adnxs.com",
+          identifierClass: "durable_id",
+          key: "uid",
+          repeatedAcrossEtlds: ["adnxs.com", "rlcdn.com"],
+          requestUrlRedacted: "https://sync.adnxs.com/getuid?uid=%5Bredacted%5D",
+          valueHash: "a".repeat(64)
+        },
+        {
+          destinationClassification: "identity_graph",
+          destinationDomain: "idsync.rlcdn.com",
+          destinationEtldPlusOne: "rlcdn.com",
+          identifierClass: "durable_id",
+          key: "uid",
+          repeatedAcrossEtlds: ["adnxs.com", "rlcdn.com"],
+          requestUrlRedacted: "https://idsync.rlcdn.com/sync?uid=%5Bredacted%5D",
+          valueHash: "a".repeat(64)
+        }
+      ],
+      crossDomainIdentifierSharingObserved: true
+    }
+  } satisfies Record<string, unknown>;
+
+  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.cross_domain_identifier_sharing_observed"), true);
+
+  const fallback = getHybridSignalFallbackEvidence({
+    runtimeArtifacts,
+    signalKey: "privacy.cross_domain_identifier_sharing_observed",
+    signalLabel: "Identifiers shared across domains",
+    signalValue: true
+  });
+
+  assert.deepEqual(fallback?.crossDomainIdentifierSharingDestinationEtlds, ["adnxs.com", "rlcdn.com"]);
+  assert.deepEqual(fallback?.crossDomainIdentifierSharingDestinationCategories, ["rtb", "identity_graph"]);
+  assert.equal(fallback?.valueHashCount, 1);
+  assert.equal(Array.isArray(fallback?.crossDomainIdentifierSharingEvidence), true);
+});
+
+test("derives cross-domain identifier sharing destinations from redirect-chain source urls", () => {
+  const runtimeArtifacts = {
+    hybrid_runtime_evidence: {
+      crossDomainIdentifierSharingDestinationCategories: ["other"],
+      crossDomainIdentifierSharingDestinationCount: 1,
+      crossDomainIdentifierSharingEvidence: [
+        {
+          destinationClassification: "other",
+          destinationDomain: "ups.analytics.yahoo.com",
+          destinationEtldPlusOne: "yahoo.com",
+          identifierClass: "durable_id",
+          key: "uid",
+          repeatedAcrossEtlds: ["yahoo.com"],
+          requestUrlRedacted: "https://ups.analytics.yahoo.com/ups/58922/cms?uid=%5Bredacted%5D",
+          sourcePageUrl:
+            "https://ssum.casalemedia.com/usermatch?cb=https%3A%2F%2Fpbs-us-east.ay.delivery%2Fsetuid%3Fuid%3D",
+          valueHash: "c".repeat(64)
+        }
+      ],
+      crossDomainIdentifierSharingObserved: true
+    }
+  } satisfies Record<string, unknown>;
+
+  const fallback = getHybridSignalFallbackEvidence({
+    runtimeArtifacts,
+    signalKey: "privacy.cross_domain_identifier_sharing_observed",
+    signalLabel: "Identifiers shared across domains",
+    signalValue: true
+  });
+
+  assert.deepEqual(fallback?.crossDomainIdentifierSharingDestinationEtlds, [
+    "yahoo.com",
+    "casalemedia.com",
+    "ay.delivery"
+  ]);
+});
+
 test("does not derive video tracking exposure without same-page correlation", () => {
   const runtimeArtifacts = {
     hybrid_runtime_evidence: {

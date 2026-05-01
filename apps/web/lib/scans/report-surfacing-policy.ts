@@ -244,7 +244,9 @@ const CONSENT_TRACKING_IDS = [
   "session_replay_observed",
   "retargeting_pixel_observed",
   "video_content_tracking_exposure",
+  "cross_domain_identifier_sharing_observed",
   "rtb_cookie_sync_observed",
+  "pre_submit_text_capture_detected",
   "fingerprinting_observed"
 ] as const satisfies ReportUnifiedFindingId[];
 
@@ -597,6 +599,13 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     findingId: "video_content_tracking_exposure",
     family: "consent_tracking",
     initialState: "review",
+    initialTier: "headline",
+    initialLane: "main"
+  },
+  cross_domain_identifier_sharing_observed: {
+    findingId: "cross_domain_identifier_sharing_observed",
+    family: "consent_tracking",
+    initialState: "confirmed",
     initialTier: "headline",
     initialLane: "main"
   },
@@ -2005,6 +2014,27 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
           lane: "main",
           tier: decision.surfaceTier,
           reason: "Fingerprinting evidence was retained, but it should remain review-level unless high-confidence runtime corroboration is present.",
+          ruleId: "evidence.consent_behavior.review_runtime_without_effect_evidence"
+        });
+      }
+      return;
+    }
+
+    if (packet.unifiedFindingId === "cross_domain_identifier_sharing_observed") {
+      if (hasConcreteRuntimeEvidence(packet)) {
+        overrideDecision(decision, {
+          state: "confirmed",
+          lane: "main",
+          tier: "headline",
+          reason: "Runtime evidence retained redacted request samples showing the same identifier-like fingerprint across multiple external destinations.",
+          ruleId: "evidence.consent_behavior.confirmed_specific_runtime_failure"
+        });
+      } else {
+        overrideDecision(decision, {
+          state: "review",
+          lane: "main",
+          tier: decision.surfaceTier,
+          reason: "Identifier-sharing evidence was present, but concrete retained runtime request evidence is required before confirmation.",
           ruleId: "evidence.consent_behavior.review_runtime_without_effect_evidence"
         });
       }

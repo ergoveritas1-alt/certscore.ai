@@ -1305,6 +1305,14 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "snapshot_signal",
+    "privacy.cross_domain_identifier_sharing_observed",
+    "Identifiers shared across domains",
+    "adtech_analytics_replay_footprint",
+    ["preconsent_tracking_incidents"],
+    ["tracking_profiling_sensitive_data_risk", "sale_sharing_targeted_advertising_controls"]
+  ),
+  defineReportSignal(
+    "snapshot_signal",
     "privacy.dark_pattern_reject_button_missing",
     "Reject button missing on consent surface",
     "choice_symmetry_dark_pattern_indicators",
@@ -2703,6 +2711,14 @@ export const REPORT_UNIFIED_FINDINGS = [
     ]
   }),
   defineReportUnifiedFinding({
+    id: "pre_submit_text_capture_detected",
+    label: "Possible pre-submit text capture",
+    owner: "adtech_analytics_replay_footprint",
+    overlays: ["tracking_profiling_sensitive_data_risk", "sale_sharing_targeted_advertising_controls"],
+    signalMappings: [{ source: "snapshot_signal", key: "privacy.pre_submit_text_capture_detected" }],
+    aliases: ["Pre-submit text capture detected", "Possible pre-submit text capture"]
+  }),
+  defineReportUnifiedFinding({
     id: "rtb_cookie_sync_observed",
     label: "RTB and identity-sync activity observed",
     owner: "adtech_analytics_replay_footprint",
@@ -2713,6 +2729,20 @@ export const REPORT_UNIFIED_FINDINGS = [
       "Programmatic adtech and identity-sync activity observed",
       "RTB cookie sync observed",
       "Identity-sync activity observed"
+    ]
+  }),
+  defineReportUnifiedFinding({
+    id: "cross_domain_identifier_sharing_observed",
+    label: "Identifiers shared across domains",
+    owner: "adtech_analytics_replay_footprint",
+    mirrors: ["preconsent_tracking_incidents"],
+    overlays: ["tracking_profiling_sensitive_data_risk", "sale_sharing_targeted_advertising_controls"],
+    signalMappings: [{ source: "snapshot_signal", key: "privacy.cross_domain_identifier_sharing_observed" }],
+    validationRuleKeys: ["runtime_privacy.cross_domain_identifier_sharing_observed"],
+    aliases: [
+      "Identifiers shared across domains",
+      "Identifier propagation to third parties",
+      "Observed identifier transmission"
     ]
   }),
   defineReportUnifiedFinding({

@@ -68,6 +68,7 @@ export type CertScoreFindingEvidenceDetails = {
   rejectEvidenceDiff?: Record<string, unknown>;
   postRejectNonEssentialRequests?: Array<Record<string, unknown>>;
   rtbCookieSyncEvidence?: Array<Record<string, unknown>>;
+  crossDomainIdentifierSharingEvidence?: Array<Record<string, unknown>>;
   confidenceRisks?: string[];
   suppressionChecks?: Record<string, unknown>;
 };
@@ -115,6 +116,16 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "Cookie-sync and identity-sync requests can transmit advertising identifiers across multiple third parties during the initial page load.",
     remediation: "Inventory the sync endpoints, suppress non-essential RTB or identity-sync calls until consent permits them, and verify the request path after deployment."
   },
+  cross_domain_identifier_sharing_observed: {
+    id: "cross_domain_identifier_sharing_observed",
+    label: "Identifiers shared across domains",
+    section: "Privacy & Tracking",
+    defaultSurfacePriority: 95,
+    whyItMatters:
+      "Identifier-like values observed across multiple external domains can indicate cross-site tracking, attribution, or data-sharing behavior that users may not expect.",
+    remediation:
+      "Inventory the destinations receiving identifier-like values, confirm the purpose and consent/disclosure basis, and suppress non-essential identifier transmission where it is not needed."
+  },
   cookie_disclosure_gap: {
     id: "cookie_disclosure_gap",
     label: "Cookie disclosure gap",
@@ -122,14 +133,6 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     defaultSurfacePriority: 91,
     whyItMatters: "When observed cookie activity is not covered by retained cookie-policy evidence, users cannot reliably understand what tracking is happening or why.",
     remediation: "Reconcile runtime cookie behavior with the cookie policy so observed cookies, providers, and purposes are disclosed accurately."
-  },
-  storage_before_consent: {
-    id: "storage_before_consent",
-    label: "Storage written before consent",
-    section: "Cookies & Storage",
-    defaultSurfacePriority: 88,
-    whyItMatters: "Persistence can support tracking even when cookies are limited.",
-    remediation: "Defer non-essential local storage, session storage, and IndexedDB writes until consent."
   },
   third_party_cookie_pre_consent: {
     id: "third_party_cookie_pre_consent",
