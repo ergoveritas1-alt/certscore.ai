@@ -1,6 +1,6 @@
 "use client";
 
-import type { PreviewScanStatusResponse } from "@website-signal-risk-scanner/shared";
+import type { PreviewScanStatusResponse } from "@website-signal-risk-scanner/shared/types/preview";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FullScanProgressCard } from "../scans/full-scan-progress-card";

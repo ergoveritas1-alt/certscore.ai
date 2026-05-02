@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@website-signal-risk-scanner/ui";
-import type { PlanCode } from "@website-signal-risk-scanner/shared";
+import type { PlanCode } from "@website-signal-risk-scanner/shared/types/entities";
 import { useFormStatus } from "react-dom";
 
 type ModifyPlanSelectFormProps = {

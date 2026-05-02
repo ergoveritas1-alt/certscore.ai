@@ -45,7 +45,22 @@ test("collapses signal, issue, and validation sources into one unified finding p
     id: "val-1",
     ruleKey: "privacy.trackers_before_consent_detected",
     severity: "high",
-    title: "Trackers observed before consent"
+    title: "Trackers observed before consent",
+    evidence: {
+      consentTimeline: {
+        firstCmpVisibleMs: 600,
+        firstConsentActionMs: 1200,
+        firstNonEssentialRequestMs: 100
+      },
+      requestPurposeClassificationConfidence: [
+        {
+          confidence: 0.95,
+          essentiality: "non_essential",
+          requestUrl: "https://example.com/collect"
+        }
+      ],
+      runtimeVendors: ["Example Analytics"]
+    }
   });
 
   const candidates: UnifiedFindingCandidate[] = [
@@ -88,12 +103,12 @@ test("collapses signal, issue, and validation sources into one unified finding p
   assert.ok(packets[0]?.sourceRefs.some((row) => row.kind === "validation"));
   assert.equal(packets[0]?.confidenceInputs.validationCount, 1);
   assert.equal(packets[0]?.confidenceInputs.hasStructuredValidationEvidence, true);
-  assert.equal(packets[0]?.confidenceInputs.hasDirectRuntimeEvidence, false);
+  assert.equal(packets[0]?.confidenceInputs.hasDirectRuntimeEvidence, true);
   assert.deepEqual(
     packets[0]?.concernContext?.originTypes.sort(),
     ["compatibility_signal", "snapshot_signal", "validation_rule"]
   );
-  assert.ok(packets[0]?.concernContext?.assertionLevels.includes("moderate"));
+  assert.ok(packets[0]?.concernContext?.assertionLevels.some((level) => level === "moderate" || level === "strong"));
 });
 
 test("hash-only sanitized network evidence does not create direct runtime uplift", () => {
@@ -600,6 +615,19 @@ test("keeps direct runtime findings surfaced under thin coverage", () => {
       {
         description: "The homepage triggered tracking before any consent action.",
         fallbackEvidence: {
+          consentTimeline: {
+            firstCmpVisibleMs: 600,
+            firstConsentActionMs: 1200,
+            firstNonEssentialRequestMs: 100
+          },
+          requestPurposeClassificationConfidence: [
+            {
+              confidence: 0.95,
+              essentiality: "non_essential",
+              requestUrl: "https://example.com/collect"
+            }
+          ],
+          runtimeVendors: ["Example Analytics"],
           signalKey: "privacy.preconsent_tracking_detected",
           signalValue: true,
           sourceUrls: ["https://example.com/collect"]
@@ -1823,9 +1851,13 @@ test("suppresses generic policy-behavior conflicts when a more specific contradi
     severity: "high",
     title: "Possible undisclosed session replay",
     evidence: {
+      conflictBridgeReasoning: "Replay runtime evidence was compared against the retained policy disclosure scope.",
+      disclosureSearchScopeRetained: true,
       claim: "Policy does not clearly disclose replay tooling.",
+      policySourceUrl: "https://example.com/privacy",
       relatedVendors: ["Microsoft Clarity"],
-      runtimeEvidence: ["Replay script observed during homepage load"]
+      runtimeEvidence: ["Replay script observed during homepage load"],
+      sessionReplayVendors: ["Microsoft Clarity"]
     }
   });
 
@@ -2060,8 +2092,20 @@ test("keeps strong corroborated findings surfaced with a confidence rationale", 
     severity: "high",
     title: "Trackers observed before consent",
     evidence: {
+      consentTimeline: {
+        firstCmpVisibleMs: 600,
+        firstConsentActionMs: 1200,
+        firstNonEssentialRequestMs: 100
+      },
       preconsent_tracker_vendors: ["Meta Pixel"],
       preconsent_tracker_evidence_urls: ["https://example.com/collect"],
+      requestPurposeClassificationConfidence: [
+        {
+          confidence: 0.95,
+          essentiality: "non_essential",
+          requestUrl: "https://example.com/collect"
+        }
+      ],
       policySummary: "Tracking is presented as consent-gated."
     }
   });
@@ -2070,6 +2114,24 @@ test("keeps strong corroborated findings surfaced with a confidence rationale", 
     reviewFindingCandidates: [
       {
         description: "Observed before a clear user choice was made.",
+        fallbackEvidence: {
+          consentTimeline: {
+            firstCmpVisibleMs: 600,
+            firstConsentActionMs: 1200,
+            firstNonEssentialRequestMs: 100
+          },
+          preconsent_tracker_evidence_urls: ["https://example.com/collect"],
+          preconsent_tracker_vendors: ["Meta Pixel"],
+          requestPurposeClassificationConfidence: [
+            {
+              confidence: 0.95,
+              essentiality: "non_essential",
+              requestUrl: "https://example.com/collect"
+            }
+          ],
+          signalKey: "privacy.preconsent_tracking_detected",
+          signalValue: true
+        },
         linkedValidationFinding: validationFinding,
         observedValue: "Yes",
         severity: "high",
@@ -2189,6 +2251,11 @@ test("retains pre-consent cookie timing evidence on unified finding packets", ()
       {
         description: "The homepage set analytics cookies before any consent action.",
         fallbackEvidence: {
+          consentTimeline: {
+            firstCmpVisibleMs: 600,
+            firstConsentActionMs: 1200,
+            firstNonEssentialRequestMs: 100
+          },
           preconsent_cookie_categories: ["advertising", "analytics"],
           preconsent_cookie_evidence: [
             {
@@ -2894,7 +2961,7 @@ test("surfaces GPC failures as runtime-backed unified findings", () => {
   assert.match(packet?.presentation.suggestedFix ?? "", /browser-level opt-out/i);
 });
 
-test("surfaces weak cookie security attributes from runtime artifact evidence", () => {
+test("keeps weak cookie security attributes support-only by default", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
@@ -2930,8 +2997,44 @@ test("surfaces weak cookie security attributes from runtime artifact evidence", 
 
   assert.equal(packet?.unifiedFindingId, "weak_cookie_security_attributes");
   assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.equal(packet?.evidence?.counts?.missingSecureCount, 2);
+});
+
+test("surfaces weak cookie security attributes for security-sensitive cookies", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Observed session cookies appear to rely on weaker security attributes than expected.",
+        fallbackEvidence: {
+          cookieAttributeSummary: {
+            totalCookiesAnalyzed: 4,
+            missingSecureCount: 1,
+            missingHttpOnlyCount: 1,
+            weakSameSiteCount: 1,
+            missingSecureCookieNames: ["session_id"],
+            missingHttpOnlyCookieNames: ["account_token"],
+            weakSameSiteCookieNames: ["checkout_session"]
+          },
+          signalKey: "privacy.weak_cookie_security_attributes_detected",
+          signalLabel: "Weak cookie security attributes detected",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "medium",
+        signalKey: "privacy.weak_cookie_security_attributes_detected",
+        signalLabel: "Weak cookie security attributes detected",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "Weak cookie security attributes detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "weak_cookie_security_attributes");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("keeps weak cookie security attributes audit-only when only HttpOnly examples are retained", () => {
@@ -3318,7 +3421,10 @@ test("surfaces CPRA CBA opt-out missing from retained runtime evidence", () => {
           optOutUiResult: "absent",
           pageUrl: "https://example.com/",
           policyCbaLanguage: "full_cba_language",
+          privacyChoiceControlSearchPerformed: true,
           policyUiCongruent: false,
+          runtimeVendorCategories: ["advertising"],
+          runtimeVendors: ["The Trade Desk"],
           scanOriginGeo: null,
           signalKey: "privacy.cpra_cba_opt_out_missing",
           signalValue: true,
@@ -4350,7 +4456,7 @@ test("keeps weak cookie security attributes audit-only without cookie examples",
   });
 
   assert.equal(packet?.unifiedFindingId, "weak_cookie_security_attributes");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
 });
 
 test("keeps contradiction findings audit-only without both policy text and concrete runtime evidence", () => {

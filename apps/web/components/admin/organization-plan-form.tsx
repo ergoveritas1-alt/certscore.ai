@@ -1,6 +1,6 @@
 "use client";
 
-import { PLAN_CODES } from "@website-signal-risk-scanner/shared";
+import { PLAN_CODES } from "@website-signal-risk-scanner/shared/constants/plans";
 import { useFormStatus } from "react-dom";
 
 type OrganizationPlanFormProps = {

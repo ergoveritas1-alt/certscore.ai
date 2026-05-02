@@ -384,6 +384,88 @@ test("specific consent-gating contradiction demotes generic pre-consent tracking
   assert.equal(preconsent?.supportTargetId, "consent_gated_tracking_claim_conflict");
 });
 
+test("weak cookie attributes default to audit-only and support stronger runtime findings", () => {
+  const weakCookiePacket = makePacket("weak_cookie_security_attributes", {
+    evidence: {
+      counts: {
+        missingHttpOnlyCount: 1
+      },
+      entities: {
+        missingHttpOnlyCookieNames: ["_ga"]
+      },
+      flags: ["privacy.weak_cookie_security_attributes_detected"],
+      pageUrls: [],
+      snippets: [],
+      sourceUrls: []
+    }
+  });
+
+  const defaultEvaluation = evaluateUnifiedFindingSurfacing({ packets: [weakCookiePacket] });
+  const defaultDecision = defaultEvaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "weak_cookie_security_attributes");
+  assert.equal(defaultDecision?.decisionState, "support_only");
+  assert.equal(defaultDecision?.reportLane, "confidence_and_coverage");
+
+  const pairedEvaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("preconsent_tracking", {
+        concernContext: {
+          assertionLevels: ["strong"],
+          evidenceStrengthFlags: ["direct_runtime"],
+          externalSurfacingEligibilities: ["eligible"],
+          negativeEvidenceFlags: [],
+          originTypes: ["validation_rule"],
+          promotionEligibilities: ["eligible"]
+        },
+        confidenceInputs: {
+          ...makePacket("preconsent_tracking").confidenceInputs,
+          hasDirectRuntimeEvidence: true
+        },
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking",
+          requestUrls: ["https://analytics.example.net/collect"],
+          vendors: ["Example Analytics"]
+        }
+      }),
+      weakCookiePacket
+    ]
+  });
+
+  const weakCookieDecision = pairedEvaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "weak_cookie_security_attributes");
+  const preconsentDecision = pairedEvaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "preconsent_tracking");
+  assert.equal(preconsentDecision?.supports.includes("weak_cookie_security_attributes"), true);
+  assert.equal(weakCookieDecision?.decisionState, "support_only");
+  assert.equal(weakCookieDecision?.supportTargetId, "preconsent_tracking");
+  assert.equal(weakCookieDecision?.reportLane, "main");
+});
+
+test("weak cookie attributes promote only for security-sensitive cookie evidence", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("weak_cookie_security_attributes", {
+        evidence: {
+          counts: {
+            missingSecureCount: 1,
+            missingHttpOnlyCount: 1
+          },
+          entities: {
+            missingHttpOnlyCookieNames: ["account_token"],
+            missingSecureCookieNames: ["session_id"]
+          },
+          flags: ["privacy.weak_cookie_security_attributes_detected"],
+          pageUrls: [],
+          snippets: [],
+          sourceUrls: []
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions.find((entry) => entry.unifiedFindingId === "weak_cookie_security_attributes");
+  assert.equal(decision?.decisionState, "review");
+  assert.equal(decision?.reportLane, "main");
+});
+
 test("positive present surface suppresses weak contradictory unavailable sibling", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [

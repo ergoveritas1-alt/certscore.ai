@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { PlanCode } from "@website-signal-risk-scanner/shared";
+import type { PlanCode } from "@website-signal-risk-scanner/shared/types/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import type { OrganizationScanListItem } from "../../server/scans/get-organization-scans";

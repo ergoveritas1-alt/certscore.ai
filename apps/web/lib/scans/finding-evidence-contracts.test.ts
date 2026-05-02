@@ -31,14 +31,20 @@ test("registry defines contracts for the high-risk finding set", () => {
     [
       "analytics_cookies_before_consent",
       "cookie_disclosure_gap",
+      "cpra_cba_opt_out_missing",
+      "cross_domain_identifier_sharing_observed",
       "dark_pattern_consent_signals_detected",
+      "fingerprinting_observed",
       "non_essential_tracking_continued_after_reject",
       "pre_consent_tracking_detected",
       "reject_option_missing_or_hidden",
       "rtb_cookie_sync_observed",
+      "sensitive_data_collection_with_third_party_tracking_present",
+      "session_replay_on_sensitive_input_surface",
       "session_replay_undisclosed",
       "third_party_tracking_before_consent",
-      "tracking_cookies_set_before_consent"
+      "tracking_cookies_set_before_consent",
+      "video_content_tracking_exposure"
     ].sort()
   );
 });
@@ -92,6 +98,57 @@ test("pre-consent with timeline and non-essential classification satisfies stron
   assert.equal(decision?.allowedNarrativeTier, "strong");
 });
 
+test("legacy sequenceEvidence shorthand does not satisfy strong pre-consent evidence", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("preconsent_tracking", {
+    requestPurposeClassificationConfidence: [nonEssentialRequest],
+    runtimeRequestUrls: [nonEssentialRequest.requestUrl],
+    sequenceEvidence: true
+  });
+
+  assert.equal(decision?.status, "downgrade");
+  assert.ok(decision?.missingRequirements.includes("consentTimelineSequence"));
+});
+
+test("WS01-style pre-consent timeline and first tracking request evidence satisfies strong", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("preconsent_tracking", {
+    consent_timeline: {
+      first_cmp_visible_ms: 650,
+      first_consent_action_ms: 1200,
+      first_non_essential_request_ms: 180,
+      first_tracking_cookie_seen_ms: 220
+    },
+    request_purpose_classification_confidence: [
+      {
+        confidence: 0.91,
+        essentiality: "non_essential",
+        requestUrl: "https://www.googletagmanager.com/gtm.js"
+      }
+    ],
+    runtime_request_urls: ["https://www.googletagmanager.com/gtm.js"],
+    runtime_vendors: ["Google Tag Manager"]
+  });
+
+  assert.equal(decision?.status, "pass_strong");
+  assert.equal(decision?.allowedNarrativeTier, "strong");
+});
+
+test("WS01-style cookie write timing evidence satisfies cookie pre-consent strong", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("tracking_cookies_set_before_consent", {
+    consent_timeline: {
+      first_cmp_visible_ms: 700,
+      first_consent_action_ms: 1300,
+      first_non_essential_request_ms: 210,
+      first_tracking_cookie_seen_ms: 240
+    },
+    preconsent_cookie_categories: ["advertising"],
+    preconsent_cookie_names: ["_fbp"],
+    preconsent_nonessential_cookie_names: ["_fbp"],
+    runtime_cookie_names: ["_fbp"]
+  });
+
+  assert.equal(decision?.status, "pass_strong");
+});
+
 test("post-reject tracking without successful reject interaction is downgraded", () => {
   const decision = evaluateFindingEvidenceContractForRawEvidence("reject_did_not_reduce_tracking", {
     postRejectNonEssentialRequestUrls: ["https://analytics.example.net/collect"],
@@ -100,6 +157,34 @@ test("post-reject tracking without successful reject interaction is downgraded",
 
   assert.equal(decision?.status, "downgrade");
   assert.ok(decision?.missingRequirements.includes("successfulRejectInteraction"));
+});
+
+test("WS01-style reject action and post-reject tracking evidence satisfies strong", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("reject_did_not_reduce_tracking", {
+    post_reject_non_essential_requests: [
+      {
+        category: "advertising",
+        ms_after_reject: 1500,
+        ts_ms: 4600,
+        url: "https://ads.example.net/collect",
+        vendor: "Example Ads"
+      }
+    ],
+    request_purpose_classification_confidence: [
+      {
+        confidence: 0.9,
+        essentiality: "non_essential",
+        requestUrl: "https://ads.example.net/collect"
+      }
+    ],
+    reject_path_depth_and_availability: {
+      availability: "available",
+      banner_layer_inspected: true,
+      reject_interaction_succeeded: true
+    }
+  });
+
+  assert.equal(decision?.status, "pass_strong");
 });
 
 test("reject hidden requires inspected banner and reject path evidence", () => {
@@ -128,6 +213,40 @@ test("cookie disclosure gap without policy anchor is not promoted", () => {
 
   assert.equal(decision?.status, "downgrade");
   assert.ok(decision?.missingRequirements.includes("policyAnchor"));
+});
+
+test("cookie disclosure gap suppressIf blocks ignored runtime cookie inventory", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("cookie_disclosure_gap", {
+    disclosureSearchScopeRetained: true,
+    mismatchExplanation: "Only operational runtime cookies were unmatched.",
+    observedBehavior: "Runtime cookies were observed.",
+    policyExtractionStatus: "fetched",
+    policySourceUrl: "https://example.com/cookie-policy",
+    policySnippet: "Cookie policy text.",
+    runtime_cookie_names: ["__cf_bm", "optanonconsent", "geo_country"],
+    unmatched_cookie_names: ["__cf_bm", "optanonconsent"]
+  });
+
+  assert.equal(decision?.status, "suppress");
+  assert.equal(decision?.externalSurfacingEligibility, "suppress");
+  assert.ok(decision?.negativeEvidenceFlags.includes("runtime_cookie_inventory_ignored_only"));
+});
+
+test("WS01-style cookie disclosure evidence satisfies strong", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("cookie_disclosure_gap", {
+    disclosure_search_scope_retained: true,
+    mismatch_explanation: "Runtime cookie _fbp was not present in retained cookie disclosure text.",
+    observedBehavior: "Runtime set _fbp from Meta Pixel.",
+    policy_extraction_status: "fetched",
+    policy_source_url: "https://example.com/cookie-policy",
+    policySnippet: "We use strictly necessary cookies.",
+    runtime_cookie_categories: ["advertising"],
+    runtime_cookie_names: ["_fbp"],
+    runtime_vendors: ["Meta Pixel"],
+    unmatched_cookie_names: ["_fbp"]
+  });
+
+  assert.equal(decision?.status, "pass_strong");
 });
 
 test("session replay undisclosed without negative disclosure search is downgraded", () => {
@@ -161,4 +280,74 @@ test("material bot block prevents strong runtime findings", () => {
 
   assert.equal(decision?.status, "downgrade");
   assert.ok(decision?.missingRequirements.includes("coverageNotMateriallyBlocked"));
+});
+
+test("new runtime contracts require concrete retained evidence shapes", () => {
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("cross_domain_identifier_sharing_observed", {
+      cross_domain_identifier_sharing_observed: true
+    })?.status,
+    "downgrade"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("cross_domain_identifier_sharing_observed", {
+      cross_domain_identifier_sharing_evidence: [
+        {
+          repeated_across_etlds: ["adnxs.com", "rlcdn.com"],
+          request_url_redacted: "https://sync.adnxs.com/getuid?uid=%5Bredacted%5D",
+          value_hash: "a".repeat(64)
+        }
+      ]
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
+      cpra_cba_opt_out_evidence: {
+        advertisingSharingVendors: ["Meta Pixel"],
+        choice_controls_inspected: true,
+        opt_out_control_found: false
+      }
+    })?.status,
+    "pass_strong"
+  );
+});
+
+test("sensitive, video, and fingerprinting contracts stay evidence-only", () => {
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("video_content_tracking_exposure", {
+      meta_pixel_request_urls: ["https://www.facebook.com/tr/?ev=PageView"],
+      same_page_video_tracking_correlation: true,
+      video_page_urls: ["https://example.com/watch/highlights"],
+      video_title_snippets: ["Week 1 highlights"]
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("fingerprinting_observed", {
+      fingerprinting_runtime_evidence: [{ signal: "canvas_readback", url: "https://fp.example.net/collect" }]
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("session_replay_on_sensitive_input_surface", {
+      sensitive_input_surface_evidence: [{ fieldType: "password", pageUrl: "https://example.com/login" }],
+      session_replay_vendors: ["Microsoft Clarity"]
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("sensitive_data_collection_with_third_party_tracking_present", {
+      runtime_request_urls: ["https://analytics.example.net/collect"],
+      runtime_vendors: ["Example Analytics"],
+      sensitive_data_types: ["health_information"],
+      sensitive_input_surface_evidence: [{ fieldType: "health", pageUrl: "https://example.com/intake" }]
+    })?.status,
+    "pass_strong"
+  );
 });

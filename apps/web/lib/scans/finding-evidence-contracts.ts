@@ -8,6 +8,7 @@ import {
   hasConcreteReplayArtifact,
   hasConcreteRtbCookieSyncEvidence,
   hasPreconsentSequenceEvidence,
+  hasStrongFingerprintingEvidence,
   hasStrongPreconsentRuntimeEvidence
 } from "./promotion-evidence-contracts";
 import type { UnifiedFindingPacket } from "./unified-findings";
@@ -26,7 +27,17 @@ export type EvidenceRequirementType =
   | "negativeEvidenceSearchScope"
   | "sessionReplayVendorEvidence"
   | "rtbOrIdentitySyncEndpointEvidence"
-  | "coverageNotMateriallyBlocked";
+  | "coverageNotMateriallyBlocked"
+  | "ignoredRuntimeCookieInventoryOnly"
+  | "privacyChoiceControlSearchScope"
+  | "advertisingSharingRuntimeEvidence"
+  | "crossDomainIdentifierEvidence"
+  | "videoContentSurfaceEvidence"
+  | "videoTrackingRuntimeEvidence"
+  | "fingerprintingRuntimeEvidence"
+  | "sensitiveInputSurfaceEvidence"
+  | "sensitiveDataFieldEvidence"
+  | "sensitiveThirdPartyTrackingEvidence";
 
 export type EvidenceRequirement = {
   type: EvidenceRequirementType;
@@ -90,7 +101,17 @@ const REQUIREMENT_DESCRIPTIONS: Record<EvidenceRequirementType, string> = {
   negativeEvidenceSearchScope: "The relevant policy/disclosure search scope was inspected and no adequate disclosure was found.",
   sessionReplayVendorEvidence: "Runtime evidence identifies a session replay vendor or replay artifact.",
   rtbOrIdentitySyncEndpointEvidence: "Concrete RTB, cookie-sync, or identity-sync endpoint evidence was retained.",
-  coverageNotMateriallyBlocked: "Runtime coverage was not materially or severely blocked by bot defenses or interstitials."
+  coverageNotMateriallyBlocked: "Runtime coverage was not materially or severely blocked by bot defenses or interstitials.",
+  ignoredRuntimeCookieInventoryOnly: "Runtime cookie inventory contains only operational cookies ignored by disclosure-gap promotion.",
+  privacyChoiceControlSearchScope: "Retained search evidence shows privacy-choice or opt-out controls were inspected.",
+  advertisingSharingRuntimeEvidence: "Runtime evidence identifies advertising, retargeting, RTB, or cross-context sharing vendors.",
+  crossDomainIdentifierEvidence: "Runtime evidence shows the same identifier-like value across multiple external destinations.",
+  videoContentSurfaceEvidence: "A video-content page or media title was retained for the same-page observation.",
+  videoTrackingRuntimeEvidence: "Runtime evidence identifies video-page tracking requests or vendors.",
+  fingerprintingRuntimeEvidence: "Runtime evidence identifies high-entropy or fingerprinting-style browser/device signals.",
+  sensitiveInputSurfaceEvidence: "A sensitive input or collection surface was retained.",
+  sensitiveDataFieldEvidence: "Evidence identifies sensitive field types, payloads, or field labels.",
+  sensitiveThirdPartyTrackingEvidence: "Runtime evidence identifies a third-party tracking endpoint on or near the sensitive collection surface."
 };
 
 function req(type: EvidenceRequirementType): EvidenceRequirement {
@@ -251,7 +272,9 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       { ifMissing: "negativeEvidenceSearchScope", to: "audit_only", reason: "Disclosure gaps require retained negative search scope." },
       { ifMissing: "runtimeAnchor", to: "audit_only", reason: "Disclosure gaps require observed runtime cookie/vendor behavior." }
     ],
-    suppressIf: [],
+    suppressIf: [
+      { ifPresent: "ignoredRuntimeCookieInventoryOnly", reason: "Operational cookies ignored by promotion cannot support a disclosure-gap finding." }
+    ],
     projectionEligibility: {
       executive: { requiresContractPass: true, minimumTier: "strong" },
       gdprEprivacy: { requiresContractPass: true, minimumTier: "strong" },
@@ -295,11 +318,119 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ftc: false
     },
     notes: "Moderate runtime RTB surfacing does not imply pre-consent RTB without a consent timeline."
+  },
+  {
+    findingId: "cpra_cba_opt_out_missing",
+    unifiedFindingIds: ["cpra_cba_opt_out_missing"],
+    requiredForStrong: [req("advertisingSharingRuntimeEvidence"), req("privacyChoiceControlSearchScope"), req("coverageNotMateriallyBlocked")],
+    requiredForGood: [req("advertisingSharingRuntimeEvidence"), req("privacyChoiceControlSearchScope")],
+    downgradeIf: [
+      { ifMissing: "advertisingSharingRuntimeEvidence", to: "audit_only", reason: "Opt-out missing findings require retained advertising/sharing runtime evidence." },
+      { ifMissing: "privacyChoiceControlSearchScope", to: "audit_only", reason: "Opt-out missing findings require retained evidence that privacy-choice controls were inspected." }
+    ],
+    suppressIf: [],
+    projectionEligibility: {
+      executive: { requiresContractPass: true, minimumTier: "strong" },
+      gdprEprivacy: false,
+      ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
+      ftc: { requiresContractPass: true, minimumTier: "strong" }
+    },
+    notes: "WC01 may interpret an opt-out gap only after WS01/validation retain advertising/sharing evidence plus control-search scope."
+  },
+  {
+    findingId: "cross_domain_identifier_sharing_observed",
+    unifiedFindingIds: ["cross_domain_identifier_sharing_observed"],
+    requiredForStrong: [req("crossDomainIdentifierEvidence"), req("coverageNotMateriallyBlocked")],
+    requiredForGood: [req("crossDomainIdentifierEvidence")],
+    downgradeIf: [
+      { ifMissing: "crossDomainIdentifierEvidence", to: "audit_only", reason: "Cross-domain identifier sharing requires retained request-level identifier evidence." }
+    ],
+    suppressIf: [],
+    projectionEligibility: {
+      executive: { requiresContractPass: true, minimumTier: "strong" },
+      gdprEprivacy: { requiresContractPass: true, minimumTier: "strong" },
+      ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
+      ftc: { requiresContractPass: true, minimumTier: "strong" }
+    },
+    notes: "A derived boolean is not enough; retained evidence must show an identifier-like value across destinations."
+  },
+  {
+    findingId: "video_content_tracking_exposure",
+    unifiedFindingIds: ["video_content_tracking_exposure"],
+    requiredForStrong: [req("videoContentSurfaceEvidence"), req("videoTrackingRuntimeEvidence"), req("coverageNotMateriallyBlocked")],
+    requiredForGood: [req("videoContentSurfaceEvidence"), req("videoTrackingRuntimeEvidence")],
+    downgradeIf: [
+      { ifMissing: "videoContentSurfaceEvidence", to: "audit_only", reason: "Video tracking exposure requires retained video-page or media-title evidence." },
+      { ifMissing: "videoTrackingRuntimeEvidence", to: "audit_only", reason: "Video tracking exposure requires retained tracking request or vendor evidence." }
+    ],
+    suppressIf: [],
+    projectionEligibility: {
+      executive: { requiresContractPass: true, minimumTier: "strong" },
+      gdprEprivacy: false,
+      ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
+      ftc: { requiresContractPass: true, minimumTier: "strong" }
+    },
+    notes: "WC01 owns regulatory framing; the contract only requires same-page video context plus runtime tracking evidence."
+  },
+  {
+    findingId: "fingerprinting_observed",
+    unifiedFindingIds: ["fingerprinting_observed"],
+    requiredForStrong: [req("fingerprintingRuntimeEvidence"), req("coverageNotMateriallyBlocked")],
+    requiredForGood: [req("fingerprintingRuntimeEvidence")],
+    downgradeIf: [
+      { ifMissing: "fingerprintingRuntimeEvidence", to: "audit_only", reason: "Fingerprinting surfacing requires retained high-entropy runtime evidence." }
+    ],
+    suppressIf: [],
+    projectionEligibility: {
+      executive: { requiresContractPass: true, minimumTier: "strong" },
+      gdprEprivacy: { requiresContractPass: true, minimumTier: "strong" },
+      ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
+      ftc: { requiresContractPass: true, minimumTier: "strong" }
+    },
+    notes: "The report finding is probable_fingerprinting; the contract remains evidence-only and does not assert identifiability."
+  },
+  {
+    findingId: "session_replay_on_sensitive_input_surface",
+    unifiedFindingIds: ["session_replay_on_sensitive_input_surface"],
+    requiredForStrong: [req("sessionReplayVendorEvidence"), req("sensitiveInputSurfaceEvidence"), req("coverageNotMateriallyBlocked")],
+    requiredForGood: [req("sessionReplayVendorEvidence"), req("sensitiveInputSurfaceEvidence")],
+    downgradeIf: [
+      { ifMissing: "sessionReplayVendorEvidence", to: "audit_only", reason: "Sensitive replay findings require concrete replay vendor/runtime evidence." },
+      { ifMissing: "sensitiveInputSurfaceEvidence", to: "audit_only", reason: "Sensitive replay findings require retained sensitive input surface evidence." }
+    ],
+    suppressIf: [],
+    projectionEligibility: {
+      executive: { requiresContractPass: true, minimumTier: "strong" },
+      gdprEprivacy: { requiresContractPass: true, minimumTier: "strong" },
+      ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
+      ftc: { requiresContractPass: true, minimumTier: "strong" }
+    },
+    notes: "Requires replay runtime evidence and sensitive input surface evidence; WC01 owns risk framing."
+  },
+  {
+    findingId: "sensitive_data_collection_with_third_party_tracking_present",
+    unifiedFindingIds: ["sensitive_data_collection_with_third_party_tracking_present"],
+    requiredForStrong: [req("sensitiveInputSurfaceEvidence"), req("sensitiveDataFieldEvidence"), req("sensitiveThirdPartyTrackingEvidence"), req("coverageNotMateriallyBlocked")],
+    requiredForGood: [req("sensitiveInputSurfaceEvidence"), req("sensitiveThirdPartyTrackingEvidence")],
+    downgradeIf: [
+      { ifMissing: "sensitiveInputSurfaceEvidence", to: "audit_only", reason: "Sensitive-data tracking findings require retained sensitive input surface evidence." },
+      { ifMissing: "sensitiveThirdPartyTrackingEvidence", to: "audit_only", reason: "Sensitive-data tracking findings require retained third-party runtime evidence." }
+    ],
+    suppressIf: [],
+    projectionEligibility: {
+      executive: { requiresContractPass: true, minimumTier: "strong" },
+      gdprEprivacy: { requiresContractPass: true, minimumTier: "strong" },
+      ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
+      ftc: { requiresContractPass: true, minimumTier: "strong" }
+    },
+    notes: "Requires structured sensitive collection evidence plus runtime tracking context, not a legal conclusion."
   }
 ] as const satisfies readonly FindingEvidenceContract[];
 
 const CONTRACT_BY_UNIFIED_ID = new Map<string, FindingEvidenceContract>();
+const CONTRACT_BY_FINDING_ID = new Map<string, FindingEvidenceContract>();
 for (const contract of FINDING_EVIDENCE_CONTRACTS) {
+  CONTRACT_BY_FINDING_ID.set(contract.findingId, contract);
   for (const unifiedFindingId of contract.unifiedFindingIds) {
     if (!CONTRACT_BY_UNIFIED_ID.has(unifiedFindingId)) {
       CONTRACT_BY_UNIFIED_ID.set(unifiedFindingId, contract);
@@ -309,6 +440,10 @@ for (const contract of FINDING_EVIDENCE_CONTRACTS) {
 
 export function getFindingEvidenceContractForUnifiedFinding(unifiedFindingId: string | null | undefined) {
   return unifiedFindingId ? CONTRACT_BY_UNIFIED_ID.get(unifiedFindingId) ?? null : null;
+}
+
+export function getFindingEvidenceContractForFindingOrUnifiedId(findingId: string | null | undefined) {
+  return findingId ? CONTRACT_BY_FINDING_ID.get(findingId) ?? CONTRACT_BY_UNIFIED_ID.get(findingId) ?? null : null;
 }
 
 function getStringArrayValues(record: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -507,6 +642,9 @@ function hasRuntimeAnchor(rawEvidence: Record<string, unknown> | null | undefine
     hasConcreteReplayArtifact(rawEvidence) ||
     hasConcreteRtbCookieSyncEvidence(rawEvidence) ||
     hasTrackingCookieClassification(rawEvidence) ||
+    getObjectArrayValues(rawEvidence, ["sensitivePayloadViolations", "sensitive_payload_violations"]).some((row) =>
+      typeof row.requestUrl === "string" || typeof row.request_url === "string" || typeof row.vendorHost === "string"
+    ) ||
     getStringArrayValues(rawEvidence, ["runtimeRequestUrls", "runtime_request_urls", "requestUrls", "runtimeVendors"]).length > 0
   );
 }
@@ -543,6 +681,120 @@ function hasSessionReplayVendorEvidence(rawEvidence: Record<string, unknown> | n
     ]).length > 0;
 }
 
+function hasPrivacyChoiceControlSearchScope(rawEvidence: Record<string, unknown> | null | undefined) {
+  const cpraEvidence = getObjectValue(rawEvidence, ["cpraCbaOptOutEvidence", "cpra_cba_opt_out_evidence"]);
+  return (
+    getBoolean(rawEvidence, ["privacyChoiceControlSearchPerformed", "privacy_choice_control_search_performed"]) === true ||
+    getStringArrayValues(rawEvidence, ["privacyChoiceSearchUrls", "privacy_choice_search_urls", "searchedPolicyUrls"]).length > 0 ||
+    cpraEvidence?.choiceControlsInspected === true ||
+    cpraEvidence?.choice_controls_inspected === true ||
+    cpraEvidence?.optOutControlFound === false ||
+    cpraEvidence?.opt_out_control_found === false
+  );
+}
+
+function hasAdvertisingSharingRuntimeEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const cpraEvidence = getObjectValue(rawEvidence, ["cpraCbaOptOutEvidence", "cpra_cba_opt_out_evidence"]);
+  const categories = getStringArrayValues(rawEvidence, [
+    "runtimeVendorCategories",
+    "runtime_vendor_categories",
+    "crossDomainIdentifierSharingDestinationCategories"
+  ]);
+  const vendors = getStringArrayValues(rawEvidence, ["runtimeVendors", "runtime_vendors", "advertisingSharingVendors"]);
+  const evidenceRows = getObjectArrayValues(rawEvidence, [
+    "advertisingSharingRuntimeEvidence",
+    "advertising_sharing_runtime_evidence",
+    "crossDomainIdentifierSharingEvidence"
+  ]);
+  return (
+    categories.some((category) => /advertising|retargeting|rtb|identity|marketing|cross_context/i.test(category)) ||
+    vendors.length > 0 ||
+    evidenceRows.length > 0 ||
+    Array.isArray(cpraEvidence?.advertisingSharingVendors) && cpraEvidence.advertisingSharingVendors.length > 0
+  );
+}
+
+function hasCrossDomainIdentifierEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const rows = getObjectArrayValues(rawEvidence, ["crossDomainIdentifierSharingEvidence", "cross_domain_identifier_sharing_evidence"]);
+  const destinations = getStringArrayValues(rawEvidence, [
+    "crossDomainIdentifierSharingDestinationEtlds",
+    "cross_domain_identifier_sharing_destination_etlds"
+  ]);
+  const valueHashCount = getObjectValue(rawEvidence, ["crossDomainIdentifierSummary", "cross_domain_identifier_summary"])?.valueHashCount;
+  return (
+    rows.some((row) => {
+      const repeatedAcrossEtlds = Array.isArray(row.repeatedAcrossEtlds)
+        ? row.repeatedAcrossEtlds
+        : Array.isArray(row.repeated_across_etlds)
+          ? row.repeated_across_etlds
+          : [];
+      const valueHash = typeof row.valueHash === "string" ? row.valueHash : typeof row.value_hash === "string" ? row.value_hash : "";
+      const url = typeof row.requestUrlRedacted === "string"
+        ? row.requestUrlRedacted
+        : typeof row.request_url_redacted === "string"
+          ? row.request_url_redacted
+          : "";
+      return repeatedAcrossEtlds.length >= 2 && valueHash.length >= 16 && /^https?:\/\//i.test(url);
+    }) ||
+    (destinations.length >= 2 && (typeof valueHashCount === "number" ? valueHashCount > 0 : rows.length > 0))
+  );
+}
+
+function hasVideoContentSurfaceEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  return (
+    getBoolean(rawEvidence, ["samePageVideoTrackingCorrelation", "same_page_video_tracking_correlation"]) === true ||
+    getBoolean(rawEvidence, ["videoContentSurfaceObserved", "video_content_surface_observed"]) === true ||
+    getStringArrayValues(rawEvidence, ["videoPageUrls", "video_page_urls"]).some((url) => /^https?:\/\//i.test(url)) ||
+    getStringArrayValues(rawEvidence, ["videoTitleSnippets", "video_title_snippets"]).length > 0
+  );
+}
+
+function hasVideoTrackingRuntimeEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  return (
+    getStringArrayValues(rawEvidence, ["metaPixelRequestUrls", "meta_pixel_request_urls", "runtimeRequestUrls", "runtime_request_urls"]).some((url) =>
+      /^https?:\/\//i.test(url) && /facebook|meta|doubleclick|google-analytics|googletagmanager|ads/i.test(url)
+    ) ||
+    getStringArrayValues(rawEvidence, ["runtimeVendors", "runtime_vendors"]).some((vendor) => /meta|facebook|pixel|analytics|advertising/i.test(vendor))
+  );
+}
+
+function hasFingerprintingRuntimeEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  return (
+    hasStrongFingerprintingEvidence(rawEvidence) ||
+    getBoolean(rawEvidence, ["fingerprintingRuntimeEvidenceRetained", "fingerprinting_runtime_evidence_retained"]) === true ||
+    getStringArrayValues(rawEvidence, ["fingerprintingSignals", "fingerprinting_signals", "highEntropySignals", "high_entropy_signals"]).length > 0 ||
+    getObjectArrayValues(rawEvidence, ["fingerprintingRuntimeEvidence", "fingerprinting_runtime_evidence"]).length > 0 ||
+    getStringArrayValues(rawEvidence, ["runtimeRequestUrls", "runtime_request_urls"]).some((url) => /^https?:\/\//i.test(url) && /fingerprint|fp|collect|beacon/i.test(url))
+  );
+}
+
+function hasSensitiveInputSurfaceEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  return (
+    getBoolean(rawEvidence, ["sensitiveInputSurfaceObserved", "sensitive_input_surface_observed"]) === true ||
+    getStringArrayValues(rawEvidence, ["sensitiveFieldContexts", "sensitive_field_contexts", "inputSurfaceUrls", "input_surface_urls"]).length > 0 ||
+    getObjectArrayValues(rawEvidence, ["sensitiveInputSurfaceEvidence", "sensitive_input_surface_evidence"]).length > 0 ||
+    getObjectArrayValues(rawEvidence, ["sensitivePayloadViolations", "sensitive_payload_violations"]).some((row) => row.evidenceStrength !== "detector_only")
+  );
+}
+
+function hasSensitiveDataFieldEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  return (
+    getStringArrayValues(rawEvidence, ["sensitiveDataTypes", "sensitive_data_types", "sensitiveFieldLabels", "sensitive_field_labels"]).length > 0 ||
+    getObjectArrayValues(rawEvidence, ["sensitiveFieldEvidence", "sensitive_field_evidence", "sensitivePayloadEvidence", "sensitive_payload_evidence"]).length > 0 ||
+    getObjectArrayValues(rawEvidence, ["sensitivePayloadViolations", "sensitive_payload_violations"]).some((row) =>
+      row.evidenceStrength !== "detector_only" &&
+      (typeof row.detectedType === "string" ||
+        typeof row.detected_type === "string" ||
+        typeof row.requestUrl === "string" ||
+        typeof row.request_url === "string")
+    )
+  );
+}
+
+function hasSensitiveThirdPartyTrackingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  return hasRuntimeAnchor(rawEvidence);
+}
+
 function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Record<string, unknown> | null | undefined) {
   switch (type) {
     case "consentTimelineSequence":
@@ -573,6 +825,26 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
       return hasConcreteRtbCookieSyncEvidence(rawEvidence);
     case "coverageNotMateriallyBlocked":
       return hasCoverageNotMateriallyBlocked(rawEvidence);
+    case "ignoredRuntimeCookieInventoryOnly":
+      return hasOnlyIgnoredCookieEvidence(rawEvidence);
+    case "privacyChoiceControlSearchScope":
+      return hasPrivacyChoiceControlSearchScope(rawEvidence);
+    case "advertisingSharingRuntimeEvidence":
+      return hasAdvertisingSharingRuntimeEvidence(rawEvidence);
+    case "crossDomainIdentifierEvidence":
+      return hasCrossDomainIdentifierEvidence(rawEvidence);
+    case "videoContentSurfaceEvidence":
+      return hasVideoContentSurfaceEvidence(rawEvidence);
+    case "videoTrackingRuntimeEvidence":
+      return hasVideoTrackingRuntimeEvidence(rawEvidence);
+    case "fingerprintingRuntimeEvidence":
+      return hasFingerprintingRuntimeEvidence(rawEvidence);
+    case "sensitiveInputSurfaceEvidence":
+      return hasSensitiveInputSurfaceEvidence(rawEvidence);
+    case "sensitiveDataFieldEvidence":
+      return hasSensitiveDataFieldEvidence(rawEvidence);
+    case "sensitiveThirdPartyTrackingEvidence":
+      return hasSensitiveThirdPartyTrackingEvidence(rawEvidence);
   }
 }
 
@@ -596,6 +868,21 @@ function downgradeFlag(type: EvidenceRequirementType) {
       return "missing_specific_runtime_anchor";
     case "coverageNotMateriallyBlocked":
       return "blocked_or_interstitial_evidence_observed";
+    case "ignoredRuntimeCookieInventoryOnly":
+      return "runtime_cookie_inventory_ignored_only";
+    case "privacyChoiceControlSearchScope":
+      return "missing_policy_side_evidence";
+    case "advertisingSharingRuntimeEvidence":
+    case "crossDomainIdentifierEvidence":
+    case "videoTrackingRuntimeEvidence":
+    case "fingerprintingRuntimeEvidence":
+    case "videoContentSurfaceEvidence":
+      return "missing_specific_runtime_anchor";
+    case "sensitiveInputSurfaceEvidence":
+    case "sensitiveDataFieldEvidence":
+      return "missing_concrete_sensitive_payload";
+    case "sensitiveThirdPartyTrackingEvidence":
+      return "missing_third_party_tracking_artifact";
     default:
       return "missing_specific_runtime_anchor";
   }
@@ -613,12 +900,18 @@ export function evaluateFindingEvidenceContractForRawEvidence(
   unifiedFindingId: string | null | undefined,
   rawEvidence: Record<string, unknown> | null | undefined
 ): FindingEvidenceContractDecision | null {
-  const contract = getFindingEvidenceContractForUnifiedFinding(unifiedFindingId);
+  const contract = getFindingEvidenceContractForFindingOrUnifiedId(unifiedFindingId);
   if (!contract) {
     return null;
   }
 
-  const allRequirements = [...new Set([...contract.requiredForStrong, ...contract.requiredForGood].map((requirement) => requirement.type))];
+  const allRequirements = [
+    ...new Set([
+      ...contract.requiredForStrong.map((requirement) => requirement.type),
+      ...contract.requiredForGood.map((requirement) => requirement.type),
+      ...contract.suppressIf.flatMap((rule) => [rule.ifMissing, rule.ifPresent].filter((type): type is EvidenceRequirementType => Boolean(type)))
+    ])
+  ];
   const satisfiedRequirements = allRequirements.filter((type) => isRequirementSatisfied(type, rawEvidence));
   const missingStrong = contract.requiredForStrong
     .map((requirement) => requirement.type)
@@ -631,12 +924,19 @@ export function evaluateFindingEvidenceContractForRawEvidence(
     ...new Set((missingStrong.length > 0 ? missingStrong : missingGood).map(downgradeFlag))
   ]);
 
-  if (unifiedFindingId === "cookie_disclosure_gap" && hasOnlyIgnoredCookieEvidence(rawEvidence)) {
+  const suppressionRule = contract.suppressIf.find((rule) =>
+    (rule.ifPresent ? satisfiedRequirements.includes(rule.ifPresent) : true) &&
+    (rule.ifMissing ? !satisfiedRequirements.includes(rule.ifMissing) : true)
+  );
+  if (suppressionRule) {
+    const suppressionRequirement = suppressionRule.ifPresent ?? suppressionRule.ifMissing;
     return {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "suppress",
       missingRequirements: missingStrong,
-      negativeEvidenceFlags: [...new Set([...negativeEvidenceFlags, "runtime_cookie_inventory_ignored_only"])],
+      negativeEvidenceFlags: suppressionRequirement
+        ? [...new Set([...negativeEvidenceFlags, downgradeFlag(suppressionRequirement)])]
+        : negativeEvidenceFlags,
       promotionEligibility: "blocked",
       satisfiedRequirements,
       status: "suppress"
@@ -696,7 +996,9 @@ export function evaluateFindingEvidenceContractForRawEvidence(
 function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, unknown> {
   const entities = packet.evidence?.entities ?? {};
   const consentTrackingDetails = packet.details?.family === "consent_tracking" ? packet.details : null;
+  const allEvidenceUrls = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])];
   return {
+    advertisingSharingRuntimeEvidence: entities.advertisingSharingRuntimeEvidence,
     botBlockChallengeEvidence: packet.concernContext?.negativeEvidenceFlags.includes("blocked_or_interstitial_evidence_observed")
       ? { blocked: true, coverageImpact: "material" }
       : undefined,
@@ -713,12 +1015,19 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
         ? true
         : undefined,
     flags: packet.evidence?.flags ?? [],
+    crossDomainIdentifierSharingDestinationEtlds:
+      entities.crossDomainIdentifierSharingDestinationEtlds ?? entities.cross_domain_identifier_sharing_destination_etlds,
+    crossDomainIdentifierSharingEvidence:
+      entities.crossDomainIdentifierSharingEvidence ?? entities.cross_domain_identifier_sharing_evidence,
+    fingerprintingRuntimeEvidence: entities.fingerprintingRuntimeEvidence ?? entities.fingerprinting_runtime_evidence,
+    fingerprintingSignals: entities.fingerprintingSignals ?? entities.highEntropySignals,
+    inputSurfaceUrls: entities.inputSurfaceUrls ?? entities.input_surface_urls,
+    metaPixelRequestUrls: entities.metaPixelRequestUrls ?? entities.meta_pixel_request_urls,
     negativeDisclosureSearchPerformed: packet.concernContext?.evidenceStrengthFlags.includes("policy_text") || undefined,
     policyAnchorRetained: packet.confidenceInputs.hasPolicyTextEvidence || undefined,
-    policySourceUrl: [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])].find((url) =>
-      /cookie|privacy|legal|policy|notice/i.test(url)
-    ),
+    policySourceUrl: allEvidenceUrls.find((url) => /cookie|privacy|legal|policy|notice/i.test(url)),
     postRejectNonEssentialRequestUrls: entities.postRejectNonEssentialRequestUrls ?? entities.post_reject_non_essential_request_urls,
+    privacyChoiceControlSearchPerformed: entities.privacyChoiceControlSearchPerformed,
     preconsentCookieCategories: entities.preconsentCookieCategories ?? entities.preconsent_cookie_categories,
     preconsentCookieNames: entities.preconsentCookieNames ?? entities.preconsent_cookie_names,
     requestPurposeClassificationConfidence: entities.requestPurposeClassificationConfidence?.map((value) => {
@@ -735,11 +1044,21 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
         return value;
       }
     }),
-    runtimeRequestUrls: entities.runtimeRequestUrls ?? consentTrackingDetails?.requestUrls,
+    runtimeRequestUrls: entities.runtimeRequestUrls ?? consentTrackingDetails?.requestUrls ?? allEvidenceUrls.filter((url) => /^https?:\/\//i.test(url)),
+    runtimeVendorCategories: entities.runtimeVendorCategories ?? entities.runtime_vendor_categories,
     runtimeVendors: entities.runtimeVendors ?? consentTrackingDetails?.vendors,
+    sensitiveDataTypes: entities.sensitiveDataTypes ?? entities.sensitive_data_types,
+    sensitiveFieldContexts: entities.sensitiveFieldContexts ?? entities.sensitive_field_contexts,
+    sensitiveFieldEvidence: entities.sensitiveFieldEvidence ?? entities.sensitive_field_evidence,
+    sensitiveInputSurfaceEvidence: entities.sensitiveInputSurfaceEvidence ?? entities.sensitive_input_surface_evidence,
+    sensitiveInputSurfaceObserved: entities.sensitiveInputSurfaceObserved,
     searchedPolicyUrls: packet.evidence?.pageUrls,
     sessionReplayRuntimeArtifacts: entities.session_replay_runtime_artifacts ?? entities.sessionReplayRuntimeArtifacts,
     sessionReplayVendors: entities.sessionReplayVendors ?? entities.session_replay_vendors,
+    videoContentSurfaceObserved:
+      entities.videoContentSurfaceObserved ?? (packet.evidence?.pageUrls ?? []).some((url) => /video|watch|media/i.test(url)),
+    videoPageUrls: entities.videoPageUrls ?? entities.video_page_urls ?? (packet.evidence?.pageUrls ?? []).filter((url) => /video|watch|media/i.test(url)),
+    videoTitleSnippets: entities.videoTitleSnippets ?? entities.video_title_snippets ?? packet.evidence?.snippets,
     unmatchedCookieCategories: entities.unmatched_cookie_categories ?? entities.unmatchedCookieCategories,
     unmatchedCookieNames: entities.unmatched_cookie_names ?? entities.unmatchedCookieNames
   };

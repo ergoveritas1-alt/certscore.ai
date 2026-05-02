@@ -417,6 +417,29 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "security-sensitive weak cookie attribute evidence can promote",
+      concern: makeConcern({
+        originKey: "privacy.weak_cookie_security_attributes_detected",
+        suggestedUnifiedFindingId: "weak_cookie_security_attributes",
+        title: "Weak cookie security attributes"
+      }),
+      evidenceStrengthFlags: ["direct_runtime"] as const,
+      rawEvidence: {
+        cookieAttributeSummary: {
+          missingSecureCount: 1,
+          missingHttpOnlyCount: 1,
+          missingSecureCookieNames: ["session_id"],
+          missingHttpOnlyCookieNames: ["account_token"]
+        }
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "raw high-risk financial product signal without offer context is blocked",
       concern: makeConcern({
         originKey: "financial.options_or_futures_language_present",

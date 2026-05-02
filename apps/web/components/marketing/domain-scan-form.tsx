@@ -1,6 +1,6 @@
 "use client";
 
-import { createDomainRequestSchema } from "@website-signal-risk-scanner/shared";
+import { createDomainRequestSchema } from "@website-signal-risk-scanner/shared/validators/domain";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";

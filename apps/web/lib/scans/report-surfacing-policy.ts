@@ -85,6 +85,7 @@ export type SurfacingPolicyRuleId =
   | "precedence.task_blocking_beats_wcag_summary"
   | "precedence.blocking_overlay_supports_consent_risk"
   | "precedence.sensitive_tracking_combo_beats_generic_sensitivity"
+  | "precedence.weak_cookie_attributes_supports_runtime_finding"
   | "support.orphan_positive_surface_retained"
   | "support.orphan_support_promoted_to_review"
   | "support.orphan_support_suppressed"
@@ -571,6 +572,13 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialLane: "main",
     orphanedSupportFallback: "suppressed"
   },
+  weak_cookie_security_attributes: {
+    findingId: "weak_cookie_security_attributes",
+    family: "consent_tracking",
+    initialState: "support_only",
+    initialTier: "support",
+    initialLane: "confidence_and_coverage"
+  },
   reject_did_not_reduce_tracking: {
     findingId: "reject_did_not_reduce_tracking",
     family: "consent_tracking",
@@ -864,6 +872,24 @@ const EXPLICIT_PRECEDENCE_RULES: PrecedenceRule[] = [
     supportingFindingId: "preconsent_tracking"
   },
   {
+    appliedRule: "precedence.weak_cookie_attributes_supports_runtime_finding",
+    primaryFindingId: "preconsent_tracking",
+    reason: "Weak cookie attributes should support stronger cookie-before-consent findings rather than lead the narrative by default.",
+    supportingFindingId: "weak_cookie_security_attributes"
+  },
+  {
+    appliedRule: "precedence.weak_cookie_attributes_supports_runtime_finding",
+    primaryFindingId: "sensitive_data_collection_with_third_party_tracking_present",
+    reason: "Weak cookie attributes should support sensitive-data tracking findings when both are present.",
+    supportingFindingId: "weak_cookie_security_attributes"
+  },
+  {
+    appliedRule: "precedence.weak_cookie_attributes_supports_runtime_finding",
+    primaryFindingId: "cookie_disclosure_gap",
+    reason: "Weak cookie attributes should support cookie-disclosure gaps when both are present.",
+    supportingFindingId: "weak_cookie_security_attributes"
+  },
+  {
     appliedRule: "precedence.sensitive_replay_beats_generic_replay",
     primaryFindingId: "session_replay_on_sensitive_input_surface",
     reason: "The sensitive-input replay finding is more specific and should lead, while generic replay disclosure mismatch remains supporting context.",
@@ -1107,6 +1133,42 @@ function hasConcreteRuntimeEvidence(packet: UnifiedFindingPacket) {
     packet.confidenceInputs.hasConcretePayloadEvidence ||
     packet.confidenceInputs.hasStructuredValidationEvidence
   );
+}
+
+function isSecuritySensitiveCookieName(value: string) {
+  return /auth|session|sess|sid|token|jwt|csrf|xsrf|login|account|user|customer|checkout|cart|payment|pay|billing/i.test(value);
+}
+
+function getWeakCookieAttributeNames(packet: UnifiedFindingPacket) {
+  return [
+    ...getEvidenceEntityValues(packet, "missingSecureCookieNames"),
+    ...getEvidenceEntityValues(packet, "missingHttpOnlyCookieNames"),
+    ...getEvidenceEntityValues(packet, "weakSameSiteCookieNames"),
+    ...getEvidenceEntityValues(packet, "thirdPartyWeakAttributeCookieNames")
+  ];
+}
+
+function hasPromotableWeakCookieSecurityEvidence(packet: UnifiedFindingPacket) {
+  const weakCookieNames = [...new Set(getWeakCookieAttributeNames(packet))];
+  if (weakCookieNames.length === 0) {
+    return false;
+  }
+
+  const missingSecureCount = getEvidenceCount(packet, ["missingSecureCount"]) ?? 0;
+  const missingHttpOnlyCount = getEvidenceCount(packet, ["missingHttpOnlyCount"]) ?? 0;
+  const weakSameSiteCount = getEvidenceCount(packet, ["weakSameSiteCount"]) ?? 0;
+  const thirdPartyWeakAttributeCount = getEvidenceCount(packet, ["thirdPartyWeakAttributeCount"]) ?? 0;
+  const hasConcreteAttribute =
+    missingSecureCount + missingHttpOnlyCount + weakSameSiteCount + thirdPartyWeakAttributeCount > 0;
+  if (!hasConcreteAttribute) {
+    return false;
+  }
+
+  if (weakCookieNames.some(isSecuritySensitiveCookieName)) {
+    return true;
+  }
+
+  return weakCookieNames.length >= 3 && missingSecureCount + weakSameSiteCount + thirdPartyWeakAttributeCount >= 3;
 }
 
 function hasConcreteRuntimeOrPayloadEvidence(packet: UnifiedFindingPacket) {
@@ -2078,6 +2140,29 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       return;
     }
 
+    if (packet.unifiedFindingId === "weak_cookie_security_attributes") {
+      if (hasPromotableWeakCookieSecurityEvidence(packet)) {
+        overrideDecision(decision, {
+          state: "review",
+          lane: "main",
+          tier: "section",
+          reason:
+            "Weak cookie attributes are promoted only when concrete cookie names show security-sensitive cookies or repeated high-risk cookie weaknesses.",
+          ruleId: "evidence.consent_behavior.review_runtime_without_effect_evidence"
+        });
+      } else {
+        overrideDecision(decision, {
+          state: "support_only",
+          lane: "confidence_and_coverage",
+          tier: "support",
+          reason:
+            "Weak cookie attributes are retained as supporting security posture evidence unless tied to security-sensitive or repeated high-risk cookies.",
+          ruleId: "evidence.consent_behavior.support_only_tracking_context"
+        });
+      }
+      return;
+    }
+
     if (packet.unifiedFindingId === "session_replay_observed" && hasConcreteRuntimeEvidence(packet)) {
       overrideDecision(decision, {
         state: "review",
@@ -2453,14 +2538,20 @@ function applyCrossFindingRules(decisionsById: Map<string, MutableDecision>, pac
       continue;
     }
 
-    if (findingId === "blocking_overlay_observed" || findingId === "sensitive_collection_surface_observed") {
+    if (
+      findingId === "blocking_overlay_observed" ||
+      findingId === "sensitive_collection_surface_observed" ||
+      findingId === "weak_cookie_security_attributes"
+    ) {
       decision.reportLane = "confidence_and_coverage";
       decision.surfaceTier = "support";
       decision.appliedRules.push("evidence.context.keep_review");
       decision.decisionReasons.push(
         findingId === "blocking_overlay_observed"
           ? "No stronger consent or tracking finding required the blocking overlay as support, so it remains supporting context rather than a standalone finding."
-          : "No stronger tracking, replay, or transmission finding required the sensitive collection surface as support, so it remains supporting context rather than a standalone finding."
+          : findingId === "sensitive_collection_surface_observed"
+            ? "No stronger tracking, replay, or transmission finding required the sensitive collection surface as support, so it remains supporting context rather than a standalone finding."
+            : "No stronger cookie or tracking finding required weak cookie attributes as support, so they remain security posture context rather than a standalone finding."
       );
       continue;
     }

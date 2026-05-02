@@ -1246,7 +1246,23 @@ function hasConcreteConsentSurfaceAbsenceEvidence(rawEvidence: Record<string, un
   return explicitNoSurface && corroboratingSignals >= 1;
 }
 
-function hasMeaningfulWeakCookieAttributeEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+function isSecuritySensitiveCookieName(value: string) {
+  return /auth|session|sess|sid|token|jwt|csrf|xsrf|login|account|user|customer|checkout|cart|payment|pay|billing/i.test(value);
+}
+
+function getWeakCookieAttributeNames(summary: Record<string, unknown>) {
+  return [
+    ...getStringArrayValues(summary, ["missingSecureCookieNames", "missing_secure_cookie_names"]),
+    ...getStringArrayValues(summary, ["missingHttpOnlyCookieNames", "missing_http_only_cookie_names"]),
+    ...getStringArrayValues(summary, ["weakSameSiteCookieNames", "weak_same_site_cookie_names"]),
+    ...getStringArrayValues(summary, [
+      "thirdPartyWeakAttributeCookieNames",
+      "third_party_weak_attribute_cookie_names"
+    ])
+  ];
+}
+
+function hasPromotableWeakCookieAttributeEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   const summary =
     rawEvidence?.cookieAttributeSummary && typeof rawEvidence.cookieAttributeSummary === "object"
       ? (rawEvidence.cookieAttributeSummary as Record<string, unknown>)
@@ -1255,29 +1271,26 @@ function hasMeaningfulWeakCookieAttributeEvidence(rawEvidence: Record<string, un
     return false;
   }
 
-  const totalCookiesAnalyzed = getNumberEvidence(summary, ["totalCookiesAnalyzed", "total_cookies_analyzed"]) ?? 0;
   const missingSecureCount = getNumberEvidence(summary, ["missingSecureCount", "missing_secure_count"]) ?? 0;
   const missingHttpOnlyCount = getNumberEvidence(summary, ["missingHttpOnlyCount", "missing_http_only_count"]) ?? 0;
   const weakSameSiteCount = getNumberEvidence(summary, ["weakSameSiteCount", "weak_same_site_count"]) ?? 0;
   const thirdPartyWeakCount =
     getNumberEvidence(summary, ["thirdPartyWeakAttributeCount", "third_party_weak_attribute_count"]) ?? 0;
+  const weakCookieNames = [...new Set(getWeakCookieAttributeNames(summary))];
+  const hasConcreteAttributes = missingSecureCount + missingHttpOnlyCount + weakSameSiteCount + thirdPartyWeakCount > 0;
+  if (!hasConcreteAttributes || weakCookieNames.length === 0) {
+    return false;
+  }
 
-  const missingSecureNames = getStringArrayValues(summary, ["missingSecureCookieNames", "missing_secure_cookie_names"]);
-  const weakSameSiteNames = getStringArrayValues(summary, ["weakSameSiteCookieNames", "weak_same_site_cookie_names"]);
-  const thirdPartyWeakNames = getStringArrayValues(summary, [
-    "thirdPartyWeakAttributeCookieNames",
-    "third_party_weak_attribute_cookie_names"
-  ]);
-
-  if (thirdPartyWeakCount >= 1 || thirdPartyWeakNames.length >= 1 || weakSameSiteCount >= 1 || weakSameSiteNames.length >= 1) {
+  if (weakCookieNames.some(isSecuritySensitiveCookieName)) {
     return true;
   }
 
-  if (missingSecureCount >= 2 || missingSecureNames.length >= 2) {
+  if (weakCookieNames.length >= 3 && (missingSecureCount + weakSameSiteCount + thirdPartyWeakCount) >= 3) {
     return true;
   }
 
-  return totalCookiesAnalyzed >= 3 && (missingSecureCount >= 1 || missingHttpOnlyCount >= 3);
+  return false;
 }
 
 function hasMeaningfulGpcIgnoredEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -2201,7 +2214,7 @@ export function deriveConcernPolicy(input: {
 
   if (
     isWeakCookieSecurityAttributesConcern(input.concern) &&
-    !hasMeaningfulWeakCookieAttributeEvidence(input.rawEvidence)
+    !hasPromotableWeakCookieAttributeEvidence(input.rawEvidence)
   ) {
     return {
       allowedNarrativeTier: "weak",
