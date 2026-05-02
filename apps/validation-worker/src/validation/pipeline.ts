@@ -1084,7 +1084,11 @@ function buildPolicyRuntimeFinding(input: {
   return {
     category: "scan_report_review" as const,
     description: input.description,
-    evidence: input.evidence,
+    evidence: {
+      ...input.evidence,
+      external_surfacing_requires_normalized_concern_policy: true,
+      validation_surfacing_scope: "internal_validation_only"
+    },
     findingFamily: taxonomy.familyId,
     findingScope: taxonomy.scope,
     findingSource: taxonomy.source,

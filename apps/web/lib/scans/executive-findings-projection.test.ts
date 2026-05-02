@@ -35,6 +35,14 @@ function makePacket(
       sourceKinds: ["signal"],
       validationCount: 0
     },
+    concernContext: {
+      assertionLevels: ["strong"],
+      evidenceStrengthFlags: ["direct_runtime"],
+      externalSurfacingEligibilities: ["eligible"],
+      negativeEvidenceFlags: [],
+      originTypes: ["snapshot_signal"],
+      promotionEligibilities: ["eligible"]
+    },
     details: { family: "commercial", kind: unifiedFindingId },
     linkedValidationFinding: null,
     observedValue: null,
@@ -260,6 +268,25 @@ test("projects surfaced unified findings into executive findings and regulatory 
     }).some((lens) => lens.acronym === "Financial & commercial claims"),
     false
   );
+});
+
+test("does not project high-risk findings when the evidence contract failed upstream", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      concernContext: {
+        assertionLevels: ["weak"],
+        evidenceStrengthFlags: ["direct_runtime"],
+        externalSurfacingEligibilities: ["audit_only"],
+        negativeEvidenceFlags: ["missing_preconsent_sequence_evidence"],
+        originTypes: ["snapshot_signal"],
+        promotionEligibilities: ["internal_only"]
+      },
+      details: { family: "consent_tracking", kind: "preconsent_tracking" }
+    })
+  ]);
+
+  assert.deepEqual(projection.findings, []);
+  assert.deepEqual(projection.trace.projectedFindingIds, []);
 });
 
 test("keeps support and context findings out of executive top findings", () => {

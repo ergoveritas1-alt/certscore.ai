@@ -6,6 +6,9 @@ import type { UnifiedFindingPacket } from "./unified-findings";
 import {
   REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL
 } from "./reject-tracking-policy";
+import {
+  evaluateFindingEvidenceContractForPacket
+} from "./finding-evidence-contracts";
 
 export const REPORT_SURFACING_POLICY_VERSION = "v1";
 
@@ -70,6 +73,8 @@ export type SurfacingPolicyRuleId =
   | "evidence.financial.confirmed_negative_risk_with_backing"
   | "evidence.financial.review_claim_context"
   | "evidence.financial.review_when_context_limited"
+  | "evidence.finding_contract.audit_only"
+  | "evidence.finding_contract.suppressed"
   | "evidence.commercial.confirmed_when_runtime_or_structured"
   | "evidence.context.keep_review"
   | "precedence.specific_contradiction_supports_generic"
@@ -1574,6 +1579,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     ["terms_missing_surface", "terms_of_service_present"],
     ["cookie_policy_missing_surface", "cookie_policy_present"]
   ]);
+  const contractDecision = evaluateFindingEvidenceContractForPacket(packet);
 
   if (packet.concernContext?.externalSurfacingEligibilities?.every((value) => value === "suppress")) {
     overrideDecision(decision, {
@@ -1582,6 +1588,28 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       tier: "support",
       reason: "Normalized concern gating marked this finding ineligible for external surfacing.",
       ruleId: "unknown.conservative_fallback"
+    });
+    return;
+  }
+
+  if (contractDecision?.externalSurfacingEligibility === "suppress") {
+    overrideDecision(decision, {
+      state: "suppressed",
+      lane: "suppressed",
+      tier: "support",
+      reason: "The finding evidence contract suppressed this high-risk finding because required evidence was missing.",
+      ruleId: "evidence.finding_contract.suppressed"
+    });
+    return;
+  }
+
+  if (contractDecision?.externalSurfacingEligibility === "audit_only") {
+    overrideDecision(decision, {
+      state: "support_only",
+      lane: "confidence_and_coverage",
+      tier: "support",
+      reason: "The finding evidence contract retained this high-risk finding for audit review because required evidence was missing.",
+      ruleId: "evidence.finding_contract.audit_only"
     });
     return;
   }

@@ -91,10 +91,192 @@ function getFiniteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function getRuntimeObject(input: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    const value = input?.[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function getRuntimeObjectArray(input: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    const value = input?.[key];
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry));
+    }
+  }
+  return [];
+}
+
+function getRuntimeStringArray(input: Record<string, unknown> | null, keys: string[]) {
+  const values: string[] = [];
+  for (const key of keys) {
+    const value = input?.[key];
+    if (Array.isArray(value)) {
+      values.push(...value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0));
+    }
+  }
+  return [...new Set(values)];
+}
+
 function buildRuntimeDerivedReviewFindingCandidates(input: {
   runtimeArtifacts: Record<string, unknown> | null;
 }): CanonicalReviewFinding[] {
   const candidates: CanonicalReviewFinding[] = [];
+  const consentTimeline = getRuntimeObject(input.runtimeArtifacts, ["consentTimeline", "consent_timeline"]);
+  const requestClassifications = getRuntimeObjectArray(input.runtimeArtifacts, [
+    "requestPurposeClassificationConfidence",
+    "request_purpose_classification_confidence"
+  ]);
+  const rejectPath = getRuntimeObject(input.runtimeArtifacts, [
+    "rejectPathDepthAndAvailability",
+    "reject_path_depth_and_availability"
+  ]);
+  const botBlockChallengeEvidence = getRuntimeObject(input.runtimeArtifacts, [
+    "botBlockChallengeEvidence",
+    "bot_block_challenge_evidence"
+  ]);
+  const firstNonEssentialRequestMs = getFiniteNumber(
+    consentTimeline?.firstNonEssentialRequestMs ?? consentTimeline?.first_non_essential_request_ms
+  );
+  const firstCmpVisibleMs = getFiniteNumber(consentTimeline?.firstCmpVisibleMs ?? consentTimeline?.first_cmp_visible_ms);
+  const firstConsentActionMs = getFiniteNumber(consentTimeline?.firstConsentActionMs ?? consentTimeline?.first_consent_action_ms);
+  const nonEssentialRequestRows = requestClassifications.filter(
+    (row) =>
+      row.essentiality === "non_essential" &&
+      typeof row.requestUrl === "string" &&
+      /^https?:\/\//i.test(row.requestUrl) &&
+      typeof row.confidence === "number" &&
+      row.confidence >= 0.7
+  );
+  const hasPreconsentSequence =
+    firstNonEssentialRequestMs !== null &&
+    ((firstCmpVisibleMs !== null && firstNonEssentialRequestMs < firstCmpVisibleMs) ||
+      (firstConsentActionMs !== null && firstNonEssentialRequestMs < firstConsentActionMs));
+
+  if (nonEssentialRequestRows.length > 0 && firstNonEssentialRequestMs !== null) {
+    candidates.push({
+      categoryId: "preconsent_tracking_incidents",
+      description: hasPreconsentSequence
+        ? "A retained consent timeline places a non-essential request before the CMP was visible or before a consent action."
+        : "A retained non-essential request classification exists, but the timing sequence is incomplete or ambiguous.",
+      fallbackEvidence: {
+        consentTimeline,
+        requestPurposeClassificationConfidence: requestClassifications,
+        preconsent_tracker_evidence_urls: nonEssentialRequestRows.map((row) => String(row.requestUrl)),
+        preconsent_tracker_vendors: nonEssentialRequestRows
+          .map((row) => (typeof row.vendor === "string" ? row.vendor : null))
+          .filter((value): value is string => Boolean(value)),
+        signalKey: "privacy.preconsent_tracking_detected",
+        signalLabel: "Pre-consent tracking detected",
+        signalValue: true
+      },
+      id: "runtime-derived-signal-privacy.preconsent_tracking_detected.evidence_quality",
+      linkedValidationFinding: null,
+      observedValue: `${nonEssentialRequestRows.length} classified non-essential request(s)`,
+      severity: hasPreconsentSequence ? "high" : "medium",
+      signalKey: "privacy.preconsent_tracking_detected",
+      signalLabel: "Pre-consent tracking detected",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Pre-consent tracking detected"
+    });
+  }
+
+  const rejectInteractionSucceeded =
+    rejectPath?.rejectInteractionSucceeded === true || rejectPath?.reject_interaction_succeeded === true;
+  const postRejectRows = getRuntimeObjectArray(input.runtimeArtifacts, [
+    "consentRejectPostRejectNonEssentialRequests",
+    "consent_reject_post_reject_non_essential_requests"
+  ]);
+  if (rejectInteractionSucceeded && postRejectRows.length > 0) {
+    candidates.push({
+      categoryId: "enforcement_outcomes_after_user_choice",
+      description: "A retained reject interaction succeeded, and non-essential request activity was retained after reject.",
+      fallbackEvidence: {
+        rejectPathDepthAndAvailability: rejectPath,
+        postRejectNonEssentialRequests: postRejectRows,
+        suppressionChecks: getRuntimeObject(input.runtimeArtifacts, [
+          "consentRejectSuppressionChecks",
+          "consent_reject_suppression_checks"
+        ]),
+        signalKey: "consent_reject_reduced_tracking",
+        signalLabel: "Reject path did not reduce tracking",
+        signalValue: false
+      },
+      id: "runtime-derived-signal-privacy.reject_did_not_reduce_tracking.evidence_quality",
+      linkedValidationFinding: null,
+      observedValue: `${postRejectRows.length} post-reject non-essential request(s)`,
+      severity: "high",
+      signalKey: "consent_reject_reduced_tracking",
+      signalLabel: "Reject path did not reduce tracking",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Reject path did not reduce tracking"
+    });
+  }
+
+  const rejectAvailableOnFirstLayer =
+    rejectPath?.rejectAvailableOnFirstLayer === true || rejectPath?.reject_available_on_first_layer === true;
+  const choiceAsymmetry = String(rejectPath?.choiceAsymmetry ?? rejectPath?.choice_asymmetry ?? "unknown");
+  if (rejectPath && !rejectAvailableOnFirstLayer && (choiceAsymmetry === "material" || choiceAsymmetry === "minor")) {
+    candidates.push({
+      categoryId: "choice_symmetry_dark_pattern_indicators",
+      description: "The retained consent interaction structure shows reject was not available on the first layer.",
+      fallbackEvidence: {
+        rejectPathDepthAndAvailability: rejectPath,
+        reject_button_missing: choiceAsymmetry === "material",
+        signalKey: "privacy.dark_pattern_reject_button_missing",
+        signalLabel: "Reject button missing",
+        signalValue: true
+      },
+      id: "runtime-derived-signal-privacy.dark_pattern_reject_button_missing.evidence_quality",
+      linkedValidationFinding: null,
+      observedValue: choiceAsymmetry,
+      severity: choiceAsymmetry === "material" ? "high" : "medium",
+      signalKey: "privacy.dark_pattern_reject_button_missing",
+      signalLabel: "Reject button missing",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Reject button missing"
+    });
+  }
+
+  const coverageImpact = String(botBlockChallengeEvidence?.coverageImpact ?? botBlockChallengeEvidence?.coverage_impact ?? "none");
+  if (botBlockChallengeEvidence?.blocked === true && (coverageImpact === "material" || coverageImpact === "severe")) {
+    candidates.push({
+      categoryId: "manual_review_triggers",
+      description: "Bot-management or challenge evidence limited scan coverage, so absence-style findings should be treated conservatively.",
+      fallbackEvidence: {
+        botBlockChallengeEvidence,
+        coverageLimitationEvidence: getRuntimeObject(input.runtimeArtifacts, [
+          "coverageLimitationEvidence",
+          "coverage_limitation_evidence"
+        ]),
+        keyPageAttemptedUrls: getRuntimeStringArray(input.runtimeArtifacts, [
+          "passivePublicVerificationAttemptedUrls",
+          "passive_public_verification_attempted_urls"
+        ]),
+        signalKey: "disclosure.key_page_discovery_unresolved_after_bounded_search",
+        signalLabel: "Bounded key-page discovery unresolved",
+        signalValue: true,
+        unifiedFindingId: "bounded_key_page_discovery_unresolved"
+      },
+      id: "runtime-derived-signal-disclosure.key_page_discovery_unresolved_after_bounded_search.evidence_quality",
+      linkedValidationFinding: null,
+      observedValue: coverageImpact,
+      severity: coverageImpact === "severe" ? "high" : "medium",
+      signalKey: "disclosure.key_page_discovery_unresolved_after_bounded_search",
+      signalLabel: "Bounded key-page discovery unresolved",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Bounded key-page discovery unresolved"
+    });
+  }
+
   const cpraEvidence =
     input.runtimeArtifacts?.cpraCbaOptOutEvidence && typeof input.runtimeArtifacts.cpraCbaOptOutEvidence === "object"
       ? (input.runtimeArtifacts.cpraCbaOptOutEvidence as Record<string, unknown>)

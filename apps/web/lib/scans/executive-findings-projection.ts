@@ -10,6 +10,7 @@ import {
 } from "./finding-registry";
 import { getFindingSurfaceScore, selectTopFindings } from "./rank-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
+import { isFindingProjectionEligible } from "./finding-evidence-contracts";
 
 const MAX_DISPLAY_SNIPPET_LENGTH = 240;
 
@@ -1811,7 +1812,10 @@ export type ExecutiveFindingsProjection = {
 export function projectExecutiveFindingsFromUnifiedPackets(
   packets: UnifiedFindingDisplayPacket[]
 ): ExecutiveFindingsProjection {
-  const surfacedPackets = packets.filter((packet) => packet.presentationDecision.status === "surface");
+  const surfacedPackets = packets.filter((packet) =>
+    packet.presentationDecision.status === "surface" &&
+    isFindingProjectionEligible({ lane: "executive", packet })
+  );
   const mappedPacketRows = surfacedPackets.map((packet) => ({
     packet,
     findingId: getMappedFindingId(packet)

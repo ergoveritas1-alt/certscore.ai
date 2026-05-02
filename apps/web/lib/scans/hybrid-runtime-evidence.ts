@@ -1083,6 +1083,8 @@ export function getHybridSignalFallbackEvidence(input: {
         signalValue: input.signalValue,
         supportingSignals: ["privacy.preconsent_tracking_detected", "privacy.tracking_before_consent_detected"],
         tracking_before_consent_detected: true,
+        runtimeEvidenceQuality: "legacy_without_consent_timeline",
+        runtimeEvidenceQualityDisposition: "audit_only_until_evidence_quality_artifacts_present",
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
         hybridNetworkSummary: networkSummary
       };

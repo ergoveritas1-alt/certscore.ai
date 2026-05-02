@@ -21,6 +21,11 @@ test("camelCase preview snapshot flags feed sensitive-context regulatory risk so
       granularPreferencesPresent: false
     },
     runtimeArtifacts: {
+      consentTimeline: {
+        firstCmpVisibleMs: 1000,
+        firstConsentActionMs: 1500,
+        firstNonEssentialRequestMs: 250
+      },
       consent_baseline_tracker_evidence_urls: [
         "https://assets.adobedtm.com/launch.js",
         "https://www.google.com/recaptcha/enterprise.js"
@@ -53,6 +58,11 @@ test("gambling-context session replay feeds sensitive-context regulatory risk so
       tracking_before_consent_detected: true
     },
     runtimeArtifacts: {
+      consentTimeline: {
+        firstCmpVisibleMs: 1000,
+        firstConsentActionMs: 1500,
+        firstNonEssentialRequestMs: 250
+      },
       consent_baseline_tracker_evidence_urls: [
         "https://rs.fullstory.com/rec/page.js",
         "https://js.appboycdn.com/web-sdk/2.7/appboy.min.js",
@@ -65,4 +75,25 @@ test("gambling-context session replay feeds sensitive-context regulatory risk so
   assert.equal(source.sensitiveContextTrackingDetected, true);
   assert.equal(source.sessionReplayWithoutDisclosureDetected, true);
   assert.deepEqual(source.highRiskTrackingVendorNames?.slice(0, 3), ["FullStory", "Braze", "Sportradar"]);
+});
+
+test("snapshot pre-consent booleans alone do not feed regulatory pre-consent drivers", () => {
+  const source = buildRegulatoryRiskSource({
+    hostname: "webmd.com",
+    snapshot: {
+      final_url: "https://www.webmd.com/",
+      homepage_fetch_status: "ok",
+      registered_domain: "webmd.com",
+      tracking_before_consent_detected: true,
+      third_party_cookie_set_before_consent: true
+    },
+    runtimeArtifacts: {
+      consent_baseline_tracker_evidence_urls: ["https://assets.adobedtm.com/launch.js"],
+      third_party_request_domains: ["assets.adobedtm.com"]
+    }
+  });
+
+  assert.equal(source.trackingBeforeConsentDetected, null);
+  assert.equal(source.thirdPartyCookieSetBeforeConsent, null);
+  assert.equal(source.sensitiveContextTrackingDetected, false);
 });

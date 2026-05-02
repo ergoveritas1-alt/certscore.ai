@@ -1218,33 +1218,6 @@ export function buildPreviewPayloadFromSnapshot(input: {
       : null
   );
 
-  if (observableConsentSurface && hasPreconsentTrackingEvidence(input.snapshot)) {
-    unifiedPreviewCandidates.push({
-      description: describePreconsentTrackingFinding({
-        hostname: input.hostname,
-        snapshot: input.snapshot
-      }),
-      fallbackEvidence: {
-        consentActionableChoiceObserved: input.snapshot.rejectAllPresent === true || input.snapshot.granularPreferencesPresent === true,
-        consentSurfaceObserved: true,
-        cookieBannerPresent: input.snapshot.cookieBannerPresent,
-        pageUrl: input.normalizedUrl,
-        preconsent_tracking_detected: true,
-        sourceUrls: [input.normalizedUrl],
-        signalKey: "privacy.preconsent_tracking_detected",
-        signalValue: true,
-        supportingSignals: ["privacy.preconsent_tracking_detected"]
-      },
-      observedValue: "Tracking before consent observed",
-      severity: "high",
-      signalKey: "privacy.preconsent_tracking_detected",
-      signalLabel: "Tracking before consent",
-      signalSource: "snapshot_signal",
-      sourceType: "signal",
-      title: "Tracking before consent"
-    });
-  }
-
   if (!siteSurfaceUnverified && !secondarySurfaceCoverageLimited && !input.snapshot.privacyPolicyPresent) {
     unifiedPreviewCandidates.push({
       description: "The live preview did not detect a likely privacy policy page from the scanned site surface.",

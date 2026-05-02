@@ -48,6 +48,16 @@ function getObjectArrayValues(record: Record<string, unknown> | null | undefined
   return values;
 }
 
+function getObjectValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
 function classifyCookieNameForPromotion(name: string) {
   const normalized = name.toLowerCase();
   if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id)/i.test(normalized)) {
@@ -348,10 +358,15 @@ export function hasConcretePreconsentArtifact(rawEvidence: Record<string, unknow
     "runtimeEvidenceUrls",
     "sourceUrls"
   ]).filter(isConcreteHttpEvidenceUrl);
+  const classifiedNonEssentialRequests = getObjectArrayValues(rawEvidence, [
+    "requestPurposeClassificationConfidence",
+    "request_purpose_classification_confidence"
+  ]).filter((row) => row.essentiality === "non_essential" && isConcreteHttpEvidenceUrl(String(row.requestUrl ?? "")));
 
   return (
     vendors.length > 0 ||
     urls.length > 0 ||
+    classifiedNonEssentialRequests.length > 0 ||
     hasPromotionGradePreconsentCookieEvidence(rawEvidence) ||
     hasConcreteSanitizedNetworkEvidence(rawEvidence, { runtimePhase: "pre_consent" })
   );
@@ -370,8 +385,23 @@ export function hasStrongPreconsentRuntimeEvidence(rawEvidence: Record<string, u
     "runtimeEvidenceUrls",
     "sourceUrls"
   ]).filter(isConcreteHttpEvidenceUrl);
+  const classifiedNonEssentialRequests = getObjectArrayValues(rawEvidence, [
+    "requestPurposeClassificationConfidence",
+    "request_purpose_classification_confidence"
+  ]).filter(
+    (row) =>
+      row.essentiality === "non_essential" &&
+      typeof row.confidence === "number" &&
+      row.confidence >= 0.7 &&
+      isConcreteHttpEvidenceUrl(String(row.requestUrl ?? ""))
+  );
 
-  return (urls.length > 0 || (vendors.length > 0 && urls.length > 0) || hasPromotionGradePreconsentCookieEvidence(rawEvidence)) && hasPreconsentSequenceEvidence(rawEvidence);
+  return (
+    urls.length > 0 ||
+    (vendors.length > 0 && urls.length > 0) ||
+    classifiedNonEssentialRequests.length > 0 ||
+    hasPromotionGradePreconsentCookieEvidence(rawEvidence)
+  ) && hasPreconsentSequenceEvidence(rawEvidence);
 }
 
 export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -379,17 +409,31 @@ export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknow
     return false;
   }
 
-  const supportingSignals = getStringArrayValues(rawEvidence, ["supportingSignals"]);
-  const signalKeys = getStringArrayValues(rawEvidence, ["signalKey", "snapshotField", "unifiedFindingId"]);
+  const timeline = getObjectValue(rawEvidence, ["consentTimeline", "consent_timeline"]);
+  if (!timeline) {
+    return false;
+  }
 
-  return (
-    rawEvidence.preconsentTrackingDetected === true ||
-    rawEvidence.preconsent_tracking_detected === true ||
-    rawEvidence.trackingBeforeConsentDetected === true ||
-    rawEvidence.tracking_before_consent_detected === true ||
-    supportingSignals.some((value) => /pre-?consent|before consent|trackers?_before_consent/i.test(value)) ||
-    signalKeys.some((value) => /preconsent|tracking_before_consent|trackers?_before_consent/i.test(value))
-  );
+  const firstNonEssentialRequestMs = typeof timeline?.firstNonEssentialRequestMs === "number"
+    ? timeline.firstNonEssentialRequestMs
+    : typeof timeline?.first_non_essential_request_ms === "number"
+      ? timeline.first_non_essential_request_ms
+      : null;
+  const firstCmpVisibleMs = typeof timeline?.firstCmpVisibleMs === "number"
+    ? timeline.firstCmpVisibleMs
+    : typeof timeline?.first_cmp_visible_ms === "number"
+      ? timeline.first_cmp_visible_ms
+      : null;
+  const firstConsentActionMs = typeof timeline?.firstConsentActionMs === "number"
+    ? timeline.firstConsentActionMs
+    : typeof timeline?.first_consent_action_ms === "number"
+      ? timeline.first_consent_action_ms
+      : null;
+  const hasTimelineSequence =
+    typeof firstNonEssentialRequestMs === "number" &&
+    ((typeof firstCmpVisibleMs === "number" && firstNonEssentialRequestMs < firstCmpVisibleMs) ||
+      (typeof firstConsentActionMs === "number" && firstNonEssentialRequestMs < firstConsentActionMs));
+  return hasTimelineSequence;
 }
 
 function getNumberValue(record: Record<string, unknown> | null | undefined, keys: string[]) {

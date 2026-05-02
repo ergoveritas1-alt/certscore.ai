@@ -67,9 +67,88 @@ test("normalizes snapshot signal candidates into eligible concerns", () => {
   assert.equal(concerns[0]?.allowedNarrativeTier, "weak");
   assert.deepEqual(concerns[0]?.negativeEvidenceFlags, [
     "no_consent_surface_observed",
-    "missing_concrete_preconsent_artifact"
+    "missing_concrete_preconsent_artifact",
+    "missing_preconsent_sequence_evidence"
   ]);
   assert.ok(concerns[0]?.evidenceStrengthFlags.includes("fallback_only"));
+});
+
+test("normalizes evidence-quality preconsent artifact into audit-only concern when timing is ambiguous", () => {
+  const [concern] = buildNormalizedConcerns({
+    reviewFindingCandidates: [
+      {
+        description: "A retained non-essential request classification exists, but the timing sequence is incomplete.",
+        fallbackEvidence: {
+          consentTimeline: {
+            firstCmpVisibleMs: null,
+            firstConsentActionMs: null,
+            firstNonEssentialRequestMs: 250,
+            timelineConfidence: "low"
+          },
+          requestPurposeClassificationConfidence: [
+            {
+              confidence: 0.9,
+              essentiality: "non_essential",
+              requestUrl: "https://analytics.example/pixel",
+              vendor: "Example Analytics"
+            }
+          ],
+          signalKey: "privacy.preconsent_tracking_detected"
+        },
+        observedValue: "1 classified request",
+        severity: "medium",
+        signalKey: "privacy.preconsent_tracking_detected",
+        signalLabel: "Pre-consent tracking detected",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "Pre-consent tracking detected"
+      } satisfies UnifiedFindingCandidate
+    ],
+    validationFindings: []
+  });
+
+  assert.equal(concern?.suggestedUnifiedFindingId, "preconsent_tracking");
+  assert.equal(concern?.promotionEligibility, "internal_only");
+  assert.equal(concern?.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"), true);
+});
+
+test("promotes evidence-quality preconsent artifact when sequence and classification are both strong", () => {
+  const packets = buildUnifiedFindingPackets({
+    reviewFindingCandidates: [
+      {
+        description: "A retained consent timeline places a non-essential request before the CMP was visible.",
+        fallbackEvidence: {
+          consentActionableChoiceObserved: true,
+          consentSurfaceObserved: true,
+          consentTimeline: {
+            firstCmpVisibleMs: 1000,
+            firstConsentActionMs: 1500,
+            firstNonEssentialRequestMs: 250,
+            timelineConfidence: "high"
+          },
+          requestPurposeClassificationConfidence: [
+            {
+              confidence: 0.9,
+              essentiality: "non_essential",
+              requestUrl: "https://analytics.example/pixel",
+              vendor: "Example Analytics"
+            }
+          ],
+          signalKey: "privacy.preconsent_tracking_detected"
+        },
+        observedValue: "1 classified request",
+        severity: "high",
+        signalKey: "privacy.preconsent_tracking_detected",
+        signalLabel: "Pre-consent tracking detected",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "Pre-consent tracking detected"
+      } satisfies UnifiedFindingCandidate
+    ],
+    validationFindings: []
+  });
+
+  assert.equal(packets.some((packet) => packet.unifiedFindingId === "preconsent_tracking"), true);
 });
 
 test("replay policy review concerns stay internal without direct runtime evidence", () => {
@@ -89,7 +168,7 @@ test("replay policy review concerns stay internal without direct runtime evidenc
   assert.equal(concern.externalSurfacingEligibility, "audit_only");
 });
 
-test("replay validation concerns with runtime artifacts are eligible for external surfacing", () => {
+test("replay validation concerns with runtime artifacts and policy text alone stay audit-only", () => {
   const concern = normalizeConcernFromValidationFinding(
     makeValidationFinding({
       id: "replay-1",
@@ -99,6 +178,33 @@ test("replay validation concerns with runtime artifacts are eligible for externa
       evidence: {
         runtimeEvidenceArtifacts: ["vendor:Microsoft Clarity|host:clarity.ms"],
         policySummary: "Policy text retained."
+      }
+    })
+  );
+
+  assert.equal(concern.promotionEligibility, "internal_only");
+  assert.equal(concern.externalSurfacingEligibility, "audit_only");
+  assert.ok(concern.evidenceStrengthFlags.includes("direct_runtime"));
+  assert.ok(concern.negativeEvidenceFlags.includes("missing_policy_side_evidence"));
+});
+
+test("replay validation concerns with disclosure search context and mismatch bridge can surface externally", () => {
+  const concern = normalizeConcernFromValidationFinding(
+    makeValidationFinding({
+      id: "replay-1",
+      ruleKey: "privacy.session_replay_without_disclosure_detected",
+      severity: "high",
+      title: "Possible undisclosed session replay",
+      evidence: {
+        disclosureSearchScopeRetained: true,
+        mismatchExplanation: "Runtime replay evidence was retained, but the retained privacy policy did not disclose session replay or behavioral analytics tooling.",
+        observedBehavior: "Microsoft Clarity session replay runtime artifact was observed on the scanned site.",
+        policyExtractionStatus: "fetched",
+        policySnippet: "Privacy policy text describes analytics generally but does not mention session replay, recordings, heatmaps, or behavioral analytics.",
+        policySourceUrl: "https://example.com/privacy",
+        sessionReplayVendorArtifactPresent: true,
+        sessionReplayVendors: ["Microsoft Clarity"],
+        session_replay_runtime_artifacts: ["vendor:Microsoft Clarity|host:clarity.ms"]
       }
     })
   );

@@ -859,6 +859,55 @@ export type CpraCbaOptOutEvidence = {
   limitation: "homepage_only";
 };
 
+export type ConsentTimelineEvidence = {
+  navigationStartMs: 0;
+  firstCmpVisibleMs: number | null;
+  cmpReadyMs: number | null;
+  firstNonEssentialRequestMs: number | null;
+  firstCookieSetMs: number | null;
+  firstTrackingCookieSetMs: number | null;
+  firstUserActionMs: number | null;
+  firstConsentActionMs: number | null;
+  firstRejectActionMs: number | null;
+  firstAcceptActionMs: number | null;
+  timelineConfidence: "high" | "medium" | "low";
+  evidenceRefs?: string[];
+};
+
+export type RequestPurposeClassificationConfidence = Array<{
+  requestUrl: string;
+  hostname: string;
+  vendor: string | null;
+  purpose: string;
+  essentiality: "essential" | "non_essential" | "unknown";
+  confidence: number;
+  reason: string;
+  firstObservedMs: number | null;
+  evidenceRefs?: string[];
+}>;
+
+export type RejectPathDepthAndAvailabilityEvidence = {
+  rejectAvailableOnFirstLayer: boolean;
+  rejectClickDepth: number | null;
+  preferencesRequiredBeforeReject: boolean;
+  scrollRequired: boolean;
+  rejectInteractionSucceeded: boolean | null;
+  acceptClickDepth: number | null;
+  choiceAsymmetry: "none" | "minor" | "material" | "unknown";
+  evidenceRefs?: string[];
+};
+
+export type BotBlockChallengeEvidence = {
+  blocked: boolean;
+  challengeType: string;
+  vendor: string;
+  httpStatus: number | null;
+  markerMatches: string[];
+  confidence: number;
+  coverageImpact: "none" | "minor" | "material" | "severe";
+  evidenceRefs?: string[];
+};
+
 export type ScanRuntimeArtifact = {
   scanId: string;
   thirdPartyRequestDomains: string[];
@@ -896,6 +945,10 @@ export type ScanRuntimeArtifact = {
   consentRedirectOrAuthRequired: boolean | null;
   consentOptInEvidenceLog: ConsentInteractionEvidenceStep[];
   consentOptOutEvidenceLog: ConsentInteractionEvidenceStep[];
+  consentTimeline?: ConsentTimelineEvidence | null;
+  requestPurposeClassificationConfidence?: RequestPurposeClassificationConfidence;
+  rejectPathDepthAndAvailability?: RejectPathDepthAndAvailabilityEvidence | null;
+  botBlockChallengeEvidence?: BotBlockChallengeEvidence | null;
   consentPostRejectCookieCount: number | null;
   consentPostRejectThirdPartyCookieCount: number | null;
   consentPostRejectTrackerEvidenceUrls: string[];

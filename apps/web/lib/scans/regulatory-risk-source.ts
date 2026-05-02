@@ -31,6 +31,45 @@ function numberFromKeys(record: Record<string, unknown>, keys: string[]) {
   return null;
 }
 
+function getObjectValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+
+  return null;
+}
+
+function hasPreconsentTimelineSequence(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const timeline = getObjectValue(runtimeArtifacts, ["consentTimeline", "consent_timeline"]);
+  const firstNonEssentialRequestMs =
+    typeof timeline?.firstNonEssentialRequestMs === "number"
+      ? timeline.firstNonEssentialRequestMs
+      : typeof timeline?.first_non_essential_request_ms === "number"
+        ? timeline.first_non_essential_request_ms
+        : null;
+  const firstCmpVisibleMs =
+    typeof timeline?.firstCmpVisibleMs === "number"
+      ? timeline.firstCmpVisibleMs
+      : typeof timeline?.first_cmp_visible_ms === "number"
+        ? timeline.first_cmp_visible_ms
+        : null;
+  const firstConsentActionMs =
+    typeof timeline?.firstConsentActionMs === "number"
+      ? timeline.firstConsentActionMs
+      : typeof timeline?.first_consent_action_ms === "number"
+        ? timeline.first_consent_action_ms
+        : null;
+
+  return (
+    typeof firstNonEssentialRequestMs === "number" &&
+    ((typeof firstCmpVisibleMs === "number" && firstNonEssentialRequestMs < firstCmpVisibleMs) ||
+      (typeof firstConsentActionMs === "number" && firstNonEssentialRequestMs < firstConsentActionMs))
+  );
+}
+
 function toRetentionDisclosure(value: unknown): RegulatoryRiskSource["retentionDisclosureQuality"] {
   return value === "none" || value === "vague" || value === "specific" ? value : null;
 }
@@ -51,27 +90,35 @@ export function buildRegulatoryRiskSource(input: {
   });
   const highRiskVendorCategories = new Set(trackingContext.highRiskVendors.map((vendor) => vendor.category));
   const highRiskTrackingVendorNames = trackingContext.highRiskVendors.map((vendor) => vendor.name);
+  const hasPreconsentTimelineSequenceEvidence = hasPreconsentTimelineSequence(input.runtimeArtifacts);
   const hasPreconsentTrackingSignal =
-    booleanFromKeys(input.snapshot, ["tracking_before_consent_detected", "trackingBeforeConsentDetected"]) === true ||
-    booleanFromKeys(input.snapshot, ["preconsent_tracking_detected", "preconsentTrackingDetected"]) === true ||
-    booleanFromKeys(input.snapshot, ["third_party_cookie_set_before_consent", "thirdPartyCookieSetBeforeConsent"]) === true;
+    hasPreconsentTimelineSequenceEvidence &&
+    (booleanFromKeys(input.snapshot, ["tracking_before_consent_detected", "trackingBeforeConsentDetected"]) === true ||
+      booleanFromKeys(input.snapshot, ["preconsent_tracking_detected", "preconsentTrackingDetected"]) === true ||
+      booleanFromKeys(input.snapshot, ["third_party_cookie_set_before_consent", "thirdPartyCookieSetBeforeConsent"]) === true);
   const thirdPartyRequestDomains = Array.isArray(input.runtimeArtifacts?.third_party_request_domains)
     ? input.runtimeArtifacts.third_party_request_domains.filter((entry): entry is string => typeof entry === "string")
     : Array.isArray(input.snapshot.third_party_request_domains)
       ? input.snapshot.third_party_request_domains.filter((entry): entry is string => typeof entry === "string")
       : [];
-  const trackingBeforeConsentDetected = booleanFromKeys(input.snapshot, [
-    "tracking_before_consent_detected",
-    "trackingBeforeConsentDetected"
-  ]);
-  const preconsentTrackingDetected = booleanFromKeys(input.snapshot, [
-    "preconsent_tracking_detected",
-    "preconsentTrackingDetected"
-  ]);
-  const thirdPartyCookieSetBeforeConsent = booleanFromKeys(input.snapshot, [
-    "third_party_cookie_set_before_consent",
-    "thirdPartyCookieSetBeforeConsent"
-  ]);
+  const trackingBeforeConsentDetected = hasPreconsentTimelineSequenceEvidence
+    ? booleanFromKeys(input.snapshot, [
+        "tracking_before_consent_detected",
+        "trackingBeforeConsentDetected"
+      ])
+    : null;
+  const preconsentTrackingDetected = hasPreconsentTimelineSequenceEvidence
+    ? booleanFromKeys(input.snapshot, [
+        "preconsent_tracking_detected",
+        "preconsentTrackingDetected"
+      ])
+    : null;
+  const thirdPartyCookieSetBeforeConsent = hasPreconsentTimelineSequenceEvidence
+    ? booleanFromKeys(input.snapshot, [
+        "third_party_cookie_set_before_consent",
+        "thirdPartyCookieSetBeforeConsent"
+      ])
+    : null;
 
   return {
     homepageFetchStatus:

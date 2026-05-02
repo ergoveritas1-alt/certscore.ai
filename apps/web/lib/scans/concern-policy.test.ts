@@ -1642,6 +1642,160 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
   }
 });
 
+test("pre-consent policy requires timeline sequence plus non-essential request classification", () => {
+  const concern = makeConcern({
+    originKey: "privacy.preconsent_tracking_detected",
+    originType: "snapshot_signal",
+    suggestedUnifiedFindingId: "preconsent_tracking",
+    title: "Pre-consent tracking detected"
+  });
+
+  const strong = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      consentActionableChoiceObserved: true,
+      consentSurfaceObserved: true,
+      consentTimeline: {
+        firstCmpVisibleMs: 1000,
+        firstConsentActionMs: 1500,
+        firstNonEssentialRequestMs: 250,
+        timelineConfidence: "high"
+      },
+      requestPurposeClassificationConfidence: [
+        {
+          confidence: 0.9,
+          essentiality: "non_essential",
+          requestUrl: "https://analytics.example/pixel",
+          vendor: "Example Analytics"
+        }
+      ],
+      signalKey: "privacy.preconsent_tracking_detected"
+    }
+  });
+
+  assert.equal(strong.promotionEligibility, "eligible");
+  assert.equal(strong.allowedNarrativeTier, "strong");
+
+  const ambiguous = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      consentActionableChoiceObserved: true,
+      consentSurfaceObserved: true,
+      consentTimeline: {
+        firstCmpVisibleMs: null,
+        firstConsentActionMs: null,
+        firstNonEssentialRequestMs: 250,
+        timelineConfidence: "low"
+      },
+      requestPurposeClassificationConfidence: [
+        {
+          confidence: 0.9,
+          essentiality: "unknown",
+          requestUrl: "https://cdn.example/app.js",
+          vendor: null
+        }
+      ],
+      signalKey: "privacy.preconsent_tracking_detected"
+    }
+  });
+
+  assert.equal(ambiguous.promotionEligibility, "internal_only");
+  assert.equal(ambiguous.externalSurfacingEligibility, "audit_only");
+});
+
+test("reject persistence policy requires a successful reject path and post-reject timing", () => {
+  const concern = makeConcern({
+    originKey: "consent_reject_reduced_tracking",
+    originType: "snapshot_signal",
+    suggestedUnifiedFindingId: "reject_did_not_reduce_tracking",
+    title: "Reject path did not reduce tracking"
+  });
+
+  const eligible = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      postRejectNonEssentialRequests: [
+        {
+          category: "analytics",
+          ms_after_reject: 3500,
+          ts_ms: 5000,
+          url: "https://analytics.example/pixel",
+          vendor: "Example Analytics"
+        }
+      ],
+      requestPurposeClassificationConfidence: [
+        {
+          confidence: 0.91,
+          essentiality: "non_essential",
+          requestUrl: "https://analytics.example/pixel"
+        }
+      ],
+      rejectPathDepthAndAvailability: {
+        rejectInteractionSucceeded: true
+      },
+      suppressionChecks: {
+        post_reject_window_available: true
+      }
+    }
+  });
+
+  assert.equal(eligible.promotionEligibility, "eligible");
+
+  const failedReject = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      postRejectNonEssentialRequests: [
+        {
+          category: "analytics",
+          ms_after_reject: 3500,
+          ts_ms: 5000,
+          url: "https://analytics.example/pixel",
+          vendor: "Example Analytics"
+        }
+      ],
+      rejectPathDepthAndAvailability: {
+        rejectInteractionSucceeded: false
+      },
+      suppressionChecks: {
+        post_reject_window_available: true
+      }
+    }
+  });
+
+  assert.equal(failedReject.promotionEligibility, "internal_only");
+  assert.equal(failedReject.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"), true);
+});
+
+test("bot-block evidence keeps uncorroborated surface claims audit-only", () => {
+  const decision = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy_policy_present",
+      originType: "snapshot_signal",
+      suggestedUnifiedFindingId: "privacy_policy_present",
+      title: "Privacy policy present"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      botBlockChallengeEvidence: {
+        blocked: true,
+        challengeType: "captcha_probable",
+        confidence: 0.9,
+        coverageImpact: "severe",
+        httpStatus: 403,
+        markerMatches: ["captcha_marker", "http:403"],
+        vendor: "cloudflare"
+      }
+    }
+  });
+
+  assert.equal(decision.promotionEligibility, "internal_only");
+  assert.equal(decision.negativeEvidenceFlags.includes("blocked_or_interstitial_evidence_observed"), true);
+});
+
 test("concern policy helper primitives stay aligned with packet usage", () => {
   assert.equal(
     concernRequiresDirectRuntime(
@@ -1819,7 +1973,55 @@ test("deriveConcernPolicy keeps vendor-only pre-consent evidence audit-only", ()
   assert.equal(policy.externalSurfacingEligibility, "audit_only");
 });
 
-test("deriveConcernPolicy promotes pre-consent evidence with vendor, URL, and sequence", () => {
+test("deriveConcernPolicy keeps snapshot boolean-only pre-consent evidence audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.pre_consent_tracking_detected",
+      suggestedUnifiedFindingId: "preconsent_tracking",
+      title: "Pre-consent tracking detected"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      consentActionableChoiceObserved: true,
+      consentSurfaceObserved: true,
+      preconsent_tracking_detected: true,
+      tracking_before_consent_detected: true,
+      thirdPartyCookieSetBeforeConsent: true,
+      supportingSignals: ["privacy.preconsent_tracking_detected"]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"));
+});
+
+test("deriveConcernPolicy applies consentTimeline gate to validation-rule pre-consent findings", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "runtime_privacy.preconsent_tracking_observed",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "preconsent_tracking",
+      title: "Tracking observed before consent"
+    }),
+    evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
+    rawEvidence: {
+      consentActionableChoiceObserved: true,
+      consentSurfaceObserved: true,
+      preconsent_tracker_evidence_urls: ["https://www.googletagmanager.com/gtm.js"],
+      preconsent_tracker_vendors: ["Google Tag Manager"],
+      preconsent_tracking_detected: true
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"));
+});
+
+test("deriveConcernPolicy keeps pre-consent evidence without consentTimeline audit-only", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
       originKey: "privacy.preconsent_tracking_detected",
@@ -1835,6 +2037,44 @@ test("deriveConcernPolicy promotes pre-consent evidence with vendor, URL, and se
     }
   });
 
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"));
+});
+
+test("deriveConcernPolicy promotes pre-consent evidence with consentTimeline sequence", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.preconsent_tracking_detected",
+      suggestedUnifiedFindingId: "preconsent_tracking",
+      title: "Pre-consent tracking detected"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      consentActionableChoiceObserved: true,
+      consentSurfaceObserved: true,
+      consentTimeline: {
+        firstCmpVisibleMs: 1000,
+        firstConsentActionMs: 1500,
+        firstNonEssentialRequestMs: 250,
+        timelineConfidence: "high"
+      },
+      preconsent_tracker_evidence_urls: ["https://connect.facebook.net/fbevents.js"],
+      preconsent_tracker_vendors: ["Meta Pixel"],
+      requestPurposeClassificationConfidence: [
+        {
+          confidence: 0.9,
+          essentiality: "non_essential",
+          requestUrl: "https://connect.facebook.net/fbevents.js",
+          vendor: "Meta Pixel"
+        }
+      ],
+      preconsent_tracking_detected: true
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "strong");
   assert.equal(policy.promotionEligibility, "eligible");
   assert.equal(policy.externalSurfacingEligibility, "eligible");
 });
@@ -1882,7 +2122,7 @@ test("deriveConcernPolicy promotes pre-submit capture only for no-submit third-p
   assert.equal(retainedOnly.promotionEligibility, "internal_only");
 });
 
-test("deriveConcernPolicy promotes non-essential pre-consent cookie evidence", () => {
+test("deriveConcernPolicy keeps non-essential pre-consent cookie evidence without consentTimeline audit-only", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
       originKey: "privacy.preconsent_tracking_detected",
@@ -1906,8 +2146,10 @@ test("deriveConcernPolicy promotes non-essential pre-consent cookie evidence", (
     }
   });
 
-  assert.equal(policy.promotionEligibility, "eligible");
-  assert.equal(policy.externalSurfacingEligibility, "eligible");
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"));
 });
 
 test("deriveConcernPolicy keeps necessary pre-consent cookie evidence audit-only", () => {
@@ -2029,7 +2271,7 @@ test("deriveConcernPolicy promotes RTB cookie sync only with concrete request-le
     }
   });
 
-  assert.equal(policy.allowedNarrativeTier, "strong");
+  assert.equal(policy.allowedNarrativeTier, "moderate");
   assert.equal(policy.promotionEligibility, "eligible");
   assert.equal(policy.externalSurfacingEligibility, "eligible");
 });
@@ -2162,6 +2404,12 @@ test("deriveConcernPolicy keeps cookie disclosure gaps eligible for substantive 
     evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
     rawEvidence: {
       ignored_runtime_cookie_names: ["awsalbcors"],
+      disclosureSearchScopeRetained: true,
+      mismatchExplanation: "Observed runtime cookie _fbp was not found in the retained cookie disclosure.",
+      observedBehavior: "Runtime set _fbp.",
+      policyExtractionStatus: "fetched",
+      policySourceUrl: "https://example.com/cookie-policy",
+      policySnippet: "Cookie policy text.",
       runtime_cookie_names: ["optanonconsent", "_fbp"],
       unmatched_cookie_names: ["_fbp"],
       unmatched_third_party_cookie_count: 1
