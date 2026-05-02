@@ -85,7 +85,13 @@ test("projects surfaced unified findings into executive findings and regulatory 
       confidenceBand: "high",
       details: { family: "consent_tracking", kind: "preconsent_tracking" },
       evidence: {
-        counts: { preconsentViolationCount: 2 },
+        counts: {
+          cmpVisibleMs: 0,
+          firstCookieSeenMs: 0,
+          firstRequestMs: 712,
+          firstThirdPartyRequestMs: 1500,
+          preconsentViolationCount: 2
+        },
         entities: {
           runtimeVendors: ["Meta Pixel", "Google Analytics"],
           runtimeRequestUrls: ["https://connect.facebook.net/en_US/fbevents.js"]
@@ -146,9 +152,70 @@ test("projects surfaced unified findings into executive findings and regulatory 
   );
   assert.equal(projection.posture, "Action Needed");
   const preconsentFinding = projection.findings.find((finding) => finding.id === "pre_consent_tracking_detected");
-  assert.deepEqual(preconsentFinding?.evidenceDetails?.runtimeVendors, ["Meta Pixel", "Google Analytics"]);
-  assert.deepEqual(preconsentFinding?.evidenceDetails?.runtimeRequestUrls, ["https://connect.facebook.net/en_US/fbevents.js"]);
-  assert.deepEqual(preconsentFinding?.evidenceDetails?.counts, { preconsentViolationCount: 2 });
+  assert.equal(preconsentFinding?.evidenceDetails?.runtimeVendors, undefined);
+  assert.equal(preconsentFinding?.evidenceDetails?.runtimeRequestUrls, undefined);
+  assert.equal(preconsentFinding?.evidenceDetails?.sourceUrls, undefined);
+  assert.equal(preconsentFinding?.evidenceDetails?.pageUrls, undefined);
+  assert.equal(preconsentFinding?.evidenceDetails?.consentState?.userConsentActionObserved, false);
+  assert.equal(preconsentFinding?.evidenceDetails?.consentState?.trackingOccurredBeforeConsentChoice, true);
+  assert.deepEqual(
+    preconsentFinding?.evidenceDetails?.vendors?.map((vendor) => vendor.name),
+    ["Meta Pixel", "Google Analytics"]
+  );
+  assert.deepEqual(preconsentFinding?.evidenceDetails?.representativeRequests?.map((request) => request.url), [
+    "https://connect.facebook.net/en_US/fbevents.js"
+  ]);
+  assert.deepEqual(preconsentFinding?.evidenceDetails?.counts, {
+    totalPreConsentThirdPartyTrackingRequests: 2,
+    representativePreConsentTrackingRequests: 1,
+    uniquePreConsentTrackingVendorsObserved: 2,
+    preConsentTrackingCookies: 0,
+    identifierLikeRequests: 0
+  });
+  assert.equal(preconsentFinding?.evidenceVersion, "1.1");
+  assert.deepEqual(preconsentFinding?.evidenceDetails?.scanContext, {
+    pageUrl: "https://example.com/",
+    scanMode: "initial_page_load",
+    interactionBeforeFinding: false
+  });
+  assert.deepEqual(preconsentFinding?.evidenceDetails?.timing, {
+    pageStartMs: 0,
+    firstRequestMs: 712,
+    firstThirdPartyRequestMs: 1500,
+    firstThirdPartyTrackingRequestMs: 1500,
+    firstCookieSeenMs: 0,
+    firstTrackingCookieSeenMs: null
+  });
+  assert.equal(
+    preconsentFinding?.evidenceDetails?.identifierEvidence?.addressingOrSignalingTransmittedByRequest,
+    true
+  );
+  assert.match(
+    preconsentFinding?.evidenceDetails?.identifierEvidence?.interpretation ?? "",
+    /network-level addressing information/i
+  );
+  assert.doesNotMatch(
+    preconsentFinding?.evidenceDetails?.identifierEvidence?.interpretation ?? "",
+    /violation|liability|illegal|non-compliant/i
+  );
+  assert.deepEqual(preconsentFinding?.evidenceDetails?.timingAnalysis, {
+    trackingBeforeConsentWindow: true,
+    basis: "First third-party tracking request (1500ms) occurred after CMP became visible (0ms) and before any recorded consent interaction."
+  });
+  assert.equal(
+    preconsentFinding?.evidenceDetails?.requestSelectionNote,
+    "Representative requests are capped examples and are not exhaustive."
+  );
+  assert.deepEqual(preconsentFinding?.evidenceDetails?.policyEvidence, { evaluated: false });
+  assert.ok(
+    preconsentFinding?.evidencePreview.some((entry) =>
+      entry.startsWith("Representative pre-consent tracking request:")
+    )
+  );
+  assert.match(preconsentFinding?.shortSummary ?? "", /before any recorded consent choice/);
+  assert.match(preconsentFinding?.shortSummary ?? "", /Meta Pixel/);
+  assert.match(preconsentFinding?.shortSummary ?? "", /1500ms/);
+  assert.doesNotMatch(preconsentFinding?.shortSummary ?? "", /violation|liability|illegal/i);
   assert.ok(
     projection.topFindings.every((finding) => projection.findings.some((candidate) => candidate.id === finding.id))
   );

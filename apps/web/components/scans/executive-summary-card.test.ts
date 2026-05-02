@@ -960,6 +960,161 @@ test("ExecutiveSummaryCard renders compact reject-path JSON evidence", () => {
   assert.doesNotMatch(html, /baseline_reconstruction_status/);
 });
 
+test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "petdesk.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No fingerprinting evidence detected.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: ["Google Tag Manager", "HubSpot"],
+      requestedHost: "petdesk.com",
+      resolvedVendorNames: ["Google Tag Manager", "HubSpot"],
+      score: 58,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 7,
+      thirdPartyDomains: ["googletagmanager.com", "js.hs-scripts.com"],
+      topFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+          confidence: "strong",
+          severity: "critical",
+          shortSummary: "Third-party tracking began before any recorded consent choice. The first classified tracking request occurred at 1500ms, with representative vendors including Google Tag Manager and HubSpot.",
+          evidenceDetails: {
+            scanContext: {
+              pageUrl: "https://petdesk.com/",
+              scanMode: "initial_page_load",
+              interactionBeforeFinding: false
+            },
+            consentState: {
+              cmpDetected: true,
+              cmpVisibleMs: 0,
+              userConsentActionObserved: false,
+              consentActionType: null,
+              trackingOccurredBeforeConsentChoice: true
+            },
+            consentBasis: "No accept, reject, manage, or close interaction was recorded before the listed tracking requests.",
+            timingAnalysis: {
+              trackingBeforeConsentWindow: true,
+              basis: "First third-party tracking request (1500ms) occurred after CMP became visible (0ms) and before any recorded consent interaction."
+            },
+            timing: {
+              pageStartMs: 0,
+              firstRequestMs: 712,
+              firstThirdPartyRequestMs: 1500,
+              firstThirdPartyTrackingRequestMs: 1500,
+              firstCookieSeenMs: 0,
+              firstTrackingCookieSeenMs: null
+            },
+            counts: {
+              totalPreConsentThirdPartyTrackingRequests: 7,
+              representativePreConsentTrackingRequests: 2,
+              uniquePreConsentTrackingVendorsObserved: 2,
+              preConsentTrackingCookies: 0,
+              identifierLikeRequests: 0
+            },
+            requestSelectionNote: "Representative requests are capped examples and are not exhaustive.",
+            vendors: [
+              {
+                name: "Google Tag Manager",
+                category: "tag_manager",
+                preConsent: true,
+                representativeUrl: "https://www.googletagmanager.com/gtm.js",
+                firstSeenMs: 1500
+              },
+              {
+                name: "HubSpot",
+                category: "marketing_automation",
+                preConsent: true,
+                representativeUrl: "https://js.hs-scripts.com/20193302.js",
+                firstSeenMs: null
+              }
+            ],
+            representativeRequests: [
+              {
+                url: "https://www.googletagmanager.com/gtm.js",
+                hostname: "googletagmanager.com",
+                vendor: "Google Tag Manager",
+                category: "tag_manager",
+                resourceType: "script",
+                firstSeenMs: 1500,
+                thirdParty: true,
+                preConsent: true,
+                identifierLike: false,
+                deviceDataLike: false,
+                queryKeysSample: []
+              },
+              {
+                url: "https://js.hs-scripts.com/20193302.js",
+                hostname: "js.hs-scripts.com",
+                vendor: "HubSpot",
+                category: "marketing_automation",
+                resourceType: "script",
+                firstSeenMs: null,
+                thirdParty: true,
+                preConsent: true,
+                identifierLike: false,
+                deviceDataLike: false,
+                queryKeysSample: []
+              }
+            ],
+            identifierEvidence: {
+              addressingOrSignalingTransmittedByRequest: true,
+              basis: ["third_party_http_requests", "ip_address_transmitted_by_network_request"],
+              interpretation: "Standard browser HTTP requests to third-party domains transmit network-level addressing information required for routing.",
+              identifierLikeRequestCount: 0,
+              deviceDataLikeRequestCount: 0
+            },
+            policyEvidence: { evaluated: false },
+            legalRelevance: {
+              cipaPenRegisterTheorySupport: "supportive_runtime_signal",
+              gdprEprivacyConsentSupport: "strong_consent_timing_signal",
+              cpraSharingSupport: "possible",
+              ftcDarkPatternOrDeceptionSupport: "support_only"
+            },
+            limitations: ["Automated scan does not determine legal liability."]
+          },
+          evidencePreview: ["Representative pre-consent tracking request: https://www.googletagmanager.com/gtm.js"],
+          evidenceRefs: ["https://www.googletagmanager.com/gtm.js"]
+        })
+      ],
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 0
+      },
+      agencyMappings: [],
+      regulatoryRisk: makeRegulatoryRisk(),
+      topObservedEntities: [{ label: "Google Tag Manager", category: "tag_manager", requestCount: 1 }],
+      trackerSummary: "2 vendors across 2 third-party domains",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { tag_manager: 1 }
+    })
+  );
+
+  assert.match(html, /consentState/);
+  assert.match(html, /evidenceVersion/);
+  assert.match(html, /timingAnalysis/);
+  assert.match(html, /requestSelectionNote/);
+  assert.match(html, /consentBasis/);
+  assert.match(html, /representativeRequests/);
+  assert.match(html, /identifierEvidence/);
+  assert.match(html, /interpretation/);
+  assert.match(html, /uniquePreConsentTrackingVendorsObserved/);
+  assert.doesNotMatch(html, /preConsentTrackingVendors/);
+  assert.match(html, /Representative pre-consent tracking request/);
+  assert.match(html, /userConsentActionObserved/);
+  assert.doesNotMatch(html, /runtimeRequestUrls/);
+  assert.doesNotMatch(html, /sourceUrls/);
+  assert.doesNotMatch(html, /pageUrls/);
+  assert.doesNotMatch(html, /CIPA violation confirmed|legal liability confirmed/i);
+});
+
 test("ExecutiveSummaryCard renders fractional regulatory rating bar segments", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {

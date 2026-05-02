@@ -1830,7 +1830,45 @@ function compactRejectEvidenceJsonPayload(finding: CertScoreFinding) {
   };
 }
 
+function compactPreConsentTrackingEvidenceJsonPayload(finding: CertScoreFinding) {
+  const details = finding.evidenceDetails ?? {};
+
+  return {
+    id: finding.id,
+    label: finding.label,
+    section: finding.section,
+    severity: finding.severity,
+    confidence: finding.confidence,
+    directVsInferred: finding.directVsInferred,
+    defaultSurfacePriority: finding.defaultSurfacePriority,
+    evidenceVersion: finding.evidenceVersion ?? "1.1",
+    shortSummary: finding.shortSummary,
+    whyItMatters: finding.whyItMatters,
+    remediation: finding.remediation,
+    evidenceDetails: {
+      scanContext: details.scanContext ?? null,
+      consentState: details.consentState ?? null,
+      consentBasis: details.consentBasis ?? null,
+      timingAnalysis: details.timingAnalysis ?? null,
+      timing: details.timing ?? null,
+      counts: details.counts ?? {},
+      requestSelectionNote: details.requestSelectionNote ?? null,
+      vendors: details.vendors ?? [],
+      representativeRequests: details.representativeRequests ?? [],
+      identifierEvidence: details.identifierEvidence ?? null,
+      policyEvidence: details.policyEvidence ?? null,
+      legalRelevance: details.legalRelevance ?? null,
+      limitations: details.limitations ?? []
+    },
+    evidencePreview: finding.evidencePreview
+  };
+}
+
 function buildFindingEvidenceJsonPayload(finding: CertScoreFinding) {
+  if (finding.id === "pre_consent_tracking_detected") {
+    return compactPreConsentTrackingEvidenceJsonPayload(finding);
+  }
+
   if (finding.id === "reject_tracking_persists_after_reject") {
     return compactRejectEvidenceJsonPayload(finding);
   }

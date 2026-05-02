@@ -13,6 +13,88 @@ export type CertScoreFindingSeverity = "critical" | "high" | "medium" | "low";
 export type CertScoreFindingConfidence = "strong" | "good" | "moderate";
 export type CertScoreFindingDirectness = "direct" | "inferred" | "mixed";
 
+export type PreConsentTrackingEvidenceDetails = {
+  scanContext: {
+    pageUrl: string | null;
+    scanMode: "initial_page_load";
+    interactionBeforeFinding: boolean;
+  };
+  consentState: {
+    cmpDetected: boolean | null;
+    cmpVisibleMs: number | null;
+    userConsentActionObserved: boolean;
+    consentActionType: string | null;
+    trackingOccurredBeforeConsentChoice: boolean;
+  };
+  consentBasis: string;
+  timingAnalysis: {
+    trackingBeforeConsentWindow: boolean;
+    basis: string;
+  };
+  timing: {
+    pageStartMs: number;
+    firstRequestMs: number | null;
+    firstThirdPartyRequestMs: number | null;
+    firstThirdPartyTrackingRequestMs: number | null;
+    firstCookieSeenMs: number | null;
+    firstTrackingCookieSeenMs: number | null;
+  };
+  counts: {
+    totalPreConsentThirdPartyTrackingRequests: number;
+    representativePreConsentTrackingRequests: number;
+    uniquePreConsentTrackingVendorsObserved: number;
+    preConsentTrackingCookies: number;
+    identifierLikeRequests: number;
+  };
+  requestSelectionNote: string;
+  vendors: Array<{
+    name: string;
+    category: string | null;
+    preConsent: boolean;
+    representativeUrl: string | null;
+    firstSeenMs: number | null;
+  }>;
+  representativeRequests: Array<{
+    url: string;
+    hostname: string;
+    vendor: string | null;
+    category: string | null;
+    resourceType: string | null;
+    firstSeenMs: number | null;
+    thirdParty: boolean;
+    preConsent: boolean;
+    identifierLike: boolean;
+    deviceDataLike: boolean;
+    queryKeysSample: string[];
+  }>;
+  identifierEvidence: {
+    addressingOrSignalingTransmittedByRequest: boolean;
+    basis: string[];
+    interpretation: string;
+    identifierLikeRequestCount: number;
+    deviceDataLikeRequestCount: number;
+  };
+  policyEvidence:
+    | {
+        evaluated: false;
+      }
+    | {
+        evaluated: true;
+        cookieOrPrivacyPolicyFound: boolean;
+        relevantDisclosureFound: boolean;
+        disclosureGapObserved: boolean;
+        policyUrl: string | null;
+        snippet: string | null;
+      };
+  legalRelevance: {
+    cipaPenRegisterTheorySupport: "supportive_runtime_signal" | "possible" | "not_evaluated";
+    gdprEprivacyConsentSupport: "strong_consent_timing_signal" | "possible" | "not_evaluated";
+    cpraSharingSupport: "possible" | "not_evaluated";
+    ftcDarkPatternOrDeceptionSupport: "support_only" | "not_evaluated";
+  };
+  limitations: string[];
+};
+
 export type CertScoreFindingDefinition = {
   id: string;
   label: string;
@@ -24,6 +106,10 @@ export type CertScoreFindingDefinition = {
 
 export type CertScoreFindingEvidenceDetails = {
   counts?: Record<string, number>;
+  scanContext?: PreConsentTrackingEvidenceDetails["scanContext"];
+  consentState?: PreConsentTrackingEvidenceDetails["consentState"];
+  consentBasis?: string;
+  timingAnalysis?: PreConsentTrackingEvidenceDetails["timingAnalysis"];
   policyRuntimeConflict?: {
     policyAnchor: {
       claimType: string | null;
@@ -62,7 +148,14 @@ export type CertScoreFindingEvidenceDetails = {
   evidenceFlags?: string[];
   sourceSignals?: string[];
   sourceUrls?: string[];
-  timing?: Record<string, number | null>;
+  timing?: Record<string, number | null> | PreConsentTrackingEvidenceDetails["timing"];
+  requestSelectionNote?: string;
+  vendors?: PreConsentTrackingEvidenceDetails["vendors"];
+  representativeRequests?: PreConsentTrackingEvidenceDetails["representativeRequests"];
+  identifierEvidence?: PreConsentTrackingEvidenceDetails["identifierEvidence"];
+  policyEvidence?: PreConsentTrackingEvidenceDetails["policyEvidence"];
+  legalRelevance?: PreConsentTrackingEvidenceDetails["legalRelevance"];
+  limitations?: string[];
   consentInteraction?: Record<string, unknown>;
   promotionDecision?: Record<string, unknown>;
   rejectEvidenceDiff?: Record<string, unknown>;
@@ -79,6 +172,7 @@ export type CertScoreFinding = CertScoreFindingDefinition & {
   evidenceDetails?: CertScoreFindingEvidenceDetails;
   evidencePreview: string[];
   evidenceRefs: string[];
+  evidenceVersion?: string;
   severity: CertScoreFindingSeverity;
   shortSummary: string;
 };
