@@ -167,9 +167,12 @@ async function exportPayload() {
   }
 }
 
-function remapRow(table: TableName, row: Row, orgId: string): Row {
+function remapRow(table: TableName, row: Row, orgId: string, domainIdMap: Map<string, string>): Row {
   const next = { ...row };
   if ("organization_id" in next) next.organization_id = orgId;
+  if (typeof next.domain_id === "string" && domainIdMap.has(next.domain_id)) {
+    next.domain_id = domainIdMap.get(next.domain_id) ?? next.domain_id;
+  }
   if (table === "domains") {
     next.latest_scan_id = null;
   }
@@ -200,7 +203,64 @@ function remapRow(table: TableName, row: Row, orgId: string): Row {
   return next;
 }
 
-async function insertRows(client: Client, table: TableName, rows: Row[], orgId: string) {
+function getDomainNormalizedKey(row: Row) {
+  if (typeof row.normalized_url === "string" && row.normalized_url.trim().length > 0) {
+    return row.normalized_url;
+  }
+  if (typeof row.hostname === "string" && row.hostname.trim().length > 0) {
+    return `https://${row.hostname}`;
+  }
+  return typeof row.id === "string" ? row.id : null;
+}
+
+async function buildDomainIdMap(client: Client, domainRows: Row[], orgId: string) {
+  const canonicalRows = new Map<string, Row>();
+  const domainIdMap = new Map<string, string>();
+
+  for (const row of domainRows) {
+    const key = getDomainNormalizedKey(row);
+    const sourceId = typeof row.id === "string" ? row.id : null;
+    if (!key || !sourceId) {
+      continue;
+    }
+    if (!canonicalRows.has(key)) {
+      canonicalRows.set(key, row);
+    }
+    const canonicalId = canonicalRows.get(key)?.id;
+    if (typeof canonicalId === "string") {
+      domainIdMap.set(sourceId, canonicalId);
+    }
+  }
+
+  const normalizedUrls = [...canonicalRows.keys()];
+  if (normalizedUrls.length > 0) {
+    const existing = await client.query<{ id: string; normalized_url: string }>(
+      `select id, normalized_url
+         from domains
+        where organization_id = $1
+          and normalized_url = any($2::text[])`,
+      [orgId, normalizedUrls]
+    );
+
+    for (const row of existing.rows) {
+      canonicalRows.delete(row.normalized_url);
+      for (const source of domainRows) {
+        const key = getDomainNormalizedKey(source);
+        const sourceId = typeof source.id === "string" ? source.id : null;
+        if (key === row.normalized_url && sourceId) {
+          domainIdMap.set(sourceId, row.id);
+        }
+      }
+    }
+  }
+
+  return {
+    domainIdMap,
+    rowsToInsert: [...canonicalRows.values()]
+  };
+}
+
+async function insertRows(client: Client, table: TableName, rows: Row[], orgId: string, domainIdMap: Map<string, string>) {
   if (rows.length === 0) return 0;
   const targetColumns = await getColumns(client, table);
   const sourceColumns = Object.keys(rows[0] ?? {});
@@ -208,7 +268,7 @@ async function insertRows(client: Client, table: TableName, rows: Row[], orgId: 
   if (columns.length === 0) return 0;
 
   const mappedRows = rows.map((row) => {
-    const remapped = remapRow(table, row, orgId);
+    const remapped = remapRow(table, row, orgId, domainIdMap);
     return Object.fromEntries(columns.map((column) => [column, remapped[column] ?? null]));
   });
 
@@ -283,10 +343,12 @@ async function importPayload() {
     await client.query("set constraints all deferred");
     const orgId = await ensureImportOrg(client);
     if (!orgId) throw new Error("Failed to create/find import organization.");
+    const { domainIdMap, rowsToInsert: domainRowsToInsert } = await buildDomainIdMap(client, payload.rows.domains ?? [], orgId);
 
     const counts: Record<string, number> = {};
     for (const table of TABLES) {
-      counts[table] = await insertRows(client, table, payload.rows[table] ?? [], orgId);
+      const rows = table === "domains" ? domainRowsToInsert : payload.rows[table] ?? [];
+      counts[table] = await insertRows(client, table, rows, orgId, domainIdMap);
       console.log(`[import] ${table}: ${counts[table]}`);
     }
     const restoredPolicyLinks = await restoreSnapshotPolicyLinks(client, payload.rows.scan_snapshots ?? []);
