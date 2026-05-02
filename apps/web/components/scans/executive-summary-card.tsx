@@ -9,6 +9,7 @@ import { formatRepresentativeAccessibilityCoverage } from "../../lib/scans/acces
 import { compactEvidenceJsonForDisplay } from "../../lib/scans/compact-evidence-json";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
+import { rankFindings } from "../../lib/scans/rank-findings";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 import { CopyJsonButton } from "./copy-json-button";
 type DomainBenchmarkCardData = {
@@ -117,6 +118,93 @@ const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
   "unsubstantiated_testimonial_near_performance_claim"
 ]);
 
+const GDPR_EPRIVACY_REGULATORY_FINDING_IDS = new Set([
+  "pre_consent_tracking_detected",
+  "reject_tracking_persists_after_reject",
+  "third_party_tracking_pre_consent",
+  "third_party_cookie_pre_consent",
+  "analytics_cookie_pre_consent",
+  "adtech_cookie_pre_consent",
+  "rtb_cookie_sync_observed",
+  "cross_domain_identifier_sharing_observed",
+  "identifier_transmission_detected",
+  "device_data_collection_detected",
+  "telemetry_rich_identification_observed",
+  "probable_fingerprinting",
+  "non_cookie_tracking_detected",
+  "multi_vendor_tracking_detected",
+  "large_third_party_footprint",
+  "collection_endpoints_detected",
+  "reject_option_missing_or_hidden",
+  "asymmetric_consent_ui",
+  "forced_consent_interaction",
+  "blocking_overlay_observed",
+  "content_obstructed_by_overlay",
+  "repeated_consent_prompt",
+  "consent_dark_patterns_detected",
+  "autoplay_before_consent",
+  "cookie_disclosure_gap",
+  "policy_behavior_contradiction_detected",
+  "policy_clarity_risk",
+  "tracking_redirect_chain",
+  "high_request_density"
+]);
+
+const CCPA_CPRA_CIPA_REGULATORY_FINDING_IDS = new Set([
+  "cpra_cba_opt_out_missing",
+  "third_party_tracking_pre_consent",
+  "cross_domain_identifier_sharing_observed",
+  "identifier_transmission_detected",
+  "device_data_collection_detected",
+  "telemetry_rich_identification_observed",
+  "rtb_cookie_sync_observed",
+  "multi_vendor_tracking_detected",
+  "large_third_party_footprint",
+  "collection_endpoints_detected",
+  "sensitive_data_collection_with_third_party_tracking_present",
+  "sensitive_collection_surface_observed",
+  "session_recording_services_detected",
+  "session_replay_on_sensitive_input_surface",
+  "pre_submit_text_capture_detected",
+  "cookie_disclosure_gap",
+  "policy_behavior_contradiction_detected",
+  "policy_clarity_risk",
+  "tracking_redirect_chain"
+]);
+
+const FTC_REGULATORY_FINDING_IDS = new Set([
+  "reject_option_missing_or_hidden",
+  "asymmetric_consent_ui",
+  "forced_consent_interaction",
+  "blocking_overlay_observed",
+  "content_obstructed_by_overlay",
+  "consent_dark_patterns_detected",
+  "repeated_consent_prompt",
+  "popup_or_modal_present",
+  "interstitial_detected",
+  "policy_behavior_contradiction_detected",
+  "policy_clarity_risk",
+  "cookie_disclosure_gap",
+  "pre_consent_tracking_detected",
+  "reject_tracking_persists_after_reject",
+  "third_party_tracking_pre_consent",
+  "video_content_tracking_exposure",
+  "sensitive_data_collection_with_third_party_tracking_present",
+  "session_replay_on_sensitive_input_surface",
+  "pre_submit_text_capture_detected",
+  "telemetry_rich_identification_observed",
+  "probable_fingerprinting",
+  "non_cookie_tracking_detected",
+  "guaranteed_outcome_claim_detected",
+  "regulatory_registration_disclosure_absent",
+  "unsubstantiated_testimonial_near_performance_claim",
+  "leveraged_or_high_risk_product_promotion",
+  "high_request_density",
+  "multi_vendor_tracking_detected",
+  "large_third_party_footprint",
+  "collection_endpoints_detected"
+]);
+
 function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
   switch (finding.id) {
     case "guaranteed_outcome_claim_detected":
@@ -200,6 +288,33 @@ function buildObservedCountLensFinding(input: {
     id: input.id,
     label: input.label
   });
+}
+
+function mergeRegulatoryLensFindings(items: RegulatoryLensFinding[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) {
+      return false;
+    }
+    seen.add(item.id);
+    return true;
+  });
+}
+
+function buildMappedRegulatoryLensFindings(input: {
+  context?: Record<string, unknown>;
+  findingIds: Set<string>;
+  findings: CertScoreFinding[];
+}) {
+  return rankFindings(input.findings)
+    .filter((finding) => input.findingIds.has(finding.id))
+    .map((finding) =>
+      buildRegulatoryLensFindingFromCertFinding(
+        finding,
+        finding.id === "cpra_cba_opt_out_missing" ? finding.label : finding.shortSummary,
+        input.context
+      )
+    );
 }
 
 export type ExecutiveAccessLimitationNotice = {
@@ -385,6 +500,7 @@ export function buildRegulatoryLenses(
     findings.find((finding) => /pre[- ]consent|before consent/i.test(`${finding.label} ${finding.shortSummary}`));
   const replayFinding = findings.find((finding) => finding.id === "session_recording_services_detected");
   const rejectTrackingFinding = findings.find((finding) => finding.id === "reject_tracking_persists_after_reject");
+  const cpraCbaOptOutFinding = findings.find((finding) => finding.id === "cpra_cba_opt_out_missing");
   const cookieDisclosureFinding = findings.find((finding) => finding.id === "cookie_disclosure_gap");
   const sensitiveTrackingFinding =
     findings.find((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present") ??
@@ -443,19 +559,12 @@ export function buildRegulatoryLenses(
       hasTrackingConcern
     ));
 
-  const privacyTrackingNotes = [
-    trackingFinding
-      ? buildRegulatoryLensFindingFromCertFinding(trackingFinding, trackingFinding.shortSummary, {
-          lens: "GDPR / ePrivacy",
-          reason: "pre_consent_tracking"
-        })
-      : null,
-    rejectTrackingFinding && rejectTrackingFinding.id !== trackingFinding?.id
-      ? buildRegulatoryLensFindingFromCertFinding(rejectTrackingFinding, rejectTrackingFinding.shortSummary, {
-          lens: "GDPR / ePrivacy",
-          reason: "reject_tracking_failure"
-        })
-      : null,
+  const privacyTrackingNotes = mergeRegulatoryLensFindings([
+    ...buildMappedRegulatoryLensFindings({
+      context: { lens: "GDPR / ePrivacy", reason: "mapped_regulatory_finding" },
+      findingIds: GDPR_EPRIVACY_REGULATORY_FINDING_IDS,
+      findings
+    }),
     beforeConsentCookieCount > 0
       ? buildObservedCountLensFinding({
           count: beforeConsentCookieCount,
@@ -465,40 +574,15 @@ export function buildRegulatoryLenses(
           metric: "beforeConsentCookieCount",
           source: "regulatory_counts"
         })
-      : null,
-    replayFinding
-      ? buildRegulatoryLensFindingFromCertFinding(replayFinding, replayFinding.shortSummary, {
-          lens: "GDPR / ePrivacy",
-          reason: "session_recording"
-        })
-      : null,
-    sensitiveTrackingFinding
-      ? buildRegulatoryLensFindingFromCertFinding(sensitiveTrackingFinding, sensitiveTrackingFinding.shortSummary, {
-          lens: "GDPR / ePrivacy",
-          reason: "sensitive_data_tracking"
-        })
-      : null,
-    cookieDisclosureFinding
-      ? buildRegulatoryLensFindingFromCertFinding(cookieDisclosureFinding, cookieDisclosureFinding.shortSummary, {
-          lens: "GDPR / ePrivacy",
-          reason: "cookie_disclosure_gap"
-        })
       : null
-  ].filter((item): item is RegulatoryLensFinding => Boolean(item));
+  ].filter((item): item is RegulatoryLensFinding => Boolean(item)));
 
-  const cpraNotes = [
-    trackingFinding
-      ? buildRegulatoryLensFindingFromCertFinding(trackingFinding, trackingFinding.shortSummary, {
-          lens: "CCPA / CPRA",
-          reason: "pre_consent_tracking"
-        })
-      : null,
-    rejectTrackingFinding && rejectTrackingFinding.id !== trackingFinding?.id
-      ? buildRegulatoryLensFindingFromCertFinding(rejectTrackingFinding, rejectTrackingFinding.shortSummary, {
-          lens: "CCPA / CPRA",
-          reason: "reject_tracking_failure"
-        })
-      : null,
+  const cpraNotes = mergeRegulatoryLensFindings([
+    ...buildMappedRegulatoryLensFindings({
+      context: { lens: "CCPA / CPRA / CIPA", reason: "mapped_regulatory_finding" },
+      findingIds: CCPA_CPRA_CIPA_REGULATORY_FINDING_IDS,
+      findings
+    }),
     thirdPartyRequestCount > 0
       ? buildObservedCountLensFinding({
           count: thirdPartyRequestCount,
@@ -507,71 +591,16 @@ export function buildRegulatoryLenses(
           metric: "thirdPartyRequestCount",
           source: "regulatory_counts"
         })
-      : null,
-    replayFinding
-      ? buildRegulatoryLensFindingFromCertFinding(replayFinding, replayFinding.shortSummary, {
-          lens: "CCPA / CPRA",
-          reason: "session_recording"
-        })
-      : null,
-    clarityFinding
-      ? buildRegulatoryLensFindingFromCertFinding(clarityFinding, clarityFinding.shortSummary, {
-          lens: "CCPA / CPRA",
-          reason: "policy_clarity"
-        })
-      : null,
-    sensitiveTrackingFinding
-      ? buildRegulatoryLensFindingFromCertFinding(sensitiveTrackingFinding, sensitiveTrackingFinding.shortSummary, {
-          lens: "CCPA / CPRA",
-          reason: "sensitive_data_tracking"
-        })
-      : null,
-    cookieDisclosureFinding
-      ? buildRegulatoryLensFindingFromCertFinding(cookieDisclosureFinding, cookieDisclosureFinding.shortSummary, {
-          lens: "CCPA / CPRA",
-          reason: "cookie_disclosure_gap"
-        })
       : null
-  ].filter((item): item is RegulatoryLensFinding => Boolean(item));
+  ].filter((item): item is RegulatoryLensFinding => Boolean(item)));
 
-  const ftcNotes = [
-    consentFinding
-      ? buildRegulatoryLensFindingFromCertFinding(consentFinding, consentFinding.shortSummary, {
-          lens: "FTC",
-          reason: "consent_choice_architecture"
-        })
-      : null,
-    rejectTrackingFinding
-      ? buildRegulatoryLensFindingFromCertFinding(rejectTrackingFinding, rejectTrackingFinding.shortSummary, {
-          lens: "FTC",
-          reason: "reject_tracking_failure"
-        })
-      : null,
-    replayFinding
-      ? buildRegulatoryLensFindingFromCertFinding(replayFinding, replayFinding.shortSummary, {
-          lens: "FTC",
-          reason: "session_recording"
-        })
-      : null,
-    trackingFinding
-      ? buildRegulatoryLensFindingFromCertFinding(trackingFinding, trackingFinding.shortSummary, {
-          lens: "FTC",
-          reason: "pre_consent_tracking"
-        })
-      : null,
-    sensitiveTrackingFinding
-      ? buildRegulatoryLensFindingFromCertFinding(sensitiveTrackingFinding, sensitiveTrackingFinding.shortSummary, {
-          lens: "FTC",
-          reason: "sensitive_data_tracking"
-        })
-      : null,
-    cookieDisclosureFinding
-      ? buildRegulatoryLensFindingFromCertFinding(cookieDisclosureFinding, cookieDisclosureFinding.shortSummary, {
-          lens: "FTC",
-          reason: "cookie_disclosure_gap"
-        })
-      : null
-  ].filter((item): item is RegulatoryLensFinding => Boolean(item));
+  const ftcNotes = mergeRegulatoryLensFindings(
+    buildMappedRegulatoryLensFindings({
+      context: { lens: "FTC", reason: "mapped_regulatory_finding" },
+      findingIds: FTC_REGULATORY_FINDING_IDS,
+      findings
+    })
+  );
 
   const gdprScore = clampScore(
     84 -
@@ -585,6 +614,7 @@ export function buildRegulatoryLenses(
   const cpraScore = clampScore(
     82 -
       (hasTrackingConcern ? 24 : 0) -
+      (cpraCbaOptOutFinding ? 16 : 0) -
       (findingIds.has("cookie_disclosure_gap") ? 12 : 0) -
       (beforeConsentCookieCount > 0 ? 12 : 0) -
       (sensitiveTrackingFinding ? 14 : 0) -
@@ -608,6 +638,21 @@ export function buildRegulatoryLenses(
 
   const lenses: RegulatoryLens[] = [
     {
+      acronym: "CCPA / CPRA / CIPA",
+      detailTitle: "Disclosure and downstream sharing issues",
+      findings: cpraNotes,
+      ratingLabel: cpraTone.label,
+      score: cpraScore,
+      summary: sensitiveTrackingFinding
+        ? "Sensitive-data collection and downstream third-party exposure drive this score."
+        : cpraCbaOptOutFinding
+        ? "Cross-context behavioral advertising and CPRA opt-out posture drive this score."
+        : replayFinding || hasTrackingConcern || hasPreConsentCookieConcern
+        ? "Third-party collection and disclosure posture drives this score."
+        : "No strong sale/share-style signal surfaced in the top findings.",
+      toneClass: cpraTone.toneClass
+    },
+    {
       acronym: "GDPR / ePrivacy",
       detailTitle: "Consent and tracking issues",
       findings: privacyTrackingNotes,
@@ -619,19 +664,6 @@ export function buildRegulatoryLenses(
         ? "Consent and pre-consent tracking risk is the main issue."
         : "No major consent-triggering issue surfaced in the top findings.",
       toneClass: gdprTone.toneClass
-    },
-    {
-      acronym: "CCPA / CPRA",
-      detailTitle: "Disclosure and downstream sharing issues",
-      findings: cpraNotes,
-      ratingLabel: cpraTone.label,
-      score: cpraScore,
-      summary: sensitiveTrackingFinding
-        ? "Sensitive-data collection and downstream third-party exposure drive this score."
-        : replayFinding || hasTrackingConcern || hasPreConsentCookieConcern
-        ? "Third-party collection and disclosure posture drives this score."
-        : "No strong sale/share-style signal surfaced in the top findings.",
-      toneClass: cpraTone.toneClass
     },
     {
       acronym: "FTC",
@@ -1122,7 +1154,7 @@ function RegulatoryLensFindingCard(input: {
     <div className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700">
       <details className="group/json">
         <summary className="flex cursor-pointer list-none items-start justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
-          <span className="min-w-0 leading-5">{input.finding.label}</span>
+          <span className="line-clamp-2 min-w-0 leading-5">{input.finding.label}</span>
           <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-400 hover:text-slate-700">
             <span className="sr-only">Show evidence JSON</span>
             <svg
@@ -1649,7 +1681,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   return (
     <details className={`group mt-3 rounded-xl border px-3 py-2 ${tone.summary}`}>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-medium leading-5">
-        <span>{input.finding.shortSummary}</span>
+        <span className="line-clamp-2 min-w-0 group-open:line-clamp-none">{input.finding.shortSummary}</span>
         <span className="text-slate-400 transition-transform group-open:rotate-180">⌄</span>
       </summary>
       <div className="mt-4 space-y-4">

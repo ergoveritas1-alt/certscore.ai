@@ -49,7 +49,7 @@ export function PrivacyRequestForm() {
             <option value="other">Not sure / other</option>
             <option value="gdpr">GDPR / EEA</option>
             <option value="uk-gdpr">UK GDPR</option>
-            <option value="ccpa-cpra">CCPA / CPRA</option>
+            <option value="ccpa-cpra">CCPA / CPRA / CIPA</option>
           </select>
         </div>
 

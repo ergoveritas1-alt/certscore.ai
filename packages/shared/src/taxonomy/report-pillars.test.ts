@@ -337,6 +337,7 @@ test("maps signals and validation rules into unified findings", () => {
     categoryAlignments: [
       { evidenceCategoryId: "data_handling_disclosures", relation: "owner" },
       { evidenceCategoryId: "transparency_notice_data_subject_rights", relation: "overlay" },
+      { evidenceCategoryId: "sale_sharing_targeted_advertising_controls", relation: "overlay" },
       { evidenceCategoryId: "notice_rights_baseline", relation: "overlay" }
     ],
     signalMappings: [{ source: "snapshot_signal", key: "disclosure.cookie_policy_fetch_failed" }],
@@ -538,6 +539,47 @@ test("maps signals and validation rules into unified findings", () => {
   assert.equal(
     getReportUnifiedFindingByAlias("Regulator-operated mock scam example")?.id,
     "regulator_operated_mock_investment_example"
+  );
+});
+
+test("maps CCPA/CPRA/CIPA-relevant privacy findings into the California regulatory overview", () => {
+  const californiaFindingIds = new Set(
+    getReportUnifiedFindingsForSection("ca_privacy_rights_controls_ccpa_cpra_cppa").map(({ finding }) => finding.id)
+  );
+  const expectedFindingIds = [
+    "privacy_policy_present",
+    "privacy_policy_missing_surface",
+    "privacy_policy_unavailable",
+    "data_categories_disclosure_missing",
+    "third_party_recipient_disclosure_missing",
+    "purpose_of_use_disclosure_missing",
+    "cookie_policy_present",
+    "cookie_policy_missing_surface",
+    "cookie_policy_unavailable",
+    "bounded_key_page_discovery_unresolved",
+    "policy_clarity_risk",
+    "privacy_contact_path_present",
+    "missing_dsar_mechanism",
+    "privacy_rights_path_present",
+    "missing_dsar_high_exposure",
+    "privacy_terms_conflict",
+    "privacy_cookie_policy_conflict",
+    "preconsent_tracking",
+    "tracking_technologies_disclosure_present",
+    "targeted_advertising_disclosure_present",
+    "third_party_advertising_disclosure_present",
+    "behavioral_analytics_disclosure_present",
+    "children_privacy_context_without_supporting_disclosure",
+    "children_privacy_disclosure_present",
+    "fingerprinting_observed",
+    "blocking_overlay_observed",
+    "gpc_signal_not_honored",
+    "cpra_cba_opt_out_missing"
+  ];
+
+  assert.deepEqual(
+    expectedFindingIds.filter((findingId) => !californiaFindingIds.has(findingId)),
+    []
   );
 });
 

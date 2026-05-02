@@ -323,8 +323,8 @@ test("projects RTB cookie sync into executive and privacy regulatory lenses", ()
     thirdPartyRequestCount: 1
   });
   assert.ok(lenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
-  assert.ok(lenses.find((lens) => lens.acronym === "CCPA / CPRA")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
-  assert.ok(lenses.find((lens) => lens.acronym === "FTC")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
+  assert.ok(lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
+  assert.equal(lenses.find((lens) => lens.acronym === "FTC")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"), false);
 });
 
 test("projects policy runtime conflicts with compact canonical evidence references", () => {
@@ -456,7 +456,7 @@ test("projects confirmed cookie disclosure gaps into executive and privacy regul
     thirdPartyRequestCount: 1
   });
   assert.ok(lenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((entry) => entry.id === "cookie_disclosure_gap"));
-  assert.ok(lenses.find((lens) => lens.acronym === "CCPA / CPRA")?.findings.some((entry) => entry.id === "cookie_disclosure_gap"));
+  assert.ok(lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA")?.findings.some((entry) => entry.id === "cookie_disclosure_gap"));
   assert.ok(lenses.find((lens) => lens.acronym === "FTC")?.findings.some((entry) => entry.id === "cookie_disclosure_gap"));
 });
 
@@ -662,7 +662,7 @@ test("projects confirmed reject-path tracking into top findings and regulatory l
     thirdPartyRequestCount: 0
   });
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
-  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA");
+  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
   const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
 
   assert.ok(finding);
@@ -671,7 +671,7 @@ test("projects confirmed reject-path tracking into top findings and regulatory l
   assert.ok(projection.topFindings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
   assert.equal(projection.trace.packets[0]?.inRegulatoryLensInput, true);
   assert.ok(gdprLens?.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
-  assert.ok(cpraLens?.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
+  assert.equal(cpraLens?.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject"), false);
   assert.ok(ftcLens?.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
 });
 
@@ -1469,10 +1469,13 @@ test("surfaces sensitive-data tracking in regulatory lenses", () => {
   });
 
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
-  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA");
+  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
   const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
 
-  assert.ok(gdprLens?.findings.some((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present"));
+  assert.equal(
+    gdprLens?.findings.some((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present"),
+    false
+  );
   assert.equal(gdprLens?.summary, "Sensitive-data collection and tracking exposure are the main issue.");
   assert.ok(cpraLens?.findings.some((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present"));
   assert.equal(cpraLens?.summary, "Sensitive-data collection and downstream third-party exposure drive this score.");
