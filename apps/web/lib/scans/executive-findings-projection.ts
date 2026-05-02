@@ -331,6 +331,53 @@ function getUrlQueryKeysSample(value: string) {
   }
 }
 
+function getRepresentativeRequestDetails(urls: string[], vendors: string[]) {
+  return urls.slice(0, 8).map((url, index) => {
+    const hostname = getUrlHostname(url) ?? url;
+    const vendor = inferVendorNameFromUrl(url, vendors) ?? vendors[index] ?? null;
+    return {
+      url,
+      hostname,
+      vendor,
+      category: classifyTrackingCategory(`${vendor ?? ""} ${hostname} ${url}`),
+      resourceType: /\.js(?:[?#]|$)|\/gtm\.js|script/i.test(url) ? "script" : null,
+      firstSeenMs: null,
+      thirdParty: true,
+      preConsent: null,
+      identifierLike: isLikelyIdentifierRequest(url),
+      deviceDataLike: isLikelyDeviceDataRequest(url),
+      queryKeysSample: getUrlQueryKeysSample(url)
+    };
+  });
+}
+
+function getVendorDetails(vendors: string[], representativeRequests: Array<{ vendor: string | null; url: string; firstSeenMs: number | null; category: string | null }>) {
+  return vendors.slice(0, 8).map((name) => {
+    const matchingRequest = representativeRequests.find((request) => request.vendor === name);
+    return {
+      name,
+      category: matchingRequest?.category ?? classifyTrackingCategory(name),
+      preConsent: false,
+      representativeUrl: matchingRequest?.url ?? null,
+      firstSeenMs: matchingRequest?.firstSeenMs ?? null
+    };
+  });
+}
+
+function buildIdentifierEvidence(representativeRequests: Array<{ identifierLike: boolean; deviceDataLike: boolean }>) {
+  const identifierLikeRequestCount = representativeRequests.filter((request) => request.identifierLike).length;
+  const deviceDataLikeRequestCount = representativeRequests.filter((request) => request.deviceDataLike).length;
+  return {
+    addressingOrSignalingTransmittedByRequest: representativeRequests.length > 0,
+    basis: representativeRequests.length > 0
+      ? ["third_party_http_requests", "ip_address_transmitted_by_network_request"]
+      : [],
+    interpretation: "Standard browser HTTP requests to third-party domains transmit network-level addressing information required for routing.",
+    identifierLikeRequestCount,
+    deviceDataLikeRequestCount
+  };
+}
+
 function classifyTrackingCategory(value: string) {
   const normalized = value.toLowerCase();
   if (/tagmanager|gtm|tealium|ensighten|launch/i.test(normalized)) {
@@ -592,6 +639,290 @@ function buildPreConsentTrackingEvidenceDetails(
   return Object.keys(details).length > 0 ? details : undefined;
 }
 
+function buildRejectTrackingEvidenceDetails(packet: UnifiedFindingDisplayPacket): CertScoreFindingEvidenceDetails {
+  const consentInteraction = getFirstEntityJsonObject(packet, "consentInteraction");
+  const promotionDecision = getFirstEntityJsonObject(packet, "promotionDecision");
+  const rejectEvidenceDiff = getFirstEntityJsonObject(packet, "rejectEvidenceDiff");
+  const postRejectNonEssentialRequests = getEntityJsonObjects(packet, "postRejectNonEssentialRequests");
+  const suppressionChecks = getFirstEntityJsonObject(packet, "suppressionChecks");
+  const confidenceRisks = getEntityValues(packet, /^confidenceRisks$/i);
+  const requestUrls = uniqueCaseInsensitiveStrings([
+    ...getEntityUrlValues(packet, /runtime.*request|request.*url/i),
+    ...(packet.details?.family === "consent_tracking" ? (packet.details.requestUrls ?? []) : []),
+    ...postRejectNonEssentialRequests.flatMap((row) => getRecordString(row, ["url", "requestUrl", "urlSample"])),
+    ...(packet.evidence?.sourceUrls ?? [])
+  ]);
+  const runtimeVendors = uniqueStrings([
+    ...getRejectTrackingVendors(packet),
+    ...postRejectNonEssentialRequests.flatMap((row) => getRecordString(row, ["vendor", "vendorName", "name"]))
+  ]).filter(isDisplayVendorName);
+  const representativeRequests = postRejectNonEssentialRequests.length > 0
+    ? postRejectNonEssentialRequests.slice(0, 8).map((row, index) => {
+        const url = getRecordString(row, ["url", "requestUrl", "urlSample"]) ?? requestUrls[index] ?? "";
+        const hostname = getRecordString(row, ["hostname", "host", "domain"]) ?? getUrlHostname(url) ?? null;
+        const vendor = getRecordString(row, ["vendor", "vendorName", "name"]) ?? inferVendorNameFromUrl(url, runtimeVendors);
+        return {
+          url,
+          hostname: hostname ?? "",
+          vendor,
+          category: getRecordString(row, ["category", "vendorCategory", "classification"]) ?? classifyTrackingCategory(`${vendor ?? ""} ${hostname ?? ""} ${url}`),
+          resourceType: getRecordString(row, ["resourceType", "resource_type", "type"]),
+          firstSeenMs: getRecordNumber(row, ["ts_ms", "firstSeenMs", "timestampMs"]),
+          thirdParty: true,
+          preConsent: false,
+          identifierLike: isLikelyIdentifierRequest(url),
+          deviceDataLike: isLikelyDeviceDataRequest(url),
+          queryKeysSample: url ? getUrlQueryKeysSample(url) : []
+        };
+      })
+    : getRepresentativeRequestDetails(requestUrls, runtimeVendors).map((request) => ({ ...request, preConsent: false }));
+  const counts = Object.fromEntries(
+    Object.entries(packet.evidence?.counts ?? {}).filter(([, value]) => Number.isFinite(value))
+  );
+
+  return {
+    ...(Object.keys(counts).length > 0 ? { counts } : {}),
+    scanContext: {
+      pageUrl: packet.primaryPageUrl,
+      scanMode: "initial_page_load",
+      interactionBeforeFinding: true
+    },
+    consentState: {
+      cmpDetected: null,
+      cmpVisibleMs: null,
+      userConsentActionObserved: Boolean(consentInteraction) || getCountValue(packet, ["consentOptOutClicks"]) !== null,
+      consentActionType: getRecordString(consentInteraction ?? {}, ["action_type", "actionType"]) ?? "reject",
+      trackingOccurredBeforeConsentChoice: false
+    },
+    rejectInteraction: consentInteraction ?? {
+      observed: getCountValue(packet, ["consentOptOutClicks"]) !== null,
+      actionType: "reject"
+    },
+    postRejectEvidence: {
+      trackingPersistedAfterReject: packet.evidence?.flags?.includes("reject_evidence_confirmed") === true,
+      postRejectNonEssentialRequestCount: representativeRequests.length,
+      basis: packet.evidence?.flags?.includes("reject_evidence_confirmed")
+        ? "A reject interaction and post-reject non-essential tracking evidence were retained."
+        : "Tracking requests were retained during the consent flow, but post-reject timing was incomplete."
+    },
+    requestSelectionNote: "Representative post-reject requests are capped examples and are not exhaustive.",
+    vendors: getVendorDetails(runtimeVendors, representativeRequests),
+    representativeRequests,
+    identifierEvidence: buildIdentifierEvidence(representativeRequests),
+    policyEvidence: { evaluated: false },
+    legalRelevance: {
+      cipaPenRegisterTheorySupport: "not_evaluated",
+      gdprEprivacyConsentSupport: "possible",
+      cpraSharingSupport: "not_evaluated",
+      ftcDarkPatternOrDeceptionSupport: "support_only"
+    },
+    limitations: [
+      "Automated scan does not determine legal liability.",
+      "Post-reject evidence depends on the retained reject interaction and observation window."
+    ],
+    runtimeRequestUrls: requestUrls,
+    runtimeVendors,
+    evidenceFlags: uniqueStrings([...(packet.evidence?.flags ?? []), "reject_path_tracking_not_reduced"]),
+    ...(consentInteraction ? { consentInteraction } : {}),
+    ...(promotionDecision ? { promotionDecision } : {}),
+    ...(rejectEvidenceDiff ? { rejectEvidenceDiff } : {}),
+    ...(postRejectNonEssentialRequests.length > 0 ? { postRejectNonEssentialRequests: postRejectNonEssentialRequests.slice(0, 20) } : {}),
+    ...(confidenceRisks.length > 0 ? { confidenceRisks } : {}),
+    ...(suppressionChecks ? { suppressionChecks } : {})
+  };
+}
+
+function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket): CertScoreFindingEvidenceDetails {
+  const requestUrls = uniqueCaseInsensitiveStrings([
+    ...getSessionReplayRequestUrls(packet),
+    ...getEntityUrlValues(packet, /runtime.*request|request.*url|evidence.*url/i),
+    ...(packet.details?.family === "consent_tracking" ? (packet.details.requestUrls ?? []) : []),
+    ...(packet.evidence?.sourceUrls ?? [])
+  ]);
+  const vendors = uniqueStrings(getSessionReplayVendors(packet)).filter(isDisplayVendorName);
+  const representativeRequests = getRepresentativeRequestDetails(requestUrls, vendors).map((request) => ({
+    ...request,
+    preConsent: false,
+    category: "session_replay"
+  }));
+  const firstPartyProxyObserved = hasFirstPartyProxySessionReplayEvidence(packet, requestUrls);
+
+  return {
+    scanContext: {
+      pageUrl: packet.primaryPageUrl,
+      scanMode: "initial_page_load",
+      interactionBeforeFinding: false
+    },
+    counts: {
+      representativeSessionReplayRequests: representativeRequests.length,
+      sessionReplayVendorsObserved: vendors.length,
+      firstPartyProxyEndpointsObserved: firstPartyProxyObserved ? 1 : 0
+    },
+    sessionReplayEvidence: {
+      observed: true,
+      firstPartyProxyObserved,
+      basis: firstPartyProxyObserved
+        ? "Session recording collection appears proxied through the scanned first-party host."
+        : "Session recording vendor or request evidence was retained during runtime collection."
+    },
+    inputSurfaceEvidence: { evaluated: false },
+    requestSelectionNote: "Representative session recording requests are capped examples and are not exhaustive.",
+    vendors: getVendorDetails(vendors, representativeRequests),
+    representativeRequests,
+    identifierEvidence: buildIdentifierEvidence(representativeRequests),
+    policyEvidence: { evaluated: false },
+    legalRelevance: {
+      cipaPenRegisterTheorySupport: "possible",
+      gdprEprivacyConsentSupport: "possible",
+      cpraSharingSupport: "not_evaluated",
+      ftcDarkPatternOrDeceptionSupport: "support_only"
+    },
+    limitations: [
+      "Automated scan does not determine legal liability.",
+      "Session recording detection identifies collection services, not the full contents captured by the vendor."
+    ],
+    runtimeRequestUrls: requestUrls,
+    runtimeVendors: vendors,
+    evidenceFlags: uniqueStrings([
+      ...(packet.evidence?.flags ?? []),
+      ...(firstPartyProxyObserved ? ["session_replay_first_party_proxy_collection"] : [])
+    ]),
+    ...(firstPartyProxyObserved
+      ? { evidenceSnippets: ["FullStory collection appears proxied through the scanned first-party domain."] }
+      : {})
+  };
+}
+
+function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket): CertScoreFindingEvidenceDetails {
+  const syncRows = getEntityJsonObjects(packet, "rtbCookieSyncEvidence");
+  const detailRequestUrls = packet.details?.family === "consent_tracking" ? (packet.details.requestUrls ?? []) : [];
+  const detailVendors = packet.details?.family === "consent_tracking" ? (packet.details.vendors ?? []) : [];
+  const requestUrls = uniqueCaseInsensitiveStrings([
+    ...getEntityUrlValues(packet, /runtime.*request|request.*url|evidence.*url/i),
+    ...detailRequestUrls,
+    ...syncRows.flatMap((row) => getRecordString(row, ["url", "urlSample", "requestUrl"])),
+    ...(packet.evidence?.sourceUrls ?? [])
+  ]);
+  const vendors = uniqueStrings([
+    ...getEntityValues(packet, /rtb.*domain|runtime.*vendor|vendor/i),
+    ...detailVendors
+  ]).filter(isDisplayVendorName);
+  const representativeRequests = getRepresentativeRequestDetails(requestUrls, vendors).map((request) => ({
+    ...request,
+    preConsent: packet.evidence?.flags?.some((flag) => /preconsent/i.test(flag)) === true
+  })).map((request) => {
+    const matchingRow = syncRows.find((row) => {
+      const rowUrl = getRecordString(row, ["url", "urlSample", "requestUrl"]);
+      const rowHost = getRecordString(row, ["hostname", "host", "domain"]);
+      return rowUrl === request.url || (rowHost !== null && request.hostname.includes(rowHost));
+    });
+    const queryKeysSample = Array.isArray(matchingRow?.queryKeysSample)
+      ? matchingRow.queryKeysSample.filter((value): value is string => typeof value === "string").slice(0, 8)
+      : request.queryKeysSample;
+    return {
+      ...request,
+      queryKeysSample,
+      identifierLike: request.identifierLike || queryKeysSample.some((key) => /^(?:uid|uuid|user_id|userid|visitor|visitor_id|client_id|cid|fbp|fbc|gclid|msclkid|ttclid|rdt_uuid|email|hashed|hash|identity|id)$/i.test(key))
+    };
+  });
+
+  return {
+    scanContext: {
+      pageUrl: packet.primaryPageUrl,
+      scanMode: "initial_page_load",
+      interactionBeforeFinding: false
+    },
+    counts: {
+      totalRtbCookieSyncObservations:
+        getCountValue(packet, ["rtb_cookie_sync_observation_count", "rtbCookieSyncObservationCount"]) ?? syncRows.length,
+      representativeSyncRequests: representativeRequests.length,
+      uniqueSyncVendorsObserved: vendors.length,
+      identifierLikeRequests: representativeRequests.filter((request) => request.identifierLike).length
+    },
+    syncEvidence: {
+      observed: true,
+      basis: "Request path, host, or query evidence matched RTB or identity-sync patterns.",
+      examples: syncRows.slice(0, 8)
+    },
+    cookieEvidence: { evaluated: false },
+    requestSelectionNote: "Representative sync requests are capped examples and are not exhaustive.",
+    vendors: getVendorDetails(vendors, representativeRequests),
+    representativeRequests,
+    identifierEvidence: buildIdentifierEvidence(representativeRequests),
+    policyEvidence: { evaluated: false },
+    legalRelevance: {
+      cipaPenRegisterTheorySupport: "possible",
+      gdprEprivacyConsentSupport: "possible",
+      cpraSharingSupport: "possible",
+      ftcDarkPatternOrDeceptionSupport: "not_evaluated"
+    },
+    limitations: [
+      "Automated scan does not determine legal liability.",
+      "RTB and identity-sync patterns indicate request-level sharing signals, not the full downstream use of identifiers."
+    ],
+    runtimeRequestUrls: requestUrls,
+    runtimeVendors: vendors,
+    rtbCookieSyncEvidence: syncRows.slice(0, 12),
+    evidenceFlags: uniqueStrings(packet.evidence?.flags ?? [])
+  };
+}
+
+function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket): CertScoreFindingEvidenceDetails {
+  const vendors = uniqueStrings([
+    ...getEntityValues(packet, /cba.*vendor|vendor|runtime.*vendor/i),
+    ...getEntityValues(packet, /cbaVendorTier/i)
+  ]).filter(isDisplayVendorName);
+  const optOutUiResult = uniqueStrings(getEntityValues(packet, /optOutUiResult|opt_out_ui_result/i))[0] ?? null;
+  const snippets = uniqueStrings(packet.evidence?.snippets ?? []).map((snippet) => truncateDisplaySnippet(snippet)).slice(0, 3);
+
+  return {
+    scanContext: {
+      pageUrl: packet.primaryPageUrl,
+      scanMode: "initial_page_load",
+      interactionBeforeFinding: false
+    },
+    counts: {
+      cbaVendorsObserved: vendors.length,
+      optOutControlsObserved: optOutUiResult && !/absent|missing|not_found/i.test(optOutUiResult) ? 1 : 0
+    },
+    jurisdictionOrPolicyContext: {
+      framework: "CPRA",
+      evaluatedSignal: "cross_context_behavioral_advertising_opt_out",
+      policyEvidenceEvaluated: false
+    },
+    optOutControlEvidence: {
+      evaluated: true,
+      result: optOutUiResult,
+      missingOrAbsent: optOutUiResult ? /absent|missing|not_found/i.test(optOutUiResult) : null,
+      basis: snippets[0] ?? "CBA vendor evidence was retained without a retained CPRA-specific opt-out control."
+    },
+    trackingOrSharingContext: {
+      cbaVendorEvidenceObserved: vendors.length > 0,
+      vendors: vendors.slice(0, 8)
+    },
+    vendors: vendors.slice(0, 8).map((name) => ({
+      name,
+      category: "advertising",
+      preConsent: false,
+      representativeUrl: null,
+      firstSeenMs: null
+    })),
+    policyEvidence: { evaluated: false },
+    legalRelevance: {
+      cipaPenRegisterTheorySupport: "not_evaluated",
+      gdprEprivacyConsentSupport: "not_evaluated",
+      cpraSharingSupport: "possible",
+      ftcDarkPatternOrDeceptionSupport: "support_only"
+    },
+    limitations: [
+      "Automated scan does not determine legal liability.",
+      "Opt-out control detection may miss controls that require deeper navigation, geolocation, account state, or manual review."
+    ],
+    evidenceSnippets: snippets,
+    evidenceFlags: uniqueStrings(packet.evidence?.flags ?? [])
+  };
+}
+
 function formatVendorList(vendors: string[]) {
   if (vendors.length <= 1) {
     return vendors[0] ?? "";
@@ -770,6 +1101,18 @@ function buildExecutiveEvidenceDetails(
 ): CertScoreFindingEvidenceDetails | undefined {
   if (findingId === "pre_consent_tracking_detected") {
     return buildPreConsentTrackingEvidenceDetails(packet);
+  }
+  if (findingId === "reject_tracking_persists_after_reject") {
+    return buildRejectTrackingEvidenceDetails(packet);
+  }
+  if (findingId === "session_recording_services_detected") {
+    return buildSessionReplayEvidenceDetails(packet);
+  }
+  if (findingId === "rtb_cookie_sync_observed") {
+    return buildRtbCookieSyncEvidenceDetails(packet);
+  }
+  if (findingId === "cpra_cba_opt_out_missing") {
+    return buildCpraCbaOptOutEvidenceDetails(packet);
   }
 
   const runtimeVendors = uniqueStrings([
@@ -1074,7 +1417,13 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
     ...(evidenceDetails ? { evidenceDetails } : {}),
     evidencePreview: buildEvidencePreview(packet, findingId),
     evidenceRefs: buildEvidenceRefs(packet),
-    ...(findingId === "pre_consent_tracking_detected" ? { evidenceVersion: "1.1" } : {}),
+    ...([
+      "pre_consent_tracking_detected",
+      "reject_tracking_persists_after_reject",
+      "session_recording_services_detected",
+      "rtb_cookie_sync_observed",
+      "cpra_cba_opt_out_missing"
+    ].includes(findingId) ? { evidenceVersion: "1.1" } : {}),
     severity: mapSeverity(packet, findingId),
     shortSummary: buildExecutiveShortSummary(packet, findingId)
   } satisfies CertScoreFinding;

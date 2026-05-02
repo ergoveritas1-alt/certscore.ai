@@ -932,9 +932,57 @@ test("ExecutiveSummaryCard renders compact reject-path JSON evidence", () => {
             suppressionChecks: {
               reject_click_confirmed: true,
               non_essential_vendor_after_reject: true
-            }
+            },
+            scanContext: {
+              pageUrl: "https://www.inc.com/",
+              scanMode: "initial_page_load",
+              interactionBeforeFinding: true
+            },
+            rejectInteraction: {
+              observed: true,
+              actionType: "reject"
+            },
+            postRejectEvidence: {
+              trackingPersistedAfterReject: true,
+              postRejectNonEssentialRequestCount: 1,
+              basis: "A reject interaction and post-reject non-essential tracking evidence were retained."
+            },
+            requestSelectionNote: "Representative post-reject requests are capped examples and are not exhaustive.",
+            vendors: [
+              {
+                name: "Google Ads",
+                category: "advertising",
+                preConsent: false,
+                representativeUrl: "https://securepubads.g.doubleclick.net/pagead/managed/js/gpt.js",
+                firstSeenMs: 6696
+              }
+            ],
+            representativeRequests: [
+              {
+                url: "https://securepubads.g.doubleclick.net/pagead/managed/js/gpt.js",
+                hostname: "securepubads.g.doubleclick.net",
+                vendor: "Google Ads",
+                category: "advertising",
+                resourceType: "script",
+                firstSeenMs: 6696,
+                thirdParty: true,
+                preConsent: false,
+                identifierLike: false,
+                deviceDataLike: false,
+                queryKeysSample: []
+              }
+            ],
+            policyEvidence: { evaluated: false },
+            legalRelevance: {
+              cipaPenRegisterTheorySupport: "not_evaluated",
+              gdprEprivacyConsentSupport: "possible",
+              cpraSharingSupport: "not_evaluated",
+              ftcDarkPatternOrDeceptionSupport: "support_only"
+            },
+            limitations: ["Automated scan does not determine legal liability."]
           },
           evidenceRefs: ["https://securepubads.g.doubleclick.net/pagead/managed/js/gpt.js"],
+          evidenceVersion: "1.1",
           shortSummary: "Non-essential tracking requests fired after the reject interaction for Google Ads."
         })
       ],
@@ -952,6 +1000,10 @@ test("ExecutiveSummaryCard renders compact reject-path JSON evidence", () => {
   );
 
   assert.match(html, /postRejectNonEssentialRequests/);
+  assert.match(html, /evidenceVersion/);
+  assert.match(html, /evidenceDetails/);
+  assert.match(html, /postRejectEvidence/);
+  assert.match(html, /policyEvidence/);
   assert.match(html, /ms_after_reject/);
   assert.match(html, /reject_path_tracking_not_reduced/);
   assert.doesNotMatch(html, /why_non_essential/);

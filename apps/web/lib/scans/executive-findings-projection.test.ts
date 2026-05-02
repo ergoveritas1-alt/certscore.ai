@@ -382,6 +382,11 @@ test("projects RTB cookie sync into executive and privacy regulatory lenses", ()
   const finding = projection.findings.find((entry) => entry.id === "rtb_cookie_sync_observed");
   assert.ok(finding);
   assert.equal(finding.section, "Vendors & Requests");
+  assert.equal(finding.evidenceVersion, "1.1");
+  assert.equal(finding.evidenceDetails?.scanContext?.scanMode, "initial_page_load");
+  assert.equal(finding.evidenceDetails?.syncEvidence?.observed, true);
+  assert.equal(finding.evidenceDetails?.identifierEvidence?.identifierLikeRequestCount, 1);
+  assert.deepEqual(finding.evidenceDetails?.policyEvidence, { evaluated: false });
   assert.equal(finding.evidenceDetails?.rtbCookieSyncEvidence?.[0]?.hostname, "sync-t1.taboola.com");
   assert.ok(projection.topFindings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
 
@@ -672,6 +677,10 @@ test("projects reject-path tracking failure into executive findings with dedicat
     consentPostRejectThirdPartyCookieCount: 3
   });
   assert.ok(finding?.evidenceDetails?.evidenceFlags?.includes("reject_path_tracking_not_reduced"));
+  assert.equal(finding?.evidenceVersion, "1.1");
+  assert.equal(finding?.evidenceDetails?.postRejectEvidence?.trackingPersistedAfterReject, true);
+  assert.equal(finding?.evidenceDetails?.rejectInteraction?.action_type, "reject_all");
+  assert.deepEqual(finding?.evidenceDetails?.policyEvidence, { evaluated: false });
   assert.equal(finding?.evidenceDetails?.consentInteraction?.action_type, "reject_all");
   assert.equal(finding?.evidenceDetails?.postRejectNonEssentialRequests?.[0]?.ms_after_reject, 842);
   assert.equal(finding?.evidenceDetails?.suppressionChecks?.reject_click_confirmed, true);
@@ -1195,6 +1204,10 @@ test("projects concrete session replay vendor evidence into executive finding js
   const finding = projection.topFindings.find((candidate) => candidate.id === "session_recording_services_detected");
 
   assert.deepEqual(finding?.evidenceDetails?.runtimeVendors, ["Qualtrics SiteIntercept"]);
+  assert.equal(finding?.evidenceVersion, "1.1");
+  assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.observed, true);
+  assert.equal(finding?.evidenceDetails?.inputSurfaceEvidence?.evaluated, false);
+  assert.deepEqual(finding?.evidenceDetails?.policyEvidence, { evaluated: false });
   assert.deepEqual(finding?.evidenceDetails?.runtimeRequestUrls, [
     "https://siteintercept.qualtrics.com/WRSiteInterceptEngine/?Q_ZID=ZN_abc"
   ]);
@@ -1395,6 +1408,10 @@ test("projects CPRA CBA opt-out missing into executive findings and top findings
   assert.ok(finding);
   assert.equal(finding?.section, "Privacy & Tracking");
   assert.equal(finding?.severity, "high");
+  assert.equal(finding?.evidenceVersion, "1.1");
+  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.result, "absent");
+  assert.equal(finding?.evidenceDetails?.trackingOrSharingContext?.cbaVendorEvidenceObserved, true);
+  assert.deepEqual(finding?.evidenceDetails?.policyEvidence, { evaluated: false });
   assert.ok(projection.topFindings.some((candidate) => candidate.id === "cpra_cba_opt_out_missing"));
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
   assert.ok(finding?.shortSummary.includes("adsrvr.org"));

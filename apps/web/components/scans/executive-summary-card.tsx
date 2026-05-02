@@ -1864,13 +1864,87 @@ function compactPreConsentTrackingEvidenceJsonPayload(finding: CertScoreFinding)
   };
 }
 
+function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
+  const details = finding.evidenceDetails ?? {};
+
+  return {
+    id: finding.id,
+    label: finding.label,
+    section: finding.section,
+    severity: finding.severity,
+    confidence: finding.confidence,
+    directVsInferred: finding.directVsInferred,
+    defaultSurfacePriority: finding.defaultSurfacePriority,
+    evidenceVersion: finding.evidenceVersion ?? "1.1",
+    shortSummary: finding.shortSummary,
+    whyItMatters: finding.whyItMatters,
+    remediation: finding.remediation,
+    evidenceDetails: compactObject(
+      {
+        scanContext: details.scanContext ?? null,
+        consentState: details.consentState ?? undefined,
+        consentBasis: details.consentBasis ?? undefined,
+        timingAnalysis: details.timingAnalysis ?? undefined,
+        timing: details.timing ?? undefined,
+        rejectInteraction: details.rejectInteraction ?? undefined,
+        postRejectEvidence: details.postRejectEvidence ?? undefined,
+        sessionReplayEvidence: details.sessionReplayEvidence ?? undefined,
+        inputSurfaceEvidence: details.inputSurfaceEvidence ?? undefined,
+        syncEvidence: details.syncEvidence ?? undefined,
+        cookieEvidence: details.cookieEvidence ?? undefined,
+        optOutControlEvidence: details.optOutControlEvidence ?? undefined,
+        jurisdictionOrPolicyContext: details.jurisdictionOrPolicyContext ?? undefined,
+        trackingOrSharingContext: details.trackingOrSharingContext ?? undefined,
+        counts: details.counts ?? {},
+        requestSelectionNote: details.requestSelectionNote ?? undefined,
+        vendors: details.vendors ?? [],
+        representativeRequests: details.representativeRequests ?? undefined,
+        identifierEvidence: details.identifierEvidence ?? undefined,
+        policyEvidence: details.policyEvidence ?? { evaluated: false },
+        legalRelevance: details.legalRelevance ?? undefined,
+        limitations: details.limitations ?? []
+      },
+      [
+        "scanContext",
+        "consentState",
+        "consentBasis",
+        "timingAnalysis",
+        "timing",
+        "rejectInteraction",
+        "postRejectEvidence",
+        "sessionReplayEvidence",
+        "inputSurfaceEvidence",
+        "syncEvidence",
+        "cookieEvidence",
+        "optOutControlEvidence",
+        "jurisdictionOrPolicyContext",
+        "trackingOrSharingContext",
+        "counts",
+        "requestSelectionNote",
+        "vendors",
+        "representativeRequests",
+        "identifierEvidence",
+        "policyEvidence",
+        "legalRelevance",
+        "limitations"
+      ]
+    ),
+    evidencePreview: finding.evidencePreview
+  };
+}
+
 function buildFindingEvidenceJsonPayload(finding: CertScoreFinding) {
   if (finding.id === "pre_consent_tracking_detected") {
     return compactPreConsentTrackingEvidenceJsonPayload(finding);
   }
 
-  if (finding.id === "reject_tracking_persists_after_reject") {
-    return compactRejectEvidenceJsonPayload(finding);
+  if (
+    finding.id === "reject_tracking_persists_after_reject" ||
+    finding.id === "session_recording_services_detected" ||
+    finding.id === "rtb_cookie_sync_observed" ||
+    finding.id === "cpra_cba_opt_out_missing"
+  ) {
+    return compactCanonicalEvidenceJsonPayload(finding);
   }
 
   return finding;

@@ -110,6 +110,15 @@ export type CertScoreFindingEvidenceDetails = {
   consentState?: PreConsentTrackingEvidenceDetails["consentState"];
   consentBasis?: string;
   timingAnalysis?: PreConsentTrackingEvidenceDetails["timingAnalysis"];
+  rejectInteraction?: Record<string, unknown>;
+  postRejectEvidence?: Record<string, unknown>;
+  sessionReplayEvidence?: Record<string, unknown>;
+  inputSurfaceEvidence?: Record<string, unknown>;
+  syncEvidence?: Record<string, unknown>;
+  cookieEvidence?: Record<string, unknown>;
+  optOutControlEvidence?: Record<string, unknown>;
+  jurisdictionOrPolicyContext?: Record<string, unknown>;
+  trackingOrSharingContext?: Record<string, unknown>;
   policyRuntimeConflict?: {
     policyAnchor: {
       claimType: string | null;
