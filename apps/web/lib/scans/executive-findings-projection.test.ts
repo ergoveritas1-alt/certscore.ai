@@ -1417,6 +1417,106 @@ test("projects CPRA CBA opt-out missing into executive findings and top findings
   assert.ok(finding?.shortSummary.includes("adsrvr.org"));
 });
 
+test("projects remaining top finding families with canonical evidence details", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("third_party_cookie_pre_consent", {
+      details: { family: "consent_tracking", kind: "third_party_cookie_pre_consent" },
+      evidence: {
+        counts: { preconsentCookieCount: 2 },
+        entities: { runtimeVendors: ["Google Analytics"] },
+        fetchQuality: null,
+        flags: ["privacy.third_party_cookie_pre_consent"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Third-party cookies were retained before consent."],
+        sourceUrls: []
+      },
+      severity: "high"
+    }),
+    makePacket("reject_button_missing", {
+      details: { family: "consent_tracking", kind: "reject_button_missing" },
+      evidence: {
+        counts: {},
+        entities: {},
+        fetchQuality: null,
+        flags: ["privacy.reject_button_missing"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Reject option was not visible on the first consent layer."],
+        sourceUrls: []
+      },
+      severity: "high"
+    }),
+    makePacket("identifier_transmission_detected", {
+      details: { family: "consent_tracking", kind: "identifier_transmission_detected" },
+      evidence: {
+        counts: {},
+        entities: {
+          runtimeRequestUrls: ["https://tracker.example/collect?uid=abc"],
+          runtimeVendors: ["Tracker Example"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.identifier_transmission_detected"],
+        pageUrls: ["https://example.com/"],
+        snippets: [],
+        sourceUrls: []
+      },
+      severity: "high"
+    }),
+    makePacket("accessibility_risk_score", {
+      details: { family: "accessibility", kind: "accessibility_risk_score" },
+      evidence: {
+        counts: { seriousAxeViolationCount: 1 },
+        entities: {},
+        fetchQuality: null,
+        flags: ["accessibility.representative_barrier"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["color-contrast failed on button text."],
+        sourceUrls: []
+      },
+      severity: "medium"
+    }),
+    makePacket("policy_clarity_risk", {
+      details: { family: "policy_extraction", kind: "policy_clarity_risk" },
+      evidence: {
+        counts: {},
+        entities: {},
+        fetchQuality: null,
+        flags: ["policy.clarity_risk"],
+        pageUrls: ["https://example.com/privacy"],
+        snippets: ["Policy language does not clearly explain advertising sharing choices."],
+        sourceUrls: ["https://example.com/privacy"]
+      },
+      severity: "medium"
+    }),
+    makePacket("leveraged_or_high_risk_product_promotion", {
+      details: { family: "financial_promotion", kind: "leveraged_or_high_risk_product_promotion" },
+      evidence: {
+        counts: {},
+        entities: {},
+        fetchQuality: null,
+        flags: ["financial.high_risk_product_promotion"],
+        pageUrls: ["https://example.com/invest"],
+        snippets: ["Trade leveraged products with high potential upside."],
+        sourceUrls: ["https://example.com/invest"]
+      },
+      severity: "high"
+    })
+  ]);
+
+  const byId = new Map(projection.findings.map((finding) => [finding.id, finding]));
+  assert.equal(byId.get("third_party_cookie_pre_consent")?.evidenceVersion, "1.1");
+  assert.equal(byId.get("third_party_cookie_pre_consent")?.evidenceDetails?.cookieEvidence?.observed, true);
+  assert.equal(byId.get("reject_option_missing_or_hidden")?.evidenceVersion, "1.1");
+  assert.equal(byId.get("reject_option_missing_or_hidden")?.evidenceDetails?.consentUiEvidence?.observed, true);
+  assert.equal(byId.get("identifier_transmission_detected")?.evidenceVersion, "1.1");
+  assert.equal(byId.get("identifier_transmission_detected")?.evidenceDetails?.telemetryEvidence?.identifierLikeRequestCount, 1);
+  assert.equal(byId.get("accessibility_risk_score")?.evidenceVersion, "1.1");
+  assert.equal(byId.get("accessibility_risk_score")?.evidenceDetails?.accessibilityEvidence?.observed, true);
+  assert.equal(byId.get("policy_clarity_risk")?.evidenceVersion, "1.1");
+  assert.equal(byId.get("policy_clarity_risk")?.evidenceDetails?.policyEvidenceDetails?.clarityRiskObserved, true);
+  assert.equal(byId.get("leveraged_or_high_risk_product_promotion")?.evidenceVersion, "1.1");
+  assert.equal(byId.get("leveraged_or_high_risk_product_promotion")?.evidenceDetails?.financialClaimsEvidence?.observed, true);
+});
+
 test("records surfaced packets that are not yet mapped into executive findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("some_unmapped_surface", {

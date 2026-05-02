@@ -118,6 +118,52 @@ const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
   "unsubstantiated_testimonial_near_performance_claim"
 ]);
 
+const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
+  "pre_consent_tracking_detected",
+  "reject_tracking_persists_after_reject",
+  "third_party_tracking_pre_consent",
+  "rtb_cookie_sync_observed",
+  "cpra_cba_opt_out_missing",
+  "cross_domain_identifier_sharing_observed",
+  "cookie_disclosure_gap",
+  "third_party_cookie_pre_consent",
+  "analytics_cookie_pre_consent",
+  "adtech_cookie_pre_consent",
+  "telemetry_rich_identification_observed",
+  "reject_option_missing_or_hidden",
+  "asymmetric_consent_ui",
+  "forced_consent_interaction",
+  "blocking_overlay_observed",
+  "content_obstructed_by_overlay",
+  "repeated_consent_prompt",
+  "multi_vendor_tracking_detected",
+  "session_recording_services_detected",
+  "session_replay_on_sensitive_input_surface",
+  "sensitive_data_collection_with_third_party_tracking_present",
+  "sensitive_collection_surface_observed",
+  "video_content_tracking_exposure",
+  "pre_submit_text_capture_detected",
+  "identifier_transmission_detected",
+  "device_data_collection_detected",
+  "probable_fingerprinting",
+  "non_cookie_tracking_detected",
+  "high_request_density",
+  "large_third_party_footprint",
+  "collection_endpoints_detected",
+  "consent_dark_patterns_detected",
+  "policy_behavior_contradiction_detected",
+  "policy_clarity_risk",
+  "tracking_redirect_chain",
+  "autoplay_before_consent",
+  "popup_or_modal_present",
+  "interstitial_detected",
+  "accessibility_risk_score",
+  "guaranteed_outcome_claim_detected",
+  "regulatory_registration_disclosure_absent",
+  "unsubstantiated_testimonial_near_performance_claim",
+  "leveraged_or_high_risk_product_promotion"
+]);
+
 const GDPR_EPRIVACY_REGULATORY_FINDING_IDS = new Set([
   "pre_consent_tracking_detected",
   "reject_tracking_persists_after_reject",
@@ -1895,6 +1941,14 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
         optOutControlEvidence: details.optOutControlEvidence ?? undefined,
         jurisdictionOrPolicyContext: details.jurisdictionOrPolicyContext ?? undefined,
         trackingOrSharingContext: details.trackingOrSharingContext ?? undefined,
+        trackingEvidence: details.trackingEvidence ?? undefined,
+        consentUiEvidence: details.consentUiEvidence ?? undefined,
+        sensitiveDataEvidence: details.sensitiveDataEvidence ?? undefined,
+        telemetryEvidence: details.telemetryEvidence ?? undefined,
+        accessibilityEvidence: details.accessibilityEvidence ?? undefined,
+        policyEvidenceDetails: details.policyEvidenceDetails ?? undefined,
+        financialClaimsEvidence: details.financialClaimsEvidence ?? undefined,
+        disclosureEvidence: details.disclosureEvidence ?? undefined,
         counts: details.counts ?? {},
         requestSelectionNote: details.requestSelectionNote ?? undefined,
         vendors: details.vendors ?? [],
@@ -1919,6 +1973,15 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
         "optOutControlEvidence",
         "jurisdictionOrPolicyContext",
         "trackingOrSharingContext",
+        "trackingEvidence",
+        "cookieEvidence",
+        "consentUiEvidence",
+        "sensitiveDataEvidence",
+        "telemetryEvidence",
+        "accessibilityEvidence",
+        "policyEvidenceDetails",
+        "financialClaimsEvidence",
+        "disclosureEvidence",
         "counts",
         "requestSelectionNote",
         "vendors",
@@ -1939,10 +2002,7 @@ function buildFindingEvidenceJsonPayload(finding: CertScoreFinding) {
   }
 
   if (
-    finding.id === "reject_tracking_persists_after_reject" ||
-    finding.id === "session_recording_services_detected" ||
-    finding.id === "rtb_cookie_sync_observed" ||
-    finding.id === "cpra_cba_opt_out_missing"
+    CANONICAL_EVIDENCE_FINDING_IDS.has(finding.id)
   ) {
     return compactCanonicalEvidenceJsonPayload(finding);
   }

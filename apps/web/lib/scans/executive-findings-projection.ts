@@ -71,6 +71,105 @@ const CONTRADICTION_FINDING_IDS = new Set([
   "privacy_terms_conflict"
 ]);
 
+const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
+  "pre_consent_tracking_detected",
+  "reject_tracking_persists_after_reject",
+  "third_party_tracking_pre_consent",
+  "rtb_cookie_sync_observed",
+  "cpra_cba_opt_out_missing",
+  "cross_domain_identifier_sharing_observed",
+  "cookie_disclosure_gap",
+  "third_party_cookie_pre_consent",
+  "analytics_cookie_pre_consent",
+  "adtech_cookie_pre_consent",
+  "telemetry_rich_identification_observed",
+  "reject_option_missing_or_hidden",
+  "asymmetric_consent_ui",
+  "forced_consent_interaction",
+  "blocking_overlay_observed",
+  "content_obstructed_by_overlay",
+  "repeated_consent_prompt",
+  "multi_vendor_tracking_detected",
+  "session_recording_services_detected",
+  "session_replay_on_sensitive_input_surface",
+  "sensitive_data_collection_with_third_party_tracking_present",
+  "sensitive_collection_surface_observed",
+  "video_content_tracking_exposure",
+  "pre_submit_text_capture_detected",
+  "identifier_transmission_detected",
+  "device_data_collection_detected",
+  "probable_fingerprinting",
+  "non_cookie_tracking_detected",
+  "high_request_density",
+  "large_third_party_footprint",
+  "collection_endpoints_detected",
+  "consent_dark_patterns_detected",
+  "policy_behavior_contradiction_detected",
+  "policy_clarity_risk",
+  "tracking_redirect_chain",
+  "autoplay_before_consent",
+  "popup_or_modal_present",
+  "interstitial_detected",
+  "accessibility_risk_score",
+  "guaranteed_outcome_claim_detected",
+  "regulatory_registration_disclosure_absent",
+  "unsubstantiated_testimonial_near_performance_claim",
+  "leveraged_or_high_risk_product_promotion"
+]);
+
+const COOKIE_EVIDENCE_FINDING_IDS = new Set([
+  "third_party_cookie_pre_consent",
+  "analytics_cookie_pre_consent",
+  "adtech_cookie_pre_consent",
+  "non_cookie_tracking_detected",
+  "cookie_disclosure_gap"
+]);
+
+const CONSENT_UI_EVIDENCE_FINDING_IDS = new Set([
+  "reject_option_missing_or_hidden",
+  "asymmetric_consent_ui",
+  "forced_consent_interaction",
+  "blocking_overlay_observed",
+  "content_obstructed_by_overlay",
+  "repeated_consent_prompt",
+  "consent_dark_patterns_detected"
+]);
+
+const SENSITIVE_EVIDENCE_FINDING_IDS = new Set([
+  "session_replay_on_sensitive_input_surface",
+  "sensitive_data_collection_with_third_party_tracking_present",
+  "sensitive_collection_surface_observed",
+  "video_content_tracking_exposure",
+  "pre_submit_text_capture_detected"
+]);
+
+const TELEMETRY_EVIDENCE_FINDING_IDS = new Set([
+  "identifier_transmission_detected",
+  "device_data_collection_detected",
+  "telemetry_rich_identification_observed",
+  "probable_fingerprinting",
+  "collection_endpoints_detected"
+]);
+
+const FOOTPRINT_EVIDENCE_FINDING_IDS = new Set([
+  "third_party_tracking_pre_consent",
+  "cross_domain_identifier_sharing_observed",
+  "multi_vendor_tracking_detected",
+  "high_request_density",
+  "large_third_party_footprint",
+  "tracking_redirect_chain",
+  "autoplay_before_consent",
+  "popup_or_modal_present",
+  "interstitial_detected"
+]);
+
+const FINANCIAL_EVIDENCE_FINDING_IDS = new Set([
+  "guaranteed_outcome_claim_detected",
+  "regulatory_registration_disclosure_absent",
+  "unsubstantiated_testimonial_near_performance_claim",
+  "leveraged_or_high_risk_product_promotion"
+]);
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
@@ -343,7 +442,7 @@ function getRepresentativeRequestDetails(urls: string[], vendors: string[]) {
       resourceType: /\.js(?:[?#]|$)|\/gtm\.js|script/i.test(url) ? "script" : null,
       firstSeenMs: null,
       thirdParty: true,
-      preConsent: null,
+      preConsent: false,
       identifierLike: isLikelyIdentifierRequest(url),
       deviceDataLike: isLikelyDeviceDataRequest(url),
       queryKeysSample: getUrlQueryKeysSample(url)
@@ -923,6 +1022,242 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
   };
 }
 
+function getPacketCounts(packet: UnifiedFindingDisplayPacket) {
+  return Object.fromEntries(
+    Object.entries(packet.evidence?.counts ?? {}).filter(([, value]) => Number.isFinite(value))
+  );
+}
+
+function getPacketSourceSignals(packet: UnifiedFindingDisplayPacket) {
+  return uniqueStrings(
+    packet.sourceRefs.flatMap((sourceRef) => {
+      if (sourceRef.kind !== "signal") {
+        return [];
+      }
+      return sourceRef.label ? `${sourceRef.key}: ${sourceRef.label}` : sourceRef.key;
+    })
+  );
+}
+
+function getPacketRuntimeRequestUrls(packet: UnifiedFindingDisplayPacket) {
+  return uniqueCaseInsensitiveStrings([
+    ...getEntityUrlValues(packet, /runtime.*request|request.*url|evidence.*url|collection.*endpoint|redirect.*url/i),
+    ...(packet.details?.family === "consent_tracking" ? (packet.details.requestUrls ?? []) : []),
+    ...(packet.evidence?.sourceUrls ?? [])
+  ]);
+}
+
+function getPacketRuntimeVendors(packet: UnifiedFindingDisplayPacket) {
+  return uniqueStrings([
+    ...getEntityValues(packet, /runtime.*vendor|vendor|relatedVendors|third.*party.*domain|request.*domain/i),
+    ...(packet.details?.family === "consent_tracking" ? (packet.details.vendors ?? []) : [])
+  ]).filter(isDisplayVendorName);
+}
+
+function getPacketEvidenceSnippets(packet: UnifiedFindingDisplayPacket) {
+  return uniqueStrings(packet.evidence?.snippets ?? []).map((snippet) => truncateDisplaySnippet(snippet)).slice(0, 5);
+}
+
+function buildGenericCanonicalEvidenceDetails(
+  packet: UnifiedFindingDisplayPacket,
+  findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
+): CertScoreFindingEvidenceDetails {
+  const runtimeRequestUrls = getPacketRuntimeRequestUrls(packet);
+  const runtimeVendors = getPacketRuntimeVendors(packet);
+  const representativeRequests = getRepresentativeRequestDetails(runtimeRequestUrls, runtimeVendors);
+  const evidenceSnippets = getPacketEvidenceSnippets(packet);
+  const sourceSignals = getPacketSourceSignals(packet);
+  const evidenceFlags = uniqueStrings(packet.evidence?.flags ?? []);
+  const sourceUrls = uniqueStrings(packet.evidence?.sourceUrls ?? []);
+  const pageUrls = uniqueStrings([
+    packet.primaryPageUrl,
+    packet.sourceUrl,
+    ...(packet.evidence?.pageUrls ?? [])
+  ]);
+  const counts = getPacketCounts(packet);
+  const details: CertScoreFindingEvidenceDetails = {
+    ...(Object.keys(counts).length > 0 ? { counts } : {}),
+    scanContext: {
+      pageUrl: packet.primaryPageUrl,
+      scanMode: "initial_page_load",
+      interactionBeforeFinding: CONSENT_UI_EVIDENCE_FINDING_IDS.has(findingId)
+    },
+    policyEvidence: { evaluated: false },
+    legalRelevance: {
+      cipaPenRegisterTheorySupport: TELEMETRY_EVIDENCE_FINDING_IDS.has(findingId) || SENSITIVE_EVIDENCE_FINDING_IDS.has(findingId)
+        ? "possible"
+        : "not_evaluated",
+      gdprEprivacyConsentSupport: COOKIE_EVIDENCE_FINDING_IDS.has(findingId) || FOOTPRINT_EVIDENCE_FINDING_IDS.has(findingId) || CONSENT_UI_EVIDENCE_FINDING_IDS.has(findingId)
+        ? "possible"
+        : "not_evaluated",
+      cpraSharingSupport: TELEMETRY_EVIDENCE_FINDING_IDS.has(findingId) || SENSITIVE_EVIDENCE_FINDING_IDS.has(findingId) || FOOTPRINT_EVIDENCE_FINDING_IDS.has(findingId)
+        ? "possible"
+        : "not_evaluated",
+      ftcDarkPatternOrDeceptionSupport: CONSENT_UI_EVIDENCE_FINDING_IDS.has(findingId) || FINANCIAL_EVIDENCE_FINDING_IDS.has(findingId)
+        ? "support_only"
+        : "not_evaluated"
+    },
+    limitations: [
+      "Automated scan does not determine legal liability.",
+      "Representative evidence is capped and should be reviewed with the full scan record before final conclusions."
+    ]
+  };
+
+  if (runtimeRequestUrls.length > 0) {
+    details.runtimeRequestUrls = runtimeRequestUrls;
+    details.representativeRequests = representativeRequests;
+    details.requestSelectionNote = "Representative requests are capped examples and are not exhaustive.";
+  }
+  if (runtimeVendors.length > 0) {
+    details.runtimeVendors = runtimeVendors;
+    details.vendors = getVendorDetails(runtimeVendors, representativeRequests);
+  }
+  if (representativeRequests.length > 0) {
+    details.identifierEvidence = buildIdentifierEvidence(representativeRequests);
+  }
+  if (evidenceSnippets.length > 0) {
+    details.evidenceSnippets = evidenceSnippets;
+  }
+  if (pageUrls.length > 0) {
+    details.pageUrls = pageUrls;
+  }
+  if (sourceUrls.length > 0) {
+    details.sourceUrls = sourceUrls;
+  }
+  if (sourceSignals.length > 0) {
+    details.sourceSignals = sourceSignals;
+  }
+  if (evidenceFlags.length > 0) {
+    details.evidenceFlags = evidenceFlags;
+  }
+
+  if (COOKIE_EVIDENCE_FINDING_IDS.has(findingId)) {
+    details.cookieEvidence = {
+      observed: true,
+      basis: evidenceSnippets[0] ?? "Cookie or storage evidence was retained for this finding.",
+      preConsentContext: /pre_consent|preconsent/i.test(findingId)
+    };
+  }
+
+  if (CONSENT_UI_EVIDENCE_FINDING_IDS.has(findingId)) {
+    details.consentUiEvidence = {
+      observed: true,
+      pattern: findingId,
+      basis: evidenceSnippets[0] ?? packet.summary,
+      userChoiceImpact: findingId === "reject_option_missing_or_hidden"
+        ? "Reject choice was not retained as visible or equivalent in the observed consent UI."
+        : "Consent UI evidence may affect how easily users can exercise a choice."
+    };
+  }
+
+  if (SENSITIVE_EVIDENCE_FINDING_IDS.has(findingId)) {
+    const packetDataTypes =
+      packet.details?.family === "sensitive_data" && "dataTypes" in packet.details
+        ? packet.details.dataTypes
+        : [];
+    const sensitiveDataTypes = uniqueStrings([
+      ...getEntityValues(packet, /sensitive.*data.*type/i),
+      ...(Array.isArray(packetDataTypes) ? packetDataTypes : [])
+    ]).map(formatSensitiveDataType);
+    const sensitiveFieldContexts = uniqueStrings([
+      ...getEntityValues(packet, /sensitive.*source.*field/i).map((value) => `field:${value}`),
+      ...getEntityValues(packet, /sensitive.*source.*location/i).map((value) => `location:${formatSensitiveSourceLocation(value)}`)
+    ]);
+    details.sensitiveDataEvidence = {
+      observed: true,
+      dataTypes: sensitiveDataTypes,
+      fieldContexts: sensitiveFieldContexts,
+      basis: evidenceSnippets[0] ?? packet.summary
+    };
+    if (sensitiveDataTypes.length > 0) {
+      details.sensitiveDataTypes = sensitiveDataTypes;
+    }
+    if (sensitiveFieldContexts.length > 0) {
+      details.sensitiveFieldContexts = sensitiveFieldContexts;
+    }
+  }
+
+  if (TELEMETRY_EVIDENCE_FINDING_IDS.has(findingId)) {
+    details.telemetryEvidence = {
+      observed: true,
+      basis: evidenceSnippets[0] ?? packet.summary,
+      identifierLikeRequestCount: representativeRequests.filter((request) => request.identifierLike).length,
+      deviceDataLikeRequestCount: representativeRequests.filter((request) => request.deviceDataLike).length
+    };
+  }
+
+  if (FOOTPRINT_EVIDENCE_FINDING_IDS.has(findingId)) {
+    details.trackingEvidence = {
+      observed: true,
+      basis: evidenceSnippets[0] ?? packet.summary,
+      runtimeRequestCount: runtimeRequestUrls.length,
+      runtimeVendorCount: runtimeVendors.length
+    };
+  }
+
+  if (findingId === "accessibility_risk_score") {
+    details.accessibilityEvidence = {
+      observed: true,
+      basis: evidenceSnippets[0] ?? packet.summary,
+      representativeExamplesRetained: evidenceSnippets.length
+    };
+  }
+
+  if (findingId === "policy_clarity_risk") {
+    details.policyEvidenceDetails = {
+      evaluated: true,
+      basis: evidenceSnippets[0] ?? packet.summary,
+      clarityRiskObserved: true
+    };
+    details.policyEvidence = { evaluated: true, cookieOrPrivacyPolicyFound: true, relevantDisclosureFound: false, disclosureGapObserved: true, policyUrl: null, snippet: evidenceSnippets[0] ?? null };
+  }
+
+  if (findingId === "policy_behavior_contradiction_detected") {
+    const policyRuntimeConflict = buildPolicyRuntimeConflictDetails(packet);
+    if (policyRuntimeConflict) {
+      details.policyRuntimeConflict = policyRuntimeConflict;
+      details.policyEvidenceDetails = {
+        evaluated: true,
+        basis: policyRuntimeConflict.conflictBridge.reasoning ?? packet.summary,
+        conflictType: policyRuntimeConflict.conflictBridge.conflictType
+      };
+    }
+  }
+
+  if (FINANCIAL_EVIDENCE_FINDING_IDS.has(findingId)) {
+    const offerSnippets = getFinancialPromotionOfferSnippets(packet).slice(0, 3);
+    const disclosureFindings = uniqueStrings([
+      ...getEntityValues(packet, /responsibleGamblingDisclosureAdjacent|termsDisclosureAdjacent/i).map((value) => {
+        if (/^true$/i.test(value)) {
+          return "Relevant disclosure evidence appears near the retained offer snippet.";
+        }
+        if (/^false$/i.test(value)) {
+          return "Clear adjacent disclosure evidence was not retained with the offer snippet.";
+        }
+        return null;
+      }),
+      ...getEntityValues(packet, /responsibleGamblingSnippets|termsSnippets/i)
+    ]).slice(0, 5);
+    details.financialClaimsEvidence = {
+      observed: true,
+      claimType: findingId,
+      basis: offerSnippets[0] ?? evidenceSnippets[0] ?? packet.summary
+    };
+    details.disclosureEvidence = {
+      evaluated: disclosureFindings.length > 0,
+      findings: disclosureFindings
+    };
+    if (offerSnippets.length > 0) {
+      details.offerSnippets = offerSnippets;
+    }
+    if (disclosureFindings.length > 0) {
+      details.disclosureFindings = disclosureFindings;
+    }
+  }
+
+  return details;
+}
+
 function formatVendorList(vendors: string[]) {
   if (vendors.length <= 1) {
     return vendors[0] ?? "";
@@ -1113,6 +1448,9 @@ function buildExecutiveEvidenceDetails(
   }
   if (findingId === "cpra_cba_opt_out_missing") {
     return buildCpraCbaOptOutEvidenceDetails(packet);
+  }
+  if (CANONICAL_EVIDENCE_FINDING_IDS.has(findingId)) {
+    return buildGenericCanonicalEvidenceDetails(packet, findingId);
   }
 
   const runtimeVendors = uniqueStrings([
@@ -1417,13 +1755,7 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
     ...(evidenceDetails ? { evidenceDetails } : {}),
     evidencePreview: buildEvidencePreview(packet, findingId),
     evidenceRefs: buildEvidenceRefs(packet),
-    ...([
-      "pre_consent_tracking_detected",
-      "reject_tracking_persists_after_reject",
-      "session_recording_services_detected",
-      "rtb_cookie_sync_observed",
-      "cpra_cba_opt_out_missing"
-    ].includes(findingId) ? { evidenceVersion: "1.1" } : {}),
+    ...(CANONICAL_EVIDENCE_FINDING_IDS.has(findingId) ? { evidenceVersion: "1.1" } : {}),
     severity: mapSeverity(packet, findingId),
     shortSummary: buildExecutiveShortSummary(packet, findingId)
   } satisfies CertScoreFinding;

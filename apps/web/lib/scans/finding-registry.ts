@@ -119,6 +119,14 @@ export type CertScoreFindingEvidenceDetails = {
   optOutControlEvidence?: Record<string, unknown>;
   jurisdictionOrPolicyContext?: Record<string, unknown>;
   trackingOrSharingContext?: Record<string, unknown>;
+  trackingEvidence?: Record<string, unknown>;
+  consentUiEvidence?: Record<string, unknown>;
+  sensitiveDataEvidence?: Record<string, unknown>;
+  telemetryEvidence?: Record<string, unknown>;
+  accessibilityEvidence?: Record<string, unknown>;
+  policyEvidenceDetails?: Record<string, unknown>;
+  financialClaimsEvidence?: Record<string, unknown>;
+  disclosureEvidence?: Record<string, unknown>;
   policyRuntimeConflict?: {
     policyAnchor: {
       claimType: string | null;
