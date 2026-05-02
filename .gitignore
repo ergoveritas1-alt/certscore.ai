@@ -1,22 +1,47 @@
+# Dependencies / package manager
 node_modules
 .pnpm-store
-.next
-dist
-.turbo
-.DS_Store
-coverage
+
+# Build artifacts
+**/*.tsbuildinfo
+dist/
+build/
+.out/
+.next/
+.turbo/
+coverage/
+apps/worker/dist/
+packages/*/dist/
+
+# Playwright / test artifacts
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# App artifacts
+apps/web/artifacts/
+apps/validation-worker/artifacts/*
+!apps/validation-worker/artifacts/.gitkeep
+
+# Logs
 *.log
-*.tsbuildinfo
+logs/
+
+# Env / secrets
 .env
-.env.local
-.env.*.local
 .env.*
 !.env.example
-.codex/
+
+# Sensitive local scripts
+scripts/*-to-local.ts
+
+# OS / editor
+.DS_Store
 .vscode/
+.idea/
+
+# Local scratch / tooling
+.codex/
 tmp/
 tools/generate-recovery-link.mts
-apps/web/.next
-apps/worker/dist
-packages/*/dist
 supabase/.temp

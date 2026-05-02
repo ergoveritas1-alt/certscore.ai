@@ -17,6 +17,10 @@
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import process from "node:process";
+import {
+  cleanupScanArtifactDirectory,
+  getScanArtifactRetentionConfig
+} from "../../../../packages/shared/src/utils/artifact-retention";
 import { closePools, query, queryOne } from "@website-signal-risk-scanner/db";
 import { loadScanRecord, type ScanRow } from "../report-production-finding-frequency";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
@@ -79,6 +83,10 @@ type CorpusConfig = {
   includeMixed: boolean;
   includeAnonymousScans: boolean;
 };
+
+export function isArtifactExportAllowed(dryRun: boolean, env: Record<string, string | undefined> = process.env): boolean {
+  return dryRun || getScanArtifactRetentionConfig(env).enabled;
+}
 
 export type ScanContext = {
   scanId: string;
@@ -1284,6 +1292,14 @@ async function main() {
   console.info("[eval] Corpus builder starting...");
   console.info(`[eval] Config: ${JSON.stringify({ ...config, since: config.since?.toISOString() })}`);
 
+  if (!isArtifactExportAllowed(config.dryRun)) {
+    console.error(
+      "[eval] Artifact export is disabled. Re-run with --dry-run or set SCAN_ARTIFACTS_ENABLED=true to write corpus files."
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   const scans = await loadRecentScans(config);
   console.info(`[eval] Loaded ${scans.length} recent scans.`);
 
@@ -1348,7 +1364,13 @@ async function main() {
   exportJsonlAndPrompt(positive, challenge, topFindingIds, config.outDir);
   exportFullFindingStats(allEnriched, config.outDir);
 
+  const cleanupResult = await cleanupScanArtifactDirectory({
+    config: getScanArtifactRetentionConfig(),
+    dir: config.outDir
+  });
+
   console.info(`[eval] Corpus exported to: ${config.outDir}`);
+  console.info(`[eval] Retention cleanup removed ${cleanupResult.deletedFiles.length} old file(s) from ${config.outDir}.`);
   console.info(`[eval] Scans considered: ${processed}`);
   console.info(`[eval] Top findings:`);
   for (const fid of topFindingIds) {

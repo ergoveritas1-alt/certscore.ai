@@ -22,6 +22,7 @@ export * from "./policy-review-notes";
 export * from "./validation-finding-taxonomy";
 export * from "./validators/domain";
 export * from "./utils/env";
+export * from "./utils/artifact-retention";
 export * from "./utils/amplify-secrets";
 export * from "./utils/crawler-identity";
 export * from "./utils/finding-comparison";

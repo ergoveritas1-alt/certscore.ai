@@ -1,5 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  cleanupScanArtifactDirectory,
+  getScanArtifactRetentionConfig
+} from "../../../packages/shared/src/utils/artifact-retention";
 import { chromium, type BrowserContext, type Frame, type Locator, type Page, type Request } from "playwright";
 
 type ScenarioName =
@@ -1717,6 +1721,14 @@ function renderMarkdown(report: SiteReport) {
 }
 
 export async function main() {
+  const artifactConfig = getScanArtifactRetentionConfig();
+  if (!artifactConfig.enabled) {
+    console.info(
+      "[consent-audit] Scan artifact writing is disabled. Set SCAN_ARTIFACTS_ENABLED=true to run the live consent audit."
+    );
+    return;
+  }
+
   await ensureDir(OUTPUT_ROOT);
   const configuredTargets =
     process.env.CONSENT_AUDIT_TARGETS?.split(",")
@@ -1802,7 +1814,13 @@ export async function main() {
       .concat("\n")
   );
 
-  console.info(`Live consent audit artifacts written to ${OUTPUT_ROOT}`);
+  const cleanupResult = await cleanupScanArtifactDirectory({
+    config: artifactConfig,
+    dir: path.join(process.cwd(), "apps/validation-worker/artifacts")
+  });
+  console.info(
+    `Live consent audit artifacts written to ${OUTPUT_ROOT}; retention cleanup removed ${cleanupResult.deletedFiles.length} old file(s).`
+  );
 }
 
 const invokedAsScript =

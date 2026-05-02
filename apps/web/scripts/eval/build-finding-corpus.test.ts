@@ -15,7 +15,8 @@ import {
   mapDirectness,
   pickDiverse,
   buildPositiveExample,
-  buildChallengeExample
+  buildChallengeExample,
+  isArtifactExportAllowed
 } from "./build-finding-corpus";
 import type { EnrichedFinding, ScanContext } from "./build-finding-corpus";
 
@@ -95,6 +96,12 @@ function makeEnrichedFinding(overrides: Partial<EnrichedFinding> = {}): Enriched
 }
 
 describe("scoring helpers", () => {
+  it("requires explicit artifact opt-in for non-dry-run exports", () => {
+    assert.equal(isArtifactExportAllowed(false, {}), false);
+    assert.equal(isArtifactExportAllowed(true, {}), true);
+    assert.equal(isArtifactExportAllowed(false, { SCAN_ARTIFACTS_ENABLED: "true" }), true);
+  });
+
   it("scoreConfidence ranks correctly", () => {
     assert.equal(scoreConfidence("strong"), 3);
     assert.equal(scoreConfidence("good"), 2);
