@@ -116,6 +116,16 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "Cookie-sync and identity-sync requests can transmit advertising identifiers across multiple third parties during the initial page load.",
     remediation: "Inventory the sync endpoints, suppress non-essential RTB or identity-sync calls until consent permits them, and verify the request path after deployment."
   },
+  cpra_cba_opt_out_missing: {
+    id: "cpra_cba_opt_out_missing",
+    label: "CPRA opt-out missing for advertising sharing",
+    section: "Privacy & Tracking",
+    defaultSurfacePriority: 96,
+    whyItMatters:
+      "Cross-context behavioral advertising vendors create CPRA opt-out expectations when the site does not expose a clear Do Not Sell or Share or Your Privacy Choices mechanism.",
+    remediation:
+      "Add a CPRA-specific opt-out mechanism, include the required privacy choices treatment, and verify that advertising-sharing vendors are suppressed when opt-out signals apply."
+  },
   cross_domain_identifier_sharing_observed: {
     id: "cross_domain_identifier_sharing_observed",
     label: "Identifiers shared across domains",

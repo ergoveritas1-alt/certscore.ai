@@ -743,6 +743,12 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
+    if (/cbaVendorTier[12]|cba_vendor_tier[12]/i.test(key)) {
+      addEntity(entities, key, stringValues);
+      runtimeArtifacts.add(`${key}: ${stringValues.slice(0, 5).join(", ")}`);
+      continue;
+    }
+
     if (/evidenceFlags|supportingSignals|financialEvidenceFlags|signalKeys/i.test(key)) {
       const financialFlags = stringValues.filter((entry) => /^(?:financial|commercial|entity|regulatory)\./.test(entry));
       if (financialFlags.length > 0) {

@@ -3796,6 +3796,7 @@ type DomainFlagFindingSupportRule = {
   findingId:
     | "consent_surface_missing"
     | "accessibility_support_path_missing"
+    | "cpra_cba_opt_out_missing"
     | "sale_sharing_controls_missing";
   evidenceFlag: string;
   rationale: string;
@@ -4329,6 +4330,12 @@ const DOMAIN_FLAG_FINDING_SUPPORT_RULES: DomainFlagFindingSupportRule[] = [
     evidenceFlag: "privacy.sale_sharing_controls_missing",
     rationale:
       "Surfaced because the scan retained a clear domain-level signal that sale or sharing controls were not detected despite retargeting-related behavior."
+  },
+  {
+    findingId: "cpra_cba_opt_out_missing",
+    evidenceFlag: "privacy.cpra_cba_opt_out_missing",
+    rationale:
+      "Surfaced because runtime evidence retained CBA vendor requests and did not confirm a CPRA-specific privacy choices control."
   }
 ];
 
@@ -4533,6 +4540,10 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   sale_sharing_controls_missing: {
     suggestedFix: "Add a clearly labeled do-not-sell/share or targeted-advertising control path wherever the site uses adtech patterns that may require that choice.",
     whyThisMatters: "If adtech or retargeting behavior is present but no sale/sharing control path is surfaced, people may not get the privacy choice they expect."
+  },
+  cpra_cba_opt_out_missing: {
+    suggestedFix: "Add a footer-level \"Your Privacy Choices\" or \"Do Not Sell or Share My Personal Information\" control for cross-context behavioral advertising, include the CPRA icon where required, and verify GPC suppresses eligible CBA vendors.",
+    whyThisMatters: "When CBA vendors run without a CPRA-specific opt-out path, California users may not get the sharing and targeted-advertising choice the law expects."
   },
   retargeting_pixel_observed: {
     suggestedFix: "Review the retained detector output and confirm whether the site deploys a specific retargeting or advertising pixel that needs follow-up disclosure, consent, or control review.",

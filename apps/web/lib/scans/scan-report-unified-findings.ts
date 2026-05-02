@@ -94,12 +94,44 @@ function getFiniteNumber(value: unknown) {
 function buildRuntimeDerivedReviewFindingCandidates(input: {
   runtimeArtifacts: Record<string, unknown> | null;
 }): CanonicalReviewFinding[] {
+  const candidates: CanonicalReviewFinding[] = [];
+  const cpraEvidence =
+    input.runtimeArtifacts?.cpraCbaOptOutEvidence && typeof input.runtimeArtifacts.cpraCbaOptOutEvidence === "object"
+      ? (input.runtimeArtifacts.cpraCbaOptOutEvidence as Record<string, unknown>)
+      : input.runtimeArtifacts?.cpra_cba_opt_out_evidence && typeof input.runtimeArtifacts.cpra_cba_opt_out_evidence === "object"
+        ? (input.runtimeArtifacts.cpra_cba_opt_out_evidence as Record<string, unknown>)
+        : null;
+  if (cpraEvidence && cpraEvidence.suppressorApplied === null) {
+    const severity = cpraEvidence.findingSeverity === "critical" || cpraEvidence.findingSeverity === "high" ? "high" : "medium";
+    candidates.push({
+      categoryId: "rights_request_mechanisms",
+      description:
+        "Cross-context behavioral advertising vendors were observed during the homepage runtime scan, but a CPRA-specific opt-out mechanism was not confirmed in footer or persistent chrome.",
+      fallbackEvidence: {
+        ...cpraEvidence,
+        signalKey: "privacy.cpra_cba_opt_out_missing",
+        signalLabel: "CPRA CBA opt-out missing",
+        signalValue: true,
+        unifiedFindingId: "cpra_cba_opt_out_missing"
+      },
+      id: "runtime-derived-signal-privacy.cpra_cba_opt_out_missing",
+      linkedValidationFinding: null,
+      observedValue: typeof cpraEvidence.optOutUiResult === "string" ? cpraEvidence.optOutUiResult : null,
+      severity,
+      signalKey: "privacy.cpra_cba_opt_out_missing",
+      signalLabel: "CPRA CBA opt-out missing",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "CPRA CBA opt-out missing"
+    });
+  }
+
   const signalKey = "privacy.cross_domain_identifier_sharing_observed";
   const signalLabel = "Identifiers shared across domains";
   const signalValue = getHybridDerivedSignalValue(input.runtimeArtifacts, signalKey);
 
   if (signalValue !== true) {
-    return [];
+    return candidates;
   }
 
   const fallbackEvidence = getHybridSignalFallbackEvidence({
@@ -110,11 +142,10 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   });
 
   if (!fallbackEvidence) {
-    return [];
+    return candidates;
   }
 
-  return [
-    {
+  candidates.push({
       categoryId: "adtech_analytics_replay_footprint",
       description: "Identifier-like values were observed in requests to multiple external domains.",
       fallbackEvidence,
@@ -127,8 +158,9 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       signalSource: "snapshot_signal",
       sourceType: "signal",
       title: signalLabel
-    }
-  ];
+    });
+
+  return candidates;
 }
 
 export function buildScanReportUnifiedFindingState(

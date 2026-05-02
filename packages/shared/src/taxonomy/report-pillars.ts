@@ -1288,6 +1288,14 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["sale_sharing_targeted_advertising_controls", "consumer_rights_request_handling"]
   ),
   defineReportSignal(
+    "runtime_artifact_signal",
+    "privacy.cpra_cba_opt_out_missing",
+    "CPRA CBA opt-out missing",
+    "rights_request_mechanisms",
+    ["adtech_analytics_replay_footprint"],
+    ["sale_sharing_targeted_advertising_controls", "consumer_rights_request_handling"]
+  ),
+  defineReportSignal(
     "snapshot_signal",
     "privacy.preconsent_tracking_detected",
     "Pre-consent tracking detected",
@@ -2666,6 +2674,15 @@ export const REPORT_UNIFIED_FINDINGS = [
     overlays: ["sale_sharing_targeted_advertising_controls", "consumer_rights_request_handling"],
     signalMappings: [{ source: "snapshot_signal", key: "privacy.sale_sharing_controls_missing" }],
     aliases: ["Sale/sharing controls missing", "Do-not-sell/share controls missing", "Missing sale or sharing controls"]
+  }),
+  defineReportUnifiedFinding({
+    id: "cpra_cba_opt_out_missing",
+    label: "CPRA CBA opt-out missing",
+    owner: "rights_request_mechanisms",
+    mirrors: ["adtech_analytics_replay_footprint"],
+    overlays: ["sale_sharing_targeted_advertising_controls", "consumer_rights_request_handling"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.cpra_cba_opt_out_missing" }],
+    aliases: ["CPRA cross-context behavioral advertising opt-out missing", "Your Privacy Choices missing for CBA"]
   }),
   defineReportUnifiedFinding({
     id: "privacy_terms_conflict",

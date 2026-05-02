@@ -1267,6 +1267,72 @@ test("projects surfaced contrast failures with representative axe evidence into 
   assert.ok(finding?.evidenceDetails?.evidenceFlags?.includes("representative_accessibility_examples_retained"));
 });
 
+test("projects CPRA CBA opt-out missing into executive findings and top findings", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      evidence: {
+        counts: { preconsentViolationCount: 3 },
+        entities: {
+          runtimeVendors: ["Google Ads", "Google Analytics", "Google Tag Manager"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: ["https://www.healthline.com/"],
+        snippets: [],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "Tracking started before consent."
+    }),
+    makePacket("cpra_cba_opt_out_missing", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "cpra_cba_opt_out_missing" },
+      evidence: {
+        counts: {},
+        entities: {
+          cbaVendorTier1: ["adsrvr.org", "pubmatic.com", "rlcdn.com"],
+          optOutUiResult: ["absent"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.cpra_cba_opt_out_missing"],
+        pageUrls: ["https://www.healthline.com/"],
+        snippets: ["CPRA CBA opt-out evidence retained with absent opt-out UI."],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "Cross-context behavioral advertising vendors were retained without a CPRA-specific opt-out mechanism."
+    }),
+    makePacket("rtb_cookie_sync_observed", {
+      confidenceBand: "high",
+      details: { family: "commercial", kind: "rtb_cookie_sync_observed" },
+      evidence: {
+        counts: {},
+        entities: {
+          vendors: ["DoubleClick / Floodlight", "DoubleVerify", "ID5"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.rtb_cookie_sync_observed"],
+        pageUrls: ["https://www.healthline.com/"],
+        snippets: [],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "RTB cookie sync evidence was retained."
+    })
+  ]);
+
+  const finding = projection.findings.find((candidate) => candidate.id === "cpra_cba_opt_out_missing");
+
+  assert.ok(finding);
+  assert.equal(finding?.section, "Privacy & Tracking");
+  assert.equal(finding?.severity, "high");
+  assert.ok(projection.topFindings.some((candidate) => candidate.id === "cpra_cba_opt_out_missing"));
+  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
+  assert.ok(finding?.shortSummary.includes("adsrvr.org"));
+});
+
 test("records surfaced packets that are not yet mapped into executive findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("some_unmapped_surface", {

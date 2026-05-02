@@ -834,6 +834,31 @@ export type GpcVerification = {
   evidenceUrls: string[];
 };
 
+export type CpraCbaOptOutUiResult =
+  | "full_cpra_compliant"
+  | "partial_no_icon"
+  | "generic_do_not_sell"
+  | "absent";
+
+export type CpraPolicyCbaLanguage = "full_cba_language" | "legacy_do_not_sell" | "absent";
+
+export type CpraCbaOptOutEvidence = {
+  pageUrl: string;
+  cbaVendorTier1: string[];
+  cbaVendorTier2: string[];
+  optOutUiResult: CpraCbaOptOutUiResult;
+  optOutLinkText: string | null;
+  optOutLinkHref: string | null;
+  cpraIconDetected: boolean;
+  gpcCbaHonored: boolean;
+  policyCbaLanguage: CpraPolicyCbaLanguage;
+  policyUiCongruent: boolean;
+  findingSeverity: "critical" | "high" | "medium";
+  suppressorApplied: string | null;
+  scanOriginGeo: string | null;
+  limitation: "homepage_only";
+};
+
 export type ScanRuntimeArtifact = {
   scanId: string;
   thirdPartyRequestDomains: string[];
@@ -885,6 +910,7 @@ export type ScanRuntimeArtifact = {
   coverageLimitationEvidence?: CoverageLimitationEvidence | null;
   keyPageDiscoverySummary: KeyPageDiscoverySummary | null;
   cookieAttributeSummary?: CookieAttributeSummary | null;
+  cpraCbaOptOutEvidence?: CpraCbaOptOutEvidence | null;
   gpcVerification?: GpcVerification | null;
   buildPhaseSummaries?: Array<{
     attempts: number;

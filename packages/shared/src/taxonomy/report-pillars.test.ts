@@ -65,7 +65,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 133);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 134);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
@@ -317,6 +317,7 @@ test("returns signals attached to an evidence category by relation", () => {
       "snapshot_signal:privacy.data_deletion_request_present",
       "snapshot_signal:privacy.do_not_sell_link_present",
       "snapshot_signal:privacy.sale_sharing_controls_missing",
+      "runtime_artifact_signal:privacy.cpra_cba_opt_out_missing",
       "snapshot_signal:privacy.consent_withdrawal_mechanism_present",
       "snapshot_signal:privacy.user_rights_friction_score",
       "document_semantic_signal:policyDsarMechanism",
@@ -359,6 +360,10 @@ test("maps signals and validation rules into unified findings", () => {
   assert.equal(
     getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.gpc_signal_not_honored")?.id,
     "gpc_signal_not_honored"
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.cpra_cba_opt_out_missing")?.id,
+    "cpra_cba_opt_out_missing"
   );
   assert.equal(
     getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.weak_cookie_security_attributes_detected")?.id,

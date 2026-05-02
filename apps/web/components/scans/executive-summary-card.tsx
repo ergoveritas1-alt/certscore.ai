@@ -1393,50 +1393,98 @@ function getFindingCardTone(finding: CertScoreFinding, isFirst: boolean) {
   };
 }
 
-function getFindingTitleIconKey(findingId: string) {
+type FindingTitleIconKey =
+  | "pulse-tracking"
+  | "arrow-transfer"
+  | "video-capture"
+  | "shield-video"
+  | "shield-network"
+  | "shield-balance"
+  | "circle-x"
+  | "chain-link"
+  | "device-telemetry"
+  | "cookie-storage"
+  | "fingerprint"
+  | "up-arrow"
+  | "accessibility-figure"
+  | "warning-triangle"
+  | "privacy-choice"
+  | "ad-exchange"
+  | "default-circle";
+
+function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKey[] {
   switch (findingId) {
     case "pre_consent_tracking_detected":
+      return ["pulse-tracking", "arrow-transfer", "ad-exchange"];
     case "reject_tracking_persists_after_reject":
-      return "pulse-tracking";
+      return ["pulse-tracking", "circle-x", "arrow-transfer"];
     case "third_party_tracking_pre_consent":
-      return "arrow-transfer";
+      return ["arrow-transfer", "pulse-tracking", "ad-exchange"];
+    case "rtb_cookie_sync_observed":
+      return ["ad-exchange", "arrow-transfer", "chain-link"];
+    case "cpra_cba_opt_out_missing":
+      return ["privacy-choice", "shield-balance", "ad-exchange"];
     case "session_recording_services_detected":
-      return "video-capture";
+      return ["video-capture", "shield-video"];
     case "session_replay_on_sensitive_input_surface":
-      return "shield-video";
+      return ["shield-video", "video-capture"];
     case "sensitive_data_collection_with_third_party_tracking_present":
-      return "shield-network";
+      return ["shield-network", "shield-video", "device-telemetry"];
     case "consent_dark_patterns_detected":
+      return ["shield-balance", "circle-x"];
     case "asymmetric_consent_ui":
-      return "shield-balance";
+      return ["shield-balance", "circle-x"];
     case "reject_option_missing_or_hidden":
+      return ["circle-x", "shield-balance"];
     case "forced_consent_interaction":
-      return "circle-x";
+      return ["circle-x", "warning-triangle"];
     case "identifier_transmission_detected":
-      return "chain-link";
+      return ["chain-link", "arrow-transfer"];
     case "device_data_collection_detected":
+      return ["device-telemetry", "fingerprint"];
     case "telemetry_rich_identification_observed":
-      return "device-telemetry";
+      return ["device-telemetry", "chain-link"];
     case "analytics_cookie_pre_consent":
+      return ["cookie-storage", "pulse-tracking"];
     case "adtech_cookie_pre_consent":
+      return ["cookie-storage", "ad-exchange"];
     case "third_party_cookie_pre_consent":
-      return "cookie-storage";
+      return ["cookie-storage", "arrow-transfer"];
     case "probable_fingerprinting":
-      return "fingerprint";
+      return ["fingerprint", "device-telemetry"];
     case "leveraged_or_high_risk_product_promotion":
-      return "up-arrow";
+      return ["up-arrow", "warning-triangle"];
     case "accessibility_risk_score":
-      return "accessibility-figure";
+      return ["accessibility-figure", "warning-triangle"];
     case "access_limited_no_reliable_findings":
-      return "warning-triangle";
+      return ["warning-triangle", "default-circle"];
     default:
-      return "default-circle";
+      return ["default-circle"];
   }
 }
 
-function FindingTitleIcon(input: { finding: CertScoreFinding }) {
+function getFindingTitleIconKey(findingId: string): FindingTitleIconKey {
+  return getPreferredFindingTitleIconKeys(findingId)[0] ?? "default-circle";
+}
+
+function assignUniqueFindingTitleIconKeys(findings: CertScoreFinding[]) {
+  const used = new Set<FindingTitleIconKey>();
+  return new Map(
+    findings.map((finding) => {
+      const preferredKeys = getPreferredFindingTitleIconKeys(finding.id);
+      const selectedKey =
+        preferredKeys.find((iconKey) => !used.has(iconKey)) ??
+        (used.has("default-circle") ? preferredKeys[0] : "default-circle") ??
+        "default-circle";
+      used.add(selectedKey);
+      return [finding.id, selectedKey] as const;
+    })
+  );
+}
+
+function FindingTitleIcon(input: { finding: CertScoreFinding; iconKey?: FindingTitleIconKey }) {
   const common = "h-4 w-4";
-  const iconKey = getFindingTitleIconKey(input.finding.id);
+  const iconKey = input.iconKey ?? getFindingTitleIconKey(input.finding.id);
 
   if (iconKey === "pulse-tracking") {
     return (
@@ -1506,6 +1554,26 @@ function FindingTitleIcon(input: { finding: CertScoreFinding }) {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
         <path d="M7.5 14.5 14 8a3 3 0 1 1 4.2 4.2l-6.5 6.5a4.5 4.5 0 0 1-6.4-6.4l5.8-5.8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "privacy-choice") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-rose-700`} aria-hidden="true">
+        <path d="M12 3.5 18 6v5.5c0 3.7-2.3 6.7-6 8.8-3.7-2.1-6-5.1-6-8.8V6l6-2.5Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+        <path d="M9 12.2 11 14l4-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M7.7 6.8 16.3 18" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.55" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "ad-exchange") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-rose-600`} aria-hidden="true">
+        <path d="M5 8h8.5M10.5 4 14 8l-3.5 4M19 16h-8.5M13.5 12 10 16l3.5 4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="5" cy="8" r="1.4" fill="currentColor" />
+        <circle cx="19" cy="16" r="1.4" fill="currentColor" />
       </svg>
     );
   }
@@ -1819,6 +1887,7 @@ export function ExecutiveSummaryCard(input: {
     .map(([key, count]) => `${formatCategoryLabel(key)} ${count}`)
     .join(" · ");
   const filteredTopFindings = input.topFindings.filter((finding) => !suppressedTopFindingIds.has(finding.id));
+  const topFindingIconKeys = assignUniqueFindingTitleIconKeys(filteredTopFindings);
   const regulatoryFindingInput =
     Array.isArray(input.allFindings) && input.allFindings.length > 0 ? input.allFindings : input.topFindings;
   const executiveHeadlineFindings = filteredTopFindings.slice(0, 3);
@@ -1974,7 +2043,9 @@ export function ExecutiveSummaryCard(input: {
             data-testid="executive-top-findings-list"
           >
             {filteredTopFindings.length > 0 ? (
-              filteredTopFindings.map((finding, index) => (
+              filteredTopFindings.map((finding, index) => {
+                const iconKey = topFindingIconKeys.get(finding.id) ?? getFindingTitleIconKey(finding.id);
+                return (
                 <div key={finding.id} className={`overflow-hidden rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${getFindingCardTone(finding, index === 0).card}`}>
                   <div className={`h-1 w-full ${getFindingCardTone(finding, index === 0).band}`} />
                   <div className="px-4 py-3">
@@ -1988,10 +2059,10 @@ export function ExecutiveSummaryCard(input: {
                   </div>
                   <div className="mt-2.5 flex items-start gap-2.5">
                       <div
-                        data-finding-icon={getFindingTitleIconKey(finding.id)}
+                        data-finding-icon={iconKey}
                         className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50"
                       >
-                      <FindingTitleIcon finding={finding} />
+                      <FindingTitleIcon finding={finding} iconKey={iconKey} />
                     </div>
                     <p data-testid="executive-finding-label" className="pt-0.5 text-[17px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">
                       {finding.label}
@@ -2000,7 +2071,8 @@ export function ExecutiveSummaryCard(input: {
                   <FindingDetailDisclosure finding={finding} />
                 </div>
                 </div>
-              ))
+                );
+              })
             ) : (
               <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700">
                 No headline issue crossed the executive threshold for this scan. Review the supporting evidence below for lower-priority signals and scan context.

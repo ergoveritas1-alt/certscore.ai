@@ -25,9 +25,11 @@ const DIRECTNESS_WEIGHT: Record<CertScoreFindingDirectness, number> = {
 };
 
 const TOP_FINDING_EXCLUDED_IDS = new Set<string>([
+  "asymmetric_consent_ui",
   "blocking_overlay_observed",
   "consent_dark_patterns_detected",
   "content_obstructed_by_overlay",
+  "forced_consent_interaction",
   "identifier_transmission_detected",
   "multi_vendor_tracking_detected",
   "non_cookie_tracking_detected",
@@ -73,6 +75,9 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
   }
   if (ranked.some((finding) => finding.id === "cross_domain_identifier_sharing_observed")) {
     forcedIds.add("cross_domain_identifier_sharing_observed");
+  }
+  if (ranked.some((finding) => finding.id === "cpra_cba_opt_out_missing")) {
+    forcedIds.add("cpra_cba_opt_out_missing");
   }
   if (
     ranked.some(

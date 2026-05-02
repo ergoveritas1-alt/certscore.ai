@@ -213,6 +213,7 @@ const RIGHTS_GAP_IDS = [
   "rights_fulfillment_friction",
   "cookie_disclosure_gap",
   "missing_transfer_disclosure",
+  "cpra_cba_opt_out_missing",
   "sale_sharing_controls_missing"
 ] as const satisfies ReportUnifiedFindingId[];
 
@@ -345,6 +346,7 @@ const FINANCIAL_PROMOTION_IDS = [
 ] as const satisfies ReportUnifiedFindingId[];
 
 const CONFIRMED_RIGHTS_GAP_IDS = [
+  "cpra_cba_opt_out_missing",
   "missing_dsar_high_exposure",
   "sale_sharing_controls_missing"
 ] as const satisfies ReportUnifiedFindingId[];
@@ -674,6 +676,13 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
   },
   sale_sharing_controls_missing: {
     findingId: "sale_sharing_controls_missing",
+    family: "rights_gap",
+    initialState: "review",
+    initialTier: "section",
+    initialLane: "main"
+  },
+  cpra_cba_opt_out_missing: {
+    findingId: "cpra_cba_opt_out_missing",
     family: "rights_gap",
     initialState: "review",
     initialTier: "section",

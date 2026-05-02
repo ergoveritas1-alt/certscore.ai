@@ -130,7 +130,7 @@ test("hash-only sanitized network evidence does not create direct runtime uplift
 });
 
 test("blocking overlay evidence stays contextual with retained consent controls", () => {
-  const [packet] = buildUnifiedFindingDisplayPackets({
+  const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
         description: "Observed intrusive or blocking runtime behavior that may interfere with normal page use.",
@@ -167,6 +167,7 @@ test("blocking overlay evidence stays contextual with retained consent controls"
     validationFindings: [],
     validationFindingLookup: new Map()
   });
+  const [packet] = packets;
 
   assert.equal(packet?.unifiedFindingId, "blocking_overlay_observed");
   assert.equal(packet?.surfacingDecision.decisionState, "support_only");
@@ -3298,6 +3299,49 @@ test("surfaces missing sale or sharing controls as a domain-level rights finding
   assert.equal(packet?.unifiedFindingId, "sale_sharing_controls_missing");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.match(packet?.presentation.whyThisMatters ?? "", /privacy choice/i);
+});
+
+test("surfaces CPRA CBA opt-out missing from retained runtime evidence", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "CBA vendors were observed without a CPRA-specific opt-out control.",
+        fallbackEvidence: {
+          cbaVendorTier1: ["adsrvr.org"],
+          cbaVendorTier2: [],
+          cpraIconDetected: false,
+          findingSeverity: "high",
+          gpcCbaHonored: false,
+          limitation: "homepage_only",
+          optOutLinkHref: null,
+          optOutLinkText: null,
+          optOutUiResult: "absent",
+          pageUrl: "https://example.com/",
+          policyCbaLanguage: "full_cba_language",
+          policyUiCongruent: false,
+          scanOriginGeo: null,
+          signalKey: "privacy.cpra_cba_opt_out_missing",
+          signalValue: true,
+          suppressorApplied: null,
+          unifiedFindingId: "cpra_cba_opt_out_missing"
+        },
+        observedValue: "absent",
+        severity: "high",
+        signalKey: "privacy.cpra_cba_opt_out_missing",
+        signalLabel: "CPRA CBA opt-out missing",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "CPRA CBA opt-out missing"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+  const [packet] = packets;
+
+  assert.equal(packet?.unifiedFindingId, "cpra_cba_opt_out_missing");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.presentation.suggestedFix ?? "", /Your Privacy Choices/i);
 });
 
 test("surfaces privacy-rights path present from policy enrichment evidence", () => {

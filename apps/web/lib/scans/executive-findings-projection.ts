@@ -48,6 +48,7 @@ const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SC
   guaranteed_outcome_claim_detected: "guaranteed_outcome_claim_detected",
   leveraged_or_high_risk_product_promotion: "leveraged_or_high_risk_product_promotion",
   cookie_disclosure_gap: "cookie_disclosure_gap",
+  cpra_cba_opt_out_missing: "cpra_cba_opt_out_missing",
   policy_behavior_conflict: "policy_behavior_contradiction_detected",
   policy_clarity_risk: "policy_clarity_risk",
   preconsent_tracking: "pre_consent_tracking_detected",
@@ -85,7 +86,7 @@ function getEntityUrlValues(packet: UnifiedFindingDisplayPacket, pattern: RegExp
   return getEntityValues(packet, pattern).filter((value) => /^https?:\/\//i.test(value));
 }
 
-function getEntityJsonObjects(packet: UnifiedFindingDisplayPacket, key: string) {
+function getEntityJsonObjects(packet: UnifiedFindingDisplayPacket, key: string): Array<Record<string, unknown>> {
   return (packet.evidence?.entities?.[key] ?? []).flatMap((value) => {
     try {
       const parsed: unknown = JSON.parse(value);
@@ -96,7 +97,7 @@ function getEntityJsonObjects(packet: UnifiedFindingDisplayPacket, key: string) 
   });
 }
 
-function getFirstEntityJsonObject(packet: UnifiedFindingDisplayPacket, key: string) {
+function getFirstEntityJsonObject(packet: UnifiedFindingDisplayPacket, key: string): Record<string, unknown> | null {
   return getEntityJsonObjects(packet, key)[0] ?? null;
 }
 
@@ -658,6 +659,17 @@ function buildExecutiveShortSummary(
     ]).slice(0, 3);
     const hostText = hosts.length > 0 ? ` involving ${formatVendorList(hosts)}` : "";
     return `Request-level RTB or identity-sync evidence was retained${hostText}.`;
+  }
+
+  if (findingId === "cpra_cba_opt_out_missing") {
+    const vendors = uniqueStrings([
+      ...getEntityValues(packet, /cba.*vendor|vendor|runtime.*vendor/i),
+      ...getEntityValues(packet, /cbaVendorTier/i)
+    ]).filter(isDisplayVendorName);
+    const optOutUiResult = uniqueStrings(getEntityValues(packet, /optOutUiResult|opt_out_ui_result/i))[0];
+    const vendorText = vendors.length > 0 ? ` involving ${formatVendorList(vendors.slice(0, 3))}` : "";
+    const uiText = optOutUiResult ? `; opt-out UI result: ${optOutUiResult.replace(/_/g, " ")}` : "";
+    return `Cross-context behavioral advertising vendor evidence was retained${vendorText}${uiText}.`;
   }
 
   if (findingId === "reject_tracking_persists_after_reject") {

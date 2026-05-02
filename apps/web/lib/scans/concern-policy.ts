@@ -27,6 +27,7 @@ import {
   hasConcreteSensitiveThirdPartyTrackingArtifact,
   hasPreconsentSequenceEvidence,
   hasStrongAccessibilitySupportPathMissingEvidence,
+  hasStrongCpraCbaOptOutMissingEvidence,
   hasStrongFingerprintingEvidence,
   hasStrongPreconsentRuntimeEvidence,
   hasStrongSaleSharingControlsMissingEvidence,
@@ -1124,6 +1125,12 @@ function isSaleSharingControlsMissingConcern(
   return concern.suggestedUnifiedFindingId === "sale_sharing_controls_missing";
 }
 
+function isCpraCbaOptOutMissingConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing";
+}
+
 function isAccessibilityIssueFindingConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
@@ -2184,6 +2191,19 @@ export function deriveConcernPolicy(input: {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_policy_side_evidence"],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
+    isCpraCbaOptOutMissingConcern(input.concern) &&
+    input.concern.originType !== "validation_rule" &&
+    !hasStrongCpraCbaOptOutMissingEvidence(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_runtime_request_url_evidence"],
       promotionEligibility: "internal_only"
     };
   }

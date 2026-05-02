@@ -1114,6 +1114,48 @@ test("ExecutiveSummaryCard assigns distinct themed icons to sensitive-data and a
   assert.match(html, /data-finding-icon=\"accessibility-figure\"/);
 });
 
+test("ExecutiveSummaryCard assigns unique icons across top findings with shared preferred icons", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent"),
+        makeFinding("reject_tracking_persists_after_reject", "Non-essential tracking continued after reject"),
+        makeFinding("cpra_cba_opt_out_missing", "CPRA opt-out missing for advertising sharing")
+      ],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: ["Google Ads"],
+      requestedHost: "example.com",
+      resolvedVendorNames: ["Google Ads"],
+      score: 62,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 12,
+      thirdPartyDomains: ["googleadservices.com"],
+      topFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent"),
+        makeFinding("reject_tracking_persists_after_reject", "Non-essential tracking continued after reject"),
+        makeFinding("cpra_cba_opt_out_missing", "CPRA opt-out missing for advertising sharing")
+      ],
+      topObservedEntities: [],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { ads: 1 }
+    })
+  );
+
+  const iconKeys = [...html.matchAll(/data-finding-icon="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(iconKeys, ["pulse-tracking", "circle-x", "privacy-choice"]);
+  assert.equal(new Set(iconKeys).size, iconKeys.length);
+});
+
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
