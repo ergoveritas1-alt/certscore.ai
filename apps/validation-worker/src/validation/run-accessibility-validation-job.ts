@@ -3,6 +3,7 @@ import { query } from "@website-signal-risk-scanner/db";
 import { runAccessibilityScan } from "../accessibility/run-accessibility-scan";
 import { persistAccessibilityResults } from "../accessibility/persist-accessibility-results";
 import { setupRequestBlocking } from "../browser/request-blocking";
+import { cleanupRuntimeScanArtifacts, getRuntimeScanArtifactOptions } from "./runtime-scan-artifacts";
 
 /**
  * Standalone validation job that runs an accessibility scan against a scan's
@@ -42,8 +43,12 @@ export async function runAccessibilityValidationJob(scanId: string): Promise<{
     return { findingsCount: 0, score: 96, status: "skipped" };
   }
 
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
+  const artifactOptions = getRuntimeScanArtifactOptions({
+    scanId,
+    stage: "accessibility-validation"
+  });
+  const browser = await chromium.launch({ headless: true, ...artifactOptions.launchOptions });
+  const context = await browser.newContext(artifactOptions.contextOptions);
   const page = await context.newPage();
   const requestBlocking = await setupRequestBlocking(page, { mode: "full" });
 
@@ -88,5 +93,11 @@ export async function runAccessibilityValidationJob(scanId: string): Promise<{
     await requestBlocking.stop();
     await context.close();
     await browser.close();
+    await cleanupRuntimeScanArtifacts(artifactOptions).catch((error) => {
+      console.warn("[accessibility-job] artifact cleanup failed", {
+        error: error instanceof Error ? error.message : String(error),
+        scanId
+      });
+    });
   }
 }

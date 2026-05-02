@@ -43,6 +43,7 @@ import { buildValidationWorkerDocumentHeaders } from "../web-bot-auth";
 import { getWorkerEnv } from "../env";
 import { runAccessibilityValidationJob } from "./run-accessibility-validation-job";
 import { deriveFinancialCommercialExpectedFindingIds } from "@website-signal-risk-scanner/validation-shared";
+import { cleanupRuntimeScanArtifacts, getRuntimeScanArtifactOptions } from "./runtime-scan-artifacts";
 
 export { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
 
@@ -4860,11 +4861,16 @@ async function renderNanoDocumentFallback(input: {
   referer?: string | null;
   sourceUrl: string;
 }) {
+  const artifactOptions = getRuntimeScanArtifactOptions({
+    scanId: `${input.documentType}-${input.canonicalUrl}`,
+    stage: "nano-document-fallback"
+  });
   try {
     const { chromium } = await import("playwright");
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({ headless: true, ...artifactOptions.launchOptions });
     try {
       const context = await browser.newContext({
+        ...artifactOptions.contextOptions,
         extraHTTPHeaders: input.referer ? { referer: input.referer } : undefined
       });
       try {
@@ -4908,6 +4914,7 @@ async function renderNanoDocumentFallback(input: {
       }
     } finally {
       await browser.close().catch(() => undefined);
+      await cleanupRuntimeScanArtifacts(artifactOptions).catch(() => undefined);
     }
   } catch (error) {
     return {
