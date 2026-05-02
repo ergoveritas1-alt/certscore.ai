@@ -1665,17 +1665,6 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     return;
   }
 
-  if (contractDecision?.externalSurfacingEligibility === "audit_only") {
-    overrideDecision(decision, {
-      state: "support_only",
-      lane: "confidence_and_coverage",
-      tier: "support",
-      reason: "The finding evidence contract retained this high-risk finding for audit review because required evidence was missing.",
-      ruleId: "evidence.finding_contract.audit_only"
-    });
-    return;
-  }
-
   if (packet.unifiedFindingId === "reject_did_not_reduce_tracking" || packet.unifiedFindingId === "reject_did_not_reduce_third_party_cookies") {
     if (evidenceFlags.has("reject_evidence_suppress")) {
       overrideDecision(decision, {
@@ -1688,10 +1677,44 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       });
       return;
     }
+  }
+
+  if (contractDecision?.externalSurfacingEligibility === "audit_only") {
+    overrideDecision(decision, {
+      state: "support_only",
+      lane: "confidence_and_coverage",
+      tier: "support",
+      reason: "The finding evidence contract retained this high-risk finding for audit review because required evidence was missing.",
+      ruleId: "evidence.finding_contract.audit_only"
+    });
+    return;
+  }
+
+  if (packet.unifiedFindingId === "reject_did_not_reduce_tracking" || packet.unifiedFindingId === "reject_did_not_reduce_third_party_cookies") {
     if (
       evidenceFlags.has("reject_evidence_review") ||
       packet.concernContext?.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence")
     ) {
+      const hasEligibleRejectConcern =
+        packet.concernContext?.promotionEligibilities.includes("eligible") === true &&
+        packet.concernContext.externalSurfacingEligibilities.includes("eligible") === true;
+
+      if (contractDecision?.promotionEligibility === "eligible" && hasEligibleRejectConcern) {
+        overrideDecision(decision, {
+          state: evidenceFlags.has("reject_evidence_confirmed") ? "confirmed" : "review",
+          lane: "main",
+          tier: "headline",
+          reason:
+            evidenceFlags.has("reject_evidence_confirmed")
+              ? `The reject interaction succeeded and classified non-essential tracking requests were retained at least ${REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL} after reject, so the finding can stand as a confirmed consent-control failure.`
+              : "The reject interaction succeeded and retained named post-reject tracker vendors with multiple runtime evidence URLs, so this can surface as a main consent-control review finding while attribution caveats remain visible.",
+          ruleId: evidenceFlags.has("reject_evidence_confirmed")
+            ? "evidence.consent_behavior.confirmed_specific_runtime_failure"
+            : "evidence.consent_behavior.review_runtime_without_effect_evidence"
+        });
+        return;
+      }
+
       overrideDecision(decision, {
         state: "support_only",
         lane: "confidence_and_coverage",

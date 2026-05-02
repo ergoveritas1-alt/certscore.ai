@@ -281,6 +281,14 @@ export function withHybridRuntimeArtifactFallbacks(runtimeArtifacts: Record<stri
   const requestObservations = getObjectArray(hybrid.requestObservations);
   const cookieWriteObservations = getObjectArray(hybrid.cookieWriteObservations);
   const consentOutcomeSummary = getConsentOutcomeSummary(hybrid);
+  const rejectCookieDiffProvenance =
+    getRecord(runtimeArtifacts.consent_reject_cookie_diff_provenance) ??
+    getRecord(runtimeArtifacts.consentRejectCookieDiffProvenance) ??
+    getRecord(consentOutcomeSummary?.rejectCookieDiffProvenance);
+  const rejectInteractionAttribution =
+    getRecord(runtimeArtifacts.consent_reject_interaction_attribution) ??
+    getRecord(runtimeArtifacts.consentRejectInteractionAttribution) ??
+    getRecord(consentOutcomeSummary?.rejectInteractionAttribution);
 
   const thirdPartyRequestDomains = uniqueStrings([
     ...getExistingArray(runtimeArtifacts, ["third_party_request_domains", "thirdPartyRequestDomains"]),
@@ -335,6 +343,10 @@ export function withHybridRuntimeArtifactFallbacks(runtimeArtifacts: Record<stri
     consentRejectReducedTracking: consentRejectReducedTracking,
     consent_reject_reduced_third_party_cookies: consentRejectReducedThirdPartyCookies,
     consentRejectReducedThirdPartyCookies: consentRejectReducedThirdPartyCookies,
+    consent_reject_cookie_diff_provenance: rejectCookieDiffProvenance,
+    consentRejectCookieDiffProvenance: rejectCookieDiffProvenance,
+    consent_reject_interaction_attribution: rejectInteractionAttribution,
+    consentRejectInteractionAttribution: rejectInteractionAttribution,
     third_party_request_count: thirdPartyRequestCount,
     thirdPartyRequestCount: thirdPartyRequestCount,
     third_party_request_domains: thirdPartyRequestDomains,

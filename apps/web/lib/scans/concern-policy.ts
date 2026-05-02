@@ -997,7 +997,15 @@ function hasConfirmedRejectTimingEvidence(rawEvidence: Record<string, unknown> |
     "rejectPathDepthAndAvailability",
     "reject_path_depth_and_availability"
   ]);
-  if (rejectPath?.rejectInteractionSucceeded !== true && rejectPath?.reject_interaction_succeeded !== true) {
+  if (!hasCredibleRejectInteractionAttribution(rawEvidence)) {
+    return false;
+  }
+  const rejectSucceeded =
+    rejectPath?.rejectInteractionSucceeded === true ||
+    rejectPath?.reject_interaction_succeeded === true ||
+    suppressionChecks?.reject_click_confirmed === true ||
+    getBooleanEvidence(rawEvidence, ["consentRejectInteractionSucceeded", "consent_reject_interaction_succeeded"]) === true;
+  if (!rejectSucceeded) {
     return false;
   }
   if (suppressionChecks && suppressionChecks.post_reject_window_available !== true) {
@@ -1028,6 +1036,107 @@ function hasConfirmedRejectTimingEvidence(rawEvidence: Record<string, unknown> |
       /^https?:\/\//i.test(url)
     );
   });
+}
+
+function getRejectInteractionAttribution(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getObjectEvidence(rawEvidence, ["rejectInteractionAttribution", "reject_interaction_attribution"]);
+}
+
+function getRejectInteractionLabel(rawEvidence: Record<string, unknown> | null | undefined) {
+  const attribution = getRejectInteractionAttribution(rawEvidence);
+  return getFirstString(attribution, ["clickedLabel", "clicked_label", "clickedText", "clicked_text"]);
+}
+
+function hasCredibleRejectInteractionAttribution(rawEvidence: Record<string, unknown> | null | undefined) {
+  const attribution = getRejectInteractionAttribution(rawEvidence);
+  if (!attribution) {
+    return true;
+  }
+
+  if (attribution.finalUrlHostChanged === true || attribution.final_url_host_changed === true) {
+    return false;
+  }
+
+  const label = getRejectInteractionLabel(rawEvidence);
+  if (!label) {
+    return true;
+  }
+
+  if (/stream|subscribe|sign\s*in|log\s*in|continue|accept|agree|allow/i.test(label)) {
+    return false;
+  }
+
+  return /reject|decline|deny|refuse|opt\s*out|save\s+settings|confirm\s+choices|manage\s+preferences/i.test(label);
+}
+
+function getThirdPartyAddedAfterRejectCookieCount(rawEvidence: Record<string, unknown> | null | undefined) {
+  const provenance = getObjectEvidence(rawEvidence, [
+    "rejectCookieDiffProvenance",
+    "reject_cookie_diff_provenance",
+    "consentRejectCookieDiffProvenance",
+    "consent_reject_cookie_diff_provenance"
+  ]);
+  const summary = getObjectEvidence(provenance, ["summary"]);
+  const explicit =
+    getNumberEvidence(summary, ["thirdPartyAddedAfterRejectCount", "third_party_added_after_reject_count"]) ??
+    getNumberEvidence(summary, ["thirdPartyPersistedAfterRejectCount", "third_party_persisted_after_reject_count"]);
+  if (explicit !== null) {
+    return explicit;
+  }
+
+  return getObjectArrayEvidence(provenance, ["changedCookies", "changed_cookies"]).filter((row) => {
+    const firstPartyStatus = getFirstString(row, ["firstPartyStatus", "first_party_status"]);
+    const change = getFirstString(row, ["change"]);
+    return firstPartyStatus === "third_party" && (change === "added_after_reject" || change === "persisted_after_reject");
+  }).length;
+}
+
+function hasStrongPostRejectTrackerVendorEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const suppressionChecks = getObjectEvidence(rawEvidence, ["suppressionChecks", "suppression_checks"]);
+  const rejectPath = getObjectEvidence(rawEvidence, [
+    "rejectPathDepthAndAvailability",
+    "reject_path_depth_and_availability"
+  ]);
+  if (!hasCredibleRejectInteractionAttribution(rawEvidence)) {
+    return false;
+  }
+  const rejectSucceeded =
+    rejectPath?.rejectInteractionSucceeded === true ||
+    rejectPath?.reject_interaction_succeeded === true ||
+    getBooleanEvidence(rawEvidence, ["consentRejectInteractionSucceeded", "consent_reject_interaction_succeeded"]) === true ||
+    suppressionChecks?.reject_click_confirmed === true;
+
+  if (!rejectSucceeded) {
+    return false;
+  }
+  if (
+    suppressionChecks?.cmp_initialization_only === true ||
+    suppressionChecks?.navigation_or_reload_ambiguous === true ||
+    suppressionChecks?.baseline_contradiction_detected === true
+  ) {
+    return false;
+  }
+
+  const postRejectEvidenceUrls = getStringArrayValues(rawEvidence, [
+    "consentPostRejectTrackerEvidenceUrls",
+    "consent_post_reject_tracker_evidence_urls",
+    "runtimeEvidenceUrls",
+    "runtime_evidence_urls"
+  ]).filter((url) => /^https?:\/\//i.test(url));
+  const thirdPartyCookiesAddedAfterReject = getThirdPartyAddedAfterRejectCookieCount(rawEvidence);
+  const namedTrackerVendors = getStringArrayValues(rawEvidence, [
+    "persisted_tracker_vendors",
+    "post_reject_tracker_vendors",
+    "runtimeVendors",
+    "runtime_vendors"
+  ]).filter((vendor) =>
+    /adobe|ads|analytics|clarity|doubleclick|facebook|google|gtm|hubspot|linkedin|marketo|meta|munchkin|pixel|reddit|tiktok/i.test(vendor)
+  );
+
+  return (
+    namedTrackerVendors.length > 0 &&
+    (postRejectEvidenceUrls.length >= 5 || (postRejectEvidenceUrls.length >= 3 && thirdPartyCookiesAddedAfterReject >= 3))
+  );
 }
 
 function isRetargetingConcern(
@@ -1885,7 +1994,8 @@ export function deriveConcernPolicy(input: {
   );
   if (
     findingEvidenceContractDecision &&
-    findingEvidenceContractDecision.promotionEligibility !== "eligible"
+    findingEvidenceContractDecision.promotionEligibility !== "eligible" &&
+    !(isRejectTrackingPersistenceConcern(input.concern) && hasStrongPostRejectTrackerVendorEvidence(input.rawEvidence))
   ) {
     return {
       allowedNarrativeTier: findingEvidenceContractDecision.allowedNarrativeTier,
@@ -2091,7 +2201,10 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isRejectTrackingPersistenceConcern(input.concern)) {
-    if (!hasConfirmedRejectTimingEvidence(input.rawEvidence)) {
+    const hasConfirmedTiming = hasConfirmedRejectTimingEvidence(input.rawEvidence);
+    const hasStrongVendorEvidence = hasStrongPostRejectTrackerVendorEvidence(input.rawEvidence);
+
+    if (!hasConfirmedTiming && !hasStrongVendorEvidence) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
@@ -2101,7 +2214,7 @@ export function deriveConcernPolicy(input: {
     }
 
     return {
-      allowedNarrativeTier: "strong",
+      allowedNarrativeTier: hasConfirmedTiming ? "strong" : "moderate",
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "eligible"

@@ -1793,6 +1793,145 @@ test("reject persistence policy requires a successful reject path and post-rejec
   assert.equal(failedReject.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"), true);
 });
 
+test("reject persistence policy promotes strong vendor-backed post-reject evidence without retained timing", () => {
+  const concern = makeConcern({
+    originKey: "consent_reject_reduced_tracking",
+    originType: "snapshot_signal",
+    suggestedUnifiedFindingId: "reject_did_not_reduce_tracking",
+    title: "Reject path did not reduce tracking"
+  });
+
+  const promoted = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      consentPostRejectTrackerEvidenceUrls: [
+        "https://www.googletagmanager.com/gtm.js?id=GTM-TEST",
+        "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/1",
+        "https://analytics.google.com/g/collect?v=2",
+        "https://munchkin.marketo.net/munchkin.js",
+        "https://www.facebook.com/tr/"
+      ],
+      persisted_tracker_vendors: ["Google Ads", "Google Analytics", "Google Tag Manager", "Marketo", "Meta Pixel"],
+      rejectPathDepthAndAvailability: {
+        rejectInteractionSucceeded: true
+      },
+      suppressionChecks: {
+        baseline_contradiction_detected: false,
+        cmp_initialization_only: false,
+        navigation_or_reload_ambiguous: false,
+        post_reject_window_available: false,
+        reject_click_confirmed: true
+      }
+    }
+  });
+
+  assert.equal(promoted.allowedNarrativeTier, "moderate");
+  assert.equal(promoted.externalSurfacingEligibility, "eligible");
+  assert.equal(promoted.promotionEligibility, "eligible");
+
+  const thin = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      consentPostRejectTrackerEvidenceUrls: [
+        "https://analytics.google.com/g/collect?v=2",
+        "https://www.googletagmanager.com/gtm.js?id=GTM-TEST"
+      ],
+      persisted_tracker_vendors: ["Google Analytics"],
+      rejectPathDepthAndAvailability: {
+        rejectInteractionSucceeded: true
+      },
+      suppressionChecks: {
+        post_reject_window_available: false,
+        reject_click_confirmed: true
+      }
+    }
+  });
+
+  assert.equal(thin.externalSurfacingEligibility, "audit_only");
+  assert.equal(thin.promotionEligibility, "internal_only");
+});
+
+test("reject persistence policy uses cookie diff provenance and rejects non-reject click labels", () => {
+  const concern = makeConcern({
+    originKey: "consent_reject_reduced_tracking",
+    originType: "snapshot_signal",
+    suggestedUnifiedFindingId: "reject_did_not_reduce_tracking",
+    title: "Reject path did not reduce tracking"
+  });
+
+  const promoted = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      consentPostRejectTrackerEvidenceUrls: [
+        "https://track.hubspot.com/__ptq.gif",
+        "https://forms-na1.hsforms.com/embed/v3/counters.gif",
+        "https://www.googleadservices.com/pagead/conversion.js"
+      ],
+      persisted_tracker_vendors: ["HubSpot", "Google Ads"],
+      rejectCookieDiffProvenance: {
+        summary: {
+          thirdPartyAddedAfterRejectCount: 4
+        }
+      },
+      rejectInteractionAttribution: {
+        clickedLabel: "Reject All",
+        finalUrlHostChanged: false
+      },
+      rejectPathDepthAndAvailability: {
+        rejectInteractionSucceeded: true
+      },
+      suppressionChecks: {
+        baseline_contradiction_detected: false,
+        cmp_initialization_only: false,
+        navigation_or_reload_ambiguous: false,
+        post_reject_window_available: false,
+        reject_click_confirmed: true
+      }
+    }
+  });
+
+  assert.equal(promoted.allowedNarrativeTier, "moderate");
+  assert.equal(promoted.externalSurfacingEligibility, "eligible");
+  assert.equal(promoted.promotionEligibility, "eligible");
+
+  const nonRejectLabel = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      consentPostRejectTrackerEvidenceUrls: [
+        "https://analytics.google.com/g/collect?v=2",
+        "https://www.googletagmanager.com/gtm.js?id=GTM-TEST",
+        "https://www.googleadservices.com/pagead/conversion.js",
+        "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/1",
+        "https://track.hubspot.com/__ptq.gif"
+      ],
+      persisted_tracker_vendors: ["Google Analytics", "Google Ads"],
+      rejectCookieDiffProvenance: {
+        summary: {
+          thirdPartyAddedAfterRejectCount: 6
+        }
+      },
+      rejectInteractionAttribution: {
+        clickedLabel: "Stream and save",
+        finalUrlHostChanged: false
+      },
+      rejectPathDepthAndAvailability: {
+        rejectInteractionSucceeded: true
+      },
+      suppressionChecks: {
+        post_reject_window_available: false,
+        reject_click_confirmed: true
+      }
+    }
+  });
+
+  assert.equal(nonRejectLabel.externalSurfacingEligibility, "audit_only");
+  assert.equal(nonRejectLabel.promotionEligibility, "internal_only");
+});
+
 test("bot-block evidence keeps uncorroborated surface claims audit-only", () => {
   const decision = deriveConcernPolicy({
     concern: makeConcern({

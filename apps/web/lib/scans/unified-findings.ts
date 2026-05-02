@@ -2276,6 +2276,12 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (preconsentCookieTimingEvidence.length > 0) {
     entities.preconsent_cookie_timing_evidence = preconsentCookieTimingEvidence;
   }
+  if (normalizedFallbackEvidence.rejectCookieDiffProvenance && typeof normalizedFallbackEvidence.rejectCookieDiffProvenance === "object") {
+    entities.rejectCookieDiffProvenance = [JSON.stringify(normalizedFallbackEvidence.rejectCookieDiffProvenance)];
+  }
+  if (normalizedFallbackEvidence.rejectInteractionAttribution && typeof normalizedFallbackEvidence.rejectInteractionAttribution === "object") {
+    entities.rejectInteractionAttribution = [JSON.stringify(normalizedFallbackEvidence.rejectInteractionAttribution)];
+  }
   if (normalizedFallbackEvidence.cookieAttributeSummary && typeof normalizedFallbackEvidence.cookieAttributeSummary === "object") {
     const summary = normalizedFallbackEvidence.cookieAttributeSummary as Record<string, unknown>;
     for (const key of [

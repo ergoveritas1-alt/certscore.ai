@@ -576,7 +576,122 @@ test("consent audit reject-tracking finding suppresses when reject click or timi
   assert.ok(packet?.evidence?.flags?.includes("reject_evidence_suppress"));
 });
 
-test("consent audit reject-tracking finding downgrades when post-reject timing is unavailable", () => {
+test("consent audit reject-tracking finding uses attribution and cookie-diff provenance to clear stale ambiguity checks", () => {
+  const runtimeArtifacts = {
+    consent_baseline_tracker_vendor_names: ["Adobe Analytics"],
+    consent_baseline_tracker_evidence_urls: ["https://assets.adobedtm.com/baseline.js"],
+    consent_post_reject_tracker_vendor_names: ["Adobe Analytics", "Google Ads", "Twitter Pixel"],
+    consent_post_reject_tracker_evidence_urls: [
+      "https://analytics.example.com/post-reject-1.js",
+      "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/1",
+      "https://static.ads-twitter.com/uwt.js",
+      "https://analytics.example.com/post-reject-2.js",
+      "https://analytics.example.com/post-reject-3.js"
+    ],
+    consent_reject_cookie_diff_provenance: {
+      summary: {
+        addedAfterRejectCount: 12,
+        persistedAfterRejectCount: 3,
+        thirdPartyAddedAfterRejectCount: 4
+      }
+    },
+    consent_reject_interaction_attribution: {
+      clickedLabel: "Save Settings",
+      finalUrl: "https://example.com/",
+      finalUrlHostChanged: false,
+      navigationEventsAfterClick: [],
+      pageUrlAtClick: "https://example.com/",
+      riskFlags: ["auth_wall_detected"]
+    },
+    consent_reject_interaction_succeeded: true,
+    consent_reject_post_reject_non_essential_requests: [
+      {
+        vendor: "Google Ads",
+        hostname: "googleadservices.com",
+        category: "advertising",
+        url: "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/1",
+        ts_ms: 1900,
+        ms_after_reject: 900,
+        resource_type: "script",
+        initiator: null,
+        why_non_essential: "Google Ads is classified as advertising."
+      },
+      {
+        vendor: "Adobe Analytics",
+        hostname: "analytics.example.com",
+        category: "analytics",
+        url: "https://analytics.example.com/post-reject-1.js",
+        ts_ms: 1960,
+        ms_after_reject: 960,
+        resource_type: "script",
+        initiator: null,
+        why_non_essential: "Adobe Analytics is classified as analytics."
+      },
+      {
+        vendor: "Twitter Pixel",
+        hostname: "static.ads-twitter.com",
+        category: "advertising",
+        url: "https://static.ads-twitter.com/uwt.js",
+        ts_ms: 2100,
+        ms_after_reject: 1100,
+        resource_type: "script",
+        initiator: null,
+        why_non_essential: "Twitter Pixel is classified as advertising."
+      }
+    ],
+    consent_reject_suppression_checks: {
+      reject_click_confirmed: true,
+      post_reject_window_available: true,
+      non_essential_vendor_after_reject: true,
+      cmp_initialization_only: false,
+      navigation_or_reload_ambiguous: true,
+      baseline_contradiction_detected: true
+    }
+  };
+  const candidates = buildReviewFindings({
+    issues: buildSectionReviewIssues({
+      accessibilityIssueRows: [],
+      consentAuditFindings: [
+        {
+          title: "Reject interaction did not reduce tracking",
+          description: "Reject flow still showed tracker activity after opt-out.",
+          severity: "high"
+        } as never
+      ],
+      policyBehaviorContradictions: [],
+      preconsentViolationRows: [],
+      runtimeArtifacts,
+      scanReportReviewIssues: [],
+      sectionId: "consent_controls_enforcement",
+      snapshot: {}
+    }),
+    prioritizedAccessibilityRuleRows: [],
+    runtimeArtifacts,
+    sectionId: "consent_controls_enforcement",
+    sectionItems: []
+  });
+  const fallbackEvidence = candidates.find((finding) => finding.title === "Reject interaction did not reduce tracking")
+    ?.fallbackEvidence as Record<string, unknown> | undefined;
+  const packet = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: candidates,
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  }).find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.reportLane, "main");
+  assert.ok(!packet?.evidence?.flags?.includes("reject_evidence_suppress"));
+  assert.deepEqual(fallbackEvidence?.suppressionChecks, {
+    reject_click_confirmed: true,
+    post_reject_window_available: true,
+    non_essential_vendor_after_reject: true,
+    cmp_initialization_only: false,
+    navigation_or_reload_ambiguous: false,
+    baseline_contradiction_detected: false
+  });
+});
+
+test("consent audit reject-tracking finding promotes vendor-rich post-reject evidence without retained timing", () => {
   const runtimeArtifacts = {
     consent_baseline_tracker_vendor_names: ["Marketo"],
     consent_baseline_tracker_evidence_urls: ["https://munchkin.marketo.net/munchkin.js"],
@@ -644,12 +759,12 @@ test("consent audit reject-tracking finding downgrades when post-reject timing i
     validationFindingLookup: new Map()
   }).find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
 
-  assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.notEqual(packet?.surfacingDecision.decisionState, "confirmed");
-  assert.equal(packet?.surfacingDecision.reportLane, "confidence_and_coverage");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "review");
+  assert.equal(packet?.surfacingDecision.reportLane, "main");
   assert.ok(packet?.evidence?.flags?.includes("reject_evidence_review"));
   assert.ok(!packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
-  assert.ok(packet?.concernContext?.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"));
+  assert.ok(!packet?.concernContext?.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"));
   assert.equal((fallbackEvidence?.promotionDecision as Record<string, unknown> | undefined)?.promoted, false);
   assert.equal((fallbackEvidence?.promotionDecision as Record<string, unknown> | undefined)?.requiredTimingSatisfied, false);
   assert.deepEqual((fallbackEvidence?.rejectEvidenceDiff as Record<string, unknown> | undefined)?.baseline_vendors, ["Marketo"]);

@@ -17,6 +17,7 @@ export type EvidenceRequirementType =
   | "consentTimelineSequence"
   | "nonEssentialRequestClassification"
   | "trackingCookieClassification"
+  | "postRejectTimestampedRuntimeEvidence"
   | "postRejectRuntimeEvidence"
   | "successfulRejectInteraction"
   | "rejectPathDepthEvidence"
@@ -91,7 +92,8 @@ const REQUIREMENT_DESCRIPTIONS: Record<EvidenceRequirementType, string> = {
   consentTimelineSequence: "Observed consent timeline has a non-essential request or cookie before CMP visibility or user action.",
   nonEssentialRequestClassification: "Runtime request or cookie is classified non-essential from structured evidence.",
   trackingCookieClassification: "Cookie evidence is classified analytics, advertising, marketing, retargeting, or session replay.",
-  postRejectRuntimeEvidence: "Timestamped post-reject runtime activity shows non-essential tracking persisted.",
+  postRejectTimestampedRuntimeEvidence: "Timestamped post-reject runtime activity shows non-essential tracking persisted.",
+  postRejectRuntimeEvidence: "Post-reject runtime activity or cookie-diff provenance shows non-essential tracking persisted.",
   successfulRejectInteraction: "Reject interaction succeeded before post-reject activity was evaluated.",
   rejectPathDepthEvidence: "Reject path depth and availability were inspected with an explicit outcome.",
   materialChoiceAsymmetryEvidence: "Structured UI evidence shows a material consent choice asymmetry or dark pattern.",
@@ -209,14 +211,15 @@ export const FINDING_EVIDENCE_CONTRACTS = [
     unifiedFindingIds: ["reject_did_not_reduce_tracking", "reject_did_not_reduce_third_party_cookies"],
     requiredForStrong: [
       req("successfulRejectInteraction"),
-      req("postRejectRuntimeEvidence"),
+      req("postRejectTimestampedRuntimeEvidence"),
       req("nonEssentialRequestClassification"),
       req("coverageNotMateriallyBlocked")
     ],
     requiredForGood: [req("successfulRejectInteraction"), req("postRejectRuntimeEvidence")],
     downgradeIf: [
       { ifMissing: "successfulRejectInteraction", to: "audit_only", reason: "Post-reject persistence requires a successful reject interaction." },
-      { ifMissing: "postRejectRuntimeEvidence", to: "audit_only", reason: "Post-reject persistence requires timestamped post-reject runtime activity." },
+      { ifMissing: "postRejectTimestampedRuntimeEvidence", to: "moderate", reason: "Post-reject persistence lacks timestamped request rows, so it remains review-grade." },
+      { ifMissing: "postRejectRuntimeEvidence", to: "audit_only", reason: "Post-reject persistence requires retained post-reject runtime activity or cookie-diff provenance." },
       { ifMissing: "nonEssentialRequestClassification", to: "audit_only", reason: "Post-reject persistence requires non-essential classification evidence." }
     ],
     suppressIf: [],
@@ -493,6 +496,22 @@ function getBoolean(record: Record<string, unknown> | null | undefined, keys: st
   return null;
 }
 
+function parseFirstObjectValue(value: unknown) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  const first = Array.isArray(value) ? value.find((entry) => typeof entry === "string" && entry.trim().length > 0) : value;
+  if (typeof first !== "string") {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(first);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
 function isPromotionCookieCategory(value: string) {
   return /analytics|advertising|marketing|retargeting|session_replay/i.test(value);
 }
@@ -538,6 +557,21 @@ function hasNonEssentialRequestClassification(rawEvidence: Record<string, unknow
   if (hasStrongPreconsentRuntimeEvidence(rawEvidence)) {
     return true;
   }
+  if (
+    getObjectArrayValues(rawEvidence, [
+      "postRejectNonEssentialRequests",
+      "post_reject_non_essential_requests",
+      "consent_reject_post_reject_non_essential_requests"
+    ]).some((row) => {
+      const category = typeof row.category === "string" ? row.category : "";
+      return /^(advertising|analytics|session_replay|marketing_automation)$/i.test(category);
+    })
+  ) {
+    return true;
+  }
+  if (hasPostRejectVendorCookieProvenance(rawEvidence)) {
+    return true;
+  }
   return getObjectArrayValues(rawEvidence, [
     "requestPurposeClassificationConfidence",
     "request_purpose_classification_confidence"
@@ -571,15 +605,77 @@ function hasCoverageNotMateriallyBlocked(rawEvidence: Record<string, unknown> | 
 
 function hasSuccessfulRejectInteraction(rawEvidence: Record<string, unknown> | null | undefined) {
   const rejectPath = getObjectValue(rawEvidence, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]);
+  const suppressionChecks = getObjectValue(rawEvidence, ["suppressionChecks", "suppression_checks"]);
   return (
     rejectPath?.rejectInteractionSucceeded === true ||
     rejectPath?.reject_interaction_succeeded === true ||
+    suppressionChecks?.reject_click_confirmed === true ||
     getBoolean(rawEvidence, ["consentRejectInteractionSucceeded", "consent_reject_interaction_succeeded"]) === true
   );
 }
 
+function getNumberValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function hasPostRejectVendorCookieProvenance(rawEvidence: Record<string, unknown> | null | undefined) {
+  const provenance = getObjectValue(rawEvidence, [
+    "rejectCookieDiffProvenance",
+    "reject_cookie_diff_provenance",
+    "consentRejectCookieDiffProvenance",
+    "consent_reject_cookie_diff_provenance"
+  ]);
+  const summary = getObjectValue(provenance, ["summary"]);
+  const thirdPartyAdded =
+    getNumberValue(summary, ["thirdPartyAddedAfterRejectCount", "third_party_added_after_reject_count"]) ?? 0;
+  const thirdPartyPersisted =
+    getNumberValue(summary, ["thirdPartyPersistedAfterRejectCount", "third_party_persisted_after_reject_count"]) ?? 0;
+  const changedCookieCount = getObjectArrayValues(provenance, ["changedCookies", "changed_cookies"]).filter((row) => {
+    const firstPartyStatus = typeof row.firstPartyStatus === "string" ? row.firstPartyStatus : row.first_party_status;
+    const change = typeof row.change === "string" ? row.change : "";
+    return firstPartyStatus === "third_party" && (change === "added_after_reject" || change === "persisted_after_reject");
+  }).length;
+  const vendorNames = getStringArrayValues(rawEvidence, [
+    "persisted_tracker_vendors",
+    "post_reject_tracker_vendors",
+    "runtimeVendors",
+    "runtime_vendors"
+  ]);
+  return (
+    vendorNames.some((vendor) => /adobe|ads|analytics|clarity|doubleclick|facebook|google|gtm|hubspot|linkedin|marketo|meta|munchkin|pixel|reddit|tiktok/i.test(vendor)) &&
+    Math.max(thirdPartyAdded, thirdPartyPersisted, changedCookieCount) >= 3
+  );
+}
+
+function hasPostRejectTimestampedRuntimeEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getObjectArrayValues(rawEvidence, [
+    "postRejectNonEssentialRequests",
+    "post_reject_non_essential_requests",
+    "consent_reject_post_reject_non_essential_requests",
+    "postRejectTrackingActivity",
+    "post_reject_tracking_activity"
+  ]).some((row) => {
+    const url = typeof row.url === "string" ? row.url : typeof row.requestUrl === "string" ? row.requestUrl : row.request_url;
+    const msAfterReject = row.ms_after_reject ?? row.msAfterReject;
+    const tsMs = row.ts_ms ?? row.tsMs;
+    return typeof tsMs === "number" && typeof msAfterReject === "number" && /^https?:\/\//i.test(String(url ?? ""));
+  });
+}
+
 function hasPostRejectRuntimeEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   return (
+    hasPostRejectTimestampedRuntimeEvidence(rawEvidence) ||
+    hasPostRejectVendorCookieProvenance(rawEvidence) ||
+    getStringArrayValues(rawEvidence, [
+      "consentPostRejectTrackerEvidenceUrls",
+      "consent_post_reject_tracker_evidence_urls"
+    ]).filter((url) => /^https?:\/\//i.test(url)).length >= 3 ||
     getStringArrayValues(rawEvidence, [
       "postRejectNonEssentialRequestUrls",
       "post_reject_non_essential_request_urls",
@@ -803,6 +899,8 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
       return hasNonEssentialRequestClassification(rawEvidence);
     case "trackingCookieClassification":
       return hasTrackingCookieClassification(rawEvidence);
+    case "postRejectTimestampedRuntimeEvidence":
+      return hasPostRejectTimestampedRuntimeEvidence(rawEvidence);
     case "postRejectRuntimeEvidence":
       return hasPostRejectRuntimeEvidence(rawEvidence);
     case "successfulRejectInteraction":
@@ -858,6 +956,7 @@ function downgradeFlag(type: EvidenceRequirementType) {
     case "sessionReplayVendorEvidence":
       return "missing_third_party_tracking_artifact";
     case "postRejectRuntimeEvidence":
+    case "postRejectTimestampedRuntimeEvidence":
     case "successfulRejectInteraction":
       return "missing_post_reject_timing_evidence";
     case "policyAnchor":
@@ -1026,7 +1125,13 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
     negativeDisclosureSearchPerformed: packet.concernContext?.evidenceStrengthFlags.includes("policy_text") || undefined,
     policyAnchorRetained: packet.confidenceInputs.hasPolicyTextEvidence || undefined,
     policySourceUrl: allEvidenceUrls.find((url) => /cookie|privacy|legal|policy|notice/i.test(url)),
+    consentPostRejectTrackerEvidenceUrls:
+      entities.consentPostRejectTrackerEvidenceUrls ?? entities.consent_post_reject_tracker_evidence_urls,
+    postRejectNonEssentialRequests:
+      entities.postRejectNonEssentialRequests ?? entities.post_reject_non_essential_requests,
     postRejectNonEssentialRequestUrls: entities.postRejectNonEssentialRequestUrls ?? entities.post_reject_non_essential_request_urls,
+    rejectCookieDiffProvenance: parseFirstObjectValue(entities.rejectCookieDiffProvenance ?? entities.reject_cookie_diff_provenance),
+    rejectInteractionAttribution: parseFirstObjectValue(entities.rejectInteractionAttribution ?? entities.reject_interaction_attribution),
     privacyChoiceControlSearchPerformed: entities.privacyChoiceControlSearchPerformed,
     preconsentCookieCategories: entities.preconsentCookieCategories ?? entities.preconsent_cookie_categories,
     preconsentCookieNames: entities.preconsentCookieNames ?? entities.preconsent_cookie_names,
@@ -1047,6 +1152,7 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
     runtimeRequestUrls: entities.runtimeRequestUrls ?? consentTrackingDetails?.requestUrls ?? allEvidenceUrls.filter((url) => /^https?:\/\//i.test(url)),
     runtimeVendorCategories: entities.runtimeVendorCategories ?? entities.runtime_vendor_categories,
     runtimeVendors: entities.runtimeVendors ?? consentTrackingDetails?.vendors,
+    suppressionChecks: entities.suppressionChecks ?? entities.suppression_checks,
     sensitiveDataTypes: entities.sensitiveDataTypes ?? entities.sensitive_data_types,
     sensitiveFieldContexts: entities.sensitiveFieldContexts ?? entities.sensitive_field_contexts,
     sensitiveFieldEvidence: entities.sensitiveFieldEvidence ?? entities.sensitive_field_evidence,

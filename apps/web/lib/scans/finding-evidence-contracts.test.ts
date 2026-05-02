@@ -187,6 +187,32 @@ test("WS01-style reject action and post-reject tracking evidence satisfies stron
   assert.equal(decision?.status, "pass_strong");
 });
 
+test("WS01-style reject cookie diff provenance satisfies post-reject review-grade contract", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("reject_did_not_reduce_tracking", {
+    consentPostRejectTrackerEvidenceUrls: [
+      "https://track.hubspot.com/__ptq.gif",
+      "https://forms-na1.hsforms.com/embed/v3/counters.gif",
+      "https://www.googleadservices.com/pagead/conversion.js"
+    ],
+    persisted_tracker_vendors: ["HubSpot", "Google Ads"],
+    rejectCookieDiffProvenance: {
+      summary: {
+        thirdPartyAddedAfterRejectCount: 4
+      }
+    },
+    rejectPathDepthAndAvailability: {
+      rejectInteractionSucceeded: true
+    },
+    suppressionChecks: {
+      reject_click_confirmed: true
+    }
+  });
+
+  assert.equal(decision?.status, "pass_good");
+  assert.equal(decision?.allowedNarrativeTier, "moderate");
+  assert.equal(decision?.promotionEligibility, "eligible");
+});
+
 test("reject hidden requires inspected banner and reject path evidence", () => {
   const weakDecision = evaluateFindingEvidenceContractForRawEvidence("reject_button_missing", {
     privacy_dark_pattern_reject_button_missing: true

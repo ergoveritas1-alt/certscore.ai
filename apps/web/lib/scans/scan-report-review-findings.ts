@@ -521,6 +521,19 @@ function buildRejectTrackingEvidenceFallback(input: {
     "confidenceRisks",
     "consent_reject_confidence_risks"
   );
+  const rejectCookieDiffProvenance = getConsentSummaryObject(
+    input.runtimeArtifacts,
+    "rejectCookieDiffProvenance",
+    "consent_reject_cookie_diff_provenance"
+  );
+  const rejectInteractionAttribution = getConsentSummaryObject(
+    input.runtimeArtifacts,
+    "rejectInteractionAttribution",
+    "consent_reject_interaction_attribution"
+  );
+  const rejectInteractionRiskFlags = Array.isArray(rejectInteractionAttribution?.riskFlags)
+    ? rejectInteractionAttribution.riskFlags.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
   const hasNonEssentialAfterReject =
     postRejectNonEssentialRequests.length > 0 ||
     input.postRejectTrackerVendors.some((vendor) =>
@@ -561,10 +574,35 @@ function buildRejectTrackingEvidenceFallback(input: {
     postRejectWindowAvailable &&
     hasPromotionGradeRequest;
   const cmpInitializationOnly = suppressionChecks.cmp_initialization_only === true;
-  const navigationOrReloadAmbiguous = suppressionChecks.navigation_or_reload_ambiguous === true;
+  const rejectHostChanged = rejectInteractionAttribution?.finalUrlHostChanged === true;
+  const rejectAttributionClearsNavigationAmbiguity =
+    rejectInteractionAttribution != null &&
+    rejectInteractionAttribution.finalUrlHostChanged === false &&
+    (!Array.isArray(rejectInteractionAttribution.navigationEventsAfterClick) ||
+      rejectInteractionAttribution.navigationEventsAfterClick.length === 0);
+  const navigationOrReloadAmbiguous =
+    (suppressionChecks.navigation_or_reload_ambiguous === true && !rejectAttributionClearsNavigationAmbiguity) ||
+    rejectHostChanged;
+  const rejectCookieDiffSummary =
+    rejectCookieDiffProvenance && typeof rejectCookieDiffProvenance.summary === "object" && !Array.isArray(rejectCookieDiffProvenance.summary)
+      ? rejectCookieDiffProvenance.summary as Record<string, unknown>
+      : null;
+  const hasRejectCookieDiffBaseline =
+    typeof rejectCookieDiffProvenance?.baselineCookieCount === "number" ||
+    typeof rejectCookieDiffProvenance?.postRejectCookieCount === "number" ||
+    typeof rejectCookieDiffSummary?.addedAfterRejectCount === "number" ||
+    typeof rejectCookieDiffSummary?.thirdPartyAddedAfterRejectCount === "number";
   const baselineContradictionDetected =
-    suppressionChecks.baseline_contradiction_detected === true ||
-    (input.baselineTrackerVendors.length === 0 && input.baselineTrackerEvidenceUrls.length > 0 && input.postRejectTrackerVendors.length > 0);
+    (suppressionChecks.baseline_contradiction_detected === true && !hasRejectCookieDiffBaseline) ||
+    (!hasRejectCookieDiffBaseline &&
+      input.baselineTrackerVendors.length === 0 &&
+      input.baselineTrackerEvidenceUrls.length > 0 &&
+      input.postRejectTrackerVendors.length > 0);
+  const runtimeEvidenceUrls = uniqueStrings([
+    ...input.baselineTrackerEvidenceUrls,
+    ...input.postRejectTrackerEvidenceUrls,
+    ...postRejectNonEssentialRequests.map((row) => (typeof row.url === "string" ? row.url : null))
+  ]);
   const confirmed =
     rejectClickConfirmed &&
     requiredTimingSatisfied &&
@@ -572,20 +610,20 @@ function buildRejectTrackingEvidenceFallback(input: {
     !cmpInitializationOnly &&
     !navigationOrReloadAmbiguous &&
     !baselineContradictionDetected;
+  const strongTimestampedRuntimeEvidence =
+    requiredTimingSatisfied &&
+    requiredVendorClassificationSatisfied &&
+    postRejectNonEssentialRequests.length >= 3 &&
+    runtimeEvidenceUrls.length >= 5;
   const review =
     rejectClickConfirmed &&
     hasNonEssentialAfterReject &&
     !cmpInitializationOnly &&
     !baselineContradictionDetected &&
-    !navigationOrReloadAmbiguous;
+    (!navigationOrReloadAmbiguous || strongTimestampedRuntimeEvidence);
   const firstPostRejectMs = postRejectNonEssentialRequests
     .map((row) => row.ms_after_reject ?? row.msAfterReject)
     .find((value): value is number => typeof value === "number" && Number.isFinite(value));
-  const runtimeEvidenceUrls = uniqueStrings([
-    ...input.baselineTrackerEvidenceUrls,
-    ...input.postRejectTrackerEvidenceUrls,
-    ...postRejectNonEssentialRequests.map((row) => (typeof row.url === "string" ? row.url : null))
-  ]);
 
   return {
     confidenceRisks: uniqueStrings([
@@ -596,6 +634,7 @@ function buildRejectTrackingEvidenceFallback(input: {
         : null,
       !requiredTimingSatisfied ? "Post-reject timing unavailable; cannot confirm persistence after reject." : null,
       navigationOrReloadAmbiguous ? "Navigation or reload makes reject attribution ambiguous." : null,
+      rejectInteractionRiskFlags.includes("auth_wall_detected") ? "An auth wall or modal was detected after the reject interaction." : null,
       baselineContradictionDetected ? "Baseline/post-reject comparison is internally contradictory." : null
     ]),
     consentBaselineCookieCount:
@@ -631,12 +670,16 @@ function buildRejectTrackingEvidenceFallback(input: {
     post_reject_tracker_vendors: input.postRejectTrackerVendors,
     postRejectNonEssentialRequests,
     reject_did_not_reduce_tracking: true,
+    rejectCookieDiffProvenance,
     rejectEvidenceConfidence: confirmed ? "confirmed" : review ? "review" : "suppress",
     rejectEvidenceDiff,
+    rejectInteractionAttribution,
     promotionDecision: {
       promoted: confirmed,
       reason: confirmed
         ? "Reject click, post-reject timing, vendor classification, and retained request URL satisfied promotion requirements."
+        : navigationOrReloadAmbiguous && strongTimestampedRuntimeEvidence
+          ? "Post-reject timing and vendor classification were retained, but navigation or reload context keeps this at review level."
         : !requiredTimingSatisfied
           ? "Post-reject timing unavailable; cannot confirm persistence after reject."
           : !requiredVendorClassificationSatisfied

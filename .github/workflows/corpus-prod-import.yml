@@ -1,0 +1,61 @@
+name: Corpus Prod Import
+
+on:
+  workflow_dispatch:
+    inputs:
+      payload_url:
+        description: "Short-lived HTTPS URL for the exported dev corpus payload JSON."
+        required: true
+        type: string
+      verify_only:
+        description: "Only verify the existing corpus import state."
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: corpus-prod-import
+  cancel-in-progress: false
+
+jobs:
+  import-corpus:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      CORPUS_PAYLOAD_URL: ${{ inputs.payload_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          test -n "${DATABASE_URL}" || (echo "Missing secret PROD_DATABASE_URL" && exit 1)
+          test -n "${CORPUS_PAYLOAD_URL}" || (echo "Missing payload_url input" && exit 1)
+          case "${DATABASE_URL}" in
+            *127.0.0.1*|*localhost*) echo "DATABASE_URL points at a local database." && exit 1 ;;
+          esac
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Import corpus payload
+        if: ${{ !inputs.verify_only }}
+        run: pnpm exec tsx ./scripts/import-dev-corpus-to-prod.ts --import
+
+      - name: Verify corpus import
+        run: pnpm exec tsx ./scripts/import-dev-corpus-to-prod.ts --verify
