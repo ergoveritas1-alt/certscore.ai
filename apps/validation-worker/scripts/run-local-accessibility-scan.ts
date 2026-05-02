@@ -1,5 +1,6 @@
 import { chromium } from "playwright";
 import { runAccessibilityScan } from "../src/accessibility/run-accessibility-scan";
+import { setupRequestBlocking } from "../src/browser/request-blocking";
 
 /**
  * Dev script to run an accessibility scan against a target URL.
@@ -18,6 +19,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
+  const requestBlocking = await setupRequestBlocking(page, { mode: "full" });
 
   try {
     console.info(`[dev] Navigating to ${url}...`);
@@ -32,6 +34,7 @@ async function main() {
     console.log("\n=== Accessibility Scan Result ===");
     console.log(`Score: ${result.score.score} (${result.score.band})`);
     console.log(`Benchmark: ${result.benchmarkLabel}`);
+    console.log(`Blocked heavy assets: ${requestBlocking.getStats().blockedCount}`);
     console.log(`Violations: ${result.metrics.totalViolationCount}`);
     console.log(`Affected nodes: ${result.metrics.totalAffectedNodeCount}`);
     console.log(`Critical: ${result.metrics.criticalCount}, Serious: ${result.metrics.seriousCount}, Moderate: ${result.metrics.moderateCount}, Minor: ${result.metrics.minorCount}`);
@@ -59,6 +62,7 @@ async function main() {
     console.error("[dev] Fatal error:", error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
   } finally {
+    await requestBlocking.stop();
     await context.close();
     await browser.close();
   }

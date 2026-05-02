@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 import { query } from "@website-signal-risk-scanner/db";
 import { runAccessibilityScan } from "../accessibility/run-accessibility-scan";
 import { persistAccessibilityResults } from "../accessibility/persist-accessibility-results";
+import { setupRequestBlocking } from "../browser/request-blocking";
 
 /**
  * Standalone validation job that runs an accessibility scan against a scan's
@@ -44,6 +45,7 @@ export async function runAccessibilityValidationJob(scanId: string): Promise<{
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
+  const requestBlocking = await setupRequestBlocking(page, { mode: "full" });
 
   try {
     console.info("[accessibility-job] navigating", { scanId, url: finalUrl });
@@ -67,6 +69,7 @@ export async function runAccessibilityValidationJob(scanId: string): Promise<{
     await persistAccessibilityResults(scanId, scan.organization_id, scan.domain_id, result);
 
     console.info("[accessibility-job] completed", {
+      requestBlocking: requestBlocking.getStats(),
       findingsCount: result.findings.length,
       scanId,
       score: result.score.score
@@ -82,6 +85,7 @@ export async function runAccessibilityValidationJob(scanId: string): Promise<{
     console.error("[accessibility-job] fatal error", { message, scanId });
     return { findingsCount: 0, score: 96, status: "failed" };
   } finally {
+    await requestBlocking.stop();
     await context.close();
     await browser.close();
   }

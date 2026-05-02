@@ -785,7 +785,7 @@ export function deriveEgressRiskDecision(input: EgressRiskObservation): EgressRi
   return {
     concurrency: highBlockRiskMode ? 1 : 4,
     highBlockRiskMode,
-    launchJitterMs: highBlockRiskMode ? { min: 15_000, max: 90_000 } : { min: 1_000, max: 10_000 },
+    launchJitterMs: highBlockRiskMode ? { min: 15_000, max: 90_000 } : { min: 0, max: 3_000 },
     suppressNonEssentialRescans: highBlockRiskMode
   };
 }

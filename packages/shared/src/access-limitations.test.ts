@@ -173,3 +173,12 @@ test("escalates egress risk after repeated distinct-domain 403 blocks", () => {
   assert.equal(decision.concurrency, 1);
   assert.equal(decision.suppressNonEssentialRescans, true);
 });
+
+test("keeps low-risk scanner pickup jitter short", () => {
+  const decision = deriveEgressRiskDecision({
+    blockedHomepage403DistinctDomainsLastHour: 0
+  });
+
+  assert.equal(decision.highBlockRiskMode, false);
+  assert.deepEqual(decision.launchJitterMs, { min: 0, max: 3_000 });
+});

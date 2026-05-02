@@ -4863,38 +4863,45 @@ async function renderNanoDocumentFallback(input: {
       const context = await browser.newContext({
         extraHTTPHeaders: input.referer ? { referer: input.referer } : undefined
       });
-      const page = await context.newPage();
-      await page.goto(input.canonicalUrl, { timeout: 20_000, waitUntil: "domcontentloaded" });
-      await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => undefined);
-      await page.waitForTimeout(1_500);
-      const [renderedTitle, renderedUrl, renderedText] = await Promise.all([
-        page.title().catch(() => null),
-        Promise.resolve(page.url()),
-        page.locator("body").innerText({ timeout: 5_000 }).catch(() => "")
-      ]);
-      await context.close().catch(() => undefined);
+      try {
+        const page = await context.newPage();
+        const { setupRequestBlocking } = await import("../browser/request-blocking");
+        const requestBlocking = await setupRequestBlocking(page, { mode: "full" });
+        await page.goto(input.canonicalUrl, { timeout: 20_000, waitUntil: "domcontentloaded" });
+        await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => undefined);
+        await page.waitForTimeout(1_500);
+        const [renderedTitle, renderedUrl, renderedText] = await Promise.all([
+          page.title().catch(() => null),
+          Promise.resolve(page.url()),
+          page.locator("body").innerText({ timeout: 5_000 }).catch(() => "")
+        ]);
+        await requestBlocking.stop();
 
-      const text = renderedText.replace(/\s+/g, " ").trim();
-      const hasLegalSignal =
-        /privacy policy|privacy notice|cookie policy|cookie notice|terms of service|terms and conditions|personal information|personal data|privacy rights/i.test(
-          text
-        );
-      if (text.length < 200 || !hasLegalSignal) {
-        return null;
+        const text = renderedText.replace(/\s+/g, " ").trim();
+        const hasLegalSignal =
+          /privacy policy|privacy notice|cookie policy|cookie notice|terms of service|terms and conditions|personal information|personal data|privacy rights/i.test(
+            text
+          );
+        if (text.length < 200 || !hasLegalSignal) {
+          return null;
+        }
+
+        const canonicalUrl = normalizeDocUrl(renderedUrl) ?? input.canonicalUrl;
+        return {
+          canonicalUrl,
+          documentText: text.slice(0, 50_000),
+          metadata: {
+            rendered_final_url: canonicalUrl,
+            request_blocking: requestBlocking.getStats(),
+            rendered_text_length: text.length,
+            renderer: "playwright_chromium",
+            retrieval_fallback_reason: "javascript_policy_center_shell"
+          } satisfies Record<string, unknown>,
+          title: renderedTitle
+        };
+      } finally {
+        await context.close().catch(() => undefined);
       }
-
-      const canonicalUrl = normalizeDocUrl(renderedUrl) ?? input.canonicalUrl;
-      return {
-        canonicalUrl,
-        documentText: text.slice(0, 50_000),
-        metadata: {
-          rendered_final_url: canonicalUrl,
-          rendered_text_length: text.length,
-          renderer: "playwright_chromium",
-          retrieval_fallback_reason: "javascript_policy_center_shell"
-        } satisfies Record<string, unknown>,
-        title: renderedTitle
-      };
     } finally {
       await browser.close().catch(() => undefined);
     }
