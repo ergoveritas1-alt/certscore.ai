@@ -898,9 +898,26 @@ function hasVideoTrackingRuntimeEvidence(rawEvidence: Record<string, unknown> | 
 function hasFingerprintingRuntimeEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   return (
     hasStrongFingerprintingEvidence(rawEvidence) ||
-    getBoolean(rawEvidence, ["fingerprintingRuntimeEvidenceRetained", "fingerprinting_runtime_evidence_retained"]) === true ||
-    getStringArrayValues(rawEvidence, ["fingerprintingSignals", "fingerprinting_signals", "highEntropySignals", "high_entropy_signals"]).length > 0 ||
-    getObjectArrayValues(rawEvidence, ["fingerprintingRuntimeEvidence", "fingerprinting_runtime_evidence"]).length > 0 ||
+    getBoolean(rawEvidence, [
+      "fingerprintRuntimeEvidenceRetained",
+      "fingerprint_runtime_evidence_retained",
+      "fingerprintingRuntimeEvidenceRetained",
+      "fingerprinting_runtime_evidence_retained"
+    ]) === true ||
+    getStringArrayValues(rawEvidence, [
+      "fingerprintAttributeCategories",
+      "fingerprint_attribute_categories",
+      "fingerprintingSignals",
+      "fingerprinting_signals",
+      "highEntropySignals",
+      "high_entropy_signals"
+    ]).length > 0 ||
+    getObjectArrayValues(rawEvidence, [
+      "fingerprintRuntimeEvidence",
+      "fingerprint_runtime_evidence",
+      "fingerprintingRuntimeEvidence",
+      "fingerprinting_runtime_evidence"
+    ]).length > 0 ||
     getStringArrayValues(rawEvidence, ["runtimeRequestUrls", "runtime_request_urls"]).some((url) => /^https?:\/\//i.test(url) && /fingerprint|fp|collect|beacon/i.test(url))
   );
 }
@@ -1158,8 +1175,12 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
       entities.crossDomainIdentifierSharingDestinationEtlds ?? entities.cross_domain_identifier_sharing_destination_etlds,
     crossDomainIdentifierSharingEvidence:
       entities.crossDomainIdentifierSharingEvidence ?? entities.cross_domain_identifier_sharing_evidence,
+    fingerprintArtifactRefs: entities.fingerprintArtifactRefs ?? entities.fingerprint_artifact_refs,
+    fingerprintAttributeCategories:
+      entities.fingerprintAttributeCategories ?? entities.fingerprint_attribute_categories ?? entities.fingerprintingSignals ?? entities.highEntropySignals,
+    fingerprintTier: packet.evidence?.counts?.fingerprintTier,
     fingerprintingRuntimeEvidence: entities.fingerprintingRuntimeEvidence ?? entities.fingerprinting_runtime_evidence,
-    fingerprintingSignals: entities.fingerprintingSignals ?? entities.highEntropySignals,
+    fingerprintingSignals: entities.fingerprintingSignals ?? entities.fingerprintAttributeCategories ?? entities.highEntropySignals,
     inputSurfaceUrls: entities.inputSurfaceUrls ?? entities.input_surface_urls,
     metaPixelRequestUrls: entities.metaPixelRequestUrls ?? entities.meta_pixel_request_urls,
     negativeDisclosureSearchPerformed: packet.concernContext?.evidenceStrengthFlags.includes("policy_text") || undefined,
@@ -1220,6 +1241,10 @@ export function evaluateFindingEvidenceContractForPacket(packet: UnifiedFindingP
       packet.concernContext.promotionEligibilities.every((value) => value === "eligible") &&
       packet.concernContext.externalSurfacingEligibilities.every((value) => value === "eligible")
     ) {
+      if (packetEvidenceDecision?.status === "pass_strong") {
+        return packetEvidenceDecision;
+      }
+
       return {
         allowedNarrativeTier: packet.concernContext.assertionLevels.includes("strong") ? "strong" : "moderate",
         externalSurfacingEligibility: "eligible",

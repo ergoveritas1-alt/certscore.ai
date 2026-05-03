@@ -213,6 +213,22 @@ function getStringValue(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+function getPlainRecordArray(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+    : [];
+}
+
+function compactJsonRows(rows: Array<Record<string, unknown>>, limit = 12) {
+  return rows.flatMap((entry) => {
+    try {
+      return [JSON.stringify(entry)];
+    } catch {
+      return [];
+    }
+  }).slice(0, limit);
+}
+
 function getBooleanValue(value: unknown) {
   return typeof value === "boolean" ? value : null;
 }
@@ -723,23 +739,67 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     }
 
     if (/rtbCookieSyncObservations|rtb_cookie_sync_observations|rtb_cookie_sync_evidence/i.test(key) && Array.isArray(value)) {
-      const compactRows = value.flatMap((entry) => {
-        if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-          return [];
-        }
-        try {
-          return [JSON.stringify(entry)];
-        } catch {
-          return [];
-        }
-      });
+      const compactRows = compactJsonRows(getPlainRecordArray(value));
       addEntity(entities, "rtbCookieSyncEvidence", compactRows.slice(0, 12));
       runtimeArtifacts.add(`${compactRows.length} compact RTB cookie-sync request observation${compactRows.length === 1 ? "" : "s"} retained.`);
       continue;
     }
 
+    if (/fingerprint(?:ing)?RuntimeEvidence|fingerprint(?:ing)?_runtime_evidence/i.test(key) && Array.isArray(value)) {
+      const compactRows = compactJsonRows(getPlainRecordArray(value));
+      addEntity(entities, "fingerprintingRuntimeEvidence", compactRows);
+      if (compactRows.length > 0) {
+        runtimeArtifacts.add(`${compactRows.length} fingerprinting runtime evidence artifact${compactRows.length === 1 ? "" : "s"} retained.`);
+      }
+      continue;
+    }
+
+    if (/fingerprintSummary|fingerprint_summary/i.test(key) && value && typeof value === "object" && !Array.isArray(value)) {
+      const summary = value as Record<string, unknown>;
+      const tier = getNumberValue(summary.tier);
+      const confidence = getStringValue(summary.confidence);
+      const summaryText = getStringValue(summary.summary);
+      const reasons = getStringArrayEvidence(summary.reasons);
+      const categoryNames = getPlainRecordArray(summary.attributeCategories ?? summary.attribute_categories)
+        .map((entry) => getStringValue(entry.name))
+        .filter((entry): entry is string => Boolean(entry));
+      addEntity(entities, "fingerprintAttributeCategories", categoryNames);
+      addEntity(entities, "fingerprintingSignals", categoryNames);
+      addEntity(entities, "fingerprintingSummaryReasons", reasons.slice(0, 6));
+      if (typeof tier === "number") {
+        counts.fingerprintTier = tier;
+      }
+      if (confidence) {
+        addEntity(entities, "fingerprintConfidence", [confidence]);
+      }
+      if (summaryText) {
+        runtimeArtifacts.add(`Fingerprint summary: ${summaryText}`);
+      }
+      if (typeof tier === "number" || categoryNames.length > 0 || reasons.length > 0) {
+        runtimeArtifacts.add(
+          `Fingerprint summary retained${typeof tier === "number" ? ` at tier ${tier}` : ""}${categoryNames.length > 0 ? ` for ${categoryNames.slice(0, 5).join(", ")}` : ""}.`
+        );
+      }
+      continue;
+    }
+
     const stringValues = getStringArrayEvidence(value);
     if (stringValues.length === 0) {
+      continue;
+    }
+
+    if (/fingerprintAttributeCategories|fingerprint_attribute_categories|fingerprintingSignals|fingerprinting_signals|highEntropySignals|high_entropy_signals/i.test(key)) {
+      addEntity(entities, "fingerprintAttributeCategories", stringValues);
+      addEntity(entities, "fingerprintingSignals", stringValues);
+      runtimeArtifacts.add(`${key}: ${stringValues.slice(0, 5).join(", ")}`);
+      continue;
+    }
+
+    if (/fingerprintArtifactRefs|fingerprint_artifact_refs/i.test(key)) {
+      addEntity(entities, "fingerprintArtifactRefs", stringValues);
+      for (const entry of stringValues) {
+        runtimeArtifacts.add(entry);
+      }
       continue;
     }
 
