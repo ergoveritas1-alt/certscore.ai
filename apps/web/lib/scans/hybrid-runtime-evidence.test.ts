@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildPreconsentEvidenceQualityFallback,
   getHybridDerivedTrackerVendors,
   getHybridDerivedSignalValue,
   getHybridNanoSignalPopulations,
@@ -531,6 +532,58 @@ test("builds concrete fallback evidence for hybrid pre-consent request timing", 
       vendor: "Meta Pixel"
     }
   ]);
+});
+
+test("builds promotion evidence from legacy baseline tracker arrays when quality columns are absent", () => {
+  const runtimeArtifacts = {
+    consent_baseline_tracker_evidence_urls: [
+      "https://tags-eu.tiqcdn.com/utag/example/prod/utag.js"
+    ],
+    consent_baseline_tracker_vendor_names: ["Tealium"],
+    hybrid_runtime_evidence: {
+      consentSummary: {
+        bannerPresent: true,
+        clicksToReject: 2,
+        firstVisibleMs: 0,
+        rejectDepthClass: "deeper_layer"
+      },
+      timelineMarkers: {
+        firstThirdPartyRequestMs: 3317,
+        navigationStartMs: 0
+      }
+    }
+  } satisfies Record<string, unknown>;
+
+  const fallback = buildPreconsentEvidenceQualityFallback(runtimeArtifacts);
+
+  assert.deepEqual(fallback?.preconsent_tracker_evidence_urls, [
+    "https://tags-eu.tiqcdn.com/utag/example/prod/utag.js"
+  ]);
+  assert.deepEqual(fallback?.preconsent_tracker_vendors, ["Tealium"]);
+  assert.deepEqual(fallback?.consentTimeline, {
+    firstCmpVisibleMs: 0,
+    firstConsentActionMs: null,
+    firstNonEssentialRequestMs: 3317,
+    navigationStartMs: 0,
+    timelineConfidence: "derived_from_hybrid_runtime"
+  });
+  assert.equal(fallback?.consentActionableChoiceObserved, true);
+  assert.equal(fallback?.consentSurfaceObserved, true);
+  assert.deepEqual(fallback?.requestPurposeClassificationConfidence, [
+    {
+      category: "tag_management",
+      confidence: 0.85,
+      essentiality: "non_essential",
+      requestUrl: "https://tags-eu.tiqcdn.com/utag/example/prod/utag.js",
+      timestampMs: 3317,
+      tsMs: 3317,
+      vendor: "Tealium"
+    }
+  ]);
+
+  const merged = withHybridRuntimeArtifactFallbacks(runtimeArtifacts);
+  assert.deepEqual(merged?.consentTimeline, fallback?.consentTimeline);
+  assert.deepEqual(merged?.requestPurposeClassificationConfidence, fallback?.requestPurposeClassificationConfidence);
 });
 
 test("retains pre-consent request URLs from vendor observations when banner timing is absent", () => {

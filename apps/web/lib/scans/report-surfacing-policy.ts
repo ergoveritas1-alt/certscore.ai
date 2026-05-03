@@ -1734,7 +1734,8 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       context.policy.family === "consent_tracking" ||
       context.policy.family === "contradiction"
     ) &&
-    packet.concernContext?.externalSurfacingEligibilities?.every((value) => value === "audit_only")
+    packet.concernContext?.externalSurfacingEligibilities?.every((value) => value === "audit_only") &&
+    contractDecision?.promotionEligibility !== "eligible"
   ) {
     overrideDecision(decision, {
       state: "support_only",

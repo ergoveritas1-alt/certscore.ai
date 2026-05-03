@@ -1209,6 +1209,10 @@ export function evaluateFindingEvidenceContractForPacket(packet: UnifiedFindingP
   if (!contract) {
     return null;
   }
+  const packetEvidenceDecision = evaluateFindingEvidenceContractForRawEvidence(
+    packet.unifiedFindingId,
+    packetToContractEvidence(packet)
+  );
 
   if (packet.concernContext) {
     if (
@@ -1231,6 +1235,10 @@ export function evaluateFindingEvidenceContractForPacket(packet: UnifiedFindingP
       packet.concernContext.promotionEligibilities.length > 0 &&
       packet.concernContext.promotionEligibilities.every((value) => value !== "eligible")
     ) {
+      if (packetEvidenceDecision?.promotionEligibility === "eligible") {
+        return packetEvidenceDecision;
+      }
+
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
@@ -1243,7 +1251,7 @@ export function evaluateFindingEvidenceContractForPacket(packet: UnifiedFindingP
     }
   }
 
-  return evaluateFindingEvidenceContractForRawEvidence(packet.unifiedFindingId, packetToContractEvidence(packet));
+  return packetEvidenceDecision;
 }
 
 export function isFindingProjectionEligible(input: {

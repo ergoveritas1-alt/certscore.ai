@@ -186,6 +186,58 @@ function getExistingNumber(record: Record<string, unknown>, keys: string[]) {
   return null;
 }
 
+function getObservedConsentActionableChoice(hybrid: Record<string, unknown> | null, runtimeArtifacts?: Record<string, unknown> | null) {
+  const consentSummary = getRecord(hybrid?.consentSummary);
+  const explicit =
+    getBoolean(runtimeArtifacts?.consent_actionable_choice_observed) ??
+    getBoolean(runtimeArtifacts?.consentActionableChoiceObserved) ??
+    getBoolean(consentSummary?.actionableChoiceObserved);
+  if (explicit !== null) {
+    return explicit;
+  }
+
+  if (
+    getBoolean(consentSummary?.acceptPresent) === true ||
+    getBoolean(consentSummary?.rejectPresent) === true ||
+    getBoolean(consentSummary?.managePresent) === true
+  ) {
+    return true;
+  }
+
+  const clicksToAccept = getNumber(consentSummary?.clicksToAccept);
+  const clicksToReject = getNumber(consentSummary?.clicksToReject);
+  if ((clicksToAccept !== null && clicksToAccept > 0) || (clicksToReject !== null && clicksToReject > 0)) {
+    return true;
+  }
+
+  const rejectDepthClass = getString(consentSummary?.rejectDepthClass);
+  if (rejectDepthClass && rejectDepthClass !== "absent" && rejectDepthClass !== "unknown") {
+    return true;
+  }
+
+  return null;
+}
+
+function classifyBaselineTrackerCategory(input: { requestUrl: string | null; vendor: string | null }) {
+  const value = `${input.vendor ?? ""} ${input.requestUrl ?? ""}`;
+  if (/fullstory|hotjar|clarity|contentsquare|mouseflow|qualtrics|siteintercept/i.test(value)) {
+    return "session_replay";
+  }
+  if (/marketo|munchkin|hubspot|pardot|eloqua/i.test(value)) {
+    return "marketing_automation";
+  }
+  if (/googletagmanager|gtm|tealium|utag|tiqcdn|tag manager/i.test(value)) {
+    return "tag_management";
+  }
+  if (/doubleclick|googleadservices|facebook|connect\.facebook|linkedin|licdn|tiktok|criteo|adnxs|xandr|pubmatic|rubicon|openx|ads?/i.test(value)) {
+    return "advertising";
+  }
+  if (/analytics|measurement|segment|mixpanel|amplitude|posthog/i.test(value)) {
+    return "analytics";
+  }
+  return "tracking";
+}
+
 export function getHybridRuntimeEvidence(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   return getRecord(runtimeArtifacts?.hybrid_runtime_evidence ?? runtimeArtifacts?.hybridRuntimeEvidence);
 }
@@ -333,9 +385,40 @@ export function withHybridRuntimeArtifactFallbacks(runtimeArtifacts: Record<stri
   const consentRejectReducedThirdPartyCookies =
     getBoolean(runtimeArtifacts.consent_reject_reduced_third_party_cookies) ??
     getBoolean(consentOutcomeSummary?.rejectReducedThirdPartyCookies);
+  const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(runtimeArtifacts);
 
   return {
     ...runtimeArtifacts,
+    ...(preconsentEvidenceQuality?.consentTimeline && !runtimeArtifacts.consentTimeline && !runtimeArtifacts.consent_timeline
+      ? {
+          consentTimeline: preconsentEvidenceQuality.consentTimeline,
+          consent_timeline: preconsentEvidenceQuality.consentTimeline
+        }
+      : {}),
+    ...(preconsentEvidenceQuality?.requestPurposeClassificationConfidence &&
+    !runtimeArtifacts.requestPurposeClassificationConfidence &&
+    !runtimeArtifacts.request_purpose_classification_confidence
+      ? {
+          requestPurposeClassificationConfidence: preconsentEvidenceQuality.requestPurposeClassificationConfidence,
+          request_purpose_classification_confidence: preconsentEvidenceQuality.requestPurposeClassificationConfidence
+        }
+      : {}),
+    ...(typeof preconsentEvidenceQuality?.consentActionableChoiceObserved === "boolean" &&
+    typeof runtimeArtifacts.consentActionableChoiceObserved !== "boolean" &&
+    typeof runtimeArtifacts.consent_actionable_choice_observed !== "boolean"
+      ? {
+          consentActionableChoiceObserved: preconsentEvidenceQuality.consentActionableChoiceObserved,
+          consent_actionable_choice_observed: preconsentEvidenceQuality.consentActionableChoiceObserved
+        }
+      : {}),
+    ...(typeof preconsentEvidenceQuality?.consentSurfaceObserved === "boolean" &&
+    typeof runtimeArtifacts.consentSurfaceObserved !== "boolean" &&
+    typeof runtimeArtifacts.consent_surface_observed !== "boolean"
+      ? {
+          consentSurfaceObserved: preconsentEvidenceQuality.consentSurfaceObserved,
+          consent_surface_observed: preconsentEvidenceQuality.consentSurfaceObserved
+        }
+      : {}),
     consent_audit_completed: consentAuditCompleted,
     consent_reject_interaction_succeeded: consentRejectInteractionSucceeded,
     consentRejectInteractionSucceeded: consentRejectInteractionSucceeded,
@@ -528,7 +611,7 @@ function getNestedObjectArray(record: Record<string, unknown> | null | undefined
 }
 
 function categoryToEssentiality(category: string | null) {
-  return category && /^(?:advertising|analytics|marketing|marketing_automation|retargeting|session_replay)$/i.test(category)
+  return category && /^(?:advertising|analytics|marketing|marketing_automation|retargeting|session_replay|tag_manager|tag_management|tracking)$/i.test(category)
     ? "non_essential"
     : null;
 }
@@ -556,8 +639,41 @@ function getRequestClassificationRows(runtimeArtifacts: Record<string, unknown> 
     ...getNestedObjectArray(runtimeArtifacts, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"]),
     ...getNestedObjectArray(hybrid, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"])
   ];
-  if (retainedRows.length > 0) {
-    return retainedRows;
+  const baselineEvidenceUrls = getExistingArray(runtimeArtifacts ?? {}, [
+    "consentBaselineTrackerEvidenceUrls",
+    "consent_baseline_tracker_evidence_urls"
+  ]);
+  const baselineVendorNames = getExistingArray(runtimeArtifacts ?? {}, [
+    "consentBaselineTrackerVendorNames",
+    "consent_baseline_tracker_vendor_names"
+  ]);
+  const timelineMarkers = getRecord(hybrid?.timelineMarkers);
+  const firstBaselineRequestMs =
+    getNumber(timelineMarkers?.firstThirdPartyRequestMs) ??
+    getNumber(timelineMarkers?.firstRequestMs) ??
+    null;
+  const baselineRows = baselineEvidenceUrls.map((requestUrl, index) => {
+    const vendor = baselineVendorNames[index] ?? baselineVendorNames[0] ?? null;
+    const category = classifyBaselineTrackerCategory({ requestUrl, vendor });
+    return {
+      category,
+      confidence: 0.85,
+      essentiality: "non_essential",
+      requestUrl,
+      timestampMs: firstBaselineRequestMs,
+      tsMs: firstBaselineRequestMs,
+      vendor
+    };
+  });
+
+  if (retainedRows.length > 0 || baselineRows.length > 0) {
+    const byUrl = new Map<string, Record<string, unknown>>();
+    for (const row of [...retainedRows, ...baselineRows]) {
+      const record = row as Record<string, unknown>;
+      const requestUrl = getString(record.requestUrl) ?? getString(record.request_url) ?? getString(record.url);
+      byUrl.set(requestUrl ?? JSON.stringify(record), record);
+    }
+    return [...byUrl.values()];
   }
 
   const vendorRows = getPreconsentVendorEvidenceRows(hybrid);
@@ -667,13 +783,9 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
   return {
     consentTimeline,
     consentActionableChoiceObserved:
-      getBoolean(runtimeArtifacts?.consent_actionable_choice_observed) ??
-      getBoolean(runtimeArtifacts?.consentActionableChoiceObserved) ??
-      getBoolean(hybridConsentSummary?.actionableChoiceObserved),
+      getObservedConsentActionableChoice(hybrid, runtimeArtifacts),
     consentSurfaceObserved:
-      getBoolean(runtimeArtifacts?.consent_surface_observed) ??
-      getBoolean(runtimeArtifacts?.consentSurfaceObserved) ??
-      getBoolean(hybridConsentSummary?.surfaceObserved),
+      getObservedConsentSurface(hybrid, runtimeArtifacts),
     requestPurposeClassificationConfidence: requestClassifications,
     preconsent_tracker_evidence_urls: uniqueStrings(
       nonEssentialRequestRows.flatMap((row) => getRowString(row, ["requestUrl", "request_url", "url"]))

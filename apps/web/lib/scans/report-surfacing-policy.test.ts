@@ -245,6 +245,74 @@ test("keeps audit-only pre-consent tracking out of main surfacing", () => {
   assert.equal(decision?.reportLane, "suppressed");
 });
 
+test("pre-consent packet evidence can promote stale audit-only concern context", () => {
+  const requestUrl = "https://tags-eu.tiqcdn.com/utag/example/prod/utag.js";
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("preconsent_tracking", {
+        concernContext: {
+          assertionLevels: ["weak"],
+          evidenceStrengthFlags: ["direct_runtime"],
+          externalSurfacingEligibilities: ["audit_only"],
+          negativeEvidenceFlags: [
+            "missing_concrete_preconsent_artifact",
+            "missing_preconsent_sequence_evidence"
+          ],
+          originTypes: ["snapshot_signal"],
+          promotionEligibilities: ["internal_only"]
+        },
+        confidenceInputs: {
+          ...makePacket("preconsent_tracking").confidenceInputs,
+          hasDirectRuntimeEvidence: true
+        },
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking",
+          requestUrls: [requestUrl],
+          vendors: ["Tealium"]
+        },
+        evidence: {
+          flags: ["privacy.preconsent_tracking_detected"],
+          pageUrls: [],
+          snippets: [],
+          sourceUrls: [],
+          entities: {
+            consentActionableChoiceObserved: ["true"],
+            consentSurfaceObserved: ["true"],
+            consentTimeline: [
+              JSON.stringify({
+                firstCmpVisibleMs: 0,
+                firstConsentActionMs: null,
+                firstNonEssentialRequestMs: 3317,
+                navigationStartMs: 0
+              })
+            ],
+            requestPurposeClassificationConfidence: [
+              JSON.stringify({
+                category: "tag_management",
+                confidence: 0.85,
+                essentiality: "non_essential",
+                requestUrl,
+                timestampMs: 3317,
+                tsMs: 3317,
+                vendor: "Tealium"
+              })
+            ],
+            runtimeRequestUrls: [requestUrl],
+            runtimeVendors: ["Tealium"]
+          }
+        },
+        severity: "high"
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions.find((entry) => entry.unifiedFindingId === "preconsent_tracking");
+  assert.equal(decision?.decisionState, "confirmed");
+  assert.equal(decision?.reportLane, "main");
+  assert.ok(decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
+});
+
 test("blocking overlay stays support-only and supports stronger consent findings", () => {
   const overlayPacket = makePacket("blocking_overlay_observed", {
     confidenceInputs: {
