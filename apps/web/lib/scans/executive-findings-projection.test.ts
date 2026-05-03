@@ -328,6 +328,36 @@ test("projects third-party cookie pre-consent when preconsent packet retains coo
   );
 });
 
+test("projects third-party cookie pre-consent from summarized preconsent cookie evidence", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      evidence: {
+        counts: {
+          preconsentViolationCount: 1
+        },
+        entities: {
+          preconsent_cookie_categories: ["advertising"],
+          preconsent_cookie_names: ["MUID"],
+          preconsent_cookie_timing_evidence: ["before_consent_cookie_write"],
+          preconsent_nonessential_cookie_names: ["MUID"],
+          runtimeVendors: ["Microsoft Advertising"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Tracking cookies were retained before consent."],
+        sourceUrls: []
+      },
+      severity: "high"
+    })
+  ]);
+
+  const finding = projection.findings.find((candidate) => candidate.id === "third_party_cookie_pre_consent");
+  assert.ok(finding);
+  assert.equal(finding.evidenceDetails?.cookieEvidence?.observed, true);
+});
+
 test("keeps support and context findings out of executive top findings", () => {
   const excludedExecutiveFindingIds = [
     "asymmetric_consent_ui",

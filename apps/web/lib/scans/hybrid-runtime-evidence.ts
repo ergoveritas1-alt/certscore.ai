@@ -1343,7 +1343,9 @@ export function getHybridSignalFallbackEvidence(input: {
         isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
       );
       const preconsentCookieEvidence = allPreconsentCookieEvidence.filter(
-        (row) => row.nonEssential && !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
+        (row) =>
+          !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain) &&
+          (row.nonEssential || (row.party === "third_party" && row.category !== "necessary"))
       );
       const preconsentNonEssentialCookies = uniqueStrings(
         preconsentCookieEvidence.filter((row) => row.nonEssential).flatMap((row) => row.cookieName)
