@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildScanReportUnifiedFindingState,
   buildScanReportUnifiedFindings,
   selectOwnerUnifiedFindingsForSection,
   type ScanReportUnifiedFindingState
@@ -983,6 +984,52 @@ test("initial cookie inventory routes to audit-only preconsent packet instead of
   assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("audit_only"), true);
   assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_concrete_preconsent_artifact"), true);
   assert.equal(packet?.evidence?.entities?.preconsent_cookie_names?.includes("kndctr_16AD4362526701720A490D45_AdobeOrg_identity"), true);
+});
+
+test("observed baseline tracker URL fallback creates canonical preconsent packet", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    runtimeArtifacts: {
+      consent_baseline_tracker_evidence_urls: ["https://www.googletagmanager.com/gtm.js?id=GTM-EXAMPLE"],
+      consent_baseline_tracker_vendor_names: ["Google Tag Manager"],
+      hybrid_runtime_evidence: {
+        timelineMarkers: {
+          consentBannerDetectedMs: 1200,
+          firstThirdPartyRequestMs: 300
+        }
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("eligible"), true);
+  assert.deepEqual(packet?.evidence?.entities?.runtimeRequestUrls, [
+    "https://www.googletagmanager.com/gtm.js?id=GTM-EXAMPLE"
+  ]);
 });
 
 test("high-risk gambling section review retains concrete offer and disclosure adjacency evidence", () => {

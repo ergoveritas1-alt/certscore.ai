@@ -22,13 +22,15 @@ const DEFAULT_TARGET_FINDINGS = [
   "non_essential_tracking_continued_after_reject",
   "reject_option_missing_or_hidden",
   "rtb_cookie_sync_observed",
+  "policy_behavior_contradiction_detected",
+  "sensitive_data_collection_with_third_party_tracking_present",
   "cross_domain_identifier_sharing_observed",
   "cookie_disclosure_gap",
   "weak_cookie_security_attributes"
 ];
 
 const TARGET_SIGNAL_PATTERN =
-  /(preconsent|pre_consent|third_party.*consent|tracking.*consent|weak_cookie|cookie_disclosure|reject|rtb|identifier)/;
+  /(preconsent|pre_consent|third_party.*consent|tracking.*consent|weak_cookie|cookie_disclosure|reject|rtb|identifier|policy_behavior|contradiction|sensitive_data|high_sensitivity)/;
 
 const LEGACY_TARGET_FINDING_ALIASES: Record<string, string[]> = {
   analytics_cookies_before_consent: ["preconsent_tracking"],
@@ -37,7 +39,15 @@ const LEGACY_TARGET_FINDING_ALIASES: Record<string, string[]> = {
     "reject_did_not_reduce_third_party_cookies"
   ],
   pre_consent_tracking_detected: ["preconsent_tracking"],
+  policy_behavior_contradiction_detected: [
+    "consent_gated_tracking_claim_conflict",
+    "do_not_sell_sharing_disclosure_conflict",
+    "policy_behavior_conflict"
+  ],
   reject_option_missing_or_hidden: ["reject_button_missing"],
+  sensitive_data_collection_with_third_party_tracking_present: [
+    "sensitive_data_collection_with_third_party_tracking_present"
+  ],
   third_party_tracking_before_consent: ["preconsent_tracking"],
   tracking_cookies_set_before_consent: ["preconsent_tracking"]
 };
