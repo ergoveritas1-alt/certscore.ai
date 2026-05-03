@@ -328,6 +328,39 @@ function getMappedFindingId(
   return null;
 }
 
+function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPacket) {
+  if (packet.unifiedFindingId !== "preconsent_tracking") {
+    return false;
+  }
+
+  const details = buildPreConsentTrackingEvidenceDetails(packet);
+  const cookieCount =
+    details?.counts?.preConsentTrackingCookies ??
+    getCountValue(packet, [
+      "preConsentTrackingCookies",
+      "preconsentCookieCount",
+      "preconsent_cookie_before_consent_count",
+      "thirdPartyCookiePreConsentCount"
+    ]) ??
+    getEntityJsonObjects(packet, "preconsent_cookie_evidence").length;
+
+  return (
+    (typeof cookieCount === "number" && cookieCount > 0) ||
+    packet.evidence?.flags?.some((flag) => /third_party_cookie.*pre.?consent|third_party_cookie_set_before_consent/i.test(flag)) === true
+  );
+}
+
+function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof typeof CERT_SCORE_FINDING_REGISTRY> {
+  const primary = getMappedFindingId(packet);
+  const ids = primary ? [primary] : [];
+
+  if (hasThirdPartyCookiePreConsentEvidence(packet) && !ids.includes("third_party_cookie_pre_consent")) {
+    ids.push("third_party_cookie_pre_consent");
+  }
+
+  return ids;
+}
+
 function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: keyof typeof CERT_SCORE_FINDING_REGISTRY) {
   const evidenceDetails = findingId ? buildExecutiveEvidenceDetails(packet, findingId) : null;
 
@@ -1809,6 +1842,11 @@ export type ExecutiveFindingsProjection = {
   };
 };
 
+type ExecutiveProjectionPacketRow = {
+  findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY | null;
+  packet: UnifiedFindingDisplayPacket;
+};
+
 export function projectExecutiveFindingsFromUnifiedPackets(
   packets: UnifiedFindingDisplayPacket[]
 ): ExecutiveFindingsProjection {
@@ -1816,10 +1854,15 @@ export function projectExecutiveFindingsFromUnifiedPackets(
     packet.presentationDecision.status === "surface" &&
     isFindingProjectionEligible({ lane: "executive", packet })
   );
-  const mappedPacketRows = surfacedPackets.map((packet) => ({
-    packet,
-    findingId: getMappedFindingId(packet)
-  }));
+  const mappedPacketRows: ExecutiveProjectionPacketRow[] = [];
+  for (const packet of surfacedPackets) {
+    const findingIds = getMappedFindingIds(packet);
+    if (findingIds.length > 0) {
+      mappedPacketRows.push(...findingIds.map((findingId) => ({ packet, findingId })));
+    } else {
+      mappedPacketRows.push({ packet, findingId: null });
+    }
+  }
   const findings = dedupeExecutiveFindings(
     mappedPacketRows.flatMap(({ packet, findingId }) => (findingId ? [buildExecutiveFinding(packet, findingId)] : []))
   );

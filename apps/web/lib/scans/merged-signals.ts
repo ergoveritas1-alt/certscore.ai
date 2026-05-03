@@ -141,6 +141,67 @@ function isPresentMergedSignal(signal: MergedSignalRecord) {
 }
 
 function buildSiblingEvidenceForMergedSignal(signal: MergedSignalRecord, mergedSignals: MergedSignalRecord[]) {
+  if (
+    signal.key === "commerce.session_replay_tool_detected" ||
+    signal.key === "privacy.session_replay_runtime_detected" ||
+    signal.key === "privacy.session_replay_runtime_vendors"
+  ) {
+    const runtimeVendors = uniqueStrings([
+      ...getMergedSignalStringArray(mergedSignals, "privacy.session_replay_runtime_vendors"),
+      ...(Array.isArray(signal.value) ? signal.value.filter((value): value is string => typeof value === "string") : [])
+    ]);
+    const runtimeEvidence = uniqueStrings([
+      ...signal.evidenceRefs,
+      ...runtimeVendors.map((vendor) => `session_replay_vendor:${vendor}`)
+    ]);
+
+    return {
+      requestUrls: signal.evidenceRefs.filter((value) => /^https?:\/\//i.test(value)),
+      runtimeEvidence,
+      runtimeEvidenceArtifacts: runtimeEvidence,
+      runtimeVendors,
+      session_replay_runtime_artifacts: runtimeEvidence,
+      session_replay_runtime_detected: true,
+      session_replay_runtime_vendors: runtimeVendors
+    };
+  }
+
+  if (
+    signal.key === "privacy.fingerprinting_detected" ||
+    signal.key === "privacy.fingerprinting_tier" ||
+    signal.key === "privacy.fingerprinting_attribute_categories"
+  ) {
+    const fingerprintTier =
+      getMergedSignalNumber(mergedSignals, "privacy.fingerprinting_tier") ??
+      (typeof signal.value === "number" ? signal.value : null);
+    const fingerprintAttributeCategories = uniqueStrings([
+      ...getMergedSignalStringArray(mergedSignals, "privacy.fingerprinting_attribute_categories"),
+      ...(Array.isArray(signal.value) ? signal.value.filter((value): value is string => typeof value === "string") : [])
+    ]);
+    const fingerprintArtifactRefs = uniqueStrings([
+      ...signal.evidenceRefs,
+      "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary"
+    ]);
+
+    return {
+      fingerprintArtifactRefs,
+      fingerprintAttributeCategories,
+      fingerprintRuntimeEvidence: fingerprintArtifactRefs.map((ref) => ({
+        artifactRef: ref,
+        attributeCategories: fingerprintAttributeCategories,
+        tier: fingerprintTier
+      })),
+      fingerprintRuntimeEvidenceRetained: true,
+      fingerprintSignals: fingerprintAttributeCategories,
+      fingerprintSummary: {
+        attributeCategories: fingerprintAttributeCategories,
+        tier: fingerprintTier
+      },
+      fingerprintTier,
+      highEntropySignals: fingerprintAttributeCategories
+    };
+  }
+
   if (signal.key === "privacy.privacy_contact_path_present") {
     const privacyContactChannelType = getMergedSignalValue(mergedSignals, "privacyContactChannelType");
     return typeof privacyContactChannelType === "string" && privacyContactChannelType.trim().length > 0
@@ -161,6 +222,7 @@ function buildSiblingEvidenceForMergedSignal(signal: MergedSignalRecord, mergedS
     return {
       disclosedCookieNames,
       disclosedCookieProviders,
+      sourceUrls: signal.evidenceRefs,
       runtimeCookieNames,
       unmatchedCookieCategories,
       unmatchedCookieCount,

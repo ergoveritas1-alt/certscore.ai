@@ -122,12 +122,102 @@ test("cookie disclosure gap merged-signal candidates retain runtime comparison e
   });
 
   const candidate = buildReviewFindingCandidatesFromMergedSignals({
+    linkedValidationEvidenceBySignalKey: new Map([
+      [
+        "privacy.cookie_runtime_disclosure_gap_detected",
+        {
+          disclosureSearchScopeRetained: true,
+          mismatchExplanation: "Runtime cookie _fbp was not found in the retained cookie disclosure.",
+          observedBehavior: "Runtime set _fbp.",
+          policyExtractionStatus: "fetched",
+          policySnippet: "Cookie policy text.",
+          policySourceUrl: "https://example.com/cookie-policy"
+        }
+      ]
+    ]),
     mergedSignals
   }).find((row) => row.signalKey === "privacy.cookie_runtime_disclosure_gap_detected");
 
   assert.deepEqual(candidate?.fallbackEvidence?.runtimeCookieNames, ["_ga", "_fbp"]);
   assert.deepEqual(candidate?.fallbackEvidence?.unmatchedCookieNames, ["_fbp"]);
   assert.equal(candidate?.fallbackEvidence?.unmatchedThirdPartyCookieCount, 1);
+});
+
+test("session replay merged-signal candidates retain vendor runtime evidence", () => {
+  const mergedSignals = buildMergedSignalRecords({
+    scannerSignals: [
+      {
+        confidence: 0.9,
+        evidenceRefs: ["scan_tracker_vendors"],
+        key: "privacy.session_replay_runtime_detected",
+        label: "Session replay runtime detected",
+        reportSignalSource: "snapshot_signal",
+        source: "scanner",
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        confidence: 0.9,
+        key: "privacy.session_replay_runtime_vendors",
+        label: "Session replay runtime vendors",
+        reportSignalSource: "snapshot_signal",
+        source: "scanner",
+        value: ["Microsoft Clarity"],
+        valueType: "string_array"
+      }
+    ]
+  });
+
+  const candidate = buildReviewFindingCandidatesFromMergedSignals({
+    mergedSignals
+  }).find((row) => row.signalKey === "privacy.session_replay_runtime_detected");
+
+  assert.deepEqual(candidate?.fallbackEvidence?.runtimeVendors, ["Microsoft Clarity"]);
+  assert.deepEqual(candidate?.fallbackEvidence?.session_replay_runtime_vendors, ["Microsoft Clarity"]);
+  assert.ok(Array.isArray(candidate?.fallbackEvidence?.session_replay_runtime_artifacts));
+});
+
+test("fingerprinting merged-signal candidates retain tier and attribute evidence", () => {
+  const mergedSignals = buildMergedSignalRecords({
+    scannerSignals: [
+      {
+        confidence: 0.88,
+        evidenceRefs: ["scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary"],
+        key: "privacy.fingerprinting_detected",
+        label: "Fingerprinting runtime detected",
+        reportSignalSource: "snapshot_signal",
+        source: "scanner",
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        confidence: 0.88,
+        key: "privacy.fingerprinting_tier",
+        label: "Fingerprinting runtime tier",
+        reportSignalSource: "snapshot_signal",
+        source: "scanner",
+        value: 2,
+        valueType: "number"
+      },
+      {
+        confidence: 0.88,
+        key: "privacy.fingerprinting_attribute_categories",
+        label: "Fingerprinting attribute categories",
+        reportSignalSource: "snapshot_signal",
+        source: "scanner",
+        value: ["canvas", "webgl"],
+        valueType: "string_array"
+      }
+    ]
+  });
+
+  const candidate = buildReviewFindingCandidatesFromMergedSignals({
+    mergedSignals
+  }).find((row) => row.signalKey === "privacy.fingerprinting_detected");
+
+  assert.equal(candidate?.fallbackEvidence?.fingerprintTier, 2);
+  assert.deepEqual(candidate?.fallbackEvidence?.fingerprintAttributeCategories, ["canvas", "webgl"]);
+  assert.equal(candidate?.fallbackEvidence?.fingerprintRuntimeEvidenceRetained, true);
 });
 
 test("merged signal candidates include domainIndustryPrimary from macroEnrichment", () => {

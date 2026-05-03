@@ -289,6 +289,45 @@ test("does not project high-risk findings when the evidence contract failed upst
   assert.deepEqual(projection.trace.projectedFindingIds, []);
 });
 
+test("projects third-party cookie pre-consent when preconsent packet retains cookie timing evidence", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      evidence: {
+        counts: {
+          preConsentTrackingCookies: 2,
+          preconsentViolationCount: 2
+        },
+        entities: {
+          preconsent_cookie_evidence: [
+            JSON.stringify({
+              cookieName: "_fbp",
+              domain: "facebook.com",
+              party: "third_party",
+              timingEvidence: "before_consent"
+            })
+          ],
+          runtimeVendors: ["Meta Pixel"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.preconsent_tracking_detected", "privacy.third_party_cookie_set_before_consent"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Third-party cookies were retained before consent."],
+        sourceUrls: []
+      },
+      severity: "high"
+    })
+  ]);
+
+  const projectedIds = projection.findings.map((finding) => finding.id);
+  assert.ok(projectedIds.includes("pre_consent_tracking_detected"));
+  assert.ok(projectedIds.includes("third_party_cookie_pre_consent"));
+  assert.equal(
+    projection.findings.find((finding) => finding.id === "third_party_cookie_pre_consent")?.evidenceDetails?.cookieEvidence?.observed,
+    true
+  );
+});
+
 test("keeps support and context findings out of executive top findings", () => {
   const excludedExecutiveFindingIds = [
     "asymmetric_consent_ui",

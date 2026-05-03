@@ -277,7 +277,10 @@ export const SNAPSHOT_FIELD_TAXONOMY = buildSnapshotFieldMap([
       "ad_network_google_ads",
       "ad_network_meta_ads",
       "retargeting_pixel_detected",
-      "cross_domain_identifier_sharing_observed"
+      "cross_domain_identifier_sharing_observed",
+      "fingerprinting_detected",
+      "fingerprinting_tier",
+      "fingerprinting_attribute_categories"
     ]
   },
   {
