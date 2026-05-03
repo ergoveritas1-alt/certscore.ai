@@ -13,7 +13,11 @@ import {
   buildSnapshotDisclosureFallbackEvidence,
   isChildContextSignalKey
 } from "./signal-fallback-evidence";
-import { getHybridRuntimeEvidence, getHybridSignalFallbackEvidence } from "./hybrid-runtime-evidence";
+import {
+  buildPreconsentEvidenceQualityFallback,
+  getHybridRuntimeEvidence,
+  getHybridSignalFallbackEvidence
+} from "./hybrid-runtime-evidence";
 import {
   findMergedSignalValue,
   isSignalValuePopulated
@@ -1476,6 +1480,7 @@ export function buildSectionReviewIssues(input: {
     );
     const preconsentScriptHosts = uniqueStrings(input.preconsentViolationRows.map((row) => row.scriptHost));
     const preconsentVendors = uniqueStrings(input.preconsentViolationRows.map((row) => row.vendorName));
+    const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
     const highRiskContext = deriveHighRiskTrackingContext({
       hostname:
         typeof input.snapshot?.registered_domain === "string"
@@ -1510,7 +1515,8 @@ export function buildSectionReviewIssues(input: {
         sensitive_context_label: highRiskContext.sensitiveContextLabel,
         sensitive_context_tracking_detected: highRiskContext.isSensitiveContext && highRiskContext.highRiskVendors.length > 0,
         supportingSignals: ["privacy.preconsent_tracking_detected", "privacy.tracking_before_consent_detected"],
-        tracking_before_consent_detected: true
+        tracking_before_consent_detected: true,
+        ...(preconsentEvidenceQuality ?? {})
       },
       severity: "high",
       title:
@@ -1609,6 +1615,7 @@ export function buildSectionReviewIssues(input: {
         let fallbackEvidence: Record<string, unknown> | undefined;
         if (finding.title === "Trackers fired before consent interaction") {
           const baselineTrackerScriptHosts = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_script_hosts");
+          const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
           fallbackEvidence = {
             preconsent_tracker_evidence_urls: baselineTrackerEvidenceUrls,
             preconsent_tracker_script_hosts: baselineTrackerScriptHosts,
@@ -1621,7 +1628,8 @@ export function buildSectionReviewIssues(input: {
             runtimeEvidenceUrls: baselineTrackerEvidenceUrls,
             runtimeVendors: baselineTrackerVendors,
             supportingSignals: ["privacy.preconsent_tracking_detected", "privacy.tracking_before_consent_detected"],
-            tracking_before_consent_detected: true
+            tracking_before_consent_detected: true,
+            ...(preconsentEvidenceQuality ?? {})
           };
         } else if (finding.title === "Reject interaction did not reduce tracking") {
           fallbackEvidence = buildRejectTrackingEvidenceFallback({

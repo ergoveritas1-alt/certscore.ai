@@ -12,7 +12,11 @@ import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { buildValidationFindingLookup } from "./validation-review-linking";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
-import { getHybridDerivedSignalValue, getHybridSignalFallbackEvidence } from "./hybrid-runtime-evidence";
+import {
+  buildPreconsentEvidenceQualityFallback,
+  getHybridDerivedSignalValue,
+  getHybridSignalFallbackEvidence
+} from "./hybrid-runtime-evidence";
 import { getReportSignalValue, isSignalValuePopulated } from "./report-signal-values";
 import {
   buildReviewFindings,
@@ -122,10 +126,20 @@ function getRuntimeStringArray(input: Record<string, unknown> | null, keys: stri
   return [...new Set(values)];
 }
 
+function getRuntimeBoolean(input: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    if (typeof input?.[key] === "boolean") {
+      return input[key] as boolean;
+    }
+  }
+  return null;
+}
+
 function buildRuntimeDerivedReviewFindingCandidates(input: {
   runtimeArtifacts: Record<string, unknown> | null;
 }): CanonicalReviewFinding[] {
   const candidates: CanonicalReviewFinding[] = [];
+  const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
   const consentTimeline = getRuntimeObject(input.runtimeArtifacts, ["consentTimeline", "consent_timeline"]);
   const requestClassifications = getRuntimeObjectArray(input.runtimeArtifacts, [
     "requestPurposeClassificationConfidence",
@@ -144,6 +158,17 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   );
   const firstCmpVisibleMs = getFiniteNumber(consentTimeline?.firstCmpVisibleMs ?? consentTimeline?.first_cmp_visible_ms);
   const firstConsentActionMs = getFiniteNumber(consentTimeline?.firstConsentActionMs ?? consentTimeline?.first_consent_action_ms);
+  const firstRejectActionMs = getFiniteNumber(consentTimeline?.firstRejectActionMs ?? consentTimeline?.first_reject_action_ms);
+  const firstAcceptActionMs = getFiniteNumber(consentTimeline?.firstAcceptActionMs ?? consentTimeline?.first_accept_action_ms);
+  const firstUserActionMs = getFiniteNumber(consentTimeline?.firstUserActionMs ?? consentTimeline?.first_user_action_ms);
+  const consentSurfaceObserved = getRuntimeBoolean(input.runtimeArtifacts, [
+    "consentSurfaceObserved",
+    "consent_surface_observed"
+  ]);
+  const consentActionableChoiceObserved = getRuntimeBoolean(input.runtimeArtifacts, [
+    "consentActionableChoiceObserved",
+    "consent_actionable_choice_observed"
+  ]);
   const nonEssentialRequestRows = requestClassifications.filter(
     (row) =>
       row.essentiality === "non_essential" &&
@@ -155,7 +180,15 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   const hasPreconsentSequence =
     firstNonEssentialRequestMs !== null &&
     ((firstCmpVisibleMs !== null && firstNonEssentialRequestMs < firstCmpVisibleMs) ||
-      (firstConsentActionMs !== null && firstNonEssentialRequestMs < firstConsentActionMs));
+      (firstConsentActionMs !== null && firstNonEssentialRequestMs < firstConsentActionMs) ||
+      (
+        consentSurfaceObserved === true &&
+        consentActionableChoiceObserved === true &&
+        firstConsentActionMs === null &&
+        firstRejectActionMs === null &&
+        firstAcceptActionMs === null &&
+        firstUserActionMs === null
+      ));
 
   if (nonEssentialRequestRows.length > 0 && firstNonEssentialRequestMs !== null) {
     candidates.push({
@@ -165,6 +198,8 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         : "A retained non-essential request classification exists, but the timing sequence is incomplete or ambiguous.",
       fallbackEvidence: {
         consentTimeline,
+        consentActionableChoiceObserved,
+        consentSurfaceObserved,
         requestPurposeClassificationConfidence: requestClassifications,
         preconsent_tracker_evidence_urls: nonEssentialRequestRows.map((row) => String(row.requestUrl)),
         preconsent_tracker_vendors: nonEssentialRequestRows
@@ -172,7 +207,8 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
           .filter((value): value is string => Boolean(value)),
         signalKey: "privacy.preconsent_tracking_detected",
         signalLabel: "Pre-consent tracking detected",
-        signalValue: true
+        signalValue: true,
+        ...(preconsentEvidenceQuality ?? {})
       },
       id: "runtime-derived-signal-privacy.preconsent_tracking_detected.evidence_quality",
       linkedValidationFinding: null,

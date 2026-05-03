@@ -506,6 +506,184 @@ function getPreconsentVendorEvidenceRows(hybrid: Record<string, unknown> | null)
     .filter((row) => row.vendor || row.requestUrl || row.hostname);
 }
 
+function getNestedObject(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function getNestedObjectArray(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    const rows = getObjectArray(value);
+    if (rows.length > 0) {
+      return rows;
+    }
+  }
+  return [] as Array<Record<string, unknown>>;
+}
+
+function categoryToEssentiality(category: string | null) {
+  return category && /^(?:advertising|analytics|marketing|marketing_automation|retargeting|session_replay)$/i.test(category)
+    ? "non_essential"
+    : null;
+}
+
+function confidenceToNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.min(1, value));
+  }
+  if (typeof value === "string") {
+    if (/^high$/i.test(value)) {
+      return 0.9;
+    }
+    if (/^medium$/i.test(value)) {
+      return 0.75;
+    }
+    if (/^low$/i.test(value)) {
+      return 0.45;
+    }
+  }
+  return null;
+}
+
+function getRequestClassificationRows(runtimeArtifacts: Record<string, unknown> | null | undefined, hybrid: Record<string, unknown> | null) {
+  const retainedRows = [
+    ...getNestedObjectArray(runtimeArtifacts, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"]),
+    ...getNestedObjectArray(hybrid, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"])
+  ];
+  if (retainedRows.length > 0) {
+    return retainedRows;
+  }
+
+  const vendorRows = getPreconsentVendorEvidenceRows(hybrid);
+  const requestRows = getObjectArray(hybrid?.requestObservations);
+  return requestRows.flatMap((row) => {
+    if (!isPreconsentRequestObservation(row, hybrid)) {
+      return [];
+    }
+
+    const requestUrl = getRequestUrl(row);
+    if (!requestUrl) {
+      return [];
+    }
+
+    const domain = getString(row.domain);
+    const matchedVendor = vendorRows.find((vendorRow) => {
+      const hostname = getString(vendorRow.hostname);
+      return Boolean(hostname && domain === hostname);
+    });
+    const category = normalizeDerivedVendorCategory(
+      getString(row.category) ??
+        getString(row.vendorCategory) ??
+        getString(row.vendor_category) ??
+        getString(matchedVendor?.category)
+    );
+    const essentiality = categoryToEssentiality(category);
+    if (essentiality !== "non_essential") {
+      return [];
+    }
+
+    return [{
+      category,
+      confidence: confidenceToNumber(row.confidence ?? row.vendorAttributionConfidence ?? row.vendor_attribution_confidence ?? matchedVendor?.confidence) ?? 0.75,
+      essentiality,
+      requestUrl,
+      tsMs: getNumber(row.tsMs ?? row.ts_ms),
+      vendor: getString(row.vendor) ?? getString(matchedVendor?.vendor)
+    }];
+  });
+}
+
+function getRowNumber(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = getNumber(row[key]);
+    if (value !== null) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getRowString(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = getString(row[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
+export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
+  const hybridConsentSummary = getRecord(hybrid?.consentSummary);
+  const timelineMarkers = getRecord(hybrid?.timelineMarkers);
+  const retainedTimeline =
+    getNestedObject(runtimeArtifacts, ["consentTimeline", "consent_timeline"]) ??
+    getNestedObject(hybrid, ["consentTimeline", "consent_timeline"]);
+  const requestClassifications = getRequestClassificationRows(runtimeArtifacts, hybrid);
+  const nonEssentialRequestRows = requestClassifications.filter((row) => {
+    const essentiality = getString(row.essentiality) ?? getString(row.classification);
+    const confidence = confidenceToNumber(row.confidence ?? row.score);
+    const requestUrl = getString(row.requestUrl) ?? getString(row.request_url) ?? getString(row.url);
+    return essentiality === "non_essential" && (confidence ?? 0) >= 0.7 && Boolean(requestUrl && /^https?:\/\//i.test(requestUrl));
+  });
+
+  const firstNonEssentialRequestMs = getNumber(
+    retainedTimeline?.firstNonEssentialRequestMs ?? retainedTimeline?.first_non_essential_request_ms
+  ) ?? Math.min(
+    ...nonEssentialRequestRows
+      .map((row) => getRowNumber(row, ["tsMs", "ts_ms", "timestampMs", "timestamp_ms"]))
+      .filter((value): value is number => value !== null)
+  );
+  const normalizedFirstNonEssentialRequestMs = Number.isFinite(firstNonEssentialRequestMs) ? firstNonEssentialRequestMs : null;
+  const consentTimeline = retainedTimeline ?? (
+    normalizedFirstNonEssentialRequestMs !== null
+      ? {
+          firstCmpVisibleMs:
+            getNumber(timelineMarkers?.consentBannerDetectedMs) ??
+            getNumber(hybridConsentSummary?.firstVisibleMs),
+          firstConsentActionMs: getNumber(
+            timelineMarkers?.consentChoiceAtMs ??
+              timelineMarkers?.consentAcceptedAtMs ??
+              timelineMarkers?.consentRejectedAtMs
+          ),
+          firstNonEssentialRequestMs: normalizedFirstNonEssentialRequestMs,
+          navigationStartMs: getNumber(timelineMarkers?.navigationStartMs) ?? 0,
+          timelineConfidence: "derived_from_hybrid_runtime"
+        }
+      : null
+  );
+
+  if (!consentTimeline && nonEssentialRequestRows.length === 0) {
+    return null;
+  }
+
+  return {
+    consentTimeline,
+    consentActionableChoiceObserved:
+      getBoolean(runtimeArtifacts?.consent_actionable_choice_observed) ??
+      getBoolean(runtimeArtifacts?.consentActionableChoiceObserved) ??
+      getBoolean(hybridConsentSummary?.actionableChoiceObserved),
+    consentSurfaceObserved:
+      getBoolean(runtimeArtifacts?.consent_surface_observed) ??
+      getBoolean(runtimeArtifacts?.consentSurfaceObserved) ??
+      getBoolean(hybridConsentSummary?.surfaceObserved),
+    requestPurposeClassificationConfidence: requestClassifications,
+    preconsent_tracker_evidence_urls: uniqueStrings(
+      nonEssentialRequestRows.flatMap((row) => getRowString(row, ["requestUrl", "request_url", "url"]))
+    ),
+    preconsent_tracker_vendors: uniqueStrings(nonEssentialRequestRows.flatMap((row) => getString(row.vendor))),
+    runtimeEvidenceQuality: "timeline_and_classification",
+    runtimeEvidenceQualityDisposition: "promotion_contract_ready"
+  };
+}
+
 function getHybridArtifactRefs(hybrid: Record<string, unknown> | null, keys: string[]) {
   return uniqueStrings(keys.flatMap((key) => getStringArray(hybrid?.[key])));
 }
@@ -1028,7 +1206,7 @@ export function getHybridSignalFallbackEvidence(input: {
   signalKey: string;
   signalLabel: string;
   signalValue: unknown;
-}) {
+}): Record<string, unknown> | null {
   const hybrid = getHybridRuntimeEvidence(input.runtimeArtifacts);
   if (!hybrid) {
     return null;
@@ -1047,6 +1225,7 @@ export function getHybridSignalFallbackEvidence(input: {
     case "privacy.tracking_before_consent_detected": {
       const preconsentRequestUrls = getPreconsentRequestUrls(hybrid);
       const preconsentVendors = getPreconsentTrackerVendors(hybrid);
+      const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
       const allPreconsentCookieEvidence = getPreconsentCookieEvidenceRows(hybrid, input.runtimeArtifacts);
       const functionalPreconsentCookieEvidence = allPreconsentCookieEvidence.filter((row) =>
         isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
@@ -1098,7 +1277,8 @@ export function getHybridSignalFallbackEvidence(input: {
         runtimeEvidenceQuality: "legacy_without_consent_timeline",
         runtimeEvidenceQualityDisposition: "audit_only_until_evidence_quality_artifacts_present",
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
-        hybridNetworkSummary: networkSummary
+        hybridNetworkSummary: networkSummary,
+        ...(preconsentEvidenceQuality ?? {})
       };
     }
     case "privacy.dark_pattern_reject_button_missing":

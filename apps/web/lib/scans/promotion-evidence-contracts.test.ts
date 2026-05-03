@@ -170,6 +170,18 @@ test("pre-consent cookie evidence is promotion-grade only for non-essential cook
 
 test("pre-consent source URLs remain review-grade sequence evidence", () => {
   const sourceUrlEvidence = {
+    consentTimeline: {
+      firstCmpVisibleMs: 500,
+      firstConsentActionMs: 800,
+      firstNonEssentialRequestMs: 100
+    },
+    requestPurposeClassificationConfidence: [
+      {
+        confidence: 0.91,
+        essentiality: "non_essential",
+        requestUrl: "https://analytics.example.com/collect"
+      }
+    ],
     signalKey: "privacy.preconsent_tracking_detected",
     signalValue: true,
     sourceUrls: ["https://analytics.example.com/collect"]
@@ -179,6 +191,11 @@ test("pre-consent source URLs remain review-grade sequence evidence", () => {
   assert.equal(hasStrongPreconsentRuntimeEvidence(sourceUrlEvidence), true);
 
   const malformedUrlEvidence = {
+    consentTimeline: {
+      firstCmpVisibleMs: 500,
+      firstConsentActionMs: 800,
+      firstNonEssentialRequestMs: 100
+    },
     signalKey: "privacy.preconsent_tracking_detected",
     signalValue: true,
     sourceUrls: ["https://www.sofi.com_oeu1776902307725r0.1932886381308404$$14812420277$$session_state"]
@@ -186,6 +203,126 @@ test("pre-consent source URLs remain review-grade sequence evidence", () => {
 
   assert.equal(hasConcretePreconsentArtifact(malformedUrlEvidence), false);
   assert.equal(hasStrongPreconsentRuntimeEvidence(malformedUrlEvidence), false);
+});
+
+test("pre-consent runtime request URLs count as concrete artifacts but still need timeline for strong evidence", () => {
+  const runtimeUrlEvidence = {
+    runtimeRequestUrls: ["https://www.googletagmanager.com/gtm.js?id=G-EXAMPLE"],
+    runtimeVendors: ["Google Tag Manager"],
+    signalKey: "privacy.preconsent_tracking_detected",
+    signalValue: true
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(runtimeUrlEvidence), true);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(runtimeUrlEvidence), false);
+
+  assert.equal(
+    hasStrongPreconsentRuntimeEvidence({
+      ...runtimeUrlEvidence,
+      consentTimeline: {
+        firstCmpVisibleMs: 500,
+        firstConsentActionMs: 800,
+        firstNonEssentialRequestMs: 100
+      },
+      requestPurposeClassificationConfidence: [
+        {
+          confidence: 0.91,
+          essentiality: "non_essential",
+          requestUrl: "https://www.googletagmanager.com/gtm.js?id=G-EXAMPLE"
+        }
+      ]
+    }),
+    true
+  );
+});
+
+test("pre-consent request before any recorded choice satisfies sequence when consent controls were observed", () => {
+  const evidence = {
+    consentActionableChoiceObserved: true,
+    consentSurfaceObserved: true,
+    consentTimeline: {
+      firstAcceptActionMs: null,
+      firstCmpVisibleMs: 0,
+      firstConsentActionMs: null,
+      firstNonEssentialRequestMs: 1660,
+      firstRejectActionMs: null,
+      firstUserActionMs: null
+    },
+    requestPurposeClassificationConfidence: [
+      {
+        confidence: 0.85,
+        essentiality: "non_essential",
+        requestUrl: "https://tags-eu.tiqcdn.com/utag/example/prod/utag.js",
+        timestampMs: 1660
+      }
+    ],
+    runtimeRequestUrls: ["https://tags-eu.tiqcdn.com/utag/example/prod/utag.js"],
+    runtimeVendors: ["Tealium"],
+    signalKey: "privacy.preconsent_tracking_detected",
+    signalValue: true
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(evidence), true);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(evidence), true);
+});
+
+test("pre-consent request without observed consent controls remains review grade", () => {
+  const evidence = {
+    consentActionableChoiceObserved: false,
+    consentSurfaceObserved: false,
+    consentTimeline: {
+      firstConsentActionMs: null,
+      firstNonEssentialRequestMs: 1660
+    },
+    requestPurposeClassificationConfidence: [
+      {
+        confidence: 0.85,
+        essentiality: "non_essential",
+        requestUrl: "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+        timestampMs: 1660
+      }
+    ],
+    runtimeRequestUrls: ["https://securepubads.g.doubleclick.net/tag/js/gpt.js"],
+    runtimeVendors: ["Google Ads"],
+    signalKey: "privacy.preconsent_tracking_detected",
+    signalValue: true
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(evidence), true);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(evidence), false);
+});
+
+test("normalized pre-consent entity URLs count as concrete artifacts but still need timeline for strong evidence", () => {
+  const normalizedEntityEvidence = {
+    entities: {
+      runtimeRequestUrls: ["https://tags.example-cdn.com/utag/site/prod/utag.js"],
+      runtimeVendors: ["Tealium"]
+    },
+    signalKey: "privacy.preconsent_tracking_detected",
+    signalValue: true
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(normalizedEntityEvidence), true);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(normalizedEntityEvidence), false);
+
+  assert.equal(
+    hasStrongPreconsentRuntimeEvidence({
+      ...normalizedEntityEvidence,
+      consentTimeline: {
+        firstCmpVisibleMs: 500,
+        firstConsentActionMs: 800,
+        firstNonEssentialRequestMs: 100
+      },
+      requestPurposeClassificationConfidence: [
+        {
+          confidence: 0.91,
+          essentiality: "non_essential",
+          requestUrl: "https://tags.example-cdn.com/utag/site/prod/utag.js"
+        }
+      ]
+    }),
+    true
+  );
 });
 
 test("policy behavior conflict contract blocks incomplete contradiction fixtures", () => {

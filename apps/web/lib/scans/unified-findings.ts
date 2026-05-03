@@ -299,8 +299,12 @@ function normalizeUnifiedFindingEvidenceRecord(
   assignCanonicalField("policySummaryShort", ["policy_summary_short"]);
   assignCanonicalField("runtimeEvidence", ["runtime_evidence"]);
   assignCanonicalField("runtimeEvidenceArtifacts", ["runtime_evidence_artifacts"]);
+  assignCanonicalField("consentActionableChoiceObserved", ["consent_actionable_choice_observed"]);
   assignCanonicalField("hybridConsentSummary", ["hybrid_consent_summary"]);
   assignCanonicalField("hybridUiSummary", ["hybrid_ui_summary"]);
+  assignCanonicalField("consentSurfaceObserved", ["consent_surface_observed"]);
+  assignCanonicalField("consentTimeline", ["consent_timeline"]);
+  assignCanonicalField("requestPurposeClassificationConfidence", ["request_purpose_classification_confidence"]);
   assignCanonicalField("blockingOverlayType", ["blocking_overlay_type"]);
   assignCanonicalField("overlayConfidence", ["overlay_confidence"]);
   assignCanonicalField("rejectDepthClass", ["reject_depth_class"]);
@@ -2030,7 +2034,33 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
               }
             })
         ).slice(0, 20)
-      : [];
+	      : [];
+  const stringifyEvidenceObject = (row: unknown) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      return [];
+    }
+    try {
+      return [JSON.stringify(row)];
+    } catch {
+      return [];
+    }
+  };
+  if (typeof normalizedFallbackEvidence.consentSurfaceObserved === "boolean") {
+    entities.consentSurfaceObserved = [String(normalizedFallbackEvidence.consentSurfaceObserved)];
+  }
+  if (typeof normalizedFallbackEvidence.consentActionableChoiceObserved === "boolean") {
+    entities.consentActionableChoiceObserved = [String(normalizedFallbackEvidence.consentActionableChoiceObserved)];
+  }
+  const consentTimelineRows = stringifyEvidenceObject(normalizedFallbackEvidence.consentTimeline);
+  if (consentTimelineRows.length > 0) {
+    entities.consentTimeline = consentTimelineRows;
+  }
+  const requestPurposeClassificationRows = stringifyEvidenceRows(
+    normalizedFallbackEvidence.requestPurposeClassificationConfidence
+  );
+  if (requestPurposeClassificationRows.length > 0) {
+    entities.requestPurposeClassificationConfidence = requestPurposeClassificationRows;
+  }
   const rtbCookieSyncRows = stringifyEvidenceRows(
     normalizedFallbackEvidence.rtbCookieSyncObservations ?? normalizedFallbackEvidence.rtb_cookie_sync_observations ?? normalizedFallbackEvidence.rtb_cookie_sync_evidence
   );

@@ -1064,7 +1064,7 @@ test("high-risk gambling section review retains concrete offer from page evidenc
   assert.ok(packet?.evidence?.entities?.offerSnippets?.some((snippet) => snippet.includes("$1,000 in bonus bets")));
 });
 
-test("supplemental runtime request evidence still promotes through unified packets", () => {
+test("supplemental runtime request evidence without consent timing stays out of surfaced packets", () => {
   const [packet] = buildSupplementalRuntimeUnifiedFindingPackets({
     disclaimer: "",
     hostname: "example.com",
@@ -1084,12 +1084,7 @@ test("supplemental runtime request evidence still promotes through unified packe
     version: "preview-v1"
   });
 
-  assert.equal(packet?.unifiedFindingId, "preconsent_tracking");
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
-  assert.equal(packet?.details?.family, "consent_tracking");
-  assert.deepEqual(packet?.details?.requestUrls, ["https://metrics.example.net/collect"]);
-  assert.equal(packet?.evidence?.entities?.preconsent_cookie_names?.includes("_ga"), true);
+  assert.equal(packet, undefined);
 });
 
 test("buildReviewFindings injects domain macro enrichment fields into fallbackEvidence", () => {

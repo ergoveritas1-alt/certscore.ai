@@ -895,6 +895,28 @@ function mergeConcernEvidenceBundles(
   };
 }
 
+function getRecordValue(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function mergeRawEvidenceWithConcernBundle(
+  rawEvidence: Record<string, unknown>,
+  bundle: NormalizedConcernEvidenceBundle
+) {
+  const existingEntities = getRecordValue(rawEvidence.entities);
+  const sourceUrls = uniqueStrings([...getStringArrayEvidence(rawEvidence.sourceUrls), ...bundle.sourceUrls]);
+  const pageUrls = uniqueStrings([...getStringArrayEvidence(rawEvidence.pageUrls), ...bundle.pageUrls]);
+
+  return {
+    ...rawEvidence,
+    ...(Object.keys(bundle.entities).length > 0 || Object.keys(existingEntities).length > 0
+      ? { entities: { ...existingEntities, ...bundle.entities } }
+      : {}),
+    ...(pageUrls.length > 0 ? { pageUrls } : {}),
+    ...(sourceUrls.length > 0 ? { sourceUrls } : {})
+  };
+}
+
 function isPolicyLikeUrl(url: string) {
   return derivePolicyPageTypeFromUrl(url) !== "non_policy";
 }
@@ -1191,9 +1213,11 @@ function buildConcernFromSharedInput(input: {
   }
   const fallbackBundle = extractEvidenceFromRaw(normalizedRawEvidence);
   const validationBundle = extractEvidenceFromValidationFinding(input.linkedValidationFinding ?? null);
+  const mergedEvidenceBundle = mergeConcernEvidenceBundles(fallbackBundle, validationBundle, input.evidence);
+  const policyRawEvidence = mergeRawEvidenceWithConcernBundle(normalizedRawEvidence, mergedEvidenceBundle);
   const evidenceBundle = {
-    ...mergeConcernEvidenceBundles(fallbackBundle, validationBundle, input.evidence),
-    rawEvidence: normalizedRawEvidence
+    ...mergedEvidenceBundle,
+    rawEvidence: policyRawEvidence
   };
   const suggestedUnifiedFindingId = resolveSuggestedUnifiedFindingId({
     linkedValidationFinding: input.linkedValidationFinding,
@@ -1214,7 +1238,7 @@ function buildConcernFromSharedInput(input: {
     bundle: evidenceBundle,
     linkedValidationFinding: input.linkedValidationFinding,
     originType: input.originType,
-    rawEvidence: normalizedRawEvidence
+    rawEvidence: policyRawEvidence
   });
   const eligibility = deriveConcernPolicy({
     concern: {
@@ -1227,7 +1251,7 @@ function buildConcernFromSharedInput(input: {
       title: input.title
     },
     evidenceStrengthFlags,
-    rawEvidence: normalizedRawEvidence
+    rawEvidence: policyRawEvidence
   });
 
   return {

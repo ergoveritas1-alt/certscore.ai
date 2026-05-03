@@ -502,6 +502,24 @@ test("builds concrete fallback evidence for hybrid pre-consent request timing", 
   assert.deepEqual(fallback?.runtimeEvidenceUrls, ["https://connect.facebook.net/fbevents.js"]);
   assert.deepEqual(fallback?.runtimeVendors, ["Meta Pixel"]);
   assert.equal(fallback?.consentBannerDetectedMs, 500);
+  assert.deepEqual(fallback?.consentTimeline, {
+    firstCmpVisibleMs: 500,
+    firstConsentActionMs: null,
+    firstNonEssentialRequestMs: 120,
+    navigationStartMs: 0,
+    timelineConfidence: "derived_from_hybrid_runtime"
+  });
+  assert.deepEqual(fallback?.requestPurposeClassificationConfidence, [
+    {
+      category: "advertising",
+      confidence: 0.9,
+      essentiality: "non_essential",
+      requestUrl: "https://connect.facebook.net/fbevents.js",
+      tsMs: 120,
+      vendor: "Meta Pixel"
+    }
+  ]);
+  assert.equal(fallback?.runtimeEvidenceQuality, "timeline_and_classification");
   assert.deepEqual(fallback?.preconsent_tracker_vendor_evidence, [
     {
       category: "advertising",

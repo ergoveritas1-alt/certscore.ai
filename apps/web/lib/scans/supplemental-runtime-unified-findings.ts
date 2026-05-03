@@ -41,6 +41,28 @@ function getRuntimeVendorNames(evidence: PreviewSupplementalEvidence) {
   );
 }
 
+function getSupplementalProofFields(evidence: PreviewSupplementalEvidence) {
+  const record = evidence as unknown as Record<string, unknown>;
+  const entities = evidence.entities as unknown as Record<string, unknown> | undefined;
+  const proof: Record<string, unknown> = {};
+  for (const key of [
+    "consentTimeline",
+    "consent_timeline",
+    "requestPurposeClassificationConfidence",
+    "request_purpose_classification_confidence",
+    "consentSurfaceObserved",
+    "consent_surface_observed",
+    "consentActionableChoiceObserved",
+    "consent_actionable_choice_observed"
+  ]) {
+    const value = record[key] ?? entities?.[key];
+    if (value !== undefined) {
+      proof[key] = value;
+    }
+  }
+  return proof;
+}
+
 export function buildSupplementalRuntimeUnifiedFindingCandidates(
   previewPayload: PreviewScanPayload | null | undefined
 ): UnifiedFindingCandidate[] {
@@ -52,6 +74,7 @@ export function buildSupplementalRuntimeUnifiedFindingCandidates(
   const trackingCookieNames = getTrackingCookieNames(evidence);
   const runtimeRequestUrls = getRuntimeRequestUrls(evidence);
   const runtimeVendorNames = getRuntimeVendorNames(evidence);
+  const supplementalProofFields = getSupplementalProofFields(evidence);
   if (trackingCookieNames.length === 0 && runtimeRequestUrls.length === 0 && runtimeVendorNames.length === 0) {
     return [];
   }
@@ -88,7 +111,8 @@ export function buildSupplementalRuntimeUnifiedFindingCandidates(
         source: evidence.source,
         sourceUrls: runtimeRequestUrls,
         supportingSignals: ["privacy.preconsent_tracking_detected"],
-        unifiedFindingId: "preconsent_tracking"
+        unifiedFindingId: "preconsent_tracking",
+        ...supplementalProofFields
       },
       observedValue: observedParts.join(", "),
       severity: runtimeRequestUrls.length > 0 ? "high" : "medium",

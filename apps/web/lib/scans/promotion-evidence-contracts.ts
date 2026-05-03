@@ -58,6 +58,13 @@ function getObjectValue(record: Record<string, unknown> | null | undefined, keys
   return null;
 }
 
+function getStringArrayValuesFromEvidenceAndEntities(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  return uniqueStrings([
+    ...getStringArrayValues(record, keys),
+    ...getStringArrayValues(getObjectValue(record, ["entities"]), keys)
+  ]);
+}
+
 function classifyCookieNameForPromotion(name: string) {
   const normalized = name.toLowerCase();
   if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id)/i.test(normalized)) {
@@ -345,23 +352,55 @@ function hasBlockingContradictionMetaSignal(rawEvidence: Record<string, unknown>
   );
 }
 
+function getPreconsentClassifiedNonEssentialRequests(rawEvidence: Record<string, unknown> | null | undefined, input: { minConfidence?: number } = {}) {
+  return getObjectArrayValues(rawEvidence, [
+    "requestPurposeClassificationConfidence",
+    "request_purpose_classification_confidence"
+  ]).filter((row) => {
+    const essentiality =
+      typeof row.essentiality === "string"
+        ? row.essentiality
+        : typeof row.classification === "string"
+          ? row.classification
+          : null;
+    const confidence =
+      typeof row.confidence === "number"
+        ? row.confidence
+        : typeof row.score === "number"
+          ? row.score
+          : null;
+    const url =
+      typeof row.requestUrl === "string"
+        ? row.requestUrl
+        : typeof row.request_url === "string"
+          ? row.request_url
+          : null;
+
+    return (
+      essentiality === "non_essential" &&
+      (typeof input.minConfidence !== "number" || (typeof confidence === "number" && confidence >= input.minConfidence)) &&
+      isConcreteHttpEvidenceUrl(url)
+    );
+  });
+}
+
 export function hasConcretePreconsentArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
-  const vendors = getStringArrayValues(rawEvidence, [
+  const vendors = getStringArrayValuesFromEvidenceAndEntities(rawEvidence, [
     "preconsent_tracker_vendors",
     "relatedVendors",
     "runtimeVendors",
     "runtime_vendors"
   ]);
-  const urls = getStringArrayValues(rawEvidence, [
+  const urls = getStringArrayValuesFromEvidenceAndEntities(rawEvidence, [
     "preconsent_tracker_evidence_urls",
     "requestUrls",
+    "runtimeRequestUrls",
+    "runtime_request_urls",
     "runtimeEvidenceUrls",
+    "runtime_evidence_urls",
     "sourceUrls"
   ]).filter(isConcreteHttpEvidenceUrl);
-  const classifiedNonEssentialRequests = getObjectArrayValues(rawEvidence, [
-    "requestPurposeClassificationConfidence",
-    "request_purpose_classification_confidence"
-  ]).filter((row) => row.essentiality === "non_essential" && isConcreteHttpEvidenceUrl(String(row.requestUrl ?? "")));
+  const classifiedNonEssentialRequests = getPreconsentClassifiedNonEssentialRequests(rawEvidence);
 
   return (
     vendors.length > 0 ||
@@ -373,35 +412,30 @@ export function hasConcretePreconsentArtifact(rawEvidence: Record<string, unknow
 }
 
 export function hasStrongPreconsentRuntimeEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
-  const vendors = getStringArrayValues(rawEvidence, [
+  const vendors = getStringArrayValuesFromEvidenceAndEntities(rawEvidence, [
     "preconsent_tracker_vendors",
     "relatedVendors",
     "runtimeVendors",
     "runtime_vendors"
   ]);
-  const urls = getStringArrayValues(rawEvidence, [
+  const urls = getStringArrayValuesFromEvidenceAndEntities(rawEvidence, [
     "preconsent_tracker_evidence_urls",
     "requestUrls",
+    "runtimeRequestUrls",
+    "runtime_request_urls",
     "runtimeEvidenceUrls",
+    "runtime_evidence_urls",
     "sourceUrls"
   ]).filter(isConcreteHttpEvidenceUrl);
-  const classifiedNonEssentialRequests = getObjectArrayValues(rawEvidence, [
-    "requestPurposeClassificationConfidence",
-    "request_purpose_classification_confidence"
-  ]).filter(
-    (row) =>
-      row.essentiality === "non_essential" &&
-      typeof row.confidence === "number" &&
-      row.confidence >= 0.7 &&
-      isConcreteHttpEvidenceUrl(String(row.requestUrl ?? ""))
-  );
+  const classifiedNonEssentialRequests = getPreconsentClassifiedNonEssentialRequests(rawEvidence, { minConfidence: 0.7 });
 
   return (
-    urls.length > 0 ||
-    (vendors.length > 0 && urls.length > 0) ||
-    classifiedNonEssentialRequests.length > 0 ||
-    hasPromotionGradePreconsentCookieEvidence(rawEvidence)
-  ) && hasPreconsentSequenceEvidence(rawEvidence);
+    hasPromotionGradePreconsentCookieEvidence(rawEvidence) ||
+    (
+      classifiedNonEssentialRequests.length > 0 &&
+      hasPreconsentSequenceEvidence(rawEvidence)
+    )
+  );
 }
 
 export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -429,11 +463,48 @@ export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknow
     : typeof timeline?.first_consent_action_ms === "number"
       ? timeline.first_consent_action_ms
       : null;
+  const firstRejectActionMs = typeof timeline?.firstRejectActionMs === "number"
+    ? timeline.firstRejectActionMs
+    : typeof timeline?.first_reject_action_ms === "number"
+      ? timeline.first_reject_action_ms
+      : null;
+  const firstAcceptActionMs = typeof timeline?.firstAcceptActionMs === "number"
+    ? timeline.firstAcceptActionMs
+    : typeof timeline?.first_accept_action_ms === "number"
+      ? timeline.first_accept_action_ms
+      : null;
+  const firstUserActionMs = typeof timeline?.firstUserActionMs === "number"
+    ? timeline.firstUserActionMs
+    : typeof timeline?.first_user_action_ms === "number"
+      ? timeline.first_user_action_ms
+      : null;
+  const consentSurfaceObserved =
+    getBooleanValue(rawEvidence, ["consentSurfaceObserved", "consent_surface_observed", "cookieBannerPresent", "consentBannerPresent"]) ??
+    getBooleanValue(getObjectValue(rawEvidence, ["entities"]), ["consentSurfaceObserved", "consent_surface_observed"]);
+  const consentActionableChoiceObserved =
+    getBooleanValue(rawEvidence, [
+      "consentActionableChoiceObserved",
+      "consent_actionable_choice_observed",
+      "consentRejectInteractionSucceeded",
+      "consentAcceptInteractionSucceeded"
+    ]) ??
+    getBooleanValue(getObjectValue(rawEvidence, ["entities"]), [
+      "consentActionableChoiceObserved",
+      "consent_actionable_choice_observed"
+    ]);
   const hasTimelineSequence =
     typeof firstNonEssentialRequestMs === "number" &&
     ((typeof firstCmpVisibleMs === "number" && firstNonEssentialRequestMs < firstCmpVisibleMs) ||
       (typeof firstConsentActionMs === "number" && firstNonEssentialRequestMs < firstConsentActionMs));
-  return hasTimelineSequence;
+  const hasNoRecordedChoiceSequence =
+    typeof firstNonEssentialRequestMs === "number" &&
+    consentSurfaceObserved === true &&
+    consentActionableChoiceObserved === true &&
+    firstConsentActionMs === null &&
+    firstRejectActionMs === null &&
+    firstAcceptActionMs === null &&
+    firstUserActionMs === null;
+  return hasTimelineSequence || hasNoRecordedChoiceSequence;
 }
 
 function getNumberValue(record: Record<string, unknown> | null | undefined, keys: string[]) {

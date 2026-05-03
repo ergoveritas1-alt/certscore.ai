@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import process from "node:process";
 import { closePools, query, queryOne } from "@website-signal-risk-scanner/db";
+import { getReportUnifiedFinding } from "@website-signal-risk-scanner/shared";
 import {
   dedupeHeadlineFindings,
   deriveConsentAuditFindings
@@ -10,7 +11,7 @@ import {
   buildReviewFindings,
   buildSectionReviewIssues
 } from "../lib/scans/scan-report-review-findings";
-import { buildUnifiedFindingDisplayPackets } from "../lib/scans/unified-findings";
+import { buildUnifiedFindingDisplayPackets, type UnifiedFindingDisplayPacket } from "../lib/scans/unified-findings";
 import { repairFindingFamilyPacketEvents } from "../server/scans/family-packet-event-repair";
 import { loadMergedSignalsByScanId } from "../server/scans/merged-signal-summary";
 
@@ -28,6 +29,18 @@ const DEFAULT_TARGET_FINDINGS = [
 
 const TARGET_SIGNAL_PATTERN =
   /(preconsent|pre_consent|third_party.*consent|tracking.*consent|weak_cookie|cookie_disclosure|reject|rtb|identifier)/;
+
+const LEGACY_TARGET_FINDING_ALIASES: Record<string, string[]> = {
+  analytics_cookies_before_consent: ["preconsent_tracking"],
+  non_essential_tracking_continued_after_reject: [
+    "reject_did_not_reduce_tracking",
+    "reject_did_not_reduce_third_party_cookies"
+  ],
+  pre_consent_tracking_detected: ["preconsent_tracking"],
+  reject_option_missing_or_hidden: ["reject_button_missing"],
+  third_party_tracking_before_consent: ["preconsent_tracking"],
+  tracking_cookies_set_before_consent: ["preconsent_tracking"]
+};
 
 type ScanRow = {
   completed_at: string | null;
@@ -103,6 +116,22 @@ function parseTargetFindings() {
   }
 
   return raw.split(",").map((value) => value.trim()).filter(Boolean);
+}
+
+function resolveTargetUnifiedFindingIds(targetFindings: string[]) {
+  const resolved = new Set<string>();
+
+  for (const finding of targetFindings) {
+    const direct = getReportUnifiedFinding(finding);
+    if (direct) {
+      resolved.add(direct.id);
+    }
+    for (const alias of LEGACY_TARGET_FINDING_ALIASES[finding] ?? []) {
+      resolved.add(alias);
+    }
+  }
+
+  return resolved;
 }
 
 function diffMs(start: string | null | undefined, end: string | null | undefined) {
@@ -214,6 +243,39 @@ function getPacketStatusCounts(packets: Array<{ presentationDecision?: { status?
   }, {});
 }
 
+function summarizePacketDiagnostics(packet: UnifiedFindingDisplayPacket) {
+  return {
+    appliedRules: packet.surfacingDecision.appliedRules,
+    confidence: packet.confidenceBand,
+    decisionReasons: packet.surfacingDecision.decisionReasons,
+    decisionState: packet.surfacingDecision.decisionState,
+    downgradeReasons: packet.presentationDecision.downgradeReasons ?? [],
+    evidenceFlags: packet.evidence?.flags ?? [],
+    evidenceKeys: packet.evidence ? Object.keys(packet.evidence) : [],
+    externalSurfacingEligibilities: packet.concernContext?.externalSurfacingEligibilities ?? [],
+    id: packet.unifiedFindingId,
+    negativeEvidenceFlags: packet.concernContext?.negativeEvidenceFlags ?? [],
+    promotionEligibilities: packet.concernContext?.promotionEligibilities ?? [],
+    reportLane: packet.surfacingDecision.reportLane,
+    status: packet.presentationDecision.status,
+    summary: packet.summary,
+    surfaceTier: packet.surfacingDecision.surfaceTier
+  };
+}
+
+function getPacketBlockerKeys(packet: UnifiedFindingDisplayPacket) {
+  return [
+    ...(packet.concernContext?.negativeEvidenceFlags ?? []),
+    ...(packet.presentationDecision.downgradeReasons ?? []),
+    ...packet.surfacingDecision.decisionReasons,
+    ...packet.surfacingDecision.appliedRules
+  ].filter((value) => value.trim().length > 0);
+}
+
+function incrementCount(target: Record<string, number>, key: string) {
+  target[key] = (target[key] ?? 0) + 1;
+}
+
 async function loadScanRows(scanIds: string[]) {
   const result = await query<ScanRow>(
     `
@@ -246,7 +308,7 @@ async function buildReport() {
 
   const rankedDomains = parseRankedDomains();
   const targetFindings = parseTargetFindings();
-  const targetFindingSet = new Set(targetFindings);
+  const targetFindingSet = resolveTargetUnifiedFindingIds(targetFindings);
   const scanRows = await loadScanRows(scanIds);
   const observedAtByScanId = new Map(
     scanRows.map((row) => [row.id, row.completed_at ?? row.started_at ?? row.created_at ?? null] as const)
@@ -259,6 +321,9 @@ async function buildReport() {
   const summaryRows: SmokeSummaryRow[] = [];
   const findingRows = [];
   const targetSignalRows = [];
+  const promotionBlockerCounts: Record<string, number> = {};
+  const targetPacketStatusCounts: Record<string, number> = {};
+  const targetPacketBlockerCounts: Record<string, number> = {};
 
   for (const [index, scan] of scanRows.entries()) {
     const rankedDomain = rankedDomains[index] ?? null;
@@ -339,6 +404,26 @@ async function buildReport() {
       validationFindingLookup: new Map()
     });
     const packetCounts = getPacketStatusCounts(packets);
+    const targetPackets = packets.filter((packet) => targetFindingSet.has(packet.unifiedFindingId));
+    const visiblePackets = packets.filter((packet) => packet.presentationDecision.status !== "suppress");
+    const suppressedPackets = packets.filter((packet) => packet.presentationDecision.status === "suppress");
+    const nonSurfacedPackets = packets.filter((packet) => packet.presentationDecision.status !== "surface");
+    const nonSurfacedTargetPackets = targetPackets.filter((packet) => packet.presentationDecision.status !== "surface");
+
+    for (const packet of targetPackets) {
+      incrementCount(targetPacketStatusCounts, packet.presentationDecision.status);
+    }
+    for (const packet of nonSurfacedPackets) {
+      for (const blocker of getPacketBlockerKeys(packet)) {
+        incrementCount(promotionBlockerCounts, blocker);
+      }
+    }
+    for (const packet of nonSurfacedTargetPackets) {
+      for (const blocker of getPacketBlockerKeys(packet)) {
+        incrementCount(targetPacketBlockerCounts, blocker);
+      }
+    }
+
     const crawlMetadata = getStageMetadata(scan.scan_config_json, "crawl_discovery");
     const sanitizedNetworkEvidence = getRecord(runtimeArtifactsRow?.sanitized_network_evidence);
     const hybridRuntimeEvidence = getRecord(runtimeArtifactsRow?.hybrid_runtime_evidence);
@@ -403,37 +488,14 @@ async function buildReport() {
       domain,
       rank: rankedDomain?.rank ?? null,
       scanId: scan.id,
-      targetPackets: packets
-        .filter((packet) => targetFindingSet.has(packet.unifiedFindingId))
-        .map((packet) => ({
-          confidence: packet.confidenceBand,
-          evidenceKeys: packet.evidence ? Object.keys(packet.evidence) : [],
-          id: packet.unifiedFindingId,
-          status: packet.presentationDecision.status,
-          summary: packet.summary
-        })),
-      visiblePackets: packets
-        .filter((packet) => packet.presentationDecision.status !== "suppress")
-        .map((packet) => ({
-          confidence: packet.confidenceBand,
-          id: packet.unifiedFindingId,
-          status: packet.presentationDecision.status,
-          summary: packet.summary
-        })),
-      suppressedPackets: packets
-        .filter((packet) => packet.presentationDecision.status === "suppress")
-        .map((packet) => ({
-          appliedRules: packet.surfacingDecision?.appliedRules ?? [],
-          confidence: packet.confidenceBand,
-          downgradeReasons: packet.presentationDecision.downgradeReasons ?? [],
-          evidenceFlags: packet.evidence?.flags ?? [],
-          evidenceEntities: packet.evidence?.entities ?? {},
-          id: packet.unifiedFindingId,
-          rationale: packet.presentationDecision.rationale,
-          surfacingDecision: packet.surfacingDecision ?? null,
-          status: packet.presentationDecision.status,
-          summary: packet.summary
-        })),
+      targetPackets: targetPackets.map(summarizePacketDiagnostics),
+      visiblePackets: visiblePackets.map(summarizePacketDiagnostics),
+      suppressedPackets: suppressedPackets.map((packet) => ({
+        ...summarizePacketDiagnostics(packet),
+        evidenceEntities: packet.evidence?.entities ?? {},
+        rationale: packet.presentationDecision.rationale,
+        surfacingDecision: packet.surfacingDecision ?? null
+      })),
       weakCookieSupport: runtimeArtifactsRow?.cookie_attribute_summary ?? null
     });
 
@@ -459,11 +521,19 @@ async function buildReport() {
     generatedAt: new Date().toISOString(),
     scope: {
       scanCount: summaryRows.length,
-      targetFindings
+      targetFindings,
+      targetUnifiedFindingIds: [...targetFindingSet]
     },
     summaryRows,
     findingRows,
     targetSignalRows,
+    promotionBlockers: Object.entries(promotionBlockerCounts)
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .map(([blocker, count]) => ({ blocker, count })),
+    targetPacketBlockers: Object.entries(targetPacketBlockerCounts)
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .map(([blocker, count]) => ({ blocker, count })),
+    targetPacketStatusCounts,
     health: {
       missingSignalConfidenceCount: targetSignalRows.filter((row) => row.confidence === null).length,
       missingSignalEvidenceRefCount: targetSignalRows.filter((row) => row.evidenceRefCount === 0).length,
@@ -496,6 +566,44 @@ function renderMarkdown(report: Awaited<ReturnType<typeof buildReport>>) {
     `- Missing total_request_count rows: ${report.health.missingTotalRequestCount}`,
     `- Target signal rows missing confidence: ${report.health.missingSignalConfidenceCount}`,
     `- Target signal rows with empty evidence_refs: ${report.health.missingSignalEvidenceRefCount}`,
+    "",
+    "## Promotion Blockers",
+    "",
+    "### Target Packet Status",
+    "",
+    "| Status | Count |",
+    "|---|---:|"
+  );
+
+  for (const [status, count] of Object.entries(report.targetPacketStatusCounts).sort((left, right) => right[1] - left[1])) {
+    lines.push(`| ${status} | ${count} |`);
+  }
+
+  lines.push(
+    "",
+    "### Target Packet Blockers",
+    "",
+    "| Blocker | Count |",
+    "|---|---:|"
+  );
+
+  for (const row of report.targetPacketBlockers.slice(0, 25)) {
+    lines.push(`| \`${row.blocker}\` | ${row.count} |`);
+  }
+
+  lines.push(
+    "",
+    "### All Non-Surfaced Packet Blockers",
+    "",
+    "| Blocker | Count |",
+    "|---|---:|"
+  );
+
+  for (const row of report.promotionBlockers.slice(0, 25)) {
+    lines.push(`| \`${row.blocker}\` | ${row.count} |`);
+  }
+
+  lines.push(
     "",
     "## Target Signals",
     "",

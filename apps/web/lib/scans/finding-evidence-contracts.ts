@@ -492,6 +492,16 @@ function getBoolean(record: Record<string, unknown> | null | undefined, keys: st
     if (typeof record?.[key] === "boolean") {
       return record[key] as boolean;
     }
+    const value = record?.[key];
+    const candidate = Array.isArray(value) ? value[0] : value;
+    if (typeof candidate === "string") {
+      if (/^true$/i.test(candidate.trim())) {
+        return true;
+      }
+      if (/^false$/i.test(candidate.trim())) {
+        return false;
+      }
+    }
   }
   return null;
 }
@@ -499,6 +509,12 @@ function getBoolean(record: Record<string, unknown> | null | undefined, keys: st
 function parseFirstObjectValue(value: unknown) {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, unknown>;
+  }
+  if (Array.isArray(value)) {
+    const objectEntry = value.find((entry) => entry && typeof entry === "object" && !Array.isArray(entry));
+    if (objectEntry) {
+      return objectEntry as Record<string, unknown>;
+    }
   }
   const first = Array.isArray(value) ? value.find((entry) => typeof entry === "string" && entry.trim().length > 0) : value;
   if (typeof first !== "string") {
@@ -510,6 +526,31 @@ function parseFirstObjectValue(value: unknown) {
   } catch {
     return null;
   }
+}
+
+function parseObjectArrayValue(value: unknown) {
+  const rawValues = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
+  const objects: Record<string, unknown>[] = [];
+  for (const rawValue of rawValues) {
+    if (rawValue && typeof rawValue === "object" && !Array.isArray(rawValue)) {
+      objects.push(rawValue as Record<string, unknown>);
+      continue;
+    }
+    if (typeof rawValue !== "string" || rawValue.trim().length === 0) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(rawValue);
+      if (Array.isArray(parsed)) {
+        objects.push(...parsed.filter((entry): entry is Record<string, unknown> => entry && typeof entry === "object" && !Array.isArray(entry)));
+      } else if (parsed && typeof parsed === "object") {
+        objects.push(parsed as Record<string, unknown>);
+      }
+    } catch {
+      // Ignore compact evidence values that are plain strings rather than JSON objects.
+    }
+  }
+  return objects;
 }
 
 function isPromotionCookieCategory(value: string) {
@@ -1096,18 +1137,17 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
   const entities = packet.evidence?.entities ?? {};
   const consentTrackingDetails = packet.details?.family === "consent_tracking" ? packet.details : null;
   const allEvidenceUrls = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])];
+  const requestPurposeClassificationConfidence = parseObjectArrayValue(
+    entities.requestPurposeClassificationConfidence ?? entities.request_purpose_classification_confidence
+  );
   return {
     advertisingSharingRuntimeEvidence: entities.advertisingSharingRuntimeEvidence,
     botBlockChallengeEvidence: packet.concernContext?.negativeEvidenceFlags.includes("blocked_or_interstitial_evidence_observed")
       ? { blocked: true, coverageImpact: "material" }
       : undefined,
-    consentTimeline: (entities.consentTimeline ?? entities.consent_timeline)?.map((value) => {
-      try {
-        return JSON.parse(value) as unknown;
-      } catch {
-        return value;
-      }
-    }),
+    consentActionableChoiceObserved: getBoolean(entities, ["consentActionableChoiceObserved", "consent_actionable_choice_observed"]),
+    consentSurfaceObserved: getBoolean(entities, ["consentSurfaceObserved", "consent_surface_observed"]),
+    consentTimeline: parseFirstObjectValue(entities.consentTimeline ?? entities.consent_timeline),
     disclosureSearchScopeRetained:
       packet.confidenceInputs.hasPolicyTextEvidence &&
       (packet.evidence?.pageUrls?.length || packet.evidence?.sourceUrls?.length || packet.evidence?.snippets?.length)
@@ -1135,13 +1175,7 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
     privacyChoiceControlSearchPerformed: entities.privacyChoiceControlSearchPerformed,
     preconsentCookieCategories: entities.preconsentCookieCategories ?? entities.preconsent_cookie_categories,
     preconsentCookieNames: entities.preconsentCookieNames ?? entities.preconsent_cookie_names,
-    requestPurposeClassificationConfidence: entities.requestPurposeClassificationConfidence?.map((value) => {
-      try {
-        return JSON.parse(value) as unknown;
-      } catch {
-        return value;
-      }
-    }),
+    requestPurposeClassificationConfidence,
     rtb_cookie_sync_evidence: entities.rtb_cookie_sync_evidence?.map((value) => {
       try {
         return JSON.parse(value) as unknown;
