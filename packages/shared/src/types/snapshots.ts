@@ -1013,7 +1013,16 @@ export type CoverageLimitationEvidence = {
 export type SensitiveFieldEvidence = {
   autocomplete: string | null;
   confidence: "strong" | "medium" | "weak";
-  dataType: "ssn" | "government_id" | "health_information" | "financial_information" | "geolocation";
+  dataType:
+    | "email"
+    | "phone"
+    | "password"
+    | "payment_card"
+    | "ssn"
+    | "government_id"
+    | "health_information"
+    | "financial_information"
+    | "geolocation";
   fieldType: string | null;
   formAction: string | null;
   inputId: string | null;
@@ -1033,20 +1042,28 @@ export type SensitivePayloadViolation = {
     | "postal_code_detected"
     | "precise_geolocation_detected"
     | "date_of_birth_detected"
+    | "password_field_detected"
+    | "payment_card_field_detected"
     | "ssn_detected"
     | "insurance_member_id_detected"
     | "health_condition_detected"
     | "full_name_detected"
     | "precise_address_detected";
-  evidenceStrength: "confirmed" | "suspected";
+  evidenceSource?:
+    | "request_payload"
+    | "sensitive_field_session_replay_correlation"
+    | "sensitive_field_third_party_tracking_correlation";
+  evidenceStrength: "confirmed" | "suspected" | "form_field_signal";
   matchSnippet: string;
+  pageUrl?: string | null;
   requestMethod: string;
   requestUrl: string;
   sourceField: string | null;
-  sourceLocation: "request_body" | "url_query";
-  sourcePattern: "generic_pattern" | "keyed_field";
+  sourceLocation: "request_body" | "url_query" | "form_field";
+  sourcePattern: "generic_pattern" | "keyed_field" | "sensitive_field_evidence";
   timestamp: string;
   vendorHost: string | null;
+  vendorName?: string | null;
 };
 
 export type PolicyMention = {
