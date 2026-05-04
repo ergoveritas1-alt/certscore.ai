@@ -69,8 +69,19 @@ jobs:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: |
           set -o pipefail
+          printf 'DATABASE_URL=%s\n' "${DATABASE_URL}" > apps/web/.env.local
           mkdir -p artifacts/finding-calibration
-          pnpm check:production-finding-calibration | tee artifacts/finding-calibration/production-finding-calibration.md
+          set +e
+          pnpm check:production-finding-calibration 2>&1 | tee artifacts/finding-calibration/production-finding-calibration.md
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "${status}" -ne 0 ]; then
+            if grep -Eq "ETIMEDOUT|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH" artifacts/finding-calibration/production-finding-calibration.md; then
+              echo "::notice::Skipping production DB calibration because the live database was unreachable from GitHub Actions."
+              exit 0
+            fi
+            exit "${status}"
+          fi
 
       - name: Upload production finding calibration report
         if: always() && steps.live-db.outputs.enabled == 'true'
