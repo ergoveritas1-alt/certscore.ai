@@ -453,6 +453,11 @@ export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknow
     : typeof timeline?.first_non_essential_request_ms === "number"
       ? timeline.first_non_essential_request_ms
       : null;
+  const firstTrackingCookieSetMs = typeof timeline?.firstTrackingCookieSetMs === "number"
+    ? timeline.firstTrackingCookieSetMs
+    : typeof timeline?.first_tracking_cookie_set_ms === "number"
+      ? timeline.first_tracking_cookie_set_ms
+      : null;
   const firstCmpVisibleMs = typeof timeline?.firstCmpVisibleMs === "number"
     ? timeline.firstCmpVisibleMs
     : typeof timeline?.first_cmp_visible_ms === "number"
@@ -492,12 +497,17 @@ export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknow
       "consentActionableChoiceObserved",
       "consent_actionable_choice_observed"
     ]);
+  const firstPreconsentRuntimeMs = typeof firstNonEssentialRequestMs === "number"
+    ? firstNonEssentialRequestMs
+    : hasPromotionGradePreconsentCookieEvidence(rawEvidence) && typeof firstTrackingCookieSetMs === "number"
+      ? firstTrackingCookieSetMs
+      : null;
   const hasTimelineSequence =
-    typeof firstNonEssentialRequestMs === "number" &&
-    ((typeof firstCmpVisibleMs === "number" && firstNonEssentialRequestMs < firstCmpVisibleMs) ||
-      (typeof firstConsentActionMs === "number" && firstNonEssentialRequestMs < firstConsentActionMs));
+    typeof firstPreconsentRuntimeMs === "number" &&
+    ((typeof firstCmpVisibleMs === "number" && firstPreconsentRuntimeMs < firstCmpVisibleMs) ||
+      (typeof firstConsentActionMs === "number" && firstPreconsentRuntimeMs < firstConsentActionMs));
   const hasNoRecordedChoiceSequence =
-    typeof firstNonEssentialRequestMs === "number" &&
+    typeof firstPreconsentRuntimeMs === "number" &&
     consentSurfaceObserved === true &&
     consentActionableChoiceObserved === true &&
     firstConsentActionMs === null &&
@@ -726,14 +736,21 @@ export function hasStrongCpraCbaOptOutMissingEvidence(rawEvidence: Record<string
   const tier1 = getStringArrayValues(rawEvidence, ["cbaVendorTier1", "cba_vendor_tier1"]);
   const tier2 = getStringArrayValues(rawEvidence, ["cbaVendorTier2", "cba_vendor_tier2"]);
   const optOutUiResult = getStringArrayValues(rawEvidence, ["optOutUiResult", "opt_out_ui_result"])[0] ?? null;
+  const policyCbaLanguage = getStringArrayValues(rawEvidence, ["policyCbaLanguage", "policy_cba_language"])[0] ?? null;
+  const scanOriginGeo = getStringArrayValues(rawEvidence, ["scanOriginGeo", "scan_origin_geo"])[0] ?? null;
   const suppressorApplied = getStringArrayValues(rawEvidence, ["suppressorApplied", "suppressor_applied"])[0] ?? null;
   const vendorThresholdMet = tier1.length >= 1 || tier2.length >= 2;
   const missingOrPartialControl =
     optOutUiResult === "absent" ||
     optOutUiResult === "generic_do_not_sell" ||
     optOutUiResult === "partial_no_icon";
+  const cpraRelevantContext =
+    Boolean(policyCbaLanguage && policyCbaLanguage !== "absent") ||
+    optOutUiResult === "generic_do_not_sell" ||
+    optOutUiResult === "partial_no_icon" ||
+    /\b(?:ca|california)\b/i.test(scanOriginGeo ?? "");
 
-  return vendorThresholdMet && missingOrPartialControl && !suppressorApplied;
+  return vendorThresholdMet && missingOrPartialControl && cpraRelevantContext && !suppressorApplied;
 }
 
 export function hasVerifiedConsentUiEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -883,6 +900,38 @@ export function hasConcreteSensitivePayloadArtifact(rawEvidence: Record<string, 
   });
 }
 
+export function hasConcreteSensitiveSessionReplayArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
+  const rows = Array.isArray(rawEvidence?.sensitivePayloadViolations)
+    ? rawEvidence.sensitivePayloadViolations
+    : Array.isArray(rawEvidence?.sensitive_payload_violations)
+      ? rawEvidence.sensitive_payload_violations
+      : [];
+
+  return rows.some((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return false;
+    }
+
+    const row = entry as {
+      evidenceSource?: unknown;
+      evidenceStrength?: unknown;
+      requestUrl?: unknown;
+      vendorHost?: unknown;
+    };
+    if (row.evidenceStrength === "detector_only") {
+      return false;
+    }
+
+    return (
+      row.evidenceSource === "sensitive_field_session_replay_correlation" &&
+      typeof row.requestUrl === "string" &&
+      row.requestUrl.trim().length > 0 &&
+      typeof row.vendorHost === "string" &&
+      row.vendorHost.trim().length > 0
+    );
+  });
+}
+
 export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
   const rows = Array.isArray(rawEvidence?.sensitivePayloadViolations)
     ? rawEvidence.sensitivePayloadViolations
@@ -896,11 +945,16 @@ export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Reco
     }
 
     const row = entry as {
+      evidenceSource?: unknown;
       evidenceStrength?: unknown;
       requestUrl?: unknown;
       vendorHost?: unknown;
     };
     if (row.evidenceStrength === "detector_only") {
+      return false;
+    }
+
+    if (row.evidenceSource !== "sensitive_field_third_party_tracking_correlation") {
       return false;
     }
 

@@ -277,8 +277,9 @@ type UnifiedFindingsWorkflowEventAppender = (input: {
   scanId: string;
 }) => Promise<unknown>;
 
-export async function deriveUnifiedFindingsWithWorkflowEvents<TFinding>(input: {
+export async function deriveUnifiedFindingsWithWorkflowEvents<TFinding extends { ruleKey?: unknown }>(input: {
   appendEvent?: UnifiedFindingsWorkflowEventAppender;
+  completionMetadata?: (findings: TFinding[]) => Record<string, unknown>;
   deriveFindings: () => TFinding[];
   scanId: string;
 }) {
@@ -286,11 +287,13 @@ export async function deriveUnifiedFindingsWithWorkflowEvents<TFinding>(input: {
 
   try {
     const findings = input.deriveFindings();
+    const extraMetadata = input.completionMetadata?.(findings) ?? {};
 
     await appendEvent({
       eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
       message: "Unified finding derivation completed.",
       metadataJson: {
+        ...extraMetadata,
         findingCount: findings.length,
         stage: "unified_findings"
       },
@@ -1065,6 +1068,19 @@ function hasStrongCookieCategoryDisclosure(input: {
         )
       ))
   );
+}
+
+function shouldApplyCookieCategoryDisclosureSafeHarbor(input: {
+  disclosures: Array<Record<string, unknown>>;
+  flags: string[];
+  mentionTopics?: string[];
+  summaryShort: unknown;
+}) {
+  return input.disclosures.length === 0 && hasStrongCookieCategoryDisclosure(input);
+}
+
+function isObstructedCookiePolicyUrl(value: string | null) {
+  return /(?:captcha|blocked|challenge|interstitial|splashui)/i.test(value ?? "");
 }
 
 function buildPolicyRuntimeFinding(input: {
@@ -3227,6 +3243,7 @@ function deriveCookieRuntimeFindings(input: {
       /cookie settings|third-party cookies|targeting cookies|analytical cookies|measurement\/performance|marketing\/targeting/i.test(
         summaryShort
       ));
+  const sourceUrlObstructed = isObstructedCookiePolicyUrl(pageUrl);
 
   if (runtimeCookies.length === 0) {
     return [];
@@ -3249,12 +3266,13 @@ function deriveCookieRuntimeFindings(input: {
   const findings: Array<ReturnType<typeof buildPolicyRuntimeFinding>> = [];
 
   const structurallyWeak =
+    sourceUrlObstructed ||
     (!hasRichCookieSemantics && disclosures.length === 0) ||
     (semanticConfidence !== null && semanticConfidence < 0.6) ||
     flags.includes("low_confidence") ||
     flags.includes("llm_provider_error");
 
-  if (structurallyWeak && !hasRichCookieSemantics) {
+  if (structurallyWeak && (!hasRichCookieSemantics || sourceUrlObstructed)) {
     findings.push(
       buildPolicyRuntimeFinding({
         description:
@@ -3277,9 +3295,10 @@ function deriveCookieRuntimeFindings(input: {
   }
 
   if (
+    !sourceUrlObstructed &&
     (!structurallyWeak || hasRichCookieSemantics) &&
     unmatched.length > 0 &&
-    !hasStrongCookieCategoryDisclosure({ disclosures, flags, mentionTopics, summaryShort })
+    !shouldApplyCookieCategoryDisclosureSafeHarbor({ disclosures, flags, mentionTopics, summaryShort })
   ) {
     const unmatchedThirdPartyCount = unmatchedObservations.filter((row) => row.thirdParty).length;
     const severity: "high" | "medium" = unmatchedThirdPartyCount > 0 || unmatched.length > 1 ? "high" : "medium";
@@ -3297,12 +3316,20 @@ function deriveCookieRuntimeFindings(input: {
             purpose: row.purpose,
             snippetHash: row.snippetHash
           })),
+          disclosureMismatchExplained: true,
+          disclosureSearchScopeRetained: true,
           policy_category_disclosure_present: hasStrongCookieCategoryDisclosure({
             disclosures,
             flags,
             mentionTopics,
             summaryShort
           }),
+          policyExtractionStatus: "fetched",
+          policySourceUrl: pageUrl,
+          mismatchExplanation:
+            "Runtime cookies were observed, but one or more non-essential runtime cookies could not be matched to retained cookie-policy disclosure rows or category disclosures.",
+          negativeDisclosureSearchPerformed: true,
+          observedBehavior: `Runtime observed unmatched cookies: ${unmatched.slice(0, 8).join(", ")}.`,
           matching_methods: matched.map((row) => ({
             cookieName: row.cookieName,
             matchedCookieName: row.disclosure.cookieName,
@@ -3323,6 +3350,171 @@ function deriveCookieRuntimeFindings(input: {
   }
 
   return findings;
+}
+
+export function deriveCookieDisclosureGapDiagnostic(
+  input: {
+    policySemanticRows: Array<Record<string, unknown>>;
+    runtimeArtifacts: Record<string, unknown> | null;
+  },
+  findings: Array<{ ruleKey?: unknown }> = []
+) {
+  const cookiePolicyEnrichment =
+    input.policySemanticRows.find((row) => (row.page_type ?? row.pageType) === "cookie_policy") ?? null;
+  const emitted = findings.some((finding) => finding.ruleKey === "cookie_runtime.disclosure_gap");
+
+  if (!cookiePolicyEnrichment) {
+    return {
+      emitted,
+      reason: "no_cookie_policy"
+    };
+  }
+
+  const pageUrl = typeof cookiePolicyEnrichment.page_url === "string" ? cookiePolicyEnrichment.page_url : null;
+  const hybrid =
+    input.runtimeArtifacts &&
+    typeof input.runtimeArtifacts.hybrid_runtime_evidence === "object" &&
+    input.runtimeArtifacts.hybrid_runtime_evidence !== null &&
+    !Array.isArray(input.runtimeArtifacts.hybrid_runtime_evidence)
+      ? (input.runtimeArtifacts.hybrid_runtime_evidence as Record<string, unknown>)
+      : null;
+  const cookieWriteObservations =
+    hybrid && Array.isArray(hybrid.cookieWriteObservations)
+      ? hybrid.cookieWriteObservations.filter(
+          (value): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
+        )
+      : [];
+  const observedRuntimeCookies = cookieWriteObservations.length > 0
+    ? cookieWriteObservations
+        .map((row) => ({
+          cookieName: typeof row.cookieName === "string" ? row.cookieName : null,
+          thirdParty: row.thirdParty === true
+        }))
+        .filter((row): row is { cookieName: string; thirdParty: boolean } => typeof row.cookieName === "string")
+    : normalizeCookieTokenList(
+        Array.isArray(input.runtimeArtifacts?.initial_cookie_names)
+          ? (input.runtimeArtifacts.initial_cookie_names as unknown[]).filter((value): value is string => typeof value === "string")
+          : []
+      ).map((cookieName) => ({ cookieName, thirdParty: false }));
+  const runtimeCookies = normalizeCookieTokenList(observedRuntimeCookies.map((row) => row.cookieName));
+  const relevantRuntimeCookies = runtimeCookies.filter((cookieName) => !isInfrastructureRuntimeCookie(cookieName));
+  const ignoredRuntimeCookies = runtimeCookies.filter((cookieName) => isInfrastructureRuntimeCookie(cookieName));
+  const relevantRuntimeCookieObservations = observedRuntimeCookies.filter((row) => !isInfrastructureRuntimeCookie(row.cookieName));
+
+  const disclosures = Array.isArray(cookiePolicyEnrichment.policy_cookie_disclosures)
+    ? ((cookiePolicyEnrichment.policy_cookie_disclosures as unknown[]) ?? []).flatMap((value) => {
+        if (typeof value !== "object" || value === null) {
+          return [];
+        }
+
+        const record = value as Record<string, unknown>;
+        const vendor = typeof record.vendor === "string" ? record.vendor : typeof record.provider === "string" ? record.provider : null;
+        const cookieType = typeof record.cookie_type === "string" ? record.cookie_type : null;
+        const cookieNames = Array.isArray(record.cookies)
+          ? record.cookies.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+          : [];
+
+        if (cookieNames.length > 0) {
+          return cookieNames.map((cookieName) => ({
+            confidence: typeof record.confidence === "number" ? record.confidence : 0.65,
+            cookieName,
+            duration: typeof record.duration === "string" ? record.duration : null,
+            provider: vendor,
+            purpose: cookieType,
+            snippetHash:
+              typeof record.snippet_hash === "string"
+                ? record.snippet_hash
+                : typeof record.snippetHash === "string"
+                  ? record.snippetHash
+                  : vendor && cookieName
+                    ? `${vendor}:${cookieName}`
+                    : cookieName
+          } satisfies CookieDisclosureRow));
+        }
+
+        return [
+          {
+            confidence: typeof record.confidence === "number" ? record.confidence : 0,
+            cookieName: typeof record.cookie_name === "string" ? record.cookie_name : typeof record.cookieName === "string" ? record.cookieName : null,
+            duration: typeof record.duration === "string" ? record.duration : null,
+            provider: typeof record.provider === "string" ? record.provider : null,
+            purpose: typeof record.purpose === "string" ? record.purpose : null,
+            snippetHash: typeof record.snippet_hash === "string" ? record.snippet_hash : typeof record.snippetHash === "string" ? record.snippetHash : null
+          } satisfies CookieDisclosureRow
+        ];
+      })
+    : [];
+  const flags = Array.isArray(cookiePolicyEnrichment.policy_actionable_flags)
+    ? cookiePolicyEnrichment.policy_actionable_flags.filter((value): value is string => typeof value === "string")
+    : [];
+  const mentionTopics = getPolicyMentionTopics(cookiePolicyEnrichment);
+  const semanticConfidence =
+    typeof cookiePolicyEnrichment.policy_semantic_confidence === "number" &&
+    Number.isFinite(cookiePolicyEnrichment.policy_semantic_confidence)
+      ? cookiePolicyEnrichment.policy_semantic_confidence
+      : null;
+  const summaryShort = cookiePolicyEnrichment.policy_summary_short ?? null;
+  const hasRichCookieSemantics =
+    disclosures.length > 0 ||
+    mentionTopics.length >= 2 ||
+    (typeof summaryShort === "string" &&
+      /cookie settings|third-party cookies|targeting cookies|analytical cookies|measurement\/performance|marketing\/targeting/i.test(
+        summaryShort
+      ));
+  const sourceUrlObstructed = isObstructedCookiePolicyUrl(pageUrl);
+  const structurallyWeak =
+    sourceUrlObstructed ||
+    (!hasRichCookieSemantics && disclosures.length === 0) ||
+    (semanticConfidence !== null && semanticConfidence < 0.6) ||
+    flags.includes("low_confidence") ||
+    flags.includes("llm_provider_error");
+  const matched = relevantRuntimeCookies.flatMap((cookieName) => {
+    const match = matchRuntimeCookie({ cookieName, disclosures });
+    return match ? [{ cookieName, ...match }] : [];
+  });
+  const unmatched = relevantRuntimeCookies.filter((cookieName) => !matched.some((entry) => entry.cookieName === cookieName));
+  const unmatchedThirdPartyCount = relevantRuntimeCookieObservations.filter((row) =>
+    unmatched.includes(normalizeCookieName(row.cookieName) ?? "") && row.thirdParty
+  ).length;
+  const categoryDisclosurePresent = hasStrongCookieCategoryDisclosure({ disclosures, flags, mentionTopics, summaryShort });
+  const categoryDisclosureSafeHarbor = shouldApplyCookieCategoryDisclosureSafeHarbor({
+    disclosures,
+    flags,
+    mentionTopics,
+    summaryShort
+  });
+  const reason = emitted
+    ? "emitted"
+    : runtimeCookies.length === 0
+      ? "no_runtime_cookies"
+      : relevantRuntimeCookies.length === 0
+        ? "only_ignored_runtime_cookies"
+        : sourceUrlObstructed
+            ? "policy_structure_obstructed"
+            : categoryDisclosureSafeHarbor
+              ? "strong_category_disclosure"
+              : structurallyWeak && !hasRichCookieSemantics
+                ? "policy_structure_obstructed"
+                : unmatched.length === 0
+                  ? "all_runtime_cookies_disclosed"
+                  : "eligible_not_emitted";
+
+  return {
+    categoryDisclosurePresent,
+    disclosedCookieRowCount: disclosures.length,
+    emitted,
+    ignoredRuntimeCookieCount: ignoredRuntimeCookies.length,
+    policyExtractionStatus: "fetched",
+    policySemanticConfidence: semanticConfidence,
+    policySourceUrl: pageUrl,
+    reason,
+    relevantRuntimeCookieCount: relevantRuntimeCookies.length,
+    runtimeCookieCount: runtimeCookies.length,
+    structurallyWeak,
+    unmatchedCookieCount: unmatched.length,
+    unmatchedCookieNames: unmatched.slice(0, 8),
+    unmatchedThirdPartyCookieCount: unmatchedThirdPartyCount
+  };
 }
 
 function buildRuntimePrivacyFinding(input: {
@@ -6216,6 +6408,16 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       scanId
     }).catch(() => undefined);
     await deriveUnifiedFindingsWithWorkflowEvents({
+      completionMetadata: (findings) => ({
+        cookieDisclosureGapDiagnostic: deriveCookieDisclosureGapDiagnostic(
+          {
+            policySemanticRows:
+              refreshedArtifacts.policySemanticRows ?? refreshedArtifacts.policySemanticInputs ?? refreshedArtifacts.policyEnrichments ?? [],
+            runtimeArtifacts: refreshedArtifacts.runtimeArtifacts
+          },
+          findings
+        )
+      }),
       deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
       scanId
     });
@@ -6372,6 +6574,16 @@ export async function processValidationRankJob(validationRunId: string) {
       scanId
     }).catch(() => undefined);
     const findings = await deriveUnifiedFindingsWithWorkflowEvents({
+      completionMetadata: (findings) => ({
+        cookieDisclosureGapDiagnostic: deriveCookieDisclosureGapDiagnostic(
+          {
+            policySemanticRows:
+              refreshedArtifacts.policySemanticRows ?? refreshedArtifacts.policySemanticInputs ?? refreshedArtifacts.policyEnrichments ?? [],
+            runtimeArtifacts: refreshedArtifacts.runtimeArtifacts
+          },
+          findings
+        )
+      }),
       deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
       scanId
     });

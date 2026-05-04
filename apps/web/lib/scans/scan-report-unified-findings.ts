@@ -140,11 +140,20 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
 }): CanonicalReviewFinding[] {
   const candidates: CanonicalReviewFinding[] = [];
   const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
-  const consentTimeline = getRuntimeObject(input.runtimeArtifacts, ["consentTimeline", "consent_timeline"]);
-  const requestClassifications = getRuntimeObjectArray(input.runtimeArtifacts, [
+  const preconsentEvidenceRecord = preconsentEvidenceQuality as Record<string, unknown> | null;
+  const consentTimeline =
+    getRuntimeObject(input.runtimeArtifacts, ["consentTimeline", "consent_timeline"]) ??
+    getRuntimeObject(preconsentEvidenceRecord, ["consentTimeline", "consent_timeline"]);
+  const directRequestClassifications = getRuntimeObjectArray(input.runtimeArtifacts, [
     "requestPurposeClassificationConfidence",
     "request_purpose_classification_confidence"
   ]);
+  const fallbackRequestClassifications = getRuntimeObjectArray(preconsentEvidenceRecord, [
+    "requestPurposeClassificationConfidence",
+    "request_purpose_classification_confidence"
+  ]);
+  const requestClassifications =
+    directRequestClassifications.length > 0 ? directRequestClassifications : fallbackRequestClassifications;
   const rejectPath = getRuntimeObject(input.runtimeArtifacts, [
     "rejectPathDepthAndAvailability",
     "reject_path_depth_and_availability"
@@ -161,14 +170,24 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   const firstRejectActionMs = getFiniteNumber(consentTimeline?.firstRejectActionMs ?? consentTimeline?.first_reject_action_ms);
   const firstAcceptActionMs = getFiniteNumber(consentTimeline?.firstAcceptActionMs ?? consentTimeline?.first_accept_action_ms);
   const firstUserActionMs = getFiniteNumber(consentTimeline?.firstUserActionMs ?? consentTimeline?.first_user_action_ms);
-  const consentSurfaceObserved = getRuntimeBoolean(input.runtimeArtifacts, [
-    "consentSurfaceObserved",
-    "consent_surface_observed"
-  ]);
-  const consentActionableChoiceObserved = getRuntimeBoolean(input.runtimeArtifacts, [
-    "consentActionableChoiceObserved",
-    "consent_actionable_choice_observed"
-  ]);
+  const consentSurfaceObserved =
+    getRuntimeBoolean(input.runtimeArtifacts, [
+      "consentSurfaceObserved",
+      "consent_surface_observed"
+    ]) ??
+    getRuntimeBoolean(preconsentEvidenceRecord, [
+      "consentSurfaceObserved",
+      "consent_surface_observed"
+    ]);
+  const consentActionableChoiceObserved =
+    getRuntimeBoolean(input.runtimeArtifacts, [
+      "consentActionableChoiceObserved",
+      "consent_actionable_choice_observed"
+    ]) ??
+    getRuntimeBoolean(preconsentEvidenceRecord, [
+      "consentActionableChoiceObserved",
+      "consent_actionable_choice_observed"
+    ]);
   const nonEssentialRequestRows = requestClassifications.filter(
     (row) =>
       row.essentiality === "non_essential" &&
@@ -252,6 +271,42 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       signalSource: "runtime_artifact_signal",
       sourceType: "signal",
       title: "Reject path did not reduce tracking"
+    });
+  }
+
+  const preSubmitTextCaptureRows = getRuntimeObjectArray(input.runtimeArtifacts, [
+    "preSubmitTextCaptureEvidence",
+    "pre_submit_text_capture_evidence"
+  ]);
+  const strongPreSubmitTextCaptureRows = preSubmitTextCaptureRows.filter((row) => {
+    const classification = String(row.destinationClassification ?? row.destination_classification ?? "");
+    const submitObserved = row.submitObserved ?? row.submit_observed;
+    return (
+      submitObserved === false &&
+      (classification === "third_party_tracking_hashed_identifier" ||
+        classification === "third_party_tracking_raw_identifier")
+    );
+  });
+  if (strongPreSubmitTextCaptureRows.length > 0) {
+    candidates.push({
+      categoryId: "sensitive_data_runtime_exposure",
+      description: "A retained runtime probe observed typed text in a third-party tracking request before form submission.",
+      fallbackEvidence: {
+        preSubmitTextCaptureEvidence: strongPreSubmitTextCaptureRows,
+        pre_submit_text_capture_evidence: strongPreSubmitTextCaptureRows,
+        signalKey: "privacy.pre_submit_text_capture_detected",
+        signalLabel: "Pre-submit text capture detected",
+        signalValue: true
+      },
+      id: "runtime-derived-signal-privacy.pre_submit_text_capture_detected",
+      linkedValidationFinding: null,
+      observedValue: `${strongPreSubmitTextCaptureRows.length} pre-submit capture observation(s)`,
+      severity: "high",
+      signalKey: "privacy.pre_submit_text_capture_detected",
+      signalLabel: "Pre-submit text capture detected",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Pre-submit text capture detected"
     });
   }
 

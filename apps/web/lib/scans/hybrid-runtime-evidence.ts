@@ -1204,13 +1204,11 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
         return (
           submitObserved === false &&
           (classification === "third_party_tracking_hashed_identifier" ||
-            classification === "third_party_tracking_raw_identifier")
+          classification === "third_party_tracking_raw_identifier")
         );
       });
     }
-    const explicit =
-      runtimeArtifacts?.pre_submit_text_capture_detected ?? runtimeArtifacts?.preSubmitTextCaptureDetected;
-    return typeof explicit === "boolean" ? explicit : undefined;
+    return undefined;
   }
 
   const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
@@ -1319,6 +1317,22 @@ export function getHybridSignalFallbackEvidence(input: {
   signalLabel: string;
   signalValue: unknown;
 }): Record<string, unknown> | null {
+  if (input.signalKey === "privacy.pre_submit_text_capture_detected") {
+    const rows = getObjectArray(input.runtimeArtifacts?.pre_submit_text_capture_evidence ?? input.runtimeArtifacts?.preSubmitTextCaptureEvidence);
+    if (rows.length === 0) {
+      return null;
+    }
+
+    return {
+      preSubmitTextCaptureEvidence: rows,
+      pre_submit_text_capture_evidence: rows,
+      runtimeEvidenceArtifacts: ["pre_submit_text_capture_evidence"],
+      signalKey: input.signalKey,
+      signalLabel: input.signalLabel,
+      signalValue: input.signalValue
+    };
+  }
+
   const hybrid = getHybridRuntimeEvidence(input.runtimeArtifacts);
   if (!hybrid) {
     return null;
@@ -1343,7 +1357,9 @@ export function getHybridSignalFallbackEvidence(input: {
         isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
       );
       const preconsentCookieEvidence = allPreconsentCookieEvidence.filter(
-        (row) => row.nonEssential && !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
+        (row) =>
+          !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain) &&
+          (row.nonEssential || (row.party === "third_party" && row.category !== "necessary"))
       );
       const preconsentNonEssentialCookies = uniqueStrings(
         preconsentCookieEvidence.filter((row) => row.nonEssential).flatMap((row) => row.cookieName)

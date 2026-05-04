@@ -8,8 +8,10 @@ import {
   normalizeConcernFromPolicyReviewQueue,
   normalizeConcernFromValidationFinding
 } from "./normalized-concerns";
+import { projectExecutiveFindingsFromUnifiedPackets } from "./executive-findings-projection";
+import { evaluateFindingEvidenceContractForPacket, evaluateFindingEvidenceContractForRawEvidence } from "./finding-evidence-contracts";
 import { POLICY_BEHAVIOR_CONFLICT_FIXTURES } from "./policy-behavior-conflict.fixtures";
-import { buildUnifiedFindingPackets, type UnifiedFindingCandidate } from "./unified-findings";
+import { buildUnifiedFindingDisplayPackets, buildUnifiedFindingPackets, type UnifiedFindingCandidate } from "./unified-findings";
 import type { ScanValidationFinding } from "./validation-review-linking";
 
 function makeValidationFinding(
@@ -71,6 +73,102 @@ test("normalizes snapshot signal candidates into eligible concerns", () => {
     "missing_preconsent_sequence_evidence"
   ]);
   assert.ok(concerns[0]?.evidenceStrengthFlags.includes("fallback_only"));
+});
+
+test("retains fingerprinting runtime evidence through normalized concerns into executive projection", () => {
+  const reviewFindingCandidate = {
+    description: "Fingerprinting runtime detected",
+    fallbackEvidence: {
+      fingerprintArtifactRefs: ["scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary"],
+      fingerprintAttributeCategories: ["hardware", "storage"],
+      fingerprintRuntimeEvidence: [
+        {
+          artifactRef: "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary",
+          attributeCategories: ["hardware", "storage"],
+          tier: 2
+        }
+      ],
+      fingerprintRuntimeEvidenceRetained: true,
+      fingerprintSignals: ["hardware", "storage"],
+      fingerprintSummary: {
+        attributeCategories: [
+          { count: 3, firstSeenMs: 120, name: "hardware" },
+          { count: 3, firstSeenMs: 140, name: "storage" }
+        ],
+        confidence: "medium",
+        reasons: ["Observed identifier-like structuring or shaping behavior."],
+        summary: "The page showed multi-signal device and browser data collection consistent with potential fingerprinting.",
+        tier: 2
+      },
+      fingerprintTier: 2,
+      highEntropySignals: ["hardware", "storage"],
+      signalKey: "privacy.fingerprinting_detected",
+      signalValue: true
+    },
+    observedValue: "true",
+    severity: "medium",
+    signalKey: "privacy.fingerprinting_detected",
+    signalLabel: "Fingerprinting runtime detected",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "Fingerprinting runtime detected"
+  } satisfies UnifiedFindingCandidate;
+  const [concern] = buildNormalizedConcerns({
+    reviewFindingCandidates: [reviewFindingCandidate],
+    validationFindings: []
+  });
+  const [candidate] = buildUnifiedFindingCandidatesFromConcerns(concern ? [concern] : []);
+  const candidateFallbackEvidence = candidate?.fallbackEvidence as Record<string, unknown> | undefined;
+  const candidateCounts = candidateFallbackEvidence?.counts as Record<string, unknown> | undefined;
+  const candidateEntities = candidateFallbackEvidence?.entities as Record<string, unknown> | undefined;
+
+  assert.equal(candidateCounts?.fingerprintTier, 2);
+  assert.deepEqual(candidateEntities?.fingerprintAttributeCategories, ["hardware", "storage"]);
+  assert.equal(evaluateFindingEvidenceContractForRawEvidence("fingerprinting_observed", candidateFallbackEvidence)?.status, "pass_strong");
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [reviewFindingCandidate],
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+  const packet = packets.find((entry) => entry.unifiedFindingId === "fingerprinting_observed");
+
+  assert.ok(packet);
+  assert.equal(packet.evidence?.counts?.fingerprintTier, 2);
+  assert.deepEqual(packet.evidence?.entities?.fingerprintAttributeCategories, ["hardware", "storage"]);
+  assert.ok(packet.evidence?.entities?.fingerprintingRuntimeEvidence?.[0]?.includes("\"tier\":2"));
+  assert.equal(evaluateFindingEvidenceContractForPacket(packet)?.status, "pass_strong");
+
+  const projection = projectExecutiveFindingsFromUnifiedPackets(packets);
+  assert.ok(projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
+});
+
+test("fingerprinting evidence stays out of executive projection without retained runtime artifacts", () => {
+  const weakCandidate = {
+    description: "Fingerprinting runtime detected",
+    fallbackEvidence: {
+      signalKey: "privacy.fingerprinting_detected",
+      signalValue: true
+    },
+    observedValue: "true",
+    severity: "medium",
+    signalKey: "privacy.fingerprinting_detected",
+    signalLabel: "Fingerprinting runtime detected",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "Fingerprinting runtime detected"
+  } satisfies UnifiedFindingCandidate;
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [weakCandidate],
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+  const packet = packets.find((entry) => entry.unifiedFindingId === "fingerprinting_observed");
+
+  assert.ok(packet);
+  assert.equal(packet.evidence?.counts?.fingerprintTier, undefined);
+  assert.notEqual(evaluateFindingEvidenceContractForPacket(packet)?.status, "pass_strong");
+  assert.ok(!projectExecutiveFindingsFromUnifiedPackets(packets).findings.some((finding) => finding.id === "probable_fingerprinting"));
 });
 
 test("normalizes evidence-quality preconsent artifact into audit-only concern when timing is ambiguous", () => {
@@ -214,15 +312,17 @@ test("replay validation concerns with disclosure search context and mismatch bri
   assert.ok(concern.evidenceStrengthFlags.includes("direct_runtime"));
 });
 
-test("high-sensitivity candidates with replay artifacts specialize into sensitive replay findings", () => {
+test("high-sensitivity candidates with replay co-occurrence artifacts specialize into sensitive replay findings", () => {
   const concern = normalizeConcernFromReviewFindingCandidate({
     description: "Sensitive input appears to coexist with replay tooling.",
     fallbackEvidence: {
       sensitivePayloadViolations: [
         {
           detectedType: "financial_information",
-          evidenceStrength: "suspected",
-          requestUrl: "https://collector.example.com/submit"
+          evidenceSource: "sensitive_field_session_replay_correlation",
+          evidenceStrength: "form_field_signal",
+          requestUrl: "https://clarity.ms/collect",
+          vendorHost: "clarity.ms"
         }
       ],
       sessionReplayVendorArtifactPresent: true,
@@ -241,6 +341,34 @@ test("high-sensitivity candidates with replay artifacts specialize into sensitiv
   assert.equal(concern.promotionEligibility, "eligible");
 });
 
+test("high-sensitivity candidates with independent replay artifacts stay general sensitive collection", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Sensitive input and replay tooling were observed independently.",
+    fallbackEvidence: {
+      sensitivePayloadViolations: [
+        {
+          detectedType: "financial_information",
+          evidenceStrength: "form_field_signal",
+          matchSnippet: "Bank account",
+          requestUrl: "",
+          sourceField: "bank_account"
+        }
+      ],
+      sessionReplayVendorArtifactPresent: true,
+      session_replay_runtime_artifacts: ["vendor:Microsoft Clarity|host:clarity.ms"]
+    },
+    observedValue: "Yes",
+    severity: "high",
+    signalKey: "commerce.high_sensitivity_data_collection_detected",
+    signalLabel: "High-sensitivity data collection detected",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "High-sensitivity data collection detected"
+  });
+
+  assert.equal(concern.suggestedUnifiedFindingId, "sensitive_collection_surface_observed");
+});
+
 test("high-sensitivity candidates with third-party tracking specialize into sensitive tracking findings", () => {
   const concern = normalizeConcernFromReviewFindingCandidate({
     description: "Sensitive input appears to coexist with third-party tracking.",
@@ -248,6 +376,7 @@ test("high-sensitivity candidates with third-party tracking specialize into sens
       sensitivePayloadViolations: [
         {
           detectedType: "health_information",
+          evidenceSource: "sensitive_field_third_party_tracking_correlation",
           evidenceStrength: "suspected",
           requestUrl: "https://tracker.example.net/collect",
           vendorHost: "tracker.example.net"

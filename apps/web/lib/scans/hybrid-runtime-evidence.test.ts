@@ -411,6 +411,62 @@ test("builds calibrated pre-consent cookie evidence from hybrid cookie writes", 
   ]);
 });
 
+test("retains third-party pre-consent cookie writes when category is unknown", () => {
+  const runtimeArtifacts = {
+    hybrid_runtime_evidence: {
+      cookieWriteObservations: [
+        {
+          beforeConsent: true,
+          cookieName: "visitor_id",
+          cookiePartyType: "third_party",
+          cookieSetMethod: "http_header",
+          domain: ".vendor.example",
+          setAtMs: 75,
+          thirdParty: true
+        },
+        {
+          beforeConsent: true,
+          cookieName: "__cf_bm",
+          cookiePartyType: "third_party",
+          cookieSetMethod: "http_header",
+          domain: ".vendor.example",
+          setAtMs: 40,
+          thirdParty: true
+        }
+      ],
+      networkSummary: {
+        preConsentThirdPartyRequestCount: 0
+      }
+    }
+  } satisfies Record<string, unknown>;
+
+  const fallback = getHybridSignalFallbackEvidence({
+    runtimeArtifacts,
+    signalKey: "privacy.preconsent_tracking_detected",
+    signalLabel: "Pre-consent tracking detected",
+    signalValue: true
+  });
+
+  assert.deepEqual(fallback?.preconsent_cookie_names, ["visitor_id"]);
+  assert.deepEqual(fallback?.preconsent_cookie_excluded_functional_names, ["__cf_bm"]);
+  assert.deepEqual(fallback?.preconsent_cookie_evidence, [
+    {
+      category: "unknown",
+      cookieName: "visitor_id",
+      domain: ".vendor.example",
+      firstObservedAtMs: 75,
+      initiatorDomain: null,
+      initiatorUrl: null,
+      initiatorVendor: null,
+      nonEssential: false,
+      party: "third_party",
+      setAtMs: 75,
+      setMethod: "http_header",
+      timingEvidence: "before_consent_cookie_write"
+    }
+  ]);
+});
+
 test("does not derive consent dark-pattern signals without an observed consent surface", () => {
   const runtimeArtifacts = {
     consentSurfaceObserved: false,

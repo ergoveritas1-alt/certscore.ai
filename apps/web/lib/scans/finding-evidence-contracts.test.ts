@@ -187,7 +187,7 @@ test("WS01-style reject action and post-reject tracking evidence satisfies stron
   assert.equal(decision?.status, "pass_strong");
 });
 
-test("WS01-style reject cookie diff provenance satisfies post-reject review-grade contract", () => {
+test("WS01-style reject cookie diff provenance stays audit-only without post-reject request timing", () => {
   const decision = evaluateFindingEvidenceContractForRawEvidence("reject_did_not_reduce_tracking", {
     consentPostRejectTrackerEvidenceUrls: [
       "https://track.hubspot.com/__ptq.gif",
@@ -208,9 +208,10 @@ test("WS01-style reject cookie diff provenance satisfies post-reject review-grad
     }
   });
 
-  assert.equal(decision?.status, "pass_good");
-  assert.equal(decision?.allowedNarrativeTier, "moderate");
-  assert.equal(decision?.promotionEligibility, "eligible");
+  assert.equal(decision?.status, "downgrade");
+  assert.equal(decision?.allowedNarrativeTier, "weak");
+  assert.equal(decision?.promotionEligibility, "internal_only");
+  assert.ok(decision?.missingRequirements.includes("postRejectTimestampedRuntimeEvidence"));
 });
 
 test("reject hidden requires inspected banner and reject path evidence", () => {
@@ -231,6 +232,31 @@ test("reject hidden requires inspected banner and reject path evidence", () => {
   assert.equal(strongDecision?.status, "pass_strong");
 });
 
+test("dark-pattern consent signals require verified banner UI evidence", () => {
+  const weakDecision = evaluateFindingEvidenceContractForRawEvidence("accept_only_banner", {
+    accept_only_banner: true
+  });
+  const strongDecision = evaluateFindingEvidenceContractForRawEvidence("accept_only_banner", {
+    accept_only_banner: true,
+    consentSurfaceObserved: true,
+    consentUiArtifactRefs: ["hybrid_runtime_evidence"],
+    hybridConsentSummary: {
+      acceptPresent: true,
+      bannerPresent: true,
+      managePresent: false,
+      rejectPresent: false
+    },
+    hybridConsentVisual: {
+      acceptOnly: true
+    },
+    runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"]
+  });
+
+  assert.equal(weakDecision?.status, "downgrade");
+  assert.ok(weakDecision?.missingRequirements.includes("materialChoiceAsymmetryEvidence"));
+  assert.equal(strongDecision?.status, "pass_strong");
+});
+
 test("cookie disclosure gap without policy anchor is not promoted", () => {
   const decision = evaluateFindingEvidenceContractForRawEvidence("cookie_disclosure_gap", {
     runtime_cookie_names: ["_ga"],
@@ -239,6 +265,21 @@ test("cookie disclosure gap without policy anchor is not promoted", () => {
 
   assert.equal(decision?.status, "downgrade");
   assert.ok(decision?.missingRequirements.includes("policyAnchor"));
+});
+
+test("cookie disclosure gap without mismatch bridge stays audit-only", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("cookie_disclosure_gap", {
+    disclosureSearchScopeRetained: true,
+    policyExtractionStatus: "fetched",
+    policySourceUrl: "https://example.com/cookie-policy",
+    runtime_cookie_categories: ["advertising"],
+    runtime_cookie_names: ["_fbp"],
+    unmatched_cookie_names: ["_fbp"]
+  });
+
+  assert.equal(decision?.status, "downgrade");
+  assert.equal(decision?.promotionEligibility, "internal_only");
+  assert.ok(decision?.missingRequirements.includes("conflictBridge"));
 });
 
 test("cookie disclosure gap suppressIf blocks ignored runtime cookie inventory", () => {
@@ -334,10 +375,37 @@ test("new runtime contracts require concrete retained evidence shapes", () => {
       cpra_cba_opt_out_evidence: {
         advertisingSharingVendors: ["Meta Pixel"],
         choice_controls_inspected: true,
-        opt_out_control_found: false
+        opt_out_control_found: false,
+        policy_cba_language: "full_cba_language"
       }
     })?.status,
     "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
+      cbaVendorTier1: ["adsrvr.org"],
+      cbaVendorTier2: [],
+      optOutUiResult: "absent",
+      policyCbaLanguage: "full_cba_language",
+      suppressorApplied: null,
+      limitation: "homepage_only"
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
+      cpra_cba_opt_out_evidence: {
+        advertisingSharingVendors: ["Meta Pixel"],
+        choice_controls_inspected: true,
+        opt_out_control_found: false,
+        opt_out_ui_result: "absent",
+        policy_cba_language: "absent",
+        scan_origin_geo: null
+      }
+    })?.externalSurfacingEligibility,
+    "audit_only"
   );
 });
 
@@ -361,8 +429,28 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
 
   assert.equal(
     evaluateFindingEvidenceContractForRawEvidence("session_replay_on_sensitive_input_surface", {
-      sensitive_input_surface_evidence: [{ fieldType: "password", pageUrl: "https://example.com/login" }],
-      session_replay_vendors: ["Microsoft Clarity"]
+      sensitivePayloadViolations: [
+        {
+          evidenceSource: "sensitive_field_session_replay_correlation",
+          evidenceStrength: "form_field_signal",
+          requestUrl: "https://clarity.ms/collect",
+          vendorHost: "clarity.ms"
+        }
+      ]
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("sensitive_data_collection_with_third_party_tracking_present", {
+      sensitivePayloadViolations: [
+        {
+          evidenceSource: "sensitive_field_third_party_tracking_correlation",
+          evidenceStrength: "form_field_signal",
+          requestUrl: "https://analytics.example.net/collect",
+          vendorHost: "analytics.example.net"
+        }
+      ]
     })?.status,
     "pass_strong"
   );
@@ -374,6 +462,6 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
       sensitive_data_types: ["health_information"],
       sensitive_input_surface_evidence: [{ fieldType: "health", pageUrl: "https://example.com/intake" }]
     })?.status,
-    "pass_strong"
+    "downgrade"
   );
 });

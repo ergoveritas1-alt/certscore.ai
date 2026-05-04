@@ -328,6 +328,50 @@ function getMappedFindingId(
   return null;
 }
 
+function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPacket) {
+  if (packet.unifiedFindingId !== "preconsent_tracking") {
+    return false;
+  }
+
+  const details = buildPreConsentTrackingEvidenceDetails(packet);
+  const preconsentCookieNames = getEntityValues(packet, /^preconsent_(?:nonessential_)?cookie_names$/i);
+  const preconsentCookieCategories = getEntityValues(packet, /^preconsent_cookie_categories$/i);
+  const preconsentCookieTimingEvidence = getEntityValues(packet, /^preconsent_cookie_timing_evidence$/i);
+  const cookieCount =
+    details?.counts?.preConsentTrackingCookies ??
+    getCountValue(packet, [
+      "preConsentTrackingCookies",
+      "preconsentCookieCount",
+      "preconsent_cookie_before_consent_count",
+      "thirdPartyCookiePreConsentCount"
+    ]) ??
+    getEntityJsonObjects(packet, "preconsent_cookie_evidence").length;
+  const hasNamedPreconsentTrackingCookie =
+    preconsentCookieNames.length > 0 &&
+    preconsentCookieTimingEvidence.includes("before_consent_cookie_write") &&
+    (
+      preconsentCookieCategories.some((category) => /analytics|advertising|marketing|retargeting|session_replay|dmp/i.test(category)) ||
+      (packet.evidence?.entities?.preconsent_nonessential_cookie_names?.length ?? 0) > 0
+    );
+
+  return (
+    (typeof cookieCount === "number" && cookieCount > 0) ||
+    hasNamedPreconsentTrackingCookie ||
+    packet.evidence?.flags?.some((flag) => /third_party_cookie.*pre.?consent|third_party_cookie_set_before_consent/i.test(flag)) === true
+  );
+}
+
+function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof typeof CERT_SCORE_FINDING_REGISTRY> {
+  const primary = getMappedFindingId(packet);
+  const ids = primary ? [primary] : [];
+
+  if (hasThirdPartyCookiePreConsentEvidence(packet) && !ids.includes("third_party_cookie_pre_consent")) {
+    ids.push("third_party_cookie_pre_consent");
+  }
+
+  return ids;
+}
+
 function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: keyof typeof CERT_SCORE_FINDING_REGISTRY) {
   const evidenceDetails = findingId ? buildExecutiveEvidenceDetails(packet, findingId) : null;
 
@@ -406,11 +450,12 @@ const SESSION_REPLAY_VENDOR_PATTERNS: Array<{ label: string; pattern: RegExp }> 
   { label: "Quantum Metric", pattern: /quantum\s+metric|quantummetric\.com/i },
   { label: "Crazy Egg", pattern: /crazy\s*egg|crazyegg\.com/i },
   { label: "Inspectlet", pattern: /inspectlet|inspectlet\.com/i },
-  { label: "Lucky Orange", pattern: /lucky\s+orange|luckyorange\.com/i }
+  { label: "Lucky Orange", pattern: /lucky\s+orange|luckyorange\.com/i },
+  { label: "Glassbox", pattern: /glassbox|glassboxdigital\.io|glassboxcdn\.com/i }
 ];
 
 const SESSION_REPLAY_URL_PATTERN =
-  /clarity\.ms|fullstory\.com|hotjar\.com|qualtrics|siteintercept|logrocket\.com|mouseflow\.com|smartlook\.com|contentsquare\.com|quantummetric\.com|crazyegg\.com|inspectlet\.com|luckyorange\.com/i;
+  /clarity\.ms|fullstory\.com|hotjar\.com|qualtrics|siteintercept|logrocket\.com|mouseflow\.com|smartlook\.com|contentsquare\.com|quantummetric\.com|crazyegg\.com|inspectlet\.com|luckyorange\.com|glassboxdigital\.io|glassboxcdn\.com/i;
 
 function getUrlHostname(value: string | null | undefined) {
   if (!value) {
@@ -706,7 +751,10 @@ function buildPreConsentTrackingEvidenceDetails(
       uniquePreConsentTrackingVendorsObserved:
         getCountValue(packet, ["preConsentTrackingVendors", "total_vendor_count", "preConsentVendorCount"]) ?? vendorDetails.length,
       preConsentTrackingCookies:
-        getCountValue(packet, ["preConsentTrackingCookies", "preconsent_cookie_before_consent_count"]) ?? cookieRows.length,
+        getCountValue(packet, ["preConsentTrackingCookies", "preconsent_cookie_before_consent_count"]) ??
+        (cookieRows.length > 0
+          ? cookieRows.length
+          : getEntityValues(packet, /^preconsent_(?:nonessential_)?cookie_names$/i).length),
       identifierLikeRequests: identifierLikeRequestCount
     },
     requestSelectionNote: "Representative requests are capped examples and are not exhaustive.",
@@ -1809,6 +1857,11 @@ export type ExecutiveFindingsProjection = {
   };
 };
 
+type ExecutiveProjectionPacketRow = {
+  findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY | null;
+  packet: UnifiedFindingDisplayPacket;
+};
+
 export function projectExecutiveFindingsFromUnifiedPackets(
   packets: UnifiedFindingDisplayPacket[]
 ): ExecutiveFindingsProjection {
@@ -1816,10 +1869,15 @@ export function projectExecutiveFindingsFromUnifiedPackets(
     packet.presentationDecision.status === "surface" &&
     isFindingProjectionEligible({ lane: "executive", packet })
   );
-  const mappedPacketRows = surfacedPackets.map((packet) => ({
-    packet,
-    findingId: getMappedFindingId(packet)
-  }));
+  const mappedPacketRows: ExecutiveProjectionPacketRow[] = [];
+  for (const packet of surfacedPackets) {
+    const findingIds = getMappedFindingIds(packet);
+    if (findingIds.length > 0) {
+      mappedPacketRows.push(...findingIds.map((findingId) => ({ packet, findingId })));
+    } else {
+      mappedPacketRows.push({ packet, findingId: null });
+    }
+  }
   const findings = dedupeExecutiveFindings(
     mappedPacketRows.flatMap(({ packet, findingId }) => (findingId ? [buildExecutiveFinding(packet, findingId)] : []))
   );

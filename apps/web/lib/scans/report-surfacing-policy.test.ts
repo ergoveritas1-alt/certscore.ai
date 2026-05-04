@@ -1260,6 +1260,7 @@ test("cookie disclosure gaps confirm only with promotion-grade runtime inventory
           counts: {
             unmatched_third_party_cookie_count: 3
           },
+          flags: ["disclosureMismatchExplained", "negativeDisclosureSearchPerformed"],
           entities: {
             runtime_cookie_names: ["_ga", "_fbp", "li_sugr"],
             unmatched_cookie_names: ["_fbp", "li_sugr"]
@@ -1283,6 +1284,7 @@ test("cookie disclosure gaps confirm only with promotion-grade runtime inventory
           counts: {
             unmatched_third_party_cookie_count: 0
           },
+          flags: ["disclosureMismatchExplained", "negativeDisclosureSearchPerformed"],
           entities: {
             runtime_cookie_names: ["xsrf-token", "laravel_session", "__cf_bm"],
             unmatched_cookie_names: ["xsrf-token", "laravel_session", "__cf_bm"]
@@ -1306,6 +1308,7 @@ test("cookie disclosure gaps confirm only with promotion-grade runtime inventory
           counts: {
             unmatched_third_party_cookie_count: 5
           },
+          flags: ["disclosureMismatchExplained", "negativeDisclosureSearchPerformed"],
           entities: {
             runtime_cookie_names: ["_fbp", "ttclid"],
             unmatched_cookie_names: ["_fbp", "ttclid"]
@@ -1329,6 +1332,7 @@ test("cookie disclosure gaps confirm only with promotion-grade runtime inventory
             unmatched_third_party_cookie_count: 0,
             unmatchedCookieCount: 2
           },
+          flags: ["disclosureMismatchExplained", "negativeDisclosureSearchPerformed"],
           entities: {
             runtime_cookie_names: ["_fbp", "_gcl_au"],
             unmatched_cookie_names: ["_fbp", "_gcl_au"]
@@ -1359,6 +1363,7 @@ test("cookie disclosure gaps confirm only with promotion-grade runtime inventory
           counts: {
             unmatched_third_party_cookie_count: 3
           },
+          flags: ["disclosureMismatchExplained", "negativeDisclosureSearchPerformed"],
           entities: {
             runtime_cookie_names: ["_ga", "_fbp", "li_sugr"],
             unmatched_cookie_names: ["_fbp", "li_sugr"]

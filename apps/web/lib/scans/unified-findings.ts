@@ -1810,6 +1810,13 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     .filter((snippet): snippet is string => typeof snippet === "string" && !/^topic:[a-z0-9_:-]+$/i.test(snippet));
 
   const counts: Record<string, number> = {};
+  if (normalizedFallbackEvidence.counts && typeof normalizedFallbackEvidence.counts === "object" && !Array.isArray(normalizedFallbackEvidence.counts)) {
+    for (const [key, value] of Object.entries(normalizedFallbackEvidence.counts as Record<string, unknown>)) {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        counts[key] = value;
+      }
+    }
+  }
   for (const key of [
     "consentFrictionDelta",
     "consentOptInClicks",
@@ -1830,6 +1837,7 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     "firstRequestMs",
     "firstThirdPartyRequestMs",
     "firstCookieSeenMs",
+    "fingerprintTier",
     "cmpVisibleMs",
     "firstPostRejectMs",
     "count"
@@ -1890,6 +1898,16 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   }
 
   const entities: Record<string, string[]> = {};
+  if (normalizedFallbackEvidence.entities && typeof normalizedFallbackEvidence.entities === "object" && !Array.isArray(normalizedFallbackEvidence.entities)) {
+    for (const [key, value] of Object.entries(normalizedFallbackEvidence.entities as Record<string, unknown>)) {
+      if (Array.isArray(value)) {
+        const stringValues = uniqueStrings(value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0));
+        if (stringValues.length > 0) {
+          entities[key] = stringValues;
+        }
+      }
+    }
+  }
   if (Array.isArray(normalizedFallbackEvidence.keyPageAttemptedUrls)) {
     entities.attemptedUrls = uniqueStrings(normalizedFallbackEvidence.keyPageAttemptedUrls as string[]);
   }
@@ -1959,6 +1977,50 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   }
   if (Array.isArray(normalizedFallbackEvidence.metaPixelRuntimePhases)) {
     entities.metaPixelRuntimePhases = uniqueStrings(normalizedFallbackEvidence.metaPixelRuntimePhases as string[]);
+  }
+  if (Array.isArray(normalizedFallbackEvidence.fingerprintAttributeCategories)) {
+    entities.fingerprintAttributeCategories = uniqueStrings([
+      ...(entities.fingerprintAttributeCategories ?? []),
+      ...(normalizedFallbackEvidence.fingerprintAttributeCategories as string[])
+    ]);
+  }
+  if (Array.isArray(normalizedFallbackEvidence.fingerprintingSignals)) {
+    entities.fingerprintingSignals = uniqueStrings([
+      ...(entities.fingerprintingSignals ?? []),
+      ...(normalizedFallbackEvidence.fingerprintingSignals as string[])
+    ]);
+  }
+  if (Array.isArray(normalizedFallbackEvidence.highEntropySignals)) {
+    entities.fingerprintingSignals = uniqueStrings([
+      ...(entities.fingerprintingSignals ?? []),
+      ...(normalizedFallbackEvidence.highEntropySignals as string[])
+    ]);
+  }
+  const fingerprintRuntimeEvidenceRows = Array.isArray(normalizedFallbackEvidence.fingerprintRuntimeEvidence)
+    ? normalizedFallbackEvidence.fingerprintRuntimeEvidence
+    : Array.isArray(normalizedFallbackEvidence.fingerprintingRuntimeEvidence)
+      ? normalizedFallbackEvidence.fingerprintingRuntimeEvidence
+      : [];
+  if (fingerprintRuntimeEvidenceRows.length > 0) {
+    entities.fingerprintingRuntimeEvidence = uniqueStrings([
+      ...(entities.fingerprintingRuntimeEvidence ?? []),
+      ...fingerprintRuntimeEvidenceRows.flatMap((entry) => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+          return [];
+        }
+        try {
+          return [JSON.stringify(entry)];
+        } catch {
+          return [];
+        }
+      })
+    ]);
+  }
+  if (Array.isArray(normalizedFallbackEvidence.fingerprintArtifactRefs)) {
+    entities.fingerprintArtifactRefs = uniqueStrings([
+      ...(entities.fingerprintArtifactRefs ?? []),
+      ...(normalizedFallbackEvidence.fingerprintArtifactRefs as string[])
+    ]);
   }
   const sensitivePayloadRequestUrls = uniqueStrings(
     sensitivePayloadViolations.map((row) => (typeof row.requestUrl === "string" ? row.requestUrl : null))

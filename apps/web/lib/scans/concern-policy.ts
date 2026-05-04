@@ -24,6 +24,7 @@ import {
   hasConcreteReplayArtifact,
   hasConcreteRetargetingArtifact,
   hasConcreteSensitivePayloadArtifact,
+  hasConcreteSensitiveSessionReplayArtifact,
   hasConcreteSensitiveThirdPartyTrackingArtifact,
   hasPreconsentSequenceEvidence,
   hasStrongAccessibilitySupportPathMissingEvidence,
@@ -908,16 +909,6 @@ function getPreSubmitTextCaptureEvidenceRows(rawEvidence: Record<string, unknown
 }
 
 function hasStrongPreSubmitTextCaptureEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
-  if (
-    rawEvidence?.signalKey === "privacy.pre_submit_text_capture_detected" &&
-    Array.isArray(rawEvidence.signalValue) &&
-    rawEvidence.signalValue.some(
-      (value) => typeof value === "string" && /third_party_tracking_(?:hashed|raw)_identifier/.test(value)
-    )
-  ) {
-    return true;
-  }
-
   return getPreSubmitTextCaptureEvidenceRows(rawEvidence).some((row) => {
     const classification = String(row.destinationClassification ?? row.destination_classification ?? "");
     const submitObserved = row.submitObserved ?? row.submit_observed;
@@ -2050,7 +2041,7 @@ export function deriveConcernPolicy(input: {
 
   if (
     isSensitiveReplayConcern(input.concern) &&
-    !hasConcreteSensitivePayloadArtifact(input.rawEvidence)
+    !hasConcreteSensitiveSessionReplayArtifact(input.rawEvidence)
   ) {
     return {
       allowedNarrativeTier: "weak",
@@ -2061,11 +2052,7 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isSensitiveThirdPartyTrackingConcern(input.concern)) {
-    const hasSensitiveContextTrackingEvidence =
-      input.rawEvidence?.sensitive_context_tracking_detected === true ||
-      input.rawEvidence?.sensitiveContextTrackingDetected === true;
-
-    if (!hasConcreteSensitivePayloadArtifact(input.rawEvidence) && !hasSensitiveContextTrackingEvidence) {
+    if (!hasConcreteSensitivePayloadArtifact(input.rawEvidence)) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
@@ -2074,7 +2061,7 @@ export function deriveConcernPolicy(input: {
       };
     }
 
-    if (!hasConcreteSensitiveThirdPartyTrackingArtifact(input.rawEvidence) && !hasSensitiveContextTrackingEvidence) {
+    if (!hasConcreteSensitiveThirdPartyTrackingArtifact(input.rawEvidence)) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
@@ -2202,9 +2189,8 @@ export function deriveConcernPolicy(input: {
 
   if (isRejectTrackingPersistenceConcern(input.concern)) {
     const hasConfirmedTiming = hasConfirmedRejectTimingEvidence(input.rawEvidence);
-    const hasStrongVendorEvidence = hasStrongPostRejectTrackerVendorEvidence(input.rawEvidence);
 
-    if (!hasConfirmedTiming && !hasStrongVendorEvidence) {
+    if (!hasConfirmedTiming) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
@@ -2214,7 +2200,7 @@ export function deriveConcernPolicy(input: {
     }
 
     return {
-      allowedNarrativeTier: hasConfirmedTiming ? "strong" : "moderate",
+      allowedNarrativeTier: "strong",
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "eligible"
@@ -2794,7 +2780,7 @@ export function deriveConcernPolicy(input: {
     }
 
     return {
-      allowedNarrativeTier: "moderate",
+      allowedNarrativeTier: findingEvidenceContractDecision?.allowedNarrativeTier ?? "moderate",
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "eligible"

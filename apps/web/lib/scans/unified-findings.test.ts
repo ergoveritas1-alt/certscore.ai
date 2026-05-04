@@ -1440,10 +1440,11 @@ test("specializes high-sensitivity replay evidence into a sensitive replay packe
           sensitivePayloadViolations: [
             {
               detectedType: "financial_information",
-              evidenceStrength: "suspected",
+              evidenceSource: "sensitive_field_session_replay_correlation",
+              evidenceStrength: "form_field_signal",
               matchSnippet: "accountNumber=***1234",
-              requestUrl: "https://collector.example.com/submit",
-              vendorHost: "collector.example.com"
+              requestUrl: "https://clarity.ms/collect",
+              vendorHost: "clarity.ms"
             }
           ],
           sessionReplayVendorArtifactPresent: true,
@@ -1469,8 +1470,8 @@ test("specializes high-sensitivity replay evidence into a sensitive replay packe
   assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
   assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
   assert.ok(packet?.evidence?.snippets?.includes("accountNumber=***1234"));
-  assert.deepEqual(packet?.evidence?.entities?.request_domains, ["collector.example.com"]);
-  assert.deepEqual(packet?.evidence?.entities?.request_urls, ["https://collector.example.com/submit"]);
+  assert.deepEqual(packet?.evidence?.entities?.request_domains, ["clarity.ms"]);
+  assert.deepEqual(packet?.evidence?.entities?.request_urls, ["https://clarity.ms/collect"]);
 });
 
 test("surfaces direct session replay observation when runtime vendor provenance is retained", () => {
@@ -1515,6 +1516,7 @@ test("specializes high-sensitivity third-party tracking evidence into a sensitiv
           sensitivePayloadViolations: [
             {
               detectedType: "health_information",
+              evidenceSource: "sensitive_field_third_party_tracking_correlation",
               evidenceStrength: "suspected",
               matchSnippet: "condition=asthma",
               requestUrl: "https://tracker.example.net/collect",
@@ -3421,10 +3423,7 @@ test("surfaces CPRA CBA opt-out missing from retained runtime evidence", () => {
           optOutUiResult: "absent",
           pageUrl: "https://example.com/",
           policyCbaLanguage: "full_cba_language",
-          privacyChoiceControlSearchPerformed: true,
           policyUiCongruent: false,
-          runtimeVendorCategories: ["advertising"],
-          runtimeVendors: ["The Trade Desk"],
           scanOriginGeo: null,
           signalKey: "privacy.cpra_cba_opt_out_missing",
           signalValue: true,
@@ -3448,6 +3447,48 @@ test("surfaces CPRA CBA opt-out missing from retained runtime evidence", () => {
   assert.equal(packet?.unifiedFindingId, "cpra_cba_opt_out_missing");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.match(packet?.presentation.suggestedFix ?? "", /Your Privacy Choices/i);
+});
+
+test("keeps CPRA CBA opt-out missing audit-only when retained evidence is adtech-only", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "CBA vendors were observed without a CPRA-specific opt-out control.",
+        fallbackEvidence: {
+          cbaVendorTier1: ["adsrvr.org"],
+          cbaVendorTier2: [],
+          cpraIconDetected: false,
+          findingSeverity: "critical",
+          gpcCbaHonored: false,
+          limitation: "homepage_only",
+          optOutLinkHref: null,
+          optOutLinkText: null,
+          optOutUiResult: "absent",
+          pageUrl: "https://example.com/",
+          policyCbaLanguage: "absent",
+          policyUiCongruent: true,
+          scanOriginGeo: null,
+          signalKey: "privacy.cpra_cba_opt_out_missing",
+          signalValue: true,
+          suppressorApplied: null,
+          unifiedFindingId: "cpra_cba_opt_out_missing"
+        },
+        observedValue: "absent",
+        severity: "high",
+        signalKey: "privacy.cpra_cba_opt_out_missing",
+        signalLabel: "CPRA CBA opt-out missing",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "CPRA CBA opt-out missing"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const packet = packets.find((candidate) => candidate.unifiedFindingId === "cpra_cba_opt_out_missing");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("audit_only"), true);
 });
 
 test("surfaces privacy-rights path present from policy enrichment evidence", () => {
