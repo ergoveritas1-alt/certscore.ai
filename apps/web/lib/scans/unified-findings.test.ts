@@ -1440,10 +1440,11 @@ test("specializes high-sensitivity replay evidence into a sensitive replay packe
           sensitivePayloadViolations: [
             {
               detectedType: "financial_information",
-              evidenceStrength: "suspected",
+              evidenceSource: "sensitive_field_session_replay_correlation",
+              evidenceStrength: "form_field_signal",
               matchSnippet: "accountNumber=***1234",
-              requestUrl: "https://collector.example.com/submit",
-              vendorHost: "collector.example.com"
+              requestUrl: "https://clarity.ms/collect",
+              vendorHost: "clarity.ms"
             }
           ],
           sessionReplayVendorArtifactPresent: true,
@@ -1469,8 +1470,8 @@ test("specializes high-sensitivity replay evidence into a sensitive replay packe
   assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
   assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
   assert.ok(packet?.evidence?.snippets?.includes("accountNumber=***1234"));
-  assert.deepEqual(packet?.evidence?.entities?.request_domains, ["collector.example.com"]);
-  assert.deepEqual(packet?.evidence?.entities?.request_urls, ["https://collector.example.com/submit"]);
+  assert.deepEqual(packet?.evidence?.entities?.request_domains, ["clarity.ms"]);
+  assert.deepEqual(packet?.evidence?.entities?.request_urls, ["https://clarity.ms/collect"]);
 });
 
 test("surfaces direct session replay observation when runtime vendor provenance is retained", () => {
@@ -1515,6 +1516,7 @@ test("specializes high-sensitivity third-party tracking evidence into a sensitiv
           sensitivePayloadViolations: [
             {
               detectedType: "health_information",
+              evidenceSource: "sensitive_field_third_party_tracking_correlation",
               evidenceStrength: "suspected",
               matchSnippet: "condition=asthma",
               requestUrl: "https://tracker.example.net/collect",

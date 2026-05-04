@@ -883,6 +883,38 @@ export function hasConcreteSensitivePayloadArtifact(rawEvidence: Record<string, 
   });
 }
 
+export function hasConcreteSensitiveSessionReplayArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
+  const rows = Array.isArray(rawEvidence?.sensitivePayloadViolations)
+    ? rawEvidence.sensitivePayloadViolations
+    : Array.isArray(rawEvidence?.sensitive_payload_violations)
+      ? rawEvidence.sensitive_payload_violations
+      : [];
+
+  return rows.some((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return false;
+    }
+
+    const row = entry as {
+      evidenceSource?: unknown;
+      evidenceStrength?: unknown;
+      requestUrl?: unknown;
+      vendorHost?: unknown;
+    };
+    if (row.evidenceStrength === "detector_only") {
+      return false;
+    }
+
+    return (
+      row.evidenceSource === "sensitive_field_session_replay_correlation" &&
+      typeof row.requestUrl === "string" &&
+      row.requestUrl.trim().length > 0 &&
+      typeof row.vendorHost === "string" &&
+      row.vendorHost.trim().length > 0
+    );
+  });
+}
+
 export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
   const rows = Array.isArray(rawEvidence?.sensitivePayloadViolations)
     ? rawEvidence.sensitivePayloadViolations
@@ -896,11 +928,16 @@ export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Reco
     }
 
     const row = entry as {
+      evidenceSource?: unknown;
       evidenceStrength?: unknown;
       requestUrl?: unknown;
       vendorHost?: unknown;
     };
     if (row.evidenceStrength === "detector_only") {
+      return false;
+    }
+
+    if (row.evidenceSource !== "sensitive_field_third_party_tracking_correlation") {
       return false;
     }
 

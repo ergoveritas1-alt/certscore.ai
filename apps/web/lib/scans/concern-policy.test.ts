@@ -1402,6 +1402,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       rawEvidence: {
         sensitivePayloadViolations: [
           {
+            evidenceSource: "sensitive_field_third_party_tracking_correlation",
             evidenceStrength: "suspected",
             requestUrl: "https://tracker.example.com/collect",
             vendorHost: "tracker.example.com"
@@ -1488,8 +1489,10 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       rawEvidence: {
         sensitivePayloadViolations: [
           {
-            evidenceStrength: "suspected",
-            requestUrl: "https://collector.example.com/submit"
+            evidenceSource: "sensitive_field_session_replay_correlation",
+            evidenceStrength: "form_field_signal",
+            requestUrl: "https://clarity.ms/collect",
+            vendorHost: "clarity.ms"
           }
         ],
         session_replay_runtime_artifacts: ["vendor:Microsoft Clarity|host:clarity.ms"]
@@ -1499,6 +1502,32 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         promotionEligibility: "eligible",
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "sensitive replay concern with independent sensitive payload stays audit-only",
+      concern: makeConcern({
+        originKey: "commerce.high_sensitivity_data_collection_detected",
+        suggestedUnifiedFindingId: "session_replay_on_sensitive_input_surface",
+        title: "Sensitive replay detected"
+      }),
+      evidenceStrengthFlags: ["direct_runtime", "concrete_payload"] as const,
+      rawEvidence: {
+        sensitivePayloadViolations: [
+          {
+            evidenceStrength: "form_field_signal",
+            matchSnippet: "Bank account",
+            requestUrl: "",
+            sourceField: "bank_account"
+          }
+        ],
+        session_replay_runtime_artifacts: ["vendor:Microsoft Clarity|host:clarity.ms"]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_concrete_sensitive_payload"]
       }
     },
     {

@@ -7,6 +7,8 @@ import {
   hasConcretePreconsentArtifact,
   hasConcreteReplayArtifact,
   hasConcreteRtbCookieSyncEvidence,
+  hasConcreteSensitiveSessionReplayArtifact,
+  hasConcreteSensitiveThirdPartyTrackingArtifact,
   hasPreconsentSequenceEvidence,
   hasStrongFingerprintingEvidence,
   hasStrongPreconsentRuntimeEvidence
@@ -38,6 +40,7 @@ export type EvidenceRequirementType =
   | "fingerprintingRuntimeEvidence"
   | "sensitiveInputSurfaceEvidence"
   | "sensitiveDataFieldEvidence"
+  | "sensitiveSessionReplayCooccurrenceEvidence"
   | "sensitiveThirdPartyTrackingEvidence";
 
 export type EvidenceRequirement = {
@@ -113,7 +116,8 @@ const REQUIREMENT_DESCRIPTIONS: Record<EvidenceRequirementType, string> = {
   fingerprintingRuntimeEvidence: "Runtime evidence identifies high-entropy or fingerprinting-style browser/device signals.",
   sensitiveInputSurfaceEvidence: "A sensitive input or collection surface was retained.",
   sensitiveDataFieldEvidence: "Evidence identifies sensitive field types, payloads, or field labels.",
-  sensitiveThirdPartyTrackingEvidence: "Runtime evidence identifies a third-party tracking endpoint on or near the sensitive collection surface."
+  sensitiveSessionReplayCooccurrenceEvidence: "Observed evidence ties session replay runtime to a sensitive input surface.",
+  sensitiveThirdPartyTrackingEvidence: "Observed evidence ties third-party tracking runtime to a sensitive collection surface."
 };
 
 function req(type: EvidenceRequirementType): EvidenceRequirement {
@@ -396,11 +400,10 @@ export const FINDING_EVIDENCE_CONTRACTS = [
   {
     findingId: "session_replay_on_sensitive_input_surface",
     unifiedFindingIds: ["session_replay_on_sensitive_input_surface"],
-    requiredForStrong: [req("sessionReplayVendorEvidence"), req("sensitiveInputSurfaceEvidence"), req("coverageNotMateriallyBlocked")],
-    requiredForGood: [req("sessionReplayVendorEvidence"), req("sensitiveInputSurfaceEvidence")],
+    requiredForStrong: [req("sensitiveSessionReplayCooccurrenceEvidence"), req("coverageNotMateriallyBlocked")],
+    requiredForGood: [req("sensitiveSessionReplayCooccurrenceEvidence")],
     downgradeIf: [
-      { ifMissing: "sessionReplayVendorEvidence", to: "audit_only", reason: "Sensitive replay findings require concrete replay vendor/runtime evidence." },
-      { ifMissing: "sensitiveInputSurfaceEvidence", to: "audit_only", reason: "Sensitive replay findings require retained sensitive input surface evidence." }
+      { ifMissing: "sensitiveSessionReplayCooccurrenceEvidence", to: "audit_only", reason: "Sensitive replay findings require observed co-occurrence between replay runtime and a sensitive input surface." }
     ],
     suppressIf: [],
     projectionEligibility: {
@@ -409,7 +412,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
-    notes: "Requires replay runtime evidence and sensitive input surface evidence; WC01 owns risk framing."
+    notes: "Requires observed replay runtime and sensitive input surface co-occurrence; WC01 owns risk framing."
   },
   {
     findingId: "sensitive_data_collection_with_third_party_tracking_present",
@@ -418,7 +421,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
     requiredForGood: [req("sensitiveInputSurfaceEvidence"), req("sensitiveThirdPartyTrackingEvidence")],
     downgradeIf: [
       { ifMissing: "sensitiveInputSurfaceEvidence", to: "audit_only", reason: "Sensitive-data tracking findings require retained sensitive input surface evidence." },
-      { ifMissing: "sensitiveThirdPartyTrackingEvidence", to: "audit_only", reason: "Sensitive-data tracking findings require retained third-party runtime evidence." }
+      { ifMissing: "sensitiveThirdPartyTrackingEvidence", to: "audit_only", reason: "Sensitive-data tracking findings require observed co-occurrence between third-party tracking runtime and a sensitive collection surface." }
     ],
     suppressIf: [],
     projectionEligibility: {
@@ -427,7 +430,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
-    notes: "Requires structured sensitive collection evidence plus runtime tracking context, not a legal conclusion."
+    notes: "Requires observed third-party tracking runtime and sensitive collection co-occurrence, not a legal conclusion."
   }
 ] as const satisfies readonly FindingEvidenceContract[];
 
@@ -947,7 +950,7 @@ function hasSensitiveDataFieldEvidence(rawEvidence: Record<string, unknown> | nu
 }
 
 function hasSensitiveThirdPartyTrackingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
-  return hasRuntimeAnchor(rawEvidence);
+  return hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence);
 }
 
 function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Record<string, unknown> | null | undefined) {
@@ -1000,6 +1003,8 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
       return hasSensitiveInputSurfaceEvidence(rawEvidence);
     case "sensitiveDataFieldEvidence":
       return hasSensitiveDataFieldEvidence(rawEvidence);
+    case "sensitiveSessionReplayCooccurrenceEvidence":
+      return hasConcreteSensitiveSessionReplayArtifact(rawEvidence);
     case "sensitiveThirdPartyTrackingEvidence":
       return hasSensitiveThirdPartyTrackingEvidence(rawEvidence);
   }
@@ -1038,6 +1043,7 @@ function downgradeFlag(type: EvidenceRequirementType) {
       return "missing_specific_runtime_anchor";
     case "sensitiveInputSurfaceEvidence":
     case "sensitiveDataFieldEvidence":
+    case "sensitiveSessionReplayCooccurrenceEvidence":
       return "missing_concrete_sensitive_payload";
     case "sensitiveThirdPartyTrackingEvidence":
       return "missing_third_party_tracking_artifact";

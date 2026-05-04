@@ -24,6 +24,7 @@ import {
   hasConcreteReplayArtifact,
   hasConcreteRetargetingArtifact,
   hasConcreteSensitivePayloadArtifact,
+  hasConcreteSensitiveSessionReplayArtifact,
   hasConcreteSensitiveThirdPartyTrackingArtifact,
   hasPreconsentSequenceEvidence,
   hasStrongAccessibilitySupportPathMissingEvidence,
@@ -2050,7 +2051,7 @@ export function deriveConcernPolicy(input: {
 
   if (
     isSensitiveReplayConcern(input.concern) &&
-    !hasConcreteSensitivePayloadArtifact(input.rawEvidence)
+    !hasConcreteSensitiveSessionReplayArtifact(input.rawEvidence)
   ) {
     return {
       allowedNarrativeTier: "weak",
@@ -2061,11 +2062,7 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isSensitiveThirdPartyTrackingConcern(input.concern)) {
-    const hasSensitiveContextTrackingEvidence =
-      input.rawEvidence?.sensitive_context_tracking_detected === true ||
-      input.rawEvidence?.sensitiveContextTrackingDetected === true;
-
-    if (!hasConcreteSensitivePayloadArtifact(input.rawEvidence) && !hasSensitiveContextTrackingEvidence) {
+    if (!hasConcreteSensitivePayloadArtifact(input.rawEvidence)) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
@@ -2074,7 +2071,7 @@ export function deriveConcernPolicy(input: {
       };
     }
 
-    if (!hasConcreteSensitiveThirdPartyTrackingArtifact(input.rawEvidence) && !hasSensitiveContextTrackingEvidence) {
+    if (!hasConcreteSensitiveThirdPartyTrackingArtifact(input.rawEvidence)) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",

@@ -312,15 +312,17 @@ test("replay validation concerns with disclosure search context and mismatch bri
   assert.ok(concern.evidenceStrengthFlags.includes("direct_runtime"));
 });
 
-test("high-sensitivity candidates with replay artifacts specialize into sensitive replay findings", () => {
+test("high-sensitivity candidates with replay co-occurrence artifacts specialize into sensitive replay findings", () => {
   const concern = normalizeConcernFromReviewFindingCandidate({
     description: "Sensitive input appears to coexist with replay tooling.",
     fallbackEvidence: {
       sensitivePayloadViolations: [
         {
           detectedType: "financial_information",
-          evidenceStrength: "suspected",
-          requestUrl: "https://collector.example.com/submit"
+          evidenceSource: "sensitive_field_session_replay_correlation",
+          evidenceStrength: "form_field_signal",
+          requestUrl: "https://clarity.ms/collect",
+          vendorHost: "clarity.ms"
         }
       ],
       sessionReplayVendorArtifactPresent: true,
@@ -339,6 +341,34 @@ test("high-sensitivity candidates with replay artifacts specialize into sensitiv
   assert.equal(concern.promotionEligibility, "eligible");
 });
 
+test("high-sensitivity candidates with independent replay artifacts stay general sensitive collection", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Sensitive input and replay tooling were observed independently.",
+    fallbackEvidence: {
+      sensitivePayloadViolations: [
+        {
+          detectedType: "financial_information",
+          evidenceStrength: "form_field_signal",
+          matchSnippet: "Bank account",
+          requestUrl: "",
+          sourceField: "bank_account"
+        }
+      ],
+      sessionReplayVendorArtifactPresent: true,
+      session_replay_runtime_artifacts: ["vendor:Microsoft Clarity|host:clarity.ms"]
+    },
+    observedValue: "Yes",
+    severity: "high",
+    signalKey: "commerce.high_sensitivity_data_collection_detected",
+    signalLabel: "High-sensitivity data collection detected",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "High-sensitivity data collection detected"
+  });
+
+  assert.equal(concern.suggestedUnifiedFindingId, "sensitive_collection_surface_observed");
+});
+
 test("high-sensitivity candidates with third-party tracking specialize into sensitive tracking findings", () => {
   const concern = normalizeConcernFromReviewFindingCandidate({
     description: "Sensitive input appears to coexist with third-party tracking.",
@@ -346,6 +376,7 @@ test("high-sensitivity candidates with third-party tracking specialize into sens
       sensitivePayloadViolations: [
         {
           detectedType: "health_information",
+          evidenceSource: "sensitive_field_third_party_tracking_correlation",
           evidenceStrength: "suspected",
           requestUrl: "https://tracker.example.net/collect",
           vendorHost: "tracker.example.net"

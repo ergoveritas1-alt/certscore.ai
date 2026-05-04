@@ -376,8 +376,28 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
 
   assert.equal(
     evaluateFindingEvidenceContractForRawEvidence("session_replay_on_sensitive_input_surface", {
-      sensitive_input_surface_evidence: [{ fieldType: "password", pageUrl: "https://example.com/login" }],
-      session_replay_vendors: ["Microsoft Clarity"]
+      sensitivePayloadViolations: [
+        {
+          evidenceSource: "sensitive_field_session_replay_correlation",
+          evidenceStrength: "form_field_signal",
+          requestUrl: "https://clarity.ms/collect",
+          vendorHost: "clarity.ms"
+        }
+      ]
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("sensitive_data_collection_with_third_party_tracking_present", {
+      sensitivePayloadViolations: [
+        {
+          evidenceSource: "sensitive_field_third_party_tracking_correlation",
+          evidenceStrength: "form_field_signal",
+          requestUrl: "https://analytics.example.net/collect",
+          vendorHost: "analytics.example.net"
+        }
+      ]
     })?.status,
     "pass_strong"
   );
@@ -389,6 +409,6 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
       sensitive_data_types: ["health_information"],
       sensitive_input_surface_evidence: [{ fieldType: "health", pageUrl: "https://example.com/intake" }]
     })?.status,
-    "pass_strong"
+    "downgrade"
   );
 });

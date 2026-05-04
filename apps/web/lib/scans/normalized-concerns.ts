@@ -6,9 +6,9 @@ import {
   type ReportSignalSource
 } from "@website-signal-risk-scanner/shared";
 import {
-  hasConcreteReplayArtifact,
   hasConcreteRtbCookieSyncEvidence,
   hasConcreteSensitivePayloadArtifact,
+  hasConcreteSensitiveSessionReplayArtifact,
   hasConcreteSensitiveThirdPartyTrackingArtifact
 } from "./promotion-evidence-contracts";
 import {
@@ -265,14 +265,6 @@ function hasThirdPartyTrackingEvidence(rawEvidence: Record<string, unknown> | nu
     return true;
   }
 
-  if (
-    (rawEvidence.sensitiveContextTrackingDetected === true ||
-      rawEvidence.sensitive_context_tracking_detected === true) &&
-    hasConcretePayloadEvidence(rawEvidence)
-  ) {
-    return true;
-  }
-
   return false;
 }
 
@@ -510,7 +502,7 @@ export function inferSpecializedUnifiedFindingId(input: {
       input.signalKey === "commerce.form_collects_geolocation" ||
       input.signalKey === "commerce.form_collects_ssn")
   ) {
-    if (hasConcreteReplayArtifact(rawEvidence)) {
+    if (hasConcreteSensitiveSessionReplayArtifact(rawEvidence)) {
       return "session_replay_on_sensitive_input_surface";
     }
 
