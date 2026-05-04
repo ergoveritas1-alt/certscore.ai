@@ -794,10 +794,10 @@ function hasMaterialChoiceAsymmetryEvidence(rawEvidence: Record<string, unknown>
     consentSummary?.bannerPresent === true ||
     consentSummary?.banner_present === true;
   const structuredUiFact =
-    rawEvidence.reject_button_missing === true ||
-    rawEvidence.forced_consent_wall === true ||
-    rawEvidence.accept_only_banner === true ||
-    rawEvidence.dismiss_without_reject === true ||
+    rawEvidence?.reject_button_missing === true ||
+    rawEvidence?.forced_consent_wall === true ||
+    rawEvidence?.accept_only_banner === true ||
+    rawEvidence?.dismiss_without_reject === true ||
     consentVisual?.ctaImbalanceDetected === true ||
     consentVisual?.cta_imbalance_detected === true ||
     consentVisual?.acceptOnly === true ||
