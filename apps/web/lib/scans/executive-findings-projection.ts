@@ -450,11 +450,12 @@ const SESSION_REPLAY_VENDOR_PATTERNS: Array<{ label: string; pattern: RegExp }> 
   { label: "Quantum Metric", pattern: /quantum\s+metric|quantummetric\.com/i },
   { label: "Crazy Egg", pattern: /crazy\s*egg|crazyegg\.com/i },
   { label: "Inspectlet", pattern: /inspectlet|inspectlet\.com/i },
-  { label: "Lucky Orange", pattern: /lucky\s+orange|luckyorange\.com/i }
+  { label: "Lucky Orange", pattern: /lucky\s+orange|luckyorange\.com/i },
+  { label: "Glassbox", pattern: /glassbox|glassboxdigital\.io|glassboxcdn\.com/i }
 ];
 
 const SESSION_REPLAY_URL_PATTERN =
-  /clarity\.ms|fullstory\.com|hotjar\.com|qualtrics|siteintercept|logrocket\.com|mouseflow\.com|smartlook\.com|contentsquare\.com|quantummetric\.com|crazyegg\.com|inspectlet\.com|luckyorange\.com/i;
+  /clarity\.ms|fullstory\.com|hotjar\.com|qualtrics|siteintercept|logrocket\.com|mouseflow\.com|smartlook\.com|contentsquare\.com|quantummetric\.com|crazyegg\.com|inspectlet\.com|luckyorange\.com|glassboxdigital\.io|glassboxcdn\.com/i;
 
 function getUrlHostname(value: string | null | undefined) {
   if (!value) {
