@@ -1694,6 +1694,41 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
   }
 });
 
+test("CPRA CBA opt-out concern policy requires CPRA-relevant context", () => {
+  const concern = makeConcern({
+    originKey: "privacy.cpra_cba_opt_out_missing",
+    originType: "snapshot_signal",
+    suggestedUnifiedFindingId: "cpra_cba_opt_out_missing",
+    title: "CPRA CBA opt-out missing"
+  });
+
+  const adtechOnly = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      cbaVendorTier1: ["adsrvr.org"],
+      optOutUiResult: "absent",
+      policyCbaLanguage: "absent",
+      suppressorApplied: null
+    }
+  });
+  assert.equal(adtechOnly.promotionEligibility, "internal_only");
+  assert.equal(adtechOnly.externalSurfacingEligibility, "audit_only");
+
+  const policyContext = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      cbaVendorTier1: ["adsrvr.org"],
+      optOutUiResult: "absent",
+      policyCbaLanguage: "full_cba_language",
+      suppressorApplied: null
+    }
+  });
+  assert.equal(policyContext.promotionEligibility, "eligible");
+  assert.equal(policyContext.externalSurfacingEligibility, "eligible");
+});
+
 test("pre-consent policy requires timeline sequence plus non-essential request classification", () => {
   const concern = makeConcern({
     originKey: "privacy.preconsent_tracking_detected",

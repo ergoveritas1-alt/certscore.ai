@@ -349,10 +349,37 @@ test("new runtime contracts require concrete retained evidence shapes", () => {
       cpra_cba_opt_out_evidence: {
         advertisingSharingVendors: ["Meta Pixel"],
         choice_controls_inspected: true,
-        opt_out_control_found: false
+        opt_out_control_found: false,
+        policy_cba_language: "full_cba_language"
       }
     })?.status,
     "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
+      cbaVendorTier1: ["adsrvr.org"],
+      cbaVendorTier2: [],
+      optOutUiResult: "absent",
+      policyCbaLanguage: "full_cba_language",
+      suppressorApplied: null,
+      limitation: "homepage_only"
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
+      cpra_cba_opt_out_evidence: {
+        advertisingSharingVendors: ["Meta Pixel"],
+        choice_controls_inspected: true,
+        opt_out_control_found: false,
+        opt_out_ui_result: "absent",
+        policy_cba_language: "absent",
+        scan_origin_geo: null
+      }
+    })?.externalSurfacingEligibility,
+    "audit_only"
   );
 });
 

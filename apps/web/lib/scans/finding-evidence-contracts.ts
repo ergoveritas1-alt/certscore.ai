@@ -34,6 +34,7 @@ export type EvidenceRequirementType =
   | "ignoredRuntimeCookieInventoryOnly"
   | "privacyChoiceControlSearchScope"
   | "advertisingSharingRuntimeEvidence"
+  | "cpraRelevantOptOutContext"
   | "crossDomainIdentifierEvidence"
   | "videoContentSurfaceEvidence"
   | "videoTrackingRuntimeEvidence"
@@ -110,6 +111,7 @@ const REQUIREMENT_DESCRIPTIONS: Record<EvidenceRequirementType, string> = {
   ignoredRuntimeCookieInventoryOnly: "Runtime cookie inventory contains only operational cookies ignored by disclosure-gap promotion.",
   privacyChoiceControlSearchScope: "Retained search evidence shows privacy-choice or opt-out controls were inspected.",
   advertisingSharingRuntimeEvidence: "Runtime evidence identifies advertising, retargeting, RTB, or cross-context sharing vendors.",
+  cpraRelevantOptOutContext: "Policy, UI, or scan-origin evidence establishes California/CPRA-relevant opt-out context.",
   crossDomainIdentifierEvidence: "Runtime evidence shows the same identifier-like value across multiple external destinations.",
   videoContentSurfaceEvidence: "A video-content page or media title was retained for the same-page observation.",
   videoTrackingRuntimeEvidence: "Runtime evidence identifies video-page tracking requests or vendors.",
@@ -330,11 +332,21 @@ export const FINDING_EVIDENCE_CONTRACTS = [
   {
     findingId: "cpra_cba_opt_out_missing",
     unifiedFindingIds: ["cpra_cba_opt_out_missing"],
-    requiredForStrong: [req("advertisingSharingRuntimeEvidence"), req("privacyChoiceControlSearchScope"), req("coverageNotMateriallyBlocked")],
-    requiredForGood: [req("advertisingSharingRuntimeEvidence"), req("privacyChoiceControlSearchScope")],
+    requiredForStrong: [
+      req("advertisingSharingRuntimeEvidence"),
+      req("privacyChoiceControlSearchScope"),
+      req("cpraRelevantOptOutContext"),
+      req("coverageNotMateriallyBlocked")
+    ],
+    requiredForGood: [
+      req("advertisingSharingRuntimeEvidence"),
+      req("privacyChoiceControlSearchScope"),
+      req("cpraRelevantOptOutContext")
+    ],
     downgradeIf: [
       { ifMissing: "advertisingSharingRuntimeEvidence", to: "audit_only", reason: "Opt-out missing findings require retained advertising/sharing runtime evidence." },
-      { ifMissing: "privacyChoiceControlSearchScope", to: "audit_only", reason: "Opt-out missing findings require retained evidence that privacy-choice controls were inspected." }
+      { ifMissing: "privacyChoiceControlSearchScope", to: "audit_only", reason: "Opt-out missing findings require retained evidence that privacy-choice controls were inspected." },
+      { ifMissing: "cpraRelevantOptOutContext", to: "audit_only", reason: "CPRA CBA opt-out findings require California/CPRA-relevant opt-out context, not ad-vendor evidence alone." }
     ],
     suppressIf: [],
     projectionEligibility: {
@@ -343,7 +355,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
-    notes: "WC01 may interpret an opt-out gap only after WS01/validation retain advertising/sharing evidence plus control-search scope."
+    notes: "WC01 may interpret an opt-out gap only after WS01/validation retain advertising/sharing evidence, control-search scope, and California/CPRA-relevant context."
   },
   {
     findingId: "cross_domain_identifier_sharing_observed",
@@ -824,13 +836,32 @@ function hasSessionReplayVendorEvidence(rawEvidence: Record<string, unknown> | n
 
 function hasPrivacyChoiceControlSearchScope(rawEvidence: Record<string, unknown> | null | undefined) {
   const cpraEvidence = getObjectValue(rawEvidence, ["cpraCbaOptOutEvidence", "cpra_cba_opt_out_evidence"]);
+  const optOutUiResult = String(
+    cpraEvidence?.optOutUiResult ?? cpraEvidence?.opt_out_ui_result ?? rawEvidence?.optOutUiResult ?? rawEvidence?.opt_out_ui_result ?? ""
+  );
+  const choiceControlSearchScope = String(
+    cpraEvidence?.choiceControlSearchScope ??
+      cpraEvidence?.choice_control_search_scope ??
+      rawEvidence?.choiceControlSearchScope ??
+      rawEvidence?.choice_control_search_scope ??
+      ""
+  );
   return (
     getBoolean(rawEvidence, ["privacyChoiceControlSearchPerformed", "privacy_choice_control_search_performed"]) === true ||
     getStringArrayValues(rawEvidence, ["privacyChoiceSearchUrls", "privacy_choice_search_urls", "searchedPolicyUrls"]).length > 0 ||
     cpraEvidence?.choiceControlsInspected === true ||
     cpraEvidence?.choice_controls_inspected === true ||
     cpraEvidence?.optOutControlFound === false ||
-    cpraEvidence?.opt_out_control_found === false
+    cpraEvidence?.opt_out_control_found === false ||
+    rawEvidence?.choiceControlsInspected === true ||
+    rawEvidence?.choice_controls_inspected === true ||
+    rawEvidence?.optOutControlFound === false ||
+    rawEvidence?.opt_out_control_found === false ||
+    choiceControlSearchScope === "homepage_footer_privacy_surfaces" ||
+    optOutUiResult === "absent" ||
+    optOutUiResult === "generic_do_not_sell" ||
+    optOutUiResult === "partial_no_icon" ||
+    optOutUiResult === "full_cpra_compliant"
   );
 }
 
@@ -842,6 +873,13 @@ function hasAdvertisingSharingRuntimeEvidence(rawEvidence: Record<string, unknow
     "crossDomainIdentifierSharingDestinationCategories"
   ]);
   const vendors = getStringArrayValues(rawEvidence, ["runtimeVendors", "runtime_vendors", "advertisingSharingVendors"]);
+  const cbaVendorTier1 = getStringArrayValues(rawEvidence, ["cbaVendorTier1", "cba_vendor_tier1"]);
+  const cbaVendorTier2 = getStringArrayValues(rawEvidence, ["cbaVendorTier2", "cba_vendor_tier2"]);
+  const cpraAdvertisingSharingVendors = [
+    ...getStringArrayValues(cpraEvidence, ["advertisingSharingVendors", "advertising_sharing_vendors"]),
+    ...getStringArrayValues(cpraEvidence, ["cbaVendorTier1", "cba_vendor_tier1"]),
+    ...getStringArrayValues(cpraEvidence, ["cbaVendorTier2", "cba_vendor_tier2"])
+  ];
   const evidenceRows = getObjectArrayValues(rawEvidence, [
     "advertisingSharingRuntimeEvidence",
     "advertising_sharing_runtime_evidence",
@@ -850,8 +888,29 @@ function hasAdvertisingSharingRuntimeEvidence(rawEvidence: Record<string, unknow
   return (
     categories.some((category) => /advertising|retargeting|rtb|identity|marketing|cross_context/i.test(category)) ||
     vendors.length > 0 ||
+    cbaVendorTier1.length > 0 ||
+    cbaVendorTier2.length > 0 ||
     evidenceRows.length > 0 ||
-    Array.isArray(cpraEvidence?.advertisingSharingVendors) && cpraEvidence.advertisingSharingVendors.length > 0
+    cpraAdvertisingSharingVendors.length > 0
+  );
+}
+
+function hasCpraRelevantOptOutContext(rawEvidence: Record<string, unknown> | null | undefined) {
+  const cpraEvidence = getObjectValue(rawEvidence, ["cpraCbaOptOutEvidence", "cpra_cba_opt_out_evidence"]);
+  const policyCbaLanguage = String(
+    cpraEvidence?.policyCbaLanguage ?? cpraEvidence?.policy_cba_language ?? rawEvidence?.policyCbaLanguage ?? rawEvidence?.policy_cba_language ?? ""
+  );
+  const optOutUiResult = String(
+    cpraEvidence?.optOutUiResult ?? cpraEvidence?.opt_out_ui_result ?? rawEvidence?.optOutUiResult ?? rawEvidence?.opt_out_ui_result ?? ""
+  );
+  const scanOriginGeo = String(
+    cpraEvidence?.scanOriginGeo ?? cpraEvidence?.scan_origin_geo ?? rawEvidence?.scanOriginGeo ?? rawEvidence?.scan_origin_geo ?? ""
+  );
+
+  return (
+    (policyCbaLanguage.length > 0 && policyCbaLanguage !== "absent") ||
+    (optOutUiResult.length > 0 && optOutUiResult !== "absent") ||
+    /\b(?:ca|california)\b/i.test(scanOriginGeo)
   );
 }
 
@@ -991,6 +1050,8 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
       return hasPrivacyChoiceControlSearchScope(rawEvidence);
     case "advertisingSharingRuntimeEvidence":
       return hasAdvertisingSharingRuntimeEvidence(rawEvidence);
+    case "cpraRelevantOptOutContext":
+      return hasCpraRelevantOptOutContext(rawEvidence);
     case "crossDomainIdentifierEvidence":
       return hasCrossDomainIdentifierEvidence(rawEvidence);
     case "videoContentSurfaceEvidence":
@@ -1036,6 +1097,7 @@ function downgradeFlag(type: EvidenceRequirementType) {
     case "privacyChoiceControlSearchScope":
       return "missing_policy_side_evidence";
     case "advertisingSharingRuntimeEvidence":
+    case "cpraRelevantOptOutContext":
     case "crossDomainIdentifierEvidence":
     case "videoTrackingRuntimeEvidence":
     case "fingerprintingRuntimeEvidence":
