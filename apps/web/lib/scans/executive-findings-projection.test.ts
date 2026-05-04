@@ -606,7 +606,7 @@ test("projects confirmed cookie disclosure gaps into executive and privacy regul
           ]
         },
         fetchQuality: null,
-        flags: [],
+        flags: ["disclosureMismatchExplained", "negativeDisclosureSearchPerformed"],
         pageUrls: ["https://example.com/legal/cookie-policy"],
         snippets: ["The retained cookie policy disclosed analytics cookies, but not the observed Meta advertising cookie."],
         sourceUrls: ["https://example.com/legal/cookie-policy"]
@@ -659,7 +659,7 @@ test("keeps confirmed cookie disclosure gaps in top findings alongside higher-ra
           unmatched_cookie_names: ["demdex", "mbox"]
         },
         fetchQuality: null,
-        flags: [],
+        flags: ["disclosureMismatchExplained", "negativeDisclosureSearchPerformed"],
         pageUrls: ["https://example.com/cookie-policy"],
         snippets: ["Runtime cookies were not covered by the retained cookie policy."],
         sourceUrls: ["https://example.com/cookie-policy"]

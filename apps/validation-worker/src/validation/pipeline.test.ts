@@ -6114,6 +6114,12 @@ test("undisclosed runtime cookie triggers cookie disclosure gap", () => {
   const finding = findings.find((item) => item.ruleKey === "cookie_runtime.disclosure_gap");
   assert.ok(finding);
   assert.equal(finding?.findingFamily, "cookie_runtime_review");
+  assert.equal(finding?.evidence.disclosureMismatchExplained, true);
+  assert.equal(finding?.evidence.disclosureSearchScopeRetained, true);
+  assert.equal(finding?.evidence.negativeDisclosureSearchPerformed, true);
+  assert.equal(finding?.evidence.policyExtractionStatus, "fetched");
+  assert.equal(finding?.evidence.policySourceUrl, "https://www.example.com/cookies");
+  assert.match(String(finding?.evidence.mismatchExplanation), /could not be matched/i);
   assert.deepEqual(finding?.evidence.unmatched_cookie_names, ["_ga"]);
   assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.cookie_policy_obstructed"));
 });

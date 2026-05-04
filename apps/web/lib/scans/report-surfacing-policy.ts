@@ -1524,6 +1524,10 @@ function hasCookieDisclosureGapBacking(packet: UnifiedFindingPacket) {
   if (packet.unifiedFindingId !== "cookie_disclosure_gap") {
     return false;
   }
+  const contractDecision = evaluateFindingEvidenceContractForPacket(packet);
+  if (contractDecision?.status !== "pass_strong") {
+    return false;
+  }
 
   if (
     packet.evidence?.fetchQuality === "blocked_interstitial" ||

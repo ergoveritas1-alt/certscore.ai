@@ -269,10 +269,11 @@ export const FINDING_EVIDENCE_CONTRACTS = [
     findingId: "cookie_disclosure_gap",
     unifiedFindingIds: ["cookie_disclosure_gap"],
     requiredForStrong: [req("runtimeAnchor"), req("policyAnchor"), req("negativeEvidenceSearchScope"), req("conflictBridge")],
-    requiredForGood: [req("runtimeAnchor"), req("policyAnchor")],
+    requiredForGood: [req("runtimeAnchor"), req("policyAnchor"), req("negativeEvidenceSearchScope"), req("conflictBridge")],
     downgradeIf: [
       { ifMissing: "policyAnchor", to: "audit_only", reason: "Without a policy/disclosure anchor this is coverage review, not a disclosure gap." },
       { ifMissing: "negativeEvidenceSearchScope", to: "audit_only", reason: "Disclosure gaps require retained negative search scope." },
+      { ifMissing: "conflictBridge", to: "audit_only", reason: "Disclosure gaps require an explicit runtime-to-policy mismatch explanation." },
       { ifMissing: "runtimeAnchor", to: "audit_only", reason: "Disclosure gaps require observed runtime cookie/vendor behavior." }
     ],
     suppressIf: [
@@ -1183,8 +1184,17 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
     fingerprintingSignals: entities.fingerprintingSignals ?? entities.fingerprintAttributeCategories ?? entities.highEntropySignals,
     inputSurfaceUrls: entities.inputSurfaceUrls ?? entities.input_surface_urls,
     metaPixelRequestUrls: entities.metaPixelRequestUrls ?? entities.meta_pixel_request_urls,
-    negativeDisclosureSearchPerformed: packet.concernContext?.evidenceStrengthFlags.includes("policy_text") || undefined,
+    disclosureMismatchExplained: packet.evidence?.flags?.includes("disclosureMismatchExplained") || packet.evidence?.flags?.includes("disclosure_mismatch_explained") || undefined,
+    mismatchExplanation: entities.mismatchExplanation ?? entities.mismatch_explanation,
+    negativeDisclosureSearchPerformed:
+      packet.evidence?.flags?.includes("negativeDisclosureSearchPerformed") ||
+      packet.evidence?.flags?.includes("negative_disclosure_search_performed") ||
+      packet.concernContext?.evidenceStrengthFlags.includes("policy_text") ||
+      undefined,
+    observedBehavior: entities.observedBehavior ?? entities.observed_behavior,
     policyAnchorRetained: packet.confidenceInputs.hasPolicyTextEvidence || undefined,
+    policyExtractionStatus: entities.policyExtractionStatus ?? entities.policy_extraction_status,
+    policySnippet: entities.policySnippet ?? entities.policy_snippet,
     policySourceUrl: allEvidenceUrls.find((url) => /cookie|privacy|legal|policy|notice/i.test(url)),
     consentPostRejectTrackerEvidenceUrls:
       entities.consentPostRejectTrackerEvidenceUrls ?? entities.consent_post_reject_tracker_evidence_urls,

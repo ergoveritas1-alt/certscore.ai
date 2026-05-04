@@ -241,6 +241,21 @@ test("cookie disclosure gap without policy anchor is not promoted", () => {
   assert.ok(decision?.missingRequirements.includes("policyAnchor"));
 });
 
+test("cookie disclosure gap without mismatch bridge stays audit-only", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("cookie_disclosure_gap", {
+    disclosureSearchScopeRetained: true,
+    policyExtractionStatus: "fetched",
+    policySourceUrl: "https://example.com/cookie-policy",
+    runtime_cookie_categories: ["advertising"],
+    runtime_cookie_names: ["_fbp"],
+    unmatched_cookie_names: ["_fbp"]
+  });
+
+  assert.equal(decision?.status, "downgrade");
+  assert.equal(decision?.promotionEligibility, "internal_only");
+  assert.ok(decision?.missingRequirements.includes("conflictBridge"));
+});
+
 test("cookie disclosure gap suppressIf blocks ignored runtime cookie inventory", () => {
   const decision = evaluateFindingEvidenceContractForRawEvidence("cookie_disclosure_gap", {
     disclosureSearchScopeRetained: true,

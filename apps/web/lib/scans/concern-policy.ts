@@ -2794,7 +2794,7 @@ export function deriveConcernPolicy(input: {
     }
 
     return {
-      allowedNarrativeTier: "moderate",
+      allowedNarrativeTier: findingEvidenceContractDecision?.allowedNarrativeTier ?? "moderate",
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "eligible"

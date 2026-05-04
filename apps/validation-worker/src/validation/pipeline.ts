@@ -3297,12 +3297,20 @@ function deriveCookieRuntimeFindings(input: {
             purpose: row.purpose,
             snippetHash: row.snippetHash
           })),
+          disclosureMismatchExplained: true,
+          disclosureSearchScopeRetained: true,
           policy_category_disclosure_present: hasStrongCookieCategoryDisclosure({
             disclosures,
             flags,
             mentionTopics,
             summaryShort
           }),
+          policyExtractionStatus: "fetched",
+          policySourceUrl: pageUrl,
+          mismatchExplanation:
+            "Runtime cookies were observed, but one or more non-essential runtime cookies could not be matched to retained cookie-policy disclosure rows or category disclosures.",
+          negativeDisclosureSearchPerformed: true,
+          observedBehavior: `Runtime observed unmatched cookies: ${unmatched.slice(0, 8).join(", ")}.`,
           matching_methods: matched.map((row) => ({
             cookieName: row.cookieName,
             matchedCookieName: row.disclosure.cookieName,

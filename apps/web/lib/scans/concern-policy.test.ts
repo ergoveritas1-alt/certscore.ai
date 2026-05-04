@@ -2566,8 +2566,10 @@ test("deriveConcernPolicy keeps cookie disclosure gaps eligible for substantive 
     evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
     rawEvidence: {
       ignored_runtime_cookie_names: ["awsalbcors"],
+      disclosureMismatchExplained: true,
       disclosureSearchScopeRetained: true,
       mismatchExplanation: "Observed runtime cookie _fbp was not found in the retained cookie disclosure.",
+      negativeDisclosureSearchPerformed: true,
       observedBehavior: "Runtime set _fbp.",
       policyExtractionStatus: "fetched",
       policySourceUrl: "https://example.com/cookie-policy",
@@ -2578,7 +2580,7 @@ test("deriveConcernPolicy keeps cookie disclosure gaps eligible for substantive 
     }
   });
 
-  assert.equal(policy.allowedNarrativeTier, "moderate");
+  assert.equal(policy.allowedNarrativeTier, "strong");
   assert.equal(policy.promotionEligibility, "eligible");
   assert.equal(policy.externalSurfacingEligibility, "eligible");
 });
