@@ -736,14 +736,21 @@ export function hasStrongCpraCbaOptOutMissingEvidence(rawEvidence: Record<string
   const tier1 = getStringArrayValues(rawEvidence, ["cbaVendorTier1", "cba_vendor_tier1"]);
   const tier2 = getStringArrayValues(rawEvidence, ["cbaVendorTier2", "cba_vendor_tier2"]);
   const optOutUiResult = getStringArrayValues(rawEvidence, ["optOutUiResult", "opt_out_ui_result"])[0] ?? null;
+  const policyCbaLanguage = getStringArrayValues(rawEvidence, ["policyCbaLanguage", "policy_cba_language"])[0] ?? null;
+  const scanOriginGeo = getStringArrayValues(rawEvidence, ["scanOriginGeo", "scan_origin_geo"])[0] ?? null;
   const suppressorApplied = getStringArrayValues(rawEvidence, ["suppressorApplied", "suppressor_applied"])[0] ?? null;
   const vendorThresholdMet = tier1.length >= 1 || tier2.length >= 2;
   const missingOrPartialControl =
     optOutUiResult === "absent" ||
     optOutUiResult === "generic_do_not_sell" ||
     optOutUiResult === "partial_no_icon";
+  const cpraRelevantContext =
+    Boolean(policyCbaLanguage && policyCbaLanguage !== "absent") ||
+    optOutUiResult === "generic_do_not_sell" ||
+    optOutUiResult === "partial_no_icon" ||
+    /\b(?:ca|california)\b/i.test(scanOriginGeo ?? "");
 
-  return vendorThresholdMet && missingOrPartialControl && !suppressorApplied;
+  return vendorThresholdMet && missingOrPartialControl && cpraRelevantContext && !suppressorApplied;
 }
 
 export function hasVerifiedConsentUiEvidence(rawEvidence: Record<string, unknown> | null | undefined) {

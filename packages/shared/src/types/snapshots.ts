@@ -846,7 +846,11 @@ export type CpraCbaOptOutEvidence = {
   pageUrl: string;
   cbaVendorTier1: string[];
   cbaVendorTier2: string[];
+  advertisingSharingVendors: string[];
+  choiceControlsInspected: boolean;
+  choiceControlSearchScope: "homepage_footer_privacy_surfaces";
   optOutUiResult: CpraCbaOptOutUiResult;
+  optOutControlFound: boolean;
   optOutLinkText: string | null;
   optOutLinkHref: string | null;
   cpraIconDetected: boolean;

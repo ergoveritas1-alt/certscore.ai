@@ -3423,10 +3423,7 @@ test("surfaces CPRA CBA opt-out missing from retained runtime evidence", () => {
           optOutUiResult: "absent",
           pageUrl: "https://example.com/",
           policyCbaLanguage: "full_cba_language",
-          privacyChoiceControlSearchPerformed: true,
           policyUiCongruent: false,
-          runtimeVendorCategories: ["advertising"],
-          runtimeVendors: ["The Trade Desk"],
           scanOriginGeo: null,
           signalKey: "privacy.cpra_cba_opt_out_missing",
           signalValue: true,
@@ -3450,6 +3447,48 @@ test("surfaces CPRA CBA opt-out missing from retained runtime evidence", () => {
   assert.equal(packet?.unifiedFindingId, "cpra_cba_opt_out_missing");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.match(packet?.presentation.suggestedFix ?? "", /Your Privacy Choices/i);
+});
+
+test("keeps CPRA CBA opt-out missing audit-only when retained evidence is adtech-only", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "CBA vendors were observed without a CPRA-specific opt-out control.",
+        fallbackEvidence: {
+          cbaVendorTier1: ["adsrvr.org"],
+          cbaVendorTier2: [],
+          cpraIconDetected: false,
+          findingSeverity: "critical",
+          gpcCbaHonored: false,
+          limitation: "homepage_only",
+          optOutLinkHref: null,
+          optOutLinkText: null,
+          optOutUiResult: "absent",
+          pageUrl: "https://example.com/",
+          policyCbaLanguage: "absent",
+          policyUiCongruent: true,
+          scanOriginGeo: null,
+          signalKey: "privacy.cpra_cba_opt_out_missing",
+          signalValue: true,
+          suppressorApplied: null,
+          unifiedFindingId: "cpra_cba_opt_out_missing"
+        },
+        observedValue: "absent",
+        severity: "high",
+        signalKey: "privacy.cpra_cba_opt_out_missing",
+        signalLabel: "CPRA CBA opt-out missing",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "CPRA CBA opt-out missing"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const packet = packets.find((candidate) => candidate.unifiedFindingId === "cpra_cba_opt_out_missing");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("audit_only"), true);
 });
 
 test("surfaces privacy-rights path present from policy enrichment evidence", () => {
