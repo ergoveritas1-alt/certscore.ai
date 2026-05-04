@@ -69,6 +69,7 @@ jobs:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: |
           set -o pipefail
+          printf 'DATABASE_URL=%s\n' "${DATABASE_URL}" > apps/web/.env.local
           mkdir -p artifacts/finding-calibration
           pnpm check:production-finding-calibration | tee artifacts/finding-calibration/production-finding-calibration.md
 
