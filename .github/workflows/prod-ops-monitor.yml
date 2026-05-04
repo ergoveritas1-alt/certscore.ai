@@ -31,6 +31,7 @@ jobs:
       OPS_ALERT_ENVIRONMENT: production
       OPS_ALERT_TO_EMAIL: ${{ secrets.OPS_ALERT_TO_EMAIL || secrets.FEEDBACK_TO_EMAIL }}
       OPS_BASE_URL: ${{ vars.AWS_WEB_CERTSCORE_BASE_URL || 'https://certscore.ai' }}
+      OPS_REQUIRE_DIRECT_DATABASE: ${{ vars.OPS_REQUIRE_DIRECT_DATABASE || 'false' }}
       OPS_REQUIRE_SCANNER_HEARTBEAT: ${{ vars.OPS_REQUIRE_SCANNER_HEARTBEAT || 'true' }}
       OPS_REQUIRE_VALIDATION_HEARTBEAT: ${{ vars.OPS_REQUIRE_VALIDATION_HEARTBEAT || 'true' }}
       OPS_SCAN_QUEUE_STALE_MINUTES: ${{ vars.OPS_SCAN_QUEUE_STALE_MINUTES || '10' }}
@@ -45,22 +46,26 @@ jobs:
 
       - name: Validate monitor configuration
         run: |
-          test -n "${DATABASE_URL}" || (echo "Missing secret PROD_DATABASE_URL or DATABASE_URL" && exit 1)
           test -n "${OPS_BASE_URL}" || (echo "Missing OPS_BASE_URL" && exit 1)
-          if [ "${OPS_WAKE_SCANNER_ON_QUEUE}" = "true" ]; then
+          if [ "${OPS_REQUIRE_DIRECT_DATABASE}" = "true" ]; then
+            test -n "${DATABASE_URL}" || (echo "Missing secret PROD_DATABASE_URL or DATABASE_URL" && exit 1)
+          fi
+          if [ "${OPS_REQUIRE_DIRECT_DATABASE}" = "true" ] && [ "${OPS_WAKE_SCANNER_ON_QUEUE}" = "true" ]; then
             test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing secret AWS_ROLE_TO_ASSUME" && exit 1)
             test -n "${AWS_SCANNER_ECS_CLUSTER}" || (echo "Missing var AWS_SCANNER_ECS_CLUSTER" && exit 1)
             test -n "${AWS_SCANNER_ECS_SERVICE}" || (echo "Missing var AWS_SCANNER_ECS_SERVICE" && exit 1)
           fi
-          case "${DATABASE_URL}" in
-            *localhost*|*127.0.0.1*|*"[::1]"*|*"@::1"*)
-              echo "DATABASE_URL points at a local database. Set PROD_DATABASE_URL to the live DB."
-              exit 1
-              ;;
-          esac
+          if [ -n "${DATABASE_URL}" ]; then
+            case "${DATABASE_URL}" in
+              *localhost*|*127.0.0.1*|*"[::1]"*|*"@::1"*)
+                echo "DATABASE_URL points at a local database. Set PROD_DATABASE_URL to the live DB."
+                exit 1
+                ;;
+            esac
+          fi
 
       - name: Configure AWS credentials
-        if: ${{ env.OPS_WAKE_SCANNER_ON_QUEUE == 'true' }}
+        if: ${{ env.OPS_REQUIRE_DIRECT_DATABASE == 'true' && env.OPS_WAKE_SCANNER_ON_QUEUE == 'true' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}

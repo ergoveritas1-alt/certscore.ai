@@ -369,21 +369,24 @@ async function runSyntheticScanCheck(input: { baseUrl: string; domain: string; f
 
 async function main() {
   const environment = process.env.OPS_ALERT_ENVIRONMENT?.trim() || DEFAULT_ENVIRONMENT;
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) {
-    throw new Error("Set DATABASE_URL before running the ops monitor.");
-  }
   const staleMinutes = Number(process.env.OPS_HEARTBEAT_STALE_MINUTES ?? DEFAULT_HEARTBEAT_STALE_MINUTES);
   const baseUrl = process.env.OPS_BASE_URL?.trim() || DEFAULT_BASE_URL;
   const requireScannerHeartbeat = getBooleanEnv("OPS_REQUIRE_SCANNER_HEARTBEAT", true);
   const requireValidationHeartbeat = getBooleanEnv("OPS_REQUIRE_VALIDATION_HEARTBEAT", true);
+  const requireDirectDatabase = getBooleanEnv("OPS_REQUIRE_DIRECT_DATABASE", false);
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (requireDirectDatabase && !databaseUrl) {
+    throw new Error("Set DATABASE_URL before running the ops monitor with OPS_REQUIRE_DIRECT_DATABASE=true.");
+  }
   const scanQueueStaleMinutes = getNumberEnv("OPS_SCAN_QUEUE_STALE_MINUTES", DEFAULT_SCAN_QUEUE_STALE_MINUTES);
   const syntheticScanEnabled = getBooleanEnv("OPS_SYNTHETIC_SCAN_ENABLED", false);
   const syntheticScanDomain = process.env.OPS_SYNTHETIC_SCAN_DOMAIN?.trim() || DEFAULT_SYNTHETIC_SCAN_DOMAIN;
   const syntheticScanTimeoutMinutes = getNumberEnv("OPS_SYNTHETIC_SCAN_TIMEOUT_MINUTES", DEFAULT_SYNTHETIC_SCAN_TIMEOUT_MINUTES);
   const staleThresholdMs = staleMinutes * 60_000;
   const findings: string[] = [];
-  process.env.DATABASE_URL = databaseUrl;
+  if (databaseUrl) {
+    process.env.DATABASE_URL = databaseUrl;
+  }
 
   await checkHttpEndpoint({
     findings,
@@ -406,59 +409,65 @@ async function main() {
   });
 
   let validationSettings: ValidationSettingsRow | null = null;
-  try {
-    validationSettings = await queryOne<ValidationSettingsRow>(
-      `
-        select last_worker_heartbeat_at, last_worker_host, pipeline_enabled
-        from validation_settings
-        where singleton_key = $1
-      `,
-      [VALIDATION_SETTINGS_KEY],
-      { readOnly: true }
-    );
-  } catch (error) {
-    findings.push(`Validation settings query failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  let scanBacklog: QueuedScanBacklogRow | null = null;
 
-  if (!validationSettings) {
-    findings.push("Validation settings row is missing.");
-  } else if (validationSettings.pipeline_enabled && requireValidationHeartbeat) {
-    if (!validationSettings.last_worker_heartbeat_at) {
-      findings.push("Validation worker heartbeat is missing.");
-    } else {
-      const heartbeatAgeMs = Date.now() - new Date(validationSettings.last_worker_heartbeat_at).getTime();
-      if (heartbeatAgeMs > staleThresholdMs) {
-        findings.push(
-          `Validation worker heartbeat is stale (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${validationSettings.last_worker_host ?? "unknown"}).`
-        );
+  if (requireDirectDatabase) {
+    try {
+      validationSettings = await queryOne<ValidationSettingsRow>(
+        `
+          select last_worker_heartbeat_at, last_worker_host, pipeline_enabled
+          from validation_settings
+          where singleton_key = $1
+        `,
+        [VALIDATION_SETTINGS_KEY],
+        { readOnly: true }
+      );
+    } catch (error) {
+      findings.push(`Validation settings query failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    if (!validationSettings) {
+      findings.push("Validation settings row is missing.");
+    } else if (validationSettings.pipeline_enabled && requireValidationHeartbeat) {
+      if (!validationSettings.last_worker_heartbeat_at) {
+        findings.push("Validation worker heartbeat is missing.");
+      } else {
+        const heartbeatAgeMs = Date.now() - new Date(validationSettings.last_worker_heartbeat_at).getTime();
+        if (heartbeatAgeMs > staleThresholdMs) {
+          findings.push(
+            `Validation worker heartbeat is stale (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${validationSettings.last_worker_host ?? "unknown"}).`
+          );
+        }
       }
     }
-  }
 
-  if (requireScannerHeartbeat) {
-    const scannerHeartbeat = await getLastScannerServiceHeartbeat();
+    if (requireScannerHeartbeat) {
+      const scannerHeartbeat = await getLastScannerServiceHeartbeat();
 
-    if (scannerHeartbeat.errorMessage) {
-      findings.push(scannerHeartbeat.errorMessage);
-    } else if (!scannerHeartbeat.lastHeartbeatAt) {
-      findings.push("Scanner service heartbeat is missing.");
-    } else {
-      const heartbeatAgeMs = Date.now() - new Date(scannerHeartbeat.lastHeartbeatAt).getTime();
-      if (heartbeatAgeMs > staleThresholdMs) {
-        findings.push(
-          `Scanner service heartbeat is stale (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${scannerHeartbeat.host ?? "unknown"}).`
-        );
+      if (scannerHeartbeat.errorMessage) {
+        findings.push(scannerHeartbeat.errorMessage);
+      } else if (!scannerHeartbeat.lastHeartbeatAt) {
+        findings.push("Scanner service heartbeat is missing.");
+      } else {
+        const heartbeatAgeMs = Date.now() - new Date(scannerHeartbeat.lastHeartbeatAt).getTime();
+        if (heartbeatAgeMs > staleThresholdMs) {
+          findings.push(
+            `Scanner service heartbeat is stale (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${scannerHeartbeat.host ?? "unknown"}).`
+          );
+        }
       }
     }
-  }
 
-  const scanBacklog = await checkQueuedScanBacklog({
-    findings,
-    staleMinutes: scanQueueStaleMinutes
-  }).catch((error) => {
-    findings.push(`Queued full-scan backlog query failed: ${error instanceof Error ? error.message : String(error)}`);
-    return null;
-  });
+    scanBacklog = await checkQueuedScanBacklog({
+      findings,
+      staleMinutes: scanQueueStaleMinutes
+    }).catch((error) => {
+      findings.push(`Queued full-scan backlog query failed: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    });
+  } else if (syntheticScanEnabled) {
+    findings.push("Synthetic scan canary requires OPS_REQUIRE_DIRECT_DATABASE=true so the monitor can wait for scan completion.");
+  }
 
   if (scanBacklog) {
     await wakeScannerCapacity({
@@ -467,7 +476,7 @@ async function main() {
     });
   }
 
-  if (syntheticScanEnabled) {
+  if (syntheticScanEnabled && requireDirectDatabase) {
     await runSyntheticScanCheck({
       baseUrl,
       domain: syntheticScanDomain,
@@ -482,6 +491,7 @@ async function main() {
         {
           environment,
           baseUrl,
+          directDatabaseChecksEnabled: requireDirectDatabase,
           status: "ok",
           queuedFullScans: scanBacklog?.queued_count ?? null,
           syntheticScanEnabled,

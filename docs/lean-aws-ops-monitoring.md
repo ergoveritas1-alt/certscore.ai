@@ -38,7 +38,6 @@ The checked-in GitHub Actions workflow `.github/workflows/prod-ops-monitor.yml` 
 Required environment:
 
 ```bash
-DATABASE_URL=...
 OPS_BASE_URL=https://certscore.ai
 OPS_ALERT_TO_EMAIL=ops@example.com
 GMAIL_SMTP_USER=...
@@ -50,6 +49,7 @@ Recommended lean-mode environment:
 ```bash
 OPS_REQUIRE_SCANNER_HEARTBEAT=false
 OPS_REQUIRE_VALIDATION_HEARTBEAT=false
+OPS_REQUIRE_DIRECT_DATABASE=false
 OPS_SCAN_QUEUE_STALE_MINUTES=10
 OPS_WAKE_SCANNER_ON_QUEUE=true
 AWS_REGION=us-west-1
@@ -57,14 +57,16 @@ AWS_SCANNER_ECS_CLUSTER=certscore-validation-cluster
 AWS_SCANNER_ECS_SERVICE=ws01-scanner-worker
 ```
 
+`OPS_REQUIRE_DIRECT_DATABASE=false` is the default for the checked-in GitHub Actions monitor because the production Postgres instance is private to AWS networking. In that mode, the monitor still checks the public web process and public database health endpoint, but it skips direct database-only checks such as worker heartbeat rows, full-scan queue backlog, and synthetic scan completion polling. Set `OPS_REQUIRE_DIRECT_DATABASE=true` only from an environment that can reach the production database, such as an ECS-hosted monitor task or a trusted operator shell inside the VPC.
+
 The monitor checks:
 
 - `/api/health`
 - `/api/health/database`
-- validation worker heartbeat, unless disabled
-- scanner heartbeat, unless disabled
-- queued full scans older than `OPS_SCAN_QUEUE_STALE_MINUTES`
-- wakes the scanner ECS service to desired count `1` when queued scans exist and `OPS_WAKE_SCANNER_ON_QUEUE=true`
+- validation worker heartbeat when direct database checks are enabled and validation heartbeat checks are not disabled
+- scanner heartbeat when direct database checks are enabled and scanner heartbeat checks are not disabled
+- queued full scans older than `OPS_SCAN_QUEUE_STALE_MINUTES` when direct database checks are enabled
+- wakes the scanner ECS service to desired count `1` when direct database checks are enabled, queued scans exist, and `OPS_WAKE_SCANNER_ON_QUEUE=true`
 
 ## Synthetic homepage scan canary
 
