@@ -760,12 +760,12 @@ test("consent audit reject-tracking finding promotes vendor-rich post-reject evi
     validationFindingLookup: new Map()
   }).find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
 
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.surfacingDecision.decisionState, "review");
-  assert.equal(packet?.surfacingDecision.reportLane, "main");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.surfacingDecision.reportLane, "confidence_and_coverage");
+  assert.ok(packet?.surfacingDecision.appliedRules.includes("evidence.finding_contract.audit_only"));
   assert.ok(packet?.evidence?.flags?.includes("reject_evidence_review"));
   assert.ok(!packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
-  assert.ok(!packet?.concernContext?.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"));
+  assert.ok(packet?.concernContext?.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"));
   assert.equal((fallbackEvidence?.promotionDecision as Record<string, unknown> | undefined)?.promoted, false);
   assert.equal((fallbackEvidence?.promotionDecision as Record<string, unknown> | undefined)?.requiredTimingSatisfied, false);
   assert.deepEqual((fallbackEvidence?.rejectEvidenceDiff as Record<string, unknown> | undefined)?.baseline_vendors, ["Marketo"]);
@@ -1029,6 +1029,68 @@ test("observed baseline tracker URL fallback creates canonical preconsent packet
   assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("eligible"), true);
   assert.deepEqual(packet?.evidence?.entities?.runtimeRequestUrls, [
     "https://www.googletagmanager.com/gtm.js?id=GTM-EXAMPLE"
+  ]);
+});
+
+test("runtime pre-submit text capture evidence creates canonical packet", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    runtimeArtifacts: {
+      pre_submit_text_capture_evidence: [
+        {
+          destinationClassification: "third_party_tracking_hashed_identifier",
+          fieldContext: {
+            ariaLabel: "Email",
+            id: "email",
+            name: "email",
+            placeholder: "Email",
+            type: "email"
+          },
+          matchType: "sha256",
+          pageUrl: "https://www.example.com/",
+          payloadHint: "sha256_sentinel_in_request_body",
+          requestDomain: "analytics.twitter.com",
+          requestMethod: "POST",
+          requestTimestamp: "2026-05-04T12:00:01.000Z",
+          requestUrl: "https://analytics.twitter.com/i/adsct",
+          resourceType: "xhr",
+          submitObserved: false,
+          typedTimestamp: "2026-05-04T12:00:00.000Z",
+          vendorCategory: "advertising"
+        }
+      ]
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "pre_submit_text_capture_detected");
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("eligible"), true);
+  assert.deepEqual(packet?.evidence?.entities?.preSubmitTextCaptureRequestDomains, ["analytics.twitter.com"]);
+  assert.deepEqual(packet?.evidence?.entities?.preSubmitTextCaptureClassifications, [
+    "third_party_tracking_hashed_identifier"
   ]);
 });
 

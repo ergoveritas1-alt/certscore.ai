@@ -187,7 +187,7 @@ test("WS01-style reject action and post-reject tracking evidence satisfies stron
   assert.equal(decision?.status, "pass_strong");
 });
 
-test("WS01-style reject cookie diff provenance satisfies post-reject review-grade contract", () => {
+test("WS01-style reject cookie diff provenance stays audit-only without post-reject request timing", () => {
   const decision = evaluateFindingEvidenceContractForRawEvidence("reject_did_not_reduce_tracking", {
     consentPostRejectTrackerEvidenceUrls: [
       "https://track.hubspot.com/__ptq.gif",
@@ -208,9 +208,10 @@ test("WS01-style reject cookie diff provenance satisfies post-reject review-grad
     }
   });
 
-  assert.equal(decision?.status, "pass_good");
-  assert.equal(decision?.allowedNarrativeTier, "moderate");
-  assert.equal(decision?.promotionEligibility, "eligible");
+  assert.equal(decision?.status, "downgrade");
+  assert.equal(decision?.allowedNarrativeTier, "weak");
+  assert.equal(decision?.promotionEligibility, "internal_only");
+  assert.ok(decision?.missingRequirements.includes("postRejectTimestampedRuntimeEvidence"));
 });
 
 test("reject hidden requires inspected banner and reject path evidence", () => {
@@ -228,6 +229,31 @@ test("reject hidden requires inspected banner and reject path evidence", () => {
 
   assert.equal(weakDecision?.status, "downgrade");
   assert.ok(weakDecision?.missingRequirements.includes("rejectPathDepthEvidence"));
+  assert.equal(strongDecision?.status, "pass_strong");
+});
+
+test("dark-pattern consent signals require verified banner UI evidence", () => {
+  const weakDecision = evaluateFindingEvidenceContractForRawEvidence("accept_only_banner", {
+    accept_only_banner: true
+  });
+  const strongDecision = evaluateFindingEvidenceContractForRawEvidence("accept_only_banner", {
+    accept_only_banner: true,
+    consentSurfaceObserved: true,
+    consentUiArtifactRefs: ["hybrid_runtime_evidence"],
+    hybridConsentSummary: {
+      acceptPresent: true,
+      bannerPresent: true,
+      managePresent: false,
+      rejectPresent: false
+    },
+    hybridConsentVisual: {
+      acceptOnly: true
+    },
+    runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"]
+  });
+
+  assert.equal(weakDecision?.status, "downgrade");
+  assert.ok(weakDecision?.missingRequirements.includes("materialChoiceAsymmetryEvidence"));
   assert.equal(strongDecision?.status, "pass_strong");
 });
 

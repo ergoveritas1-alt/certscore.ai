@@ -7,6 +7,7 @@ import {
   evaluateConsentGatedTrackingConflictContract,
   evaluatePolicyBehaviorConflictContract,
   hasConcretePreconsentArtifact,
+  hasPreconsentSequenceEvidence,
   hasStrongPreconsentRuntimeEvidence
 } from "./promotion-evidence-contracts";
 import { buildSanitizedNetworkEvidenceAuditRecord } from "./sanitized-network-evidence";
@@ -166,6 +167,32 @@ test("pre-consent cookie evidence is promotion-grade only for non-essential cook
 
   assert.equal(hasConcretePreconsentArtifact(initialSnapshotOnlyEvidence), false);
   assert.equal(hasStrongPreconsentRuntimeEvidence(initialSnapshotOnlyEvidence), false);
+});
+
+test("pre-consent cookie write timestamp satisfies sequence for classified tracking cookies", () => {
+  const evidence = {
+    consentTimeline: {
+      firstCmpVisibleMs: 1000,
+      firstConsentActionMs: 1500,
+      firstTrackingCookieSetMs: 250
+    },
+    preconsent_cookie_evidence: [
+      {
+        category: "advertising",
+        cookieName: "_fbp",
+        nonEssential: true,
+        timingEvidence: "before_consent_cookie_write"
+      }
+    ],
+    preconsent_cookie_names: ["_fbp"],
+    preconsent_nonessential_cookie_names: ["_fbp"],
+    preconsent_tracking_detected: true,
+    supportingSignals: ["privacy.preconsent_tracking_detected"]
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(evidence), true);
+  assert.equal(hasPreconsentSequenceEvidence(evidence), true);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(evidence), true);
 });
 
 test("pre-consent source URLs remain review-grade sequence evidence", () => {

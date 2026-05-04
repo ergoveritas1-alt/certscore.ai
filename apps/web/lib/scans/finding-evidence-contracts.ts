@@ -219,10 +219,14 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       req("nonEssentialRequestClassification"),
       req("coverageNotMateriallyBlocked")
     ],
-    requiredForGood: [req("successfulRejectInteraction"), req("postRejectRuntimeEvidence")],
+    requiredForGood: [
+      req("successfulRejectInteraction"),
+      req("postRejectTimestampedRuntimeEvidence"),
+      req("nonEssentialRequestClassification")
+    ],
     downgradeIf: [
       { ifMissing: "successfulRejectInteraction", to: "audit_only", reason: "Post-reject persistence requires a successful reject interaction." },
-      { ifMissing: "postRejectTimestampedRuntimeEvidence", to: "moderate", reason: "Post-reject persistence lacks timestamped request rows, so it remains review-grade." },
+      { ifMissing: "postRejectTimestampedRuntimeEvidence", to: "audit_only", reason: "Post-reject persistence requires timestamped post-reject request rows." },
       { ifMissing: "postRejectRuntimeEvidence", to: "audit_only", reason: "Post-reject persistence requires retained post-reject runtime activity or cookie-diff provenance." },
       { ifMissing: "nonEssentialRequestClassification", to: "audit_only", reason: "Post-reject persistence requires non-essential classification evidence." }
     ],
@@ -754,15 +758,52 @@ function hasRejectPathDepthEvidence(rawEvidence: Record<string, unknown> | null 
     rejectPath.bannerLayerInspected === true ||
     rejectPath.banner_layer_inspected === true ||
     rejectPath.rejectPathTested === true ||
-    rejectPath.reject_path_tested === true;
+    rejectPath.reject_path_tested === true ||
+    typeof rejectPath.rejectClickDepth === "number" ||
+    typeof rejectPath.reject_click_depth === "number" ||
+    typeof rejectPath.acceptClickDepth === "number" ||
+    typeof rejectPath.accept_click_depth === "number";
   return inspected && Boolean(status && ["available", "hidden", "not_found", "unavailable", "failed", "untested"].includes(status));
 }
 
 function hasMaterialChoiceAsymmetryEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   const flags = getStringArrayValues(rawEvidence, ["flags", "evidenceFlags", "uiEvidenceFlags", "runtimeArtifacts"]);
+  const artifactRefs = getStringArrayValues(rawEvidence, [
+    "consentUiArtifactRefs",
+    "consent_ui_artifact_refs",
+    "runtimeEvidenceArtifacts",
+    "runtime_evidence_artifacts"
+  ]);
+  const consentSummary = getObjectValue(rawEvidence, ["hybridConsentSummary", "hybrid_consent_summary"]);
+  const consentVisual = getObjectValue(rawEvidence, ["hybridConsentVisual", "hybrid_consent_visual"]);
+  const uiSummary = getObjectValue(rawEvidence, ["hybridUiSummary", "hybrid_ui_summary"]);
+  const surfaceObserved =
+    getBoolean(rawEvidence, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
+    consentSummary?.bannerPresent === true ||
+    consentSummary?.banner_present === true;
+  const structuredUiFact =
+    rawEvidence.reject_button_missing === true ||
+    rawEvidence.forced_consent_wall === true ||
+    rawEvidence.accept_only_banner === true ||
+    rawEvidence.dismiss_without_reject === true ||
+    consentVisual?.ctaImbalanceDetected === true ||
+    consentVisual?.cta_imbalance_detected === true ||
+    consentVisual?.acceptOnly === true ||
+    consentVisual?.accept_only === true ||
+    consentVisual?.rejectHidden === true ||
+    consentVisual?.reject_hidden === true ||
+    consentVisual?.contrastAsymmetryDetected === true ||
+    consentVisual?.contrast_asymmetry_detected === true ||
+    consentSummary?.rejectDepthClass === "absent" ||
+    consentSummary?.reject_depth_class === "absent" ||
+    consentSummary?.pageInteractionBlocked === true ||
+    consentSummary?.page_interaction_blocked === true ||
+    uiSummary?.forcedActionRequired === true ||
+    uiSummary?.forced_action_required === true;
   return (
     getBoolean(rawEvidence, ["materialChoiceAsymmetryObserved", "material_choice_asymmetry_observed"]) === true ||
-    flags.some((flag) => /dark_pattern|accept_more_prominent|reject_button_missing|forced_consent_wall|accept_only_banner/.test(flag))
+    flags.some((flag) => /dark_pattern|accept_more_prominent|reject_button_missing|forced_consent_wall|accept_only_banner/.test(flag)) ||
+    (surfaceObserved && structuredUiFact && artifactRefs.length > 0)
   );
 }
 
@@ -1276,10 +1317,6 @@ export function evaluateFindingEvidenceContractForPacket(packet: UnifiedFindingP
       packet.concernContext.promotionEligibilities.length > 0 &&
       packet.concernContext.promotionEligibilities.every((value) => value !== "eligible")
     ) {
-      if (packetEvidenceDecision?.promotionEligibility === "eligible") {
-        return packetEvidenceDecision;
-      }
-
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",

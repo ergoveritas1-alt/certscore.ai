@@ -274,6 +274,42 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     });
   }
 
+  const preSubmitTextCaptureRows = getRuntimeObjectArray(input.runtimeArtifacts, [
+    "preSubmitTextCaptureEvidence",
+    "pre_submit_text_capture_evidence"
+  ]);
+  const strongPreSubmitTextCaptureRows = preSubmitTextCaptureRows.filter((row) => {
+    const classification = String(row.destinationClassification ?? row.destination_classification ?? "");
+    const submitObserved = row.submitObserved ?? row.submit_observed;
+    return (
+      submitObserved === false &&
+      (classification === "third_party_tracking_hashed_identifier" ||
+        classification === "third_party_tracking_raw_identifier")
+    );
+  });
+  if (strongPreSubmitTextCaptureRows.length > 0) {
+    candidates.push({
+      categoryId: "sensitive_data_runtime_exposure",
+      description: "A retained runtime probe observed typed text in a third-party tracking request before form submission.",
+      fallbackEvidence: {
+        preSubmitTextCaptureEvidence: strongPreSubmitTextCaptureRows,
+        pre_submit_text_capture_evidence: strongPreSubmitTextCaptureRows,
+        signalKey: "privacy.pre_submit_text_capture_detected",
+        signalLabel: "Pre-submit text capture detected",
+        signalValue: true
+      },
+      id: "runtime-derived-signal-privacy.pre_submit_text_capture_detected",
+      linkedValidationFinding: null,
+      observedValue: `${strongPreSubmitTextCaptureRows.length} pre-submit capture observation(s)`,
+      severity: "high",
+      signalKey: "privacy.pre_submit_text_capture_detected",
+      signalLabel: "Pre-submit text capture detected",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Pre-submit text capture detected"
+    });
+  }
+
   const rejectAvailableOnFirstLayer =
     rejectPath?.rejectAvailableOnFirstLayer === true || rejectPath?.reject_available_on_first_layer === true;
   const choiceAsymmetry = String(rejectPath?.choiceAsymmetry ?? rejectPath?.choice_asymmetry ?? "unknown");

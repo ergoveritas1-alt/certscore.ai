@@ -1702,8 +1702,10 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       const hasEligibleRejectConcern =
         packet.concernContext?.promotionEligibilities.includes("eligible") === true &&
         packet.concernContext.externalSurfacingEligibilities.includes("eligible") === true;
+      const missingPostRejectTimingEvidence =
+        packet.concernContext?.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence") === true;
 
-      if (contractDecision?.promotionEligibility === "eligible" && hasEligibleRejectConcern) {
+      if (contractDecision?.promotionEligibility === "eligible" && hasEligibleRejectConcern && !missingPostRejectTimingEvidence) {
         overrideDecision(decision, {
           state: evidenceFlags.has("reject_evidence_confirmed") ? "confirmed" : "review",
           lane: "main",

@@ -453,6 +453,11 @@ export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknow
     : typeof timeline?.first_non_essential_request_ms === "number"
       ? timeline.first_non_essential_request_ms
       : null;
+  const firstTrackingCookieSetMs = typeof timeline?.firstTrackingCookieSetMs === "number"
+    ? timeline.firstTrackingCookieSetMs
+    : typeof timeline?.first_tracking_cookie_set_ms === "number"
+      ? timeline.first_tracking_cookie_set_ms
+      : null;
   const firstCmpVisibleMs = typeof timeline?.firstCmpVisibleMs === "number"
     ? timeline.firstCmpVisibleMs
     : typeof timeline?.first_cmp_visible_ms === "number"
@@ -492,12 +497,17 @@ export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknow
       "consentActionableChoiceObserved",
       "consent_actionable_choice_observed"
     ]);
+  const firstPreconsentRuntimeMs = typeof firstNonEssentialRequestMs === "number"
+    ? firstNonEssentialRequestMs
+    : hasPromotionGradePreconsentCookieEvidence(rawEvidence) && typeof firstTrackingCookieSetMs === "number"
+      ? firstTrackingCookieSetMs
+      : null;
   const hasTimelineSequence =
-    typeof firstNonEssentialRequestMs === "number" &&
-    ((typeof firstCmpVisibleMs === "number" && firstNonEssentialRequestMs < firstCmpVisibleMs) ||
-      (typeof firstConsentActionMs === "number" && firstNonEssentialRequestMs < firstConsentActionMs));
+    typeof firstPreconsentRuntimeMs === "number" &&
+    ((typeof firstCmpVisibleMs === "number" && firstPreconsentRuntimeMs < firstCmpVisibleMs) ||
+      (typeof firstConsentActionMs === "number" && firstPreconsentRuntimeMs < firstConsentActionMs));
   const hasNoRecordedChoiceSequence =
-    typeof firstNonEssentialRequestMs === "number" &&
+    typeof firstPreconsentRuntimeMs === "number" &&
     consentSurfaceObserved === true &&
     consentActionableChoiceObserved === true &&
     firstConsentActionMs === null &&
