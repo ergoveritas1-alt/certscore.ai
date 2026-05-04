@@ -1956,8 +1956,14 @@ export function deriveConcernPolicy(input: {
   }
 
   if (concernRequiresDirectRuntime(input.concern)) {
+    const hasSensitiveReplayCooccurrenceRuntime =
+      isSensitiveReplayConcern(input.concern) &&
+      hasConcreteSensitiveSessionReplayArtifact(input.rawEvidence);
     const contractDecision = evaluateConcreteRuntimeContract({
-      hasConcreteArtifact: hasConcreteSessionReplayEvidence(input.rawEvidence) || hasDirectRuntime,
+      hasConcreteArtifact:
+        hasConcreteSessionReplayEvidence(input.rawEvidence) ||
+        hasSensitiveReplayCooccurrenceRuntime ||
+        hasDirectRuntime,
       missingFlag: "no_direct_runtime_replay_artifact_observed",
       originType: input.concern.originType,
       rawEvidence: input.rawEvidence

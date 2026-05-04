@@ -2107,6 +2107,10 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       return [];
     }
   };
+  const sensitivePayloadRows = stringifyEvidenceRows(sensitivePayloadViolations);
+  if (sensitivePayloadRows.length > 0) {
+    entities.sensitivePayloadViolations = sensitivePayloadRows;
+  }
   if (typeof normalizedFallbackEvidence.consentSurfaceObserved === "boolean") {
     entities.consentSurfaceObserved = [String(normalizedFallbackEvidence.consentSurfaceObserved)];
   }

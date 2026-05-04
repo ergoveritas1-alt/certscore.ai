@@ -1206,6 +1206,9 @@ function deriveEvidenceStrengthFlags(input: {
   if (hasConcreteRtbCookieSyncEvidence(input.rawEvidence)) {
     flags.add("direct_runtime");
   }
+  if (hasConcreteSensitiveSessionReplayArtifact(input.rawEvidence)) {
+    flags.add("direct_runtime");
+  }
   if (input.bundle.policySnippets.length > 0) {
     flags.add("policy_text");
   }

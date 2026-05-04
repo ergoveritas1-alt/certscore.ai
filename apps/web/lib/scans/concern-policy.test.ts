@@ -1479,13 +1479,13 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
-      name: "sensitive replay concern with payload and replay evidence stays eligible",
+      name: "sensitive replay concern with retained co-occurrence evidence stays eligible",
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",
         suggestedUnifiedFindingId: "session_replay_on_sensitive_input_surface",
         title: "Sensitive replay detected"
       }),
-      evidenceStrengthFlags: ["direct_runtime", "concrete_payload"] as const,
+      evidenceStrengthFlags: ["concrete_payload", "fallback_only"] as const,
       rawEvidence: {
         sensitivePayloadViolations: [
           {
@@ -1494,8 +1494,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
             requestUrl: "https://clarity.ms/collect",
             vendorHost: "clarity.ms"
           }
-        ],
-        session_replay_runtime_artifacts: ["vendor:Microsoft Clarity|host:clarity.ms"]
+        ]
       },
       expected: {
         allowedNarrativeTier: "moderate",

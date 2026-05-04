@@ -1447,8 +1447,6 @@ test("specializes high-sensitivity replay evidence into a sensitive replay packe
               vendorHost: "clarity.ms"
             }
           ],
-          sessionReplayVendorArtifactPresent: true,
-          session_replay_runtime_artifacts: ["vendor:Microsoft Clarity|host:clarity.ms"],
           signalKey: "commerce.high_sensitivity_data_collection_detected",
           signalValue: true
         },
@@ -1470,6 +1468,7 @@ test("specializes high-sensitivity replay evidence into a sensitive replay packe
   assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
   assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
   assert.ok(packet?.evidence?.snippets?.includes("accountNumber=***1234"));
+  assert.equal(packet?.evidence?.entities?.sensitivePayloadViolations?.length, 1);
   assert.deepEqual(packet?.evidence?.entities?.request_domains, ["clarity.ms"]);
   assert.deepEqual(packet?.evidence?.entities?.request_urls, ["https://clarity.ms/collect"]);
 });

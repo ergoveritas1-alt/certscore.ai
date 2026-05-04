@@ -324,9 +324,7 @@ test("high-sensitivity candidates with replay co-occurrence artifacts specialize
           requestUrl: "https://clarity.ms/collect",
           vendorHost: "clarity.ms"
         }
-      ],
-      sessionReplayVendorArtifactPresent: true,
-      session_replay_runtime_artifacts: ["vendor:Microsoft Clarity|host:clarity.ms"]
+      ]
     },
     observedValue: "Yes",
     severity: "high",
@@ -339,6 +337,7 @@ test("high-sensitivity candidates with replay co-occurrence artifacts specialize
 
   assert.equal(concern.suggestedUnifiedFindingId, "session_replay_on_sensitive_input_surface");
   assert.equal(concern.promotionEligibility, "eligible");
+  assert.ok(concern.evidenceStrengthFlags.includes("direct_runtime"));
 });
 
 test("high-sensitivity candidates with independent replay artifacts stay general sensitive collection", () => {

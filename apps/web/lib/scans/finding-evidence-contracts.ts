@@ -1332,6 +1332,9 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
     sensitiveFieldEvidence: entities.sensitiveFieldEvidence ?? entities.sensitive_field_evidence,
     sensitiveInputSurfaceEvidence: entities.sensitiveInputSurfaceEvidence ?? entities.sensitive_input_surface_evidence,
     sensitiveInputSurfaceObserved: entities.sensitiveInputSurfaceObserved,
+    sensitivePayloadViolations: parseObjectArrayValue(
+      entities.sensitivePayloadViolations ?? entities.sensitive_payload_violations
+    ),
     searchedPolicyUrls: packet.evidence?.pageUrls,
     sessionReplayRuntimeArtifacts: entities.session_replay_runtime_artifacts ?? entities.sessionReplayRuntimeArtifacts,
     sessionReplayVendors: entities.sessionReplayVendors ?? entities.session_replay_vendors,
