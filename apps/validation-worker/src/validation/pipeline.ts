@@ -1070,6 +1070,19 @@ function hasStrongCookieCategoryDisclosure(input: {
   );
 }
 
+function shouldApplyCookieCategoryDisclosureSafeHarbor(input: {
+  disclosures: Array<Record<string, unknown>>;
+  flags: string[];
+  mentionTopics?: string[];
+  summaryShort: unknown;
+}) {
+  return input.disclosures.length === 0 && hasStrongCookieCategoryDisclosure(input);
+}
+
+function isObstructedCookiePolicyUrl(value: string | null) {
+  return /(?:captcha|blocked|challenge|interstitial|splashui)/i.test(value ?? "");
+}
+
 function buildPolicyRuntimeFinding(input: {
   description: string;
   evidence: Record<string, unknown>;
@@ -3230,6 +3243,7 @@ function deriveCookieRuntimeFindings(input: {
       /cookie settings|third-party cookies|targeting cookies|analytical cookies|measurement\/performance|marketing\/targeting/i.test(
         summaryShort
       ));
+  const sourceUrlObstructed = isObstructedCookiePolicyUrl(pageUrl);
 
   if (runtimeCookies.length === 0) {
     return [];
@@ -3252,12 +3266,13 @@ function deriveCookieRuntimeFindings(input: {
   const findings: Array<ReturnType<typeof buildPolicyRuntimeFinding>> = [];
 
   const structurallyWeak =
+    sourceUrlObstructed ||
     (!hasRichCookieSemantics && disclosures.length === 0) ||
     (semanticConfidence !== null && semanticConfidence < 0.6) ||
     flags.includes("low_confidence") ||
     flags.includes("llm_provider_error");
 
-  if (structurallyWeak && !hasRichCookieSemantics) {
+  if (structurallyWeak && (!hasRichCookieSemantics || sourceUrlObstructed)) {
     findings.push(
       buildPolicyRuntimeFinding({
         description:
@@ -3280,9 +3295,10 @@ function deriveCookieRuntimeFindings(input: {
   }
 
   if (
+    !sourceUrlObstructed &&
     (!structurallyWeak || hasRichCookieSemantics) &&
     unmatched.length > 0 &&
-    !hasStrongCookieCategoryDisclosure({ disclosures, flags, mentionTopics, summaryShort })
+    !shouldApplyCookieCategoryDisclosureSafeHarbor({ disclosures, flags, mentionTopics, summaryShort })
   ) {
     const unmatchedThirdPartyCount = unmatchedObservations.filter((row) => row.thirdParty).length;
     const severity: "high" | "medium" = unmatchedThirdPartyCount > 0 || unmatched.length > 1 ? "high" : "medium";
@@ -3445,7 +3461,9 @@ export function deriveCookieDisclosureGapDiagnostic(
       /cookie settings|third-party cookies|targeting cookies|analytical cookies|measurement\/performance|marketing\/targeting/i.test(
         summaryShort
       ));
+  const sourceUrlObstructed = isObstructedCookiePolicyUrl(pageUrl);
   const structurallyWeak =
+    sourceUrlObstructed ||
     (!hasRichCookieSemantics && disclosures.length === 0) ||
     (semanticConfidence !== null && semanticConfidence < 0.6) ||
     flags.includes("low_confidence") ||
@@ -3459,19 +3477,27 @@ export function deriveCookieDisclosureGapDiagnostic(
     unmatched.includes(normalizeCookieName(row.cookieName) ?? "") && row.thirdParty
   ).length;
   const categoryDisclosurePresent = hasStrongCookieCategoryDisclosure({ disclosures, flags, mentionTopics, summaryShort });
+  const categoryDisclosureSafeHarbor = shouldApplyCookieCategoryDisclosureSafeHarbor({
+    disclosures,
+    flags,
+    mentionTopics,
+    summaryShort
+  });
   const reason = emitted
     ? "emitted"
     : runtimeCookies.length === 0
       ? "no_runtime_cookies"
       : relevantRuntimeCookies.length === 0
         ? "only_ignored_runtime_cookies"
-        : categoryDisclosurePresent
-          ? "strong_category_disclosure"
-          : structurallyWeak && !hasRichCookieSemantics
+        : sourceUrlObstructed
             ? "policy_structure_obstructed"
-            : unmatched.length === 0
-              ? "all_runtime_cookies_disclosed"
-              : "eligible_not_emitted";
+            : categoryDisclosureSafeHarbor
+              ? "strong_category_disclosure"
+              : structurallyWeak && !hasRichCookieSemantics
+                ? "policy_structure_obstructed"
+                : unmatched.length === 0
+                  ? "all_runtime_cookies_disclosed"
+                  : "eligible_not_emitted";
 
   return {
     categoryDisclosurePresent,

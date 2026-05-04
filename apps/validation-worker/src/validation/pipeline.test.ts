@@ -6430,6 +6430,47 @@ test("weak cookie policy structure triggers cookie policy obstructed instead of 
   );
 });
 
+test("obstructed cookie policy source urls do not emit cookie disclosure gaps", () => {
+  const artifacts = buildArtifacts({
+    policyEnrichments: [
+      {
+        id: "cookie-1",
+        page_type: "cookie_policy",
+        page_url:
+          "https://www.example.com/splashui/captcha?ru=https%3A%2F%2Fwww.example.com%2Fhelp%2Fcookie-notice",
+        policy_actionable_flags: [],
+        policy_semantic_confidence: 0.82,
+        policy_mentions: [
+          { topic: "cookie_tracking_technologies_disclosure", confidence: 0.82 },
+          { topic: "cookie_third_party_advertising_disclosure", confidence: 0.82 }
+        ],
+        policy_cookie_disclosures: []
+      }
+    ],
+    policyReviewQueue: [],
+    snapshot: {},
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        cookieWriteObservations: [{ cookieName: "_fbp", thirdParty: true }]
+      }
+    } as Record<string, unknown>
+  });
+  const findings = deriveValidationFindings(artifacts);
+
+  assert.ok(!findings.some((item) => item.ruleKey === "cookie_runtime.disclosure_gap"));
+  assert.ok(findings.some((item) => item.ruleKey === "cookie_runtime.cookie_policy_obstructed"));
+  assert.equal(
+    deriveCookieDisclosureGapDiagnostic(
+      {
+        policySemanticRows: artifacts.policySemanticInputs ?? artifacts.policyEnrichments ?? [],
+        runtimeArtifacts: artifacts.runtimeArtifacts
+      },
+      findings
+    ).reason,
+    "policy_structure_obstructed"
+  );
+});
+
 test("rich category-based cookie semantics without parsed rows do not trigger a disclosure gap", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
@@ -6489,6 +6530,57 @@ test("category-based cookie disclosure with settings and consent language suppre
       findings
     ).reason,
     "strong_category_disclosure"
+  );
+});
+
+test("category-based cookie disclosure does not suppress unmatched cookies when named disclosure rows exist", () => {
+  const artifacts = buildArtifacts({
+    policyEnrichments: [
+      {
+        id: "cookie-1",
+        page_type: "cookie_policy",
+        page_url: "https://www.example.com/cookies",
+        policy_actionable_flags: [],
+        policy_semantic_confidence: 0.9,
+        policy_summary_short:
+          "Cookie Preferences explain required cookies, functional cookies, advertising cookies, and measurement/performance cookies.",
+        policy_cookie_disclosures: [
+          {
+            vendor: "Google Analytics",
+            cookies: ["_ga"],
+            cookie_type: "measurement_performance"
+          }
+        ]
+      }
+    ],
+    policyReviewQueue: [],
+    snapshot: {},
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        cookieWriteObservations: [
+          { cookieName: "_ga", thirdParty: false },
+          { cookieName: "_fbp", thirdParty: true }
+        ]
+      }
+    } as Record<string, unknown>
+  });
+  const findings = deriveValidationFindings(artifacts);
+
+  const finding = findings.find((item) => item.ruleKey === "cookie_runtime.disclosure_gap");
+  assert.ok(finding);
+  assert.equal(finding?.severity, "high");
+  assert.equal(finding?.evidence.policy_category_disclosure_present, true);
+  assert.deepEqual(finding?.evidence.unmatched_cookie_names, ["_fbp"]);
+  assert.equal(finding?.evidence.unmatched_third_party_cookie_count, 1);
+  assert.equal(
+    deriveCookieDisclosureGapDiagnostic(
+      {
+        policySemanticRows: artifacts.policySemanticInputs ?? artifacts.policyEnrichments ?? [],
+        runtimeArtifacts: artifacts.runtimeArtifacts
+      },
+      findings
+    ).reason,
+    "emitted"
   );
 });
 
