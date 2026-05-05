@@ -1830,6 +1830,38 @@ test("reject persistence policy requires a successful reject path and post-rejec
 
   assert.equal(eligible.promotionEligibility, "eligible");
 
+  const eligibleRequestUrl = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      postRejectNonEssentialRequests: [
+        {
+          category: "analytics",
+          ms_after_reject: 3500,
+          requestUrl: "https://analytics.example/pixel",
+          ts_ms: 5000,
+          vendor: "Example Analytics"
+        }
+      ],
+      requestPurposeClassificationConfidence: [
+        {
+          confidence: 0.91,
+          essentiality: "non_essential",
+          requestUrl: "https://analytics.example/pixel"
+        }
+      ],
+      rejectPathDepthAndAvailability: {
+        rejectInteractionSucceeded: true
+      },
+      suppressionChecks: {
+        post_reject_window_available: true
+      }
+    }
+  });
+
+  assert.equal(eligibleRequestUrl.promotionEligibility, "eligible");
+  assert.equal(eligibleRequestUrl.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"), false);
+
   const failedReject = deriveConcernPolicy({
     concern,
     evidenceStrengthFlags: ["direct_runtime"],

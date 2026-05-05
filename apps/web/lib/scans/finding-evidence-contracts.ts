@@ -1273,6 +1273,14 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
       ? { blocked: true, coverageImpact: "material" }
       : undefined,
     consentActionableChoiceObserved: getBoolean(entities, ["consentActionableChoiceObserved", "consent_actionable_choice_observed"]),
+    consentRejectInteractionSucceeded:
+      packet.unifiedFindingId === "reject_did_not_reduce_tracking" &&
+      (
+        packet.evidence?.flags?.includes("reject_evidence_confirmed") ||
+        packet.evidence?.flags?.includes("reject_evidence_review")
+      )
+        ? true
+        : getBoolean(entities, ["consentRejectInteractionSucceeded", "consent_reject_interaction_succeeded"]) ?? undefined,
     consentSurfaceObserved: getBoolean(entities, ["consentSurfaceObserved", "consent_surface_observed"]),
     consentTimeline: parseFirstObjectValue(entities.consentTimeline ?? entities.consent_timeline),
     disclosureSearchScopeRetained:
@@ -1307,11 +1315,13 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
     policySourceUrl: allEvidenceUrls.find((url) => /cookie|privacy|legal|policy|notice/i.test(url)),
     consentPostRejectTrackerEvidenceUrls:
       entities.consentPostRejectTrackerEvidenceUrls ?? entities.consent_post_reject_tracker_evidence_urls,
-    postRejectNonEssentialRequests:
-      entities.postRejectNonEssentialRequests ?? entities.post_reject_non_essential_requests,
+    postRejectNonEssentialRequests: parseObjectArrayValue(
+      entities.postRejectNonEssentialRequests ?? entities.post_reject_non_essential_requests
+    ),
     postRejectNonEssentialRequestUrls: entities.postRejectNonEssentialRequestUrls ?? entities.post_reject_non_essential_request_urls,
     rejectCookieDiffProvenance: parseFirstObjectValue(entities.rejectCookieDiffProvenance ?? entities.reject_cookie_diff_provenance),
     rejectInteractionAttribution: parseFirstObjectValue(entities.rejectInteractionAttribution ?? entities.reject_interaction_attribution),
+    suppressionChecks: parseFirstObjectValue(entities.suppressionChecks ?? entities.suppression_checks),
     privacyChoiceControlSearchPerformed: entities.privacyChoiceControlSearchPerformed,
     preconsentCookieCategories: entities.preconsentCookieCategories ?? entities.preconsent_cookie_categories,
     preconsentCookieNames: entities.preconsentCookieNames ?? entities.preconsent_cookie_names,
@@ -1326,7 +1336,6 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
     runtimeRequestUrls: entities.runtimeRequestUrls ?? consentTrackingDetails?.requestUrls ?? allEvidenceUrls.filter((url) => /^https?:\/\//i.test(url)),
     runtimeVendorCategories: entities.runtimeVendorCategories ?? entities.runtime_vendor_categories,
     runtimeVendors: entities.runtimeVendors ?? consentTrackingDetails?.vendors,
-    suppressionChecks: entities.suppressionChecks ?? entities.suppression_checks,
     sensitiveDataTypes: entities.sensitiveDataTypes ?? entities.sensitive_data_types,
     sensitiveFieldContexts: entities.sensitiveFieldContexts ?? entities.sensitive_field_contexts,
     sensitiveFieldEvidence: entities.sensitiveFieldEvidence ?? entities.sensitive_field_evidence,
