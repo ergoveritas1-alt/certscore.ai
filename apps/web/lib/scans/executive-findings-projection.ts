@@ -334,6 +334,19 @@ function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPack
   }
 
   const details = buildPreConsentTrackingEvidenceDetails(packet);
+  const cookieRows = getEntityJsonObjects(packet, "preconsent_cookie_evidence");
+  const thirdPartyTrackingCookieRows = cookieRows.filter((row) => {
+    const timingEvidence = getRecordString(row, ["timingEvidence", "timing_evidence"]);
+    const party = getRecordString(row, ["party", "cookiePartyType", "cookie_party_type"]);
+    const category = getRecordString(row, ["category"]);
+    const nonEssential = row.nonEssential === true || row.non_essential === true;
+    return (
+      timingEvidence === "before_consent_cookie_write" &&
+      party === "third_party" &&
+      nonEssential &&
+      /analytics|advertising|marketing|retargeting|session_replay|dmp/i.test(category ?? "")
+    );
+  });
   const preconsentCookieNames = getEntityValues(packet, /^preconsent_(?:nonessential_)?cookie_names$/i);
   const preconsentCookieCategories = getEntityValues(packet, /^preconsent_cookie_categories$/i);
   const preconsentCookieTimingEvidence = getEntityValues(packet, /^preconsent_cookie_timing_evidence$/i);
@@ -345,8 +358,9 @@ function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPack
       "preconsent_cookie_before_consent_count",
       "thirdPartyCookiePreConsentCount"
     ]) ??
-    getEntityJsonObjects(packet, "preconsent_cookie_evidence").length;
+    thirdPartyTrackingCookieRows.length;
   const hasNamedPreconsentTrackingCookie =
+    thirdPartyTrackingCookieRows.length > 0 &&
     preconsentCookieNames.length > 0 &&
     preconsentCookieTimingEvidence.includes("before_consent_cookie_write") &&
     (
@@ -355,9 +369,10 @@ function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPack
     );
 
   return (
-    (typeof cookieCount === "number" && cookieCount > 0) ||
+    (typeof cookieCount === "number" && cookieCount > 0 && thirdPartyTrackingCookieRows.length > 0) ||
     hasNamedPreconsentTrackingCookie ||
-    packet.evidence?.flags?.some((flag) => /third_party_cookie.*pre.?consent|third_party_cookie_set_before_consent/i.test(flag)) === true
+    (thirdPartyTrackingCookieRows.length > 0 &&
+      packet.evidence?.flags?.some((flag) => /third_party_cookie.*pre.?consent|third_party_cookie_set_before_consent/i.test(flag)) === true)
   );
 }
 

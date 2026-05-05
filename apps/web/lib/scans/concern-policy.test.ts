@@ -2420,6 +2420,7 @@ test("deriveConcernPolicy keeps non-essential pre-consent cookie evidence withou
           category: "advertising",
           cookieName: "_fbp",
           nonEssential: true,
+          party: "third_party",
           timingEvidence: "before_consent_cookie_write"
         }
       ],
@@ -2458,6 +2459,7 @@ test("deriveConcernPolicy promotes classified pre-consent cookie writes with con
           category: "advertising",
           cookieName: "_fbp",
           nonEssential: true,
+          party: "third_party",
           timingEvidence: "before_consent_cookie_write"
         }
       ],

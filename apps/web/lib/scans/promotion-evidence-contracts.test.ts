@@ -102,6 +102,7 @@ test("pre-consent cookie evidence is promotion-grade only for non-essential cook
         category: "analytics",
         cookieName: "_ga",
         nonEssential: true,
+        party: "third_party",
         timingEvidence: "before_consent_cookie_write"
       }
     ],
@@ -117,11 +118,17 @@ test("pre-consent cookie evidence is promotion-grade only for non-essential cook
   const adobeCookieEvidence = {
     preconsent_cookie_evidence: [
       {
+        category: "dmp",
         cookieName: "demdex",
+        nonEssential: true,
+        party: "third_party",
         timingEvidence: "before_consent_cookie_write"
       },
       {
+        category: "session_replay",
         cookieName: "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L",
+        nonEssential: true,
+        party: "third_party",
         timingEvidence: "before_consent_cookie_write"
       }
     ],
@@ -181,6 +188,7 @@ test("pre-consent cookie write timestamp satisfies sequence for classified track
         category: "advertising",
         cookieName: "_fbp",
         nonEssential: true,
+        party: "third_party",
         timingEvidence: "before_consent_cookie_write"
       }
     ],

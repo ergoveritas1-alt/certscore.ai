@@ -28,7 +28,7 @@ function makePrivacyFinding(id: string, priority = 95): CertScoreFinding {
   };
 }
 
-test("selectTopFindings excludes consent support/context findings from headline slots", () => {
+test("selectTopFindings can select the consent dark-pattern umbrella while excluding support/context findings", () => {
   const selected = selectTopFindings(
     [
       makeFinding("consent_dark_patterns_detected", 200),
@@ -41,7 +41,7 @@ test("selectTopFindings excludes consent support/context findings from headline 
 
   assert.deepEqual(
     selected.map((finding) => finding.id),
-    ["pre_consent_tracking_detected"]
+    ["pre_consent_tracking_detected", "consent_dark_patterns_detected"]
   );
 });
 

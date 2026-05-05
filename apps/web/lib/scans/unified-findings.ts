@@ -2296,6 +2296,10 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       ? (normalizedFallbackEvidence.preconsentCookieEvidence as Array<Record<string, unknown>>)
       : [])
   ];
+  const preconsentCookieEvidence = stringifyEvidenceRows(preconsentCookieEvidenceRows);
+  if (preconsentCookieEvidence.length > 0) {
+    entities.preconsent_cookie_evidence = preconsentCookieEvidence;
+  }
   const preconsentCookieInitiatorVendors = uniqueStrings([
     ...(Array.isArray(normalizedFallbackEvidence.preconsent_cookie_initiator_vendors)
       ? (normalizedFallbackEvidence.preconsent_cookie_initiator_vendors as string[])

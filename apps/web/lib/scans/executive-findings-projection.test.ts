@@ -301,10 +301,12 @@ test("projects third-party cookie pre-consent when preconsent packet retains coo
         entities: {
           preconsent_cookie_evidence: [
             JSON.stringify({
+              category: "advertising",
               cookieName: "_fbp",
               domain: "facebook.com",
+              nonEssential: true,
               party: "third_party",
-              timingEvidence: "before_consent"
+              timingEvidence: "before_consent_cookie_write"
             })
           ],
           runtimeVendors: ["Meta Pixel"]
@@ -328,7 +330,7 @@ test("projects third-party cookie pre-consent when preconsent packet retains coo
   );
 });
 
-test("projects third-party cookie pre-consent from summarized preconsent cookie evidence", () => {
+test("projects third-party cookie pre-consent from retained third-party cookie evidence", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("preconsent_tracking", {
       details: { family: "consent_tracking", kind: "preconsent_tracking" },
@@ -338,6 +340,16 @@ test("projects third-party cookie pre-consent from summarized preconsent cookie 
         },
         entities: {
           preconsent_cookie_categories: ["advertising"],
+          preconsent_cookie_evidence: [
+            JSON.stringify({
+              category: "advertising",
+              cookieName: "MUID",
+              domain: ".bing.com",
+              nonEssential: true,
+              party: "third_party",
+              timingEvidence: "before_consent_cookie_write"
+            })
+          ],
           preconsent_cookie_names: ["MUID"],
           preconsent_cookie_timing_evidence: ["before_consent_cookie_write"],
           preconsent_nonessential_cookie_names: ["MUID"],
@@ -358,11 +370,10 @@ test("projects third-party cookie pre-consent from summarized preconsent cookie 
   assert.equal(finding.evidenceDetails?.cookieEvidence?.observed, true);
 });
 
-test("keeps support and context findings out of executive top findings", () => {
+test("keeps support and context findings out of executive top findings while allowing consent dark-pattern umbrella", () => {
   const excludedExecutiveFindingIds = [
     "asymmetric_consent_ui",
     "blocking_overlay_observed",
-    "consent_dark_patterns_detected",
     "content_obstructed_by_overlay",
     "forced_consent_interaction",
     "identifier_transmission_detected",
@@ -436,6 +447,8 @@ test("keeps support and context findings out of executive top findings", () => {
     assert.ok(projection.findings.some((finding) => finding.id === findingId));
     assert.ok(!projection.topFindings.some((finding) => finding.id === findingId));
   }
+  assert.ok(projection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+  assert.ok(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
 });
 
 test("projects RTB cookie sync into executive and privacy regulatory lenses", () => {

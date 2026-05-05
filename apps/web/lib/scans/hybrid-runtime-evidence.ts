@@ -758,8 +758,21 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
       .filter((value): value is number => value !== null)
   );
   const normalizedFirstNonEssentialRequestMs = Number.isFinite(firstNonEssentialRequestMs) ? firstNonEssentialRequestMs : null;
+  const preconsentTrackingCookieRows = buildRuntimeCookieInventory({ hybridRuntimeEvidence: hybrid, runtimeArtifacts }).rows.filter(
+    (row) =>
+      row.timingEvidence === "before_consent_cookie_write" &&
+      row.party === "third_party" &&
+      row.nonEssential &&
+      !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
+  );
+  const firstTrackingCookieSetMs = Math.min(
+    ...preconsentTrackingCookieRows
+      .map((row) => row.setAtMs ?? row.firstObservedAtMs)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+  );
+  const normalizedFirstTrackingCookieSetMs = Number.isFinite(firstTrackingCookieSetMs) ? firstTrackingCookieSetMs : null;
   const consentTimeline = retainedTimeline ?? (
-    normalizedFirstNonEssentialRequestMs !== null
+    normalizedFirstNonEssentialRequestMs !== null || normalizedFirstTrackingCookieSetMs !== null
       ? {
           firstCmpVisibleMs:
             getNumber(timelineMarkers?.consentBannerDetectedMs) ??
@@ -769,6 +782,7 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
               timelineMarkers?.consentAcceptedAtMs ??
               timelineMarkers?.consentRejectedAtMs
           ),
+          ...(normalizedFirstTrackingCookieSetMs !== null ? { firstTrackingCookieSetMs: normalizedFirstTrackingCookieSetMs } : {}),
           firstNonEssentialRequestMs: normalizedFirstNonEssentialRequestMs,
           navigationStartMs: getNumber(timelineMarkers?.navigationStartMs) ?? 0,
           timelineConfidence: "derived_from_hybrid_runtime"
@@ -776,7 +790,7 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
       : null
   );
 
-  if (!consentTimeline && nonEssentialRequestRows.length === 0) {
+  if (!consentTimeline && nonEssentialRequestRows.length === 0 && preconsentTrackingCookieRows.length === 0) {
     return null;
   }
 

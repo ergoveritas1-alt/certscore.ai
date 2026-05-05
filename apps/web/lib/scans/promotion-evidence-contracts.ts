@@ -283,39 +283,18 @@ export function hasConcreteCrossDomainIdentifierSharingEvidence(rawEvidence: Rec
 
 function hasPromotionGradePreconsentCookieEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   const cookieRows = getObjectArrayValues(rawEvidence, ["preconsent_cookie_evidence", "preconsentCookieEvidence"]);
-  const hasBeforeConsentWrite = cookieRows.some((row) => {
+  const promotionGradeRows = cookieRows.filter((row) => {
     const timingEvidence = typeof row.timingEvidence === "string" ? row.timingEvidence : typeof row.timing_evidence === "string" ? row.timing_evidence : null;
-    return timingEvidence === "before_consent_cookie_write";
+    const party = typeof row.party === "string" ? row.party : typeof row.cookiePartyType === "string" ? row.cookiePartyType : typeof row.cookie_party_type === "string" ? row.cookie_party_type : null;
+    const thirdParty = row.thirdParty === true || row.third_party === true || party === "third_party";
+    const category = typeof row.category === "string" ? row.category : null;
+    const nonEssential = row.nonEssential === true || row.non_essential === true;
+    const cookieName = typeof row.cookieName === "string" ? row.cookieName : typeof row.cookie_name === "string" ? row.cookie_name : null;
+    const inferredCategory = cookieName ? classifyCookieNameForPromotion(cookieName) : "unknown";
+    const promotionCategory = isPromotionGradeCookieCategory(category) || isPromotionGradeCookieCategory(inferredCategory);
+    return thirdParty && promotionCategory && nonEssential && timingEvidence === "before_consent_cookie_write";
   });
-  const explicitNames = getStringArrayValues(rawEvidence, [
-    "preconsent_nonessential_cookie_names",
-    "preconsentNonessentialCookieNames"
-  ]);
-  if (hasBeforeConsentWrite && explicitNames.some((name) => {
-    const category = classifyCookieNameForPromotion(name);
-    return category === "analytics" || category === "advertising";
-  })) {
-    return true;
-  }
-
-  if (
-    cookieRows.some((row) => {
-      const category = typeof row.category === "string" ? row.category : null;
-      const nonEssential = row.nonEssential === true || row.non_essential === true;
-      const cookieName = typeof row.cookieName === "string" ? row.cookieName : typeof row.cookie_name === "string" ? row.cookie_name : null;
-      const inferredCategory = cookieName ? classifyCookieNameForPromotion(cookieName) : "unknown";
-      const promotionCategory = isPromotionGradeCookieCategory(category) || isPromotionGradeCookieCategory(inferredCategory);
-      const timingEvidence = typeof row.timingEvidence === "string" ? row.timingEvidence : typeof row.timing_evidence === "string" ? row.timing_evidence : null;
-      return promotionCategory && (nonEssential || timingEvidence === "before_consent_cookie_write") && timingEvidence === "before_consent_cookie_write";
-    })
-  ) {
-    return true;
-  }
-
-  return hasBeforeConsentWrite && getStringArrayValues(rawEvidence, ["preconsent_cookie_names", "preconsentCookieNames"]).some((name) => {
-    const category = classifyCookieNameForPromotion(name);
-    return category === "analytics" || category === "advertising";
-  });
+  return promotionGradeRows.length > 0;
 }
 
 function collectStrings(value: unknown, acc: string[], depth = 0) {
@@ -508,8 +487,8 @@ export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknow
       (typeof firstConsentActionMs === "number" && firstPreconsentRuntimeMs < firstConsentActionMs));
   const hasNoRecordedChoiceSequence =
     typeof firstPreconsentRuntimeMs === "number" &&
-    consentSurfaceObserved === true &&
-    consentActionableChoiceObserved === true &&
+    (hasPromotionGradePreconsentCookieEvidence(rawEvidence) ||
+      (consentSurfaceObserved === true && consentActionableChoiceObserved === true)) &&
     firstConsentActionMs === null &&
     firstRejectActionMs === null &&
     firstAcceptActionMs === null &&

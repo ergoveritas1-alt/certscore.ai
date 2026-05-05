@@ -199,7 +199,45 @@ function inferCookieProvider(name: string, domain: string | null = null) {
   return null;
 }
 
-function getCookiePartyType(row: Record<string, unknown>): RuntimeCookieEvidenceRow["party"] {
+function getHybridPageHostname(hybrid: Record<string, unknown> | null) {
+  const navigationSummary = getRecord(hybrid?.navigationSummary ?? hybrid?.navigation_summary);
+  const url = getString(
+    navigationSummary?.finalUrl ??
+      navigationSummary?.final_url ??
+      navigationSummary?.initialUrl ??
+      navigationSummary?.initial_url
+  );
+  if (!url) {
+    return null;
+  }
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeHostForCookieParty(value: string | null | undefined) {
+  return value?.trim().replace(/^\./, "").replace(/^www\./, "").toLowerCase() ?? null;
+}
+
+function isSameSiteCookieDomain(cookieDomain: string | null, pageHostname: string | null) {
+  const normalizedCookieDomain = normalizeHostForCookieParty(cookieDomain);
+  const normalizedPageHostname = normalizeHostForCookieParty(pageHostname);
+  if (!normalizedCookieDomain || !normalizedPageHostname) {
+    return false;
+  }
+  return normalizedCookieDomain === normalizedPageHostname || normalizedCookieDomain.endsWith(`.${normalizedPageHostname}`);
+}
+
+function getCookiePartyType(
+  row: Record<string, unknown>,
+  domain: string | null,
+  hybrid: Record<string, unknown> | null
+): RuntimeCookieEvidenceRow["party"] {
+  if (isSameSiteCookieDomain(domain, getHybridPageHostname(hybrid))) {
+    return "first_party";
+  }
   if (row.thirdParty === true || row.third_party === true) {
     return "third_party";
   }
@@ -253,7 +291,7 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     initiatorUrl: getString(row.initiatorUrl ?? row.initiator_url ?? row.cookieInitiatorUrl ?? row.cookie_initiator_url),
     initiatorVendor: getString(row.initiatorVendor ?? row.initiator_vendor ?? row.cookieInitiatorVendor ?? row.cookie_initiator_vendor),
     nonEssential: getBoolean(row.nonEssential ?? row.non_essential) ?? isNonEssentialCookieCategory(category),
-    party: getCookiePartyType(row),
+    party: getCookiePartyType(row, domain, hybrid),
     setAtMs,
     setMethod: getString(row.cookieSetMethod ?? row.cookie_set_method ?? row.setMethod ?? row.set_method),
     timingEvidence: isPreconsentCookieWrite(row, hybrid) ? "before_consent_cookie_write" : "unknown"

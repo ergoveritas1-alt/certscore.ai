@@ -27,7 +27,6 @@ const DIRECTNESS_WEIGHT: Record<CertScoreFindingDirectness, number> = {
 const TOP_FINDING_EXCLUDED_IDS = new Set<string>([
   "asymmetric_consent_ui",
   "blocking_overlay_observed",
-  "consent_dark_patterns_detected",
   "content_obstructed_by_overlay",
   "forced_consent_interaction",
   "identifier_transmission_detected",
