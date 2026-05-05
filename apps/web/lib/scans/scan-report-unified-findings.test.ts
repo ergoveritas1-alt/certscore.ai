@@ -14,6 +14,7 @@ import {
   dedupeHeadlineFindings,
   deriveConsentAuditFindings
 } from "./consent-audit-findings";
+import { projectExecutiveFindingsFromUnifiedPackets } from "./executive-findings-projection";
 
 function packet(id: string, categoryId: string, relation: "owner" | "mirror" | "overlay") {
   return {
@@ -1092,6 +1093,94 @@ test("runtime pre-submit text capture evidence creates canonical packet", () => 
   assert.deepEqual(packet?.evidence?.entities?.preSubmitTextCaptureClassifications, [
     "third_party_tracking_hashed_identifier"
   ]);
+});
+
+test("runtime-derived reject persistence projects when retained post-reject rows are promotion-grade", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    runtimeArtifacts: {
+      consent_baseline_tracker_evidence_urls: ["https://www.google-analytics.com/g/collect"],
+      consent_baseline_tracker_vendor_names: ["Google Analytics"],
+      consent_post_reject_tracker_evidence_urls: ["https://www.google-analytics.com/g/collect?after=1"],
+      consent_post_reject_tracker_vendor_names: ["Google Analytics"],
+      consent_reject_interaction_succeeded: true,
+      consent_reject_persisted_tracker_vendor_names: ["Google Analytics"],
+      consent_reject_post_reject_non_essential_requests: [
+        {
+          category: "analytics",
+          hostname: "www.google-analytics.com",
+          ms_after_reject: 1000,
+          ts_ms: 3000,
+          url: "https://www.google-analytics.com/g/collect?after=1",
+          vendor: "Google Analytics"
+        }
+      ],
+      consent_reject_suppression_checks: {
+        baseline_contradiction_detected: false,
+        cmp_initialization_only: false,
+        navigation_or_reload_ambiguous: false,
+        non_essential_vendor_after_reject: true,
+        post_reject_window_available: true,
+        reject_click_confirmed: true
+      },
+      reject_path_depth_and_availability: {
+        availability: "available",
+        banner_layer_inspected: true,
+        reject_interaction_succeeded: true
+      },
+      request_purpose_classification_confidence: [
+        {
+          category: "analytics",
+          confidence: 0.85,
+          essentiality: "non_essential",
+          hostname: "www.google-analytics.com",
+          requestUrl: "https://www.google-analytics.com/g/collect?after=1",
+          tsMs: 3000,
+          vendor: "Google Analytics"
+        }
+      ]
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.ok(packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
+  assert.deepEqual(packet?.evidence?.entities?.postRejectNonEssentialRequests, [
+    JSON.stringify({
+      category: "analytics",
+      hostname: "www.google-analytics.com",
+      ms_after_reject: 1000,
+      ts_ms: 3000,
+      url: "https://www.google-analytics.com/g/collect?after=1",
+      vendor: "Google Analytics"
+    })
+  ]);
+  assert.ok(projection.findings.some((finding) => finding.id === "reject_tracking_persists_after_reject"));
+  assert.ok(projection.topFindings.some((finding) => finding.id === "reject_tracking_persists_after_reject"));
 });
 
 test("high-risk gambling section review retains concrete offer and disclosure adjacency evidence", () => {
