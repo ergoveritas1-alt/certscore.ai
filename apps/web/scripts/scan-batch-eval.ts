@@ -9,11 +9,7 @@ import { deriveCertScoreFindings } from "../lib/scans/derive-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../lib/scans/executive-findings-projection";
 import { withHybridRuntimeArtifactFallbacks } from "../lib/scans/hybrid-runtime-evidence";
 import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../lib/scans/nano-document-sources";
-import {
-  buildReviewFindings,
-  buildSectionReviewIssues
-} from "../lib/scans/scan-report-review-findings";
-import { buildUnifiedFindingDisplayPackets } from "../lib/scans/unified-findings";
+import { buildScanReportUnifiedFindingState } from "../lib/scans/scan-report-unified-findings";
 import { repairFindingFamilyPacketEvents } from "../server/scans/family-packet-event-repair";
 import { loadMergedSignalsByScanId } from "../server/scans/merged-signal-summary";
 import { deriveSignalEnrichmentWorkflowState } from "../../../packages/shared/src/utils/scan-signal-workflow";
@@ -512,35 +508,47 @@ async function summarizeScan(input: {
     })),
     policyEnrichment: normalizedPolicyRows
   });
-  const consentAuditFindings = dedupeHeadlineFindings(deriveConsentAuditFindings(snapshot, normalizedRuntimeArtifacts));
-  const consentReviewIssues = buildSectionReviewIssues({
-    accessibilityIssueRows: [],
-    consentAuditFindings,
-    pageEvidenceRows: [],
-    policyBehaviorContradictions: [],
-    preconsentViolationRows: [],
-    runtimeArtifacts: normalizedRuntimeArtifacts,
-    scanReportReviewIssues: [],
-    sectionId: "consent_controls_enforcement",
-    signalHitRows: [],
-    snapshot: snapshot ?? {}
-  });
-  const reviewFindingCandidates = buildReviewFindings({
-    issues: consentReviewIssues,
-    prioritizedAccessibilityRuleRows: [],
-    runtimeArtifacts: normalizedRuntimeArtifacts,
-    sectionId: "consent_controls_enforcement",
-    sectionItems: []
-  });
-
-  const displayPackets = buildUnifiedFindingDisplayPackets({
+  const reportState = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: repairedEvents,
+    macroEnrichment: null,
     mergedSignals: mergedSignalsByScanId.get(input.scanId) ?? [],
+    pageEvidence: [],
     policyEnrichment: normalizedPolicyRows,
-    reviewFindingCandidates,
-    scanEvents: repairedEvents,
-    validationFindings: [],
-    validationFindingLookup: new Map()
+    preconsentViolations: [],
+    primaryPolicyEnrichment: normalizedPolicyRows[0] ?? null,
+    runtimeArtifacts: normalizedRuntimeArtifacts,
+    scan: {
+      completedAt: typeof scanRow?.completed_at === "string" ? scanRow.completed_at : null,
+      createdAt: typeof scanRow?.created_at === "string" ? scanRow.created_at : new Date().toISOString(),
+      errorMessage: typeof scanRow?.error_message === "string" ? scanRow.error_message : null,
+      domainHostname: input.hostname,
+      domainId: null,
+      executionSummary: null,
+      id: input.scanId,
+      pagesRequested: 0,
+      pagesScanned: typeof snapshot?.pages_scanned === "number" ? snapshot.pages_scanned : 0,
+      scanConfigJson: null,
+      scanType: "full",
+      startedAt: typeof scanRow?.started_at === "string" ? scanRow.started_at : null,
+      status: typeof scanRow?.status === "string" ? scanRow.status : "unknown"
+    },
+    signalHits: [],
+    signals: [],
+    snapshot,
+    trackerVendors: [],
+    validationFindings: []
+  } as unknown as Parameters<typeof buildScanReportUnifiedFindingState>[0], {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: (candidateSnapshot, candidateRuntimeArtifacts) =>
+      dedupeHeadlineFindings(deriveConsentAuditFindings(candidateSnapshot, candidateRuntimeArtifacts)),
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
   });
+  const displayPackets = reportState.globalUnifiedFindings;
 
   const surfaced = displayPackets
     .filter((packet) => packet.presentationDecision.status !== "suppress")
