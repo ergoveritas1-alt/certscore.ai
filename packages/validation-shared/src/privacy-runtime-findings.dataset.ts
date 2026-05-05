@@ -2,6 +2,7 @@ import { PRIVACY_RUNTIME_FINDINGS_REVIEWED_EXAMPLES } from "./privacy-runtime-fi
 
 export const PRIVACY_RUNTIME_FINDING_IDS = [
   "preconsent_tracking",
+  "reject_did_not_reduce_tracking",
   "fingerprinting_observed",
   "reject_button_missing",
   "accept_more_prominent_than_reject",
@@ -48,6 +49,7 @@ export const PRIVACY_RUNTIME_FINDING_GROUPS = [
 export const PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS = [
   "consent_gated_tracking_claim_conflict",
   "preconsent_tracking",
+  "reject_did_not_reduce_tracking",
   "weak_cookie_security_attributes",
   "accessibility_support_path_missing",
   "privacy_rights_path_present",
@@ -127,7 +129,7 @@ export type PrivacyRuntimeEvidence = {
   runtimeAnchor?: {
     confidence: number;
     observationType: string;
-    phase: "pre_consent" | "post_accept" | "unknown";
+    phase: "pre_consent" | "post_reject" | "post_accept" | "unknown";
     requestUrls?: string[];
     vendors?: string[];
   };
@@ -302,6 +304,34 @@ const PRODUCTION_FINDING_CONFIGS: ProductionFindingConfig[] = [
     }),
     positiveNotes: "Concrete vendor, request URL, and ordering evidence support pre-consent tracking.",
     signalKey: "privacy.preconsent_tracking_detected"
+  },
+  {
+    findingGroup: "preconsent_tracking",
+    findingId: "reject_did_not_reduce_tracking",
+    positiveEvidenceFor: (index) => ({
+      artifactRefs: [`s3://privacy-runtime/reviewed-reject-persistence-${index}/runtime.json`],
+      consentActionableChoiceObserved: true,
+      consentSurfaceObserved: true,
+      detectionSource: "post_reject_runtime_artifact",
+      requestUrls: [`https://www.google-analytics.com/g/collect?reviewed=${index}`],
+      runtimeAnchor: {
+        confidence: 0.9,
+        observationType: "tracking_persisted_after_reject",
+        phase: "post_reject",
+        requestUrls: [`https://www.google-analytics.com/g/collect?reviewed=${index}`],
+        vendors: ["Google Analytics"]
+      },
+      sequenceEvidence: true,
+      snapshotEvidence: {
+        consent_reject_interaction_succeeded: true,
+        post_reject_non_essential_request_count: 1,
+        reject_evidence_confirmed: true
+      },
+      vendorCategories: ["analytics"],
+      vendors: ["Google Analytics"]
+    }),
+    positiveNotes: "Retained reject click and timestamped post-reject non-essential request evidence support tracking persistence after reject.",
+    signalKey: "consent_reject_reduced_tracking"
   },
   {
     findingGroup: "production_surfaced_calibration",
@@ -936,6 +966,7 @@ const PRODUCTION_REVIEWED_URLS: Record<(typeof PRIVACY_RUNTIME_TOP_PRODUCTION_FI
   accessibility_support_path_missing: "https://1000pipbuilder.com/",
   consent_gated_tracking_claim_conflict: "https://www.acorns.com/",
   preconsent_tracking: "https://www.acorns.com/",
+  reject_did_not_reduce_tracking: "https://www.hubspot.com/",
   pricing_or_fee_transparency_unclear: "https://backtestr.xyz/",
   privacy_contact_path_present: "https://www.acorns.com/",
   privacy_policy_present: "https://www.acorns.com/",

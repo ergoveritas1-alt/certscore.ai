@@ -1683,7 +1683,10 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     }
   }
 
-  if (contractDecision?.externalSurfacingEligibility === "audit_only") {
+  if (
+    contractDecision?.externalSurfacingEligibility === "audit_only" &&
+    !(packet.unifiedFindingId === "preconsent_tracking" && hasSpecificPreconsentEvidence(packet))
+  ) {
     overrideDecision(decision, {
       state: "support_only",
       lane: "confidence_and_coverage",
@@ -1741,7 +1744,8 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       context.policy.family === "contradiction"
     ) &&
     packet.concernContext?.externalSurfacingEligibilities?.every((value) => value === "audit_only") &&
-    contractDecision?.promotionEligibility !== "eligible"
+    contractDecision?.promotionEligibility !== "eligible" &&
+    !(packet.unifiedFindingId === "preconsent_tracking" && hasSpecificPreconsentEvidence(packet))
   ) {
     overrideDecision(decision, {
       state: "support_only",

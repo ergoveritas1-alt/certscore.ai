@@ -17,6 +17,7 @@ import {
   getHybridDerivedSignalValue,
   getHybridSignalFallbackEvidence
 } from "./hybrid-runtime-evidence";
+import { REJECT_TRACKING_CONFIRMATION_MIN_MS } from "./reject-tracking-policy";
 import { getReportSignalValue, isSignalValuePopulated } from "./report-signal-values";
 import {
   buildReviewFindings,
@@ -242,22 +243,105 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   }
 
   const rejectInteractionSucceeded =
-    rejectPath?.rejectInteractionSucceeded === true || rejectPath?.reject_interaction_succeeded === true;
+    rejectPath?.rejectInteractionSucceeded === true ||
+    rejectPath?.reject_interaction_succeeded === true ||
+    getRuntimeBoolean(input.runtimeArtifacts, [
+      "consentRejectInteractionSucceeded",
+      "consent_reject_interaction_succeeded"
+    ]) === true;
   const postRejectRows = getRuntimeObjectArray(input.runtimeArtifacts, [
     "consentRejectPostRejectNonEssentialRequests",
     "consent_reject_post_reject_non_essential_requests"
   ]);
   if (rejectInteractionSucceeded && postRejectRows.length > 0) {
+    const suppressionChecks = getRuntimeObject(input.runtimeArtifacts, [
+      "consentRejectSuppressionChecks",
+      "consent_reject_suppression_checks"
+    ]);
+    const rejectInteractionAttribution = getRuntimeObject(input.runtimeArtifacts, [
+      "consentRejectInteractionAttribution",
+      "consent_reject_interaction_attribution"
+    ]);
+    const promotionGradeRows = postRejectRows.filter((row) => {
+      const category = typeof row.category === "string" ? row.category : "";
+      const url = typeof row.url === "string" ? row.url : typeof row.requestUrl === "string" ? row.requestUrl : "";
+      const vendor = typeof row.vendor === "string" ? row.vendor : "";
+      const msAfterReject = row.ms_after_reject ?? row.msAfterReject;
+      const tsMs = row.ts_ms ?? row.tsMs;
+      return (
+        typeof tsMs === "number" &&
+        typeof msAfterReject === "number" &&
+        msAfterReject >= REJECT_TRACKING_CONFIRMATION_MIN_MS &&
+        /^(advertising|analytics|session_replay|marketing_automation)$/i.test(category) &&
+        vendor.trim().length > 0 &&
+        /^https?:\/\//i.test(url)
+      );
+    });
+    const baselineTrackerEvidenceUrls = getRuntimeStringArray(input.runtimeArtifacts, [
+      "consentBaselineTrackerEvidenceUrls",
+      "consent_baseline_tracker_evidence_urls"
+    ]);
+    const postRejectTrackerEvidenceUrls = getRuntimeStringArray(input.runtimeArtifacts, [
+      "consentPostRejectTrackerEvidenceUrls",
+      "consent_post_reject_tracker_evidence_urls"
+    ]);
+    const postRejectRequestUrls = postRejectRows
+      .map((row) => (typeof row.url === "string" ? row.url : typeof row.requestUrl === "string" ? row.requestUrl : null))
+      .filter((url): url is string => Boolean(url && /^https?:\/\//i.test(url)));
+    const persistedTrackerVendors = getRuntimeStringArray(input.runtimeArtifacts, [
+      "consentRejectPersistedTrackerVendorNames",
+      "consent_reject_persisted_tracker_vendor_names"
+    ]);
+    const postRejectTrackerVendors = getRuntimeStringArray(input.runtimeArtifacts, [
+      "consentPostRejectTrackerVendorNames",
+      "consent_post_reject_tracker_vendor_names"
+    ]);
+    const attributionClearsNavigationAmbiguity =
+      rejectInteractionAttribution?.finalUrlHostChanged === false &&
+      (
+        !Array.isArray(rejectInteractionAttribution.navigationEventsAfterClick) ||
+        rejectInteractionAttribution.navigationEventsAfterClick.length === 0
+      );
+    const navigationOrReloadAmbiguous =
+      suppressionChecks?.navigation_or_reload_ambiguous === true && !attributionClearsNavigationAmbiguity;
+    const confirmed = promotionGradeRows.length > 0 &&
+      suppressionChecks?.cmp_initialization_only !== true &&
+      !navigationOrReloadAmbiguous &&
+      suppressionChecks?.baseline_contradiction_detected !== true;
+    const runtimeEvidenceUrls = [
+      ...baselineTrackerEvidenceUrls,
+      ...postRejectTrackerEvidenceUrls,
+      ...postRejectRequestUrls
+    ];
+
     candidates.push({
       categoryId: "enforcement_outcomes_after_user_choice",
       description: "A retained reject interaction succeeded, and non-essential request activity was retained after reject.",
       fallbackEvidence: {
-        rejectPathDepthAndAvailability: rejectPath,
-        postRejectNonEssentialRequests: postRejectRows,
-        suppressionChecks: getRuntimeObject(input.runtimeArtifacts, [
-          "consentRejectSuppressionChecks",
-          "consent_reject_suppression_checks"
+        consentBaselineTrackerEvidenceUrls: baselineTrackerEvidenceUrls,
+        consentOptOutEvidenceLog: getRuntimeObjectArray(input.runtimeArtifacts, [
+          "consentOptOutEvidenceLog",
+          "consent_opt_out_evidence_log"
         ]),
+        consentPostRejectTrackerEvidenceUrls: postRejectTrackerEvidenceUrls,
+        consentRejectInteractionSucceeded: true,
+        persisted_tracker_vendors: [...new Set([...persistedTrackerVendors, ...postRejectTrackerVendors])],
+        post_reject_tracker_vendors: postRejectTrackerVendors,
+        promotionDecision: {
+          promoted: confirmed,
+          reason: confirmed
+            ? "Reject click, post-reject timing, vendor classification, and retained request URL satisfied promotion requirements."
+            : "Retained post-reject request rows did not satisfy promotion-grade timing, attribution, or classification checks."
+        },
+        reject_did_not_reduce_tracking: true,
+        rejectEvidenceConfidence: confirmed ? "confirmed" : "review",
+        rejectInteractionAttribution,
+        rejectPathDepthAndAvailability: rejectPath,
+        runtimeEvidenceUrls,
+        runtimeVendors: [...new Set([...postRejectTrackerVendors, ...persistedTrackerVendors])],
+        sourceUrls: postRejectRequestUrls,
+        postRejectNonEssentialRequests: postRejectRows,
+        suppressionChecks,
         signalKey: "consent_reject_reduced_tracking",
         signalLabel: "Reject path did not reduce tracking",
         signalValue: false
