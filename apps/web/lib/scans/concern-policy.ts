@@ -1014,7 +1014,14 @@ function hasConfirmedRejectTimingEvidence(rawEvidence: Record<string, unknown> |
 
   return rows.some((row) => {
     const category = typeof row.category === "string" ? row.category : "";
-    const url = typeof row.url === "string" ? row.url : "";
+    const url =
+      typeof row.url === "string"
+        ? row.url
+        : typeof row.requestUrl === "string"
+          ? row.requestUrl
+          : typeof row.request_url === "string"
+            ? row.request_url
+            : "";
     const vendor = typeof row.vendor === "string" ? row.vendor : "";
     const msAfterReject = row.ms_after_reject ?? row.msAfterReject;
     const tsMs = row.ts_ms ?? row.tsMs;

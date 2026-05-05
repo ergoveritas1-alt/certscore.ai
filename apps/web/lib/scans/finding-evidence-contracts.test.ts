@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  evaluateFindingEvidenceContractForPacket,
   evaluateFindingEvidenceContractForRawEvidence,
   FINDING_EVIDENCE_CONTRACTS
 } from "./finding-evidence-contracts";
@@ -183,6 +184,45 @@ test("WS01-style reject action and post-reject tracking evidence satisfies stron
       reject_interaction_succeeded: true
     }
   });
+
+  assert.equal(decision?.status, "pass_strong");
+});
+
+test("stringified reject requestUrl packet evidence satisfies strong", () => {
+  const decision = evaluateFindingEvidenceContractForPacket({
+    confidenceInputs: {
+      hasPolicyTextEvidence: false
+    },
+    concernContext: null,
+    evidence: {
+      entities: {
+        postRejectNonEssentialRequests: [
+          JSON.stringify({
+            category: "advertising",
+            ms_after_reject: 1500,
+            requestUrl: "https://ads.example.net/collect",
+            ts_ms: 4600,
+            vendor: "Example Ads"
+          })
+        ],
+        requestPurposeClassificationConfidence: [
+          JSON.stringify({
+            confidence: 0.9,
+            essentiality: "non_essential",
+            requestUrl: "https://ads.example.net/collect"
+          })
+        ],
+        suppressionChecks: [
+          JSON.stringify({
+            post_reject_window_available: true,
+            reject_click_confirmed: true
+          })
+        ]
+      },
+      flags: ["reject_evidence_confirmed"]
+    },
+    unifiedFindingId: "reject_did_not_reduce_tracking"
+  } as never);
 
   assert.equal(decision?.status, "pass_strong");
 });
