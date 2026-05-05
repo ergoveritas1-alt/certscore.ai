@@ -4525,13 +4525,12 @@ function ResultCategorySection(input: {
 }
 
 const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
-  "guaranteed_outcome_claim_detected",
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected",
   "financial_urgency_pressure_tactic_detected",
-  "leveraged_or_high_risk_product_promotion",
-  "regulatory_registration_disclosure_absent",
-  "unsubstantiated_testimonial_near_performance_claim"
+  "guaranteed_or_high_return_claims_present",
+  "performance_claims_without_context",
+  "high_risk_product_risk_disclosure_missing"
 ]);
 
 function computeFinancialScoreFromFindings(findings: CertScoreFinding[]): number | null {

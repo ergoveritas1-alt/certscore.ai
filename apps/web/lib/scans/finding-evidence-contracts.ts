@@ -3,6 +3,7 @@ import type {
   NormalizedConcernExternalSurfacingEligibility,
   NormalizedConcernPromotionEligibility
 } from "./normalized-concerns";
+import { evaluatePolicyBehaviorContradictionEvidence } from "./contradiction-evidence-contract";
 import {
   hasConcretePreconsentArtifact,
   hasConcreteReplayArtifact,
@@ -27,6 +28,7 @@ export type EvidenceRequirementType =
   | "policyAnchor"
   | "runtimeAnchor"
   | "conflictBridge"
+  | "policyBehaviorContradictionEvidence"
   | "negativeEvidenceSearchScope"
   | "sessionReplayVendorEvidence"
   | "rtbOrIdentitySyncEndpointEvidence"
@@ -104,6 +106,7 @@ const REQUIREMENT_DESCRIPTIONS: Record<EvidenceRequirementType, string> = {
   policyAnchor: "A retained policy/disclosure source was fetched and can anchor the interpretation.",
   runtimeAnchor: "Concrete runtime request, cookie, vendor, or payload evidence anchors the finding.",
   conflictBridge: "Evidence explains the mismatch between runtime behavior and disclosure language.",
+  policyBehaviorContradictionEvidence: "A complete policy/runtime contradiction bundle with specific anchors and bridge provenance was retained.",
   negativeEvidenceSearchScope: "The relevant policy/disclosure search scope was inspected and no adequate disclosure was found.",
   sessionReplayVendorEvidence: "Runtime evidence identifies a session replay vendor or replay artifact.",
   rtbOrIdentitySyncEndpointEvidence: "Concrete RTB, cookie-sync, or identity-sync endpoint evidence was retained.",
@@ -139,6 +142,27 @@ const PRECONSENT_COOKIE_STRONG = [
 ];
 
 export const FINDING_EVIDENCE_CONTRACTS = [
+  {
+    findingId: "policy_behavior_contradiction_detected",
+    unifiedFindingIds: ["policy_behavior_contradiction_detected", "policy_behavior_conflict", "consent_gated_tracking_claim_conflict"],
+    requiredForStrong: [req("policyBehaviorContradictionEvidence")],
+    requiredForGood: [req("policyBehaviorContradictionEvidence")],
+    downgradeIf: [
+      {
+        ifMissing: "policyBehaviorContradictionEvidence",
+        to: "audit_only",
+        reason: "Policy/runtime contradictions require a specific policy anchor, concrete runtime anchor, and explicit bridge provenance."
+      }
+    ],
+    suppressIf: [],
+    projectionEligibility: {
+      executive: { requiresContractPass: true, minimumTier: "strong" },
+      gdprEprivacy: { requiresContractPass: true, minimumTier: "strong" },
+      ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
+      ftc: { requiresContractPass: true, minimumTier: "strong" }
+    },
+    notes: "Producer-provided complete/promotion fields are revalidated by WC01 before surfacing or executive projection."
+  },
   {
     findingId: "pre_consent_tracking_detected",
     unifiedFindingIds: ["preconsent_tracking"],
@@ -484,6 +508,10 @@ function getStringArrayValues(record: Record<string, unknown> | null | undefined
     }
   }
   return [...new Set(values)];
+}
+
+function getStringValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  return getStringArrayValues(record, keys)[0] ?? null;
 }
 
 function getObjectValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -1091,6 +1119,8 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
       return hasRuntimeAnchor(rawEvidence);
     case "conflictBridge":
       return hasConflictBridge(rawEvidence);
+    case "policyBehaviorContradictionEvidence":
+      return evaluatePolicyBehaviorContradictionEvidence(rawEvidence).eligible;
     case "negativeEvidenceSearchScope":
       return hasNegativeEvidenceSearchScope(rawEvidence);
     case "sessionReplayVendorEvidence":
@@ -1145,6 +1175,8 @@ function downgradeFlag(type: EvidenceRequirementType) {
     case "runtimeAnchor":
     case "rtbOrIdentitySyncEndpointEvidence":
       return "missing_specific_runtime_anchor";
+    case "policyBehaviorContradictionEvidence":
+      return "missing_contradiction_bridge";
     case "coverageNotMateriallyBlocked":
       return "blocked_or_interstitial_evidence_observed";
     case "ignoredRuntimeCookieInventoryOnly":
@@ -1193,17 +1225,25 @@ export function evaluateFindingEvidenceContractForRawEvidence(
       ...contract.suppressIf.flatMap((rule) => [rule.ifMissing, rule.ifPresent].filter((type): type is EvidenceRequirementType => Boolean(type)))
     ])
   ];
-  const satisfiedRequirements = allRequirements.filter((type) => isRequirementSatisfied(type, rawEvidence));
-  const missingStrong = contract.requiredForStrong
+	  const satisfiedRequirements = allRequirements.filter((type) => isRequirementSatisfied(type, rawEvidence));
+	  const missingStrong = contract.requiredForStrong
     .map((requirement) => requirement.type)
     .filter((type) => !satisfiedRequirements.includes(type));
-  const missingGood = contract.requiredForGood
-    .map((requirement) => requirement.type)
-    .filter((type) => !satisfiedRequirements.includes(type));
+	  const missingGood = contract.requiredForGood
+	    .map((requirement) => requirement.type)
+	    .filter((type) => !satisfiedRequirements.includes(type));
+	  const policyBehaviorContradictionDecision = allRequirements.includes("policyBehaviorContradictionEvidence")
+	    ? evaluatePolicyBehaviorContradictionEvidence(rawEvidence)
+	    : null;
 
-  const negativeEvidenceFlags = orderNegativeEvidenceFlags([
-    ...new Set((missingStrong.length > 0 ? missingStrong : missingGood).map(downgradeFlag))
-  ]);
+	  const negativeEvidenceFlags = orderNegativeEvidenceFlags([
+	    ...new Set([
+	      ...(policyBehaviorContradictionDecision && !policyBehaviorContradictionDecision.eligible
+	        ? policyBehaviorContradictionDecision.negativeEvidenceFlags
+	        : []),
+	      ...(missingStrong.length > 0 ? missingStrong : missingGood).map(downgradeFlag)
+	    ])
+	  ]);
 
   const suppressionRule = contract.suppressIf.find((rule) =>
     (rule.ifPresent ? satisfiedRequirements.includes(rule.ifPresent) : true) &&
@@ -1277,7 +1317,23 @@ export function evaluateFindingEvidenceContractForRawEvidence(
 function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, unknown> {
   const entities = packet.evidence?.entities ?? {};
   const consentTrackingDetails = packet.details?.family === "consent_tracking" ? packet.details : null;
+  const contradictionDetails = packet.details?.family === "contradiction" ? packet.details : null;
   const allEvidenceUrls = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])];
+  const contradictionRuntimeRequests =
+    entities.runtimeRequestUrls ??
+    entities.runtime_request_urls ??
+    contradictionDetails?.runtimeEvidenceArtifacts ??
+    allEvidenceUrls.filter((url) => /^https?:\/\//i.test(url));
+  const contradictionRuntimeVendors =
+    entities.runtimeVendors ??
+    entities.runtime_vendors ??
+    contradictionDetails?.vendors ??
+    [];
+  const sourceEvidenceIds = [
+    ...(Array.isArray(entities.sourceEvidenceIds) ? entities.sourceEvidenceIds : []),
+    ...(Array.isArray(entities.source_evidence_ids) ? entities.source_evidence_ids : []),
+    ...(contradictionDetails?.sourceEvidenceIds ?? [])
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
   const requestPurposeClassificationConfidence = parseObjectArrayValue(
     entities.requestPurposeClassificationConfidence ?? entities.request_purpose_classification_confidence
   );
@@ -1296,8 +1352,59 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
         ? true
         : getBoolean(entities, ["consentRejectInteractionSucceeded", "consent_reject_interaction_succeeded"]) ?? undefined,
     consentSurfaceObserved: getBoolean(entities, ["consentSurfaceObserved", "consent_surface_observed"]),
-    consentTimeline: parseFirstObjectValue(entities.consentTimeline ?? entities.consent_timeline),
-    disclosureSearchScopeRetained:
+	    consentTimeline: parseFirstObjectValue(entities.consentTimeline ?? entities.consent_timeline),
+	    contradictionEvidence: contradictionDetails
+	      ? {
+	          claim: contradictionDetails.claim ?? null,
+	          contradictionBasis: contradictionDetails.contradictionBasis ?? null,
+	          conflictBridge: {
+	            conflictType: contradictionDetails.conflictType ?? null,
+	            reasoning: contradictionDetails.conflictBridgeReasoning ?? null,
+	            supportsPromotion: contradictionDetails.conflictSupportsPromotion === true,
+	            provenance: {
+	              bridgeRuleId: contradictionDetails.bridgeRuleId ?? getStringValue(entities, ["bridgeRuleId", "bridge_rule_id"]),
+	              generatedBy: contradictionDetails.bridgeGeneratedBy ?? getStringValue(entities, ["bridgeGeneratedBy", "generated_by"]),
+	              mappingType: contradictionDetails.bridgeMappingType ?? getStringValue(entities, ["bridgeMappingType", "mapping_type"]),
+	              mappingVersion: contradictionDetails.bridgeMappingVersion ?? getStringValue(entities, ["bridgeMappingVersion", "mapping_version"]),
+	              policyAnchorRef: contradictionDetails.policyAnchorRef ?? getStringValue(entities, ["policyAnchorRef", "policy_anchor_ref"]),
+	              runtimeAnchorRef: contradictionDetails.runtimeAnchorRef ?? getStringValue(entities, ["runtimeAnchorRef", "runtime_anchor_ref"]),
+	              sourceEvidenceIds
+	            }
+	          },
+	          evidenceSufficiency: {
+	            conflictBridgePresent: contradictionDetails.conflictType != null && contradictionDetails.conflictSupportsPromotion === true,
+	            policyAnchorPresent: Boolean(contradictionDetails.policyClaimType && contradictionDetails.policySourceUrl && contradictionDetails.policySnippet),
+	            promotionEligible: contradictionDetails.contradictionPromotionEligible === true,
+	            reviewStatus: contradictionDetails.contradictionReviewStatus ?? null,
+	            runtimeAnchorPresent: Boolean(contradictionDetails.runtimeObservationType && contradictionRuntimeRequests.length > 0)
+	          },
+	          policyAnchor: {
+	            claimType: contradictionDetails.policyClaimType ?? null,
+	            confidence: getNumberValue(entities, ["policyConfidence", "policy_confidence"]) ?? 0.72,
+	            extractionStatus: getStringValue(entities, ["policyExtractionStatus", "policy_extraction_status"]) ?? "fetched",
+	            normalizedClaim: contradictionDetails.claim ?? contradictionDetails.policySnippet ?? null,
+	            snippet: contradictionDetails.policySnippet ?? null,
+	            sourceUrl: contradictionDetails.policySourceUrl ?? null
+	          },
+	          policySnippet: contradictionDetails.policySnippet ?? null,
+	          policySourceUrl: contradictionDetails.policySourceUrl ?? null,
+	          runtimeAnchor: {
+	            confidence: getNumberValue(entities, ["runtimeConfidence", "runtime_confidence"]) ?? 0.82,
+	            cookies: getStringArrayValues(entities, ["runtimeCookies", "runtime_cookie_names"]),
+	            observationType: contradictionDetails.runtimeObservationType ?? null,
+	            phase: contradictionDetails.runtimePhase ?? "unknown",
+	            requests: contradictionRuntimeRequests,
+	            storageArtifacts: getStringArrayValues(entities, ["runtimeStorageArtifacts", "runtime_storage_artifacts"]),
+	            vendors: contradictionRuntimeVendors
+	          },
+	          runtimeEvidenceArtifacts: contradictionDetails.runtimeEvidenceArtifacts ?? [],
+	          runtimeSummary: contradictionDetails.observedBehavior ?? null,
+	          runtimeVendors: contradictionRuntimeVendors,
+	          sourceUrls: allEvidenceUrls,
+	          supportingSignals: []
+	        }
+	      : undefined,
+	    disclosureSearchScopeRetained:
       packet.confidenceInputs.hasPolicyTextEvidence &&
       (packet.evidence?.pageUrls?.length || packet.evidence?.sourceUrls?.length || packet.evidence?.snippets?.length)
         ? true
@@ -1384,17 +1491,23 @@ export function evaluateFindingEvidenceContractForPacket(packet: UnifiedFindingP
     packetToContractEvidence(packet)
   );
 
-  if (packet.concernContext) {
-    if (
-      packet.concernContext.promotionEligibilities.length > 0 &&
-      packet.concernContext.promotionEligibilities.every((value) => value === "eligible") &&
-      packet.concernContext.externalSurfacingEligibilities.every((value) => value === "eligible")
-    ) {
-      if (packetEvidenceDecision?.status === "pass_strong") {
-        return packetEvidenceDecision;
-      }
+	  if (packet.concernContext) {
+	    const requiresPolicyBehaviorContradictionEvidence = contract.requiredForStrong.some(
+	      (requirement) => requirement.type === "policyBehaviorContradictionEvidence"
+	    );
+	    if (
+	      packet.concernContext.promotionEligibilities.length > 0 &&
+	      packet.concernContext.promotionEligibilities.every((value) => value === "eligible") &&
+	      packet.concernContext.externalSurfacingEligibilities.every((value) => value === "eligible")
+	    ) {
+	      if (packetEvidenceDecision?.status === "pass_strong") {
+	        return packetEvidenceDecision;
+	      }
+	      if (requiresPolicyBehaviorContradictionEvidence) {
+	        return packetEvidenceDecision;
+	      }
 
-      return {
+	      return {
         allowedNarrativeTier: packet.concernContext.assertionLevels.includes("strong") ? "strong" : "moderate",
         externalSurfacingEligibility: "eligible",
         missingRequirements: [],
@@ -1428,10 +1541,13 @@ export function isFindingProjectionEligible(input: {
   lane: keyof FindingEvidenceContract["projectionEligibility"];
   packet: UnifiedFindingPacket;
 }) {
-  const contract = getFindingEvidenceContractForUnifiedFinding(input.packet.unifiedFindingId);
-  if (!contract) {
-    return true;
-  }
+	  const contract = getFindingEvidenceContractForUnifiedFinding(input.packet.unifiedFindingId);
+	  if (!contract) {
+	    if (input.packet.details?.family === "contradiction") {
+	      return evaluatePolicyBehaviorContradictionEvidence(packetToContractEvidence(input.packet)).eligible;
+	    }
+	    return true;
+	  }
 
   const rule = contract.projectionEligibility[input.lane];
   if (rule === false) {

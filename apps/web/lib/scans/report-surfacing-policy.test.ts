@@ -100,15 +100,32 @@ test("contradiction beats generic absence while retaining the absence as support
           hasDirectRuntimeEvidence: true,
           hasPolicyTextEvidence: true
         },
-        details: {
-          family: "contradiction",
-          kind: "policy_behavior_conflict",
-          contradictionBasis: "Policy promised no tracking before consent, but runtime evidence showed tracking.",
-          conflictType: "tracking_before_consent",
-          policyClaimType: "tracking_promise",
-          runtimeObservationType: "tracker_runtime_observed"
-        }
-      }),
+	        details: {
+	          family: "contradiction",
+	          kind: "policy_behavior_conflict",
+	          claim: "Optional analytics and advertising cookies are controlled by consent preferences.",
+	          contradictionBasis: "Policy promised optional tracking would follow consent preferences, but runtime evidence showed tracking before consent.",
+	          bridgeGeneratedBy: "wc01.test",
+	          bridgeMappingType: "deterministic_policy_runtime_mapping",
+	          bridgeMappingVersion: "policy_behavior_conflict_map:v1",
+	          bridgeRuleId: "test.policy_behavior_cookie_preferences_preconsent_v1",
+	          conflictBridgeReasoning: "Cookie preferences policy evidence is paired with concrete pre-consent advertising request evidence.",
+	          conflictSupportsPromotion: true,
+	          conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+	          contradictionPromotionEligible: true,
+	          contradictionReviewStatus: "complete",
+	          policyAnchorRef: "policy:privacy#cookies",
+	          policyClaimType: "cookie_preferences_available",
+	          policySnippet: "We use optional analytics and advertising cookies only after you set cookie preferences or consent.",
+	          policySourceUrl: "https://example.com/privacy",
+	          runtimeAnchorRef: "request:https://ads.example.net/pixel.js",
+	          runtimeEvidenceArtifacts: ["https://ads.example.net/pixel.js"],
+	          runtimeObservationType: "marketing_vendor_fired_pre_consent",
+	          runtimePhase: "pre_consent",
+	          sourceEvidenceIds: ["policy:privacy#cookies", "request:https://ads.example.net/pixel.js"],
+	          vendors: ["Example Ads"]
+	        }
+	      }),
       makePacket("privacy_policy_missing_surface", {
         details: {
           attemptCount: 1,
@@ -414,14 +431,30 @@ test("specific consent-gating contradiction demotes generic pre-consent tracking
           hasPolicyTextEvidence: true
         },
         details: {
-          family: "contradiction",
-          kind: "consent_gated_tracking_claim_conflict",
-          contradictionBasis: "The policy and consent surface imply tracking should begin only after a valid consent interaction.",
-          conflictType: "tracking_before_consent",
-          policyClaimType: "consent_gated_tracking_claim",
-          runtimeObservationType: "tracker_runtime_observed",
-          vendors: ["Google Tag Manager"]
-        },
+	          family: "contradiction",
+	          kind: "consent_gated_tracking_claim_conflict",
+	          claim: "Optional analytics and advertising cookies are controlled by cookie preferences and consent.",
+	          contradictionBasis: "The policy and consent surface says optional tracking follows cookie preferences, but tracking began before consent.",
+	          bridgeGeneratedBy: "wc01.test",
+	          bridgeMappingType: "deterministic_policy_runtime_mapping",
+	          bridgeMappingVersion: "policy_behavior_conflict_map:v1",
+	          bridgeRuleId: "test.policy_behavior_cookie_preferences_preconsent_v1",
+	          conflictBridgeReasoning: "Cookie preference policy evidence is paired with concrete pre-consent tracker request evidence.",
+	          conflictSupportsPromotion: true,
+	          conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+	          contradictionPromotionEligible: true,
+	          contradictionReviewStatus: "complete",
+	          policyAnchorRef: "policy:privacy#cookies",
+	          policyClaimType: "cookie_preferences_available",
+	          policySnippet: "We use optional analytics and advertising cookies only after you set cookie preferences or consent.",
+	          policySourceUrl: "https://example.com/privacy",
+	          runtimeAnchorRef: "request:https://www.googletagmanager.com/gtm.js",
+	          runtimeEvidenceArtifacts: ["https://www.googletagmanager.com/gtm.js"],
+	          runtimeObservationType: "marketing_vendor_fired_pre_consent",
+	          runtimePhase: "pre_consent",
+	          sourceEvidenceIds: ["policy:privacy#cookies", "request:https://www.googletagmanager.com/gtm.js"],
+	          vendors: ["Google Tag Manager"]
+	        },
         evidence: {
           flags: [],
           entities: {
@@ -1434,7 +1467,7 @@ test("negative financial-promotion risks confirm when backed by retained financi
 test("corpus-derived negative financial-promotion findings use the confirmed financial-risk policy", () => {
   const corpusDerivedFindingIds = [
     "financial_urgency_pressure_tactic_detected",
-    "guaranteed_outcome_claim_detected",
+    "guaranteed_or_high_return_claims_present",
     "simulated_performance_without_disclosure",
     "unqualified_superlative_claim_detected"
   ] as const satisfies readonly ReportUnifiedFindingId[];

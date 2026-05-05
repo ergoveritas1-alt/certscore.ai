@@ -109,13 +109,12 @@ type RegulatoryLensFinding = {
 };
 
 const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
-  "guaranteed_outcome_claim_detected",
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected",
   "financial_urgency_pressure_tactic_detected",
-  "leveraged_or_high_risk_product_promotion",
-  "regulatory_registration_disclosure_absent",
-  "unsubstantiated_testimonial_near_performance_claim"
+  "guaranteed_or_high_return_claims_present",
+  "performance_claims_without_context",
+  "high_risk_product_risk_disclosure_missing"
 ]);
 
 const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
@@ -157,11 +156,7 @@ const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
   "autoplay_before_consent",
   "popup_or_modal_present",
   "interstitial_detected",
-  "accessibility_risk_score",
-  "guaranteed_outcome_claim_detected",
-  "regulatory_registration_disclosure_absent",
-  "unsubstantiated_testimonial_near_performance_claim",
-  "leveraged_or_high_risk_product_promotion"
+  "accessibility_risk_score"
 ]);
 
 const GDPR_EPRIVACY_REGULATORY_FINDING_IDS = new Set([
@@ -241,10 +236,6 @@ const FTC_REGULATORY_FINDING_IDS = new Set([
   "telemetry_rich_identification_observed",
   "probable_fingerprinting",
   "non_cookie_tracking_detected",
-  "guaranteed_outcome_claim_detected",
-  "regulatory_registration_disclosure_absent",
-  "unsubstantiated_testimonial_near_performance_claim",
-  "leveraged_or_high_risk_product_promotion",
   "high_request_density",
   "multi_vendor_tracking_detected",
   "large_third_party_footprint",
@@ -253,20 +244,12 @@ const FTC_REGULATORY_FINDING_IDS = new Set([
 
 function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
   switch (finding.id) {
-    case "guaranteed_outcome_claim_detected":
-      return "Guaranteed or certain-outcome claim surfaced.";
     case "simulated_performance_without_disclosure":
       return "Simulated or hypothetical performance language surfaced without nearby disclosure.";
     case "unqualified_superlative_claim_detected":
       return "Unqualified superiority or best-in-class claim surfaced.";
     case "financial_urgency_pressure_tactic_detected":
       return "Urgency language appears tied to a conversion step.";
-    case "leveraged_or_high_risk_product_promotion":
-      return "High-risk financial product promotion language surfaced.";
-    case "regulatory_registration_disclosure_absent":
-      return "Financial advisory or signal context surfaced without a visible registration disclosure.";
-    case "unsubstantiated_testimonial_near_performance_claim":
-      return "Testimonial or review language appeared near an unsubstantiated performance claim.";
     default:
       return finding.shortSummary;
   }
@@ -446,9 +429,7 @@ function buildFinancialClaimsLens(input: {
     findings: financialFindings,
     ratingLabel: financialTone.label,
     score: financialScore,
-    summary: input.findings.some((finding) => finding.id === "guaranteed_outcome_claim_detected")
-      ? "High-confidence claims or earnings language surfaced without enough balancing disclosure."
-      : "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
+    summary: "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
     toneClass: financialTone.toneClass
   } satisfies RegulatoryLens;
 }
@@ -529,12 +510,7 @@ export function buildRegulatoryLenses(
 ): RegulatoryLens[] {
   const findingIds = new Set(findings.map((finding) => finding.id));
   const financialClaimFindings = findings.filter((finding) => FINANCIAL_CLAIMS_FINDING_IDS.has(finding.id));
-  const financialRegulatoryBenchmarkActive =
-    hasFinancialRegulatoryBenchmark(options?.benchmarkIndustry) ||
-    financialClaimFindings.some((finding) =>
-      finding.id === "regulatory_registration_disclosure_absent" ||
-      finding.id === "leveraged_or_high_risk_product_promotion"
-    );
+  const financialRegulatoryBenchmarkActive = hasFinancialRegulatoryBenchmark(options?.benchmarkIndustry);
   const trackingFinding =
     findings.find((finding) => finding.id === "pre_consent_tracking_detected") ??
     findings.find((finding) => finding.id === "rtb_cookie_sync_observed") ??
@@ -1127,8 +1103,7 @@ export function buildRegulatoryLensesFromUnifiedPackets(
     /gambling|sports betting|sportsbook|casino|wager|bonus bet|responsible gambling|1-800-gambler/i.test(surfacedText) &&
     surfacedPackets.some((packet) => (
       packet.unifiedFindingId === "preconsent_tracking" ||
-      packet.unifiedFindingId === "session_replay_observed" ||
-      packet.unifiedFindingId === "leveraged_or_high_risk_product_promotion"
+      packet.unifiedFindingId === "session_replay_observed"
     ));
 
   return buildRegulatoryLenses(
@@ -1530,8 +1505,6 @@ function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKe
       return ["cookie-storage", "arrow-transfer"];
     case "probable_fingerprinting":
       return ["fingerprint", "device-telemetry"];
-    case "leveraged_or_high_risk_product_promotion":
-      return ["up-arrow", "warning-triangle"];
     case "accessibility_risk_score":
       return ["accessibility-figure", "warning-triangle"];
     case "access_limited_no_reliable_findings":

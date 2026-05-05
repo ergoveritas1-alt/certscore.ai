@@ -83,6 +83,13 @@ const COVERAGE_GAP_SURFACE_MISSING_IDS = new Set([
   "contact_page_missing_surface"
 ]);
 
+const RETIRED_FINANCIAL_FINDING_IDS = new Set([
+  "regulatory_registration_disclosure_absent",
+  "unsubstantiated_testimonial_near_performance_claim",
+  "leveraged_or_high_risk_product_promotion",
+  "guaranteed_outcome_claim_detected"
+]);
+
 const BLOCKED_OR_INTERSTITIAL_TEXT_PATTERN =
   /unable to authorize your request|access denied|verify you are human|captcha|bot challenge|request blocked|security check|temporarily unavailable|forbidden|we(?:'|’)re sorry, but we were unable to authorize your request/i;
 
@@ -1461,15 +1468,6 @@ function isCommercialEvidenceConcern(
   ].includes(concern.suggestedUnifiedFindingId ?? "");
 }
 
-function isRawHighRiskFinancialProductConcern(
-  concern: Pick<NormalizedConcern, "originType" | "suggestedUnifiedFindingId">
-) {
-  return (
-    concern.suggestedUnifiedFindingId === "leveraged_or_high_risk_product_promotion" &&
-    concern.originType !== "validation_rule"
-  );
-}
-
 const DERIVATIVES_LANGUAGE_SIGNAL_KEYS = new Set([
   "financial.options_or_futures_language_present",
   "financial.perpetuals_or_derivatives_language_present"
@@ -1564,25 +1562,21 @@ function hasConcreteOfferEvidence(rawEvidence: Record<string, unknown> | null | 
 
 const NEGATIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "financial_urgency_pressure_tactic_detected",
-  "guaranteed_outcome_claim_detected",
   "performance_claims_without_context",
   "guaranteed_or_high_return_claims_present",
   "investment_risk_disclosure_missing",
   "hypothetical_performance_disclosure_missing",
-  "unsubstantiated_testimonial_near_performance_claim",
   "testimonial_endorsement_financial_promotion_risk",
   "investment_purchase_by_credit_card_present",
   "investment_urgency_countdown_present",
   "pump_and_dump_language_present",
   "vague_whitepaper_or_technical_obfuscation_present",
   "registration_identifier_missing",
-  "regulatory_registration_disclosure_absent",
   "registration_claim_support_missing",
   "entity_naming_consistency_conflict",
   "fee_disclosure_missing_or_opaque",
   "material_terms_hard_to_locate",
   "promo_to_terms_conflict",
-  "leveraged_or_high_risk_product_promotion",
   "yield_or_return_claims_high_risk",
   "high_risk_product_risk_disclosure_missing",
   "ai_financial_advice_or_trading_claims_without_disclosure",
@@ -1945,6 +1939,17 @@ export function deriveConcernPolicy(input: {
   const hasPageAttribution = input.evidenceStrengthFlags.includes("page_attributed");
   const hasKeyPageDiscovery = input.evidenceStrengthFlags.includes("key_page_discovery");
   const negativeEvidenceFlags = new Set<NormalizedConcernNegativeEvidenceFlag>();
+
+  const suggestedUnifiedFindingId = input.concern.suggestedUnifiedFindingId;
+  if (typeof suggestedUnifiedFindingId === "string" && RETIRED_FINANCIAL_FINDING_IDS.has(suggestedUnifiedFindingId)) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "suppress",
+      negativeEvidenceFlags: [],
+      promotionEligibility: "blocked"
+    };
+  }
+
   const consentSurfaceObserved = getBooleanEvidence(input.rawEvidence, [
     "consentSurfaceObserved",
     "consent_surface_observed",
@@ -2416,50 +2421,6 @@ export function deriveConcernPolicy(input: {
       externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "internal_only"
-    };
-  }
-
-  if (
-    isRawHighRiskFinancialProductConcern(input.concern) &&
-    !hasFinancialOfferContext(input.rawEvidence)
-  ) {
-    return {
-      allowedNarrativeTier: "weak",
-      externalSurfacingEligibility: "suppress",
-      negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: "blocked"
-    };
-  }
-
-  if (
-    isRawHighRiskFinancialProductConcern(input.concern) &&
-    isDerivativesLanguageSignal(input.concern) &&
-    hasSportsbookGamblingContext(input.rawEvidence) &&
-    !hasTrueFinancialDerivativesContext(input.rawEvidence) &&
-    !hasPredictionMarketContext(input.rawEvidence)
-  ) {
-    return {
-      allowedNarrativeTier: "weak",
-      externalSurfacingEligibility: "suppress",
-      negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: "blocked"
-    };
-  }
-
-  if (
-    isRawHighRiskFinancialProductConcern(input.concern) &&
-    input.concern.originType === "section_review" &&
-    input.rawEvidence?.sectionReviewIssue === true &&
-    hasSportsbookGamblingContext(input.rawEvidence) &&
-    !hasTrueFinancialDerivativesContext(input.rawEvidence) &&
-    !hasPredictionMarketContext(input.rawEvidence) &&
-    !hasConcreteOfferEvidence(input.rawEvidence)
-  ) {
-    return {
-      allowedNarrativeTier: "weak",
-      externalSurfacingEligibility: "suppress",
-      negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: "blocked"
     };
   }
 

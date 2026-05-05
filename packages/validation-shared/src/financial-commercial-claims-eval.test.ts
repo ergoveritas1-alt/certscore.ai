@@ -17,7 +17,7 @@ test("deriveFinancialCommercialExpectedFindingIds mirrors the current determinis
     classification: guaranteeExample.expected
   });
 
-  assert.deepEqual(findingIds, ["guaranteed_outcome_claim_detected"]);
+  assert.deepEqual(findingIds, []);
 });
 
 test("deriveFinancialCommercialExpectedCardMode omits non-commercial negatives", () => {

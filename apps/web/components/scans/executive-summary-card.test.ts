@@ -677,10 +677,10 @@ test("ExecutiveSummaryCard shows benchmark beside posture without scanned timest
 test("buildRegulatoryLenses promotes retained financial-promotion findings into the financial claims lens", () => {
   const lenses = buildRegulatoryLenses(
     [
-      makeFinding("leveraged_or_high_risk_product_promotion", "Leveraged or high-risk product promotion", {
+      makeFinding("high_risk_product_risk_disclosure_missing", "High-risk product risk disclosure missing", {
         section: "Financial & Claims",
         severity: "medium",
-        shortSummary: "Leverage language present on a public-facing financial promotion surface."
+        shortSummary: "High-risk product marketing surfaced without nearby risk disclosure."
       })
     ],
     {
@@ -709,16 +709,12 @@ test("buildRegulatoryLenses promotes retained financial-promotion findings into 
   assert.equal(financialLens?.minimal, undefined);
   assert.equal(financialLens?.ratingLabel, "Watch");
   assert.match(financialLens?.summary ?? "", /Commercial claims and pricing language should be reviewed/i);
-  assert.match(regulatoryFindingLabels(financialLens?.findings ?? []).join(" "), /High-risk financial product promotion language surfaced/i);
+  assert.match(regulatoryFindingLabels(financialLens?.findings ?? []).join(" "), /High-risk product marketing surfaced/i);
 });
 
 test("buildRegulatoryLenses places financial claims directly below DOJ / ADA accessibility in regulatory findings", () => {
   const lenses = buildRegulatoryLenses(
     [
-      makeFinding("guaranteed_outcome_claim_detected", "Guaranteed outcome claim detected", {
-        severity: "high",
-        shortSummary: "Guaranteed returns language surfaced near signup copy."
-      }),
       makeFinding("simulated_performance_without_disclosure", "Simulated performance without disclosure", {
         severity: "medium",
         shortSummary: "Backtested performance language surfaced without nearby disclosure."
@@ -749,7 +745,6 @@ test("buildRegulatoryLenses places financial claims directly below DOJ / ADA acc
   assert.equal(financialLens?.detailTitle, "Claims, urgency, and pricing disclosures");
   assert.match(financialLens?.summary ?? "", /claims|pricing/i);
   assert.equal(financialLens?.minimal, undefined);
-  assert.match(regulatoryFindingLabels(financialLens?.findings ?? []).join(" "), /Guaranteed or certain-outcome claim surfaced/);
   assert.match(regulatoryFindingLabels(financialLens?.findings ?? []).join(" "), /Simulated or hypothetical performance language surfaced/);
 });
 
@@ -758,11 +753,11 @@ test("ExecutiveSummaryCard builds regulatory lenses from all findings instead of
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
       allFindings: [
-        makeFinding("guaranteed_outcome_claim_detected", "Guaranteed outcome claim detected", {
+        makeFinding("simulated_performance_without_disclosure", "Simulated performance without disclosure", {
           section: "Privacy & Tracking",
           defaultSurfacePriority: 97,
           severity: "high",
-          shortSummary: "Guaranteed returns language surfaced near signup copy."
+          shortSummary: "Backtested performance language surfaced without nearby disclosure."
         })
       ],
       beforeConsentCookieCount: 12,
@@ -808,7 +803,7 @@ test("ExecutiveSummaryCard builds regulatory lenses from all findings instead of
   );
 
   assert.match(html, /Financial &amp; commercial claims/);
-  assert.match(html, /Guaranteed or certain-outcome claim surfaced\./);
+  assert.match(html, /Simulated or hypothetical performance language surfaced without nearby disclosure\./);
 });
 
 test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-findings list", () => {

@@ -34,10 +34,11 @@ test("registry defines contracts for the high-risk finding set", () => {
       "cookie_disclosure_gap",
       "cpra_cba_opt_out_missing",
       "cross_domain_identifier_sharing_observed",
-      "dark_pattern_consent_signals_detected",
-      "fingerprinting_observed",
-      "non_essential_tracking_continued_after_reject",
-      "pre_consent_tracking_detected",
+	      "dark_pattern_consent_signals_detected",
+	      "fingerprinting_observed",
+	      "non_essential_tracking_continued_after_reject",
+	      "policy_behavior_contradiction_detected",
+	      "pre_consent_tracking_detected",
       "reject_option_missing_or_hidden",
       "rtb_cookie_sync_observed",
       "sensitive_data_collection_with_third_party_tracking_present",
@@ -47,7 +48,424 @@ test("registry defines contracts for the high-risk finding set", () => {
       "tracking_cookies_set_before_consent",
       "video_content_tracking_exposure"
     ].sort()
+	  );
+	});
+
+function makePolicyBehaviorContradictionEvidence(overrides: Record<string, unknown> = {}) {
+  return {
+    contradictionEvidence: {
+      claim: "We use optional analytics and advertising cookies only after you set cookie preferences or consent.",
+      contradictionBasis:
+        "The policy says optional tracking is controlled by consent, but marketing requests fired before consent.",
+      conflictBridge: {
+        conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+        provenance: {
+          bridgeRuleId: "test.policy_behavior_cookie_preferences_preconsent_v1",
+          generatedBy: "wc01.test",
+          mappingType: "deterministic_policy_runtime_mapping",
+          mappingVersion: "policy_behavior_conflict_map:v1",
+          policyAnchorRef: "policy:privacy#cookies",
+          runtimeAnchorRef: "request:https://ads.example.net/pixel.js",
+          sourceEvidenceIds: ["policy:privacy#cookies", "request:https://ads.example.net/pixel.js"]
+        },
+        reasoning:
+          "The policy anchor describes cookie preferences for optional tracking while runtime evidence shows an advertising request before consent.",
+        supportsPromotion: true
+      },
+      evidenceSufficiency: {
+        conflictBridgePresent: true,
+        policyAnchorPresent: true,
+        promotionEligible: true,
+        reviewStatus: "complete",
+        runtimeAnchorPresent: true
+      },
+      policyAnchor: {
+        claimType: "cookie_preferences_available",
+        confidence: 0.82,
+        extractionStatus: "fetched",
+        normalizedClaim: "Optional analytics and advertising cookies are controlled by consent preferences.",
+        snippet: "We use optional analytics and advertising cookies only after you set cookie preferences or consent.",
+        sourceUrl: "https://example.com/privacy"
+      },
+      runtimeAnchor: {
+        confidence: 0.88,
+        observationType: "marketing_vendor_fired_pre_consent",
+        phase: "pre_consent",
+        requests: ["https://ads.example.net/pixel.js"],
+        vendors: ["Example Ads"]
+      },
+      runtimeEvidenceArtifacts: ["https://ads.example.net/pixel.js"],
+      runtimeVendors: ["Example Ads"],
+      sourceUrls: ["https://example.com/privacy"]
+    },
+    ...overrides
+  };
+}
+
+function makeUpstreamContradictionCandidatePackets(overrides: Record<string, unknown> = {}) {
+  return {
+    policyClaimCandidates: [
+      {
+        charEnd: 132,
+        charStart: 14,
+        claimType: "cookie_preferences_available",
+        confidence: 0.84,
+        documentType: "cookie_policy",
+        extractedBy: "ws01.policy_claim_extractor",
+        extractionStatus: "fetched",
+        extractionVersion: "policy_claim_candidate:v1",
+        headingPath: "Cookie Policy > Your choices",
+        id: "policy_claim:cookie_preferences_available:example",
+        sectionPath: "cookie-policy/your-choices",
+        snippet:
+          "You can manage cookie preferences and choose whether analytics and advertising cookies are enabled before they are used.",
+        snippetHash: "sha256:policy-snippet-example",
+        sourceUrl: "https://example.com/cookie-policy"
+      }
+    ],
+    policyRuntimeBridgeCandidates: [
+      {
+        bridgeRuleId: "ws01.policy_runtime.cookie_preferences_preconsent_request_v1",
+        confidence: 0.79,
+        generatedBy: "ws01.policy_runtime_bridge_generator",
+        id: "policy_runtime_bridge:example",
+        mappingType: "deterministic_policy_runtime_mapping",
+        mappingVersion: "policy_behavior_conflict_map:v1",
+        policyAnchorRef: "policy_claim:cookie_preferences_available:example",
+        reasoning:
+          "The policy claim says analytics and advertising cookies are controlled by preferences, while the runtime artifact records a pre-consent advertising request.",
+        runtimeAnchorRef: "runtime_artifact:request:pre_consent:example",
+        sourceEvidenceIds: [
+          "policy_claim:cookie_preferences_available:example",
+          "runtime_artifact:request:pre_consent:example"
+        ],
+        supportsPromotionCandidate: true
+      }
+    ],
+    runtimeBehaviorArtifacts: [
+      {
+        artifactType: "request",
+        cmpVisibleMs: 450,
+        confidence: 0.9,
+        consentActionObserved: false,
+        cookieName: null,
+        host: "securepubads.g.doubleclick.net",
+        id: "runtime_artifact:request:pre_consent:example",
+        phase: "pre_consent",
+        sourceArtifactRef: "network-request:securepubads.g.doubleclick.net/tag/js/gpt.js",
+        storageKey: null,
+        timestampMs: 120,
+        url: "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+        vendor: "Google Ad Manager"
+      }
+    ],
+    ...overrides
+  };
+}
+
+test("policy behavior contradiction contract fails closed without required anchors and bridge provenance", () => {
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("policy_behavior_conflict", {
+      policy_behavior_conflict_detected: true
+    })?.promotionEligibility,
+    "internal_only"
   );
+  assert.ok(
+    evaluateFindingEvidenceContractForRawEvidence("policy_behavior_conflict", makePolicyBehaviorContradictionEvidence({
+      contradictionEvidence: {
+        ...makePolicyBehaviorContradictionEvidence().contradictionEvidence,
+        policyAnchor: null
+      }
+    }))?.negativeEvidenceFlags.includes("missing_policy_side_evidence")
+  );
+  assert.ok(
+    evaluateFindingEvidenceContractForRawEvidence("policy_behavior_conflict", makePolicyBehaviorContradictionEvidence({
+      contradictionEvidence: {
+        ...makePolicyBehaviorContradictionEvidence().contradictionEvidence,
+        runtimeAnchor: { confidence: 0.88, observationType: null, phase: "unknown", requests: [], vendors: [] }
+      }
+    }))?.negativeEvidenceFlags.includes("missing_runtime_anchor")
+  );
+  assert.ok(
+    evaluateFindingEvidenceContractForRawEvidence("policy_behavior_conflict", makePolicyBehaviorContradictionEvidence({
+      contradictionEvidence: {
+        ...makePolicyBehaviorContradictionEvidence().contradictionEvidence,
+        conflictBridge: {
+          conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+          reasoning: "Looks mismatched.",
+          supportsPromotion: true
+        }
+      }
+    }))?.negativeEvidenceFlags.includes("missing_bridge_provenance")
+  );
+});
+
+test("upstream policy/runtime bridge candidate packets normalize into a passing contradiction bundle", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence(
+    "policy_behavior_contradiction_detected",
+    makeUpstreamContradictionCandidatePackets()
+  );
+
+  assert.equal(decision?.status, "pass_strong");
+  assert.equal(decision?.promotionEligibility, "eligible");
+});
+
+test("upstream near-miss packets do not satisfy the contradiction contract", () => {
+  const base = makeUpstreamContradictionCandidatePackets();
+  const nearMisses = [
+    {
+      id: "broad boolean alone",
+      expectedFlag: "missing_policy_side_evidence",
+      evidence: { policy_behavior_conflict_detected: true }
+    },
+    {
+      id: "policy page exists alone",
+      expectedFlag: "missing_runtime_anchor",
+      evidence: {
+        policyClaimCandidates: base.policyClaimCandidates,
+        privacy_policy_present: true
+      }
+    },
+    {
+      id: "vendor name alone",
+      expectedFlag: "missing_policy_side_evidence",
+      evidence: {
+        runtimeBehaviorArtifacts: [
+          {
+            artifactType: "vendor",
+            confidence: 0.9,
+            consentActionObserved: false,
+            id: "runtime_artifact:vendor:pre_consent:example",
+            phase: "pre_consent",
+            sourceArtifactRef: "vendor:Google Ad Manager",
+            vendor: "Google Ad Manager"
+          }
+        ]
+      }
+    },
+    {
+      id: "bridge candidate without stable refs",
+      expectedFlag: "missing_bridge_provenance",
+      evidence: {
+        ...base,
+        policyRuntimeBridgeCandidates: [
+          {
+            ...base.policyRuntimeBridgeCandidates[0],
+            policyAnchorRef: "",
+            runtimeAnchorRef: "",
+            sourceEvidenceIds: []
+          }
+        ]
+      }
+    }
+  ];
+
+  for (const nearMiss of nearMisses) {
+    const decision = evaluateFindingEvidenceContractForRawEvidence("policy_behavior_contradiction_detected", nearMiss.evidence);
+    assert.equal(decision?.promotionEligibility, "internal_only", nearMiss.id);
+    assert.ok(decision?.negativeEvidenceFlags.includes(nearMiss.expectedFlag), nearMiss.id);
+  }
+});
+
+test("policy behavior contradiction contract rejects boilerplate or fallback policy anchors", () => {
+  for (const snippet of [
+    "Privacy Policy",
+    "Terms of Use",
+    "Insufficient policy content fetched for semantic review."
+  ]) {
+    const evidence = makePolicyBehaviorContradictionEvidence();
+    (evidence.contradictionEvidence.policyAnchor as Record<string, unknown>).snippet = snippet;
+    const decision = evaluateFindingEvidenceContractForRawEvidence("policy_behavior_conflict", evidence);
+    assert.equal(decision?.promotionEligibility, "internal_only");
+    assert.ok(decision?.negativeEvidenceFlags.includes("boilerplate_policy_anchor"));
+    assert.ok(decision?.negativeEvidenceFlags.includes("producer_claim_failed_revalidation"));
+  }
+});
+
+test("policy behavior contradiction contract passes a specific policy claim with runtime anchor and bridge provenance", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence(
+    "consent_gated_tracking_claim_conflict",
+    makePolicyBehaviorContradictionEvidence()
+  );
+
+  assert.equal(decision?.status, "pass_strong");
+  assert.equal(decision?.promotionEligibility, "eligible");
+});
+
+test("policy behavior contradiction contract accepts multiple contradiction-grade positive fixtures", () => {
+  const positives = [
+    {
+      id: "cookie preferences control optional advertising",
+      evidence: makePolicyBehaviorContradictionEvidence()
+    },
+    {
+      id: "only necessary cookies before choice but analytics fires",
+      evidence: makePolicyBehaviorContradictionEvidence({
+        contradictionEvidence: {
+          ...makePolicyBehaviorContradictionEvidence().contradictionEvidence,
+          claim: "We use only strictly necessary cookies before you make a choice; analytics cookies are used only after you consent.",
+          conflictBridge: {
+            conflictType: "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired",
+            provenance: {
+              bridgeRuleId: "test.only_necessary_prechoice_analytics_v1",
+              generatedBy: "wc01.test",
+              mappingType: "deterministic_policy_runtime_mapping",
+              mappingVersion: "policy_behavior_conflict_map:v1",
+              policyAnchorRef: "policy:cookie#strictly-necessary",
+              runtimeAnchorRef: "request:https://analytics.example.net/collect",
+              sourceEvidenceIds: ["policy:cookie#strictly-necessary", "request:https://analytics.example.net/collect"]
+            },
+            reasoning:
+              "The policy anchor limits pre-choice cookies to strictly necessary cookies, but analytics network evidence fired before consent.",
+            supportsPromotion: true
+          },
+          policyAnchor: {
+            claimType: "only_necessary_cookies_before_choice",
+            confidence: 0.86,
+            extractionStatus: "fetched",
+            normalizedClaim: "Only strictly necessary cookies are used before consent; analytics requires consent.",
+            snippet:
+              "We use only strictly necessary cookies before you make a choice; analytics cookies are used only after you consent.",
+            sourceUrl: "https://example.com/cookie-policy"
+          },
+          runtimeAnchor: {
+            confidence: 0.91,
+            observationType: "analytics_vendor_fired_pre_consent",
+            phase: "pre_consent",
+            requests: ["https://analytics.example.net/collect"],
+            vendors: ["Example Analytics"]
+          },
+          runtimeEvidenceArtifacts: ["https://analytics.example.net/collect"],
+          runtimeVendors: ["Example Analytics"],
+          sourceUrls: ["https://example.com/cookie-policy"]
+        }
+      })
+    },
+    {
+      id: "reject disables tracking but tracking persists",
+      evidence: makePolicyBehaviorContradictionEvidence({
+        contradictionEvidence: {
+          ...makePolicyBehaviorContradictionEvidence().contradictionEvidence,
+          claim: "If you reject optional cookies, we disable analytics and advertising tracking and store only necessary cookies.",
+          conflictBridge: {
+            conflictType: "declared_tracking_disabled_after_reject_but_tracking_persisted_after_reject",
+            provenance: {
+              bridgeRuleId: "test.reject_disables_tracking_v1",
+              generatedBy: "wc01.test",
+              mappingType: "deterministic_policy_runtime_mapping",
+              mappingVersion: "policy_behavior_conflict_map:v1",
+              policyAnchorRef: "policy:cookie#reject",
+              runtimeAnchorRef: "cookie:_ga",
+              sourceEvidenceIds: ["policy:cookie#reject", "cookie:_ga", "request:https://www.google-analytics.com/g/collect"]
+            },
+            reasoning:
+              "The policy anchor says rejecting optional cookies disables tracking, but analytics tracking persisted after the reject action.",
+            supportsPromotion: true
+          },
+          policyAnchor: {
+            claimType: "tracking_disabled_after_reject",
+            confidence: 0.84,
+            extractionStatus: "fetched",
+            normalizedClaim: "Rejecting optional cookies disables analytics and advertising tracking.",
+            snippet:
+              "If you reject optional cookies, we disable analytics and advertising tracking and store only necessary cookies.",
+            sourceUrl: "https://example.com/privacy#cookies"
+          },
+          runtimeAnchor: {
+            confidence: 0.89,
+            observationType: "tracking_persisted_after_reject",
+            phase: "after_reject",
+            cookies: ["_ga"],
+            requests: ["https://www.google-analytics.com/g/collect"],
+            vendors: ["Google Analytics"]
+          },
+          runtimeEvidenceArtifacts: ["cookie:_ga", "https://www.google-analytics.com/g/collect"],
+          runtimeVendors: ["Google Analytics"],
+          sourceUrls: ["https://example.com/privacy#cookies"]
+        }
+      })
+    }
+  ];
+
+  for (const positive of positives) {
+    const decision = evaluateFindingEvidenceContractForRawEvidence("policy_behavior_contradiction_detected", positive.evidence);
+    assert.equal(decision?.status, "pass_strong", positive.id);
+    assert.equal(decision?.promotionEligibility, "eligible", positive.id);
+  }
+});
+
+test("policy behavior contradiction contract keeps near-miss fixtures blocked", () => {
+  const base = makePolicyBehaviorContradictionEvidence().contradictionEvidence;
+  const nearMisses = [
+    {
+      id: "valid runtime evidence but weak policy claim",
+      expectedFlag: "weak_policy_anchor",
+      evidence: makePolicyBehaviorContradictionEvidence({
+        contradictionEvidence: {
+          ...base,
+          policyAnchor: {
+            ...base.policyAnchor,
+            snippet: "Privacy choices and legal information for visitors."
+          }
+        }
+      })
+    },
+    {
+      id: "generic cookie explanation but no consent or preference claim",
+      expectedFlag: "weak_policy_anchor",
+      evidence: makePolicyBehaviorContradictionEvidence({
+        contradictionEvidence: {
+          ...base,
+          policyAnchor: {
+            ...base.policyAnchor,
+            snippet:
+              "Cookie Policy To make our website useful and reliable, we need to place small amounts of information called cookies on your device. Cookies do lots of different jobs, like letting you navigate pages."
+          }
+        }
+      })
+    },
+    {
+      id: "valid policy claim but no concrete runtime artifact",
+      expectedFlag: "missing_specific_runtime_artifact",
+      evidence: makePolicyBehaviorContradictionEvidence({
+        contradictionEvidence: {
+          ...base,
+          runtimeAnchor: {
+            confidence: 0.88,
+            observationType: "marketing_vendor_fired_pre_consent",
+            phase: "pre_consent",
+            requests: [],
+            vendors: [],
+            cookies: [],
+            storageArtifacts: []
+          },
+          runtimeEvidenceArtifacts: [],
+          runtimeVendors: []
+        }
+      })
+    },
+    {
+      id: "policy and runtime present but no bridge provenance",
+      expectedFlag: "missing_bridge_provenance",
+      evidence: makePolicyBehaviorContradictionEvidence({
+        contradictionEvidence: {
+          ...base,
+          conflictBridge: {
+            conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+            reasoning:
+              "The policy anchor describes cookie preferences for optional tracking while runtime evidence shows an advertising request before consent.",
+            supportsPromotion: true
+          }
+        }
+      })
+    }
+  ];
+
+  for (const nearMiss of nearMisses) {
+    const decision = evaluateFindingEvidenceContractForRawEvidence("policy_behavior_contradiction_detected", nearMiss.evidence);
+    assert.equal(decision?.promotionEligibility, "internal_only", nearMiss.id);
+    assert.ok(decision?.negativeEvidenceFlags.includes(nearMiss.expectedFlag), nearMiss.id);
+  }
 });
 
 test("raw snapshot boolean cannot satisfy a strong pre-consent contract", () => {

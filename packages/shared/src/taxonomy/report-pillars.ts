@@ -436,13 +436,6 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     ]
   }),
   defineReportUnifiedFinding({
-    id: "guaranteed_outcome_claim_detected",
-    label: "Guaranteed outcome claim detected",
-    owner: "consumer_financial_marketing_claims",
-    mirrors: ["performance_claim_context_and_risk_disclosure", "disclosures_claim_substantiation"],
-    validationRuleKeys: ["financial_review.guaranteed_outcome_claim_detected"]
-  }),
-  defineReportUnifiedFinding({
     id: "simulated_performance_without_disclosure",
     label: "Simulated performance without disclosure",
     owner: "performance_claim_context_and_risk_disclosure",
@@ -484,13 +477,6 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     signalMappings: [{ source: "snapshot_signal", key: "financial.testimonial_or_review_block_near_financial_claim_present" }]
   }),
   defineReportUnifiedFinding({
-    id: "unsubstantiated_testimonial_near_performance_claim",
-    label: "Testimonial adjacent to unsubstantiated performance claim",
-    owner: "consumer_financial_marketing_claims",
-    mirrors: ["performance_claim_context_and_risk_disclosure", "disclosures_claim_substantiation"],
-    validationRuleKeys: ["financial_review.unsubstantiated_testimonial_near_performance_claim"]
-  }),
-  defineReportUnifiedFinding({
     id: "investment_purchase_by_credit_card_present",
     label: "Investment purchase by credit card present",
     owner: "consumer_choice_and_cost_transparency",
@@ -530,14 +516,6 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     owner: "registration_status_credibility",
     mirrors: ["entity_identity_governance_and_operator_accountability"],
     validationRuleKeys: ["section_review.registration_claim_without_identifier"]
-  }),
-  defineReportUnifiedFinding({
-    id: "regulatory_registration_disclosure_absent",
-    label: "Regulatory registration disclosure absent",
-    owner: "registration_status_credibility",
-    mirrors: ["consumer_financial_marketing_claims", "performance_claim_context_and_risk_disclosure"],
-    signalMappings: [{ source: "snapshot_signal", key: "regulatory.registration_disclosure_absent" }],
-    validationRuleKeys: ["regulatory.registration_transparency_disclosure_absent"]
   }),
   defineReportUnifiedFinding({
     id: "registration_claim_support_missing",
@@ -588,20 +566,6 @@ const FINANCIAL_REPORT_UNIFIED_FINDINGS: ReportUnifiedFindingDefinition[] = [
     owner: "cancellation_termination_rights",
     mirrors: ["cancellation_termination_disclosures"],
     overlays: ["subscription_billing_cancellation_fairness"]
-  }),
-  defineReportUnifiedFinding({
-    id: "leveraged_or_high_risk_product_promotion",
-    label: "Leveraged or high-risk product promotion",
-    owner: "high_risk_product_promotion",
-    mirrors: ["consumer_financial_marketing_claims"],
-    signalMappings: [
-      { source: "snapshot_signal", key: "financial.leverage_language_present" },
-      { source: "snapshot_signal", key: "financial.margin_trading_language_present" },
-      { source: "snapshot_signal", key: "financial.options_or_futures_language_present" },
-      { source: "snapshot_signal", key: "financial.perpetuals_or_derivatives_language_present" },
-      { source: "snapshot_signal", key: "financial.staking_apy_language_present" },
-      { source: "snapshot_signal", key: "financial.copy_trading_language_present" }
-    ]
   }),
   defineReportUnifiedFinding({
     id: "yield_or_return_claims_high_risk",
@@ -3248,6 +3212,7 @@ const REPORT_UNIFIED_FINDING_ALIASES = Object.fromEntries(
     (finding.aliases ?? []).map((alias) => [alias.trim().toLowerCase(), finding])
   )
 ) as Record<string, ReportUnifiedFindingDefinition>;
+
 const REPORT_UNIFIED_FINDING_SIGNAL_LOOKUP = Object.fromEntries(
   REPORT_UNIFIED_FINDINGS.flatMap((finding) =>
     finding.signalMappings.map((mapping) => [`${mapping.source}:${mapping.key}`, finding])

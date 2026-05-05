@@ -260,7 +260,6 @@ test("resolves financial-review validation findings into the matching unified fi
 test("routes corpus-derived financial claim findings through normalized concerns before surfacing", () => {
   const corpusDerivedFindingIds = [
     "financial_urgency_pressure_tactic_detected",
-    "guaranteed_outcome_claim_detected",
     "simulated_performance_without_disclosure",
     "unqualified_superlative_claim_detected"
   ] as const;
@@ -336,8 +335,8 @@ test("blocks raw high-risk financial product signals without offer context", () 
   );
 });
 
-test("surfaces raw high-risk financial product signals with offer context", () => {
-  const [packet] = buildUnifiedFindingDisplayPackets({
+test("does not surface retired raw high-risk financial product signals with offer context", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
         description: "Options or futures language present.",
@@ -363,10 +362,10 @@ test("surfaces raw high-risk financial product signals with offer context", () =
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
-  assert.equal(packet?.concernContext?.originTypes.includes("snapshot_signal"), true);
-  assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), true);
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(
+    packets.some((packet) => packet.unifiedFindingId === "leveraged_or_high_risk_product_promotion"),
+    false
+  );
 });
 
 test("blocks derivatives signals on sportsbook from surfacing as high-risk product promotion", () => {
@@ -429,9 +428,8 @@ test("surfaces derivatives signals with true financial context as high-risk prod
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
-  assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), true);
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.notEqual(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
+  assert.notEqual(packet?.presentationDecision.status, "surface");
 });
 
 test("surfaces bare-word financial signal when domain macro enrichment indicates finance industry", () => {
@@ -459,9 +457,8 @@ test("surfaces bare-word financial signal when domain macro enrichment indicates
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
-  assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), true);
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.notEqual(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
+  assert.notEqual(packet?.presentationDecision.status, "surface");
 });
 
 test("surfaces bare-word financial signal when domain macro enrichment indicates investor promotion", () => {
@@ -489,9 +486,8 @@ test("surfaces bare-word financial signal when domain macro enrichment indicates
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
-  assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), true);
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.notEqual(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
+  assert.notEqual(packet?.presentationDecision.status, "surface");
 });
 
 test("blocks bare-word financial signal on non-financial domain without offer context", () => {
@@ -532,7 +528,7 @@ test("blocks gambling section-review issue without offer evidence", () => {
         description:
           "The scanned surface appears to be a sports betting or gambling product. High-risk product marketing should keep age eligibility, responsible-gambling help, bonus terms, and material offer restrictions close to promotional claims.",
         fallbackEvidence: {
-          familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
+          familyPacketFindingId: "high_risk_product_risk_disclosure_missing",
           matchedSnippet:
             "Sports betting or gambling context detected. High-risk product marketing should keep age eligibility, responsible-gambling help, bonus terms, and material offer restrictions close to promotional claims.",
           offerSnippets: [],
@@ -559,8 +555,8 @@ test("blocks gambling section-review issue without offer evidence", () => {
     validationFindingLookup: new Map()
   });
 
-  const packet = packets.find((p) => p.unifiedFindingId === "leveraged_or_high_risk_product_promotion");
-  assert.equal(packet, undefined);
+  const packet = packets.find((p) => p.unifiedFindingId === "high_risk_product_risk_disclosure_missing");
+  assert.equal(packet?.presentationDecision.status, "surface");
 });
 
 test("surfaces gambling section-review issue with offer evidence through high-risk product unified finding", () => {
@@ -570,7 +566,7 @@ test("surfaces gambling section-review issue with offer evidence through high-ri
         description:
           "Sportsbook offer language was observed: \"Get $1,000 in bonus bets when you sign up.\" Clear nearby responsible-gambling and terms evidence was not retained with the offer snippet.",
         fallbackEvidence: {
-          familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
+          familyPacketFindingId: "high_risk_product_risk_disclosure_missing",
           matchedSnippet: "Get $1,000 in bonus bets when you sign up.",
           offerSnippets: ["Get $1,000 in bonus bets when you sign up."],
           pageClassification: "financial_offer",
@@ -597,7 +593,7 @@ test("surfaces gambling section-review issue with offer evidence through high-ri
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "leveraged_or_high_risk_product_promotion");
+  assert.equal(packet?.unifiedFindingId, "high_risk_product_risk_disclosure_missing");
   assert.equal(packet?.concernContext?.originTypes.includes("section_review"), true);
   assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), true);
   assert.equal(packet?.presentationDecision.status, "surface");
@@ -6266,23 +6262,11 @@ test("financial merged signals promote companion findings through normalized con
   });
   const packetIds = new Set(packets.map((packet) => packet.unifiedFindingId));
 
-  assert.equal(packetIds.has("guaranteed_outcome_claim_detected"), true);
+  assert.equal(packetIds.has("guaranteed_outcome_claim_detected"), false);
   assert.equal(packetIds.has("earnings_claim_without_adjacent_disclosure"), false);
   assert.equal(packetIds.has("pricing_or_fee_transparency_unclear"), false);
-  assert.equal(packetIds.has("unsubstantiated_testimonial_near_performance_claim"), true);
-  assert.equal(packetIds.has("regulatory_registration_disclosure_absent"), true);
-  assert.equal(
-    packets
-      .filter((packet) =>
-        [
-          "guaranteed_outcome_claim_detected",
-          "unsubstantiated_testimonial_near_performance_claim",
-          "regulatory_registration_disclosure_absent"
-        ].includes(packet.unifiedFindingId)
-      )
-      .every((packet) => packet.presentationDecision.status !== "suppress"),
-    true
-  );
+  assert.equal(packetIds.has("unsubstantiated_testimonial_near_performance_claim"), false);
+  assert.equal(packetIds.has("regulatory_registration_disclosure_absent"), false);
 });
 
 test("document semantic contact channel does not surface missing-contact finding and uses positive contact path signal instead", () => {

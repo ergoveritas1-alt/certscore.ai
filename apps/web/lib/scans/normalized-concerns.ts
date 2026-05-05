@@ -81,16 +81,24 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "missing_policy_side_evidence"
   | "missing_contradiction_mapping"
   | "missing_explicit_contradiction_basis"
+  | "missing_contradiction_bridge"
+  | "missing_bridge_provenance"
   | "missing_specific_policy_anchor"
   | "missing_specific_runtime_anchor"
+  | "missing_runtime_anchor"
   | "missing_runtime_request_url_evidence"
   | "missing_privacy_specific_contact_channel"
   | "unsupported_contradiction_mapping"
+  | "unsupported_policy_runtime_mapping"
+  | "weak_policy_anchor"
+  | "boilerplate_policy_anchor"
   | "policy_semantic_review_incomplete"
   | "runtime_tracking_review_incomplete"
   | "possible_policy_runtime_mismatch"
   | "insufficient_evidence_for_policy_behavior_conflict"
   | "model_suspicion_without_structured_support"
+  | "producer_claim_failed_revalidation"
+  | "missing_specific_runtime_artifact"
   | "missing_concrete_preconsent_artifact"
   | "missing_preconsent_sequence_evidence"
   | "missing_post_reject_timing_evidence"
@@ -1420,29 +1428,7 @@ type FinancialCompanionDefinition = {
   title: string;
 };
 
-const FINANCIAL_COMPANION_DEFINITIONS: Record<string, FinancialCompanionDefinition> = {
-  guaranteed_outcome_claim_detected: {
-    description:
-      "The scan retained guaranteed-outcome or low-risk/high-return marketing language in a public-facing financial promotion context.",
-    id: "guaranteed_outcome_claim_detected",
-    severity: "high",
-    title: "Guaranteed outcome claim detected"
-  },
-  regulatory_registration_disclosure_absent: {
-    description:
-      "The scan retained trading-signal, forex, copy-trading, or advisory context without clear registration or unregistered-status disclosure evidence.",
-    id: "regulatory_registration_disclosure_absent",
-    severity: "high",
-    title: "Registration disclosure absent"
-  },
-  unsubstantiated_testimonial_near_performance_claim: {
-    description:
-      "The scan retained testimonial or review evidence adjacent to unsubstantiated performance or guaranteed-outcome financial claims.",
-    id: "unsubstantiated_testimonial_near_performance_claim",
-    severity: "high",
-    title: "Testimonial adjacent to unsubstantiated performance claim"
-  }
-};
+const FINANCIAL_COMPANION_DEFINITIONS: Record<string, FinancialCompanionDefinition> = {};
 
 function getFinancialConcernFlags(concern: NormalizedConcern) {
   return new Set(
@@ -1481,64 +1467,8 @@ function hasConcreteRegistrationDisclosureEvidence(concern: NormalizedConcern) {
 }
 
 function deriveFinancialCompanionFindingIds(concern: NormalizedConcern) {
-  const flags = getFinancialConcernFlags(concern);
-  const currentId = concern.suggestedUnifiedFindingId ?? "";
-  const hasFinancialRuntimeContext =
-    [...flags].some((flag) => /^(?:financial|commercial|entity)\./.test(flag)) ||
-    concern.originKey.startsWith("financial_review.") ||
-    concern.originKey.startsWith("regulatory.");
-
-  if (!hasFinancialRuntimeContext || !hasAggregateFinancialFlagEvidence(concern)) {
-    return [];
-  }
-
-  const hasGuarantee = hasAnyFlag(flags, [
-    "financial.guaranteed_return_language_present",
-    "financial.low_risk_high_return_language_present"
-  ]);
-  const hasPerformanceClaim = hasAnyFlag(flags, [
-    "financial.performance_claim_text_present",
-    "financial.return_or_yield_percentage_present",
-    "financial.investment_outperformance_language_present"
-  ]);
-  const hasFeeClaim = hasAnyFlag(flags, [
-    "commercial.fee_related_text_present",
-    "commercial.promo_price_or_free_claim_present",
-    "commercial.variable_fee_language_present_without_explanation"
-  ]);
-  const hasClearFeeDisclosure = hasAnyFlag(flags, [
-    "commercial.explicit_fee_disclosure_text_present",
-    "commercial.fee_schedule_table_present"
-  ]);
-  const hasPastPerformanceDisclosure = hasAnyFlag(flags, [
-    "financial.past_performance_disclaimer_text_present",
-    "financial.risk_disclosure_text_present"
-  ]);
-  const hasTestimonial = flags.has("financial.testimonial_or_review_block_near_financial_claim_present");
-  const hasAdvisoryOrSignalContext =
-    hasAnyFlag(flags, [
-      "financial.copy_trading_language_present",
-      "financial.ai_trading_or_automated_trading_language_present",
-      "financial.signal_service_language_present"
-    ]) ||
-    /forex|trading signal|copy trading|mirror trading|funded account|prop trading/i.test(
-      concern.evidenceBundle.policySnippets.join(" ")
-    );
-  const hasRegistrationDisclosure = hasConcreteRegistrationDisclosureEvidence(concern);
-
-  const ids = new Set<string>();
-  if (hasGuarantee) {
-    ids.add("guaranteed_outcome_claim_detected");
-  }
-  if (hasGuarantee && hasTestimonial) {
-    ids.add("unsubstantiated_testimonial_near_performance_claim");
-  }
-  if (hasAdvisoryOrSignalContext && !hasRegistrationDisclosure) {
-    ids.add("regulatory_registration_disclosure_absent");
-  }
-
-  ids.delete(currentId);
-  return [...ids];
+  void concern;
+  return [];
 }
 
 function expandFinancialCompanionConcerns(concern: NormalizedConcern): NormalizedConcern[] {

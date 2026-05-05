@@ -1214,7 +1214,7 @@ test("high-risk gambling section review retains concrete offer and disclosure ad
     validationFindings: [],
     validationFindingLookup: new Map()
   });
-  const packet = packets.find((finding) => finding.unifiedFindingId === "leveraged_or_high_risk_product_promotion");
+  const packet = packets.find((finding) => finding.unifiedFindingId === "high_risk_product_risk_disclosure_missing");
 
   assert.ok(packet?.evidence?.entities?.offerSnippets?.some((snippet) => snippet.includes("$1,000 in bonus bets")));
   assert.deepEqual(packet?.evidence?.entities?.responsibleGamblingDisclosureAdjacent, ["false"]);
@@ -1257,7 +1257,7 @@ test("high-risk gambling section review retains concrete offer from page evidenc
     validationFindings: [],
     validationFindingLookup: new Map()
   });
-  const packet = packets.find((finding) => finding.unifiedFindingId === "leveraged_or_high_risk_product_promotion");
+  const packet = packets.find((finding) => finding.unifiedFindingId === "high_risk_product_risk_disclosure_missing");
 
   assert.ok(packet?.evidence?.entities?.offerSnippets?.some((snippet) => snippet.includes("$1,000 in bonus bets")));
 });

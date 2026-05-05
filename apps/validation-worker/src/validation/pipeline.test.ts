@@ -2136,7 +2136,7 @@ test("deriveValidationFindings emits pilot financial review rows from retained s
   assert.equal(finding?.evidence.unifiedFindingId, "fee_disclosure_present");
 });
 
-test("deriveValidationFindings promotes guaranteed financial claims into restored commercial-claims findings", () => {
+test("deriveValidationFindings does not promote retired guaranteed financial claims", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       pageEvidence: [
@@ -2183,18 +2183,10 @@ test("deriveValidationFindings promotes guaranteed financial claims into restore
     })
   );
 
-  const guaranteedFinding = findings.find((item) => item.ruleKey === "financial_review.guaranteed_outcome_claim_detected");
-
-  assert.ok(guaranteedFinding);
-  assert.equal(guaranteedFinding?.evidence.unifiedFindingId, "guaranteed_outcome_claim_detected");
-  assert.deepEqual(guaranteedFinding?.evidence.supportingSignals, [
-    "financial.guaranteed_return_language_present",
-    "financial.claim_cta_block_present",
-    "financial.return_or_yield_percentage_present"
-  ]);
+  assert.equal(findings.some((item) => item.ruleKey === "financial_review.guaranteed_outcome_claim_detected"), false);
 });
 
-test("deriveValidationFindings infers trading-signal claim and registration transparency findings from retained page evidence", () => {
+test("deriveValidationFindings does not infer retired registration transparency findings from retained page evidence", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       pageEvidence: [
@@ -2218,13 +2210,10 @@ test("deriveValidationFindings infers trading-signal claim and registration tran
   );
 
   assert.equal(findings.some((item) => item.ruleKey === "financial_review.earnings_claim_without_adjacent_disclosure"), false);
-  const registrationFinding = findings.find((item) => item.ruleKey === "regulatory.registration_transparency_disclosure_absent");
-  assert.ok(registrationFinding);
-  assert.equal(registrationFinding?.severity, "high");
-  assert.equal(registrationFinding?.evidence.unifiedFindingId, "regulatory_registration_disclosure_absent");
+  assert.equal(findings.some((item) => item.ruleKey === "regulatory.registration_transparency_disclosure_absent"), false);
 });
 
-test("deriveValidationFindings promotes testimonial adjacent to guaranteed performance claim", () => {
+test("deriveValidationFindings does not promote retired testimonial-adjacent guaranteed performance claim", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
       pageEvidence: [
@@ -2263,11 +2252,10 @@ test("deriveValidationFindings promotes testimonial adjacent to guaranteed perfo
     })
   );
 
-  const compoundFinding = findings.find(
-    (item) => item.ruleKey === "financial_review.unsubstantiated_testimonial_near_performance_claim"
+  assert.equal(
+    findings.some((item) => item.ruleKey === "financial_review.unsubstantiated_testimonial_near_performance_claim"),
+    false
   );
-  assert.ok(compoundFinding);
-  assert.equal(compoundFinding?.evidence.unifiedFindingId, "unsubstantiated_testimonial_near_performance_claim");
 });
 
 test("deriveValidationFindings suppresses faq-style guarantee questions as earnings or guaranteed-outcome claims", () => {
@@ -3207,15 +3195,7 @@ test("deriveValidationFindings prefers commercial package claims over educationa
 
   const surfacedFinancialFindings = findings.filter((item) => item.ruleKey.startsWith("financial_review."));
 
-  assert.ok(surfacedFinancialFindings.length > 0);
-  assert.equal(
-    surfacedFinancialFindings.some(
-      (item) =>
-        item.evidence.matchedSnippet ===
-        "One Month Package Of Forex Signals $75 4-6 Signals Daily 90-95% Accuracy Weekly +2000 Pips Guaranteed"
-    ),
-    true
-  );
+  assert.equal(surfacedFinancialFindings.length, 0);
   assert.equal(
     surfacedFinancialFindings.some((item) =>
       String(item.evidence.matchedSnippet).includes("Swing trading is a type of trading strategy")
@@ -3294,13 +3274,7 @@ test("deriveValidationFindings prefers package claims over testimonial praise on
 
   const surfacedFinancialFindings = findings.filter((item) => item.ruleKey.startsWith("financial_review."));
 
-  assert.ok(surfacedFinancialFindings.length > 0);
-  assert.equal(
-    surfacedFinancialFindings.some((item) =>
-      String(item.evidence.matchedSnippet).includes("One Month Package Of Forex Signals $75 FXBANK VIP ACCESS 4-6 Signals Daily 90-95% Accuracy Weekly +2000 Pips Guaranteed")
-    ),
-    true
-  );
+  assert.equal(surfacedFinancialFindings.length, 0);
   assert.equal(
     surfacedFinancialFindings.some((item) =>
       String(item.evidence.matchedSnippet).includes("I’m reaching out to you guys to thank you")
@@ -5552,7 +5526,8 @@ test("promotes CMP-gated tracking conflict when consent UI and policy coverage c
           page_type: "cookie_policy",
           page_url: "https://example.com/cookie-policy",
           policy_mentions: [{ topic: "tracking_technologies_disclosure" }],
-          policy_summary_short: "Cookie notice explains cookie settings, third-party cookies, analytics, and marketing categories."
+	          policy_summary_short:
+	            "We use optional analytics and marketing cookies only after you set cookie preferences or provide consent."
         }
       ],
       preconsentViolations: [
@@ -5619,15 +5594,29 @@ test("promotes CMP-gated tracking conflict when consent UI and policy coverage c
   assert.equal(finding?.evidence.cmp_vendor_name, "OneTrust");
   assert.equal(finding?.evidence.consent_actionable_choice_observed, true);
   assert.equal(finding?.evidence.preconsent_tracking_detected, true);
-  assert.deepEqual(
-    (finding?.evidence.contradictionEvidence as Record<string, unknown> | undefined)?.conflictBridge,
-    {
-      conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
-      reasoning:
-        "Choice-control policy evidence is paired with concrete pre-consent runtime request URLs and attributed non-essential vendors.",
-      supportsPromotion: true
-    }
-  );
+  const contradictionEvidence = finding?.evidence.contradictionEvidence as Record<string, unknown> | undefined;
+  const conflictBridge = contradictionEvidence?.conflictBridge as Record<string, unknown> | undefined;
+  const provenance = conflictBridge?.provenance as Record<string, unknown> | undefined;
+  const policyClaimCandidates = contradictionEvidence?.policyClaimCandidates as Array<Record<string, unknown>> | undefined;
+  const runtimeBehaviorArtifacts = contradictionEvidence?.runtimeBehaviorArtifacts as Array<Record<string, unknown>> | undefined;
+  const bridgeCandidates = contradictionEvidence?.policyRuntimeBridgeCandidates as Array<Record<string, unknown>> | undefined;
+  assert.equal(conflictBridge?.conflictType, "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice");
+  assert.equal(conflictBridge?.reasoning, "Choice-control policy evidence is paired with concrete pre-consent runtime request URLs and attributed non-essential vendors.");
+  assert.equal(conflictBridge?.supportsPromotion, true);
+  assert.equal(provenance?.bridgeRuleId, "validation_worker.consent_choice_policy_preconsent_runtime_v1");
+  assert.equal(provenance?.generatedBy, "wc01.validation_worker");
+  assert.equal(provenance?.mappingType, "deterministic_policy_runtime_mapping");
+  assert.equal(provenance?.mappingVersion, "policy_behavior_conflict_map:v1");
+  assert.match(String(provenance?.policyAnchorRef), /^policy_claim:cookie_preferences_available:/);
+  assert.match(String(provenance?.runtimeAnchorRef), /^runtime_artifact:request:pre_consent:/);
+  assert.deepEqual(provenance?.sourceEvidenceIds, [provenance?.policyAnchorRef, provenance?.runtimeAnchorRef]);
+  assert.equal(policyClaimCandidates?.[0]?.id, provenance?.policyAnchorRef);
+  assert.equal(policyClaimCandidates?.[0]?.sourceUrl, "https://example.com/cookie-policy");
+  assert.equal(policyClaimCandidates?.[0]?.snippetHash, "916bddf9634166f14e0ad39fbeac4e6cf8860e3b8c94ced2e254d06b1cefaf98");
+  assert.equal(runtimeBehaviorArtifacts?.[0]?.id, provenance?.runtimeAnchorRef);
+  assert.equal(runtimeBehaviorArtifacts?.[0]?.url, "https://securepubads.g.doubleclick.net/tag/js/gpt.js");
+  assert.equal(bridgeCandidates?.[0]?.policyAnchorRef, provenance?.policyAnchorRef);
+  assert.equal(bridgeCandidates?.[0]?.runtimeAnchorRef, provenance?.runtimeAnchorRef);
   assert.deepEqual(finding?.evidence.runtimeRequestUrls, [
     "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
     "https://js.hs-scripts.com/48163345.js"

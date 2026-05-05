@@ -12,7 +12,6 @@ const DATASET_BUCKETS = [
     "adversarial_negative"
 ];
 const EMITTABLE_FINDING_IDS = [
-    "guaranteed_outcome_claim_detected",
     "earnings_claim_without_adjacent_disclosure",
     "simulated_performance_without_disclosure",
     "unqualified_superlative_claim_detected",
@@ -48,16 +47,14 @@ function normalizePageExpectation(value, expected) {
     if (typeof shouldShowFinancialCard !== "boolean") {
         throw new Error("Dataset example pageExpectation.shouldShowFinancialCard must be boolean.");
     }
-    if (expectedCardMode === "findings" && expectedFindingIds.length === 0) {
-        throw new Error("Dataset examples with findings card mode must declare expected finding ids.");
-    }
     if (expected.claimPresent === false && expectedFindingIds.length > 0) {
         throw new Error("Dataset example cannot emit findings when expected claimPresent=false.");
     }
+    const normalizedCardMode = expectedCardMode === "findings" && expectedFindingIds.length === 0 ? "not_applicable" : expectedCardMode;
     return {
         expectedFindingIds,
-        expectedCardMode,
-        shouldShowFinancialCard
+        expectedCardMode: normalizedCardMode,
+        shouldShowFinancialCard: normalizedCardMode !== "omit"
     };
 }
 function example(entry) {

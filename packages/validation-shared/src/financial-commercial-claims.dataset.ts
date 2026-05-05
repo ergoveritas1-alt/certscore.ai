@@ -12,7 +12,6 @@ const DATASET_BUCKETS = [
 ] as const;
 
 const EMITTABLE_FINDING_IDS = [
-  "guaranteed_outcome_claim_detected",
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected",
   "financial_urgency_pressure_tactic_detected"

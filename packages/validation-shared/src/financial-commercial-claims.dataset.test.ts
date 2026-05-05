@@ -57,5 +57,5 @@ test("financial commercial claims dataset summary exposes bucket and finding cov
   assert.ok(summary.cardModeCounts.findings >= 1);
   assert.ok(summary.cardModeCounts.not_applicable >= 1);
   assert.ok(summary.cardModeCounts.omit >= 1);
-  assert.ok(summary.emittableFindingCounts.guaranteed_outcome_claim_detected >= 1);
+  assert.equal("guaranteed_outcome_claim_detected" in summary.emittableFindingCounts, false);
 });

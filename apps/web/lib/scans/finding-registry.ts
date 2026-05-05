@@ -527,37 +527,32 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     remediation:
       "Fix the retained WCAG rule examples first, then rerun the accessibility scan to confirm representative barriers no longer reproduce."
   },
-  guaranteed_outcome_claim_detected: {
-    id: "guaranteed_outcome_claim_detected",
-    label: "Guaranteed outcome claim detected",
+  guaranteed_or_high_return_claims_present: {
+    id: "guaranteed_or_high_return_claims_present",
+    label: "Guaranteed or high-return claims present",
     section: "Financial & Claims",
-    defaultSurfacePriority: 92,
-    whyItMatters: "Guaranteed-results language on public financial promotions can materially increase commercial-claims and enforcement risk.",
-    remediation: "Remove or qualify guaranteed-results language and place balancing disclosure directly adjacent to the claim."
-  },
-  regulatory_registration_disclosure_absent: {
-    id: "regulatory_registration_disclosure_absent",
-    label: "Regulatory registration disclosure absent",
-    section: "Financial & Claims",
-    defaultSurfacePriority: 88,
-    whyItMatters: "Trading-signal, forex, derivatives, and advisory surfaces create elevated review risk when users cannot tell whether the operator is registered or unregistered.",
+    defaultSurfacePriority: 76,
+    whyItMatters:
+      "Prominent guaranteed or unusually high-return language can create financial promotion review risk when substantiation and risk context are not visible near the claim.",
     remediation:
-      "Disclose the relevant NFA, CFTC, SEC, FCA, or equivalent registration status, or clearly state that the service is not registered and signals are for informational use only."
+      "Qualify return language, keep assumptions and risk disclosures near the claim, and avoid implying guaranteed investment or trading outcomes."
   },
-  unsubstantiated_testimonial_near_performance_claim: {
-    id: "unsubstantiated_testimonial_near_performance_claim",
-    label: "Testimonial adjacent to unsubstantiated performance claim",
+  performance_claims_without_context: {
+    id: "performance_claims_without_context",
+    label: "Performance claims lack context",
     section: "Financial & Claims",
-    defaultSurfacePriority: 86,
-    whyItMatters: "Pairing social proof with guaranteed-return or performance language can amplify deception risk in financial promotions.",
-    remediation: "Separate testimonials from performance claims or add clear adjacent disclosure explaining substantiation, typicality, compensation, and material limitations."
+    defaultSurfacePriority: 75,
+    whyItMatters:
+      "Performance claims need clear context so visitors can distinguish representative, historical, simulated, or aspirational results.",
+    remediation:
+      "Add adjacent context for timeframe, assumptions, variability, and whether the performance claim is historical, simulated, or illustrative."
   },
-  leveraged_or_high_risk_product_promotion: {
-    id: "leveraged_or_high_risk_product_promotion",
-    label: "Leveraged or high-risk product promotion",
+  high_risk_product_risk_disclosure_missing: {
+    id: "high_risk_product_risk_disclosure_missing",
+    label: "High-risk product risk disclosure missing",
     section: "Financial & Claims",
     defaultSurfacePriority: 74,
-    whyItMatters: "High-risk financial product promotion can materially increase commercial-claims and disclosure review risk even before narrower earnings or fee findings are confirmed.",
-    remediation: "Review high-risk product marketing claims and place clear risk, fee, and eligibility disclosures adjacent to the offer language."
+    whyItMatters: "High-risk product marketing can increase disclosure review risk when the associated risk context is not visible near the offer.",
+    remediation: "Place clear risk, fee, eligibility, and material offer restriction disclosures adjacent to high-risk product marketing language."
   }
 };

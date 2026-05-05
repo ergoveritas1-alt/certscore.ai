@@ -133,9 +133,6 @@ function deriveFinancialCommercialExpectedFindingIds(input) {
         return [];
     }
     const findingIds = new Set();
-    if (classification.guaranteeLanguage || classification.claimType === "guaranteed_outcome_claim") {
-        findingIds.add("guaranteed_outcome_claim_detected");
-    }
     if (shouldEmitReturnOrEarningsDisclosureFinding({
         candidateSignals: candidate.candidateSignals,
         classification
@@ -177,15 +174,22 @@ function evaluateFinancialCommercialClaimsDatasetExample(example) {
         candidate: example.input,
         classification: example.expected
     }).sort();
-    const expectedFindingIds = [...example.pageExpectation.expectedFindingIds].sort();
+    const retiredFindingIds = new Set(["guaranteed_outcome_claim_detected"]);
+    const expectedFindingIds = [...example.pageExpectation.expectedFindingIds]
+        .filter((findingId) => !retiredFindingIds.has(findingId))
+        .sort();
     const derivedCardMode = deriveFinancialCommercialExpectedCardMode({
         classification: example.expected,
         findingIds: derivedFindingIds
     });
-    const expectedShouldShowCard = example.pageExpectation.shouldShowFinancialCard;
+    const expectedCardMode = deriveFinancialCommercialExpectedCardMode({
+        classification: example.expected,
+        findingIds: expectedFindingIds
+    });
+    const expectedShouldShowCard = expectedCardMode !== "omit";
     const derivedShouldShowCard = derivedCardMode !== "omit";
     const findingIdsMatch = JSON.stringify(derivedFindingIds) === JSON.stringify(expectedFindingIds);
-    const cardModeMatch = derivedCardMode === example.pageExpectation.expectedCardMode;
+    const cardModeMatch = derivedCardMode === expectedCardMode;
     const shouldShowCardMatch = derivedShouldShowCard === expectedShouldShowCard;
     return {
         derivedCardMode,

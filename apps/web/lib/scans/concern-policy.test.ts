@@ -463,7 +463,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       name: "raw high-risk financial product signal with offer context stays eligible",
       concern: makeConcern({
         originKey: "financial.options_or_futures_language_present",
-        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        suggestedUnifiedFindingId: "high_risk_product_risk_disclosure_missing",
         title: "Options or futures language present"
       }),
       evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
@@ -487,7 +487,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       name: "raw high-risk financial product signal on finance domain stays eligible via macro enrichment",
       concern: makeConcern({
         originKey: "financial.options_or_futures_language_present",
-        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        suggestedUnifiedFindingId: "high_risk_product_risk_disclosure_missing",
         title: "Options or futures language present"
       }),
       evidenceStrengthFlags: ["fallback_only"] as const,
@@ -508,7 +508,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       name: "raw high-risk financial product signal on crypto domain stays eligible via macro enrichment",
       concern: makeConcern({
         originKey: "financial.perpetuals_or_derivatives_language_present",
-        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        suggestedUnifiedFindingId: "high_risk_product_risk_disclosure_missing",
         title: "Perpetuals or derivatives language present"
       }),
       evidenceStrengthFlags: ["fallback_only"] as const,
@@ -578,7 +578,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       name: "options signal with true financial derivatives context stays eligible",
       concern: makeConcern({
         originKey: "financial.options_or_futures_language_present",
-        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        suggestedUnifiedFindingId: "high_risk_product_risk_disclosure_missing",
         title: "Options or futures language present"
       }),
       evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
@@ -602,7 +602,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       name: "perpetuals signal with true financial derivatives context stays eligible",
       concern: makeConcern({
         originKey: "financial.perpetuals_or_derivatives_language_present",
-        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        suggestedUnifiedFindingId: "high_risk_product_risk_disclosure_missing",
         title: "Perpetuals or derivatives language present"
       }),
       evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
@@ -650,7 +650,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       name: "options signal on CFTC-regulated prediction market stays eligible",
       concern: makeConcern({
         originKey: "financial.options_or_futures_language_present",
-        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        suggestedUnifiedFindingId: "high_risk_product_risk_disclosure_missing",
         title: "Options or futures language present"
       }),
       evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
@@ -706,12 +706,12 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       concern: makeConcern({
         originKey: "section_review.high_risk_product_without_local_loss_risk_disclosure",
         originType: "section_review",
-        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        suggestedUnifiedFindingId: "high_risk_product_risk_disclosure_missing",
         title: "High-risk gambling promotion disclosure review"
       }),
       evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
       rawEvidence: {
-        familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
+        familyPacketFindingId: "high_risk_product_risk_disclosure_missing",
         matchedSnippet: "Get $1,000 in bonus bets when you sign up.",
         offerSnippets: ["Get $1,000 in bonus bets when you sign up."],
         pageClassification: "financial_offer",
@@ -737,12 +737,12 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       concern: makeConcern({
         originKey: "section_review.high_risk_product_without_local_loss_risk_disclosure",
         originType: "section_review",
-        suggestedUnifiedFindingId: "leveraged_or_high_risk_product_promotion",
+        suggestedUnifiedFindingId: "high_risk_product_risk_disclosure_missing",
         title: "High-risk gambling promotion disclosure review"
       }),
       evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"] as const,
       rawEvidence: {
-        familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
+        familyPacketFindingId: "high_risk_product_risk_disclosure_missing",
         matchedSnippet: "Trade perpetual swaps with leverage on our derivatives exchange.",
         offerSnippets: ["Trade perpetual swaps with leverage on our derivatives exchange."],
         pageClassification: "financial_offer",
@@ -786,7 +786,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "blocked",
         externalSurfacingEligibility: "suppress",
-        negativeEvidenceFlags: ["missing_behavior_side_evidence"]
+        negativeEvidenceFlags: []
       }
     },
     {

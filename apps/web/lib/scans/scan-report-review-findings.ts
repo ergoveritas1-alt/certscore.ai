@@ -1345,7 +1345,7 @@ export function buildSectionReviewIssues(input: {
           ...getRecordStringArray(input.runtimeArtifacts, "third_party_request_domains").slice(0, 4)
         ]),
         fallbackEvidence: {
-          familyPacketFindingId: "leveraged_or_high_risk_product_promotion",
+          familyPacketFindingId: "high_risk_product_risk_disclosure_missing",
           matchedSnippet,
           offerSnippets: promotionEvidence?.offerSnippets ?? [],
           pageClassification: "financial_offer",
@@ -1389,11 +1389,24 @@ export function buildSectionReviewIssues(input: {
             contradictionEvidence: {
               claim: row.claim,
               contradictionBasis: row.status,
-              conflictBridge: {
-                conflictType: row.conflictType ?? null,
-                reasoning: row.conflictReasoning ?? row.runtimeSummary,
-                supportsPromotion: row.conflictSupportsPromotion === true
-              },
+	              conflictBridge: {
+	                conflictType: row.conflictType ?? null,
+	                provenance: {
+	                  bridgeRuleId: row.conflictType ? "wc01.scan_report_review.policy_behavior_contradiction_v1" : null,
+	                  generatedBy: "wc01.scan_report_review",
+	                  mappingType: row.conflictType ? "deterministic_policy_runtime_mapping" : null,
+	                  mappingVersion: "policy_behavior_conflict_map:v1",
+	                  policyAnchorRef: row.policyPageUrl,
+	                  runtimeAnchorRef: runtimeRequestUrls[0] ?? runtimeScriptHosts[0] ?? null,
+	                  sourceEvidenceIds: uniqueStrings([
+	                    row.policyPageUrl,
+	                    ...runtimeRequestUrls,
+	                    ...runtimeScriptHosts.map((host) => `script_host:${host}`)
+	                  ])
+	                },
+	                reasoning: row.conflictReasoning ?? row.runtimeSummary,
+	                supportsPromotion: row.conflictSupportsPromotion === true
+	              },
               evidenceSufficiency: {
                 conflictBridgePresent,
                 policyAnchorPresent,

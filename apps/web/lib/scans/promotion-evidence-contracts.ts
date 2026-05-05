@@ -1,4 +1,5 @@
 import {
+  evaluatePolicyBehaviorContradictionEvidence,
   getAllowedConflictType,
   getContradictionEvidenceBundle
 } from "./contradiction-evidence-contract";
@@ -1011,6 +1012,16 @@ export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Reco
 }
 
 export function evaluatePolicyBehaviorConflictContract(rawEvidence: Record<string, unknown> | null | undefined): ContractDecision | null {
+  const recomputedDecision = evaluatePolicyBehaviorContradictionEvidence(rawEvidence);
+  if (!recomputedDecision.eligible) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: recomputedDecision.negativeEvidenceFlags,
+      promotionEligibility: "internal_only"
+    };
+  }
+
   const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
   if (!contradictionEvidence) {
     return {
@@ -1117,6 +1128,16 @@ export function evaluatePolicyBehaviorConflictContract(rawEvidence: Record<strin
 }
 
 export function evaluateConsentGatedTrackingConflictContract(rawEvidence: Record<string, unknown> | null | undefined): ContractDecision | null {
+  const recomputedDecision = evaluatePolicyBehaviorContradictionEvidence(rawEvidence);
+  if (!recomputedDecision.eligible) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: recomputedDecision.negativeEvidenceFlags,
+      promotionEligibility: "internal_only"
+    };
+  }
+
   const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
   if (!contradictionEvidence) {
     return {

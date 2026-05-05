@@ -17,6 +17,20 @@ function getStringArray(record: Record<string, unknown> | null | undefined, keys
   return [] as string[];
 }
 
+function getRecordArray(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (Array.isArray(value)) {
+      return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item));
+    }
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return [value as Record<string, unknown>];
+    }
+  }
+
+  return [] as Record<string, unknown>[];
+}
+
 function getFirstString(record: Record<string, unknown> | null | undefined, keys: string[]) {
   for (const key of keys) {
     if (typeof record?.[key] === "string") {
@@ -111,6 +125,29 @@ function normalizeContradictionEvidenceRecord(
   assignCanonicalField("runtimeAnchorPresent", ["runtime_anchor_present"]);
   assignCanonicalField("conflictBridgePresent", ["conflict_bridge_present"]);
   assignCanonicalField("promotionEligible", ["promotion_eligible"]);
+  assignCanonicalField("policyClaimCandidates", ["policy_claim_candidates", "policyClaimCandidate", "policy_claim_candidate"]);
+  assignCanonicalField("runtimeBehaviorArtifacts", ["runtime_behavior_artifacts", "runtimeBehaviorArtifact", "runtime_behavior_artifact"]);
+  assignCanonicalField("policyRuntimeBridgeCandidates", [
+    "policy_runtime_bridge_candidates",
+    "policyRuntimeBridgeCandidate",
+    "policy_runtime_bridge_candidate"
+  ]);
+  assignCanonicalField("artifactType", ["artifact_type"]);
+  assignCanonicalField("timestampMs", ["timestamp_ms"]);
+  assignCanonicalField("cmpVisibleMs", ["cmp_visible_ms"]);
+  assignCanonicalField("consentActionObserved", ["consent_action_observed"]);
+  assignCanonicalField("sourceArtifactRef", ["source_artifact_ref"]);
+  assignCanonicalField("cookieName", ["cookie_name"]);
+  assignCanonicalField("storageKey", ["storage_key"]);
+  assignCanonicalField("snippetHash", ["snippet_hash"]);
+  assignCanonicalField("documentType", ["document_type"]);
+  assignCanonicalField("sectionPath", ["section_path"]);
+  assignCanonicalField("headingPath", ["heading_path"]);
+  assignCanonicalField("charStart", ["char_start"]);
+  assignCanonicalField("charEnd", ["char_end"]);
+  assignCanonicalField("extractedBy", ["extracted_by"]);
+  assignCanonicalField("extractionVersion", ["extraction_version"]);
+  assignCanonicalField("supportsPromotionCandidate", ["supports_promotion_candidate"]);
 
   return normalized;
 }
@@ -183,6 +220,7 @@ export type ContradictionConflictBridge = {
   conflictType: PolicyBehaviorConflictType | null;
   reasoning: string | null;
   supportsPromotion: boolean;
+  provenance: ContradictionBridgeProvenance;
 };
 
 export type ContradictionEvidenceSufficiency = {
@@ -191,6 +229,16 @@ export type ContradictionEvidenceSufficiency = {
   conflictBridgePresent: boolean;
   promotionEligible: boolean;
   reviewStatus: ContradictionEvidenceStatus;
+};
+
+export type ContradictionBridgeProvenance = {
+  bridgeRuleId: string | null;
+  generatedBy: string | null;
+  mappingType: string | null;
+  mappingVersion: string | null;
+  policyAnchorRef: string | null;
+  runtimeAnchorRef: string | null;
+  sourceEvidenceIds: string[];
 };
 
 export type ContradictionEvidenceBundle = {
@@ -210,6 +258,58 @@ export type ContradictionEvidenceBundle = {
   runtimeAnchor: ContradictionRuntimeAnchor;
   conflictBridge: ContradictionConflictBridge;
   evidenceSufficiency: ContradictionEvidenceSufficiency;
+};
+
+export type PolicyClaimCandidate = {
+  id: string;
+  claimType: PolicyBehaviorConflictClaimType;
+  sourceUrl: string;
+  documentType: string;
+  extractionStatus: string;
+  snippet: string;
+  snippetHash: string;
+  sectionPath: string | null;
+  headingPath: string | null;
+  charStart: number | null;
+  charEnd: number | null;
+  confidence: number;
+  extractedBy: string;
+  extractionVersion: string;
+};
+
+export type RuntimeBehaviorArtifact = {
+  id: string;
+  artifactType: "request" | "cookie" | "storage" | "vendor";
+  phase: RuntimeObservationPhase | "post_accept" | "post_reject";
+  url: string | null;
+  host: string | null;
+  vendor: string | null;
+  cookieName: string | null;
+  storageKey: string | null;
+  timestampMs: number | null;
+  cmpVisibleMs: number | null;
+  consentActionObserved: boolean;
+  confidence: number;
+  sourceArtifactRef: string;
+};
+
+export type PolicyRuntimeBridgeCandidate = {
+  id: string;
+  bridgeRuleId: string;
+  mappingVersion: string;
+  policyAnchorRef: string;
+  runtimeAnchorRef: string;
+  sourceEvidenceIds: string[];
+  mappingType: string;
+  reasoning: string;
+  generatedBy: string;
+  confidence: number;
+  supportsPromotionCandidate: boolean;
+};
+
+export type PolicyBehaviorContradictionEvidenceDecision = {
+  eligible: boolean;
+  negativeEvidenceFlags: string[];
 };
 
 const POLICY_BEHAVIOR_CONFLICT_MAP: Record<
@@ -279,6 +379,7 @@ function normalizeRuntimeObservationType(value: string | null): PolicyBehaviorRu
 
 function normalizeConflictType(value: string | null): PolicyBehaviorConflictType | null {
   switch (value) {
+    case "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice":
     case "declared_opt_out_honored_but_tracking_persisted_under_opt_out":
     case "declared_no_marketing_before_consent_but_marketing_vendor_fired_pre_consent":
     case "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired":
@@ -315,6 +416,69 @@ function normalizeEvidenceStatus(value: string | null): ContradictionEvidenceSta
       return value;
     default:
       return null;
+  }
+}
+
+function getBridgeProvenance(source: Record<string, unknown> | null | undefined): ContradictionBridgeProvenance {
+  const provenanceRecord = getNestedRecord(source, ["provenance", "bridgeProvenance", "bridge_provenance"]) ?? source;
+  return {
+    bridgeRuleId: getFirstString(provenanceRecord, ["bridgeRuleId", "bridge_rule_id"]),
+    generatedBy: getFirstString(provenanceRecord, ["generatedBy", "generated_by"]),
+    mappingType: getFirstString(provenanceRecord, ["mappingType", "mapping_type"]),
+    mappingVersion: getFirstString(provenanceRecord, ["mappingVersion", "mapping_version"]),
+    policyAnchorRef: getFirstString(provenanceRecord, ["policyAnchorRef", "policy_anchor_ref"]),
+    runtimeAnchorRef: getFirstString(provenanceRecord, ["runtimeAnchorRef", "runtime_anchor_ref"]),
+    sourceEvidenceIds: getStringArray(provenanceRecord, ["sourceEvidenceIds", "source_evidence_ids"])
+  };
+}
+
+export function isSpecificPolicyBehaviorPolicySnippet(
+  value: string | null | undefined,
+  claimType: PolicyBehaviorConflictClaimType | null = null
+) {
+  const snippet = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  if (snippet.length < 32) {
+    return false;
+  }
+  if (/insufficient policy content fetched|semantic review|error page|page not found/i.test(snippet)) {
+    return false;
+  }
+  if (/^(?:privacy policy|cookie policy|terms of use|terms and conditions|legal|privacy center)$/i.test(snippet)) {
+    return false;
+  }
+
+  const lower = snippet.toLowerCase();
+  const claimTerms =
+    /(cookie|tracking|analytics|advertis(?:e|ing)|marketing|sale|share|consent|opt[- ]?out|preferences?|personal information|personal data|third part(?:y|ies)|data collection|collect(?:ed|ion)?|data use|use of data)/i;
+  if (!claimTerms.test(lower)) {
+    return false;
+  }
+
+  const navBoilerplateTokens = lower.match(/\b(?:privacy policy|terms of use|contact|login|resources|careers|home|about|platform|solutions|menu|table of contents|community guidelines)\b/g)?.length ?? 0;
+  const claimVerb = /\b(?:collect|use|share|sell|disclose|store|process|track|consent|choose|control|disable|reject|opt[- ]?out|preference)\b/i.test(lower);
+  const generallySpecific = claimVerb || navBoilerplateTokens <= 2;
+  if (!generallySpecific) {
+    return false;
+  }
+
+  switch (claimType) {
+    case "cookie_preferences_available":
+    case "only_necessary_cookies_before_choice":
+      return /\b(?:consent|choice|choose|preferences?|control|manage|reject|decline|opt[- ]?in|opt[- ]?out|disable|strictly necessary|essential cookies?)\b/i.test(lower);
+    case "no_marketing_tracking_before_consent":
+      return /\b(?:marketing|advertis(?:e|ing)|tracking)\b/i.test(lower) && /\b(?:consent|permission|opt[- ]?in|before|until|without)\b/i.test(lower);
+    case "tracking_disabled_after_reject":
+      return /\b(?:reject|decline|refuse|opt[- ]?out)\b/i.test(lower) && /\b(?:disable|stop|block|turn off|necessary cookies?)\b/i.test(lower);
+    case "no_sale_share_without_opt_out_or_consent":
+      return /\b(?:do not sell|do not share|sell or share|sale\/share|opt[- ]?out|consent)\b/i.test(lower);
+    case "no_third_party_advertising_tracking":
+      return /\b(?:third part(?:y|ies)|advertis(?:e|ing)|tracking)\b/i.test(lower) && /\b(?:no|not|disable|reject|opt[- ]?out|without consent)\b/i.test(lower);
+    case "no_data_sharing_with_advertisers":
+      return /\b(?:advertisers?|advertising partners?)\b/i.test(lower) && /\b(?:do not share|not share|no share|without consent|opt[- ]?out)\b/i.test(lower);
+    case "gpc_honored":
+      return /\b(?:global privacy control|gpc|opt[- ]?out preference signal)\b/i.test(lower) && /\b(?:honor|honour|respect|process|treat)\b/i.test(lower);
+    default:
+      return true;
   }
 }
 
@@ -377,6 +541,29 @@ function inferObservationType(source: Record<string, unknown> | null | undefined
     return explicit;
   }
 
+  const artifactType = getFirstString(normalizedSource, ["artifactType"]);
+  const phase = inferPhase(normalizedSource);
+  const artifactHaystack = [
+    artifactType,
+    getFirstString(normalizedSource, ["url"]),
+    getFirstString(normalizedSource, ["host"]),
+    getFirstString(normalizedSource, ["vendor"]),
+    getFirstString(normalizedSource, ["cookieName"]),
+    getFirstString(normalizedSource, ["storageKey"])
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (phase === "pre_consent" && /(analytics|google-analytics|stats|measurement)/.test(artifactHaystack)) {
+    return "analytics_vendor_fired_pre_consent";
+  }
+  if (phase === "pre_consent" && /(request|vendor|cookie|doubleclick|ad|ads|marketing|pixel|tracker|rtb|sync|tag manager|gtm)/.test(artifactHaystack)) {
+    return "marketing_vendor_fired_pre_consent";
+  }
+  if (phase === "after_reject" && /(request|vendor|cookie|storage|track|analytics|advertis|marketing|pixel)/.test(artifactHaystack)) {
+    return "tracking_persisted_after_reject";
+  }
+
   const haystack = [
     getFirstString(normalizedSource, ["runtimeSummary"]),
     ...getStringArray(normalizedSource, ["runtimeEvidenceArtifacts"]),
@@ -418,6 +605,14 @@ function inferPhase(source: Record<string, unknown> | null | undefined): Runtime
   );
   if (explicit !== "unknown") {
     return explicit;
+  }
+
+  const upstreamPhase = getFirstString(normalizedSource, ["phase"]);
+  if (upstreamPhase === "post_reject") {
+    return "after_reject";
+  }
+  if (upstreamPhase === "post_accept") {
+    return "post_consent";
   }
 
   const haystack = [
@@ -470,11 +665,32 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
       ? normalizeContradictionEvidenceRecord(normalizedRecord.contradictionEvidence as Record<string, unknown>)
       : null;
   const source = nested ?? normalizedRecord;
+  const policyClaimCandidates = getRecordArray(source, ["policyClaimCandidates"]);
+  const runtimeBehaviorArtifacts = getRecordArray(source, ["runtimeBehaviorArtifacts"]);
+  const policyRuntimeBridgeCandidates = getRecordArray(source, ["policyRuntimeBridgeCandidates"]);
+  const bridgeCandidate =
+    policyRuntimeBridgeCandidates.find(
+      (candidate) => getFirstBoolean(normalizeContradictionEvidenceRecord(candidate), ["supportsPromotionCandidate"]) === true
+    ) ??
+    policyRuntimeBridgeCandidates[0] ??
+    null;
+  const bridgePolicyAnchorRef = getFirstString(bridgeCandidate, ["policyAnchorRef"]);
+  const bridgeRuntimeAnchorRef = getFirstString(bridgeCandidate, ["runtimeAnchorRef"]);
+  const bridgeSourceEvidenceIds = getStringArray(bridgeCandidate, ["sourceEvidenceIds"]);
+  const policyClaimCandidate =
+    policyClaimCandidates.find((candidate) => getFirstString(candidate, ["id"]) === bridgePolicyAnchorRef) ??
+    policyClaimCandidates[0] ??
+    null;
+  const runtimeBehaviorArtifact =
+    runtimeBehaviorArtifacts.find((candidate) => getFirstString(candidate, ["id"]) === bridgeRuntimeAnchorRef) ??
+    runtimeBehaviorArtifacts.find((candidate) => bridgeSourceEvidenceIds.includes(getFirstString(candidate, ["id"]) ?? "")) ??
+    runtimeBehaviorArtifacts[0] ??
+    null;
   const explicitConflictBridgeRecord = getNestedRecord(source, ["conflictBridge", "conflict_bridge"]);
   const explicitSufficiencyRecord = getNestedRecord(source, ["evidenceSufficiency", "evidence_sufficiency"]);
-  const policyAnchorSource = normalizeContradictionEvidenceRecord(getNestedRecord(source, ["policyAnchor", "policy_anchor"]) ?? source);
-  const runtimeAnchorSource = normalizeContradictionEvidenceRecord(getNestedRecord(source, ["runtimeAnchor", "runtime_anchor"]) ?? source);
-  const conflictBridgeSource = normalizeContradictionEvidenceRecord(explicitConflictBridgeRecord ?? source);
+  const policyAnchorSource = normalizeContradictionEvidenceRecord(getNestedRecord(source, ["policyAnchor", "policy_anchor"]) ?? policyClaimCandidate ?? source);
+  const runtimeAnchorSource = normalizeContradictionEvidenceRecord(getNestedRecord(source, ["runtimeAnchor", "runtime_anchor"]) ?? runtimeBehaviorArtifact ?? source);
+  const conflictBridgeSource = normalizeContradictionEvidenceRecord(explicitConflictBridgeRecord ?? bridgeCandidate ?? source);
   const sufficiencySource = normalizeContradictionEvidenceRecord(explicitSufficiencyRecord ?? source);
 
   const claim = getFirstString(source, ["claim"]);
@@ -506,6 +722,7 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
   const inferredConflictType = getAllowedConflictType(policyClaimType, runtimeObservationType);
   const runtimeRequests = uniqueStrings([
     ...getStringArray(runtimeAnchorSource, ["requests", "requestUrls"]),
+    getFirstString(runtimeAnchorSource, ["url"]),
     ...getStringArray(source, ["requestUrls"]),
     ...getStringArray(source, ["runtimeEvidenceUrls"]),
     ...getStringArray(source, ["preconsent_tracker_evidence_urls"]),
@@ -514,9 +731,13 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
       runtimePhase: inferPhase(runtimeAnchorSource)
     })
   ]);
-  const runtimeCookies = getStringArray(runtimeAnchorSource, ["cookies", "cookieNames"]);
+  const runtimeCookies = uniqueStrings([
+    ...getStringArray(runtimeAnchorSource, ["cookies", "cookieNames"]),
+    getFirstString(runtimeAnchorSource, ["cookieName"])
+  ]);
   const storageArtifacts = uniqueStrings([
     ...getStringArray(runtimeAnchorSource, ["storageArtifacts"]),
+    getFirstString(runtimeAnchorSource, ["storageKey"]),
     ...getStringArray(runtimeAnchorSource, ["scriptHosts"]).map((host) => `script_host:${host}`),
     ...getStringArray(source, ["preconsent_tracker_script_hosts"]).map((host) => `script_host:${host}`)
   ]);
@@ -543,6 +764,7 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
     sourceUrl: getFirstString(runtimeAnchorSource, ["sourceUrl"]) ?? policySourceUrl,
     vendors: uniqueStrings([
       ...getStringArray(runtimeAnchorSource, ["vendors", "runtimeVendors"]),
+      getFirstString(runtimeAnchorSource, ["vendor"]),
       ...runtimeVendors,
       ...relatedVendors,
       ...getSanitizedNetworkEvidenceVendors(record, {
@@ -565,7 +787,9 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
       getFirstString(source, ["reasoning", "explanation"]),
     supportsPromotion:
       getFirstBoolean(conflictBridgeSource, ["supportsPromotion"]) ??
-      false
+      getFirstBoolean(conflictBridgeSource, ["supportsPromotionCandidate"]) ??
+      false,
+    provenance: getBridgeProvenance(conflictBridgeSource)
   };
 
   const derivedPolicyAnchorPresent = Boolean(
@@ -648,5 +872,107 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
     runtimeAnchor,
     conflictBridge,
     evidenceSufficiency
+  };
+}
+
+export function evaluatePolicyBehaviorContradictionEvidence(
+  record: Record<string, unknown> | null | undefined
+): PolicyBehaviorContradictionEvidenceDecision {
+  const bundle = getContradictionEvidenceBundle(record);
+  const negativeEvidenceFlags = new Set<string>();
+
+  if (!bundle) {
+    return {
+      eligible: false,
+      negativeEvidenceFlags: [
+        "missing_policy_side_evidence",
+        "missing_runtime_anchor",
+        "missing_contradiction_bridge",
+        "insufficient_evidence_for_policy_behavior_conflict"
+      ]
+    };
+  }
+
+  const { policyAnchor, runtimeAnchor, conflictBridge } = bundle;
+  const allowedConflictType = getAllowedConflictType(policyAnchor.claimType, runtimeAnchor.observationType);
+  const policyConfidenceOk = typeof policyAnchor.confidence === "number" && policyAnchor.confidence >= 0.55;
+  const runtimeConfidenceOk = typeof runtimeAnchor.confidence === "number" && runtimeAnchor.confidence >= 0.55;
+  const runtimeArtifactPresent =
+    runtimeAnchor.requests.length > 0 ||
+    runtimeAnchor.vendors.length > 0 ||
+    runtimeAnchor.cookies.length > 0 ||
+    runtimeAnchor.storageArtifacts.length > 0 ||
+    bundle.runtimeEvidenceArtifacts.length > 0 ||
+    getSanitizedNetworkEvidenceRequestUrls(record).length > 0;
+  const policyAnchorPresent = Boolean(
+    policyAnchor.claimType &&
+      policyAnchor.sourceUrl &&
+      policyAnchor.snippet &&
+      policyAnchor.extractionStatus === "fetched" &&
+      policyConfidenceOk
+  );
+  const policySnippetSpecific = isSpecificPolicyBehaviorPolicySnippet(policyAnchor.snippet, policyAnchor.claimType);
+  const runtimeAnchorPresent = Boolean(
+    runtimeAnchor.observationType &&
+      runtimeAnchor.phase !== "unknown" &&
+      runtimeConfidenceOk &&
+      runtimeArtifactPresent
+  );
+  const bridgeProvenancePresent = Boolean(
+    conflictBridge.provenance.bridgeRuleId &&
+      conflictBridge.provenance.generatedBy &&
+      conflictBridge.provenance.mappingType &&
+      conflictBridge.provenance.mappingVersion &&
+      conflictBridge.provenance.policyAnchorRef &&
+      conflictBridge.provenance.runtimeAnchorRef &&
+      conflictBridge.provenance.sourceEvidenceIds.length > 0
+  );
+  const bridgePresent = Boolean(
+    conflictBridge.conflictType &&
+      allowedConflictType &&
+      conflictBridge.conflictType === allowedConflictType &&
+      conflictBridge.reasoning &&
+      conflictBridge.supportsPromotion &&
+      bridgeProvenancePresent
+  );
+
+  if (!policyAnchorPresent) {
+    negativeEvidenceFlags.add("missing_policy_side_evidence");
+  }
+  if (policyAnchor.snippet && !policySnippetSpecific) {
+    negativeEvidenceFlags.add(/insufficient policy content fetched|^(privacy policy|terms of use)$/i.test(policyAnchor.snippet.trim())
+      ? "boilerplate_policy_anchor"
+      : "weak_policy_anchor");
+  }
+  if (!runtimeAnchorPresent) {
+    negativeEvidenceFlags.add("missing_runtime_anchor");
+    negativeEvidenceFlags.add("missing_specific_runtime_artifact");
+  }
+  if (!allowedConflictType || !conflictBridge.conflictType || conflictBridge.conflictType !== allowedConflictType) {
+    negativeEvidenceFlags.add("unsupported_policy_runtime_mapping");
+  }
+  if (!conflictBridge.reasoning || !conflictBridge.supportsPromotion) {
+    negativeEvidenceFlags.add("missing_contradiction_bridge");
+  }
+  if (!bridgeProvenancePresent) {
+    negativeEvidenceFlags.add("missing_bridge_provenance");
+  }
+  if (
+    bundle.evidenceSufficiency.reviewStatus === "complete" ||
+    bundle.evidenceSufficiency.promotionEligible === true ||
+    conflictBridge.supportsPromotion
+  ) {
+    if (!policyAnchorPresent || !policySnippetSpecific || !runtimeAnchorPresent || !bridgePresent) {
+      negativeEvidenceFlags.add("producer_claim_failed_revalidation");
+    }
+  }
+
+  if (negativeEvidenceFlags.size > 0) {
+    negativeEvidenceFlags.add("insufficient_evidence_for_policy_behavior_conflict");
+  }
+
+  return {
+    eligible: negativeEvidenceFlags.size === 0,
+    negativeEvidenceFlags: [...negativeEvidenceFlags]
   };
 }

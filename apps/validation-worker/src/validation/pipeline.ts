@@ -778,9 +778,9 @@ function getConsentChoicePolicyAnchor(policySemanticRows: Array<Record<string, u
         (hasChoiceSignal ? 10 : 0) +
         (privacyContactChannel && privacyContactChannel !== "none" && privacyContactChannel !== "unknown" ? 1 : 0);
 
-      return { hasChoiceSignal, pageType, pageUrl, score, summary };
+      return { hasChoiceSignal, pageType, pageUrl, row, score, summary };
     })
-    .filter((row) => row.hasChoiceSignal && row.pageUrl && row.summary)
+    .filter((row) => row.hasChoiceSignal && row.pageUrl && isSpecificConsentChoicePolicySnippet(row.summary))
     .sort((left, right) => right.score - left.score);
 
   const selected = rankedRows[0];
@@ -789,12 +789,66 @@ function getConsentChoicePolicyAnchor(policySemanticRows: Array<Record<string, u
   }
 
   return {
+    charEnd: getNumberValue(selected.row, "char_end") ?? getNumberValue(selected.row, "charEnd"),
+    charStart: getNumberValue(selected.row, "char_start") ?? getNumberValue(selected.row, "charStart"),
     confidence: 0.72,
+    documentType: selected.pageType ?? "policy",
+    extractedBy: "wc01.validation_worker.policy_semantic_rows",
+    extractionVersion: "policy_claim_candidate:v1",
     extractionStatus: "fetched",
+    headingPath: getStringValue(selected.row, "heading_path") ?? getStringValue(selected.row, "headingPath"),
+    id: buildPolicyClaimCandidateId({
+      claimType: "cookie_preferences_available",
+      snippet: selected.summary,
+      sourceUrl: selected.pageUrl
+    }),
     normalizedClaim: "The policy surface describes cookie, tracking, or privacy-choice controls available to visitors.",
+    sectionPath: getStringValue(selected.row, "section_path") ?? getStringValue(selected.row, "sectionPath"),
     snippet: selected.summary,
+    snippetHash: buildNanoDocumentContentHash(selected.summary),
     sourceUrl: selected.pageUrl
   };
+}
+
+function buildPolicyClaimCandidateId(input: { claimType: string; snippet: string; sourceUrl: string }) {
+  const digest = createHash("sha256")
+    .update([input.claimType, input.sourceUrl, input.snippet].join("\n"))
+    .digest("hex")
+    .slice(0, 16);
+  return `policy_claim:${input.claimType}:${digest}`;
+}
+
+function buildRuntimeBehaviorArtifactId(input: { artifactType: string; phase: string; value: string }) {
+  const digest = createHash("sha256")
+    .update([input.artifactType, input.phase, input.value].join("\n"))
+    .digest("hex")
+    .slice(0, 16);
+  return `runtime_artifact:${input.artifactType}:${input.phase}:${digest}`;
+}
+
+function buildPolicyRuntimeBridgeCandidateId(input: { bridgeRuleId: string; policyAnchorRef: string; runtimeAnchorRef: string }) {
+  const digest = createHash("sha256")
+    .update([input.bridgeRuleId, input.policyAnchorRef, input.runtimeAnchorRef].join("\n"))
+    .digest("hex")
+    .slice(0, 16);
+  return `policy_runtime_bridge:${digest}`;
+}
+
+function isSpecificConsentChoicePolicySnippet(value: string | null | undefined) {
+  const snippet = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  if (snippet.length < 32) {
+    return false;
+  }
+  if (/insufficient policy content fetched|semantic review|error page|page not found/i.test(snippet)) {
+    return false;
+  }
+  if (/^(?:privacy policy|cookie policy|terms of use|terms and conditions|legal|privacy center)$/i.test(snippet)) {
+    return false;
+  }
+  if (!/(cookie|tracking|analytics|advertis(?:e|ing)|marketing|sale|share|consent|opt[- ]?out|preferences?|personal information|personal data|third part(?:y|ies)|data collection|collect(?:ed|ion)?|data use|use of data)/i.test(snippet)) {
+    return false;
+  }
+  return /\b(?:collect|use|share|sell|disclose|store|process|track|consent|choose|control|disable|reject|opt[- ]?out|preference)\b/i.test(snippet);
 }
 
 function buildConsentGatedTrackingContradictionEvidence(input: {
@@ -810,15 +864,84 @@ function buildConsentGatedTrackingContradictionEvidence(input: {
     return null;
   }
 
+  const runtimeArtifact = {
+    artifactType: "request",
+    cmpVisibleMs: null,
+    confidence: 0.82,
+    consentActionObserved: false,
+    host: (() => {
+      try {
+        return new URL(runtimeRequestUrls[0] ?? "").hostname;
+      } catch {
+        return null;
+      }
+    })(),
+    id: buildRuntimeBehaviorArtifactId({
+      artifactType: "request",
+      phase: "pre_consent",
+      value: runtimeRequestUrls[0] ?? runtimeVendors[0] ?? "unknown"
+    }),
+    phase: "pre_consent",
+    sourceArtifactRef: runtimeRequestUrls[0] ?? runtimeVendors[0] ?? "runtime_preconsent_request_urls",
+    timestampMs: null,
+    url: runtimeRequestUrls[0] ?? null,
+    vendor: runtimeVendors[0] ?? null,
+    cookieName: null,
+    storageKey: null
+  };
+  const bridgeRuleId = "validation_worker.consent_choice_policy_preconsent_runtime_v1";
+  const bridgeCandidate = {
+    bridgeRuleId,
+    confidence: 0.78,
+    generatedBy: "wc01.validation_worker",
+    id: buildPolicyRuntimeBridgeCandidateId({
+      bridgeRuleId,
+      policyAnchorRef: policyAnchor.id,
+      runtimeAnchorRef: runtimeArtifact.id
+    }),
+    mappingType: "deterministic_policy_runtime_mapping",
+    mappingVersion: "policy_behavior_conflict_map:v1",
+    policyAnchorRef: policyAnchor.id,
+    reasoning:
+      "Choice-control policy evidence is paired with concrete pre-consent runtime request URLs and attributed non-essential vendors.",
+    runtimeAnchorRef: runtimeArtifact.id,
+    sourceEvidenceIds: [policyAnchor.id, runtimeArtifact.id],
+    supportsPromotionCandidate: true
+  };
+  const policyClaimCandidate = {
+    charEnd: policyAnchor.charEnd,
+    charStart: policyAnchor.charStart,
+    claimType: "cookie_preferences_available",
+    confidence: policyAnchor.confidence,
+    documentType: policyAnchor.documentType,
+    extractedBy: policyAnchor.extractedBy,
+    extractionStatus: policyAnchor.extractionStatus,
+    extractionVersion: policyAnchor.extractionVersion,
+    headingPath: policyAnchor.headingPath,
+    id: policyAnchor.id,
+    sectionPath: policyAnchor.sectionPath,
+    snippet: policyAnchor.snippet,
+    snippetHash: policyAnchor.snippetHash,
+    sourceUrl: policyAnchor.sourceUrl
+  };
+
   return {
     claim: policyAnchor.normalizedClaim,
     contradictionBasis:
       "The policy and consent surfaces describe visitor choice controls, but non-essential advertising, analytics, or marketing requests were observed before a visitor choice was completed.",
     conflictBridge: {
       conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
-      reasoning:
-        "Choice-control policy evidence is paired with concrete pre-consent runtime request URLs and attributed non-essential vendors.",
-      supportsPromotion: true
+      provenance: {
+        bridgeRuleId: bridgeCandidate.bridgeRuleId,
+        generatedBy: bridgeCandidate.generatedBy,
+        mappingType: bridgeCandidate.mappingType,
+        mappingVersion: bridgeCandidate.mappingVersion,
+        policyAnchorRef: bridgeCandidate.policyAnchorRef,
+        runtimeAnchorRef: bridgeCandidate.runtimeAnchorRef,
+        sourceEvidenceIds: bridgeCandidate.sourceEvidenceIds
+      },
+      reasoning: bridgeCandidate.reasoning,
+      supportsPromotion: bridgeCandidate.supportsPromotionCandidate
     },
     evidenceSufficiency: {
       conflictBridgePresent: true,
@@ -837,6 +960,8 @@ function buildConsentGatedTrackingContradictionEvidence(input: {
     },
     policySnippet: policyAnchor.snippet,
     policySourceUrl: policyAnchor.sourceUrl,
+    policyClaimCandidates: [policyClaimCandidate],
+    policyRuntimeBridgeCandidates: [bridgeCandidate],
     runtimeAnchor: {
       confidence: 0.82,
       cookies: [],
@@ -847,6 +972,7 @@ function buildConsentGatedTrackingContradictionEvidence(input: {
       storageArtifacts: [],
       vendors: runtimeVendors
     },
+    runtimeBehaviorArtifacts: [runtimeArtifact],
     runtimeEvidenceArtifacts: runtimeRequestUrls,
     runtimeSummary:
       "Non-essential advertising, analytics, or marketing requests were observed before the visitor completed a consent choice.",
@@ -1585,14 +1711,6 @@ function getFinancialValidationDefinition(signalKey: string) {
 
 function getFinancialCommercialDefinition(findingId: string) {
   switch (findingId) {
-    case "guaranteed_outcome_claim_detected":
-      return {
-        description:
-          "The scan retained guaranteed-outcome or low-risk/high-return marketing language in a public-facing financial promotion context.",
-        ruleKey: "financial_review.guaranteed_outcome_claim_detected",
-        severity: "high" as const,
-        title: "Guaranteed outcome claim detected"
-      };
     case "simulated_performance_without_disclosure":
       return {
         description:
@@ -1616,14 +1734,6 @@ function getFinancialCommercialDefinition(findingId: string) {
         ruleKey: "financial_review.financial_urgency_pressure_tactic_detected",
         severity: "medium" as const,
         title: "Financial urgency pressure tactic detected"
-      };
-    case "unsubstantiated_testimonial_near_performance_claim":
-      return {
-        description:
-          "The scan retained testimonial or review language adjacent to guaranteed-return or performance-style financial promotion language without nearby balancing disclosure evidence.",
-        ruleKey: "financial_review.unsubstantiated_testimonial_near_performance_claim",
-        severity: "high" as const,
-        title: "Testimonial adjacent to unsubstantiated performance claim"
       };
     default:
       return null;
@@ -1762,16 +1872,6 @@ function scoreFinancialCommercialFindingSnippet(input: {
   let score = scoreFinancialCommercialSnippet(normalized, input.signalKeys);
 
   switch (input.findingId) {
-    case "guaranteed_outcome_claim_detected":
-      if (/\b(guarantee|guaranteed|assured|risk[- ]free|no[- ]risk|safe returns?|certain profits?)\b/i.test(normalized)) {
-        score += 44;
-      } else {
-        score -= 65;
-      }
-      if (FINANCIAL_NEGATED_GUARANTEE_PATTERN.test(normalized)) {
-        score -= 72;
-      }
-      break;
     case "simulated_performance_without_disclosure":
       if (/\b(backtest(?:ed)?|hypothetical|simulated|paper trading|historical performance)\b/i.test(normalized)) {
         score += 48;
@@ -1883,12 +1983,6 @@ function hasStrongFinancialCommercialSnippetForFinding(input: {
   const signalKeys = new Set(input.signalKeys ?? []);
 
   switch (input.findingId) {
-    case "guaranteed_outcome_claim_detected":
-      return (
-        wordCount >= 3 &&
-        /\b(guarantee|guaranteed|assured|risk[- ]free|no[- ]risk|safe returns?|certain profits?)\b/i.test(normalized) &&
-        !FINANCIAL_NEGATED_GUARANTEE_PATTERN.test(normalized)
-      );
     case "simulated_performance_without_disclosure":
       return (
         wordCount >= 3 &&
@@ -2767,14 +2861,6 @@ function deriveFinancialCommercialClaimFindings(input: ValidationArtifactBundle)
         classification
       });
       const normalizedFindingIds: string[] = [...new Set(derivedFindingIds)];
-      if (
-        signalKeys.includes("financial.guaranteed_return_language_present") &&
-        signalKeys.includes("financial.testimonial_or_review_block_near_financial_claim_present") &&
-        !classification.adjacentDisclosurePresent
-      ) {
-        normalizedFindingIds.push("unsubstantiated_testimonial_near_performance_claim");
-      }
-
       for (const findingId of normalizedFindingIds) {
         const definition = getFinancialCommercialDefinition(findingId);
         if (!definition) {
@@ -2873,76 +2959,8 @@ function getSnapshotText(input: ValidationArtifactBundle) {
 }
 
 function deriveRegulatoryRegistrationTransparencyFindings(input: ValidationArtifactBundle) {
-  const retainedTexts = [
-    getSnapshotText(input),
-    ...input.pageEvidence.map((row) => getStringValue(row, "matched_text")).filter((value): value is string => Boolean(value)),
-    ...input.signalHits.flatMap((hit) => {
-      const payload = getRecord(hit.payload);
-      return [
-        getStringValue(hit, "signal_key"),
-        getStringValue(payload, "matchedText"),
-        getStringValue(payload, "matchedTerm"),
-        ...(Array.isArray(payload?.matchedTexts)
-          ? (payload.matchedTexts as unknown[]).filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-          : [])
-      ].filter((value): value is string => Boolean(value));
-    })
-  ];
-  const corpus = retainedTexts.join(" ");
-  const hasFinancialAdvisoryOrSignalContext =
-    FINANCIAL_REGULATORY_CONTEXT_BENCHMARK_PATTERN.test(corpus) ||
-    FINANCIAL_SIGNAL_SERVICE_CONTEXT_PATTERN.test(corpus) ||
-    input.signalHits.some((hit) => {
-      const signalKey = getStringValue(hit, "signal_key") ?? "";
-      return (
-        signalKey.startsWith("financial.") ||
-        signalKey === "entity.regulatory_or_license_claim_text_present"
-      );
-    });
-  const registrationDisclosurePresent =
-    FINANCIAL_REGISTRATION_DISCLOSURE_PATTERN.test(corpus) ||
-    input.signalHits.some((hit) => getStringValue(hit, "signal_key") === "entity.registration_identifier_text_present");
-
-  if (!hasFinancialAdvisoryOrSignalContext || registrationDisclosurePresent) {
-    return [];
-  }
-
-  const pageUrl =
-    input.pageEvidence.map((row) => getStringValue(row, "page_url")).find((value): value is string => Boolean(value)) ??
-    input.signalHits.map((hit) => getStringValue(hit, "page_url")).find((value): value is string => Boolean(value)) ??
-    null;
-  const taxonomy = deriveValidationFindingTaxonomy({
-    category: "scan_report_review",
-    ruleKey: "regulatory.registration_transparency_disclosure_absent",
-    subtype: "regulatory_registration_transparency"
-  });
-
-  return [{
-    category: "scan_report_review" as const,
-    description:
-      "Financial advisory, trading-signal, forex, derivatives, or prop-trading context was retained without a visible registration disclosure on the scanned surface.",
-    evidence: {
-      confidence: "moderate",
-      contextSignals: retainedTexts.filter((value) => FINANCIAL_REGULATORY_CONTEXT_BENCHMARK_PATTERN.test(value) || FINANCIAL_SIGNAL_SERVICE_CONTEXT_PATTERN.test(value)).slice(0, 8),
-      matchedSnippet: retainedTexts.find((value) => FINANCIAL_SIGNAL_SERVICE_CONTEXT_PATTERN.test(value)) ?? getSnapshotText(input) ?? null,
-      pageUrl,
-      registrationDisclosurePresent: false,
-      remediation:
-        "If you provide investment advice, trading signals, or manage client funds, disclose your registration status (NFA, CFTC, SEC, FCA, or equivalent) or a clear statement that you are not a registered adviser and signals are for informational use only.",
-      sourceUrls: pageUrl ? [pageUrl] : [],
-      unifiedFindingId: "regulatory_registration_disclosure_absent"
-    },
-    findingFamily: taxonomy.familyId,
-    findingScope: taxonomy.scope,
-    findingSource: taxonomy.source,
-    findingSubject: taxonomy.subject,
-    pageUrl,
-    rank: 0,
-    ruleKey: "regulatory.registration_transparency_disclosure_absent",
-    severity: "high" as const,
-    subtype: "regulatory_registration_transparency",
-    title: "Regulatory registration disclosure absent"
-  }];
+  void input;
+  return [] satisfies ValidationFindingRow[];
 }
 
 function deriveFinancialContextTextClaimFindings(_input: ValidationArtifactBundle) {
@@ -4853,7 +4871,6 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     ...deriveFinancialValidationFindings(input),
     ...deriveFinancialCommercialClaimFindings(input),
     ...deriveFinancialContextTextClaimFindings(input),
-    ...deriveRegulatoryRegistrationTransparencyFindings(input),
     ...deriveRuntimePrivacyFindings({
       policySemanticRows,
       preconsentViolations: input.preconsentViolations,

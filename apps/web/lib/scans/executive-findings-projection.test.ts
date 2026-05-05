@@ -113,11 +113,35 @@ test("projects surfaced unified findings into executive findings and regulatory 
       severity: "high",
       summary: "6 third-party requests fired before any consent action."
     }),
-    makePacket("policy_behavior_conflict", {
-      details: { family: "contradiction", kind: "policy_behavior_conflict" },
-      severity: "high",
-      summary: "Observed runtime behavior appears to conflict with policy representations."
-    }),
+	    makePacket("policy_behavior_conflict", {
+	      details: {
+	        family: "contradiction",
+	        kind: "policy_behavior_conflict",
+	        claim: "Optional analytics and advertising cookies are controlled by cookie preferences and consent.",
+	        contradictionBasis: "The policy says optional tracking follows cookie preferences, but tracking began before consent.",
+	        bridgeGeneratedBy: "wc01.test",
+	        bridgeMappingType: "deterministic_policy_runtime_mapping",
+	        bridgeMappingVersion: "policy_behavior_conflict_map:v1",
+	        bridgeRuleId: "test.policy_behavior_cookie_preferences_preconsent_v1",
+	        conflictBridgeReasoning: "Cookie preference policy evidence is paired with concrete pre-consent tracker request evidence.",
+	        conflictSupportsPromotion: true,
+	        conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+	        contradictionPromotionEligible: true,
+	        contradictionReviewStatus: "complete",
+	        policyAnchorRef: "policy:privacy#cookies",
+	        policyClaimType: "cookie_preferences_available",
+	        policySnippet: "We use optional analytics and advertising cookies only after you set cookie preferences or consent.",
+	        policySourceUrl: "https://example.com/privacy",
+	        runtimeAnchorRef: "request:https://connect.facebook.net/en_US/fbevents.js",
+	        runtimeEvidenceArtifacts: ["https://connect.facebook.net/en_US/fbevents.js"],
+	        runtimeObservationType: "marketing_vendor_fired_pre_consent",
+	        runtimePhase: "pre_consent",
+	        sourceEvidenceIds: ["policy:privacy#cookies", "request:https://connect.facebook.net/en_US/fbevents.js"],
+	        vendors: ["Meta Pixel"]
+	      },
+	      severity: "high",
+	      summary: "Observed runtime behavior appears to conflict with policy representations."
+	    }),
     makePacket("accept_more_prominent_than_reject", {
       details: { family: "consent_tracking", kind: "accept_more_prominent_than_reject" },
       summary: "Accept appears more prominent than reject."
@@ -528,20 +552,31 @@ test("projects policy runtime conflicts with compact canonical evidence referenc
           "The policy and consent surfaces describe visitor choice controls, but non-essential marketing requests were observed before a visitor choice was completed.",
         policyClaimType: "cookie_preferences_available",
         runtimeObservationType: "marketing_vendor_fired_pre_consent",
-        runtimePhase: "pre_consent",
-        conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+	        runtimePhase: "pre_consent",
+	        bridgeGeneratedBy: "wc01.test",
+	        bridgeMappingType: "deterministic_policy_runtime_mapping",
+	        bridgeMappingVersion: "policy_behavior_conflict_map:v1",
+	        bridgeRuleId: "test.policy_behavior_cookie_preferences_preconsent_v1",
+	        conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
         conflictBridgeReasoning:
           "Choice-control policy evidence is paired with concrete pre-consent runtime request URLs and attributed non-essential vendors.",
         conflictSupportsPromotion: true,
         contradictionReviewStatus: "complete",
         contradictionPromotionEligible: true,
-        policySnippet: "Cookie notice explains cookie settings, third-party cookies, analytics, and marketing categories.",
-        policySourceUrl: "https://privacy.klaviyo.com/policies/?name=klaviyo-cookie-notice",
-        runtimeEvidenceArtifacts: [
+	        policySnippet:
+	          "Cookie notice says visitors can manage cookie preferences and choose whether analytics and marketing cookies are enabled.",
+	        policySourceUrl: "https://privacy.klaviyo.com/policies/?name=klaviyo-cookie-notice",
+	        policyAnchorRef: "policy:klaviyo-cookie-notice#settings",
+	        runtimeAnchorRef: "request:https://js.hs-scripts.com/48163345.js",
+	        runtimeEvidenceArtifacts: [
           "https://js.hs-scripts.com/48163345.js",
           "https://static-tracking.klaviyo.com/onsite/js/example.js"
         ],
-        vendors: ["HubSpot", "Klaviyo"]
+	        sourceEvidenceIds: [
+	          "policy:klaviyo-cookie-notice#settings",
+	          "request:https://js.hs-scripts.com/48163345.js"
+	        ],
+	        vendors: ["HubSpot", "Klaviyo"]
       },
       evidence: {
         entities: {
@@ -555,7 +590,7 @@ test("projects policy runtime conflicts with compact canonical evidence referenc
         flags: ["policy_runtime.consent_gated_tracking_claim_conflict"],
         pageUrls: ["https://privacy.klaviyo.com/policies/?name=klaviyo-cookie-notice"],
         snippets: [
-          "Cookie notice explains cookie settings, third-party cookies, analytics, and marketing categories.",
+          "Cookie notice says visitors can manage cookie preferences and choose whether analytics and marketing cookies are enabled.",
           "Choice-control policy evidence is paired with concrete pre-consent runtime request URLs and attributed non-essential vendors."
         ],
         sourceUrls: [
@@ -990,7 +1025,7 @@ test("downgrades reject-path tracking projection when post-reject timing is miss
   assert.equal(finding?.evidenceDetails?.suppressionChecks?.post_reject_window_available, false);
 });
 
-test("projects surfaced scanner-level financial promotion into executive findings without validation rows", () => {
+test("does not project retired scanner-level financial promotion into executive findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("leveraged_or_high_risk_product_promotion", {
       details: { family: "financial_promotion", kind: "leveraged_or_high_risk_product_promotion" },
@@ -1009,17 +1044,11 @@ test("projects surfaced scanner-level financial promotion into executive finding
     })
   ]);
 
-  assert.deepEqual(projection.findings.map((finding) => finding.id), [
-    "leveraged_or_high_risk_product_promotion"
-  ]);
-  assert.deepEqual(projection.findings[0]?.evidenceDetails?.sourceUrls, ["https://example.com/sportsbook"]);
-  assert.deepEqual(projection.findings[0]?.evidenceDetails?.evidenceSnippets, [
-    "Sportsbook promotion language appeared on a wagering product page."
-  ]);
-  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
+  assert.equal(projection.findings.some((finding) => finding.id === "leveraged_or_high_risk_product_promotion"), false);
+  assert.equal(projection.topFindings.some((finding) => finding.id === "leveraged_or_high_risk_product_promotion"), false);
 });
 
-test("projects financial companion findings into executive findings", () => {
+test("does not project retired financial companion findings into executive findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("guaranteed_outcome_claim_detected", {
       confidenceBand: "high",
@@ -1042,19 +1071,61 @@ test("projects financial companion findings into executive findings", () => {
   ]);
 
   assert.deepEqual(
-    projection.findings.map((finding) => finding.id).sort(),
-    [
-      "guaranteed_outcome_claim_detected",
-      "regulatory_registration_disclosure_absent",
-      "unsubstantiated_testimonial_near_performance_claim"
-    ]
+    projection.findings
+      .map((finding) => finding.id)
+      .filter((id) =>
+        [
+          "guaranteed_outcome_claim_detected",
+          "regulatory_registration_disclosure_absent",
+          "unsubstantiated_testimonial_near_performance_claim"
+        ].includes(id)
+      ),
+    []
   );
-  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
-  assert.ok(projection.topFindings.some((finding) => finding.id === "guaranteed_outcome_claim_detected"));
-  assert.equal(projection.topFindings.filter((finding) => finding.section === "Financial & Claims").length, 2);
+  assert.deepEqual(
+    projection.topFindings
+      .map((finding) => finding.id)
+      .filter((id) =>
+        [
+          "guaranteed_outcome_claim_detected",
+          "regulatory_registration_disclosure_absent",
+          "unsubstantiated_testimonial_near_performance_claim"
+        ].includes(id)
+      ),
+    []
+  );
 });
 
-test("projects concrete sportsbook offer evidence into high-risk promotion finding", () => {
+test("projects concrete sportsbook offer evidence into high-risk disclosure finding", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("high_risk_product_risk_disclosure_missing", {
+      details: { family: "financial_promotion", kind: "high_risk_product_risk_disclosure_missing" },
+      evidence: {
+        counts: {},
+        entities: {
+          offerSnippets: ["Get $1,000 in bonus bets when you sign up."],
+          primaryOfferSnippet: ["Get $1,000 in bonus bets when you sign up."],
+          responsibleGamblingDisclosureAdjacent: ["false"],
+          termsDisclosureAdjacent: ["false"]
+        },
+        fetchQuality: null,
+        flags: ["financial.high_risk_product_risk_disclosure_missing"],
+        pageUrls: ["https://example.com/sportsbook"],
+        snippets: ["Get $1,000 in bonus bets when you sign up."],
+        sourceUrls: ["https://example.com/sportsbook"]
+      },
+      summary: "Sportsbook offer language was observed."
+    })
+  ]);
+
+  const finding = projection.findings.find((candidate) => candidate.id === "high_risk_product_risk_disclosure_missing");
+
+  assert.ok(finding);
+  assert.deepEqual(finding?.evidenceDetails?.offerSnippets, ["Get $1,000 in bonus bets when you sign up."]);
+  assert.ok(finding?.evidenceDetails?.disclosureFindings?.includes("Clear adjacent disclosure evidence was not retained with the offer snippet."));
+});
+
+test("does not project retired concrete sportsbook offer evidence into high-risk promotion finding", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("leveraged_or_high_risk_product_promotion", {
       details: { family: "financial_promotion", kind: "leveraged_or_high_risk_product_promotion" },
@@ -1076,14 +1147,42 @@ test("projects concrete sportsbook offer evidence into high-risk promotion findi
     })
   ]);
 
-  const finding = projection.findings.find((candidate) => candidate.id === "leveraged_or_high_risk_product_promotion");
+  assert.equal(projection.findings.some((finding) => finding.id === "leveraged_or_high_risk_product_promotion"), false);
+});
 
-  assert.equal(
-    finding?.shortSummary,
-    'Sportsbook offer language was observed ("Get $1,000 in bonus bets when you sign up.") without clear nearby responsible-gambling or terms evidence retained.'
+test("projects active financial companion findings into executive findings", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("guaranteed_or_high_return_claims_present", {
+      confidenceBand: "high",
+      details: { family: "financial_promotion", kind: "guaranteed_or_high_return_claims_present" },
+      severity: "high",
+      summary: "High return language surfaced."
+    }),
+    makePacket("performance_claims_without_context", {
+      confidenceBand: "high",
+      details: { family: "financial_promotion", kind: "performance_claims_without_context" },
+      severity: "high",
+      summary: "Performance claim appeared without context."
+    }),
+    makePacket("high_risk_product_risk_disclosure_missing", {
+      confidenceBand: "high",
+      details: { family: "financial_promotion", kind: "high_risk_product_risk_disclosure_missing" },
+      severity: "high",
+      summary: "High-risk product disclosure was not retained."
+    }),
+  ]);
+
+  assert.deepEqual(
+    projection.findings.map((finding) => finding.id).sort(),
+    [
+      "guaranteed_or_high_return_claims_present",
+      "high_risk_product_risk_disclosure_missing",
+      "performance_claims_without_context"
+    ]
   );
-  assert.deepEqual(finding?.evidenceDetails?.offerSnippets, ["Get $1,000 in bonus bets when you sign up."]);
-  assert.ok(finding?.evidenceDetails?.disclosureFindings?.includes("Clear adjacent disclosure evidence was not retained with the offer snippet."));
+  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
+  assert.ok(projection.topFindings.some((finding) => finding.id === "guaranteed_or_high_return_claims_present"));
+  assert.equal(projection.topFindings.filter((finding) => finding.section === "Financial & Claims").length, 2);
 });
 
 test("keeps runtime-backed session recording in top findings when consent issues also surface", () => {
@@ -1615,13 +1714,13 @@ test("projects remaining top finding families with canonical evidence details", 
       },
       severity: "medium"
     }),
-    makePacket("leveraged_or_high_risk_product_promotion", {
-      details: { family: "financial_promotion", kind: "leveraged_or_high_risk_product_promotion" },
+    makePacket("high_risk_product_risk_disclosure_missing", {
+      details: { family: "financial_promotion", kind: "high_risk_product_risk_disclosure_missing" },
       evidence: {
         counts: {},
         entities: {},
         fetchQuality: null,
-        flags: ["financial.high_risk_product_promotion"],
+        flags: ["financial.high_risk_product_risk_disclosure_missing"],
         pageUrls: ["https://example.com/invest"],
         snippets: ["Trade leveraged products with high potential upside."],
         sourceUrls: ["https://example.com/invest"]
@@ -1641,8 +1740,8 @@ test("projects remaining top finding families with canonical evidence details", 
   assert.equal(byId.get("accessibility_risk_score")?.evidenceDetails?.accessibilityEvidence?.observed, true);
   assert.equal(byId.get("policy_clarity_risk")?.evidenceVersion, "1.1");
   assert.equal(byId.get("policy_clarity_risk")?.evidenceDetails?.policyEvidenceDetails?.clarityRiskObserved, true);
-  assert.equal(byId.get("leveraged_or_high_risk_product_promotion")?.evidenceVersion, "1.1");
-  assert.equal(byId.get("leveraged_or_high_risk_product_promotion")?.evidenceDetails?.financialClaimsEvidence?.observed, true);
+  assert.equal(byId.get("high_risk_product_risk_disclosure_missing")?.evidenceVersion, "1.1");
+  assert.equal(byId.get("high_risk_product_risk_disclosure_missing")?.evidenceDetails?.financialClaimsEvidence?.observed, true);
 });
 
 test("records surfaced packets that are not yet mapped into executive findings", () => {

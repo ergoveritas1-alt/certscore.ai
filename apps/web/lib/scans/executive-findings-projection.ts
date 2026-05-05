@@ -47,8 +47,6 @@ const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SC
   dismiss_without_reject: "consent_dark_patterns_detected",
   fingerprinting_observed: "probable_fingerprinting",
   forced_consent_wall: "forced_consent_interaction",
-  guaranteed_outcome_claim_detected: "guaranteed_outcome_claim_detected",
-  leveraged_or_high_risk_product_promotion: "leveraged_or_high_risk_product_promotion",
   cookie_disclosure_gap: "cookie_disclosure_gap",
   cpra_cba_opt_out_missing: "cpra_cba_opt_out_missing",
   policy_behavior_conflict: "policy_behavior_contradiction_detected",
@@ -112,10 +110,9 @@ const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
   "popup_or_modal_present",
   "interstitial_detected",
   "accessibility_risk_score",
-  "guaranteed_outcome_claim_detected",
-  "regulatory_registration_disclosure_absent",
-  "unsubstantiated_testimonial_near_performance_claim",
-  "leveraged_or_high_risk_product_promotion"
+  "guaranteed_or_high_return_claims_present",
+  "performance_claims_without_context",
+  "high_risk_product_risk_disclosure_missing"
 ]);
 
 const COOKIE_EVIDENCE_FINDING_IDS = new Set([
@@ -165,10 +162,12 @@ const FOOTPRINT_EVIDENCE_FINDING_IDS = new Set([
 ]);
 
 const FINANCIAL_EVIDENCE_FINDING_IDS = new Set([
-  "guaranteed_outcome_claim_detected",
-  "regulatory_registration_disclosure_absent",
-  "unsubstantiated_testimonial_near_performance_claim",
-  "leveraged_or_high_risk_product_promotion"
+  "simulated_performance_without_disclosure",
+  "unqualified_superlative_claim_detected",
+  "financial_urgency_pressure_tactic_detected",
+  "guaranteed_or_high_return_claims_present",
+  "performance_claims_without_context",
+  "high_risk_product_risk_disclosure_missing"
 ]);
 
 function uniqueStrings(values: Array<string | null | undefined>) {
@@ -1566,27 +1565,6 @@ function buildExecutiveEvidenceDetails(
   if (evidenceSnippets.length > 0) {
     details.evidenceSnippets = evidenceSnippets;
   }
-  if (findingId === "leveraged_or_high_risk_product_promotion") {
-    const offerSnippets = getFinancialPromotionOfferSnippets(packet).slice(0, 3);
-    const disclosureFindings = uniqueStrings([
-      ...getEntityValues(packet, /responsibleGamblingDisclosureAdjacent|termsDisclosureAdjacent/i).map((value) => {
-        if (/^true$/i.test(value)) {
-          return "Relevant disclosure evidence appears near the retained offer snippet.";
-        }
-        if (/^false$/i.test(value)) {
-          return "Clear adjacent disclosure evidence was not retained with the offer snippet.";
-        }
-        return null;
-      }),
-      ...getEntityValues(packet, /responsibleGamblingSnippets|termsSnippets/i)
-    ]).slice(0, 5);
-    if (offerSnippets.length > 0) {
-      details.offerSnippets = offerSnippets;
-    }
-    if (disclosureFindings.length > 0) {
-      details.disclosureFindings = disclosureFindings;
-    }
-  }
   if (pageUrls.length > 0) {
     details.pageUrls = pageUrls;
   }
@@ -1781,24 +1759,6 @@ function buildExecutiveShortSummary(
       return `Non-essential tracking requests fired after the reject interaction${vendorText}.`;
     }
     return "Tracking requests were observed during the consent flow, but post-reject timing was not retained.";
-  }
-
-  if (findingId === "leveraged_or_high_risk_product_promotion") {
-    const offerSnippets = getFinancialPromotionOfferSnippets(packet);
-    const hasAdjacentDisclosureEvidence = getEntityValues(packet, /responsibleGamblingDisclosureAdjacent|termsDisclosureAdjacent/i)
-      .some((value) => /^true$/i.test(value));
-    const disclosureText = uniqueStrings([
-      ...getEntityValues(packet, /responsible|terms|disclosure|adjacent/i),
-      ...(packet.evidence?.snippets ?? [])
-    ]).join(" ");
-    const disclosureQualifier = hasAdjacentDisclosureEvidence ||
-      /responsible.*adjacent|adjacent.*responsible|terms.*adjacent|adjacent.*terms/i.test(disclosureText)
-      ? "with nearby responsible-gambling or terms evidence retained"
-      : "without clear nearby responsible-gambling or terms evidence retained";
-
-    if (offerSnippets.length > 0) {
-      return `Sportsbook offer language was observed ("${formatQuotedSnippet(offerSnippets[0]!)}") ${disclosureQualifier}.`;
-    }
   }
 
   return packet.summary;

@@ -43,7 +43,6 @@ const CORE_PAGE_TYPES = [
 ] as const;
 
 const EMITTABLE_FINDING_IDS: FinancialCommercialClaimsEmittableFindingId[] = [
-  "guaranteed_outcome_claim_detected",
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected",
   "financial_urgency_pressure_tactic_detected"
@@ -108,6 +107,9 @@ function buildPositiveFindingPageTypeMatrix(examples: FinancialCommercialClaimsD
     const pageType = getDatasetPageType(example);
 
     for (const findingId of example.pageExpectation.expectedFindingIds) {
+      if (!grouped.has(findingId)) {
+        continue;
+      }
       incrementCount(grouped.get(findingId)!, pageType);
     }
   }
