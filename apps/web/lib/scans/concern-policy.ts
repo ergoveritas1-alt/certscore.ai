@@ -1003,11 +1003,28 @@ function hasConfirmedRejectTimingEvidence(rawEvidence: Record<string, unknown> |
     return false;
   }
 
-  const rows = getObjectArrayEvidence(rawEvidence, [
-    "postRejectNonEssentialRequests",
-    "post_reject_non_essential_requests",
-    "consent_reject_post_reject_non_essential_requests"
-  ]);
+  const rawRows =
+    rawEvidence?.postRejectNonEssentialRequests ??
+    rawEvidence?.post_reject_non_essential_requests ??
+    rawEvidence?.consent_reject_post_reject_non_essential_requests;
+  const rows = Array.isArray(rawRows)
+    ? rawRows.flatMap((entry): Array<Record<string, unknown>> => {
+        if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+          return [entry as Record<string, unknown>];
+        }
+        if (typeof entry !== "string" || entry.trim().length === 0) {
+          return [];
+        }
+        try {
+          const parsed = JSON.parse(entry) as unknown;
+          return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+            ? [parsed as Record<string, unknown>]
+            : [];
+        } catch {
+          return [];
+        }
+      })
+    : [];
   if (rows.length === 0) {
     return false;
   }
