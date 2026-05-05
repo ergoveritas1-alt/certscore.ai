@@ -196,6 +196,64 @@ test("generic tier-2 fingerprinting telemetry stays out of executive projection"
   assert.ok(!projectExecutiveFindingsFromUnifiedPackets(packets).findings.some((finding) => finding.id === "probable_fingerprinting"));
 });
 
+test("tier-2 canvas evidence needs an independent high-entropy category before surfacing", () => {
+  const baseCandidate = {
+    description: "Fingerprinting runtime detected",
+    observedValue: "true",
+    severity: "medium",
+    signalKey: "privacy.fingerprinting_detected",
+    signalLabel: "Fingerprinting runtime detected",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "Fingerprinting runtime detected"
+  } satisfies Omit<UnifiedFindingCandidate, "fallbackEvidence">;
+  const makePackets = (categories: string[]) => buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        ...baseCandidate,
+        fallbackEvidence: {
+          fingerprintArtifactRefs: ["scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary"],
+          fingerprintAttributeCategories: categories,
+          fingerprintRuntimeEvidence: [
+            {
+              artifactRef: "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary",
+              attributeCategories: categories,
+              tier: 2
+            }
+          ],
+          fingerprintRuntimeEvidenceRetained: true,
+          fingerprintSummary: {
+            attributeCategories: categories.map((name) => ({ count: 2, name })),
+            confidence: "medium",
+            reasons: ["Observed fingerprint-relevant browser APIs."],
+            tier: 2
+          },
+          fingerprintTier: 2,
+          highEntropySignals: categories,
+          signalKey: "privacy.fingerprinting_detected",
+          signalValue: true
+        }
+      } satisfies UnifiedFindingCandidate
+    ],
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  const canvasOnlyPackets = makePackets(["screen_viewport", "hardware", "storage", "canvas_webgl"]);
+  const canvasOnlyPacket = canvasOnlyPackets.find((entry) => entry.unifiedFindingId === "fingerprinting_observed");
+
+  assert.ok(canvasOnlyPacket);
+  assert.equal(evaluateFindingEvidenceContractForPacket(canvasOnlyPacket)?.status, "downgrade");
+  assert.ok(!projectExecutiveFindingsFromUnifiedPackets(canvasOnlyPackets).findings.some((finding) => finding.id === "probable_fingerprinting"));
+
+  const clusteredPackets = makePackets(["screen_viewport", "hardware", "canvas_webgl", "fonts_plugins"]);
+  const clusteredPacket = clusteredPackets.find((entry) => entry.unifiedFindingId === "fingerprinting_observed");
+
+  assert.ok(clusteredPacket);
+  assert.equal(evaluateFindingEvidenceContractForPacket(clusteredPacket)?.status, "pass_strong");
+  assert.ok(projectExecutiveFindingsFromUnifiedPackets(clusteredPackets).findings.some((finding) => finding.id === "probable_fingerprinting"));
+});
+
 test("fingerprinting evidence stays out of executive projection without retained runtime artifacts", () => {
   const weakCandidate = {
     description: "Fingerprinting runtime detected",
