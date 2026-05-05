@@ -13,9 +13,11 @@ test("derives pre-consent tracking and consent dark-pattern signals from hybrid 
   const runtimeArtifacts = {
     hybrid_runtime_evidence: {
       consentSummary: {
+        acceptActionLabels: ["Accept all"],
         bannerPresent: true,
+        bannerTextSnippet: "We use cookies to improve your experience. Accept all",
         acceptPresent: true,
-        closePresent: true,
+        closePresent: false,
         managePresent: false,
         rejectPresent: false,
         rejectDepthClass: "absent"
@@ -44,7 +46,22 @@ test("derives pre-consent tracking and consent dark-pattern signals from hybrid 
   assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.dark_pattern_accept_button_prominence"), true);
   assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.dark_pattern_forced_consent_wall"), true);
   assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.dark_pattern_accept_only_banner"), true);
-  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.dark_pattern_dismiss_without_reject"), true);
+
+  const dismissRuntimeArtifacts = {
+    hybrid_runtime_evidence: {
+      consentSummary: {
+        acceptActionLabels: ["Accept cookies"],
+        bannerPresent: true,
+        bannerTextSnippet: "This website uses cookies to improve your experience. Accept cookies",
+        acceptPresent: true,
+        closePresent: true,
+        managePresent: false,
+        rejectPresent: false,
+        rejectDepthClass: "absent"
+      }
+    }
+  } satisfies Record<string, unknown>;
+  assert.equal(getHybridDerivedSignalValue(dismissRuntimeArtifacts, "privacy.dark_pattern_dismiss_without_reject"), true);
 });
 
 test("derives session replay vendors from hybrid request-to-vendor observations", () => {

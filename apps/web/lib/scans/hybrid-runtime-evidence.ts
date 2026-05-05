@@ -1251,6 +1251,9 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
       if (!verifiedConsentSurface) {
         return undefined;
       }
+      if (consentSummary?.acceptPresent !== true) {
+        return undefined;
+      }
       return (
         consentVisual?.ctaImbalanceDetected === true ||
         consentVisual?.acceptProminence === "high" ||
@@ -1260,6 +1263,9 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
       );
     case "privacy.dark_pattern_forced_consent_wall":
       if (!verifiedConsentSurface) {
+        return undefined;
+      }
+      if (consentSummary?.rejectPresent === true || consentSummary?.closePresent === true) {
         return undefined;
       }
       return (
@@ -1282,7 +1288,11 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
       if (!verifiedConsentSurface) {
         return undefined;
       }
-      return consentSummary?.closePresent === true && consentSummary?.rejectPresent === false;
+      return (
+        consentSummary?.closePresent === true &&
+        consentSummary?.rejectPresent === false &&
+        (consentSummary?.acceptPresent === true || consentSummary?.bannerDisappearedWithoutChoice === true)
+      );
     case "commerce.session_replay_tool_detected":
     case "privacy.session_replay_runtime_detected":
       return hasSessionReplayObserved(hybrid);
@@ -1342,6 +1352,8 @@ export function getHybridSignalFallbackEvidence(input: {
   const consentVisual = getRecord(hybrid.consentVisual);
   const uiSummary = getRecord(hybrid.uiSummary);
   const networkSummary = getRecord(hybrid.networkSummary);
+  const navigationSummary = getRecord(hybrid.navigationSummary ?? hybrid.navigation_summary);
+  const consentPageUrl = getString(navigationSummary?.finalUrl ?? navigationSummary?.final_url ?? navigationSummary?.initialUrl ?? navigationSummary?.initial_url);
   const fingerprintSummary = getFingerprintSummary(hybrid);
   const mediaSummary = getMediaSummary(hybrid);
   const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, input.runtimeArtifacts);
@@ -1419,6 +1431,7 @@ export function getHybridSignalFallbackEvidence(input: {
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
         signalValue: input.signalValue,
+        ...(consentPageUrl ? { pageUrl: consentPageUrl } : {}),
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
         consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
         hybridConsentSummary: consentSummary,
@@ -1433,6 +1446,7 @@ export function getHybridSignalFallbackEvidence(input: {
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
         signalValue: input.signalValue,
+        ...(consentPageUrl ? { pageUrl: consentPageUrl } : {}),
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
         consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
         hybridConsentSummary: consentSummary,
@@ -1448,6 +1462,7 @@ export function getHybridSignalFallbackEvidence(input: {
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
         signalValue: input.signalValue,
+        ...(consentPageUrl ? { pageUrl: consentPageUrl } : {}),
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
         consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
         hybridConsentSummary: consentSummary,
@@ -1463,6 +1478,7 @@ export function getHybridSignalFallbackEvidence(input: {
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
         signalValue: input.signalValue,
+        ...(consentPageUrl ? { pageUrl: consentPageUrl } : {}),
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
         consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
         hybridConsentSummary: consentSummary,
@@ -1478,6 +1494,7 @@ export function getHybridSignalFallbackEvidence(input: {
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,
         signalValue: input.signalValue,
+        ...(consentPageUrl ? { pageUrl: consentPageUrl } : {}),
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
         consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
         hybridConsentSummary: consentSummary

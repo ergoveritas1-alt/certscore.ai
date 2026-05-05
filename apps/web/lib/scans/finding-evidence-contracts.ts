@@ -782,13 +782,27 @@ function hasMaterialChoiceAsymmetryEvidence(rawEvidence: Record<string, unknown>
   const flags = getStringArrayValues(rawEvidence, ["flags", "evidenceFlags", "uiEvidenceFlags", "runtimeArtifacts"]);
   const artifactRefs = getStringArrayValues(rawEvidence, [
     "consentUiArtifactRefs",
-    "consent_ui_artifact_refs",
-    "runtimeEvidenceArtifacts",
-    "runtime_evidence_artifacts"
+    "consent_ui_artifact_refs"
   ]);
   const consentSummary = getObjectValue(rawEvidence, ["hybridConsentSummary", "hybrid_consent_summary"]);
   const consentVisual = getObjectValue(rawEvidence, ["hybridConsentVisual", "hybrid_consent_visual"]);
   const uiSummary = getObjectValue(rawEvidence, ["hybridUiSummary", "hybrid_ui_summary"]);
+  const acceptLabels = getStringArrayValues(consentSummary, ["acceptActionLabels", "accept_action_labels"]);
+  const rejectLabels = getStringArrayValues(consentSummary, ["rejectActionLabels", "reject_action_labels"]);
+  const manageLabels = getStringArrayValues(consentSummary, ["manageActionLabels", "manage_action_labels"]);
+  const closeLabels = getStringArrayValues(consentSummary, ["closeActionLabels", "close_action_labels"]);
+  const bannerText =
+    typeof consentSummary?.bannerTextSnippet === "string"
+      ? consentSummary.bannerTextSnippet
+      : typeof consentSummary?.banner_text_snippet === "string"
+        ? consentSummary.banner_text_snippet
+        : "";
+  const retainedConsentUiText =
+    acceptLabels.length > 0 ||
+    rejectLabels.length > 0 ||
+    manageLabels.length > 0 ||
+    closeLabels.length > 0 ||
+    bannerText.trim().length > 0;
   const surfaceObserved =
     getBoolean(rawEvidence, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
     consentSummary?.bannerPresent === true ||
@@ -815,7 +829,7 @@ function hasMaterialChoiceAsymmetryEvidence(rawEvidence: Record<string, unknown>
   return (
     getBoolean(rawEvidence, ["materialChoiceAsymmetryObserved", "material_choice_asymmetry_observed"]) === true ||
     flags.some((flag) => /dark_pattern|accept_more_prominent|reject_button_missing|forced_consent_wall|accept_only_banner/.test(flag)) ||
-    (surfaceObserved && structuredUiFact && artifactRefs.length > 0)
+    (surfaceObserved && structuredUiFact && (artifactRefs.length > 0 || retainedConsentUiText))
   );
 }
 

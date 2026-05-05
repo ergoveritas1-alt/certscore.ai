@@ -2962,6 +2962,53 @@ test("surfaces GPC failures as runtime-backed unified findings", () => {
   assert.match(packet?.presentation.suggestedFix ?? "", /browser-level opt-out/i);
 });
 
+test("surfaces accept-only consent UI when retained DOM labels satisfy the evidence contract", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        categoryId: "choice_symmetry_dark_pattern_indicators",
+        description: "The retained consent UI text shows an accept control without a same-layer reject or preferences path.",
+        fallbackEvidence: {
+          accept_only_banner: true,
+          consentSurfaceObserved: true,
+          hybridConsentSummary: {
+            acceptActionLabels: ["accept all"],
+            acceptPresent: true,
+            bannerPresent: true,
+            bannerTextSnippet: "We use cookies to improve your experience. Accept all",
+            manageActionLabels: [],
+            managePresent: false,
+            rejectActionLabels: [],
+            rejectPresent: false
+          },
+          hybridConsentVisual: {
+            acceptOnly: true
+          },
+          runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+          pageUrl: "https://example.com/",
+          signalKey: "privacy.dark_pattern_accept_only_banner",
+          signalLabel: "Accept-only banner detected",
+          signalValue: true
+        },
+        observedValue: "accept all",
+        severity: "high",
+        signalKey: "privacy.dark_pattern_accept_only_banner",
+        signalLabel: "Accept-only banner detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Accept-only banner detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "accept_only_banner");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("eligible"), true);
+  assert.deepEqual(packet?.evidence?.pageUrls, ["https://example.com/"]);
+});
+
 test("keeps weak cookie security attributes support-only by default", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
