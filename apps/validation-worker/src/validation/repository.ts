@@ -2697,6 +2697,100 @@ export async function hasValidationRunForScan(scanId: string) {
   return Boolean(data?.id);
 }
 
+export async function ensureCompletedValidationRunForScan(scanId: string) {
+  const existing = await queryOne<{ id: string }>(
+    `select id from validation_runs where scan_id = $1 order by created_at desc limit 1`,
+    [scanId],
+    { readOnly: true }
+  );
+
+  if (existing?.id) {
+    return existing;
+  }
+
+  const scan = await queryOne<{
+    completed_at: string | null;
+    created_at: string;
+    domain_hostname: string | null;
+    domain_id: string | null;
+    domain_normalized_url: string | null;
+    scan_config_json: Record<string, unknown> | null;
+    snapshot_domain: string | null;
+    started_at: string | null;
+  }>(
+    `
+      select
+        s.completed_at,
+        s.created_at,
+        s.domain_id,
+        s.scan_config_json,
+        s.started_at,
+        d.hostname as domain_hostname,
+        d.normalized_url as domain_normalized_url,
+        ss.domain as snapshot_domain
+      from scans s
+      left join domains d on d.id = s.domain_id
+      left join scan_snapshots ss on ss.scan_id = s.id
+      where s.id = $1
+      limit 1
+    `,
+    [scanId],
+    { readOnly: true }
+  );
+
+  if (!scan) {
+    throw new Error(`Cannot create completed validation run for missing scan ${scanId}.`);
+  }
+
+  const scanConfig = scan.scan_config_json && typeof scan.scan_config_json === "object" ? scan.scan_config_json : {};
+  const configuredHostname = typeof scanConfig.hostname === "string" && scanConfig.hostname.trim().length > 0
+    ? scanConfig.hostname.trim()
+    : null;
+  const configuredUrl = typeof scanConfig.normalizedUrl === "string" && scanConfig.normalizedUrl.trim().length > 0
+    ? scanConfig.normalizedUrl.trim()
+    : null;
+  const hostname = configuredHostname ?? scan.domain_hostname ?? scan.snapshot_domain ?? "unknown";
+  const normalizedUrl = configuredUrl ?? scan.domain_normalized_url ?? (hostname === "unknown" ? "https://unknown.invalid" : `https://${hostname}`);
+  const timestamp = scan.completed_at ?? scan.started_at ?? scan.created_at ?? new Date().toISOString();
+
+  const created = await queryOne<{ id: string }>(
+    `
+      insert into validation_runs (
+        scan_id,
+        domain_id,
+        hostname,
+        normalized_url,
+        trigger_mode,
+        status,
+        started_at,
+        completed_at
+      )
+      select $1, $2, $3, $4, 'manual', 'completed', $5, $5
+      where not exists (
+        select 1 from validation_runs where scan_id = $1
+      )
+      returning id
+    `,
+    [scanId, scan.domain_id, hostname, normalizedUrl, timestamp]
+  );
+
+  if (created?.id) {
+    return created;
+  }
+
+  const raced = await queryOne<{ id: string }>(
+    `select id from validation_runs where scan_id = $1 order by created_at desc limit 1`,
+    [scanId],
+    { readOnly: true }
+  );
+
+  if (!raced?.id) {
+    throw new Error(`Failed to create completed validation run for scan ${scanId}.`);
+  }
+
+  return raced;
+}
+
 export function normalizeValidationTargetInput(value: string) {
   return normalizeUrl(value);
 }

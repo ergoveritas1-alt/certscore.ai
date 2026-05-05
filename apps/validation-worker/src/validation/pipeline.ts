@@ -9,6 +9,7 @@ import {
   claimNextAutomaticTarget,
   createScanForValidationRun,
   createValidationRun,
+  ensureCompletedValidationRunForScan,
   ensureValidationSettings,
   failValidationRun,
   finalizeValidationRun,
@@ -6407,7 +6408,7 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       },
       scanId
     }).catch(() => undefined);
-    await deriveUnifiedFindingsWithWorkflowEvents({
+    const findings = await deriveUnifiedFindingsWithWorkflowEvents({
       completionMetadata: (findings) => ({
         cookieDisclosureGapDiagnostic: deriveCookieDisclosureGapDiagnostic(
           {
@@ -6421,6 +6422,10 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
       scanId
     });
+    if (findings.length > 0) {
+      const completedRun = await ensureCompletedValidationRunForScan(scanId);
+      await replaceValidationRunFindings(completedRun.id, findings);
+    }
 
     const scanType = typeof artifacts.scan?.scan_type === "string" ? artifacts.scan.scan_type : null;
     if (scanType === "preview" && scanStatus !== "completed" && scanStatus !== "failed") {
