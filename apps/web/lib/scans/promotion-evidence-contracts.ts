@@ -576,26 +576,83 @@ function getUrlAssessment(record: Record<string, unknown> | null | undefined) {
   return typeof value?.assessment === "string" ? value.assessment : null;
 }
 
+const HIGH_ENTROPY_FINGERPRINTING_CATEGORIES = new Set([
+  "audio",
+  "canvas",
+  "canvas_readback",
+  "canvas_webgl",
+  "fonts",
+  "fonts_plugins",
+  "media_devices",
+  "webgl"
+]);
+
+function normalizeFingerprintingCategory(value: string) {
+  return value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+function getFingerprintingAttributeCategories(rawEvidence: Record<string, unknown> | null | undefined) {
+  const summary = getRecordValue(rawEvidence, ["fingerprintSummary", "fingerprint_summary"]);
+  const summaryCategoryRows = getObjectArrayValues(summary, ["attributeCategories", "attribute_categories"])
+    .map((row) => (typeof row.name === "string" ? row.name : null))
+    .filter((value): value is string => Boolean(value));
+  const runtimeEvidenceCategoryRows = getObjectArrayValues(rawEvidence, [
+    "fingerprintRuntimeEvidence",
+    "fingerprint_runtime_evidence",
+    "fingerprintingRuntimeEvidence",
+    "fingerprinting_runtime_evidence"
+  ]).flatMap((row) =>
+    getStringArrayValues(row, ["attributeCategories", "attribute_categories", "signals"])
+  );
+
+  return uniqueStrings([
+    ...getStringArrayValues(rawEvidence, [
+      "fingerprintAttributeCategories",
+      "fingerprint_attribute_categories",
+      "fingerprintingSignals",
+      "fingerprinting_signals",
+      "highEntropySignals",
+      "high_entropy_signals"
+    ]),
+    ...getStringArrayValues(summary, ["fingerprintingSignals", "fingerprinting_signals", "highEntropySignals", "high_entropy_signals"]),
+    ...summaryCategoryRows,
+    ...runtimeEvidenceCategoryRows
+  ]).map(normalizeFingerprintingCategory);
+}
+
+function hasConcreteFingerprintingRuntimeAnchor(rawEvidence: Record<string, unknown> | null | undefined) {
+  const urls = getStringArrayValues(rawEvidence, [
+    "requestUrls",
+    "request_urls",
+    "runtimeEvidenceUrls",
+    "runtime_evidence_urls",
+    "runtimeRequestUrls",
+    "runtime_request_urls"
+  ]);
+  const scriptHosts = getStringArrayValues(rawEvidence, ["scriptHosts", "script_hosts"]);
+  const vendors = getStringArrayValues(rawEvidence, ["runtimeVendors", "runtime_vendors", "vendors"]);
+  const runtimeEvidenceUrls = getObjectArrayValues(rawEvidence, [
+    "fingerprintRuntimeEvidence",
+    "fingerprint_runtime_evidence",
+    "fingerprintingRuntimeEvidence",
+    "fingerprinting_runtime_evidence"
+  ]).flatMap((row) => getStringArrayValues(row, ["url", "requestUrl", "request_url", "scriptUrl", "script_url"]));
+
+  return (
+    [...urls, ...runtimeEvidenceUrls].some(isConcreteHttpEvidenceUrl) ||
+    scriptHosts.some((host) => /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host)) ||
+    vendors.some((vendor) => /fingerprint|fingerprintjs|fpjs|iovation|datadome|perimeterx|arkose|castle|forter|sift|risk|fraud|bot/i.test(vendor))
+  );
+}
+
 export function hasStrongFingerprintingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   const summary = getRecordValue(rawEvidence, ["fingerprintSummary", "fingerprint_summary"]);
   const tier = getNumberValue(summary, ["tier"]) ?? getNumberValue(rawEvidence, ["fingerprintTier", "fingerprint_tier"]) ?? 0;
-  const attributeCategories = getStringArrayValues(rawEvidence, [
-    "fingerprintAttributeCategories",
-    "fingerprint_attribute_categories"
-  ]);
-  const summaryAttributeCategories = getStringArrayValues(summary, ["attributeCategories", "attribute_categories"]);
-  const scriptOrRequestEvidence = getStringArrayValues(rawEvidence, [
-    "fingerprintArtifactRefs",
-    "fingerprint_artifact_refs",
-    "requestUrls",
-    "runtimeEvidenceUrls",
-    "scriptHosts",
-    "script_hosts"
-  ]).length > 0;
-  const vendorEvidence = getStringArrayValues(rawEvidence, ["runtimeVendors", "runtime_vendors", "vendors"]).length > 0;
-  const attributeCount = Math.max(attributeCategories.length, summaryAttributeCategories.length);
+  const categories = getFingerprintingAttributeCategories(rawEvidence);
+  const highEntropyCategoryCount = categories.filter((category) => HIGH_ENTROPY_FINGERPRINTING_CATEGORIES.has(category)).length;
+  const hasConcreteRuntimeAnchor = hasConcreteFingerprintingRuntimeAnchor(rawEvidence);
 
-  return tier >= 3 || (tier >= 2 && attributeCount > 0 && (scriptOrRequestEvidence || vendorEvidence));
+  return hasConcreteRuntimeAnchor && (tier >= 3 ? highEntropyCategoryCount >= 1 : tier >= 2 && highEntropyCategoryCount >= 2);
 }
 
 export function hasStrongAccessibilitySupportPathMissingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {

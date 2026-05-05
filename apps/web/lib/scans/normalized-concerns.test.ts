@@ -80,20 +80,21 @@ test("retains fingerprinting runtime evidence through normalized concerns into e
     description: "Fingerprinting runtime detected",
     fallbackEvidence: {
       fingerprintArtifactRefs: ["scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary"],
-      fingerprintAttributeCategories: ["hardware", "storage"],
+      fingerprintAttributeCategories: ["canvas_webgl", "audio"],
       fingerprintRuntimeEvidence: [
         {
           artifactRef: "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary",
-          attributeCategories: ["hardware", "storage"],
+          attributeCategories: ["canvas_webgl", "audio"],
+          requestUrl: "https://fp.example.test/collect",
           tier: 2
         }
       ],
       fingerprintRuntimeEvidenceRetained: true,
-      fingerprintSignals: ["hardware", "storage"],
+      fingerprintSignals: ["canvas_webgl", "audio"],
       fingerprintSummary: {
         attributeCategories: [
-          { count: 3, firstSeenMs: 120, name: "hardware" },
-          { count: 3, firstSeenMs: 140, name: "storage" }
+          { count: 3, firstSeenMs: 120, name: "canvas_webgl" },
+          { count: 3, firstSeenMs: 140, name: "audio" }
         ],
         confidence: "medium",
         reasons: ["Observed identifier-like structuring or shaping behavior."],
@@ -101,7 +102,8 @@ test("retains fingerprinting runtime evidence through normalized concerns into e
         tier: 2
       },
       fingerprintTier: 2,
-      highEntropySignals: ["hardware", "storage"],
+      highEntropySignals: ["canvas_webgl", "audio"],
+      requestUrls: ["https://fp.example.test/collect"],
       signalKey: "privacy.fingerprinting_detected",
       signalValue: true
     },
@@ -123,7 +125,7 @@ test("retains fingerprinting runtime evidence through normalized concerns into e
   const candidateEntities = candidateFallbackEvidence?.entities as Record<string, unknown> | undefined;
 
   assert.equal(candidateCounts?.fingerprintTier, 2);
-  assert.deepEqual(candidateEntities?.fingerprintAttributeCategories, ["hardware", "storage"]);
+  assert.deepEqual(candidateEntities?.fingerprintAttributeCategories, ["canvas_webgl", "audio"]);
   assert.equal(evaluateFindingEvidenceContractForRawEvidence("fingerprinting_observed", candidateFallbackEvidence)?.status, "pass_strong");
 
   const packets = buildUnifiedFindingDisplayPackets({
@@ -135,12 +137,63 @@ test("retains fingerprinting runtime evidence through normalized concerns into e
 
   assert.ok(packet);
   assert.equal(packet.evidence?.counts?.fingerprintTier, 2);
-  assert.deepEqual(packet.evidence?.entities?.fingerprintAttributeCategories, ["hardware", "storage"]);
+  assert.deepEqual(packet.evidence?.entities?.fingerprintAttributeCategories, ["canvas_webgl", "audio"]);
   assert.ok(packet.evidence?.entities?.fingerprintingRuntimeEvidence?.[0]?.includes("\"tier\":2"));
   assert.equal(evaluateFindingEvidenceContractForPacket(packet)?.status, "pass_strong");
 
   const projection = projectExecutiveFindingsFromUnifiedPackets(packets);
   assert.ok(projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
+});
+
+test("generic tier-2 fingerprinting telemetry stays out of executive projection", () => {
+  const genericCandidate = {
+    description: "Fingerprinting runtime detected",
+    fallbackEvidence: {
+      fingerprintArtifactRefs: ["scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary"],
+      fingerprintAttributeCategories: ["screen_viewport", "hardware", "storage", "timezone_locale", "input_touch"],
+      fingerprintRuntimeEvidence: [
+        {
+          artifactRef: "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary",
+          attributeCategories: ["screen_viewport", "hardware", "storage", "timezone_locale", "input_touch"],
+          tier: 2
+        }
+      ],
+      fingerprintRuntimeEvidenceRetained: true,
+      fingerprintSignals: ["screen_viewport", "hardware", "storage", "timezone_locale", "input_touch"],
+      fingerprintSummary: {
+        attributeCategories: [
+          { count: 3, firstSeenMs: 120, name: "screen_viewport" },
+          { count: 3, firstSeenMs: 140, name: "hardware" },
+          { count: 3, firstSeenMs: 160, name: "storage" }
+        ],
+        confidence: "medium",
+        reasons: ["Observed common browser/device telemetry."],
+        summary: "The page showed common browser and device attributes.",
+        tier: 2
+      },
+      fingerprintTier: 2,
+      highEntropySignals: ["screen_viewport", "hardware", "storage", "timezone_locale", "input_touch"],
+      signalKey: "privacy.fingerprinting_detected",
+      signalValue: true
+    },
+    observedValue: "true",
+    severity: "medium",
+    signalKey: "privacy.fingerprinting_detected",
+    signalLabel: "Fingerprinting runtime detected",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "Fingerprinting runtime detected"
+  } satisfies UnifiedFindingCandidate;
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [genericCandidate],
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+  const packet = packets.find((entry) => entry.unifiedFindingId === "fingerprinting_observed");
+
+  assert.ok(packet);
+  assert.equal(evaluateFindingEvidenceContractForPacket(packet)?.status, "downgrade");
+  assert.ok(!projectExecutiveFindingsFromUnifiedPackets(packets).findings.some((finding) => finding.id === "probable_fingerprinting"));
 });
 
 test("fingerprinting evidence stays out of executive projection without retained runtime artifacts", () => {

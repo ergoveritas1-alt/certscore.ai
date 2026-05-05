@@ -1096,6 +1096,25 @@ test("keeps runtime-backed session recording in top findings when consent issues
     }),
     makePacket("fingerprinting_observed", {
       details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: {
+          fingerprintTier: 2
+        },
+        entities: {
+          fingerprintAttributeCategories: ["canvas_webgl", "audio"],
+          fingerprintingRuntimeEvidence: [
+            JSON.stringify({
+              attributeCategories: ["canvas_webgl", "audio"],
+              requestUrl: "https://fp.example.test/collect",
+              tier: 2
+            })
+          ]
+        },
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: ["https://fp.example.test/collect"]
+      },
       severity: "high",
       summary: "Probable fingerprinting behavior."
     }),

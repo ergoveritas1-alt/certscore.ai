@@ -2534,7 +2534,7 @@ test("deriveConcernPolicy promotes corroborated fingerprinting evidence", () => 
     }),
     evidenceStrengthFlags: ["direct_runtime"],
     rawEvidence: {
-      fingerprintAttributeCategories: ["canvas_webgl"],
+      fingerprintAttributeCategories: ["canvas_webgl", "audio"],
       fingerprintSummary: {
         tier: 2
       },

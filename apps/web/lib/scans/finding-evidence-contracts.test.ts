@@ -496,6 +496,8 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
 
   assert.equal(
     evaluateFindingEvidenceContractForRawEvidence("fingerprinting_observed", {
+      fingerprint_tier: 2,
+      fingerprint_attribute_categories: ["canvas_webgl", "audio"],
       fingerprinting_runtime_evidence: [{ signal: "canvas_readback", url: "https://fp.example.net/collect" }]
     })?.status,
     "pass_strong"
