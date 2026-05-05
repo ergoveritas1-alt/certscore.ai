@@ -288,13 +288,47 @@ test("dark-pattern consent signals require verified banner UI evidence", () => {
     },
     hybridConsentVisual: {
       acceptOnly: true
-    },
-    runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"]
+    }
   });
 
   assert.equal(weakDecision?.status, "downgrade");
   assert.ok(weakDecision?.missingRequirements.includes("materialChoiceAsymmetryEvidence"));
   assert.equal(strongDecision?.status, "pass_strong");
+});
+
+test("dark-pattern consent signals accept retained DOM labels without screenshot refs", () => {
+  const noLabelDecision = evaluateFindingEvidenceContractForRawEvidence("accept_only_banner", {
+    accept_only_banner: true,
+    consentSurfaceObserved: true,
+    hybridConsentSummary: {
+      acceptPresent: true,
+      bannerPresent: true,
+      managePresent: false,
+      rejectPresent: false
+    },
+    hybridConsentVisual: {
+      acceptOnly: true
+    }
+  });
+  const retainedLabelDecision = evaluateFindingEvidenceContractForRawEvidence("accept_only_banner", {
+    accept_only_banner: true,
+    consentSurfaceObserved: true,
+    hybridConsentSummary: {
+      acceptActionLabels: ["accept all"],
+      bannerPresent: true,
+      bannerTextSnippet: "We use cookies to improve your experience. Accept all",
+      manageActionLabels: [],
+      rejectActionLabels: []
+    },
+    hybridConsentVisual: {
+      acceptOnly: true
+    },
+    runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"]
+  });
+
+  assert.equal(noLabelDecision?.status, "downgrade");
+  assert.ok(noLabelDecision?.missingRequirements.includes("materialChoiceAsymmetryEvidence"));
+  assert.equal(retainedLabelDecision?.status, "pass_strong");
 });
 
 test("cookie disclosure gap without policy anchor is not promoted", () => {
