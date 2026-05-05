@@ -516,6 +516,7 @@ async function summarizeScan(input: {
     mergedSignals: mergedSignalsByScanId.get(input.scanId) ?? [],
     pageEvidence: [],
     policyEnrichment: normalizedPolicyRows,
+    policyReviewQueue: [],
     preconsentViolations: [],
     primaryPolicyEnrichment: normalizedPolicyRows[0] ?? null,
     runtimeArtifacts: normalizedRuntimeArtifacts,
