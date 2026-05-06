@@ -2281,6 +2281,46 @@ test("deriveConcernPolicy keeps snapshot boolean-only pre-consent evidence audit
   assert.ok(policy.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"));
 });
 
+test("deriveConcernPolicy promotes structured third-party pre-consent cookie evidence without request urls", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.preconsent_tracking_detected",
+      suggestedUnifiedFindingId: "preconsent_tracking",
+      title: "Pre-consent tracking detected"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      consentActionableChoiceObserved: true,
+      consentSurfaceObserved: true,
+      preconsent_cookie_evidence: [
+        {
+          beforeConsent: true,
+          category: "advertising",
+          cookieInitiatorVendor: "Amazon Ads",
+          cookieName: "ad-privacy",
+          cookiePartyType: "third_party",
+          domain: ".amazon-adsystem.com",
+          responseHost: "amazon-adsystem.com",
+          timingEvidence: "before_consent_cookie_write",
+          thirdParty: true
+        }
+      ],
+      consentTimeline: {
+        firstCmpVisibleMs: 1000,
+        firstConsentActionMs: 1500,
+        firstTrackingCookieSetMs: 200
+      },
+      preconsent_tracking_detected: true,
+      thirdPartyCookieSetBeforeConsent: true,
+      supportingSignals: ["privacy.preconsent_tracking_detected"]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "strong");
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
 test("deriveConcernPolicy applies consentTimeline gate to validation-rule pre-consent findings", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({

@@ -1250,13 +1250,6 @@ function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
   if (packet.unifiedFindingId !== "preconsent_tracking" || packet.details?.family !== "consent_tracking") {
     return false;
   }
-  const negativeFlags = new Set(packet.concernContext?.negativeEvidenceFlags ?? []);
-  if (
-    negativeFlags.has("missing_concrete_preconsent_artifact") ||
-    negativeFlags.has("missing_preconsent_sequence_evidence")
-  ) {
-    return false;
-  }
 
   const hasBeforeConsentCookieWriteEvidence =
     (packet.evidence?.entities?.preconsent_cookie_timing_evidence ?? []).some((value) =>
@@ -1639,6 +1632,8 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     ["cookie_policy_missing_surface", "cookie_policy_present"]
   ]);
   const contractDecision = evaluateFindingEvidenceContractForPacket(packet);
+  const hasSpecificPreconsentRuntimeEvidence =
+    packet.unifiedFindingId === "preconsent_tracking" && hasSpecificPreconsentEvidence(packet);
 
   if (packet.concernContext?.externalSurfacingEligibilities?.every((value) => value === "suppress")) {
     overrideDecision(decision, {
@@ -1651,7 +1646,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     return;
   }
 
-  if (contractDecision?.externalSurfacingEligibility === "suppress") {
+  if (contractDecision?.externalSurfacingEligibility === "suppress" && !hasSpecificPreconsentRuntimeEvidence) {
     overrideDecision(decision, {
       state: "suppressed",
       lane: "suppressed",
@@ -1678,7 +1673,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
 
   if (
     contractDecision?.externalSurfacingEligibility === "audit_only" &&
-    !(packet.unifiedFindingId === "preconsent_tracking" && hasSpecificPreconsentEvidence(packet))
+    !hasSpecificPreconsentRuntimeEvidence
   ) {
     overrideDecision(decision, {
       state: "support_only",
@@ -1739,7 +1734,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     ) &&
     packet.concernContext?.externalSurfacingEligibilities?.every((value) => value === "audit_only") &&
     contractDecision?.promotionEligibility !== "eligible" &&
-    !(packet.unifiedFindingId === "preconsent_tracking" && hasSpecificPreconsentEvidence(packet))
+    !hasSpecificPreconsentRuntimeEvidence
   ) {
     overrideDecision(decision, {
       state: "support_only",

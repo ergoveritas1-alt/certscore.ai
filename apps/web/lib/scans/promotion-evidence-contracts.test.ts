@@ -178,6 +178,36 @@ test("pre-consent cookie evidence is promotion-grade only for non-essential cook
   assert.equal(hasStrongPreconsentRuntimeEvidence(initialSnapshotOnlyEvidence), false);
 });
 
+test("structured cookie evidence can promote without a request URL, but bare booleans cannot", () => {
+  const structuredCookieEvidence = {
+    preconsent_cookie_evidence: [
+      {
+        beforeConsent: true,
+        category: "advertising",
+        cookieInitiatorVendor: "Amazon Ads",
+        cookieName: "ad-privacy",
+        cookiePartyType: "third_party",
+        domain: ".amazon-adsystem.com",
+        responseHost: "amazon-adsystem.com",
+        thirdParty: true
+      }
+    ],
+    preconsent_tracking_detected: true,
+    third_party_cookie_set_before_consent: true
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(structuredCookieEvidence), true);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(structuredCookieEvidence), true);
+
+  const bareBooleanEvidence = {
+    preconsent_tracking_detected: true,
+    third_party_cookie_set_before_consent: true
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(bareBooleanEvidence), false);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(bareBooleanEvidence), false);
+});
+
 test("pre-consent cookie write timestamp satisfies sequence for classified tracking cookies", () => {
   const evidence = {
     consentTimeline: {
