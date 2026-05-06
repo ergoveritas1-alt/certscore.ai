@@ -2471,7 +2471,7 @@ test("deriveConcernPolicy promotes pre-submit capture only for retained no-submi
   assert.equal(retainedOnly.promotionEligibility, "internal_only");
 });
 
-test("deriveConcernPolicy keeps non-essential pre-consent cookie evidence without consentTimeline audit-only", () => {
+test("deriveConcernPolicy promotes non-essential pre-consent cookie timing evidence without numeric timeline offsets", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
       originKey: "privacy.preconsent_tracking_detected",
@@ -2496,10 +2496,10 @@ test("deriveConcernPolicy keeps non-essential pre-consent cookie evidence withou
     }
   });
 
-  assert.equal(policy.allowedNarrativeTier, "weak");
-  assert.equal(policy.promotionEligibility, "internal_only");
-  assert.equal(policy.externalSurfacingEligibility, "audit_only");
-  assert.ok(policy.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"));
+  assert.equal(policy.allowedNarrativeTier, "moderate");
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+  assert.ok(!policy.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"));
 });
 
 test("deriveConcernPolicy promotes classified pre-consent cookie writes with consentTimeline sequence", () => {

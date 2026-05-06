@@ -81,7 +81,7 @@ function classifyCookieNameForPromotion(name: string) {
 }
 
 function isPromotionGradeCookieCategory(value: string | null | undefined) {
-  return Boolean(value && /analytics|advertising|marketing|retargeting|session_replay/i.test(value));
+  return Boolean(value && /analytics|advertising|marketing|retargeting|session_replay|personalization/i.test(value));
 }
 
 function isConcreteHttpEvidenceUrl(value: string | null | undefined) {
@@ -541,6 +541,10 @@ export function hasStrongPreconsentRuntimeEvidence(rawEvidence: Record<string, u
 export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   if (!rawEvidence) {
     return false;
+  }
+
+  if (hasPromotionGradePreconsentCookieEvidence(rawEvidence)) {
+    return true;
   }
 
   const timeline = getObjectValue(rawEvidence, ["consentTimeline", "consent_timeline"]);

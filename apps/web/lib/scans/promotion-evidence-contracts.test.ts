@@ -235,6 +235,32 @@ test("pre-consent cookie write timestamp satisfies sequence for classified track
   assert.equal(hasStrongPreconsentRuntimeEvidence(evidence), true);
 });
 
+test("structured before-consent cookie timing satisfies sequence without numeric timeline offsets", () => {
+  const evidence = {
+    preconsent_cookie_categories: ["advertising"],
+    preconsent_cookie_evidence: [
+      {
+        beforeConsent: true,
+        category: "advertising",
+        cookieName: "ad-privacy",
+        cookiePartyType: "third_party",
+        domain: ".amazon-adsystem.com",
+        nonEssential: true,
+        timingEvidence: "before_consent_cookie_write",
+        vendor: "Amazon Ads"
+      }
+    ],
+    preconsent_cookie_names: ["ad-privacy"],
+    preconsent_cookie_timing_evidence: ["before_consent_cookie_write"],
+    preconsent_nonessential_cookie_names: ["ad-privacy"],
+    preconsent_tracking_detected: true
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(evidence), true);
+  assert.equal(hasPreconsentSequenceEvidence(evidence), true);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(evidence), true);
+});
+
 test("sensitive third-party tracking contract accepts legacy tracking-host payloads without promoting generic first-party runtime calls", () => {
   assert.equal(
     hasConcreteSensitiveThirdPartyTrackingArtifact({

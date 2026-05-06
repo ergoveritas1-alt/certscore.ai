@@ -338,7 +338,7 @@ function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPack
     const timingEvidence = getRecordString(row, ["timingEvidence", "timing_evidence"]);
     const party = getRecordString(row, ["party", "cookiePartyType", "cookie_party_type"]);
     const category = getRecordString(row, ["category", "cookieCategory", "cookie_category", "vendorCategory", "vendor_category"]);
-    const promotionCategory = /analytics|advertising|marketing|retargeting|session_replay|dmp/i.test(category ?? "");
+    const promotionCategory = /analytics|advertising|marketing|retargeting|session_replay|dmp|personalization/i.test(category ?? "");
     const cookieName = getRecordString(row, ["cookieName", "cookie_name"]);
     const vendorOrHost = getRecordString(row, [
       "vendor",
@@ -379,7 +379,7 @@ function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPack
     preconsentCookieNames.length > 0 &&
     preconsentCookieTimingEvidence.includes("before_consent_cookie_write") &&
     (
-      preconsentCookieCategories.some((category) => /analytics|advertising|marketing|retargeting|session_replay|dmp/i.test(category)) ||
+      preconsentCookieCategories.some((category) => /analytics|advertising|marketing|retargeting|session_replay|dmp|personalization/i.test(category)) ||
       (packet.evidence?.entities?.preconsent_nonessential_cookie_names?.length ?? 0) > 0
     );
 
