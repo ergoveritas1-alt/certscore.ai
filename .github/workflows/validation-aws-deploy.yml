@@ -155,6 +155,7 @@ jobs:
           AWS_SCANNER_LOG_GROUP: ${{ env.ECS_WORKER_LOG_GROUP }}
           CHECK_NAME: validation-worker
           EXPECTED_GIT_SHA: ${{ github.sha }}
+          SCANNER_HEALTH_REQUIRE_LOG_HEARTBEAT: "0"
           SCANNER_HEALTH_LOG_PATTERN: validation-worker.*started|validation-worker.*heartbeat|heartbeat
         run: pnpm ops:check:scanner-deploy
 

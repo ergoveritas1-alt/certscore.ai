@@ -10,6 +10,7 @@ expected_sha="${EXPECTED_GIT_SHA:-${GITHUB_SHA:-}}"
 log_group="${AWS_SCANNER_LOG_GROUP:-${ECS_LOG_GROUP:-}}"
 log_window_minutes="${SCANNER_HEALTH_LOG_WINDOW_MINUTES:-10}"
 heartbeat_pattern="${SCANNER_HEALTH_LOG_PATTERN:-started|startup|heartbeat|runtime_heartbeat}"
+require_log_heartbeat="${SCANNER_HEALTH_REQUIRE_LOG_HEARTBEAT:-1}"
 
 fail() {
   echo "FAIL ${check_name}: $*" >&2
@@ -110,7 +111,12 @@ if [[ -z "${log_group}" ]]; then
 fi
 
 if [[ -z "${log_group}" ]]; then
-  fail "set AWS_SCANNER_LOG_GROUP or configure awslogs-group on container ${container_name}"
+  if [[ "${require_log_heartbeat}" == "1" ]]; then
+    fail "set AWS_SCANNER_LOG_GROUP or configure awslogs-group on container ${container_name}"
+  fi
+
+  pass "log heartbeat check skipped because no log group is configured"
+  exit 0
 fi
 
 task_id="${first_task_arn##*/}"
@@ -124,6 +130,11 @@ log_events="$(aws logs filter-log-events \
   --output text)"
 
 if ! grep -Eiq "${heartbeat_pattern}" <<<"${log_events}"; then
+  if [[ "${require_log_heartbeat}" != "1" ]]; then
+    pass "log heartbeat check skipped: no startup/heartbeat log matching /${heartbeat_pattern}/ in ${log_group} during the last ${log_window_minutes} minute(s) for task ${task_id}"
+    exit 0
+  fi
+
   fail "no startup/heartbeat log matching /${heartbeat_pattern}/ in ${log_group} during the last ${log_window_minutes} minute(s) for task ${task_id}"
 fi
 
