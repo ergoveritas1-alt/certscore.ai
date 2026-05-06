@@ -30,6 +30,7 @@ import {
   shouldPreferNanoDocumentSources
 } from "../../../web/lib/scans/nano-document-sources";
 import { buildNanoPolicySignalRows, MANAGED_NANO_POLICY_SIGNAL_KEYS } from "../../../web/lib/scans/nano-policy-signals";
+import { buildScanReportUnifiedFindingsForScan } from "../../../web/lib/scans/scan-report-unified-findings";
 import { repairFindingFamilyPacketEvents } from "../../../web/server/scans/family-packet-event-repair";
 import type { ScanValidationFinding } from "../../../web/lib/scans/validation-review-linking";
 import { getWorkerEnv } from "../env";
@@ -2049,39 +2050,6 @@ async function persistValidationRunReportFindingCount(input: {
   scanId: string;
 }) {
   try {
-    const detailViewModulePath = "../../../web/components/scans/shared-scan-detail-view";
-    const [detailViewModule] = await Promise.all([import(detailViewModulePath)]);
-    const resolvedDetailViewModule = (
-      detailViewModule as {
-        default?: Record<string, unknown>;
-        "module.exports"?: Record<string, unknown>;
-        buildScanReportUnifiedFindings?: unknown;
-      }
-    ).buildScanReportUnifiedFindings
-      ? (detailViewModule as Record<string, unknown>)
-      : (
-          detailViewModule as {
-            default?: Record<string, unknown>;
-            "module.exports"?: Record<string, unknown>;
-          }
-        ).default ??
-        (
-          detailViewModule as {
-            default?: Record<string, unknown>;
-            "module.exports"?: Record<string, unknown>;
-          }
-        )["module.exports"] ??
-        (detailViewModule as Record<string, unknown>);
-    const buildScanReportUnifiedFindings = (
-      resolvedDetailViewModule as {
-        buildScanReportUnifiedFindings?: (scanRecord: Record<string, unknown>) => Array<Record<string, unknown>>;
-      }
-    ).buildScanReportUnifiedFindings;
-
-    if (typeof buildScanReportUnifiedFindings !== "function") {
-      throw new Error("shared-scan-detail-view did not export buildScanReportUnifiedFindings");
-    }
-
     const scanRecord = await loadScanRecordForFindingCount({
       runId: input.runId,
       scanId: input.scanId
@@ -2091,7 +2059,7 @@ async function persistValidationRunReportFindingCount(input: {
       return;
     }
 
-    const reportFindingCount = buildScanReportUnifiedFindings(scanRecord).length;
+    const reportFindingCount = buildScanReportUnifiedFindingsForScan(scanRecord).length;
     await query(
       `
         update scan_snapshots

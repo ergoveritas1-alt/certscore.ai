@@ -5,7 +5,7 @@ import {
   mapSignalKeyToTaxonomy
 } from "@website-signal-risk-scanner/shared";
 import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../../web/lib/scans/nano-document-sources";
-import { buildUnifiedFindingDisplayPackets } from "../../web/lib/scans/unified-findings";
+import { buildScanReportUnifiedFindingsForScan } from "../../web/lib/scans/scan-report-unified-findings";
 import { repairFindingFamilyPacketEvents } from "../../web/server/scans/family-packet-event-repair";
 import type { ScanValidationFinding } from "../../web/lib/scans/validation-review-linking";
 
@@ -275,76 +275,8 @@ async function loadScanRecordForFindingCount(input: {
   };
 }
 
-let buildScanReportUnifiedFindingsPromise:
-  | Promise<(scanRecord: Record<string, unknown>) => Array<Record<string, unknown>>>
-  | null = null;
-
-async function getBuildScanReportUnifiedFindings() {
-  if (!buildScanReportUnifiedFindingsPromise) {
-    const detailViewModulePath = "../../web/components/scans/shared-scan-detail-view";
-    buildScanReportUnifiedFindingsPromise = import(detailViewModulePath).then(
-      (module) => {
-        const resolvedModule = (
-          module as {
-            default?: Record<string, unknown>;
-            "module.exports"?: Record<string, unknown>;
-            buildScanReportUnifiedFindings?: unknown;
-          }
-        ).buildScanReportUnifiedFindings
-          ? (module as Record<string, unknown>)
-          : (
-              module as {
-                default?: Record<string, unknown>;
-                "module.exports"?: Record<string, unknown>;
-              }
-            ).default ??
-            (
-              module as {
-                default?: Record<string, unknown>;
-                "module.exports"?: Record<string, unknown>;
-              }
-            )["module.exports"] ??
-            (module as Record<string, unknown>);
-
-        const buildScanReportUnifiedFindings = (
-          resolvedModule as {
-            buildScanReportUnifiedFindings?: (scanRecord: Record<string, unknown>) => Array<Record<string, unknown>>;
-          }
-        ).buildScanReportUnifiedFindings;
-
-        if (typeof buildScanReportUnifiedFindings !== "function") {
-          throw new Error("shared-scan-detail-view did not export buildScanReportUnifiedFindings");
-        }
-
-        return buildScanReportUnifiedFindings;
-      }
-    );
-  }
-
-  return buildScanReportUnifiedFindingsPromise;
-}
-
 async function computeReportFindingCount(scanRecord: Awaited<ReturnType<typeof loadScanRecordForFindingCount>>) {
-  try {
-    const buildScanReportUnifiedFindings = await getBuildScanReportUnifiedFindings();
-    return buildScanReportUnifiedFindings(scanRecord).length;
-  } catch (error) {
-    console.error("[backfill-report-finding-counts] falling back to surfaced finding count", {
-      error: error instanceof Error ? error.message : String(error)
-    });
-    const validationFindingLookup = new Map(
-      scanRecord.validationFindings.map((finding) => [finding.ruleKey, finding] as const)
-    );
-    const displayPackets = buildUnifiedFindingDisplayPackets({
-      policyEnrichment: scanRecord.policyEnrichment,
-      reviewFindingCandidates: [],
-      scanEvents: scanRecord.events,
-      validationFindings: scanRecord.validationFindings,
-      validationFindingLookup
-    });
-
-    return displayPackets.filter((finding) => finding.presentationDecision.status !== "suppress").length;
-  }
+  return buildScanReportUnifiedFindingsForScan(scanRecord).length;
 }
 
 async function main() {

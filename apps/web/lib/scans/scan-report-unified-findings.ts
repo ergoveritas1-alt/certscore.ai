@@ -13,16 +13,32 @@ import { buildValidationFindingLookup } from "./validation-review-linking";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import {
+  dedupeHeadlineFindings,
+  deriveConsentAuditFindings
+} from "./consent-audit-findings";
+import {
   buildPreconsentEvidenceQualityFallback,
   getHybridDerivedSignalValue,
   getHybridSignalFallbackEvidence
 } from "./hybrid-runtime-evidence";
+import { deriveHighRiskTrackingContext } from "./high-risk-tracking-context";
 import {
   evaluatePolicyBehaviorContradictionEvidence,
-  getContradictionEvidenceBundle
+  getAllowedConflictType,
+  getContradictionEvidenceBundle,
+  type PolicyBehaviorConflictClaimType,
+  type PolicyBehaviorConflictType,
+  type PolicyBehaviorRuntimeObservationType
 } from "./contradiction-evidence-contract";
 import { REJECT_TRACKING_CONFIRMATION_MIN_MS } from "./reject-tracking-policy";
-import { getReportSignalValue, isSignalValuePopulated } from "./report-signal-values";
+import { findMergedSignalValue, getReportSignalValue, isSignalValuePopulated } from "./report-signal-values";
+import {
+  getPolicyEvidenceSnippets,
+  getPolicyPageType,
+  getPolicyPageUrl,
+  getPolicySummaryText
+} from "./policy-enrichment-row";
+import { normalizePolicySnippet } from "./policy-snippet-normalization";
 import {
   buildReviewFindings,
   buildSectionReviewIssues,
@@ -96,8 +112,585 @@ export type ScanReportUnifiedFindingStateDependencies = {
   filterContradictoryPositiveSurfaceFindings: (findings: UnifiedFindingDisplayPacket[]) => UnifiedFindingDisplayPacket[];
 };
 
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
 function getFiniteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getSnapshotNumber(snapshot: Record<string, unknown>, key: string) {
+  return getFiniteNumber(snapshot[key]) ?? 0;
+}
+
+function getRecordStringArray(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+function getPolicySnippetValues(row: Record<string, unknown> | null) {
+  if (!row) {
+    return [];
+  }
+
+  const snippets = getPolicyEvidenceSnippets(row);
+  const snippetValues = snippets && typeof snippets === "object" ? Object.values(snippets) : [];
+
+  return uniqueStrings([
+    ...snippetValues.map((value) => (typeof value === "string" ? normalizePolicySnippet(value) : null)),
+    getPolicySummaryText(row) ? normalizePolicySnippet(getPolicySummaryText(row) ?? "") : null
+  ]);
+}
+
+function getPolicyRowNumber(row: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function getPolicyRowString(row: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function hasContradictionGradePolicyExtraction(row: Record<string, unknown> | null) {
+  const policyPageUrl = row ? getPolicyPageUrl(row) : null;
+  const semanticConfidence = getPolicyRowNumber(row, ["policy_semantic_confidence", "policySemanticConfidence"]);
+  const coverageRatio = getPolicyRowNumber(row, ["policy_coverage_ratio", "policyCoverageRatio"]);
+  const extractionStatus = getPolicyRowString(row, ["policy_extraction_status", "policyExtractionStatus"]) ?? "fetched";
+  const snippetCount = getPolicyRowNumber(row, ["policy_snippet_count", "policySnippetCount"]);
+
+  return Boolean(
+    policyPageUrl &&
+      extractionStatus === "fetched" &&
+      (semanticConfidence === null || semanticConfidence >= 0.55) &&
+      (coverageRatio === null || coverageRatio >= 0.25) &&
+      (snippetCount === null || snippetCount > 0)
+  );
+}
+
+function deriveConsentGatingPolicyAnchor(row: Record<string, unknown> | null) {
+  const snippets = getPolicySnippetValues(row);
+  const policyPageUrl = row ? getPolicyPageUrl(row) : null;
+  const semanticConfidence = getPolicyRowNumber(row, ["policy_semantic_confidence", "policySemanticConfidence"]);
+
+  if (!hasContradictionGradePolicyExtraction(row)) {
+    return null;
+  }
+
+  for (const snippet of snippets) {
+    const lowerSnippet = snippet.toLowerCase();
+    const mentionsNonEssential =
+      /optional|non[-\s]?essential|analytics|advertis(?:e|ing)|marketing|tracking|targeting|performance/.test(lowerSnippet);
+    const mentionsConsent = /consent|choice|permission|opt[-\s]?in|accept|agree/.test(lowerSnippet);
+    const necessaryOnly =
+      /(only|solely|strictly)\s+(necessary|required|essential)/.test(lowerSnippet) ||
+      /necessary cookies? (?:only|until|before)/.test(lowerSnippet);
+    const marketingBeforeConsent =
+      /(advertis(?:e|ing)|marketing|tracking|targeting|analytics).{0,80}(consent|choice|permission|opt[-\s]?in)/.test(lowerSnippet) ||
+      /(consent|choice|permission|opt[-\s]?in).{0,80}(advertis(?:e|ing)|marketing|tracking|targeting|analytics)/.test(lowerSnippet);
+    const rejectDisablesTracking =
+      /(reject|decline|disable|turn off).{0,80}(analytics|advertis(?:e|ing)|marketing|tracking|targeting|non[-\s]?essential)/.test(lowerSnippet);
+    const vagueConsentReference =
+      /(?:we value your privacy|may use cookies|use cookies to improve|cookies and similar technologies)/.test(lowerSnippet) &&
+      !necessaryOnly &&
+      !marketingBeforeConsent &&
+      !rejectDisablesTracking;
+
+    if (vagueConsentReference) {
+      continue;
+    }
+
+    let claimType: PolicyBehaviorConflictClaimType | null = null;
+    if (necessaryOnly && mentionsConsent) {
+      claimType = "only_necessary_cookies_before_choice";
+    } else if ((mentionsNonEssential && mentionsConsent) || marketingBeforeConsent || rejectDisablesTracking) {
+      claimType = "no_marketing_tracking_before_consent";
+    }
+
+    if (!claimType) {
+      continue;
+    }
+
+    return {
+      claimType,
+      confidence: semanticConfidence ?? 0.82,
+      extractionStatus: "fetched",
+      normalizedClaim: snippet,
+      snippet,
+      sourceUrl: policyPageUrl
+    };
+  }
+
+  return null;
+}
+
+function deriveConsentGatingPolicyAnchorFromRows(rows: Array<Record<string, unknown>>) {
+  const privacyPolicyAnchor = rows
+    .filter((row) => getPolicyPageType(row) === "privacy_policy" || getPolicyPageType(row) === "cookie_policy")
+    .map((row) => deriveConsentGatingPolicyAnchor(row))
+    .find(Boolean);
+  if (privacyPolicyAnchor) {
+    return privacyPolicyAnchor;
+  }
+
+  return rows.map((row) => deriveConsentGatingPolicyAnchor(row)).find(Boolean) ?? null;
+}
+
+function derivePreconsentObservationType(
+  preconsentRows: Array<{ vendorCategory: string; vendorName: string }>
+): PolicyBehaviorRuntimeObservationType | null {
+  const categories = preconsentRows
+    .map((row) => (typeof row.vendorCategory === "string" ? row.vendorCategory.toLowerCase() : ""))
+    .filter((value) => value.length > 0);
+  const vendorNames = preconsentRows
+    .map((row) => (typeof row.vendorName === "string" ? row.vendorName.toLowerCase() : ""))
+    .filter((value) => value.length > 0);
+  const haystack = [...categories, ...vendorNames].join(" ");
+
+  if (/advertis|marketing|adtech|retarget|targeting|social|doubleclick|facebook|linkedin|reddit|tiktok|snap/.test(haystack)) {
+    return "marketing_vendor_fired_pre_consent";
+  }
+  if (/analytics|measurement|session[_\s-]?replay|replay|hotjar|clarity|fullstory|google analytics|ga4/.test(haystack)) {
+    return "analytics_vendor_fired_pre_consent";
+  }
+
+  return preconsentRows.length > 0 ? "analytics_vendor_fired_pre_consent" : null;
+}
+
+function derivePolicyBehaviorContradictions(input: {
+  mergedSignals?: Array<{
+    key: string;
+    value: boolean | number | string | string[] | null;
+    selectedPopulation?: { value?: boolean | number | string | string[] | null } | null;
+  }>;
+  primaryPolicyEnrichment?: Record<string, unknown> | null;
+  policyEnrichments: Array<Record<string, unknown>>;
+  preconsentViolations: Array<{
+    evidenceUrls: string[];
+    scriptHost?: string | null;
+    vendorCategory: string;
+    vendorName: string;
+  }>;
+  runtimeArtifacts: Record<string, unknown> | null;
+  snapshot: Record<string, unknown> | null;
+  trackerVendors: Array<{
+    beforeConsent: boolean | null;
+    vendorCategory: string;
+    vendorName: string;
+  }>;
+}): PolicyBehaviorContradiction[] {
+  const privacyEnrichment =
+    input.primaryPolicyEnrichment ??
+    input.policyEnrichments.find((row) => getPolicyPageType(row) === "privacy_policy") ??
+    input.policyEnrichments[0] ??
+    null;
+  const contradictions: PolicyBehaviorContradiction[] = [];
+  const trackerVendors = input.trackerVendors.map((tracker) => tracker.vendorName);
+  const advertisingVendors = input.trackerVendors
+    .filter((tracker) => tracker.vendorCategory === "advertising")
+    .map((tracker) => tracker.vendorName);
+  const sessionReplayVendors = input.trackerVendors
+    .filter((tracker) => tracker.vendorCategory === "session_replay")
+    .map((tracker) => tracker.vendorName);
+  const preconsentVendors = input.preconsentViolations.map((row) => row.vendorName);
+  const preconsentEvidence = [...new Set(input.preconsentViolations.flatMap((row) => row.evidenceUrls))];
+  const hasPolicyBehaviorConflict =
+    input.snapshot?.policy_behavior_conflict_detected === true || input.snapshot?.policyBehaviorConflictDetected === true;
+  const mergedPolicyFlags = findMergedSignalValue(input.mergedSignals, "policyActionableFlags");
+  const policyFlags = Array.isArray(mergedPolicyFlags)
+    ? mergedPolicyFlags.filter((value): value is string => typeof value === "string")
+    : [];
+  const mergedPolicyDoNotSell = findMergedSignalValue(input.mergedSignals, "policyDoNotSell");
+  const policyDoNotSell = typeof mergedPolicyDoNotSell === "string" ? mergedPolicyDoNotSell : "unknown";
+  const policyPageUrl = privacyEnrichment ? getPolicyPageUrl(privacyEnrichment) : null;
+  const policySummary = privacyEnrichment ? getPolicySummaryText(privacyEnrichment) : null;
+  const consentGatingAnchor = deriveConsentGatingPolicyAnchorFromRows(input.policyEnrichments);
+
+  if (preconsentVendors.length > 0) {
+    const runtimeObservationType = derivePreconsentObservationType(input.preconsentViolations);
+    const conflictType = consentGatingAnchor
+      ? getAllowedConflictType(consentGatingAnchor.claimType, runtimeObservationType)
+      : null;
+    const hasConcreteRuntimeRequest = preconsentEvidence.some((url) => /^https?:\/\//i.test(url));
+    const preconsentScriptHosts = uniqueStrings(input.preconsentViolations.map((row) => row.scriptHost));
+    const conflictSupportsPromotion = Boolean(
+      consentGatingAnchor?.sourceUrl &&
+        consentGatingAnchor.snippet &&
+        runtimeObservationType &&
+        conflictType &&
+        hasConcreteRuntimeRequest &&
+        preconsentVendors.length > 0
+    );
+    const policyClaim =
+      consentGatingAnchor?.normalizedClaim ??
+      "The policy and consent surface imply tracking should begin only after a valid consent interaction.";
+    const runtimeSummary = `Trackers fired on first render before consent interaction: ${preconsentVendors.join(", ")}.`;
+
+    contradictions.push({
+      title: "Consent-gated tracking claim conflicts with runtime behavior",
+      status: "violation risk",
+      severity: "high",
+      claim: policyClaim,
+      observedBehavior: runtimeSummary,
+      evidence: preconsentEvidence.slice(0, 3),
+      policyPageUrl: consentGatingAnchor?.sourceUrl ?? policyPageUrl,
+      policyClaimType: consentGatingAnchor?.claimType ?? null,
+      policyConfidence: consentGatingAnchor?.confidence ?? null,
+      policyExtractionStatus: consentGatingAnchor?.extractionStatus ?? null,
+      policySnippet: consentGatingAnchor?.snippet ?? null,
+      policySummary,
+      relatedVendors: preconsentVendors,
+      runtimeConfidence: hasConcreteRuntimeRequest ? 0.82 : 0.5,
+      runtimeObservationType,
+      runtimePhase: "pre_consent",
+      runtimeScriptHosts: preconsentScriptHosts,
+      runtimeSummary,
+      runtimeVendors: preconsentVendors,
+      conflictReasoning:
+        consentGatingAnchor && runtimeObservationType
+          ? "The policy anchor describes consent-gated non-essential tracking, while runtime evidence shows tracker requests before consent."
+          : runtimeSummary,
+      conflictSupportsPromotion,
+      conflictType,
+      supportingSignals: uniqueStrings([
+        "consent_gating_claim",
+        ...preconsentScriptHosts.map((host) => `preconsent_script_host:${host}`)
+      ])
+    });
+  }
+
+  if ((policyDoNotSell === "present_link" || policyDoNotSell === "present_text") && advertisingVendors.length > 0) {
+    contradictions.push({
+      title: "Do-not-sell / sharing disclosure conflicts with observed adtech stack",
+      status: "likely contradiction",
+      severity: "medium",
+      claim: "The policy makes an explicit do-not-sell or sharing disclosure, which raises the bar for consistency around third-party marketing data use.",
+      observedBehavior: `Advertising or retargeting vendors were observed at runtime: ${advertisingVendors.join(", ")}.`,
+      evidence: advertisingVendors.slice(0, 4),
+      policyPageUrl,
+      policySnippet: "The policy makes an explicit do-not-sell or sharing disclosure, which raises the bar for consistency around third-party marketing data use.",
+      policySummary,
+      relatedVendors: advertisingVendors,
+      runtimeSummary: `Advertising or retargeting vendors were observed at runtime: ${advertisingVendors.join(", ")}.`,
+      runtimeVendors: advertisingVendors,
+      supportingSignals: [policyDoNotSell]
+    });
+  }
+
+  if (hasPolicyBehaviorConflict || policyFlags.includes("policy_behavior_conflict_candidate")) {
+    const relatedVendors = uniqueStrings([...advertisingVendors, ...sessionReplayVendors, ...preconsentVendors]).slice(0, 6);
+
+    contradictions.push({
+      title: "Policy/behavior conflict detected",
+      status: "contradiction",
+      severity: "high",
+      claim: "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.",
+      observedBehavior:
+        advertisingVendors.length > 0
+          ? `Observed adtech vendors include ${advertisingVendors.join(", ")}${sessionReplayVendors.length > 0 ? `; session replay tooling includes ${sessionReplayVendors.join(", ")}.` : "."}`
+          : trackerVendors.length > 0
+            ? `Observed tracker vendors include ${trackerVendors.slice(0, 6).join(", ")}.`
+            : "The scan flagged a policy/behavior conflict based on runtime evidence and policy semantics.",
+      evidence: [...preconsentEvidence.slice(0, 2), ...advertisingVendors.slice(0, 2), ...sessionReplayVendors.slice(0, 1)].slice(0, 4),
+      policyPageUrl,
+      policySnippet: "Observed runtime behavior appears to conflict with policy representations about tracking or third-party data use.",
+      policySummary,
+      relatedVendors,
+      runtimeSummary:
+        advertisingVendors.length > 0
+          ? `Observed adtech vendors include ${advertisingVendors.join(", ")}${sessionReplayVendors.length > 0 ? `; session replay tooling includes ${sessionReplayVendors.join(", ")}.` : "."}`
+          : trackerVendors.length > 0
+            ? `Observed tracker vendors include ${trackerVendors.slice(0, 6).join(", ")}.`
+            : "The scan flagged a policy/behavior conflict based on runtime evidence and policy semantics.",
+      runtimeVendors: relatedVendors,
+      supportingSignals: uniqueStrings([
+        hasPolicyBehaviorConflict ? "policy_behavior_conflict_detected" : null,
+        policyFlags.includes("policy_behavior_conflict_candidate") ? "policy_behavior_conflict_candidate" : null
+      ])
+    });
+  }
+
+  return contradictions.filter(
+    (row, index, rows) =>
+      rows.findIndex((candidate) => candidate.title === row.title && candidate.observedBehavior === row.observedBehavior) === index
+  );
+}
+
+function derivePreconsentViolationRows(input: {
+  persistedViolations: ScanDetailResponse["preconsentViolations"];
+  runtimeArtifacts: Record<string, unknown> | null;
+  trackerVendors: ScanDetailResponse["trackerVendors"];
+}): PreconsentViolationRow[] {
+  if (input.persistedViolations.length > 0) {
+    return input.persistedViolations;
+  }
+
+  const baselineTrackerVendors = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_vendor_names");
+  const baselineEvidenceUrls = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_evidence_urls");
+  const baselineScriptHosts = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_script_hosts");
+  const highRiskContext = deriveHighRiskTrackingContext({
+    runtimeArtifacts: input.runtimeArtifacts,
+    evidenceUrls: baselineEvidenceUrls
+  });
+  const synthesizedHighRiskVendors = highRiskContext.highRiskVendors.filter(
+    (vendor) => !baselineTrackerVendors.some((name) => name.toLowerCase() === vendor.name.toLowerCase())
+  );
+  const vendorNames = uniqueStrings([
+    ...baselineTrackerVendors,
+    ...synthesizedHighRiskVendors.map((vendor) => vendor.name)
+  ]);
+
+  return vendorNames.map((vendorName) => {
+    const tracker = input.trackerVendors.find((candidate) => candidate.vendorName === vendorName);
+    const highRiskVendor = synthesizedHighRiskVendors.find((candidate) => candidate.name === vendorName);
+    const vendorEvidenceUrls = baselineEvidenceUrls.filter((url) => {
+      const lowerUrl = url.toLowerCase();
+      const lowerVendor = vendorName.toLowerCase();
+
+      if (lowerVendor.includes("linkedin")) {
+        return lowerUrl.includes("linkedin") || lowerUrl.includes("licdn");
+      }
+      if (lowerVendor.includes("google")) {
+        return lowerUrl.includes("google") || lowerUrl.includes("doubleclick") || lowerUrl.includes("googletagmanager");
+      }
+      if (lowerVendor.includes("marketo")) {
+        return lowerUrl.includes("marketo") || lowerUrl.includes("munchkin");
+      }
+      if (lowerVendor.includes("reddit")) {
+        return lowerUrl.includes("reddit");
+      }
+      if (lowerVendor.includes("clarity")) {
+        return lowerUrl.includes("clarity");
+      }
+
+      if (highRiskVendor) {
+        return highRiskVendor.evidence.some((evidence) => lowerUrl.includes(evidence.toLowerCase())) ||
+          lowerUrl.includes(lowerVendor.replace(/\s+|\/.*/g, ""));
+      }
+
+      return lowerUrl.includes(lowerVendor.replace(/\s+/g, ""));
+    });
+
+    return {
+      collectionEndpointType: tracker?.collectionEndpointType ?? "unknown",
+      confidence: tracker?.confidence ?? (highRiskVendor ? 0.86 : 0),
+      detectionSource: tracker?.detectionSource ?? "runtime_audit",
+      evidenceUrls: vendorEvidenceUrls.length > 0 ? vendorEvidenceUrls : highRiskVendor?.evidence.filter((value) => /^https?:\/\//i.test(value)) ?? [],
+      firstPartyOrThirdParty: "unknown",
+      matchedSignatureId: tracker?.matchedSignatureId ?? null,
+      scriptHost:
+        tracker?.scriptHost ??
+        baselineScriptHosts.find((host) => host && host.toLowerCase().includes(vendorName.toLowerCase().replace(/\s+/g, ""))) ??
+        highRiskVendor?.evidence.find((value) => !/^https?:\/\//i.test(value)) ??
+        null,
+      vendorCategory: tracker?.vendorCategory ?? highRiskVendor?.category ?? "unknown",
+      vendorName
+    };
+  });
+}
+
+function deriveAccessibilityIssueRows(snapshot: Record<string, unknown>): AccessibilityIssueRow[] {
+  const rows = [
+    {
+      key: "contrast",
+      count: getSnapshotNumber(snapshot, "wcag_contrast_failures_count"),
+      description: "Contrast failures can make text and controls hard to perceive for low-vision users.",
+      label: "Contrast failures"
+    },
+    {
+      key: "alt",
+      count: getSnapshotNumber(snapshot, "wcag_missing_alt_count"),
+      description: "Missing alt text reduces screen-reader access to informative images.",
+      label: "Missing alt text"
+    },
+    {
+      key: "navigation",
+      count: getSnapshotNumber(snapshot, "wcag_keyboard_navigation_issue_count") + getSnapshotNumber(snapshot, "wcag_focus_indicator_issue_count"),
+      description: "Keyboard/focus issues make navigation harder without a mouse.",
+      label: "Navigation issues"
+    },
+    {
+      key: "aria",
+      count: getSnapshotNumber(snapshot, "wcag_aria_error_count"),
+      description: "ARIA issues can break semantics or assistive-technology interpretation.",
+      label: "ARIA problems"
+    },
+    {
+      key: "labels",
+      count: getSnapshotNumber(snapshot, "wcag_form_label_error_count"),
+      description: "Form label issues make inputs less understandable and harder to complete.",
+      label: "Form label issues"
+    }
+  ].filter((row) => row.count > 0);
+
+  return rows.sort((left, right) => right.count - left.count);
+}
+
+function getAccessibilityRuleMetadata(ruleCode: string, ruleGroup: string) {
+  const metadataByRuleCode: Record<string, { criteria: string[]; family: string; impact: string; remediation: string }> = {
+    "color-contrast": {
+      criteria: ["WCAG 1.4.3", "WCAG 1.4.11"],
+      family: "Contrast",
+      impact: "Low-vision users may struggle to read text or distinguish controls.",
+      remediation: "Adjust foreground, background, and focus-state contrast on primary UI elements."
+    },
+    "image-alt": {
+      criteria: ["WCAG 1.1.1"],
+      family: "Alt text",
+      impact: "Screen-reader users may miss meaningful image content.",
+      remediation: "Add descriptive alt text for informative images and empty alt text for decorative images."
+    },
+    label: {
+      criteria: ["WCAG 1.3.1", "WCAG 3.3.2"],
+      family: "Form labels",
+      impact: "Inputs become harder to understand and complete with assistive technology.",
+      remediation: "Associate visible labels or robust accessible names with every user-input control."
+    },
+    "aria-valid-attr-value": {
+      criteria: ["WCAG 4.1.2"],
+      family: "ARIA",
+      impact: "Broken ARIA values can confuse assistive technologies or invalidate semantics.",
+      remediation: "Correct invalid ARIA attributes and values to restore reliable semantics."
+    },
+    "aria-required-attr": {
+      criteria: ["WCAG 4.1.2"],
+      family: "ARIA",
+      impact: "Missing required ARIA attributes can break expected component behavior for assistive technology.",
+      remediation: "Add the required ARIA attributes for each custom widget pattern."
+    },
+    "button-name": {
+      criteria: ["WCAG 4.1.2", "WCAG 2.4.4"],
+      family: "Navigation",
+      impact: "Unnamed controls create ambiguity for screen-reader and keyboard users.",
+      remediation: "Ensure every actionable control has a clear accessible name."
+    },
+    "link-name": {
+      criteria: ["WCAG 2.4.4", "WCAG 4.1.2"],
+      family: "Navigation",
+      impact: "Links without names make navigation and page comprehension harder.",
+      remediation: "Provide descriptive visible or accessible names for each link target."
+    }
+  };
+
+  const metadataByRuleGroup: Record<string, { criteria: string[]; family: string; impact: string; remediation: string }> = {
+    alt: {
+      criteria: ["WCAG 1.1.1"],
+      family: "Alt text",
+      impact: "Non-text content is less accessible to screen-reader users.",
+      remediation: "Add or repair alternative text coverage on meaningful image content."
+    },
+    contrast: {
+      criteria: ["WCAG 1.4.3", "WCAG 1.4.11"],
+      family: "Contrast",
+      impact: "Insufficient contrast reduces readability and control discoverability.",
+      remediation: "Raise text, icon, and control contrast across affected UI states."
+    },
+    aria: {
+      criteria: ["WCAG 4.1.2"],
+      family: "ARIA",
+      impact: "ARIA implementation issues can break semantics and announcements.",
+      remediation: "Repair custom component semantics and invalid ARIA usage."
+    },
+    label: {
+      criteria: ["WCAG 1.3.1", "WCAG 3.3.2"],
+      family: "Form labels",
+      impact: "Users may not understand what a form control expects.",
+      remediation: "Add explicit labels and stable accessible names for each form input."
+    },
+    keyboard: {
+      criteria: ["WCAG 2.1.1", "WCAG 2.4.7"],
+      family: "Keyboard",
+      impact: "Keyboard users can lose navigation flow or focus visibility.",
+      remediation: "Fix keyboard navigation traps, missing focus styles, and tab order issues."
+    },
+    focus: {
+      criteria: ["WCAG 2.4.7"],
+      family: "Keyboard",
+      impact: "Users may lose sight of where focus is on the page.",
+      remediation: "Restore strong visible focus indicators on interactive elements."
+    },
+    landmark: {
+      criteria: ["WCAG 1.3.1"],
+      family: "Navigation",
+      impact: "Missing landmarks reduce efficient page navigation for assistive technology.",
+      remediation: "Add and validate landmark roles for major page regions."
+    },
+    heading: {
+      criteria: ["WCAG 1.3.1", "WCAG 2.4.6"],
+      family: "Structure",
+      impact: "Heading structure problems make pages harder to navigate and understand.",
+      remediation: "Repair heading levels and page outline consistency."
+    },
+    link: {
+      criteria: ["WCAG 2.4.4"],
+      family: "Navigation",
+      impact: "Weak or missing link names make navigation ambiguous.",
+      remediation: "Use descriptive link text and accessible names."
+    }
+  };
+
+  return (
+    metadataByRuleCode[ruleCode] ??
+    metadataByRuleGroup[ruleGroup] ?? {
+      criteria: ["WCAG review needed"],
+      family: "Other",
+      impact: "Automated accessibility issues were detected in this rule family.",
+      remediation: "Review the affected components and validate the issue against the relevant WCAG success criteria."
+    }
+  );
+}
+
+function deriveAccessibilityRuleEvidenceRows(input: {
+  examples: NonNullable<ScanDetailResponse["accessibilityRuleExamples"]>;
+  ruleCounts: NonNullable<ScanDetailResponse["accessibilityRuleCounts"]>;
+}): AccessibilityRuleEvidenceRow[] {
+  if (input.examples.length > 0) {
+    return input.examples.map((example) => {
+      const metadata = getAccessibilityRuleMetadata(example.ruleCode, example.ruleGroup);
+      const weightedPriority =
+        (example.severity === "high" ? 30 : example.severity === "medium" ? 20 : 10) + Math.min(example.nodeCount, 25);
+
+      return {
+        ...example,
+        ...metadata,
+        instanceCount: example.nodeCount,
+        weightedPriority
+      };
+    });
+  }
+
+  return input.ruleCounts.map((rule) => {
+    const metadata = getAccessibilityRuleMetadata(rule.ruleCode, rule.ruleGroup);
+    const weightedPriority =
+      (rule.severity === "high" ? 30 : rule.severity === "medium" ? 20 : 10) + Math.min(rule.instanceCount, 25);
+
+    return {
+      ...rule,
+      ...metadata,
+      description: null,
+      help: null,
+      helpUrl: null,
+      impact: null,
+      nodeCount: rule.instanceCount,
+      pageUrl: null,
+      representativeSelectors: [],
+      severity: rule.severity,
+      weightedPriority
+    };
+  });
 }
 
 function getRuntimeObject(input: Record<string, unknown> | null, keys: string[]) {
@@ -848,4 +1441,175 @@ export function selectOwnerUnifiedFindings(state: ScanReportUnifiedFindingState)
 
 export function buildScanReportUnifiedFindings(state: ScanReportUnifiedFindingState) {
   return selectOwnerUnifiedFindings(state);
+}
+
+function normalizeFindingTopicText(value: string | null | undefined) {
+  return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, " ") : "";
+}
+
+function getPositiveSurfaceTopicKey(finding: Pick<UnifiedFindingDisplayPacket, "title" | "unifiedFindingId">) {
+  switch (finding.unifiedFindingId) {
+    case "privacy_contact_path_present":
+      return "privacy_contact_path";
+    case "accessibility_support_path_present":
+      return "accessibility_support_path";
+    case "privacy_policy_present":
+      return "privacy_policy";
+    case "terms_of_service_present":
+      return "terms_of_service";
+    case "cookie_policy_present":
+      return "cookie_policy";
+    default:
+      break;
+  }
+
+  const normalizedTitle = normalizeFindingTopicText(finding.title);
+  if (normalizedTitle === "privacy contact path present") {
+    return "privacy_contact_path";
+  }
+  if (normalizedTitle === "accessibility support path present") {
+    return "accessibility_support_path";
+  }
+  if (normalizedTitle === "privacy policy present") {
+    return "privacy_policy";
+  }
+  if (normalizedTitle === "terms of service present") {
+    return "terms_of_service";
+  }
+  if (normalizedTitle === "cookie policy present") {
+    return "cookie_policy";
+  }
+
+  return null;
+}
+
+function getContradictoryPositiveTopicKey(finding: Pick<UnifiedFindingDisplayPacket, "title" | "unifiedFindingId">) {
+  switch (finding.unifiedFindingId) {
+    case "privacy_contact_channel_missing":
+      return "privacy_contact_path";
+    case "accessibility_support_path_missing":
+      return "accessibility_support_path";
+    case "privacy_policy_missing_surface":
+      return "privacy_policy";
+    case "terms_missing_surface":
+      return "terms_of_service";
+    case "cookie_policy_missing_surface":
+      return "cookie_policy";
+    default:
+      break;
+  }
+
+  const normalizedTitle = normalizeFindingTopicText(finding.title);
+  if (normalizedTitle === "privacy contact path missing") {
+    return "privacy_contact_path";
+  }
+  if (normalizedTitle === "accessibility support path missing") {
+    return "accessibility_support_path";
+  }
+  if (normalizedTitle === "privacy policy missing") {
+    return "privacy_policy";
+  }
+  if (normalizedTitle === "terms missing") {
+    return "terms_of_service";
+  }
+  if (normalizedTitle === "cookie policy missing") {
+    return "cookie_policy";
+  }
+
+  return null;
+}
+
+export function filterContradictoryPositiveSurfaceFindings(findings: UnifiedFindingDisplayPacket[]) {
+  const contradictoryPositiveFindingIdByNegative = new Map<string, string>([
+    ["privacy_contact_channel_missing", "privacy_contact_path_present"],
+    ["accessibility_support_path_missing", "accessibility_support_path_present"],
+    ["privacy_policy_missing_surface", "privacy_policy_present"],
+    ["terms_missing_surface", "terms_of_service_present"],
+    ["cookie_policy_missing_surface", "cookie_policy_present"]
+  ]);
+  const presentFindingIds = new Set(findings.map((finding) => finding.unifiedFindingId));
+  const normalizedPositiveTopicKeys = new Set(
+    findings.flatMap((finding) => {
+      const topicKey = getPositiveSurfaceTopicKey(finding);
+      return topicKey ? [topicKey] : [];
+    })
+  );
+
+  return findings.filter((finding) => {
+    const contradictoryPositiveFindingId = contradictoryPositiveFindingIdByNegative.get(finding.unifiedFindingId);
+    if (contradictoryPositiveFindingId && presentFindingIds.has(contradictoryPositiveFindingId)) {
+      return false;
+    }
+
+    const contradictoryPositiveTopicKey = getContradictoryPositiveTopicKey(finding);
+    return !contradictoryPositiveTopicKey || !normalizedPositiveTopicKeys.has(contradictoryPositiveTopicKey);
+  });
+}
+
+export function debugBuildScanReportUnifiedFindingStateForScan(scanRecord: Record<string, unknown>): ScanReportUnifiedFindingState {
+  const snapshot = scanRecord.snapshot;
+  if (!snapshot) {
+    return {
+      allReviewFindingCandidates: [],
+      derivedContext: {
+        accessibilityIssueRows: [],
+        accessibilityRuleEvidenceRows: [],
+        consentAuditFindings: [],
+        policyBehaviorContradictions: [],
+        preconsentViolationRows: [],
+        prioritizedAccessibilityRuleRows: [],
+        scanReportReviewIssues: [],
+        taxonomySnapshotSections: []
+      },
+      globalUnifiedFindings: [],
+      sectionDrafts: []
+    };
+  }
+
+  try {
+    return buildScanReportUnifiedFindingState(scanRecord as ScanDetailResponse, {
+      deriveAccessibilityIssueRows,
+      deriveAccessibilityRuleEvidenceRows,
+      deriveConsentAuditFindings: (candidateSnapshot, runtimeArtifacts) =>
+        dedupeHeadlineFindings(deriveConsentAuditFindings(candidateSnapshot, runtimeArtifacts)),
+      derivePolicyBehaviorContradictions: (input) =>
+        derivePolicyBehaviorContradictions(input as Parameters<typeof derivePolicyBehaviorContradictions>[0]),
+      derivePreconsentViolationRows,
+      filterContradictoryPositiveSurfaceFindings
+    });
+  } catch (error) {
+    console.error("Failed to build scan report unified finding state", error);
+    return {
+      allReviewFindingCandidates: [],
+      derivedContext: {
+        accessibilityIssueRows: [],
+        accessibilityRuleEvidenceRows: [],
+        consentAuditFindings: [],
+        policyBehaviorContradictions: [],
+        preconsentViolationRows: [],
+        prioritizedAccessibilityRuleRows: [],
+        scanReportReviewIssues: [],
+        taxonomySnapshotSections: []
+      },
+      globalUnifiedFindings: [],
+      sectionDrafts: []
+    };
+  }
+}
+
+export function buildScanReportUnifiedFindingsForScan(scanRecord: Record<string, unknown>) {
+  const snapshot = scanRecord.snapshot;
+  if (!snapshot) {
+    return [] as UnifiedFindingDisplayPacket[];
+  }
+
+  try {
+    const state = debugBuildScanReportUnifiedFindingStateForScan(scanRecord);
+    const ownerFindings = buildScanReportUnifiedFindings(state);
+
+    return filterContradictoryPositiveSurfaceFindings(ownerFindings);
+  } catch (error) {
+    console.error("Failed to build scan report unified findings", error);
+    return [] as UnifiedFindingDisplayPacket[];
+  }
 }
