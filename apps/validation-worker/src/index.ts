@@ -56,11 +56,17 @@ function bootstrapValidationWorker() {
   const interval = setInterval(() => {
     void recordValidationWorkerHeartbeat({
       host
-    }).catch((error) => {
-      console.error("[validation-worker] failed to record heartbeat", {
-        error: error instanceof Error ? error.message : String(error)
+    })
+      .then(() => {
+        console.info("[validation-worker] heartbeat", {
+          host
+        });
+      })
+      .catch((error) => {
+        console.error("[validation-worker] failed to record heartbeat", {
+          error: error instanceof Error ? error.message : String(error)
+        });
       });
-    });
     void browserCleanup?.schedule("heartbeat");
   }, HEARTBEAT_INTERVAL_MS);
 
