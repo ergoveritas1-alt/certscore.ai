@@ -1,6 +1,11 @@
 project_name            = "certscore-web"
 aws_region              = "us-west-1"
 github_actions_subjects = ["repo:ergoveritas1-alt/certscore.ai:*"]
+github_actions_extra_ecr_repository_arns = [
+  "arn:aws:ecr:us-west-1:199536052647:repository/certscore-validation-ops-web",
+  "arn:aws:ecr:us-west-1:199536052647:repository/certscore-validation-worker",
+  "arn:aws:ecr:us-west-1:199536052647:repository/certscore-scanner-worker"
+]
 
 # Reuse the existing validation VPC shape in the current account.
 existing_vpc_id           = "vpc-0f249d7ab389f8d1f"

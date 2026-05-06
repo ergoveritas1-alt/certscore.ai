@@ -368,7 +368,7 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           "ecr:PutImage",
           "ecr:UploadLayerPart"
         ]
-        Resource = [aws_ecr_repository.web.arn]
+        Resource = concat([aws_ecr_repository.web.arn], var.github_actions_extra_ecr_repository_arns)
       },
       {
         Effect = "Allow"
@@ -391,7 +391,9 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
       {
         Effect = "Allow"
         Action = [
+          "logs:DescribeLogGroups",
           "logs:DescribeLogStreams",
+          "logs:FilterLogEvents",
           "logs:GetLogEvents"
         ]
         Resource = "*"

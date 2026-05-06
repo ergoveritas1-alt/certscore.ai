@@ -70,6 +70,7 @@ The default example now targets the RDS/default VPC because that is the fastest 
 - `aws_region`
 - `project_name`
 - `github_actions_subjects`
+- optional `github_actions_extra_ecr_repository_arns` when the shared GitHub deploy role also needs to build validation or scanner images
 - VPC selection inputs or CIDR for a new VPC
 - public subnet ids for ALB ingress
 - private subnet ids for ECS tasks

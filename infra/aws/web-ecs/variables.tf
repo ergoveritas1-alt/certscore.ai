@@ -10,6 +10,12 @@ variable "github_actions_subjects" {
   default     = ["repo:ergoveritas1-alt/certscore.ai:*"]
 }
 
+variable "github_actions_extra_ecr_repository_arns" {
+  description = "Additional ECR repository ARNs the GitHub Actions role may push to, for shared production workflows that build validation or scanner images from this repo."
+  type        = list(string)
+  default     = []
+}
+
 variable "aws_region" {
   description = "AWS region for the future public web stack."
   type        = string
