@@ -8,7 +8,7 @@ import {
   type CertScoreFindingSection,
   type CertScoreFindingSeverity
 } from "./finding-registry";
-import { getFindingSurfaceScore, selectTopFindings } from "./rank-findings";
+import { getFindingSurfaceScore, rankFindings } from "./rank-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import { isFindingProjectionEligible } from "./finding-evidence-contracts";
 
@@ -378,6 +378,17 @@ function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPack
 function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof typeof CERT_SCORE_FINDING_REGISTRY> {
   const primary = getMappedFindingId(packet);
   const ids = primary ? [primary] : [];
+
+  if (
+    primary === "session_replay_on_sensitive_input_surface" &&
+    !ids.includes("sensitive_data_collection_with_third_party_tracking_present")
+  ) {
+    ids.push("sensitive_data_collection_with_third_party_tracking_present");
+  }
+
+  if (packet.unifiedFindingId === "reject_button_missing" && !ids.includes("consent_dark_patterns_detected")) {
+    ids.push("consent_dark_patterns_detected");
+  }
 
   if (hasThirdPartyCookiePreConsentEvidence(packet) && !ids.includes("third_party_cookie_pre_consent")) {
     ids.push("third_party_cookie_pre_consent");
@@ -1863,7 +1874,7 @@ export function projectExecutiveFindingsFromUnifiedPackets(
       .filter((finding) => finding.section === section)
       .sort((left, right) => getFindingSurfaceScore(right) - getFindingSurfaceScore(left))
   })).filter((group) => group.findings.length > 0);
-  const topFindings = selectTopFindings(findings, 5);
+  const topFindings = rankFindings(findings);
   const topFindingIds = new Set(topFindings.map((finding) => finding.id));
 
   return {

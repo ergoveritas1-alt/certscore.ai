@@ -7,54 +7,59 @@ import { DomainScanForm } from "../../components/marketing/domain-scan-form";
 import { PendingButtonLink } from "../../components/ui/pending-link";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
-export const metadata: Metadata = createPageMetadata({
-  title: "Website Signal Scanner",
-  description:
-    "Surface observable website signals across privacy, consent, accessibility, disclosures, and policy-to-behavior contradictions.",
-  path: "/"
-});
+export const metadata: Metadata = {
+  ...createPageMetadata({
+    title: "CertScore.ai — Evidence-Based Website Compliance Scanner",
+    description:
+      "Scan any website to see which trackers fire, when they fire, and whether consent choices are respected. Evidence-backed compliance insights.",
+    path: "/"
+  }),
+  title: {
+    absolute: "CertScore.ai — Evidence-Based Website Compliance Scanner"
+  }
+};
 
 const featureCards = [
   {
-    icon: "🛡",
-    metric: "Signals",
-    title: "Privacy & Tracking",
-    description: "Detect tracking technologies, third-party requests, and data-collection signals visible from a public website scan."
+    icon: "Trace",
+    metric: "Before",
+    title: "Tracking before consent",
+    description: "See whether analytics, ads, pixels, or cookies start before a visitor makes a consent choice."
   },
   {
-    icon: "©",
-    metric: "Choice",
-    title: "Consent Health",
-    description: "Evaluate whether consent controls appear when expected and whether observable tracking behavior appears to align with user choice."
+    icon: "Reject",
+    metric: "After",
+    title: "Reject not respected",
+    description: "Verify consent flows by comparing tracking activity before and after a reject interaction."
   },
   {
-    icon: "⚖",
-    metric: "Review",
-    title: "Disclosures & Regulatory Signals",
-    description: "Surface public signals tied to privacy notices, contact paths, policy surfaces, accessibility posture, and framework-relevant disclosures."
+    icon: "Gap",
+    metric: "Proof",
+    title: "Third-party tracking activity",
+    description: "Detect vendor requests, RTB or cookie sync behavior, and disclosure gaps using browser-observed evidence."
   }
 ];
 
 const personas = [
   {
-    title: "Compliance consultants and web agencies",
+    title: "Developers validating tracking behavior",
     detail:
-      "You review client websites for privacy, consent, disclosure, and accessibility risks on a recurring basis. CertScore gives you structured findings and reproducible evidence you can review with clients without relying on manual checklists alone."
+      "Confirm that tags, pixels, and cookies behave the way the implementation intends on the live website."
   },
   {
-    title: "In-house privacy and compliance teams",
+    title: "Agencies auditing client or competitor sites",
     detail:
-      "You need ongoing visibility into public website signals, not a one-time audit. CertScore helps track whether consent flows are working, whether vendors are collecting data before consent, and what has changed since the last review."
+      "Run repeatable scans that show observable website behavior without depending on manual inspection alone."
   },
   {
-    title: "Due diligence and risk analysts",
+    title: "Operators verifying consent flows",
     detail:
-      "When evaluating a company or counterparty, public-facing website behavior and disclosures can be useful diligence signals. CertScore provides a structured read on observable privacy, disclosure, accessibility, and trust-related signals for deeper review."
+      "Check whether reject and accept paths actually change tracking activity after a visitor makes a choice."
   },
   {
-    title: "Developers responsible for compliance implementation",
+    title: "Teams reviewing third-party websites",
     detail:
-      "You own the implementation but may not always see what is happening on the live site. CertScore scans public pages in a browser context to surface trackers that load before consent and flows that may not behave as intended."
+      "Evaluate public sites, vendors, partners, and diligence targets with evidence gathered from runtime scans."
   }
 ];
 
@@ -154,33 +159,30 @@ function SignalCheckIcon() {
   );
 }
 
-const categories = [
-  "Scan consent flows, cookie banners, and user-choice mechanisms for privacy and consumer-protection risk signals",
-  "Surface trackers, third-party collection, and vendor-level evidence tied to privacy, data use, and disclosure posture",
-  "Flag contradictions between what a site says about privacy, pricing, consent, or financial promotions and what runtime evidence shows",
-  "Detect website signals relevant to FTC, CPPA, GDPR, COPPA, ADA, CFTC, and SEC frameworks"
+const findingExamples = [
+  "Tracking before consent",
+  "Reject not respected",
+  "Third-party tracking activity",
+  "RTB / cookie sync observed",
+  "Disclosure gaps"
 ];
 
-const whatHappensNext = [
+const evidenceDetails = [
   {
-    step: "01",
-    title: "Review and prioritize",
-    description: "Review the scan and prioritize the findings that matter most."
+    label: "First tracking request",
+    value: "420ms after page load, before banner interaction"
   },
   {
-    step: "02",
-    title: "Remediate",
-    description: "Update the live site to address the issues surfaced."
+    label: "Vendors observed",
+    value: "Google Tag Manager, Meta"
   },
   {
-    step: "03",
-    title: "Re-scan to verify",
-    description: "Run the site again to verify the changes worked."
+    label: "Explanation",
+    value: "Marketing and analytics requests started before the visitor made a consent choice."
   },
   {
-    step: "04",
-    title: "Track drift",
-    description: "Monitor the domain so new issues do not creep back in."
+    label: "Recommended fix",
+    value: "Delay marketing tags until opt-in consent is recorded, then re-scan to verify the consent flow."
   }
 ];
 
@@ -193,7 +195,7 @@ export default async function MarketingHomePage() {
     applicationCategory: "Website Monitoring Software",
     operatingSystem: "Web",
     description:
-      "CertScore.ai scans websites for observable accessibility, privacy, and disclosure signals and tracks changes over time."
+      "CertScore.ai scans websites like a real visitor to detect tracking activity, verify consent flows, and surface evidence-backed disclosure signals."
   };
 
   return (
@@ -210,17 +212,16 @@ export default async function MarketingHomePage() {
                 backgroundImage: "linear-gradient(180deg, #020617 0%, #0f172a 24%, #334155 62%, #94a3b8 100%)"
               }}
             >
-              Surface website evidence across privacy, consent, accessibility, and{" "}
+              See what any website actually does—not what it{" "}
               <span
                 className="bg-clip-text text-transparent"
                 style={{ backgroundImage: "linear-gradient(180deg, #2f63ea 0%, #5b83ee 52%, #8ea5f2 100%)" }}
               >
-                disclosures
-              </span>{" "}
-              .
+                claims
+              </span>
             </h1>
             <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
-              Automated scanning for pre-consent tracking, consent flow failures, third-party data collection, disclosure gaps, accessibility signals, and policy-to-behavior contradictions. Built for teams that need reviewable evidence, not checklists.
+              CertScore scans sites like a real visitor and shows exactly which trackers fire, when they fire, and whether consent choices are respected.
             </p>
             <div className="flex flex-col gap-3 pt-1 sm:flex-row">
               <PendingButtonLink
@@ -238,22 +239,29 @@ export default async function MarketingHomePage() {
               />
             </div>
             <p className="max-w-2xl text-sm leading-6 text-slate-500">
-              No legal advice. No certification. Findings reflect automated analysis of public website signals and should be reviewed in context.
+              Evidence-based scanning for teams that need to observe website behavior, detect tracking activity, and verify consent flows.
             </p>
           </div>
 
           <div className="space-y-4">
             <Card id="homepage-scan" className="border-slate-200 bg-slate-50 shadow-none">
               <CardHeader>
-                <CardTitle>Start a full scan</CardTitle>
+                <CardTitle>Scan any website (yours, a client, or a competitor)</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <DomainScanForm
                   buttonLabel="Scan a website"
-                  helperText="Start a full scan for a signed-in workspace. CertScore will queue the domain, run the scanner, and open the saved scan record when it is accepted."
-                  inputLabel="Website domain"
+                  helperText="CertScore will queue the domain, run the scanner, and open the saved scan record when it is accepted."
+                  inputLabel="Scan any website (yours, a client, or a competitor)"
+                  inputPlaceholder="Scan any website (yours, a client, or a competitor)"
                   mode="full"
                 />
+                <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
+                  <p className="font-semibold text-slate-950">Example finding</p>
+                  <p className="mt-2 font-medium">Tracking detected before consent on example.com</p>
+                  <p className="mt-1 text-slate-600">-&gt; 14 third-party requests fired before banner interaction</p>
+                  <p className="text-slate-600">-&gt; Vendors: Google Tag Manager, Meta</p>
+                </div>
               </CardContent>
             </Card>
 
@@ -264,7 +272,7 @@ export default async function MarketingHomePage() {
       <section className="border-b border-slate-200 bg-white/70">
         <div className="mx-auto max-w-6xl px-6 py-4">
           <p className="text-sm font-medium tracking-wide text-slate-600 sm:text-[15px]">
-            Pre-consent tracking • disclosure gaps • accessibility signals • contradictions • change tracking
+            Tracking before consent • reject not respected • RTB / cookie sync observed • disclosure gaps
           </p>
         </div>
       </section>
@@ -276,7 +284,7 @@ export default async function MarketingHomePage() {
               What CertScore surfaces
             </div>
             <h2 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-              Observable website signals across privacy, consent, accessibility, and disclosures
+              Concrete findings from runtime website behavior
             </h2>
           </div>
           <Link href="/preview" className="text-base font-semibold text-[#2f63ea] hover:text-[#2454db]">
@@ -297,7 +305,7 @@ export default async function MarketingHomePage() {
                 }
               >
                 <CardHeader className="space-y-5 p-6 pb-0">
-                  <div className="text-[1.7rem] leading-none text-slate-500">{item.icon}</div>
+                  <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">{item.icon}</div>
                   <div className="space-y-3">
                     <p className="text-6xl font-light leading-none tracking-[-0.06em] text-slate-950">{item.metric}</p>
                     <CardTitle className="min-h-[3.75rem] text-[1.7rem] leading-none tracking-tight text-slate-950">{item.title}</CardTitle>
@@ -311,6 +319,37 @@ export default async function MarketingHomePage() {
             );
           })}
         </div>
+        <div className="mt-8 flex flex-wrap gap-2">
+          {findingExamples.map((finding) => (
+            <span key={finding} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
+              {finding}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      <section className="border-y border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-6 py-16">
+          <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+            <div className="space-y-4">
+              <Badge tone="neutral">Evidence example</Badge>
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Tracking started before consent</h2>
+              <p className="text-sm leading-6 text-slate-600">
+                CertScore records timing, vendors, requests, and consent-flow outcomes so teams can review what happened in the browser.
+              </p>
+            </div>
+            <Card className="border border-slate-200 bg-slate-50 shadow-none">
+              <CardContent className="grid gap-4 p-6">
+                {evidenceDetails.map((item) => (
+                  <div key={item.label} className="grid gap-1 border-b border-slate-200 pb-4 last:border-0 last:pb-0 sm:grid-cols-[12rem_1fr]">
+                    <p className="text-sm font-semibold text-slate-950">{item.label}</p>
+                    <p className="text-sm leading-6 text-slate-600">{item.value}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </section>
 
       <section id="sample-report" className="border-y border-slate-200 bg-white">
@@ -319,7 +358,7 @@ export default async function MarketingHomePage() {
             <Badge tone="neutral">Personas</Badge>
             <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Who CertScore is built for</h2>
             <p className="text-sm text-slate-600">
-              CertScore is most useful for teams that need repeatable, observable website evidence instead of one-off manual review.
+              CertScore is most useful for teams that need repeatable evidence about public website behavior.
             </p>
           </div>
 
@@ -358,7 +397,7 @@ export default async function MarketingHomePage() {
                 Get a clearer read on public-facing website signals.
               </h2>
               <p className="max-w-3xl text-lg leading-8 text-slate-300">
-                Use CertScore to automate scanning, surface reviewable evidence, and monitor changes across privacy, consent, accessibility, disclosure, and contradiction signals.
+                Use CertScore to observe website behavior, detect tracking activity, verify consent flows, and monitor changes over time.
               </p>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <PendingButtonLink
@@ -377,6 +416,14 @@ export default async function MarketingHomePage() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="border-t border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-6 py-8">
+          <p className="max-w-3xl text-sm leading-6 text-slate-600">
+            CertScore provides automated, evidence-based insights into website behavior. It is not a legal certification or guarantee of compliance.
+          </p>
         </div>
       </section>
 

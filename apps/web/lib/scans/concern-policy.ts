@@ -24,8 +24,8 @@ import {
   hasConcreteReplayArtifact,
   hasConcreteRetargetingArtifact,
   hasConcreteSensitivePayloadArtifact,
-  hasConcreteSensitiveSessionReplayArtifact,
   hasConcreteSensitiveThirdPartyTrackingArtifact,
+  hasSensitiveSessionReplaySurfaceCooccurrenceArtifact,
   hasPreconsentSequenceEvidence,
   hasStrongAccessibilitySupportPathMissingEvidence,
   hasStrongCpraCbaOptOutMissingEvidence,
@@ -1987,7 +1987,7 @@ export function deriveConcernPolicy(input: {
   if (concernRequiresDirectRuntime(input.concern)) {
     const hasSensitiveReplayCooccurrenceRuntime =
       isSensitiveReplayConcern(input.concern) &&
-      hasConcreteSensitiveSessionReplayArtifact(input.rawEvidence);
+      hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(input.rawEvidence);
     const contractDecision = evaluateConcreteRuntimeContract({
       hasConcreteArtifact:
         hasConcreteSessionReplayEvidence(input.rawEvidence) ||
@@ -2076,7 +2076,7 @@ export function deriveConcernPolicy(input: {
 
   if (
     isSensitiveReplayConcern(input.concern) &&
-    !hasConcreteSensitiveSessionReplayArtifact(input.rawEvidence)
+    !hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(input.rawEvidence)
   ) {
     return {
       allowedNarrativeTier: "weak",

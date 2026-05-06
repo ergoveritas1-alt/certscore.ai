@@ -5,7 +5,6 @@ import { buildProductionFindingFrequencyReport } from "./report-production-findi
 const DEFAULT_REVIEW_FINDINGS = [
   "behavioral_analytics_disclosure_present",
   "cookie_policy_present",
-  "guaranteed_outcome_claim_detected",
   "missing_dsar_mechanism",
   "missing_transfer_disclosure",
   "policy_clarity_risk",
@@ -20,8 +19,6 @@ const EXPECTED_BEHAVIOR: Record<string, string> = {
     "Promotion requires runtime cookie/tracker inventory plus policy coverage evidence; weak policy-only or URL-only cases should stay review/audit.",
   cookie_policy_present:
     "Positive context only; should remain support/confidence coverage unless it supports a stronger cookie or tracking finding.",
-  guaranteed_outcome_claim_detected:
-    "Confirmed only with retained financial context plus guaranteed outcome claim evidence.",
   missing_dsar_mechanism:
     "Confirmed only with structured validation, readable fetched policy evidence, and a concrete policy URL; demote when a DSAR path is visible.",
   missing_transfer_disclosure:

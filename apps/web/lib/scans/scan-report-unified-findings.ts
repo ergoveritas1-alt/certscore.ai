@@ -464,16 +464,37 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   const rejectAvailableOnFirstLayer =
     rejectPath?.rejectAvailableOnFirstLayer === true || rejectPath?.reject_available_on_first_layer === true;
   const choiceAsymmetry = String(rejectPath?.choiceAsymmetry ?? rejectPath?.choice_asymmetry ?? "unknown");
-  if (rejectPath && !rejectAvailableOnFirstLayer && (choiceAsymmetry === "material" || choiceAsymmetry === "minor")) {
+  const acceptClickDepth = getFiniteNumber(rejectPath?.acceptClickDepth ?? rejectPath?.accept_click_depth);
+  const rejectClickDepth = getFiniteNumber(rejectPath?.rejectClickDepth ?? rejectPath?.reject_click_depth);
+  const preferencesRequiredBeforeReject =
+    rejectPath?.preferencesRequiredBeforeReject === true || rejectPath?.preferences_required_before_reject === true;
+  const concreteRejectPathObserved =
+    consentSurfaceObserved === true &&
+    consentActionableChoiceObserved === true &&
+    (acceptClickDepth !== null || rejectClickDepth !== null || preferencesRequiredBeforeReject);
+  if (
+    rejectPath &&
+    concreteRejectPathObserved &&
+    !rejectAvailableOnFirstLayer &&
+    (choiceAsymmetry === "material" || choiceAsymmetry === "minor")
+  ) {
     candidates.push({
       categoryId: "choice_symmetry_dark_pattern_indicators",
       description: "The retained consent interaction structure shows reject was not available on the first layer.",
       fallbackEvidence: {
+        consentActionableChoiceObserved,
+        consentSurfaceObserved,
         rejectPathDepthAndAvailability: rejectPath,
         reject_button_missing: choiceAsymmetry === "material",
+        runtimeEvidenceArtifacts: ["scan_runtime_artifacts.reject_path_depth_and_availability"],
         signalKey: "privacy.dark_pattern_reject_button_missing",
         signalLabel: "Reject button missing",
-        signalValue: true
+        signalValue: true,
+        snippets: [
+          rejectClickDepth !== null && acceptClickDepth !== null
+            ? `Reject required ${rejectClickDepth} interaction step(s), while accept required ${acceptClickDepth}.`
+            : "Reject was not available on the first consent layer in the retained consent interaction structure."
+        ]
       },
       id: "runtime-derived-signal-privacy.dark_pattern_reject_button_missing.evidence_quality",
       linkedValidationFinding: null,

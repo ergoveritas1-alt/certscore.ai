@@ -1504,6 +1504,35 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "sensitive replay concern with retained sensitive request and replay runtime stays eligible",
+      concern: makeConcern({
+        originKey: "commerce.high_sensitivity_data_collection_detected",
+        suggestedUnifiedFindingId: "session_replay_on_sensitive_input_surface",
+        title: "Sensitive replay detected"
+      }),
+      evidenceStrengthFlags: ["direct_runtime", "concrete_payload", "fallback_only"] as const,
+      rawEvidence: {
+        sensitivePayloadViolations: [
+          {
+            detectedType: "postal_code_detected",
+            evidenceStrength: "suspected",
+            matchSnippet: "zipcode=64***18",
+            requestUrl: "https://api.example.com/location?zipcode=64118",
+            sourceField: "zipcode",
+            vendorHost: "api.example.com"
+          }
+        ],
+        session_replay_runtime_detected: true,
+        session_replay_runtime_vendors: ["FullStory"]
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "sensitive replay concern with independent sensitive payload stays audit-only",
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",

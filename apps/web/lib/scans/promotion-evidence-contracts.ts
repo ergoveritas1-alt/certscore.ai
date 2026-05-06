@@ -114,6 +114,110 @@ function getEtldPlusOneFromHostname(hostname: string | null | undefined) {
   return parts.slice(-2).join(".");
 }
 
+function getRuntimeEvidenceHostname(row: { requestUrl?: unknown; vendorHost?: unknown }) {
+  const vendorHost = typeof row.vendorHost === "string" ? row.vendorHost.trim().toLowerCase() : "";
+  if (vendorHost.includes(".")) {
+    return vendorHost;
+  }
+
+  if (typeof row.requestUrl !== "string") {
+    return "";
+  }
+
+  try {
+    return new URL(row.requestUrl).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isSessionReplayRuntimeHost(hostname: string) {
+  return /(?:^|\.)((?:fullstory|hotjar|contentsquare|mouseflow|smartlook|logrocket|sessioncam|quantummetric|glassbox|clarity|qualtrics|decibelinsight)\.(?:com|io|net|co)|clarity\.ms)$/i.test(
+    hostname
+  );
+}
+
+function isTrackingRuntimeHost(hostname: string) {
+  return (
+    isSessionReplayRuntimeHost(hostname) ||
+    /(?:doubleclick|googletagmanager|google-analytics|analytics\.google|googleadservices|facebook|connect\.facebook|linkedin|adsrvr|adnxs|criteo|demdex|rubiconproject|pubmatic|openx|taboola|outbrain|bing|bat\.bing|intellimize|optimizely|segment|amplitude|mixpanel|posthog)/i.test(
+      hostname
+    )
+  );
+}
+
+function getSensitivePayloadRows(rawEvidence: Record<string, unknown> | null | undefined) {
+  const rows = Array.isArray(rawEvidence?.sensitivePayloadViolations)
+    ? rawEvidence.sensitivePayloadViolations
+    : Array.isArray(rawEvidence?.sensitive_payload_violations)
+      ? rawEvidence.sensitive_payload_violations
+      : [];
+
+  return rows.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object");
+}
+
+function hasSensitivePayloadRequestArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getSensitivePayloadRows(rawEvidence).some((row) => {
+    if (row.evidenceStrength === "detector_only") {
+      return false;
+    }
+
+    const requestUrl = typeof row.requestUrl === "string" ? row.requestUrl : "";
+    if (!/^https?:\/\//i.test(requestUrl)) {
+      return false;
+    }
+
+    return (
+      (typeof row.detectedType === "string" && row.detectedType.trim().length > 0) ||
+      (typeof row.sourceField === "string" && row.sourceField.trim().length > 0) ||
+      (typeof row.matchSnippet === "string" && row.matchSnippet.trim().length > 0)
+    );
+  });
+}
+
+function getStringArrayEvidence(value: unknown) {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+function hasRetainedSessionReplayRuntimeArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  if (rawEvidence.session_replay_runtime_detected === true || rawEvidence.sessionReplayRuntimeDetected === true) {
+    return true;
+  }
+  if (rawEvidence.session_replay_vendor_artifact_present === true || rawEvidence.sessionReplayVendorArtifactPresent === true) {
+    return true;
+  }
+
+  const artifacts = [
+    ...getStringArrayEvidence(rawEvidence.session_replay_runtime_artifacts),
+    ...getStringArrayEvidence(rawEvidence.sessionReplayRuntimeArtifacts),
+    ...getStringArrayEvidence(rawEvidence.runtimeEvidenceArtifacts)
+  ];
+  if (artifacts.some((value) => /session_replay|session replay|fullstory|hotjar|clarity|contentsquare|mouseflow|logrocket/i.test(value))) {
+    return true;
+  }
+
+  const vendors = [
+    ...getStringArrayEvidence(rawEvidence.session_replay_runtime_vendors),
+    ...getStringArrayEvidence(rawEvidence.sessionReplayRuntimeVendors),
+    ...getStringArrayEvidence(rawEvidence.runtimeVendors)
+  ];
+  if (vendors.some((value) => /fullstory|hotjar|clarity|contentsquare|mouseflow|smartlook|logrocket|sessioncam|quantummetric|glassbox|qualtrics/i.test(value))) {
+    return true;
+  }
+
+  const requestUrls = [
+    ...getStringArrayEvidence(rawEvidence.session_replay_request_urls),
+    ...getStringArrayEvidence(rawEvidence.sessionReplayRequestUrls),
+    ...getStringArrayEvidence(rawEvidence.runtimeRequestUrls),
+    ...getStringArrayEvidence(rawEvidence.runtime_request_urls)
+  ];
+  return requestUrls.some((value) => isSessionReplayRuntimeHost(getRuntimeEvidenceHostname({ requestUrl: value })));
+}
+
 function collectUrlEtldPlusOne(value: string | null | undefined) {
   if (!value) {
     return [];
@@ -898,24 +1002,7 @@ export function hasStrongRightsFrictionArtifact(rawEvidence: Record<string, unkn
 }
 
 export function hasConcreteSensitivePayloadArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
-  const rows = Array.isArray(rawEvidence?.sensitivePayloadViolations)
-    ? rawEvidence.sensitivePayloadViolations
-    : Array.isArray(rawEvidence?.sensitive_payload_violations)
-      ? rawEvidence.sensitive_payload_violations
-      : [];
-
-  return rows.some((entry) => {
-    if (!entry || typeof entry !== "object") {
-      return false;
-    }
-
-    const row = entry as {
-      detectedType?: unknown;
-      evidenceStrength?: unknown;
-      matchSnippet?: unknown;
-      requestUrl?: unknown;
-      sourceField?: unknown;
-    };
+  return getSensitivePayloadRows(rawEvidence).some((row) => {
     if (row.evidenceStrength === "detector_only") {
       return false;
     }
@@ -937,73 +1024,61 @@ export function hasConcreteSensitivePayloadArtifact(rawEvidence: Record<string, 
 }
 
 export function hasConcreteSensitiveSessionReplayArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
-  const rows = Array.isArray(rawEvidence?.sensitivePayloadViolations)
-    ? rawEvidence.sensitivePayloadViolations
-    : Array.isArray(rawEvidence?.sensitive_payload_violations)
-      ? rawEvidence.sensitive_payload_violations
-      : [];
-
-  return rows.some((entry) => {
-    if (!entry || typeof entry !== "object") {
-      return false;
-    }
-
-    const row = entry as {
+  return getSensitivePayloadRows(rawEvidence).some((row) => {
+    const typedRow = row as {
       evidenceSource?: unknown;
       evidenceStrength?: unknown;
       requestUrl?: unknown;
       vendorHost?: unknown;
     };
-    if (row.evidenceStrength === "detector_only") {
+    if (typedRow.evidenceStrength === "detector_only") {
       return false;
     }
 
+    const hostname = getRuntimeEvidenceHostname(typedRow);
     return (
-      row.evidenceSource === "sensitive_field_session_replay_correlation" &&
-      typeof row.requestUrl === "string" &&
-      row.requestUrl.trim().length > 0 &&
-      typeof row.vendorHost === "string" &&
-      row.vendorHost.trim().length > 0
+      (typedRow.evidenceSource === "sensitive_field_session_replay_correlation" || isSessionReplayRuntimeHost(hostname)) &&
+      typeof typedRow.requestUrl === "string" &&
+      typedRow.requestUrl.trim().length > 0 &&
+      hostname.length > 0
     );
   });
 }
 
+export function hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
+  return (
+    hasConcreteSensitiveSessionReplayArtifact(rawEvidence) ||
+    (hasSensitivePayloadRequestArtifact(rawEvidence) && hasRetainedSessionReplayRuntimeArtifact(rawEvidence))
+  );
+}
+
 export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
-  const rows = Array.isArray(rawEvidence?.sensitivePayloadViolations)
-    ? rawEvidence.sensitivePayloadViolations
-    : Array.isArray(rawEvidence?.sensitive_payload_violations)
-      ? rawEvidence.sensitive_payload_violations
-      : [];
-
-  return rows.some((entry) => {
-    if (!entry || typeof entry !== "object") {
-      return false;
-    }
-
-    const row = entry as {
+  return getSensitivePayloadRows(rawEvidence).some((row) => {
+    const typedRow = row as {
       evidenceSource?: unknown;
       evidenceStrength?: unknown;
       requestUrl?: unknown;
       vendorHost?: unknown;
     };
-    if (row.evidenceStrength === "detector_only") {
+    if (typedRow.evidenceStrength === "detector_only") {
       return false;
     }
 
-    if (row.evidenceSource !== "sensitive_field_third_party_tracking_correlation") {
+    const hostname = getRuntimeEvidenceHostname(typedRow);
+    if (typedRow.evidenceSource !== "sensitive_field_third_party_tracking_correlation" && !isTrackingRuntimeHost(hostname)) {
       return false;
     }
 
-    if (typeof row.vendorHost === "string" && row.vendorHost.trim().includes(".")) {
+    if (hostname.length > 0) {
       return true;
     }
 
-    if (typeof row.requestUrl !== "string") {
+    if (typeof typedRow.requestUrl !== "string") {
       return false;
     }
 
     try {
-      const parsed = new URL(row.requestUrl);
+      const parsed = new URL(typedRow.requestUrl);
       return (parsed.protocol === "https:" || parsed.protocol === "http:") && parsed.hostname.includes(".");
     } catch {
       return false;

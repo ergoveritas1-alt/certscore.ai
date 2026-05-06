@@ -889,12 +889,28 @@ test("new runtime contracts require concrete retained evidence shapes", () => {
   assert.equal(
     evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
       cpra_cba_opt_out_evidence: {
+        cbaVendorTier1: ["adnxs.com", "criteo.com"],
+        choice_controls_inspected: true,
+        opt_out_control_found: false,
+        opt_out_ui_result: "absent",
+        policy_cba_language: "absent",
+        scan_origin_geo: null,
+        suppressor_applied: null
+      }
+    })?.externalSurfacingEligibility,
+    "audit_only"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
+      cpra_cba_opt_out_evidence: {
         advertisingSharingVendors: ["Meta Pixel"],
         choice_controls_inspected: true,
         opt_out_control_found: false,
         opt_out_ui_result: "absent",
         policy_cba_language: "absent",
-        scan_origin_geo: null
+        scan_origin_geo: null,
+        suppressor_applied: null
       }
     })?.externalSurfacingEligibility,
     "audit_only"
@@ -931,6 +947,24 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
           vendorHost: "clarity.ms"
         }
       ]
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("session_replay_on_sensitive_input_surface", {
+      sensitivePayloadViolations: [
+        {
+          detectedType: "postal_code_detected",
+          evidenceStrength: "suspected",
+          matchSnippet: "zipcode=64***18",
+          requestUrl: "https://api.example.com/location?zipcode=64118",
+          sourceField: "zipcode",
+          vendorHost: "api.example.com"
+        }
+      ],
+      session_replay_runtime_detected: true,
+      session_replay_runtime_vendors: ["FullStory"]
     })?.status,
     "pass_strong"
   );

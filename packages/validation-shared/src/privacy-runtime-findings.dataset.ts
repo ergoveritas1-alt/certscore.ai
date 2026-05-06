@@ -33,7 +33,6 @@ export const PRIVACY_RUNTIME_FINDING_IDS = [
   "arbitration_clause_present",
   "behavioral_analytics_disclosure_present",
   "cookie_policy_present",
-  "guaranteed_outcome_claim_detected",
   "missing_transfer_disclosure",
   "missing_dsar_mechanism"
 ] as const;
@@ -73,7 +72,6 @@ export const PRIVACY_RUNTIME_TOP_PRODUCTION_FINDING_IDS = [
   "arbitration_clause_present",
   "behavioral_analytics_disclosure_present",
   "cookie_policy_present",
-  "guaranteed_outcome_claim_detected",
   "missing_transfer_disclosure",
   "missing_dsar_mechanism"
 ] as const satisfies readonly PrivacyRuntimeFindingId[];
@@ -884,29 +882,6 @@ const PRODUCTION_FINDING_CONFIGS: ProductionFindingConfig[] = [
   },
   {
     findingGroup: "production_surfaced_calibration",
-    findingId: "guaranteed_outcome_claim_detected",
-    positiveEvidenceFor: (index) => ({
-      artifactRefs: [`s3://privacy-runtime/reviewed-guaranteed-outcome-${index}/offer.html`],
-      policyAnchor: {
-        claimType: "guaranteed_outcome_financial_claim",
-        confidence: 0.84,
-        extractionStatus: "fetched",
-        sourceUrl: `https://reviewed-guaranteed-outcome-${index}.example.test/offer`,
-        snippet: "Guaranteed payouts and guaranteed passing for funded trading accounts."
-      },
-      signalKey: "financial_review.guaranteed_outcome_claim_detected",
-      urlAssessment: {
-        assessment: "supports_promotion",
-        rationale: "Reviewed financial page uses guaranteed outcome, guaranteed payout, guaranteed passing, or guaranteed profit language.",
-        reviewedAt: "2026-04-24",
-        reviewedUrl: `https://reviewed-guaranteed-outcome-${index}.example.test/offer`
-      }
-    }),
-    positiveNotes: "Financial promotional text contains guaranteed outcome language in an investment, trading, or payout context.",
-    signalKey: "financial_review.guaranteed_outcome_claim_detected"
-  },
-  {
-    findingGroup: "production_surfaced_calibration",
     findingId: "missing_transfer_disclosure",
     positiveEvidenceFor: (index) => ({
       artifactRefs: [`s3://privacy-runtime/reviewed-missing-transfer-${index}/section-review.json`],
@@ -988,7 +963,6 @@ const PRODUCTION_REVIEWED_URLS: Record<(typeof PRIVACY_RUNTIME_TOP_PRODUCTION_FI
   arbitration_clause_present: "https://bestcopytrading.com/terms-and-conditions/",
   behavioral_analytics_disclosure_present: "https://www.acorns.com/privacy/",
   cookie_policy_present: "https://ftmo.com/en/cookies/",
-  guaranteed_outcome_claim_detected: "https://tradesbyfin.com/",
   missing_transfer_disclosure: "https://bestforex-signals.com/privacy-policy",
   missing_dsar_mechanism: "https://devbankuk.com/",
   weak_cookie_security_attributes: "https://www.acorns.com/"

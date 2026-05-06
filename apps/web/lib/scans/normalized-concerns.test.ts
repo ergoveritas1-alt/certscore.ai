@@ -522,6 +522,38 @@ test("high-sensitivity candidates with independent replay artifacts stay general
   assert.equal(concern.suggestedUnifiedFindingId, "sensitive_collection_surface_observed");
 });
 
+test("high-sensitivity candidates with retained sensitive requests and replay runtime specialize into sensitive replay findings", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Sensitive request and replay tooling were observed on the same scan surface.",
+    fallbackEvidence: {
+      sensitivePayloadViolations: [
+        {
+          detectedType: "postal_code_detected",
+          evidenceStrength: "suspected",
+          matchSnippet: "zipcode=64***18",
+          requestUrl: "https://api.example.com/location?zipcode=64118",
+          sourceField: "zipcode",
+          vendorHost: "api.example.com"
+        }
+      ],
+      session_replay_runtime_detected: true,
+      session_replay_runtime_vendors: ["FullStory"]
+    },
+    observedValue: "Yes",
+    severity: "high",
+    signalKey: "commerce.high_sensitivity_data_collection_detected",
+    signalLabel: "High-sensitivity data collection detected",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "High-sensitivity data collection detected"
+  });
+
+  assert.equal(concern.suggestedUnifiedFindingId, "session_replay_on_sensitive_input_surface");
+  assert.equal(concern.promotionEligibility, "eligible");
+  assert.equal(concern.externalSurfacingEligibility, "eligible");
+  assert.ok(concern.evidenceStrengthFlags.includes("direct_runtime"));
+});
+
 test("high-sensitivity candidates with third-party tracking specialize into sensitive tracking findings", () => {
   const concern = normalizeConcernFromReviewFindingCandidate({
     description: "Sensitive input appears to coexist with third-party tracking.",

@@ -1250,6 +1250,13 @@ function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
   if (packet.unifiedFindingId !== "preconsent_tracking" || packet.details?.family !== "consent_tracking") {
     return false;
   }
+  const negativeFlags = new Set(packet.concernContext?.negativeEvidenceFlags ?? []);
+  if (
+    negativeFlags.has("missing_concrete_preconsent_artifact") ||
+    negativeFlags.has("missing_preconsent_sequence_evidence")
+  ) {
+    return false;
+  }
 
   const hasBeforeConsentCookieWriteEvidence =
     (packet.evidence?.entities?.preconsent_cookie_timing_evidence ?? []).some((value) =>

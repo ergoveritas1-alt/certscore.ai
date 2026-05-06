@@ -394,8 +394,8 @@ test("projects third-party cookie pre-consent from retained third-party cookie e
   assert.equal(finding.evidenceDetails?.cookieEvidence?.observed, true);
 });
 
-test("keeps support and context findings out of executive top findings while allowing consent dark-pattern umbrella", () => {
-  const excludedExecutiveFindingIds = [
+test("includes every executive finding in top findings while preserving consent dark-pattern umbrella", () => {
+  const formerlyExcludedExecutiveFindingIds = [
     "asymmetric_consent_ui",
     "blocking_overlay_observed",
     "content_obstructed_by_overlay",
@@ -467,10 +467,34 @@ test("keeps support and context findings out of executive top findings while all
     })
   ]);
 
-  for (const findingId of excludedExecutiveFindingIds) {
+  for (const findingId of formerlyExcludedExecutiveFindingIds) {
     assert.ok(projection.findings.some((finding) => finding.id === findingId));
-    assert.ok(!projection.topFindings.some((finding) => finding.id === findingId));
+    assert.ok(projection.topFindings.some((finding) => finding.id === findingId));
   }
+  assert.ok(projection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+  assert.ok(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+});
+
+test("projects concrete reject-missing dark-pattern evidence into the umbrella executive finding", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("reject_button_missing", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "reject_button_missing" },
+      evidence: {
+        counts: {},
+        entities: {},
+        fetchQuality: null,
+        flags: ["privacy.dark_pattern_reject_button_missing"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Reject required a deeper preferences path while accept was available on the first layer."],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "Reject option was missing from the first consent layer."
+    })
+  ]);
+
+  assert.ok(projection.findings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
   assert.ok(projection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
   assert.ok(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
 });
@@ -1182,7 +1206,7 @@ test("projects active financial companion findings into executive findings", () 
   );
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
   assert.ok(projection.topFindings.some((finding) => finding.id === "guaranteed_or_high_return_claims_present"));
-  assert.equal(projection.topFindings.filter((finding) => finding.section === "Financial & Claims").length, 2);
+  assert.equal(projection.topFindings.filter((finding) => finding.section === "Financial & Claims").length, 3);
 });
 
 test("keeps runtime-backed session recording in top findings when consent issues also surface", () => {
@@ -1256,7 +1280,7 @@ test("keeps runtime-backed session recording in top findings when consent issues
 
   const topFindingIds = projection.topFindings.map((finding) => finding.id);
   assert.ok(topFindingIds.includes("session_recording_services_detected"));
-  assert.ok(!topFindingIds.includes("asymmetric_consent_ui"));
+  assert.ok(topFindingIds.includes("asymmetric_consent_ui"));
   assert.equal(
     projection.topFindings.find((finding) => finding.id === "session_recording_services_detected")?.shortSummary,
     "Microsoft Clarity session recording was observed during runtime collection."
@@ -1315,7 +1339,7 @@ test("projects blocking overlay context without violation framing", () => {
   assert.equal(finding?.severity, "medium");
   assert.ok(finding?.whyItMatters.includes("common"));
   assert.ok(!/violation/i.test(`${finding?.label} ${finding?.whyItMatters}`));
-  assert.ok(!projection.topFindings.some((entry) => entry.id === "blocking_overlay_observed"));
+  assert.ok(projection.topFindings.some((entry) => entry.id === "blocking_overlay_observed"));
 });
 
 test("projects video content tracking exposure into executive findings", () => {
@@ -1442,6 +1466,53 @@ test("projects concrete session replay vendor evidence into executive finding js
   assert.equal(
     finding?.shortSummary,
     "Qualtrics SiteIntercept session recording was observed during runtime collection."
+  );
+});
+
+test("projects sensitive replay packets into sensitive third-party tracking companion finding", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("session_replay_on_sensitive_input_surface", {
+      confidenceBand: "high",
+      details: {
+        dataTypes: ["postal_code_detected"],
+        family: "sensitive_data",
+        kind: "session_replay_on_sensitive_input_surface"
+      },
+      evidence: {
+        counts: {},
+        entities: {
+          request_domains: ["api.example.com"],
+          request_urls: ["https://api.example.com/location?zipcode=64118"],
+          runtimeRequestUrls: ["https://edge.fullstory.com", "https://api.example.com/location?zipcode=64118"],
+          runtimeVendors: ["FullStory"],
+          sensitive_data_types: ["postal_code_detected"],
+          sensitive_source_fields: ["zipcode"],
+          sensitive_source_locations: ["url_query"],
+          session_replay_runtime_vendors: ["FullStory"]
+        },
+        fetchQuality: null,
+        flags: ["commerce.high_sensitivity_data_collection_detected"],
+        pageUrls: [],
+        snippets: ["zipcode=64***18"],
+        sourceUrls: []
+      },
+      severity: "medium",
+      summary: "FullStory session replay was observed on a sensitive-data input surface."
+    })
+  ]);
+
+  assert.ok(projection.findings.some((finding) => finding.id === "session_replay_on_sensitive_input_surface"));
+  assert.ok(
+    projection.findings.some(
+      (finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present"
+    )
+  );
+  assert.ok(
+    projection.trace.packets.some(
+      (packet) =>
+        packet.unifiedFindingId === "session_replay_on_sensitive_input_surface" &&
+        packet.executiveFindingId === "sensitive_data_collection_with_third_party_tracking_present"
+    )
   );
 });
 

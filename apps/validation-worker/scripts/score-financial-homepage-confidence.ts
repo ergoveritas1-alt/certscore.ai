@@ -33,8 +33,7 @@ type HostEvaluation = {
 
 const SUSPICIOUS_FINANCIAL_RULE_KEYS = new Set([
   "financial_review.simulated_performance_without_disclosure",
-  "financial_review.unqualified_superlative_claim_detected",
-  "financial_review.guaranteed_outcome_claim_detected"
+  "financial_review.unqualified_superlative_claim_detected"
 ]);
 
 const DEFAULT_TARGETS: HostTarget[] = [

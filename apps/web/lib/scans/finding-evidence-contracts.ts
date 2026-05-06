@@ -8,8 +8,8 @@ import {
   hasConcretePreconsentArtifact,
   hasConcreteReplayArtifact,
   hasConcreteRtbCookieSyncEvidence,
-  hasConcreteSensitiveSessionReplayArtifact,
   hasConcreteSensitiveThirdPartyTrackingArtifact,
+  hasSensitiveSessionReplaySurfaceCooccurrenceArtifact,
   hasPreconsentSequenceEvidence,
   hasStrongFingerprintingEvidence,
   hasStrongPreconsentRuntimeEvidence
@@ -803,7 +803,18 @@ function hasRejectPathDepthEvidence(rawEvidence: Record<string, unknown> | null 
     typeof rejectPath.reject_click_depth === "number" ||
     typeof rejectPath.acceptClickDepth === "number" ||
     typeof rejectPath.accept_click_depth === "number";
-  return inspected && Boolean(status && ["available", "hidden", "not_found", "unavailable", "failed", "untested"].includes(status));
+  const hasChoiceAsymmetry =
+    rejectPath.choiceAsymmetry === "material" ||
+    rejectPath.choice_asymmetry === "material" ||
+    rejectPath.choiceAsymmetry === "minor" ||
+    rejectPath.choice_asymmetry === "minor";
+  const hasAvailabilityFact =
+    typeof rejectPath.rejectAvailableOnFirstLayer === "boolean" ||
+    typeof rejectPath.reject_available_on_first_layer === "boolean";
+  return (
+    (inspected && Boolean(status && ["available", "hidden", "not_found", "unavailable", "failed", "untested"].includes(status))) ||
+    (inspected && hasChoiceAsymmetry && hasAvailabilityFact)
+  );
 }
 
 function hasMaterialChoiceAsymmetryEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -1150,7 +1161,7 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
     case "sensitiveDataFieldEvidence":
       return hasSensitiveDataFieldEvidence(rawEvidence);
     case "sensitiveSessionReplayCooccurrenceEvidence":
-      return hasConcreteSensitiveSessionReplayArtifact(rawEvidence);
+      return hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(rawEvidence);
     case "sensitiveThirdPartyTrackingEvidence":
       return hasSensitiveThirdPartyTrackingEvidence(rawEvidence);
   }

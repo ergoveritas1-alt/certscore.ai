@@ -37,4 +37,3 @@ function examine(findingId) {
 examine('rights_fulfillment_friction');
 examine('missing_transfer_disclosure');
 examine('affiliate_disclosure_scope_limited');
-examine('guaranteed_outcome_claim_detected');

@@ -949,6 +949,48 @@ test("high-sensitivity snapshot signal specializes when merged tracking context 
   assert.ok(packet?.evidence?.snippets?.includes("intellimizeClientIp=***-***-4248"));
 });
 
+test("high-sensitivity snapshot signal specializes to sensitive replay when replay runtime co-occurs with retained sensitive request", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    mergedSignals: [],
+    reviewFindingCandidates: [
+      {
+        description: "Sensitive request and replay tooling were retained together.",
+        fallbackEvidence: {
+          sensitivePayloadViolations: [
+            {
+              detectedType: "postal_code_detected",
+              evidenceStrength: "suspected",
+              matchSnippet: "zipcode=64***18",
+              requestUrl: "https://api.example.com/location?zipcode=64118",
+              sourceField: "zipcode",
+              vendorHost: "api.example.com"
+            }
+          ],
+          session_replay_runtime_detected: true,
+          session_replay_runtime_vendors: ["FullStory"],
+          session_replay_vendor_artifact_present: true,
+          signalKey: "commerce.high_sensitivity_data_collection_detected",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "commerce.high_sensitivity_data_collection_detected",
+        signalLabel: "High-sensitivity data collection detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "High-sensitivity data collection detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "session_replay_on_sensitive_input_surface");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.deepEqual(packet?.evidence?.entities?.session_replay_runtime_vendors, ["FullStory"]);
+  assert.deepEqual(packet?.evidence?.entities?.request_domains, ["api.example.com"]);
+});
+
 test("initial cookie inventory routes to audit-only preconsent packet instead of raw executive bridge", () => {
   const issues = buildSectionReviewIssues({
     accessibilityIssueRows: [],
@@ -1181,6 +1223,69 @@ test("runtime-derived reject persistence projects when retained post-reject rows
   ]);
   assert.ok(projection.findings.some((finding) => finding.id === "reject_tracking_persists_after_reject"));
   assert.ok(projection.topFindings.some((finding) => finding.id === "reject_tracking_persists_after_reject"));
+});
+
+test("runtime reject path depth promotes concrete dark-pattern reject-missing evidence", () => {
+  const makeState = (runtimeArtifacts: Record<string, unknown>) => buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [],
+    primaryPolicyEnrichment: null,
+    runtimeArtifacts,
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+
+  const concreteState = makeState({
+    consent_actionable_choice_observed: true,
+    consent_surface_observed: true,
+    reject_path_depth_and_availability: {
+      acceptClickDepth: 1,
+      choiceAsymmetry: "material",
+      preferencesRequiredBeforeReject: true,
+      rejectAvailableOnFirstLayer: false,
+      rejectClickDepth: 2
+    }
+  });
+  const weakState = makeState({
+    consent_actionable_choice_observed: false,
+    consent_surface_observed: false,
+    reject_path_depth_and_availability: {
+      acceptClickDepth: null,
+      choiceAsymmetry: "material",
+      preferencesRequiredBeforeReject: false,
+      rejectAvailableOnFirstLayer: false,
+      rejectClickDepth: null
+    }
+  });
+
+  const packet = concreteState.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "reject_button_missing");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(concreteState.globalUnifiedFindings);
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.ok(projection.findings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
+  assert.ok(projection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+  assert.ok(!weakState.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "reject_button_missing"));
 });
 
 test("high-risk gambling section review retains concrete offer and disclosure adjacency evidence", () => {

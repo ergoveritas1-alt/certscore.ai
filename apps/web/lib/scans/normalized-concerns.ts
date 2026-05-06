@@ -8,8 +8,8 @@ import {
 import {
   hasConcreteRtbCookieSyncEvidence,
   hasConcreteSensitivePayloadArtifact,
-  hasConcreteSensitiveSessionReplayArtifact,
-  hasConcreteSensitiveThirdPartyTrackingArtifact
+  hasConcreteSensitiveThirdPartyTrackingArtifact,
+  hasSensitiveSessionReplaySurfaceCooccurrenceArtifact
 } from "./promotion-evidence-contracts";
 import {
   derivePolicyPageTypeFromEvidence,
@@ -514,7 +514,7 @@ export function inferSpecializedUnifiedFindingId(input: {
       input.signalKey === "commerce.form_collects_geolocation" ||
       input.signalKey === "commerce.form_collects_ssn")
   ) {
-    if (hasConcreteSensitiveSessionReplayArtifact(rawEvidence)) {
+    if (hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(rawEvidence)) {
       return "session_replay_on_sensitive_input_surface";
     }
 
@@ -1218,7 +1218,7 @@ function deriveEvidenceStrengthFlags(input: {
   if (hasConcreteRtbCookieSyncEvidence(input.rawEvidence)) {
     flags.add("direct_runtime");
   }
-  if (hasConcreteSensitiveSessionReplayArtifact(input.rawEvidence)) {
+  if (hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(input.rawEvidence)) {
     flags.add("direct_runtime");
   }
   if (input.bundle.policySnippets.length > 0) {

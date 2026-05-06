@@ -371,6 +371,10 @@ test("maps signals and validation rules into unified findings", () => {
     "weak_cookie_security_attributes"
   );
   assert.equal(
+    getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.dark_pattern_reject_button_missing")?.id,
+    "reject_button_missing"
+  );
+  assert.equal(
     getReportUnifiedFindingForSignal("snapshot_signal", "privacy.consent_mechanism_absent")?.id,
     "consent_mechanism_absent"
   );

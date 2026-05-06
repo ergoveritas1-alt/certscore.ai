@@ -36,17 +36,14 @@ export const FINDING_EVIDENCE_NON_CONTRACT_RATIONALES: readonly FindingEvidenceN
     id: "financial_claim_validation_contract",
     findingIds: [
       "financial_urgency_pressure_tactic_detected",
-      "guaranteed_outcome_claim_detected",
       "guaranteed_or_high_return_claims_present",
       "high_risk_product_risk_disclosure_missing",
       "hypothetical_performance_disclosure_missing",
       "investment_risk_disclosure_missing",
-      "leveraged_or_high_risk_product_promotion",
       "performance_claims_without_context",
       "regulatory_registration_disclosure_absent",
       "simulated_performance_without_disclosure",
       "unqualified_superlative_claim_detected",
-      "unsubstantiated_testimonial_near_performance_claim",
       "yield_or_return_claims_high_risk"
     ],
     owner: "financial_validation",
@@ -162,7 +159,7 @@ export const FINDING_EVIDENCE_ID_COVERAGE: readonly FindingEvidenceCoverageEntry
     nonContractRationaleId: "accessibility_rule_level_validation"
   },
   {
-    ws01FindingIds: ["guaranteed_or_high_return_claims_present", "leveraged_or_high_risk_product_promotion", "yield_or_return_claims_high_risk"],
+    ws01FindingIds: ["guaranteed_or_high_return_claims_present", "yield_or_return_claims_high_risk"],
     unifiedFindingId: "guaranteed_or_high_return_claims_present",
     reportFindingId: "guaranteed_or_high_return_claims_present",
     contractFindingId: null,

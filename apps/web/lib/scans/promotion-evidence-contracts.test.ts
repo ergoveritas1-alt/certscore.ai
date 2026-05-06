@@ -7,6 +7,8 @@ import {
   evaluateConsentGatedTrackingConflictContract,
   evaluatePolicyBehaviorConflictContract,
   hasConcretePreconsentArtifact,
+  hasConcreteSensitiveSessionReplayArtifact,
+  hasConcreteSensitiveThirdPartyTrackingArtifact,
   hasPreconsentSequenceEvidence,
   hasStrongPreconsentRuntimeEvidence
 } from "./promotion-evidence-contracts";
@@ -201,6 +203,70 @@ test("pre-consent cookie write timestamp satisfies sequence for classified track
   assert.equal(hasConcretePreconsentArtifact(evidence), true);
   assert.equal(hasPreconsentSequenceEvidence(evidence), true);
   assert.equal(hasStrongPreconsentRuntimeEvidence(evidence), true);
+});
+
+test("sensitive third-party tracking contract accepts legacy tracking-host payloads without promoting generic first-party runtime calls", () => {
+  assert.equal(
+    hasConcreteSensitiveThirdPartyTrackingArtifact({
+      sensitive_payload_violations: [
+        {
+          detectedType: "phone_detected",
+          evidenceStrength: "confirmed",
+          matchSnippet: "intellimizeClientIp=***-***-4248",
+          requestUrl: "https://log.intellimize.co/logger",
+          vendorHost: "log.intellimize.co"
+        }
+      ]
+    }),
+    true
+  );
+
+  assert.equal(
+    hasConcreteSensitiveThirdPartyTrackingArtifact({
+      sensitive_payload_violations: [
+        {
+          detectedType: "postal_code_detected",
+          evidenceStrength: "suspected",
+          matchSnippet: "zipcode=64***18",
+          requestUrl: "https://api.target.com/location_fulfillment_aggregations/v1/preferred_stores?zipcode=64118",
+          vendorHost: "api.target.com"
+        }
+      ]
+    }),
+    false
+  );
+});
+
+test("sensitive session replay contract accepts legacy replay-host payloads without promoting generic tracking hosts", () => {
+  assert.equal(
+    hasConcreteSensitiveSessionReplayArtifact({
+      sensitive_payload_violations: [
+        {
+          detectedType: "email_detected",
+          evidenceStrength: "confirmed",
+          matchSnippet: "email=***@example.com",
+          requestUrl: "https://clarity.ms/collect",
+          vendorHost: "clarity.ms"
+        }
+      ]
+    }),
+    true
+  );
+
+  assert.equal(
+    hasConcreteSensitiveSessionReplayArtifact({
+      sensitive_payload_violations: [
+        {
+          detectedType: "phone_detected",
+          evidenceStrength: "confirmed",
+          matchSnippet: "intellimizeClientIp=***-***-4248",
+          requestUrl: "https://log.intellimize.co/logger",
+          vendorHost: "log.intellimize.co"
+        }
+      ]
+    }),
+    false
+  );
 });
 
 test("pre-consent source URLs remain review-grade sequence evidence", () => {

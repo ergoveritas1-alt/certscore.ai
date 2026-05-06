@@ -2814,7 +2814,10 @@ export const REPORT_UNIFIED_FINDINGS = [
     label: "Reject button missing",
     owner: "choice_symmetry_dark_pattern_indicators",
     overlays: ["choice_architecture_dark_patterns", "opt_out_choice_design_dark_pattern_risk"],
-    signalMappings: [{ source: "snapshot_signal", key: "privacy.dark_pattern_reject_button_missing" }],
+    signalMappings: [
+      { source: "snapshot_signal", key: "privacy.dark_pattern_reject_button_missing" },
+      { source: "runtime_artifact_signal", key: "privacy.dark_pattern_reject_button_missing" }
+    ],
     aliases: ["Reject-all control missing"]
   }),
   defineReportUnifiedFinding({
