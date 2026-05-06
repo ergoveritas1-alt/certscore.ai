@@ -1158,3 +1158,27 @@ test("multiple concern origins still collapse into one canonical unified finding
     ["compatibility_signal", "snapshot_signal", "validation_rule"]
   );
 });
+
+test("normalizes snake_case validation rows before building concerns", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    validationFindings: [
+      {
+        id: "db-row-1",
+        rule_key: "runtime_privacy.preconsent_tracking_observed",
+        title: "Tracking observed before consent",
+        description: "Runtime evidence retained pre-consent tracking.",
+        evidence_json: {
+          preconsent_tracking_detected: true,
+          runtimeVendors: ["Example Analytics"]
+        },
+        severity: "high"
+      } as unknown as ScanValidationFinding
+    ]
+  });
+
+  assert.equal(concerns.length, 1);
+  assert.equal(concerns[0]?.originKey, "runtime_privacy.preconsent_tracking_observed");
+  assert.equal(concerns[0]?.originType, "validation_rule");
+  assert.equal(concerns[0]?.evidenceBundle.rawEvidence?.preconsent_tracking_detected, true);
+});

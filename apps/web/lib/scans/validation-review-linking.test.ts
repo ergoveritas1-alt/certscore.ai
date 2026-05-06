@@ -5,6 +5,7 @@ import {
   findValidationFindingForKeys,
   getValidationMatchKeysForReviewReason,
   getValidationMatchKeysForTitle,
+  normalizeScanValidationFinding,
   type ScanValidationFinding
 } from "./validation-review-linking";
 
@@ -40,6 +41,36 @@ test("buildValidationFindingLookup keeps the highest-confidence finding for a ru
   ]);
 
   assert.equal(lookup.get("privacy.trackers_before_consent_detected")?.id, "b");
+});
+
+test("normalizes snake_case validation rows from database queries", () => {
+  const finding = normalizeScanValidationFinding({
+    id: "db-row-1",
+    rule_key: "runtime_privacy.preconsent_tracking_observed",
+    title: "Tracking observed before consent",
+    description: "Runtime evidence retained pre-consent tracking.",
+    evidence_json: { preconsent_tracking_detected: true },
+    finding_source: "runtime_privacy",
+    page_url: "https://example.com/",
+    severity: "high",
+    system_confidence_score: 0.91
+  });
+
+  assert.equal(finding?.ruleKey, "runtime_privacy.preconsent_tracking_observed");
+  assert.equal(finding?.evidence?.preconsent_tracking_detected, true);
+  assert.equal(finding?.findingSource, "runtime_privacy");
+  assert.equal(finding?.pageUrl, "https://example.com/");
+  assert.equal(finding?.systemConfidenceScore, 0.91);
+});
+
+test("buildValidationFindingLookup ignores rows without a rule key", () => {
+  const lookup = buildValidationFindingLookup([
+    { id: "bad-row", title: "No rule key", rule_key: "" } as unknown as ScanValidationFinding,
+    makeFinding({ id: "good-row", ruleKey: "privacy.trackers_before_consent_detected", title: "Tracked before consent" })
+  ]);
+
+  assert.equal(lookup.size, 1);
+  assert.equal(lookup.get("privacy.trackers_before_consent_detected")?.id, "good-row");
 });
 
 test("findValidationFindingForKeys returns the first matched rule key", () => {

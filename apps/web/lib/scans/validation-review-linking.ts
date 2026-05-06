@@ -23,6 +23,61 @@ export type ScanValidationFinding = {
   verdict: "supported" | "inconclusive" | "not_supported" | null;
 };
 
+function getString(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function getConfidenceBand(value: unknown): ScanValidationFinding["systemConfidenceBand"] {
+  return value === "very_high" || value === "high" || value === "moderate" || value === "low" || value === "very_low" ? value : null;
+}
+
+function getVerdict(value: unknown): ScanValidationFinding["verdict"] {
+  return value === "supported" || value === "inconclusive" || value === "not_supported" ? value : null;
+}
+
+export function normalizeScanValidationFinding(rawFinding: ScanValidationFinding | Record<string, unknown>): ScanValidationFinding | null {
+  const row = rawFinding as ScanValidationFinding & Record<string, unknown>;
+  const id = getString(row.id);
+  const ruleKey = getString(row.ruleKey ?? row.rule_key);
+  const title = getString(row.title);
+  if (!id || !ruleKey || !title) {
+    return null;
+  }
+
+  return {
+    agreementScore: getNumber(row.agreementScore ?? row.agreement_score),
+    category: getString(row.category),
+    description: getString(row.description),
+    evidence: getRecord(row.evidence ?? row.evidenceJson ?? row.evidence_json),
+    findingFamily: getString(row.findingFamily ?? row.finding_family),
+    findingScope: getString(row.findingScope ?? row.finding_scope),
+    findingSource: getString(row.findingSource ?? row.finding_source),
+    findingSubject: getString(row.findingSubject ?? row.finding_subject),
+    id,
+    model: getString(row.model),
+    modelConfidence: getNumber(row.modelConfidence ?? row.model_confidence),
+    pageUrl: getString(row.pageUrl ?? row.page_url),
+    promptVersion: getString(row.promptVersion ?? row.prompt_version),
+    rationale: getString(row.rationale),
+    ruleKey,
+    severity: getString(row.severity),
+    subtype: getString(row.subtype),
+    systemConfidenceBand: getConfidenceBand(row.systemConfidenceBand ?? row.system_confidence_band),
+    systemConfidenceExplanation: getString(row.systemConfidenceExplanation ?? row.system_confidence_explanation),
+    systemConfidenceScore: getNumber(row.systemConfidenceScore ?? row.system_confidence_score),
+    title,
+    verdict: getVerdict(row.verdict)
+  };
+}
+
 const SIGNAL_TO_VALIDATION_RULE_KEYS: Record<string, string[]> = {
   "accessibility.wcag_error_count_total": ["accessibility.wcag_errors_detected"],
   "accessibility.litigation_risk_score": ["scan_snapshot.accessibility.accessibility_risk_score"],
@@ -118,10 +173,14 @@ export function getValidationMatchKeysForReviewReason(reason: string) {
   }
 }
 
-export function buildValidationFindingLookup(findings: ScanValidationFinding[]) {
+export function buildValidationFindingLookup(findings: Array<ScanValidationFinding | Record<string, unknown>>) {
   const lookup = new Map<string, ScanValidationFinding>();
 
-  for (const finding of findings) {
+  for (const rawFinding of findings) {
+    const finding = normalizeScanValidationFinding(rawFinding);
+    if (!finding) {
+      continue;
+    }
     const existing = lookup.get(finding.ruleKey);
 
     if (!existing) {

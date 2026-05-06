@@ -3261,7 +3261,10 @@ export function getReportUnifiedFindingForSignal(source: ReportSignalSource, key
   return REPORT_UNIFIED_FINDING_SIGNAL_LOOKUP[`${source}:${key}`] ?? null;
 }
 
-export function getReportUnifiedFindingForValidationRule(ruleKey: string) {
+export function getReportUnifiedFindingForValidationRule(ruleKey: string | null | undefined) {
+  if (typeof ruleKey !== "string" || ruleKey.trim().length === 0) {
+    return null;
+  }
   const exactMatch = REPORT_UNIFIED_FINDING_VALIDATION_LOOKUP[ruleKey];
   if (exactMatch) {
     return exactMatch;

@@ -663,6 +663,12 @@ test("returns unified findings by id and alias", () => {
   assert.equal(getReportUnifiedFindingByAlias("Possible undisclosed session replay")?.id, "session_replay_undisclosed");
 });
 
+test("validation-rule lookup tolerates missing rule keys", () => {
+  assert.equal(getReportUnifiedFindingForValidationRule(null), null);
+  assert.equal(getReportUnifiedFindingForValidationRule(undefined), null);
+  assert.equal(getReportUnifiedFindingForValidationRule(""), null);
+});
+
 test("keeps unified-finding signal and validation mappings unique", () => {
   const signalKeys = new Set<string>();
   const validationKeys = new Set<string>();

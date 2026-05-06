@@ -23,7 +23,7 @@ import {
 import type { ReviewFindingSeverity } from "./canonical-review-finding";
 import { deriveConcernPolicy } from "./concern-policy";
 import type { FetchQuality } from "./signal-fallback-evidence";
-import type { ScanValidationFinding } from "./validation-review-linking";
+import { normalizeScanValidationFinding, type ScanValidationFinding } from "./validation-review-linking";
 
 const MAX_POLICY_SNIPPET_LENGTH = 600;
 
@@ -1157,7 +1157,8 @@ function resolveSuggestedUnifiedFindingId(input: {
   }
 
   if (input.linkedValidationFinding) {
-    const validationMatch = getReportUnifiedFindingForValidationRule(input.linkedValidationFinding.ruleKey);
+    const validationRuleKey = normalizeScanValidationFinding(input.linkedValidationFinding)?.ruleKey ?? null;
+    const validationMatch = validationRuleKey ? getReportUnifiedFindingForValidationRule(validationRuleKey) : null;
     if (validationMatch) {
       return inferSpecializedUnifiedFindingId({
         currentSuggestedId: validationMatch.id,
@@ -1353,17 +1354,20 @@ export function normalizeConcernFromReviewFindingCandidate(
   domainContext?: ScanDomainContext
 ): NormalizedConcern {
   const originType = deriveOriginTypeFromCandidate(candidate);
+  const linkedValidationFinding = candidate.linkedValidationFinding
+    ? normalizeScanValidationFinding(candidate.linkedValidationFinding)
+    : null;
   const originKey =
     candidate.sourceType === "signal" && candidate.signalKey
       ? candidate.signalKey
-      : candidate.linkedValidationFinding?.ruleKey ?? normalizeTitleKey(candidate.title);
+      : linkedValidationFinding?.ruleKey ?? normalizeTitleKey(candidate.title);
 
   return buildConcernFromSharedInput({
     categoryId: candidate.categoryId,
     description: candidate.description,
     domainContext,
     evidence: candidate.evidence,
-    linkedValidationFinding: candidate.linkedValidationFinding ?? null,
+    linkedValidationFinding,
     observedValue: candidate.observedValue,
     originKey,
     originType,
@@ -1378,24 +1382,29 @@ export function normalizeConcernFromReviewFindingCandidate(
 }
 
 export function normalizeConcernFromValidationFinding(
-  finding: ScanValidationFinding,
+  finding: ScanValidationFinding | Record<string, unknown>,
   domainContext?: ScanDomainContext
 ): NormalizedConcern {
+  const normalizedFinding = normalizeScanValidationFinding(finding);
+  const fallbackTitle = typeof finding.title === "string" && finding.title.trim().length > 0 ? finding.title : "Validation finding";
+  const ruleKey = normalizedFinding?.ruleKey ?? normalizeTitleKey(fallbackTitle);
+  const title = normalizedFinding?.title ?? fallbackTitle;
+  const description = normalizedFinding?.description ?? title;
   return buildConcernFromSharedInput({
-    description: finding.description ?? finding.title,
+    description,
     domainContext,
     evidence: [],
-    linkedValidationFinding: finding,
+    linkedValidationFinding: normalizedFinding,
     observedValue: null,
-    originKey: finding.ruleKey,
+    originKey: ruleKey,
     originType: "validation_rule",
-    rawEvidence: finding.evidence ?? null,
+    rawEvidence: normalizedFinding?.evidence ?? null,
     severity:
-      finding.severity === "high" || finding.severity === "medium" || finding.severity === "low"
-        ? finding.severity
+      normalizedFinding?.severity === "high" || normalizedFinding?.severity === "medium" || normalizedFinding?.severity === "low"
+        ? normalizedFinding.severity
         : "medium",
     sourceType: "validation",
-    title: finding.title
+    title
   });
 }
 
@@ -1519,15 +1528,16 @@ function expandFinancialCompanionConcerns(concern: NormalizedConcern): Normalize
 export function buildNormalizedConcerns(input: {
   domainContext?: ScanDomainContext;
   reviewFindingCandidates: ReviewFindingCandidateInput[];
-  validationFindings: ScanValidationFinding[];
+  validationFindings: Array<ScanValidationFinding | Record<string, unknown>>;
 }) {
   const concerns = [
     ...input.reviewFindingCandidates.map((candidate) =>
       normalizeConcernFromReviewFindingCandidate(candidate, input.domainContext)
     ),
-    ...input.validationFindings.map((finding) =>
-      normalizeConcernFromValidationFinding(finding, input.domainContext)
-    )
+    ...input.validationFindings.flatMap((finding) => {
+      const normalizedFinding = normalizeScanValidationFinding(finding);
+      return normalizedFinding ? [normalizeConcernFromValidationFinding(normalizedFinding, input.domainContext)] : [];
+    })
   ];
 
   return concerns.flatMap(expandFinancialCompanionConcerns);
