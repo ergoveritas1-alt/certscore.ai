@@ -224,7 +224,7 @@ async function main() {
   const findings: string[] = [];
   const sections = {
     databaseAndBacklog: { details: [], status: "ok" as SectionState },
-    workerHeartbeats: { details: [], status: "ok" as SectionState },
+    workerHeartbeats: { details: [], status: "skipped" as SectionState },
     scannerQueueCanary: { details: [], status: "ok" as SectionState }
   };
 
@@ -323,7 +323,7 @@ async function main() {
         status,
         answer: {
           areScansBeingPickedUp: sections.scannerQueueCanary.status === "ok",
-          areWorkersAlive: sections.workerHeartbeats.status === "ok",
+          areWorkersAlive: sections.workerHeartbeats.status === "skipped" ? null : sections.workerHeartbeats.status === "ok",
           isAnythingStale: status === "failing"
         },
         sections,
