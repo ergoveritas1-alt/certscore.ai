@@ -394,6 +394,57 @@ test("projects third-party cookie pre-consent from retained third-party cookie e
   assert.equal(finding.evidenceDetails?.cookieEvidence?.observed, true);
 });
 
+test("projects structured third-party cookie pre-consent without request urls but not from bare booleans", () => {
+  const structuredProjection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      evidence: {
+        counts: { preconsentViolationCount: 1 },
+        entities: {
+          preconsent_cookie_evidence: [
+            JSON.stringify({
+              beforeConsent: true,
+              category: "advertising",
+              cookieInitiatorVendor: "Amazon Ads",
+              cookieName: "ad-privacy",
+              cookiePartyType: "third_party",
+              domain: ".amazon-adsystem.com",
+              responseHost: "amazon-adsystem.com",
+              thirdParty: true
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: ["privacy.preconsent_tracking_detected", "privacy.third_party_cookie_set_before_consent"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Third-party cookies were retained before consent."],
+        sourceUrls: []
+      },
+      severity: "high"
+    })
+  ]);
+
+  assert.ok(structuredProjection.findings.some((finding) => finding.id === "third_party_cookie_pre_consent"));
+
+  const booleanOnlyProjection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      evidence: {
+        counts: {},
+        entities: {},
+        fetchQuality: null,
+        flags: ["privacy.preconsent_tracking_detected", "privacy.third_party_cookie_set_before_consent"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["A boolean cookie flag was retained."],
+        sourceUrls: []
+      },
+      severity: "high"
+    })
+  ]);
+
+  assert.equal(booleanOnlyProjection.findings.some((finding) => finding.id === "third_party_cookie_pre_consent"), false);
+});
+
 test("includes every executive finding in top findings while preserving consent dark-pattern umbrella", () => {
   const formerlyExcludedExecutiveFindingIds = [
     "asymmetric_consent_ui",

@@ -337,13 +337,29 @@ function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPack
   const thirdPartyTrackingCookieRows = cookieRows.filter((row) => {
     const timingEvidence = getRecordString(row, ["timingEvidence", "timing_evidence"]);
     const party = getRecordString(row, ["party", "cookiePartyType", "cookie_party_type"]);
-    const category = getRecordString(row, ["category"]);
-    const nonEssential = row.nonEssential === true || row.non_essential === true;
+    const category = getRecordString(row, ["category", "cookieCategory", "cookie_category", "vendorCategory", "vendor_category"]);
+    const promotionCategory = /analytics|advertising|marketing|retargeting|session_replay|dmp/i.test(category ?? "");
+    const cookieName = getRecordString(row, ["cookieName", "cookie_name"]);
+    const vendorOrHost = getRecordString(row, [
+      "vendor",
+      "cookieInitiatorVendor",
+      "cookie_initiator_vendor",
+      "responseHost",
+      "response_host",
+      "cookieInitiatorDomain",
+      "cookie_initiator_domain",
+      "domain"
+    ]);
+    const nonEssential = row.nonEssential === true || row.non_essential === true || promotionCategory;
+    const beforeConsent =
+      timingEvidence === "before_consent_cookie_write" ||
+      (timingEvidence === null && (row.beforeConsent === true || row.before_consent === true));
     return (
-      timingEvidence === "before_consent_cookie_write" &&
-      party === "third_party" &&
+      beforeConsent &&
+      (party === "third_party" || row.thirdParty === true || row.third_party === true) &&
       nonEssential &&
-      /analytics|advertising|marketing|retargeting|session_replay|dmp/i.test(category ?? "")
+      promotionCategory &&
+      Boolean(cookieName && vendorOrHost)
     );
   });
   const preconsentCookieNames = getEntityValues(packet, /^preconsent_(?:nonessential_)?cookie_names$/i);
@@ -673,7 +689,8 @@ function buildPreConsentTrackingEvidenceDetails(
   const vendors = uniqueStrings([
     ...getEntityValues(packet, /^(?:preconsent_tracker_vendors|runtimeVendors)$/i),
     ...(packet.details?.family === "consent_tracking" ? (packet.details.vendors ?? []) : []),
-    ...vendorRows.flatMap((row) => getRecordString(row, ["vendor", "vendorName", "name", "label"]))
+    ...vendorRows.flatMap((row) => getRecordString(row, ["vendor", "vendorName", "name", "label"])),
+    ...cookieRows.flatMap((row) => getRecordString(row, ["vendor", "vendorName", "cookieInitiatorVendor", "cookie_initiator_vendor"]))
   ]).filter(isDisplayVendorName);
 
   const firstRequestMs = getCountValue(packet, ["firstRequestMs"]);

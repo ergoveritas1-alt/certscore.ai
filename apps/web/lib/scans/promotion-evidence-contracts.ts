@@ -68,10 +68,10 @@ function getStringArrayValuesFromEvidenceAndEntities(record: Record<string, unkn
 
 function classifyCookieNameForPromotion(name: string) {
   const normalized = name.toLowerCase();
-  if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id)/i.test(normalized)) {
+  if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id|^_ali_s_|^yandex|^yuid|^cna$|^sca$)/i.test(normalized)) {
     return "analytics";
   }
-  if (/(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|doubleclick|criteo|cto_bundle|_mkto_trk|muid|fr\b|demdex|dpm\.demdex|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check|pubmatic|krtbcookie|pugt|spugt|bidswitch|tuuid|id5|casalemedia|cmid|cmps|cmpro|gumgum|3lift|tluid|tapad|adsrvr|tdid|rubiconproject|openx|scorecardresearch|quantserve|crwdcntrl|panoramaid|_pubcid)/i.test(normalized)) {
+  if (/(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|doubleclick|criteo|cto_bundle|_mkto_trk|muid|fr\b|demdex|dpm\.demdex|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check|pubmatic|krtbcookie|pugt|spugt|bidswitch|tuuid|id5|casalemedia|cmid|cmps|cmpro|gumgum|3lift|tluid|tapad|adsrvr|tdid|rubiconproject|openx|scorecardresearch|quantserve|crwdcntrl|panoramaid|_pubcid|^yabs|^sync_cookie_csrf$|^ftid$|^bh$|^ad-privacy$)/i.test(normalized)) {
     return "advertising";
   }
   if (/(qsi_replaysession|qualtrics|siteintercept|hotjar|fullstory|clarity|contentsquare|mouseflow)/i.test(normalized)) {
@@ -392,12 +392,28 @@ function hasPromotionGradePreconsentCookieEvidence(rawEvidence: Record<string, u
     const timingEvidence = typeof row.timingEvidence === "string" ? row.timingEvidence : typeof row.timing_evidence === "string" ? row.timing_evidence : null;
     const party = typeof row.party === "string" ? row.party : typeof row.cookiePartyType === "string" ? row.cookiePartyType : typeof row.cookie_party_type === "string" ? row.cookie_party_type : null;
     const thirdParty = row.thirdParty === true || row.third_party === true || party === "third_party";
-    const category = typeof row.category === "string" ? row.category : null;
-    const nonEssential = row.nonEssential === true || row.non_essential === true;
+    const category =
+      typeof row.category === "string"
+        ? row.category
+        : typeof row.cookieCategory === "string"
+          ? row.cookieCategory
+          : typeof row.cookie_category === "string"
+            ? row.cookie_category
+            : typeof row.vendorCategory === "string"
+              ? row.vendorCategory
+              : typeof row.vendor_category === "string"
+                ? row.vendor_category
+                : null;
     const cookieName = typeof row.cookieName === "string" ? row.cookieName : typeof row.cookie_name === "string" ? row.cookie_name : null;
     const inferredCategory = cookieName ? classifyCookieNameForPromotion(cookieName) : "unknown";
     const promotionCategory = isPromotionGradeCookieCategory(category) || isPromotionGradeCookieCategory(inferredCategory);
-    return thirdParty && promotionCategory && nonEssential && timingEvidence === "before_consent_cookie_write";
+    const nonEssential = row.nonEssential === true || row.non_essential === true || promotionCategory;
+    const beforeConsent =
+      timingEvidence === "before_consent_cookie_write" ||
+      (timingEvidence === null && row.beforeConsent === true) ||
+      (timingEvidence === null && row.before_consent === true);
+    const namedEvidence = Boolean(cookieName);
+    return thirdParty && promotionCategory && nonEssential && beforeConsent && namedEvidence;
   });
   return promotionGradeRows.length > 0;
 }
