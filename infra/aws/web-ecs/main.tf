@@ -5,14 +5,14 @@ data "tls_certificate" "github_actions_oidc" {
 }
 
 locals {
-  prefix            = var.project_name
-  vpc_id            = var.existing_vpc_id
-  public_subnets    = var.public_subnet_ids
-  private_subnets   = var.private_subnet_ids
-  certificate_arn   = trimspace(var.existing_certificate_arn) != "" ? var.existing_certificate_arn : null
-  create_cluster    = trimspace(var.existing_ecs_cluster_name) == ""
-  ecs_cluster_name  = local.create_cluster ? aws_ecs_cluster.web[0].name : var.existing_ecs_cluster_name
-  common_tags       = merge(var.tags, { Project = local.prefix, ManagedBy = "terraform", Stack = "web-ecs" })
+  prefix           = var.project_name
+  vpc_id           = var.existing_vpc_id
+  public_subnets   = var.public_subnet_ids
+  private_subnets  = var.private_subnet_ids
+  certificate_arn  = trimspace(var.existing_certificate_arn) != "" ? var.existing_certificate_arn : null
+  create_cluster   = trimspace(var.existing_ecs_cluster_name) == ""
+  ecs_cluster_name = local.create_cluster ? aws_ecs_cluster.web[0].name : var.existing_ecs_cluster_name
+  common_tags      = merge(var.tags, { Project = local.prefix, ManagedBy = "terraform", Stack = "web-ecs" })
   web_secret_arns = compact([
     var.database_url_secret_arn,
     var.better_auth_secret_arn,
