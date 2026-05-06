@@ -110,7 +110,7 @@ export function isFunctionalCookieExcludedFromTrackingEvidence(name: string | nu
 }
 
 export function isNonEssentialCookieCategory(category: string | null | undefined) {
-  return category === "analytics" || category === "advertising" || category === "dmp" || category === "session_replay";
+  return category === "analytics" || category === "advertising" || category === "dmp" || category === "session_replay" || category === "personalization";
 }
 
 function inferCookieProvider(name: string, domain: string | null = null) {
@@ -205,6 +205,9 @@ function inferCookieProvider(name: string, domain: string | null = null) {
   if (/amazon-adsystem|ad-privacy/.test(normalized)) {
     return "Amazon Ads";
   }
+  if (/xiaomi|mi\.com|xm_user_bucket|^xm_/.test(normalized)) {
+    return "Xiaomi";
+  }
   if (/mixpanel|mp_/.test(normalized)) {
     return "Mixpanel";
   }
@@ -236,13 +239,29 @@ function normalizeHostForCookieParty(value: string | null | undefined) {
   return value?.trim().replace(/^\./, "").replace(/^www\./, "").toLowerCase() ?? null;
 }
 
+function roughEtldPlusOne(hostname: string | null | undefined) {
+  const parts = (hostname ?? "").replace(/^\./, "").toLowerCase().split(".").filter(Boolean);
+  if (parts.length <= 2) {
+    return parts.join(".");
+  }
+  const lastTwo = parts.slice(-2).join(".");
+  return new Set(["co.uk", "com.au", "com.br", "co.jp", "co.nz", "com.mx"]).has(lastTwo) && parts.length >= 3
+    ? parts.slice(-3).join(".")
+    : lastTwo;
+}
+
 function isSameSiteCookieDomain(cookieDomain: string | null, pageHostname: string | null) {
   const normalizedCookieDomain = normalizeHostForCookieParty(cookieDomain);
   const normalizedPageHostname = normalizeHostForCookieParty(pageHostname);
   if (!normalizedCookieDomain || !normalizedPageHostname) {
     return false;
   }
-  return normalizedCookieDomain === normalizedPageHostname || normalizedCookieDomain.endsWith(`.${normalizedPageHostname}`);
+  return (
+    normalizedCookieDomain === normalizedPageHostname ||
+    normalizedPageHostname.endsWith(`.${normalizedCookieDomain}`) ||
+    normalizedCookieDomain.endsWith(`.${normalizedPageHostname}`) ||
+    roughEtldPlusOne(normalizedCookieDomain) === roughEtldPlusOne(normalizedPageHostname)
+  );
 }
 
 function getCookiePartyType(

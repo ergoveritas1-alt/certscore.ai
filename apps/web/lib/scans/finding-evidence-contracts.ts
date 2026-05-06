@@ -602,7 +602,7 @@ function parseObjectArrayValue(value: unknown) {
 }
 
 function isPromotionCookieCategory(value: string) {
-  return /analytics|advertising|marketing|retargeting|session_replay/i.test(value);
+  return /analytics|advertising|marketing|retargeting|session_replay|personalization/i.test(value);
 }
 
 function isPromotionCookieName(value: string) {
@@ -644,6 +644,9 @@ function hasTrackingCookieClassification(rawEvidence: Record<string, unknown> | 
 
 function hasNonEssentialRequestClassification(rawEvidence: Record<string, unknown> | null | undefined) {
   if (hasStrongPreconsentRuntimeEvidence(rawEvidence)) {
+    return true;
+  }
+  if (hasPreconsentSequenceEvidence(rawEvidence) && hasTrackingCookieClassification(rawEvidence)) {
     return true;
   }
   if (

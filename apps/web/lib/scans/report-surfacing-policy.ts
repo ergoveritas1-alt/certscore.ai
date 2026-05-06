@@ -1280,8 +1280,12 @@ function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
     (packet.evidence?.entities?.runtimeRequestUrls?.some(isConcreteHttpEvidenceUrl) ?? false);
   const hasRuntimeOrValidationBacking =
     packet.confidenceInputs.hasDirectRuntimeEvidence || packet.confidenceInputs.hasStructuredValidationEvidence;
+  const hasRetainedPreconsentSequence =
+    packet.concernContext?.negativeEvidenceFlags?.includes("missing_preconsent_sequence_evidence") !== true ||
+    (packet.evidence?.entities?.consentTimeline?.length ?? 0) > 0 ||
+    (packet.evidence?.entities?.requestPurposeClassificationConfidence?.length ?? 0) > 0;
 
-  return hasRuntimeOrValidationBacking && ((hasVendors && hasUrls) || hasPreconsentCookieEvidence);
+  return hasRuntimeOrValidationBacking && ((hasVendors && hasUrls && hasRetainedPreconsentSequence) || hasPreconsentCookieEvidence);
 }
 
 function hasSpecificConsentGatedRuntimeEvidence(packet: UnifiedFindingPacket) {
@@ -1302,6 +1306,10 @@ function hasSpecificConsentGatedRuntimeEvidence(packet: UnifiedFindingPacket) {
 function hasStandalonePreconsentRuntimeEvidence(packet: UnifiedFindingPacket) {
   if (packet.unifiedFindingId !== "preconsent_tracking" || packet.details?.family !== "consent_tracking") {
     return false;
+  }
+
+  if (hasSpecificPreconsentEvidence(packet)) {
+    return true;
   }
 
   const hasVendors = (packet.details.vendors ?? []).some((value) => typeof value === "string" && value.trim().length > 0);
