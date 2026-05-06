@@ -2112,10 +2112,9 @@ test("deriveConcernPolicy weakens contradiction concerns when one side of the mi
     promotionEligibility: "internal_only",
     externalSurfacingEligibility: "audit_only",
     negativeEvidenceFlags: [
-      "missing_behavior_side_evidence",
       "missing_policy_side_evidence",
-      "missing_contradiction_mapping",
-      "missing_explicit_contradiction_basis",
+      "missing_runtime_anchor",
+      "missing_contradiction_bridge",
       "insufficient_evidence_for_policy_behavior_conflict"
     ]
   });
@@ -2142,16 +2141,13 @@ test("deriveConcernPolicy keeps generic policy-behavior conflicts internal when 
     promotionEligibility: "internal_only",
     externalSurfacingEligibility: "audit_only",
     negativeEvidenceFlags: [
-      "policy_semantic_review_incomplete",
       "missing_policy_side_evidence",
-      "missing_specific_policy_anchor",
-      "missing_behavior_side_evidence",
-      "missing_specific_runtime_anchor",
-      "runtime_tracking_review_incomplete",
-      "missing_contradiction_mapping",
-      "missing_explicit_contradiction_basis",
-      "insufficient_evidence_for_policy_behavior_conflict",
-      "possible_policy_runtime_mismatch"
+      "missing_runtime_anchor",
+      "missing_specific_runtime_artifact",
+      "unsupported_policy_runtime_mapping",
+      "missing_contradiction_bridge",
+      "missing_bridge_provenance",
+      "insufficient_evidence_for_policy_behavior_conflict"
     ]
   });
 });
@@ -2209,7 +2205,7 @@ test("deriveConcernPolicy fails closed for Schwab-like contradiction candidates 
   assert.equal(policy.promotionEligibility, "internal_only");
   assert.equal(policy.externalSurfacingEligibility, "audit_only");
   assert.ok(policy.negativeEvidenceFlags.includes("insufficient_evidence_for_policy_behavior_conflict"));
-  assert.ok(policy.negativeEvidenceFlags.includes("runtime_tracking_review_incomplete"));
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_runtime_anchor"));
 });
 
 test("deriveConcernPolicy keeps vendor-only pre-consent evidence audit-only", () => {

@@ -17,6 +17,10 @@ import {
   getHybridDerivedSignalValue,
   getHybridSignalFallbackEvidence
 } from "./hybrid-runtime-evidence";
+import {
+  evaluatePolicyBehaviorContradictionEvidence,
+  getContradictionEvidenceBundle
+} from "./contradiction-evidence-contract";
 import { REJECT_TRACKING_CONFIRMATION_MIN_MS } from "./reject-tracking-policy";
 import { getReportSignalValue, isSignalValuePopulated } from "./report-signal-values";
 import {
@@ -116,6 +120,21 @@ function getRuntimeObjectArray(input: Record<string, unknown> | null, keys: stri
   return [];
 }
 
+function getNativeContradictionPacketSources(runtimeArtifacts: Record<string, unknown> | null) {
+  return [
+    runtimeArtifacts,
+    getRuntimeObject(runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]),
+    getRuntimeObject(runtimeArtifacts, ["sanitizedNetworkEvidence", "sanitized_network_evidence"])
+  ].filter((source): source is Record<string, unknown> => Boolean(source));
+}
+
+function hasNativeContradictionPacketTriplet(source: Record<string, unknown>) {
+  return (
+    getRuntimeObjectArray(source, ["policyClaimCandidates", "policy_claim_candidates"]).length > 0 &&
+    getRuntimeObjectArray(source, ["runtimeBehaviorArtifacts", "runtime_behavior_artifacts"]).length > 0
+  );
+}
+
 function getRuntimeStringArray(input: Record<string, unknown> | null, keys: string[]) {
   const values: string[] = [];
   for (const key of keys) {
@@ -140,6 +159,54 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   runtimeArtifacts: Record<string, unknown> | null;
 }): CanonicalReviewFinding[] {
   const candidates: CanonicalReviewFinding[] = [];
+  const nativeContradictionPacketSource = getNativeContradictionPacketSources(input.runtimeArtifacts).find((source) => {
+    if (!hasNativeContradictionPacketTriplet(source)) {
+      return false;
+    }
+    const decision = evaluatePolicyBehaviorContradictionEvidence(source);
+    return (
+      !decision.eligible &&
+      decision.negativeEvidenceFlags.includes("missing_bridge_provenance") &&
+      !decision.negativeEvidenceFlags.includes("missing_policy_side_evidence") &&
+      !decision.negativeEvidenceFlags.includes("missing_runtime_anchor") &&
+      !decision.negativeEvidenceFlags.includes("missing_specific_runtime_artifact") &&
+      !decision.negativeEvidenceFlags.includes("boilerplate_policy_anchor") &&
+      !decision.negativeEvidenceFlags.includes("weak_policy_anchor")
+    );
+  });
+  const nativeContradictionBundle = getContradictionEvidenceBundle(nativeContradictionPacketSource);
+  if (nativeContradictionPacketSource && nativeContradictionBundle) {
+    const policyAnchorId = nativeContradictionBundle.conflictBridge.provenance.policyAnchorRef || nativeContradictionBundle.policyAnchor.sourceUrl || "policy";
+    const runtimeAnchorId =
+      nativeContradictionBundle.conflictBridge.provenance.runtimeAnchorRef ||
+      nativeContradictionBundle.runtimeAnchor.requests[0] ||
+      nativeContradictionBundle.runtimeAnchor.cookies[0] ||
+      nativeContradictionBundle.runtimeAnchor.storageArtifacts[0] ||
+      "runtime";
+    candidates.push({
+      categoryId: "policy_clarity_consistency_review",
+      description:
+        "WS01 retained a specific policy claim and concrete runtime behavior anchor, but no stable bridge provenance was retained for promotion.",
+      fallbackEvidence: {
+        ...nativeContradictionPacketSource,
+        candidateReviewStatus: "candidate_insufficient_bridge_provenance",
+        signalKey: "context.policy_behavior_conflict_detected",
+        signalLabel: "Policy/behavior conflict detected",
+        signalValue: true,
+        unifiedFindingId: "policy_behavior_conflict"
+      },
+      id: `runtime-derived-signal-context.policy_behavior_conflict_detected.${policyAnchorId}.${runtimeAnchorId}`,
+      linkedValidationFinding: null,
+      observedValue: "Candidate missing stable bridge provenance",
+      severity: "high",
+      signalKey: "context.policy_behavior_conflict_detected",
+      signalLabel: "Policy/behavior conflict detected",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Policy/behavior conflict detected"
+    });
+  }
+
   const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
   const preconsentEvidenceRecord = preconsentEvidenceQuality as Record<string, unknown> | null;
   const consentTimeline =

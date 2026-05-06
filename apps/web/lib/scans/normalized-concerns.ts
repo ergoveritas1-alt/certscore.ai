@@ -15,6 +15,10 @@ import {
   derivePolicyPageTypeFromEvidence,
   derivePolicyPrimarySourceFromEvidence
 } from "./policy-evidence-metadata";
+import {
+  getContradictionEvidenceBundle,
+  isSpecificPolicyBehaviorPolicySnippet
+} from "./contradiction-evidence-contract";
 
 import type { ReviewFindingSeverity } from "./canonical-review-finding";
 import { deriveConcernPolicy } from "./concern-policy";
@@ -1529,6 +1533,56 @@ export function buildNormalizedConcerns(input: {
   return concerns.flatMap(expandFinancialCompanionConcerns);
 }
 
+function isPolicyBehaviorMissingBridgeReviewConcern(concern: NormalizedConcern) {
+  if (
+    concern.suggestedUnifiedFindingId !== "policy_behavior_conflict" ||
+    concern.promotionEligibility !== "internal_only" ||
+    concern.externalSurfacingEligibility !== "audit_only" ||
+    concern.originType !== "compatibility_signal"
+  ) {
+    return false;
+  }
+
+  const negativeFlags = new Set(concern.negativeEvidenceFlags);
+  if (
+    !negativeFlags.has("missing_bridge_provenance") ||
+    negativeFlags.has("missing_policy_side_evidence") ||
+    negativeFlags.has("missing_runtime_anchor") ||
+    negativeFlags.has("missing_specific_runtime_artifact") ||
+    negativeFlags.has("boilerplate_policy_anchor") ||
+    negativeFlags.has("weak_policy_anchor")
+  ) {
+    return false;
+  }
+
+  const bundle = getContradictionEvidenceBundle(concern.evidenceBundle.rawEvidence);
+  if (!bundle) {
+    return false;
+  }
+
+  const policyAnchor = bundle.policyAnchor;
+  const runtimeAnchor = bundle.runtimeAnchor;
+  const concreteRuntimeAnchor =
+    runtimeAnchor.requests.length > 0 ||
+    runtimeAnchor.cookies.length > 0 ||
+    runtimeAnchor.storageArtifacts.length > 0 ||
+    bundle.runtimeEvidenceArtifacts.some((artifact) => /^https?:\/\//i.test(artifact) || /^(cookie|storage):/i.test(artifact));
+
+  return (
+    Boolean(policyAnchor.claimType) &&
+    policyAnchor.extractionStatus === "fetched" &&
+    typeof policyAnchor.confidence === "number" &&
+    policyAnchor.confidence >= 0.55 &&
+    Boolean(policyAnchor.sourceUrl) &&
+    isSpecificPolicyBehaviorPolicySnippet(policyAnchor.snippet, policyAnchor.claimType) &&
+    Boolean(runtimeAnchor.observationType) &&
+    runtimeAnchor.phase !== "unknown" &&
+    typeof runtimeAnchor.confidence === "number" &&
+    runtimeAnchor.confidence >= 0.55 &&
+    concreteRuntimeAnchor
+  );
+}
+
 export function buildUnifiedFindingCandidatesFromConcerns(concerns: NormalizedConcern[]): ConcernBackedUnifiedFindingCandidate[] {
   return concerns
     .filter((concern) => {
@@ -1540,7 +1594,8 @@ export function buildUnifiedFindingCandidatesFromConcerns(concerns: NormalizedCo
       // unless the contradiction-grade concern gate already marked them promotion-eligible.
       if (
         concern.suggestedUnifiedFindingId === "policy_behavior_conflict" &&
-        concern.promotionEligibility !== "eligible"
+        concern.promotionEligibility !== "eligible" &&
+        !isPolicyBehaviorMissingBridgeReviewConcern(concern)
       ) {
         return false;
       }

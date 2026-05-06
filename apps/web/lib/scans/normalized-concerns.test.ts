@@ -41,6 +41,49 @@ function makeValidationFinding(
   };
 }
 
+function makeMissingBridgePolicyRuntimeEvidence(runtimeOverride: Record<string, unknown> = {}) {
+  return {
+    policyClaimCandidates: [
+      {
+        id: "policy_claim:only_necessary_cookies_before_choice:snippet-1",
+        claimType: "only_necessary_cookies_before_choice",
+        sourceUrl: "https://example.com/privacy",
+        documentType: "privacy_policy",
+        extractionStatus: "fetched",
+        snippet:
+          "We use optional analytics and advertising cookies only after you make a cookie choice, and you can control or reject non-essential cookies in our preference center.",
+        snippetHash: "snippet-1",
+        sectionPath: "Cookies and tracking",
+        headingPath: "Cookies and tracking",
+        charStart: 42,
+        charEnd: 210,
+        confidence: 0.91,
+        extractedBy: "ws01.policy_extractor",
+        extractionVersion: "ws01-policy-runtime:v1"
+      }
+    ],
+    runtimeBehaviorArtifacts: [
+      {
+        id: "runtime_artifact:request:pre_consent:request-1",
+        artifactType: "request",
+        phase: "pre_consent",
+        url: "https://analytics.example.net/collect?id=abc",
+        host: "analytics.example.net",
+        vendor: "Example Analytics",
+        cookieName: null,
+        storageKey: null,
+        timestampMs: 880,
+        cmpVisibleMs: 1400,
+        consentActionObserved: false,
+        confidence: 0.9,
+        sourceArtifactRef: "sanitized_network_evidence:request-1",
+        ...runtimeOverride
+      }
+    ],
+    policyRuntimeBridgeCandidates: []
+  };
+}
+
 test("normalizes snapshot signal candidates into eligible concerns", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [
@@ -946,6 +989,99 @@ test("non-eligible policy behavior conflicts do not assemble into unified findin
 
   const candidates = buildUnifiedFindingCandidatesFromConcerns(concerns);
   assert.equal(candidates.length, 0);
+});
+
+test("policy behavior candidates with strong anchors but missing bridge assemble as audit-only concerns", () => {
+  const fallbackEvidence = makeMissingBridgePolicyRuntimeEvidence();
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [
+      {
+        description: "WS01 retained policy and runtime anchors but no bridge provenance.",
+        fallbackEvidence: {
+          ...fallbackEvidence,
+          unifiedFindingId: "policy_behavior_conflict"
+        },
+        observedValue: "Candidate missing stable bridge provenance",
+        severity: "high",
+        signalKey: "context.policy_behavior_conflict_detected",
+        signalLabel: "Policy/behavior conflict detected",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "Policy/behavior conflict detected"
+      }
+    ],
+    validationFindings: []
+  });
+
+  assert.equal(concerns[0]?.suggestedUnifiedFindingId, "policy_behavior_conflict");
+  assert.equal(concerns[0]?.promotionEligibility, "internal_only");
+  assert.equal(concerns[0]?.externalSurfacingEligibility, "audit_only");
+  assert.ok(concerns[0]?.negativeEvidenceFlags.includes("missing_bridge_provenance"));
+  assert.ok(!concerns[0]?.negativeEvidenceFlags.includes("missing_policy_side_evidence"));
+  assert.ok(!concerns[0]?.negativeEvidenceFlags.includes("missing_runtime_anchor"));
+
+  const candidates = buildUnifiedFindingCandidatesFromConcerns(concerns);
+  assert.equal(candidates.length, 1);
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "WS01 retained policy and runtime anchors but no bridge provenance.",
+        fallbackEvidence: {
+          ...fallbackEvidence,
+          unifiedFindingId: "policy_behavior_conflict"
+        },
+        observedValue: "Candidate missing stable bridge provenance",
+        severity: "high",
+        signalKey: "context.policy_behavior_conflict_detected",
+        signalLabel: "Policy/behavior conflict detected",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "Policy/behavior conflict detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+  const packet = packets.find((entry) => entry.unifiedFindingId === "policy_behavior_conflict");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), false);
+
+  const executive = projectExecutiveFindingsFromUnifiedPackets(packets);
+  assert.equal(executive.findings.some((finding) => finding.id === "policy_behavior_contradiction_detected"), false);
+});
+
+test("policy behavior missing-bridge lane does not assemble from vendor-only runtime anchors", () => {
+  const fallbackEvidence = makeMissingBridgePolicyRuntimeEvidence({
+    artifactType: "vendor",
+    url: null,
+    host: null,
+    cookieName: null,
+    storageKey: null
+  });
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [
+      {
+        description: "WS01 retained a policy anchor and a bare runtime vendor name.",
+        fallbackEvidence: {
+          ...fallbackEvidence,
+          unifiedFindingId: "policy_behavior_conflict"
+        },
+        observedValue: "Vendor only",
+        severity: "high",
+        signalKey: "context.policy_behavior_conflict_detected",
+        signalLabel: "Policy/behavior conflict detected",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "Policy/behavior conflict detected"
+      }
+    ],
+    validationFindings: []
+  });
+
+  assert.equal(concerns[0]?.suggestedUnifiedFindingId, "policy_behavior_conflict");
+  assert.equal(concerns[0]?.promotionEligibility, "internal_only");
+  assert.equal(buildUnifiedFindingCandidatesFromConcerns(concerns).length, 0);
 });
 
 test("multiple concern origins still collapse into one canonical unified finding", () => {

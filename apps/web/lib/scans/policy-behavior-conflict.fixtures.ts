@@ -24,7 +24,19 @@ export const POLICY_BEHAVIOR_CONFLICT_FIXTURES = {
       conflictBridge: {
         conflictType: "declared_opt_out_honored_but_tracking_persisted_under_opt_out",
         reasoning: "The policy says GPC is honored, but tracking still persisted in a GPC-enabled session.",
-        supportsPromotion: true
+        supportsPromotion: true,
+        provenance: {
+          bridgeRuleId: "policy_behavior_contradiction:gpc_honored:gpc_signal_not_honored",
+          generatedBy: "wc01.test_fixture",
+          mappingType: "deterministic_policy_runtime_mapping",
+          mappingVersion: "policy_behavior_conflict_map:v1",
+          policyAnchorRef: "https://www.example.com/privacy",
+          runtimeAnchorRef: "https://www.facebook.com/tr?id=123&ev=PageView",
+          sourceEvidenceIds: [
+            "https://www.example.com/privacy",
+            "https://www.facebook.com/tr?id=123&ev=PageView"
+          ]
+        }
       },
       evidenceSufficiency: {
         policyAnchorPresent: true,
@@ -63,7 +75,19 @@ export const POLICY_BEHAVIOR_CONFLICT_FIXTURES = {
       conflictBridge: {
         conflictType: "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired",
         reasoning: "The policy restricts pre-choice cookies to necessary ones, but a marketing vendor fired before consent.",
-        supportsPromotion: true
+        supportsPromotion: true,
+        provenance: {
+          bridgeRuleId: "policy_behavior_contradiction:only_necessary_cookies_before_choice:marketing_vendor_fired_pre_consent",
+          generatedBy: "wc01.test_fixture",
+          mappingType: "deterministic_policy_runtime_mapping",
+          mappingVersion: "policy_behavior_conflict_map:v1",
+          policyAnchorRef: "https://www.example.com/privacy",
+          runtimeAnchorRef: "https://pagead2.googlesyndication.com/pagead/viewthroughconversion/123",
+          sourceEvidenceIds: [
+            "https://www.example.com/privacy",
+            "https://pagead2.googlesyndication.com/pagead/viewthroughconversion/123"
+          ]
+        }
       },
       evidenceSufficiency: {
         policyAnchorPresent: true,
@@ -101,7 +125,19 @@ export const POLICY_BEHAVIOR_CONFLICT_FIXTURES = {
       conflictBridge: {
         conflictType: "declared_tracking_disabled_after_reject_but_tracking_persisted_after_reject",
         reasoning: "The policy says tracking stops after reject, but analytics traffic continued after reject.",
-        supportsPromotion: true
+        supportsPromotion: true,
+        provenance: {
+          bridgeRuleId: "policy_behavior_contradiction:tracking_disabled_after_reject:tracking_persisted_after_reject",
+          generatedBy: "wc01.test_fixture",
+          mappingType: "deterministic_policy_runtime_mapping",
+          mappingVersion: "policy_behavior_conflict_map:v1",
+          policyAnchorRef: "https://www.example.com/privacy",
+          runtimeAnchorRef: "https://metrics.example-analytics.com/b/ss/example",
+          sourceEvidenceIds: [
+            "https://www.example.com/privacy",
+            "https://metrics.example-analytics.com/b/ss/example"
+          ]
+        }
       },
       evidenceSufficiency: {
         policyAnchorPresent: true,
