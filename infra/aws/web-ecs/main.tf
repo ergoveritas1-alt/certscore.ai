@@ -378,7 +378,21 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           "ecs:DescribeTaskDefinition",
           "ecs:DescribeTasks",
           "ecs:ListTasks",
+          "ecs:RunTask",
           "ecs:UpdateService"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["iam:PassRole"]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:DescribeLogStreams",
+          "logs:GetLogEvents"
         ]
         Resource = "*"
       }

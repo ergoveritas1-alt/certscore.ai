@@ -24,12 +24,21 @@ jobs:
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_SCANNER_ECS_CLUSTER: ${{ vars.AWS_SCANNER_ECS_CLUSTER }}
       AWS_SCANNER_ECS_SERVICE: ${{ vars.AWS_SCANNER_ECS_SERVICE }}
+      AWS_VALIDATION_ECS_CLUSTER: ${{ vars.AWS_VALIDATION_ECS_CLUSTER }}
+      AWS_VALIDATION_ECS_SCHEDULER_SERVICE: ${{ vars.AWS_VALIDATION_ECS_SCHEDULER_SERVICE }}
+      AWS_VALIDATION_ECS_WEB_SERVICE: ${{ vars.AWS_VALIDATION_ECS_WEB_SERVICE }}
+      AWS_VALIDATION_ECS_WORKER_SERVICE: ${{ vars.AWS_VALIDATION_ECS_WORKER_SERVICE }}
+      AWS_WEB_CERTSCORE_SERVICE: ${{ vars.AWS_WEB_CERTSCORE_SERVICE }}
+      AWS_WEB_ECS_CLUSTER: ${{ vars.AWS_WEB_ECS_CLUSTER }}
       DATABASE_URL: ${{ secrets.PROD_DATABASE_URL || secrets.DATABASE_URL }}
       FEEDBACK_TO_EMAIL: ${{ secrets.FEEDBACK_TO_EMAIL }}
       GMAIL_SMTP_APP_PASSWORD: ${{ secrets.GMAIL_SMTP_APP_PASSWORD }}
       GMAIL_SMTP_USER: ${{ secrets.GMAIL_SMTP_USER }}
       OPS_ALERT_ENVIRONMENT: production
       OPS_ALERT_TO_EMAIL: ${{ secrets.OPS_ALERT_TO_EMAIL || secrets.FEEDBACK_TO_EMAIL }}
+      OPS_AWS_DB_PROBE_ENABLED: ${{ vars.OPS_AWS_DB_PROBE_ENABLED || 'false' }}
+      OPS_AWS_MONITOR_ECS_CLUSTER: ${{ vars.OPS_AWS_MONITOR_ECS_CLUSTER || vars.AWS_VALIDATION_ECS_CLUSTER }}
+      OPS_AWS_MONITOR_ECS_SERVICE: ${{ vars.OPS_AWS_MONITOR_ECS_SERVICE || vars.AWS_VALIDATION_ECS_WORKER_SERVICE }}
       OPS_BASE_URL: ${{ vars.AWS_WEB_CERTSCORE_BASE_URL || 'https://certscore.ai' }}
       OPS_REQUIRE_DIRECT_DATABASE: ${{ vars.OPS_REQUIRE_DIRECT_DATABASE || 'false' }}
       OPS_REQUIRE_SCANNER_HEARTBEAT: ${{ vars.OPS_REQUIRE_SCANNER_HEARTBEAT || 'true' }}
@@ -55,6 +64,11 @@ jobs:
             test -n "${AWS_SCANNER_ECS_CLUSTER}" || (echo "Missing var AWS_SCANNER_ECS_CLUSTER" && exit 1)
             test -n "${AWS_SCANNER_ECS_SERVICE}" || (echo "Missing var AWS_SCANNER_ECS_SERVICE" && exit 1)
           fi
+          if [ "${OPS_AWS_DB_PROBE_ENABLED}" = "true" ]; then
+            test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing secret AWS_ROLE_TO_ASSUME" && exit 1)
+            test -n "${OPS_AWS_MONITOR_ECS_CLUSTER}" || (echo "Missing var OPS_AWS_MONITOR_ECS_CLUSTER or AWS_VALIDATION_ECS_CLUSTER" && exit 1)
+            test -n "${OPS_AWS_MONITOR_ECS_SERVICE}" || (echo "Missing var OPS_AWS_MONITOR_ECS_SERVICE or AWS_VALIDATION_ECS_WORKER_SERVICE" && exit 1)
+          fi
           if [ -n "${DATABASE_URL}" ]; then
             case "${DATABASE_URL}" in
               *localhost*|*127.0.0.1*|*"[::1]"*|*"@::1"*)
@@ -65,7 +79,7 @@ jobs:
           fi
 
       - name: Configure AWS credentials
-        if: ${{ env.OPS_REQUIRE_DIRECT_DATABASE == 'true' && env.OPS_WAKE_SCANNER_ON_QUEUE == 'true' }}
+        if: ${{ env.OPS_AWS_DB_PROBE_ENABLED == 'true' || env.AWS_WEB_ECS_CLUSTER != '' || env.AWS_VALIDATION_ECS_CLUSTER != '' || (env.OPS_REQUIRE_DIRECT_DATABASE == 'true' && env.OPS_WAKE_SCANNER_ON_QUEUE == 'true') }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
@@ -87,3 +101,7 @@ jobs:
 
       - name: Run production monitor
         run: pnpm ops:monitor:prod
+
+      - name: Run AWS-side database and worker probe
+        if: ${{ env.OPS_AWS_DB_PROBE_ENABLED == 'true' }}
+        run: pnpm ops:monitor:prod:aws

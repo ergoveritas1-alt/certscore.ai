@@ -496,6 +496,22 @@ resource "aws_iam_role_policy" "task_exec" {
   })
 }
 
+resource "aws_iam_role_policy" "task_ops_monitor" {
+  name = "${local.prefix}-ecs-ops-monitor"
+  role = aws_iam_role.task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ecs:UpdateService"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 resource "aws_iam_openid_connect_provider" "github_actions" {
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
@@ -568,7 +584,24 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           "ecs:DescribeTaskDefinition",
           "ecs:DescribeTasks",
           "ecs:ListTasks",
+          "ecs:RunTask",
           "ecs:UpdateService"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = ["iam:PassRole"]
+        Resource = [
+          aws_iam_role.execution.arn,
+          aws_iam_role.task.arn
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:DescribeLogStreams",
+          "logs:GetLogEvents"
         ]
         Resource = "*"
       }

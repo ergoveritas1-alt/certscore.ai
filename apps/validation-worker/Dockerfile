@@ -15,7 +15,7 @@ ENV BUILD_IMAGE_TAG="${BUILD_IMAGE_TAG}"
 ENV BUILD_RUNTIME_TARGET="${BUILD_RUNTIME_TARGET}"
 
 RUN corepack enable
-RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends awscli procps && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

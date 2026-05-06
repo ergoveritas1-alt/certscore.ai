@@ -12,6 +12,13 @@ const DEFAULT_SYNTHETIC_SCAN_TIMEOUT_MINUTES = 15;
 const VALIDATION_SETTINGS_KEY = "default";
 const execFileAsync = promisify(execFile);
 
+type SectionState = "ok" | "skipped" | "failing";
+
+type MonitorSection = {
+  details: string[];
+  status: SectionState;
+};
+
 type ValidationSettingsRow = {
   last_worker_heartbeat_at: string | null;
   last_worker_host: string | null;
@@ -47,6 +54,28 @@ type ScannerServiceHeartbeatSnapshot = {
   host: string | null;
   lastHeartbeatAt: string | null;
 };
+
+function createSections() {
+  return {
+    publicWeb: { details: [], status: "ok" },
+    ecsServices: { details: [], status: "skipped" },
+    databaseAndBacklog: { details: [], status: "skipped" },
+    workerHeartbeats: { details: [], status: "skipped" },
+    scannerQueueCanary: { details: [], status: "skipped" }
+  } satisfies Record<string, MonitorSection>;
+}
+
+function markSection(section: MonitorSection, status: SectionState, detail: string) {
+  if (status === "failing" || (status === "ok" && section.status !== "failing") || (status === "skipped" && section.status === "skipped")) {
+    section.status = status;
+  }
+  section.details.push(detail);
+}
+
+function addFinding(input: { findings: string[]; section: MonitorSection; message: string }) {
+  input.findings.push(input.message);
+  markSection(input.section, "failing", input.message);
+}
 
 function getBooleanEnv(name: string, defaultValue: boolean) {
   const value = process.env[name]?.trim().toLowerCase();
@@ -200,6 +229,7 @@ async function sendAlertEmail(subject: string, lines: string[]) {
 async function checkHttpEndpoint(input: {
   findings: string[];
   label: string;
+  section: MonitorSection;
   timeoutMs?: number;
   url: string;
   validateJson?: (value: unknown) => string | null;
@@ -218,31 +248,168 @@ async function checkHttpEndpoint(input: {
     });
 
     if (!response.ok) {
-      input.findings.push(`${input.label} returned HTTP ${response.status}.`);
+      addFinding({
+        findings: input.findings,
+        section: input.section,
+        message: `${input.label} returned HTTP ${response.status}.`
+      });
       return;
     }
 
     if (input.validateJson) {
       const payload = await response.json().catch((error) => {
-        input.findings.push(`${input.label} did not return valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+        addFinding({
+          findings: input.findings,
+          section: input.section,
+          message: `${input.label} did not return valid JSON: ${error instanceof Error ? error.message : String(error)}`
+        });
         return null;
       });
 
       if (payload !== null) {
         const validationError = input.validateJson(payload);
         if (validationError) {
-          input.findings.push(`${input.label} failed validation: ${validationError}`);
+          addFinding({
+            findings: input.findings,
+            section: input.section,
+            message: `${input.label} failed validation: ${validationError}`
+          });
         }
       }
     }
+
+    if (!input.findings.some((finding) => finding.startsWith(`${input.label} `))) {
+      markSection(input.section, "ok", `${input.label} returned healthy.`);
+    }
   } catch (error) {
-    input.findings.push(`${input.label} request failed: ${error instanceof Error ? error.message : String(error)}`);
+    addFinding({
+      findings: input.findings,
+      section: input.section,
+      message: `${input.label} request failed: ${error instanceof Error ? error.message : String(error)}`
+    });
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function checkQueuedScanBacklog(input: { findings: string[]; staleMinutes: number }) {
+function getEcsServiceTargets() {
+  const explicitTargets = (process.env.OPS_ECS_SERVICE_TARGETS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (explicitTargets.length > 0) {
+    return explicitTargets;
+  }
+
+  return [
+    process.env.AWS_WEB_ECS_CLUSTER && process.env.AWS_WEB_CERTSCORE_SERVICE
+      ? `${process.env.AWS_WEB_ECS_CLUSTER}/${process.env.AWS_WEB_CERTSCORE_SERVICE}`
+      : null,
+    process.env.AWS_VALIDATION_ECS_CLUSTER && process.env.AWS_VALIDATION_ECS_WEB_SERVICE
+      ? `${process.env.AWS_VALIDATION_ECS_CLUSTER}/${process.env.AWS_VALIDATION_ECS_WEB_SERVICE}`
+      : null,
+    process.env.AWS_VALIDATION_ECS_CLUSTER && process.env.AWS_VALIDATION_ECS_WORKER_SERVICE
+      ? `${process.env.AWS_VALIDATION_ECS_CLUSTER}/${process.env.AWS_VALIDATION_ECS_WORKER_SERVICE}`
+      : null,
+    process.env.AWS_VALIDATION_ECS_CLUSTER && process.env.AWS_VALIDATION_ECS_SCHEDULER_SERVICE
+      ? `${process.env.AWS_VALIDATION_ECS_CLUSTER}/${process.env.AWS_VALIDATION_ECS_SCHEDULER_SERVICE}`
+      : null,
+    process.env.AWS_SCANNER_ECS_CLUSTER && process.env.AWS_SCANNER_ECS_SERVICE
+      ? `${process.env.AWS_SCANNER_ECS_CLUSTER}/${process.env.AWS_SCANNER_ECS_SERVICE}`
+      : null
+  ].filter((target): target is string => Boolean(target));
+}
+
+async function checkEcsServices(input: { findings: string[]; section: MonitorSection }) {
+  const targets = getEcsServiceTargets();
+
+  if (targets.length === 0) {
+    markSection(input.section, "skipped", "No ECS service targets configured.");
+    return;
+  }
+
+  const region = process.env.AWS_REGION?.trim() || "us-west-1";
+  let checkedCount = 0;
+
+  for (const target of targets) {
+    const [cluster, service] = target.split("/");
+
+    if (!cluster || !service) {
+      addFinding({
+        findings: input.findings,
+        section: input.section,
+        message: `Invalid ECS service target ${target}; expected cluster/service.`
+      });
+      continue;
+    }
+
+    try {
+      const { stdout } = await execFileAsync("aws", [
+        "ecs",
+        "describe-services",
+        "--region",
+        region,
+        "--cluster",
+        cluster,
+        "--services",
+        service,
+        "--output",
+        "json"
+      ]);
+      const payload = JSON.parse(stdout) as {
+        failures?: { arn?: string; reason?: string }[];
+        services?: {
+          desiredCount?: number;
+          deployments?: { rolloutState?: string; rolloutStateReason?: string }[];
+          pendingCount?: number;
+          runningCount?: number;
+          serviceName?: string;
+          status?: string;
+        }[];
+      };
+      const describedService = payload.services?.[0];
+      const failure = payload.failures?.[0];
+
+      if (!describedService) {
+        addFinding({
+          findings: input.findings,
+          section: input.section,
+          message: `ECS service ${target} was not described${failure?.reason ? `: ${failure.reason}` : "."}`
+        });
+        continue;
+      }
+
+      checkedCount += 1;
+      const rollout = describedService.deployments?.[0];
+      const desired = describedService.desiredCount ?? 0;
+      const running = describedService.runningCount ?? 0;
+      const pending = describedService.pendingCount ?? 0;
+
+      if (describedService.status !== "ACTIVE" || running < desired || pending > 0 || rollout?.rolloutState === "FAILED") {
+        addFinding({
+          findings: input.findings,
+          section: input.section,
+          message: `ECS service ${target} unhealthy: status ${describedService.status ?? "unknown"}, desired ${desired}, running ${running}, pending ${pending}, rollout ${rollout?.rolloutState ?? "unknown"}.`
+        });
+      } else {
+        markSection(input.section, "ok", `ECS service ${target} is steady (${running}/${desired} running).`);
+      }
+    } catch (error) {
+      addFinding({
+        findings: input.findings,
+        section: input.section,
+        message: `ECS service ${target} check failed: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+  }
+
+  if (checkedCount === 0 && input.section.status !== "failing") {
+    markSection(input.section, "skipped", "No ECS services were checked.");
+  }
+}
+
+async function checkQueuedScanBacklog(input: { findings: string[]; section: MonitorSection; staleMinutes: number }) {
   const backlog = await queryOne<QueuedScanBacklogRow>(
     `
       select
@@ -258,16 +425,24 @@ async function checkQueuedScanBacklog(input: { findings: string[]; staleMinutes:
   );
 
   if (!backlog) {
-    input.findings.push("Queued full-scan backlog query returned no row.");
+    addFinding({
+      findings: input.findings,
+      section: input.section,
+      message: "Queued full-scan backlog query returned no row."
+    });
     return;
   }
 
   if (backlog.stale_queued_count > 0) {
-    input.findings.push(
-      `${backlog.stale_queued_count} full scan(s) have been queued longer than ${input.staleMinutes}m; oldest queued at ${
+    addFinding({
+      findings: input.findings,
+      section: input.section,
+      message: `${backlog.stale_queued_count} full scan(s) have been queued longer than ${input.staleMinutes}m; oldest queued at ${
         backlog.oldest_queued_at ?? "unknown"
       }.`
-    );
+    });
+  } else {
+    markSection(input.section, "ok", `Queued full-scan backlog is clear (${backlog.queued_count} queued).`);
   }
 
   return backlog;
@@ -354,7 +529,7 @@ async function waitForSyntheticScan(input: { scanId: string; timeoutMinutes: num
   throw new Error(`Synthetic scan ${input.scanId} did not complete within ${input.timeoutMinutes}m.`);
 }
 
-async function runSyntheticScanCheck(input: { baseUrl: string; domain: string; findings: string[]; timeoutMinutes: number }) {
+async function runSyntheticScanCheck(input: { baseUrl: string; domain: string; findings: string[]; section: MonitorSection; timeoutMinutes: number }) {
   try {
     const scanId = await queueSyntheticScan({ baseUrl: input.baseUrl, domain: input.domain });
     await wakeScannerCapacity({
@@ -363,8 +538,46 @@ async function runSyntheticScanCheck(input: { baseUrl: string; domain: string; f
     });
     await waitForSyntheticScan({ scanId, timeoutMinutes: input.timeoutMinutes });
   } catch (error) {
-    input.findings.push(`Synthetic homepage scan failed: ${error instanceof Error ? error.message : String(error)}`);
+    addFinding({
+      findings: input.findings,
+      section: input.section,
+      message: `Synthetic homepage scan failed: ${error instanceof Error ? error.message : String(error)}`
+    });
   }
+}
+
+function summarizeForHumans(input: {
+  baseUrl: string;
+  directDatabaseChecksEnabled: boolean;
+  environment: string;
+  queuedFullScans: number | null;
+  sections: ReturnType<typeof createSections>;
+  status: SectionState;
+  syntheticScanEnabled: boolean;
+  validationHeartbeatAt: string | null;
+}) {
+  return {
+    environment: input.environment,
+    baseUrl: input.baseUrl,
+    status: input.status,
+    answer: {
+      canUsersUseTheApp: input.sections.publicWeb.status === "ok",
+      areScansBeingPickedUp:
+        input.directDatabaseChecksEnabled && input.sections.scannerQueueCanary.status !== "skipped"
+          ? input.sections.scannerQueueCanary.status === "ok"
+          : null,
+      areWorkersAlive:
+        input.directDatabaseChecksEnabled && input.sections.workerHeartbeats.status !== "skipped"
+          ? input.sections.workerHeartbeats.status === "ok"
+          : null,
+      isAnythingStale: input.status === "failing"
+    },
+    sections: input.sections,
+    directDatabaseChecksEnabled: input.directDatabaseChecksEnabled,
+    queuedFullScans: input.queuedFullScans,
+    syntheticScanEnabled: input.syntheticScanEnabled,
+    validationHeartbeatAt: input.validationHeartbeatAt
+  };
 }
 
 async function main() {
@@ -384,6 +597,7 @@ async function main() {
   const syntheticScanTimeoutMinutes = getNumberEnv("OPS_SYNTHETIC_SCAN_TIMEOUT_MINUTES", DEFAULT_SYNTHETIC_SCAN_TIMEOUT_MINUTES);
   const staleThresholdMs = staleMinutes * 60_000;
   const findings: string[] = [];
+  const sections = createSections();
   if (databaseUrl) {
     process.env.DATABASE_URL = databaseUrl;
   }
@@ -391,6 +605,7 @@ async function main() {
   await checkHttpEndpoint({
     findings,
     label: "Web health",
+    section: sections.publicWeb,
     url: new URL("/api/health", baseUrl).toString(),
     validateJson: (value) => {
       const status = (value as { status?: unknown } | null)?.status;
@@ -401,6 +616,7 @@ async function main() {
   await checkHttpEndpoint({
     findings,
     label: "Database health",
+    section: sections.publicWeb,
     url: new URL("/api/health/database", baseUrl).toString(),
     validateJson: (value) => {
       const ok = (value as { ok?: unknown } | null)?.ok;
@@ -411,7 +627,16 @@ async function main() {
   let validationSettings: ValidationSettingsRow | null = null;
   let scanBacklog: QueuedScanBacklogRow | null = null;
 
+  await checkEcsServices({
+    findings,
+    section: sections.ecsServices
+  });
+
   if (requireDirectDatabase) {
+    markSection(sections.databaseAndBacklog, "ok", "Direct database checks are enabled.");
+    markSection(sections.workerHeartbeats, "ok", "Worker heartbeat checks are enabled.");
+    markSection(sections.scannerQueueCanary, "ok", "Scanner queue checks are enabled.");
+
     try {
       validationSettings = await queryOne<ValidationSettingsRow>(
         `
@@ -423,50 +648,107 @@ async function main() {
         { readOnly: true }
       );
     } catch (error) {
-      findings.push(`Validation settings query failed: ${error instanceof Error ? error.message : String(error)}`);
+      addFinding({
+        findings,
+        section: sections.workerHeartbeats,
+        message: `Validation settings query failed: ${error instanceof Error ? error.message : String(error)}`
+      });
     }
 
     if (!validationSettings) {
-      findings.push("Validation settings row is missing.");
+      addFinding({
+        findings,
+        section: sections.workerHeartbeats,
+        message: "Validation settings row is missing."
+      });
     } else if (validationSettings.pipeline_enabled && requireValidationHeartbeat) {
       if (!validationSettings.last_worker_heartbeat_at) {
-        findings.push("Validation worker heartbeat is missing.");
+        addFinding({
+          findings,
+          section: sections.workerHeartbeats,
+          message: "Validation worker heartbeat is missing."
+        });
       } else {
         const heartbeatAgeMs = Date.now() - new Date(validationSettings.last_worker_heartbeat_at).getTime();
         if (heartbeatAgeMs > staleThresholdMs) {
-          findings.push(
-            `Validation worker heartbeat is stale (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${validationSettings.last_worker_host ?? "unknown"}).`
+          addFinding({
+            findings,
+            section: sections.workerHeartbeats,
+            message: `Validation worker heartbeat is stale (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${validationSettings.last_worker_host ?? "unknown"}).`
+          });
+        } else {
+          markSection(
+            sections.workerHeartbeats,
+            "ok",
+            `Validation worker heartbeat is fresh (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${validationSettings.last_worker_host ?? "unknown"}).`
           );
         }
       }
+    } else if (!requireValidationHeartbeat) {
+      markSection(sections.workerHeartbeats, "skipped", "Validation heartbeat freshness is disabled.");
+    } else {
+      markSection(sections.workerHeartbeats, "skipped", "Validation pipeline is disabled.");
     }
 
     if (requireScannerHeartbeat) {
       const scannerHeartbeat = await getLastScannerServiceHeartbeat();
 
       if (scannerHeartbeat.errorMessage) {
-        findings.push(scannerHeartbeat.errorMessage);
+        addFinding({
+          findings,
+          section: sections.workerHeartbeats,
+          message: scannerHeartbeat.errorMessage
+        });
       } else if (!scannerHeartbeat.lastHeartbeatAt) {
-        findings.push("Scanner service heartbeat is missing.");
+        addFinding({
+          findings,
+          section: sections.workerHeartbeats,
+          message: "Scanner service heartbeat is missing."
+        });
       } else {
         const heartbeatAgeMs = Date.now() - new Date(scannerHeartbeat.lastHeartbeatAt).getTime();
         if (heartbeatAgeMs > staleThresholdMs) {
-          findings.push(
-            `Scanner service heartbeat is stale (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${scannerHeartbeat.host ?? "unknown"}).`
+          addFinding({
+            findings,
+            section: sections.workerHeartbeats,
+            message: `Scanner service heartbeat is stale (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${scannerHeartbeat.host ?? "unknown"}).`
+          });
+        } else {
+          markSection(
+            sections.workerHeartbeats,
+            "ok",
+            `Scanner service heartbeat is fresh (${Math.round(heartbeatAgeMs / 60_000)}m old, host ${scannerHeartbeat.host ?? "unknown"}).`
           );
         }
       }
+    } else {
+      markSection(sections.workerHeartbeats, "skipped", "Scanner heartbeat freshness is disabled.");
     }
 
     scanBacklog = await checkQueuedScanBacklog({
       findings,
+      section: sections.scannerQueueCanary,
       staleMinutes: scanQueueStaleMinutes
     }).catch((error) => {
-      findings.push(`Queued full-scan backlog query failed: ${error instanceof Error ? error.message : String(error)}`);
+      addFinding({
+        findings,
+        section: sections.scannerQueueCanary,
+        message: `Queued full-scan backlog query failed: ${error instanceof Error ? error.message : String(error)}`
+      });
       return null;
     });
   } else if (syntheticScanEnabled) {
-    findings.push("Synthetic scan canary requires OPS_REQUIRE_DIRECT_DATABASE=true so the monitor can wait for scan completion.");
+    markSection(sections.databaseAndBacklog, "skipped", "Direct database checks are disabled.");
+    markSection(sections.workerHeartbeats, "skipped", "Direct database checks are disabled.");
+    addFinding({
+      findings,
+      section: sections.scannerQueueCanary,
+      message: "Synthetic scan canary requires OPS_REQUIRE_DIRECT_DATABASE=true so the monitor can wait for scan completion."
+    });
+  } else {
+    markSection(sections.databaseAndBacklog, "skipped", "Direct database checks are disabled.");
+    markSection(sections.workerHeartbeats, "skipped", "Direct database checks are disabled.");
+    markSection(sections.scannerQueueCanary, "skipped", "Direct database checks are disabled.");
   }
 
   if (scanBacklog) {
@@ -481,26 +763,28 @@ async function main() {
       baseUrl,
       domain: syntheticScanDomain,
       findings,
+      section: sections.scannerQueueCanary,
       timeoutMinutes: syntheticScanTimeoutMinutes
     });
+    if (!findings.some((finding) => finding.startsWith("Synthetic homepage scan failed"))) {
+      markSection(sections.scannerQueueCanary, "ok", `Synthetic homepage scan completed for ${syntheticScanDomain}.`);
+    }
   }
 
+  const status: SectionState = findings.length === 0 ? "ok" : "failing";
+  const summary = summarizeForHumans({
+    baseUrl,
+    directDatabaseChecksEnabled: requireDirectDatabase,
+    environment,
+    queuedFullScans: scanBacklog?.queued_count ?? null,
+    sections,
+    status,
+    syntheticScanEnabled,
+    validationHeartbeatAt: validationSettings?.last_worker_heartbeat_at ?? null
+  });
+
   if (findings.length === 0) {
-    console.log(
-      JSON.stringify(
-        {
-          environment,
-          baseUrl,
-          directDatabaseChecksEnabled: requireDirectDatabase,
-          status: "ok",
-          queuedFullScans: scanBacklog?.queued_count ?? null,
-          syntheticScanEnabled,
-          validationHeartbeatAt: validationSettings?.last_worker_heartbeat_at ?? null
-        },
-        null,
-        2
-      )
-    );
+    console.log(JSON.stringify(summary, null, 2));
     return;
   }
 
@@ -513,6 +797,7 @@ async function main() {
   ];
 
   const sent = await sendAlertEmail(subject, lines);
+  console.error(JSON.stringify(summary, null, 2));
   console.error(lines.join("\n"));
 
   if (!sent) {

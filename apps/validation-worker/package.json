@@ -13,6 +13,7 @@
     "extract:financial-claims-drafts": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/extract-financial-claims-drafts.ts",
     "extract:privacy-runtime-drafts": "node --enable-source-maps --import tsx ./scripts/extract-privacy-runtime-drafts.ts",
     "inspect:signal-enrichment": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/inspect-signal-enrichment.ts",
+    "ops:prod-db-probe": "node --enable-source-maps ./dist/apps/validation-worker/scripts/prod-ops-db-probe.js",
     "summarize:signal-events": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/inspect-signal-enrichment.ts --events-only",
     "summarize:signal-enrichment": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/inspect-signal-enrichment.ts --summary",
     "score:financial-homepage-confidence": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/score-financial-homepage-confidence.ts",

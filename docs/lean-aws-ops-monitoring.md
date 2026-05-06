@@ -33,7 +33,7 @@ Run the production ops monitor on a schedule, for example every 5 minutes:
 pnpm ops:monitor:prod
 ```
 
-The checked-in GitHub Actions workflow `.github/workflows/prod-ops-monitor.yml` runs this every 5 minutes using production secrets.
+The checked-in GitHub Actions workflow `.github/workflows/prod-ops-monitor.yml` runs this every 5 minutes. It runs the public web/ECS monitor from GitHub, and can run the private database, worker-heartbeat, backlog, and synthetic-canary probe as a one-off ECS Fargate task inside the validation cluster network when `OPS_AWS_DB_PROBE_ENABLED=true`.
 
 Required environment:
 
@@ -55,18 +55,29 @@ OPS_WAKE_SCANNER_ON_QUEUE=true
 AWS_REGION=us-west-1
 AWS_SCANNER_ECS_CLUSTER=certscore-validation-cluster
 AWS_SCANNER_ECS_SERVICE=ws01-scanner-worker
+OPS_AWS_DB_PROBE_ENABLED=true
+OPS_AWS_MONITOR_ECS_CLUSTER=certscore-validation-cluster
+OPS_AWS_MONITOR_ECS_SERVICE=certscore-validation-worker
 ```
 
-`OPS_REQUIRE_DIRECT_DATABASE=false` is the default for the checked-in GitHub Actions monitor because the production Postgres instance is private to AWS networking. In that mode, the monitor still checks the public web process and public database health endpoint, but it skips direct database-only checks such as worker heartbeat rows, full-scan queue backlog, and synthetic scan completion polling. Set `OPS_REQUIRE_DIRECT_DATABASE=true` only from an environment that can reach the production database, such as an ECS-hosted monitor task or a trusted operator shell inside the VPC.
+`OPS_REQUIRE_DIRECT_DATABASE=false` is the default for the GitHub-hosted monitor because the production Postgres instance is private to AWS networking. In that mode, `pnpm ops:monitor:prod` still checks the public web process, public database health endpoint, and configured ECS services. With `OPS_AWS_DB_PROBE_ENABLED=true`, the workflow then runs `pnpm ops:monitor:prod:aws`, which launches `apps/validation-worker/scripts/prod-ops-db-probe.ts` in Fargate using the validation worker task definition, subnets, security groups, and production secrets. Set `OPS_REQUIRE_DIRECT_DATABASE=true` only from an environment that can reach the production database directly, such as the ECS-hosted probe or a trusted operator shell inside the VPC.
 
 The monitor checks:
 
 - `/api/health`
 - `/api/health/database`
+- configured ECS services from `OPS_ECS_SERVICE_TARGETS` or the `AWS_WEB_*`, `AWS_VALIDATION_*`, and `AWS_SCANNER_*` variables
 - validation worker heartbeat when direct database checks are enabled and validation heartbeat checks are not disabled
 - scanner heartbeat when direct database checks are enabled and scanner heartbeat checks are not disabled
 - queued full scans older than `OPS_SCAN_QUEUE_STALE_MINUTES` when direct database checks are enabled
 - wakes the scanner ECS service to desired count `1` when direct database checks are enabled, queued scans exist, and `OPS_WAKE_SCANNER_ON_QUEUE=true`
+
+The JSON output is intentionally sectioned so the first screen answers the operational questions directly:
+
+- can users use the app?
+- are scans being picked up?
+- are workers alive?
+- is anything stale?
 
 ## Synthetic homepage scan canary
 
