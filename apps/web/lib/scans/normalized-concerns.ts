@@ -749,6 +749,26 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
+    if (/runtimeHostInventory|runtime_host_inventory|runtimeHostInventoryContext/i.test(key) && Array.isArray(value)) {
+      const rows = getPlainRecordArray(value).slice(0, 20);
+      const compactRows = compactJsonRows(rows, 20);
+      addEntity(entities, "runtimeHostInventory", compactRows);
+      addEntity(
+        entities,
+        "runtimeHostInventoryHosts",
+        rows.flatMap((row) => getStringValue(row.host) ?? [])
+      );
+      addEntity(
+        entities,
+        "runtimeHostInventoryVendors",
+        rows.flatMap((row) => getStringValue(row.matchedVendorName ?? row.matched_vendor_name) ?? [])
+      );
+      if (compactRows.length > 0) {
+        runtimeArtifacts.add(`${compactRows.length} compact runtime host inventor${compactRows.length === 1 ? "y row" : "y rows"} retained as context.`);
+      }
+      continue;
+    }
+
     if (/fingerprint(?:ing)?RuntimeEvidence|fingerprint(?:ing)?_runtime_evidence/i.test(key) && Array.isArray(value)) {
       const compactRows = compactJsonRows(getPlainRecordArray(value));
       addEntity(entities, "fingerprintingRuntimeEvidence", compactRows);

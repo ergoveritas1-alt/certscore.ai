@@ -118,6 +118,48 @@ test("normalizes snapshot signal candidates into eligible concerns", () => {
   assert.ok(concerns[0]?.evidenceStrengthFlags.includes("fallback_only"));
 });
 
+test("retains runtime host inventory context without promoting inventory-only tracking", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [
+      {
+        description: "Runtime host inventory observed third-party adtech hosts, but no pre-consent sequence artifact was retained.",
+        fallbackEvidence: {
+          runtimeHostInventoryContext: [
+            {
+              cookieNamesSample: ["TDID"],
+              host: "match.adsrvr.org",
+              matchedSignatureId: "trade_desk",
+              matchedVendorCategory: "advertising",
+              matchedVendorName: "The Trade Desk",
+              samplePaths: ["/track/cmf"],
+              sampleQueryKeys: ["uid"],
+              sources: ["request", "cookie"]
+            }
+          ],
+          signalKey: "privacy.preconsent_tracking_detected"
+        },
+        observedValue: "Possible tracking host observed",
+        severity: "medium",
+        signalKey: "privacy.preconsent_tracking_detected",
+        signalLabel: "Pre-consent tracking detected",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "Pre-consent tracking detected"
+      } satisfies UnifiedFindingCandidate
+    ],
+    validationFindings: []
+  });
+
+  const [concern] = concerns;
+  assert.ok(concern);
+  assert.deepEqual(concern.evidenceBundle.entities.runtimeHostInventoryHosts, ["match.adsrvr.org"]);
+  assert.deepEqual(concern.evidenceBundle.entities.runtimeHostInventoryVendors, ["The Trade Desk"]);
+  assert.equal(concern.promotionEligibility, "internal_only");
+  assert.equal(concern.externalSurfacingEligibility, "audit_only");
+  assert.ok(concern.negativeEvidenceFlags.includes("missing_concrete_preconsent_artifact"));
+  assert.equal(buildUnifiedFindingCandidatesFromConcerns(concerns)[0]?.normalizedConcern.promotionEligibility, "internal_only");
+});
+
 test("retains fingerprinting runtime evidence through normalized concerns into executive projection", () => {
   const reviewFindingCandidate = {
     description: "Fingerprinting runtime detected",

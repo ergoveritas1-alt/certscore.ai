@@ -659,6 +659,54 @@ test("builds promotion evidence from legacy baseline tracker arrays when quality
   assert.deepEqual(merged?.requestPurposeClassificationConfidence, fallback?.requestPurposeClassificationConfidence);
 });
 
+test("uses runtime host inventory as fallback context without deriving pre-consent tracking", () => {
+  const runtimeArtifacts = {
+    hybrid_runtime_evidence: {
+      runtimeHostInventory: [
+        {
+          cookieCount: 1,
+          cookieNamesSample: ["TDID"],
+          etldPlusOne: "adsrvr.org",
+          firstPartyStatus: "third_party",
+          host: "match.adsrvr.org",
+          matchedSignatureId: "trade_desk",
+          matchedVendorCategory: "advertising",
+          matchedVendorName: "The Trade Desk",
+          requestCount: 3,
+          samplePaths: ["/track/cmf"],
+          sampleQueryKeys: ["uid"],
+          scriptCount: 0,
+          sources: ["request", "cookie"]
+        },
+        {
+          etldPlusOne: "example.com",
+          firstPartyStatus: "first_party",
+          host: "cdn.example.com",
+          requestCount: 2,
+          sources: ["request"]
+        },
+        {
+          etldPlusOne: "adsrvr.org",
+          firstPartyStatus: "third_party",
+          host: "js.adsrvr.org",
+          matchedSignatureId: "trade_desk",
+          matchedVendorCategory: "advertising",
+          matchedVendorName: "The Trade Desk",
+          scriptCount: 1,
+          sources: ["script"]
+        }
+      ]
+    }
+  } satisfies Record<string, unknown>;
+
+  const merged = withHybridRuntimeArtifactFallbacks(runtimeArtifacts);
+
+  assert.deepEqual(merged?.third_party_request_domains, ["match.adsrvr.org"]);
+  assert.deepEqual(merged?.initial_cookie_domains, ["match.adsrvr.org"]);
+  assert.deepEqual(merged?.script_src_domains, ["js.adsrvr.org"]);
+  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.preconsent_tracking_detected"), false);
+});
+
 test("retains pre-consent request URLs from vendor observations when banner timing is absent", () => {
   const runtimeArtifacts = {
     hybrid_runtime_evidence: {

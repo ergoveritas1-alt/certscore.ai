@@ -74,6 +74,53 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function getRuntimeHostInventoryRows(hybrid: Record<string, unknown> | null) {
+  return getObjectArray(hybrid?.runtimeHostInventory ?? hybrid?.runtime_host_inventory);
+}
+
+function getRuntimeHostInventoryThirdPartyRows(hybrid: Record<string, unknown> | null) {
+  return getRuntimeHostInventoryRows(hybrid).filter((row) => {
+    const host = getString(row.host);
+    const firstPartyStatus = getString(row.firstPartyStatus ?? row.first_party_status);
+    return Boolean(host && firstPartyStatus !== "first_party");
+  });
+}
+
+function getRuntimeHostInventorySources(row: Record<string, unknown>) {
+  return uniqueStrings([
+    ...getStringArray(row.sources),
+    ...getStringArray(row.source_types)
+  ]);
+}
+
+function getRuntimeHostInventoryHostsBySource(hybrid: Record<string, unknown> | null, sources: string[]) {
+  const sourceSet = new Set(sources);
+  return uniqueStrings(
+    getRuntimeHostInventoryThirdPartyRows(hybrid).flatMap((row) => {
+      const host = getString(row.host);
+      const rowSources = getRuntimeHostInventorySources(row);
+      return host && rowSources.some((source) => sourceSet.has(source)) ? [host] : [];
+    })
+  );
+}
+
+function getRuntimeHostInventoryContext(hybrid: Record<string, unknown> | null) {
+  return getRuntimeHostInventoryThirdPartyRows(hybrid)
+    .map((row) => ({
+      cookieNamesSample: getStringArray(row.cookieNamesSample ?? row.cookie_names_sample).slice(0, 5),
+      etldPlusOne: getString(row.etldPlusOne ?? row.etld_plus_one),
+      host: getString(row.host),
+      matchedSignatureId: getString(row.matchedSignatureId ?? row.matched_signature_id),
+      matchedVendorCategory: getString(row.matchedVendorCategory ?? row.matched_vendor_category),
+      matchedVendorName: getString(row.matchedVendorName ?? row.matched_vendor_name),
+      samplePaths: getStringArray(row.samplePaths ?? row.sample_paths).slice(0, 5),
+      sampleQueryKeys: getStringArray(row.sampleQueryKeys ?? row.sample_query_keys).slice(0, 8),
+      sources: getRuntimeHostInventorySources(row)
+    }))
+    .filter((row) => row.host)
+    .slice(0, 20);
+}
+
 function getEtldPlusOneFromHostname(hostname: string | null | undefined) {
   if (!hostname) {
     return null;
@@ -332,6 +379,9 @@ export function withHybridRuntimeArtifactFallbacks(runtimeArtifacts: Record<stri
   const storageSummary = getRecord(hybrid.storageSummary);
   const requestObservations = getObjectArray(hybrid.requestObservations);
   const cookieWriteObservations = getObjectArray(hybrid.cookieWriteObservations);
+  const runtimeInventoryRequestHosts = getRuntimeHostInventoryHostsBySource(hybrid, ["request", "redirect"]);
+  const runtimeInventoryScriptHosts = getRuntimeHostInventoryHostsBySource(hybrid, ["script"]);
+  const runtimeInventoryCookieHosts = getRuntimeHostInventoryHostsBySource(hybrid, ["cookie"]);
   const consentOutcomeSummary = getConsentOutcomeSummary(hybrid);
   const rejectCookieDiffProvenance =
     getRecord(runtimeArtifacts.consent_reject_cookie_diff_provenance) ??
@@ -345,6 +395,7 @@ export function withHybridRuntimeArtifactFallbacks(runtimeArtifacts: Record<stri
   const thirdPartyRequestDomains = uniqueStrings([
     ...getExistingArray(runtimeArtifacts, ["third_party_request_domains", "thirdPartyRequestDomains"]),
     ...getStringArray(vendorSummary?.rawThirdPartyDomains),
+    ...runtimeInventoryRequestHosts,
     ...requestObservations
       .filter((row) => row.thirdParty === true)
       .flatMap((row) => (typeof row.domain === "string" ? [row.domain] : []))
@@ -355,10 +406,12 @@ export function withHybridRuntimeArtifactFallbacks(runtimeArtifacts: Record<stri
   ]);
   const initialCookieDomains = uniqueStrings([
     ...getExistingArray(runtimeArtifacts, ["initial_cookie_domains", "initialCookieDomains"]),
+    ...runtimeInventoryCookieHosts,
     ...cookieWriteObservations.flatMap((row) => (typeof row.domain === "string" ? [row.domain] : []))
   ]);
   const scriptSrcDomains = uniqueStrings([
     ...getExistingArray(runtimeArtifacts, ["script_src_domains", "scriptSrcDomains"]),
+    ...runtimeInventoryScriptHosts,
     ...requestObservations
       .filter((row) => row.resourceType === "script")
       .flatMap((row) => (typeof row.domain === "string" ? [row.domain] : []))
@@ -1419,6 +1472,7 @@ export function getHybridSignalFallbackEvidence(input: {
         preconsent_tracker_evidence_urls: preconsentRequestUrls,
         preconsent_tracker_vendor_evidence: getPreconsentVendorEvidenceRows(hybrid),
         preconsent_tracker_vendors: preconsentVendors,
+        runtimeHostInventoryContext: getRuntimeHostInventoryContext(hybrid),
         preconsent_tracking_detected: true,
         requestUrls: preconsentRequestUrls,
         runtimeEvidenceUrls: preconsentRequestUrls,
