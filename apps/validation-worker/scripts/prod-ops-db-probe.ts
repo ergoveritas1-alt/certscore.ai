@@ -10,7 +10,7 @@ const DEFAULT_SYNTHETIC_SCAN_TIMEOUT_MINUTES = 15;
 const VALIDATION_SETTINGS_KEY = "default";
 const execFileAsync = promisify(execFile);
 
-type SectionState = "ok" | "skipped" | "failing";
+type SectionState = "ok" | "skipped" | "under_load" | "failing";
 
 type Section = {
   details: string[];
@@ -27,6 +27,16 @@ type QueuedScanBacklogRow = {
   oldest_queued_at: string | null;
   queued_count: number;
   stale_queued_count: number;
+};
+
+type QueueSnapshotRow = {
+  created_at: string | null;
+  metadata_json: unknown;
+};
+
+type ScannerEcsState = {
+  detail: string;
+  isRunning: boolean;
 };
 
 type ScannerHeartbeatEventRow = {
@@ -58,7 +68,12 @@ function getNumberEnv(name: string, defaultValue: number) {
 }
 
 function mark(section: Section, status: SectionState, detail: string) {
-  if (status === "failing" || (status === "ok" && section.status !== "failing") || (status === "skipped" && section.status === "skipped")) {
+  if (
+    status === "failing" ||
+    (status === "under_load" && section.status !== "failing") ||
+    (status === "ok" && section.status !== "failing" && section.status !== "under_load") ||
+    (status === "skipped" && section.status === "skipped")
+  ) {
     section.status = status;
   }
   section.details.push(detail);
@@ -67,6 +82,10 @@ function mark(section: Section, status: SectionState, detail: string) {
 function finding(findings: string[], section: Section, message: string) {
   findings.push(message);
   mark(section, "failing", message);
+}
+
+function note(section: Section, detail: string) {
+  section.details.push(detail);
 }
 
 function normalizeHeartbeatValue(value: unknown) {
@@ -160,6 +179,115 @@ async function wakeScannerCapacity(findings: string[], section: Section, queuedC
   }
 }
 
+async function getScannerEcsState(): Promise<ScannerEcsState> {
+  const cluster = process.env.AWS_SCANNER_ECS_CLUSTER?.trim();
+  const service = process.env.AWS_SCANNER_ECS_SERVICE?.trim();
+  const region = process.env.AWS_REGION?.trim() || "us-west-1";
+
+  if (!cluster || !service) {
+    return {
+      detail: "Scanner ECS service is not configured.",
+      isRunning: false
+    };
+  }
+
+  try {
+    const { stdout } = await execFileAsync("aws", [
+      "ecs",
+      "describe-services",
+      "--region",
+      region,
+      "--cluster",
+      cluster,
+      "--services",
+      service,
+      "--output",
+      "json"
+    ]);
+    const payload = JSON.parse(stdout) as {
+      failures?: { reason?: string }[];
+      services?: Array<{
+        desiredCount?: number;
+        pendingCount?: number;
+        runningCount?: number;
+        status?: string;
+      }>;
+    };
+    const described = payload.services?.[0];
+    const failure = payload.failures?.[0];
+
+    if (!described) {
+      return {
+        detail: `Scanner ECS service ${cluster}/${service} was not described${failure?.reason ? `: ${failure.reason}` : "."}`,
+        isRunning: false
+      };
+    }
+
+    const desired = described.desiredCount ?? 0;
+    const running = described.runningCount ?? 0;
+    const pending = described.pendingCount ?? 0;
+    const isRunning = described.status === "ACTIVE" && running > 0 && running >= desired && pending === 0;
+
+    return {
+      detail: `Scanner ECS service ${cluster}/${service} is ${described.status ?? "unknown"} (${running}/${desired} running, ${pending} pending).`,
+      isRunning
+    };
+  } catch (error) {
+    return {
+      detail: `Scanner ECS service check failed: ${error instanceof Error ? error.message : String(error)}`,
+      isRunning: false
+    };
+  }
+}
+
+function getSnapshotOldestQueuedAt(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+
+  const oldestQueuedAt = (metadata as { oldestQueuedAt?: unknown }).oldestQueuedAt;
+  return typeof oldestQueuedAt === "string" && oldestQueuedAt.trim().length > 0 ? oldestQueuedAt : null;
+}
+
+async function getPreviousQueueSnapshot() {
+  return queryOne<QueueSnapshotRow>(
+    `select created_at::text as created_at, metadata_json
+       from scan_events
+      where scan_id is null
+        and event_type = $1
+      order by created_at desc
+      limit 1`,
+    ["ops.scanner_queue_snapshot"],
+    { readOnly: true }
+  );
+}
+
+async function recordQueueSnapshot(backlog: QueuedScanBacklogRow, scanQueueStaleMinutes: number, status: SectionState) {
+  await query(
+    `insert into scan_events (event_type, message, metadata_json)
+     values ($1, $2, $3::jsonb)`,
+    [
+      "ops.scanner_queue_snapshot",
+      `Ops queue snapshot: ${backlog.queued_count} queued, ${backlog.stale_queued_count} stale.`,
+      JSON.stringify({
+        oldestQueuedAt: backlog.oldest_queued_at,
+        queuedCount: backlog.queued_count,
+        staleQueuedCount: backlog.stale_queued_count,
+        staleMinutes: scanQueueStaleMinutes,
+        status
+      })
+    ]
+  );
+}
+
+async function recordQueueSnapshotBestEffort(section: Section, backlog: QueuedScanBacklogRow, scanQueueStaleMinutes: number, status: SectionState) {
+  try {
+    await recordQueueSnapshot(backlog, scanQueueStaleMinutes, status);
+  } catch (error) {
+    note(section, `Queue snapshot persistence skipped: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 async function queueSyntheticScan(baseUrl: string, domain: string) {
   const response = await fetch(new URL("/api/full-scan", baseUrl), {
     body: JSON.stringify({ domain }),
@@ -222,6 +350,7 @@ async function main() {
   const requireScannerHeartbeat = getBooleanEnv("OPS_REQUIRE_SCANNER_HEARTBEAT", true);
   const requireValidationHeartbeat = getBooleanEnv("OPS_REQUIRE_VALIDATION_HEARTBEAT", true);
   const findings: string[] = [];
+  let scannerHeartbeatHealthy = false;
   const sections = {
     databaseAndBacklog: { details: [], status: "ok" as SectionState },
     workerHeartbeats: { details: [], status: "skipped" as SectionState },
@@ -268,9 +397,11 @@ async function main() {
         `Scanner service heartbeat is stale or missing (${Number.isFinite(heartbeatAgeMs) ? Math.round(heartbeatAgeMs / 60_000) : "unknown"}m old, host ${scannerHeartbeat.host ?? "unknown"}).`
       );
     } else {
+      scannerHeartbeatHealthy = true;
       mark(sections.workerHeartbeats, "ok", `Scanner service heartbeat is fresh (${Math.round(heartbeatAgeMs / 60_000)}m old).`);
     }
   } else {
+    scannerHeartbeatHealthy = true;
     mark(sections.workerHeartbeats, "skipped", "Scanner heartbeat freshness is disabled.");
   }
 
@@ -291,14 +422,37 @@ async function main() {
   if (!backlog) {
     finding(findings, sections.databaseAndBacklog, "Queued full-scan backlog query returned no row.");
   } else if (backlog.stale_queued_count > 0) {
-    finding(
-      findings,
+    const [scannerEcsState, previousSnapshot] = await Promise.all([getScannerEcsState(), getPreviousQueueSnapshot()]);
+    const previousOldestQueuedAt = getSnapshotOldestQueuedAt(previousSnapshot?.metadata_json);
+    const oldestQueuedScanIsMoving = !previousOldestQueuedAt || previousOldestQueuedAt !== backlog.oldest_queued_at;
+    const backlogMessage = `${backlog.stale_queued_count} full scan(s) have been queued longer than ${scanQueueStaleMinutes}m; oldest queued at ${
+      backlog.oldest_queued_at ?? "unknown"
+    }.`;
+
+    if (!scannerHeartbeatHealthy) {
+      finding(findings, sections.scannerQueueCanary, `${backlogMessage} Scanner heartbeat is stale.`);
+    } else if (!scannerEcsState.isRunning) {
+      finding(findings, sections.scannerQueueCanary, `${backlogMessage} ${scannerEcsState.detail}`);
+    } else if (!oldestQueuedScanIsMoving) {
+      finding(
+        findings,
+        sections.scannerQueueCanary,
+        `${backlogMessage} Oldest queued scan has not moved since previous monitor snapshot at ${previousSnapshot?.created_at ?? "unknown"}.`
+      );
+    } else {
+      mark(sections.scannerQueueCanary, "under_load", `${backlogMessage} Scanner is running, so this is classified as under load.`);
+      note(sections.scannerQueueCanary, scannerEcsState.detail);
+    }
+    await recordQueueSnapshotBestEffort(
       sections.scannerQueueCanary,
-      `${backlog.stale_queued_count} full scan(s) have been queued longer than ${scanQueueStaleMinutes}m; oldest queued at ${backlog.oldest_queued_at ?? "unknown"}.`
+      backlog,
+      scanQueueStaleMinutes,
+      findings.length > 0 ? "failing" : sections.scannerQueueCanary.status
     );
   } else {
     mark(sections.databaseAndBacklog, "ok", "Direct database query succeeded.");
     mark(sections.scannerQueueCanary, "ok", `Queued full-scan backlog is clear (${backlog.queued_count} queued).`);
+    await recordQueueSnapshotBestEffort(sections.scannerQueueCanary, backlog, scanQueueStaleMinutes, "ok");
   }
 
   if (backlog) {
@@ -316,15 +470,15 @@ async function main() {
     }
   }
 
-  const status: SectionState = findings.length === 0 ? "ok" : "failing";
+  const status: SectionState = findings.length > 0 ? "failing" : sections.scannerQueueCanary.status === "under_load" ? "under_load" : "ok";
   console.log(
     JSON.stringify(
       {
         status,
         answer: {
-          areScansBeingPickedUp: sections.scannerQueueCanary.status === "ok",
+          areScansBeingPickedUp: sections.scannerQueueCanary.status === "ok" || sections.scannerQueueCanary.status === "under_load",
           areWorkersAlive: sections.workerHeartbeats.status === "skipped" ? null : sections.workerHeartbeats.status === "ok",
-          isAnythingStale: status === "failing"
+          isAnythingStale: status === "failing" || status === "under_load"
         },
         sections,
         queuedFullScans: backlog?.queued_count ?? null,
