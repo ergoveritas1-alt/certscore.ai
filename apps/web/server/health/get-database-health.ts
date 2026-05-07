@@ -52,28 +52,34 @@ export async function getDatabaseHealth(): Promise<DatabaseHealthStatus> {
   }
 
   try {
-    const [organizationCount, domainCount, scanCount, ...tableChecks] = await Promise.all([
-      queryOne<{ count: string }>("select count(*)::text as count from public.organizations", [], { readOnly: true }),
-      queryOne<{ count: string }>("select count(*)::text as count from public.domains", [], { readOnly: true }),
-      queryOne<{ count: string }>("select count(*)::text as count from public.scans", [], { readOnly: true }),
-      ...REQUIRED_AUTH_TABLES.map((tableName) =>
-        queryOne<{ exists: boolean }>(
-          `
-            select exists (
-              select 1
+    const health = await queryOne<{
+      domains_count: string;
+      organizations_count: string;
+      present_auth_tables: string[] | null;
+      scans_count: string;
+    }>(
+      `
+        select
+          (select count(*)::text from public.organizations) as organizations_count,
+          (select count(*)::text from public.domains) as domains_count,
+          (select count(*)::text from public.scans) as scans_count,
+          coalesce(
+            (
+              select array_agg(table_name order by table_name)
               from information_schema.tables
               where table_schema = 'public'
-                and table_name = $1
-            ) as exists
-          `,
-          [tableName],
-          { readOnly: true }
-        )
-      )
-    ]);
+                and table_name = any($1::text[])
+            ),
+            array[]::text[]
+          ) as present_auth_tables
+      `,
+      [REQUIRED_AUTH_TABLES],
+      { readOnly: true }
+    );
 
-    const presentTables = REQUIRED_AUTH_TABLES.filter((_, index) => tableChecks[index]?.exists === true);
-    const missingTables = REQUIRED_AUTH_TABLES.filter((_, index) => tableChecks[index]?.exists !== true);
+    const presentTableSet = new Set(health?.present_auth_tables ?? []);
+    const presentTables = REQUIRED_AUTH_TABLES.filter((tableName) => presentTableSet.has(tableName));
+    const missingTables = REQUIRED_AUTH_TABLES.filter((tableName) => !presentTableSet.has(tableName));
 
     return {
       ok: true,
@@ -85,9 +91,9 @@ export async function getDatabaseHealth(): Promise<DatabaseHealthStatus> {
         database: true
       },
       counts: {
-        organizations: Number(organizationCount?.count ?? 0),
-        domains: Number(domainCount?.count ?? 0),
-        scans: Number(scanCount?.count ?? 0)
+        organizations: Number(health?.organizations_count ?? 0),
+        domains: Number(health?.domains_count ?? 0),
+        scans: Number(health?.scans_count ?? 0)
       },
       requiredTables: {
         missing: missingTables,
