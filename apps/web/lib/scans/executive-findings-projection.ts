@@ -60,6 +60,8 @@ const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SC
   video_content_tracking_exposure: "video_content_tracking_exposure"
 };
 
+const UMBRELLA_DARK_PATTERN_PACKET_IDS = new Set(["accept_only_banner", "dismiss_without_reject"]);
+
 const CONTRADICTION_FINDING_IDS = new Set([
   "consent_gated_tracking_claim_conflict",
   "do_not_sell_sharing_disclosure_conflict",
@@ -340,6 +342,29 @@ function getMappedFindingId(
   return null;
 }
 
+function hasConcreteConsentDarkPatternEvidence(packet: UnifiedFindingDisplayPacket) {
+  const snippets = packet.evidence?.snippets ?? [];
+  const hasSpecificUiSnippet = snippets.some((snippet) => {
+    const normalized = snippet.trim();
+    return (
+      normalized.length > 0 &&
+      !/promotional or choice architecture may need closer disclosure review/i.test(normalized) &&
+      /accept|reject|dismiss|consent|banner|button|choice|layer|overlay|preference/i.test(normalized)
+    );
+  });
+  if (hasSpecificUiSnippet) {
+    return true;
+  }
+
+  const entities = packet.evidence?.entities ?? {};
+  return Object.entries(entities).some(([key, values]) => {
+    if (!/accept|reject|dismiss|consent|banner|button|choice|layer|overlay|preference|visual|ui/i.test(key)) {
+      return false;
+    }
+    return values.some((value) => value.trim().length > 0);
+  });
+}
+
 function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPacket) {
   if (packet.unifiedFindingId !== "preconsent_tracking") {
     return false;
@@ -407,6 +432,14 @@ function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPack
 function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof typeof CERT_SCORE_FINDING_REGISTRY> {
   const primary = getMappedFindingId(packet);
   const ids = primary ? [primary] : [];
+
+  if (
+    primary === "consent_dark_patterns_detected" &&
+    UMBRELLA_DARK_PATTERN_PACKET_IDS.has(packet.unifiedFindingId) &&
+    !hasConcreteConsentDarkPatternEvidence(packet)
+  ) {
+    return [];
+  }
 
   if (
     primary === "session_replay_on_sensitive_input_surface" &&

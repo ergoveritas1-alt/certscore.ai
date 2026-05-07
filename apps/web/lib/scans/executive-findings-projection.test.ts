@@ -550,6 +550,46 @@ test("projects concrete reject-missing dark-pattern evidence into the umbrella e
   assert.ok(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
 });
 
+test("does not project generic accept-only consent signals into the dark-pattern umbrella", () => {
+  const weakProjection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("accept_only_banner", {
+      evidence: {
+        counts: {},
+        entities: {},
+        fetchQuality: null,
+        flags: ["privacy.dark_pattern_accept_only_banner"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Promotional or choice architecture may need closer disclosure review."],
+        sourceUrls: []
+      },
+      summary: "Promotional or choice architecture may need closer disclosure review."
+    })
+  ]);
+  const concreteProjection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("accept_only_banner", {
+      evidence: {
+        counts: {},
+        entities: {
+          acceptActionLabels: ["accept all"],
+          bannerTextSnippet: ["We use cookies to improve your experience. Accept all"],
+          rejectActionLabels: []
+        },
+        fetchQuality: null,
+        flags: ["privacy.dark_pattern_accept_only_banner"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Consent banner showed an accept action without a retained reject action."],
+        sourceUrls: []
+      },
+      summary: "Consent banner showed an accept action without a retained reject action."
+    })
+  ]);
+
+  assert.equal(weakProjection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"), false);
+  assert.equal(weakProjection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"), false);
+  assert.ok(concreteProjection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+  assert.ok(concreteProjection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+});
+
 test("projects RTB cookie sync into executive and privacy regulatory lenses", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("rtb_cookie_sync_observed", {
