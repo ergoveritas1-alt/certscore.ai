@@ -52,6 +52,7 @@ export async function getDatabaseHealth(): Promise<DatabaseHealthStatus> {
   }
 
   try {
+    const requiredAuthTableValuesSql = REQUIRED_AUTH_TABLES.map((_, index) => `($${index + 1})`).join(", ");
     const health = await queryOne<{
       domains_count: string;
       organizations_count: string;
@@ -59,21 +60,28 @@ export async function getDatabaseHealth(): Promise<DatabaseHealthStatus> {
       scans_count: string;
     }>(
       `
+        with required_auth_tables(table_name) as (
+          values ${requiredAuthTableValuesSql}
+        )
         select
           (select count(*)::text from public.organizations) as organizations_count,
           (select count(*)::text from public.domains) as domains_count,
           (select count(*)::text from public.scans) as scans_count,
           coalesce(
             (
-              select array_agg(table_name order by table_name)
-              from information_schema.tables
-              where table_schema = 'public'
-                and table_name = any($1::text[])
+              select array_agg(required_auth_tables.table_name order by required_auth_tables.table_name)
+              from required_auth_tables
+              where exists (
+                select 1
+                from information_schema.tables
+                where table_schema = 'public'
+                  and table_name = required_auth_tables.table_name
+              )
             ),
             array[]::text[]
           ) as present_auth_tables
       `,
-      [REQUIRED_AUTH_TABLES],
+      [...REQUIRED_AUTH_TABLES],
       { readOnly: true }
     );
 
