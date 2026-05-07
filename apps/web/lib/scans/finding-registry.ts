@@ -243,7 +243,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     section: "Privacy & Tracking",
     defaultSurfacePriority: 95,
     whyItMatters:
-      "Identifier-like values observed across multiple external domains can indicate cross-site tracking, attribution, or data-sharing behavior that users may not expect.",
+      "Identifier-like values observed in external identity, RTB, or adtech requests can indicate cross-site tracking, attribution, or data-sharing behavior that users may not expect.",
     remediation:
       "Inventory the destinations receiving identifier-like values, confirm the purpose and consent/disclosure basis, and suppress non-essential identifier transmission where it is not needed."
   },

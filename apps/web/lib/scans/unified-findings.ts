@@ -3580,9 +3580,11 @@ function selectObservedValue(packet: UnifiedFindingPacket) {
         /crossDomainIdentifierSharingDestinations/i.test(key) ? values : []
       )
     );
-    return destinations.length > 0
+    return destinations.length >= 2
       ? `Identifier-like values were observed in requests to multiple external domains (${destinations.slice(0, 3).join(", ")}), which may indicate cross-site tracking, attribution, or data-sharing behavior under the tested scan conditions.`
-      : "Identifier-like values were observed in requests to multiple external domains, which may indicate cross-site tracking, attribution, or data-sharing behavior under the tested scan conditions.";
+      : destinations.length === 1
+        ? `Identifier-like values were observed in a retained request to an external identity, RTB, or adtech destination (${destinations[0]}), which may indicate cross-site tracking, attribution, or data-sharing behavior under the tested scan conditions.`
+        : "Identifier-like values were observed in retained requests to external identity, RTB, or adtech destinations, which may indicate cross-site tracking, attribution, or data-sharing behavior under the tested scan conditions.";
   }
 
   if (packet.unifiedFindingId === "contact_support_path_present") {

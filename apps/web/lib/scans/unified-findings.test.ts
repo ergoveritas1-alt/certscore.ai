@@ -5521,6 +5521,48 @@ test("surfaces cross-domain identifier sharing from concrete runtime evidence", 
   assert.doesNotMatch(packet?.observedValue ?? "", /leakage/i);
 });
 
+test("describes single-destination identity sync without claiming multiple external domains", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Identifier-like values were observed in a retained request to an external identity-sync destination.",
+        fallbackEvidence: {
+          crossDomainIdentifierSharingDestinationCategories: ["identity_graph"],
+          crossDomainIdentifierSharingDestinationEtlds: ["liveramp.com"],
+          crossDomainIdentifierSharingEvidence: [
+            {
+              destinationClassification: "identity_graph",
+              destinationDomain: "api.liveramp.com",
+              destinationEtldPlusOne: "liveramp.com",
+              identifierClass: "durable_id",
+              key: "partnerid",
+              repeatedAcrossEtlds: ["liveramp.com"],
+              requestUrlRedacted: "https://api.liveramp.com/pixel?partnerid=%5Bredacted%5D",
+              valueHash: "b".repeat(64)
+            }
+          ],
+          signalKey: "privacy.cross_domain_identifier_sharing_observed",
+          signalValue: true
+        },
+        observedValue: "Identifiers shared with identity sync endpoint",
+        severity: "high",
+        signalKey: "privacy.cross_domain_identifier_sharing_observed",
+        signalLabel: "Identifiers shared across domains",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Identifiers shared across domains"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "cross_domain_identifier_sharing_observed");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.match(packet?.observedValue ?? "", /external identity, RTB, or adtech destination \(liveramp\.com\)/i);
+  assert.doesNotMatch(packet?.observedValue ?? "", /multiple external domains/i);
+});
+
 test("drops weak root-only cookie obstruction urls from final evidence packets", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

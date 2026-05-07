@@ -222,6 +222,19 @@ function getRecordString(row: Record<string, unknown>, keys: string[]) {
   return null;
 }
 
+function getRecordStringArray(row: Record<string, unknown> | undefined, keys: string[]) {
+  if (!row) {
+    return [];
+  }
+  for (const key of keys) {
+    const value = row[key];
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
+    }
+  }
+  return [];
+}
+
 function getRecordNumber(row: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const value = row[key];
@@ -435,6 +448,26 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
     ]).slice(0, 4);
   }
 
+  if (findingId === "cross_domain_identifier_sharing_observed" && evidenceDetails) {
+    const rows = evidenceDetails.crossDomainIdentifierSharingEvidence ?? [];
+    const destinations = uniqueStrings(
+      rows.flatMap((row) => [
+        getRecordString(row, ["destinationEtldPlusOne", "destination_etld_plus_one"]),
+        getRecordString(row, ["destinationDomain", "destination_domain"])
+      ])
+    );
+    const identifierKeys = uniqueStrings(rows.flatMap((row) => getRecordString(row, ["key"]) ?? []));
+    const firstRequest = evidenceDetails.representativeRequests?.[0];
+    return uniqueStrings([
+      packet.summary,
+      destinations.length > 0
+        ? `Identifier-like request evidence was retained for ${destinations.slice(0, 3).join(", ")}.`
+        : null,
+      identifierKeys.length > 0 ? `Identifier query keys retained: ${identifierKeys.slice(0, 5).join(", ")}.` : null,
+      firstRequest ? `Representative identifier-sharing request: ${firstRequest.url}` : null
+    ]).slice(0, 4);
+  }
+
   return uniqueStrings([
     packet.summary,
     packet.observedValue,
@@ -517,6 +550,9 @@ function getUrlQueryKeysSample(value: string) {
   }
 }
 
+const IDENTIFIER_QUERY_KEY_PATTERN =
+  /^(?:uid|uuid|user_id|userid|visitor|visitor_id|client_id|cid|fbp|fbc|gclid|msclkid|ttclid|rdt_uuid|email|hashed|hash|identity|id|partnerid|partner_uid|partner_id|uid2|euid|id5id|tdid)$/i;
+
 function getRepresentativeRequestDetails(urls: string[], vendors: string[]) {
   return urls.slice(0, 8).map((url, index) => {
     const hostname = getUrlHostname(url) ?? url;
@@ -585,7 +621,11 @@ function classifyTrackingCategory(value: string) {
 }
 
 function isLikelyIdentifierRequest(url: string) {
-  return /[?&](?:uid|uuid|user_id|userid|visitor|visitor_id|client_id|cid|fbp|fbc|gclid|msclkid|ttclid|rdt_uuid|email|hashed|hash|identity|id)=/i.test(url);
+  try {
+    return [...new URL(url).searchParams.keys()].some((key) => IDENTIFIER_QUERY_KEY_PATTERN.test(key));
+  } catch {
+    return /[?&](?:uid|uuid|user_id|userid|visitor|visitor_id|client_id|cid|fbp|fbc|gclid|msclkid|ttclid|rdt_uuid|email|hashed|hash|identity|id|partnerid|partner_uid|partner_id|uid2|euid|id5id|tdid)=/i.test(url);
+  }
 }
 
 function isLikelyDeviceDataRequest(url: string) {
@@ -1006,13 +1046,12 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       const rowHost = getRecordString(row, ["hostname", "host", "domain"]);
       return rowUrl === request.url || (rowHost !== null && request.hostname.includes(rowHost));
     });
-    const queryKeysSample = Array.isArray(matchingRow?.queryKeysSample)
-      ? matchingRow.queryKeysSample.filter((value): value is string => typeof value === "string").slice(0, 8)
-      : request.queryKeysSample;
+    const queryKeysSample = getRecordStringArray(matchingRow, ["queryKeysSample", "query_keys_sample"]).slice(0, 8);
+    const effectiveQueryKeysSample = queryKeysSample.length > 0 ? queryKeysSample : request.queryKeysSample;
     return {
       ...request,
-      queryKeysSample,
-      identifierLike: request.identifierLike || queryKeysSample.some((key) => /^(?:uid|uuid|user_id|userid|visitor|visitor_id|client_id|cid|fbp|fbc|gclid|msclkid|ttclid|rdt_uuid|email|hashed|hash|identity|id)$/i.test(key))
+      queryKeysSample: effectiveQueryKeysSample,
+      identifierLike: request.identifierLike || effectiveQueryKeysSample.some((key) => IDENTIFIER_QUERY_KEY_PATTERN.test(key))
     };
   });
 
@@ -1284,6 +1323,75 @@ function buildGenericCanonicalEvidenceDetails(
       runtimeRequestCount: runtimeRequestUrls.length,
       runtimeVendorCount: runtimeVendors.length
     };
+  }
+
+  if (findingId === "cross_domain_identifier_sharing_observed") {
+    const rows = getEntityJsonObjects(packet, "crossDomainIdentifierSharingEvidence");
+    const destinations = uniqueStrings([
+      ...getEntityValues(packet, /crossDomainIdentifierSharingDestinations/i),
+      ...rows.flatMap((row) => [
+        getRecordString(row, ["destinationEtldPlusOne", "destination_etld_plus_one"]),
+        getRecordString(row, ["destinationDomain", "destination_domain"])
+      ])
+    ]);
+    const categories = uniqueStrings([
+      ...getEntityValues(packet, /crossDomainIdentifierSharingCategories/i),
+      ...rows.flatMap((row) => getRecordString(row, ["destinationClassification", "destination_classification"]) ?? [])
+    ]);
+    const identifierKeys = uniqueStrings(rows.flatMap((row) => getRecordString(row, ["key"]) ?? []));
+    const identifierClasses = uniqueStrings(rows.flatMap((row) => getRecordString(row, ["identifierClass", "identifier_class"]) ?? []));
+    const redactedRequestUrls = uniqueCaseInsensitiveStrings(
+      rows.flatMap((row) => getRecordString(row, ["requestUrlRedacted", "request_url_redacted"]) ?? [])
+    );
+    const representativeIdentifierRequests = getRepresentativeRequestDetails(redactedRequestUrls, destinations).map((request) => {
+      const matchingRow = rows.find((row) => {
+        const rowUrl = getRecordString(row, ["requestUrlRedacted", "request_url_redacted"]);
+        const rowHost = getRecordString(row, ["destinationDomain", "destination_domain"]);
+        return rowUrl === request.url || (rowHost !== null && request.hostname.includes(rowHost));
+      });
+      const rowKey = matchingRow ? getRecordString(matchingRow, ["key"]) : null;
+      const rowClass = matchingRow ? getRecordString(matchingRow, ["identifierClass", "identifier_class"]) : null;
+      return {
+        ...request,
+        category: rowClass ?? request.category,
+        queryKeysSample: rowKey ? uniqueStrings([rowKey, ...request.queryKeysSample]).slice(0, 8) : request.queryKeysSample,
+        identifierLike: true
+      };
+    });
+
+    details.counts = {
+      ...(details.counts ?? {}),
+      crossDomainIdentifierEvidenceRows: rows.length,
+      crossDomainIdentifierDestinations: destinations.length,
+      crossDomainIdentifierKeys: identifierKeys.length
+    };
+    details.trackingEvidence = {
+      ...(details.trackingEvidence ?? {}),
+      observed: true,
+      basis: rows.length > 0
+        ? "Retained request-level evidence shows identifier-like query values sent to external identity, RTB, or adtech destinations."
+        : details.trackingEvidence?.basis ?? packet.summary,
+      destinationCategories: categories.slice(0, 8),
+      destinationDomains: destinations.slice(0, 12),
+      identifierClasses: identifierClasses.slice(0, 8),
+      identifierKeys: identifierKeys.slice(0, 8),
+      redactedRequestUrls: redactedRequestUrls.slice(0, 8)
+    };
+    if (rows.length > 0) {
+      details.crossDomainIdentifierSharingEvidence = rows.slice(0, 12);
+    }
+    if (redactedRequestUrls.length > 0) {
+      details.runtimeRequestUrls = uniqueCaseInsensitiveStrings([...(details.runtimeRequestUrls ?? []), ...redactedRequestUrls]).slice(0, 8);
+      details.representativeRequests = representativeIdentifierRequests;
+      details.requestSelectionNote = "Representative identifier-sharing requests are capped examples with query values redacted.";
+      details.identifierEvidence = {
+        addressingOrSignalingTransmittedByRequest: true,
+        basis: ["retained_identifier_query_evidence", "redacted_request_url_evidence"],
+        interpretation: "Identifier-like query keys were retained with redacted values for review; automated evidence does not determine downstream use.",
+        identifierLikeRequestCount: representativeIdentifierRequests.length,
+        deviceDataLikeRequestCount: representativeIdentifierRequests.filter((request) => request.deviceDataLike).length
+      };
+    }
   }
 
   if (findingId === "accessibility_risk_score") {

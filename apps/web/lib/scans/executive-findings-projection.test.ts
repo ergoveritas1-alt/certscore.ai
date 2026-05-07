@@ -557,24 +557,24 @@ test("projects RTB cookie sync into executive and privacy regulatory lenses", ()
       details: {
         family: "consent_tracking",
         kind: "rtb_cookie_sync_observed",
-        requestUrls: ["https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/"],
-        vendors: ["PubMatic"]
+        requestUrls: ["https://api.liveramp.com/pixel"],
+        vendors: ["LiveRamp"]
       },
       evidence: {
         counts: { rtb_cookie_sync_observation_count: 1 },
         entities: {
           rtbCookieSyncEvidence: [
             JSON.stringify({
-              hostname: "sync-t1.taboola.com",
-              pathSample: "/sg/pubmatic-network/1/rtb-h/",
-              queryKeysSample: ["gdpr", "uid"],
-              reason: "sync_path",
+              hostname: "api.liveramp.com",
+              path_sample: "/pixel",
+              query_keys_sample: ["partnerid"],
+              reason: "identifier_query",
               runtimePhase: "pre_consent",
-              urlSample: "https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/"
+              url_sample: "https://api.liveramp.com/pixel"
             })
           ],
-          runtimeRequestUrls: ["https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/"],
-          runtimeVendors: ["PubMatic"]
+          runtimeRequestUrls: ["https://api.liveramp.com/pixel"],
+          runtimeVendors: ["LiveRamp"]
         },
         fetchQuality: null,
         flags: ["preconsent_tracking_detected"],
@@ -595,7 +595,8 @@ test("projects RTB cookie sync into executive and privacy regulatory lenses", ()
   assert.equal(finding.evidenceDetails?.syncEvidence?.observed, true);
   assert.equal(finding.evidenceDetails?.identifierEvidence?.identifierLikeRequestCount, 1);
   assert.deepEqual(finding.evidenceDetails?.policyEvidence, { evaluated: false });
-  assert.equal(finding.evidenceDetails?.rtbCookieSyncEvidence?.[0]?.hostname, "sync-t1.taboola.com");
+  assert.equal(finding.evidenceDetails?.rtbCookieSyncEvidence?.[0]?.hostname, "api.liveramp.com");
+  assert.deepEqual(finding.evidenceDetails?.representativeRequests?.[0]?.queryKeysSample, ["partnerid"]);
   assert.ok(projection.topFindings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
 
   const lenses = buildRegulatoryLenses(projection.findings, {
@@ -605,6 +606,54 @@ test("projects RTB cookie sync into executive and privacy regulatory lenses", ()
   assert.ok(lenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
   assert.ok(lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
   assert.equal(lenses.find((lens) => lens.acronym === "FTC")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"), false);
+});
+
+test("projects cross-domain identifier sharing rows into executive evidence details", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("cross_domain_identifier_sharing_observed", {
+      confidenceBand: "high",
+      evidence: {
+        counts: {},
+        entities: {
+          crossDomainIdentifierSharingCategories: ["identity_graph"],
+          crossDomainIdentifierSharingDestinations: ["liveramp.com"],
+          crossDomainIdentifierSharingEvidence: [
+            JSON.stringify({
+              destinationClassification: "identity_graph",
+              destinationDomain: "api.liveramp.com",
+              destinationEtldPlusOne: "liveramp.com",
+              identifierClass: "durable_id",
+              key: "partnerid",
+              repeatedAcrossEtlds: ["liveramp.com"],
+              requestUrlRedacted: "https://api.liveramp.com/pixel?partnerid=%5Bredacted%5D",
+              valueHash: "a".repeat(64)
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: ["direct_runtime"],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "Identifier-like values were observed in retained identity-sync request evidence."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "cross_domain_identifier_sharing_observed");
+  assert.ok(finding);
+  assert.equal(finding.evidenceDetails?.counts?.crossDomainIdentifierEvidenceRows, 1);
+  assert.equal(finding.evidenceDetails?.counts?.crossDomainIdentifierDestinations, 2);
+  assert.deepEqual(finding.evidenceDetails?.trackingEvidence?.identifierKeys, ["partnerid"]);
+  assert.deepEqual(finding.evidenceDetails?.trackingEvidence?.destinationDomains, ["liveramp.com", "api.liveramp.com"]);
+  assert.equal(finding.evidenceDetails?.crossDomainIdentifierSharingEvidence?.[0]?.destinationDomain, "api.liveramp.com");
+  assert.deepEqual(finding.evidenceDetails?.representativeRequests?.[0]?.queryKeysSample, ["partnerid"]);
+  assert.equal(finding.evidenceDetails?.identifierEvidence?.identifierLikeRequestCount, 1);
+  assert.equal(finding.evidenceDetails?.runtimeRequestUrls?.[0], "https://api.liveramp.com/pixel?partnerid=%5Bredacted%5D");
+  assert.ok(finding.evidencePreview.some((entry) => entry.includes("liveramp.com")));
+  assert.ok(finding.evidencePreview.some((entry) => entry.includes("partnerid")));
+  assert.ok(finding.evidencePreview.some((entry) => entry.includes("%5Bredacted%5D")));
 });
 
 test("projects policy runtime conflicts with compact canonical evidence references", () => {
