@@ -44,6 +44,7 @@ export type AdminScanListItem = {
   recoverableFindingClasses: RecoverableFindingClass[];
   robotsFetchHttpStatus: number | null;
   scanId: string;
+  sourceIp: string | null;
   scanType: string;
   status: string;
   stopTier: ScanExecutionTier | null;
@@ -226,6 +227,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
       domainId: scan.domain_id,
       domainHostname: scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null,
       organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
+      sourceIp: snapshot?.egress_id ?? snapshot?.egress_type ?? null,
       scanType: scan.scan_type,
       status: scan.status,
       createdAt: displayCreatedAt,

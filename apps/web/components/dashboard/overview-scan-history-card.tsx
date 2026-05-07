@@ -224,9 +224,7 @@ export function OverviewScanHistoryCard({ planCode, scans }: OverviewScanHistory
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
-                          <span>
-                            <span className="font-medium text-slate-900">{latestScan.scanType}</span> · {latestScan.status}
-                          </span>
+                          <span className="font-medium text-slate-900">{latestScan.status}</span>
                           <span
                             className={[
                               "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium",

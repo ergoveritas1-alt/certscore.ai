@@ -49,10 +49,12 @@ export default async function AdminScansPage() {
             <tbody className="divide-y divide-slate-100">
               {scans.map((scan) => (
                 <tr key={scan.scanId}>
-                  <td className="py-4 pr-4 text-slate-700">{scan.organizationName ?? "Unknown workspace"}</td>
+                  <td className="py-4 pr-4 text-slate-700">
+                    <p>{scan.organizationName ?? "Unknown workspace"}</p>
+                    <p className="text-xs text-slate-500">Source IP {scan.sourceIp ?? "Not recorded"}</p>
+                  </td>
                   <td className="py-4 pr-4 text-slate-700">{scan.domainHostname ?? "Unknown domain"}</td>
                   <td className="py-4 pr-4 text-slate-700">
-                    <p>{scan.scanType}</p>
                     <p>{scan.status}</p>
                     <p>{scan.pagesScanned} pages</p>
                   </td>

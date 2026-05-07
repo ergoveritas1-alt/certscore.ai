@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   ...createPageMetadata({
     title: "CertScore.ai — Evidence-Based Website Compliance Scanner",
     description:
-      "Scan any website to see which trackers fire, when they fire, and whether consent choices are respected. Evidence-backed compliance insights.",
+      "Scan websites to detect pre-consent tracking, third-party requests, cookie activity, consent enforcement gaps, and policy-runtime inconsistencies.",
     path: "/"
   }),
   title: {
@@ -195,7 +195,7 @@ export default async function MarketingHomePage() {
     applicationCategory: "Website Monitoring Software",
     operatingSystem: "Web",
     description:
-      "CertScore.ai scans websites like a real visitor to detect tracking activity, verify consent flows, and surface evidence-backed disclosure signals."
+      "CertScore.ai scans websites like a real visitor to detect tracking activity, verify consent flows, and compare policy claims against runtime behavior."
   };
 
   return (
@@ -207,21 +207,15 @@ export default async function MarketingHomePage() {
         <div className="mx-auto grid max-w-6xl gap-10 px-6 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
           <div className="space-y-5">
             <h1
-              className="max-w-3xl pb-2 bg-clip-text text-4xl font-semibold leading-[1.02] tracking-tight text-transparent sm:text-5xl lg:text-6xl"
+              className="max-w-3xl pb-2 bg-clip-text text-4xl font-semibold leading-[1.08] tracking-normal text-transparent sm:text-5xl sm:leading-[1.04] lg:text-6xl"
               style={{
                 backgroundImage: "linear-gradient(180deg, #020617 0%, #0f172a 24%, #334155 62%, #94a3b8 100%)"
               }}
             >
-              See what any website actually does—not what it{" "}
-              <span
-                className="bg-clip-text text-transparent"
-                style={{ backgroundImage: "linear-gradient(180deg, #2f63ea 0%, #5b83ee 52%, #8ea5f2 100%)" }}
-              >
-                claims
-              </span>
+              Observe real website behavior around tracking, cookies, and consent—not just what policies claim.
             </h1>
             <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
-              CertScore scans sites like a real visitor and shows exactly which trackers fire, when they fire, and whether consent choices are respected.
+              Detect pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, and disclosure inconsistencies using automated runtime analysis.
             </p>
             <div className="flex flex-col gap-3 pt-1 sm:flex-row">
               <PendingButtonLink
@@ -239,7 +233,7 @@ export default async function MarketingHomePage() {
               />
             </div>
             <p className="max-w-2xl text-sm leading-6 text-slate-500">
-              Evidence-based scanning for teams that need to observe website behavior, detect tracking activity, and verify consent flows.
+              Evidence-based scanning for teams comparing live browser behavior with consent controls, cookie posture, and privacy disclosures.
             </p>
           </div>
 
@@ -251,9 +245,9 @@ export default async function MarketingHomePage() {
               <CardContent className="space-y-4">
                 <DomainScanForm
                   buttonLabel="Scan a website"
-                  helperText="CertScore will queue the domain, run the scanner, and open the saved scan record when it is accepted."
-                  inputLabel="Scan any website."
-                  inputPlaceholder="Scan any website."
+                  helperText="CertScore will queue the domain, run a browser-based scan, and open the saved scan record when it is accepted."
+                  inputLabel="Website to analyze"
+                  inputPlaceholder="example.com"
                   mode="full"
                 />
                 <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">

@@ -858,6 +858,77 @@ test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-f
   assert.match(html, /Representative accessibility barriers detected/);
 });
 
+test("ExecutiveSummaryCard exposes strong fingerprinting primitives inline", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 1,
+      domainBenchmark: null,
+      finalHost: "petdesk.com",
+      fingerprintReasons: ["audio", "canvas_webgl", "fonts_plugins"],
+      fingerprintLabel: "Possible",
+      fingerprintNarrative: "Possible",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-07T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "petdesk.com",
+      resolvedVendorNames: [],
+      score: 58,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 12,
+      thirdPartyDomains: ["example.test"],
+      topFindings: [
+        makeFinding("probable_fingerprinting", "Probable fingerprinting behavior", {
+          section: "Fingerprinting",
+          shortSummary:
+            "Runtime collection included multiple browser/device fingerprinting-related primitives beyond ordinary analytics telemetry, including canvas/WebGL access, audio environment access, and font/plugin enumeration.",
+          evidenceDetails: {
+            telemetryEvidence: {
+              observed: true,
+              basis: "Runtime collection included multiple browser/device fingerprinting-related primitives beyond ordinary analytics telemetry.",
+              strongFingerprintSignalLabels: [
+                "canvas/WebGL access",
+                "audio environment access",
+                "font/plugin enumeration",
+                "hardware/device attribute collection"
+              ],
+              genericFingerprintSignalLabels: [
+                "timezone/locale",
+                "screen/viewport",
+                "storage capability",
+                "touch/input capability"
+              ],
+              confidenceExplanation: "Multiple high-entropy browser/device collection primitives observed."
+            }
+          }
+        })
+      ],
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 0
+      },
+      agencyMappings: [],
+      regulatoryRisk: makeRegulatoryRisk(),
+      topObservedEntities: [],
+      trackerSummary: "No meaningful third-party footprint observed",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /Stronger retained primitives/);
+  assert.match(html, /canvas\/WebGL access/);
+  assert.match(html, /audio environment access/);
+  assert.match(html, /font\/plugin enumeration/);
+  assert.match(html, /hardware\/device attribute collection/);
+  assert.match(html, /Generic browser context/);
+  assert.match(html, /timezone\/locale/);
+  assert.match(html, /Multiple high-entropy browser\/device collection primitives observed/);
+  assert.match(html, /This does not independently establish unlawful tracking or legal liability/);
+});
+
 test("ExecutiveSummaryCard renders compact reject-path JSON evidence", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {

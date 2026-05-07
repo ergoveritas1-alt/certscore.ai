@@ -51,7 +51,7 @@ const SLIDES: CarouselSlide[] = [
     src: "/images/how-it-works/advanced-diagnostics.png",
     alt: "Advanced diagnostics and raw signals sections.",
     title: "Advanced diagnostics and raw signals",
-    highlight: "Drill into trust, governance, security, and raw detected signals when you need analyst-level detail."
+    highlight: "Drill into governance, security, request metadata, and raw detected signals when you need analyst-level detail."
   },
   {
     src: "/images/how-it-works/consent-detail-signals-variant.png",

@@ -1696,6 +1696,18 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const reference = getFindingReferenceLink(input.finding);
   const jsonPayload = JSON.stringify(buildFindingEvidenceJsonPayload(input.finding), null, 2);
   const tone = getFindingCardTone(input.finding, false);
+  const fingerprintTelemetry =
+    input.finding.id === "probable_fingerprinting" || input.finding.id === "browser_fingerprinting_related_signals_observed"
+      ? input.finding.evidenceDetails?.telemetryEvidence
+      : null;
+  const strongFingerprintSignalLabels = Array.isArray(fingerprintTelemetry?.strongFingerprintSignalLabels)
+    ? fingerprintTelemetry.strongFingerprintSignalLabels.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+  const genericFingerprintSignalLabels = Array.isArray(fingerprintTelemetry?.genericFingerprintSignalLabels)
+    ? fingerprintTelemetry.genericFingerprintSignalLabels.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+  const confidenceExplanation =
+    typeof fingerprintTelemetry?.confidenceExplanation === "string" ? fingerprintTelemetry.confidenceExplanation : null;
 
   return (
     <details className={`group mt-3 rounded-xl border px-3 py-2 ${tone.summary}`}>
@@ -1722,6 +1734,36 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
             </a>
           ) : null}
         </div>
+        {fingerprintTelemetry ? (
+          <div className="space-y-3 rounded-lg border border-slate-200 bg-white px-3 py-3">
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Why this surfaced</p>
+              <p className="text-sm leading-6 text-slate-700">
+                The runtime environment accessed multiple browser/device attributes commonly associated with probabilistic device identification techniques.
+              </p>
+            </div>
+            {strongFingerprintSignalLabels.length > 0 ? (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Stronger retained primitives</p>
+                <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">
+                  {strongFingerprintSignalLabels.map((signal) => <li key={signal}>{signal}</li>)}
+                </ul>
+              </div>
+            ) : null}
+            {genericFingerprintSignalLabels.length > 0 ? (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Generic browser context</p>
+                <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">
+                  {genericFingerprintSignalLabels.map((signal) => <li key={signal}>{signal}</li>)}
+                </ul>
+              </div>
+            ) : null}
+            {confidenceExplanation ? (
+              <p className="text-sm leading-6 text-slate-700">{confidenceExplanation}</p>
+            ) : null}
+            <p className="text-sm leading-6 text-slate-700">This does not independently establish unlawful tracking or legal liability.</p>
+          </div>
+        ) : null}
         <details className="group/json min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
             <span>{"{}"} JSON evidence</span>

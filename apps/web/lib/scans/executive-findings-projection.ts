@@ -400,6 +400,61 @@ function buildFingerprintingRawEvidence(packet: UnifiedFindingDisplayPacket): Re
   };
 }
 
+const STRONG_FINGERPRINT_SIGNAL_LABELS: Record<string, string> = {
+  audio: "audio environment access",
+  audio_context: "audio environment access",
+  canvas: "canvas/WebGL access",
+  canvas_webgl: "canvas/WebGL access",
+  font_metrics: "font metric collection",
+  fonts: "font/plugin enumeration",
+  fonts_plugins: "font/plugin enumeration",
+  hardware: "hardware/device attribute collection",
+  webgl: "canvas/WebGL access"
+};
+
+const GENERIC_FINGERPRINT_SIGNAL_LABELS: Record<string, string> = {
+  input_touch: "touch/input capability",
+  network_device_state: "network/device state",
+  screen_viewport: "screen/viewport",
+  storage: "storage capability",
+  timezone_locale: "timezone/locale"
+};
+
+function normalizeFingerprintSignal(value: string) {
+  return value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+function formatFingerprintSignalLabel(value: string) {
+  const normalized = normalizeFingerprintSignal(value);
+  return STRONG_FINGERPRINT_SIGNAL_LABELS[normalized] ??
+    GENERIC_FINGERPRINT_SIGNAL_LABELS[normalized] ??
+    normalized.replace(/_/g, " ");
+}
+
+function getFingerprintSignalGroups(packet: UnifiedFindingDisplayPacket) {
+  const rawEvidence = buildFingerprintingRawEvidence(packet);
+  const signals = Array.isArray(rawEvidence.fingerprintAttributeCategories)
+    ? (rawEvidence.fingerprintAttributeCategories as string[])
+    : [];
+  const strongSignals = uniqueStrings(
+    signals
+      .map(normalizeFingerprintSignal)
+      .filter((signal) => signal in STRONG_FINGERPRINT_SIGNAL_LABELS)
+  );
+  const genericSignals = uniqueStrings(
+    signals
+      .map(normalizeFingerprintSignal)
+      .filter((signal) => !(signal in STRONG_FINGERPRINT_SIGNAL_LABELS))
+  );
+
+  return {
+    genericSignals,
+    genericSignalLabels: uniqueStrings(genericSignals.map(formatFingerprintSignalLabel)),
+    strongSignals,
+    strongSignalLabels: uniqueStrings(strongSignals.map(formatFingerprintSignalLabel))
+  };
+}
+
 function hasConcreteConsentDarkPatternEvidence(packet: UnifiedFindingDisplayPacket) {
   const snippets = packet.evidence?.snippets ?? [];
   const hasSpecificUiSnippet = snippets.some((snippet) => {
@@ -568,6 +623,25 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
       identifierKeys.length > 0 ? `Identifier query keys retained: ${identifierKeys.slice(0, 5).join(", ")}.` : null,
       firstRequest ? `Representative identifier-sharing request: ${firstRequest.url}` : null
     ]).slice(0, 4);
+  }
+
+  if (findingId === "probable_fingerprinting" || findingId === "browser_fingerprinting_related_signals_observed") {
+    const groups = getFingerprintSignalGroups(packet);
+    return uniqueStrings([
+      findingId === "probable_fingerprinting"
+        ? "Why this surfaced: runtime collection included multiple browser/device fingerprinting-related primitives beyond ordinary analytics telemetry."
+        : "Why this surfaced: browser or device attributes were retained for fingerprinting review, but stronger fingerprinting primitives were not retained.",
+      groups.strongSignalLabels.length > 0
+        ? `Stronger retained primitives: ${groups.strongSignalLabels.join(", ")}.`
+        : null,
+      groups.genericSignalLabels.length > 0
+        ? `Additional browser context: ${groups.genericSignalLabels.join(", ")}.`
+        : null,
+      findingId === "probable_fingerprinting"
+        ? "Confidence basis: multiple high-entropy browser/device collection primitives observed."
+        : "Confidence basis: generic browser/device telemetry only; no probable fingerprinting escalation.",
+      "This does not independently establish unlawful tracking or legal liability."
+    ]).slice(0, 5);
   }
 
   return uniqueStrings([
@@ -1436,14 +1510,36 @@ function buildGenericCanonicalEvidenceDetails(
     const fingerprintSignals = Array.isArray(fingerprintingRawEvidence?.fingerprintAttributeCategories)
       ? (fingerprintingRawEvidence.fingerprintAttributeCategories as string[])
       : [];
+    const fingerprintSignalGroups = findingId === "browser_fingerprinting_related_signals_observed" || findingId === "probable_fingerprinting"
+      ? getFingerprintSignalGroups(packet)
+      : null;
     details.telemetryEvidence = {
       observed: true,
       basis: findingId === "browser_fingerprinting_related_signals_observed"
         ? "Browser or device attributes were retained for fingerprinting review, but strong fingerprinting proof was not retained."
+        : findingId === "probable_fingerprinting"
+          ? "Runtime collection included multiple browser/device fingerprinting-related primitives beyond ordinary analytics telemetry."
         : evidenceSnippets[0] ?? packet.summary,
       identifierLikeRequestCount: representativeRequests.filter((request) => request.identifierLike).length,
       deviceDataLikeRequestCount: representativeRequests.filter((request) => request.deviceDataLike).length,
-      ...(fingerprintSignals.length > 0 ? { fingerprintSignals } : {})
+      ...(fingerprintSignals.length > 0 ? { fingerprintSignals } : {}),
+      ...(fingerprintSignalGroups?.strongSignals.length
+        ? {
+            strongFingerprintSignals: fingerprintSignalGroups.strongSignals,
+            strongFingerprintSignalLabels: fingerprintSignalGroups.strongSignalLabels
+          }
+        : {}),
+      ...(fingerprintSignalGroups?.genericSignals.length
+        ? {
+            genericFingerprintSignals: fingerprintSignalGroups.genericSignals,
+            genericFingerprintSignalLabels: fingerprintSignalGroups.genericSignalLabels
+          }
+        : {}),
+      ...(findingId === "probable_fingerprinting"
+        ? { confidenceExplanation: "Multiple high-entropy browser/device collection primitives observed." }
+        : findingId === "browser_fingerprinting_related_signals_observed"
+          ? { confidenceExplanation: "Generic browser/device telemetry retained without stronger fingerprinting primitives." }
+          : {})
     };
   }
 
@@ -2227,6 +2323,13 @@ function buildExecutiveShortSummary(
       return `Non-essential tracking requests fired after the reject interaction${vendorText}.`;
     }
     return "Tracking requests were observed during the consent flow, but post-reject timing was not retained.";
+  }
+
+  if (findingId === "probable_fingerprinting") {
+    const groups = getFingerprintSignalGroups(packet);
+    const retained = groups.strongSignalLabels.slice(0, 3);
+    const retainedText = retained.length > 0 ? `, including ${formatVendorList(retained)}` : "";
+    return `Runtime collection included multiple browser/device fingerprinting-related primitives beyond ordinary analytics telemetry${retainedText}.`;
   }
 
   if (findingId === "browser_fingerprinting_related_signals_observed") {

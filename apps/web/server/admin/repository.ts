@@ -283,7 +283,7 @@ export async function loadAdminScanListPageData(limit: number): Promise<{
       const snapshotsResult = await query<AdminScanSnapshotRow>(
         `select scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status,
                 robots_fetch_http_status, blocked_flag, captcha_flag, access_posture_class,
-                highest_successful_tier, stop_tier, recoverable_finding_classes
+                highest_successful_tier, stop_tier, recoverable_finding_classes, egress_id, egress_type
            from scan_snapshots
           where scan_id = any($1::uuid[])`,
         [scanIds],
@@ -294,7 +294,7 @@ export async function loadAdminScanListPageData(limit: number): Promise<{
       if (isMissingTieredSnapshotColumn({ message: getErrorMessage(error) })) {
         const fallback = await query<AdminScanSnapshotRow>(
           `select scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status,
-                  robots_fetch_http_status, blocked_flag, captcha_flag
+                  robots_fetch_http_status, blocked_flag, captcha_flag, egress_id, egress_type
              from scan_snapshots
             where scan_id = any($1::uuid[])`,
           [scanIds],

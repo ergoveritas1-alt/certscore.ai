@@ -1655,13 +1655,24 @@ test("keeps probable fingerprinting wording for strong high-entropy evidence", (
       details: { family: "consent_tracking", kind: "fingerprinting_observed" },
       evidence: {
         counts: {
-          fingerprintTier: 2
+          fingerprintTier: 2,
+          mergedSignalConfidence: 1
         },
         entities: {
-          fingerprintAttributeCategories: ["canvas_webgl", "audio"],
+          fingerprintAttributeCategories: [
+            "audio",
+            "canvas_webgl",
+            "fonts_plugins",
+            "hardware",
+            "timezone_locale",
+            "storage",
+            "input_touch",
+            "network_device_state",
+            "screen_viewport"
+          ],
           fingerprintingRuntimeEvidence: [
             JSON.stringify({
-              attributeCategories: ["canvas_webgl", "audio"],
+              attributeCategories: ["canvas_webgl", "audio", "fonts_plugins", "hardware"],
               requestUrl: "https://fp.example.test/collect",
               tier: 2
             })
@@ -1677,8 +1688,92 @@ test("keeps probable fingerprinting wording for strong high-entropy evidence", (
     })
   ]);
 
-  assert.ok(projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
+  const finding = projection.findings.find((entry) => entry.id === "probable_fingerprinting");
+  assert.ok(finding);
   assert.ok(!projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
+  assert.match(finding.shortSummary, /canvas\/WebGL access/);
+  assert.match(finding.shortSummary, /audio environment access/);
+  const strongPreview = finding.evidencePreview.find((entry) => entry.startsWith("Stronger retained primitives:")) ?? "";
+  assert.match(strongPreview, /canvas\/WebGL access/);
+  assert.match(strongPreview, /audio environment access/);
+  assert.match(strongPreview, /font\/plugin enumeration/);
+  assert.match(strongPreview, /hardware\/device attribute collection/);
+  const genericPreview = finding.evidencePreview.find((entry) => entry.startsWith("Additional browser context:")) ?? "";
+  assert.match(genericPreview, /timezone\/locale/);
+  assert.match(genericPreview, /storage capability/);
+  assert.match(genericPreview, /touch\/input capability/);
+  assert.match(genericPreview, /network\/device state/);
+  assert.match(genericPreview, /screen\/viewport/);
+  assert.deepEqual(finding.evidenceDetails?.telemetryEvidence?.strongFingerprintSignals, [
+    "audio",
+    "canvas_webgl",
+    "fonts_plugins",
+    "hardware"
+  ]);
+  assert.deepEqual(finding.evidenceDetails?.telemetryEvidence?.genericFingerprintSignals, [
+    "timezone_locale",
+    "storage",
+    "input_touch",
+    "network_device_state",
+    "screen_viewport"
+  ]);
+});
+
+test("keeps canvas-only fingerprinting evidence below probable wording", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("fingerprinting_observed", {
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: {
+          fingerprintTier: 2
+        },
+        entities: {
+          fingerprintAttributeCategories: ["canvas_webgl"]
+        },
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: []
+      },
+      severity: "medium",
+      summary: "Fingerprinting review signal."
+    })
+  ]);
+
+  assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
+  assert.ok(projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
+});
+
+test("keeps Clarity and GTM without strong primitives as generic browser telemetry", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("fingerprinting_observed", {
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: {
+          fingerprintTier: 2
+        },
+        entities: {
+          fingerprintAttributeCategories: ["timezone_locale", "screen_viewport", "storage"],
+          runtimeVendors: ["Microsoft Clarity", "Google Tag Manager"]
+        },
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: []
+      },
+      severity: "medium",
+      summary: "Browser telemetry observed."
+    })
+  ]);
+
+  assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
+  const finding = projection.findings.find((entry) => entry.id === "browser_fingerprinting_related_signals_observed");
+  assert.ok(finding);
+  assert.deepEqual(finding.evidenceDetails?.telemetryEvidence?.genericFingerprintSignals, [
+    "timezone_locale",
+    "screen_viewport",
+    "storage"
+  ]);
 });
 
 test("projects blocking overlay context without violation framing", () => {
