@@ -136,6 +136,8 @@ export type CertScoreFindingEvidenceDetails = {
     runtimeAnchor: {
       observationType: string | null;
       phase: string | null;
+      firstSeenMs?: number | null;
+      host?: string | null;
       requestUrls: string[];
       vendors: string[];
     };
@@ -365,7 +367,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   sensitive_data_collection_with_third_party_tracking_present: {
     id: "sensitive_data_collection_with_third_party_tracking_present",
-    label: "Sensitive-data collection with third-party tracking present",
+    label: "Sensitive input surfaces detected alongside third-party tracking",
     section: "Privacy & Tracking",
     defaultSurfacePriority: 98,
     whyItMatters:
@@ -414,6 +416,14 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     defaultSurfacePriority: 66,
     whyItMatters: "Broad environment collection can support device recognition even without cookies.",
     remediation: "Limit collection of high-entropy device and browser attributes to essential uses."
+  },
+  browser_fingerprinting_related_signals_observed: {
+    id: "browser_fingerprinting_related_signals_observed",
+    label: "Browser fingerprinting-related signals observed",
+    section: "Fingerprinting",
+    defaultSurfacePriority: 72,
+    whyItMatters: "Browser and device attributes can be relevant to fingerprinting review, even when strong fingerprinting proof was not retained.",
+    remediation: "Review scripts collecting browser or device attributes and limit non-essential collection to disclosed, necessary purposes."
   },
   probable_fingerprinting: {
     id: "probable_fingerprinting",

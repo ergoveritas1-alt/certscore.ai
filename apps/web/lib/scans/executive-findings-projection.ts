@@ -10,7 +10,9 @@ import {
 } from "./finding-registry";
 import { getFindingSurfaceScore, rankFindings } from "./rank-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
+import { evaluatePolicyBehaviorContradictionEvidence, getContradictionEvidenceBundle } from "./contradiction-evidence-contract";
 import { isFindingProjectionEligible } from "./finding-evidence-contracts";
+import { hasStrongFingerprintingEvidence } from "./promotion-evidence-contracts";
 
 const MAX_DISPLAY_SNIPPET_LENGTH = 240;
 
@@ -99,6 +101,7 @@ const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
   "pre_submit_text_capture_detected",
   "identifier_transmission_detected",
   "device_data_collection_detected",
+  "browser_fingerprinting_related_signals_observed",
   "probable_fingerprinting",
   "non_cookie_tracking_detected",
   "high_request_density",
@@ -147,6 +150,7 @@ const TELEMETRY_EVIDENCE_FINDING_IDS = new Set([
   "identifier_transmission_detected",
   "device_data_collection_detected",
   "telemetry_rich_identification_observed",
+  "browser_fingerprinting_related_signals_observed",
   "probable_fingerprinting",
   "collection_endpoints_detected"
 ]);
@@ -286,6 +290,9 @@ function mapExecutiveConfidence(
   if (findingId === "reject_tracking_persists_after_reject" && !packet.evidence?.flags?.includes("reject_evidence_confirmed")) {
     return "moderate";
   }
+  if (findingId === "policy_behavior_contradiction_detected") {
+    return evaluatePolicyRuntimeConflictPresentation(packet).complete ? mapConfidenceBandToExecutiveConfidence(packet.confidenceBand) : "moderate";
+  }
   return mapConfidenceBandToExecutiveConfidence(packet.confidenceBand);
 }
 
@@ -318,6 +325,9 @@ function mapSeverity(
   if (findingId === "reject_tracking_persists_after_reject" && !packet.evidence?.flags?.includes("reject_evidence_confirmed")) {
     return "medium";
   }
+  if (findingId === "browser_fingerprinting_related_signals_observed") {
+    return "low";
+  }
   if (packet.severity === "high") {
     return "high";
   }
@@ -330,6 +340,11 @@ function mapSeverity(
 function getMappedFindingId(
   packet: UnifiedFindingDisplayPacket
 ): keyof typeof CERT_SCORE_FINDING_REGISTRY | null {
+  if (packet.unifiedFindingId === "fingerprinting_observed") {
+    return hasStrongFingerprintingEvidence(buildFingerprintingRawEvidence(packet))
+      ? "probable_fingerprinting"
+      : "browser_fingerprinting_related_signals_observed";
+  }
   if (packet.unifiedFindingId in CERT_SCORE_FINDING_REGISTRY) {
     return packet.unifiedFindingId as keyof typeof CERT_SCORE_FINDING_REGISTRY;
   }
@@ -340,6 +355,49 @@ function getMappedFindingId(
     return "policy_behavior_contradiction_detected";
   }
   return null;
+}
+
+function buildFingerprintingRawEvidence(packet: UnifiedFindingDisplayPacket): Record<string, unknown> {
+  const entities = packet.evidence?.entities ?? {};
+  const fingerprintRuntimeEvidence = [
+    ...(entities.fingerprintingRuntimeEvidence ?? []),
+    ...(entities.fingerprintRuntimeEvidence ?? [])
+  ].flatMap((value) => {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? [parsed as Record<string, unknown>] : [];
+    } catch {
+      return [{ value }];
+    }
+  });
+  const fingerprintAttributeCategories = uniqueStrings([
+    ...(entities.fingerprintAttributeCategories ?? []),
+    ...(entities.fingerprintingSignals ?? []),
+    ...(entities.highEntropySignals ?? [])
+  ]);
+  const fingerprintTier = packet.evidence?.counts?.fingerprintTier;
+
+  return {
+    fingerprintAttributeCategories,
+    fingerprintRuntimeEvidence,
+    fingerprintSummary: {
+      ...(typeof fingerprintTier === "number" ? { tier: fingerprintTier } : {}),
+      ...(fingerprintAttributeCategories.length > 0 ? { fingerprintingSignals: fingerprintAttributeCategories } : {})
+    },
+    fingerprintTier,
+    requestUrls: uniqueStrings([
+      ...(packet.evidence?.sourceUrls ?? []),
+      ...getEntityUrlValues(packet, /runtime.*request|request.*url|evidence.*url|fingerprint.*url/i),
+      ...fingerprintRuntimeEvidence.flatMap((row) => [
+        getRecordString(row, ["requestUrl", "request_url", "url", "redactedUrl", "redacted_url"]),
+        ...getRecordStringArray(row, ["requestUrls", "request_urls", "urls"])
+      ])
+    ]),
+    runtimeVendors: uniqueStrings([
+      ...getEntityValues(packet, /runtime.*vendor|vendor/i),
+      ...fingerprintRuntimeEvidence.flatMap((row) => getRecordString(row, ["vendor", "vendorName", "vendor_name", "hostname", "host"]))
+    ])
+  };
 }
 
 function hasConcreteConsentDarkPatternEvidence(packet: UnifiedFindingDisplayPacket) {
@@ -461,6 +519,17 @@ function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof t
 
 function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: keyof typeof CERT_SCORE_FINDING_REGISTRY) {
   const evidenceDetails = findingId ? buildExecutiveEvidenceDetails(packet, findingId) : null;
+
+  if (findingId === "policy_behavior_contradiction_detected" && evidenceDetails?.policyRuntimeConflict) {
+    const conflict = evidenceDetails.policyRuntimeConflict;
+    const runtimeEvent = getPolicyRuntimeRepresentativeEvent(conflict);
+    return uniqueStrings([
+      conflict.policyAnchor.snippet ? `Policy claim: "${formatQuotedSnippet(conflict.policyAnchor.snippet)}"` : "Policy claim: not displayed from retained evidence.",
+      conflict.policyAnchor.sourceUrl ? `Policy source: ${conflict.policyAnchor.sourceUrl}` : "Policy source: not retained.",
+      runtimeEvent ? `Runtime event: ${runtimeEvent}` : "Runtime event: no concrete timed or consent-phased runtime event was retained.",
+      conflict.conflictBridge.reasoning ? `Bridge: ${conflict.conflictBridge.reasoning}` : "Bridge: no explicit policy/runtime bridge was retained."
+    ]).slice(0, 4);
+  }
 
   if (findingId === "pre_consent_tracking_detected" && evidenceDetails) {
     const vendorNames = (evidenceDetails.vendors ?? []).map((vendor) => vendor.name).slice(0, 5);
@@ -617,6 +686,26 @@ function getVendorDetails(vendors: string[], representativeRequests: Array<{ ven
       firstSeenMs: matchingRequest?.firstSeenMs ?? null
     };
   });
+}
+
+function getNumberFromRecord(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getStringFromRecord(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
 }
 
 function buildIdentifierEvidence(representativeRequests: Array<{ identifierLike: boolean; deviceDataLike: boolean }>) {
@@ -1341,11 +1430,20 @@ function buildGenericCanonicalEvidenceDetails(
   }
 
   if (TELEMETRY_EVIDENCE_FINDING_IDS.has(findingId)) {
+    const fingerprintingRawEvidence = findingId === "browser_fingerprinting_related_signals_observed" || findingId === "probable_fingerprinting"
+      ? buildFingerprintingRawEvidence(packet)
+      : null;
+    const fingerprintSignals = Array.isArray(fingerprintingRawEvidence?.fingerprintAttributeCategories)
+      ? (fingerprintingRawEvidence.fingerprintAttributeCategories as string[])
+      : [];
     details.telemetryEvidence = {
       observed: true,
-      basis: evidenceSnippets[0] ?? packet.summary,
+      basis: findingId === "browser_fingerprinting_related_signals_observed"
+        ? "Browser or device attributes were retained for fingerprinting review, but strong fingerprinting proof was not retained."
+        : evidenceSnippets[0] ?? packet.summary,
       identifierLikeRequestCount: representativeRequests.filter((request) => request.identifierLike).length,
-      deviceDataLikeRequestCount: representativeRequests.filter((request) => request.deviceDataLike).length
+      deviceDataLikeRequestCount: representativeRequests.filter((request) => request.deviceDataLike).length,
+      ...(fingerprintSignals.length > 0 ? { fingerprintSignals } : {})
     };
   }
 
@@ -1446,13 +1544,35 @@ function buildGenericCanonicalEvidenceDetails(
 
   if (findingId === "policy_behavior_contradiction_detected") {
     const policyRuntimeConflict = buildPolicyRuntimeConflictDetails(packet);
+    const presentation = evaluatePolicyRuntimeConflictPresentation(packet);
     if (policyRuntimeConflict) {
       details.policyRuntimeConflict = policyRuntimeConflict;
+      details.policyEvidence = policyRuntimeConflict.policyAnchor.snippet || policyRuntimeConflict.policyAnchor.sourceUrl
+        ? {
+            evaluated: true,
+            cookieOrPrivacyPolicyFound: Boolean(policyRuntimeConflict.policyAnchor.sourceUrl),
+            relevantDisclosureFound: Boolean(policyRuntimeConflict.policyAnchor.snippet),
+            disclosureGapObserved: !presentation.complete,
+            policyUrl: policyRuntimeConflict.policyAnchor.sourceUrl,
+            snippet: policyRuntimeConflict.policyAnchor.snippet
+          }
+        : { evaluated: false };
       details.policyEvidenceDetails = {
-        evaluated: true,
+        evaluated: Boolean(policyRuntimeConflict.policyAnchor.snippet && policyRuntimeConflict.policyAnchor.sourceUrl),
         basis: policyRuntimeConflict.conflictBridge.reasoning ?? packet.summary,
-        conflictType: policyRuntimeConflict.conflictBridge.conflictType
+        conflictType: policyRuntimeConflict.conflictBridge.conflictType,
+        policySnippet: policyRuntimeConflict.policyAnchor.snippet,
+        policySourceUrl: policyRuntimeConflict.policyAnchor.sourceUrl,
+        runtimeEvent: getPolicyRuntimeRepresentativeEvent(policyRuntimeConflict),
+        missingAnchors: presentation.missing
       };
+      details.limitations = [
+        ...(!policyRuntimeConflict.policyAnchor.snippet ? ["The policy claim could not be displayed from retained evidence."] : []),
+        ...(!policyRuntimeConflict.policyAnchor.sourceUrl ? ["The policy source URL could not be displayed from retained evidence."] : []),
+        ...(presentation.missing.includes("missing_runtime_timing_or_phase")
+          ? ["The runtime event did not include retained timing or consent-relative phase evidence."]
+          : [])
+      ];
     }
   }
 
@@ -1599,10 +1719,57 @@ function buildPolicyRuntimeConflictDetails(packet: UnifiedFindingDisplayPacket) 
     return null;
   }
 
+  const bundle = getContradictionEvidenceBundle({
+    contradictionEvidence: {
+      claim: packet.details.claim ?? null,
+      contradictionBasis: packet.details.contradictionBasis ?? null,
+      conflictBridge: {
+        conflictType: packet.details.conflictType ?? null,
+        reasoning: packet.details.conflictBridgeReasoning ?? null,
+        supportsPromotion: packet.details.conflictSupportsPromotion === true,
+        provenance: {
+          bridgeRuleId: packet.details.bridgeRuleId ?? null,
+          generatedBy: packet.details.bridgeGeneratedBy ?? null,
+          mappingType: packet.details.bridgeMappingType ?? null,
+          mappingVersion: packet.details.bridgeMappingVersion ?? null,
+          policyAnchorRef: packet.details.policyAnchorRef ?? null,
+          runtimeAnchorRef: packet.details.runtimeAnchorRef ?? null,
+          sourceEvidenceIds: packet.details.sourceEvidenceIds ?? []
+        }
+      },
+      evidenceSufficiency: {
+        conflictBridgePresent: packet.details.conflictType != null && packet.details.conflictSupportsPromotion === true,
+        policyAnchorPresent: Boolean(packet.details.policyClaimType && packet.details.policySourceUrl && packet.details.policySnippet),
+        promotionEligible: packet.details.contradictionPromotionEligible === true,
+        reviewStatus: packet.details.contradictionReviewStatus ?? null,
+        runtimeAnchorPresent: Boolean(packet.details.runtimeObservationType && (packet.details.runtimeEvidenceArtifacts?.length ?? 0) > 0)
+      },
+      policyAnchor: {
+        claimType: packet.details.policyClaimType ?? null,
+        confidence: getNumberFromRecord(packet.evidence?.entities ?? {}, ["policyConfidence", "policy_confidence"]) ?? 0.72,
+        extractionStatus: getStringFromRecord(packet.evidence?.entities ?? {}, ["policyExtractionStatus", "policy_extraction_status"]) ?? "fetched",
+        normalizedClaim: packet.details.claim ?? packet.details.policySnippet ?? null,
+        snippet: packet.details.policySnippet ?? null,
+        sourceUrl: packet.details.policySourceUrl ?? null
+      },
+      policySnippet: packet.details.policySnippet ?? null,
+      policySourceUrl: packet.details.policySourceUrl ?? null,
+      runtimeAnchor: {
+        confidence: getNumberFromRecord(packet.evidence?.entities ?? {}, ["runtimeConfidence", "runtime_confidence"]) ?? 0.82,
+        observationType: packet.details.runtimeObservationType ?? null,
+        phase: packet.details.runtimePhase ?? "unknown",
+        requests: packet.details.runtimeEvidenceArtifacts ?? [],
+        vendors: packet.details.vendors ?? []
+      },
+      runtimeEvidenceArtifacts: packet.details.runtimeEvidenceArtifacts ?? [],
+      runtimeSummary: packet.details.observedBehavior ?? null,
+      runtimeVendors: packet.details.vendors ?? [],
+      sourceUrls: [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])],
+      supportingSignals: []
+    }
+  });
   const policySourceUrls = uniqueStrings([
     packet.details.policySourceUrl,
-    packet.primaryPageUrl,
-    packet.sourceUrl,
     ...(packet.evidence?.pageUrls ?? []),
     ...(packet.evidence?.sourceUrls ?? []).filter((url) => !getEntityUrlValues(packet, /runtime.*request|request.*url/i).includes(url))
   ]).filter((url) => /^https?:\/\//i.test(url));
@@ -1617,16 +1784,27 @@ function buildPolicyRuntimeConflictDetails(packet: UnifiedFindingDisplayPacket) 
   const validationRuleKeys = uniqueStrings(
     packet.sourceRefs.flatMap((sourceRef) => (sourceRef.kind === "validation" ? [sourceRef.ruleKey] : []))
   );
+  const runtimeArtifacts = getPolicyRuntimeArtifacts(packet);
+  const firstRuntimeArtifact = runtimeArtifacts[0] ?? null;
+  const phase = bundle?.runtimeAnchor.phase ?? packet.details.runtimePhase ?? null;
+  const firstSeenMs = firstRuntimeArtifact
+    ? getNumberFromRecord(firstRuntimeArtifact, ["timestampMs", "timestamp_ms", "firstSeenMs", "first_seen_ms"])
+    : null;
+  const runtimeHost = firstRuntimeArtifact
+    ? getStringFromRecord(firstRuntimeArtifact, ["host", "hostname", "domain"])
+    : null;
 
   return {
     policyAnchor: {
-      claimType: packet.details.policyClaimType ?? null,
-      sourceUrl: packet.details.policySourceUrl ?? policySourceUrls[0] ?? null,
+      claimType: bundle?.policyAnchor.claimType ?? packet.details.policyClaimType ?? null,
+      sourceUrl: packet.details.policySourceUrl ?? bundle?.policyAnchor.sourceUrl ?? null,
       snippet: packet.details.policySnippet ? truncateDisplaySnippet(packet.details.policySnippet) : null
     },
     runtimeAnchor: {
-      observationType: packet.details.runtimeObservationType ?? null,
-      phase: packet.details.runtimePhase ?? null,
+      observationType: bundle?.runtimeAnchor.observationType ?? packet.details.runtimeObservationType ?? null,
+      phase,
+      firstSeenMs,
+      host: runtimeHost ?? (runtimeRequestUrls[0] ? getUrlHostname(runtimeRequestUrls[0]) : null),
       requestUrls: runtimeRequestUrls.slice(0, 5),
       vendors: runtimeVendors.slice(0, 8)
     },
@@ -1636,10 +1814,8 @@ function buildPolicyRuntimeConflictDetails(packet: UnifiedFindingDisplayPacket) 
       supportsPromotion: packet.details.conflictSupportsPromotion === true
     },
     evidenceSufficiency: {
-      reviewStatus: packet.details.contradictionReviewStatus ?? null,
-      promotionEligible:
-        packet.details.contradictionPromotionEligible === true ||
-        packet.concernContext?.promotionEligibilities.includes("eligible") === true
+      reviewStatus: bundle?.evidenceSufficiency.reviewStatus ?? packet.details.contradictionReviewStatus ?? null,
+      promotionEligible: evaluatePolicyRuntimeConflictPresentation(packet).complete
     },
     references: {
       policySourceUrls: policySourceUrls.slice(0, 3),
@@ -1647,6 +1823,129 @@ function buildPolicyRuntimeConflictDetails(packet: UnifiedFindingDisplayPacket) 
       validationRuleKeys
     }
   };
+}
+
+function getPolicyRuntimeArtifacts(packet: UnifiedFindingDisplayPacket) {
+  const entities = (packet.evidence?.entities ?? {}) as Record<string, unknown>;
+  const raw =
+    entities.runtimeBehaviorArtifacts ??
+    entities.runtime_behavior_artifacts ??
+    entities.runtimeBehaviorArtifact ??
+    entities.runtime_behavior_artifact;
+  if (Array.isArray(raw)) {
+    return raw.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry));
+  }
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return [raw as Record<string, unknown>];
+  }
+  return [];
+}
+
+function evaluatePolicyRuntimeConflictPresentation(packet: UnifiedFindingDisplayPacket) {
+  if (packet.details?.family !== "contradiction") {
+    return { complete: false, missing: ["missing_contradiction_bridge"] };
+  }
+  const policySnippet = packet.details.policySnippet?.trim() ?? "";
+  const policySourceUrl = packet.details.policySourceUrl?.trim() ?? "";
+  const runtimeArtifacts = getPolicyRuntimeArtifacts(packet);
+  const runtimeHasTiming = runtimeArtifacts.some((artifact) =>
+    getNumberFromRecord(artifact, ["timestampMs", "timestamp_ms", "firstSeenMs", "first_seen_ms"]) !== null
+  );
+  const runtimePhase = packet.details.runtimePhase ?? null;
+  const runtimeHasConsentRelativePhase = runtimePhase === "pre_consent" || runtimePhase === "after_reject" || runtimePhase === "gpc_enabled";
+  const runtimeRequestUrls = uniqueStrings([
+    ...(packet.details.runtimeEvidenceArtifacts ?? []),
+    ...getEntityUrlValues(packet, /runtime.*request|request.*url|preconsent.*tracker.*evidence|evidence.*url/i)
+  ]);
+  const runtimeEventPresent =
+    Boolean(packet.details.runtimeObservationType) &&
+    runtimeRequestUrls.length > 0 &&
+    (runtimeHasTiming || runtimeHasConsentRelativePhase);
+  const bridgePresent = Boolean(packet.details.conflictType && packet.details.conflictBridgeReasoning && packet.details.conflictSupportsPromotion === true);
+  const contractEligible = evaluatePolicyBehaviorContradictionEvidence({
+    contradictionEvidence: {
+      claim: packet.details.claim ?? null,
+      contradictionBasis: packet.details.contradictionBasis ?? null,
+      conflictBridge: {
+        conflictType: packet.details.conflictType ?? null,
+        reasoning: packet.details.conflictBridgeReasoning ?? null,
+        supportsPromotion: packet.details.conflictSupportsPromotion === true,
+        provenance: {
+          bridgeRuleId: packet.details.bridgeRuleId ?? null,
+          generatedBy: packet.details.bridgeGeneratedBy ?? null,
+          mappingType: packet.details.bridgeMappingType ?? null,
+          mappingVersion: packet.details.bridgeMappingVersion ?? null,
+          policyAnchorRef: packet.details.policyAnchorRef ?? null,
+          runtimeAnchorRef: packet.details.runtimeAnchorRef ?? null,
+          sourceEvidenceIds: packet.details.sourceEvidenceIds ?? []
+        }
+      },
+      policyAnchor: {
+        claimType: packet.details.policyClaimType ?? null,
+        confidence: getNumberFromRecord(packet.evidence?.entities ?? {}, ["policyConfidence", "policy_confidence"]) ?? 0.72,
+        extractionStatus: getStringFromRecord(packet.evidence?.entities ?? {}, ["policyExtractionStatus", "policy_extraction_status"]) ?? "fetched",
+        normalizedClaim: packet.details.claim ?? packet.details.policySnippet ?? null,
+        snippet: policySnippet || null,
+        sourceUrl: policySourceUrl || null
+      },
+      runtimeAnchor: {
+        confidence: getNumberFromRecord(packet.evidence?.entities ?? {}, ["runtimeConfidence", "runtime_confidence"]) ?? 0.82,
+        observationType: packet.details.runtimeObservationType ?? null,
+        phase: runtimePhase ?? "unknown",
+        requests: runtimeRequestUrls,
+        vendors: packet.details.vendors ?? []
+      }
+    }
+  }).eligible;
+  const missing = [
+    policySnippet ? null : "missing_policy_snippet",
+    /^https?:\/\//i.test(policySourceUrl) ? null : "missing_policy_source_url",
+    runtimeEventPresent ? null : "missing_runtime_timing_or_phase",
+    bridgePresent ? null : "missing_conflict_bridge",
+    contractEligible ? null : "policy_behavior_contract_not_strong"
+  ].filter((value): value is string => Boolean(value));
+  return { complete: missing.length === 0, missing };
+}
+
+function getPolicyRuntimeRepresentativeEvent(conflict: NonNullable<CertScoreFindingEvidenceDetails["policyRuntimeConflict"]>) {
+  const url = conflict.runtimeAnchor.requestUrls[0] ?? null;
+  const vendor = conflict.runtimeAnchor.vendors[0] ?? "Runtime request";
+  const host = typeof conflict.runtimeAnchor.host === "string" && conflict.runtimeAnchor.host.length > 0
+    ? conflict.runtimeAnchor.host
+    : url
+      ? getUrlHostname(url)
+      : null;
+  const firstSeenMs = typeof conflict.runtimeAnchor.firstSeenMs === "number" ? conflict.runtimeAnchor.firstSeenMs : null;
+  const phase = typeof conflict.runtimeAnchor.phase === "string" ? conflict.runtimeAnchor.phase : null;
+  if (!url && !host && conflict.runtimeAnchor.vendors.length === 0) {
+    return null;
+  }
+  const target = [vendor, host].filter(Boolean).join(" at ");
+  if (firstSeenMs !== null && phase === "pre_consent") {
+    return `${target} fired at ${firstSeenMs}ms before consent interaction.`;
+  }
+  if (firstSeenMs !== null) {
+    return `${target} fired at ${firstSeenMs}ms during ${formatRuntimePhase(phase)}.`;
+  }
+  if (phase === "pre_consent") {
+    return `${target} fired during the pre-consent phase.`;
+  }
+  return `${target} was observed during the scan.`;
+}
+
+function formatRuntimePhase(phase: string | null) {
+  switch (phase) {
+    case "pre_consent":
+      return "the pre-consent phase";
+    case "after_reject":
+      return "the post-reject phase";
+    case "gpc_enabled":
+      return "the GPC-enabled phase";
+    case "post_consent":
+      return "the post-consent phase";
+    default:
+      return "the scan";
+  }
 }
 
 function formatQuotedSnippet(snippet: string) {
@@ -1930,6 +2229,19 @@ function buildExecutiveShortSummary(
     return "Tracking requests were observed during the consent flow, but post-reject timing was not retained.";
   }
 
+  if (findingId === "browser_fingerprinting_related_signals_observed") {
+    return "Observed browser or device attribute collection that can be relevant to fingerprinting review, but no strong fingerprinting proof was retained.";
+  }
+
+  if (findingId === "policy_behavior_contradiction_detected") {
+    const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);
+    const conflict = evidenceDetails?.policyRuntimeConflict;
+    const runtimeEvent = conflict ? getPolicyRuntimeRepresentativeEvent(conflict) : null;
+    if (conflict?.policyAnchor.snippet && runtimeEvent && evaluatePolicyRuntimeConflictPresentation(packet).complete) {
+      return `Policy states "${formatQuotedSnippet(conflict.policyAnchor.snippet)}"; runtime observed ${runtimeEvent}`;
+    }
+  }
+
   return packet.summary;
 }
 
@@ -1943,7 +2255,9 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
     defaultSurfacePriority: definition.defaultSurfacePriority,
     whyItMatters: definition.whyItMatters,
     remediation: definition.remediation,
-    confidence: mapExecutiveConfidence(packet, findingId),
+    confidence: findingId === "browser_fingerprinting_related_signals_observed"
+      ? "moderate"
+      : mapExecutiveConfidence(packet, findingId),
     directVsInferred: mapVerificationStateToDirectness(packet.presentationDecision.verificationState),
     ...(evidenceDetails ? { evidenceDetails } : {}),
     evidencePreview: buildEvidencePreview(packet, findingId),

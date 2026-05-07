@@ -1302,9 +1302,9 @@ test("ExecutiveSummaryCard assigns distinct themed icons to sensitive-data and a
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
       allFindings: [
-        makeFinding("sensitive_data_collection_with_third_party_tracking_present", "Sensitive-data collection with third-party tracking present", {
+        makeFinding("sensitive_data_collection_with_third_party_tracking_present", "Sensitive input surfaces detected alongside third-party tracking", {
           severity: "medium",
-          shortSummary: "Sensitive data collection was retained alongside third-party tracking."
+          shortSummary: "Sensitive input evidence was retained alongside third-party tracking."
         }),
         makeFinding("accessibility_risk_score", "Representative accessibility barriers detected", {
           section: "Accessibility",
@@ -1329,9 +1329,9 @@ test("ExecutiveSummaryCard assigns distinct themed icons to sensitive-data and a
       thirdPartyRequestCount: 1,
       thirdPartyDomains: ["log.intellimize.co"],
       topFindings: [
-        makeFinding("sensitive_data_collection_with_third_party_tracking_present", "Sensitive-data collection with third-party tracking present", {
+        makeFinding("sensitive_data_collection_with_third_party_tracking_present", "Sensitive input surfaces detected alongside third-party tracking", {
           severity: "medium",
-          shortSummary: "Sensitive data collection was retained alongside third-party tracking."
+          shortSummary: "Sensitive input evidence was retained alongside third-party tracking."
         }),
         makeFinding("accessibility_risk_score", "Representative accessibility barriers detected", {
           section: "Accessibility",

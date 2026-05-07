@@ -824,6 +824,43 @@ function getFingerprintingAttributeCategories(rawEvidence: Record<string, unknow
   ]).map(normalizeFingerprintingCategory);
 }
 
+function hasExplicitFingerprintingVendorEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const vendorValues = getStringArrayValues(rawEvidence, [
+    "runtimeVendors",
+    "runtime_vendors",
+    "vendors",
+    "vendorNames",
+    "vendor_names"
+  ]);
+  const runtimeVendorValues = getObjectArrayValues(rawEvidence, [
+    "fingerprintRuntimeEvidence",
+    "fingerprint_runtime_evidence",
+    "fingerprintingRuntimeEvidence",
+    "fingerprinting_runtime_evidence"
+  ]).flatMap((row) => getStringArrayValues(row, ["vendor", "vendorName", "vendor_name", "hostname", "host", "requestUrl", "request_url", "url"]));
+
+  return [...vendorValues, ...runtimeVendorValues].some((value) =>
+    /fingerprintjs|fpjs|fingerprint\.com|iovation|threatmetrix|lexisnexis|perimeterx|px-cloud|datadome|arkose|humansecurity|kasada|shape security|akamai bot|cloudflare bot|device intelligence|fingerprint/i.test(value)
+  );
+}
+
+function hasConcreteFingerprintingRequestEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const requestValues = uniqueStrings([
+    ...getStringArrayValues(rawEvidence, ["requestUrls", "request_urls", "runtimeRequestUrls", "runtime_request_urls", "sourceUrls", "source_urls"]),
+    ...getObjectArrayValues(rawEvidence, [
+      "fingerprintRuntimeEvidence",
+      "fingerprint_runtime_evidence",
+      "fingerprintingRuntimeEvidence",
+      "fingerprinting_runtime_evidence"
+    ]).flatMap((row) => getStringArrayValues(row, ["requestUrl", "request_url", "url", "redactedUrl", "redacted_url"]))
+  ]);
+
+  return requestValues.some((value) =>
+    /^https?:\/\//i.test(value) &&
+    /fingerprint|fingerprintjs|fpjs|\/fp(?:[/?#.]|$)|[?&#](?:fp|fingerprint|device_?fingerprint)=|entropy|canvas|webgl|audio_context|device_?hash|visitor_?id|stable_?id|bot_?score|risk_?score/i.test(value)
+  );
+}
+
 export function hasStrongFingerprintingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   const summary = getRecordValue(rawEvidence, ["fingerprintSummary", "fingerprint_summary"]);
   const tier = getNumberValue(summary, ["tier"]) ?? getNumberValue(rawEvidence, ["fingerprintTier", "fingerprint_tier"]) ?? 0;
@@ -834,7 +871,9 @@ export function hasStrongFingerprintingEvidence(rawEvidence: Record<string, unkn
 
   return (
     (tier >= 3 && highEntropyCategoryCount >= 1) ||
-    (tier >= 2 && hasRenderingFingerprinting && hasCorroboratingFingerprinting)
+    (tier >= 2 && hasRenderingFingerprinting && hasCorroboratingFingerprinting) ||
+    hasExplicitFingerprintingVendorEvidence(rawEvidence) ||
+    hasConcreteFingerprintingRequestEvidence(rawEvidence)
   );
 }
 

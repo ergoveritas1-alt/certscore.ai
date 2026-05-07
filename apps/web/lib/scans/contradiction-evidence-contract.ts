@@ -701,8 +701,7 @@ export function getContradictionEvidenceBundle(record: Record<string, unknown> |
     getFirstString(source, ["policySnippet"]);
   const policySnippet =
     getFirstString(policyAnchorSource, ["snippet", "policySnippet"]) ??
-    explicitPolicySnippet ??
-    claim;
+    explicitPolicySnippet;
   const policySourceUrl =
     getFirstString(policyAnchorSource, ["sourceUrl"]) ??
     getFirstString(source, ["policySourceUrl", "sourceUrl"]);

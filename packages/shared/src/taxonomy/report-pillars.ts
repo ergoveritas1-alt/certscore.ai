@@ -2932,7 +2932,7 @@ export const REPORT_UNIFIED_FINDINGS = [
 
   defineReportUnifiedFinding({
     id: "sensitive_data_collection_with_third_party_tracking_present",
-    label: "Sensitive-data collection with third-party tracking present",
+    label: "Sensitive input surfaces detected alongside third-party tracking",
     owner: "sensitive_data_third_party_exposure_context",
     mirrors: ["adtech_analytics_replay_footprint", "identity_financial_data_collection", "health_location_other_sensitive_data_collection"],
     overlays: ["tracking_profiling_sensitive_data_risk", "profiling_high_risk_data_use_signals"]

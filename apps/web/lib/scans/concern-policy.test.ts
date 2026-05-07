@@ -1396,7 +1396,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",
         suggestedUnifiedFindingId: "sensitive_data_collection_with_third_party_tracking_present",
-        title: "Sensitive data collection with third-party tracking present"
+        title: "Sensitive input surfaces detected alongside third-party tracking"
       }),
       evidenceStrengthFlags: ["concrete_payload", "page_attributed"] as const,
       rawEvidence: {
@@ -1563,7 +1563,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",
         suggestedUnifiedFindingId: "sensitive_data_collection_with_third_party_tracking_present",
-        title: "Sensitive data collection with third-party tracking present"
+        title: "Sensitive input surfaces detected alongside third-party tracking"
       }),
       evidenceStrengthFlags: ["concrete_payload"] as const,
       rawEvidence: {
@@ -2614,6 +2614,27 @@ test("deriveConcernPolicy keeps thin fingerprinting evidence audit-only", () => 
   assert.equal(policy.externalSurfacingEligibility, "audit_only");
 });
 
+test("deriveConcernPolicy keeps generic tier-2 fingerprinting attributes audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.fingerprinting_detected",
+      suggestedUnifiedFindingId: "fingerprinting_observed",
+      title: "Fingerprinting observed"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      fingerprintAttributeCategories: ["timezone_locale", "storage", "fonts_plugins"],
+      fingerprintSummary: {
+        tier: 2
+      }
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+});
+
 test("deriveConcernPolicy promotes corroborated fingerprinting evidence", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
@@ -2628,6 +2649,26 @@ test("deriveConcernPolicy promotes corroborated fingerprinting evidence", () => 
         tier: 2
       },
       requestUrls: ["https://fp.example.test/collect"]
+    }
+  });
+
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy promotes tier-3 high-entropy fingerprinting evidence", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.fingerprinting_detected",
+      suggestedUnifiedFindingId: "fingerprinting_observed",
+      title: "Fingerprinting observed"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      fingerprintAttributeCategories: ["canvas_webgl"],
+      fingerprintSummary: {
+        tier: 3
+      }
     }
   });
 

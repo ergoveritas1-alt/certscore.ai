@@ -1631,7 +1631,7 @@ export function buildSectionReviewIssues(input: {
       severity: "high",
       title:
         highRiskContext.isSensitiveContext && highRiskVendorSummary.length > 0
-          ? "Sensitive-data collection with third-party tracking present"
+          ? "Sensitive input surfaces detected alongside third-party tracking"
           : "Pre-consent tracking incidents detected"
     });
   }

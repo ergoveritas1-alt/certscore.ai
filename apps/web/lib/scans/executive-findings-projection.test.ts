@@ -87,6 +87,101 @@ function makePacket(
   } satisfies UnifiedFindingDisplayPacket;
 }
 
+function makePolicyRuntimeConflictPacket(
+  overrides: Partial<UnifiedFindingDisplayPacket> = {},
+  detailOverrides: Record<string, unknown> = {},
+  entityOverrides: Record<string, unknown> = {}
+) {
+  const runtimeUrl = "https://connect.facebook.net/en_US/fbevents.js";
+  return makePacket("consent_gated_tracking_claim_conflict", {
+    confidenceBand: "high",
+    confidenceInputs: {
+      evidenceQualityFlags: [],
+      hasConcretePayloadEvidence: true,
+      hasCorroboratedPositiveSurfaceEvidence: true,
+      hasDirectRuntimeEvidence: true,
+      hasKeyPageDiscoveryEvidence: true,
+      hasMultipleHumanFacingUrls: false,
+      hasPageAttribution: true,
+      hasPacketBackedEvidence: true,
+      hasPolicyTextEvidence: true,
+      hasReadableSurfaceSnippetEvidence: true,
+      hasStructuredValidationEvidence: true,
+      isFallbackOnly: false,
+      issueCount: 1,
+      signalCount: 1,
+      sourceCount: 2,
+      sourceKinds: ["validation"],
+      validationCount: 1
+    },
+    details: {
+      family: "contradiction",
+      kind: "consent_gated_tracking_claim_conflict",
+      claim: "Optional analytics and advertising cookies are controlled by cookie preferences and consent.",
+      contradictionBasis: "The policy says optional tracking follows cookie preferences, but tracking began before consent.",
+      bridgeGeneratedBy: "wc01.test",
+      bridgeMappingType: "deterministic_policy_runtime_mapping",
+      bridgeMappingVersion: "policy_behavior_conflict_map:v1",
+      bridgeRuleId: "test.policy_behavior_cookie_preferences_preconsent_v1",
+      conflictBridgeReasoning: "Cookie preference policy evidence is paired with concrete pre-consent tracker request evidence.",
+      conflictSupportsPromotion: true,
+      conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+      contradictionPromotionEligible: true,
+      contradictionReviewStatus: "complete",
+      policyAnchorRef: "policy:privacy#cookies",
+      policyClaimType: "cookie_preferences_available",
+      policySnippet: "We use optional analytics and advertising cookies only after you set cookie preferences or consent.",
+      policySourceUrl: "https://example.com/privacy",
+      runtimeAnchorRef: `request:${runtimeUrl}`,
+      runtimeEvidenceArtifacts: [runtimeUrl],
+      runtimeObservationType: "marketing_vendor_fired_pre_consent",
+      runtimePhase: "pre_consent",
+      sourceEvidenceIds: ["policy:privacy#cookies", `request:${runtimeUrl}`],
+      vendors: ["Meta Pixel"],
+      ...detailOverrides
+    },
+    evidence: {
+      counts: {},
+      entities: {
+        policyConfidence: 0.8,
+        runtimeBehaviorArtifacts: [
+          {
+            artifactType: "request",
+            host: "connect.facebook.net",
+            id: `request:${runtimeUrl}`,
+            phase: "pre_consent",
+            timestampMs: 640,
+            url: runtimeUrl,
+            vendor: "Meta Pixel"
+          }
+        ],
+        runtimeConfidence: 0.9,
+        runtimeRequestUrls: [runtimeUrl],
+        runtimeVendors: ["Meta Pixel"],
+        ...entityOverrides
+      } as unknown as Record<string, string[]>,
+      fetchQuality: null,
+      flags: ["policy_runtime.consent_gated_tracking_claim_conflict"],
+      pageUrls: ["https://example.com/privacy"],
+      snippets: [
+        "We use optional analytics and advertising cookies only after you set cookie preferences or consent.",
+        "Cookie preference policy evidence is paired with concrete pre-consent tracker request evidence."
+      ],
+      sourceUrls: ["https://example.com/privacy", runtimeUrl]
+    },
+    sourceRefs: [
+      {
+        kind: "validation",
+        ruleKey: "runtime_privacy.consent_gated_tracking_claim_conflict",
+        title: "Consent-gated tracking claim conflicts with runtime behavior"
+      }
+    ],
+    severity: "high",
+    summary: "Policy and runtime behavior conflict.",
+    ...overrides
+  });
+}
+
 test("projects surfaced unified findings into executive findings and regulatory lenses", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("preconsent_tracking", {
@@ -792,6 +887,94 @@ test("projects policy runtime conflicts with compact canonical evidence referenc
   ]);
 });
 
+test("policy runtime contradiction with full anchors renders as strong self-proving evidence", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([makePolicyRuntimeConflictPacket()]);
+  const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
+
+  assert.ok(finding);
+  assert.equal(finding.label, "Policy and runtime behavior conflict");
+  assert.equal(finding.confidence, "strong");
+  assert.equal(finding.evidenceDetails?.policyEvidence?.evaluated, true);
+  assert.equal(finding.evidenceDetails?.policyRuntimeConflict?.policyAnchor.sourceUrl, "https://example.com/privacy");
+  assert.equal(finding.evidenceDetails?.policyRuntimeConflict?.runtimeAnchor.firstSeenMs, 640);
+  assert.match(finding.shortSummary, /Policy states/);
+  assert.match(finding.shortSummary, /640ms before consent interaction/);
+  assert.deepEqual(finding.evidencePreview, [
+    'Policy claim: "We use optional analytics and advertising cookies only after you set cookie preferences or consent."',
+    "Policy source: https://example.com/privacy",
+    "Runtime event: Meta Pixel at connect.facebook.net fired at 640ms before consent interaction.",
+    "Bridge: Cookie preference policy evidence is paired with concrete pre-consent tracker request evidence."
+  ]);
+});
+
+test("policy runtime contradiction missing policy snippet is not projected", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePolicyRuntimeConflictPacket({}, { policySnippet: null }, { policyConfidence: 0.8 })
+  ]);
+  const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
+
+  assert.equal(finding, undefined);
+});
+
+test("policy runtime contradiction missing policy URL is not projected", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePolicyRuntimeConflictPacket({}, { policySourceUrl: null })
+  ]);
+  const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
+
+  assert.equal(finding, undefined);
+});
+
+test("policy runtime contradiction missing timing and consent phase is not projected", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePolicyRuntimeConflictPacket(
+      {},
+      { runtimePhase: null },
+      {
+        runtimeBehaviorArtifacts: [
+          {
+            artifactType: "request",
+            host: "connect.facebook.net",
+            id: "request:https://connect.facebook.net/en_US/fbevents.js",
+            phase: "unknown",
+            timestampMs: null,
+            url: "https://connect.facebook.net/en_US/fbevents.js",
+            vendor: "Meta Pixel"
+          }
+        ]
+      }
+    )
+  ]);
+  const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
+
+  assert.equal(finding, undefined);
+});
+
+test("policy runtime contradiction without retained matching runtime phase is not projected", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePolicyRuntimeConflictPacket(
+      {},
+      { runtimePhase: null },
+      {
+        runtimeBehaviorArtifacts: [
+          {
+            artifactType: "request",
+            host: "connect.facebook.net",
+            id: "request:https://connect.facebook.net/en_US/fbevents.js",
+            phase: "unknown",
+            timestampMs: 640,
+            url: "https://connect.facebook.net/en_US/fbevents.js",
+            vendor: "Meta Pixel"
+          }
+        ]
+      }
+    )
+  ]);
+  const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
+
+  assert.equal(finding, undefined);
+});
+
 test("projects confirmed cookie disclosure gaps into executive and privacy regulatory lenses", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("cookie_disclosure_gap", {
@@ -1427,6 +1610,77 @@ test("keeps runtime-backed session recording in top findings when consent issues
   );
 });
 
+test("projects generic tier-2 fingerprinting evidence with safer browser-attribute wording", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("fingerprinting_observed", {
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: {
+          fingerprintTier: 2,
+          mergedSignalConfidence: 1
+        },
+        entities: {
+          fingerprintAttributeCategories: ["timezone_locale", "storage", "fonts_plugins"],
+          fingerprintingSignals: ["timezone_locale", "storage", "fonts_plugins"]
+        },
+        flags: [],
+        pageUrls: [],
+        snippets: [
+          "Observed coordinated browser or device attribute collection consistent with fingerprinting review risk."
+        ],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "Probable fingerprinting behavior."
+    })
+  ]);
+
+  assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
+  const finding = projection.findings.find((entry) => entry.id === "browser_fingerprinting_related_signals_observed");
+  assert.equal(finding?.label, "Browser fingerprinting-related signals observed");
+  assert.equal(finding?.severity, "low");
+  assert.equal(
+    finding?.shortSummary,
+    "Observed browser or device attribute collection that can be relevant to fingerprinting review, but no strong fingerprinting proof was retained."
+  );
+  assert.equal(
+    finding?.evidenceDetails?.telemetryEvidence?.basis,
+    "Browser or device attributes were retained for fingerprinting review, but strong fingerprinting proof was not retained."
+  );
+});
+
+test("keeps probable fingerprinting wording for strong high-entropy evidence", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("fingerprinting_observed", {
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: {
+          fingerprintTier: 2
+        },
+        entities: {
+          fingerprintAttributeCategories: ["canvas_webgl", "audio"],
+          fingerprintingRuntimeEvidence: [
+            JSON.stringify({
+              attributeCategories: ["canvas_webgl", "audio"],
+              requestUrl: "https://fp.example.test/collect",
+              tier: 2
+            })
+          ]
+        },
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: ["https://fp.example.test/collect"]
+      },
+      severity: "high",
+      summary: "Probable fingerprinting behavior."
+    })
+  ]);
+
+  assert.ok(projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
+});
+
 test("projects blocking overlay context without violation framing", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("blocking_overlay_observed", {
@@ -1994,7 +2248,7 @@ test("projects sensitive data with third-party tracking into executive findings 
         sourceUrls: []
       },
       severity: "medium",
-      summary: "Sensitive-data collection with third-party tracking was retained."
+      summary: "Sensitive input evidence was retained alongside third-party tracking."
     }),
     makePacket("contrast_failures", {
       confidenceBand: "high",
@@ -2081,7 +2335,7 @@ test("surfaces sensitive-data tracking in regulatory lenses", () => {
         sourceUrls: []
       },
       severity: "medium",
-      summary: "Sensitive-data collection with third-party tracking was retained."
+      summary: "Sensitive input evidence was retained alongside third-party tracking."
     })
   ]);
 
