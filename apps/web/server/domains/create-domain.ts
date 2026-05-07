@@ -12,6 +12,7 @@ import {
 } from "./repository";
 import { getPlanLimits } from "../plans/get-plan-limits";
 import { queueFullScanForDomain } from "../scans/create-full-scan";
+import { validateScanUrl } from "../scan-intake/url-preflight";
 
 export type CreateDomainActionState = {
   error: string | null;
@@ -180,8 +181,25 @@ export async function createDomainAction(
     };
   }
 
+  const preflightResults = await Promise.all(parsedBatch.valid.map((item) => validateScanUrl(item.domain)));
+  const blockedPreflight = preflightResults.find((result) => result.status !== "ok");
+
+  if (blockedPreflight) {
+    return {
+      error:
+        blockedPreflight.status === "redirected_to_different_domain"
+          ? `${blockedPreflight.submittedUrl} redirects to ${blockedPreflight.finalUrl}. Start this scan from the public scan form to confirm the redirected website.`
+          : blockedPreflight.message
+    };
+  }
+
+  const intakeDomains = parsedBatch.valid.map((item, index) => ({
+    ...item,
+    domain: preflightResults[index]?.finalUrl ?? preflightResults[index]?.normalizedUrl ?? item.domain
+  }));
+
   const results = await Promise.all(
-    parsedBatch.valid.map((item) =>
+    intakeDomains.map((item) =>
       createOrQueueDomainScan({
         domain: item.domain,
         allowExistingDomainRescan: true

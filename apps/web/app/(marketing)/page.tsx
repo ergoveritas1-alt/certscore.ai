@@ -246,14 +246,14 @@ export default async function MarketingHomePage() {
           <div className="space-y-4">
             <Card id="homepage-scan" className="border-slate-200 bg-slate-50 shadow-none">
               <CardHeader>
-                <CardTitle>Scan any website (yours, a client, or a competitor)</CardTitle>
+                <CardTitle>Scan any website.</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <DomainScanForm
                   buttonLabel="Scan a website"
                   helperText="CertScore will queue the domain, run the scanner, and open the saved scan record when it is accepted."
-                  inputLabel="Scan any website (yours, a client, or a competitor)"
-                  inputPlaceholder="Scan any website (yours, a client, or a competitor)"
+                  inputLabel="Scan any website."
+                  inputPlaceholder="Scan any website."
                   mode="full"
                 />
                 <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
@@ -266,14 +266,6 @@ export default async function MarketingHomePage() {
             </Card>
 
           </div>
-        </div>
-      </section>
-
-      <section className="border-b border-slate-200 bg-white/70">
-        <div className="mx-auto max-w-6xl px-6 py-4">
-          <p className="text-sm font-medium tracking-wide text-slate-600 sm:text-[15px]">
-            Tracking before consent • reject not respected • RTB / cookie sync observed • disclosure gaps
-          </p>
         </div>
       </section>
 

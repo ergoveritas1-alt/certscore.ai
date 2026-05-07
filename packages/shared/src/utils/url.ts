@@ -1,15 +1,38 @@
 export function normalizeUrl(input: string): string {
-  const trimmedInput = input.trim();
-  const url = new URL(trimmedInput.startsWith("http") ? trimmedInput : `https://${trimmedInput}`);
+  const trimmedInput = input.trim().replace(/^htps:\/\//i, "https://").replace(/^htp:\/\//i, "http://");
 
-  if (!url.hostname || !url.hostname.includes(".")) {
+  if (!trimmedInput || /\s/.test(trimmedInput) || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmedInput)) {
+    throw new Error("Invalid URL");
+  }
+
+  const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmedInput) ? trimmedInput : `https://${trimmedInput}`);
+
+  if (url.username || url.password || !url.hostname || !url.hostname.includes(".")) {
     throw new Error("Invalid hostname");
   }
 
   url.hostname = url.hostname.toLowerCase();
-  url.protocol = url.protocol === "http:" || url.protocol === "https:" ? url.protocol : "https:";
-  url.pathname = "/";
-  url.search = "";
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Invalid protocol");
+  }
+
+  if (
+    url.hostname === "localhost" ||
+    url.hostname.endsWith(".localhost") ||
+    url.hostname.endsWith(".local") ||
+    url.hostname.endsWith(".internal") ||
+    url.hostname.split(".").some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label))
+  ) {
+    throw new Error("Invalid hostname");
+  }
+
+  const withoutProtocol = trimmedInput.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+  const preservePath = withoutProtocol.includes("/") || withoutProtocol.includes("?") || withoutProtocol.includes("#");
+
+  if (!preservePath) {
+    url.pathname = "/";
+    url.search = "";
+  }
   url.hash = "";
 
   return url.toString();

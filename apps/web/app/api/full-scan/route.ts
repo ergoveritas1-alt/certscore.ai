@@ -5,6 +5,7 @@ import { isBetterAuthConfigurationError } from "../../../server/better-auth/env"
 import { createOrQueueDomainScan } from "../../../server/domains/create-domain";
 import { createAnonymousFullScan } from "../../../server/scans/create-anonymous-full-scan";
 import { createPreviewScan } from "../../../server/preview-scan/create-preview-scan";
+import { validateScanUrl } from "../../../server/scan-intake/url-preflight";
 
 function isPublicFullScanAvailabilityError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -83,6 +84,38 @@ export async function POST(request: Request) {
       );
     }
 
+    const confirmedFinalUrl = typeof payload?.confirmedFinalUrl === "string" ? payload.confirmedFinalUrl : null;
+    const preflightResults = await Promise.all(parsedBatch.valid.map((item) => validateScanUrl(item.domain)));
+    const blockedPreflight = preflightResults.find((result) => {
+      if (result.status === "ok") {
+        return false;
+      }
+
+      return !(
+        parsedBatch.valid.length === 1 &&
+        result.status === "redirected_to_different_domain" &&
+        result.finalUrl &&
+        confirmedFinalUrl === result.finalUrl
+      );
+    });
+
+    if (blockedPreflight) {
+      return NextResponse.json(
+        {
+          code: blockedPreflight.status,
+          error: blockedPreflight.message,
+          preflight: blockedPreflight
+        },
+        { status: 400 }
+      );
+    }
+
+    const intakeDomains = parsedBatch.valid.map((item, index) => ({
+      ...item,
+      hostname: preflightResults[index]?.finalHostname ?? item.hostname,
+      normalizedUrl: preflightResults[index]?.finalUrl ?? preflightResults[index]?.normalizedUrl ?? item.normalizedUrl
+    }));
+
     let user = null;
 
     try {
@@ -98,7 +131,7 @@ export async function POST(request: Request) {
     }
 
     if (!user) {
-      const firstDomain = parsedBatch.valid[0];
+      const firstDomain = intakeDomains[0];
 
       if (!firstDomain) {
         return NextResponse.json(
@@ -158,10 +191,10 @@ export async function POST(request: Request) {
     }
 
     const scans = await Promise.all(
-      parsedBatch.valid.map((item) =>
+      intakeDomains.map((item) =>
         createOrQueueDomainScan({
           allowExistingDomainRescan: true,
-          domain: item.domain,
+          domain: item.normalizedUrl,
           provenance
         })
       )
