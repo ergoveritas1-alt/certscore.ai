@@ -22,3 +22,22 @@ test("validation ops contract requires admin allowlist", () => {
 
   assert.ok(findings.some((finding) => finding.level === "fail" && finding.label === "validation ops admins"));
 });
+
+test("validation ops contract rejects localhost app urls", () => {
+  const findings = evaluateValidationCutoverContract({
+    APP_FLAVOR: "validation_ops",
+    BETTER_AUTH_SECRET: "x".repeat(32),
+    CERTSCORE_ADMIN_EMAILS: "admin@example.com",
+    DATABASE_URL: "postgresql://example",
+    NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+  });
+
+  assert.ok(
+    findings.some(
+      (finding) =>
+        finding.level === "fail" &&
+        finding.label === "validation ops app url" &&
+        finding.details.includes("not localhost")
+    )
+  );
+});

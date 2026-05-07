@@ -18,31 +18,8 @@ type ScanMode = NonNullable<DomainScanFormProps["mode"]>;
 type ScanSubmitPayload = {
   code?: string | null;
   error?: string | null;
-  preflight?: ScanUrlPreflightResult | null;
   previewUrl?: string | null;
   scanUrl?: string | null;
-};
-
-type ScanUrlPreflightStatus =
-  | "invalid_url"
-  | "domain_not_found"
-  | "unreachable"
-  | "redirected_to_different_domain"
-  | "blocked_or_challenged"
-  | "timeout"
-  | "ok";
-
-type ScanUrlPreflightResult = {
-  status: ScanUrlPreflightStatus;
-  input: string;
-  normalizedUrl: string | null;
-  submittedUrl: string | null;
-  finalUrl: string | null;
-  hostname: string | null;
-  finalHostname: string | null;
-  message: string;
-  suggestion: string | null;
-  requiresConfirmation: boolean;
 };
 
 type ScanSubmitFailure = {
@@ -111,87 +88,15 @@ export function DomainScanForm({
   const router = useRouter();
   const [domain, setDomain] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [pendingConfirmation, setPendingConfirmation] = useState<ScanUrlPreflightResult | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   function resetValidationState() {
     setErrorMessage(null);
-    setPendingConfirmation(null);
-    setStatusMessage(null);
-  }
-
-  function getPreflightErrorMessage(result: ScanUrlPreflightResult) {
-    const suggestion = result.suggestion ? ` Did you mean ${result.suggestion}?` : "";
-
-    if (result.status === "invalid_url") {
-      return `Enter a public website URL, such as example.com.${suggestion}`;
-    }
-
-    if (result.status === "domain_not_found") {
-      return `That domain was not found in public DNS.${suggestion}`;
-    }
-
-    if (result.status === "unreachable") {
-      return `That website could not be reached over HTTPS or HTTP.${suggestion}`;
-    }
-
-    if (result.status === "blocked_or_challenged") {
-      return "That website appears to block or challenge automated requests before scanning.";
-    }
-
-    if (result.status === "timeout") {
-      return "That website did not respond before the validation timeout. Try again in a moment.";
-    }
-
-    return result.message;
-  }
-
-  async function runPreflight(confirmedFinalUrl: string | null) {
-    const response = await fetch("/api/scan-url-preflight", {
-      body: JSON.stringify({
-        domain
-      }),
-      headers: {
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const result = (await response.json()) as ScanUrlPreflightResult;
-
-    if (!response.ok || !result.status) {
-      throw new Error("URL validation could not be completed.");
-    }
-
-    if (result.status === "redirected_to_different_domain") {
-      if (confirmedFinalUrl && confirmedFinalUrl === result.finalUrl) {
-        return result;
-      }
-
-      setPendingConfirmation(result);
-      setErrorMessage(null);
-      setStatusMessage(null);
-      return null;
-    }
-
-    if (result.status !== "ok") {
-      setErrorMessage(getPreflightErrorMessage(result));
-      setStatusMessage(null);
-      return null;
-    }
-
-    const displayUrl = result.finalUrl ?? result.normalizedUrl;
-    if (displayUrl && displayUrl.trim() !== domain.trim()) {
-      setStatusMessage(`Scanning ${displayUrl}`);
-    }
-
-    return result;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage(null);
-    setStatusMessage(null);
 
     if (!domain.trim()) {
       setErrorMessage("Enter a website domain to scan.");
@@ -201,18 +106,9 @@ export function DomainScanForm({
     setIsSubmitting(true);
 
     try {
-      const confirmedFinalUrl = pendingConfirmation?.finalUrl ?? null;
-      const preflight = await runPreflight(confirmedFinalUrl);
-
-      if (!preflight) {
-        setIsSubmitting(false);
-        return;
-      }
-
       const response = await fetch(mode === "preview" ? "/api/preview-scan" : "/api/full-scan", {
         body: JSON.stringify({
-          confirmedFinalUrl,
-          domain: preflight.finalUrl ?? preflight.normalizedUrl ?? domain
+          domain
         }),
         headers: {
           "Content-Type": "application/json"
@@ -232,7 +128,7 @@ export function DomainScanForm({
           stage: "api_rejected",
           status: response.status
         });
-        setErrorMessage(payload.preflight ? getPreflightErrorMessage(payload.preflight) : getScanSubmitErrorMessage(mode, payload));
+        setErrorMessage(getScanSubmitErrorMessage(mode, payload));
         setIsSubmitting(false);
         return;
       }
@@ -316,15 +212,6 @@ export function DomainScanForm({
       {helperText && !compact ? (
         <div className="flex justify-start sm:justify-end">
           <p className="max-w-sm text-xs text-slate-500 sm:text-right">{helperText}</p>
-        </div>
-      ) : null}
-      {statusMessage ? <p className="text-sm text-slate-600">{statusMessage}</p> : null}
-      {pendingConfirmation ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-          <p className="font-semibold">This URL redirects to a different website.</p>
-          <p className="mt-1">Submitted: {pendingConfirmation.submittedUrl}</p>
-          <p>Final: {pendingConfirmation.finalUrl}</p>
-          <p className="mt-2">Submit again to confirm scanning the final URL.</p>
         </div>
       ) : null}
       {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}

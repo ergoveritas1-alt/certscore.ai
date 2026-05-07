@@ -28,6 +28,8 @@
     "dev:validation:scheduler": "pnpm --filter @website-signal-risk-scanner/validation-worker scheduler",
     "ops:check:deploy": "bash ./scripts/check-deployment-pathways.sh",
     "ops:check:scanner-deploy": "bash ./scripts/check-scanner-deploy-health.sh",
+    "ops:check:scanner-autoscaling": "pnpm exec tsx ./scripts/check-ws01-scanner-autoscaling-safety.ts",
+    "ops:repair:stale-scans": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/repair-stale-running-scans.ts",
     "ops:check:live": "pnpm exec tsx ./scripts/check-live-deployment-state.ts",
     "ops:check:live-db": "pnpm exec tsx ./scripts/check-live-db-consistency.ts",
     "ops:smoke:auth": "pnpm exec tsx ./scripts/check-production-auth-smoke.ts",

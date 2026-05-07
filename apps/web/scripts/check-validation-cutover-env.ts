@@ -12,6 +12,23 @@ const schema = z.object({
 
 type ValidationCutoverEnv = z.infer<typeof schema>;
 
+function getHostname(value: string | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isLocalhostUrl(value: string | undefined) {
+  const hostname = getHostname(value);
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
 function pass(label: string, details: string) {
   console.info(`PASS ${label}: ${details}`);
 }
@@ -40,6 +57,12 @@ export function evaluateValidationCutoverContract(env: ValidationCutoverEnv) {
         label: "validation ops app url",
         level: "fail",
         details: "Set NEXT_PUBLIC_APP_URL for the dedicated validation ops host."
+      });
+    } else if (isLocalhostUrl(env.NEXT_PUBLIC_APP_URL)) {
+      findings.push({
+        label: "validation ops app url",
+        level: "fail",
+        details: "NEXT_PUBLIC_APP_URL must be the public validation ops origin, not localhost. Set it to the active production host before building or deploying."
       });
     } else {
       findings.push({
