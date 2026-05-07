@@ -1053,7 +1053,7 @@ function hasConfirmedRejectTimingEvidence(rawEvidence: Record<string, unknown> |
       typeof tsMs === "number" &&
       typeof msAfterReject === "number" &&
       msAfterReject >= REJECT_TRACKING_CONFIRMATION_MIN_MS &&
-      /^(advertising|analytics|session_replay|marketing_automation)$/i.test(category) &&
+      /^(advertising|analytics|session_replay|marketing_automation|tag_manager)$/i.test(category) &&
       vendor.trim().length > 0 &&
       /^https?:\/\//i.test(url)
     );

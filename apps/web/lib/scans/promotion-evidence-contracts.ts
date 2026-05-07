@@ -257,7 +257,7 @@ function hasConcreteRtbObservationRow(row: Record<string, unknown>) {
     /sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid/i.test(`${hostname} ${pathSample} ${urlSample} ${reason}`) ||
     /redirect_sync|identifier_query|known_sync_host|sync_path/i.test(reason);
   const hasIdHints = queryKeys.some((key) =>
-    /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|gdpr|gdpr_consent|us_privacy|redir|redirect|callback)$/i.test(key)
+    /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|uid2|euid|id5id|tdid|gdpr|gdpr_consent|us_privacy|redir|redirect|callback)$/i.test(key)
   );
   return hostname.includes(".") && hasSyncPattern && (hasIdHints || /sync|idsync|match|redirect/i.test(`${pathSample} ${reason}`));
 }
@@ -282,7 +282,7 @@ export function hasConcreteRtbCookieSyncEvidence(rawEvidence: Record<string, unk
       const parsed = new URL(url);
       const text = `${parsed.hostname} ${parsed.pathname}`;
       return /sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid/i.test(text) &&
-        [...parsed.searchParams.keys()].some((key) => /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|gdpr|gdpr_consent|us_privacy|redir|redirect|callback)$/i.test(key));
+        [...parsed.searchParams.keys()].some((key) => /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|uid2|euid|id5id|tdid|gdpr|gdpr_consent|us_privacy|redir|redirect|callback)$/i.test(key));
     } catch {
       return false;
     }
@@ -340,11 +340,26 @@ function hasConcreteCrossDomainIdentifierSharingRow(row: Record<string, unknown>
     ) ||
     involvedEtlds.some((etld) => /(?:casalemedia|ay\.delivery|yahoo|bidswitch|mobilefuse|undertone)\.com|ay\.delivery/i.test(etld));
   const hasDurableIdentifier = /durable_id|cookie_id|affiliate_click_id|session_id|unknown_identifier/i.test(identifierClass);
+  const knownSyncDestination = /(?:taboola|adnxs|demdex|id5-sync|id5|liveramp|pubmatic|rlcdn|rubiconproject|openx|adsrvr|3lift|crwdcntrl)(?:\.|$)/i.test(
+    `${destinationDomain} ${destinationEtld} ${requestUrl}`
+  );
+  const namedIdentitySyncKey = /^(?:partner_?id|uid2|euid|id5id|tdid)$/i.test(key);
+  const isStrongSingleDestinationIdentitySync =
+    (/^(?:rtb|identity_graph)$/i.test(destinationClassification) ||
+      /(?:identity|id5|demdex|rlcdn|liveramp|uidapi|crwdcntrl|adnxs|pubmatic|openx|rubicon|bidswitch|casalemedia|adsrvr)/i.test(
+        `${destinationDomain} ${destinationEtld}`
+      )) &&
+    /^(?:durable_id|cookie_id)$/i.test(identifierClass) &&
+    /^(?:uid|uuid|user_?id|visitor_?id|external_?id|identity|guid|sync_?id|match_?id|partner_?(?:uid|id)|buyeruid|bkuid|d_uuid|uid2|euid|id5id|tdid)$/i.test(key) &&
+    ((knownSyncDestination && namedIdentitySyncKey) ||
+      /(?:^|\/|[-_:])(?:sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid|getuid\w*)(?:\/|[-_:]|[?#&]|$)|\/tap\.php$|\/track\/cmf(?:\/|$)|\/ibs:dpid/i.test(
+        requestUrl
+      ));
   return (
     key.length > 0 &&
     /^[a-f0-9]{32,}$/i.test(valueHash) &&
     destinationEtld.includes(".") &&
-    involvedEtlds.length >= 2 &&
+    (involvedEtlds.length >= 2 || isStrongSingleDestinationIdentitySync) &&
     hasPromotionVendor &&
     hasDurableIdentifier &&
     (requestUrl.includes("[redacted]") || requestUrl.includes("%5Bredacted%5D"))
@@ -377,8 +392,52 @@ export function hasConcreteCrossDomainIdentifierSharingEvidence(rawEvidence: Rec
       ...collectUrlEtldPlusOne(typeof row.requestUrlRedacted === "string" ? row.requestUrlRedacted : typeof row.request_url_redacted === "string" ? row.request_url_redacted : null)
     ])
   );
+  const hasStrongSingleDestinationIdentitySync = rows.some((row) => {
+    const requestUrl = typeof row.requestUrlRedacted === "string"
+      ? row.requestUrlRedacted
+      : typeof row.request_url_redacted === "string"
+        ? row.request_url_redacted
+        : "";
+    const key = typeof row.key === "string" ? row.key.trim() : "";
+    const destinationClassification = typeof row.destinationClassification === "string"
+      ? row.destinationClassification
+      : typeof row.destination_classification === "string"
+        ? row.destination_classification
+        : "";
+    const destinationDomain = typeof row.destinationDomain === "string"
+      ? row.destinationDomain
+      : typeof row.destination_domain === "string"
+        ? row.destination_domain
+        : "";
+    const destinationEtld = typeof row.destinationEtldPlusOne === "string"
+      ? row.destinationEtldPlusOne
+      : typeof row.destination_etld_plus_one === "string"
+        ? row.destination_etld_plus_one
+        : "";
+    const identifierClass = typeof row.identifierClass === "string"
+      ? row.identifierClass
+      : typeof row.identifier_class === "string"
+        ? row.identifier_class
+        : "";
+    const knownSyncDestination = /(?:taboola|adnxs|demdex|id5-sync|id5|liveramp|pubmatic|rlcdn|rubiconproject|openx|adsrvr|3lift|crwdcntrl)(?:\.|$)/i.test(
+      `${destinationDomain} ${destinationEtld} ${requestUrl}`
+    );
+    const namedIdentitySyncKey = /^(?:partner_?id|uid2|euid|id5id|tdid)$/i.test(key);
+    return (
+      (/^(?:rtb|identity_graph)$/i.test(destinationClassification) ||
+        /(?:identity|id5|demdex|rlcdn|liveramp|uidapi|crwdcntrl|adnxs|pubmatic|openx|rubicon|bidswitch|casalemedia|adsrvr)/i.test(
+          `${destinationDomain} ${destinationEtld}`
+        )) &&
+      /^(?:durable_id|cookie_id)$/i.test(identifierClass) &&
+      /^(?:uid|uuid|user_?id|visitor_?id|external_?id|identity|guid|sync_?id|match_?id|partner_?(?:uid|id)|buyeruid|bkuid|d_uuid|uid2|euid|id5id|tdid)$/i.test(key) &&
+      ((knownSyncDestination && namedIdentitySyncKey) ||
+        /(?:^|\/|[-_:])(?:sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid|getuid\w*)(?:\/|[-_:]|[?#&]|$)|\/tap\.php$|\/track\/cmf(?:\/|$)|\/ibs:dpid/i.test(
+          requestUrl
+        ))
+    );
+  });
   return (
-    uniqueStrings([...destinationEtlds, ...rowEtlds]).length >= 2 &&
+    (uniqueStrings([...destinationEtlds, ...rowEtlds]).length >= 2 || hasStrongSingleDestinationIdentitySync) &&
     (
       categories.some((category) => /adtech|affiliate|analytics|identity_graph|rtb|marketing/i.test(category)) ||
       rowEtlds.some((etld) => /(?:casalemedia|ay\.delivery|yahoo|bidswitch|mobilefuse|undertone)\.com|ay\.delivery/i.test(etld))

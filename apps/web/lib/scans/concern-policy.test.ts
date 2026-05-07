@@ -1891,6 +1891,30 @@ test("reject persistence policy requires a successful reject path and post-rejec
   assert.equal(eligibleRequestUrl.promotionEligibility, "eligible");
   assert.equal(eligibleRequestUrl.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"), false);
 
+  const eligibleTagManagerRequest = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      postRejectNonEssentialRequests: [
+        {
+          category: "tag_manager",
+          ms_after_reject: 3500,
+          ts_ms: 5000,
+          url: "https://www.googletagmanager.com/gtm.js?id=GTM-POST-REJECT",
+          vendor: "Google Tag Manager"
+        }
+      ],
+      rejectPathDepthAndAvailability: {
+        rejectInteractionSucceeded: true
+      },
+      suppressionChecks: {
+        post_reject_window_available: true
+      }
+    }
+  });
+
+  assert.equal(eligibleTagManagerRequest.promotionEligibility, "eligible");
+
   const failedReject = deriveConcernPolicy({
     concern,
     evidenceStrengthFlags: ["direct_runtime"],
@@ -2719,6 +2743,37 @@ test("deriveConcernPolicy promotes cross-domain identifier sharing when redirect
           sourcePageUrl:
             "https://ssum.casalemedia.com/usermatch?cb=https%3A%2F%2Fpbs-us-east.ay.delivery%2Fsetuid%3Fuid%3D",
           valueHash: "c".repeat(64)
+        }
+      ]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "strong");
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy promotes single-destination high-confidence identity sync evidence", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.cross_domain_identifier_sharing_observed",
+      suggestedUnifiedFindingId: "cross_domain_identifier_sharing_observed",
+      title: "Identifiers shared across domains"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      crossDomainIdentifierSharingDestinationCategories: ["identity_graph"],
+      crossDomainIdentifierSharingDestinationEtlds: ["liveramp.com"],
+      crossDomainIdentifierSharingEvidence: [
+        {
+          destinationClassification: "identity_graph",
+          destinationDomain: "api.liveramp.com",
+          destinationEtldPlusOne: "liveramp.com",
+          identifierClass: "durable_id",
+          key: "partnerid",
+          repeatedAcrossEtlds: ["liveramp.com"],
+          requestUrlRedacted: "https://api.liveramp.com/pixel?partnerid=%5Bredacted%5D",
+          valueHash: "d".repeat(64)
         }
       ]
     }

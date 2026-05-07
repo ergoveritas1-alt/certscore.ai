@@ -606,6 +606,31 @@ test("WS01-style reject action and post-reject tracking evidence satisfies stron
   assert.equal(decision?.status, "pass_strong");
 });
 
+test("WS01-style post-reject tag-manager request evidence satisfies strong", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("reject_did_not_reduce_tracking", {
+    post_reject_non_essential_requests: [
+      {
+        category: "tag_manager",
+        ms_after_reject: 1500,
+        ts_ms: 4600,
+        url: "https://www.googletagmanager.com/gtm.js?id=GTM-POST-REJECT",
+        vendor: "Google Tag Manager"
+      }
+    ],
+    reject_path_depth_and_availability: {
+      availability: "available",
+      banner_layer_inspected: true,
+      reject_interaction_succeeded: true
+    },
+    suppression_checks: {
+      post_reject_window_available: true,
+      reject_click_confirmed: true
+    }
+  });
+
+  assert.equal(decision?.status, "pass_strong");
+});
+
 test("stringified reject requestUrl packet evidence satisfies strong", () => {
   const decision = evaluateFindingEvidenceContractForPacket({
     confidenceInputs: {
@@ -829,6 +854,21 @@ test("RTB observed can surface as runtime RTB but not strong pre-consent RTB wit
   assert.ok(decision?.missingRequirements.includes("consentTimelineSequence"));
 });
 
+test("RTB identifier-query evidence accepts named identity sync keys", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("rtb_cookie_sync_observed", {
+    rtb_cookie_sync_evidence: [
+      {
+        hostname: "id5-sync.com",
+        path_sample: "/pixel.gif",
+        query_keys_sample: ["uid2"],
+        reason: "identifier_query"
+      }
+    ]
+  });
+
+  assert.equal(decision?.status, "pass_good");
+});
+
 test("material bot block prevents strong runtime findings", () => {
   const decision = evaluateFindingEvidenceContractForRawEvidence("preconsent_tracking", {
     botBlockChallengeEvidence: { blocked: true, coverageImpact: "material" },
@@ -856,6 +896,26 @@ test("new runtime contracts require concrete retained evidence shapes", () => {
           repeated_across_etlds: ["adnxs.com", "rlcdn.com"],
           request_url_redacted: "https://sync.adnxs.com/getuid?uid=%5Bredacted%5D",
           value_hash: "a".repeat(64)
+        }
+      ]
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("cross_domain_identifier_sharing_observed", {
+      cross_domain_identifier_sharing_destination_categories: ["identity_graph"],
+      cross_domain_identifier_sharing_destination_etlds: ["liveramp.com"],
+      cross_domain_identifier_sharing_evidence: [
+        {
+          destination_classification: "identity_graph",
+          destination_domain: "api.liveramp.com",
+          destination_etld_plus_one: "liveramp.com",
+          identifier_class: "durable_id",
+          key: "partnerid",
+          repeated_across_etlds: ["liveramp.com"],
+          request_url_redacted: "https://api.liveramp.com/pixel?partnerid=%5Bredacted%5D",
+          value_hash: "b".repeat(64)
         }
       ]
     })?.status,

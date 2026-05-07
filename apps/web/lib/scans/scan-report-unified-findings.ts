@@ -932,7 +932,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         typeof tsMs === "number" &&
         typeof msAfterReject === "number" &&
         msAfterReject >= REJECT_TRACKING_CONFIRMATION_MIN_MS &&
-        /^(advertising|analytics|session_replay|marketing_automation)$/i.test(category) &&
+        /^(advertising|analytics|session_replay|marketing_automation|tag_manager)$/i.test(category) &&
         vendor.trim().length > 0 &&
         /^https?:\/\//i.test(url)
       );
@@ -1183,9 +1183,23 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     return candidates;
   }
 
+  const crossDomainIdentifierDestinations = uniqueStrings([
+    ...(Array.isArray(fallbackEvidence.crossDomainIdentifierSharingDestinationEtlds)
+      ? (fallbackEvidence.crossDomainIdentifierSharingDestinationEtlds as string[])
+      : []),
+    ...(Array.isArray(fallbackEvidence.cross_domain_identifier_sharing_destination_etlds)
+      ? (fallbackEvidence.cross_domain_identifier_sharing_destination_etlds as string[])
+      : [])
+  ]);
+  const crossDomainIdentifierDescription = crossDomainIdentifierDestinations.length >= 2
+    ? "Identifier-like values were observed in requests to multiple external domains."
+    : crossDomainIdentifierDestinations.length === 1
+      ? "Identifier-like values were observed in a retained request to an external identity, RTB, or adtech destination."
+      : "Identifier-like values were observed in retained requests to external identity, RTB, or adtech destinations.";
+
   candidates.push({
       categoryId: "adtech_analytics_replay_footprint",
-      description: "Identifier-like values were observed in requests to multiple external domains.",
+      description: crossDomainIdentifierDescription,
       fallbackEvidence,
       id: `runtime-derived-signal-${signalKey}`,
       linkedValidationFinding: null,

@@ -600,7 +600,7 @@ function buildRejectTrackingEvidenceFallback(input: {
       msAfterReject >= REJECT_TRACKING_CONFIRMATION_MIN_MS &&
       vendor.trim().length > 0 &&
       /^https?:\/\//i.test(url) &&
-      /^(advertising|analytics|session_replay|marketing_automation)$/i.test(category)
+      /^(advertising|analytics|session_replay|marketing_automation|tag_manager)$/i.test(category)
     );
   });
   const requiredVendorClassificationSatisfied = hasPromotionGradeRequest;

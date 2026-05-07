@@ -51,7 +51,7 @@ function hasStructuredPostRejectTrackingEvidence(runtimeArtifacts: Record<string
       return (
         vendor.length > 0 &&
         /^https?:\/\//i.test(url) &&
-        /^(advertising|analytics|session_replay|marketing_automation)$/i.test(category)
+        /^(advertising|analytics|session_replay|marketing_automation|tag_manager)$/i.test(category)
       );
     })
   );

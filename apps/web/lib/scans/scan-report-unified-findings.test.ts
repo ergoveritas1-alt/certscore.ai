@@ -1225,6 +1225,69 @@ test("runtime-derived reject persistence projects when retained post-reject rows
   assert.ok(projection.topFindings.some((finding) => finding.id === "reject_tracking_persists_after_reject"));
 });
 
+test("runtime-derived reject persistence projects retained post-reject tag-manager rows", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    runtimeArtifacts: {
+      consent_post_reject_tracker_evidence_urls: ["https://www.googletagmanager.com/gtm.js?id=GTM-POST-REJECT"],
+      consent_post_reject_tracker_vendor_names: ["Google Tag Manager"],
+      consent_reject_interaction_succeeded: true,
+      consent_reject_post_reject_non_essential_requests: [
+        {
+          category: "tag_manager",
+          hostname: "www.googletagmanager.com",
+          ms_after_reject: 1000,
+          ts_ms: 3000,
+          url: "https://www.googletagmanager.com/gtm.js?id=GTM-POST-REJECT",
+          vendor: "Google Tag Manager"
+        }
+      ],
+      consent_reject_suppression_checks: {
+        baseline_contradiction_detected: false,
+        cmp_initialization_only: false,
+        navigation_or_reload_ambiguous: false,
+        non_essential_vendor_after_reject: true,
+        post_reject_window_available: true,
+        reject_click_confirmed: true
+      },
+      reject_path_depth_and_availability: {
+        availability: "available",
+        banner_layer_inspected: true,
+        reject_interaction_succeeded: true
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.ok(packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
+  assert.ok(projection.findings.some((finding) => finding.id === "reject_tracking_persists_after_reject"));
+});
+
 test("runtime reject path depth promotes concrete dark-pattern reject-missing evidence", () => {
   const makeState = (runtimeArtifacts: Record<string, unknown>) => buildScanReportUnifiedFindingState({
     accessibilityRuleCounts: [],

@@ -656,7 +656,7 @@ function hasNonEssentialRequestClassification(rawEvidence: Record<string, unknow
       "consent_reject_post_reject_non_essential_requests"
     ]).some((row) => {
       const category = typeof row.category === "string" ? row.category : "";
-      return /^(advertising|analytics|session_replay|marketing_automation)$/i.test(category);
+      return /^(advertising|analytics|session_replay|marketing_automation|tag_manager)$/i.test(category);
     })
   ) {
     return true;
@@ -1031,7 +1031,43 @@ function hasCrossDomainIdentifierEvidence(rawEvidence: Record<string, unknown> |
         : typeof row.request_url_redacted === "string"
           ? row.request_url_redacted
           : "";
-      return repeatedAcrossEtlds.length >= 2 && valueHash.length >= 16 && /^https?:\/\//i.test(url);
+      const key = typeof row.key === "string" ? row.key.trim() : "";
+      const destinationClassification = typeof row.destinationClassification === "string"
+        ? row.destinationClassification
+        : typeof row.destination_classification === "string"
+          ? row.destination_classification
+          : "";
+      const destinationDomain = typeof row.destinationDomain === "string"
+        ? row.destinationDomain
+        : typeof row.destination_domain === "string"
+          ? row.destination_domain
+          : "";
+      const destinationEtld = typeof row.destinationEtldPlusOne === "string"
+        ? row.destinationEtldPlusOne
+        : typeof row.destination_etld_plus_one === "string"
+          ? row.destination_etld_plus_one
+          : "";
+      const identifierClass = typeof row.identifierClass === "string"
+        ? row.identifierClass
+        : typeof row.identifier_class === "string"
+          ? row.identifier_class
+          : "";
+      const knownSyncDestination = /(?:taboola|adnxs|demdex|id5-sync|id5|liveramp|pubmatic|rlcdn|rubiconproject|openx|adsrvr|3lift|crwdcntrl)(?:\.|$)/i.test(
+        `${destinationDomain} ${destinationEtld} ${url}`
+      );
+      const namedIdentitySyncKey = /^(?:partner_?id|uid2|euid|id5id|tdid)$/i.test(key);
+      const isStrongSingleDestinationIdentitySync =
+        (/^(?:rtb|identity_graph)$/i.test(destinationClassification) ||
+          /(?:identity|id5|demdex|rlcdn|liveramp|uidapi|crwdcntrl|adnxs|pubmatic|openx|rubicon|bidswitch|casalemedia|adsrvr)/i.test(
+            `${destinationDomain} ${destinationEtld}`
+          )) &&
+        /^(?:durable_id|cookie_id)$/i.test(identifierClass) &&
+        /^(?:uid|uuid|user_?id|visitor_?id|external_?id|identity|guid|sync_?id|match_?id|partner_?(?:uid|id)|buyeruid|bkuid|d_uuid|uid2|euid|id5id|tdid)$/i.test(key) &&
+        ((knownSyncDestination && namedIdentitySyncKey) ||
+          /(?:^|\/|[-_:])(?:sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid|getuid\w*)(?:\/|[-_:]|[?#&]|$)|\/tap\.php$|\/track\/cmf(?:\/|$)|\/ibs:dpid/i.test(
+            url
+          ));
+      return (repeatedAcrossEtlds.length >= 2 || isStrongSingleDestinationIdentitySync) && valueHash.length >= 16 && /^https?:\/\//i.test(url);
     }) ||
     (destinations.length >= 2 && (typeof valueHashCount === "number" ? valueHashCount > 0 : rows.length > 0))
   );
