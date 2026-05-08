@@ -10,6 +10,7 @@ import {
   findOrganizationDomainByNormalizedUrl,
   loadDomainOrganizationAndSettings
 } from "./repository";
+import { checkDomainDns } from "./domain-dns";
 import { getPlanLimits } from "../plans/get-plan-limits";
 import { queueFullScanForDomain } from "../scans/create-full-scan";
 
@@ -67,6 +68,14 @@ export async function createOrQueueDomainScan(input: {
   const organizationSettings = organizationSettingsAndOrg.settings;
 
   const { hostname, normalizedUrl } = parsedInput.data;
+  const dnsStatus = await checkDomainDns(hostname);
+
+  if (!dnsStatus.exists) {
+    return {
+      error: dnsStatus.reason,
+      scanId: null
+    };
+  }
 
   let existingDomain;
   try {

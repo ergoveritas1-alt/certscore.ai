@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createDomainRequestSchema, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { getCurrentUser } from "../../../server/auth";
 import { isBetterAuthConfigurationError } from "../../../server/better-auth/env";
+import { checkDomainDns } from "../../../server/domains/domain-dns";
 import { createOrQueueDomainScan } from "../../../server/domains/create-domain";
 import { createAnonymousFullScan } from "../../../server/scans/create-anonymous-full-scan";
 import { createPreviewScan } from "../../../server/preview-scan/create-preview-scan";
@@ -84,6 +85,26 @@ export async function POST(request: Request) {
     }
 
     const intakeDomains = parsedBatch.valid;
+    const dnsStatuses = await Promise.all(
+      intakeDomains.map(async (item) => ({
+        domain: item.domain,
+        status: await checkDomainDns(item.hostname)
+      }))
+    );
+    const failedDnsStatus = dnsStatuses.find((item) => !item.status.exists);
+
+    if (failedDnsStatus) {
+      return NextResponse.json(
+        {
+          code: "domain_not_found",
+          error:
+            intakeDomains.length === 1
+              ? failedDnsStatus.status.reason
+              : `${failedDnsStatus.domain}: ${failedDnsStatus.status.reason}`
+        },
+        { status: 400 }
+      );
+    }
 
     let user = null;
 

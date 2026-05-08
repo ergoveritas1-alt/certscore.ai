@@ -2496,16 +2496,25 @@ export function deriveExecutiveAccessLimitationNotice(
       : review?.verifiedSurfaces.length ?? 0;
   const browserBlockReason = deriveBrowserBlockReason(scanEvents);
   const verifiedPolicyInsights = review?.verifiedPolicyInsights ?? [];
-  const blockedAccessObserved =
+  const homepageFetchStatus = getRecordString(snapshot, "homepage_fetch_status");
+  const homepageReachabilityFailed =
+    homepageFetchStatus === "error" ||
+    homepageFetchStatus === "timeout" ||
+    homepageFetchStatus === "not_found" ||
+    getRecordString(snapshot, "scan_outcome") === "transport_failure" ||
+    getRecordString(snapshot, "scan_outcome") === "timeout_navigation" ||
+    getRecordString(snapshot, "scan_outcome") === "domain_inactive_or_unstable";
+  const accessLimitationObserved =
     snapshot.blocked_flag === true ||
     snapshot.auth_wall_detected === true ||
     snapshot.captcha_flag === true ||
+    homepageReachabilityFailed ||
     typeof browserBlockReason === "string" ||
-    getRecordString(snapshot, "homepage_fetch_status") === "forbidden" ||
-    getRecordString(snapshot, "homepage_fetch_status") === "blocked" ||
+    homepageFetchStatus === "forbidden" ||
+    homepageFetchStatus === "blocked" ||
     (typeof snapshot.homepage_fetch_http_status === "number" && snapshot.homepage_fetch_http_status >= 400);
 
-  if (!blockedAccessObserved) {
+  if (!accessLimitationObserved) {
     return null;
   }
 
@@ -5554,6 +5563,9 @@ export function SharedScanDetailView({
           <HomepagePreviewGate href={createAccountHref} mode="full" />
         ) : null}
       </div>
+      <p className="px-1 text-xs leading-5 text-slate-500">
+        CertScore.ai automated findings may contain errors. Always review the supporting evidence.
+      </p>
     </div>
   );
 }

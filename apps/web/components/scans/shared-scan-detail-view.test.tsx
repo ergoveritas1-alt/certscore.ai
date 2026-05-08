@@ -342,7 +342,7 @@ async function loadExecutiveAccessLimitationNotice() {
       | {
           summary: string;
           finding: { label: string; shortSummary: string };
-          review: { coverageLabel: string; reason: string };
+          review: { coverageLabel: string; outcomeTitle: string; reason: string; title: string };
         }
       | null;
   }).deriveExecutiveAccessLimitationNotice;
@@ -950,6 +950,44 @@ test("deriveExecutiveAccessLimitationNotice stays off when blocked scans still v
   });
 
   assert.equal(notice, null);
+});
+
+test("deriveExecutiveAccessLimitationNotice suppresses healthy-looking summaries for unreachable homepages", async () => {
+  const deriveExecutiveAccessLimitationNotice = await loadExecutiveAccessLimitationNotice();
+
+  const notice = deriveExecutiveAccessLimitationNotice({
+    certscore_overall: 81,
+    coverage_level: "limited_none",
+    homepage_fetch_status: "error",
+    pages_scanned: 0,
+    scan_outcome: "transport_failure",
+    total_signals: 0,
+    verified_public_surfaces_count: 0
+  });
+
+  assert.equal(notice?.review.title, "Transport failure");
+  assert.equal(notice?.review.coverageLabel, "No public verification available");
+  assert.match(notice?.summary ?? "", /No reliable privacy or consent findings were retained/i);
+  assert.match(notice?.finding.shortSummary ?? "", /No reliable privacy or consent findings were retained/i);
+});
+
+test("deriveExecutiveAccessLimitationNotice suppresses healthy-looking summaries for not-found homepages", async () => {
+  const deriveExecutiveAccessLimitationNotice = await loadExecutiveAccessLimitationNotice();
+
+  const notice = deriveExecutiveAccessLimitationNotice({
+    certscore_overall: 81,
+    homepage_fetch_http_status: 404,
+    homepage_fetch_status: "not_found",
+    pages_scanned: 0,
+    scan_outcome: "domain_inactive_or_unstable",
+    total_signals: 0,
+    verified_public_surfaces_count: 0
+  });
+
+  assert.equal(notice?.review.title, "Domain inactive or unstable");
+  assert.equal(notice?.review.outcomeTitle, "Domain inactive or unstable");
+  assert.match(notice?.review.reason ?? "", /HTTP 404 Not Found/i);
+  assert.match(notice?.summary ?? "", /No reliable privacy or consent findings were retained/i);
 });
 
 test("selectExecutiveAccessLimitationNotice does not replace retained unified findings", async () => {

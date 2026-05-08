@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { previewScanRequestSchema } from "@website-signal-risk-scanner/shared";
+import { checkDomainDns } from "../../../server/domains/domain-dns";
 import { createPreviewScan } from "../../../server/preview-scan/create-preview-scan";
 
 export async function POST(request: Request) {
@@ -11,6 +12,18 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: result.error.issues[0]?.message ?? "Invalid preview scan request."
+        },
+        { status: 400 }
+      );
+    }
+
+    const dnsStatus = await checkDomainDns(result.data.hostname);
+
+    if (!dnsStatus.exists) {
+      return NextResponse.json(
+        {
+          code: "domain_not_found",
+          error: dnsStatus.reason
         },
         { status: 400 }
       );
