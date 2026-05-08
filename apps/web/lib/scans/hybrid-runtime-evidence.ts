@@ -1030,6 +1030,15 @@ function getFingerprintArtifactRefs(hybrid: Record<string, unknown> | null, fing
   ]);
 }
 
+function getFingerprintingRuntimeEvidence(hybrid: Record<string, unknown> | null) {
+  return [
+    ...getObjectArray(hybrid?.fingerprintingRuntimeEvidence),
+    ...getObjectArray(hybrid?.fingerprinting_runtime_evidence),
+    ...getObjectArray(hybrid?.fingerprintRuntimeEvidence),
+    ...getObjectArray(hybrid?.fingerprint_runtime_evidence)
+  ];
+}
+
 function getUiSummary(hybrid: Record<string, unknown> | null) {
   return getRecord(hybrid?.uiSummary);
 }
@@ -1590,6 +1599,7 @@ export function getHybridSignalFallbackEvidence(input: {
       return {
         fingerprintAttributeCategories: getFingerprintAttributeCategories(fingerprintSummary),
         fingerprintArtifactRefs: getFingerprintArtifactRefs(hybrid, fingerprintSummary),
+        fingerprintingRuntimeEvidence: getFingerprintingRuntimeEvidence(hybrid),
         fingerprinting_detected: true,
         signalKey: input.signalKey,
         signalLabel: input.signalLabel,

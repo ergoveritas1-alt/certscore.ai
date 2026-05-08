@@ -6,8 +6,13 @@ import { POLICY_BEHAVIOR_CONFLICT_FIXTURES } from "./policy-behavior-conflict.fi
 import {
   evaluateConsentGatedTrackingConflictContract,
   evaluatePolicyBehaviorConflictContract,
+  diagnosePreConsentCookieEvidence,
+  hasConcreteCrossDomainIdentifierSharingEvidence,
   hasConcretePreconsentArtifact,
+  hasConcreteRtbCookieSyncEvidence,
   hasConcreteSensitiveSessionReplayArtifact,
+  hasStrongFingerprintingEvidence,
+  hasSensitiveSessionReplaySurfaceCooccurrenceArtifact,
   hasConcreteSensitiveThirdPartyTrackingArtifact,
   hasPreconsentSequenceEvidence,
   hasStrongPreconsentRuntimeEvidence
@@ -323,6 +328,149 @@ test("sensitive session replay contract accepts legacy replay-host payloads with
     }),
     false
   );
+});
+
+test("sensitive replay surface co-occurrence requires a replay-correlated sensitive artifact", () => {
+  assert.equal(
+    hasSensitiveSessionReplaySurfaceCooccurrenceArtifact({
+      sensitive_payload_violations: [
+        {
+          detectedType: "email_detected",
+          evidenceSource: "sensitive_field_third_party_tracking_correlation",
+          evidenceStrength: "form_field_signal",
+          matchSnippet: "email field",
+          requestUrl: "https://www.googletagmanager.com/gtm.js?id=GTM-TEST",
+          vendorHost: "www.googletagmanager.com"
+        }
+      ],
+      session_replay_runtime_detected: true,
+      session_replay_runtime_vendors: ["Microsoft Clarity"]
+    }),
+    false
+  );
+
+  assert.equal(
+    hasSensitiveSessionReplaySurfaceCooccurrenceArtifact({
+      sensitive_payload_violations: [
+        {
+          detectedType: "email_detected",
+          evidenceSource: "sensitive_field_session_replay_correlation",
+          evidenceStrength: "form_field_signal",
+          matchSnippet: "email field",
+          requestUrl: "https://k.clarity.ms/collect",
+          vendorHost: "k.clarity.ms"
+        }
+      ],
+      session_replay_runtime_detected: true,
+      session_replay_runtime_vendors: ["Microsoft Clarity"]
+    }),
+    true
+  );
+});
+
+test("pre-consent cookie diagnostics distinguish collection, classification, phase, and contract suppression", () => {
+  assert.equal(diagnosePreConsentCookieEvidence({}), "no_cookies_observed");
+  assert.equal(
+    diagnosePreConsentCookieEvidence({
+      consent_baseline_cookie_count: 8
+    }),
+    "cookies_observed_not_classified"
+  );
+  assert.equal(
+    diagnosePreConsentCookieEvidence({
+      consent_baseline_cookie_count: 8,
+      preconsent_cookie_names: ["_ga"]
+    }),
+    "cookies_observed_without_preconsent_phase"
+  );
+  assert.equal(
+    diagnosePreConsentCookieEvidence({
+      consentTimeline: { firstCmpVisibleMs: 0 },
+      preconsent_cookie_categories: ["necessary"],
+      preconsent_cookie_names: ["__cf_bm"]
+    }),
+    "preconsent_cookies_suppressed_by_contract"
+  );
+  assert.equal(
+    diagnosePreConsentCookieEvidence({
+      consentTimeline: { firstCmpVisibleMs: 0 },
+      preconsent_cookie_categories: ["advertising"],
+      preconsent_cookie_names: ["_fbp"]
+    }),
+    "preconsent_cookie_evidence_retained"
+  );
+});
+
+test("fingerprinting primitive clusters require retained runtime anchors", () => {
+  const summaryOnlyEvidence = {
+    fingerprintSummary: {
+      attributeCategories: [{ name: "canvas_webgl" }, { name: "audio" }, { name: "fonts_plugins" }],
+      networkAfterCollection: true,
+      thirdPartyAfterCollection: true,
+      tier: 3
+    }
+  };
+
+  assert.equal(hasStrongFingerprintingEvidence(summaryOnlyEvidence), false);
+  assert.equal(
+    hasStrongFingerprintingEvidence({
+      ...summaryOnlyEvidence,
+      fingerprintingRuntimeEvidence: [
+        {
+          artifactRef: "runtime:fingerprint:canvas:petdesk",
+          attributeCategories: ["canvas_webgl", "audio", "fonts_plugins"],
+          sourceScriptUrl: "https://cdn.example.test/fp.js"
+        }
+      ]
+    }),
+    true
+  );
+});
+
+test("promotion contracts consume normalized compact evidence rows from concern entities", () => {
+  const preconsentCookieRow = {
+    category: "advertising",
+    cookieName: "_fbp",
+    nonEssential: true,
+    party: "third_party",
+    timingEvidence: "before_consent_cookie_write"
+  };
+  const rtbRow = {
+    hostname: "px.ads.linkedin.com",
+    pathSample: "/collect",
+    queryKeysSample: ["partner", "redirect"],
+    reason: "redirect_sync"
+  };
+  const crossDomainRow = {
+    destinationClassification: "identity_graph",
+    destinationDomain: "id5-sync.com",
+    destinationEtldPlusOne: "id5-sync.com",
+    identifierClass: "cookie_id",
+    key: "uid",
+    requestUrlRedacted: "https://id5-sync.com/sync?uid=[redacted]",
+    sourcePageUrl: "https://petdesk.com/",
+    valueHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  };
+
+  const normalizedConcernEvidence = {
+    consentTimeline: {
+      firstConsentActionMs: 1200,
+      firstNonEssentialRequestMs: 200
+    },
+    entities: {
+      cross_domain_identifier_sharing_destination_categories: ["identity_graph"],
+      cross_domain_identifier_sharing_destination_etlds: ["id5-sync.com"],
+      cross_domain_identifier_sharing_evidence: [JSON.stringify(crossDomainRow)],
+      preconsent_cookie_evidence: [JSON.stringify(preconsentCookieRow)],
+      rtbCookieSyncEvidence: [JSON.stringify(rtbRow)]
+    }
+  };
+
+  assert.equal(hasConcretePreconsentArtifact(normalizedConcernEvidence), true);
+  assert.equal(hasPreconsentSequenceEvidence(normalizedConcernEvidence), true);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(normalizedConcernEvidence), true);
+  assert.equal(hasConcreteRtbCookieSyncEvidence(normalizedConcernEvidence), true);
+  assert.equal(hasConcreteCrossDomainIdentifierSharingEvidence(normalizedConcernEvidence), true);
 });
 
 test("pre-consent source URLs remain review-grade sequence evidence", () => {

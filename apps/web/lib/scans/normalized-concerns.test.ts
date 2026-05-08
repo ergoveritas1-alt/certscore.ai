@@ -564,7 +564,7 @@ test("high-sensitivity candidates with independent replay artifacts stay general
   assert.equal(concern.suggestedUnifiedFindingId, "sensitive_collection_surface_observed");
 });
 
-test("high-sensitivity candidates with retained sensitive requests and replay runtime specialize into sensitive replay findings", () => {
+test("high-sensitivity candidates with independent sensitive requests and replay runtime stay out of sensitive replay findings", () => {
   const concern = normalizeConcernFromReviewFindingCandidate({
     description: "Sensitive request and replay tooling were observed on the same scan surface.",
     fallbackEvidence: {
@@ -580,6 +580,36 @@ test("high-sensitivity candidates with retained sensitive requests and replay ru
       ],
       session_replay_runtime_detected: true,
       session_replay_runtime_vendors: ["FullStory"]
+    },
+    observedValue: "Yes",
+    severity: "high",
+    signalKey: "commerce.high_sensitivity_data_collection_detected",
+    signalLabel: "High-sensitivity data collection detected",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "High-sensitivity data collection detected"
+  });
+
+  assert.equal(concern.suggestedUnifiedFindingId, "sensitive_collection_surface_observed");
+});
+
+test("high-sensitivity candidates with replay-correlated sensitive artifacts specialize into sensitive replay findings", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Sensitive input appears to coexist with replay collection on the same surface.",
+    fallbackEvidence: {
+      sensitivePayloadViolations: [
+        {
+          detectedType: "email_detected",
+          evidenceSource: "sensitive_field_session_replay_correlation",
+          evidenceStrength: "form_field_signal",
+          matchSnippet: "email field",
+          requestUrl: "https://k.clarity.ms/collect",
+          sourceField: "email",
+          vendorHost: "k.clarity.ms"
+        }
+      ],
+      session_replay_runtime_detected: true,
+      session_replay_runtime_vendors: ["Microsoft Clarity"]
     },
     observedValue: "Yes",
     severity: "high",

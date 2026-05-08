@@ -1776,6 +1776,31 @@ test("keeps Clarity and GTM without strong primitives as generic browser telemet
   ]);
 });
 
+test("keeps tier-3 primitive noise below probable fingerprinting without a strong runtime cluster", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("fingerprinting_observed", {
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: {
+          fingerprintTier: 3
+        },
+        entities: {
+          fingerprintAttributeCategories: ["audio", "fonts_plugins", "hardware"]
+        },
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: []
+      },
+      severity: "medium",
+      summary: "Browser primitive noise observed."
+    })
+  ]);
+
+  assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
+  assert.ok(projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
+});
+
 test("projects blocking overlay context without violation framing", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("blocking_overlay_observed", {

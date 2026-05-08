@@ -526,7 +526,18 @@ test("builds fallback evidence for hybrid fingerprinting concerns", () => {
         confidence: "high",
         reasons: ["multiple device attributes collected"],
         summary: "Likely fingerprinting observed."
-      }
+      },
+      fingerprintingRuntimeEvidence: [
+        {
+          artifactRef: "runtime:fingerprint:petdesk",
+          attributeCategories: ["canvas_webgl", "hardware", "font"],
+          evidenceSource: "fingerprint_api_runtime_event",
+          host: "collector.example.net",
+          requestUrl: "https://collector.example.net/fp?visitor_id=[redacted]",
+          runtimePhase: "pre_consent",
+          tier: 3
+        }
+      ]
     }
   } satisfies Record<string, unknown>;
 
@@ -540,6 +551,17 @@ test("builds fallback evidence for hybrid fingerprinting concerns", () => {
   assert.equal(fallback?.fingerprinting_detected, true);
   assert.deepEqual(fallback?.runtimeEvidenceArtifacts, ["hybrid_runtime_evidence"]);
   assert.equal((fallback?.fingerprintSummary as { tier?: unknown } | undefined)?.tier, 3);
+  assert.deepEqual(fallback?.fingerprintingRuntimeEvidence, [
+    {
+      artifactRef: "runtime:fingerprint:petdesk",
+      attributeCategories: ["canvas_webgl", "hardware", "font"],
+      evidenceSource: "fingerprint_api_runtime_event",
+      host: "collector.example.net",
+      requestUrl: "https://collector.example.net/fp?visitor_id=[redacted]",
+      runtimePhase: "pre_consent",
+      tier: 3
+    }
+  ]);
 });
 
 test("builds concrete fallback evidence for hybrid pre-consent request timing", () => {

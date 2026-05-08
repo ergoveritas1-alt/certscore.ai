@@ -2656,7 +2656,7 @@ test("deriveConcernPolicy promotes corroborated fingerprinting evidence", () => 
   assert.equal(policy.externalSurfacingEligibility, "eligible");
 });
 
-test("deriveConcernPolicy promotes tier-3 high-entropy fingerprinting evidence", () => {
+test("deriveConcernPolicy keeps tier-3 high-entropy fingerprinting evidence audit-only without a runtime anchor", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
       originKey: "privacy.fingerprinting_detected",
@@ -2672,8 +2672,8 @@ test("deriveConcernPolicy promotes tier-3 high-entropy fingerprinting evidence",
     }
   });
 
-  assert.equal(policy.promotionEligibility, "eligible");
-  assert.equal(policy.externalSurfacingEligibility, "eligible");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
 });
 
 test("deriveConcernPolicy promotes same-page video content tracking exposure", () => {

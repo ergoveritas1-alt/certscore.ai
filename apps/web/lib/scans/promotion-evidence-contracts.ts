@@ -49,6 +49,45 @@ function getObjectArrayValues(record: Record<string, unknown> | null | undefined
   return values;
 }
 
+function parseObjectRow(value: unknown) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function getObjectArrayValuesFromEvidenceAndEntities(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  const entities = getObjectValue(record, ["entities"]);
+  const values: Array<Record<string, unknown>> = [];
+
+  for (const key of keys) {
+    for (const source of [record, entities]) {
+      const value = source?.[key];
+      if (!Array.isArray(value)) {
+        continue;
+      }
+      for (const entry of value) {
+        const row = parseObjectRow(entry);
+        if (row) {
+          values.push(row);
+        }
+      }
+    }
+  }
+
+  return values;
+}
+
 function getObjectValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
   for (const key of keys) {
     const value = record?.[key];
@@ -82,6 +121,54 @@ function classifyCookieNameForPromotion(name: string) {
 
 function isPromotionGradeCookieCategory(value: string | null | undefined) {
   return Boolean(value && /analytics|advertising|marketing|retargeting|session_replay|personalization/i.test(value));
+}
+
+export type PreConsentCookieEvidenceDiagnostic =
+  | "no_cookies_observed"
+  | "cookies_observed_not_classified"
+  | "cookies_observed_without_preconsent_phase"
+  | "preconsent_cookies_suppressed_by_contract"
+  | "preconsent_cookie_evidence_retained";
+
+export function diagnosePreConsentCookieEvidence(rawEvidence: Record<string, unknown> | null | undefined): PreConsentCookieEvidenceDiagnostic {
+  const initialCookieCount = getNumberValue(rawEvidence, ["initialCookieCount", "initial_cookie_count"]) ?? 0;
+  const baselineCookieCount = getNumberValue(rawEvidence, ["consentBaselineCookieCount", "consent_baseline_cookie_count"]) ?? 0;
+  const preconsentCookieCount =
+    getNumberValue(rawEvidence, ["preconsentCookieCount", "preconsent_cookie_count", "consentPreconsentViolationCount", "consent_preconsent_violation_count"]) ?? 0;
+  const cookieNames = getStringArrayValues(rawEvidence, [
+    "preconsentCookieNames",
+    "preconsent_cookie_names",
+    "initialCookieNames",
+    "initial_cookie_names",
+    "consentBaselineCookieNames",
+    "consent_baseline_cookie_names"
+  ]);
+  const cookieCategories = getStringArrayValues(rawEvidence, [
+    "preconsentCookieCategories",
+    "preconsent_cookie_categories",
+    "preconsentNonessentialCookieCategories",
+    "preconsent_nonessential_cookie_categories"
+  ]);
+  const hasPreconsentTiming =
+    getNumberValue(rawEvidence, ["firstConsentActionMs", "first_consent_action_ms"]) !== null ||
+    getNumberValue(rawEvidence, ["firstCmpVisibleMs", "first_cmp_visible_ms"]) !== null ||
+    getNumberValue(getObjectValue(rawEvidence, ["consentTimeline", "consent_timeline"]), ["firstConsentActionMs", "first_consent_action_ms"]) !== null ||
+    getNumberValue(getObjectValue(rawEvidence, ["consentTimeline", "consent_timeline"]), ["firstCmpVisibleMs", "first_cmp_visible_ms"]) !== null;
+  const observedCookieCount = Math.max(initialCookieCount, baselineCookieCount, preconsentCookieCount, cookieNames.length);
+
+  if (observedCookieCount === 0) {
+    return "no_cookies_observed";
+  }
+  if (cookieCategories.length === 0 && cookieNames.length === 0) {
+    return "cookies_observed_not_classified";
+  }
+  if (!hasPreconsentTiming && preconsentCookieCount === 0) {
+    return "cookies_observed_without_preconsent_phase";
+  }
+  if (!cookieCategories.some(isPromotionGradeCookieCategory)) {
+    return "preconsent_cookies_suppressed_by_contract";
+  }
+  return "preconsent_cookie_evidence_retained";
 }
 
 function isConcreteHttpEvidenceUrl(value: string | null | undefined) {
@@ -267,10 +354,11 @@ export function hasConcreteRtbCookieSyncEvidence(rawEvidence: Record<string, unk
     return false;
   }
 
-  const rows = getObjectArrayValues(rawEvidence, [
+  const rows = getObjectArrayValuesFromEvidenceAndEntities(rawEvidence, [
     "rtbCookieSyncObservations",
     "rtb_cookie_sync_observations",
-    "rtb_cookie_sync_evidence"
+    "rtb_cookie_sync_evidence",
+    "rtbCookieSyncEvidence"
   ]);
   if (rows.some(hasConcreteRtbObservationRow)) {
     return true;
@@ -367,7 +455,7 @@ function hasConcreteCrossDomainIdentifierSharingRow(row: Record<string, unknown>
 }
 
 export function hasConcreteCrossDomainIdentifierSharingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
-  const rows = getObjectArrayValues(rawEvidence, [
+  const rows = getObjectArrayValuesFromEvidenceAndEntities(rawEvidence, [
     "crossDomainIdentifierSharingEvidence",
     "cross_domain_identifier_sharing_evidence"
   ]);
@@ -375,11 +463,11 @@ export function hasConcreteCrossDomainIdentifierSharingEvidence(rawEvidence: Rec
     return false;
   }
 
-  const categories = getStringArrayValues(rawEvidence, [
+  const categories = getStringArrayValuesFromEvidenceAndEntities(rawEvidence, [
     "crossDomainIdentifierSharingDestinationCategories",
     "cross_domain_identifier_sharing_destination_categories"
   ]);
-  const destinationEtlds = getStringArrayValues(rawEvidence, [
+  const destinationEtlds = getStringArrayValuesFromEvidenceAndEntities(rawEvidence, [
     "crossDomainIdentifierSharingDestinationEtlds",
     "cross_domain_identifier_sharing_destination_etlds"
   ]);
@@ -446,7 +534,7 @@ export function hasConcreteCrossDomainIdentifierSharingEvidence(rawEvidence: Rec
 }
 
 function hasPromotionGradePreconsentCookieEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
-  const cookieRows = getObjectArrayValues(rawEvidence, ["preconsent_cookie_evidence", "preconsentCookieEvidence"]);
+  const cookieRows = getObjectArrayValuesFromEvidenceAndEntities(rawEvidence, ["preconsent_cookie_evidence", "preconsentCookieEvidence"]);
   const promotionGradeRows = cookieRows.filter((row) => {
     const timingEvidence = typeof row.timingEvidence === "string" ? row.timingEvidence : typeof row.timing_evidence === "string" ? row.timing_evidence : null;
     const party = typeof row.party === "string" ? row.party : typeof row.cookiePartyType === "string" ? row.cookiePartyType : typeof row.cookie_party_type === "string" ? row.cookie_party_type : null;
@@ -861,6 +949,37 @@ function hasConcreteFingerprintingRequestEvidence(rawEvidence: Record<string, un
   );
 }
 
+function hasFingerprintingRuntimeAnchor(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getObjectArrayValues(rawEvidence, [
+    "fingerprintRuntimeEvidence",
+    "fingerprint_runtime_evidence",
+    "fingerprintingRuntimeEvidence",
+    "fingerprinting_runtime_evidence"
+  ]).some((row) => {
+    const anchorValues = getStringArrayValues(row, [
+      "artifactRef",
+      "artifact_ref",
+      "requestUrl",
+      "request_url",
+      "url",
+      "redactedUrl",
+      "redacted_url",
+      "sourceUrl",
+      "source_url",
+      "scriptUrl",
+      "script_url",
+      "sourceScriptUrl",
+      "source_script_url",
+      "vendor",
+      "vendorName",
+      "vendor_name",
+      "hostname",
+      "host"
+    ]);
+    return anchorValues.some((value) => value.trim().length > 0);
+  });
+}
+
 export function hasStrongFingerprintingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   const summary = getRecordValue(rawEvidence, ["fingerprintSummary", "fingerprint_summary"]);
   const tier = getNumberValue(summary, ["tier"]) ?? getNumberValue(rawEvidence, ["fingerprintTier", "fingerprint_tier"]) ?? 0;
@@ -868,10 +987,19 @@ export function hasStrongFingerprintingEvidence(rawEvidence: Record<string, unkn
   const highEntropyCategoryCount = categories.filter((category) => HIGH_ENTROPY_FINGERPRINTING_CATEGORIES.has(category)).length;
   const hasRenderingFingerprinting = categories.some((category) => RENDERING_FINGERPRINTING_CATEGORIES.has(category));
   const hasCorroboratingFingerprinting = categories.some((category) => CORROBORATING_FINGERPRINTING_CATEGORIES.has(category));
+  const networkAfterCollection = getBooleanValue(summary, ["networkAfterCollection", "network_after_collection"]) === true;
+  const thirdPartyAfterCollection = getBooleanValue(summary, ["thirdPartyAfterCollection", "third_party_after_collection"]) === true;
+  const hasRuntimeAnchor = hasFingerprintingRuntimeAnchor(rawEvidence);
+  const hasStrongPrimitiveCluster =
+    highEntropyCategoryCount >= 3 &&
+    hasRenderingFingerprinting &&
+    hasCorroboratingFingerprinting &&
+    (networkAfterCollection || thirdPartyAfterCollection) &&
+    hasRuntimeAnchor;
 
   return (
-    (tier >= 3 && highEntropyCategoryCount >= 1) ||
-    (tier >= 2 && hasRenderingFingerprinting && hasCorroboratingFingerprinting) ||
+    (tier >= 3 && hasStrongPrimitiveCluster) ||
+    (tier >= 2 && hasRenderingFingerprinting && hasCorroboratingFingerprinting && hasRuntimeAnchor) ||
     hasExplicitFingerprintingVendorEvidence(rawEvidence) ||
     hasConcreteFingerprintingRequestEvidence(rawEvidence)
   );
@@ -1164,10 +1292,7 @@ export function hasConcreteSensitiveSessionReplayArtifact(rawEvidence: Record<st
 }
 
 export function hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
-  return (
-    hasConcreteSensitiveSessionReplayArtifact(rawEvidence) ||
-    (hasSensitivePayloadRequestArtifact(rawEvidence) && hasRetainedSessionReplayRuntimeArtifact(rawEvidence))
-  );
+  return hasConcreteSensitiveSessionReplayArtifact(rawEvidence);
 }
 
 export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Record<string, unknown> | null | undefined) {

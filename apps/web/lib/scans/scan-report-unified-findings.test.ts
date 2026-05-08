@@ -949,7 +949,7 @@ test("high-sensitivity snapshot signal specializes when merged tracking context 
   assert.ok(packet?.evidence?.snippets?.includes("intellimizeClientIp=***-***-4248"));
 });
 
-test("high-sensitivity snapshot signal specializes to sensitive replay when replay runtime co-occurs with retained sensitive request", () => {
+test("high-sensitivity snapshot signal stays generic when replay runtime is independent of retained sensitive request", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     mergedSignals: [],
     reviewFindingCandidates: [
@@ -985,8 +985,8 @@ test("high-sensitivity snapshot signal specializes to sensitive replay when repl
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "session_replay_on_sensitive_input_surface");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.unifiedFindingId, "sensitive_collection_surface_observed");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.deepEqual(packet?.evidence?.entities?.session_replay_runtime_vendors, ["FullStory"]);
   assert.deepEqual(packet?.evidence?.entities?.request_domains, ["api.example.com"]);
 });

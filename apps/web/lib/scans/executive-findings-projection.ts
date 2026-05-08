@@ -2258,7 +2258,7 @@ function buildExecutiveShortSummary(
   if (findingId === "session_replay_on_sensitive_input_surface") {
     const vendors = getSessionReplayVendors(packet);
     const vendorText = vendors.length > 0 ? `${formatVendorList(vendors)} session replay` : "Session replay";
-    return `${vendorText} was observed on a sensitive-data input surface.`;
+    return `${vendorText} was observed alongside a sensitive input surface in the same runtime session; this does not by itself show field-value transmission.`;
   }
 
   if (findingId === "sensitive_data_collection_with_third_party_tracking_present") {
