@@ -6,6 +6,7 @@ import { checkDomainDns } from "../../../server/domains/domain-dns";
 import { createOrQueueDomainScan } from "../../../server/domains/create-domain";
 import { createAnonymousFullScan } from "../../../server/scans/create-anonymous-full-scan";
 import { createPreviewScan } from "../../../server/preview-scan/create-preview-scan";
+import { shouldBypassDnsValidationForProductionLoadTest } from "./load-test-intake";
 
 function isPublicFullScanAvailabilityError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -85,25 +86,29 @@ export async function POST(request: Request) {
     }
 
     const intakeDomains = parsedBatch.valid;
-    const dnsStatuses = await Promise.all(
-      intakeDomains.map(async (item) => ({
-        domain: item.domain,
-        status: await checkDomainDns(item.hostname)
-      }))
-    );
-    const failedDnsStatus = dnsStatuses.find((item) => !item.status.exists);
+    const shouldBypassDnsValidation = shouldBypassDnsValidationForProductionLoadTest(provenance);
 
-    if (failedDnsStatus) {
-      return NextResponse.json(
-        {
-          code: "domain_not_found",
-          error:
-            intakeDomains.length === 1
-              ? failedDnsStatus.status.reason
-              : `${failedDnsStatus.domain}: ${failedDnsStatus.status.reason}`
-        },
-        { status: 400 }
+    if (!shouldBypassDnsValidation) {
+      const dnsStatuses = await Promise.all(
+        intakeDomains.map(async (item) => ({
+          domain: item.domain,
+          status: await checkDomainDns(item.hostname)
+        }))
       );
+      const failedDnsStatus = dnsStatuses.find((item) => !item.status.exists);
+
+      if (failedDnsStatus) {
+        return NextResponse.json(
+          {
+            code: "domain_not_found",
+            error:
+              intakeDomains.length === 1
+                ? failedDnsStatus.status.reason
+                : `${failedDnsStatus.domain}: ${failedDnsStatus.status.reason}`
+          },
+          { status: 400 }
+        );
+      }
     }
 
     let user = null;
