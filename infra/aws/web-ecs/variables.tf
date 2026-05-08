@@ -112,6 +112,12 @@ variable "certscore_admin_emails" {
   default     = ""
 }
 
+variable "full_scan_allow_production_load_test_dns_bypass" {
+  description = "Whether trusted production load-test full-scan requests bypass intake DNS validation so scanner/runtime records transport outcomes."
+  type        = bool
+  default     = false
+}
+
 variable "s3_bucket" {
   description = "Shared artifact bucket used by the public web services."
   type        = string

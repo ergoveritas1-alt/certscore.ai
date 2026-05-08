@@ -37,6 +37,7 @@ locals {
       { name = "NEXT_PUBLIC_AUTH_GOOGLE_ENABLED", value = var.next_public_auth_google_enabled },
       { name = "CERTSCORE_ADMIN_EMAILS", value = var.certscore_admin_emails },
       { name = "FULL_SCAN_QUEUE_ALLOW_DEGRADED_HEARTBEAT", value = tostring(var.full_scan_queue_allow_degraded_heartbeat) },
+      { name = "FULL_SCAN_ALLOW_PRODUCTION_LOAD_TEST_DNS_BYPASS", value = tostring(var.full_scan_allow_production_load_test_dns_bypass) },
       { name = "S3_BUCKET", value = var.s3_bucket },
       { name = "S3_REGION", value = var.s3_region }
     ],
