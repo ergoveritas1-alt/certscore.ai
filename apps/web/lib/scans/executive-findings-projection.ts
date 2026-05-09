@@ -45,7 +45,6 @@ const SECTION_ORDER: CertScoreFindingSection[] = [
 const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SCORE_FINDING_REGISTRY> = {
   accept_more_prominent_than_reject: "asymmetric_consent_ui",
   accept_only_banner: "consent_dark_patterns_detected",
-  contrast_failures: "accessibility_risk_score",
   dismiss_without_reject: "consent_dark_patterns_detected",
   fingerprinting_observed: "probable_fingerprinting",
   forced_consent_wall: "forced_consent_interaction",
@@ -121,7 +120,11 @@ const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
   "autoplay_before_consent",
   "popup_or_modal_present",
   "interstitial_detected",
-  "accessibility_risk_score",
+  "focus_management_issue",
+  "keyboard_navigation_accessibility_issue",
+  "semantic_labeling_accessibility_issue",
+  "text_alternative_accessibility_issue",
+  "visual_contrast_accessibility_issue",
   "guaranteed_or_high_return_claims_present",
   "performance_claims_without_context",
   "high_risk_product_risk_disclosure_missing"
@@ -1677,7 +1680,13 @@ function buildGenericCanonicalEvidenceDetails(
     }
   }
 
-  if (findingId === "accessibility_risk_score") {
+  if (
+    findingId === "focus_management_issue" ||
+    findingId === "keyboard_navigation_accessibility_issue" ||
+    findingId === "semantic_labeling_accessibility_issue" ||
+    findingId === "text_alternative_accessibility_issue" ||
+    findingId === "visual_contrast_accessibility_issue"
+  ) {
     details.accessibilityEvidence = {
       observed: true,
       basis: evidenceSnippets[0] ?? packet.summary,

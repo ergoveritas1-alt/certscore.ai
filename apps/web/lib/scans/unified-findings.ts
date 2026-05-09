@@ -681,8 +681,12 @@ const COVERAGE_FINDING_IDS = new Set([
 ]);
 
 const ACCESSIBILITY_ISSUE_FINDING_IDS = new Set([
-  "wcag_issue_summary",
-  "accessibility_risk_score"
+  "focus_management_issue",
+  "keyboard_navigation_accessibility_issue",
+  "semantic_labeling_accessibility_issue",
+  "text_alternative_accessibility_issue",
+  "visual_contrast_accessibility_issue",
+  "wcag_issue_summary"
 ]);
 
 const POLICY_EXTRACTION_FINDING_IDS = new Set([
@@ -2470,7 +2474,9 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     isAccessibilityRiskContext && accessibilityExampleCoverage.representativeExampleCount === 0
       ? "accessibility_score_only_audit_context"
       : null,
-    accessibilityExampleCoverage.representativeExampleCount > 0 && !accessibilityExamplesArePromotable
+    isAccessibilityRiskContext &&
+    accessibilityExampleCoverage.representativeExampleCount > 0 &&
+    !accessibilityExamplesArePromotable
       ? "accessibility_examples_below_promotion_threshold"
       : null,
     hasSanitizedNetworkEvidenceHash(normalizedFallbackEvidence) ? "sanitized_network_evidence_hashed" : null,
@@ -3277,7 +3283,7 @@ function sanitizeEvidenceForFinding(
     }
   }
 
-  if (findingId === "accessibility_risk_score") {
+  if (ACCESSIBILITY_ISSUE_FINDING_IDS.has(findingId)) {
     next.flags = next.flags.filter((flag) => flag !== "contradiction_runtime_artifact_retained");
   }
 
@@ -3333,7 +3339,10 @@ function augmentAccessibilityAuditEvidence(input: {
   }
   if (coverage.representativeExampleCount === 0) {
     flags.add("accessibility_score_only_audit_context");
-  } else if (!hasExternallyPromotableAccessibilityExamples(input.fallbackEvidence)) {
+  } else if (
+    (input.findingId === "accessibility_risk_score" || input.findingId === "wcag_issue_summary") &&
+    !hasExternallyPromotableAccessibilityExamples(input.fallbackEvidence)
+  ) {
     flags.add("accessibility_examples_below_promotion_threshold");
   }
 
@@ -5108,7 +5117,7 @@ function getUnifiedFindingBaseSortPriority(unifiedFindingId: string) {
   if (FINANCIAL_PROMOTION_FINDING_IDS.has(unifiedFindingId)) {
     return 350;
   }
-  if (COVERAGE_FINDING_IDS.has(unifiedFindingId) || unifiedFindingId === "accessibility_risk_score") {
+  if (COVERAGE_FINDING_IDS.has(unifiedFindingId)) {
     return 100;
   }
   return 250;
@@ -5137,7 +5146,7 @@ function getDisplayPacketSortPriority(input: {
     getUnifiedFindingBaseSortPriority(input.packet.unifiedFindingId) +
     getSurfacingDecisionSortPriority(input.packet.surfacingDecision);
 
-  if (input.hasRegulatorMockContext && (COVERAGE_FINDING_IDS.has(input.packet.unifiedFindingId) || input.packet.unifiedFindingId === "accessibility_risk_score")) {
+  if (input.hasRegulatorMockContext && COVERAGE_FINDING_IDS.has(input.packet.unifiedFindingId)) {
     priority -= 100;
   }
 

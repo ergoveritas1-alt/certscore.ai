@@ -527,15 +527,55 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "Interstitials can block access and create pressure to act.",
     remediation: "Avoid full-page interruptions for non-essential messaging."
   },
-  accessibility_risk_score: {
-    id: "accessibility_risk_score",
-    label: "Automated accessibility issues observed",
+  keyboard_navigation_accessibility_issue: {
+    id: "keyboard_navigation_accessibility_issue",
+    label: "Keyboard navigation accessibility issue",
     section: "Accessibility",
-    defaultSurfacePriority: 72,
+    defaultSurfacePriority: 88,
     whyItMatters:
-      "Representative WCAG examples make accessibility risk reviewable because they identify the page, rule, impacted node, and severity behind the automated signal.",
+      "Keyboard operability barriers can prevent users from reaching or operating important page controls without a mouse.",
     remediation:
-      "Fix the retained WCAG rule examples first, then rerun the accessibility scan to confirm representative barriers no longer reproduce."
+      "Fix the retained keyboard-related WCAG examples, verify controls are reachable and operable with Tab, Shift+Tab, Enter, Space, and Escape, then rerun the scan."
+  },
+  semantic_labeling_accessibility_issue: {
+    id: "semantic_labeling_accessibility_issue",
+    label: "Semantic labeling accessibility issue",
+    section: "Accessibility",
+    defaultSurfacePriority: 74,
+    whyItMatters:
+      "Missing or invalid accessible names, labels, roles, and ARIA semantics can make controls ambiguous or unusable for assistive technology users.",
+    remediation:
+      "Repair labels, accessible names, role/ARIA usage, and semantic structure for the retained axe examples, then rerun the accessibility scan."
+  },
+  text_alternative_accessibility_issue: {
+    id: "text_alternative_accessibility_issue",
+    label: "Text alternative accessibility issue",
+    section: "Accessibility",
+    defaultSurfacePriority: 62,
+    whyItMatters:
+      "Missing text alternatives can prevent non-text content from being understood by screen reader users and other assistive technologies.",
+    remediation:
+      "Add appropriate alt text, captions, or equivalent alternatives for the retained media and object examples, then rerun the accessibility scan."
+  },
+  visual_contrast_accessibility_issue: {
+    id: "visual_contrast_accessibility_issue",
+    label: "Visual contrast accessibility issue",
+    section: "Accessibility",
+    defaultSurfacePriority: 70,
+    whyItMatters:
+      "Insufficient contrast can make text and controls difficult to perceive, especially for users with low vision or color-vision differences.",
+    remediation:
+      "Adjust foreground, background, and state colors for the retained contrast examples until they meet the applicable WCAG contrast threshold."
+  },
+  focus_management_issue: {
+    id: "focus_management_issue",
+    label: "Focus management issue",
+    section: "Accessibility",
+    defaultSurfacePriority: 90,
+    whyItMatters:
+      "Broken focus handling in modals, overlays, consent banners, or dynamic views can trap keyboard users or leave them unable to understand where interaction moved.",
+    remediation:
+      "Move focus predictably on open, keep modal background content out of the tab order, restore focus on close, preserve visible focus, and verify the behavior with keyboard-only interaction."
   },
   guaranteed_or_high_return_claims_present: {
     id: "guaranteed_or_high_return_claims_present",

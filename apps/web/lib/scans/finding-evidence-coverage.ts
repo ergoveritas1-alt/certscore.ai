@@ -23,10 +23,14 @@ export const FINDING_EVIDENCE_NON_CONTRACT_RATIONALES: readonly FindingEvidenceN
   {
     id: "accessibility_rule_level_validation",
     findingIds: [
-      "accessibility_risk_score",
       "contrast_failures",
+      "focus_management_issue",
       "critical_form_completion_barrier",
-      "keyboard_only_task_completion_blocked"
+      "keyboard_navigation_accessibility_issue",
+      "keyboard_only_task_completion_blocked",
+      "semantic_labeling_accessibility_issue",
+      "text_alternative_accessibility_issue",
+      "visual_contrast_accessibility_issue"
     ],
     owner: "accessibility_validation",
     rationale:
@@ -152,9 +156,15 @@ export const FINDING_EVIDENCE_ID_COVERAGE: readonly FindingEvidenceCoverageEntry
     nonContractRationaleId: null
   },
   {
-    ws01FindingIds: ["accessibility_risk_score", "contrast_failures", "critical_form_completion_barrier", "keyboard_only_task_completion_blocked"],
-    unifiedFindingId: "accessibility_risk_score",
-    reportFindingId: "accessibility_risk_score",
+    ws01FindingIds: [
+      "focus_management_issue",
+      "keyboard_navigation_accessibility_issue",
+      "semantic_labeling_accessibility_issue",
+      "text_alternative_accessibility_issue",
+      "visual_contrast_accessibility_issue"
+    ],
+    unifiedFindingId: "keyboard_navigation_accessibility_issue",
+    reportFindingId: "keyboard_navigation_accessibility_issue",
     contractFindingId: null,
     nonContractRationaleId: "accessibility_rule_level_validation"
   },

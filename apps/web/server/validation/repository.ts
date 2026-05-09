@@ -26,7 +26,9 @@ import {
 } from "../../lib/scans/hybrid-runtime-evidence";
 import {
   formatRepresentativeAccessibilityCoverage,
+  getAccessibilityFindingIdForRuleCode,
   getRepresentativeAccessibilityExampleCoverage,
+  hasBehaviorReproducedFocusManagementEvidence,
   normalizePersistedAccessibilityRuleExamples,
   type PersistedAccessibilityRuleExampleRow
 } from "../../lib/scans/accessibility-evidence";
@@ -823,17 +825,44 @@ function buildPolicyReviewEvidencePayload(input: {
   };
 }
 
-function buildAccessibilityRiskSnapshotEvidence(score: number) {
-  return buildAccessibilityRiskSnapshotEvidenceWithExamples(score, []);
-}
+const ACCESSIBILITY_SPLIT_FINDING_METADATA: Record<string, {
+  description: string;
+  ruleKey: string;
+  severity: string;
+  title: string;
+}> = {
+  keyboard_navigation_accessibility_issue: {
+    description: "Keyboard-related WCAG rule examples were retained and warrant review for keyboard operability barriers.",
+    ruleKey: "accessibility_review.navigation_issues",
+    severity: "high",
+    title: "Keyboard navigation accessibility issue"
+  },
+  semantic_labeling_accessibility_issue: {
+    description: "Accessible name, label, role, or semantic rule examples were retained and warrant assistive technology review.",
+    ruleKey: "accessibility_review.semantic_labeling_issues",
+    severity: "medium",
+    title: "Semantic labeling accessibility issue"
+  },
+  text_alternative_accessibility_issue: {
+    description: "Text alternative rule examples were retained and warrant review for non-text content accessibility.",
+    ruleKey: "accessibility_review.text_alternative_issues",
+    severity: "low",
+    title: "Text alternative accessibility issue"
+  },
+  visual_contrast_accessibility_issue: {
+    description: "Color contrast rule examples were retained and warrant review for perceivability barriers.",
+    ruleKey: "accessibility_review.contrast_failures",
+    severity: "medium",
+    title: "Visual contrast accessibility issue"
+  }
+};
 
-function buildAccessibilityRiskSnapshotEvidenceWithExamples(
-  score: number,
-  examples: ScanAccessibilityRuleExampleRow[]
-) {
+function buildAccessibilitySplitEvidence(examples: ScanAccessibilityRuleExampleRow[]) {
+  const normalizedExamples = normalizePersistedAccessibilityRuleExamples(examples);
+  const representativeCoverage = getRepresentativeAccessibilityExampleCoverage({
+    accessibilityRuleExamples: normalizedExamples
+  });
   const pageUrls = [...new Set(examples.map((example) => example.page_url))];
-  const accessibilityRuleExamples = normalizePersistedAccessibilityRuleExamples(examples);
-  const representativeCoverage = getRepresentativeAccessibilityExampleCoverage({ accessibilityRuleExamples });
   const exampleSnippets = examples.map((example) => {
     const selector = Array.isArray(example.representative_selectors) ? example.representative_selectors[0] : null;
     return selector
@@ -842,19 +871,15 @@ function buildAccessibilityRiskSnapshotEvidenceWithExamples(
   });
 
   return {
-    accessibilityRuleExamples,
-    claim: "Scanner-derived accessibility risk indicators were elevated and warrant manual accessibility review.",
+    accessibilityRuleExamples: normalizedExamples,
     confidenceBasis: [
-      `Accessibility risk score: ${score}.`,
-      "This score helps prioritize review, but automated accessibility testing does not determine full conformance on its own.",
-      examples.length > 0
-        ? `Representative page-level accessibility examples were retained across ${pageUrls.length} page${pageUrls.length === 1 ? "" : "s"}.`
-        : "Representative page-level accessibility examples were not retained with this score.",
+      `Representative accessibility examples were retained across ${pageUrls.length} page${pageUrls.length === 1 ? "" : "s"}.`,
       representativeCoverage.representativeExampleCount > 0
         ? formatRepresentativeAccessibilityCoverage(representativeCoverage)
         : null
     ].filter((entry): entry is string => typeof entry === "string"),
     maxAxeImpact: representativeCoverage.maxImpact,
+    pageUrls,
     representativeAxeExampleCount: representativeCoverage.representativeExampleCount,
     representativeAxePageCount: representativeCoverage.distinctPageCount,
     representativeAxeRuleCount: representativeCoverage.distinctRuleCount,
@@ -862,15 +887,76 @@ function buildAccessibilityRiskSnapshotEvidenceWithExamples(
       representativeCoverage.representativeExampleCount > 0
         ? formatRepresentativeAccessibilityCoverage(representativeCoverage)
         : null,
-    missingEvidence: examples.length > 0
-      ? []
-      : ["Affected page URLs or representative rule examples for the highest-priority accessibility barriers."],
-    pageUrls,
-    policyEvidence: [],
-    runtimeEvidence: exampleSnippets,
-    snapshotField: "accessibility_litigation_risk_score",
-    value: score
+    runtimeEvidence: exampleSnippets
   };
+}
+
+function getFocusManagementEvidenceEntries(runtimeArtifacts: Record<string, unknown> | null) {
+  if (!runtimeArtifacts) {
+    return [] as Record<string, unknown>[];
+  }
+
+  const direct = runtimeArtifacts.focusManagementEvidence ?? runtimeArtifacts.focus_management_evidence;
+  const hybrid = runtimeArtifacts.hybridRuntimeEvidence ?? runtimeArtifacts.hybrid_runtime_evidence;
+  const hybridRecord = hybrid && typeof hybrid === "object" && !Array.isArray(hybrid) ? hybrid as Record<string, unknown> : null;
+  const nested = hybridRecord?.focusManagementEvidence ?? hybridRecord?.focus_management_evidence;
+  const values = [direct, nested];
+
+  return values.flatMap((value) =>
+    Array.isArray(value)
+      ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+      : value && typeof value === "object" && !Array.isArray(value)
+        ? [value as Record<string, unknown>]
+        : []
+  );
+}
+
+function buildSupplementalFocusManagementFinding(input: {
+  existingFindings: ExistingFindingIdentity[];
+  runtimeArtifacts: Record<string, unknown> | null;
+  startingRank: number;
+}) {
+  const evidenceEntries = getFocusManagementEvidenceEntries(input.runtimeArtifacts).filter((entry) =>
+    hasBehaviorReproducedFocusManagementEvidence({ focusManagementEvidence: entry })
+  );
+  if (evidenceEntries.length === 0) {
+    return [] as ValidationRunFindingRow[];
+  }
+
+  const title = "Focus management accessibility issue";
+  const ruleKey = "accessibility_review.focus_management_issue";
+  const existingRuleKeys = new Set(input.existingFindings.map((row) => row.rule_key));
+  const existingTitles = new Set(input.existingFindings.map((row) => row.title.trim().toLowerCase()));
+  if (existingRuleKeys.has(ruleKey) || existingTitles.has(title.toLowerCase())) {
+    return [];
+  }
+
+  const pageUrls = [...new Set(evidenceEntries.map((entry) => entry.pageUrl).filter((value): value is string => typeof value === "string"))];
+  const issueTypes = [...new Set(evidenceEntries.map((entry) => entry.issueType).filter((value): value is string => typeof value === "string"))];
+
+  return [{
+    category: "accessibility",
+    description: "Behavior-reproduced focus-management evidence was retained from WS01 keyboard interaction tracing.",
+    evidence_json: {
+      confidenceBasis: [
+        "WS01 reproduced the focus-management behavior with keyboard interaction tracing.",
+        "Evidence includes sanitized active-element transitions, dialog context, expected behavior, and observed behavior."
+      ],
+      focusManagementEvidence: evidenceEntries,
+      issueTypes,
+      pageUrls,
+      runtimeEvidence: evidenceEntries.map((entry) =>
+        `${String(entry.issueType ?? "focus_management_issue")} on ${String(entry.pageUrl ?? "unknown page")}: ${String(entry.observed ?? "behavior reproduced")}`
+      )
+    },
+    finding_rank: input.startingRank + 1,
+    id: "supplemental:accessibility:focus_management_issue",
+    page_url: pageUrls[0] ?? null,
+    rule_key: ruleKey,
+    severity: "high",
+    subtype: "runtime_focus_management",
+    title
+  }];
 }
 
 function buildSupplementalPolicyQueueFindings(input: {
@@ -968,25 +1054,36 @@ function buildSupplementalSnapshotFindings(input: {
     }
   }
 
-  if (typeof snapshot.accessibility_litigation_risk_score === "number") {
-    const title = "Accessibility risk score";
-    const ruleKey = "scan_snapshot.accessibility.accessibility_risk_score";
+  const accessibilityExamplesByFindingId = new Map<string, ScanAccessibilityRuleExampleRow[]>();
+  for (const example of input.accessibilityRuleExamples) {
+    const findingId = getAccessibilityFindingIdForRuleCode(example.rule_code);
+    if (!findingId) {
+      continue;
+    }
+    accessibilityExamplesByFindingId.set(findingId, [
+      ...(accessibilityExamplesByFindingId.get(findingId) ?? []),
+      example
+    ]);
+  }
 
-    if (!existingRuleKeys.has(ruleKey) && !existingTitles.has(title.toLowerCase())) {
+  for (const [findingId, examples] of accessibilityExamplesByFindingId) {
+    const metadata = ACCESSIBILITY_SPLIT_FINDING_METADATA[findingId];
+    if (!metadata) {
+      continue;
+    }
+
+    if (!existingRuleKeys.has(metadata.ruleKey) && !existingTitles.has(metadata.title.toLowerCase())) {
       supplements.push({
         category: "accessibility",
-        description: "Scanner-derived risk indicator is elevated.",
-        evidence_json: buildAccessibilityRiskSnapshotEvidenceWithExamples(
-          snapshot.accessibility_litigation_risk_score,
-          input.accessibilityRuleExamples.slice(0, 5)
-        ),
+        description: metadata.description,
+        evidence_json: buildAccessibilitySplitEvidence(examples.slice(0, 5)),
         finding_rank: input.startingRank + supplements.length + 1,
-        id: "supplemental:snapshot:accessibility_risk_score",
+        id: `supplemental:accessibility:${findingId}`,
         page_url: null,
-        rule_key: ruleKey,
-        severity: "medium",
+        rule_key: metadata.ruleKey,
+        severity: metadata.severity,
         subtype: "snapshot_review",
-        title
+        title: metadata.title
       });
     }
   }
@@ -1210,8 +1307,13 @@ async function loadSupplementalValidationFindings(input: {
     runtimeArtifacts: runtimeArtifacts ?? null,
     startingRank: input.existingFindings.length + policySupplements.length + snapshotSupplements.length
   });
+  const focusManagementSupplements = buildSupplementalFocusManagementFinding({
+    existingFindings: [...input.existingFindings, ...policySupplements, ...snapshotSupplements, ...cookieGapSupplements],
+    runtimeArtifacts: runtimeArtifacts ?? null,
+    startingRank: input.existingFindings.length + policySupplements.length + snapshotSupplements.length + cookieGapSupplements.length
+  });
 
-  return [...policySupplements, ...snapshotSupplements, ...cookieGapSupplements].map((row, index) => ({
+  return [...policySupplements, ...snapshotSupplements, ...cookieGapSupplements, ...focusManagementSupplements].map((row, index) => ({
     ...row,
     finding_rank: input.existingFindings.length + index + 1
   }));

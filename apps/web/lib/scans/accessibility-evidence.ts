@@ -34,6 +34,70 @@ export type NormalizedAccessibilityRuleExample = {
   severity: string;
 };
 
+export const TEXT_ALTERNATIVE_ACCESSIBILITY_RULE_IDS = new Set([
+  "audio-caption",
+  "image-alt",
+  "image-redundant-alt",
+  "object-alt",
+  "video-caption"
+]);
+
+export const VISUAL_CONTRAST_ACCESSIBILITY_RULE_IDS = new Set([
+  "color-contrast"
+]);
+
+export const SEMANTIC_LABELING_ACCESSIBILITY_RULE_IDS = new Set([
+  "aria-command-name",
+  "aria-input-field-name",
+  "aria-toggle-field-name",
+  "aria-tooltip-name",
+  "aria-treeitem-name",
+  "button-name",
+  "input-button-name",
+  "label",
+  "link-name",
+  "select-name"
+]);
+
+const STRONG_SEMANTIC_LABELING_RULE_IDS = new Set([
+  "aria-command-name",
+  "aria-input-field-name",
+  "aria-toggle-field-name",
+  "aria-tooltip-name",
+  "aria-treeitem-name",
+  "button-name",
+  "input-button-name",
+  "label",
+  "select-name"
+]);
+
+export const KEYBOARD_NAVIGATION_ACCESSIBILITY_RULE_IDS = new Set([
+  "nested-interactive",
+  "no-focusable-non-tabindex",
+  "scrollable-region-focusable",
+  "skip-link",
+  "tabindex"
+]);
+
+export const SPLIT_ACCESSIBILITY_FINDING_IDS = new Set([
+  "focus_management_issue",
+  "keyboard_navigation_accessibility_issue",
+  "semantic_labeling_accessibility_issue",
+  "text_alternative_accessibility_issue",
+  "visual_contrast_accessibility_issue"
+]);
+
+const FOCUS_MANAGEMENT_ISSUE_TYPES = new Set([
+  "background_tabbable_under_modal",
+  "focus_not_moved_to_dialog",
+  "focus_not_restored",
+  "focus_trap_missing",
+  "illogical_tab_order",
+  "invisible_focus_indicator",
+  "spa_route_focus_not_reset",
+  "unreachable_keyboard_control"
+]);
+
 const IMPACT_RANK: Record<string, number> = {
   minor: 1,
   moderate: 2,
@@ -211,6 +275,179 @@ export function hasExternallyPromotableAccessibilityExamples(rawEvidence: Record
     coverage.hasSevereExample ||
     coverage.distinctPageCount >= 2 ||
     coverage.distinctRuleCount >= 2
+  );
+}
+
+export function getCompleteRepresentativeAccessibilityExamples(
+  rawEvidence: Record<string, unknown> | null | undefined
+) {
+  if (!rawEvidence || !Array.isArray(rawEvidence.accessibilityRuleExamples)) {
+    return [] as AccessibilityRuleExampleLike[];
+  }
+
+  return rawEvidence.accessibilityRuleExamples
+    .filter((entry): entry is AccessibilityRuleExampleLike => Boolean(entry) && typeof entry === "object")
+    .filter(isCompleteRepresentativeAccessibilityExample);
+}
+
+export function getAccessibilityFindingIdForRuleCode(ruleCode: string | null | undefined) {
+  if (!ruleCode) {
+    return null;
+  }
+
+  if (TEXT_ALTERNATIVE_ACCESSIBILITY_RULE_IDS.has(ruleCode)) {
+    return "text_alternative_accessibility_issue";
+  }
+  if (VISUAL_CONTRAST_ACCESSIBILITY_RULE_IDS.has(ruleCode)) {
+    return "visual_contrast_accessibility_issue";
+  }
+  if (SEMANTIC_LABELING_ACCESSIBILITY_RULE_IDS.has(ruleCode)) {
+    return "semantic_labeling_accessibility_issue";
+  }
+  if (KEYBOARD_NAVIGATION_ACCESSIBILITY_RULE_IDS.has(ruleCode)) {
+    return "keyboard_navigation_accessibility_issue";
+  }
+
+  return null;
+}
+
+export function inferSplitAccessibilityFindingIdFromEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const examples = getCompleteRepresentativeAccessibilityExamples(rawEvidence);
+  const findingIds = examples
+    .map((example) => getAccessibilityFindingIdForRuleCode(getAccessibilityStringValue(example, ["ruleCode", "rule_code", "ruleId", "rule_id"])))
+    .filter((findingId): findingId is NonNullable<ReturnType<typeof getAccessibilityFindingIdForRuleCode>> => Boolean(findingId));
+
+  if (findingIds.includes("keyboard_navigation_accessibility_issue")) {
+    return "keyboard_navigation_accessibility_issue";
+  }
+  if (findingIds.includes("semantic_labeling_accessibility_issue")) {
+    return "semantic_labeling_accessibility_issue";
+  }
+  if (findingIds.includes("visual_contrast_accessibility_issue")) {
+    return "visual_contrast_accessibility_issue";
+  }
+  if (findingIds.includes("text_alternative_accessibility_issue")) {
+    return "text_alternative_accessibility_issue";
+  }
+
+  return null;
+}
+
+export function hasCompleteExamplesForAccessibilityFinding(
+  rawEvidence: Record<string, unknown> | null | undefined,
+  findingId: string
+) {
+  return getCompleteRepresentativeAccessibilityExamples(rawEvidence).some((example) => {
+    const ruleCode = getAccessibilityStringValue(example, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
+    return getAccessibilityFindingIdForRuleCode(ruleCode) === findingId;
+  });
+}
+
+export function hasPromotableKeyboardAccessibilityEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const examples = getCompleteRepresentativeAccessibilityExamples(rawEvidence).filter((example) => {
+    const ruleCode = getAccessibilityStringValue(example, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
+    return getAccessibilityFindingIdForRuleCode(ruleCode) === "keyboard_navigation_accessibility_issue";
+  });
+  const pages = new Set<string>();
+  const rules = new Set<string>();
+  let hasSevereExample = false;
+
+  for (const example of examples) {
+    const pageUrl = getAccessibilityStringValue(example, ["pageUrl", "page_url"]);
+    const ruleCode = getAccessibilityStringValue(example, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
+    const impact = getAccessibilityStringValue(example, ["impact", "axeImpact", "axe_impact", "severity"])?.toLowerCase();
+    if (pageUrl) {
+      pages.add(pageUrl);
+    }
+    if (ruleCode) {
+      rules.add(ruleCode);
+    }
+    if (impact && /^(?:critical|serious|high)$/.test(impact)) {
+      hasSevereExample = true;
+    }
+  }
+
+  return hasSevereExample || pages.size >= 2 || rules.size >= 2;
+}
+
+export function hasPromotableSemanticLabelingAccessibilityEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const examples = getCompleteRepresentativeAccessibilityExamples(rawEvidence).filter((example) => {
+    const ruleCode = getAccessibilityStringValue(example, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
+    return getAccessibilityFindingIdForRuleCode(ruleCode) === "semantic_labeling_accessibility_issue";
+  });
+  const linkNamePages = new Set<string>();
+  let linkNameExampleCount = 0;
+  let linkNameNodeCount = 0;
+  let hasStrongNameOrLabelRule = false;
+
+  for (const example of examples) {
+    const ruleCode = getAccessibilityStringValue(example, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
+    const pageUrl = getAccessibilityStringValue(example, ["pageUrl", "page_url"]);
+    if (ruleCode && STRONG_SEMANTIC_LABELING_RULE_IDS.has(ruleCode)) {
+      hasStrongNameOrLabelRule = true;
+    }
+    if (ruleCode === "link-name") {
+      linkNameExampleCount += 1;
+      linkNameNodeCount += getAccessibilityNumberValue(example, ["nodeCount", "node_count", "affectedNodeCount", "affected_node_count"]) ?? 0;
+      if (pageUrl) {
+        linkNamePages.add(pageUrl);
+      }
+    }
+  }
+
+  return (
+    hasStrongNameOrLabelRule ||
+    linkNameExampleCount >= 2 ||
+    linkNamePages.size >= 2 ||
+    linkNameNodeCount >= 2
+  );
+}
+
+function getObjectValue(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+export function hasBehaviorReproducedFocusManagementEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const nestedEvidence = (() => {
+    const focusManagementEvidence = rawEvidence?.focusManagementEvidence ?? rawEvidence?.focus_management_evidence;
+    if (Array.isArray(focusManagementEvidence)) {
+      return focusManagementEvidence.find((entry) => Boolean(entry) && typeof entry === "object") as Record<string, unknown> | undefined;
+    }
+    return getObjectValue(focusManagementEvidence);
+  })();
+  const hybridRuntimeEvidence =
+    getObjectValue(rawEvidence?.hybridRuntimeEvidence) ?? getObjectValue(rawEvidence?.hybrid_runtime_evidence);
+  const hybridFocusEvidence = (() => {
+    const value = hybridRuntimeEvidence?.focusManagementEvidence ?? hybridRuntimeEvidence?.focus_management_evidence;
+    if (Array.isArray(value)) {
+      return value.find((entry) => Boolean(entry) && typeof entry === "object") as Record<string, unknown> | undefined;
+    }
+    return getObjectValue(value);
+  })();
+  const evidence = nestedEvidence ?? hybridFocusEvidence ?? rawEvidence ?? null;
+  if (!evidence) {
+    return false;
+  }
+
+  const issueType = getAccessibilityStringValue(evidence, ["issueType", "issue_type"]);
+  const expected = getAccessibilityStringValue(evidence, ["expected"]);
+  const observed = getAccessibilityStringValue(evidence, ["observed"]);
+  const evidenceStrength = getAccessibilityStringValue(evidence, ["evidenceStrength", "evidence_strength"]);
+  const focusTrace = Array.isArray(evidence.focusTrace)
+    ? evidence.focusTrace
+    : Array.isArray(evidence.focus_trace)
+      ? evidence.focus_trace
+      : [];
+  const dialogContext = getObjectValue(evidence.dialogContext) ?? getObjectValue(evidence.dialog_context);
+
+  return Boolean(
+    issueType &&
+      FOCUS_MANAGEMENT_ISSUE_TYPES.has(issueType) &&
+      expected &&
+      observed &&
+      evidenceStrength === "behavior_reproduced" &&
+      focusTrace.length > 0 &&
+      dialogContext
   );
 }
 

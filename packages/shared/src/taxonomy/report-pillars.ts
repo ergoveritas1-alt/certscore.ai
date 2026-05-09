@@ -3093,35 +3093,74 @@ export const REPORT_UNIFIED_FINDINGS = [
     mirrors: ["perceivability_barriers"],
     overlays: ["conformance_posture_litigation_indicators"],
     signalMappings: [
-      { source: "snapshot_signal", key: "accessibility.wcag_error_count_total" },
-      { source: "snapshot_signal", key: "accessibility.wcag_missing_alt_count" }
+      { source: "snapshot_signal", key: "accessibility.wcag_error_count_total" }
     ],
-    validationRuleKeys: ["accessibility.wcag_errors_detected", "accessibility_review.missing_alt_text"],
-    aliases: ["Automated accessibility issues detected", "Missing alt text"]
+    validationRuleKeys: ["accessibility.wcag_errors_detected"],
+    aliases: ["Automated accessibility issues detected"]
   }),
   defineReportUnifiedFinding({
     id: "accessibility_risk_score",
     label: "Accessibility risk score",
     owner: "representative_rule_level_evidence",
     overlays: ["conformance_posture_litigation_indicators", "navigation_interaction_form_barriers"],
-    signalMappings: [{ source: "snapshot_signal", key: "accessibility.accessibility_litigation_risk_score" }],
     validationRuleKeys: ["scan_snapshot.accessibility.accessibility_risk_score"]
+  }),
+  defineReportUnifiedFinding({
+    id: "keyboard_navigation_accessibility_issue",
+    label: "Keyboard navigation accessibility issue",
+    owner: "navigation_interaction_and_task_path_barriers",
+    overlays: ["navigation_interaction_form_barriers", "conformance_posture_litigation_indicators"],
+    validationRuleKeys: ["accessibility_review.navigation_issues"]
+  }),
+  defineReportUnifiedFinding({
+    id: "semantic_labeling_accessibility_issue",
+    label: "Semantic labeling accessibility issue",
+    owner: "form_task_completion_and_critical_workflow_barriers",
+    overlays: ["navigation_interaction_form_barriers", "representative_rule_level_evidence"],
+    signalMappings: [
+      { source: "snapshot_signal", key: "accessibility.wcag_form_label_error_count" },
+      { source: "snapshot_signal", key: "accessibility.wcag_link_name_error_count" },
+      { source: "snapshot_signal", key: "accessibility.wcag_aria_error_count" }
+    ],
+    validationRuleKeys: ["accessibility_review.form_label_issues", "accessibility_review.aria_problems"],
+    aliases: ["Form label issues", "Link name issues", "ARIA problems"]
+  }),
+  defineReportUnifiedFinding({
+    id: "text_alternative_accessibility_issue",
+    label: "Text alternative accessibility issue",
+    owner: "perceivability_barriers",
+    overlays: ["perceivable_content_barriers", "representative_rule_level_evidence"],
+    signalMappings: [{ source: "snapshot_signal", key: "accessibility.wcag_missing_alt_count" }],
+    validationRuleKeys: ["accessibility_review.missing_alt_text"],
+    aliases: ["Missing alt text"]
+  }),
+  defineReportUnifiedFinding({
+    id: "visual_contrast_accessibility_issue",
+    label: "Visual contrast accessibility issue",
+    owner: "perceivability_barriers",
+    overlays: ["perceivable_content_barriers", "conformance_posture_litigation_indicators"],
+    signalMappings: [{ source: "snapshot_signal", key: "accessibility.wcag_contrast_failures_count" }],
+    validationRuleKeys: ["accessibility_review.contrast_failures"],
+    aliases: ["Contrast failures"]
+  }),
+  defineReportUnifiedFinding({
+    id: "focus_management_issue",
+    label: "Focus management issue",
+    owner: "navigation_interaction_and_task_path_barriers",
+    overlays: ["navigation_interaction_form_barriers", "conformance_posture_litigation_indicators"],
+    validationRuleKeys: ["accessibility_review.focus_management_issue"]
   }),
   defineReportUnifiedFinding({
     id: "contrast_failures",
     label: "Contrast failures",
     owner: "perceivability_barriers",
-    overlays: ["perceivable_content_barriers"],
-    signalMappings: [{ source: "snapshot_signal", key: "accessibility.wcag_contrast_failures_count" }],
-    validationRuleKeys: ["accessibility_review.contrast_failures"]
+    overlays: ["perceivable_content_barriers"]
   }),
   defineReportUnifiedFinding({
     id: "form_label_issues",
     label: "Form label issues",
     owner: "form_task_completion_and_critical_workflow_barriers",
-    overlays: ["navigation_interaction_form_barriers"],
-    signalMappings: [{ source: "snapshot_signal", key: "accessibility.wcag_form_label_error_count" }],
-    validationRuleKeys: ["accessibility_review.form_label_issues"]
+    overlays: ["navigation_interaction_form_barriers"]
   }),
   defineReportUnifiedFinding({
     id: "critical_form_completion_barrier",
@@ -3135,16 +3174,13 @@ export const REPORT_UNIFIED_FINDINGS = [
     label: "Link name issues",
     owner: "navigation_interaction_and_task_path_barriers",
     overlays: ["navigation_interaction_form_barriers", "conformance_posture_litigation_indicators"],
-    signalMappings: [{ source: "snapshot_signal", key: "accessibility.wcag_link_name_error_count" }],
     aliases: ["Navigation issues"]
   }),
   defineReportUnifiedFinding({
     id: "keyboard_navigation_issues",
     label: "Keyboard navigation issues",
     owner: "navigation_interaction_and_task_path_barriers",
-    overlays: ["navigation_interaction_form_barriers"],
-    signalMappings: [{ source: "snapshot_signal", key: "accessibility.wcag_keyboard_navigation_issue_count" }],
-    validationRuleKeys: ["accessibility_review.navigation_issues"]
+    overlays: ["navigation_interaction_form_barriers"]
   }),
   defineReportUnifiedFinding({
     id: "keyboard_only_task_completion_blocked",
@@ -3157,8 +3193,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     id: "focus_indicator_issues",
     label: "Focus indicator issues",
     owner: "navigation_interaction_and_task_path_barriers",
-    overlays: ["navigation_interaction_form_barriers"],
-    signalMappings: [{ source: "snapshot_signal", key: "accessibility.wcag_focus_indicator_issue_count" }]
+    overlays: ["navigation_interaction_form_barriers"]
   }),
   defineReportUnifiedFinding({
     id: "landmark_issues",
@@ -3172,8 +3207,6 @@ export const REPORT_UNIFIED_FINDINGS = [
     label: "ARIA issues",
     owner: "representative_rule_level_evidence",
     overlays: ["navigation_interaction_form_barriers"],
-    signalMappings: [{ source: "snapshot_signal", key: "accessibility.wcag_aria_error_count" }],
-    validationRuleKeys: ["accessibility_review.aria_problems"],
     aliases: ["ARIA problems"]
   }),
   defineReportUnifiedFinding({

@@ -42,8 +42,12 @@ import {
   derivePolicyPrimarySourceFromEvidence
 } from "./policy-evidence-metadata";
 import {
+  hasBehaviorReproducedFocusManagementEvidence,
+  hasCompleteExamplesForAccessibilityFinding,
   getRepresentativeAccessibilityExampleCoverage,
-  hasExternallyPromotableAccessibilityExamples
+  hasExternallyPromotableAccessibilityExamples,
+  hasPromotableKeyboardAccessibilityEvidence,
+  hasPromotableSemanticLabelingAccessibilityEvidence
 } from "./accessibility-evidence";
 import {
   REJECT_TRACKING_CONFIRMATION_MIN_MS
@@ -54,14 +58,18 @@ import {
 
 const ACCESSIBILITY_PAGE_ATTRIBUTION_IDS = new Set([
   "wcag_issue_summary",
-  "accessibility_risk_score",
   "contrast_failures",
+  "focus_management_issue",
   "form_label_issues",
   "critical_form_completion_barrier",
+  "keyboard_navigation_accessibility_issue",
   "link_name_issues",
   "keyboard_navigation_issues",
   "keyboard_only_task_completion_blocked",
   "focus_indicator_issues",
+  "semantic_labeling_accessibility_issue",
+  "text_alternative_accessibility_issue",
+  "visual_contrast_accessibility_issue",
   "landmark_issues",
   "aria_issues",
   "accessibility_claim_mismatch"
@@ -1291,10 +1299,21 @@ function isAccessibilityIssueFindingConcern(
   return ACCESSIBILITY_PAGE_ATTRIBUTION_IDS.has(concern.suggestedUnifiedFindingId ?? "");
 }
 
-function isContrastFailuresConcern(
+function isSplitAccessibilityIssueConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
-  return concern.suggestedUnifiedFindingId === "contrast_failures";
+  return [
+    "keyboard_navigation_accessibility_issue",
+    "semantic_labeling_accessibility_issue",
+    "text_alternative_accessibility_issue",
+    "visual_contrast_accessibility_issue"
+  ].includes(concern.suggestedUnifiedFindingId ?? "");
+}
+
+function isFocusManagementIssueConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "focus_management_issue";
 }
 
 function isBoundedKeyPageDiscoveryUnresolvedConcern(
@@ -1724,20 +1743,6 @@ function getNumberEvidence(
   return null;
 }
 
-function hasPositiveContrastFailureCount(rawEvidence: Record<string, unknown> | null | undefined) {
-  const count = getNumberEvidence(rawEvidence, [
-    "count",
-    "instanceCount",
-    "nodeCount",
-    "signalValue",
-    "value",
-    "wcagContrastFailuresCount",
-    "wcag_contrast_failures_count"
-  ]);
-
-  return typeof count === "number" && count > 0;
-}
-
 function getCoverageGapPresenceValue(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">,
   rawEvidence: Record<string, unknown> | null | undefined
@@ -1941,6 +1946,14 @@ export function deriveConcernPolicy(input: {
   const negativeEvidenceFlags = new Set<NormalizedConcernNegativeEvidenceFlag>();
 
   const suggestedUnifiedFindingId = input.concern.suggestedUnifiedFindingId;
+  if (suggestedUnifiedFindingId === "accessibility_risk_score") {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: ["missing_representative_accessibility_examples"],
+      promotionEligibility: "internal_only"
+    };
+  }
   if (typeof suggestedUnifiedFindingId === "string" && RETIRED_FINANCIAL_FINDING_IDS.has(suggestedUnifiedFindingId)) {
     return {
       allowedNarrativeTier: "weak",
@@ -2498,19 +2511,62 @@ export function deriveConcernPolicy(input: {
     };
   }
 
+  if (isFocusManagementIssueConcern(input.concern)) {
+    if (!hasBehaviorReproducedFocusManagementEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_specific_runtime_anchor"],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: "strong",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
+  if (isSplitAccessibilityIssueConcern(input.concern)) {
+    const findingId = input.concern.suggestedUnifiedFindingId ?? "";
+    const hasFindingExamples = hasCompleteExamplesForAccessibilityFinding(input.rawEvidence, findingId);
+    const keyboardPromotable =
+      findingId !== "keyboard_navigation_accessibility_issue" ||
+      hasPromotableKeyboardAccessibilityEvidence(input.rawEvidence);
+    const semanticPromotable =
+      findingId !== "semantic_labeling_accessibility_issue" ||
+      hasPromotableSemanticLabelingAccessibilityEvidence(input.rawEvidence);
+
+    if (!hasFindingExamples || !keyboardPromotable || !semanticPromotable) {
+      const coverage = getRepresentativeAccessibilityExampleCoverage(input.rawEvidence);
+      negativeEvidenceFlags.add(
+        coverage.representativeExampleCount > 0
+          ? "accessibility_examples_below_promotion_threshold"
+          : "missing_representative_accessibility_examples"
+      );
+
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: findingId === "keyboard_navigation_accessibility_issue" ? "strong" : "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
   if (
     isAccessibilityIssueFindingConcern(input.concern) &&
     !hasRepresentativeAccessibilityExamples(input.rawEvidence)
   ) {
-    if (isContrastFailuresConcern(input.concern) && hasPositiveContrastFailureCount(input.rawEvidence)) {
-      return {
-        allowedNarrativeTier: "moderate",
-        externalSurfacingEligibility: "eligible",
-        negativeEvidenceFlags: [...negativeEvidenceFlags],
-        promotionEligibility: "eligible"
-      };
-    }
-
     const coverage = getRepresentativeAccessibilityExampleCoverage(input.rawEvidence);
     negativeEvidenceFlags.add(
       coverage.representativeExampleCount > 0

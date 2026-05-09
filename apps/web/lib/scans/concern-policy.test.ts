@@ -1633,11 +1633,11 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "internal_only",
         externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: ["accessibility_examples_below_promotion_threshold"]
+        negativeEvidenceFlags: ["missing_representative_accessibility_examples"]
       }
     },
     {
-      name: "contrast failures with automated count evidence can promote",
+      name: "contrast failures with automated count evidence stay audit-only",
       concern: makeConcern({
         originType: "validation_rule",
         originKey: "accessibility_review.contrast_failures",
@@ -1649,14 +1649,14 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         count: 2
       },
       expected: {
-        allowedNarrativeTier: "moderate",
-        promotionEligibility: "eligible",
-        externalSurfacingEligibility: "eligible",
-        negativeEvidenceFlags: []
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_representative_accessibility_examples"]
       }
     },
     {
-      name: "page-attributed accessibility score with serious axe example can promote",
+      name: "page-attributed legacy accessibility score with serious axe example stays audit-only",
       concern: makeConcern({
         originType: "validation_rule",
         originKey: "scan_snapshot.accessibility.accessibility_risk_score",
@@ -1666,14 +1666,14 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
       rawEvidence: ADA_ACCESSIBILITY_FIXTURES.seriousAxeExample,
       expected: {
-        allowedNarrativeTier: "strong",
-        promotionEligibility: "eligible",
-        externalSurfacingEligibility: "eligible",
-        negativeEvidenceFlags: []
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_representative_accessibility_examples"]
       }
     },
     {
-      name: "page-attributed accessibility score with multi-page axe coverage can promote",
+      name: "page-attributed legacy accessibility score with multi-page axe coverage stays audit-only",
       concern: makeConcern({
         originType: "validation_rule",
         originKey: "scan_snapshot.accessibility.accessibility_risk_score",
@@ -1682,6 +1682,218 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }),
       evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
       rawEvidence: ADA_ACCESSIBILITY_FIXTURES.multiRuleAxeExamples,
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_representative_accessibility_examples"]
+      }
+    },
+    {
+      name: "semantic labeling issue keeps a lone link-name example audit-only",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "accessibility_review.semantic_labeling_accessibility_issue",
+        suggestedUnifiedFindingId: "semantic_labeling_accessibility_issue",
+        title: "Semantic labeling accessibility issue"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: {
+        accessibilityRuleExamples: [
+          {
+            help: "Links must have discernible text",
+            impact: "serious",
+            nodeCount: 1,
+            pageUrl: "https://example.com/",
+            representativeSelectors: ["a.icon-link"],
+            ruleCode: "link-name",
+            ruleGroup: "wcag2a",
+            severity: "medium"
+          }
+        ]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["accessibility_examples_below_promotion_threshold"]
+      }
+    },
+    {
+      name: "semantic labeling issue promotes concrete name and label examples",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "accessibility_review.semantic_labeling_accessibility_issue",
+        suggestedUnifiedFindingId: "semantic_labeling_accessibility_issue",
+        title: "Semantic labeling accessibility issue"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: {
+        accessibilityRuleExamples: [
+          {
+            help: "Buttons must have discernible text",
+            impact: "critical",
+            nodeCount: 1,
+            pageUrl: "https://example.com/",
+            representativeSelectors: ["button.icon-only"],
+            ruleCode: "button-name",
+            ruleGroup: "wcag2a",
+            severity: "high"
+          }
+        ]
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "semantic labeling issue promotes repeated link-name evidence",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "accessibility_review.semantic_labeling_accessibility_issue",
+        suggestedUnifiedFindingId: "semantic_labeling_accessibility_issue",
+        title: "Semantic labeling accessibility issue"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: {
+        accessibilityRuleExamples: [
+          {
+            help: "Links must have discernible text",
+            impact: "serious",
+            nodeCount: 2,
+            pageUrl: "https://example.com/",
+            representativeSelectors: ["a.social-link"],
+            ruleCode: "link-name",
+            ruleGroup: "wcag2a",
+            severity: "medium"
+          }
+        ]
+      },
+      expected: {
+        allowedNarrativeTier: "moderate",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "focus management issue cannot promote from static axe focus-adjacent examples",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "accessibility_review.focus_management_issue",
+        suggestedUnifiedFindingId: "focus_management_issue",
+        title: "Focus management issue"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: {
+        accessibilityRuleExamples: [
+          {
+            help: "ARIA hidden elements must not contain focusable elements",
+            impact: "serious",
+            nodeCount: 1,
+            pageUrl: "https://example.com/",
+            representativeSelectors: ["[aria-hidden='true'] button"],
+            ruleCode: "aria-hidden-focus",
+            ruleGroup: "wcag2a",
+            severity: "high"
+          }
+        ]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_specific_runtime_anchor"]
+      }
+    },
+    {
+      name: "focus management issue promotes with WS01 behavior-reproduced evidence",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "accessibility_review.focus_management_issue",
+        suggestedUnifiedFindingId: "focus_management_issue",
+        title: "Focus management issue"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: {
+        focusManagementEvidence: {
+          dialogContext: {
+            ariaModal: true,
+            backgroundTabbableCount: 3,
+            role: "dialog"
+          },
+          evidenceStrength: "behavior_reproduced",
+          expected: "Focus remains inside the open modal.",
+          focusTrace: [
+            {
+              activeElement: {
+                role: "link",
+                selectorHash: "background-link",
+                withinDialog: false
+              },
+              key: "Tab",
+              step: 1
+            }
+          ],
+          issueType: "background_tabbable_under_modal",
+          observed: "A background link received focus while the modal was open."
+        }
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "focus management issue promotes from persisted hybrid runtime evidence",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "accessibility_review.focus_management_issue",
+        suggestedUnifiedFindingId: "focus_management_issue",
+        title: "Focus management issue"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: {
+        hybrid_runtime_evidence: {
+          focusManagementEvidence: [
+            {
+              dialogContext: {
+                ariaModal: "true",
+                backgroundTabbableCount: 2,
+                closeControl: { selector: "button[aria-label='Close']" },
+                focusableCount: 3,
+                opener: null,
+                role: "dialog",
+                selector: "[role='dialog']"
+              },
+              evidenceStrength: "behavior_reproduced",
+              expected: "Tab navigation should remain contained within the open modal.",
+              focusTrace: [
+                {
+                  action: "snapshot",
+                  activeElement: { selector: "button[aria-label='Close']", tagName: "button" },
+                  activeInsideDialog: true,
+                  step: 0
+                },
+                {
+                  action: "press_tab",
+                  activeElement: { selector: "a:text(\"Home\")", tagName: "a" },
+                  activeInsideDialog: false,
+                  step: 1
+                }
+              ],
+              issueType: "focus_trap_missing",
+              observed: "Focus left the dialog while it remained open.",
+              pageUrl: "https://example.com/"
+            }
+          ]
+        }
+      },
       expected: {
         allowedNarrativeTier: "strong",
         promotionEligibility: "eligible",
@@ -2121,7 +2333,7 @@ test("concern policy helper primitives stay aligned with packet usage", () => {
   assert.equal(
     concernRequiresPageAttribution(
       makeConcern({
-        suggestedUnifiedFindingId: "accessibility_risk_score"
+        suggestedUnifiedFindingId: "visual_contrast_accessibility_issue"
       })
     ),
     true

@@ -1036,9 +1036,9 @@ test("keeps confirmed cookie disclosure gaps in top findings alongside higher-ra
       severity: "high",
       summary: "Observed runtime behavior appears to conflict with policy representations."
     }),
-    makePacket("contrast_failures", {
+    makePacket("visual_contrast_accessibility_issue", {
       confidenceBand: "high",
-      details: { family: "accessibility", kind: "contrast_failures" },
+      details: { family: "accessibility", kind: "visual_contrast_accessibility_issue" },
       severity: "medium",
       summary: "Automated accessibility issues were retained."
     }),
@@ -1284,9 +1284,9 @@ test("keeps confirmed reject-path tracking in top findings alongside pre-consent
       severity: "high",
       summary: "Tracking requests still appeared after the reject interaction."
     }),
-    makePacket("contrast_failures", {
+    makePacket("visual_contrast_accessibility_issue", {
       confidenceBand: "high",
-      details: { family: "accessibility", kind: "contrast_failures" },
+      details: { family: "accessibility", kind: "visual_contrast_accessibility_issue" },
       severity: "high",
       summary: "Automated accessibility issues observed."
     })
@@ -2062,10 +2062,10 @@ test("projects representative accessibility packets into DOJ ADA regulatory lens
   const seriousExampleCount = ADA_ACCESSIBILITY_FIXTURES.seriousAxeExample.accessibilityRuleExamples.length;
   const lenses = buildRegulatoryLensesFromUnifiedPackets(
     [
-      makePacket("accessibility_risk_score", {
+      makePacket("visual_contrast_accessibility_issue", {
         details: {
           family: "accessibility",
-          kind: "accessibility_risk_score",
+          kind: "visual_contrast_accessibility_issue",
           ruleExamples: ["color-contrast"]
         },
         evidence: {
@@ -2141,13 +2141,13 @@ test("keeps DOJ ADA regulatory lens minimal for score-only accessibility packets
   assert.equal(adaLens?.score, null);
 });
 
-test("projects surfaced contrast failures with representative axe evidence into executive findings", () => {
+test("projects surfaced visual contrast findings with representative axe evidence into executive findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
-    makePacket("contrast_failures", {
+    makePacket("visual_contrast_accessibility_issue", {
       confidenceBand: "high",
       details: {
         family: "accessibility",
-        kind: "contrast_failures",
+        kind: "visual_contrast_accessibility_issue",
         ruleExamples: ["color-contrast"]
       },
       evidence: {
@@ -2177,7 +2177,7 @@ test("projects surfaced contrast failures with representative axe evidence into 
     })
   ]);
 
-  const finding = projection.findings.find((candidate) => candidate.id === "accessibility_risk_score");
+  const finding = projection.findings.find((candidate) => candidate.id === "visual_contrast_accessibility_issue");
 
   assert.ok(finding);
   assert.equal(finding?.section, "Accessibility");
@@ -2301,8 +2301,8 @@ test("projects remaining top finding families with canonical evidence details", 
       },
       severity: "high"
     }),
-    makePacket("accessibility_risk_score", {
-      details: { family: "accessibility", kind: "accessibility_risk_score" },
+    makePacket("visual_contrast_accessibility_issue", {
+      details: { family: "accessibility", kind: "visual_contrast_accessibility_issue" },
       evidence: {
         counts: { seriousAxeViolationCount: 1 },
         entities: {},
@@ -2349,8 +2349,8 @@ test("projects remaining top finding families with canonical evidence details", 
   assert.equal(byId.get("reject_option_missing_or_hidden")?.evidenceDetails?.consentUiEvidence?.observed, true);
   assert.equal(byId.get("identifier_transmission_detected")?.evidenceVersion, "1.1");
   assert.equal(byId.get("identifier_transmission_detected")?.evidenceDetails?.telemetryEvidence?.identifierLikeRequestCount, 1);
-  assert.equal(byId.get("accessibility_risk_score")?.evidenceVersion, "1.1");
-  assert.equal(byId.get("accessibility_risk_score")?.evidenceDetails?.accessibilityEvidence?.observed, true);
+  assert.equal(byId.get("visual_contrast_accessibility_issue")?.evidenceVersion, "1.1");
+  assert.equal(byId.get("visual_contrast_accessibility_issue")?.evidenceDetails?.accessibilityEvidence?.observed, true);
   assert.equal(byId.get("policy_clarity_risk")?.evidenceVersion, "1.1");
   assert.equal(byId.get("policy_clarity_risk")?.evidenceDetails?.policyEvidenceDetails?.clarityRiskObserved, true);
   assert.equal(byId.get("high_risk_product_risk_disclosure_missing")?.evidenceVersion, "1.1");
@@ -2398,11 +2398,11 @@ test("projects sensitive data with third-party tracking into executive findings 
       severity: "medium",
       summary: "Sensitive input evidence was retained alongside third-party tracking."
     }),
-    makePacket("contrast_failures", {
+    makePacket("visual_contrast_accessibility_issue", {
       confidenceBand: "high",
       details: {
         family: "accessibility",
-        kind: "contrast_failures",
+        kind: "visual_contrast_accessibility_issue",
         ruleExamples: ["color-contrast"]
       },
       evidence: {

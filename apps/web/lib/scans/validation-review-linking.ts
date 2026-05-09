@@ -80,7 +80,6 @@ export function normalizeScanValidationFinding(rawFinding: ScanValidationFinding
 
 const SIGNAL_TO_VALIDATION_RULE_KEYS: Record<string, string[]> = {
   "accessibility.wcag_error_count_total": ["accessibility.wcag_errors_detected"],
-  "accessibility.litigation_risk_score": ["scan_snapshot.accessibility.accessibility_risk_score"],
   "context.session_replay_without_disclosure_detected": ["privacy.session_replay_without_disclosure_detected"],
   "disclosure.disclosure_language_missing_detected": ["disclosure.disclosure_language_missing_detected"],
   "disclosure.policy_runtime_disclosure_likely_obstructed": ["scan_signal.disclosure.policy_runtime_disclosure_likely_obstructed"],
@@ -96,7 +95,6 @@ const SIGNAL_TO_VALIDATION_RULE_KEYS: Record<string, string[]> = {
 
 const TITLE_TO_VALIDATION_RULE_KEYS: Record<string, string[]> = {
   "automated accessibility issues detected": ["accessibility.wcag_errors_detected"],
-  "accessibility risk score": ["scan_snapshot.accessibility.accessibility_risk_score"],
   "critical user-rights fulfillment friction": ["scan_signal.privacy.user_rights_friction_score"],
   "disclosure likely obstructed": ["scan_signal.disclosure.policy_runtime_disclosure_likely_obstructed"],
   "disclosure language missing": ["disclosure.disclosure_language_missing_detected"],

@@ -3295,14 +3295,14 @@ test("keeps accessibility risk score audit-only without representative axe examp
   });
 
   assert.equal(packet?.unifiedFindingId, "accessibility_risk_score");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.presentationDecision.status, "suppress");
   assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), false);
-  assert.equal(packet?.evidence?.flags?.includes("accessibility_score_only_audit_context"), true);
-  assert.equal(packet?.evidence?.counts?.accessibilityRiskScore, ADA_ACCESSIBILITY_FIXTURES.scoreOnlySnapshot.value);
+  assert.equal(packet?.evidence?.flags?.includes("accessibility_score_only_audit_context"), false);
+  assert.equal(packet?.evidence?.counts?.accessibilityRiskScore, undefined);
   assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_representative_accessibility_examples"), true);
 });
 
-test("keeps accessibility risk score audit-only for a single moderate axe example", () => {
+test("surfaces split visual contrast finding for a complete moderate axe example", () => {
   const validationFinding = makeValidationFinding({
     id: "val-accessibility-risk",
     ruleKey: "scan_snapshot.accessibility.accessibility_risk_score",
@@ -3317,14 +3317,14 @@ test("keeps accessibility risk score audit-only for a single moderate axe exampl
     validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
   });
 
-  assert.equal(packet?.unifiedFindingId, "accessibility_risk_score");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.unifiedFindingId, "visual_contrast_accessibility_issue");
+  assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), true);
-  assert.equal(packet?.evidence?.flags?.includes("accessibility_examples_below_promotion_threshold"), true);
-  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("accessibility_examples_below_promotion_threshold"), true);
+  assert.equal(packet?.evidence?.flags?.includes("accessibility_examples_below_promotion_threshold"), false);
+  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("accessibility_examples_below_promotion_threshold"), false);
 });
 
-test("surfaces accessibility risk score when representative axe examples are severe or broadly covered", () => {
+test("surfaces split semantic labeling finding when representative axe examples are severe or broadly covered", () => {
   const validationFinding = makeValidationFinding({
     id: "val-accessibility-risk",
     ruleKey: "scan_snapshot.accessibility.accessibility_risk_score",
@@ -3339,7 +3339,7 @@ test("surfaces accessibility risk score when representative axe examples are sev
     validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
   });
 
-  assert.equal(packet?.unifiedFindingId, "accessibility_risk_score");
+  assert.equal(packet?.unifiedFindingId, "semantic_labeling_accessibility_issue");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.presentation.confidenceScore, "1.0");
   assert.equal(packet?.evidence?.flags?.includes("contradiction_runtime_artifact_retained"), false);
@@ -3351,7 +3351,7 @@ test("surfaces accessibility risk score when representative axe examples are sev
   assert.ok(packet?.evidence?.snippets?.some((snippet) => /Representative axe examples: 1 rule across 1 page; max impact: serious\./.test(snippet)));
 });
 
-test("surfaces contrast failures when automated axe count evidence is present", () => {
+test("keeps contrast count-only evidence audit-only", () => {
   const validationFinding = makeValidationFinding({
     id: "val-contrast-count",
     ruleKey: "accessibility_review.contrast_failures",
@@ -3368,13 +3368,13 @@ test("surfaces contrast failures when automated axe count evidence is present", 
     validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
   });
 
-  assert.equal(packet?.unifiedFindingId, "contrast_failures");
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_representative_accessibility_examples"), false);
+  assert.equal(packet?.unifiedFindingId, "visual_contrast_accessibility_issue");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_representative_accessibility_examples"), true);
   assert.equal(packet?.evidence?.counts?.count, 1);
 });
 
-test("surfaces contrast failures with complete representative axe evidence", () => {
+test("surfaces visual contrast finding with complete representative axe evidence", () => {
   const validationFinding = makeValidationFinding({
     id: "val-contrast-examples",
     ruleKey: "accessibility_review.contrast_failures",
@@ -3405,7 +3405,7 @@ test("surfaces contrast failures with complete representative axe evidence", () 
     validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
   });
 
-  assert.equal(packet?.unifiedFindingId, "contrast_failures");
+  assert.equal(packet?.unifiedFindingId, "visual_contrast_accessibility_issue");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), true);
   assert.equal(packet?.evidence?.counts?.representativeAxeExampleCount, 1);
@@ -4663,8 +4663,8 @@ test("surfaces consent-gated tracking claim conflict with complete policy anchor
   });
 
   assert.equal(packet?.unifiedFindingId, "consent_gated_tracking_claim_conflict");
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.surfacingDecision.reportable, true);
+  assert.equal(packet?.presentationDecision.status, "suppress");
+  assert.equal(packet?.surfacingDecision.reportable, false);
 });
 
 test("surfaces tracking technologies disclosure present from policy enrichment evidence", () => {
@@ -6223,7 +6223,7 @@ test("demotes generic coverage findings when mock regulator context is also pres
 
   assert.equal(packets[0]?.unifiedFindingId, "regulator_operated_mock_investment_example");
   assert.equal(packets[1]?.unifiedFindingId, "accessibility_risk_score");
-  assert.equal(packets[1]?.presentationDecision.status, "audit_only");
+  assert.equal(packets[1]?.presentationDecision.status, "suppress");
 });
 
 test("merged signals feed unified finding derivation through the canonical display packet path", () => {

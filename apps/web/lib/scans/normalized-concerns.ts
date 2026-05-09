@@ -19,6 +19,10 @@ import {
   getContradictionEvidenceBundle,
   isSpecificPolicyBehaviorPolicySnippet
 } from "./contradiction-evidence-contract";
+import {
+  hasBehaviorReproducedFocusManagementEvidence,
+  inferSplitAccessibilityFindingIdFromEvidence
+} from "./accessibility-evidence";
 
 import type { ReviewFindingSeverity } from "./canonical-review-finding";
 import { deriveConcernPolicy } from "./concern-policy";
@@ -467,6 +471,26 @@ export function inferSpecializedUnifiedFindingId(input: {
   const currentId = input.currentSuggestedId ?? null;
   const title = (input.title ?? "").toLowerCase();
 
+  if (hasBehaviorReproducedFocusManagementEvidence(rawEvidence)) {
+    return "focus_management_issue";
+  }
+
+  const splitAccessibilityFindingId = inferSplitAccessibilityFindingIdFromEvidence(rawEvidence);
+  if (
+    splitAccessibilityFindingId &&
+    (currentId === "accessibility_risk_score" ||
+      currentId === "contrast_failures" ||
+      currentId === "form_label_issues" ||
+      currentId === "link_name_issues" ||
+      currentId === "keyboard_navigation_issues" ||
+      currentId === "focus_indicator_issues" ||
+      currentId === "aria_issues" ||
+      input.signalKey?.startsWith("accessibility.") ||
+      /accessibility|axe|wcag|contrast|keyboard|label|aria|alt text|alternative text/.test(title))
+  ) {
+    return splitAccessibilityFindingId;
+  }
+
   const attributedUrls = [
     ...getStringArrayEvidence(rawEvidence?.pageUrls),
     ...getStringArrayEvidence(rawEvidence?.sourceUrls),
@@ -477,32 +501,6 @@ export function inferSpecializedUnifiedFindingId(input: {
     ...getStringArrayEvidence(rawEvidence?.policySnippets),
     getStringValue(rawEvidence?.policySummaryShort)
   ].filter((value): value is string => Boolean(value));
-
-  const keyboardIssueCount = getNumberValue(
-    rawEvidence?.wcagKeyboardNavigationIssueCount ?? rawEvidence?.wcag_keyboard_navigation_issue_count
-  );
-  if (
-    (currentId === "keyboard_navigation_issues" ||
-      input.signalKey === "accessibility.wcag_keyboard_navigation_issue_count" ||
-      /keyboard/.test(title)) &&
-    typeof keyboardIssueCount === "number" &&
-    keyboardIssueCount >= 2
-  ) {
-    return "keyboard_only_task_completion_blocked";
-  }
-
-  const formLabelIssueCount = getNumberValue(
-    rawEvidence?.wcagFormLabelErrorCount ?? rawEvidence?.wcag_form_label_error_count
-  );
-  if (
-    (currentId === "form_label_issues" ||
-      input.signalKey === "accessibility.wcag_form_label_error_count" ||
-      /form label/.test(title)) &&
-    typeof formLabelIssueCount === "number" &&
-    formLabelIssueCount >= 3
-  ) {
-    return "critical_form_completion_barrier";
-  }
 
   const hasSensitivePayload = hasConcreteSensitivePayloadArtifact(rawEvidence);
   if (

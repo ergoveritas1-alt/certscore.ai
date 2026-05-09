@@ -5,7 +5,11 @@ import { getAnonymousScanById } from "./get-scan-by-id";
 
 export const OPS_SCAN_STATUS_FINDING_IDS = [
   "pre_consent_tracking_detected",
-  "accessibility_risk_score",
+  "keyboard_navigation_accessibility_issue",
+  "semantic_labeling_accessibility_issue",
+  "text_alternative_accessibility_issue",
+  "visual_contrast_accessibility_issue",
+  "focus_management_issue",
   "cross_domain_identifier_sharing_observed",
   "cpra_cba_opt_out_missing",
   "reject_tracking_persists_after_reject",

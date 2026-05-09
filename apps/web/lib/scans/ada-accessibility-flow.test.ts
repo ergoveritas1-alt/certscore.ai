@@ -78,7 +78,7 @@ test("ADA accessibility flow promotes persisted WS axe examples into the DOJ ADA
     validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
   });
 
-  assert.equal(packet?.unifiedFindingId, "accessibility_risk_score");
+  assert.equal(packet?.unifiedFindingId, "semantic_labeling_accessibility_issue");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), true);
   assert.equal(packet?.evidence?.counts?.representativeAxeExampleCount, 2);
@@ -115,11 +115,11 @@ test("ADA accessibility flow leaves score-only evidence audit-only with explicit
   });
 
   assert.equal(packet?.unifiedFindingId, "accessibility_risk_score");
-  assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.equal(packet?.evidence?.flags?.includes("accessibility_score_only_audit_context"), true);
+  assert.equal(packet?.presentationDecision.status, "suppress");
+  assert.equal(packet?.evidence?.flags?.includes("accessibility_score_only_audit_context"), false);
   assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_representative_accessibility_examples"), true);
 
-  const lenses = buildRegulatoryLensesFromUnifiedPackets([packet], {
+  const lenses = buildRegulatoryLensesFromUnifiedPackets(packet ? [packet] : [], {
     beforeConsentCookieCount: 0,
     thirdPartyRequestCount: 0
   });

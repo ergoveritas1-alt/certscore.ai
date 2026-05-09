@@ -119,9 +119,7 @@ test("getValidationMatchKeysForTitle maps current scan-signal and snapshot findi
   assert.deepEqual(getValidationMatchKeysForTitle("Disclosure likely obstructed"), [
     "scan_signal.disclosure.policy_runtime_disclosure_likely_obstructed"
   ]);
-  assert.deepEqual(getValidationMatchKeysForTitle("Accessibility risk score"), [
-    "scan_snapshot.accessibility.accessibility_risk_score"
-  ]);
+  assert.deepEqual(getValidationMatchKeysForTitle("Accessibility risk score"), []);
   assert.deepEqual(getValidationMatchKeysForTitle("Possible pre-consent tracking signals on first load"), [
     "privacy.trackers_before_consent_detected"
   ]);

@@ -72,7 +72,7 @@ test("selectTopFindings forces CPRA CBA opt-out missing into top findings", () =
     [
       makePrivacyFinding("pre_consent_tracking_detected", 100),
       makePrivacyFinding("rtb_cookie_sync_observed", 94),
-      makeFinding("accessibility_risk_score", 72),
+      makeFinding("visual_contrast_accessibility_issue", 72),
       makePrivacyFinding("cpra_cba_opt_out_missing", 96),
       makeFinding("some_consent_finding", 95)
     ],
