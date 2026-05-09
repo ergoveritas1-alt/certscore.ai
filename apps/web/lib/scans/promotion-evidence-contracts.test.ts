@@ -5,6 +5,7 @@ import { getContradictionEvidenceBundle } from "./contradiction-evidence-contrac
 import { POLICY_BEHAVIOR_CONFLICT_FIXTURES } from "./policy-behavior-conflict.fixtures";
 import {
   evaluateConsentGatedTrackingConflictContract,
+  deriveFingerprintEvidenceTier,
   evaluatePolicyBehaviorConflictContract,
   diagnosePreConsentCookieEvidence,
   hasConcreteCrossDomainIdentifierSharingEvidence,
@@ -898,4 +899,89 @@ test("consent-gated tracking conflict retains script hosts as support without tr
   assert.equal(decision?.externalSurfacingEligibility, "audit_only");
   assert.ok(!decision?.negativeEvidenceFlags.includes("missing_behavior_side_evidence"));
   assert.ok(decision?.negativeEvidenceFlags.includes("missing_runtime_request_url_evidence"));
+});
+
+test("fingerprint tiering keeps generic modern web app telemetry at tier 0 or 1", () => {
+  const tier = deriveFingerprintEvidenceTier({
+    fingerprintAttributeCategories: ["screen_viewport", "timezone_locale", "storage", "input_touch"]
+  });
+
+  assert.ok(tier.tier <= 1);
+  assert.equal(tier.entropyTransmissionObserved, false);
+  assert.equal(tier.entropyLinkedToIdentifier, false);
+});
+
+test("fingerprint tiering keeps fraud-prevention-heavy fintech below tier 3 without identifier linkage", () => {
+  const tier = deriveFingerprintEvidenceTier({
+    fingerprintAttributeCategories: ["canvas_webgl", "audio", "hardware", "device_memory"],
+    fingerprintRuntimeEvidence: [
+      {
+        artifactRef: "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary",
+        attributeCategories: ["canvas_webgl", "audio", "hardware", "device_memory"],
+        tier: 2
+      }
+    ],
+    runtimeVendors: ["Generic Risk Analytics"]
+  });
+
+  assert.equal(tier.tier, 2);
+  assert.equal(hasStrongFingerprintingEvidence({
+    fingerprintAttributeCategories: ["canvas_webgl", "audio", "hardware", "device_memory"],
+    fingerprintRuntimeEvidence: [{ artifactRef: "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary" }],
+    runtimeVendors: ["Generic Risk Analytics"]
+  }), false);
+});
+
+test("fingerprint tiering escalates adtech-heavy known fingerprint behavior to tier 3", () => {
+  const evidence = {
+    fingerprintAttributeCategories: ["canvas_webgl", "fonts_plugins"],
+    fingerprintRuntimeEvidence: [
+      {
+        artifactRef: "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary",
+        attributeCategories: ["canvas_webgl", "fonts_plugins"],
+        requestUrl: "https://fpjs.example.test/collect",
+        tier: 3,
+        vendor: "FingerprintJS"
+      }
+    ],
+    runtimeVendors: ["FingerprintJS"]
+  };
+  const tier = deriveFingerprintEvidenceTier(evidence);
+
+  assert.equal(tier.tier, 3);
+  assert.equal(tier.knownFingerprintingVendorObserved, true);
+  assert.equal(hasStrongFingerprintingEvidence(evidence), true);
+});
+
+test("fingerprint tiering keeps canvas-only telemetry below tier 3", () => {
+  const tier = deriveFingerprintEvidenceTier({
+    fingerprintAttributeCategories: ["canvas_webgl"],
+    fingerprintSummary: { tier: 1 }
+  });
+
+  assert.equal(tier.tier, 1);
+});
+
+test("fingerprint tiering escalates canvas and fonts with outbound identifier sync to tier 3", () => {
+  const evidence = {
+    entropyLinkedToIdentifier: true,
+    entropyTransmissionObserved: true,
+    fingerprintAttributeCategories: ["canvas_webgl", "fonts_plugins"],
+    fingerprintRuntimeEvidence: [
+      {
+        artifactRef: "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary",
+        attributeCategories: ["canvas_webgl", "fonts_plugins"],
+        entropyLinkedToIdentifier: true,
+        requestUrl: "https://ads.example.test/sync?device_fingerprint=abc&uid=123",
+        tier: 3
+      }
+    ],
+    requestUrls: ["https://ads.example.test/sync?device_fingerprint=abc&uid=123"]
+  };
+  const tier = deriveFingerprintEvidenceTier(evidence);
+
+  assert.equal(tier.tier, 3);
+  assert.equal(tier.entropyLinkedToIdentifier, true);
+  assert.equal(tier.entropyTransmissionObserved, true);
+  assert.equal(hasStrongFingerprintingEvidence(evidence), true);
 });

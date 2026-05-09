@@ -2645,6 +2645,13 @@ test("deriveConcernPolicy promotes corroborated fingerprinting evidence", () => 
     evidenceStrengthFlags: ["direct_runtime"],
     rawEvidence: {
       fingerprintAttributeCategories: ["canvas_webgl", "audio"],
+      fingerprintRuntimeEvidence: [
+        {
+          artifactRef: "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary",
+          attributeCategories: ["canvas_webgl", "audio"],
+          requestUrl: "https://fp.example.test/collect"
+        }
+      ],
       fingerprintSummary: {
         tier: 2
       },

@@ -5107,6 +5107,7 @@ export function SharedScanDetailView({
                 <FingerprintingPanel
                   categories={executiveFingerprintCategories}
                   confidence={typeof hybridFingerprintSummary?.confidence === "string" ? hybridFingerprintSummary.confidence : null}
+                  hasProbableFinding={allExecutiveFindings.some((finding) => finding.id === "probable_fingerprinting")}
                   label={certScoreSummary.fingerprintLabel}
                   narrative={certScoreSummary.fingerprintNarrative}
                   reasons={executiveFingerprintReasons}

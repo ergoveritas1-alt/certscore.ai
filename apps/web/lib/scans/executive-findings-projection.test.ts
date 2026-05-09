@@ -1040,7 +1040,7 @@ test("keeps confirmed cookie disclosure gaps in top findings alongside higher-ra
       confidenceBand: "high",
       details: { family: "accessibility", kind: "contrast_failures" },
       severity: "medium",
-      summary: "Representative accessibility barriers were retained."
+      summary: "Automated accessibility issues were retained."
     }),
     makePacket("cookie_disclosure_gap", {
       confidenceBand: "high",
@@ -1288,7 +1288,7 @@ test("keeps confirmed reject-path tracking in top findings alongside pre-consent
       confidenceBand: "high",
       details: { family: "accessibility", kind: "contrast_failures" },
       severity: "high",
-      summary: "Representative accessibility barriers detected."
+      summary: "Automated accessibility issues observed."
     })
   ]);
 
@@ -1610,7 +1610,7 @@ test("keeps runtime-backed session recording in top findings when consent issues
   );
 });
 
-test("projects generic tier-2 fingerprinting evidence with safer browser-attribute wording", () => {
+test("keeps uncorroborated tier-2 fingerprinting evidence out of executive findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("fingerprinting_observed", {
       details: { family: "consent_tracking", kind: "fingerprinting_observed" },
@@ -1636,20 +1636,53 @@ test("projects generic tier-2 fingerprinting evidence with safer browser-attribu
   ]);
 
   assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
+});
+
+test("projects tier-2 fingerprinting-related telemetry only with corroborating tracking findings", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      severity: "high",
+      summary: "Tracking started before consent."
+    }),
+    makePacket("fingerprinting_observed", {
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: {
+          fingerprintTier: 2,
+          mergedSignalConfidence: 1
+        },
+        entities: {
+          fingerprintAttributeCategories: ["canvas_webgl", "audio", "fonts_plugins"],
+          fingerprintingSignals: ["canvas_webgl", "audio", "fonts_plugins"]
+        },
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "Probable fingerprinting behavior."
+    })
+  ]);
+
   const finding = projection.findings.find((entry) => entry.id === "browser_fingerprinting_related_signals_observed");
-  assert.equal(finding?.label, "Browser fingerprinting-related signals observed");
-  assert.equal(finding?.severity, "low");
+  assert.ok(finding);
+  assert.equal(finding.label, "Browser fingerprinting-related signals observed");
+  assert.equal(finding.severity, "medium");
   assert.equal(
-    finding?.shortSummary,
-    "Observed browser or device attribute collection that can be relevant to fingerprinting review, but no strong fingerprinting proof was retained."
+    finding.shortSummary,
+    "Fingerprinting-related browser telemetry was observed, but retained evidence does not establish identity-oriented fingerprinting."
   );
   assert.equal(
-    finding?.evidenceDetails?.telemetryEvidence?.basis,
-    "Browser or device attributes were retained for fingerprinting review, but strong fingerprinting proof was not retained."
+    finding.evidenceDetails?.telemetryEvidence?.basis,
+    "Fingerprinting-related browser telemetry was retained for review, but identity-oriented fingerprinting was not established."
   );
 });
 
-test("keeps probable fingerprinting wording for strong high-entropy evidence", () => {
+test("keeps probable fingerprinting wording for strong high-entropy evidence with outbound correlation", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("fingerprinting_observed", {
       details: { family: "consent_tracking", kind: "fingerprinting_observed" },
@@ -1691,7 +1724,7 @@ test("keeps probable fingerprinting wording for strong high-entropy evidence", (
   const finding = projection.findings.find((entry) => entry.id === "probable_fingerprinting");
   assert.ok(finding);
   assert.ok(!projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
-  assert.match(finding.shortSummary, /canvas\/WebGL access/);
+  assert.match(finding.shortSummary, /identity-oriented corroboration/);
   assert.match(finding.shortSummary, /audio environment access/);
   const strongPreview = finding.evidencePreview.find((entry) => entry.startsWith("Stronger retained primitives:")) ?? "";
   assert.match(strongPreview, /canvas\/WebGL access/);
@@ -1741,7 +1774,7 @@ test("keeps canvas-only fingerprinting evidence below probable wording", () => {
   ]);
 
   assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
-  assert.ok(projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
 });
 
 test("keeps Clarity and GTM without strong primitives as generic browser telemetry", () => {
@@ -1768,12 +1801,7 @@ test("keeps Clarity and GTM without strong primitives as generic browser telemet
 
   assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
   const finding = projection.findings.find((entry) => entry.id === "browser_fingerprinting_related_signals_observed");
-  assert.ok(finding);
-  assert.deepEqual(finding.evidenceDetails?.telemetryEvidence?.genericFingerprintSignals, [
-    "timezone_locale",
-    "screen_viewport",
-    "storage"
-  ]);
+  assert.equal(finding, undefined);
 });
 
 test("keeps tier-3 primitive noise below probable fingerprinting without a strong runtime cluster", () => {
@@ -1798,7 +1826,7 @@ test("keeps tier-3 primitive noise below probable fingerprinting without a stron
   ]);
 
   assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
-  assert.ok(projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
 });
 
 test("projects blocking overlay context without violation framing", () => {
@@ -2049,7 +2077,7 @@ test("projects representative accessibility packets into DOJ ADA regulatory lens
           snippets: ["color-contrast on https://example.com/ (.hero-title)"],
           sourceUrls: []
         },
-        summary: "Representative accessibility barriers were retained from axe examples."
+        summary: "Automated accessibility issues were retained from axe examples."
       })
     ],
     {

@@ -2,8 +2,8 @@ import Link from "next/link";
 import { RescanDomainForm } from "./rescan-domain-form";
 
 type ScanViewActionsProps = {
-  alternateHref: string;
-  alternateLabel: string;
+  alternateHref?: string | null;
+  alternateLabel?: string | null;
   canRescan: boolean;
   cooldownMessage?: string | null;
   domainId?: string | null;
@@ -33,9 +33,11 @@ export function ScanViewActions({
           showLabel
         />
       ) : null}
-      <Link className={getLinkClassName()} href={alternateHref}>
-        {alternateLabel}
-      </Link>
+      {alternateHref && alternateLabel ? (
+        <Link className={getLinkClassName()} href={alternateHref}>
+          {alternateLabel}
+        </Link>
+      ) : null}
     </div>
   );
 }

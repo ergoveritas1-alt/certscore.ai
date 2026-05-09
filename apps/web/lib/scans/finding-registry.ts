@@ -529,7 +529,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   accessibility_risk_score: {
     id: "accessibility_risk_score",
-    label: "Representative accessibility barriers detected",
+    label: "Automated accessibility issues observed",
     section: "Accessibility",
     defaultSurfacePriority: 72,
     whyItMatters:

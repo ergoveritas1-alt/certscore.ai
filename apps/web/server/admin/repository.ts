@@ -231,7 +231,7 @@ function isMissingTieredSnapshotColumn(error: { message?: string; code?: string 
   );
 }
 
-export async function loadAdminScanListPageData(limit: number): Promise<{
+export async function loadAdminScanListPageData(limit: number, offset = 0): Promise<{
   diagnosticEvents: AdminScanDiagnosticEventRow[];
   domains: AdminScanDomainRow[];
   organizations: AdminScanOrganizationRow[];
@@ -245,9 +245,9 @@ export async function loadAdminScanListPageData(limit: number): Promise<{
   const scansResult = await query<AdminScanQueryRow>(
     `select id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_scanned
        from scans
-      order by created_at desc
-      limit $1`,
-    [limit],
+      order by coalesce(completed_at, started_at, created_at) desc, created_at desc
+      limit $1 offset $2`,
+    [limit, offset],
     { readOnly: true }
   );
 

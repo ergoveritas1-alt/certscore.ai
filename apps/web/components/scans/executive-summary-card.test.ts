@@ -3,7 +3,12 @@ import test from "node:test";
 import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { buildRegulatoryLenses, buildRegulatoryLensesFromUnifiedPackets, ExecutiveSummaryCard } from "./executive-summary-card";
+import {
+  buildRegulatoryLenses,
+  buildRegulatoryLensesFromUnifiedPackets,
+  deriveBenchmarkScoreExplanation,
+  ExecutiveSummaryCard
+} from "./executive-summary-card";
 import { ADA_ACCESSIBILITY_FIXTURES } from "../../lib/scans/ada-accessibility.fixtures";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
@@ -107,7 +112,7 @@ function makeUnifiedPacket(
     presentation: {
       findingName: unifiedFindingId,
       suggestedFix: "Review retained axe examples.",
-      whyThisMatters: "Representative accessibility barriers can create usability and ADA review risk."
+      whyThisMatters: "Automated accessibility issues can create usability and ADA review risk."
     },
     presentationDecision: {
       confidenceRationale: "test",
@@ -556,7 +561,7 @@ test("buildRegulatoryLensesFromUnifiedPackets explains representative DOJ ADA ax
           snippets: ["Representative axe examples: 2 rules across 2 pages; max impact: serious."],
           sourceUrls: []
         },
-        summary: "Representative accessibility barriers were retained from axe examples."
+        summary: "Automated accessibility issues were retained from axe examples."
       })
     ],
     {
@@ -570,6 +575,79 @@ test("buildRegulatoryLensesFromUnifiedPackets explains representative DOJ ADA ax
   assert.ok(adaLens);
   assert.equal(adaLens?.minimal, undefined);
   assert.match(regulatoryFindingLabels(adaLens?.findings ?? []).join(" "), /Representative axe examples: 2 rules across 2 pages; max impact: serious\./);
+});
+
+test("benchmark score explanation uses surfaced findings without percentile claims", () => {
+  const explanation = deriveBenchmarkScoreExplanation({
+    benchmark: {
+      confidence: "medium",
+      estimatedRankLabel: "Typical",
+      expectedCookiesBeforeConsent: 1,
+      expectedOverallScore: 82,
+      expectedThirdPartyRequests: 8,
+      industry: "Entertainment ticketing",
+      rationale: "Matched to an entertainment benchmark."
+    },
+    findings: [
+      makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+        shortSummary: "pre-consent tracking"
+      }),
+      makeFinding("third_party_cookie_pre_consent", "Third-party cookies before consent", {
+        shortSummary: "cookie activity before consent"
+      }),
+      makeFinding("reject_option_missing_or_hidden", "Reject option missing or hidden", {
+        shortSummary: "limited consent choice visibility"
+      })
+    ],
+    score: 61
+  });
+
+  assert.equal(
+    explanation,
+    "This score is below the Entertainment ticketing benchmark expectation mainly because of pre-consent tracking, cookie activity before consent, and limited consent choice visibility."
+  );
+  assert.doesNotMatch(explanation ?? "", /percent|peer/i);
+});
+
+test("ExecutiveSummaryCard explains interruption-backed limited coverage only when events are provided", () => {
+  const baseProps = {
+    accessLimitationNotice: null,
+    beforeConsentCookieCount: 0,
+    domainBenchmark: null,
+    finalHost: "example.com",
+    fingerprintReasons: [],
+    fingerprintLabel: "None detected",
+    fingerprintNarrative: "No fingerprinting evidence detected.",
+    landedOnDifferentHost: false,
+    lastScannedAt: "2026-04-21T17:07:47.000Z",
+    posture: "Watch" as const,
+    preConsentVendorNames: [],
+    requestedHost: "example.com",
+    resolvedVendorNames: [],
+    score: 72,
+    sessionReplayVendorNames: [],
+    thirdPartyRequestCount: 0,
+    thirdPartyDomains: [],
+    topFindings: [
+      makeFinding("accessibility_risk_score", "Automated accessibility issues observed", {
+        section: "Accessibility"
+      })
+    ],
+    topObservedEntities: [],
+    trackerSummary: "No meaningful third-party footprint observed",
+    unifiedFindings: [],
+    unresolvedVendorHosts: [],
+    vendorCategoryCounts: {}
+  };
+  const withInterruption = renderToStaticMarkup(createElement(ExecutiveSummaryCard, {
+    ...baseProps,
+    scanInterruptions: [{ label: "Captcha/security challenge", details: ["Challenge suspected."] }]
+  }));
+  const withoutInterruption = renderToStaticMarkup(createElement(ExecutiveSummaryCard, baseProps));
+
+  assert.match(withInterruption, /Coverage was limited by site protections/);
+  assert.match(withInterruption, /Findings shown here are based on retained observable evidence/);
+  assert.doesNotMatch(withoutInterruption, /Coverage was limited by site protections/);
 });
 
 test("ExecutiveSummaryCard renders score-only ADA accessibility as audit-only without the stale 88 rating", () => {
@@ -833,7 +911,7 @@ test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-f
         }),
         makeFinding("reject_tracking_persists_after_reject", "Non-essential tracking continued after reject"),
         makeFinding("session_recording_services_detected", "Session recording services detected"),
-        makeFinding("accessibility_risk_score", "Representative accessibility barriers detected", {
+        makeFinding("accessibility_risk_score", "Automated accessibility issues observed", {
           section: "Accessibility"
         })
       ],
@@ -855,7 +933,7 @@ test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-f
   assert.match(html, /Tracking started before consent/);
   assert.match(html, /Non-essential tracking continued after reject/);
   assert.match(html, /Session recording services detected/);
-  assert.match(html, /Representative accessibility barriers detected/);
+  assert.match(html, /Automated accessibility issues observed/);
 });
 
 test("ExecutiveSummaryCard exposes strong fingerprinting primitives inline", () => {
@@ -1377,10 +1455,10 @@ test("ExecutiveSummaryCard assigns distinct themed icons to sensitive-data and a
           severity: "medium",
           shortSummary: "Sensitive input evidence was retained alongside third-party tracking."
         }),
-        makeFinding("accessibility_risk_score", "Representative accessibility barriers detected", {
+        makeFinding("accessibility_risk_score", "Automated accessibility issues observed", {
           section: "Accessibility",
           severity: "low",
-          shortSummary: "Representative accessibility barriers were retained."
+          shortSummary: "Automated accessibility issues were retained."
         })
       ],
       beforeConsentCookieCount: 0,
@@ -1404,10 +1482,10 @@ test("ExecutiveSummaryCard assigns distinct themed icons to sensitive-data and a
           severity: "medium",
           shortSummary: "Sensitive input evidence was retained alongside third-party tracking."
         }),
-        makeFinding("accessibility_risk_score", "Representative accessibility barriers detected", {
+        makeFinding("accessibility_risk_score", "Automated accessibility issues observed", {
           section: "Accessibility",
           severity: "low",
-          shortSummary: "Representative accessibility barriers were retained."
+          shortSummary: "Automated accessibility issues were retained."
         })
       ],
       topObservedEntities: [],

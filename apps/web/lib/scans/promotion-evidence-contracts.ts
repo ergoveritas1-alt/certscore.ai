@@ -879,6 +879,31 @@ const CORROBORATING_FINGERPRINTING_CATEGORIES = new Set([
   "media_devices"
 ]);
 
+const GENERIC_BROWSER_TELEMETRY_CATEGORIES = new Set([
+  "input_touch",
+  "locale",
+  "network_device_state",
+  "screen_viewport",
+  "storage",
+  "timezone",
+  "timezone_locale",
+  "viewport"
+]);
+
+const MODERATE_ENTROPY_FINGERPRINTING_CATEGORIES = new Set([
+  "audio",
+  "audio_context",
+  "canvas",
+  "canvas_readback",
+  "device_memory",
+  "hardware",
+  "hardware_concurrency",
+  "webgl"
+]);
+
+const KNOWN_FINGERPRINTING_VENDOR_PATTERN =
+  /fingerprintjs|fpjs|fingerprint\.com|iovation|threatmetrix|lexisnexis|perimeterx|px-cloud|datadome|arkose|humansecurity|kasada|shape security|akamai bot|cloudflare bot|device intelligence|device graph|devicegraph|identity resolution|id resolution|fingerprint/i;
+
 function normalizeFingerprintingCategory(value: string) {
   return value.trim().toLowerCase().replace(/[\s-]+/g, "_");
 }
@@ -928,7 +953,7 @@ function hasExplicitFingerprintingVendorEvidence(rawEvidence: Record<string, unk
   ]).flatMap((row) => getStringArrayValues(row, ["vendor", "vendorName", "vendor_name", "hostname", "host", "requestUrl", "request_url", "url"]));
 
   return [...vendorValues, ...runtimeVendorValues].some((value) =>
-    /fingerprintjs|fpjs|fingerprint\.com|iovation|threatmetrix|lexisnexis|perimeterx|px-cloud|datadome|arkose|humansecurity|kasada|shape security|akamai bot|cloudflare bot|device intelligence|fingerprint/i.test(value)
+    KNOWN_FINGERPRINTING_VENDOR_PATTERN.test(value)
   );
 }
 
@@ -947,6 +972,151 @@ function hasConcreteFingerprintingRequestEvidence(rawEvidence: Record<string, un
     /^https?:\/\//i.test(value) &&
     /fingerprint|fingerprintjs|fpjs|\/fp(?:[/?#.]|$)|[?&#](?:fp|fingerprint|device_?fingerprint)=|entropy|canvas|webgl|audio_context|device_?hash|visitor_?id|stable_?id|bot_?score|risk_?score/i.test(value)
   );
+}
+
+function getFingerprintingRuntimeRows(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getObjectArrayValues(rawEvidence, [
+    "fingerprintRuntimeEvidence",
+    "fingerprint_runtime_evidence",
+    "fingerprintingRuntimeEvidence",
+    "fingerprinting_runtime_evidence"
+  ]);
+}
+
+function hasRuntimeBoolean(rawEvidence: Record<string, unknown> | null | undefined, keys: string[]) {
+  if (getBooleanValue(rawEvidence, keys) === true) {
+    return true;
+  }
+  const summary = getRecordValue(rawEvidence, ["fingerprintSummary", "fingerprint_summary"]);
+  if (getBooleanValue(summary, keys) === true) {
+    return true;
+  }
+  return getFingerprintingRuntimeRows(rawEvidence).some((row) => getBooleanValue(row, keys) === true);
+}
+
+function hasIdentifierLinkageEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const count =
+    getNumberValue(rawEvidence, ["identifierLikeRequestCount", "identifier_like_request_count"]) ??
+    getNumberValue(getRecordValue(rawEvidence, ["fingerprintSummary", "fingerprint_summary"]), [
+      "identifierLikeRequestCount",
+      "identifier_like_request_count"
+    ]) ??
+    0;
+  if (count > 0) {
+    return true;
+  }
+  return hasRuntimeBoolean(rawEvidence, [
+    "entropyLinkedToIdentifier",
+    "entropy_linked_to_identifier",
+    "identifierLinkageObserved",
+    "identifier_linkage_observed",
+    "cookieSyncLinkageObserved",
+    "cookie_sync_linkage_observed"
+  ]);
+}
+
+function hasEntropyTransmissionEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const count =
+    getNumberValue(rawEvidence, ["deviceDataLikeRequestCount", "device_data_like_request_count"]) ??
+    getNumberValue(getRecordValue(rawEvidence, ["fingerprintSummary", "fingerprint_summary"]), [
+      "deviceDataLikeRequestCount",
+      "device_data_like_request_count"
+    ]) ??
+    0;
+  if (count > 0 || hasConcreteFingerprintingRequestEvidence(rawEvidence)) {
+    return true;
+  }
+  return hasRuntimeBoolean(rawEvidence, [
+    "entropyTransmissionObserved",
+    "entropy_transmission_observed",
+    "networkAfterCollection",
+    "network_after_collection",
+    "thirdPartyAfterCollection",
+    "third_party_after_collection"
+  ]);
+}
+
+function hasCrossContextLinkageEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  return hasRuntimeBoolean(rawEvidence, [
+    "crossContextLinkageObserved",
+    "cross_context_linkage_observed",
+    "crossContextIdentifierBehavior",
+    "cross_context_identifier_behavior"
+  ]);
+}
+
+export type FingerprintEvidenceTier = 0 | 1 | 2 | 3;
+
+export interface FingerprintEvidenceTierResult {
+  tier: FingerprintEvidenceTier;
+  label: string;
+  confidenceExplanation: string;
+  strongFingerprintSignals: string[];
+  genericFingerprintSignals: string[];
+  entropyTransmissionObserved: boolean;
+  entropyLinkedToIdentifier: boolean;
+  crossContextLinkageObserved: boolean;
+  knownFingerprintingVendorObserved: boolean;
+}
+
+export function deriveFingerprintEvidenceTier(rawEvidence: Record<string, unknown> | null | undefined): FingerprintEvidenceTierResult {
+  const summary = getRecordValue(rawEvidence, ["fingerprintSummary", "fingerprint_summary"]);
+  const upstreamTier = getNumberValue(summary, ["tier"]) ?? getNumberValue(rawEvidence, ["fingerprintTier", "fingerprint_tier"]) ?? 0;
+  const categories = getFingerprintingAttributeCategories(rawEvidence);
+  const strongSignals = uniqueStrings(categories.filter((category) => !GENERIC_BROWSER_TELEMETRY_CATEGORIES.has(category)));
+  const genericSignals = uniqueStrings(categories.filter((category) => GENERIC_BROWSER_TELEMETRY_CATEGORIES.has(category)));
+  const highEntropyCategoryCount = categories.filter((category) => HIGH_ENTROPY_FINGERPRINTING_CATEGORIES.has(category)).length;
+  const moderateEntropyCategoryCount = categories.filter((category) => MODERATE_ENTROPY_FINGERPRINTING_CATEGORIES.has(category)).length;
+  const hasRenderingFingerprinting = categories.some((category) => RENDERING_FINGERPRINTING_CATEGORIES.has(category));
+  const hasCorroboratingFingerprinting = categories.some((category) => CORROBORATING_FINGERPRINTING_CATEGORIES.has(category));
+  const hasRepeatedReads = hasRuntimeBoolean(rawEvidence, ["repeatedEntropyReads", "repeated_entropy_reads", "repeatCollectionSequencing", "repeat_collection_sequencing"]);
+  const entropyTransmissionObserved = hasEntropyTransmissionEvidence(rawEvidence);
+  const entropyLinkedToIdentifier = hasIdentifierLinkageEvidence(rawEvidence);
+  const crossContextLinkageObserved = hasCrossContextLinkageEvidence(rawEvidence);
+  const knownFingerprintingVendorObserved = hasExplicitFingerprintingVendorEvidence(rawEvidence);
+  const hasIdentityOrientation =
+    entropyLinkedToIdentifier ||
+    knownFingerprintingVendorObserved ||
+    entropyTransmissionObserved ||
+    hasRepeatedReads ||
+    crossContextLinkageObserved;
+  const coordinatedHighEntropy =
+    highEntropyCategoryCount >= 2 ||
+    (hasRenderingFingerprinting && hasCorroboratingFingerprinting) ||
+    hasRepeatedReads ||
+    upstreamTier >= 2;
+  const moderateEntropyObserved = moderateEntropyCategoryCount > 0 || upstreamTier >= 1;
+  const tier: FingerprintEvidenceTier = hasIdentityOrientation && (coordinatedHighEntropy || knownFingerprintingVendorObserved)
+    ? 3
+    : coordinatedHighEntropy
+      ? 2
+      : moderateEntropyObserved
+        ? 1
+        : 0;
+
+  return {
+    tier,
+    label: tier === 3
+      ? "Probable fingerprinting behavior"
+      : tier === 2
+        ? "Fingerprinting-related browser telemetry observed"
+        : tier === 1
+          ? "Elevated browser/device entropy collection observed"
+          : "Generic browser telemetry observed",
+    confidenceExplanation: tier === 3
+      ? "High-entropy browser/device collection is corroborated by identifier linkage, outbound entropy transmission, known fingerprinting vendor attribution, repeat sequencing, or cross-context linkage."
+      : tier === 2
+        ? "Coordinated high-entropy browser/device collection was observed, but retained evidence does not establish identity-oriented fingerprinting."
+        : tier === 1
+          ? "Moderate browser/device entropy collection was observed without coordinated identity-oriented corroboration."
+          : "Only generic browser telemetry was retained.",
+    crossContextLinkageObserved,
+    entropyLinkedToIdentifier,
+    entropyTransmissionObserved,
+    genericFingerprintSignals: genericSignals,
+    knownFingerprintingVendorObserved,
+    strongFingerprintSignals: strongSignals
+  };
 }
 
 function hasFingerprintingRuntimeAnchor(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -981,28 +1151,7 @@ function hasFingerprintingRuntimeAnchor(rawEvidence: Record<string, unknown> | n
 }
 
 export function hasStrongFingerprintingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
-  const summary = getRecordValue(rawEvidence, ["fingerprintSummary", "fingerprint_summary"]);
-  const tier = getNumberValue(summary, ["tier"]) ?? getNumberValue(rawEvidence, ["fingerprintTier", "fingerprint_tier"]) ?? 0;
-  const categories = getFingerprintingAttributeCategories(rawEvidence);
-  const highEntropyCategoryCount = categories.filter((category) => HIGH_ENTROPY_FINGERPRINTING_CATEGORIES.has(category)).length;
-  const hasRenderingFingerprinting = categories.some((category) => RENDERING_FINGERPRINTING_CATEGORIES.has(category));
-  const hasCorroboratingFingerprinting = categories.some((category) => CORROBORATING_FINGERPRINTING_CATEGORIES.has(category));
-  const networkAfterCollection = getBooleanValue(summary, ["networkAfterCollection", "network_after_collection"]) === true;
-  const thirdPartyAfterCollection = getBooleanValue(summary, ["thirdPartyAfterCollection", "third_party_after_collection"]) === true;
-  const hasRuntimeAnchor = hasFingerprintingRuntimeAnchor(rawEvidence);
-  const hasStrongPrimitiveCluster =
-    highEntropyCategoryCount >= 3 &&
-    hasRenderingFingerprinting &&
-    hasCorroboratingFingerprinting &&
-    (networkAfterCollection || thirdPartyAfterCollection) &&
-    hasRuntimeAnchor;
-
-  return (
-    (tier >= 3 && hasStrongPrimitiveCluster) ||
-    (tier >= 2 && hasRenderingFingerprinting && hasCorroboratingFingerprinting && hasRuntimeAnchor) ||
-    hasExplicitFingerprintingVendorEvidence(rawEvidence) ||
-    hasConcreteFingerprintingRequestEvidence(rawEvidence)
-  );
+  return deriveFingerprintEvidenceTier(rawEvidence).tier >= 3 && hasFingerprintingRuntimeAnchor(rawEvidence);
 }
 
 export function hasStrongAccessibilitySupportPathMissingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {

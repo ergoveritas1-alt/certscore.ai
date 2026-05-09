@@ -9,6 +9,9 @@ import {
 import {
   evaluateFindingEvidenceContractForPacket
 } from "./finding-evidence-contracts";
+import {
+  deriveFingerprintEvidenceTier
+} from "./promotion-evidence-contracts";
 
 export const REPORT_SURFACING_POLICY_VERSION = "v1";
 
@@ -1121,6 +1124,54 @@ function hasConcreteRuntimeEvidence(packet: UnifiedFindingPacket) {
   );
 }
 
+function buildFingerprintingRawEvidence(packet: UnifiedFindingPacket): Record<string, unknown> {
+  const fingerprintRuntimeEvidence = getEvidenceEntityValuesForKeys(packet, [
+    "fingerprintRuntimeEvidence",
+    "fingerprintingRuntimeEvidence"
+  ]).flatMap((value) => {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? [parsed as Record<string, unknown>] : [];
+    } catch {
+      return [{ value }];
+    }
+  });
+  const fingerprintAttributeCategories = [
+    ...getEvidenceEntityValuesForKeys(packet, [
+      "fingerprintAttributeCategories",
+      "fingerprintingSignals",
+      "highEntropySignals"
+    ])
+  ];
+  const fingerprintTier = getEvidenceCount(packet, ["fingerprintTier", "fingerprint_tier"]);
+
+  return {
+    fingerprintAttributeCategories,
+    fingerprintRuntimeEvidence,
+    fingerprintSummary: {
+      ...(typeof fingerprintTier === "number" ? { tier: fingerprintTier } : {}),
+      ...(fingerprintAttributeCategories.length > 0 ? { fingerprintingSignals: fingerprintAttributeCategories } : {})
+    },
+    fingerprintTier,
+    requestUrls: [
+      ...(packet.evidence?.sourceUrls ?? []),
+      ...fingerprintRuntimeEvidence.flatMap((row) =>
+        ["requestUrl", "request_url", "url", "redactedUrl", "redacted_url"]
+          .map((key) => row[key])
+          .filter((value): value is string => typeof value === "string")
+      )
+    ],
+    runtimeVendors: [
+      ...getEvidenceEntityValuesForKeys(packet, ["runtimeVendors", "vendors", "vendorNames"]),
+      ...fingerprintRuntimeEvidence.flatMap((row) =>
+        ["vendor", "vendorName", "vendor_name", "hostname", "host"]
+          .map((key) => row[key])
+          .filter((value): value is string => typeof value === "string")
+      )
+    ]
+  };
+}
+
 function isSecuritySensitiveCookieName(value: string) {
   return /auth|session|sess|sid|token|jwt|csrf|xsrf|login|account|user|customer|checkout|cart|payment|pay|billing/i.test(value);
 }
@@ -2130,20 +2181,23 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     }
 
     if (packet.unifiedFindingId === "fingerprinting_observed") {
-      if (packet.confidenceBand === "high" && hasConcreteRuntimeEvidence(packet)) {
+      const fingerprintTier = deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet)).tier;
+      if (fingerprintTier >= 3 && packet.confidenceBand === "high" && hasConcreteRuntimeEvidence(packet)) {
         overrideDecision(decision, {
           state: "confirmed",
           lane: "main",
           tier: "section",
-          reason: "Fingerprinting evidence was retained with high confidence and concrete runtime backing, so this finding can stand on its own.",
+          reason: "Identity-oriented fingerprinting evidence was retained with high confidence and concrete runtime backing, so this finding can stand on its own.",
           ruleId: "evidence.consent_behavior.confirmed_specific_runtime_failure"
         });
       } else {
         overrideDecision(decision, {
-          state: "review",
-          lane: "main",
-          tier: decision.surfaceTier,
-          reason: "Fingerprinting evidence was retained, but it should remain review-level unless high-confidence runtime corroboration is present.",
+          state: fingerprintTier >= 2 ? "review" : "support_only",
+          lane: fingerprintTier >= 2 ? "main" : "confidence_and_coverage",
+          tier: fingerprintTier >= 2 ? decision.surfaceTier : "support",
+          reason: fingerprintTier >= 2
+            ? "Fingerprinting-related browser telemetry was retained, but probable fingerprinting requires identity linkage, vendor attribution, outbound entropy transmission, repeat sequencing, or cross-context linkage."
+            : "Browser/device entropy collection was retained only as support because identity-oriented fingerprinting evidence was not present.",
           ruleId: "evidence.consent_behavior.review_runtime_without_effect_evidence"
         });
       }

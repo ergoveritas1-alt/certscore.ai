@@ -12,6 +12,7 @@ import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { rankFindings } from "../../lib/scans/rank-findings";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 import { CopyJsonButton } from "./copy-json-button";
+import { InfoTip } from "./info-tip";
 type DomainBenchmarkCardData = {
   confidence: "low" | "medium" | "high";
   estimatedRankLabel: string;
@@ -58,6 +59,26 @@ function formatCategoryLabel(value: string) {
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
+function getEvidenceConfidenceLabel(confidence: CertScoreFinding["confidence"]) {
+  if (confidence === "strong") {
+    return "Strong evidence";
+  }
+  if (confidence === "good") {
+    return "Good evidence";
+  }
+  return "Review evidence";
+}
+
+function getEvidenceConfidenceDefinition(confidence: CertScoreFinding["confidence"]) {
+  if (confidence === "strong") {
+    return "Observed directly in retained runtime telemetry.";
+  }
+  if (confidence === "good") {
+    return "Supported by retained evidence or structured inference, but less complete than strong evidence.";
+  }
+  return "Retained for analyst review; not enough to stand alone as a confirmed finding.";
 }
 
 function DetailDisclosure(input: {
@@ -1307,6 +1328,44 @@ function BenchmarkMetricCard(input: {
   );
 }
 
+export function deriveBenchmarkScoreExplanation(input: {
+  benchmark: DomainBenchmarkCardData;
+  findings: CertScoreFinding[];
+  score: number | null;
+}) {
+  if (!input.benchmark || typeof input.score !== "number") {
+    return null;
+  }
+
+  const delta = input.score - input.benchmark.expectedOverallScore;
+  const drivers = uniqueStrings(
+    input.findings
+      .slice(0, 4)
+      .map((finding) => finding.shortSummary || finding.label)
+      .map((value) => value.trim().replace(/\.$/, "").toLowerCase())
+  ).slice(0, 3);
+  const driverText =
+    drivers.length > 1
+      ? `${drivers.slice(0, -1).join(", ")}, and ${drivers[drivers.length - 1]}`
+      : drivers[0] ?? null;
+
+  if (delta < 0) {
+    return driverText
+      ? `This score is below the ${input.benchmark.industry} benchmark expectation mainly because of ${driverText}.`
+      : `This score is below the ${input.benchmark.industry} benchmark expectation based on surfaced findings.`;
+  }
+
+  if (delta > 0) {
+    return driverText
+      ? `This score is above the ${input.benchmark.industry} benchmark expectation, with remaining review context concentrated around ${driverText}.`
+      : `This score is above the ${input.benchmark.industry} benchmark expectation for the retained evidence.`;
+  }
+
+  return driverText
+    ? `This score is in line with the ${input.benchmark.industry} benchmark expectation, with review context concentrated around ${driverText}.`
+    : `This score is in line with the ${input.benchmark.industry} benchmark expectation.`;
+}
+
 function ExecutiveMetricCard(input: {
   accent?: "sky" | "amber" | "emerald" | "slate";
   helper?: string | null;
@@ -2117,6 +2176,7 @@ export function ExecutiveSummaryCard(input: {
     .slice(0, 6)
     .map((entity) => `${entity.label} · ${formatCategoryLabel(entity.category)} · ${entity.requestCount} req`);
   const fingerprintEvidence = input.fingerprintReasons.filter(Boolean);
+  const hasProbableFingerprintingFinding = regulatoryFindingInput.some((finding) => finding.id === "probable_fingerprinting");
   const shouldShowFingerprintSnapshot =
     fingerprintEvidence.length > 0 || input.fingerprintLabel !== "None detected";
   const vendorEvidence = [
@@ -2156,6 +2216,11 @@ export function ExecutiveSummaryCard(input: {
   const regulatoryLenses = input.unifiedFindings
     ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions)
     : buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);
+  const benchmarkScoreExplanation = deriveBenchmarkScoreExplanation({
+    benchmark: input.domainBenchmark,
+    findings: regulatoryFindingInput,
+    score: input.score
+  });
 
   return (
     <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
@@ -2223,23 +2288,30 @@ export function ExecutiveSummaryCard(input: {
               ))}
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-3">
-              <BenchmarkMetricCard
-                label="Overall score"
-                actualValue={input.score}
-                benchmarkValue={input.domainBenchmark?.expectedOverallScore ?? null}
-                maxValue={100}
-              />
-              <BenchmarkMetricCard
-                label="Third-party requests"
-                actualValue={input.thirdPartyRequestCount}
-                benchmarkValue={input.domainBenchmark?.expectedThirdPartyRequests ?? null}
-              />
-              <BenchmarkMetricCard
-                label="Cookies before consent"
-                actualValue={input.beforeConsentCookieCount}
-                benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
-              />
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <BenchmarkMetricCard
+                  label="Overall score"
+                  actualValue={input.score}
+                  benchmarkValue={input.domainBenchmark?.expectedOverallScore ?? null}
+                  maxValue={100}
+                />
+                <BenchmarkMetricCard
+                  label="Third-party requests"
+                  actualValue={input.thirdPartyRequestCount}
+                  benchmarkValue={input.domainBenchmark?.expectedThirdPartyRequests ?? null}
+                />
+                <BenchmarkMetricCard
+                  label="Cookies before consent"
+                  actualValue={input.beforeConsentCookieCount}
+                  benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
+                />
+              </div>
+              {benchmarkScoreExplanation ? (
+                <p className="rounded-[1rem] border border-slate-200 bg-white/85 px-4 py-3 text-sm leading-6 text-slate-700">
+                  {benchmarkScoreExplanation}
+                </p>
+              ) : null}
             </div>
           )}
           <div className="space-y-3">
@@ -2272,8 +2344,9 @@ export function ExecutiveSummaryCard(input: {
                     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).severityBadge}`}>
                       {finding.severity}
                     </span>
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).confidenceBadge}`}>
-                      {finding.confidence === "strong" ? "Strong evidence" : finding.confidence === "good" ? "Good evidence" : "Moderate evidence"}
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).confidenceBadge}`}>
+                      {getEvidenceConfidenceLabel(finding.confidence)}
+                      <InfoTip align="start" placement="bottom" text={getEvidenceConfidenceDefinition(finding.confidence)} />
                     </span>
                   </div>
                   <div className="mt-2.5 flex items-start gap-2.5">
@@ -2407,6 +2480,9 @@ export function ExecutiveSummaryCard(input: {
                     <p className="mt-2 text-sm text-slate-800">
                       {scanInterruptions.length} interruption event{scanInterruptions.length === 1 ? "" : "s"} retained
                     </p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Coverage was limited by site protections. Findings shown here are based on retained observable evidence.
+                    </p>
                     <div className="mt-3 space-y-2">
                       {scanInterruptions.map((event) => (
                         <details key={`${event.label}:${event.details.join("|")}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
@@ -2429,7 +2505,14 @@ export function ExecutiveSummaryCard(input: {
                 {shouldShowFingerprintSnapshot ? (
                   <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Fingerprinting</p>
-                    <p className="mt-2 text-sm text-slate-800">{input.fingerprintNarrative}</p>
+                    <p className="mt-2 text-sm font-medium text-slate-900">
+                      {hasProbableFingerprintingFinding ? "Probable fingerprinting detected" : "No probable fingerprinting detected"}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-800">
+                      {hasProbableFingerprintingFinding
+                        ? input.fingerprintNarrative
+                        : "Minor fingerprinting indicators retained for review. Insufficient evidence for a probable fingerprinting finding."}
+                    </p>
                     <DetailDisclosure
                       summary={`${fingerprintEvidence.length} fingerprint indicators retained`}
                       title="Fingerprint evidence"

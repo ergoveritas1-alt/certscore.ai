@@ -1,5 +1,7 @@
+import React from "react";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { EvidencePreview } from "./evidence-preview";
+import { InfoTip } from "./info-tip";
 
 function getSeverityClasses(severity: CertScoreFinding["severity"]) {
   switch (severity) {
@@ -27,9 +29,19 @@ function getBadgeCopy(finding: CertScoreFinding) {
       ? "Strong evidence"
       : finding.confidence === "good"
         ? "Good evidence"
-        : "Moderate evidence";
+        : "Review evidence";
 
   return { directness, confidence };
+}
+
+function getConfidenceDefinition(confidence: CertScoreFinding["confidence"]) {
+  if (confidence === "strong") {
+    return "Observed directly in retained runtime telemetry.";
+  }
+  if (confidence === "good") {
+    return "Supported by retained evidence or structured inference, but less complete than strong evidence.";
+  }
+  return "Retained for analyst review; not enough to stand alone as a confirmed finding.";
 }
 
 export function FindingCard({ finding }: { finding: CertScoreFinding }) {
@@ -43,8 +55,9 @@ export function FindingCard({ finding }: { finding: CertScoreFinding }) {
             <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getSeverityClasses(finding.severity)}`}>
               {finding.severity}
             </span>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
               {badgeCopy.confidence}
+              <InfoTip align="start" placement="bottom" text={getConfidenceDefinition(finding.confidence)} />
             </span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
               {badgeCopy.directness}

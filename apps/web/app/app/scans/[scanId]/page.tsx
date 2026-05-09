@@ -92,8 +92,8 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
       }
       headerActions={
         <ScanViewActions
-          alternateHref={`/app/scans/${scanRecord.scan.id}/json`}
-          alternateLabel="json-view"
+          alternateHref={canRescan ? `/app/scans/${scanRecord.scan.id}/json` : null}
+          alternateLabel={canRescan ? "json-view" : null}
           canRescan={canRescan && Boolean(scanRecord.scan.domainId) && Boolean(rescanAvailability)}
           cooldownMessage={rescanCooldownMessage}
           domainId={scanRecord.scan.domainId}

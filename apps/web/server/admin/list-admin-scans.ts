@@ -68,7 +68,7 @@ export type BlockedRunTelemetry = {
   successRateByEgress: Array<{ egress: string; successRate: number; total: number }>;
 };
 
-export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
+export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanListItem[]> {
   await requirePlatformAdminContext();
   const {
     diagnosticEvents,
@@ -80,7 +80,7 @@ export async function listAdminScans(limit = 50): Promise<AdminScanListItem[]> {
     validationFindingRows,
     validationRuns,
     verdictByFindingId
-  } = await loadAdminScanListPageData(limit);
+  } = await loadAdminScanListPageData(limit, offset);
 
   const domainMap = new Map(domains.flatMap((domain) => (domain.id ? [[domain.id, domain] as const] : [])));
   const organizationMap = new Map(organizations.flatMap((organization) => (organization.id ? [[organization.id, organization] as const] : [])));

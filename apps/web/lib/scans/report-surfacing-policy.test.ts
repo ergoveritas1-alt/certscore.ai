@@ -1960,6 +1960,26 @@ test("fingerprinting confirms only with high confidence and concrete runtime evi
         details: {
           family: "consent_tracking",
           kind: "fingerprinting_observed"
+        },
+        evidence: {
+          counts: {
+            fingerprintTier: 3
+          },
+          entities: {
+            fingerprintAttributeCategories: ["canvas_webgl", "audio", "fonts_plugins"],
+            fingerprintingRuntimeEvidence: [
+              JSON.stringify({
+                attributeCategories: ["canvas_webgl", "audio", "fonts_plugins"],
+                entropyTransmissionObserved: true,
+                requestUrl: "https://fp.example.test/collect?device_fingerprint=abc",
+                tier: 3
+              })
+            ]
+          },
+          flags: [],
+          pageUrls: [],
+          snippets: [],
+          sourceUrls: ["https://fp.example.test/collect?device_fingerprint=abc"]
         }
       })
     ]

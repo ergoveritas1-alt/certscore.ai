@@ -281,7 +281,7 @@ test("generic tier-2 fingerprinting telemetry stays out of executive projection"
   assert.ok(!projectExecutiveFindingsFromUnifiedPackets(packets).findings.some((finding) => finding.id === "probable_fingerprinting"));
 });
 
-test("tier-2 canvas evidence needs an independent high-entropy category before surfacing", () => {
+test("tier-2 canvas evidence needs identity corroboration before probable fingerprinting surfacing", () => {
   const baseCandidate = {
     description: "Fingerprinting runtime detected",
     observedValue: "true",
@@ -292,7 +292,7 @@ test("tier-2 canvas evidence needs an independent high-entropy category before s
     sourceType: "signal",
     title: "Fingerprinting runtime detected"
   } satisfies Omit<UnifiedFindingCandidate, "fallbackEvidence">;
-  const makePackets = (categories: string[]) => buildUnifiedFindingDisplayPackets({
+  const makePackets = (categories: string[], requestUrl?: string) => buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
         ...baseCandidate,
@@ -303,6 +303,7 @@ test("tier-2 canvas evidence needs an independent high-entropy category before s
             {
               artifactRef: "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary",
               attributeCategories: categories,
+              ...(requestUrl ? { requestUrl } : {}),
               tier: 2
             }
           ],
@@ -315,6 +316,7 @@ test("tier-2 canvas evidence needs an independent high-entropy category before s
           },
           fingerprintTier: 2,
           highEntropySignals: categories,
+          ...(requestUrl ? { requestUrls: [requestUrl] } : {}),
           signalKey: "privacy.fingerprinting_detected",
           signalValue: true
         }
@@ -335,8 +337,14 @@ test("tier-2 canvas evidence needs an independent high-entropy category before s
   const clusteredPacket = clusteredPackets.find((entry) => entry.unifiedFindingId === "fingerprinting_observed");
 
   assert.ok(clusteredPacket);
-  assert.equal(evaluateFindingEvidenceContractForPacket(clusteredPacket)?.status, "pass_strong");
-  assert.ok(projectExecutiveFindingsFromUnifiedPackets(clusteredPackets).findings.some((finding) => finding.id === "probable_fingerprinting"));
+  assert.equal(evaluateFindingEvidenceContractForPacket(clusteredPacket)?.status, "downgrade");
+  assert.ok(!projectExecutiveFindingsFromUnifiedPackets(clusteredPackets).findings.some((finding) => finding.id === "probable_fingerprinting"));
+
+  const identityLinkedPackets = makePackets(
+    ["screen_viewport", "hardware", "canvas_webgl", "fonts_plugins"],
+    "https://fp.example.test/collect?device_fingerprint=abc"
+  );
+  assert.ok(projectExecutiveFindingsFromUnifiedPackets(identityLinkedPackets).findings.some((finding) => finding.id === "probable_fingerprinting"));
 });
 
 test("fingerprinting evidence stays out of executive projection without retained runtime artifacts", () => {
