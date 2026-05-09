@@ -1636,7 +1636,7 @@ test("keeps uncorroborated tier-2 fingerprinting evidence out of executive findi
   ]);
 
   assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
-  assert.ok(!projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "fingerprinting_related_signals_observed"));
 });
 
 test("projects tier-2 fingerprinting-related telemetry only with corroborating tracking findings", () => {
@@ -1668,9 +1668,9 @@ test("projects tier-2 fingerprinting-related telemetry only with corroborating t
     })
   ]);
 
-  const finding = projection.findings.find((entry) => entry.id === "browser_fingerprinting_related_signals_observed");
+  const finding = projection.findings.find((entry) => entry.id === "fingerprinting_related_signals_observed");
   assert.ok(finding);
-  assert.equal(finding.label, "Browser fingerprinting-related signals observed");
+  assert.equal(finding.label, "Fingerprinting-related signals observed");
   assert.equal(finding.severity, "medium");
   assert.equal(
     finding.shortSummary,
@@ -1723,7 +1723,7 @@ test("keeps probable fingerprinting wording for strong high-entropy evidence wit
 
   const finding = projection.findings.find((entry) => entry.id === "probable_fingerprinting");
   assert.ok(finding);
-  assert.ok(!projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "fingerprinting_related_signals_observed"));
   assert.match(finding.shortSummary, /identity-oriented corroboration/);
   assert.match(finding.shortSummary, /audio environment access/);
   const strongPreview = finding.evidencePreview.find((entry) => entry.startsWith("Stronger retained primitives:")) ?? "";
@@ -1774,7 +1774,7 @@ test("keeps canvas-only fingerprinting evidence below probable wording", () => {
   ]);
 
   assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
-  assert.ok(!projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "fingerprinting_related_signals_observed"));
 });
 
 test("keeps Clarity and GTM without strong primitives as generic browser telemetry", () => {
@@ -1800,7 +1800,7 @@ test("keeps Clarity and GTM without strong primitives as generic browser telemet
   ]);
 
   assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
-  const finding = projection.findings.find((entry) => entry.id === "browser_fingerprinting_related_signals_observed");
+  const finding = projection.findings.find((entry) => entry.id === "fingerprinting_related_signals_observed");
   assert.equal(finding, undefined);
 });
 
@@ -1826,7 +1826,7 @@ test("keeps tier-3 primitive noise below probable fingerprinting without a stron
   ]);
 
   assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
-  assert.ok(!projection.findings.some((finding) => finding.id === "browser_fingerprinting_related_signals_observed"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "fingerprinting_related_signals_observed"));
 });
 
 test("projects blocking overlay context without violation framing", () => {

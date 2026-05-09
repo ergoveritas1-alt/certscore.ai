@@ -28,6 +28,13 @@ function makePrivacyFinding(id: string, priority = 95): CertScoreFinding {
   };
 }
 
+function makeFingerprintingFinding(id: string, priority = 95): CertScoreFinding {
+  return {
+    ...makeFinding(id, priority),
+    section: "Fingerprinting"
+  };
+}
+
 test("selectTopFindings can select the consent dark-pattern umbrella while excluding support/context findings", () => {
   const selected = selectTopFindings(
     [
@@ -73,4 +80,54 @@ test("selectTopFindings forces CPRA CBA opt-out missing into top findings", () =
   );
 
   assert.ok(selected.some((finding) => finding.id === "cpra_cba_opt_out_missing"));
+});
+
+test("selectTopFindings only selects curated executive summary top findings", () => {
+  const selected = selectTopFindings(
+    [
+      makePrivacyFinding("pre_consent_tracking_detected", 100),
+      makePrivacyFinding("rtb_cookie_sync_observed", 200),
+      makePrivacyFinding("cookie_disclosure_gap", 199),
+      makeFinding("reject_option_missing_or_hidden", 98),
+      makeFinding("blocking_overlay_observed", 250)
+    ],
+    4
+  );
+
+  assert.deepEqual(
+    selected.map((finding) => finding.id),
+    ["pre_consent_tracking_detected", "rtb_cookie_sync_observed", "reject_option_missing_or_hidden"]
+  );
+});
+
+test("selectTopFindings lets ranked consent UI subtypes compete under the section cap", () => {
+  const selected = selectTopFindings(
+    [
+      makeFinding("asymmetric_consent_ui", 120),
+      makeFinding("forced_consent_interaction", 110),
+      makeFinding("consent_dark_patterns_detected", 100),
+      makeFinding("reject_option_missing_or_hidden", 90),
+      makePrivacyFinding("pre_consent_tracking_detected", 100)
+    ],
+    5
+  );
+
+  assert.deepEqual(
+    selected.map((finding) => finding.id),
+    ["pre_consent_tracking_detected", "asymmetric_consent_ui", "forced_consent_interaction"]
+  );
+});
+
+test("selectTopFindings suppresses fingerprinting-related signals when probable fingerprinting is present", () => {
+  const selected = selectTopFindings(
+    [
+      makeFingerprintingFinding("fingerprinting_related_signals_observed", 120),
+      makeFingerprintingFinding("probable_fingerprinting", 93),
+      makePrivacyFinding("pre_consent_tracking_detected", 100)
+    ],
+    3
+  );
+
+  assert.ok(selected.some((finding) => finding.id === "probable_fingerprinting"));
+  assert.ok(!selected.some((finding) => finding.id === "fingerprinting_related_signals_observed"));
 });

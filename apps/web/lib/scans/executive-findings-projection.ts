@@ -108,7 +108,7 @@ const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
   "pre_submit_text_capture_detected",
   "identifier_transmission_detected",
   "device_data_collection_detected",
-  "browser_fingerprinting_related_signals_observed",
+  "fingerprinting_related_signals_observed",
   "probable_fingerprinting",
   "non_cookie_tracking_detected",
   "high_request_density",
@@ -157,7 +157,7 @@ const TELEMETRY_EVIDENCE_FINDING_IDS = new Set([
   "identifier_transmission_detected",
   "device_data_collection_detected",
   "telemetry_rich_identification_observed",
-  "browser_fingerprinting_related_signals_observed",
+  "fingerprinting_related_signals_observed",
   "probable_fingerprinting",
   "collection_endpoints_detected"
 ]);
@@ -332,7 +332,7 @@ function mapSeverity(
   if (findingId === "reject_tracking_persists_after_reject" && !packet.evidence?.flags?.includes("reject_evidence_confirmed")) {
     return "medium";
   }
-  if (findingId === "browser_fingerprinting_related_signals_observed") {
+  if (findingId === "fingerprinting_related_signals_observed") {
     const tier = deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet)).tier;
     return tier >= 2 ? "medium" : "low";
   }
@@ -356,7 +356,7 @@ function getMappedFindingId(
     if (tier <= 0) {
       return null;
     }
-    return tier >= 3 ? "probable_fingerprinting" : "browser_fingerprinting_related_signals_observed";
+    return tier >= 3 ? "probable_fingerprinting" : "fingerprinting_related_signals_observed";
   }
   if (packet.unifiedFindingId in CERT_SCORE_FINDING_REGISTRY) {
     return packet.unifiedFindingId as keyof typeof CERT_SCORE_FINDING_REGISTRY;
@@ -389,6 +389,8 @@ function buildFingerprintingRawEvidence(packet: UnifiedFindingDisplayPacket): Re
     ...(entities.highEntropySignals ?? [])
   ]);
   const fingerprintTier = packet.evidence?.counts?.fingerprintTier;
+  const identifierLikeRequestCount = packet.evidence?.counts?.identifierLikeRequestCount;
+  const deviceDataLikeRequestCount = packet.evidence?.counts?.deviceDataLikeRequestCount;
   const entropyTransmissionObserved = packet.evidence?.counts?.entropyTransmissionObserved ?? entities.entropyTransmissionObserved?.[0];
   const entropyLinkedToIdentifier = packet.evidence?.counts?.entropyLinkedToIdentifier ?? entities.entropyLinkedToIdentifier?.[0];
   const crossContextLinkageObserved = packet.evidence?.counts?.crossContextLinkageObserved ?? entities.crossContextLinkageObserved?.[0];
@@ -399,11 +401,15 @@ function buildFingerprintingRawEvidence(packet: UnifiedFindingDisplayPacket): Re
     fingerprintSummary: {
       ...(typeof fingerprintTier === "number" ? { tier: fingerprintTier } : {}),
       ...(fingerprintAttributeCategories.length > 0 ? { fingerprintingSignals: fingerprintAttributeCategories } : {}),
+      ...(typeof identifierLikeRequestCount === "number" ? { identifierLikeRequestCount } : {}),
+      ...(typeof deviceDataLikeRequestCount === "number" ? { deviceDataLikeRequestCount } : {}),
       ...(typeof entropyTransmissionObserved === "boolean" ? { entropyTransmissionObserved } : {}),
       ...(typeof entropyLinkedToIdentifier === "boolean" ? { entropyLinkedToIdentifier } : {}),
       ...(typeof crossContextLinkageObserved === "boolean" ? { crossContextLinkageObserved } : {})
     },
     fingerprintTier,
+    ...(typeof identifierLikeRequestCount === "number" ? { identifierLikeRequestCount } : {}),
+    ...(typeof deviceDataLikeRequestCount === "number" ? { deviceDataLikeRequestCount } : {}),
     ...(typeof entropyTransmissionObserved === "boolean" ? { entropyTransmissionObserved } : {}),
     ...(typeof entropyLinkedToIdentifier === "boolean" ? { entropyLinkedToIdentifier } : {}),
     ...(typeof crossContextLinkageObserved === "boolean" ? { crossContextLinkageObserved } : {}),
@@ -647,7 +653,7 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
     ]).slice(0, 4);
   }
 
-  if (findingId === "probable_fingerprinting" || findingId === "browser_fingerprinting_related_signals_observed") {
+  if (findingId === "probable_fingerprinting" || findingId === "fingerprinting_related_signals_observed") {
     const groups = getFingerprintSignalGroups(packet);
     const tierResult = deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet));
     return uniqueStrings([
@@ -1535,19 +1541,19 @@ function buildGenericCanonicalEvidenceDetails(
   }
 
   if (TELEMETRY_EVIDENCE_FINDING_IDS.has(findingId)) {
-    const fingerprintingRawEvidence = findingId === "browser_fingerprinting_related_signals_observed" || findingId === "probable_fingerprinting"
+    const fingerprintingRawEvidence = findingId === "fingerprinting_related_signals_observed" || findingId === "probable_fingerprinting"
       ? buildFingerprintingRawEvidence(packet)
       : null;
     const fingerprintTierResult = fingerprintingRawEvidence ? deriveFingerprintEvidenceTier(fingerprintingRawEvidence) : null;
     const fingerprintSignals = Array.isArray(fingerprintingRawEvidence?.fingerprintAttributeCategories)
       ? (fingerprintingRawEvidence.fingerprintAttributeCategories as string[])
       : [];
-    const fingerprintSignalGroups = findingId === "browser_fingerprinting_related_signals_observed" || findingId === "probable_fingerprinting"
+    const fingerprintSignalGroups = findingId === "fingerprinting_related_signals_observed" || findingId === "probable_fingerprinting"
       ? getFingerprintSignalGroups(packet)
       : null;
     details.telemetryEvidence = {
       observed: true,
-      basis: findingId === "browser_fingerprinting_related_signals_observed"
+      basis: findingId === "fingerprinting_related_signals_observed"
         ? (fingerprintTierResult?.tier ?? 0) >= 2
           ? "Fingerprinting-related browser telemetry was retained for review, but identity-oriented fingerprinting was not established."
           : "Elevated browser/device entropy collection was retained for review, but identity-oriented fingerprinting was not established."
@@ -1581,7 +1587,7 @@ function buildGenericCanonicalEvidenceDetails(
         : {}),
       ...(findingId === "probable_fingerprinting"
         ? { confidenceExplanation: fingerprintTierResult?.confidenceExplanation ?? "Identity-oriented fingerprinting evidence observed." }
-        : findingId === "browser_fingerprinting_related_signals_observed"
+        : findingId === "fingerprinting_related_signals_observed"
           ? {
               confidenceExplanation: fingerprintTierResult?.confidenceExplanation ?? "Browser/device entropy collection retained without identity-oriented fingerprinting evidence.",
               limitations: [
@@ -2382,7 +2388,7 @@ function buildExecutiveShortSummary(
     return `Runtime collection included browser/device fingerprinting evidence with identity-oriented corroboration${retainedText}.`;
   }
 
-  if (findingId === "browser_fingerprinting_related_signals_observed") {
+  if (findingId === "fingerprinting_related_signals_observed") {
     const tier = deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet)).tier;
     return tier >= 2
       ? "Fingerprinting-related browser telemetry was observed, but retained evidence does not establish identity-oriented fingerprinting."
@@ -2411,7 +2417,7 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
     defaultSurfacePriority: definition.defaultSurfacePriority,
     whyItMatters: definition.whyItMatters,
     remediation: definition.remediation,
-    confidence: findingId === "browser_fingerprinting_related_signals_observed"
+    confidence: findingId === "fingerprinting_related_signals_observed"
       ? "moderate"
       : mapExecutiveConfidence(packet, findingId),
     directVsInferred: mapVerificationStateToDirectness(packet.presentationDecision.verificationState),

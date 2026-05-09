@@ -15,6 +15,7 @@ export const OPS_SCAN_STATUS_FINDING_IDS = [
   "session_replay_on_sensitive_input_surface",
   "consent_dark_patterns_detected",
   "reject_option_missing_or_hidden",
+  "fingerprinting_related_signals_observed",
   "probable_fingerprinting"
 ] as const;
 

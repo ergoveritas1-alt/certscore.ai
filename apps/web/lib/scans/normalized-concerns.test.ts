@@ -347,6 +347,60 @@ test("tier-2 canvas evidence needs identity corroboration before probable finger
   assert.ok(projectExecutiveFindingsFromUnifiedPackets(identityLinkedPackets).findings.some((finding) => finding.id === "probable_fingerprinting"));
 });
 
+test("fingerprinting summary string categories and request counts remain available to promotion policy", () => {
+  const candidate = {
+    description: "Fingerprinting runtime detected",
+    fallbackEvidence: {
+      fingerprintArtifactRefs: ["scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary"],
+      fingerprintRuntimeEvidence: [
+        {
+          artifactRef: "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary",
+          requestUrl: "https://telemetry.example.test/collect",
+          tier: 2
+        }
+      ],
+      fingerprintRuntimeEvidenceRetained: true,
+      fingerprintSummary: {
+        attributeCategories: ["canvas_webgl", "fonts_plugins"],
+        deviceDataLikeRequestCount: 1,
+        identifierLikeRequestCount: 1,
+        tier: 2
+      },
+      signalKey: "privacy.fingerprinting_detected",
+      signalValue: true
+    },
+    observedValue: "true",
+    severity: "medium",
+    signalKey: "privacy.fingerprinting_detected",
+    signalLabel: "Fingerprinting runtime detected",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "Fingerprinting runtime detected"
+  } satisfies UnifiedFindingCandidate;
+
+  const [concern] = buildNormalizedConcerns({
+    reviewFindingCandidates: [candidate],
+    validationFindings: []
+  });
+  const [unifiedCandidate] = buildUnifiedFindingCandidatesFromConcerns(concern ? [concern] : []);
+  const fallbackEvidence = unifiedCandidate?.fallbackEvidence as Record<string, unknown> | undefined;
+  const counts = fallbackEvidence?.counts as Record<string, unknown> | undefined;
+  const entities = fallbackEvidence?.entities as Record<string, unknown> | undefined;
+
+  assert.deepEqual(entities?.fingerprintAttributeCategories, ["canvas_webgl", "fonts_plugins"]);
+  assert.equal(counts?.identifierLikeRequestCount, 1);
+  assert.equal(counts?.deviceDataLikeRequestCount, 1);
+  assert.equal(concern?.promotionEligibility, "eligible");
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [candidate],
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+
+  assert.ok(projectExecutiveFindingsFromUnifiedPackets(packets).findings.some((finding) => finding.id === "probable_fingerprinting"));
+});
+
 test("fingerprinting evidence stays out of executive projection without retained runtime artifacts", () => {
   const weakCandidate = {
     description: "Fingerprinting runtime detected",
