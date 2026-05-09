@@ -1504,7 +1504,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
-      name: "sensitive replay concern with retained sensitive request and replay runtime stays eligible",
+      name: "sensitive replay concern with independent retained sensitive request and replay runtime stays audit-only",
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",
         suggestedUnifiedFindingId: "session_replay_on_sensitive_input_surface",
@@ -1526,10 +1526,10 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         session_replay_runtime_vendors: ["FullStory"]
       },
       expected: {
-        allowedNarrativeTier: "moderate",
-        promotionEligibility: "eligible",
-        externalSurfacingEligibility: "eligible",
-        negativeEvidenceFlags: []
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["missing_concrete_sensitive_payload"]
       }
     },
     {

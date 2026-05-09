@@ -784,14 +784,30 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       const confidence = getStringValue(summary.confidence);
       const summaryText = getStringValue(summary.summary);
       const reasons = getStringArrayEvidence(summary.reasons);
-      const categoryNames = getPlainRecordArray(summary.attributeCategories ?? summary.attribute_categories)
+      const categoryNames = uniqueStrings([
+        ...getPlainRecordArray(summary.attributeCategories ?? summary.attribute_categories)
         .map((entry) => getStringValue(entry.name))
-        .filter((entry): entry is string => Boolean(entry));
+          .filter((entry): entry is string => Boolean(entry)),
+        ...getStringArrayEvidence(summary.attributeCategories),
+        ...getStringArrayEvidence(summary.attribute_categories),
+        ...getStringArrayEvidence(summary.fingerprintingSignals),
+        ...getStringArrayEvidence(summary.fingerprinting_signals),
+        ...getStringArrayEvidence(summary.highEntropySignals),
+        ...getStringArrayEvidence(summary.high_entropy_signals)
+      ]);
       addEntity(entities, "fingerprintAttributeCategories", categoryNames);
       addEntity(entities, "fingerprintingSignals", categoryNames);
       addEntity(entities, "fingerprintingSummaryReasons", reasons.slice(0, 6));
       if (typeof tier === "number") {
         counts.fingerprintTier = tier;
+      }
+      const identifierLikeRequestCount = getNumberValue(summary.identifierLikeRequestCount ?? summary.identifier_like_request_count);
+      const deviceDataLikeRequestCount = getNumberValue(summary.deviceDataLikeRequestCount ?? summary.device_data_like_request_count);
+      if (typeof identifierLikeRequestCount === "number") {
+        counts.identifierLikeRequestCount = identifierLikeRequestCount;
+      }
+      if (typeof deviceDataLikeRequestCount === "number") {
+        counts.deviceDataLikeRequestCount = deviceDataLikeRequestCount;
       }
       if (confidence) {
         addEntity(entities, "fingerprintConfidence", [confidence]);

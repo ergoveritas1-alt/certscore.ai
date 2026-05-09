@@ -24,16 +24,27 @@ const DIRECTNESS_WEIGHT: Record<CertScoreFindingDirectness, number> = {
   inferred: 1
 };
 
-const TOP_FINDING_EXCLUDED_IDS = new Set<string>([
+export const EXECUTIVE_SUMMARY_TOP_FINDING_IDS = [
+  "pre_consent_tracking_detected",
+  "accessibility_risk_score",
+  "cross_domain_identifier_sharing_observed",
+  "cpra_cba_opt_out_missing",
+  "reject_tracking_persists_after_reject",
+  "session_recording_services_detected",
+  "third_party_cookie_pre_consent",
+  "sensitive_data_collection_with_third_party_tracking_present",
+  "session_replay_on_sensitive_input_surface",
+  "rtb_cookie_sync_observed",
+  "consent_dark_patterns_detected",
+  "reject_option_missing_or_hidden",
   "asymmetric_consent_ui",
-  "blocking_overlay_observed",
-  "content_obstructed_by_overlay",
   "forced_consent_interaction",
-  "identifier_transmission_detected",
-  "multi_vendor_tracking_detected",
-  "non_cookie_tracking_detected",
-  "telemetry_rich_identification_observed",
-  "reject_option_missing_or_hidden"
+  "fingerprinting_related_signals_observed",
+  "probable_fingerprinting"
+] as const;
+
+const EXECUTIVE_SUMMARY_TOP_FINDING_ID_SET = new Set<string>([
+  ...EXECUTIVE_SUMMARY_TOP_FINDING_IDS
 ]);
 
 export function getFindingSurfaceScore(finding: CertScoreFinding) {
@@ -50,7 +61,7 @@ export function rankFindings(findings: CertScoreFinding[]) {
 }
 
 export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
-  const ranked = rankFindings(findings).filter((finding) => !TOP_FINDING_EXCLUDED_IDS.has(finding.id));
+  const ranked = rankFindings(findings).filter((finding) => EXECUTIVE_SUMMARY_TOP_FINDING_ID_SET.has(finding.id));
   const sectionCounts = new Map<string, number>();
   const selected: CertScoreFinding[] = [];
   const suppressedIds = new Set<string>();
@@ -58,13 +69,13 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
   if (ranked.some((finding) => finding.id === "pre_consent_tracking_detected")) {
     suppressedIds.add("third_party_tracking_pre_consent");
   }
+  if (ranked.some((finding) => finding.id === "probable_fingerprinting")) {
+    suppressedIds.add("fingerprinting_related_signals_observed");
+  }
 
   const forcedIds = new Set<string>();
   if (ranked.some((finding) => finding.id === "pre_consent_tracking_detected")) {
     forcedIds.add("pre_consent_tracking_detected");
-  }
-  if (ranked.some((finding) => finding.id === "cookie_disclosure_gap")) {
-    forcedIds.add("cookie_disclosure_gap");
   }
   if (ranked.some((finding) => finding.id === "probable_fingerprinting")) {
     forcedIds.add("probable_fingerprinting");
@@ -86,9 +97,6 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
     )
   ) {
     forcedIds.add("reject_tracking_persists_after_reject");
-  }
-  if (ranked.some((finding) => finding.id === "blocking_overlay_observed")) {
-    forcedIds.add("blocking_overlay_observed");
   }
 
   for (const finding of ranked) {

@@ -417,9 +417,9 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "Broad environment collection can support device recognition even without cookies.",
     remediation: "Limit collection of high-entropy device and browser attributes to essential uses."
   },
-  browser_fingerprinting_related_signals_observed: {
-    id: "browser_fingerprinting_related_signals_observed",
-    label: "Browser fingerprinting-related signals observed",
+  fingerprinting_related_signals_observed: {
+    id: "fingerprinting_related_signals_observed",
+    label: "Fingerprinting-related signals observed",
     section: "Fingerprinting",
     defaultSurfacePriority: 72,
     whyItMatters: "Browser and device attributes can be relevant to fingerprinting review, even when strong fingerprinting proof was not retained.",

@@ -1756,7 +1756,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const jsonPayload = JSON.stringify(buildFindingEvidenceJsonPayload(input.finding), null, 2);
   const tone = getFindingCardTone(input.finding, false);
   const fingerprintTelemetry =
-    input.finding.id === "probable_fingerprinting" || input.finding.id === "browser_fingerprinting_related_signals_observed"
+    input.finding.id === "probable_fingerprinting" || input.finding.id === "fingerprinting_related_signals_observed"
       ? input.finding.evidenceDetails?.telemetryEvidence
       : null;
   const strongFingerprintSignalLabels = Array.isArray(fingerprintTelemetry?.strongFingerprintSignalLabels)
