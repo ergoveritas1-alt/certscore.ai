@@ -62,6 +62,16 @@ OPS_AWS_MONITOR_ECS_SERVICE=certscore-validation-worker
 
 `OPS_REQUIRE_DIRECT_DATABASE=false` is the default for the GitHub-hosted monitor because the production Postgres instance is private to AWS networking. In that mode, `pnpm ops:monitor:prod` still checks the public web process, public database health endpoint, and configured ECS services. With `OPS_AWS_DB_PROBE_ENABLED=true`, the workflow then runs `pnpm ops:monitor:prod:aws`, which launches `apps/validation-worker/scripts/prod-ops-db-probe.ts` in Fargate using the validation worker task definition, subnets, security groups, and production secrets. Set `OPS_REQUIRE_DIRECT_DATABASE=true` only from an environment that can reach the production database directly, such as the ECS-hosted probe or a trusted operator shell inside the VPC.
 
+For scoped investigation work, use the reusable production DB audit runner rather
+than laptop DB access or ECS Exec into app containers:
+
+```bash
+pnpm ops:prod-db:audit -- --audit rtb-cookie-sync --input ./tmp/audit-input.json
+```
+
+See `docs/prod-db-audit-runner.md` for the input contract, access model, and
+sanitization rules.
+
 The monitor checks:
 
 - `/api/health`
