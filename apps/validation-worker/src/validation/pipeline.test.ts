@@ -5517,6 +5517,81 @@ test("promotes RTB cookie sync from explicit sync observations even when vendor 
   assert.deepEqual(finding?.evidence.runtimeRequestUrls, ["https://www.ebayadservices.com/marketingtracking/v1/sync"]);
 });
 
+test("promotes RTB cookie sync from retained redirect-chain observations with unknown runtime phase", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyReviewQueue: [],
+      runtimeArtifacts: {
+        third_party_request_count: 359,
+        third_party_request_domains: [
+          "aax.amazon-adsystem.com",
+          "ads.pubmatic.com",
+          "bttrack.com",
+          "cm.g.doubleclick.net",
+          "dsum-sec.casalemedia.com",
+          "match.adsrvr.org",
+          "pixel.rubiconproject.com",
+          "ssbsync.smartadserver.com"
+        ],
+        hybrid_runtime_evidence: {
+          rtbCookieSyncObservations: [
+            {
+              hostname: "pixel.rubiconproject.com",
+              pathSample: "/exchange/sync.php",
+              queryKeysSample: ["gdpr"],
+              reason: "redirect_sync",
+              redirectTargetHost: "s.amazon-adsystem.com",
+              runtimePhase: "unknown",
+              statusCode: 302,
+              urlSample: "https://pixel.rubiconproject.com/exchange/sync.php?gdpr=0",
+              vendor: "Magnite / Rubicon"
+            },
+            {
+              hostname: "bttrack.com",
+              pathSample: "/pixel/cookiesync",
+              queryKeysSample: [],
+              reason: "sync_path",
+              redirectTargetHost: "dsum.casalemedia.com",
+              runtimePhase: "unknown",
+              statusCode: 302,
+              urlSample: "https://bttrack.com/pixel/cookiesync",
+              vendor: null
+            },
+            {
+              hostname: "ssbsync.smartadserver.com",
+              pathSample: "/api/sync",
+              queryKeysSample: ["gdpr", "gdpr_consent"],
+              reason: "sync_path",
+              runtimePhase: "unknown",
+              statusCode: 200,
+              urlSample: "https://ssbsync.smartadserver.com/api/sync?gdpr=0",
+              vendor: null
+            }
+          ],
+          requestObservations: [],
+          vendorSummary: {
+            normalizedVendors: ["Amazon Ads", "DoubleClick", "Magnite / Rubicon"],
+            rawThirdPartyDomains: ["pixel.rubiconproject.com", "bttrack.com", "ssbsync.smartadserver.com"]
+          }
+        }
+      },
+      snapshot: {
+        cookie_count_total: 104,
+        preconsent_tracking_detected: true,
+        third_party_cookie_count: 101,
+        tracker_count_total: 9,
+        tracker_vendor_count: 9
+      },
+      trackerVendors: []
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "runtime_privacy.rtb_cookie_sync_observed");
+  assert.ok(finding);
+  assert.equal(finding?.severity, "high");
+  assert.equal(finding?.evidence.rtb_cookie_sync_observation_count, 3);
+});
+
 test("promotes CMP-gated tracking conflict when consent UI and policy coverage coexist with pre-consent adtech", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({
