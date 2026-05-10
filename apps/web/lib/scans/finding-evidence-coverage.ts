@@ -128,10 +128,10 @@ export const FINDING_EVIDENCE_ID_COVERAGE: readonly FindingEvidenceCoverageEntry
     nonContractRationaleId: null
   },
   {
-    ws01FindingIds: ["session_replay_on_sensitive_input_surface"],
-    unifiedFindingId: "session_replay_on_sensitive_input_surface",
-    reportFindingId: "session_replay_on_sensitive_input_surface",
-    contractFindingId: "session_replay_on_sensitive_input_surface",
+    ws01FindingIds: ["possible_session_replay_on_sensitive_input_surface"],
+    unifiedFindingId: "possible_session_replay_on_sensitive_input_surface",
+    reportFindingId: "possible_session_replay_on_sensitive_input_surface",
+    contractFindingId: "possible_session_replay_on_sensitive_input_surface",
     nonContractRationaleId: null
   },
   {

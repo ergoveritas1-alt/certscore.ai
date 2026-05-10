@@ -2642,7 +2642,7 @@ export const REPORT_UNIFIED_FINDINGS = [
   }),
   defineReportUnifiedFinding({
     id: "cpra_cba_opt_out_missing",
-    label: "CPRA CBA opt-out missing",
+    label: "CPRA advertising opt-out missing or incomplete",
     owner: "rights_request_mechanisms",
     mirrors: ["adtech_analytics_replay_footprint"],
     overlays: ["sale_sharing_targeted_advertising_controls", "consumer_rights_request_handling"],
@@ -2860,8 +2860,8 @@ export const REPORT_UNIFIED_FINDINGS = [
     ]
   }),
   defineReportUnifiedFinding({
-    id: "session_replay_on_sensitive_input_surface",
-    label: "Session replay on sensitive input surface",
+    id: "possible_session_replay_on_sensitive_input_surface",
+    label: "Possible session replay on sensitive input surface",
     owner: "sensitive_data_third_party_exposure_context",
     mirrors: ["adtech_analytics_replay_footprint", "identity_financial_data_collection", "health_location_other_sensitive_data_collection"],
     overlays: ["tracking_profiling_sensitive_data_risk", "profiling_high_risk_data_use_signals"]

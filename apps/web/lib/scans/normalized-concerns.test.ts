@@ -593,7 +593,7 @@ test("high-sensitivity candidates with replay co-occurrence artifacts specialize
     title: "High-sensitivity data collection detected"
   });
 
-  assert.equal(concern.suggestedUnifiedFindingId, "session_replay_on_sensitive_input_surface");
+  assert.equal(concern.suggestedUnifiedFindingId, "possible_session_replay_on_sensitive_input_surface");
   assert.equal(concern.promotionEligibility, "eligible");
   assert.ok(concern.evidenceStrengthFlags.includes("direct_runtime"));
 });
@@ -682,7 +682,7 @@ test("high-sensitivity candidates with replay-correlated sensitive artifacts spe
     title: "High-sensitivity data collection detected"
   });
 
-  assert.equal(concern.suggestedUnifiedFindingId, "session_replay_on_sensitive_input_surface");
+  assert.equal(concern.suggestedUnifiedFindingId, "possible_session_replay_on_sensitive_input_surface");
   assert.equal(concern.promotionEligibility, "eligible");
   assert.equal(concern.externalSurfacingEligibility, "eligible");
   assert.ok(concern.evidenceStrengthFlags.includes("direct_runtime"));

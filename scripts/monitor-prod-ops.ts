@@ -7,6 +7,9 @@ const DEFAULT_ENVIRONMENT = "production";
 const DEFAULT_HEARTBEAT_STALE_MINUTES = 10;
 const DEFAULT_BASE_URL = "https://certscore.ai";
 const DEFAULT_SCAN_QUEUE_STALE_MINUTES = 10;
+const DEFAULT_STALE_RUNNING_SCAN_MINUTES = 12;
+const DEFAULT_STALE_RUNNING_SCAN_EVENT_MINUTES = 8;
+const DEFAULT_STALE_RUNNING_SCAN_REPAIR_LIMIT = 25;
 const DEFAULT_SYNTHETIC_SCAN_DOMAIN = "example.com";
 const DEFAULT_SYNTHETIC_SCAN_TIMEOUT_MINUTES = 15;
 const VALIDATION_SETTINGS_KEY = "default";
@@ -34,6 +37,21 @@ type QueuedScanBacklogRow = {
 type SyntheticScanRow = {
   completed_at: string | null;
   error_message: string | null;
+  started_at: string | null;
+  status: string;
+};
+
+type StaleRunningScanRow = {
+  completed_at: string | null;
+  created_at: string;
+  domain_hostname: string | null;
+  domain_id: string | null;
+  error_message: string | null;
+  id: string;
+  latest_event_at: string | null;
+  latest_event_message: string | null;
+  organization_id: string | null;
+  run_age_minutes: number | null;
   started_at: string | null;
   status: string;
 };
@@ -448,6 +466,159 @@ async function checkQueuedScanBacklog(input: { findings: string[]; section: Moni
   return backlog;
 }
 
+async function loadStaleRunningScans(input: { eventStaleMinutes: number; limit: number; runAgeMinutes: number }) {
+  const result = await query<StaleRunningScanRow>(
+    `
+      select s.id::text,
+             s.organization_id::text,
+             s.domain_id::text,
+             d.hostname as domain_hostname,
+             s.status,
+             s.created_at::text,
+             s.started_at::text,
+             s.completed_at::text,
+             s.error_message,
+             latest_event.created_at::text as latest_event_at,
+             latest_event.message as latest_event_message,
+             floor(extract(epoch from (now() - coalesce(s.started_at, s.created_at))) / 60)::int as run_age_minutes
+        from scans s
+        left join domains d on d.id = s.domain_id
+        left join lateral (
+          select se.created_at, se.message
+            from scan_events se
+           where se.scan_id = s.id
+           order by se.created_at desc
+           limit 1
+        ) latest_event on true
+       where s.scan_type = 'full'
+         and s.status = 'running'
+         and coalesce(s.started_at, s.created_at) < now() - $1::interval
+         and (
+           latest_event.created_at is null
+           or latest_event.created_at < now() - $2::interval
+         )
+       order by coalesce(s.started_at, s.created_at)
+       limit $3
+    `,
+    [`${input.runAgeMinutes} minutes`, `${input.eventStaleMinutes} minutes`, input.limit],
+    { readOnly: true }
+  );
+
+  return result.rows;
+}
+
+async function markStaleRunningScanFailed(input: {
+  eventStaleMinutes: number;
+  runAgeMinutes: number;
+  scan: StaleRunningScanRow;
+}) {
+  const failedAt = new Date().toISOString();
+  const errorMessage = `Ops monitor marked scan failed after stale running state: run age ${input.scan.run_age_minutes ?? "unknown"}m, latest event stale threshold ${input.eventStaleMinutes}m.`;
+  const result = await query<{ id: string }>(
+    `
+      update scans
+         set status = 'failed',
+             completed_at = $2,
+             error_message = $3,
+             updated_at = now()
+       where id = $1
+         and status = 'running'
+         and coalesce(started_at, created_at) < now() - $4::interval
+         and not exists (
+           select 1
+             from scan_events se
+            where se.scan_id = scans.id
+              and se.created_at >= now() - $5::interval
+         )
+       returning id::text
+    `,
+    [input.scan.id, failedAt, errorMessage, `${input.runAgeMinutes} minutes`, `${input.eventStaleMinutes} minutes`]
+  );
+
+  if (result.rowCount === 0) {
+    return false;
+  }
+
+  await query(
+    `
+      insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+      values ($1, $2, $3, 'ops.scan_marked_failed', $4, $5)
+    `,
+    [
+      input.scan.id,
+      input.scan.domain_id,
+      input.scan.organization_id,
+      "Ops monitor marked stale running scan as failed.",
+      {
+        failedAt,
+        latestEventAt: input.scan.latest_event_at,
+        latestEventMessage: input.scan.latest_event_message,
+        minEventStaleMinutes: input.eventStaleMinutes,
+        minRunAgeMinutes: input.runAgeMinutes,
+        reason: "stale_running_scan",
+        runAgeMinutes: input.scan.run_age_minutes,
+        source: "monitor-prod-ops"
+      }
+    ]
+  );
+
+  return true;
+}
+
+async function repairStaleRunningScans(input: {
+  eventStaleMinutes: number;
+  findings: string[];
+  limit: number;
+  repairEnabled: boolean;
+  runAgeMinutes: number;
+  section: MonitorSection;
+}) {
+  const scans = await loadStaleRunningScans({
+    eventStaleMinutes: input.eventStaleMinutes,
+    limit: input.limit,
+    runAgeMinutes: input.runAgeMinutes
+  });
+
+  if (scans.length === 0) {
+    markSection(input.section, "ok", "No stale running full scans found.");
+    return { repairedCount: 0, staleRunningCount: 0 };
+  }
+
+  const scanSummary = scans
+    .map((scan) => `${scan.domain_hostname ?? scan.id} (${scan.id}, ${scan.run_age_minutes ?? "unknown"}m)`)
+    .join(", ");
+
+  if (!input.repairEnabled) {
+    addFinding({
+      findings: input.findings,
+      section: input.section,
+      message: `${scans.length} stale running full scan(s) found and repair is disabled: ${scanSummary}.`
+    });
+    return { repairedCount: 0, staleRunningCount: scans.length };
+  }
+
+  let repairedCount = 0;
+  for (const scan of scans) {
+    if (
+      await markStaleRunningScanFailed({
+        eventStaleMinutes: input.eventStaleMinutes,
+        runAgeMinutes: input.runAgeMinutes,
+        scan
+      })
+    ) {
+      repairedCount += 1;
+    }
+  }
+
+  markSection(
+    input.section,
+    "ok",
+    `Repaired ${repairedCount}/${scans.length} stale running full scan(s): ${scanSummary}.`
+  );
+
+  return { repairedCount, staleRunningCount: scans.length };
+}
+
 async function wakeScannerCapacity(input: { findings: string[]; queuedCount: number }) {
   if (input.queuedCount <= 0 || !getBooleanEnv("OPS_WAKE_SCANNER_ON_QUEUE", false)) {
     return;
@@ -551,6 +722,7 @@ function summarizeForHumans(input: {
   directDatabaseChecksEnabled: boolean;
   environment: string;
   queuedFullScans: number | null;
+  repairedStaleRunningScans: number | null;
   sections: ReturnType<typeof createSections>;
   status: SectionState;
   syntheticScanEnabled: boolean;
@@ -575,6 +747,7 @@ function summarizeForHumans(input: {
     sections: input.sections,
     directDatabaseChecksEnabled: input.directDatabaseChecksEnabled,
     queuedFullScans: input.queuedFullScans,
+    repairedStaleRunningScans: input.repairedStaleRunningScans,
     syntheticScanEnabled: input.syntheticScanEnabled,
     validationHeartbeatAt: input.validationHeartbeatAt
   };
@@ -592,6 +765,13 @@ async function main() {
     throw new Error("Set DATABASE_URL before running the ops monitor with OPS_REQUIRE_DIRECT_DATABASE=true.");
   }
   const scanQueueStaleMinutes = getNumberEnv("OPS_SCAN_QUEUE_STALE_MINUTES", DEFAULT_SCAN_QUEUE_STALE_MINUTES);
+  const staleRunningScanMinutes = getNumberEnv("OPS_STALE_RUNNING_SCAN_MINUTES", DEFAULT_STALE_RUNNING_SCAN_MINUTES);
+  const staleRunningScanEventMinutes = getNumberEnv(
+    "OPS_STALE_RUNNING_SCAN_EVENT_MINUTES",
+    DEFAULT_STALE_RUNNING_SCAN_EVENT_MINUTES
+  );
+  const staleRunningScanRepairLimit = getNumberEnv("OPS_STALE_RUNNING_SCAN_REPAIR_LIMIT", DEFAULT_STALE_RUNNING_SCAN_REPAIR_LIMIT);
+  const staleRunningScanRepairEnabled = getBooleanEnv("OPS_REPAIR_STALE_RUNNING_SCANS", true);
   const syntheticScanEnabled = getBooleanEnv("OPS_SYNTHETIC_SCAN_ENABLED", false);
   const syntheticScanDomain = process.env.OPS_SYNTHETIC_SCAN_DOMAIN?.trim() || DEFAULT_SYNTHETIC_SCAN_DOMAIN;
   const syntheticScanTimeoutMinutes = getNumberEnv("OPS_SYNTHETIC_SCAN_TIMEOUT_MINUTES", DEFAULT_SYNTHETIC_SCAN_TIMEOUT_MINUTES);
@@ -626,6 +806,7 @@ async function main() {
 
   let validationSettings: ValidationSettingsRow | null = null;
   let scanBacklog: QueuedScanBacklogRow | null = null;
+  let repairedStaleRunningScans: number | null = null;
 
   await checkEcsServices({
     findings,
@@ -737,6 +918,23 @@ async function main() {
       });
       return null;
     });
+
+    const staleRunningResult = await repairStaleRunningScans({
+      eventStaleMinutes: staleRunningScanEventMinutes,
+      findings,
+      limit: staleRunningScanRepairLimit,
+      repairEnabled: staleRunningScanRepairEnabled,
+      runAgeMinutes: staleRunningScanMinutes,
+      section: sections.scannerQueueCanary
+    }).catch((error) => {
+      addFinding({
+        findings,
+        section: sections.scannerQueueCanary,
+        message: `Stale running full-scan repair failed: ${error instanceof Error ? error.message : String(error)}`
+      });
+      return null;
+    });
+    repairedStaleRunningScans = staleRunningResult?.repairedCount ?? null;
   } else if (syntheticScanEnabled) {
     markSection(sections.databaseAndBacklog, "skipped", "Direct database checks are disabled.");
     markSection(sections.workerHeartbeats, "skipped", "Direct database checks are disabled.");
@@ -777,6 +975,7 @@ async function main() {
     directDatabaseChecksEnabled: requireDirectDatabase,
     environment,
     queuedFullScans: scanBacklog?.queued_count ?? null,
+    repairedStaleRunningScans,
     sections,
     status,
     syntheticScanEnabled,

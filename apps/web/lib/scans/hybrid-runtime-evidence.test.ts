@@ -518,6 +518,62 @@ test("does not derive consent dark-pattern signals without an observed consent s
   );
 });
 
+test("does not derive consent dark-pattern signals from non-consent overlays without consent text", () => {
+  const runtimeArtifacts = {
+    overlayKind: "age_gate",
+    consentSurfaceObserved: true,
+    hybrid_runtime_evidence: {
+      consentSummary: {
+        bannerPresent: true,
+        acceptPresent: true,
+        rejectPresent: false,
+        pageInteractionBlocked: true
+      },
+      consentVisual: {
+        acceptOnly: true,
+        ctaImbalanceDetected: true
+      },
+      uiSummary: {
+        forcedActionRequired: true
+      }
+    }
+  } satisfies Record<string, unknown>;
+  const consentRuntimeArtifacts = {
+    overlayKind: "age_gate",
+    consentSurfaceObserved: true,
+    hybrid_runtime_evidence: {
+      consentSummary: {
+        acceptActionLabels: ["Accept all"],
+        bannerPresent: true,
+        bannerTextSnippet: "We use cookies. Accept all or manage preferences.",
+        acceptPresent: true,
+        manageActionLabels: ["Manage preferences"],
+        rejectPresent: false,
+        pageInteractionBlocked: true
+      },
+      consentVisual: {
+        acceptOnly: true
+      },
+      uiSummary: {
+        forcedActionRequired: true
+      }
+    }
+  } satisfies Record<string, unknown>;
+
+  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.dark_pattern_reject_button_missing"), undefined);
+  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.dark_pattern_forced_consent_wall"), undefined);
+  assert.equal(
+    getHybridSignalFallbackEvidence({
+      runtimeArtifacts,
+      signalKey: "privacy.dark_pattern_forced_consent_wall",
+      signalLabel: "Forced consent wall",
+      signalValue: true
+    }),
+    null
+  );
+  assert.equal(getHybridDerivedSignalValue(consentRuntimeArtifacts, "privacy.dark_pattern_forced_consent_wall"), true);
+});
+
 test("builds fallback evidence for hybrid fingerprinting concerns", () => {
   const runtimeArtifacts = {
     hybrid_runtime_evidence: {

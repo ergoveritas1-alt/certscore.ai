@@ -182,6 +182,34 @@ function makePolicyRuntimeConflictPacket(
   });
 }
 
+function makeCpraPacket(input: {
+  optOutControlFound?: string;
+  optOutUiResult: string;
+  policyCbaLanguage?: string;
+}) {
+  return makePacket("cpra_cba_opt_out_missing", {
+    confidenceBand: "high",
+    details: { family: "consent_tracking", kind: "cpra_cba_opt_out_missing" },
+    evidence: {
+      counts: {},
+      entities: {
+        cbaVendorTier1: ["adsrvr.org"],
+        choiceControlsInspected: ["true"],
+        optOutControlFound: input.optOutControlFound ? [input.optOutControlFound] : [],
+        optOutUiResult: [input.optOutUiResult],
+        policyCbaLanguage: [input.policyCbaLanguage ?? "full_cba_language"]
+      },
+      fetchQuality: null,
+      flags: ["privacy.cpra_cba_opt_out_missing"],
+      pageUrls: ["https://example.com/"],
+      snippets: [],
+      sourceUrls: []
+    },
+    severity: "high",
+    summary: "Cross-context behavioral advertising vendors were retained with incomplete opt-out evidence."
+  });
+}
+
 test("projects surfaced unified findings into executive findings and regulatory lenses", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("preconsent_tracking", {
@@ -645,6 +673,45 @@ test("projects concrete reject-missing dark-pattern evidence into the umbrella e
   assert.ok(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
 });
 
+test("projects reject path evidence from packet entities and records reject subtype", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("reject_button_missing", {
+      concernContext: undefined,
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "reject_button_missing" },
+      evidence: {
+        counts: {},
+        entities: {
+          rejectPathDepthAndAvailability: [
+            JSON.stringify({
+              acceptClickDepth: 1,
+              choiceAsymmetry: "material",
+              preferencesRequiredBeforeReject: true,
+              rejectAvailableOnFirstLayer: false,
+              rejectClickDepth: 2
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: ["privacy.dark_pattern_reject_button_missing"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Reject required a deeper preferences path while accept was available on the first layer."],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "Reject option required a preferences path."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "reject_option_missing_or_hidden");
+  assert.ok(finding);
+  assert.equal(finding.evidenceDetails?.consentUiEvidence?.rejectOptionSubtype, "reject_requires_preferences_path");
+  assert.match(
+    String(finding.evidenceDetails?.consentUiEvidence?.userChoiceImpact),
+    /preferences or manage-choices path/
+  );
+});
+
 test("does not project generic accept-only consent signals into the dark-pattern umbrella", () => {
   const weakProjection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("accept_only_banner", {
@@ -731,7 +798,11 @@ test("projects RTB cookie sync into executive and privacy regulatory lenses", ()
   assert.equal(finding.evidenceDetails?.identifierEvidence?.identifierLikeRequestCount, 1);
   assert.deepEqual(finding.evidenceDetails?.policyEvidence, { evaluated: false });
   assert.equal(finding.evidenceDetails?.rtbCookieSyncEvidence?.[0]?.hostname, "api.liveramp.com");
+  assert.deepEqual(finding.evidenceDetails?.rtbCookieSyncEvidenceSubtypes, ["identifier_query_sync"]);
+  assert.equal(finding.evidenceDetails?.rtbCookieSyncSubtypeCounts?.identifier_query_sync, 1);
+  assert.deepEqual(finding.evidenceDetails?.rtbCookieSyncIdentifierQueryKeys, ["partnerid"]);
   assert.deepEqual(finding.evidenceDetails?.representativeRequests?.[0]?.queryKeysSample, ["partnerid"]);
+  assert.match(finding.shortSummary, /identifier or redirect-chain support/);
   assert.ok(projection.topFindings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
 
   const lenses = buildRegulatoryLenses(projection.findings, {
@@ -1724,8 +1795,8 @@ test("keeps probable fingerprinting wording for strong high-entropy evidence wit
   const finding = projection.findings.find((entry) => entry.id === "probable_fingerprinting");
   assert.ok(finding);
   assert.ok(!projection.findings.some((finding) => finding.id === "fingerprinting_related_signals_observed"));
-  assert.match(finding.shortSummary, /identity-oriented corroboration/);
-  assert.match(finding.shortSummary, /audio environment access/);
+  assert.match(finding.shortSummary, /Probable browser\/device fingerprinting behavior was observed/);
+  assert.match(finding.shortSummary, /fraud prevention or security/);
   const strongPreview = finding.evidencePreview.find((entry) => entry.startsWith("Stronger retained primitives:")) ?? "";
   assert.match(strongPreview, /canvas\/WebGL access/);
   assert.match(strongPreview, /audio environment access/);
@@ -1750,6 +1821,52 @@ test("keeps probable fingerprinting wording for strong high-entropy evidence wit
     "network_device_state",
     "screen_viewport"
   ]);
+});
+
+test("annotates tier-2 fingerprinting promoted by known bot-defense vendor evidence", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("fingerprinting_observed", {
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: {
+          fingerprintTier: 2
+        },
+        entities: {
+          fingerprintAttributeCategories: [
+            "screen_viewport",
+            "hardware",
+            "storage",
+            "fonts_plugins",
+            "network_device_state",
+            "timezone_locale",
+            "input_touch",
+            "canvas_webgl"
+          ],
+          fingerprintingRuntimeEvidence: [
+            JSON.stringify({
+              host: "client.px-cloud.net",
+              requestUrl: "https://client.px-cloud.net/PXXljWHHUe/main.min.js"
+            })
+          ]
+        },
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: ["https://client.px-cloud.net/PXXljWHHUe/main.min.js"]
+      },
+      severity: "high",
+      summary: "Probable fingerprinting behavior."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "probable_fingerprinting");
+  assert.ok(finding);
+  assert.equal(
+    finding.evidenceDetails?.telemetryEvidence?.fingerprintPromotionAnnotation,
+    "tier_2_runtime_vendor_promoted"
+  );
+  assert.equal(finding.evidenceDetails?.telemetryEvidence?.fingerprintPurposeFraming, "security_or_bot_defense_possible");
+  assert.match(finding.shortSummary, /known bot-defense\/fingerprinting vendor/);
 });
 
 test("keeps canvas-only fingerprinting evidence below probable wording", () => {
@@ -2013,12 +2130,12 @@ test("projects concrete session replay vendor evidence into executive finding js
 
 test("projects sensitive replay packets into sensitive third-party tracking companion finding", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
-    makePacket("session_replay_on_sensitive_input_surface", {
+    makePacket("possible_session_replay_on_sensitive_input_surface", {
       confidenceBand: "high",
       details: {
         dataTypes: ["postal_code_detected"],
         family: "sensitive_data",
-        kind: "session_replay_on_sensitive_input_surface"
+        kind: "possible_session_replay_on_sensitive_input_surface"
       },
       evidence: {
         counts: {},
@@ -2043,7 +2160,7 @@ test("projects sensitive replay packets into sensitive third-party tracking comp
     })
   ]);
 
-  assert.ok(projection.findings.some((finding) => finding.id === "session_replay_on_sensitive_input_surface"));
+  assert.ok(projection.findings.some((finding) => finding.id === "possible_session_replay_on_sensitive_input_surface"));
   assert.ok(
     projection.findings.some(
       (finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present"
@@ -2052,7 +2169,7 @@ test("projects sensitive replay packets into sensitive third-party tracking comp
   assert.ok(
     projection.trace.packets.some(
       (packet) =>
-        packet.unifiedFindingId === "session_replay_on_sensitive_input_surface" &&
+        packet.unifiedFindingId === "possible_session_replay_on_sensitive_input_surface" &&
         packet.executiveFindingId === "sensitive_data_collection_with_third_party_tracking_present"
     )
   );
@@ -2249,12 +2366,39 @@ test("projects CPRA CBA opt-out missing into executive findings and top findings
   assert.equal(finding?.section, "Privacy & Tracking");
   assert.equal(finding?.severity, "high");
   assert.equal(finding?.evidenceVersion, "1.1");
+  assert.equal(finding?.label, "CPRA advertising opt-out missing or incomplete");
   assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.result, "absent");
+  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.optOutSubtype, "opt_out_absent");
+  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.missingOrAbsent, true);
   assert.equal(finding?.evidenceDetails?.trackingOrSharingContext?.cbaVendorEvidenceObserved, true);
   assert.deepEqual(finding?.evidenceDetails?.policyEvidence, { evaluated: false });
   assert.ok(projection.topFindings.some((candidate) => candidate.id === "cpra_cba_opt_out_missing"));
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
   assert.ok(finding?.shortSummary.includes("adsrvr.org"));
+});
+
+test("projects CPRA CBA opt-out subtype for partial privacy choice treatment", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makeCpraPacket({ optOutControlFound: "true", optOutUiResult: "partial_no_icon" })
+  ]);
+  const finding = projection.findings.find((candidate) => candidate.id === "cpra_cba_opt_out_missing");
+
+  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.optOutSubtype, "partial_no_icon");
+  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.missingOrAbsent, false);
+  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.incompleteOrUnconfirmed, true);
+  assert.match(finding?.shortSummary ?? "", /incomplete|not confirmed as CPRA-complete/i);
+  assert.doesNotMatch(finding?.evidenceDetails?.optOutControlEvidence?.basis as string, /missing/i);
+});
+
+test("projects CPRA CBA opt-out subtype for generic do-not-sell only", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makeCpraPacket({ optOutControlFound: "true", optOutUiResult: "generic_do_not_sell" })
+  ]);
+  const finding = projection.findings.find((candidate) => candidate.id === "cpra_cba_opt_out_missing");
+
+  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.optOutSubtype, "generic_do_not_sell_only");
+  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.missingOrAbsent, false);
+  assert.match(finding?.evidenceDetails?.optOutControlEvidence?.basis as string, /Do Not Share|CBA-specific/i);
 });
 
 test("projects remaining top finding families with canonical evidence details", () => {

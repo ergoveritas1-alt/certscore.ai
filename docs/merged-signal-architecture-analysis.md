@@ -77,7 +77,7 @@ These findings do not currently have a stable scanner-backed or merged-signal-ba
 - `do_not_sell_sharing_disclosure_conflict`
 - `consent_surface_required_deeper_sweep`
 - `accept_flow_unavailable_after_reject`
-- `session_replay_on_sensitive_input_surface`
+- `possible_session_replay_on_sensitive_input_surface`
 - `sensitive_data_collection_with_third_party_tracking_present`
 - `surface_title_mismatch`
 - `affiliate_disclosure_scope_limited`

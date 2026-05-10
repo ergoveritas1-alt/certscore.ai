@@ -42,7 +42,7 @@ test("registry defines contracts for the high-risk finding set", () => {
       "reject_option_missing_or_hidden",
       "rtb_cookie_sync_observed",
       "sensitive_data_collection_with_third_party_tracking_present",
-      "session_replay_on_sensitive_input_surface",
+      "possible_session_replay_on_sensitive_input_surface",
       "session_replay_undisclosed",
       "third_party_tracking_before_consent",
       "tracking_cookies_set_before_consent",
@@ -715,6 +715,20 @@ test("reject hidden requires inspected banner and reject path evidence", () => {
   assert.equal(strongDecision?.status, "pass_strong");
 });
 
+test("reject behind preferences path satisfies reject path evidence", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("reject_button_missing", {
+    rejectPathDepthAndAvailability: {
+      acceptClickDepth: 1,
+      choiceAsymmetry: "material",
+      preferencesRequiredBeforeReject: true,
+      rejectAvailableOnFirstLayer: false,
+      rejectClickDepth: 2
+    }
+  });
+
+  assert.equal(decision?.status, "pass_strong");
+});
+
 test("dark-pattern consent signals require verified banner UI evidence", () => {
   const weakDecision = evaluateFindingEvidenceContractForRawEvidence("accept_only_banner", {
     accept_only_banner: true
@@ -737,6 +751,42 @@ test("dark-pattern consent signals require verified banner UI evidence", () => {
   assert.equal(weakDecision?.status, "downgrade");
   assert.ok(weakDecision?.missingRequirements.includes("materialChoiceAsymmetryEvidence"));
   assert.equal(strongDecision?.status, "pass_strong");
+});
+
+test("non-consent overlays do not satisfy consent dark-pattern UI evidence by themselves", () => {
+  const ageGateDecision = evaluateFindingEvidenceContractForRawEvidence("forced_consent_wall", {
+    consentSurfaceObserved: true,
+    consentUiArtifactRefs: ["hybrid_runtime_evidence"],
+    forced_consent_wall: true,
+    overlayKind: "age_gate",
+    hybridConsentSummary: {
+      bannerPresent: true,
+      pageInteractionBlocked: true
+    },
+    hybridUiSummary: {
+      forcedActionRequired: true
+    }
+  });
+  const consentWallDecision = evaluateFindingEvidenceContractForRawEvidence("forced_consent_wall", {
+    consentSurfaceObserved: true,
+    consentUiArtifactRefs: ["hybrid_runtime_evidence"],
+    forced_consent_wall: true,
+    overlayKind: "consent_overlay",
+    hybridConsentSummary: {
+      acceptActionLabels: ["Accept all"],
+      bannerPresent: true,
+      bannerTextSnippet: "We use cookies. Accept all or manage preferences.",
+      manageActionLabels: ["Manage preferences"],
+      pageInteractionBlocked: true
+    },
+    hybridUiSummary: {
+      forcedActionRequired: true
+    }
+  });
+
+  assert.equal(ageGateDecision?.status, "downgrade");
+  assert.ok(ageGateDecision?.missingRequirements.includes("materialChoiceAsymmetryEvidence"));
+  assert.equal(consentWallDecision?.status, "pass_strong");
 });
 
 test("dark-pattern consent signals accept retained DOM labels without screenshot refs", () => {
@@ -869,6 +919,71 @@ test("RTB identifier-query evidence accepts named identity sync keys", () => {
   assert.equal(decision?.status, "pass_good");
 });
 
+test("RTB sync-path-only singleton is audit-only without retained identifier or redirect support", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("rtb_cookie_sync_observed", {
+    rtb_cookie_sync_evidence: [
+      {
+        hostname: "sync.example-adtech.test",
+        path_sample: "/sync",
+        reason: "sync_path"
+      }
+    ]
+  });
+
+  assert.equal(decision?.status, "downgrade");
+  assert.equal(decision?.allowedNarrativeTier, "weak");
+  assert.ok(decision?.missingRequirements.includes("rtbOrIdentitySyncEndpointEvidence"));
+});
+
+test("RTB sync-path-only observations remain eligible when multiple independent endpoints are retained", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("rtb_cookie_sync_observed", {
+    rtb_cookie_sync_evidence: [
+      {
+        hostname: "sync-one.example-adtech.test",
+        path_sample: "/sync",
+        reason: "sync_path"
+      },
+      {
+        hostname: "match.example-identity.test",
+        path_sample: "/match",
+        reason: "sync_path"
+      }
+    ]
+  });
+
+  assert.equal(decision?.status, "pass_good");
+});
+
+test("RTB redirect-chain evidence projects without identifier query keys", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("rtb_cookie_sync_observed", {
+    rtb_cookie_sync_evidence: [
+      {
+        hostname: "pixel.example-adtech.test",
+        path_sample: "/idsync/ex/push",
+        reason: "redirect_sync",
+        redirect_target_host: "match.example-identity.test"
+      }
+    ]
+  });
+
+  assert.equal(decision?.status, "pass_good");
+});
+
+test("RTB known endpoint evidence projects with concrete retained request shape", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("rtb_cookie_sync_observed", {
+    rtb_cookie_sync_evidence: [
+      {
+        category: "identity_sync",
+        hostname: "ib.example-adtech.test",
+        path_sample: "/getuid",
+        reason: "sync_path"
+      }
+    ]
+  });
+
+  assert.equal(decision?.status, "pass_good");
+});
+
 test("material bot block prevents strong runtime findings", () => {
   const decision = evaluateFindingEvidenceContractForRawEvidence("preconsent_tracking", {
     botBlockChallengeEvidence: { blocked: true, coverageImpact: "material" },
@@ -938,10 +1053,24 @@ test("new runtime contracts require concrete retained evidence shapes", () => {
     evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
       cbaVendorTier1: ["adsrvr.org"],
       cbaVendorTier2: [],
+      choiceControlsInspected: true,
       optOutUiResult: "absent",
       policyCbaLanguage: "full_cba_language",
       suppressorApplied: null,
       limitation: "homepage_only"
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
+      cpra_cba_opt_out_evidence: {
+        advertisingSharingVendors: ["Meta Pixel"],
+        choice_controls_inspected: true,
+        opt_out_control_found: true,
+        opt_out_ui_result: "partial_no_icon",
+        policy_cba_language: "full_cba_language"
+      }
     })?.status,
     "pass_strong"
   );
@@ -998,7 +1127,7 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
   );
 
   assert.equal(
-    evaluateFindingEvidenceContractForRawEvidence("session_replay_on_sensitive_input_surface", {
+    evaluateFindingEvidenceContractForRawEvidence("possible_session_replay_on_sensitive_input_surface", {
       sensitivePayloadViolations: [
         {
           evidenceSource: "sensitive_field_session_replay_correlation",
@@ -1012,10 +1141,11 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
   );
 
   assert.equal(
-    evaluateFindingEvidenceContractForRawEvidence("session_replay_on_sensitive_input_surface", {
+    evaluateFindingEvidenceContractForRawEvidence("possible_session_replay_on_sensitive_input_surface", {
       sensitivePayloadViolations: [
         {
           detectedType: "postal_code_detected",
+          evidenceSource: "sensitive_field_session_replay_correlation",
           evidenceStrength: "suspected",
           matchSnippet: "zipcode=64***18",
           requestUrl: "https://api.example.com/location?zipcode=64118",

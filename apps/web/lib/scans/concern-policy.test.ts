@@ -1464,7 +1464,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       name: "sensitive replay concern without sensitive payload evidence stays audit-only",
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",
-        suggestedUnifiedFindingId: "session_replay_on_sensitive_input_surface",
+        suggestedUnifiedFindingId: "possible_session_replay_on_sensitive_input_surface",
         title: "Sensitive replay detected"
       }),
       evidenceStrengthFlags: ["direct_runtime"] as const,
@@ -1482,7 +1482,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       name: "sensitive replay concern with retained co-occurrence evidence stays eligible",
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",
-        suggestedUnifiedFindingId: "session_replay_on_sensitive_input_surface",
+        suggestedUnifiedFindingId: "possible_session_replay_on_sensitive_input_surface",
         title: "Sensitive replay detected"
       }),
       evidenceStrengthFlags: ["concrete_payload", "fallback_only"] as const,
@@ -1507,7 +1507,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       name: "sensitive replay concern with independent retained sensitive request and replay runtime stays audit-only",
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",
-        suggestedUnifiedFindingId: "session_replay_on_sensitive_input_surface",
+        suggestedUnifiedFindingId: "possible_session_replay_on_sensitive_input_surface",
         title: "Sensitive replay detected"
       }),
       evidenceStrengthFlags: ["direct_runtime", "concrete_payload", "fallback_only"] as const,
@@ -1536,7 +1536,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       name: "sensitive replay concern with independent sensitive payload stays audit-only",
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",
-        suggestedUnifiedFindingId: "session_replay_on_sensitive_input_surface",
+        suggestedUnifiedFindingId: "possible_session_replay_on_sensitive_input_surface",
         title: "Sensitive replay detected"
       }),
       evidenceStrengthFlags: ["direct_runtime", "concrete_payload"] as const,
@@ -1960,6 +1960,7 @@ test("CPRA CBA opt-out concern policy requires CPRA-relevant context", () => {
     evidenceStrengthFlags: ["direct_runtime"],
     rawEvidence: {
       cbaVendorTier1: ["adsrvr.org"],
+      choiceControlsInspected: true,
       optOutUiResult: "absent",
       policyCbaLanguage: "full_cba_language",
       suppressorApplied: null
@@ -3127,6 +3128,203 @@ test("deriveConcernPolicy keeps cookie disclosure gaps eligible for substantive 
   assert.equal(policy.externalSurfacingEligibility, "eligible");
 });
 
+test("deriveConcernPolicy keeps generic CPRA opt-out absence audit-only without inspected choice surfaces", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.cpra_cba_opt_out_missing",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "cpra_cba_opt_out_missing",
+      title: "CPRA opt-out missing"
+    }),
+    evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
+    rawEvidence: {
+      cbaVendorTier1: ["adsrvr.org"],
+      optOutUiResult: "absent",
+      policyCbaLanguage: "absent"
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_privacy_choice_control_search_scope"));
+});
+
+test("deriveConcernPolicy promotes CPRA opt-out gaps with CBA evidence and inspected choice surfaces", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.cpra_cba_opt_out_missing",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "cpra_cba_opt_out_missing",
+      title: "CPRA opt-out missing"
+    }),
+    evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
+    rawEvidence: {
+      cpra_cba_opt_out_evidence: {
+        advertisingSharingVendors: ["Meta Pixel"],
+        choice_controls_inspected: true,
+        opt_out_control_found: false,
+        opt_out_ui_result: "absent",
+        policy_cba_language: "full_cba_language"
+      }
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "strong");
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy promotes partial CPRA opt-out controls as incomplete CBA evidence", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.cpra_cba_opt_out_missing",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "cpra_cba_opt_out_missing",
+      title: "CPRA opt-out missing"
+    }),
+    evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
+    rawEvidence: {
+      cpra_cba_opt_out_evidence: {
+        advertisingSharingVendors: ["Meta Pixel"],
+        choice_controls_inspected: true,
+        opt_out_control_found: true,
+        opt_out_ui_result: "partial_no_icon",
+        policy_cba_language: "full_cba_language"
+      }
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "strong");
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy keeps full CPRA-compliant controls internal-only for missing opt-out finding", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.cpra_cba_opt_out_missing",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "cpra_cba_opt_out_missing",
+      title: "CPRA opt-out missing"
+    }),
+    evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
+    rawEvidence: {
+      cpra_cba_opt_out_evidence: {
+        advertisingSharingVendors: ["Meta Pixel"],
+        choice_controls_inspected: true,
+        opt_out_control_found: true,
+        opt_out_ui_result: "full_cpra_compliant",
+        policy_cba_language: "full_cba_language"
+      }
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+});
+
+test("deriveConcernPolicy keeps ordinary cookie overlays audit-only for blocking overlay top finding", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.overlay_blocking_detected",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "blocking_overlay_observed",
+      title: "Blocking overlay observed"
+    }),
+    evidenceStrengthFlags: ["structured_validation"],
+    rawEvidence: {
+      blocking_overlay_observed: true,
+      consentSurfaceObserved: true,
+      overlayActionLabels: ["Accept all", "Manage choices"]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_material_scan_blocking_overlay"));
+});
+
+test("deriveConcernPolicy promotes material consent overlay blocking evidence", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.overlay_blocking_detected",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "blocking_overlay_observed",
+      title: "Blocking overlay observed"
+    }),
+    evidenceStrengthFlags: ["structured_validation"],
+    rawEvidence: {
+      blocking_overlay_observed: true,
+      consentSurfaceObserved: true,
+      pageAccessBlockedUntilChoice: true,
+      overlayKind: "consent_overlay_blocking_scan",
+      overlayActionLabels: ["Accept all", "Reject all"]
+    }
+  });
+
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
+test("deriveConcernPolicy requires concrete child evidence for umbrella dark-pattern finding", () => {
+  const generic = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.consent_dark_patterns_detected",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "consent_dark_patterns_detected",
+      title: "Consent dark patterns detected"
+    }),
+    evidenceStrengthFlags: ["structured_validation"],
+    rawEvidence: {
+      consentSurfaceObserved: true
+    }
+  });
+  const concrete = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.consent_dark_patterns_detected",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "consent_dark_patterns_detected",
+      title: "Consent dark patterns detected"
+    }),
+    evidenceStrengthFlags: ["structured_validation"],
+    rawEvidence: {
+      accept_more_prominent_than_reject: true,
+      consentSurfaceObserved: true,
+      runtimeEvidenceArtifacts: ["artifact:consent-ui"]
+    }
+  });
+
+  assert.equal(generic.promotionEligibility, "internal_only");
+  assert.equal(generic.externalSurfacingEligibility, "audit_only");
+  assert.ok(generic.negativeEvidenceFlags.includes("missing_concrete_dark_pattern_child_finding"));
+  assert.equal(concrete.promotionEligibility, "eligible");
+});
+
+test("deriveConcernPolicy keeps non-consent forced interactions audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.forced_consent_wall",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "forced_consent_interaction",
+      title: "Forced consent interaction"
+    }),
+    evidenceStrengthFlags: ["structured_validation"],
+    rawEvidence: {
+      forced_consent_wall: true,
+      overlayKind: "login_or_paywall_blocking_scan",
+      overlayActionLabels: ["Sign in", "Subscribe"]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_consent_specific_blocking_evidence"));
+});
+
 test("deriveConcernPolicy keeps RTB cookie sync audit-only for vendor names or generic adtech without sync evidence", () => {
   for (const rawEvidence of [
     {
@@ -3155,6 +3353,33 @@ test("deriveConcernPolicy keeps RTB cookie sync audit-only for vendor names or g
     assert.equal(policy.externalSurfacingEligibility, "audit_only");
     assert.ok(policy.negativeEvidenceFlags.includes("missing_specific_runtime_anchor"));
   }
+});
+
+test("deriveConcernPolicy keeps single sync-path-only RTB evidence audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "runtime_privacy.rtb_cookie_sync_observed",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "rtb_cookie_sync_observed",
+      title: "RTB cookie sync observed"
+    }),
+    evidenceStrengthFlags: ["structured_validation"],
+    rawEvidence: {
+      preconsent_tracking_detected: true,
+      rtb_cookie_sync_evidence: [
+        {
+          hostname: "sync.example-adtech.test",
+          pathSample: "/sync",
+          reason: "sync_path"
+        }
+      ]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_specific_runtime_anchor"));
 });
 
 test("deriveConcernPolicy keeps uncorrelated video and Meta evidence audit-only", () => {

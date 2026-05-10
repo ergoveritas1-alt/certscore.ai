@@ -32,7 +32,9 @@ import {
   hasStrongFingerprintingEvidence,
   hasStrongPreconsentRuntimeEvidence,
   hasStrongSaleSharingControlsMissingEvidence,
-  hasStrongRightsFrictionArtifact
+  hasStrongRightsFrictionArtifact,
+  hasNonConsentOverlayWithoutIndependentConsentEvidence,
+  hasVerifiedConsentUiEvidence
 } from "./promotion-evidence-contracts";
 import {
   hasConcreteSanitizedNetworkEvidence
@@ -768,7 +770,7 @@ function isHighSensitivityConcern(
     .join(" ")
     .toLowerCase();
 
-  return /high_sensitivity_data_collection_detected|form_collects_(ssn|government_id|health_information|financial_information|geolocation)|session_replay_on_sensitive_input_surface|sensitive_data_collection_with_third_party_tracking_present/.test(
+  return /high_sensitivity_data_collection_detected|form_collects_(ssn|government_id|health_information|financial_information|geolocation)|possible_session_replay_on_sensitive_input_surface|sensitive_data_collection_with_third_party_tracking_present/.test(
     haystack
   );
 }
@@ -776,7 +778,7 @@ function isHighSensitivityConcern(
 function isSensitiveReplayConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
-  return concern.suggestedUnifiedFindingId === "session_replay_on_sensitive_input_surface";
+  return concern.suggestedUnifiedFindingId === "possible_session_replay_on_sensitive_input_surface";
 }
 
 function isSensitiveThirdPartyTrackingConcern(
@@ -995,6 +997,115 @@ function getObjectEvidence(rawEvidence: Record<string, unknown> | null | undefin
     }
   }
   return null;
+}
+
+function getNestedBooleanEvidence(
+  rawEvidence: Record<string, unknown> | null | undefined,
+  objectKeys: string[],
+  booleanKeys: string[]
+) {
+  return getBooleanEvidence(getObjectEvidence(rawEvidence, objectKeys), booleanKeys);
+}
+
+function getNestedStringEvidence(
+  rawEvidence: Record<string, unknown> | null | undefined,
+  objectKeys: string[],
+  stringKeys: string[]
+) {
+  return getFirstString(getObjectEvidence(rawEvidence, objectKeys), stringKeys);
+}
+
+function getOverlayKind(rawEvidence: Record<string, unknown> | null | undefined) {
+  return (
+    getFirstString(rawEvidence, ["overlayKind", "overlay_kind", "overlayType", "overlay_type", "blockerType", "blocker_type"]) ??
+    getNestedStringEvidence(rawEvidence, ["overlayEvidence", "overlay_evidence", "hybridConsentSummary", "hybrid_consent_summary"], [
+      "overlayKind",
+      "overlay_kind",
+      "overlayType",
+      "overlay_type"
+    ])
+  );
+}
+
+function isNonConsentBlockingOverlayKind(value: string | null | undefined) {
+  return Boolean(value && /bot|challenge|captcha|login|auth|paywall|subscribe|newsletter|age|regional|app_install|install/i.test(value));
+}
+
+function hasConsentSpecificOverlayEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const overlayKind = getOverlayKind(rawEvidence);
+  const labels = getStringArrayValues(rawEvidence, [
+    "overlayActionLabels",
+    "overlay_action_labels",
+    "consentActionLabels",
+    "consent_action_labels",
+    "buttonLabels",
+    "button_labels"
+  ]);
+  const snippets = getEvidenceTextCandidates(rawEvidence);
+  const consentSurfaceObserved = getBooleanEvidence(rawEvidence, [
+    "consentSurfaceObserved",
+    "consent_surface_observed",
+    "cookieBannerPresent",
+    "consentBannerPresent"
+  ]);
+  const nestedConsentSurfaceObserved = getNestedBooleanEvidence(rawEvidence, [
+    "hybridConsentSummary",
+    "hybrid_consent_summary",
+    "overlayEvidence",
+    "overlay_evidence"
+  ], ["bannerPresent", "banner_present", "consentSurfaceObserved", "consent_surface_observed"]);
+
+  if (hasNonConsentOverlayWithoutIndependentConsentEvidence(rawEvidence)) {
+    return false;
+  }
+
+  return (
+    /consent|cookie|cmp|privacy|preferences?/i.test(overlayKind ?? "") ||
+    consentSurfaceObserved === true ||
+    nestedConsentSurfaceObserved === true ||
+    labels.some((label) => /accept|reject|decline|consent|cookie|privacy|preferences?|manage choices/i.test(label)) ||
+    snippets.some((snippet) => /accept all|reject all|manage (?:options|preferences|choices)|cookie (?:banner|preferences)|consent/i.test(snippet))
+  );
+}
+
+function hasMaterialScanBlockingOverlayEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const overlayKind = getOverlayKind(rawEvidence);
+  const materialBlock =
+    getBooleanEvidence(rawEvidence, [
+      "keyContentBlocked",
+      "key_content_blocked",
+      "reportabilityMateriallyBlocked",
+      "reportability_materially_blocked",
+      "materiallyBlocked",
+      "materially_blocked",
+      "pageAccessBlockedUntilChoice",
+      "page_access_blocked_until_choice"
+    ]) === true ||
+    getNestedBooleanEvidence(rawEvidence, ["hybridConsentSummary", "hybrid_consent_summary", "hybridUiSummary", "hybrid_ui_summary"], [
+      "cookieWallDetected",
+      "cookie_wall_detected",
+      "forcedActionRequired",
+      "forced_action_required",
+      "pageInteractionBlocked",
+      "page_interaction_blocked"
+    ]) === true;
+
+  return Boolean(
+    materialBlock &&
+      (
+        isNonConsentBlockingOverlayKind(overlayKind) ||
+        hasConsentSpecificOverlayEvidence(rawEvidence) ||
+        /bot_challenge_blocking_scan|login_or_paywall_blocking_scan|consent_overlay_blocking_scan|age_gate_blocking_scan/i.test(overlayKind ?? "")
+      )
+  );
+}
+
+function hasConcreteDarkPatternChildEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (hasNonConsentOverlayWithoutIndependentConsentEvidence(rawEvidence)) {
+    return false;
+  }
+
+  return hasVerifiedConsentUiEvidence(rawEvidence);
 }
 
 function hasConfirmedRejectTimingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -1291,6 +1402,25 @@ function isCpraCbaOptOutMissingConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
   return concern.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing";
+}
+
+function isBlockingOverlayConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "blocking_overlay_observed";
+}
+
+function isConsentDarkPatternConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "consent_dark_patterns_detected";
+}
+
+function isForcedConsentInteractionConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "forced_consent_interaction" ||
+    concern.suggestedUnifiedFindingId === "forced_consent_wall";
 }
 
 function isAccessibilityIssueFindingConcern(
@@ -2044,6 +2174,54 @@ export function deriveConcernPolicy(input: {
         ...findingEvidenceContractDecision.negativeEvidenceFlags
       ] as NormalizedConcernNegativeEvidenceFlag[],
       promotionEligibility: findingEvidenceContractDecision.promotionEligibility
+    };
+  }
+
+  if (isCpraCbaOptOutMissingConcern(input.concern) && !hasStrongCpraCbaOptOutMissingEvidence(input.rawEvidence)) {
+    const contractFlags = findingEvidenceContractDecision?.negativeEvidenceFlags ?? [];
+    const missingChoiceScope = contractFlags.includes("missing_privacy_choice_control_search_scope") ||
+      !contractFlags.includes("missing_cpra_relevant_opt_out_context");
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [
+        ...negativeEvidenceFlags,
+        ...(missingChoiceScope ? ["missing_privacy_choice_control_search_scope"] : []),
+        "missing_cpra_relevant_opt_out_context"
+      ] as NormalizedConcernNegativeEvidenceFlag[],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (isBlockingOverlayConcern(input.concern) && !hasMaterialScanBlockingOverlayEvidence(input.rawEvidence)) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [
+        ...negativeEvidenceFlags,
+        hasConsentSpecificOverlayEvidence(input.rawEvidence)
+          ? "missing_material_scan_blocking_overlay"
+          : "ordinary_cookie_banner_only"
+      ] as NormalizedConcernNegativeEvidenceFlag[],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (isForcedConsentInteractionConcern(input.concern) && !hasConsentSpecificOverlayEvidence(input.rawEvidence)) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_consent_specific_blocking_evidence"] as NormalizedConcernNegativeEvidenceFlag[],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (isConsentDarkPatternConcern(input.concern) && !hasConcreteDarkPatternChildEvidence(input.rawEvidence)) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_concrete_dark_pattern_child_finding"] as NormalizedConcernNegativeEvidenceFlag[],
+      promotionEligibility: "internal_only"
     };
   }
 

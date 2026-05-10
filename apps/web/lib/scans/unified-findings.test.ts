@@ -1459,7 +1459,7 @@ test("specializes high-sensitivity replay evidence into a sensitive replay packe
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "session_replay_on_sensitive_input_surface");
+  assert.equal(packet?.unifiedFindingId, "possible_session_replay_on_sensitive_input_surface");
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
   assert.equal(packet?.confidenceInputs.hasConcretePayloadEvidence, true);
@@ -3456,6 +3456,7 @@ test("surfaces CPRA CBA opt-out missing from retained runtime evidence", () => {
         fallbackEvidence: {
           cbaVendorTier1: ["adsrvr.org"],
           cbaVendorTier2: [],
+          choiceControlsInspected: true,
           cpraIconDetected: false,
           findingSeverity: "high",
           gpcCbaHonored: false,

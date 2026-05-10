@@ -12,7 +12,11 @@ import { getFindingSurfaceScore, rankFindings } from "./rank-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import { evaluatePolicyBehaviorContradictionEvidence, getContradictionEvidenceBundle } from "./contradiction-evidence-contract";
 import { isFindingProjectionEligible } from "./finding-evidence-contracts";
-import { deriveFingerprintEvidenceTier, hasStrongFingerprintingEvidence } from "./promotion-evidence-contracts";
+import {
+  classifyRtbCookieSyncEvidenceRows,
+  deriveFingerprintEvidenceTier,
+  hasStrongFingerprintingEvidence
+} from "./promotion-evidence-contracts";
 
 const MAX_DISPLAY_SNIPPET_LENGTH = 240;
 
@@ -80,6 +84,12 @@ const CONTRADICTION_FINDING_IDS = new Set([
   "privacy_terms_conflict"
 ]);
 
+type CpraOptOutSubtype =
+  | "opt_out_absent"
+  | "partial_no_icon"
+  | "generic_do_not_sell_only"
+  | "control_present_but_cba_compliance_unclear";
+
 const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
   "pre_consent_tracking_detected",
   "reject_tracking_persists_after_reject",
@@ -100,7 +110,7 @@ const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
   "repeated_consent_prompt",
   "multi_vendor_tracking_detected",
   "session_recording_services_detected",
-  "session_replay_on_sensitive_input_surface",
+  "possible_session_replay_on_sensitive_input_surface",
   "sensitive_data_collection_with_third_party_tracking_present",
   "sensitive_collection_surface_observed",
   "video_content_tracking_exposure",
@@ -149,7 +159,7 @@ const CONSENT_UI_EVIDENCE_FINDING_IDS = new Set([
 ]);
 
 const SENSITIVE_EVIDENCE_FINDING_IDS = new Set([
-  "session_replay_on_sensitive_input_surface",
+  "possible_session_replay_on_sensitive_input_surface",
   "sensitive_data_collection_with_third_party_tracking_present",
   "sensitive_collection_surface_observed",
   "video_content_tracking_exposure",
@@ -431,6 +441,72 @@ function buildFingerprintingRawEvidence(packet: UnifiedFindingDisplayPacket): Re
   };
 }
 
+function getRawFingerprintTier(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return null;
+  }
+  const directTier = getRecordNumber(rawEvidence, ["fingerprintTier", "fingerprint_tier"]);
+  if (directTier !== null) {
+    return directTier;
+  }
+  const summary = rawEvidence.fingerprintSummary ?? rawEvidence.fingerprint_summary;
+  if (summary && typeof summary === "object" && !Array.isArray(summary)) {
+    return getRecordNumber(summary as Record<string, unknown>, ["tier"]);
+  }
+  return null;
+}
+
+function deriveRejectOptionSubtype(packet: UnifiedFindingDisplayPacket) {
+  const rejectPath = getFirstEntityJsonObject(packet, "rejectPathDepthAndAvailability");
+  const rejectDepthClass = getEntityValues(packet, /^rejectDepthClass$/i)[0] ?? null;
+  const availability =
+    getRecordString(rejectPath ?? {}, ["availability", "status", "outcome"]) ??
+    (rejectDepthClass === "missing" ? "not_found" : rejectDepthClass === "hidden" ? "hidden" : null);
+  const rejectAvailableOnFirstLayer =
+    rejectPath?.rejectAvailableOnFirstLayer === true ||
+    rejectPath?.reject_available_on_first_layer === true ||
+    rejectDepthClass === "same_layer";
+  const preferencesRequiredBeforeReject =
+    rejectPath?.preferencesRequiredBeforeReject === true ||
+    rejectPath?.preferences_required_before_reject === true ||
+    rejectDepthClass === "second_layer";
+  const choiceAsymmetry = getRecordString(rejectPath ?? {}, ["choiceAsymmetry", "choice_asymmetry"]);
+  const acceptDepth = getRecordNumber(rejectPath ?? {}, ["acceptClickDepth", "accept_click_depth"]);
+  const rejectDepth = getRecordNumber(rejectPath ?? {}, ["rejectClickDepth", "reject_click_depth", "depth"]);
+
+  if (availability === "hidden" || rejectDepthClass === "hidden") {
+    return "reject_present_but_visually_hidden";
+  }
+  if (preferencesRequiredBeforeReject || rejectDepthClass === "second_layer") {
+    return "reject_requires_preferences_path";
+  }
+  if (availability === "not_found" || availability === "unavailable" || availability === "absent" || rejectDepthClass === "missing") {
+    return "reject_absent_first_layer";
+  }
+  if (
+    choiceAsymmetry === "material" ||
+    choiceAsymmetry === "minor" ||
+    (typeof acceptDepth === "number" && typeof rejectDepth === "number" && rejectDepth > acceptDepth)
+  ) {
+    return "reject_depth_asymmetry";
+  }
+  if (rejectAvailableOnFirstLayer === false) {
+    return "reject_absent_first_layer";
+  }
+  return "reject_path_ambiguous";
+}
+
+function getFingerprintPromotionAnnotation(
+  rawEvidence: Record<string, unknown> | null | undefined,
+  tierResult: ReturnType<typeof deriveFingerprintEvidenceTier> | null
+) {
+  const rawTier = getRawFingerprintTier(rawEvidence);
+  if (tierResult?.tier === 3 && rawTier === 2 && tierResult.knownFingerprintingVendorObserved) {
+    return "tier_2_runtime_vendor_promoted";
+  }
+  return null;
+}
+
 const STRONG_FINGERPRINT_SIGNAL_LABELS: Record<string, string> = {
   audio: "audio environment access",
   audio_context: "audio environment access",
@@ -586,7 +662,7 @@ function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof t
   }
 
   if (
-    primary === "session_replay_on_sensitive_input_surface" &&
+    primary === "possible_session_replay_on_sensitive_input_surface" &&
     !ids.includes("sensitive_data_collection_with_third_party_tracking_present")
   ) {
     ids.push("sensitive_data_collection_with_third_party_tracking_present");
@@ -658,13 +734,21 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
 
   if (findingId === "probable_fingerprinting" || findingId === "fingerprinting_related_signals_observed") {
     const groups = getFingerprintSignalGroups(packet);
-    const tierResult = deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet));
+    const rawEvidence = buildFingerprintingRawEvidence(packet);
+    const tierResult = deriveFingerprintEvidenceTier(rawEvidence);
+    const promotionAnnotation = getFingerprintPromotionAnnotation(rawEvidence, tierResult);
     return uniqueStrings([
       findingId === "probable_fingerprinting"
-        ? "Why this surfaced: high-entropy browser/device collection was corroborated by identity-oriented runtime evidence."
+        ? tierResult.knownFingerprintingVendorObserved
+          ? "Why this surfaced: probable browser/device fingerprinting behavior was observed. The scan detected coordinated collection of high-entropy browser/device attributes and subsequent third-party network activity associated with a known bot-defense/fingerprinting vendor."
+          : "Why this surfaced: probable browser/device fingerprinting behavior was observed. The scan detected coordinated collection of high-entropy browser/device attributes with runtime corroboration."
         : tierResult.tier >= 2
           ? "Why this surfaced: coordinated browser/device entropy collection was retained for review, with no retained proof of identity-oriented fingerprinting."
           : "Why this surfaced: elevated browser/device entropy collection was retained for review, with no retained proof of identity-oriented fingerprinting.",
+      findingId === "probable_fingerprinting"
+        ? "Purpose framing: this may be used for fraud prevention or security, but it can still create privacy review obligations depending on jurisdiction, disclosure, consent posture, and data sharing."
+        : null,
+      promotionAnnotation ? `Internal annotation: ${promotionAnnotation}.` : null,
       groups.strongSignalLabels.length > 0
         ? `Stronger retained primitives: ${groups.strongSignalLabels.join(", ")}.`
         : null,
@@ -681,7 +765,7 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
         ? null
         : "Observed browser entropy collection alone does not establish cross-site identity tracking.",
       "This does not independently establish unlawful tracking or legal liability."
-    ]).slice(0, 5);
+    ]).slice(0, findingId === "probable_fingerprinting" ? 6 : 5);
   }
 
   return uniqueStrings([
@@ -1261,6 +1345,13 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
 
 function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket): CertScoreFindingEvidenceDetails {
   const syncRows = getEntityJsonObjects(packet, "rtbCookieSyncEvidence");
+  const syncClassifications = classifyRtbCookieSyncEvidenceRows(syncRows);
+  const subtypeCounts = syncClassifications.reduce<Record<string, number>>((counts, classification) => {
+    counts[classification.subtype] = (counts[classification.subtype] ?? 0) + 1;
+    return counts;
+  }, {});
+  const strongSubtypeCount = syncClassifications.filter((classification) => classification.subtype !== "sync_path_only").length;
+  const weakSubtypeCount = syncClassifications.filter((classification) => classification.subtype === "sync_path_only").length;
   const detailRequestUrls = packet.details?.family === "consent_tracking" ? (packet.details.requestUrls ?? []) : [];
   const detailVendors = packet.details?.family === "consent_tracking" ? (packet.details.vendors ?? []) : [];
   const requestUrls = uniqueCaseInsensitiveStrings([
@@ -1302,11 +1393,16 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
         getCountValue(packet, ["rtb_cookie_sync_observation_count", "rtbCookieSyncObservationCount"]) ?? syncRows.length,
       representativeSyncRequests: representativeRequests.length,
       uniqueSyncVendorsObserved: vendors.length,
-      identifierLikeRequests: representativeRequests.filter((request) => request.identifierLike).length
+      identifierLikeRequests: representativeRequests.filter((request) => request.identifierLike).length,
+      strongSyncEvidenceRows: strongSubtypeCount,
+      syncPathOnlyRows: weakSubtypeCount
     },
     syncEvidence: {
       observed: true,
-      basis: "Request path, host, or query evidence matched RTB or identity-sync patterns.",
+      basis: strongSubtypeCount > 0
+        ? "Retained request evidence included identifier-query, cross-domain redirect, or known RTB/identity-sync endpoint patterns."
+        : "Retained request evidence included multiple independent RTB/identity-sync endpoint patterns without retained identifier transfer.",
+      subtypes: subtypeCounts,
       examples: syncRows.slice(0, 8)
     },
     cookieEvidence: { evaluated: false },
@@ -1328,6 +1424,15 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     runtimeRequestUrls: requestUrls,
     runtimeVendors: vendors,
     rtbCookieSyncEvidence: syncRows.slice(0, 12),
+    rtbCookieSyncSubtypeCounts: subtypeCounts,
+    rtbCookieSyncEvidenceSubtypes: uniqueStrings(syncClassifications.map((classification) => classification.subtype)),
+    rtbCookieSyncRedirectTargets: uniqueStrings(
+      syncClassifications.map((classification) => classification.redirectTargetHost).filter(Boolean)
+    ),
+    rtbCookieSyncIdentifierQueryKeys: uniqueStrings(syncClassifications.flatMap((classification) => classification.queryKeys))
+      .filter((key) => IDENTIFIER_QUERY_KEY_PATTERN.test(key))
+      .slice(0, 12),
+    rtbCookieSyncWeakObservationCount: weakSubtypeCount,
     evidenceFlags: uniqueStrings(packet.evidence?.flags ?? [])
   };
 }
@@ -1335,10 +1440,22 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
 function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket): CertScoreFindingEvidenceDetails {
   const vendors = uniqueStrings([
     ...getEntityValues(packet, /cba.*vendor|vendor|runtime.*vendor/i),
-    ...getEntityValues(packet, /cbaVendorTier/i)
+    ...getEntityValues(packet, /cbaVendorTier|advertisingSharingVendors/i)
   ]).filter(isDisplayVendorName);
   const optOutUiResult = uniqueStrings(getEntityValues(packet, /optOutUiResult|opt_out_ui_result/i))[0] ?? null;
+  const optOutControlFound = parseBooleanEntity(getEntityValues(packet, /optOutControlFound|opt_out_control_found/i)[0]);
+  const choiceControlsInspected = parseBooleanEntity(getEntityValues(packet, /choiceControlsInspected|choice_controls_inspected/i)[0]);
+  const policyCbaLanguage = uniqueStrings(getEntityValues(packet, /policyCbaLanguage|policy_cba_language/i))[0] ?? null;
+  const policyUiCongruent = parseBooleanEntity(getEntityValues(packet, /policyUiCongruent|policy_ui_congruent/i)[0]);
+  const optOutSubtype = deriveCpraOptOutSubtype({ optOutControlFound, optOutUiResult });
   const snippets = uniqueStrings(packet.evidence?.snippets ?? []).map((snippet) => truncateDisplaySnippet(snippet)).slice(0, 3);
+  const missingOrAbsent = optOutSubtype === "opt_out_absent";
+  const basis = buildCpraOptOutBasis({
+    fallbackSnippet: snippets[0],
+    optOutSubtype,
+    optOutUiResult,
+    vendors
+  });
 
   return {
     scanContext: {
@@ -1348,18 +1465,24 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     },
     counts: {
       cbaVendorsObserved: vendors.length,
-      optOutControlsObserved: optOutUiResult && !/absent|missing|not_found/i.test(optOutUiResult) ? 1 : 0
+      optOutControlsObserved: missingOrAbsent ? 0 : 1
     },
     jurisdictionOrPolicyContext: {
       framework: "CPRA",
       evaluatedSignal: "cross_context_behavioral_advertising_opt_out",
-      policyEvidenceEvaluated: false
+      policyCbaLanguage,
+      policyEvidenceEvaluated: policyCbaLanguage !== null,
+      policyUiCongruent
     },
     optOutControlEvidence: {
       evaluated: true,
+      optOutSubtype,
       result: optOutUiResult,
-      missingOrAbsent: optOutUiResult ? /absent|missing|not_found/i.test(optOutUiResult) : null,
-      basis: snippets[0] ?? "CBA vendor evidence was retained without a retained CPRA-specific opt-out control."
+      optOutControlFound,
+      choiceControlsInspected,
+      missingOrAbsent,
+      incompleteOrUnconfirmed: !missingOrAbsent,
+      basis
     },
     trackingOrSharingContext: {
       cbaVendorEvidenceObserved: vendors.length > 0,
@@ -1386,6 +1509,51 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     evidenceSnippets: snippets,
     evidenceFlags: uniqueStrings(packet.evidence?.flags ?? [])
   };
+}
+
+function parseBooleanEntity(value: string | null | undefined) {
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  return null;
+}
+
+function deriveCpraOptOutSubtype(input: {
+  optOutControlFound: boolean | null;
+  optOutUiResult: string | null;
+}): CpraOptOutSubtype {
+  if (input.optOutControlFound === false || input.optOutUiResult === "absent") {
+    return "opt_out_absent";
+  }
+  if (input.optOutUiResult === "partial_no_icon") {
+    return "partial_no_icon";
+  }
+  if (input.optOutUiResult === "generic_do_not_sell") {
+    return "generic_do_not_sell_only";
+  }
+  return "control_present_but_cba_compliance_unclear";
+}
+
+function buildCpraOptOutBasis(input: {
+  fallbackSnippet: string | null | undefined;
+  optOutSubtype: CpraOptOutSubtype;
+  optOutUiResult: string | null;
+  vendors: string[];
+}) {
+  const vendorText = input.vendors.length > 0 ? ` for ${formatVendorList(input.vendors.slice(0, 3))}` : "";
+  switch (input.optOutSubtype) {
+    case "opt_out_absent":
+      return input.fallbackSnippet ?? `CBA vendor evidence was retained${vendorText}, and no CPRA-specific opt-out control was confirmed.`;
+    case "partial_no_icon":
+      return `A privacy choice control was retained${vendorText}, but the CPRA privacy-choice treatment was incomplete or not confirmed.`;
+    case "generic_do_not_sell_only":
+      return `A generic Do Not Sell control was retained${vendorText}, but Do Not Share or CBA-specific coverage was not confirmed.`;
+    case "control_present_but_cba_compliance_unclear":
+      return `A privacy choice control was retained${vendorText}, but complete CPRA CBA opt-out coverage was not confirmed${input.optOutUiResult ? `; opt-out UI result: ${input.optOutUiResult.replace(/_/g, " ")}` : ""}.`;
+  }
 }
 
 function getPacketCounts(packet: UnifiedFindingDisplayPacket) {
@@ -1506,12 +1674,24 @@ function buildGenericCanonicalEvidenceDetails(
   }
 
   if (CONSENT_UI_EVIDENCE_FINDING_IDS.has(findingId)) {
+    const rejectOptionSubtype = findingId === "reject_option_missing_or_hidden"
+      ? deriveRejectOptionSubtype(packet)
+      : null;
     details.consentUiEvidence = {
       observed: true,
       pattern: findingId,
+      ...(rejectOptionSubtype ? { rejectOptionSubtype } : {}),
       basis: evidenceSnippets[0] ?? packet.summary,
       userChoiceImpact: findingId === "reject_option_missing_or_hidden"
-        ? "Reject choice was not retained as visible or equivalent in the observed consent UI."
+        ? rejectOptionSubtype === "reject_requires_preferences_path"
+          ? "Reject choice was retained behind an additional preferences or manage-choices path."
+          : rejectOptionSubtype === "reject_present_but_visually_hidden"
+            ? "Reject choice was retained but visually hidden or materially hard to perceive."
+            : rejectOptionSubtype === "reject_depth_asymmetry"
+              ? "Reject choice required materially more interaction than the accept path."
+              : rejectOptionSubtype === "reject_absent_first_layer"
+                ? "Reject choice was not retained as visible or equivalent on the first observed consent layer."
+                : "Reject path evidence was retained, but the exact reject availability subtype is ambiguous."
         : "Consent UI evidence may affect how easily users can exercise a choice."
     };
   }
@@ -1548,6 +1728,7 @@ function buildGenericCanonicalEvidenceDetails(
       ? buildFingerprintingRawEvidence(packet)
       : null;
     const fingerprintTierResult = fingerprintingRawEvidence ? deriveFingerprintEvidenceTier(fingerprintingRawEvidence) : null;
+    const fingerprintPromotionAnnotation = getFingerprintPromotionAnnotation(fingerprintingRawEvidence, fingerprintTierResult);
     const fingerprintSignals = Array.isArray(fingerprintingRawEvidence?.fingerprintAttributeCategories)
       ? (fingerprintingRawEvidence.fingerprintAttributeCategories as string[])
       : [];
@@ -1558,10 +1739,10 @@ function buildGenericCanonicalEvidenceDetails(
       observed: true,
       basis: findingId === "fingerprinting_related_signals_observed"
         ? (fingerprintTierResult?.tier ?? 0) >= 2
-          ? "Fingerprinting-related browser telemetry was retained for review, but identity-oriented fingerprinting was not established."
-          : "Elevated browser/device entropy collection was retained for review, but identity-oriented fingerprinting was not established."
+        ? "Fingerprinting-related browser telemetry was retained for review, but identity-oriented fingerprinting was not established."
+        : "Elevated browser/device entropy collection was retained for review, but identity-oriented fingerprinting was not established."
         : findingId === "probable_fingerprinting"
-          ? "Runtime collection included identity-oriented browser/device fingerprinting evidence."
+          ? "Probable browser/device fingerprinting behavior was observed. The retained evidence shows coordinated high-entropy browser/device collection with runtime corroboration."
         : evidenceSnippets[0] ?? packet.summary,
       identifierLikeRequestCount: representativeRequests.filter((request) => request.identifierLike).length,
       deviceDataLikeRequestCount: representativeRequests.filter((request) => request.deviceDataLike).length,
@@ -1589,7 +1770,11 @@ function buildGenericCanonicalEvidenceDetails(
           }
         : {}),
       ...(findingId === "probable_fingerprinting"
-        ? { confidenceExplanation: fingerprintTierResult?.confidenceExplanation ?? "Identity-oriented fingerprinting evidence observed." }
+        ? {
+            confidenceExplanation: fingerprintTierResult?.confidenceExplanation ?? "Probable browser/device fingerprinting behavior observed.",
+            fingerprintPurposeFraming: "security_or_bot_defense_possible",
+            ...(fingerprintPromotionAnnotation ? { fingerprintPromotionAnnotation } : {})
+          }
         : findingId === "fingerprinting_related_signals_observed"
           ? {
               confidenceExplanation: fingerprintTierResult?.confidenceExplanation ?? "Browser/device entropy collection retained without identity-oriented fingerprinting evidence.",
@@ -2205,7 +2390,7 @@ function buildExecutiveEvidenceDetails(
   }
   if (
     findingId === "sensitive_data_collection_with_third_party_tracking_present" ||
-    findingId === "session_replay_on_sensitive_input_surface"
+    findingId === "possible_session_replay_on_sensitive_input_surface"
   ) {
     const packetDataTypes =
       packet.details?.family === "sensitive_data" && "dataTypes" in packet.details
@@ -2265,7 +2450,20 @@ function buildExecutiveEvidenceDetails(
   if (findingId === "rtb_cookie_sync_observed") {
     const rows = getEntityJsonObjects(packet, "rtbCookieSyncEvidence");
     if (rows.length > 0) {
+      const classifications = classifyRtbCookieSyncEvidenceRows(rows);
       details.rtbCookieSyncEvidence = rows.slice(0, 12);
+      details.rtbCookieSyncEvidenceSubtypes = uniqueStrings(classifications.map((classification) => classification.subtype));
+      details.rtbCookieSyncSubtypeCounts = classifications.reduce<Record<string, number>>((counts, classification) => {
+        counts[classification.subtype] = (counts[classification.subtype] ?? 0) + 1;
+        return counts;
+      }, {});
+      details.rtbCookieSyncRedirectTargets = uniqueStrings(classifications.map((classification) => classification.redirectTargetHost));
+      details.rtbCookieSyncIdentifierQueryKeys = uniqueStrings(classifications.flatMap((classification) => classification.queryKeys))
+        .filter((key) => IDENTIFIER_QUERY_KEY_PATTERN.test(key))
+        .slice(0, 12);
+      details.rtbCookieSyncWeakObservationCount = classifications.filter(
+        (classification) => classification.subtype === "sync_path_only"
+      ).length;
     }
   }
 
@@ -2320,10 +2518,10 @@ function buildExecutiveShortSummary(
     return `Third-party tracking began before any recorded consent choice.${timingText}${vendorText}.`;
   }
 
-  if (findingId === "session_replay_on_sensitive_input_surface") {
+  if (findingId === "possible_session_replay_on_sensitive_input_surface") {
     const vendors = getSessionReplayVendors(packet);
     const vendorText = vendors.length > 0 ? `${formatVendorList(vendors)} session replay` : "Session replay";
-    return `${vendorText} was observed alongside a sensitive input surface in the same runtime session; this does not by itself show field-value transmission.`;
+    return `${vendorText} may be present alongside a sensitive input surface in the same runtime session; this does not by itself show field-value transmission.`;
   }
 
   if (findingId === "sensitive_data_collection_with_third_party_tracking_present") {
@@ -2366,19 +2564,32 @@ function buildExecutiveShortSummary(
     const hosts = uniqueStrings([
       ...getEntityValues(packet, /rtb.*domain|runtime.*vendor|vendor/i)
     ]).slice(0, 3);
+    const subtypes = classifyRtbCookieSyncEvidenceRows(getEntityJsonObjects(packet, "rtbCookieSyncEvidence")).map(
+      (classification) => classification.subtype
+    );
     const hostText = hosts.length > 0 ? ` involving ${formatVendorList(hosts)}` : "";
-    return `Request-level RTB or identity-sync evidence was retained${hostText}.`;
+    if (subtypes.some((subtype) => subtype === "identifier_query_sync" || subtype === "redirect_chain_sync")) {
+      return `Request-level RTB or identity-sync evidence with retained identifier or redirect-chain support was retained${hostText}.`;
+    }
+    return `Request-level RTB or identity-sync endpoint evidence was retained${hostText}.`;
   }
 
   if (findingId === "cpra_cba_opt_out_missing") {
     const vendors = uniqueStrings([
       ...getEntityValues(packet, /cba.*vendor|vendor|runtime.*vendor/i),
-      ...getEntityValues(packet, /cbaVendorTier/i)
+      ...getEntityValues(packet, /cbaVendorTier|advertisingSharingVendors/i)
     ]).filter(isDisplayVendorName);
     const optOutUiResult = uniqueStrings(getEntityValues(packet, /optOutUiResult|opt_out_ui_result/i))[0];
+    const optOutControlFound = parseBooleanEntity(getEntityValues(packet, /optOutControlFound|opt_out_control_found/i)[0]);
+    const optOutSubtype = deriveCpraOptOutSubtype({ optOutControlFound, optOutUiResult: optOutUiResult ?? null });
     const vendorText = vendors.length > 0 ? ` involving ${formatVendorList(vendors.slice(0, 3))}` : "";
+    if (optOutSubtype === "opt_out_absent") {
+      const uiText = optOutUiResult ? `; opt-out UI result: ${optOutUiResult.replace(/_/g, " ")}` : "";
+      return `Cross-context behavioral advertising vendor evidence was retained${vendorText}, and no CPRA-specific opt-out control was confirmed${uiText}.`;
+    }
+    const subtypeText = optOutSubtype.replace(/_/g, " ");
     const uiText = optOutUiResult ? `; opt-out UI result: ${optOutUiResult.replace(/_/g, " ")}` : "";
-    return `Cross-context behavioral advertising vendor evidence was retained${vendorText}${uiText}.`;
+    return `Cross-context behavioral advertising vendor evidence was retained${vendorText}, and the CPRA opt-out control was incomplete or not confirmed as CPRA-complete (${subtypeText})${uiText}.`;
   }
 
   if (findingId === "reject_tracking_persists_after_reject") {
@@ -2391,10 +2602,11 @@ function buildExecutiveShortSummary(
   }
 
   if (findingId === "probable_fingerprinting") {
-    const groups = getFingerprintSignalGroups(packet);
-    const retained = groups.strongSignalLabels.slice(0, 3);
-    const retainedText = retained.length > 0 ? `, including ${formatVendorList(retained)}` : "";
-    return `Runtime collection included browser/device fingerprinting evidence with identity-oriented corroboration${retainedText}.`;
+    const tierResult = deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet));
+    const vendorClause = tierResult.knownFingerprintingVendorObserved
+      ? " and subsequent third-party network activity associated with a known bot-defense/fingerprinting vendor"
+      : " and runtime corroboration";
+    return `Probable browser/device fingerprinting behavior was observed. The scan detected coordinated collection of high-entropy browser/device attributes${vendorClause}. This may be used for fraud prevention or security, but it can still create privacy review obligations depending on jurisdiction, disclosure, consent posture, and data sharing.`;
   }
 
   if (findingId === "fingerprinting_related_signals_observed") {

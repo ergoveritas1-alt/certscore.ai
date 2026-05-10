@@ -113,6 +113,12 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "missing_concrete_sensitive_payload"
   | "missing_third_party_tracking_artifact"
   | "runtime_cookie_inventory_ignored_only"
+  | "ordinary_cookie_banner_only"
+  | "missing_material_scan_blocking_overlay"
+  | "missing_consent_specific_blocking_evidence"
+  | "missing_concrete_dark_pattern_child_finding"
+  | "missing_privacy_choice_control_search_scope"
+  | "missing_cpra_relevant_opt_out_context"
   | "clear_pricing_terms_context_observed"
   | "missing_representative_accessibility_examples"
   | "accessibility_examples_below_promotion_threshold";
@@ -513,7 +519,7 @@ export function inferSpecializedUnifiedFindingId(input: {
       input.signalKey === "commerce.form_collects_ssn")
   ) {
     if (hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(rawEvidence)) {
-      return "session_replay_on_sensitive_input_surface";
+      return "possible_session_replay_on_sensitive_input_surface";
     }
 
     if (hasThirdPartyTrackingEvidence(rawEvidence)) {

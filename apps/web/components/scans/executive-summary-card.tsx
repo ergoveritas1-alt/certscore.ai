@@ -158,7 +158,7 @@ const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
   "repeated_consent_prompt",
   "multi_vendor_tracking_detected",
   "session_recording_services_detected",
-  "session_replay_on_sensitive_input_surface",
+  "possible_session_replay_on_sensitive_input_surface",
   "sensitive_data_collection_with_third_party_tracking_present",
   "sensitive_collection_surface_observed",
   "video_content_tracking_exposure",
@@ -226,7 +226,7 @@ const CCPA_CPRA_CIPA_REGULATORY_FINDING_IDS = new Set([
   "sensitive_data_collection_with_third_party_tracking_present",
   "sensitive_collection_surface_observed",
   "session_recording_services_detected",
-  "session_replay_on_sensitive_input_surface",
+  "possible_session_replay_on_sensitive_input_surface",
   "pre_submit_text_capture_detected",
   "cookie_disclosure_gap",
   "policy_behavior_contradiction_detected",
@@ -252,7 +252,7 @@ const FTC_REGULATORY_FINDING_IDS = new Set([
   "third_party_tracking_pre_consent",
   "video_content_tracking_exposure",
   "sensitive_data_collection_with_third_party_tracking_present",
-  "session_replay_on_sensitive_input_surface",
+  "possible_session_replay_on_sensitive_input_surface",
   "pre_submit_text_capture_detected",
   "telemetry_rich_identification_observed",
   "probable_fingerprinting",
@@ -547,7 +547,7 @@ export function buildRegulatoryLenses(
   const cookieDisclosureFinding = findings.find((finding) => finding.id === "cookie_disclosure_gap");
   const sensitiveTrackingFinding =
     findings.find((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present") ??
-    findings.find((finding) => finding.id === "session_replay_on_sensitive_input_surface");
+    findings.find((finding) => finding.id === "possible_session_replay_on_sensitive_input_surface");
   const consentFinding =
     findings.find((finding) => finding.id === "consent_dark_patterns_detected") ??
     findings.find((finding) => finding.id === "asymmetric_consent_ui") ??
@@ -1538,7 +1538,7 @@ function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKe
       return ["privacy-choice", "shield-balance", "ad-exchange"];
     case "session_recording_services_detected":
       return ["video-capture", "shield-video"];
-    case "session_replay_on_sensitive_input_surface":
+    case "possible_session_replay_on_sensitive_input_surface":
       return ["shield-video", "video-capture"];
     case "sensitive_data_collection_with_third_party_tracking_present":
       return ["shield-network", "shield-video", "device-telemetry"];

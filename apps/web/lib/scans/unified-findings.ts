@@ -315,6 +315,7 @@ function normalizeUnifiedFindingEvidenceRecord(
   assignCanonicalField("blockingOverlayType", ["blocking_overlay_type"]);
   assignCanonicalField("overlayConfidence", ["overlay_confidence"]);
   assignCanonicalField("rejectDepthClass", ["reject_depth_class"]);
+  assignCanonicalField("rejectPathDepthAndAvailability", ["reject_path_depth_and_availability"]);
   assignCanonicalField("consentBaselineTrackerEvidenceUrls", ["consent_baseline_tracker_evidence_urls"]);
   assignCanonicalField("consentPostRejectTrackerEvidenceUrls", ["consent_post_reject_tracker_evidence_urls"]);
   assignCanonicalField("consentOptInEvidenceLog", ["consent_opt_in_evidence_log"]);
@@ -747,7 +748,7 @@ const CONSENT_TRACKING_FINDING_IDS = new Set([
 ]);
 
 const SENSITIVE_DATA_FINDING_IDS = new Set([
-  "session_replay_on_sensitive_input_surface",
+  "possible_session_replay_on_sensitive_input_surface",
   "sensitive_data_collection_with_third_party_tracking_present",
   "sensitive_collection_surface_observed",
   "minors_or_age_gated_collection_context",
@@ -1965,6 +1966,37 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (policyRightsSignals.length > 0) {
     entities.policyRightsSignals = policyRightsSignals;
   }
+  const cpraCbaOptOutEvidence =
+    normalizedFallbackEvidence.cpraCbaOptOutEvidence && typeof normalizedFallbackEvidence.cpraCbaOptOutEvidence === "object" && !Array.isArray(normalizedFallbackEvidence.cpraCbaOptOutEvidence)
+      ? normalizedFallbackEvidence.cpraCbaOptOutEvidence as Record<string, unknown>
+      : normalizedFallbackEvidence.cpra_cba_opt_out_evidence && typeof normalizedFallbackEvidence.cpra_cba_opt_out_evidence === "object" && !Array.isArray(normalizedFallbackEvidence.cpra_cba_opt_out_evidence)
+        ? normalizedFallbackEvidence.cpra_cba_opt_out_evidence as Record<string, unknown>
+        : normalizedFallbackEvidence;
+  const addCpraEntity = (key: string, value: unknown) => {
+    if (typeof value === "string" && value.trim().length > 0) {
+      entities[key] = uniqueStrings([...(entities[key] ?? []), value.trim()]);
+    } else if (typeof value === "boolean") {
+      entities[key] = uniqueStrings([...(entities[key] ?? []), String(value)]);
+    }
+  };
+  addCpraEntity("optOutUiResult", cpraCbaOptOutEvidence.optOutUiResult ?? cpraCbaOptOutEvidence.opt_out_ui_result);
+  addCpraEntity("optOutControlFound", cpraCbaOptOutEvidence.optOutControlFound ?? cpraCbaOptOutEvidence.opt_out_control_found);
+  addCpraEntity("choiceControlsInspected", cpraCbaOptOutEvidence.choiceControlsInspected ?? cpraCbaOptOutEvidence.choice_controls_inspected);
+  addCpraEntity("policyCbaLanguage", cpraCbaOptOutEvidence.policyCbaLanguage ?? cpraCbaOptOutEvidence.policy_cba_language);
+  addCpraEntity("policyUiCongruent", cpraCbaOptOutEvidence.policyUiCongruent ?? cpraCbaOptOutEvidence.policy_ui_congruent);
+  addCpraEntity("scanOriginGeo", cpraCbaOptOutEvidence.scanOriginGeo ?? cpraCbaOptOutEvidence.scan_origin_geo);
+  if (Array.isArray(cpraCbaOptOutEvidence.advertisingSharingVendors)) {
+    entities.advertisingSharingVendors = uniqueStrings([
+      ...(entities.advertisingSharingVendors ?? []),
+      ...(cpraCbaOptOutEvidence.advertisingSharingVendors as string[])
+    ]);
+  }
+  if (Array.isArray(cpraCbaOptOutEvidence.advertising_sharing_vendors)) {
+    entities.advertisingSharingVendors = uniqueStrings([
+      ...(entities.advertisingSharingVendors ?? []),
+      ...(cpraCbaOptOutEvidence.advertising_sharing_vendors as string[])
+    ]);
+  }
   if (Array.isArray(normalizedFallbackEvidence.relatedVendors)) {
     entities.relatedVendors = uniqueStrings(normalizedFallbackEvidence.relatedVendors as string[]);
   }
@@ -2202,6 +2234,13 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     if (typeof overlayFacts.viewportCoveragePercent === "number") {
       counts.overlayViewportCoveragePercent = overlayFacts.viewportCoveragePercent;
     }
+  }
+  if (
+    normalizedFallbackEvidence.rejectPathDepthAndAvailability &&
+    typeof normalizedFallbackEvidence.rejectPathDepthAndAvailability === "object" &&
+    !Array.isArray(normalizedFallbackEvidence.rejectPathDepthAndAvailability)
+  ) {
+    entities.rejectPathDepthAndAvailability = [JSON.stringify(normalizedFallbackEvidence.rejectPathDepthAndAvailability)];
   }
   const consentInteractionRows = stringifyEvidenceRows(
     normalizedFallbackEvidence.consentInteraction ? [normalizedFallbackEvidence.consentInteraction] : []
@@ -4585,9 +4624,9 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Review replay tooling deployment and either disclose it clearly in privacy/cookie materials or disable it until disclosures are accurate.",
     whyThisMatters: "Undisclosed session replay can materially change how users understand monitoring on the site."
   },
-  session_replay_on_sensitive_input_surface: {
-    suggestedFix: "Remove replay tooling from sensitive-input flows or add tighter field masking and monitoring controls before allowing replay to run there.",
-    whyThisMatters: "Replay tooling on sensitive-input surfaces can increase exposure if typed or submitted data is captured more broadly than users expect."
+  possible_session_replay_on_sensitive_input_surface: {
+    suggestedFix: "Audit possible replay tooling in sensitive-input flows and add tighter field masking and monitoring controls before allowing replay to run there.",
+    whyThisMatters: "Possible replay tooling on sensitive-input surfaces can increase exposure if typed or submitted data is captured more broadly than users expect."
   },
   sensitive_data_collection_with_third_party_tracking_present: {
     suggestedFix: "Review the page or form where sensitive data is collected and suppress third-party advertising, replay, or analytics tooling unless it is clearly necessary and tightly controlled.",

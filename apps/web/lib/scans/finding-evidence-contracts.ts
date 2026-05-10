@@ -438,12 +438,12 @@ export const FINDING_EVIDENCE_CONTRACTS = [
     notes: "The report finding is probable_fingerprinting; the contract remains evidence-only and does not assert identifiability."
   },
   {
-    findingId: "session_replay_on_sensitive_input_surface",
-    unifiedFindingIds: ["session_replay_on_sensitive_input_surface"],
+    findingId: "possible_session_replay_on_sensitive_input_surface",
+    unifiedFindingIds: ["possible_session_replay_on_sensitive_input_surface"],
     requiredForStrong: [req("sensitiveSessionReplayCooccurrenceEvidence"), req("coverageNotMateriallyBlocked")],
     requiredForGood: [req("sensitiveSessionReplayCooccurrenceEvidence")],
     downgradeIf: [
-      { ifMissing: "sensitiveSessionReplayCooccurrenceEvidence", to: "audit_only", reason: "Sensitive replay findings require observed co-occurrence between replay runtime and a sensitive input surface." }
+      { ifMissing: "sensitiveSessionReplayCooccurrenceEvidence", to: "audit_only", reason: "Possible sensitive replay findings require retained co-occurrence evidence between replay runtime and a sensitive input surface." }
     ],
     suppressIf: [],
     projectionEligibility: {
@@ -452,7 +452,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
-    notes: "Requires observed replay runtime and sensitive input surface co-occurrence; WC01 owns risk framing."
+    notes: "Represents possible replay risk on a sensitive input surface; WC01 owns risk framing and requires retained co-occurrence evidence."
   },
   {
     findingId: "sensitive_data_collection_with_third_party_tracking_present",
@@ -522,6 +522,65 @@ function getObjectValue(record: Record<string, unknown> | null | undefined, keys
     }
   }
   return null;
+}
+
+function getOverlayKind(record: Record<string, unknown> | null | undefined) {
+  const overlayEvidence = getObjectValue(record, ["overlayEvidence", "overlay_evidence"]);
+  const consentSummary = getObjectValue(record, ["hybridConsentSummary", "hybrid_consent_summary"]);
+  const uiSummary = getObjectValue(record, ["hybridUiSummary", "hybrid_ui_summary"]);
+  return (
+    getStringValue(record, ["overlayKind", "overlay_kind", "overlayType", "overlay_type", "blockerType", "blocker_type"]) ??
+    getStringValue(overlayEvidence, ["overlayKind", "overlay_kind", "overlayType", "overlay_type", "blockerType", "blocker_type"]) ??
+    getStringValue(consentSummary, ["overlayKind", "overlay_kind", "overlayType", "overlay_type"]) ??
+    getStringValue(uiSummary, ["overlayKind", "overlay_kind", "overlayType", "overlay_type"])
+  );
+}
+
+function hasIndependentConsentSurfaceText(record: Record<string, unknown> | null | undefined) {
+  const consentSummary = getObjectValue(record, ["hybridConsentSummary", "hybrid_consent_summary"]);
+  const uiSummary = getObjectValue(record, ["hybridUiSummary", "hybrid_ui_summary"]);
+  const text = [
+    ...getStringArrayValues(record, [
+      "overlayActionLabels",
+      "overlay_action_labels",
+      "consentActionLabels",
+      "consent_action_labels",
+      "buttonLabels",
+      "button_labels",
+      "snippets",
+      "snippet",
+      "description",
+      "observedBehavior",
+      "observed_behavior"
+    ]),
+    ...getStringArrayValues(consentSummary, [
+      "acceptActionLabels",
+      "accept_action_labels",
+      "rejectActionLabels",
+      "reject_action_labels",
+      "manageActionLabels",
+      "manage_action_labels",
+      "closeActionLabels",
+      "close_action_labels",
+      "bannerTextSnippet",
+      "banner_text_snippet",
+      "textSnippet",
+      "text_snippet"
+    ]),
+    ...getStringArrayValues(uiSummary, ["buttonLabels", "button_labels", "actionLabels", "action_labels", "textSnippet", "text_snippet", "overlayText", "overlay_text"])
+  ];
+  return text.some((value) =>
+    /accept all|reject all|decline|manage (?:options|preferences|choices)|cookie|cookies|consent|privacy|tracking|preferences?/i.test(value)
+  );
+}
+
+function hasNonConsentOverlayWithoutIndependentConsentEvidence(record: Record<string, unknown> | null | undefined) {
+  const overlayKind = getOverlayKind(record);
+  return Boolean(
+    overlayKind &&
+      /bot|challenge|captcha|login|auth|paywall|subscribe|subscription|newsletter|age|regional|region|geo|app_install|install/i.test(overlayKind) &&
+      !hasIndependentConsentSurfaceText(record)
+  );
 }
 
 function getObjectArrayValues(record: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -821,6 +880,10 @@ function hasRejectPathDepthEvidence(rawEvidence: Record<string, unknown> | null 
 }
 
 function hasMaterialChoiceAsymmetryEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (hasNonConsentOverlayWithoutIndependentConsentEvidence(rawEvidence)) {
+    return false;
+  }
+
   const flags = getStringArrayValues(rawEvidence, ["flags", "evidenceFlags", "uiEvidenceFlags", "runtimeArtifacts"]);
   const artifactRefs = getStringArrayValues(rawEvidence, [
     "consentUiArtifactRefs",
@@ -955,7 +1018,6 @@ function hasPrivacyChoiceControlSearchScope(rawEvidence: Record<string, unknown>
     rawEvidence?.optOutControlFound === false ||
     rawEvidence?.opt_out_control_found === false ||
     choiceControlSearchScope === "homepage_footer_privacy_surfaces" ||
-    optOutUiResult === "absent" ||
     optOutUiResult === "generic_do_not_sell" ||
     optOutUiResult === "partial_no_icon" ||
     optOutUiResult === "full_cpra_compliant"
@@ -1232,9 +1294,11 @@ function downgradeFlag(type: EvidenceRequirementType) {
     case "ignoredRuntimeCookieInventoryOnly":
       return "runtime_cookie_inventory_ignored_only";
     case "privacyChoiceControlSearchScope":
-      return "missing_policy_side_evidence";
+      return "missing_privacy_choice_control_search_scope";
     case "advertisingSharingRuntimeEvidence":
+      return "missing_runtime_request_url_evidence";
     case "cpraRelevantOptOutContext":
+      return "missing_cpra_relevant_opt_out_context";
     case "crossDomainIdentifierEvidence":
     case "videoTrackingRuntimeEvidence":
     case "fingerprintingRuntimeEvidence":
@@ -1490,6 +1554,9 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
       entities.postRejectNonEssentialRequests ?? entities.post_reject_non_essential_requests
     ),
     postRejectNonEssentialRequestUrls: entities.postRejectNonEssentialRequestUrls ?? entities.post_reject_non_essential_request_urls,
+    rejectPathDepthAndAvailability: parseFirstObjectValue(
+      entities.rejectPathDepthAndAvailability ?? entities.reject_path_depth_and_availability
+    ),
     rejectCookieDiffProvenance: parseFirstObjectValue(entities.rejectCookieDiffProvenance ?? entities.reject_cookie_diff_provenance),
     rejectInteractionAttribution: parseFirstObjectValue(entities.rejectInteractionAttribution ?? entities.reject_interaction_attribution),
     suppressionChecks: parseFirstObjectValue(entities.suppressionChecks ?? entities.suppression_checks),

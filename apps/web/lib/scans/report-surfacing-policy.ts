@@ -284,7 +284,7 @@ const SUPPORT_ONLY_CONSENT_TRACKING_CONTEXT_IDS = [
 ] as const satisfies ReportUnifiedFindingId[];
 
 const SENSITIVE_DATA_IDS = [
-  "session_replay_on_sensitive_input_surface",
+  "possible_session_replay_on_sensitive_input_surface",
   "sensitive_data_collection_with_third_party_tracking_present",
   "sensitive_collection_surface_observed",
   "minors_or_age_gated_collection_context",
@@ -631,8 +631,8 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialTier: "section",
     initialLane: "main"
   },
-  session_replay_on_sensitive_input_surface: {
-    findingId: "session_replay_on_sensitive_input_surface",
+  possible_session_replay_on_sensitive_input_surface: {
+    findingId: "possible_session_replay_on_sensitive_input_surface",
     family: "sensitive_data",
     initialState: "review",
     initialTier: "headline",
@@ -735,6 +735,13 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialState: "review",
     initialTier: "secondary",
     initialLane: "main"
+  },
+  accessibility_risk_score: {
+    findingId: "accessibility_risk_score",
+    family: "accessibility",
+    initialState: "support_only",
+    initialTier: "support",
+    initialLane: "confidence_and_coverage"
   },
   guaranteed_or_high_return_claims_present: {
     findingId: "guaranteed_or_high_return_claims_present",
@@ -884,8 +891,8 @@ const EXPLICIT_PRECEDENCE_RULES: PrecedenceRule[] = [
   },
   {
     appliedRule: "precedence.sensitive_replay_beats_generic_replay",
-    primaryFindingId: "session_replay_on_sensitive_input_surface",
-    reason: "The sensitive-input replay finding is more specific and should lead, while generic replay disclosure mismatch remains supporting context.",
+    primaryFindingId: "possible_session_replay_on_sensitive_input_surface",
+    reason: "The possible sensitive-input replay finding is more specific and should lead, while generic replay disclosure mismatch remains supporting context.",
     supportingFindingId: "session_replay_undisclosed"
   },
   {

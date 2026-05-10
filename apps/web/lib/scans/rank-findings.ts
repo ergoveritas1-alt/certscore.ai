@@ -37,7 +37,7 @@ export const EXECUTIVE_SUMMARY_TOP_FINDING_IDS = [
   "session_recording_services_detected",
   "third_party_cookie_pre_consent",
   "sensitive_data_collection_with_third_party_tracking_present",
-  "session_replay_on_sensitive_input_surface",
+  "possible_session_replay_on_sensitive_input_surface",
   "rtb_cookie_sync_observed",
   "consent_dark_patterns_detected",
   "reject_option_missing_or_hidden",

@@ -1255,10 +1255,89 @@ function getObservedConsentSurface(
   return surfacedControls ? true : null;
 }
 
+function getConsentSurfaceTextCandidates(
+  hybrid: Record<string, unknown> | null,
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+) {
+  const consentSummary = getRecord(hybrid?.consentSummary);
+  const uiSummary = getRecord(hybrid?.uiSummary);
+  return [
+    ...getStringArray(runtimeArtifacts?.overlayActionLabels),
+    ...getStringArray(runtimeArtifacts?.overlay_action_labels),
+    ...getStringArray(runtimeArtifacts?.consentActionLabels),
+    ...getStringArray(runtimeArtifacts?.consent_action_labels),
+    ...getStringArray(runtimeArtifacts?.buttonLabels),
+    ...getStringArray(runtimeArtifacts?.button_labels),
+    ...getStringArray(consentSummary?.acceptActionLabels),
+    ...getStringArray(consentSummary?.accept_action_labels),
+    ...getStringArray(consentSummary?.rejectActionLabels),
+    ...getStringArray(consentSummary?.reject_action_labels),
+    ...getStringArray(consentSummary?.manageActionLabels),
+    ...getStringArray(consentSummary?.manage_action_labels),
+    ...getStringArray(consentSummary?.closeActionLabels),
+    ...getStringArray(consentSummary?.close_action_labels),
+    ...getStringArray(uiSummary?.buttonLabels),
+    ...getStringArray(uiSummary?.button_labels),
+    ...getStringArray(uiSummary?.actionLabels),
+    ...getStringArray(uiSummary?.action_labels),
+    getString(consentSummary?.bannerTextSnippet ?? consentSummary?.banner_text_snippet),
+    getString(consentSummary?.textSnippet ?? consentSummary?.text_snippet),
+    getString(uiSummary?.textSnippet ?? uiSummary?.text_snippet),
+    getString(uiSummary?.overlayText ?? uiSummary?.overlay_text),
+    getString(runtimeArtifacts?.overlayText ?? runtimeArtifacts?.overlay_text),
+    getString(runtimeArtifacts?.bannerTextSnippet ?? runtimeArtifacts?.banner_text_snippet)
+  ].filter((value): value is string => Boolean(value));
+}
+
+function getOverlayKind(
+  hybrid: Record<string, unknown> | null,
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+) {
+  const consentSummary = getRecord(hybrid?.consentSummary);
+  const uiSummary = getRecord(hybrid?.uiSummary);
+  const overlayEvidence = getRecord(runtimeArtifacts?.overlayEvidence ?? runtimeArtifacts?.overlay_evidence);
+  return getString(
+    runtimeArtifacts?.overlayKind ??
+      runtimeArtifacts?.overlay_kind ??
+      runtimeArtifacts?.overlayType ??
+      runtimeArtifacts?.overlay_type ??
+      runtimeArtifacts?.blockerType ??
+      runtimeArtifacts?.blocker_type ??
+      overlayEvidence?.overlayKind ??
+      overlayEvidence?.overlay_kind ??
+      overlayEvidence?.overlayType ??
+      overlayEvidence?.overlay_type ??
+      consentSummary?.overlayKind ??
+      consentSummary?.overlay_kind ??
+      consentSummary?.overlayType ??
+      consentSummary?.overlay_type ??
+      uiSummary?.overlayKind ??
+      uiSummary?.overlay_kind ??
+      uiSummary?.overlayType ??
+      uiSummary?.overlay_type
+  );
+}
+
+function hasNonConsentOverlayWithoutIndependentConsentEvidence(
+  hybrid: Record<string, unknown> | null,
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+) {
+  const overlayKind = getOverlayKind(hybrid, runtimeArtifacts);
+  if (!overlayKind || !/bot|challenge|captcha|login|auth|paywall|subscribe|subscription|newsletter|age|regional|region|geo|app_install|install/i.test(overlayKind)) {
+    return false;
+  }
+  return !getConsentSurfaceTextCandidates(hybrid, runtimeArtifacts).some((value) =>
+    /accept all|reject all|decline|manage (?:options|preferences|choices)|cookie|cookies|consent|privacy|tracking|preferences?/i.test(value)
+  );
+}
+
 function hasVerifiedConsentSurface(
   hybrid: Record<string, unknown> | null,
   runtimeArtifacts: Record<string, unknown> | null | undefined
 ) {
+  if (hasNonConsentOverlayWithoutIndependentConsentEvidence(hybrid, runtimeArtifacts)) {
+    return false;
+  }
   return getObservedConsentSurface(hybrid, runtimeArtifacts) === true;
 }
 

@@ -180,6 +180,11 @@ export type CertScoreFindingEvidenceDetails = {
   rejectEvidenceDiff?: Record<string, unknown>;
   postRejectNonEssentialRequests?: Array<Record<string, unknown>>;
   rtbCookieSyncEvidence?: Array<Record<string, unknown>>;
+  rtbCookieSyncSubtypeCounts?: Record<string, number>;
+  rtbCookieSyncEvidenceSubtypes?: string[];
+  rtbCookieSyncRedirectTargets?: string[];
+  rtbCookieSyncIdentifierQueryKeys?: string[];
+  rtbCookieSyncWeakObservationCount?: number;
   crossDomainIdentifierSharingEvidence?: Array<Record<string, unknown>>;
   confidenceRisks?: string[];
   suppressionChecks?: Record<string, unknown>;
@@ -231,13 +236,13 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   cpra_cba_opt_out_missing: {
     id: "cpra_cba_opt_out_missing",
-    label: "CPRA opt-out missing for advertising sharing",
+    label: "CPRA advertising opt-out missing or incomplete",
     section: "Privacy & Tracking",
     defaultSurfacePriority: 96,
     whyItMatters:
-      "Cross-context behavioral advertising vendors create CPRA opt-out expectations when the site does not expose a clear Do Not Sell or Share or Your Privacy Choices mechanism.",
+      "Cross-context behavioral advertising vendors create CPRA opt-out expectations when the site does not expose or confirm a complete Do Not Sell or Share or Your Privacy Choices mechanism.",
     remediation:
-      "Add a CPRA-specific opt-out mechanism, include the required privacy choices treatment, and verify that advertising-sharing vendors are suppressed when opt-out signals apply."
+      "Add or verify a CPRA-specific opt-out mechanism, include the required privacy choices treatment, and confirm that advertising-sharing vendors are suppressed when opt-out signals apply."
   },
   cross_domain_identifier_sharing_observed: {
     id: "cross_domain_identifier_sharing_observed",
@@ -355,13 +360,13 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "Session replay or recording tools can capture detailed on-page behavior and require careful consent, masking, and disclosure controls.",
     remediation: "Audit replay tooling, ensure sensitive fields are masked, gate it behind consent where required, and disclose it clearly."
   },
-  session_replay_on_sensitive_input_surface: {
-    id: "session_replay_on_sensitive_input_surface",
-    label: "Session replay observed on a sensitive input surface",
+  possible_session_replay_on_sensitive_input_surface: {
+    id: "possible_session_replay_on_sensitive_input_surface",
+    label: "Possible session replay on a sensitive input surface",
     section: "Privacy & Tracking",
     defaultSurfacePriority: 99,
     whyItMatters:
-      "Session replay on pages that collect health, financial, identity, or other sensitive data can materially increase privacy and data-handling risk, especially if masking or consent controls are weak.",
+      "Possible session replay on pages that collect health, financial, identity, or other sensitive data can materially increase privacy and data-handling risk, especially if masking or consent controls are weak.",
     remediation:
       "Disable session replay on sensitive forms unless it is clearly necessary, confirm that sensitive fields are fully masked, and gate collection behind the appropriate consent and disclosure controls."
   },
@@ -427,11 +432,11 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   probable_fingerprinting: {
     id: "probable_fingerprinting",
-    label: "Probable fingerprinting behavior",
+    label: "Probable browser/device fingerprinting behavior",
     section: "Fingerprinting",
     defaultSurfacePriority: 93,
-    whyItMatters: "Fingerprinting can identify or re-identify users without relying on cookies.",
-    remediation: "Remove non-essential fingerprinting scripts or restrict collection to clearly necessary fraud controls."
+    whyItMatters: "Browser/device fingerprinting may support fraud prevention or security, but it can still create privacy review obligations depending on jurisdiction, disclosure, consent posture, and data sharing.",
+    remediation: "Review the scripts collecting high-entropy browser or device attributes, document any security or fraud-prevention purpose, and align disclosures, consent posture, and data sharing controls."
   },
   non_cookie_tracking_detected: {
     id: "non_cookie_tracking_detected",

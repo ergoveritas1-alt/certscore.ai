@@ -332,21 +332,123 @@ function collectUrlEtldPlusOne(value: string | null | undefined) {
   return [...output];
 }
 
-function hasConcreteRtbObservationRow(row: Record<string, unknown>) {
+export type RtbCookieSyncEvidenceSubtype =
+  | "identifier_query_sync"
+  | "redirect_chain_sync"
+  | "known_sync_endpoint"
+  | "sync_path_only";
+
+export type RtbCookieSyncEvidenceClassification = {
+  row: Record<string, unknown>;
+  subtype: RtbCookieSyncEvidenceSubtype;
+  hostname: string;
+  redirectTargetHost: string | null;
+  queryKeys: string[];
+  vendor: string | null;
+  independentKey: string;
+};
+
+const RTB_IDENTIFIER_QUERY_KEY_PATTERN =
+  /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|uid2|euid|id5id|tdid|dclid|li_fat_id|fbclid|gclid|msclkid|redir|redirect|callback)$/i;
+
+const RTB_WEAK_CONTEXT_QUERY_KEY_PATTERN = /^(?:gdpr|gdpr_consent|us_privacy|gpp|gpp_sid)$/i;
+
+function getRecordStringValue(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function getRoughRegistrableDomain(hostname: string) {
+  const parts = hostname.toLowerCase().split(".").filter(Boolean);
+  if (parts.length <= 2) {
+    return hostname.toLowerCase();
+  }
+  return parts.slice(-2).join(".");
+}
+
+export function classifyRtbCookieSyncEvidenceRow(row: Record<string, unknown>): RtbCookieSyncEvidenceClassification | null {
   const hostname = typeof row.hostname === "string" ? row.hostname.trim() : "";
-  const pathSample = typeof row.pathSample === "string" ? row.pathSample : typeof row.path_sample === "string" ? row.path_sample : "";
-  const urlSample = typeof row.urlSample === "string" ? row.urlSample : typeof row.url_sample === "string" ? row.url_sample : "";
-  const reason = typeof row.reason === "string" ? row.reason : "";
+  const pathSample = getRecordStringValue(row, ["pathSample", "path_sample"]);
+  const urlSample = getRecordStringValue(row, ["urlSample", "url_sample", "requestUrl", "request_url"]);
+  const reason = getRecordStringValue(row, ["reason"]);
+  const category = getRecordStringValue(row, ["category", "destinationCategory", "destination_category"]);
+  const vendor = getRecordStringValue(row, ["vendor", "vendorName", "vendor_name"]) || null;
+  const redirectTargetHost = getRecordStringValue(row, [
+    "redirectTargetHost",
+    "redirect_target_host",
+    "redirectHostname",
+    "redirect_hostname"
+  ]) || null;
   const queryKeys = [
     ...getStringArrayValues(row, ["queryKeysSample", "query_keys_sample", "parameterKeys", "parameter_keys"])
   ];
   const hasSyncPattern =
     /sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid/i.test(`${hostname} ${pathSample} ${urlSample} ${reason}`) ||
     /redirect_sync|identifier_query|known_sync_host|sync_path/i.test(reason);
-  const hasIdHints = queryKeys.some((key) =>
-    /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|uid2|euid|id5id|tdid|gdpr|gdpr_consent|us_privacy|redir|redirect|callback)$/i.test(key)
+  if (!hostname.includes(".") || !hasSyncPattern) {
+    return null;
+  }
+
+  const hasStrongIdHints = queryKeys.some((key) => RTB_IDENTIFIER_QUERY_KEY_PATTERN.test(key));
+  const hasOnlyWeakContextKeys = queryKeys.length > 0 && queryKeys.every((key) => RTB_WEAK_CONTEXT_QUERY_KEY_PATTERN.test(key));
+  const hostnameEtld = getRoughRegistrableDomain(hostname);
+  const redirectEtld = redirectTargetHost ? getRoughRegistrableDomain(redirectTargetHost) : null;
+  const hasCrossDomainRedirect = Boolean(redirectEtld && redirectEtld !== hostnameEtld);
+  const knownEndpointShape =
+    /\/(?:idsync|sync|usersync|user[-_]?match|cookie[-_]?sync|setuid|getuid|tap\.php|cmf|match)(?:\/|$|[.?_-])/i.test(pathSample) ||
+    /identifier_query|known_sync_host/i.test(reason);
+  const categorySupportsSync = /rtb|identity|ad|advertis/i.test(category);
+
+  let subtype: RtbCookieSyncEvidenceSubtype | null = null;
+  if (hasStrongIdHints && !hasOnlyWeakContextKeys) {
+    subtype = "identifier_query_sync";
+  } else if (hasCrossDomainRedirect && /redirect|sync|match|idsync|tap|getuid/i.test(`${pathSample} ${reason}`)) {
+    subtype = "redirect_chain_sync";
+  } else if (knownEndpointShape && (categorySupportsSync || /known_sync_host|identifier_query/i.test(reason))) {
+    subtype = "known_sync_endpoint";
+  } else if (/sync|idsync|match|redirect/i.test(`${pathSample} ${reason}`)) {
+    subtype = "sync_path_only";
+  }
+
+  if (!subtype) {
+    return null;
+  }
+
+  return {
+    row,
+    subtype,
+    hostname,
+    redirectTargetHost,
+    queryKeys,
+    vendor,
+    independentKey: vendor ?? hostnameEtld
+  };
+}
+
+export function classifyRtbCookieSyncEvidenceRows(rows: Array<Record<string, unknown>>) {
+  return rows.flatMap((row) => {
+    const classification = classifyRtbCookieSyncEvidenceRow(row);
+    return classification ? [classification] : [];
+  });
+}
+
+export function hasProjectableRtbCookieSyncEvidenceRows(rows: Array<Record<string, unknown>>) {
+  const classifications = classifyRtbCookieSyncEvidenceRows(rows);
+  if (classifications.some((classification) => classification.subtype !== "sync_path_only")) {
+    return true;
+  }
+
+  const weakIndependentKeys = uniqueStrings(
+    classifications
+      .filter((classification) => classification.subtype === "sync_path_only")
+      .map((classification) => classification.independentKey)
   );
-  return hostname.includes(".") && hasSyncPattern && (hasIdHints || /sync|idsync|match|redirect/i.test(`${pathSample} ${reason}`));
+  return weakIndependentKeys.length >= 2;
 }
 
 export function hasConcreteRtbCookieSyncEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -360,7 +462,7 @@ export function hasConcreteRtbCookieSyncEvidence(rawEvidence: Record<string, unk
     "rtb_cookie_sync_evidence",
     "rtbCookieSyncEvidence"
   ]);
-  if (rows.some(hasConcreteRtbObservationRow)) {
+  if (hasProjectableRtbCookieSyncEvidenceRows(rows)) {
     return true;
   }
 
@@ -370,7 +472,7 @@ export function hasConcreteRtbCookieSyncEvidence(rawEvidence: Record<string, unk
       const parsed = new URL(url);
       const text = `${parsed.hostname} ${parsed.pathname}`;
       return /sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid/i.test(text) &&
-        [...parsed.searchParams.keys()].some((key) => /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|uid2|euid|id5id|tdid|gdpr|gdpr_consent|us_privacy|redir|redirect|callback)$/i.test(key));
+        [...parsed.searchParams.keys()].some((key) => RTB_IDENTIFIER_QUERY_KEY_PATTERN.test(key));
     } catch {
       return false;
     }
@@ -802,6 +904,46 @@ function getBooleanValue(record: Record<string, unknown> | null | undefined, key
   return null;
 }
 
+function getOverlayKind(record: Record<string, unknown> | null | undefined) {
+  const overlayEvidence = getRecordValue(record, ["overlayEvidence", "overlay_evidence"]);
+  const consentSummary = getRecordValue(record, ["hybridConsentSummary", "hybrid_consent_summary"]);
+  const uiSummary = getRecordValue(record, ["hybridUiSummary", "hybrid_ui_summary"]);
+  return (
+    getStringArrayValues(record, ["overlayKind", "overlay_kind", "overlayType", "overlay_type", "blockerType", "blocker_type"])[0] ??
+    getStringArrayValues(overlayEvidence, ["overlayKind", "overlay_kind", "overlayType", "overlay_type", "blockerType", "blocker_type"])[0] ??
+    getStringArrayValues(consentSummary, ["overlayKind", "overlay_kind", "overlayType", "overlay_type"])[0] ??
+    getStringArrayValues(uiSummary, ["overlayKind", "overlay_kind", "overlayType", "overlay_type"])[0] ??
+    null
+  );
+}
+
+function isKnownNonConsentOverlayKind(value: string | null | undefined) {
+  return Boolean(value && /bot|challenge|captcha|login|auth|paywall|subscribe|subscription|newsletter|age|regional|region|geo|app_install|install/i.test(value));
+}
+
+function hasIndependentConsentSurfaceText(record: Record<string, unknown> | null | undefined) {
+  const consentSummary = getRecordValue(record, ["hybridConsentSummary", "hybrid_consent_summary"]);
+  const uiSummary = getRecordValue(record, ["hybridUiSummary", "hybrid_ui_summary"]);
+  const labels = [
+    ...getStringArrayValues(record, ["overlayActionLabels", "overlay_action_labels", "consentActionLabels", "consent_action_labels", "buttonLabels", "button_labels"]),
+    ...getStringArrayValues(consentSummary, ["acceptActionLabels", "accept_action_labels", "rejectActionLabels", "reject_action_labels", "manageActionLabels", "manage_action_labels", "closeActionLabels", "close_action_labels"]),
+    ...getStringArrayValues(uiSummary, ["buttonLabels", "button_labels", "actionLabels", "action_labels"])
+  ];
+  const snippets = [
+    ...getEvidenceSnippets(record),
+    ...getStringArrayValues(consentSummary, ["bannerTextSnippet", "banner_text_snippet", "textSnippet", "text_snippet"]),
+    ...getStringArrayValues(uiSummary, ["textSnippet", "text_snippet", "overlayText", "overlay_text"])
+  ];
+  return [...labels, ...snippets].some((value) =>
+    /accept all|reject all|decline|manage (?:options|preferences|choices)|cookie|cookies|consent|privacy|tracking|preferences?/i.test(value)
+  );
+}
+
+export function hasNonConsentOverlayWithoutIndependentConsentEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const overlayKind = getOverlayKind(rawEvidence);
+  return isKnownNonConsentOverlayKind(overlayKind) && !hasIndependentConsentSurfaceText(rawEvidence);
+}
+
 function getArtifactRefs(record: Record<string, unknown> | null | undefined) {
   return getStringArrayValues(record, [
     "artifactRefs",
@@ -1097,14 +1239,14 @@ export function deriveFingerprintEvidenceTier(rawEvidence: Record<string, unknow
   return {
     tier,
     label: tier === 3
-      ? "Probable fingerprinting behavior"
+      ? "Probable browser/device fingerprinting behavior"
       : tier === 2
         ? "Fingerprinting-related browser telemetry observed"
         : tier === 1
           ? "Elevated browser/device entropy collection observed"
           : "Generic browser telemetry observed",
     confidenceExplanation: tier === 3
-      ? "High-entropy browser/device collection is corroborated by identifier linkage, outbound entropy transmission, known fingerprinting vendor attribution, repeat sequencing, or cross-context linkage."
+      ? "High-entropy browser/device collection is corroborated by identifier linkage, outbound entropy transmission, known bot-defense/fingerprinting vendor attribution, repeat sequencing, or cross-context linkage. This may be fraud prevention or security behavior, but can still require privacy review."
       : tier === 2
         ? "Coordinated high-entropy browser/device collection was observed, but retained evidence does not establish identity-oriented fingerprinting."
         : tier === 1
@@ -1268,13 +1410,34 @@ export function hasStrongCpraCbaOptOutMissingEvidence(rawEvidence: Record<string
   if (!rawEvidence) {
     return false;
   }
+  const cpraEvidence = getRecordValue(rawEvidence, ["cpraCbaOptOutEvidence", "cpra_cba_opt_out_evidence"]);
   const tier1 = getStringArrayValues(rawEvidence, ["cbaVendorTier1", "cba_vendor_tier1"]);
   const tier2 = getStringArrayValues(rawEvidence, ["cbaVendorTier2", "cba_vendor_tier2"]);
-  const optOutUiResult = getStringArrayValues(rawEvidence, ["optOutUiResult", "opt_out_ui_result"])[0] ?? null;
-  const policyCbaLanguage = getStringArrayValues(rawEvidence, ["policyCbaLanguage", "policy_cba_language"])[0] ?? null;
-  const scanOriginGeo = getStringArrayValues(rawEvidence, ["scanOriginGeo", "scan_origin_geo"])[0] ?? null;
-  const suppressorApplied = getStringArrayValues(rawEvidence, ["suppressorApplied", "suppressor_applied"])[0] ?? null;
-  const vendorThresholdMet = tier1.length >= 1 || tier2.length >= 2;
+  const nestedTier1 = getStringArrayValues(cpraEvidence, ["cbaVendorTier1", "cba_vendor_tier1", "advertisingSharingVendors", "advertising_sharing_vendors"]);
+  const nestedTier2 = getStringArrayValues(cpraEvidence, ["cbaVendorTier2", "cba_vendor_tier2"]);
+  const optOutUiResult =
+    getStringArrayValues(cpraEvidence, ["optOutUiResult", "opt_out_ui_result"])[0] ??
+    getStringArrayValues(rawEvidence, ["optOutUiResult", "opt_out_ui_result"])[0] ??
+    null;
+  const policyCbaLanguage =
+    getStringArrayValues(cpraEvidence, ["policyCbaLanguage", "policy_cba_language"])[0] ??
+    getStringArrayValues(rawEvidence, ["policyCbaLanguage", "policy_cba_language"])[0] ??
+    null;
+  const scanOriginGeo =
+    getStringArrayValues(cpraEvidence, ["scanOriginGeo", "scan_origin_geo"])[0] ??
+    getStringArrayValues(rawEvidence, ["scanOriginGeo", "scan_origin_geo"])[0] ??
+    null;
+  const suppressorApplied =
+    getStringArrayValues(cpraEvidence, ["suppressorApplied", "suppressor_applied"])[0] ??
+    getStringArrayValues(rawEvidence, ["suppressorApplied", "suppressor_applied"])[0] ??
+    null;
+  const choiceControlsInspected =
+    cpraEvidence?.choiceControlsInspected === true ||
+    cpraEvidence?.choice_controls_inspected === true ||
+    rawEvidence.choiceControlsInspected === true ||
+    rawEvidence.choice_controls_inspected === true ||
+    getStringArrayValues(rawEvidence, ["privacyChoiceSearchUrls", "privacy_choice_search_urls", "gpcOptOutDiscoveryAttemptUrls", "gpc_opt_out_discovery_attempt_urls"]).length > 0;
+  const vendorThresholdMet = tier1.length >= 1 || tier2.length >= 2 || nestedTier1.length >= 1 || nestedTier2.length >= 2;
   const missingOrPartialControl =
     optOutUiResult === "absent" ||
     optOutUiResult === "generic_do_not_sell" ||
@@ -1283,13 +1446,17 @@ export function hasStrongCpraCbaOptOutMissingEvidence(rawEvidence: Record<string
     Boolean(policyCbaLanguage && policyCbaLanguage !== "absent") ||
     optOutUiResult === "generic_do_not_sell" ||
     optOutUiResult === "partial_no_icon" ||
-    /\b(?:ca|california)\b/i.test(scanOriginGeo ?? "");
+    /\b(?:ca|california)\b/i.test(scanOriginGeo ?? "") ||
+    getStringArrayValues(rawEvidence, ["privacyChoiceSearchUrls", "privacy_choice_search_urls", "gpcOptOutDiscoveryAttemptUrls", "gpc_opt_out_discovery_attempt_urls"]).length > 0;
 
-  return vendorThresholdMet && missingOrPartialControl && cpraRelevantContext && !suppressorApplied;
+  return vendorThresholdMet && choiceControlsInspected && missingOrPartialControl && cpraRelevantContext && !suppressorApplied;
 }
 
 export function hasVerifiedConsentUiEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   if (!rawEvidence) {
+    return false;
+  }
+  if (hasNonConsentOverlayWithoutIndependentConsentEvidence(rawEvidence)) {
     return false;
   }
 
@@ -1309,6 +1476,8 @@ export function hasVerifiedConsentUiEvidence(rawEvidence: Record<string, unknown
   const specificUiFact = Boolean(
     rawEvidence.reject_button_missing === true ||
       rawEvidence.forced_consent_wall === true ||
+      rawEvidence.accept_more_prominent_than_reject === true ||
+      rawEvidence.asymmetric_consent_ui === true ||
       rawEvidence.accept_only_banner === true ||
       rawEvidence.dismiss_without_reject === true ||
       consentVisual?.ctaImbalanceDetected === true ||

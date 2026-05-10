@@ -1583,17 +1583,17 @@ test("generic tracking-context findings are suppressed unless they support a str
 test("sensitive-flow-specific finding outranks generic sibling", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
-      makePacket("session_replay_on_sensitive_input_surface", {
+      makePacket("possible_session_replay_on_sensitive_input_surface", {
         confidenceBand: "high",
         confidenceInputs: {
-          ...makePacket("session_replay_on_sensitive_input_surface").confidenceInputs,
+          ...makePacket("possible_session_replay_on_sensitive_input_surface").confidenceInputs,
           hasConcretePayloadEvidence: true,
           hasDirectRuntimeEvidence: true
         },
         details: {
           dataTypes: ["financial"],
           family: "sensitive_data",
-          kind: "session_replay_on_sensitive_input_surface"
+          kind: "possible_session_replay_on_sensitive_input_surface"
         }
       }),
       makePacket("session_replay_undisclosed", {
@@ -1614,12 +1614,12 @@ test("sensitive-flow-specific finding outranks generic sibling", () => {
     ]
   });
 
-  const specific = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "session_replay_on_sensitive_input_surface");
+  const specific = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "possible_session_replay_on_sensitive_input_surface");
   const generic = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "session_replay_undisclosed");
 
   assert.equal(specific?.decisionState, "confirmed");
   assert.equal(generic?.decisionState, "support_only");
-  assert.equal(generic?.supportTargetId, "session_replay_on_sensitive_input_surface");
+  assert.equal(generic?.supportTargetId, "possible_session_replay_on_sensitive_input_surface");
 });
 
 test("task-blocking accessibility finding outranks generic accessibility summary", () => {
