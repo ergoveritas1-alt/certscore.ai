@@ -387,9 +387,14 @@ export function classifyRtbCookieSyncEvidenceRow(row: Record<string, unknown>): 
   const queryKeys = [
     ...getStringArrayValues(row, ["queryKeysSample", "query_keys_sample", "parameterKeys", "parameter_keys"])
   ];
+  const syncEndpointPathShape =
+    /(?:^|\/)(?:idsync|sync|usersync|user[-_]?match|cookie[-_]?sync|setuid|getuid\w*|tap\.php|cmf)(?:\/|$|[?_])|(?:^|\/)match(?:\/|$|[?_])/i.test(
+      pathSample
+    );
   const hasSyncPattern =
-    /sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid/i.test(`${hostname} ${pathSample} ${urlSample} ${reason}`) ||
-    /redirect_sync|identifier_query|known_sync_host|sync_path/i.test(reason);
+    /sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid/i.test(`${hostname} ${urlSample}`) ||
+    syncEndpointPathShape ||
+    /redirect_sync|identifier_query|known_sync_host/i.test(reason);
   if (!hostname.includes(".") || !hasSyncPattern) {
     return null;
   }
@@ -400,8 +405,8 @@ export function classifyRtbCookieSyncEvidenceRow(row: Record<string, unknown>): 
   const redirectEtld = redirectTargetHost ? getRoughRegistrableDomain(redirectTargetHost) : null;
   const hasCrossDomainRedirect = Boolean(redirectEtld && redirectEtld !== hostnameEtld);
   const knownEndpointShape =
-    /\/(?:idsync|sync|usersync|user[-_]?match|cookie[-_]?sync|setuid|getuid|tap\.php|cmf|match)(?:\/|$|[.?_-])/i.test(pathSample) ||
-    /identifier_query|known_sync_host/i.test(reason);
+    syncEndpointPathShape ||
+    /identifier_query/i.test(reason);
   const categorySupportsSync = /rtb|identity|ad|advertis/i.test(category);
 
   let subtype: RtbCookieSyncEvidenceSubtype | null = null;
@@ -411,7 +416,7 @@ export function classifyRtbCookieSyncEvidenceRow(row: Record<string, unknown>): 
     subtype = "redirect_chain_sync";
   } else if (knownEndpointShape && (categorySupportsSync || /known_sync_host|identifier_query/i.test(reason))) {
     subtype = "known_sync_endpoint";
-  } else if (/sync|idsync|match|redirect/i.test(`${pathSample} ${reason}`)) {
+  } else if (syncEndpointPathShape || /redirect_sync/i.test(reason)) {
     subtype = "sync_path_only";
   }
 

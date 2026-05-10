@@ -954,6 +954,28 @@ test("RTB sync-path-only observations remain eligible when multiple independent 
   assert.equal(decision?.status, "pass_good");
 });
 
+test("RTB sync-path evidence ignores generic asset and API path sync substrings", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("rtb_cookie_sync_observed", {
+    rtb_cookie_sync_evidence: [
+      {
+        hostname: "www.example-shop.test",
+        pathSample: "/cdn/shopifycloud/shop-js/modules/client.shop-cart-sync.en.esm.js",
+        reason: "sync_path",
+        category: "identity_sync"
+      },
+      {
+        hostname: "api.example-news.test",
+        pathSample: "/sports/v1/events/schedule/season/2025/tournament/0101/match-day/35",
+        reason: "sync_path",
+        category: "identity_sync"
+      }
+    ]
+  });
+
+  assert.equal(decision?.status, "downgrade");
+  assert.ok(decision?.missingRequirements.includes("rtbOrIdentitySyncEndpointEvidence"));
+});
+
 test("RTB redirect-chain evidence projects without identifier query keys", () => {
   const decision = evaluateFindingEvidenceContractForRawEvidence("rtb_cookie_sync_observed", {
     rtb_cookie_sync_evidence: [

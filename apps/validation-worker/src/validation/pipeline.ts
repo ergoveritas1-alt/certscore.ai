@@ -3905,10 +3905,9 @@ function getRtbCookieSyncObservations(hybrid: Record<string, unknown> | null, rt
           ? row.redirect_target_host
           : null;
     const hasConcreteSyncEvidence =
-      reason === "sync_path" ||
       reason === "identifier_query" ||
       reason === "redirect_sync" ||
-      /(?:^|\/|[-_:])(?:sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid|getuid\w*)(?:\/|[-_:]|$)|\/tap\.php$|\/track\/cmf(?:\/|$)|\/ibs:dpid/i.test(
+      /(?:^|\/)(?:sync|idsync|usersync|user[-_]?match|cookie[-_]?sync|setuid|getuid\w*)(?:\/|[?_]|$)|(?:^|\/)match(?:\/|[?_]|$)|\/tap\.php$|\/track\/cmf(?:\/|$)|\/ibs:dpid/i.test(
         `${hostname} ${pathSample}`
       ) ||
       queryKeysSample.some((key) =>
@@ -3951,7 +3950,9 @@ function getRtbCookieSyncObservations(hybrid: Record<string, unknown> | null, rt
     const hostname = typeof row.domain === "string" ? row.domain.trim().replace(/^\.+/, "").toLowerCase() : "";
     const pathSample = typeof row.pathSample === "string" ? row.pathSample : typeof row.path_sample === "string" ? row.path_sample : "/";
     const queryKeysSample = getRuntimeStringArray(row.queryKeysSample ?? row.query_keys_sample ?? row.parameterKeys ?? row.parameter_keys);
-    const syncPattern = /sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid/i.test(`${hostname} ${pathSample}`);
+    const syncPattern =
+      /sync|idsync|user[-_]?match|cookie[-_]?sync|setuid/i.test(hostname) ||
+      /(?:^|\/)(?:sync|idsync|usersync|user[-_]?match|cookie[-_]?sync|setuid|getuid\w*)(?:\/|[?_]|$)|(?:^|\/)match(?:\/|[?_]|$)/i.test(pathSample);
     const idHints = queryKeysSample.some((key) =>
       /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|gdpr|gdpr_consent|us_privacy|redir|redirect|callback)$/i.test(key)
     );

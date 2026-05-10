@@ -2,26 +2,7 @@ import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { buildScanReportUnifiedFindings } from "../../components/scans/shared-scan-detail-view";
 import { getAnonymousScanById } from "./get-scan-by-id";
-
-export const OPS_SCAN_STATUS_FINDING_IDS = [
-  "pre_consent_tracking_detected",
-  "keyboard_navigation_accessibility_issue",
-  "semantic_labeling_accessibility_issue",
-  "text_alternative_accessibility_issue",
-  "visual_contrast_accessibility_issue",
-  "focus_management_issue",
-  "cross_domain_identifier_sharing_observed",
-  "cpra_cba_opt_out_missing",
-  "reject_tracking_persists_after_reject",
-  "session_recording_services_detected",
-  "third_party_cookie_pre_consent",
-  "sensitive_data_collection_with_third_party_tracking_present",
-  "possible_session_replay_on_sensitive_input_surface",
-  "consent_dark_patterns_detected",
-  "reject_option_missing_or_hidden",
-  "fingerprinting_related_signals_observed",
-  "probable_fingerprinting"
-] as const;
+import { OPS_SCAN_STATUS_FINDING_IDS } from "./ops-status-finding-ids";
 
 export type OpsScanStatusFindingId = (typeof OPS_SCAN_STATUS_FINDING_IDS)[number];
 
@@ -46,10 +27,27 @@ type OpsScanEventRow = {
 };
 
 type OpsSnapshotRow = {
+  access_posture_class?: string | null;
+  auth_wall_detected?: boolean | null;
+  auth_wall_suspected?: boolean | null;
+  blocked_flag?: boolean | null;
+  block_page_classification?: string | null;
+  captcha_flag?: boolean | null;
+  challenge_suspected?: boolean | null;
+  fingerprint_block_suspected?: boolean | null;
+  geo_block_suspected?: boolean | null;
+  homepage_fetch_http_status?: number | null;
+  homepage_fetch_status?: string | null;
+  rate_limit_suspected?: boolean | null;
   report_finding_count?: number | null;
+  robots_allowed?: boolean | null;
+  robots_fetch_http_status?: number | null;
+  robots_fetch_status?: string | null;
   scan_outcome?: string | null;
   stop_reason_code?: string | null;
   stop_reason_detail?: string | null;
+  stop_reason_http_status?: number | null;
+  stop_reason_label?: string | null;
   total_signals?: number | null;
 };
 
@@ -105,7 +103,28 @@ async function loadOpsScanStatusCore(scanId: string) {
       { readOnly: true }
     ).then((result) => result.rows),
     queryOne<OpsSnapshotRow>(
-      `select report_finding_count, scan_outcome, stop_reason_code, stop_reason_detail, total_signals
+      `select access_posture_class,
+              auth_wall_detected,
+              auth_wall_suspected,
+              blocked_flag,
+              block_page_classification,
+              captcha_flag,
+              challenge_suspected,
+              fingerprint_block_suspected,
+              geo_block_suspected,
+              homepage_fetch_http_status,
+              homepage_fetch_status,
+              rate_limit_suspected,
+              report_finding_count,
+              robots_allowed,
+              robots_fetch_http_status,
+              robots_fetch_status,
+              scan_outcome,
+              stop_reason_code,
+              stop_reason_detail,
+              stop_reason_http_status,
+              stop_reason_label,
+              total_signals
          from scan_snapshots
         where scan_id = $1`,
       [scanId],
@@ -139,10 +158,27 @@ async function loadOpsScanStatusCore(scanId: string) {
       status: scan.status
     },
     snapshot: {
+      accessPostureClass: snapshot?.access_posture_class ?? null,
+      authWallDetected: snapshot?.auth_wall_detected ?? null,
+      authWallSuspected: snapshot?.auth_wall_suspected ?? null,
+      blockedFlag: snapshot?.blocked_flag ?? null,
+      blockPageClassification: snapshot?.block_page_classification ?? null,
+      captchaFlag: snapshot?.captcha_flag ?? null,
+      challengeSuspected: snapshot?.challenge_suspected ?? null,
+      fingerprintBlockSuspected: snapshot?.fingerprint_block_suspected ?? null,
+      geoBlockSuspected: snapshot?.geo_block_suspected ?? null,
+      homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
+      homepageFetchStatus: snapshot?.homepage_fetch_status ?? null,
+      rateLimitSuspected: snapshot?.rate_limit_suspected ?? null,
       reportFindingCount: snapshot?.report_finding_count ?? null,
+      robotsAllowed: snapshot?.robots_allowed ?? null,
+      robotsFetchHttpStatus: snapshot?.robots_fetch_http_status ?? null,
+      robotsFetchStatus: snapshot?.robots_fetch_status ?? null,
       scanOutcome: snapshot?.scan_outcome ?? null,
       stopReasonCode: snapshot?.stop_reason_code ?? null,
       stopReasonDetail: snapshot?.stop_reason_detail ?? null,
+      stopReasonHttpStatus: snapshot?.stop_reason_http_status ?? null,
+      stopReasonLabel: snapshot?.stop_reason_label ?? null,
       totalSignals: snapshot?.total_signals ?? null
     },
     workflow: {
