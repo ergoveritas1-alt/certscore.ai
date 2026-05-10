@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildScanCalibrationSummary,
+  deriveExecutiveDisplayState,
   deriveExecutiveNarrativePresentation,
   deriveHostResolutionCategory,
   isThinCoverageSummary
@@ -77,10 +78,87 @@ test("uses a coverage note for thin scans instead of a normal primary-concerns n
     verifiedPublicSurfacesCount: 0
   });
 
-  assert.equal(presentation.findingsHeading, "Possible homepage issues");
+  assert.equal(presentation.findingsHeading, "Automated homepage findings");
   assert.equal(presentation.summaryLabel, "Coverage note:");
   assert.equal(presentation.limitedCoverage, true);
-  assert.match(presentation.summaryMessage, /limited public coverage/i);
+  assert.match(presentation.summaryMessage, /These are automated observations from the public scan\. Review the evidence before taking action/);
+});
+
+test("derives limited review for interrupted clear scans with retained runtime context", () => {
+  const displayState = deriveExecutiveDisplayState({
+    domainBenchmark: {
+      expectedThirdPartyRequests: 55
+    },
+    posture: "Clear",
+    scanInterruptions: [
+      { label: "Captcha/security challenge", details: ["Challenge suspected."] },
+      { label: "Authentication wall", details: ["The homepage presented an authentication wall."] }
+    ],
+    thirdPartyDomains: ["securepubads.g.doubleclick.net"],
+    thirdPartyRequestCount: 81,
+    topFindingCount: 0,
+    vendorCount: 5
+  });
+
+  assert.equal(displayState, "Limited review");
+});
+
+test("keeps clean well-covered scans clear when no interruption context is retained", () => {
+  const displayState = deriveExecutiveDisplayState({
+    domainBenchmark: {
+      expectedThirdPartyRequests: 55
+    },
+    posture: "Clear",
+    scanInterruptions: [],
+    thirdPartyDomains: [],
+    thirdPartyRequestCount: 12,
+    topFindingCount: 0,
+    vendorCount: 0
+  });
+
+  assert.equal(displayState, "Clear");
+});
+
+test("preserves action-needed posture when already-projected headline findings exist", () => {
+  const displayState = deriveExecutiveDisplayState({
+    coverageLevel: "limited_partial",
+    posture: "Action Needed",
+    scanInterruptions: [{ label: "Captcha/security challenge", details: [] }],
+    thirdPartyRequestCount: 81,
+    topFindingCount: 1,
+    vendorCount: 5
+  });
+
+  assert.equal(displayState, "Action Needed");
+});
+
+test("builds calibration summary with display state separate from canonical posture", () => {
+  const summary = buildScanCalibrationSummary({
+    domain: "latimes.com",
+    domainBenchmark: {
+      expectedThirdPartyRequests: 55
+    },
+    finalHost: "www.latimes.com",
+    policySurfaces: [
+      { pageLabel: "Privacy Policy", details: ["Privacy choices and advertising disclosures retained."] }
+    ],
+    posture: "Clear",
+    requestedHost: "latimes.com",
+    scanId: "scan-1",
+    scanInterruptions: [
+      { label: "Captcha/security challenge", details: ["Challenge suspected."] },
+      { label: "Authentication wall", details: ["Auth wall suspected."] }
+    ],
+    status: "completed",
+    thirdPartyDomains: ["securepubads.g.doubleclick.net"],
+    thirdPartyRequestCount: 81,
+    topFindings: [],
+    vendorCount: 5
+  });
+
+  assert.equal(summary.executive.posture, "Clear");
+  assert.equal(summary.executive.displayState, "Limited review");
+  assert.match(summary.executive.headline, /Runtime coverage was limited/);
 });
 
 test("builds a calibration summary that preserves same-site alias posture without flagging an off-origin landing", () => {

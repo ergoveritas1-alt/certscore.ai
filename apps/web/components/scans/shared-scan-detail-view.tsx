@@ -4936,20 +4936,29 @@ export function SharedScanDetailView({
         whatThisMeans: executiveAccessLimitationNotice.review.whatThisMeans
       }
     : null;
+  const executivePolicySurfaces = deriveExecutivePolicySurfaces(scanRecord.policyEnrichment);
+  const executiveScanInterruptions = deriveExecutiveScanInterruptions(scanRecord.snapshot, scanRecord.events);
   const scanCalibrationSummary = buildScanCalibrationSummary({
     accessLimitationNotice: executiveAccessNoticeCardProps,
+    beforeConsentCookieCount: cookiesBeforeConsentCount,
     coverageLevel: typeof scanRecord.snapshot?.coverage_level === "string" ? scanRecord.snapshot.coverage_level : null,
     domain: scanRecord.scan.domainHostname,
+    domainBenchmark: scanRecord.domainBenchmark,
     finalHost: certScoreSummary.finalHost,
     legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
     pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned) ?? scanRecord.scan.pagesScanned,
+    policySurfaces: executivePolicySurfaces,
     policyEnrichmentCount: scanRecord.policyEnrichment.length,
     posture: executiveAccessLimitationNotice ? "Watch" : executiveFindingsProjection.posture,
     requestedHost: certScoreSummary.requestedHost,
     scanId: scanRecord.scan.id,
+    scanInterruptions: executiveScanInterruptions,
     scanOutcome: typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null,
     status: scanRecord.scan.status,
+    thirdPartyDomains: executiveThirdPartyDomains,
+    thirdPartyRequestCount: executiveThirdPartyRequestCount,
     topFindings: topExecutiveFindings,
+    vendorCount: executiveResolvedVendorNames.length + executiveUnresolvedVendorHosts.length,
     verifiedPublicSurfacesCount: getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)
   });
 
@@ -5041,6 +5050,7 @@ export function SharedScanDetailView({
             coverageMicrocards={coverageMicrocards}
             coverageLevel={typeof scanRecord.snapshot?.coverage_level === "string" ? scanRecord.snapshot.coverage_level : null}
             domainBenchmark={scanRecord.domainBenchmark}
+            externalCoverageContextAvailable={Boolean(fallbackEvidence)}
             finalHost={certScoreSummary.finalHost}
             fingerprintReasons={executiveFingerprintReasons}
             fingerprintLabel={certScoreSummary.fingerprintLabel}
@@ -5066,8 +5076,8 @@ export function SharedScanDetailView({
             legalCoverageScore={getFiniteNumber(scanRecord.snapshot?.legal_coverage_score)}
             pagesScanned={getFiniteNumber(scanRecord.snapshot?.pages_scanned)}
             policyEnrichmentCount={scanRecord.policyEnrichment.length}
-            policySurfaces={deriveExecutivePolicySurfaces(scanRecord.policyEnrichment)}
-            scanInterruptions={deriveExecutiveScanInterruptions(scanRecord.snapshot, scanRecord.events)}
+            policySurfaces={executivePolicySurfaces}
+            scanInterruptions={executiveScanInterruptions}
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
             lightweightHeroMetrics={lightweightHeroMetrics}
           />

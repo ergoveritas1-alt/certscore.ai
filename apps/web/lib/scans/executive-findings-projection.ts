@@ -357,6 +357,9 @@ function mapSeverity(
   if (findingId === "reject_tracking_persists_after_reject" && !packet.evidence?.flags?.includes("reject_evidence_confirmed")) {
     return "medium";
   }
+  if (findingId === "policy_behavior_contradiction_detected" && !isSpecificPolicyRuntimeContradiction(packet)) {
+    return "medium";
+  }
   if (findingId === "fingerprinting_related_signals_observed") {
     const tier = deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet)).tier;
     return tier >= 2 ? "medium" : "low";
@@ -371,6 +374,10 @@ function mapSeverity(
     return "medium";
   }
   return "low";
+}
+
+function trimTrailingSentencePunctuation(value: string) {
+  return value.trim().replace(/[.,;:!?]+$/g, "");
 }
 
 function getMappedFindingId(
@@ -2557,7 +2564,9 @@ function buildExecutiveShortSummary(
     const vendorText = vendors.length > 0
       ? `, with representative vendors including ${formatVendorList(vendors)}`
       : "";
-    return `Third-party tracking began before any recorded consent choice.${timingText}${vendorText}.`;
+    return `${trimTrailingSentencePunctuation(
+      `Third-party tracking began before any recorded consent choice.${timingText}${vendorText}`
+    )}.`;
   }
 
   if (findingId === "possible_session_replay_on_sensitive_input_surface") {
@@ -2663,11 +2672,29 @@ function buildExecutiveShortSummary(
     const conflict = evidenceDetails?.policyRuntimeConflict;
     const runtimeEvent = conflict ? getPolicyRuntimeRepresentativeEvent(conflict) : null;
     if (conflict?.policyAnchor.snippet && runtimeEvent && evaluatePolicyRuntimeConflictPresentation(packet).complete) {
-      return `Policy states "${formatQuotedSnippet(conflict.policyAnchor.snippet)}"; runtime observed ${runtimeEvent}`;
+      return `${trimTrailingSentencePunctuation(
+        `Public disclosures describe cookie, device, or third-party data collection, while runtime evidence observed ${runtimeEvent}`
+      )}. Review whether the implementation, consent flow, and disclosures align.`;
     }
   }
 
   return packet.summary;
+}
+
+function isSpecificPolicyRuntimeContradiction(packet: UnifiedFindingDisplayPacket) {
+  if (packet.unifiedFindingId === "policy_behavior_conflict" || !evaluatePolicyRuntimeConflictPresentation(packet).complete) {
+    return false;
+  }
+
+  const details = packet.details as Record<string, unknown> | null | undefined;
+  const conflictType = typeof details?.conflictType === "string" ? details.conflictType : "";
+  const policyClaimType = typeof details?.policyClaimType === "string" ? details.policyClaimType : "";
+  const policySnippet = typeof details?.policySnippet === "string" ? details.policySnippet : "";
+  const haystack = `${conflictType} ${policyClaimType} ${policySnippet}`;
+
+  return /only\s+after|after\s+(?:you\s+)?(?:set\s+)?(?:cookie\s+)?preferences|after\s+consent|consent(?:ed|ing)?|consent[- ]?gated|reject(?:ion)?\s+(?:disables|stops|prevents|turns off|suppresses)|disabled\s+after\s+reject|only\s+necessary|necessary\s+cookies?\s+only|no\s+(?:sale|share|sharing|marketing|advertis(?:ing|er)|third[- ]party advertising)|declared_no_|declared_only_necessary|declared_tracking_disabled_after_reject/i.test(
+    haystack
+  );
 }
 
 function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY) {
@@ -2675,7 +2702,10 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
   const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);
   return {
     id: definition.id,
-    label: definition.label,
+    label:
+      findingId === "policy_behavior_contradiction_detected" && isSpecificPolicyRuntimeContradiction(packet)
+        ? "Policy/runtime behavior conflict"
+        : definition.label,
     section: definition.section,
     defaultSurfacePriority: definition.defaultSurfacePriority,
     whyItMatters: definition.whyItMatters,

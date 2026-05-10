@@ -482,13 +482,13 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   policy_behavior_contradiction_detected: {
     id: "policy_behavior_contradiction_detected",
-    label: "Policy and runtime behavior conflict",
+    label: "Policy/runtime alignment review",
     section: "Privacy & Tracking",
     defaultSurfacePriority: 97,
     whyItMatters:
-      "A mismatch between public policy language and observed runtime behavior is one of the clearest reasons for targeted analyst review.",
+      "Runtime behavior and public disclosures should be reviewed together so teams can confirm the consent flow, implementation, and policy language are aligned.",
     remediation:
-      "Compare the retained policy claim against the observed runtime behavior, then either correct the implementation or narrow the policy language so it accurately reflects what the site does in practice."
+      "Compare the retained disclosure language against the observed runtime behavior, then confirm whether the implementation, consent flow, and public disclosures align."
   },
   policy_clarity_risk: {
     id: "policy_clarity_risk",

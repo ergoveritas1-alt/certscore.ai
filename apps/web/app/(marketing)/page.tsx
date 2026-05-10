@@ -212,7 +212,7 @@ export default async function MarketingHomePage() {
                 backgroundImage: "linear-gradient(180deg, #020617 0%, #0f172a 24%, #334155 62%, #94a3b8 100%)"
               }}
             >
-              Observe real website behavior around tracking, cookies, and consent—not just what policies claim.
+              See how websites actually handle tracking, cookies, and consent — not just what their policies claim.
             </h1>
             <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
               Detect pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, and disclosure inconsistencies using automated runtime analysis.

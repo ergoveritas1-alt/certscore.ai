@@ -179,6 +179,29 @@ test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards 
   assert.equal(cpraLens?.summary, "Third-party collection and disclosure posture drives this score.");
   assert.equal(ftcLens?.summary, "Choice architecture and disclosure clarity are the main FTC-style concerns.");
   assert.equal(ftcLens?.ratingLabel, "Needs work");
+  assert.ok(ftcLens?.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.ok(gdprLens?.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+});
+
+test("buildRegulatoryLenses keeps pre-consent tracking out of FTC unless paired with choice or disclosure context", () => {
+  const lenses = buildRegulatoryLenses(
+    [
+      makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+        severity: "critical",
+        shortSummary: "7 third-party requests fired before any consent action."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 20,
+      thirdPartyRequestCount: 7
+    }
+  );
+
+  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
+  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
+
+  assert.ok(gdprLens?.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.equal(ftcLens?.findings.some((finding) => finding.id === "pre_consent_tracking_detected"), false);
 });
 
 test("buildRegulatoryLenses retains reject-path tracking failure as dedicated regulatory evidence", () => {
@@ -220,7 +243,7 @@ test("buildRegulatoryLenses maps CPRA CBA opt-out missing into the CCPA CPRA len
       })
     ],
     {
-      beforeConsentCookieCount: 0,
+      beforeConsentCookieCount: 20,
       thirdPartyRequestCount: 42
     }
   );
@@ -229,6 +252,45 @@ test("buildRegulatoryLenses maps CPRA CBA opt-out missing into the CCPA CPRA len
 
   assert.equal(cpraLens?.summary, "Cross-context behavioral advertising and CPRA opt-out posture drive this score.");
   assert.ok(regulatoryFindingLabels(cpraLens?.findings ?? []).includes("CPRA opt-out missing for advertising sharing"));
+});
+
+test("buildRegulatoryLenses maps cross-domain identifiers to GDPR only with tracking or device context", () => {
+  const baseLenses = buildRegulatoryLenses(
+    [
+      makeFinding("cross_domain_identifier_sharing_observed", "Identifiers shared across domains", {
+        shortSummary: "Identifier-like values were observed in cross-domain requests."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 4
+    }
+  );
+  const trackingLenses = buildRegulatoryLenses(
+    [
+      makeFinding("cross_domain_identifier_sharing_observed", "Identifiers shared across domains", {
+        shortSummary: "Identifier-like values were observed in cross-domain requests."
+      }),
+      makeFinding("rtb_cookie_sync_observed", "RTB cookie sync observed", {
+        shortSummary: "RTB sync evidence was retained."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 4
+    }
+  );
+
+  assert.equal(
+    baseLenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((finding) => finding.id === "cross_domain_identifier_sharing_observed"),
+    false
+  );
+  assert.ok(
+    baseLenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA")?.findings.some((finding) => finding.id === "cross_domain_identifier_sharing_observed")
+  );
+  assert.ok(
+    trackingLenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((finding) => finding.id === "cross_domain_identifier_sharing_observed")
+  );
 });
 
 test("buildRegulatoryLenses uses gambling-specific FTC copy for sensitive tracking on sportsbook benchmarks", () => {
@@ -403,6 +465,108 @@ test("buildRegulatoryLenses maps consent-choice review signals into GDPR without
   assert.equal(ftcLens?.detailTitle, "Choice architecture review signals");
   assert.equal(ftcLens?.summary, "Consent-choice design should be reviewed for clarity.");
   assert.doesNotMatch(ftcLens?.detailTitle ?? "", /Dark pattern/i);
+});
+
+test("buildRegulatoryLenses maps dark-pattern umbrella to FTC by default and GDPR only with tracking context", () => {
+  const baseLenses = buildRegulatoryLenses(
+    [
+      makeFinding("consent_dark_patterns_detected", "Dark pattern consent signals detected", {
+        shortSummary: "Accept appears more prominent than reject or settings."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    }
+  );
+  const trackingLenses = buildRegulatoryLenses(
+    [
+      makeFinding("consent_dark_patterns_detected", "Dark pattern consent signals detected", {
+        shortSummary: "Accept appears more prominent than reject or settings."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 2,
+      thirdPartyRequestCount: 0
+    }
+  );
+
+  assert.equal(
+    baseLenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((finding) => finding.id === "consent_dark_patterns_detected"),
+    false
+  );
+  assert.ok(baseLenses.find((lens) => lens.acronym === "FTC")?.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+  assert.ok(
+    trackingLenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((finding) => finding.id === "consent_dark_patterns_detected")
+  );
+});
+
+test("buildRegulatoryLenses maps session recording to CCPA only with sensitive or disclosure context", () => {
+  const baseLenses = buildRegulatoryLenses(
+    [
+      makeFinding("session_recording_services_detected", "Session recording services detected", {
+        shortSummary: "Session replay tooling was observed."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 3
+    }
+  );
+  const sensitiveLenses = buildRegulatoryLenses(
+    [
+      makeFinding("session_recording_services_detected", "Session recording services detected", {
+        shortSummary: "Session replay tooling was observed."
+      }),
+      makeFinding("possible_session_replay_on_sensitive_input_surface", "Possible session replay on a sensitive input surface", {
+        shortSummary: "Session replay appeared near a sensitive input surface."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 3
+    }
+  );
+
+  assert.equal(
+    baseLenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA")?.findings.some((finding) => finding.id === "session_recording_services_detected"),
+    false
+  );
+  assert.ok(
+    sensitiveLenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA")?.findings.some((finding) => finding.id === "session_recording_services_detected")
+  );
+});
+
+test("buildRegulatoryLenses maps probable fingerprinting to FTC only with sensitive or deceptive context", () => {
+  const baseLenses = buildRegulatoryLenses(
+    [
+      makeFinding("probable_fingerprinting", "Probable browser/device fingerprinting behavior", {
+        shortSummary: "Probable fingerprinting behavior was observed."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 3
+    }
+  );
+  const disclosureLenses = buildRegulatoryLenses(
+    [
+      makeFinding("probable_fingerprinting", "Probable browser/device fingerprinting behavior", {
+        shortSummary: "Probable fingerprinting behavior was observed."
+      }),
+      makeFinding("cookie_disclosure_gap", "Cookie disclosure gap", {
+        shortSummary: "Observed cookie activity was not covered by retained policy evidence."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 3
+    }
+  );
+
+  assert.ok(baseLenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((finding) => finding.id === "probable_fingerprinting"));
+  assert.equal(baseLenses.find((lens) => lens.acronym === "FTC")?.findings.some((finding) => finding.id === "probable_fingerprinting"), false);
+  assert.ok(disclosureLenses.find((lens) => lens.acronym === "FTC")?.findings.some((finding) => finding.id === "probable_fingerprinting"));
 });
 
 test("buildRegulatoryLenses adds DOJ / ADA accessibility when the shared accessibility overlay is materially triggered", () => {
@@ -595,17 +759,22 @@ test("benchmark score explanation uses surfaced findings without percentile clai
       makeFinding("third_party_cookie_pre_consent", "Third-party cookies before consent", {
         shortSummary: "cookie activity before consent"
       }),
-      makeFinding("reject_option_missing_or_hidden", "Reject option missing or hidden", {
-        shortSummary: "limited consent choice visibility"
+      makeFinding("rtb_cookie_sync_observed", "RTB cookie sync observed", {
+        shortSummary: "RTB sync"
+      }),
+      makeFinding("policy_behavior_contradiction_detected", "Policy/runtime alignment review", {
+        shortSummary: "policy states a long raw quote that should not be copied into the score note"
       })
     ],
-    score: 61
+    score: 61,
+    vendorNames: ["Adobe Analytics", "DoubleClick", "Meta Pixel"]
   });
 
   assert.equal(
     explanation,
-    "This score is below the Entertainment ticketing benchmark expectation mainly because of pre-consent tracking, cookie activity before consent, and limited consent choice visibility."
+    "This score is below the Entertainment ticketing benchmark expectation mainly because retained evidence showed tracking before consent, pre-consent tracking cookies, RTB cookie-sync activity, and a policy/runtime review issue. Representative observed vendors included Adobe Analytics, DoubleClick, and Meta Pixel."
   );
+  assert.doesNotMatch(explanation ?? "", /policy states a long raw quote/i);
   assert.doesNotMatch(explanation ?? "", /percent|peer/i);
 });
 
@@ -647,7 +816,205 @@ test("ExecutiveSummaryCard explains interruption-backed limited coverage only wh
 
   assert.match(withInterruption, /Coverage was limited by site protections/);
   assert.match(withInterruption, /Findings shown here are based on retained observable evidence/);
+  assert.match(withInterruption, /1 interruption event retained/);
+  assert.match(withInterruption, /Captcha\/security challenge/);
   assert.doesNotMatch(withoutInterruption, /Coverage was limited by site protections/);
+});
+
+test("ExecutiveSummaryCard renders limited review for latimes-style interrupted clear scans", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 4,
+      domainBenchmark: {
+        confidence: "medium",
+        estimatedRankLabel: "Typical",
+        expectedCookiesBeforeConsent: 4,
+        expectedOverallScore: 78,
+        expectedThirdPartyRequests: 55,
+        industry: "Media / publisher sites",
+        rationale: "Matched to a media benchmark."
+      },
+      finalHost: "www.latimes.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      posture: "Clear",
+      preConsentVendorNames: [],
+      requestedHost: "latimes.com",
+      resolvedVendorNames: ["Google Ad Manager", "Permutive", "Piano"],
+      score: 74,
+      scanInterruptions: [
+        { label: "Captcha/security challenge", details: ["Challenge suspected."] },
+        { label: "Authentication wall", details: ["The homepage presented an authentication wall."] }
+      ],
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 81,
+      thirdPartyDomains: [
+        "securepubads.g.doubleclick.net",
+        "cdn.permutive.com",
+        "experience.tinypass.com"
+      ],
+      topFindings: [],
+      topObservedEntities: [
+        { label: "Google Ad Manager", category: "advertising", requestCount: 18 },
+        { label: "Permutive", category: "advertising", requestCount: 9 }
+      ],
+      trackerSummary: "5 vendors across 11 third-party domains",
+      unifiedFindings: [],
+      unresolvedVendorHosts: ["example-ad-host.test", "metrics.example.test"],
+      vendorCategoryCounts: { advertising: 3, analytics: 2 },
+      policySurfaces: [
+        {
+          pageLabel: "Privacy Policy",
+          pageUrl: "https://www.latimes.com/privacy-policy",
+          details: ["Privacy choices and advertising disclosures retained."]
+        },
+        {
+          pageLabel: "Terms of Service",
+          pageUrl: "https://www.latimes.com/terms-of-service",
+          details: []
+        }
+      ]
+    })
+  );
+
+  assert.match(html, /Limited review/);
+  assert.doesNotMatch(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
+  assert.match(html, /Runtime coverage was limited by site protections/);
+  assert.match(html, /CertScore did not confirm a headline homepage issue from retained evidence/);
+  assert.match(html, /Observed vendor and request counts may be incomplete/);
+  assert.match(html, /No headline homepage issue was confirmed from retained evidence/);
+  assert.match(html, /Observed footprint may be incomplete because site protections interrupted runtime collection/);
+  assert.match(html, /\+26 above expected for Media \/ publisher sites/);
+  assert.doesNotMatch(html, /View evidence/);
+  assert.doesNotMatch(html, /Audit finding/);
+});
+
+test("ExecutiveSummaryCard keeps clean well-covered scans clear", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: {
+        confidence: "medium",
+        estimatedRankLabel: "Typical",
+        expectedCookiesBeforeConsent: 2,
+        expectedOverallScore: 82,
+        expectedThirdPartyRequests: 55,
+        industry: "Media / publisher sites",
+        rationale: "Matched to a media benchmark."
+      },
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      legalCoverageScore: 30,
+      pagesScanned: 5,
+      policyEnrichmentCount: 2,
+      posture: "Clear",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 86,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 12,
+      thirdPartyDomains: [],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "No meaningful third-party footprint observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {},
+      verifiedPublicSurfacesCount: 2
+    })
+  );
+
+  assert.match(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
+  assert.doesNotMatch(html, /Limited review/);
+  assert.doesNotMatch(html, /Runtime coverage was limited by site protections/);
+});
+
+test("ExecutiveSummaryCard treats interruption-only scans as coverage limited without inventing findings", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      coverageLevel: "limited_partial",
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      posture: "Clear",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 72,
+      scanInterruptions: [{ label: "Captcha/security challenge", details: ["Challenge suspected."] }],
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyDomains: [],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "No meaningful third-party footprint observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /Limited review/);
+  assert.match(html, /Runtime coverage was limited by site protections/);
+  assert.match(html, /No headline homepage issue was confirmed from retained evidence/);
+  assert.doesNotMatch(html, /View evidence/);
+  assert.doesNotMatch(html, /Audit finding/);
+});
+
+test("ExecutiveSummaryCard frames external coverage context as supplemental only", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      externalCoverageContextAvailable: true,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      posture: "Clear",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 72,
+      scanInterruptions: [{ label: "Authentication wall", details: ["Auth wall suspected."] }],
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyDomains: [],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "No meaningful third-party footprint observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /External public scans may show broader page activity/);
+  assert.match(html, /not a CertScore-confirmed finding/);
+  assert.doesNotMatch(html, /Tracking started before consent/);
 });
 
 test("ExecutiveSummaryCard renders score-only ADA accessibility as audit-only without the stale 88 rating", () => {
@@ -713,11 +1080,11 @@ test("ExecutiveSummaryCard shows benchmark beside posture without scanned timest
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
-      beforeConsentCookieCount: 0,
+      beforeConsentCookieCount: 20,
       domainBenchmark: {
         confidence: "medium",
         estimatedRankLabel: "Typical",
-        expectedCookiesBeforeConsent: 0,
+        expectedCookiesBeforeConsent: 4,
         expectedOverallScore: 82,
         expectedThirdPartyRequests: 8,
         industry: "Web portal / News & Media / Internet services",
@@ -735,7 +1102,7 @@ test("ExecutiveSummaryCard shows benchmark beside posture without scanned timest
       resolvedVendorNames: [],
       score: 69,
       sessionReplayVendorNames: [],
-      thirdPartyRequestCount: 0,
+      thirdPartyRequestCount: 132,
       thirdPartyDomains: [],
       topFindings: [],
       topObservedEntities: [],
@@ -748,6 +1115,12 @@ test("ExecutiveSummaryCard shows benchmark beside posture without scanned timest
 
   assert.match(html, /Action Needed/);
   assert.match(html, /Benchmark: Web portal \/ News &amp; Media \/ Internet services/);
+  assert.match(html, /Score note:<\/span>/);
+  assert.match(html, /line-clamp-2/);
+  assert.match(html, /132 third-party requests/);
+  assert.match(html, /\+124 above expected for Web portal \/ News &amp; Media \/ Internet services/);
+  assert.match(html, /20 cookies before consent/);
+  assert.match(html, /\+16 above expected for Web portal \/ News &amp; Media \/ Internet services/);
   assert.doesNotMatch(html, /Scanned Apr/);
   assert.ok(html.indexOf("Action Needed") < html.indexOf("Benchmark: Web portal"));
 });
@@ -934,6 +1307,152 @@ test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-f
   assert.match(html, /Non-essential tracking continued after reject/);
   assert.match(html, /Session recording services detected/);
   assert.match(html, /Automated accessibility issues observed/);
+});
+
+test("ExecutiveSummaryCard renders directional finding-density context for surfaced top findings", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 1,
+      domainBenchmark: null,
+      finalHost: "inc.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No fingerprinting evidence detected.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: ["Google Ads"],
+      requestedHost: "inc.com",
+      resolvedVendorNames: ["Google Ads", "Microsoft Clarity"],
+      score: 58,
+      sessionReplayVendorNames: ["Microsoft Clarity"],
+      thirdPartyRequestCount: 64,
+      thirdPartyDomains: ["securepubads.g.doubleclick.net"],
+      topFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+          confidence: "good",
+          severity: "critical"
+        }),
+        makeFinding("session_recording_services_detected", "Session recording services detected", {
+          confidence: "strong",
+          severity: "high"
+        })
+      ],
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 0
+      },
+      agencyMappings: [],
+      regulatoryRisk: makeRegulatoryRisk(),
+      topObservedEntities: [{ label: "Google Ads", category: "ads", requestCount: 12 }],
+      trackerSummary: "2 vendors across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { ads: 1 }
+    })
+  );
+
+  assert.match(html, /critical/);
+  assert.match(html, /Consent timing/);
+  assert.match(html, /Good evidence/);
+  assert.match(html, /Good evidence means the signal is supported/);
+  assert.match(html, /Seen on ~18% of sites/);
+  assert.match(html, /Seen on ~12% of sites/);
+  assert.match(html, /directional market context/);
+  assert.match(html, /not a compliance benchmark or legal conclusion/);
+  assert.doesNotMatch(html, /View evidence/);
+  assert.doesNotMatch(html, /Audit finding/);
+  assert.match(html, /Next step: confirm whether these vendors are necessary before consent/);
+  assert.equal(html.match(/Seen on ~18% of sites/g)?.length, 2);
+  assert.equal(html.match(/Seen on ~12% of sites/g)?.length, 2);
+
+  const nonBenchmarkedHtml = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "inc.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No fingerprinting evidence detected.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "inc.com",
+      resolvedVendorNames: ["Microsoft Clarity"],
+      score: 72,
+      sessionReplayVendorNames: ["Microsoft Clarity"],
+      thirdPartyRequestCount: 12,
+      thirdPartyDomains: ["www.clarity.ms"],
+      topFindings: [
+        makeFinding("accessibility_risk_score", "Automated accessibility issues observed", {
+          confidence: "strong",
+          severity: "medium"
+        })
+      ],
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 0
+      },
+      agencyMappings: [],
+      regulatoryRisk: makeRegulatoryRisk(),
+      topObservedEntities: [{ label: "Microsoft Clarity", category: "analytics", requestCount: 5 }],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { analytics: 1 }
+    })
+  );
+
+  assert.doesNotMatch(nonBenchmarkedHtml, /Seen on ~/);
+});
+
+test("ExecutiveSummaryCard renders display criticality independently from confidence and canonical severity", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "inc.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No fingerprinting evidence detected.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "inc.com",
+      resolvedVendorNames: ["Microsoft Clarity"],
+      score: 72,
+      sessionReplayVendorNames: ["Microsoft Clarity"],
+      thirdPartyRequestCount: 12,
+      thirdPartyDomains: ["www.clarity.ms"],
+      topFindings: [
+        makeFinding("session_recording_services_detected", "Session recording services detected", {
+          confidence: "strong",
+          severity: "high",
+          shortSummary: "Session recording was observed on the scanned path."
+        })
+      ],
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 0
+      },
+      agencyMappings: [],
+      regulatoryRisk: makeRegulatoryRisk(),
+      topObservedEntities: [{ label: "Microsoft Clarity", category: "analytics", requestCount: 5 }],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { analytics: 1 }
+    })
+  );
+
+  assert.match(html, /medium/);
+  assert.match(html, /Strong evidence/);
+  assert.match(html, /&quot;severity&quot;: &quot;high&quot;/);
 });
 
 test("ExecutiveSummaryCard exposes strong fingerprinting primitives inline", () => {
@@ -1152,7 +1671,6 @@ test("ExecutiveSummaryCard renders compact reject-path JSON evidence", () => {
   assert.match(html, /reject_path_tracking_not_reduced/);
   assert.doesNotMatch(html, /why_non_essential/);
   assert.doesNotMatch(html, /sampleUrls/);
-  assert.doesNotMatch(html, /aria-label/);
   assert.doesNotMatch(html, /baseline_reconstruction_status/);
 });
 
@@ -1541,6 +2059,48 @@ test("ExecutiveSummaryCard assigns unique icons across top findings with shared 
   assert.equal(new Set(iconKeys).size, iconKeys.length);
 });
 
+test("ExecutiveSummaryCard assigns specific icons to accessibility and policy runtime findings", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 62,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 12,
+      thirdPartyDomains: ["googleadservices.com"],
+      topFindings: [
+        makeFinding("keyboard_navigation_accessibility_issue", "Keyboard navigation accessibility issue", {
+          section: "Accessibility"
+        }),
+        makeFinding("policy_behavior_contradiction_detected", "Policy/runtime behavior conflict"),
+        makeFinding("visual_contrast_accessibility_issue", "Visual contrast accessibility issue", {
+          section: "Accessibility"
+        })
+      ],
+      topObservedEntities: [],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { ads: 1 }
+    })
+  );
+
+  const iconKeys = [...html.matchAll(/data-finding-icon="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(iconKeys, ["keyboard-key", "policy-sync", "contrast-circle"]);
+  assert.equal(new Set(iconKeys).size, iconKeys.length);
+});
+
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
@@ -1612,8 +2172,8 @@ test("ExecutiveSummaryCard scopes the hero copy when scan coverage is thin", () 
   );
 
   assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
-  assert.match(html, /Coverage note:<\/span> Possible homepage findings were retained from limited public coverage\. Tracking started before consent/);
-  assert.match(html, /Possible homepage issues/);
+  assert.match(html, /Coverage note:<\/span> These are automated observations from the public scan\. Review the evidence before taking action\. Tracking started before consent/);
+  assert.match(html, /Automated homepage findings/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
 });
 
@@ -1656,7 +2216,7 @@ test("ExecutiveSummaryCard scopes the hero copy when the scan outcome shows bloc
   );
 
   assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
-  assert.match(html, /Coverage note:<\/span> Possible homepage findings were retained from limited public coverage\. Tracking started before consent/);
+  assert.match(html, /Coverage note:<\/span> These are automated observations from the public scan\. Review the evidence before taking action\. Tracking started before consent/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
 });
 
@@ -1700,7 +2260,7 @@ test("ExecutiveSummaryCard scopes the hero copy when coverage level is limited p
   );
 
   assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
-  assert.match(html, /Coverage note:<\/span> Possible homepage findings were retained from limited public coverage\. Tracking started before consent/);
+  assert.match(html, /Coverage note:<\/span> These are automated observations from the public scan\. Review the evidence before taking action\. Tracking started before consent/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
 });
 
@@ -1844,4 +2404,5 @@ test("ExecutiveSummaryCard switches to blocked-access language when no reliable 
   assert.match(html, /Access limitation/);
   assert.match(html, /This run was blocked before it established a trustworthy public browsing path/);
   assert.doesNotMatch(html, /Regulatory findings/);
+  assert.doesNotMatch(html, /Review lenses/);
 });

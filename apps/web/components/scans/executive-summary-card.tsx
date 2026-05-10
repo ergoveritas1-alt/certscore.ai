@@ -1,13 +1,18 @@
 import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import React from "react";
 import {
+  deriveExecutiveDisplayState,
   deriveExecutiveNarrativePresentation,
   formatTopFindingHeadline,
+  hasMeaningfulExecutiveInterruption,
+  type ExecutiveDisplayState,
   type ExecutivePosture
 } from "../../lib/scans/calibration-summary";
 import { formatRepresentativeAccessibilityCoverage } from "../../lib/scans/accessibility-evidence";
 import { compactEvidenceJsonForDisplay } from "../../lib/scans/compact-evidence-json";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
+import { getFindingCriticalityBadge, type FindingCriticalityBadge } from "../../lib/scans/finding-criticality-badges";
+import { getFindingDensityBenchmark } from "../../lib/scans/finding-density-benchmarks";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { rankFindings } from "../../lib/scans/rank-findings";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
@@ -43,9 +48,12 @@ export type ExecutiveScanInterruption = {
   label: string;
 };
 
-function getPostureClasses(posture: "Clear" | "Watch" | "Action Needed") {
+function getPostureClasses(posture: ExecutiveDisplayState) {
   if (posture === "Action Needed") {
     return "border-rose-200 bg-rose-50/90 text-rose-950";
+  }
+  if (posture === "Limited review") {
+    return "border-sky-200 bg-sky-50/90 text-sky-950";
   }
   if (posture === "Watch") {
     return "border-amber-200 bg-amber-50/90 text-amber-950";
@@ -61,6 +69,42 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function formatInlineList(values: string[]) {
+  if (values.length <= 1) {
+    return values[0] ?? "";
+  }
+  if (values.length === 2) {
+    return `${values[0]} and ${values[1]}`;
+  }
+  return `${values.slice(0, -1).join(", ")}, and ${values[values.length - 1]}`;
+}
+
+function trimTrailingSentencePunctuation(value: string) {
+  return value.trim().replace(/[.,;:!?]+$/g, "");
+}
+
+function sentenceWithPeriod(value: string) {
+  const trimmed = trimTrailingSentencePunctuation(value);
+  return trimmed ? `${trimmed}.` : "";
+}
+
+function splitInlineVendorList(value: string) {
+  return value
+    .replace(/\band\b/g, ",")
+    .split(",")
+    .map((vendor) => trimTrailingSentencePunctuation(vendor))
+    .filter(Boolean);
+}
+
+function getRepresentativeVendorsFromFindings(findings: CertScoreFinding[]) {
+  return uniqueStrings(
+    findings.flatMap((finding) => {
+      const match = finding.shortSummary.match(/representative vendors including\s+([^.;]+)/i);
+      return match?.[1] ? splitInlineVendorList(match[1]) : [];
+    })
+  );
+}
+
 function getEvidenceConfidenceLabel(confidence: CertScoreFinding["confidence"]) {
   if (confidence === "strong") {
     return "Strong evidence";
@@ -73,12 +117,72 @@ function getEvidenceConfidenceLabel(confidence: CertScoreFinding["confidence"]) 
 
 function getEvidenceConfidenceDefinition(confidence: CertScoreFinding["confidence"]) {
   if (confidence === "strong") {
-    return "Observed directly in retained runtime telemetry.";
+    return "Strong evidence means CertScore observed direct behavior during the scan, such as a classified tracking request before a consent choice.";
   }
   if (confidence === "good") {
-    return "Supported by retained evidence or structured inference, but less complete than strong evidence.";
+    return "Good evidence means the signal is supported but may rely on partial, contextual, or vendor-pattern evidence.";
   }
   return "Retained for analyst review; not enough to stand alone as a confirmed finding.";
+}
+
+function getFindingTypeLabel(finding: CertScoreFinding) {
+  const label = `${finding.id} ${finding.label} ${finding.section}`.toLowerCase();
+
+  if (label.includes("session_recording") || label.includes("session replay")) {
+    return "Session replay";
+  }
+  if (label.includes("fingerprint")) {
+    return "Fingerprinting";
+  }
+  if (label.includes("accessibility") || label.includes("wcag") || label.includes("keyboard") || label.includes("screen reader")) {
+    return "Accessibility";
+  }
+  if (label.includes("cookie")) {
+    return "Cookie behavior";
+  }
+  if (label.includes("consent") || label.includes("reject") || label.includes("pre_consent") || label.includes("pre-consent")) {
+    return "Consent timing";
+  }
+  if (label.includes("third_party") || label.includes("third-party") || label.includes("sharing") || label.includes("tracker")) {
+    return "Third-party sharing";
+  }
+  if (label.includes("policy") || label.includes("disclosure") || label.includes("privacy rights")) {
+    return "Disclosure / policy";
+  }
+  if (label.includes("dark pattern") || label.includes("interface") || label.includes("choice")) {
+    return "Consumer interface";
+  }
+
+  return "Review signal";
+}
+
+function getRecommendedNextStep(finding: CertScoreFinding) {
+  const label = `${finding.id} ${finding.label}`.toLowerCase();
+
+  if (label.includes("pre_consent") || label.includes("pre-consent") || label.includes("third_party_tracking_pre_consent")) {
+    return "Next step: confirm whether these vendors are necessary before consent or should be consent-gated.";
+  }
+  if (label.includes("reject_tracking") || label.includes("reject")) {
+    return "Next step: test whether reject choices suppress non-essential vendors across reloads.";
+  }
+  if (label.includes("accessibility") || label.includes("wcag") || label.includes("keyboard")) {
+    return "Next step: review affected elements with keyboard and screen-reader checks.";
+  }
+  if (label.includes("session_recording") || label.includes("session replay")) {
+    return "Next step: confirm whether session replay collection is disclosed and appropriately consent-gated.";
+  }
+  if (label.includes("fingerprint")) {
+    return "Next step: verify whether the retained browser signals are necessary and disclosed for the user-facing purpose.";
+  }
+  if (label.includes("cookie")) {
+    return "Next step: compare the retained cookie evidence against banner behavior and public disclosures.";
+  }
+
+  return `Next step: ${getFindingFixText(finding)}`;
+}
+
+function getFindingEvidenceAnchor(finding: CertScoreFinding) {
+  return `finding-evidence-${finding.id}`;
 }
 
 function DetailDisclosure(input: {
@@ -188,7 +292,6 @@ const GDPR_EPRIVACY_REGULATORY_FINDING_IDS = new Set([
   "analytics_cookie_pre_consent",
   "adtech_cookie_pre_consent",
   "rtb_cookie_sync_observed",
-  "cross_domain_identifier_sharing_observed",
   "identifier_transmission_detected",
   "device_data_collection_detected",
   "telemetry_rich_identification_observed",
@@ -203,7 +306,6 @@ const GDPR_EPRIVACY_REGULATORY_FINDING_IDS = new Set([
   "blocking_overlay_observed",
   "content_obstructed_by_overlay",
   "repeated_consent_prompt",
-  "consent_dark_patterns_detected",
   "autoplay_before_consent",
   "cookie_disclosure_gap",
   "policy_behavior_contradiction_detected",
@@ -225,7 +327,6 @@ const CCPA_CPRA_CIPA_REGULATORY_FINDING_IDS = new Set([
   "collection_endpoints_detected",
   "sensitive_data_collection_with_third_party_tracking_present",
   "sensitive_collection_surface_observed",
-  "session_recording_services_detected",
   "possible_session_replay_on_sensitive_input_surface",
   "pre_submit_text_capture_detected",
   "cookie_disclosure_gap",
@@ -247,7 +348,6 @@ const FTC_REGULATORY_FINDING_IDS = new Set([
   "policy_behavior_contradiction_detected",
   "policy_clarity_risk",
   "cookie_disclosure_gap",
-  "pre_consent_tracking_detected",
   "reject_tracking_persists_after_reject",
   "third_party_tracking_pre_consent",
   "video_content_tracking_exposure",
@@ -255,7 +355,6 @@ const FTC_REGULATORY_FINDING_IDS = new Set([
   "possible_session_replay_on_sensitive_input_surface",
   "pre_submit_text_capture_detected",
   "telemetry_rich_identification_observed",
-  "probable_fingerprinting",
   "non_cookie_tracking_detected",
   "high_request_density",
   "multi_vendor_tracking_detected",
@@ -365,6 +464,123 @@ function buildMappedRegulatoryLensFindings(input: {
         input.context
       )
     );
+}
+
+function addMappedFindingId(target: Set<string>, findingIds: Set<string>, findingId: string) {
+  if (findingIds.has(findingId)) {
+    target.add(findingId);
+  }
+}
+
+function hasAnyFinding(findingIds: Set<string>, ids: string[]) {
+  return ids.some((id) => findingIds.has(id));
+}
+
+function shouldMapPreConsentTrackingToFtc(input: {
+  findingIds: Set<string>;
+  hasHealthSensitiveContext: boolean;
+  hasSensitiveGamblingTrackingRisk: boolean;
+  sensitiveTrackingFinding: CertScoreFinding | undefined;
+}) {
+  return (
+    hasAnyFinding(input.findingIds, [
+      "reject_option_missing_or_hidden",
+      "asymmetric_consent_ui",
+      "forced_consent_interaction",
+      "consent_dark_patterns_detected",
+      "policy_behavior_contradiction_detected",
+      "policy_clarity_risk",
+      "cookie_disclosure_gap"
+    ]) ||
+    Boolean(input.sensitiveTrackingFinding) ||
+    input.hasHealthSensitiveContext ||
+    input.hasSensitiveGamblingTrackingRisk
+  );
+}
+
+function shouldMapCrossDomainIdentifierSharingToGdpr(input: {
+  beforeConsentCookieCount: number;
+  findingIds: Set<string>;
+}) {
+  return (
+    input.beforeConsentCookieCount > 0 ||
+    hasAnyFinding(input.findingIds, [
+      "pre_consent_tracking_detected",
+      "reject_tracking_persists_after_reject",
+      "third_party_tracking_pre_consent",
+      "third_party_cookie_pre_consent",
+      "analytics_cookie_pre_consent",
+      "adtech_cookie_pre_consent",
+      "rtb_cookie_sync_observed",
+      "identifier_transmission_detected",
+      "device_data_collection_detected",
+      "probable_fingerprinting",
+      "non_cookie_tracking_detected"
+    ])
+  );
+}
+
+function shouldMapSessionRecordingToCpra(input: {
+  findingIds: Set<string>;
+  sensitiveTrackingFinding: CertScoreFinding | undefined;
+}) {
+  return (
+    Boolean(input.sensitiveTrackingFinding) ||
+    hasAnyFinding(input.findingIds, [
+      "possible_session_replay_on_sensitive_input_surface",
+      "sensitive_data_collection_with_third_party_tracking_present",
+      "sensitive_collection_surface_observed",
+      "pre_submit_text_capture_detected",
+      "cookie_disclosure_gap",
+      "policy_behavior_contradiction_detected",
+      "policy_clarity_risk",
+      "cpra_cba_opt_out_missing",
+      "cross_domain_identifier_sharing_observed",
+      "rtb_cookie_sync_observed"
+    ])
+  );
+}
+
+function shouldMapConsentDarkPatternsToGdpr(input: {
+  beforeConsentCookieCount: number;
+  findingIds: Set<string>;
+  hasTrackingConcern: boolean;
+}) {
+  return (
+    input.hasTrackingConcern ||
+    input.beforeConsentCookieCount > 0 ||
+    hasAnyFinding(input.findingIds, [
+      "reject_tracking_persists_after_reject",
+      "pre_consent_tracking_detected",
+      "third_party_tracking_pre_consent",
+      "third_party_cookie_pre_consent",
+      "analytics_cookie_pre_consent",
+      "adtech_cookie_pre_consent",
+      "rtb_cookie_sync_observed"
+    ])
+  );
+}
+
+function shouldMapProbableFingerprintingToFtc(input: {
+  findingIds: Set<string>;
+  hasHealthSensitiveContext: boolean;
+  hasSensitiveGamblingTrackingRisk: boolean;
+  sensitiveTrackingFinding: CertScoreFinding | undefined;
+}) {
+  return (
+    Boolean(input.sensitiveTrackingFinding) ||
+    input.hasHealthSensitiveContext ||
+    input.hasSensitiveGamblingTrackingRisk ||
+    hasAnyFinding(input.findingIds, [
+      "cookie_disclosure_gap",
+      "policy_behavior_contradiction_detected",
+      "policy_clarity_risk",
+      "reject_option_missing_or_hidden",
+      "asymmetric_consent_ui",
+      "forced_consent_interaction",
+      "consent_dark_patterns_detected"
+    ])
+  );
 }
 
 export type ExecutiveAccessLimitationNotice = {
@@ -602,10 +818,45 @@ export function buildRegulatoryLenses(
       hasTrackingConcern
     ));
 
+  const gdprRegulatoryFindingIds = new Set(GDPR_EPRIVACY_REGULATORY_FINDING_IDS);
+  if (shouldMapCrossDomainIdentifierSharingToGdpr({ beforeConsentCookieCount, findingIds })) {
+    addMappedFindingId(gdprRegulatoryFindingIds, findingIds, "cross_domain_identifier_sharing_observed");
+  }
+  if (shouldMapConsentDarkPatternsToGdpr({ beforeConsentCookieCount, findingIds, hasTrackingConcern })) {
+    addMappedFindingId(gdprRegulatoryFindingIds, findingIds, "consent_dark_patterns_detected");
+  }
+
+  const cpraRegulatoryFindingIds = new Set(CCPA_CPRA_CIPA_REGULATORY_FINDING_IDS);
+  if (shouldMapSessionRecordingToCpra({ findingIds, sensitiveTrackingFinding })) {
+    addMappedFindingId(cpraRegulatoryFindingIds, findingIds, "session_recording_services_detected");
+  }
+
+  const ftcRegulatoryFindingIds = new Set(FTC_REGULATORY_FINDING_IDS);
+  if (
+    shouldMapPreConsentTrackingToFtc({
+      findingIds,
+      hasHealthSensitiveContext,
+      hasSensitiveGamblingTrackingRisk,
+      sensitiveTrackingFinding
+    })
+  ) {
+    addMappedFindingId(ftcRegulatoryFindingIds, findingIds, "pre_consent_tracking_detected");
+  }
+  if (
+    shouldMapProbableFingerprintingToFtc({
+      findingIds,
+      hasHealthSensitiveContext,
+      hasSensitiveGamblingTrackingRisk,
+      sensitiveTrackingFinding
+    })
+  ) {
+    addMappedFindingId(ftcRegulatoryFindingIds, findingIds, "probable_fingerprinting");
+  }
+
   const privacyTrackingNotes = mergeRegulatoryLensFindings([
     ...buildMappedRegulatoryLensFindings({
       context: { lens: "GDPR / ePrivacy", reason: "mapped_regulatory_finding" },
-      findingIds: GDPR_EPRIVACY_REGULATORY_FINDING_IDS,
+      findingIds: gdprRegulatoryFindingIds,
       findings
     }),
     beforeConsentCookieCount > 0
@@ -623,7 +874,7 @@ export function buildRegulatoryLenses(
   const cpraNotes = mergeRegulatoryLensFindings([
     ...buildMappedRegulatoryLensFindings({
       context: { lens: "CCPA / CPRA / CIPA", reason: "mapped_regulatory_finding" },
-      findingIds: CCPA_CPRA_CIPA_REGULATORY_FINDING_IDS,
+      findingIds: cpraRegulatoryFindingIds,
       findings
     }),
     thirdPartyRequestCount > 0
@@ -640,7 +891,7 @@ export function buildRegulatoryLenses(
   const ftcNotes = mergeRegulatoryLensFindings(
     buildMappedRegulatoryLensFindings({
       context: { lens: "FTC", reason: "mapped_regulatory_finding" },
-      findingIds: FTC_REGULATORY_FINDING_IDS,
+      findingIds: ftcRegulatoryFindingIds,
       findings
     })
   );
@@ -1172,6 +1423,28 @@ function RegulatoryRatingBar(input: { score: number; toneClass: string }) {
   );
 }
 
+function getRegulatoryLensMappingReason(input: {
+  finding: RegulatoryLensFinding;
+  lens: Pick<RegulatoryLens, "acronym" | "summary">;
+}) {
+  const text = `${input.lens.acronym} ${input.lens.summary} ${input.finding.id} ${input.finding.label}`.toLowerCase();
+
+  if (text.includes("pre-consent") || text.includes("pre_consent") || text.includes("consent")) {
+    return "Shown here because this scan observed tracking before a recorded consent choice or related consent-control signals.";
+  }
+  if (text.includes("ccpa") || text.includes("cpra") || text.includes("third-party") || text.includes("sharing") || text.includes("advertising")) {
+    return "Shown here because the scan observed third-party advertising or sharing-context signals.";
+  }
+  if (text.includes("ftc") || text.includes("choice") || text.includes("interface") || text.includes("dark pattern")) {
+    return "Shown here because the scan observed consumer-choice or interface-pattern signals.";
+  }
+  if (text.includes("accessibility") || text.includes("wcag") || text.includes("ada")) {
+    return "Shown here because the scan observed automated accessibility barriers or related public-facing accessibility signals.";
+  }
+
+  return "Shown here because retained scan evidence maps this finding to the review lens context.";
+}
+
 function RegulatoryLensFindingCard(input: {
   finding: RegulatoryLensFinding;
   lens: Pick<RegulatoryLens, "acronym" | "detailTitle" | "ratingLabel" | "score" | "summary">;
@@ -1196,7 +1469,10 @@ function RegulatoryLensFindingCard(input: {
     <div className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700">
       <details className="group/json">
         <summary className="flex cursor-pointer list-none items-start justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
-          <span className="line-clamp-2 min-w-0 leading-5">{input.finding.label}</span>
+          <span className="min-w-0 space-y-1 leading-5">
+            <span className="line-clamp-2">{input.finding.label}</span>
+            <span className="block text-[11px] leading-4 text-slate-500">{getRegulatoryLensMappingReason(input)}</span>
+          </span>
           <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-400 hover:text-slate-700">
             <span className="sr-only">Show evidence JSON</span>
             <svg
@@ -1228,6 +1504,7 @@ function RegulatoryLensFindingCard(input: {
 function BenchmarkMetricCard(input: {
   actualValue: number | null;
   benchmarkValue: number | null;
+  benchmarkIndustry?: string | null;
   label: string;
   maxValue?: number;
 }) {
@@ -1241,6 +1518,26 @@ function BenchmarkMetricCard(input: {
   const benchmarkRatio = benchmarkValue !== null ? Math.max(0, Math.min(1, benchmarkValue / scaleMax)) : null;
   const delta =
     actualValue !== null && benchmarkValue !== null ? actualValue - benchmarkValue : null;
+  const benchmarkContext =
+    input.benchmarkIndustry && input.benchmarkIndustry.trim().length > 0
+      ? ` for ${input.benchmarkIndustry}`
+      : "";
+  const deltaLabel =
+    delta !== null
+      ? input.label === "Overall score"
+        ? `${delta > 0 ? "+" : ""}${delta} vs expected${benchmarkContext}`
+        : delta > 0
+          ? `+${delta} above expected${benchmarkContext}`
+          : delta < 0
+            ? `${Math.abs(delta)} below expected${benchmarkContext}`
+            : `At expected level${benchmarkContext}`
+      : null;
+  const actualLabel =
+    actualValue === null
+      ? "No value retained"
+      : input.label === "Overall score"
+        ? `${actualValue}/100 overall score`
+        : `${actualValue} ${input.label.toLowerCase()}`;
   const tone =
     input.label === "Overall score"
       ? {
@@ -1270,10 +1567,17 @@ function BenchmarkMetricCard(input: {
             value: "text-slate-950",
             deltaPositive: "text-emerald-700",
             deltaNegative: "text-lime-700"
-          };
+        };
+  const deltaClassName =
+    delta === null ? "text-slate-500" : delta > 0 ? tone.deltaPositive : delta < 0 ? tone.deltaNegative : "text-slate-500";
+  const benchmarkTooltip = deltaLabel
+    ? `${deltaLabel}. Expected ${benchmarkValue}.`
+    : benchmarkValue !== null
+      ? `Expected ${benchmarkValue}.`
+      : null;
 
   return (
-    <div className={`relative overflow-hidden rounded-[1.6rem] border border-slate-200 px-5 py-4 ${tone.card}`}>
+    <div className={`relative overflow-visible rounded-[1.6rem] border border-slate-200 px-5 py-4 ${tone.card}`}>
       <div className="flex items-start justify-between gap-3">
         <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
           {input.label === "Overall score" ? (
@@ -1292,13 +1596,17 @@ function BenchmarkMetricCard(input: {
             input.label
           )}
         </p>
-        <span className="sr-only">{benchmarkValue !== null ? `Expected ${benchmarkValue}` : "Expected benchmark unavailable"}</span>
+        <span className="inline-flex items-center gap-1">
+          <span className="sr-only">{benchmarkValue !== null ? `Expected ${benchmarkValue}` : "Expected benchmark unavailable"}</span>
+          {benchmarkTooltip ? <InfoTip align="end" placement="bottom" text={benchmarkTooltip} /> : null}
+        </span>
       </div>
       <div className="mt-5">
         <div className="flex items-end gap-1">
           <span className={`text-[3.2rem] font-semibold leading-none tracking-tight ${tone.value}`}>{actualValue ?? "—"}</span>
           {input.maxValue ? <span className="pb-1 text-[2rem] leading-none text-slate-500">/100</span> : null}
         </div>
+        <p className="mt-1 text-xs leading-5 text-slate-600">{actualLabel}</p>
       </div>
       <div className="mt-5 space-y-2">
         <div className={`relative h-3 rounded-full ${tone.rail}`}>
@@ -1313,16 +1621,7 @@ function BenchmarkMetricCard(input: {
             />
           ) : null}
         </div>
-        <div className="flex items-center text-[11px] text-slate-500">
-          {delta !== null ? (
-            <span className={delta > 0 ? tone.deltaPositive : delta < 0 ? tone.deltaNegative : "text-slate-500"}>
-              {delta > 0 ? "+" : ""}
-              {delta} vs expected
-            </span>
-          ) : (
-            <span>&nbsp;</span>
-          )}
-        </div>
+        <div className={`h-4 text-[11px] ${deltaClassName}`} aria-hidden="true" />
       </div>
     </div>
   );
@@ -1332,26 +1631,54 @@ export function deriveBenchmarkScoreExplanation(input: {
   benchmark: DomainBenchmarkCardData;
   findings: CertScoreFinding[];
   score: number | null;
+  vendorNames?: string[];
 }) {
   if (!input.benchmark || typeof input.score !== "number") {
     return null;
   }
 
   const delta = input.score - input.benchmark.expectedOverallScore;
-  const drivers = uniqueStrings(
-    input.findings
-      .slice(0, 4)
-      .map((finding) => finding.shortSummary || finding.label)
-      .map((value) => value.trim().replace(/\.$/, "").toLowerCase())
-  ).slice(0, 3);
-  const driverText =
-    drivers.length > 1
-      ? `${drivers.slice(0, -1).join(", ")}, and ${drivers[drivers.length - 1]}`
-      : drivers[0] ?? null;
+  const findingIds = new Set(input.findings.map((finding) => finding.id));
+  const drivers = [
+    findingIds.has("pre_consent_tracking_detected") || findingIds.has("third_party_tracking_pre_consent")
+      ? "tracking before consent"
+      : null,
+    findingIds.has("third_party_cookie_pre_consent") ||
+    findingIds.has("analytics_cookie_pre_consent") ||
+    findingIds.has("adtech_cookie_pre_consent")
+      ? "pre-consent tracking cookies"
+      : null,
+    findingIds.has("rtb_cookie_sync_observed") ? "RTB cookie-sync activity" : null,
+    findingIds.has("policy_behavior_contradiction_detected") ||
+    findingIds.has("policy_clarity_risk") ||
+    findingIds.has("cookie_disclosure_gap")
+      ? "a policy/runtime review issue"
+      : null,
+    findingIds.has("reject_tracking_persists_after_reject") ? "post-reject tracking activity" : null,
+    findingIds.has("reject_option_missing_or_hidden") ||
+    findingIds.has("asymmetric_consent_ui") ||
+    findingIds.has("consent_dark_patterns_detected") ||
+    findingIds.has("forced_consent_interaction")
+      ? "consent choice interface signals"
+      : null,
+    findingIds.has("session_recording_services_detected") ||
+    findingIds.has("possible_session_replay_on_sensitive_input_surface")
+      ? "session replay activity"
+      : null,
+    findingIds.has("probable_fingerprinting") || findingIds.has("fingerprinting_related_signals_observed")
+      ? "fingerprinting-related telemetry"
+      : null
+  ];
+  const driverText = formatInlineList(uniqueStrings(drivers).slice(0, 4));
+  const vendorNames = uniqueStrings(input.vendorNames ?? []).slice(0, 3);
+  const vendorText =
+    vendorNames.length > 0 ? ` Representative observed vendors included ${formatInlineList(vendorNames)}.` : "";
 
   if (delta < 0) {
     return driverText
-      ? `This score is below the ${input.benchmark.industry} benchmark expectation mainly because of ${driverText}.`
+      ? `${sentenceWithPeriod(
+          `This score is below the ${input.benchmark.industry} benchmark expectation mainly because retained evidence showed ${driverText}`
+        )}${vendorText}`
       : `This score is below the ${input.benchmark.industry} benchmark expectation based on surfaced findings.`;
   }
 
@@ -1427,6 +1754,20 @@ function ExecutiveMetricCard(input: {
   );
 }
 
+function BenchmarkScoreNote({ message }: { message: string }) {
+  return (
+    <details className="group rounded-[1rem] border border-slate-200 bg-white/85 px-4 py-3 text-sm leading-6 text-slate-700">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
+        <span className="line-clamp-2 min-w-0 group-open:line-clamp-none">
+          <span className="font-semibold text-slate-950">Score note:</span>{" "}
+          {message}
+        </span>
+        <span className="shrink-0 text-slate-400 transition-transform group-open:rotate-180">⌄</span>
+      </summary>
+    </details>
+  );
+}
+
 function getFindingReferenceLink(finding: CertScoreFinding) {
   if (finding.id === "third_party_tracking_pre_consent") {
     return {
@@ -1475,8 +1816,12 @@ function getFindingFixText(finding: CertScoreFinding) {
   return finding.remediation;
 }
 
-function getFindingCardTone(finding: CertScoreFinding, isFirst: boolean) {
-  if (finding.severity === "critical" || isFirst) {
+function getFindingCardTone(
+  finding: CertScoreFinding,
+  isFirst: boolean,
+  criticalityBadge: FindingCriticalityBadge = finding.severity
+) {
+  if (criticalityBadge === "critical" || isFirst) {
     return {
       card: "border-slate-200 bg-[linear-gradient(180deg,rgba(252,252,252,0.94),rgba(255,255,255,1))]",
       band: "bg-rose-200",
@@ -1486,7 +1831,7 @@ function getFindingCardTone(finding: CertScoreFinding, isFirst: boolean) {
     };
   }
 
-  if (finding.severity === "high") {
+  if (criticalityBadge === "high") {
     return {
       card: "border-slate-200 bg-[linear-gradient(180deg,rgba(252,252,251,0.82),rgba(255,255,255,1))]",
       band: "bg-slate-200",
@@ -1519,8 +1864,11 @@ type FindingTitleIconKey =
   | "fingerprint"
   | "up-arrow"
   | "accessibility-figure"
+  | "keyboard-key"
+  | "contrast-circle"
   | "warning-triangle"
   | "privacy-choice"
+  | "policy-sync"
   | "ad-exchange"
   | "default-circle";
 
@@ -1566,6 +1914,18 @@ function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKe
       return ["fingerprint", "device-telemetry"];
     case "accessibility_risk_score":
       return ["accessibility-figure", "warning-triangle"];
+    case "keyboard_navigation_accessibility_issue":
+      return ["keyboard-key", "accessibility-figure", "warning-triangle"];
+    case "visual_contrast_accessibility_issue":
+      return ["contrast-circle", "accessibility-figure", "warning-triangle"];
+    case "semantic_labeling_accessibility_issue":
+      return ["accessibility-figure", "warning-triangle"];
+    case "text_alternative_accessibility_issue":
+      return ["accessibility-figure", "contrast-circle"];
+    case "focus_management_issue":
+      return ["keyboard-key", "warning-triangle"];
+    case "policy_behavior_contradiction_detected":
+      return ["policy-sync", "shield-balance", "chain-link"];
     case "access_limited_no_reliable_findings":
       return ["warning-triangle", "default-circle"];
     default:
@@ -1735,6 +2095,36 @@ function FindingTitleIcon(input: { finding: CertScoreFinding; iconKey?: FindingT
     );
   }
 
+  if (iconKey === "keyboard-key") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-amber-700`} aria-hidden="true">
+        <rect x="3.8" y="6.5" width="16.4" height="11" rx="2.4" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M7 10h.01M10.3 10h.01M13.6 10h.01M17 10h.01M7 13.6h2.5M12 13.6h5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "contrast-circle") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-amber-700`} aria-hidden="true">
+        <circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M12 4.5a7.5 7.5 0 0 0 0 15Z" fill="currentColor" opacity="0.22" />
+        <path d="M12 4.5v15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "policy-sync") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <path d="M7 4.5h7l3 3v12H7z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+        <path d="M14 4.5v3h3M9.5 11h5M9.5 14h3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M17.8 11.2c1 .7 1.7 1.7 1.7 3 0 2.2-1.8 4-4 4h-.5M12.2 17.8c-1-.7-1.7-1.7-1.7-3 0-2.2 1.8-4 4-4h.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M17.1 9.7h2.2v2.2M12.9 19.3h-2.2v-2.2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
   if (iconKey === "warning-triangle") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-amber-700`} aria-hidden="true">
@@ -1769,7 +2159,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
     typeof fingerprintTelemetry?.confidenceExplanation === "string" ? fingerprintTelemetry.confidenceExplanation : null;
 
   return (
-    <details className={`group mt-3 rounded-xl border px-3 py-2 ${tone.summary}`}>
+    <details id={getFindingEvidenceAnchor(input.finding)} className={`group mt-3 scroll-mt-24 rounded-xl border px-3 py-2 ${tone.summary}`}>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-medium leading-5">
         <span className="line-clamp-2 min-w-0 group-open:line-clamp-none">{input.finding.shortSummary}</span>
         <span className="text-slate-400 transition-transform group-open:rotate-180">⌄</span>
@@ -2118,6 +2508,7 @@ export function ExecutiveSummaryCard(input: {
   }> | null;
   coverageLevel?: string | null;
   domainBenchmark: DomainBenchmarkCardData;
+  externalCoverageContextAvailable?: boolean | null;
   finalHost: string | null;
   fingerprintReasons: string[];
   fingerprintLabel: string;
@@ -2186,6 +2577,20 @@ export function ExecutiveSummaryCard(input: {
   const policySurfaces = input.policySurfaces ?? [];
   const coveredPolicySurfaceUrlCount = new Set(policySurfaces.map((surface) => surface.pageUrl).filter(Boolean)).size;
   const scanInterruptions = input.scanInterruptions ?? [];
+  const displayState = deriveExecutiveDisplayState({
+    beforeConsentCookieCount: input.beforeConsentCookieCount,
+    coverageLevel: input.coverageLevel,
+    domainBenchmark: input.domainBenchmark,
+    policySurfaces,
+    posture: input.posture,
+    scanInterruptions,
+    scanOutcome: input.scanOutcome,
+    thirdPartyDomains: input.thirdPartyDomains,
+    thirdPartyRequestCount: input.thirdPartyRequestCount,
+    topFindingCount: filteredTopFindings.length,
+    vendorCount: vendorEvidence.length
+  });
+  const hasMeaningfulInterruption = hasMeaningfulExecutiveInterruption({ scanInterruptions });
   const executiveHeadline = input.accessLimitationNotice
     ? input.accessLimitationNotice.message
     : formatTopFindingHeadline(executiveHeadlineFindings);
@@ -2196,6 +2601,7 @@ export function ExecutiveSummaryCard(input: {
     coverageLevel: input.coverageLevel,
     legalCoverageScore: input.legalCoverageScore,
     pagesScanned: input.pagesScanned,
+    displayState,
     policyEnrichmentCount: input.policyEnrichmentCount,
     posture: input.posture as ExecutivePosture,
     requestedHost: input.requestedHost,
@@ -2219,7 +2625,13 @@ export function ExecutiveSummaryCard(input: {
   const benchmarkScoreExplanation = deriveBenchmarkScoreExplanation({
     benchmark: input.domainBenchmark,
     findings: regulatoryFindingInput,
-    score: input.score
+    score: input.score,
+    vendorNames: uniqueStrings([
+      ...getRepresentativeVendorsFromFindings(filteredTopFindings),
+      ...input.preConsentVendorNames,
+      ...input.sessionReplayVendorNames,
+      ...input.resolvedVendorNames
+    ])
   });
 
   return (
@@ -2230,9 +2642,9 @@ export function ExecutiveSummaryCard(input: {
             <div className="flex flex-wrap items-center gap-3">
               <span
                 data-testid="executive-posture-badge"
-                className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] ${getPostureClasses(input.posture)}`}
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] ${getPostureClasses(displayState)}`}
               >
-                {input.posture}
+                {displayState}
               </span>
               {input.domainBenchmark ? (
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-600">
@@ -2294,23 +2706,24 @@ export function ExecutiveSummaryCard(input: {
                   label="Overall score"
                   actualValue={input.score}
                   benchmarkValue={input.domainBenchmark?.expectedOverallScore ?? null}
+                  benchmarkIndustry={input.domainBenchmark?.industry ?? null}
                   maxValue={100}
                 />
                 <BenchmarkMetricCard
                   label="Third-party requests"
                   actualValue={input.thirdPartyRequestCount}
                   benchmarkValue={input.domainBenchmark?.expectedThirdPartyRequests ?? null}
+                  benchmarkIndustry={input.domainBenchmark?.industry ?? null}
                 />
                 <BenchmarkMetricCard
                   label="Cookies before consent"
                   actualValue={input.beforeConsentCookieCount}
                   benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
+                  benchmarkIndustry={input.domainBenchmark?.industry ?? null}
                 />
               </div>
               {benchmarkScoreExplanation ? (
-                <p className="rounded-[1rem] border border-slate-200 bg-white/85 px-4 py-3 text-sm leading-6 text-slate-700">
-                  {benchmarkScoreExplanation}
-                </p>
+                <BenchmarkScoreNote message={benchmarkScoreExplanation} />
               ) : null}
             </div>
           )}
@@ -2336,18 +2749,38 @@ export function ExecutiveSummaryCard(input: {
             {filteredTopFindings.length > 0 ? (
               filteredTopFindings.map((finding, index) => {
                 const iconKey = topFindingIconKeys.get(finding.id) ?? getFindingTitleIconKey(finding.id);
+                const densityBenchmark = getFindingDensityBenchmark(finding.id);
+                const criticalityBadge = getFindingCriticalityBadge(finding.id) ?? finding.severity;
+                const cardTone = getFindingCardTone(finding, index === 0, criticalityBadge);
                 return (
-                <div key={finding.id} className={`overflow-hidden rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${getFindingCardTone(finding, index === 0).card}`}>
-                  <div className={`h-1 w-full ${getFindingCardTone(finding, index === 0).band}`} />
+                <div key={finding.id} className={`overflow-hidden rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${cardTone.card}`}>
+                  <div className={`h-1 w-full ${cardTone.band}`} />
                   <div className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).severityBadge}`}>
-                      {finding.severity}
+                    <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
+                      {getFindingTypeLabel(finding)}
                     </span>
-                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${getFindingCardTone(finding, index === 0).confidenceBadge}`}>
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${cardTone.severityBadge}`}>
+                      {criticalityBadge}
+                    </span>
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${cardTone.confidenceBadge}`}>
                       {getEvidenceConfidenceLabel(finding.confidence)}
                       <InfoTip align="start" placement="bottom" text={getEvidenceConfidenceDefinition(finding.confidence)} />
                     </span>
+                    {densityBenchmark ? (
+                      <span
+                        aria-label={`${densityBenchmark.contextLabel}: ${densityBenchmark.tooltip}`}
+                        className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-800"
+                        title={densityBenchmark.sourceLabel}
+                      >
+                        {densityBenchmark.contextLabel}
+                        <InfoTip
+                          align="start"
+                          placement="bottom"
+                          text={densityBenchmark.tooltip}
+                        />
+                      </span>
+                    ) : null}
                   </div>
                   <div className="mt-2.5 flex items-start gap-2.5">
                       <div
@@ -2360,6 +2793,7 @@ export function ExecutiveSummaryCard(input: {
                       {finding.label}
                     </p>
                   </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">{getRecommendedNextStep(finding)}</p>
                   <FindingDetailDisclosure finding={finding} />
                 </div>
                 </div>
@@ -2367,7 +2801,9 @@ export function ExecutiveSummaryCard(input: {
               })
             ) : (
               <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700">
-                No headline issue crossed the executive threshold for this scan. Review the supporting evidence below for lower-priority signals and scan context.
+                {displayState === "Limited review"
+                  ? "No headline homepage issue was confirmed from retained evidence. Review coverage limitations and retained signals before treating this scan as clean."
+                  : "No headline issue crossed the executive threshold for this scan. Review the supporting evidence below for lower-priority signals and scan context."}
               </div>
             )}
           </div>
@@ -2391,7 +2827,10 @@ export function ExecutiveSummaryCard(input: {
               </div>
               <div className="space-y-3">
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Regulatory findings</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Review lenses</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    Findings organized by privacy, consumer protection, and accessibility context. Not a legal determination.
+                  </p>
                   <div className="mt-3 space-y-3">
                     {regulatoryLenses.map((lens) => (
                       <details key={lens.acronym} className="group rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3">
@@ -2436,8 +2875,22 @@ export function ExecutiveSummaryCard(input: {
                   </div>
                 </div>
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Tracker footprint</p>
+                  <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Tracker footprint
+                    {input.externalCoverageContextAvailable ? (
+                      <InfoTip
+                        align="end"
+                        placement="bottom"
+                        text="External public scans may show broader page activity. This is supporting coverage context, not a CertScore-confirmed finding."
+                      />
+                    ) : null}
+                  </p>
                   <p className="mt-2 text-sm text-slate-800">{input.trackerSummary}</p>
+                  {hasMeaningfulInterruption ? (
+                    <p className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-950">
+                      Observed footprint may be incomplete because site protections interrupted runtime collection.
+                    </p>
+                  ) : null}
                   <DetailDisclosure
                     summary={`${vendorEvidence.length} vendor names and ${input.thirdPartyDomains.length} third-party domains`}
                     title="Observed vendors and domains"

@@ -963,19 +963,35 @@ test("policy runtime contradiction with full anchors renders as strong self-prov
   const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
 
   assert.ok(finding);
-  assert.equal(finding.label, "Policy and runtime behavior conflict");
+  assert.equal(finding.label, "Policy/runtime behavior conflict");
+  assert.equal(finding.severity, "high");
   assert.equal(finding.confidence, "strong");
   assert.equal(finding.evidenceDetails?.policyEvidence?.evaluated, true);
   assert.equal(finding.evidenceDetails?.policyRuntimeConflict?.policyAnchor.sourceUrl, "https://example.com/privacy");
   assert.equal(finding.evidenceDetails?.policyRuntimeConflict?.runtimeAnchor.firstSeenMs, 640);
-  assert.match(finding.shortSummary, /Policy states/);
-  assert.match(finding.shortSummary, /640ms before consent interaction/);
+  assert.match(finding.shortSummary, /Public disclosures describe cookie, device, or third-party data collection/);
+  assert.match(finding.shortSummary, /runtime evidence observed Meta Pixel at connect\.facebook\.net fired at 640ms before consent interaction/);
+  assert.match(finding.shortSummary, /Review whether the implementation, consent flow, and disclosures align/);
   assert.deepEqual(finding.evidencePreview, [
     'Policy claim: "We use optional analytics and advertising cookies only after you set cookie preferences or consent."',
     "Policy source: https://example.com/privacy",
     "Runtime event: Meta Pixel at connect.facebook.net fired at 640ms before consent interaction.",
     "Bridge: Cookie preference policy evidence is paired with concrete pre-consent tracker request evidence."
   ]);
+});
+
+test("generic policy runtime alignment review projects as medium even with retained bridge evidence", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePolicyRuntimeConflictPacket(
+      { unifiedFindingId: "policy_behavior_conflict" },
+      { kind: "policy_behavior_conflict" }
+    )
+  ]);
+  const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
+
+  assert.equal(finding?.label, "Policy/runtime alignment review");
+  assert.equal(finding?.severity, "medium");
+  assert.equal(finding?.confidence, "strong");
 });
 
 test("policy runtime contradiction missing policy snippet is not projected", () => {

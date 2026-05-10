@@ -1,6 +1,7 @@
 import type { CertScoreFinding } from "./finding-registry";
 
 export type ExecutivePosture = "Clear" | "Watch" | "Action Needed";
+export type ExecutiveDisplayState = ExecutivePosture | "Limited review";
 
 export type HostResolutionCategory = "same_host" | "same_site_alias" | "off_origin_landing";
 
@@ -27,6 +28,7 @@ export type ScanCalibrationSummary = {
     headline: string;
     hostResolutionCategory: HostResolutionCategory;
     limitedCoverage: boolean;
+    displayState: ExecutiveDisplayState;
     posture: ExecutivePosture;
     summaryLabel: string;
     summaryMessage: string;
@@ -116,6 +118,83 @@ function hasLimitedCoverageLevel(coverageLevel: string | null | undefined) {
   return /^limited_/i.test(coverageLevel);
 }
 
+function hasMeaningfulInterruption(input: {
+  label: string;
+  details?: string[];
+}) {
+  const haystack = `${input.label} ${(input.details ?? []).join(" ")}`;
+  return /captcha|security challenge|bot challenge|authentication wall|auth wall|access denied|paywall|blocked by site protection|http\s*(?:401|403)|access limitation/i.test(haystack);
+}
+
+function policySurfaceSuggestsTrackingContext(input: {
+  details: string[];
+  pageLabel: string;
+}) {
+  const haystack = `${input.pageLabel} ${input.details.join(" ")}`;
+  return /privacy|cookie|tracking|advertis(?:e|ing)|sale|share|privacy choice|do not sell|do not share|targeted/i.test(haystack);
+}
+
+export function deriveExecutiveDisplayState(input: {
+  beforeConsentCookieCount?: number | null;
+  coverageLevel?: string | null;
+  domainBenchmark?: {
+    expectedThirdPartyRequests: number;
+  } | null;
+  policySurfaces?: Array<{
+    details: string[];
+    pageLabel: string;
+  }> | null;
+  posture: ExecutivePosture;
+  scanInterruptions?: Array<{
+    details?: string[];
+    label: string;
+  }> | null;
+  scanOutcome?: string | null;
+  thirdPartyDomains?: string[] | null;
+  thirdPartyRequestCount?: number | null;
+  topFindingCount?: number | null;
+  vendorCount?: number | null;
+}) {
+  if (input.posture === "Action Needed") {
+    return input.posture;
+  }
+
+  const topFindingCount = input.topFindingCount ?? 0;
+  if (topFindingCount > 0) {
+    return input.posture;
+  }
+
+  const meaningfulInterruption = (input.scanInterruptions ?? []).some(hasMeaningfulInterruption);
+  const explicitLimitedCoverage =
+    hasLimitedCoverageLevel(input.coverageLevel) ||
+    hasLimitedConfidenceOutcome(input.scanOutcome);
+  const aboveBenchmarkRequests =
+    typeof input.thirdPartyRequestCount === "number" &&
+    typeof input.domainBenchmark?.expectedThirdPartyRequests === "number" &&
+    input.thirdPartyRequestCount > input.domainBenchmark.expectedThirdPartyRequests;
+  const hasRuntimeContext =
+    aboveBenchmarkRequests ||
+    (input.vendorCount ?? 0) > 0 ||
+    (input.thirdPartyDomains?.length ?? 0) > 0 ||
+    (input.beforeConsentCookieCount ?? 0) > 0;
+  const hasPolicyContext = (input.policySurfaces ?? []).some(policySurfaceSuggestsTrackingContext);
+
+  if (explicitLimitedCoverage || (meaningfulInterruption && (hasRuntimeContext || hasPolicyContext))) {
+    return "Limited review";
+  }
+
+  return input.posture;
+}
+
+export function hasMeaningfulExecutiveInterruption(input: {
+  scanInterruptions?: Array<{
+    details?: string[];
+    label: string;
+  }> | null;
+}) {
+  return (input.scanInterruptions ?? []).some(hasMeaningfulInterruption);
+}
+
 export function formatTopFindingHeadline(findings: CertScoreFinding[]) {
   const labels = findings.slice(0, 3).map((finding) => finding.label);
   if (labels.length === 0) {
@@ -141,6 +220,14 @@ function getPostureHeadline(posture: ExecutivePosture) {
     return "Privacy and consent issues worth prompt review";
   }
   return "No major privacy and consent issues surfaced";
+}
+
+function getDisplayStateHeadline(displayState: ExecutiveDisplayState, posture: ExecutivePosture) {
+  if (displayState === "Limited review") {
+    return "Runtime coverage was limited by site protections";
+  }
+
+  return getPostureHeadline(posture);
 }
 
 function getCoverageScopedPostureHeadline(posture: ExecutivePosture, findingSections: string[] = []) {
@@ -186,6 +273,7 @@ export function deriveExecutiveNarrativePresentation(input: {
   coverageLevel?: string | null;
   legalCoverageScore?: number | null;
   pagesScanned?: number | null;
+  displayState?: ExecutiveDisplayState;
   posture: ExecutivePosture;
   policyEnrichmentCount?: number | null;
   requestedHost: string | null;
@@ -238,20 +326,34 @@ export function deriveExecutiveNarrativePresentation(input: {
     };
   }
 
+  const displayState = input.displayState ?? input.posture;
+
+  if (displayState === "Limited review") {
+    return {
+      findingsHeading: "Automated homepage findings",
+      headline: getDisplayStateHeadline(displayState, input.posture),
+      hostResolutionCategory,
+      limitedCoverage: true,
+      summaryLabel: "Coverage note:",
+      summaryMessage:
+        "CertScore did not confirm a headline homepage issue from retained evidence. Observed vendor and request counts may be incomplete. Review retained evidence and consider external corroboration before treating this scan as clean."
+    };
+  }
+
   if (limitedCoverage) {
     return {
-      findingsHeading: "Possible homepage issues",
+      findingsHeading: "Automated homepage findings",
       headline: getCoverageScopedPostureHeadline(input.posture, input.topFindingSections),
       hostResolutionCategory,
       limitedCoverage,
       summaryLabel: "Coverage note:",
-      summaryMessage: `Possible homepage findings were retained from limited public coverage. ${input.executiveHeadline}`
+      summaryMessage: `These are automated observations from the public scan. Review the evidence before taking action. ${input.executiveHeadline}`
     };
   }
 
   return {
     findingsHeading: "Highest-priority issues",
-    headline: getPostureHeadline(input.posture),
+    headline: getDisplayStateHeadline(displayState, input.posture),
     hostResolutionCategory,
     limitedCoverage: false,
     summaryLabel: "Primary concerns:",
@@ -264,21 +366,50 @@ export function buildScanCalibrationSummary(input: {
     headline: string;
     message: string;
   } | null;
+  beforeConsentCookieCount?: number | null;
   coverageLevel?: string | null;
   domain: string | null;
+  domainBenchmark?: {
+    expectedThirdPartyRequests: number;
+  } | null;
   finalHost: string | null;
   legalCoverageScore?: number | null;
   pagesScanned?: number | null;
+  policySurfaces?: Array<{
+    details: string[];
+    pageLabel: string;
+  }> | null;
+  displayState?: ExecutiveDisplayState;
   policyEnrichmentCount?: number | null;
   posture: ExecutivePosture;
   requestedHost: string | null;
   scanId: string | null;
+  scanInterruptions?: Array<{
+    details?: string[];
+    label: string;
+  }> | null;
   scanOutcome?: string | null;
   status: string | null;
+  thirdPartyDomains?: string[] | null;
+  thirdPartyRequestCount?: number | null;
   topFindings: CertScoreFinding[];
+  vendorCount?: number | null;
   verifiedPublicSurfacesCount?: number | null;
 }) {
   const executiveHeadline = formatTopFindingHeadline(input.topFindings);
+  const displayState = input.displayState ?? deriveExecutiveDisplayState({
+    beforeConsentCookieCount: input.beforeConsentCookieCount,
+    coverageLevel: input.coverageLevel,
+    domainBenchmark: input.domainBenchmark,
+    policySurfaces: input.policySurfaces,
+    posture: input.posture,
+    scanInterruptions: input.scanInterruptions,
+    scanOutcome: input.scanOutcome,
+    thirdPartyDomains: input.thirdPartyDomains,
+    thirdPartyRequestCount: input.thirdPartyRequestCount,
+    topFindingCount: input.topFindings.length,
+    vendorCount: input.vendorCount
+  });
   const presentation = deriveExecutiveNarrativePresentation({
     accessLimitationNotice: input.accessLimitationNotice,
     executiveHeadline,
@@ -286,6 +417,7 @@ export function buildScanCalibrationSummary(input: {
     coverageLevel: input.coverageLevel,
     legalCoverageScore: input.legalCoverageScore,
     pagesScanned: input.pagesScanned,
+    displayState,
     policyEnrichmentCount: input.policyEnrichmentCount,
     posture: input.posture,
     requestedHost: input.requestedHost,
@@ -309,6 +441,7 @@ export function buildScanCalibrationSummary(input: {
       headline: presentation.headline,
       hostResolutionCategory: presentation.hostResolutionCategory,
       limitedCoverage: presentation.limitedCoverage,
+      displayState,
       posture: input.posture,
       summaryLabel: presentation.summaryLabel,
       summaryMessage: presentation.summaryMessage
