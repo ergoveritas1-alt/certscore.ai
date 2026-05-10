@@ -1869,6 +1869,144 @@ test("annotates tier-2 fingerprinting promoted by known bot-defense vendor evide
   assert.match(finding.shortSummary, /known bot-defense\/fingerprinting vendor/);
 });
 
+test("keeps strong fingerprinting evidence from blocked surfaces below probable wording", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      severity: "high",
+      summary: "Tracking started before consent."
+    }),
+    makePacket("fingerprinting_observed", {
+      concernContext: {
+        assertionLevels: ["strong"],
+        evidenceStrengthFlags: ["direct_runtime"],
+        externalSurfacingEligibilities: ["eligible"],
+        negativeEvidenceFlags: ["blocked_or_interstitial_evidence_observed"],
+        originTypes: ["snapshot_signal"],
+        promotionEligibilities: ["eligible"]
+      },
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: {
+          fingerprintTier: 2
+        },
+        entities: {
+          fingerprintAttributeCategories: [
+            "screen_viewport",
+            "hardware",
+            "storage",
+            "fonts_plugins",
+            "network_device_state",
+            "timezone_locale",
+            "input_touch",
+            "canvas_webgl"
+          ],
+          fingerprintingRuntimeEvidence: [
+            JSON.stringify({
+              host: "client.px-cloud.net",
+              requestUrl: "https://client.px-cloud.net/PXXljWHHUe/main.min.js"
+            })
+          ]
+        },
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: ["https://client.px-cloud.net/PXXljWHHUe/main.min.js"]
+      },
+      severity: "high",
+      summary: "Probable fingerprinting behavior."
+    })
+  ]);
+
+  assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
+  assert.ok(projection.findings.some((finding) => finding.id === "fingerprinting_related_signals_observed"));
+});
+
+test("keeps explicit thin/block-page fingerprinting context below probable wording", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      severity: "high",
+      summary: "Tracking started before consent."
+    }),
+    makePacket("fingerprinting_observed", {
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: {
+          fingerprintTier: 2
+        },
+        entities: {
+          blockPageClassification: ["empty_or_thin_block_page"],
+          fingerprintAttributeCategories: [
+            "screen_viewport",
+            "hardware",
+            "storage",
+            "fonts_plugins",
+            "network_device_state",
+            "timezone_locale",
+            "input_touch",
+            "canvas_webgl"
+          ],
+          fingerprintingRuntimeEvidence: [
+            JSON.stringify({
+              host: "client.px-cloud.net",
+              requestUrl: "https://client.px-cloud.net/PXXljWHHUe/main.min.js"
+            })
+          ]
+        },
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: ["https://client.px-cloud.net/PXXljWHHUe/main.min.js"]
+      },
+      severity: "high",
+      summary: "Probable fingerprinting behavior."
+    })
+  ]);
+
+  assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
+  assert.ok(projection.findings.some((finding) => finding.id === "fingerprinting_related_signals_observed"));
+});
+
+test("suppresses blocked fingerprinting-related telemetry without retained review context", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      severity: "high",
+      summary: "Tracking started before consent."
+    }),
+    makePacket("fingerprinting_observed", {
+      concernContext: {
+        assertionLevels: ["strong"],
+        evidenceStrengthFlags: ["direct_runtime"],
+        externalSurfacingEligibilities: ["eligible"],
+        negativeEvidenceFlags: ["blocked_or_interstitial_evidence_observed"],
+        originTypes: ["snapshot_signal"],
+        promotionEligibilities: ["eligible"]
+      },
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: {
+          fingerprintTier: 2
+        },
+        entities: {},
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: []
+      },
+      severity: "medium",
+      summary: "Bare fingerprinting tier marker observed."
+    })
+  ]);
+
+  assert.ok(!projection.findings.some((finding) => finding.id === "probable_fingerprinting"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "fingerprinting_related_signals_observed"));
+});
+
 test("keeps canvas-only fingerprinting evidence below probable wording", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("fingerprinting_observed", {

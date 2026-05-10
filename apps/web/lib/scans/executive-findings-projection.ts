@@ -74,6 +74,18 @@ const FINGERPRINTING_CORROBORATING_TRACKING_IDS = new Set([
   "third_party_cookie_pre_consent"
 ]);
 
+const FINGERPRINTING_PROBABLE_BLOCK_SURFACES = new Set([
+  "adult_gate_probable",
+  "auth_wall_probable",
+  "captcha_probable",
+  "empty_or_thin_block_page",
+  "geo_block_probable",
+  "login_wall_probable",
+  "plain_origin_403",
+  "unknown_block_page",
+  "vendor_interstitial_probable"
+]);
+
 const CONTRADICTION_FINDING_IDS = new Set([
   "consent_gated_tracking_claim_conflict",
   "do_not_sell_sharing_disclosure_conflict",
@@ -369,7 +381,9 @@ function getMappedFindingId(
     if (tier <= 0) {
       return null;
     }
-    return tier >= 3 ? "probable_fingerprinting" : "fingerprinting_related_signals_observed";
+    return tier >= 3 && !hasFingerprintingProbableAccessLimitation(packet)
+      ? "probable_fingerprinting"
+      : "fingerprinting_related_signals_observed";
   }
   if (packet.unifiedFindingId in CERT_SCORE_FINDING_REGISTRY) {
     return packet.unifiedFindingId as keyof typeof CERT_SCORE_FINDING_REGISTRY;
@@ -381,6 +395,34 @@ function getMappedFindingId(
     return "policy_behavior_contradiction_detected";
   }
   return null;
+}
+
+function hasFingerprintingProbableAccessLimitation(packet: UnifiedFindingDisplayPacket) {
+  if (
+    packet.concernContext?.negativeEvidenceFlags.includes("blocked_or_interstitial_evidence_observed") ||
+    packet.concernContext?.negativeEvidenceFlags.includes("positive_surface_content_unverified")
+  ) {
+    return true;
+  }
+
+  const accessSurfaceValues = uniqueStrings([
+    ...getEntityValues(packet, /block.*page.*classification|block.*classification|access.*block|access.*limitation|stop.*reason/i),
+    ...(packet.evidence?.flags ?? []).filter((flag) => /block|captcha|interstitial|login|auth|403|thin|geo/i.test(flag))
+  ]).map((value) => value.trim().toLowerCase());
+
+  return accessSurfaceValues.some((value) => FINGERPRINTING_PROBABLE_BLOCK_SURFACES.has(value));
+}
+
+function hasFingerprintingRelatedReviewContext(packet: UnifiedFindingDisplayPacket) {
+  const rawEvidence = buildFingerprintingRawEvidence(packet);
+  const fingerprintEvidenceTier = deriveFingerprintEvidenceTier(rawEvidence);
+  return (
+    fingerprintEvidenceTier.strongFingerprintSignals.length > 0 ||
+    fingerprintEvidenceTier.genericFingerprintSignals.length > 0 ||
+    Array.isArray(rawEvidence.fingerprintRuntimeEvidence) && rawEvidence.fingerprintRuntimeEvidence.length > 0 ||
+    uniqueStrings(rawEvidence.requestUrls as Array<string | null | undefined>).length > 0 ||
+    uniqueStrings(rawEvidence.runtimeVendors as Array<string | null | undefined>).length > 0
+  );
 }
 
 function buildFingerprintingRawEvidence(packet: UnifiedFindingDisplayPacket): Record<string, unknown> {
@@ -2728,6 +2770,9 @@ export function projectExecutiveFindingsFromUnifiedPackets(
         return true;
       }
       const tier = deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet)).tier;
+      if (findingId === "fingerprinting_related_signals_observed" && hasFingerprintingProbableAccessLimitation(packet)) {
+        return hasFingerprintingRelatedReviewContext(packet);
+      }
       return tier >= 3 || (tier >= 2 && hasCorroboratingTrackingFinding);
     });
     if (executiveEligibleFindingIds.length > 0) {

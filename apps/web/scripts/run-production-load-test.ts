@@ -32,12 +32,20 @@ type ScanStatus =
   | "error";
 
 type PollEntry = {
+  accessPostureClass: string | null;
+  findingCounts: Record<string, number>;
   manifest_row: string;
   tranco_rank: string;
   domain: string;
   scanId: string;
   enqueuedAt: string;
   status: ScanStatus;
+  interruptionSummary: {
+    categories: string[];
+    hasInterruption: boolean;
+    reason: string | null;
+    stopReasonCode: string | null;
+  } | null;
   httpStatus: number | null;
   loaded: boolean;
   error: string | null;
@@ -177,12 +185,15 @@ async function enqueueScan(
 async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
   if (!entry.ok || !entry.scanUrl) {
     return {
+      accessPostureClass: null,
+      findingCounts: {},
       manifest_row: entry.manifest_row,
       tranco_rank: entry.tranco_rank,
       domain: entry.domain,
       scanId: "n/a",
       enqueuedAt: entry.enqueuedAt,
       status: "error",
+      interruptionSummary: null,
       httpStatus: null,
       loaded: false,
       error: entry.error ?? "Enqueue failed",
@@ -190,45 +201,52 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
   }
 
   try {
-    const response = await fetch(new URL(entry.scanUrl, BASE_URL), {
-      headers: { "Cache-Control": "no-store" },
+    const response = await fetch(new URL(`/api/scan-status/${entry.scanId}?includeFindings=1`, BASE_URL), {
+      headers: {
+        Accept: "application/json",
+        "Cache-Control": "no-store"
+      },
       redirect: "follow",
     });
 
-    const html = await response.text();
+    const body = (await response.json()) as {
+      accessPosture?: {
+        accessPostureClass?: string | null;
+      };
+      findingCounts?: Record<string, number>;
+      interruptionSummary?: PollEntry["interruptionSummary"];
+      scan?: {
+        status?: string;
+      };
+    };
     const loaded = response.ok;
-
-    let status: ScanStatus = "queued";
-
-    if (html.includes("Scanner:</p>") || html.includes("Started:")) {
-      if (html.includes("Completed")) {
-        status = "completed";
-      } else if (html.includes("Failed") || html.includes("Blocked")) {
-        status = "failed";
-      } else {
-        status = "running";
-      }
-    }
+    const status = normalizeScanStatus(body.scan?.status);
 
     return {
+      accessPostureClass: body.accessPosture?.accessPostureClass ?? null,
+      findingCounts: body.findingCounts ?? {},
       manifest_row: entry.manifest_row,
       tranco_rank: entry.tranco_rank,
       domain: entry.domain,
       scanId: entry.scanId ?? "unknown",
       enqueuedAt: entry.enqueuedAt,
       status,
+      interruptionSummary: body.interruptionSummary ?? null,
       httpStatus: response.status,
       loaded,
       error: null,
     };
   } catch (error) {
     return {
+      accessPostureClass: null,
+      findingCounts: {},
       manifest_row: entry.manifest_row,
       tranco_rank: entry.tranco_rank,
       domain: entry.domain,
       scanId: entry.scanId ?? "unknown",
       enqueuedAt: entry.enqueuedAt,
       status: "error",
+      interruptionSummary: null,
       httpStatus: null,
       loaded: false,
       error: error instanceof Error ? error.message : String(error),
@@ -236,18 +254,31 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
   }
 }
 
+function normalizeScanStatus(status: string | null | undefined): ScanStatus {
+  if (
+    status === "queued" ||
+    status === "running" ||
+    status === "completed" ||
+    status === "failed" ||
+    status === "canceled" ||
+    status === "error"
+  ) {
+    return status;
+  }
+
+  return "queued";
+}
+
 function aggregateFindings(polls: PollEntry[][]): FindingSummary[] {
-  // This is a placeholder — real findings would come from ops-status API.
-  // We capture the terminal statuses and counts.
   const counts = new Map<string, number>();
   for (const pollSeries of polls) {
     const last = pollSeries[pollSeries.length - 1];
     if (!last) continue;
 
-    if (last.status === "completed") {
-      counts.set("completed_scans", (counts.get("completed_scans") ?? 0) + 1);
-    } else if (last.status === "failed" || last.status === "error") {
-      counts.set("failed_scans", (counts.get("failed_scans") ?? 0) + 1);
+    for (const [findingId, count] of Object.entries(last.findingCounts)) {
+      if (count > 0) {
+        counts.set(findingId, (counts.get(findingId) ?? 0) + 1);
+      }
     }
   }
 
@@ -267,7 +298,17 @@ function aggregateInterruptions(polls: PollEntry[][]): InterruptionEntry[] {
     const last = pollSeries[pollSeries.length - 1];
     if (!last) continue;
 
-    if (last.status === "error" || last.status === "failed") {
+    if (last.interruptionSummary?.hasInterruption) {
+      for (const cat of last.interruptionSummary.categories) {
+        const entry = categories.get(cat) ?? {
+          count: 0,
+          examples: new Set<string>(),
+        };
+        entry.count += 1;
+        entry.examples.add(last.domain);
+        categories.set(cat, entry);
+      }
+    } else if (last.status === "error" || last.status === "failed") {
       const cat = last.error
         ? `error:${last.error.slice(0, 40)}`
         : "unknown_failure";

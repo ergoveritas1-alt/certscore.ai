@@ -2,6 +2,7 @@ import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { buildScanReportUnifiedFindings } from "../../components/scans/shared-scan-detail-view";
 import { getAnonymousScanById } from "./get-scan-by-id";
+import { asAccessPostureClass, buildOpsInterruptionSummary } from "./ops-interruption-summary";
 import { OPS_SCAN_STATUS_FINDING_IDS } from "./ops-status-finding-ids";
 
 export type OpsScanStatusFindingId = (typeof OPS_SCAN_STATUS_FINDING_IDS)[number];
@@ -139,6 +140,14 @@ async function loadOpsScanStatusCore(scanId: string) {
   const newestUnifiedEvent = events.find((event) => event.event_type === "signal_enrichment.stage_completed" && getMetadataNumber(event.metadata_json, "findingCount") !== null);
 
   return {
+    accessPosture: {
+      accessPostureClass: asAccessPostureClass(snapshot?.access_posture_class),
+      pagesScanned: scan.pages_scanned,
+      stopReasonCode: snapshot?.stop_reason_code ?? null,
+      stopReasonDetail: snapshot?.stop_reason_detail ?? null,
+      stopReasonHttpStatus: snapshot?.stop_reason_http_status ?? null,
+      stopReasonLabel: snapshot?.stop_reason_label ?? null
+    },
     domain: scan.domain_hostname,
     events: events.map((event) => ({
       createdAt: toIsoTimestamp(event.created_at),
@@ -181,6 +190,7 @@ async function loadOpsScanStatusCore(scanId: string) {
       stopReasonLabel: snapshot?.stop_reason_label ?? null,
       totalSignals: snapshot?.total_signals ?? null
     },
+    interruptionSummary: buildOpsInterruptionSummary({ events, scan, snapshot }),
     workflow: {
       latestFindingCount: newestUnifiedEvent ? getMetadataNumber(newestUnifiedEvent.metadata_json, "findingCount") : null,
       latestFindingStageAt: newestUnifiedEvent ? toIsoTimestamp(newestUnifiedEvent.created_at) : null
