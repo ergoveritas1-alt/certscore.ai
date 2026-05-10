@@ -6396,12 +6396,12 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       error: error instanceof Error ? error.message : String(error),
       scanId
     });
-    return { activeRunCount: 1, findingCount: 0, runCount: 0 };
+    return { activeRunCount: 1, findingCount: 0, runCount: 0, unifiedDerivationCompletedCount: 0 };
   });
-  const hasValidationFindings = validationDerivationState.findingCount > 0;
+  const hasCompletedUnifiedDerivation = validationDerivationState.unifiedDerivationCompletedCount > 0;
   const hasActiveValidationRun = validationDerivationState.activeRunCount > 0;
 
-  if (!hasValidationFindings && !hasActiveValidationRun) {
+  if (!hasCompletedUnifiedDerivation && !hasActiveValidationRun) {
     await appendScanWorkflowEvent({
       eventType: SCAN_EVENT_TYPES.signalMergeStarted,
       message: "Merged signal derivation started.",

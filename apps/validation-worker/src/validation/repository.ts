@@ -2670,24 +2670,32 @@ export async function getValidationDerivationStateForScan(scanId: string) {
     active_run_count: number;
     finding_count: number;
     run_count: number;
+    unified_derivation_completed_count: number;
   }>(
     `
       select
         count(distinct vr.id)::int as run_count,
         count(distinct vr.id) filter (where vr.status = any($2::text[]))::int as active_run_count,
-        count(vrf.id)::int as finding_count
+        count(vrf.id)::int as finding_count,
+        (
+          select count(*)::int
+          from scan_events se
+          where se.scan_id = $1
+            and se.event_type = $3
+        ) as unified_derivation_completed_count
       from validation_runs vr
       left join validation_run_findings vrf on vrf.validation_run_id = vr.id
       where vr.scan_id = $1
     `,
-    [scanId, [...ACTIVE_RUN_STATUSES]],
+    [scanId, [...ACTIVE_RUN_STATUSES], SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted],
     { readOnly: true }
   );
 
   return {
     activeRunCount: data?.active_run_count ?? 0,
     findingCount: data?.finding_count ?? 0,
-    runCount: data?.run_count ?? 0
+    runCount: data?.run_count ?? 0,
+    unifiedDerivationCompletedCount: data?.unified_derivation_completed_count ?? 0
   };
 }
 
