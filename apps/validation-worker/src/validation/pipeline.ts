@@ -13,9 +13,9 @@ import {
   ensureValidationSettings,
   failValidationRun,
   finalizeValidationRun,
+  getValidationDerivationStateForScan,
   getValidationPipelineState,
   getValidationRun,
-  hasValidationRunForScan,
   listRecentValidationRuns,
   loadCompletedScanArtifacts,
   loadNanoDocRetrievalInputs,
@@ -6391,15 +6391,17 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
     scanId
   }).catch(() => undefined);
 
-  const hasValidationRun = await hasValidationRunForScan(scanId).catch((error) => {
-    console.error("[validation-worker] failed to check validation run for scan", {
+  const validationDerivationState = await getValidationDerivationStateForScan(scanId).catch((error) => {
+    console.error("[validation-worker] failed to check validation derivation state for scan", {
       error: error instanceof Error ? error.message : String(error),
       scanId
     });
-    return true;
+    return { activeRunCount: 1, findingCount: 0, runCount: 0 };
   });
+  const hasValidationFindings = validationDerivationState.findingCount > 0;
+  const hasActiveValidationRun = validationDerivationState.activeRunCount > 0;
 
-  if (!hasValidationRun) {
+  if (!hasValidationFindings && !hasActiveValidationRun) {
     await appendScanWorkflowEvent({
       eventType: SCAN_EVENT_TYPES.signalMergeStarted,
       message: "Merged signal derivation started.",

@@ -2665,6 +2665,32 @@ export async function hasValidationRunForScan(scanId: string) {
   return Boolean(data?.id);
 }
 
+export async function getValidationDerivationStateForScan(scanId: string) {
+  const data = await queryOne<{
+    active_run_count: number;
+    finding_count: number;
+    run_count: number;
+  }>(
+    `
+      select
+        count(distinct vr.id)::int as run_count,
+        count(distinct vr.id) filter (where vr.status = any($2::text[]))::int as active_run_count,
+        count(vrf.id)::int as finding_count
+      from validation_runs vr
+      left join validation_run_findings vrf on vrf.validation_run_id = vr.id
+      where vr.scan_id = $1
+    `,
+    [scanId, [...ACTIVE_RUN_STATUSES]],
+    { readOnly: true }
+  );
+
+  return {
+    activeRunCount: data?.active_run_count ?? 0,
+    findingCount: data?.finding_count ?? 0,
+    runCount: data?.run_count ?? 0
+  };
+}
+
 export async function ensureCompletedValidationRunForScan(scanId: string) {
   const existing = await queryOne<{ id: string }>(
     `select id from validation_runs where scan_id = $1 order by created_at desc limit 1`,
