@@ -14,6 +14,7 @@
     "extract:privacy-runtime-drafts": "node --enable-source-maps --import tsx ./scripts/extract-privacy-runtime-drafts.ts",
     "inspect:signal-enrichment": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/inspect-signal-enrichment.ts",
     "ops:prod-db-audit": "node --enable-source-maps ./dist/apps/validation-worker/scripts/prod-db-audit.js",
+    "ops:nano-signal-backfill": "node --enable-source-maps ./dist/apps/validation-worker/scripts/nano-signal-backfill.js",
     "ops:prod-db-probe": "node --enable-source-maps ./dist/apps/validation-worker/scripts/prod-ops-db-probe.js",
     "summarize:signal-events": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/inspect-signal-enrichment.ts --events-only",
     "summarize:signal-enrichment": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/inspect-signal-enrichment.ts --summary",
