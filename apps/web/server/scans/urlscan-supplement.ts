@@ -90,9 +90,13 @@ export function shouldAttemptFullScanUrlscanSupplement(input: {
   }
 
   const coverageLevel = getString(snapshot, "coverage_level");
-  const blockedByCoverage = coverageLevel === "limited_partial" && getNumber(snapshot, "pages_scanned") === 0;
+  const scanOutcome = getString(snapshot, "scan_outcome");
+  const hasLimitedCoverage = coverageLevel === "limited_partial" || coverageLevel === "limited_none";
+  const blockedByCoverage = hasLimitedCoverage && getNumber(snapshot, "pages_scanned") === 0;
+  const incompleteOutcome =
+    Boolean(scanOutcome && /partial|incomplete|degraded|timeout|restricted|unknown_access/i.test(scanOutcome));
 
-  return isHomepageAccessLimited(snapshot) || blockedByCoverage;
+  return isHomepageAccessLimited(snapshot) || blockedByCoverage || (hasLimitedCoverage && incompleteOutcome);
 }
 
 export function buildFullScanUrlscanSupplementPayload(input: {
@@ -123,9 +127,13 @@ export function buildFullScanUrlscanSupplementPayload(input: {
   const protectionVendor =
     getString(input.snapshot, "block_vendor_guess") ??
     getString(input.snapshot, "cmp_vendor_name");
+  const pagesScanned = getNumber(input.snapshot, "pages_scanned") ?? 0;
   const evidenceRelation = input.evidenceRelation ?? "same_host";
   const isOffDomainRedirect = evidenceRelation === "off_domain_redirect";
   const urlscanFinalHostname = input.urlscanFinalHostname ?? null;
+  const liveCoverageDescription = pagesScanned > 0
+    ? "CertScore live coverage was incomplete"
+    : "CertScore was blocked before public-page verification";
 
   return {
     version: "preview-v1",
@@ -141,8 +149,8 @@ export function buildFullScanUrlscanSupplementPayload(input: {
       coverageLevel: "limited_partial",
       title: isOffDomainRedirect ? "Redirect evidence available" : "Indirect public evidence available",
       message: isOffDomainRedirect
-        ? "CertScore was blocked before public-page verification, but supplemental public runtime evidence showed the requested domain redirected off-domain."
-        : "CertScore was blocked before public-page verification, but supplemental same-host public runtime evidence was retained."
+        ? `${liveCoverageDescription}, but supplemental public runtime evidence showed the requested domain redirected off-domain.`
+        : `${liveCoverageDescription}, but supplemental same-host public runtime evidence was retained.`
     },
     evidence: {
       coverageLevel: "limited_partial",
@@ -156,7 +164,9 @@ export function buildFullScanUrlscanSupplementPayload(input: {
     },
     supplementalEvidence: fallbackEvidence,
     summaryBullets: [
-      "CertScore retained limited-coverage context because the live browser pass hit an access limitation.",
+      pagesScanned > 0
+        ? "CertScore retained limited-coverage context because the live browser pass completed with partial page coverage."
+        : "CertScore retained limited-coverage context because the live browser pass hit an access limitation.",
       isOffDomainRedirect && urlscanFinalHostname
         ? `Supplemental public runtime evidence showed the requested domain redirected to ${urlscanFinalHostname}.`
         : "Supplemental same-host public runtime evidence was retained to help explain what a public browser observed.",

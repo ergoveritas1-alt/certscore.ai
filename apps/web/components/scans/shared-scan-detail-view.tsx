@@ -311,6 +311,31 @@ function getRecordStringArray(record: Record<string, unknown> | null | undefined
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
 
+export function hasIncompleteScanCoverage(scanRecord: Pick<ScanDetailResponse, "scan" | "snapshot" | "events">) {
+  if (scanRecord.scan.status !== "completed") {
+    return false;
+  }
+
+  const snapshot = scanRecord.snapshot;
+  if (!snapshot) {
+    return false;
+  }
+
+  const coverageLevel = typeof snapshot.coverage_level === "string" ? snapshot.coverage_level : null;
+  const scanOutcome = typeof snapshot.scan_outcome === "string" ? snapshot.scan_outcome : null;
+  const pagesScanned = getFiniteNumber(snapshot.pages_scanned) ?? scanRecord.scan.pagesScanned;
+
+  return (
+    coverageLevel === "limited_partial" ||
+    coverageLevel === "limited_none" ||
+    snapshot.partial_scan === true ||
+    snapshot.incomplete_pages === true ||
+    snapshot.timeout_flag === true ||
+    Boolean(scanOutcome && /partial|incomplete|degraded|blocked|captcha|auth|challenge|forbidden|timeout|restricted|unknown_access/i.test(scanOutcome)) ||
+    (typeof pagesScanned === "number" && pagesScanned === 0 && coverageLevel !== "broad")
+  );
+}
+
 function getRecordObjectArray(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
   return Array.isArray(value)
@@ -4927,6 +4952,7 @@ export function SharedScanDetailView({
   });
   const isScanInFlight = scanRecord.scan.status === "queued" || scanRecord.scan.status === "running";
   const isScanFailed = scanRecord.scan.status === "failed";
+  const isIncompleteScanCoverage = hasIncompleteScanCoverage(scanRecord);
   const executiveAccessNoticeCardProps = executiveAccessLimitationNotice
     ? {
         coverageLabel: executiveAccessLimitationNotice.review.coverageLabel,
@@ -4990,6 +5016,8 @@ export function SharedScanDetailView({
             Created <ViewerTimestamp value={scanRecord.scan.createdAt} />
           </>
         }
+        statusLabel={isIncompleteScanCoverage ? "Incomplete" : undefined}
+        statusTone={isIncompleteScanCoverage ? "warning" : undefined}
         status={scanRecord.scan.status}
         title={`Scan: ${scanRecord.scan.domainHostname ?? "Unknown website"}`}
       />

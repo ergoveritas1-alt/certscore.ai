@@ -40,6 +40,71 @@ test("attempts urlscan supplement for homepage-blocked full scans even when lega
   );
 });
 
+test("attempts urlscan supplement for completed partial scans with retained pages", () => {
+  assert.equal(
+    shouldAttemptFullScanUrlscanSupplement({
+      snapshot: {
+        coverage_level: "limited_partial",
+        pages_scanned: 3,
+        scan_outcome: "completed_partial",
+        verified_public_surfaces_count: 2
+      }
+    }),
+    true
+  );
+
+  assert.equal(
+    shouldAttemptFullScanUrlscanSupplement({
+      snapshot: {
+        coverage_level: "broad",
+        pages_scanned: 3,
+        scan_outcome: "completed_successfully",
+        verified_public_surfaces_count: 2
+      }
+    }),
+    false
+  );
+});
+
+test("describes retained-page partial supplements without blocked-only wording", () => {
+  const payload = buildFullScanUrlscanSupplementPayload({
+    domainHostname: "latimes.com",
+    hostname: "www.latimes.com",
+    normalizedUrl: "https://www.latimes.com/",
+    selectedSource: {
+      reportUrl: "https://urlscan.io/result/rich/",
+      resultApiUrl: "https://urlscan.io/api/v1/result/rich/",
+      result: {
+        data: {
+          requests: new Array(40).fill({})
+        },
+        lists: {
+          domains: ["www.latimes.com", "cdn.example.net"],
+          ips: ["192.0.2.1"]
+        },
+        page: {
+          title: "Example",
+          url: "https://www.latimes.com/"
+        }
+      }
+    },
+    snapshot: {
+      coverage_level: "limited_partial",
+      pages_scanned: 3,
+      scan_outcome: "completed_partial",
+      verified_public_surfaces_count: 2
+    }
+  });
+
+  assert.ok(payload);
+  assert.match(payload.resultState?.message ?? "", /live coverage was incomplete/);
+  assert.doesNotMatch(payload.resultState?.message ?? "", /blocked before public-page verification/);
+  assert.equal(
+    payload.summaryBullets.some((bullet) => bullet.includes("partial page coverage")),
+    true
+  );
+});
+
 test("builds supplemental urlscan evidence without promoted sample findings", () => {
   const payload = buildFullScanUrlscanSupplementPayload({
     domainHostname: "example.com",

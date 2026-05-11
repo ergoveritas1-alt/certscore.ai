@@ -2591,6 +2591,12 @@ export function ExecutiveSummaryCard(input: {
     vendorCount: vendorEvidence.length
   });
   const hasMeaningfulInterruption = hasMeaningfulExecutiveInterruption({ scanInterruptions });
+  const hasIncompleteCoverageNotice =
+    displayState === "Limited review" ||
+    hasMeaningfulInterruption ||
+    input.coverageLevel === "limited_partial" ||
+    input.coverageLevel === "limited_none" ||
+    Boolean(input.scanOutcome && /partial|incomplete|degraded|blocked|captcha|auth|challenge|forbidden|timeout|restricted|unknown_access/i.test(input.scanOutcome));
   const executiveHeadline = input.accessLimitationNotice
     ? input.accessLimitationNotice.message
     : formatTopFindingHeadline(executiveHeadlineFindings);
@@ -2831,6 +2837,11 @@ export function ExecutiveSummaryCard(input: {
                   <p className="mt-2 text-sm leading-6 text-slate-600">
                     Findings organized by privacy, consumer protection, and accessibility context. Not a legal determination.
                   </p>
+                  {hasIncompleteCoverageNotice ? (
+                    <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
+                      This scan has incomplete coverage. Treat missing or low-confidence results as unresolved until a complete rescan confirms them.
+                    </p>
+                  ) : null}
                   <div className="mt-3 space-y-3">
                     {regulatoryLenses.map((lens) => (
                       <details key={lens.acronym} className="group rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3">

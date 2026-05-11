@@ -887,6 +887,7 @@ test("ExecutiveSummaryCard renders limited review for latimes-style interrupted 
   assert.match(html, /Runtime coverage was limited by site protections/);
   assert.match(html, /CertScore did not confirm a headline homepage issue from retained evidence/);
   assert.match(html, /Observed vendor and request counts may be incomplete/);
+  assert.match(html, /This scan has incomplete coverage/);
   assert.match(html, /No headline homepage issue was confirmed from retained evidence/);
   assert.match(html, /Observed footprint may be incomplete because site protections interrupted runtime collection/);
   assert.match(html, /\+26 above expected for Media \/ publisher sites/);
@@ -939,6 +940,7 @@ test("ExecutiveSummaryCard keeps clean well-covered scans clear", () => {
   assert.match(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
   assert.doesNotMatch(html, /Limited review/);
   assert.doesNotMatch(html, /Runtime coverage was limited by site protections/);
+  assert.doesNotMatch(html, /This scan has incomplete coverage/);
 });
 
 test("ExecutiveSummaryCard treats interruption-only scans as coverage limited without inventing findings", () => {
@@ -975,6 +977,7 @@ test("ExecutiveSummaryCard treats interruption-only scans as coverage limited wi
 
   assert.match(html, /Limited review/);
   assert.match(html, /Runtime coverage was limited by site protections/);
+  assert.match(html, /This scan has incomplete coverage/);
   assert.match(html, /No headline homepage issue was confirmed from retained evidence/);
   assert.doesNotMatch(html, /View evidence/);
   assert.doesNotMatch(html, /Audit finding/);
