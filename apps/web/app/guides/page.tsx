@@ -11,6 +11,46 @@ export const metadata: Metadata = createPageMetadata({
 
 const guides = [
   {
+    href: "/guides/pre-consent-tracking",
+    title: "Pre-consent tracking",
+    description: "Review what it means when tracking requests or non-essential cookies appear before a recorded consent choice."
+  },
+  {
+    href: "/guides/third-party-cookies-before-consent",
+    title: "Third-party cookies before consent",
+    description: "Understand how third-party cookie timing can become a reviewable risk signal."
+  },
+  {
+    href: "/guides/rtb-cookie-syncing",
+    title: "RTB cookie syncing",
+    description: "Learn how identifier-sharing and cookie-sync signals can be reviewed with vendor evidence."
+  },
+  {
+    href: "/guides/session-replay-risk",
+    title: "Session replay risk",
+    description: "Distinguish session recording service detection from rarer sensitive-input replay risk signals."
+  },
+  {
+    href: "/guides/accessibility-homepage-signals",
+    title: "Accessibility homepage signals",
+    description: "Review automated homepage accessibility signals without treating them as a full WCAG audit."
+  },
+  {
+    href: "/guides/check-website-tracking-before-consent",
+    title: "Check tracking before consent",
+    description: "A practical overview of reviewing first-load tracking behavior against consent timing."
+  },
+  {
+    href: "/guides/check-third-party-cookies-before-consent",
+    title: "Check third-party cookies before consent",
+    description: "A practical overview of reviewing third-party cookie timing before a consent choice."
+  },
+  {
+    href: "/guides/website-consent-audit",
+    title: "Website consent audit",
+    description: "Learn how to compare consent interface behavior with observed website tracking and cookie activity."
+  },
+  {
     href: "/guides/website-privacy-policy-requirements",
     title: "Privacy policy signals",
     description: "See which privacy-rights, retention, and disclosure cues commonly appear in policy scans."

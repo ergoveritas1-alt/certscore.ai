@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
@@ -17,6 +18,50 @@ type PublicScanDetailPageProps = {
     scanId: string;
   }>;
 };
+
+function getPublicScanDomainLabel(domainHostname: string | null) {
+  return domainHostname?.trim() || "Public website";
+}
+
+export async function generateMetadata({ params }: PublicScanDetailPageProps): Promise<Metadata> {
+  const { scanId } = await params;
+  const scanRecord = await getAnonymousScanById(scanId);
+
+  if (!scanRecord) {
+    return {
+      title: "Scan not found | CertScore.ai",
+      robots: {
+        follow: false,
+        index: false
+      }
+    };
+  }
+
+  const domain = getPublicScanDomainLabel(scanRecord.scan.domainHostname);
+  const title = `${domain} tracking, cookie, consent, and accessibility scan | CertScore.ai`;
+  const description = `Automated CertScore.ai scan summary for ${domain}, including observed tracking, cookie, consent, and accessibility risk signals. Review the evidence; automated findings may contain errors.`;
+
+  return {
+    title: {
+      absolute: title
+    },
+    description,
+    robots: {
+      follow: false,
+      index: false
+    },
+    openGraph: {
+      title,
+      description,
+      type: "website"
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description
+    }
+  };
+}
 
 export default async function PublicScanDetailPage({ params }: PublicScanDetailPageProps) {
   const { scanId } = await params;

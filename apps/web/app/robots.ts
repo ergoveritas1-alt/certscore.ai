@@ -1,13 +1,44 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "../lib/seo";
 
+const publicAllowPaths = [
+  "/",
+  "/how-it-works",
+  "/methodology",
+  "/what-is-certscore",
+  "/pricing",
+  "/guides",
+  "/guides/",
+  "/benchmarks/",
+  "/compare/",
+  "/faq",
+  "/insights/",
+  "/llms.txt"
+];
+
+const privateDisallowPaths = ["/app/", "/api/", "/auth/"];
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/how-it-works", "/methodology", "/pricing", "/guides", "/guides/", "/faq", "/insights/"],
-        disallow: ["/app/", "/api/", "/auth/"]
+        allow: publicAllowPaths,
+        disallow: privateDisallowPaths
+      },
+      {
+        userAgent: [
+          "OAI-SearchBot",
+          "ChatGPT-User",
+          "GPTBot",
+          "Googlebot",
+          "Google-Extended",
+          "ClaudeBot",
+          "Claude-User",
+          "Claude-SearchBot"
+        ],
+        allow: publicAllowPaths,
+        disallow: privateDisallowPaths
       }
     ],
     sitemap: `${SITE_URL}/sitemap.xml`

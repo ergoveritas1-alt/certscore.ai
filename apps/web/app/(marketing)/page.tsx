@@ -191,11 +191,10 @@ export default async function MarketingHomePage() {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     name: "CertScore.ai",
-    url: SITE_URL,
-    applicationCategory: "Website Monitoring Software",
+    applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     description:
-      "CertScore.ai scans websites like a real visitor to detect tracking activity, verify consent flows, and compare policy claims against runtime behavior."
+      "CertScore.ai scans public websites for observable tracking, cookie, consent, accessibility, and privacy risk signals."
   };
 
   return (

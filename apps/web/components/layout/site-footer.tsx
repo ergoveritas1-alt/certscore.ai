@@ -1,5 +1,16 @@
 import Link from "next/link";
 
+const resourceLinks = [
+  { href: "/what-is-certscore", label: "What is CertScore.ai?" },
+  { href: "/methodology", label: "Methodology" },
+  { href: "/benchmarks/website-consent-tracking-2026", label: "Website consent benchmark" },
+  { href: "/guides/pre-consent-tracking", label: "Pre-consent tracking guide" },
+  { href: "/guides/rtb-cookie-syncing", label: "RTB cookie syncing guide" },
+  { href: "/compare/privacy-scanner-vs-cookie-scanner", label: "Privacy scanner vs cookie scanner" },
+  { href: "/press", label: "Press" },
+  { href: "/llms.txt", label: "llms.txt" }
+];
+
 export function SiteFooter() {
   return (
     <footer className="border-t border-slate-200 bg-white">
@@ -36,6 +47,16 @@ export function SiteFooter() {
             <Link href="/login" className="hover:text-slate-900">
               Login
             </Link>
+          </div>
+        </div>
+        <div className="border-t border-slate-100 pt-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Resources</p>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+            {resourceLinks.map((link) => (
+              <Link key={link.href} href={link.href} className="hover:text-slate-900">
+                {link.label}
+              </Link>
+            ))}
           </div>
         </div>
         <div className="text-xs text-slate-400">
