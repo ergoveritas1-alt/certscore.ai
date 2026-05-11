@@ -917,21 +917,24 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
       `
         with requested as (
           select distinct on (scan_id)
-            scan_id,
-            created_at as requested_at,
+            scan_events.scan_id,
+            scan_events.created_at as requested_at,
             case
-              when metadata_json->>'pollCount' ~ '^\\d+$' then (metadata_json->>'pollCount')::int
+              when scan_events.metadata_json->>'pollCount' ~ '^\\d+$' then (scan_events.metadata_json->>'pollCount')::int
               else 0
             end as poll_count,
             case
-              when metadata_json->>'recheckAfterEpochMs' ~ '^\\d+(\\.\\d+)?$' then (metadata_json->>'recheckAfterEpochMs')::numeric
+              when scan_events.metadata_json->>'recheckAfterEpochMs' ~ '^\\d+(\\.\\d+)?$' then (scan_events.metadata_json->>'recheckAfterEpochMs')::numeric
               else null
             end as recheck_after_epoch_ms,
+            case when scans.status in ('completed', 'failed') then 1 else 0 end as terminal_priority,
             false as recovered
           from scan_events
-          where event_type = $1
-            and scan_id is not null
-          order by scan_id, created_at desc
+          join scans on scans.id = scan_events.scan_id
+          where scan_events.event_type = $1
+            and scan_events.scan_id is not null
+            and scan_events.created_at >= now() - interval '24 hours'
+          order by scan_events.scan_id, scan_events.created_at desc
         ),
         recovered as (
           select
@@ -939,6 +942,7 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
             coalesce(scans.completed_at, scans.updated_at, scans.created_at) as requested_at,
             0 as poll_count,
             null::numeric as recheck_after_epoch_ms,
+            1 as terminal_priority,
             true as recovered
           from scans
           where scans.status = 'completed'
@@ -957,9 +961,9 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
             )
         ),
         candidates as (
-          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, recovered from requested
+          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered from requested
           union all
-          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, recovered from recovered
+          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered from recovered
         )
         select candidates.scan_id, candidates.requested_at, candidates.poll_count, candidates.recovered
         from candidates
@@ -971,7 +975,7 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
               and completed.event_type in ($2, $3)
               and completed.created_at >= candidates.requested_at
           )
-        order by candidates.requested_at asc
+        order by candidates.terminal_priority desc, candidates.requested_at desc
         limit $4
       `,
       [
