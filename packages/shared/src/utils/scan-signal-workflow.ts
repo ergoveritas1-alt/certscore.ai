@@ -59,16 +59,44 @@ function getEarliestEventTimestamp(events: WorkflowEventRecord[], eventTypes: st
   return matches[0] ?? null;
 }
 
+function getLatestStartedAtForLifecycle(input: {
+  completedAt: string | null;
+  events: WorkflowEventRecord[];
+  startedEventTypes: string[];
+}) {
+  const completedAtMs = input.completedAt ? Date.parse(input.completedAt) : null;
+  const matches = input.events
+    .filter((event) => input.startedEventTypes.includes(event.eventType))
+    .map((event) => event.createdAt)
+    .filter((createdAt) => {
+      if (completedAtMs === null || !Number.isFinite(completedAtMs)) {
+        return true;
+      }
+      const createdAtMs = Date.parse(createdAt);
+      return Number.isFinite(createdAtMs) && createdAtMs <= completedAtMs;
+    })
+    .sort((left, right) => left.localeCompare(right));
+
+  return matches.at(-1) ?? null;
+}
+
 function deriveLifecycleTimestamps(input: {
   completedEventTypes: string[];
   events: WorkflowEventRecord[];
   failedEventTypes?: string[];
   startedEventTypes: string[];
 }): WorkflowTimestampMap & { failedAt: string | null } {
+  const completedAt = getLatestEventTimestamp(input.events, input.completedEventTypes);
+  const failedAt = input.failedEventTypes ? getLatestEventTimestamp(input.events, input.failedEventTypes) : null;
+
   return {
-    completedAt: getLatestEventTimestamp(input.events, input.completedEventTypes),
-    failedAt: input.failedEventTypes ? getLatestEventTimestamp(input.events, input.failedEventTypes) : null,
-    startedAt: getEarliestEventTimestamp(input.events, input.startedEventTypes)
+    completedAt,
+    failedAt,
+    startedAt: getLatestStartedAtForLifecycle({
+      completedAt: failedAt ?? completedAt,
+      events: input.events,
+      startedEventTypes: input.startedEventTypes
+    })
   };
 }
 
