@@ -72,7 +72,7 @@ export default function WebsiteConsentTrackingBenchmarkPage() {
           {
             title: "Observed benchmark signals",
             paragraphs: [
-              "In recent CertScore benchmark scans, pre-consent tracking appeared in roughly one in five scanned sites.",
+              "In recent CertScore.ai benchmark scans, pre-consent tracking appeared in roughly one in five scanned sites.",
               "RTB cookie sync appeared in roughly one in ten scanned sites.",
               "Fingerprinting-related signals appeared in roughly 17% of scans, while probable fingerprinting remained rare.",
               "Severe session replay on sensitive input surfaces appeared rarely."

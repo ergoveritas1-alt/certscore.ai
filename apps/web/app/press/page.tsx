@@ -72,7 +72,7 @@ export default function PressPage() {
 
           <Card className="border-slate-200 bg-white shadow-none">
             <CardHeader>
-              <CardTitle className="text-xl text-slate-950">What CertScore scans</CardTitle>
+              <CardTitle className="text-xl text-slate-950">What CertScore.ai scans</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="grid gap-2 text-sm leading-6 text-slate-600 sm:grid-cols-2">
@@ -88,7 +88,7 @@ export default function PressPage() {
               <CardTitle className="text-xl text-slate-950">Benchmark highlights</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm leading-7 text-slate-600">
-              <p>In recent CertScore benchmark scans, pre-consent tracking appeared in roughly one in five scanned sites.</p>
+              <p>In recent CertScore.ai benchmark scans, pre-consent tracking appeared in roughly one in five scanned sites.</p>
               <p>RTB cookie sync appeared in roughly one in ten scanned sites.</p>
               <p>Fingerprinting-related signals appeared in roughly 17% of scans, while probable fingerprinting remained rare.</p>
             </CardContent>

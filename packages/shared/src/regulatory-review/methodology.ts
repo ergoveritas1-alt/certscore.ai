@@ -1,16 +1,16 @@
 export const INLINE_METHODOLOGY_SUMMARY =
-  "CertScore reviews public website signals and browser behavior, retains reproducible evidence, applies deterministic confidence rules, and surfaces structured findings rather than legal conclusions.";
+  "CertScore.ai reviews public website signals and browser behavior, retains limited reproducible evidence for review, applies deterministic confidence rules, and surfaces structured findings rather than legal conclusions.";
 
 export const PUBLIC_METHODOLOGY_SECTIONS = [
   {
-    heading: "What CertScore reviews",
+    heading: "What CertScore.ai reviews",
     body:
-      "CertScore reviews public-facing website surfaces such as disclosure pages, privacy-choice interfaces, browser behavior after page load, and automated accessibility results on tested public pages. The system is designed to assess observable website signals, not to issue legal conclusions."
+      "CertScore.ai reviews public-facing website surfaces such as disclosure pages, privacy-choice interfaces, browser behavior after page load, and automated accessibility results on tested public pages. The system is designed to assess observable website signals, not to issue legal conclusions."
   },
   {
     heading: "What counts as observable evidence",
     body:
-      "Observable evidence includes screenshots, retained DOM excerpts, timestamped network requests, cookie and storage changes, session interaction logs, and automated accessibility results on tested pages. Findings are expected to cite concrete, reviewable evidence rather than broad narrative statements."
+      "Observable evidence may include timestamped network requests, cookie and storage changes, consent interaction metadata, derived accessibility results, evidence URLs, and limited excerpts retained for evidence context. Debug artifacts such as screenshots or DOM excerpts are retained only when explicitly enabled for validation or troubleshooting. Findings are expected to cite concrete, reviewable evidence rather than broad narrative statements."
   },
   {
     heading: "How scans are run",
@@ -45,12 +45,12 @@ export const PUBLIC_METHODOLOGY_SECTIONS = [
   {
     heading: "Important limitations",
     body:
-      "CertScore observes only what can be seen from the tested public conditions. Internal processing, server-side controls, private dashboards, and region-specific behavior can differ. Authenticated, personalized, or geofenced flows may not be covered in the retained evidence."
+      "CertScore.ai observes only what can be seen from the tested public conditions. Internal processing, server-side controls, private dashboards, and region-specific behavior can differ. Authenticated, personalized, or geofenced flows may not be covered in the retained evidence."
   },
   {
     heading: "Why findings are posture-based and not legal conclusions",
     body:
-      "Findings intentionally use conservative posture language because CertScore is not a legal conclusion engine. The product is built to support skeptical review with reproducible evidence, clear methodology, and explicit limits on what automated scanning can defensibly determine."
+      "Findings intentionally use conservative posture language because CertScore.ai is not a legal conclusion engine. The product is built to support skeptical review with reproducible evidence, clear methodology, and explicit limits on what automated scanning can defensibly determine."
   }
 ];
 

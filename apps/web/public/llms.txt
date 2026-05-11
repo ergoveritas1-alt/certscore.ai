@@ -2,7 +2,8 @@
 
 CertScore.ai scans public websites for observable privacy, cookie, consent, tracking, accessibility, session recording, and fingerprinting-related risk signals.
 
-Key pages:
+## Key pages
+
 - https://certscore.ai/
 - https://certscore.ai/methodology
 - https://certscore.ai/what-is-certscore
@@ -11,8 +12,13 @@ Key pages:
 - https://certscore.ai/guides/rtb-cookie-syncing
 - https://certscore.ai/guides/session-replay-risk
 - https://certscore.ai/guides/accessibility-homepage-signals
+- https://certscore.ai/guides/check-website-tracking-before-consent
+- https://certscore.ai/guides/check-third-party-cookies-before-consent
+- https://certscore.ai/guides/website-consent-audit
 - https://certscore.ai/benchmarks/website-consent-tracking-2026
 - https://certscore.ai/compare/privacy-scanner-vs-cookie-scanner
+- https://certscore.ai/press
 
-Important disclaimer:
+## Important disclaimer
+
 CertScore.ai automated findings may contain errors. Always review the underlying evidence. CertScore.ai does not provide legal advice or certify compliance.

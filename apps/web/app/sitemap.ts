@@ -9,6 +9,7 @@ const staticPaths = [
   "/press",
   "/pricing",
   "/guides",
+  "/benchmarks",
   "/benchmarks/website-consent-tracking-2026",
   "/compare/privacy-scanner-vs-cookie-scanner",
   "/llms.txt",

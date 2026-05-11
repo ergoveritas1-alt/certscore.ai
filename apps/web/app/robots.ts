@@ -7,9 +7,12 @@ const publicAllowPaths = [
   "/methodology",
   "/what-is-certscore",
   "/pricing",
+  "/press",
   "/guides",
   "/guides/",
+  "/benchmarks",
   "/benchmarks/",
+  "/compare",
   "/compare/",
   "/faq",
   "/insights/",
@@ -35,7 +38,8 @@ export default function robots(): MetadataRoute.Robots {
           "Google-Extended",
           "ClaudeBot",
           "Claude-User",
-          "Claude-SearchBot"
+          "Claude-SearchBot",
+          "anthropic-ai"
         ],
         allow: publicAllowPaths,
         disallow: privateDisallowPaths

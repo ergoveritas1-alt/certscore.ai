@@ -46,7 +46,7 @@ export default function MethodologyPage() {
         <div className="mx-auto max-w-5xl px-6 py-16">
           <div className="max-w-3xl space-y-4">
             <Badge tone="neutral">Methodology</Badge>
-            <h1 className="text-4xl font-semibold tracking-tight text-slate-950">Evidence-led methodology for structured findings.</h1>
+            <h1 className="text-4xl font-semibold tracking-tight text-slate-950">CertScore.ai methodology for structured findings.</h1>
             <p className="text-lg leading-8 text-slate-600">{INLINE_METHODOLOGY_SUMMARY}</p>
             <p className="text-sm leading-7 text-slate-500">
               This page explains what CertScore tests, what “not detected” means, how evidence is retained, how confidence is assigned,
@@ -62,7 +62,7 @@ export default function MethodologyPage() {
             <CardTitle className="text-xl text-slate-950">How findings are surfaced</CardTitle>
           </CardHeader>
           <CardContent className="pt-0 text-sm leading-7 text-slate-600">
-            CertScore does not treat every raw detector output as a report finding. Observed signals are evaluated using evidence thresholds,
+            CertScore.ai does not treat every raw detector output as a report finding. Observed signals are evaluated using evidence thresholds,
             support strength, contradiction checks, and scan-context limits. Depending on the retained evidence, an item may be surfaced as a
             finding, held for reviewer attention, used as supporting context, or suppressed.
           </CardContent>
@@ -85,7 +85,7 @@ export default function MethodologyPage() {
             <Badge tone="neutral">Deeper insights</Badge>
             <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Use scan evidence to support deeper review.</h2>
             <p className="text-sm text-slate-600">
-              CertScore can do more than surface obvious findings. It helps teams connect runtime evidence to broken user controls, disclosure gaps, and broader public-facing trust signals.
+              CertScore.ai can do more than surface obvious findings. It helps teams connect runtime evidence to broken user controls, disclosure gaps, and broader public-facing trust signals.
             </p>
           </div>
           <div className="mt-8 grid gap-5 md:grid-cols-3">

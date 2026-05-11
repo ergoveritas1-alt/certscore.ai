@@ -74,7 +74,7 @@ const guides = [
 
 function GuideCheckIcon() {
   return (
-    <div className="relative flex h-6 w-6 shrink-0 items-center justify-center">
+    <div aria-hidden="true" className="relative flex h-6 w-6 shrink-0 items-center justify-center">
       <span className="absolute inset-0 rounded-full bg-[linear-gradient(180deg,rgba(224,242,254,0.96)_0%,rgba(239,246,255,0.98)_100%)] ring-1 ring-sky-200" />
       <svg viewBox="0 0 24 24" className="relative h-4 w-4" aria-hidden="true">
         <path d="m7.3 12.1 3 3.1 6.5-7" fill="none" stroke="#0f8bd7" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -84,6 +84,8 @@ function GuideCheckIcon() {
 }
 
 export default function GuidesPage() {
+  const visibleGuides = guides.filter((guide) => guide.title.trim().length > 0);
+
   return (
     <section className="mx-auto max-w-6xl px-6 py-16">
       <div className="max-w-2xl space-y-4">
@@ -93,8 +95,8 @@ export default function GuidesPage() {
           These guides explain the kinds of public website signals CertScore.ai looks for and how they support review over time.
         </p>
       </div>
-        <div className="mt-10 grid gap-5 md:grid-cols-2">
-          {guides.map((guide) => (
+      <div className="mt-10 grid gap-5 md:grid-cols-2">
+        {visibleGuides.map((guide) => (
           <Card key={guide.href} className="relative overflow-hidden border-slate-200 bg-white shadow-none">
             <div aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(15,139,215,0.18)_0%,rgba(103,199,240,0.3)_100%)]" />
             <CardHeader>
