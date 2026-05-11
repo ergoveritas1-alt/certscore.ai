@@ -201,7 +201,7 @@ function buildValidFixture(findingId: LaunchFindingId, mode: "high" | "medium"):
         repeatability: mode === "high" ? "consistent" : "partially_consistent",
         sessionCount: mode === "high" ? 2 : 1,
         testConditions: [
-          "Fresh browser profile with retained screenshots, DOM excerpts, and network evidence.",
+          "Fresh browser profile with retained runtime evidence context.",
           "Public pages only; authenticated flows were not tested."
         ]
       },

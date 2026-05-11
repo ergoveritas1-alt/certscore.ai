@@ -100,10 +100,10 @@ export default function GuidesPage() {
           <Card key={guide.href} className="relative overflow-hidden border-slate-200 bg-white shadow-none">
             <div aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(15,139,215,0.18)_0%,rgba(103,199,240,0.3)_100%)]" />
             <CardHeader>
-              <CardTitle className="flex items-center gap-3">
+              <div className="flex items-center gap-3">
                 <GuideCheckIcon />
-                <span>{guide.title}</span>
-              </CardTitle>
+                <CardTitle>{guide.title}</CardTitle>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-slate-600">{guide.description}</p>
