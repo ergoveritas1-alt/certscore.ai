@@ -3,6 +3,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import { SITE_NAME, SITE_URL } from "../lib/seo";
 
+const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
+const bingSiteVerification = process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION?.trim();
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
@@ -22,6 +25,16 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image"
+  },
+  verification: {
+    ...(googleSiteVerification ? { google: googleSiteVerification } : {}),
+    ...(bingSiteVerification
+      ? {
+          other: {
+            "msvalidate.01": bingSiteVerification
+          }
+        }
+      : {})
   }
 };
 

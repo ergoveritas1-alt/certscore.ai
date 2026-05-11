@@ -19,7 +19,7 @@ const publicAllowPaths = [
   "/llms.txt"
 ];
 
-const privateDisallowPaths = ["/app/", "/api/", "/auth/"];
+const privateDisallowPaths = ["/app/", "/api/", "/auth/", "/dashboard/", "/account/", "/admin/", "/private/"];
 
 export default function robots(): MetadataRoute.Robots {
   return {
