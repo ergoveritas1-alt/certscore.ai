@@ -365,7 +365,8 @@ async function runScanTimingAudit(input: AuditInput) {
       documentSourceCount: documents?.document_source_count ?? 0,
       events: events.map((event) => ({
         createdAt: event.created_at,
-        eventType: event.event_type
+        eventType: event.event_type,
+        metadataJson: event.metadata_json
       })),
       findingsCount: findings?.finding_count ?? 0,
       mergedSignalCount: (signals?.scanner_signal_count ?? 0) + (signals?.nano_signal_count ?? 0),
@@ -407,6 +408,14 @@ async function runScanTimingAudit(input: AuditInput) {
       scannerRuntime: summarizeTiming(rows.map((row) => row.timings.scannerRuntimeMs)),
       nanoDocSignals: summarizeTiming(rows.map((row) => row.timings.nanoDocSignalsDurationMs)),
       nanoRechecks: summarizeNanoRecheckRows(rows),
+      projectionRecovery: summarizeTiming(rows.map((row) => row.timings.projectionRecoveryLatencyMs)),
+      projectionRecoveryModes: rows.reduce<Record<string, number>>((counts, row) => {
+        const mode = row.timings.projectionRecoveryMode;
+        if (mode) {
+          counts[mode] = (counts[mode] ?? 0) + 1;
+        }
+        return counts;
+      }, {}),
       signalMerge: summarizeTiming(rows.map((row) => row.timings.signalMergeDurationMs)),
       unifiedFindings: summarizeTiming(rows.map((row) => row.timings.unifiedFindingsDurationMs)),
       timeToFirstUsefulReport: summarizeTiming(rows.map((row) => row.timings.timeToFirstUsefulReportMs)),

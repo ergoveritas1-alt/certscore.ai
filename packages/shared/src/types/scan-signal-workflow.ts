@@ -44,6 +44,8 @@ export type SignalEnrichmentWorkflowState = {
     signalMergeDurationMs: number | null;
     scannerDurationMs: number | null;
     scannerRuntimeMs: number | null;
+    projectionRecoveryLatencyMs: number | null;
+    projectionRecoveryMode: string | null;
     timeToFinalReportMs: number | null;
     timeToFirstUsefulReportMs: number | null;
     unifiedFindingsDurationMs: number | null;

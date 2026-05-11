@@ -186,6 +186,7 @@ export type NanoSignalScanLease = {
   client: PoolClient;
   pollCount: number;
   recovered: boolean;
+  recoveryMode: "completed_scan_backfill" | "missing_unified_projection" | null;
   scanId: string;
 };
 
@@ -913,7 +914,7 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
   const client = await getWritePool().connect();
 
   try {
-    const result = await client.query<{ poll_count: number; recovered: boolean; requested_at: string; scan_id: string }>(
+    const result = await client.query<{ poll_count: number; recovered: boolean; recovery_mode: NanoSignalScanLease["recoveryMode"]; requested_at: string; scan_id: string }>(
       `
         with requested as (
           select distinct on (scan_id)
@@ -928,7 +929,8 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
               else null
             end as recheck_after_epoch_ms,
             case when scans.status in ('completed', 'failed') then 1 else 0 end as terminal_priority,
-            false as recovered
+            false as recovered,
+            null::text as recovery_mode
           from scan_events
           join scans on scans.id = scan_events.scan_id
           where scan_events.event_type = $1
@@ -943,7 +945,8 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
             0 as poll_count,
             null::numeric as recheck_after_epoch_ms,
             1 as terminal_priority,
-            true as recovered
+            true as recovered,
+            'completed_scan_backfill'::text as recovery_mode
           from scans
           where scans.status = 'completed'
             and coalesce(scans.completed_at, scans.updated_at, scans.created_at) >= now() - interval '24 hours'
@@ -967,7 +970,8 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
             0 as poll_count,
             null::numeric as recheck_after_epoch_ms,
             1 as terminal_priority,
-            true as recovered
+            true as recovered,
+            'missing_unified_projection'::text as recovery_mode
           from scans
           where scans.status = 'completed'
             and coalesce(scans.completed_at, scans.updated_at, scans.created_at) >= now() - interval '24 hours'
@@ -985,13 +989,13 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
             )
         ),
         candidates as (
-          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered from requested
+          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered, recovery_mode from requested
           union all
-          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered from recovered
+          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered, recovery_mode from recovered
           union all
-          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered from unified_recovery
+          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered, recovery_mode from unified_recovery
         )
-        select candidates.scan_id, candidates.requested_at, candidates.poll_count, candidates.recovered
+        select candidates.scan_id, candidates.requested_at, candidates.poll_count, candidates.recovered, candidates.recovery_mode
         from candidates
         where (candidates.recheck_after_epoch_ms is null or candidates.recheck_after_epoch_ms <= extract(epoch from timezone('utc', now())) * 1000)
           and not exists (
@@ -1024,6 +1028,7 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
           client,
           pollCount: row.poll_count,
           recovered: row.recovered,
+          recoveryMode: row.recovery_mode,
           scanId: row.scan_id
         };
       }

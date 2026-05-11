@@ -6127,7 +6127,11 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
   }
 }
 
-export async function processNanoSignalEnrichmentJob(input: { pollCount?: number; scanId: string }) {
+export async function processNanoSignalEnrichmentJob(input: {
+  pollCount?: number;
+  recoveryMode?: "completed_scan_backfill" | "missing_unified_projection" | null;
+  scanId: string;
+}) {
   const { state } = await getValidationPipelineState();
   if (state !== "running") {
     return;
@@ -6149,6 +6153,7 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted,
       message: "Nano document signal enrichment started.",
       metadataJson: {
+        ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
         stage: "nano_doc_signals"
       },
       scanId
@@ -6416,6 +6421,7 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       policyDocumentCount: artifacts.policySemanticRows.length,
       policyEnrichmentCount: artifacts.rawPolicyEnrichmentRows.length,
       preferDocumentSources: artifacts.preferDocumentSources === true,
+      ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
       scanStartedAt: startedAt,
       stage: "nano_doc_signals",
       sourceMode: artifacts.preferDocumentSources === true ? "document_sources" : "policy_enrichment"
@@ -6439,6 +6445,7 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       eventType: SCAN_EVENT_TYPES.signalMergeStarted,
       message: "Merged signal derivation started.",
       metadataJson: {
+        ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
         stage: "signal_merge"
       },
       scanId
@@ -6451,6 +6458,7 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       message: "Merged signal derivation completed.",
       metadataJson: {
         mergedSignalCount: refreshedArtifacts.mergedSignals.length,
+        ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
         stage: "signal_merge"
       },
       scanId
@@ -6460,6 +6468,7 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
       eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted,
       message: "Unified finding derivation started.",
       metadataJson: {
+        ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
         stage: "unified_findings"
       },
       scanId
@@ -6473,7 +6482,8 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
             runtimeArtifacts: refreshedArtifacts.runtimeArtifacts
           },
           findings
-        )
+        ),
+        ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {})
       }),
       deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
       scanId

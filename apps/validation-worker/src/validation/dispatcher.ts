@@ -62,7 +62,7 @@ async function dispatchNanoSignalScan(lease: NanoSignalScanLease) {
       eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued,
       message: "Nano document signal enrichment requested.",
       metadataJson: {
-        recoveryMode: "completed_scan_backfill",
+        recoveryMode: lease.recoveryMode ?? "completed_scan_backfill",
         stage: "nano_doc_signals"
       },
       scanId: lease.scanId
@@ -71,6 +71,7 @@ async function dispatchNanoSignalScan(lease: NanoSignalScanLease) {
 
   await processNanoSignalEnrichmentJob({
     pollCount: lease.pollCount,
+    recoveryMode: lease.recoveryMode,
     scanId: lease.scanId
   });
 }

@@ -38,6 +38,8 @@ test("deriveSignalEnrichmentWorkflowState marks bridge mode when nano starts aft
     nanoDocRetrievalDurationMs: null,
     nanoDocSignalsDurationMs: 60 * 1000,
     queuePickupLatencyMs: null,
+    projectionRecoveryLatencyMs: null,
+    projectionRecoveryMode: null,
     signalMergeDurationMs: 60 * 1000,
     scannerDurationMs: 5 * 60 * 1000,
     scannerRuntimeMs: 5 * 60 * 1000,
@@ -118,6 +120,8 @@ test("deriveSignalEnrichmentWorkflowState marks parallelized mode when nano begi
   assert.equal(workflow.timings.scannerRuntimeMs, 5 * 60 * 1000);
   assert.equal(workflow.timings.queuePickupLatencyMs, null);
   assert.equal(workflow.timings.nanoDocRetrievalDurationMs, null);
+  assert.equal(workflow.timings.projectionRecoveryLatencyMs, null);
+  assert.equal(workflow.timings.projectionRecoveryMode, null);
   assert.equal(workflow.timings.timeToFirstUsefulReportMs, null);
   assert.equal(workflow.timings.timeToFinalReportMs, null);
   assert.equal(workflow.timings.timeToMergedSignalsMs, null);
@@ -151,6 +155,7 @@ test("deriveSignalEnrichmentWorkflowState measures queued scans without implying
   assert.equal(workflow.mergedSignalsReady, false);
   assert.equal(workflow.timings.queuePickupLatencyMs, null);
   assert.equal(workflow.timings.timeToFirstUsefulReportMs, null);
+  assert.equal(workflow.timings.projectionRecoveryLatencyMs, null);
   assert.equal(workflow.stages.find((stage) => stage.id === "scanner")?.status, "queued");
 });
 
@@ -175,6 +180,7 @@ test("deriveSignalEnrichmentWorkflowState preserves failed scanner timing withou
   assert.equal(workflow.timings.queuePickupLatencyMs, 3_000);
   assert.equal(workflow.timings.scannerDurationMs, null);
   assert.equal(workflow.timings.timeToFirstUsefulReportMs, null);
+  assert.equal(workflow.timings.projectionRecoveryLatencyMs, null);
   assert.equal(workflow.stages.find((stage) => stage.id === "scanner")?.status, "failed");
   assert.equal(workflow.stages.find((stage) => stage.id === "nano_doc_signals")?.status, "failed");
 });
@@ -241,6 +247,56 @@ test("deriveSignalEnrichmentWorkflowState measures the latest retry attempt for 
   assert.equal(workflow.timings.signalMergeDurationMs, 1_000);
   assert.equal(workflow.timings.unifiedFindingsDurationMs, 1_000);
   assert.equal(workflow.timings.timeToFirstUsefulReportMs, 241_000);
+  assert.equal(workflow.timings.projectionRecoveryLatencyMs, null);
   assert.equal(workflow.stages.find((stage) => stage.id === "signal_merge")?.startedAt, "2026-04-02T10:03:00.000Z");
   assert.equal(workflow.stages.find((stage) => stage.id === "unified_findings")?.startedAt, "2026-04-02T10:04:00.000Z");
+});
+
+test("deriveSignalEnrichmentWorkflowState separates recovered projection latency from end-to-end report time", () => {
+  const workflow = deriveSignalEnrichmentWorkflowState({
+    events: [
+      { createdAt: "2026-04-02T10:00:00.000Z", eventType: SCAN_EVENT_TYPES.fullQueued },
+      { createdAt: "2026-04-02T10:00:01.000Z", eventType: SCAN_EVENT_TYPES.fullStarted },
+      { createdAt: "2026-04-02T10:00:20.000Z", eventType: SCAN_EVENT_TYPES.fullCompleted },
+      { createdAt: "2026-04-02T10:00:21.000Z", eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted },
+      { createdAt: "2026-04-02T10:00:22.000Z", eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted },
+      {
+        createdAt: "2026-04-02T10:30:00.000Z",
+        eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued,
+        metadataJson: { recoveryMode: "missing_unified_projection" }
+      },
+      {
+        createdAt: "2026-04-02T10:30:02.000Z",
+        eventType: SCAN_EVENT_TYPES.signalMergeStarted,
+        metadataJson: { recoveryMode: "missing_unified_projection" }
+      },
+      {
+        createdAt: "2026-04-02T10:30:03.000Z",
+        eventType: SCAN_EVENT_TYPES.signalMergeCompleted,
+        metadataJson: { recoveryMode: "missing_unified_projection" }
+      },
+      {
+        createdAt: "2026-04-02T10:30:04.000Z",
+        eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted,
+        metadataJson: { recoveryMode: "missing_unified_projection" }
+      },
+      {
+        createdAt: "2026-04-02T10:30:05.000Z",
+        eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
+        metadataJson: { recoveryMode: "missing_unified_projection" }
+      }
+    ],
+    documentSourceCount: 1,
+    findingsCount: 1,
+    mergedSignalCount: 4,
+    nanoSignalCount: 1,
+    policyDocumentCount: 1,
+    scanCompletedAt: "2026-04-02T10:00:20.000Z",
+    scanStatus: "completed",
+    scannerSignalCount: 3
+  });
+
+  assert.equal(workflow.timings.timeToFirstUsefulReportMs, 1_805_000);
+  assert.equal(workflow.timings.projectionRecoveryLatencyMs, 5_000);
+  assert.equal(workflow.timings.projectionRecoveryMode, "missing_unified_projection");
 });

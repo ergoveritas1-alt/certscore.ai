@@ -8,6 +8,7 @@ import type {
 type WorkflowEventRecord = {
   createdAt: string;
   eventType: string;
+  metadataJson?: unknown;
 };
 
 type WorkflowTimestampMap = {
@@ -57,6 +58,32 @@ function getEarliestEventTimestamp(events: WorkflowEventRecord[], eventTypes: st
     .sort((left, right) => left.localeCompare(right));
 
   return matches[0] ?? null;
+}
+
+function getEventMetadata(event: WorkflowEventRecord) {
+  return typeof event.metadataJson === "object" && event.metadataJson !== null && !Array.isArray(event.metadataJson)
+    ? event.metadataJson as Record<string, unknown>
+    : {};
+}
+
+function getLatestProjectionRecoveryEvent(events: WorkflowEventRecord[]) {
+  const recoveryEventTypes: string[] = [
+    SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued,
+    SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted,
+    SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
+    SCAN_EVENT_TYPES.signalMergeStarted,
+    SCAN_EVENT_TYPES.signalMergeCompleted,
+    SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted,
+    SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted
+  ];
+
+  return events
+    .filter((event) =>
+      recoveryEventTypes.includes(event.eventType) &&
+      typeof getEventMetadata(event).recoveryMode === "string"
+    )
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    .at(-1) ?? null;
 }
 
 function getLatestStartedAtForLifecycle(input: {
@@ -255,6 +282,22 @@ export function deriveSignalEnrichmentWorkflowState(input: {
     );
   const timeToFirstUsefulReportMs = diffMs(reportTimingStartAt, findingsTimestamps.completedAt);
   const timeToFinalReportMs = diffMs(reportTimingStartAt, finalReportCompletedAt);
+  const projectionRecoveryEvent = getLatestProjectionRecoveryEvent(input.events);
+  const projectionRecoveryMode = projectionRecoveryEvent
+    ? String(getEventMetadata(projectionRecoveryEvent).recoveryMode)
+    : null;
+  const projectionRecoveryStartedAt =
+    projectionRecoveryMode === null
+      ? null
+      : getEarliestEventTimestamp(
+          input.events.filter((event) => getEventMetadata(event).recoveryMode === projectionRecoveryMode),
+          [
+            SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued,
+            SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted,
+            SCAN_EVENT_TYPES.signalMergeStarted,
+            SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted
+          ]
+        );
 
   const stages: SignalEnrichmentWorkflowStage[] = [
     {
@@ -331,6 +374,8 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       nanoDocRetrievalDurationMs: diffMs(docRetrievalTimestamps.startedAt, docRetrievalTimestamps.completedAt),
       nanoDocSignalsDurationMs: diffMs(nanoTimestamps.startedAt, nanoTimestamps.completedAt),
       queuePickupLatencyMs,
+      projectionRecoveryLatencyMs: diffMs(projectionRecoveryStartedAt, findingsTimestamps.completedAt),
+      projectionRecoveryMode,
       signalMergeDurationMs: diffMs(mergeTimestamps.startedAt, mergeTimestamps.completedAt),
       scannerDurationMs,
       scannerRuntimeMs: scannerDurationMs,
