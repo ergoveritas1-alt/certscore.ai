@@ -210,3 +210,37 @@ test("deriveSignalEnrichmentWorkflowState promotes merge and findings to complet
   assert.equal(workflow.timings.queuePickupLatencyMs, 15_507);
   assert.equal(workflow.stages.find((stage) => stage.id === "scanner")?.waitMs, 15_507);
 });
+
+test("deriveSignalEnrichmentWorkflowState measures the latest retry attempt for repeated stages", () => {
+  const workflow = deriveSignalEnrichmentWorkflowState({
+    events: [
+      { createdAt: "2026-04-02T10:00:00.000Z", eventType: SCAN_EVENT_TYPES.fullQueued },
+      { createdAt: "2026-04-02T10:00:01.000Z", eventType: SCAN_EVENT_TYPES.fullStarted },
+      { createdAt: "2026-04-02T10:00:20.000Z", eventType: SCAN_EVENT_TYPES.fullCompleted },
+      { createdAt: "2026-04-02T10:00:21.000Z", eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted },
+      { createdAt: "2026-04-02T10:00:22.000Z", eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted },
+      { createdAt: "2026-04-02T10:00:23.000Z", eventType: SCAN_EVENT_TYPES.signalMergeStarted },
+      { createdAt: "2026-04-02T10:00:24.000Z", eventType: SCAN_EVENT_TYPES.signalMergeCompleted },
+      { createdAt: "2026-04-02T10:03:00.000Z", eventType: SCAN_EVENT_TYPES.signalMergeStarted },
+      { createdAt: "2026-04-02T10:03:01.000Z", eventType: SCAN_EVENT_TYPES.signalMergeCompleted },
+      { createdAt: "2026-04-02T10:03:02.000Z", eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted },
+      { createdAt: "2026-04-02T10:03:03.000Z", eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted },
+      { createdAt: "2026-04-02T10:04:00.000Z", eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted },
+      { createdAt: "2026-04-02T10:04:01.000Z", eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted }
+    ],
+    documentSourceCount: 1,
+    findingsCount: 1,
+    mergedSignalCount: 4,
+    nanoSignalCount: 1,
+    policyDocumentCount: 1,
+    scanCompletedAt: "2026-04-02T10:00:20.000Z",
+    scanStatus: "completed",
+    scannerSignalCount: 3
+  });
+
+  assert.equal(workflow.timings.signalMergeDurationMs, 1_000);
+  assert.equal(workflow.timings.unifiedFindingsDurationMs, 1_000);
+  assert.equal(workflow.timings.timeToFirstUsefulReportMs, 241_000);
+  assert.equal(workflow.stages.find((stage) => stage.id === "signal_merge")?.startedAt, "2026-04-02T10:03:00.000Z");
+  assert.equal(workflow.stages.find((stage) => stage.id === "unified_findings")?.startedAt, "2026-04-02T10:04:00.000Z");
+});
