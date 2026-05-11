@@ -960,10 +960,36 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
                 and terminal.event_type in ($2, $3)
             )
         ),
+        unified_recovery as (
+          select
+            scans.id as scan_id,
+            now() as requested_at,
+            0 as poll_count,
+            null::numeric as recheck_after_epoch_ms,
+            1 as terminal_priority,
+            true as recovered
+          from scans
+          where scans.status = 'completed'
+            and coalesce(scans.completed_at, scans.updated_at, scans.created_at) >= now() - interval '24 hours'
+            and exists (
+              select 1
+              from scan_events signals_completed
+              where signals_completed.scan_id = scans.id
+                and signals_completed.event_type = $2
+            )
+            and not exists (
+              select 1
+              from scan_events findings_completed
+              where findings_completed.scan_id = scans.id
+                and findings_completed.event_type = $5
+            )
+        ),
         candidates as (
           select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered from requested
           union all
           select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered from recovered
+          union all
+          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered from unified_recovery
         )
         select candidates.scan_id, candidates.requested_at, candidates.poll_count, candidates.recovered
         from candidates
@@ -982,7 +1008,8 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
         SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued,
         SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
         SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed,
-        limit
+        limit,
+        SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted
       ]
     );
 
