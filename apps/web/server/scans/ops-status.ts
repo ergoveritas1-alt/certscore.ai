@@ -74,6 +74,14 @@ function buildEmptyFindingCounts() {
   return Object.fromEntries(OPS_SCAN_STATUS_FINDING_IDS.map((findingId) => [findingId, 0])) as Record<OpsScanStatusFindingId, number>;
 }
 
+function buildUnknownReportReadiness() {
+  return {
+    findingsReady: null,
+    mergedSignalsReady: null,
+    status: "unknown"
+  };
+}
+
 async function loadOpsScanStatusCore(scanId: string) {
   const [scan, events, snapshot] = await Promise.all([
     queryOne<OpsScanStatusRow>(
@@ -209,6 +217,7 @@ export async function getAnonymousOpsScanStatus(input: { includeFindings?: boole
     return {
       ...core,
       findingCounts: buildEmptyFindingCounts(),
+      reportReadiness: buildUnknownReportReadiness(),
       topFindings: []
     };
   }
@@ -219,6 +228,7 @@ export async function getAnonymousOpsScanStatus(input: { includeFindings?: boole
     return {
       ...core,
       findingCounts: buildEmptyFindingCounts(),
+      reportReadiness: buildUnknownReportReadiness(),
       topFindings: []
     };
   }
@@ -236,6 +246,11 @@ export async function getAnonymousOpsScanStatus(input: { includeFindings?: boole
   return {
     ...core,
     findingCounts,
+    reportReadiness: {
+      findingsReady: scanRecord.signalEnrichmentWorkflow.findingsReady,
+      mergedSignalsReady: scanRecord.signalEnrichmentWorkflow.mergedSignalsReady,
+      status: scanRecord.signalEnrichmentWorkflow.findingsReady ? "ready" : "finalizing"
+    },
     topFindings: executiveProjection.topFindings.map((finding) => ({
       id: finding.id,
       label: finding.label,

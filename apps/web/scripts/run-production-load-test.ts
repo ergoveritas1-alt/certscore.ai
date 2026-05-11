@@ -49,6 +49,11 @@ type PollEntry = {
   httpStatus: number | null;
   loaded: boolean;
   error: string | null;
+  reportReadiness: {
+    findingsReady: boolean | null;
+    mergedSignalsReady: boolean | null;
+    status: string | null;
+  } | null;
 };
 
 type OperatorEvent = {
@@ -197,6 +202,7 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
       httpStatus: null,
       loaded: false,
       error: entry.error ?? "Enqueue failed",
+      reportReadiness: null,
     };
   }
 
@@ -215,6 +221,7 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
       };
       findingCounts?: Record<string, number>;
       interruptionSummary?: PollEntry["interruptionSummary"];
+      reportReadiness?: PollEntry["reportReadiness"];
       scan?: {
         status?: string;
       };
@@ -235,6 +242,7 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
       httpStatus: response.status,
       loaded,
       error: null,
+      reportReadiness: body.reportReadiness ?? null,
     };
   } catch (error) {
     return {
@@ -250,6 +258,7 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
       httpStatus: null,
       loaded: false,
       error: error instanceof Error ? error.message : String(error),
+      reportReadiness: null,
     };
   }
 }
@@ -333,6 +342,14 @@ function isTerminal(status: ScanStatus) {
   return ["completed", "failed", "canceled", "error"].includes(status);
 }
 
+function isLoadTestComplete(entry: PollEntry) {
+  if (entry.status !== "completed") {
+    return isTerminal(entry.status);
+  }
+
+  return entry.reportReadiness?.findingsReady !== false;
+}
+
 function summarizeStatus(
   active: PollEntry[],
   terminalCount: number,
@@ -340,12 +357,15 @@ function summarizeStatus(
 ) {
   const queued = active.filter((e) => e.status === "queued").length;
   const running = active.filter((e) => e.status === "running").length;
+  const finalizing = active.filter(
+    (e) => e.status === "completed" && e.reportReadiness?.findingsReady === false
+  ).length;
   const completed = terminalCount;
   const errors = active.filter(
     (e) => e.status === "error" || e.status === "failed"
   ).length;
 
-  return `[STATUS] ${completed}/${totalCount} done | running:${running} | queued:${queued} | errors:${errors}`;
+  return `[STATUS] ${completed}/${totalCount} done | running:${running} | queued:${queued} | finalizing:${finalizing} | errors:${errors}`;
 }
 
 async function main() {
@@ -451,12 +471,12 @@ async function main() {
       (e): e is PollEntry => e !== null
     );
 
-    const newTerminal = filtered.filter((e) => isTerminal(e.status));
+    const newTerminal = filtered.filter((e) => isLoadTestComplete(e));
     terminal = [...terminal, ...newTerminal];
     const latestByScanId = new Map(filtered.map((entry) => [entry.scanId, entry]));
     active = active.filter((entry) => {
       const latest = latestByScanId.get(entry.scanId ?? "unknown");
-      return latest ? !isTerminal(latest.status) : true;
+      return latest ? !isLoadTestComplete(latest) : true;
     });
 
     const monitorSnapshot = {
@@ -468,7 +488,7 @@ async function main() {
     };
     appendJsonl(monitorPath, monitorSnapshot);
 
-    const activePolls = filtered.filter((e) => !isTerminal(e.status));
+    const activePolls = filtered.filter((e) => !isLoadTestComplete(e));
     const statusLine = summarizeStatus(activePolls, terminal.length, successful.length);
     console.log(statusLine);
 
