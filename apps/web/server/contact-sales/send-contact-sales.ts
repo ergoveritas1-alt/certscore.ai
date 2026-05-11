@@ -31,7 +31,7 @@ export async function sendContactSalesAction(
   }
 
   const gmailConfig = getGmailConfig();
-  const toEmail = process.env.FEEDBACK_TO_EMAIL?.trim() || "ben@certscore.ai";
+  const toEmail = process.env.CONTACT_SALES_TO_EMAIL?.trim() || "sales@certscore.ai";
 
   if (!gmailConfig) {
     return {

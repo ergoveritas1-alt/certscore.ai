@@ -37,6 +37,7 @@ function mergeAmplifyEnvironmentSecrets(env: NodeJS.ProcessEnv = process.env): N
 const amplifyRuntimeSchema = z.object({
   APP_FLAVOR: z.enum(["certscore", "validation_ops"]).optional(),
   BETTER_AUTH_SECRET: z.string().min(32),
+  CONTACT_SALES_TO_EMAIL: z.string().email().optional(),
   DATABASE_READ_URL: z.string().optional(),
   DATABASE_SSL_MODE: z.enum(["disable", "prefer", "require", "verify-ca", "verify-full"]).optional(),
   DATABASE_URL: z.string().min(1),
@@ -130,6 +131,10 @@ async function main() {
 
   if (!values.PRIVACY_REQUEST_TO_EMAIL) {
     info("privacy email", "PRIVACY_REQUEST_TO_EMAIL is unset; privacy requests will fall back to FEEDBACK_TO_EMAIL if the server code permits it.");
+  }
+
+  if (!values.CONTACT_SALES_TO_EMAIL) {
+    info("contact sales email", "CONTACT_SALES_TO_EMAIL is unset; contact-sales requests will be sent to sales@certscore.ai.");
   }
 
   pass("amplify runtime env", "Critical web runtime variables are present after Amplify secrets merge.");
