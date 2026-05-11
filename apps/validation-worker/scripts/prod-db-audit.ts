@@ -63,6 +63,7 @@ type TimingScanRow = {
 type TimingEventRow = {
   created_at: string;
   event_type: string;
+  metadata_json: unknown;
   scan_id: string;
 };
 
@@ -210,6 +211,81 @@ function summarizeTiming(values: Array<number | null>) {
   };
 }
 
+function getNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function summarizeNanoRechecks(events: TimingEventRow[]) {
+  const queuedEvents = events.filter((event) => event.event_type === "signals.nano_doc_enrichment_requested");
+  const recheckEvents = queuedEvents
+    .map((event) => ({
+      event,
+      metadata: getObject(event.metadata_json)
+    }))
+    .filter(({ metadata }) => getNumber(metadata.pollCount) !== null || typeof metadata.reason === "string");
+  const reasonCounts = new Map<string, number>();
+  const delayMs: number[] = [];
+  const pollCounts: number[] = [];
+
+  for (const { metadata } of recheckEvents) {
+    const reason = typeof metadata.reason === "string" && metadata.reason.trim().length > 0 ? metadata.reason.trim() : "unspecified";
+    reasonCounts.set(reason, (reasonCounts.get(reason) ?? 0) + 1);
+
+    const delay = getNumber(metadata.recheckDelayMs);
+    if (delay !== null) {
+      delayMs.push(delay);
+    }
+
+    const pollCount = getNumber(metadata.pollCount);
+    if (pollCount !== null) {
+      pollCounts.push(pollCount);
+    }
+  }
+
+  return {
+    queuedEventCount: queuedEvents.length,
+    recheckEventCount: recheckEvents.length,
+    maxPollCount: pollCounts.length > 0 ? Math.max(...pollCounts) : null,
+    recheckDelay: summarizeTiming(delayMs),
+    reasons: Object.fromEntries([...reasonCounts.entries()].sort(([left], [right]) => left.localeCompare(right)))
+  };
+}
+
+function summarizeNanoRecheckRows(rows: Array<{ nanoRechecks: ReturnType<typeof summarizeNanoRechecks> }>) {
+  const reasonCounts = new Map<string, number>();
+  const delayValues: number[] = [];
+
+  for (const row of rows) {
+    for (const [reason, count] of Object.entries(row.nanoRechecks.reasons)) {
+      reasonCounts.set(reason, (reasonCounts.get(reason) ?? 0) + count);
+    }
+    const delaySummary = row.nanoRechecks.recheckDelay;
+    if (delaySummary.count > 0) {
+      if (delaySummary.p50Ms !== null) delayValues.push(delaySummary.p50Ms);
+      if (delaySummary.p90Ms !== null) delayValues.push(delaySummary.p90Ms);
+      if (delaySummary.p95Ms !== null) delayValues.push(delaySummary.p95Ms);
+    }
+  }
+
+  return {
+    queuedEventCount: rows.reduce((sum, row) => sum + row.nanoRechecks.queuedEventCount, 0),
+    recheckEventCount: rows.reduce((sum, row) => sum + row.nanoRechecks.recheckEventCount, 0),
+    maxPollCount: rows.reduce<number | null>(
+      (max, row) => row.nanoRechecks.maxPollCount === null ? max : Math.max(max ?? 0, row.nanoRechecks.maxPollCount),
+      null
+    ),
+    sampledRecheckDelay: summarizeTiming(delayValues),
+    reasons: Object.fromEntries([...reasonCounts.entries()].sort(([left], [right]) => left.localeCompare(right)))
+  };
+}
+
 async function runScanTimingAudit(input: AuditInput) {
   const scans = input.scans ?? [];
   const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
@@ -227,7 +303,8 @@ async function runScanTimingAudit(input: AuditInput) {
     query<TimingEventRow>(
       `select scan_id::text as scan_id,
               event_type,
-              created_at::text as created_at
+              created_at::text as created_at,
+              metadata_json
          from scan_events
         where scan_id = any($1::uuid[])
         order by scan_id, created_at asc`,
@@ -308,6 +385,7 @@ async function runScanTimingAudit(input: AuditInput) {
       findingsReady: workflow.findingsReady,
       mergedSignalsReady: workflow.mergedSignalsReady,
       eventCount: events.length,
+      nanoRechecks: summarizeNanoRechecks(events),
       signalCounts: {
         nano: signals?.nano_signal_count ?? 0,
         scanner: signals?.scanner_signal_count ?? 0
@@ -328,6 +406,7 @@ async function runScanTimingAudit(input: AuditInput) {
       queuePickupLatency: summarizeTiming(rows.map((row) => row.timings.queuePickupLatencyMs)),
       scannerRuntime: summarizeTiming(rows.map((row) => row.timings.scannerRuntimeMs)),
       nanoDocSignals: summarizeTiming(rows.map((row) => row.timings.nanoDocSignalsDurationMs)),
+      nanoRechecks: summarizeNanoRecheckRows(rows),
       signalMerge: summarizeTiming(rows.map((row) => row.timings.signalMergeDurationMs)),
       unifiedFindings: summarizeTiming(rows.map((row) => row.timings.unifiedFindingsDurationMs)),
       timeToFirstUsefulReport: summarizeTiming(rows.map((row) => row.timings.timeToFirstUsefulReportMs)),

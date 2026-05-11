@@ -48,10 +48,10 @@ import { cleanupRuntimeScanArtifacts, getRuntimeScanArtifactOptions } from "./ru
 
 export { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
 
-const VALIDATION_SCAN_HANDOFF_POLL_MS = 15_000;
+const VALIDATION_SCAN_HANDOFF_POLL_MS = 5_000;
 const NANO_DOC_RETRIEVAL_POLL_MS = 5_000;
 const MAX_NANO_DOC_RETRIEVAL_POLLS = 20;
-const NANO_SIGNAL_ENRICHMENT_POLL_MS = 5_000;
+const NANO_SIGNAL_ENRICHMENT_POLL_MS = 2_000;
 const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
 const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 4;
 const VALIDATION_VERDICT_BATCH_SIZE = 3;
