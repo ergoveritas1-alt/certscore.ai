@@ -74,12 +74,12 @@ const guides = [
 
 function GuideCheckIcon() {
   return (
-    <div aria-hidden="true" className="relative flex h-6 w-6 shrink-0 items-center justify-center">
+    <span aria-hidden="true" className="relative flex h-6 w-6 shrink-0 items-center justify-center">
       <span className="absolute inset-0 rounded-full bg-[linear-gradient(180deg,rgba(224,242,254,0.96)_0%,rgba(239,246,255,0.98)_100%)] ring-1 ring-sky-200" />
       <svg viewBox="0 0 24 24" className="relative h-4 w-4" aria-hidden="true">
         <path d="m7.3 12.1 3 3.1 6.5-7" fill="none" stroke="#0f8bd7" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-    </div>
+    </span>
   );
 }
 

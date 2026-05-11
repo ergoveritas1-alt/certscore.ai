@@ -10,7 +10,7 @@ export const PUBLIC_METHODOLOGY_SECTIONS = [
   {
     heading: "What counts as observable evidence",
     body:
-      "Observable evidence may include timestamped network requests, cookie and storage changes, consent interaction metadata, derived accessibility results, evidence URLs, and limited excerpts retained for evidence context. Debug artifacts such as screenshots or DOM excerpts are retained only when explicitly enabled for validation or troubleshooting. Findings are expected to cite concrete, reviewable evidence rather than broad narrative statements."
+      "Observable evidence may include timestamped network requests, cookie and storage changes, consent interaction metadata, derived accessibility results, evidence URLs, and limited excerpts retained for evidence context. Debug artifacts such as screenshots or DOM excerpts are retained only when explicitly enabled for validation or troubleshooting."
   },
   {
     heading: "How scans are run",
