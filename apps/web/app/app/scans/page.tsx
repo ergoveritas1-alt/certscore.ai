@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { PendingScanStartedEvent } from "../../../components/analytics/data-layer-events";
 import { RescanDomainForm } from "../../../components/scans/rescan-domain-form";
 import { ScanHistoryLiveRefresh } from "../../../components/scans/scan-history-live-refresh";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
@@ -129,6 +130,7 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
 
   return (
     <div className="space-y-6 pb-6">
+      <PendingScanStartedEvent />
       <ScanHistoryLiveRefresh enabled={hasActiveScans} />
       <section className="rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-panel sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

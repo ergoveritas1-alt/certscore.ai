@@ -12,7 +12,7 @@ type PendingLinkSharedProps = {
   className?: string;
   pendingClassName?: string;
   onClick?: AnchorHTMLAttributes<HTMLAnchorElement>["onClick"];
-};
+} & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "href" | "onClick" | "title">;
 
 type PendingLinkProps = PendingLinkSharedProps & {
   idleContent: ReactNode;
@@ -90,7 +90,8 @@ export function PendingLink({
   pendingContent,
   ariaLabel,
   title,
-  onClick
+  onClick,
+  ...anchorProps
 }: PendingLinkProps) {
   const { handleClick, isNavigating } = usePendingNavigation(href, onClick);
 
@@ -103,6 +104,7 @@ export function PendingLink({
       onClick={handleClick}
       tabIndex={isNavigating ? -1 : undefined}
       title={title}
+      {...anchorProps}
     >
       {isNavigating ? pendingContent : idleContent}
     </Link>
@@ -119,7 +121,8 @@ export function PendingButtonLink({
   title,
   size = "md",
   variant = "primary",
-  onClick
+  onClick,
+  ...anchorProps
 }: PendingButtonLinkProps) {
   const { handleClick, isNavigating } = usePendingNavigation(href, onClick);
 
@@ -137,6 +140,7 @@ export function PendingButtonLink({
         onClick={handleClick}
         tabIndex={isNavigating ? -1 : undefined}
         title={title}
+        {...anchorProps}
       >
         {isNavigating ? pendingContent : idleContent}
       </Link>

@@ -3,6 +3,7 @@
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import { getScanTargetType, type ScanSource, pushDataLayerEvent } from "../../lib/analytics/data-layer";
 
 type DomainScanFormProps = {
   buttonLabel?: string;
@@ -11,6 +12,7 @@ type DomainScanFormProps = {
   inputLabel?: string;
   inputPlaceholder?: string;
   mode?: "full" | "preview";
+  scanSource?: ScanSource;
 };
 
 type ScanMode = NonNullable<DomainScanFormProps["mode"]>;
@@ -83,7 +85,8 @@ export function DomainScanForm({
   helperText,
   inputLabel = "Website domain",
   inputPlaceholder = "Enter yoursite.com",
-  mode = "preview"
+  mode = "preview",
+  scanSource = "unknown"
 }: DomainScanFormProps) {
   const router = useRouter();
   const [domain, setDomain] = useState("");
@@ -147,6 +150,12 @@ export function DomainScanForm({
         return;
       }
 
+      pushDataLayerEvent({
+        event: "scan_started",
+        scan_source: scanSource,
+        scan_target_type: getScanTargetType(domain),
+        scan_status: "queued"
+      });
       router.push(destination);
     } catch (error) {
       recordScanSubmitFailure({

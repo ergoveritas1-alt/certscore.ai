@@ -1,7 +1,8 @@
 "use client";
 
 import { Button, Input } from "@website-signal-risk-scanner/ui";
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
+import { clearPendingScanStarted, markPendingScanStarted } from "../analytics/data-layer-events";
 import { createDomainAction, type CreateDomainActionState } from "../../server/domains/create-domain";
 
 const initialState: CreateDomainActionState = {
@@ -16,8 +17,14 @@ type AddDomainFormProps = {
 export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
   const [state, action, isPending] = useActionState(createDomainAction, initialState);
 
+  useEffect(() => {
+    if (state.error) {
+      clearPendingScanStarted();
+    }
+  }, [state.error]);
+
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-4" onSubmit={() => markPendingScanStarted("dashboard")}>
       <div>
         <div className="relative">
           <Input

@@ -295,6 +295,8 @@ export default function PricingPage() {
               </p>
               <PendingButtonLink
                 className="w-full border-0 bg-[linear-gradient(135deg,#47b54a_0%,#63c864_58%,#8add89_100%)] text-slate-950 shadow-[0_14px_32px_rgba(71,181,74,0.18)] hover:brightness-[1.03] md:w-auto md:min-w-[180px]"
+                data-analytics-cta-location="unknown"
+                data-analytics-event="contact_clicked"
                 href="/contact-sales"
                 idleContent="Contact us"
                 pendingContent="Opening..."

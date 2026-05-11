@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import type { ReactNode } from "react";
 import "./globals.css";
+import { DataLayerClickTracker } from "../components/analytics/data-layer-events";
 import { SITE_NAME, SITE_URL } from "../lib/seo";
 
 const GTM_CONTAINER_ID = "GTM-M2JDQD5N";
@@ -80,6 +81,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
             style={{ display: "none", visibility: "hidden" }}
           />
         </noscript>
+        <DataLayerClickTracker />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }} />
         {children}

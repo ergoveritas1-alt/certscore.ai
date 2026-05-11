@@ -13,6 +13,7 @@ import {
   type SignalEnrichmentWorkflowStageStatus
 } from "@website-signal-risk-scanner/shared";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
+import { ScanCompletedEvent } from "../analytics/data-layer-events";
 import { CopyJsonButton } from "./copy-json-button";
 import { CookieStoragePanel } from "./cookie-storage-panel";
 import { DiagnosticsPanel } from "./diagnostics-panel";
@@ -4686,6 +4687,7 @@ export function deriveExecutiveDisplayedScore(input: {
 }
 
 type SharedScanDetailViewProps = {
+  analyticsScanSource?: "homepage" | "dashboard" | "unknown";
   autoRefresh?: ReactNode;
   createAccountHref?: string | null;
   executiveAccessLimitationOverride?: ExecutiveAccessLimitationNotice | null;
@@ -4697,6 +4699,7 @@ type SharedScanDetailViewProps = {
 };
 
 export function SharedScanDetailView({
+  analyticsScanSource = "unknown",
   autoRefresh = null,
   createAccountHref = null,
   executiveAccessLimitationOverride = null,
@@ -4964,6 +4967,7 @@ export function SharedScanDetailView({
 
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
+      {scanRecord.scan.status === "completed" ? <ScanCompletedEvent scanSource={analyticsScanSource} /> : null}
       <script
         type="application/json"
         data-testid="scan-calibration-summary"

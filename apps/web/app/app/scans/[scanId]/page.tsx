@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { PendingScanStartedEvent } from "../../../../components/analytics/data-layer-events";
 import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
@@ -83,24 +84,28 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
       : null;
 
   return (
-    <SharedScanDetailView
-      autoRefresh={
-        <ScanStatusAutoRefresh
-          pendingPostCompletionWork={pendingPostCompletionWork}
-          status={scanRecord.scan.status}
-        />
-      }
-      headerActions={
-        <ScanViewActions
-          alternateHref={canRescan ? `/app/scans/${scanRecord.scan.id}/json` : null}
-          alternateLabel={canRescan ? "json-view" : null}
-          canRescan={canRescan && Boolean(scanRecord.scan.domainId) && Boolean(rescanAvailability)}
-          cooldownMessage={rescanCooldownMessage}
-          domainId={scanRecord.scan.domainId}
-          rescanDisabled={Boolean(rescanAvailability && !rescanAvailability.allowed)}
-        />
-      }
-      scanRecord={scanRecord}
-    />
+    <>
+      <PendingScanStartedEvent />
+      <SharedScanDetailView
+        analyticsScanSource="dashboard"
+        autoRefresh={
+          <ScanStatusAutoRefresh
+            pendingPostCompletionWork={pendingPostCompletionWork}
+            status={scanRecord.scan.status}
+          />
+        }
+        headerActions={
+          <ScanViewActions
+            alternateHref={canRescan ? `/app/scans/${scanRecord.scan.id}/json` : null}
+            alternateLabel={canRescan ? "json-view" : null}
+            canRescan={canRescan && Boolean(scanRecord.scan.domainId) && Boolean(rescanAvailability)}
+            cooldownMessage={rescanCooldownMessage}
+            domainId={scanRecord.scan.domainId}
+            rescanDisabled={Boolean(rescanAvailability && !rescanAvailability.allowed)}
+          />
+        }
+        scanRecord={scanRecord}
+      />
+    </>
   );
 }

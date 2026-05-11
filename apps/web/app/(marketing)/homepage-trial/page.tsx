@@ -158,6 +158,7 @@ export default function HomepageTrialPage() {
                   inputLabel="Website domain"
                   inputPlaceholder="Enter yoursite.com"
                   mode="preview"
+                  scanSource="homepage"
                 />
               </div>
 

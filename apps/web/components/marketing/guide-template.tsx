@@ -132,7 +132,9 @@ export function GuideTemplate({
                 asChild
                 className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
               >
-                <Link href="/preview">Use this guide, scan a website</Link>
+                <Link data-analytics-cta-type="scan" data-analytics-event="guide_cta_clicked" href="/preview">
+                  Use this guide, scan a website
+                </Link>
               </Button>
             </div>
           </CardContent>
@@ -153,6 +155,8 @@ export function GuideTemplate({
               </Link>
             ))}
             <Link
+              data-analytics-cta-type="pricing"
+              data-analytics-event="guide_cta_clicked"
               href="/pricing"
               className="rounded-full border border-slate-200 bg-white px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-50"
             >

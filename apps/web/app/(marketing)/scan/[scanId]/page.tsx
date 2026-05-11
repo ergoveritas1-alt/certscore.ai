@@ -87,6 +87,7 @@ export default async function PublicScanDetailPage({ params }: PublicScanDetailP
       <SiteHeader />
       <section className="mx-auto max-w-6xl px-6 py-16">
         <SharedScanDetailView
+          analyticsScanSource="homepage"
           autoRefresh={
             <ScanStatusAutoRefresh
               pendingPostCompletionWork={pendingPostCompletionWork}
@@ -102,6 +103,7 @@ export default async function PublicScanDetailPage({ params }: PublicScanDetailP
                   inputLabel="Scan another website"
                   inputPlaceholder="Enter another site"
                   mode="full"
+                  scanSource="homepage"
                 />
               </div>
             ) : null

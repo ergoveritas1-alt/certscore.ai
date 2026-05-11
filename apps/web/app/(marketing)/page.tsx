@@ -248,6 +248,7 @@ export default async function MarketingHomePage() {
                   inputLabel="Website to analyze"
                   inputPlaceholder="example.com"
                   mode="full"
+                  scanSource="homepage"
                 />
                 <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
                   <p className="font-semibold text-slate-950">Example finding</p>

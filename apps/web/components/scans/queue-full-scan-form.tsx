@@ -1,7 +1,8 @@
 "use client";
 
 import { Button } from "@website-signal-risk-scanner/ui";
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
+import { clearPendingScanStarted, markPendingScanStarted } from "../analytics/data-layer-events";
 import { createFullScanAction, type CreateFullScanActionState } from "../../server/scans/create-full-scan";
 
 const initialState: CreateFullScanActionState = {
@@ -19,8 +20,14 @@ export function QueueFullScanForm({ domainId, disabled = false, unavailableReaso
   const isDisabled = disabled || isPending;
   const errorMessage = state.error ?? unavailableReason;
 
+  useEffect(() => {
+    if (state.error) {
+      clearPendingScanStarted();
+    }
+  }, [state.error]);
+
   return (
-    <form action={action} className="space-y-3">
+    <form action={action} className="space-y-3" onSubmit={() => markPendingScanStarted("dashboard")}>
       <input name="domainId" type="hidden" value={domainId} />
       {errorMessage ? <p className="max-w-sm text-sm text-red-600">{errorMessage}</p> : null}
       <Button

@@ -49,7 +49,7 @@ export function SiteFooter() {
             <Link href="/privacy-request" className="hover:text-slate-900">
               Privacy Request
             </Link>
-            <Link href="/login" className="hover:text-slate-900">
+            <Link data-analytics-cta-location="unknown" data-analytics-event="sign_in_clicked" href="/login" className="hover:text-slate-900">
               Login
             </Link>
           </div>
