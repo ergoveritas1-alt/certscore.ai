@@ -96,6 +96,36 @@ async function runDispatchLoop(slot: number, browserCleanup: { schedule(reason: 
         continue;
       }
 
+      const scanLease = await claimNextNanoSignalScanLease();
+      if (scanLease) {
+        try {
+          console.info("[validation-worker] nano signal scan claimed", {
+            pollCount: scanLease.pollCount,
+            recovered: scanLease.recovered,
+            recoveryMode: scanLease.recoveryMode,
+            scanId: scanLease.scanId,
+            slot,
+          });
+          await dispatchNanoSignalScan(scanLease);
+          console.info("[validation-worker] nano signal scan processed", {
+            scanId: scanLease.scanId,
+            slot
+          });
+          void browserCleanup?.schedule("scan_processed");
+        } catch (error) {
+          console.error("[validation-worker] nano signal scan failed", {
+            error: error instanceof Error ? error.message : String(error),
+            scanId: scanLease.scanId,
+            slot
+          });
+          void browserCleanup?.schedule("scan_failed");
+        } finally {
+          await releaseNanoSignalScanLease(scanLease);
+        }
+
+        continue;
+      }
+
       const lease = await claimNextValidationRunLease();
       if (lease) {
         try {
@@ -126,35 +156,7 @@ async function runDispatchLoop(slot: number, browserCleanup: { schedule(reason: 
         continue;
       }
 
-      const scanLease = await claimNextNanoSignalScanLease();
-      if (!scanLease) {
-        await sleep(IDLE_POLL_MS);
-        continue;
-      }
-
-      try {
-        console.info("[validation-worker] nano signal scan claimed", {
-          pollCount: scanLease.pollCount,
-          recovered: scanLease.recovered,
-          scanId: scanLease.scanId,
-          slot
-        });
-        await dispatchNanoSignalScan(scanLease);
-        console.info("[validation-worker] nano signal scan processed", {
-          scanId: scanLease.scanId,
-          slot
-        });
-        void browserCleanup?.schedule("scan_processed");
-      } catch (error) {
-        console.error("[validation-worker] nano signal scan failed", {
-          error: error instanceof Error ? error.message : String(error),
-          scanId: scanLease.scanId,
-          slot
-        });
-        void browserCleanup?.schedule("scan_failed");
-      } finally {
-        await releaseNanoSignalScanLease(scanLease);
-      }
+      await sleep(IDLE_POLL_MS);
     } catch (error) {
       console.error("[validation-worker] dispatch loop error", {
         error: error instanceof Error ? error.message : String(error),
