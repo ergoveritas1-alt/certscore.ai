@@ -1,4 +1,5 @@
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { deriveSignalEnrichmentWorkflowState } from "@website-signal-risk-scanner/shared";
 
 type AuditInput = {
   notes?: string;
@@ -49,6 +50,36 @@ type ValidationFindingRow = {
 type EventCountRow = {
   count: number;
   event_type: string;
+  scan_id: string;
+};
+
+type TimingScanRow = {
+  completed_at: string | null;
+  created_at: string;
+  id: string;
+  status: string;
+};
+
+type TimingEventRow = {
+  created_at: string;
+  event_type: string;
+  scan_id: string;
+};
+
+type TimingSignalCountRow = {
+  nano_signal_count: number;
+  scan_id: string;
+  scanner_signal_count: number;
+};
+
+type TimingDocumentCountRow = {
+  document_source_count: number;
+  policy_document_count: number;
+  scan_id: string;
+};
+
+type TimingFindingCountRow = {
+  finding_count: number;
   scan_id: string;
 };
 
@@ -147,6 +178,163 @@ function classifyRtbBreakPoint(input: {
 
 function getStringArray(value: unknown) {
   return asArray(value).filter((entry): entry is string => typeof entry === "string");
+}
+
+function getAverage(values: number[]) {
+  if (values.length === 0) {
+    return null;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function percentile(values: number[], percentileValue: number) {
+  if (values.length === 0) {
+    return null;
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil((percentileValue / 100) * sorted.length) - 1));
+  return sorted[index] ?? null;
+}
+
+function summarizeTiming(values: Array<number | null>) {
+  const finiteValues = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+  return {
+    count: finiteValues.length,
+    avgMs: getAverage(finiteValues),
+    p50Ms: percentile(finiteValues, 50),
+    p90Ms: percentile(finiteValues, 90),
+    p95Ms: percentile(finiteValues, 95)
+  };
+}
+
+async function runScanTimingAudit(input: AuditInput) {
+  const scans = input.scans ?? [];
+  const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
+  const [scanResult, eventResult, signalCountResult, documentCountResult, findingCountResult] = await Promise.all([
+    query<TimingScanRow>(
+      `select id::text as id,
+              status,
+              created_at::text as created_at,
+              completed_at::text as completed_at
+         from scans
+        where id = any($1::uuid[])`,
+      [scanIds],
+      { readOnly: true }
+    ),
+    query<TimingEventRow>(
+      `select scan_id::text as scan_id,
+              event_type,
+              created_at::text as created_at
+         from scan_events
+        where scan_id = any($1::uuid[])
+        order by scan_id, created_at asc`,
+      [scanIds],
+      { readOnly: true }
+    ),
+    query<TimingSignalCountRow>(
+      `select scan_id::text as scan_id,
+              count(*) filter (where population_source = 'scanner')::int as scanner_signal_count,
+              count(*) filter (where population_source = 'nano')::int as nano_signal_count
+         from scan_signals
+        where scan_id = any($1::uuid[])
+        group by scan_id`,
+      [scanIds],
+      { readOnly: true }
+    ),
+    query<TimingDocumentCountRow>(
+      `select scan_id::text as scan_id,
+              count(*)::int as document_source_count,
+              count(*) filter (where source_status = 'ready')::int as policy_document_count
+         from scan_document_sources
+        where scan_id = any($1::uuid[])
+        group by scan_id`,
+      [scanIds],
+      { readOnly: true }
+    ),
+    query<TimingFindingCountRow>(
+      `select vr.scan_id::text as scan_id,
+              count(vrf.id)::int as finding_count
+         from validation_runs vr
+         left join validation_run_findings vrf on vrf.validation_run_id = vr.id
+        where vr.scan_id = any($1::uuid[])
+        group by vr.scan_id`,
+      [scanIds],
+      { readOnly: true }
+    )
+  ]);
+  await queryOne<{ ok: number }>("select 1 as ok", [], { readOnly: true });
+
+  const scansById = new Map(scanResult.rows.map((row) => [row.id, row]));
+  const eventsByScan = new Map<string, TimingEventRow[]>();
+  for (const event of eventResult.rows) {
+    const existing = eventsByScan.get(event.scan_id) ?? [];
+    existing.push(event);
+    eventsByScan.set(event.scan_id, existing);
+  }
+  const signalsByScan = new Map(signalCountResult.rows.map((row) => [row.scan_id, row]));
+  const documentsByScan = new Map(documentCountResult.rows.map((row) => [row.scan_id, row]));
+  const findingsByScan = new Map(findingCountResult.rows.map((row) => [row.scan_id, row]));
+
+  const rows = scans.map((inputScan) => {
+    const scan = scansById.get(inputScan.scanId);
+    const events = eventsByScan.get(inputScan.scanId) ?? [];
+    const signals = signalsByScan.get(inputScan.scanId);
+    const documents = documentsByScan.get(inputScan.scanId);
+    const findings = findingsByScan.get(inputScan.scanId);
+    const workflow = deriveSignalEnrichmentWorkflowState({
+      documentSourceCount: documents?.document_source_count ?? 0,
+      events: events.map((event) => ({
+        createdAt: event.created_at,
+        eventType: event.event_type
+      })),
+      findingsCount: findings?.finding_count ?? 0,
+      mergedSignalCount: (signals?.scanner_signal_count ?? 0) + (signals?.nano_signal_count ?? 0),
+      nanoSignalCount: signals?.nano_signal_count ?? 0,
+      policyDocumentCount: documents?.policy_document_count ?? 0,
+      scanCompletedAt: scan?.completed_at ?? null,
+      scanStatus: scan?.status ?? null,
+      scannerSignalCount: signals?.scanner_signal_count ?? 0
+    });
+
+    return {
+      batch: inputScan.batch ?? null,
+      manifestRow: inputScan.manifestRow ?? null,
+      scanId: inputScan.scanId,
+      status: scan?.status ?? "missing",
+      actualMode: workflow.actualMode,
+      findingsReady: workflow.findingsReady,
+      mergedSignalsReady: workflow.mergedSignalsReady,
+      eventCount: events.length,
+      signalCounts: {
+        nano: signals?.nano_signal_count ?? 0,
+        scanner: signals?.scanner_signal_count ?? 0
+      },
+      timings: workflow.timings
+    };
+  });
+
+  return {
+    audit: "scan-timing",
+    generatedAt: new Date().toISOString(),
+    notes: input.notes ?? null,
+    readScope: {
+      scanCount: scanIds.length,
+      tables: ["scans", "scan_events", "scan_signals", "scan_document_sources", "validation_runs", "validation_run_findings"]
+    },
+    summary: {
+      queuePickupLatency: summarizeTiming(rows.map((row) => row.timings.queuePickupLatencyMs)),
+      scannerRuntime: summarizeTiming(rows.map((row) => row.timings.scannerRuntimeMs)),
+      nanoDocSignals: summarizeTiming(rows.map((row) => row.timings.nanoDocSignalsDurationMs)),
+      signalMerge: summarizeTiming(rows.map((row) => row.timings.signalMergeDurationMs)),
+      unifiedFindings: summarizeTiming(rows.map((row) => row.timings.unifiedFindingsDurationMs)),
+      timeToFirstUsefulReport: summarizeTiming(rows.map((row) => row.timings.timeToFirstUsefulReportMs)),
+      timeToFinalReport: summarizeTiming(rows.map((row) => row.timings.timeToFinalReportMs))
+    },
+    rows
+  };
 }
 
 async function runRtbCookieSyncAudit(input: AuditInput) {
@@ -319,7 +507,12 @@ async function main() {
     throw new Error("DATABASE_READ_URL or DATABASE_URL is required.");
   }
   const input = decodeInput();
-  const result = auditName === "rtb-cookie-sync" ? await runRtbCookieSyncAudit(input) : null;
+  const result =
+    auditName === "rtb-cookie-sync"
+      ? await runRtbCookieSyncAudit(input)
+      : auditName === "scan-timing"
+        ? await runScanTimingAudit(input)
+        : null;
   if (!result) {
     throw new Error(`Unsupported prod DB audit: ${auditName}`);
   }

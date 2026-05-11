@@ -71,6 +71,23 @@ __PROD_DB_AUDIT_JSON_END__
 It does not print database URLs, cookies, raw HTML, streamed RSC, credentials, or
 full response bodies.
 
+### `scan-timing`
+
+Reads only the supplied scan IDs from:
+
+- `scans`
+- `scan_events`
+- `scan_signals`
+- `scan_document_sources`
+- `validation_runs`
+- `validation_run_findings`
+
+Output is sanitized aggregate JSON with per-scan lifecycle timing and p50/p90/p95
+summaries for queue pickup, scanner runtime, nano enrichment, merge, unified
+finding derivation, first useful report, and final report timing. It derives
+timing only from existing lifecycle events and persisted counts; it does not
+read raw evidence bodies or create any findings.
+
 ## Required Access
 
 The operator or CI role running the launcher needs:

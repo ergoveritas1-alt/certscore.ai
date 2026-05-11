@@ -35,10 +35,14 @@ test("deriveSignalEnrichmentWorkflowState marks bridge mode when nano starts aft
     skippedByReason: {}
   });
   assert.deepEqual(workflow.timings, {
-    scannerDurationMs: 5 * 60 * 1000,
     nanoDocRetrievalDurationMs: null,
     nanoDocSignalsDurationMs: 60 * 1000,
+    queuePickupLatencyMs: null,
     signalMergeDurationMs: 60 * 1000,
+    scannerDurationMs: 5 * 60 * 1000,
+    scannerRuntimeMs: 5 * 60 * 1000,
+    timeToFinalReportMs: 11 * 60 * 1000,
+    timeToFirstUsefulReportMs: 11 * 60 * 1000,
     unifiedFindingsDurationMs: 60 * 1000,
     timeToMergedSignalsMs: 9 * 60 * 1000,
     timeToFindingsMs: 11 * 60 * 1000
@@ -111,7 +115,11 @@ test("deriveSignalEnrichmentWorkflowState marks parallelized mode when nano begi
   assert.equal(workflow.stages.find((stage) => stage.id === "nano_doc_signals")?.status, "blocked");
   assert.equal(workflow.stages.find((stage) => stage.id === "signal_merge")?.status, "blocked");
   assert.equal(workflow.timings.scannerDurationMs, 5 * 60 * 1000);
+  assert.equal(workflow.timings.scannerRuntimeMs, 5 * 60 * 1000);
+  assert.equal(workflow.timings.queuePickupLatencyMs, null);
   assert.equal(workflow.timings.nanoDocRetrievalDurationMs, null);
+  assert.equal(workflow.timings.timeToFirstUsefulReportMs, null);
+  assert.equal(workflow.timings.timeToFinalReportMs, null);
   assert.equal(workflow.timings.timeToMergedSignalsMs, null);
   assert.equal(workflow.timings.timeToFindingsMs, null);
   assert.deepEqual(workflow.extractionMetrics, {
@@ -123,6 +131,52 @@ test("deriveSignalEnrichmentWorkflowState marks parallelized mode when nano begi
       terms_extraction_not_required: 1
     }
   });
+});
+
+test("deriveSignalEnrichmentWorkflowState measures queued scans without implying report readiness", () => {
+  const workflow = deriveSignalEnrichmentWorkflowState({
+    events: [
+      { createdAt: "2026-04-02T10:00:00.000Z", eventType: SCAN_EVENT_TYPES.fullQueued }
+    ],
+    documentSourceCount: 0,
+    findingsCount: 0,
+    mergedSignalCount: 0,
+    nanoSignalCount: 0,
+    policyDocumentCount: 0,
+    scanStatus: "queued",
+    scannerSignalCount: 0
+  });
+
+  assert.equal(workflow.findingsReady, false);
+  assert.equal(workflow.mergedSignalsReady, false);
+  assert.equal(workflow.timings.queuePickupLatencyMs, null);
+  assert.equal(workflow.timings.timeToFirstUsefulReportMs, null);
+  assert.equal(workflow.stages.find((stage) => stage.id === "scanner")?.status, "queued");
+});
+
+test("deriveSignalEnrichmentWorkflowState preserves failed scanner timing without creating findings readiness", () => {
+  const workflow = deriveSignalEnrichmentWorkflowState({
+    events: [
+      { createdAt: "2026-04-02T10:00:00.000Z", eventType: SCAN_EVENT_TYPES.fullQueued },
+      { createdAt: "2026-04-02T10:00:03.000Z", eventType: SCAN_EVENT_TYPES.fullStarted },
+      { createdAt: "2026-04-02T10:00:20.000Z", eventType: SCAN_EVENT_TYPES.fullFailed },
+      { createdAt: "2026-04-02T10:00:21.000Z", eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed }
+    ],
+    documentSourceCount: 0,
+    findingsCount: 0,
+    mergedSignalCount: 0,
+    nanoSignalCount: 0,
+    policyDocumentCount: 0,
+    scanStatus: "failed",
+    scannerSignalCount: 0
+  });
+
+  assert.equal(workflow.findingsReady, false);
+  assert.equal(workflow.timings.queuePickupLatencyMs, 3_000);
+  assert.equal(workflow.timings.scannerDurationMs, null);
+  assert.equal(workflow.timings.timeToFirstUsefulReportMs, null);
+  assert.equal(workflow.stages.find((stage) => stage.id === "scanner")?.status, "failed");
+  assert.equal(workflow.stages.find((stage) => stage.id === "nano_doc_signals")?.status, "failed");
 });
 
 test("deriveSignalEnrichmentWorkflowState promotes merge and findings to completed when persisted counts exist after scan completion", () => {
@@ -153,4 +207,6 @@ test("deriveSignalEnrichmentWorkflowState promotes merge and findings to complet
   assert.equal(workflow.stages.find((stage) => stage.id === "unified_findings")?.status, "completed");
   assert.equal(workflow.stages.find((stage) => stage.id === "signal_merge")?.startedAt, null);
   assert.equal(workflow.stages.find((stage) => stage.id === "unified_findings")?.startedAt, null);
+  assert.equal(workflow.timings.queuePickupLatencyMs, 15_507);
+  assert.equal(workflow.stages.find((stage) => stage.id === "scanner")?.waitMs, 15_507);
 });

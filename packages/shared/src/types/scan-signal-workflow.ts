@@ -24,6 +24,7 @@ export type SignalEnrichmentWorkflowStage = {
   label: string;
   startedAt: string | null;
   status: SignalEnrichmentWorkflowStageStatus;
+  waitMs?: number | null;
 };
 
 export type SignalEnrichmentWorkflowState = {
@@ -37,10 +38,14 @@ export type SignalEnrichmentWorkflowState = {
   findingsReady: boolean;
   mergedSignalsReady: boolean;
   timings: {
-    scannerDurationMs: number | null;
     nanoDocRetrievalDurationMs: number | null;
     nanoDocSignalsDurationMs: number | null;
+    queuePickupLatencyMs: number | null;
     signalMergeDurationMs: number | null;
+    scannerDurationMs: number | null;
+    scannerRuntimeMs: number | null;
+    timeToFinalReportMs: number | null;
+    timeToFirstUsefulReportMs: number | null;
     unifiedFindingsDurationMs: number | null;
     timeToMergedSignalsMs: number | null;
     timeToFindingsMs: number | null;
