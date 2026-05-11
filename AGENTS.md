@@ -33,7 +33,6 @@ WC01/
 │  └─ web-bot-auth/         # Server-only Web Bot Auth signing and key-directory helpers (Cloudflare Verified Bot)
 ├─ scripts/                 # Operational, migration, and audit scripts (TS via tsx)
 ├─ infra/aws/               # AWS infrastructure definitions (web-ecs, validation)
-├─ deploy/                  # Deployment configs (Caddy, etc.)
 ├─ docs/                    # Architecture docs, runbooks, and checklists
 ├─ .github/workflows/       # CI/CD pipelines
 ├─ package.json             # Root scripts and devDependencies
