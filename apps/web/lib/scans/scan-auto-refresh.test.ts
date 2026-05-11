@@ -42,9 +42,13 @@ function makeWorkflow(overrides: Partial<SignalEnrichmentWorkflowState> = {}): S
     timings: {
       nanoDocRetrievalDurationMs: null,
       nanoDocSignalsDurationMs: null,
+      queuePickupLatencyMs: null,
       scannerDurationMs: 1000,
+      scannerRuntimeMs: 1000,
       signalMergeDurationMs: null,
+      timeToFinalReportMs: null,
       timeToFindingsMs: null,
+      timeToFirstUsefulReportMs: null,
       timeToMergedSignalsMs: null,
       unifiedFindingsDurationMs: null
     },

@@ -184,6 +184,7 @@ export type ValidationRunLease = {
 
 export type NanoSignalScanLease = {
   client: PoolClient;
+  pollCount: number;
   recovered: boolean;
   scanId: string;
 };
@@ -912,19 +913,32 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
   const client = await getWritePool().connect();
 
   try {
-    const result = await client.query<{ recovered: boolean; requested_at: string; scan_id: string }>(
+    const result = await client.query<{ poll_count: number; recovered: boolean; requested_at: string; scan_id: string }>(
       `
         with requested as (
-          select scan_id, max(created_at) as requested_at, false as recovered
+          select distinct on (scan_id)
+            scan_id,
+            created_at as requested_at,
+            case
+              when metadata_json->>'pollCount' ~ '^\\d+$' then (metadata_json->>'pollCount')::int
+              else 0
+            end as poll_count,
+            case
+              when metadata_json->>'recheckAfterEpochMs' ~ '^\\d+(\\.\\d+)?$' then (metadata_json->>'recheckAfterEpochMs')::numeric
+              else null
+            end as recheck_after_epoch_ms,
+            false as recovered
           from scan_events
           where event_type = $1
             and scan_id is not null
-          group by scan_id
+          order by scan_id, created_at desc
         ),
         recovered as (
           select
             scans.id as scan_id,
             coalesce(scans.completed_at, scans.updated_at, scans.created_at) as requested_at,
+            0 as poll_count,
+            null::numeric as recheck_after_epoch_ms,
             true as recovered
           from scans
           where scans.status = 'completed'
@@ -943,19 +957,20 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
             )
         ),
         candidates as (
-          select scan_id, requested_at, recovered from requested
+          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, recovered from requested
           union all
-          select scan_id, requested_at, recovered from recovered
+          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, recovered from recovered
         )
-        select candidates.scan_id, candidates.requested_at, candidates.recovered
+        select candidates.scan_id, candidates.requested_at, candidates.poll_count, candidates.recovered
         from candidates
-        where not exists (
-          select 1
-          from scan_events completed
-          where completed.scan_id = candidates.scan_id
-            and completed.event_type in ($2, $3)
-            and completed.created_at >= candidates.requested_at
-        )
+        where (candidates.recheck_after_epoch_ms is null or candidates.recheck_after_epoch_ms <= extract(epoch from timezone('utc', now())) * 1000)
+          and not exists (
+            select 1
+            from scan_events completed
+            where completed.scan_id = candidates.scan_id
+              and completed.event_type in ($2, $3)
+              and completed.created_at >= candidates.requested_at
+          )
         order by candidates.requested_at asc
         limit $4
       `,
@@ -976,6 +991,7 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
       if (lockResult.rows[0]?.locked) {
         return {
           client,
+          pollCount: row.poll_count,
           recovered: row.recovered,
           scanId: row.scan_id
         };

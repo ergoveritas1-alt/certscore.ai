@@ -88,6 +88,30 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function requeueNanoSignalEnrichmentPoll(input: {
+  delayMs?: number;
+  pollCount: number;
+  reason: string;
+  scanId: string;
+}) {
+  const delayMs = input.delayMs ?? NANO_SIGNAL_ENRICHMENT_POLL_MS;
+  const recheckAt = new Date(Date.now() + delayMs);
+
+  await appendScanWorkflowEvent({
+    eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued,
+    message: "Nano document signal enrichment recheck scheduled.",
+    metadataJson: {
+      pollCount: input.pollCount,
+      reason: input.reason,
+      recheckAfter: recheckAt.toISOString(),
+      recheckAfterEpochMs: recheckAt.getTime(),
+      recheckDelayMs: delayMs,
+      stage: "nano_doc_signals"
+    },
+    scanId: input.scanId
+  }).catch(() => undefined);
+}
+
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -6347,11 +6371,19 @@ export async function processNanoSignalEnrichmentJob(input: { pollCount?: number
   }
 
   if (artifacts.policySemanticRows.length === 0 && scanStatus !== "completed" && scanStatus !== "failed") {
-    if (pollCount + 1 < MAX_NANO_SIGNAL_ENRICHMENT_POLLS) {
-      await sleep(NANO_SIGNAL_ENRICHMENT_POLL_MS);
-      await processNanoSignalEnrichmentJob({ pollCount: pollCount + 1, scanId });
-      return;
-    }
+    await requeueNanoSignalEnrichmentPoll({
+      delayMs:
+        pollCount + 1 < MAX_NANO_SIGNAL_ENRICHMENT_POLLS
+          ? NANO_SIGNAL_ENRICHMENT_POLL_MS
+          : VALIDATION_SCAN_HANDOFF_POLL_MS,
+      pollCount: pollCount + 1,
+      reason:
+        pollCount + 1 < MAX_NANO_SIGNAL_ENRICHMENT_POLLS
+          ? "waiting_for_scanner_policy_rows"
+          : "waiting_for_scanner_terminal_status",
+      scanId
+    });
+    return;
   }
 
   if (scanStatus === "failed") {

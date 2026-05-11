@@ -70,7 +70,7 @@ async function dispatchNanoSignalScan(lease: NanoSignalScanLease) {
   }
 
   await processNanoSignalEnrichmentJob({
-    pollCount: 0,
+    pollCount: lease.pollCount,
     scanId: lease.scanId
   });
 }
@@ -133,6 +133,7 @@ async function runDispatchLoop(slot: number, browserCleanup: { schedule(reason: 
 
       try {
         console.info("[validation-worker] nano signal scan claimed", {
+          pollCount: scanLease.pollCount,
           recovered: scanLease.recovered,
           scanId: scanLease.scanId,
           slot

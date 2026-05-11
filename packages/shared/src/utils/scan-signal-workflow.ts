@@ -29,6 +29,18 @@ function diffMs(startedAt: string | null, completedAt: string | null) {
   return end - start;
 }
 
+function maxTimestamp(...timestamps: Array<string | null>) {
+  const values = timestamps
+    .map((timestamp) => (timestamp ? Date.parse(timestamp) : Number.NaN))
+    .filter((timestamp) => Number.isFinite(timestamp));
+
+  if (values.length === 0) {
+    return null;
+  }
+
+  return new Date(Math.max(...values)).toISOString();
+}
+
 function getLatestEventTimestamp(events: WorkflowEventRecord[], eventTypes: string[]) {
   const matches = events
     .filter((event) => eventTypes.includes(event.eventType))
@@ -96,6 +108,9 @@ export function deriveSignalEnrichmentWorkflowState(input: {
   scanStatus: string | null;
   scannerSignalCount: number;
 }) : SignalEnrichmentWorkflowState {
+  const scannerQueuedAt =
+    getEarliestEventTimestamp(input.events, [SCAN_EVENT_TYPES.fullQueued, SCAN_EVENT_TYPES.previewQueued]) ??
+    null;
   const scannerCompletedAt =
     getLatestEventTimestamp(input.events, [SCAN_EVENT_TYPES.fullCompleted, SCAN_EVENT_TYPES.previewCompleted]) ??
     input.scanCompletedAt ??
@@ -192,6 +207,26 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       : findingsLifecycleStatus === "completed" || (mergeStatus === "completed" && hasPersistedFindings)
         ? "completed"
         : findingsLifecycleStatus;
+  const finalReportCompletedAt = findingsTimestamps.completedAt
+    ? maxTimestamp(
+        scannerCompletedAt,
+        docRetrievalCompletedAt,
+        nanoTimestamps.completedAt,
+        mergeTimestamps.completedAt,
+        findingsTimestamps.completedAt
+      )
+    : null;
+  const reportTimingStartAt = scannerQueuedAt ?? scannerStartedAt;
+  const queuePickupLatencyMs = diffMs(scannerQueuedAt, scannerStartedAt);
+  const scannerDurationMs = diffMs(scannerStartedAt, scannerCompletedAt);
+  const nanoDocRetrievalWaitMs = diffMs(scannerQueuedAt, docRetrievalTimestamps.startedAt);
+  const nanoDocSignalsWaitMs =
+    diffMs(
+      getLatestEventTimestamp(input.events, [SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued]) ?? docRetrievalCompletedAt,
+      nanoTimestamps.startedAt
+    );
+  const timeToFirstUsefulReportMs = diffMs(reportTimingStartAt, findingsTimestamps.completedAt);
+  const timeToFinalReportMs = diffMs(reportTimingStartAt, finalReportCompletedAt);
 
   const stages: SignalEnrichmentWorkflowStage[] = [
     {
@@ -204,6 +239,7 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       label: "Scanner",
       startedAt: scannerStartedAt,
       status: scannerStatus,
+      waitMs: queuePickupLatencyMs
     },
     {
       completedAt: docRetrievalCompletedAt,
@@ -214,7 +250,8 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       itemCount: input.documentSourceCount ?? input.policyDocumentCount,
       label: "Nano Doc Retrieval",
       startedAt: docRetrievalTimestamps.startedAt,
-      status: docRetrievalStatus
+      status: docRetrievalStatus,
+      waitMs: nanoDocRetrievalWaitMs
     },
     {
       completedAt: nanoTimestamps.completedAt,
@@ -225,7 +262,8 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       itemCount: input.nanoSignalCount > 0 ? input.nanoSignalCount : input.policyDocumentCount,
       label: "Nano Doc Signals",
       startedAt: nanoTimestamps.startedAt,
-      status: nanoStatus
+      status: nanoStatus,
+      waitMs: nanoDocSignalsWaitMs
     },
     {
       completedAt: mergeTimestamps.completedAt,
@@ -262,10 +300,14 @@ export function deriveSignalEnrichmentWorkflowState(input: {
     findingsReady: findingsStatus === "completed" || hasPersistedFindings,
     mergedSignalsReady: mergeStatus === "completed" || hasPersistedMergedSignals,
     timings: {
-      scannerDurationMs: diffMs(scannerStartedAt, scannerCompletedAt),
       nanoDocRetrievalDurationMs: diffMs(docRetrievalTimestamps.startedAt, docRetrievalTimestamps.completedAt),
       nanoDocSignalsDurationMs: diffMs(nanoTimestamps.startedAt, nanoTimestamps.completedAt),
+      queuePickupLatencyMs,
       signalMergeDurationMs: diffMs(mergeTimestamps.startedAt, mergeTimestamps.completedAt),
+      scannerDurationMs,
+      scannerRuntimeMs: scannerDurationMs,
+      timeToFinalReportMs,
+      timeToFirstUsefulReportMs,
       unifiedFindingsDurationMs: diffMs(findingsTimestamps.startedAt, findingsTimestamps.completedAt),
       timeToMergedSignalsMs: diffMs(scannerStartedAt, mergeTimestamps.completedAt),
       timeToFindingsMs: diffMs(scannerStartedAt, findingsTimestamps.completedAt)
