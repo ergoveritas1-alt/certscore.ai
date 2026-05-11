@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { DomainScanForm } from "../../components/marketing/domain-scan-form";
 import { HowItWorksCarousel } from "../../components/marketing/how-it-works-carousel";
@@ -93,6 +94,20 @@ export default function HowItWorksPage() {
               <CardContent className="px-5 pb-4 pt-0 text-sm leading-6 text-slate-600">{step.description}</CardContent>
             </Card>
           ))}
+        </div>
+        <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-sky-700">
+          <Link href="/guides/detect-tracking-before-consent" className="hover:text-sky-800">
+            Detect tracking before consent
+          </Link>
+          <Link href="/guides/reject-consent-tracking-test" className="hover:text-sky-800">
+            Reject consent tracking test
+          </Link>
+          <Link href="/guides/privacy-scanner-vs-cookie-scanner" className="hover:text-sky-800">
+            Privacy scanner vs cookie scanner
+          </Link>
+          <Link href="/methodology" className="hover:text-sky-800">
+            CertScore methodology
+          </Link>
         </div>
       </section>
 

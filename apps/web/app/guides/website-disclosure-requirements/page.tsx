@@ -15,6 +15,7 @@ export default function WebsiteDisclosureRequirementsPage() {
       eyebrow="Disclosure guide"
       title="Website Disclosure Requirements"
       intro="Website disclosure requirements are often discussed when a site contains testimonials, reviews, affiliate links, promotional claims, or other endorsement-style content. The practical question is whether the public content appears to disclose important context clearly enough."
+      pagePath="/guides/website-disclosure-requirements"
       questionTitle="What disclosure requirements should websites think about?"
       whyItMatters={[
         "Promotional content can create risk when the visitor sees a recommendation or endorsement without understanding the relationship behind it.",

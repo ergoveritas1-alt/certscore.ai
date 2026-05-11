@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import { SiteFooter } from "../../../components/layout/site-footer";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { AiVisibilityContent } from "../../../components/marketing/ai-visibility-content";
-import { createPageMetadata, SITE_URL } from "../../../lib/seo";
+import {
+  createBreadcrumbSchema,
+  createPageMetadata,
+  createPublicArticleSchema,
+  createPublicWebPageSchema
+} from "../../../lib/seo";
 
 const title = "Privacy scanner vs cookie scanner: what is the difference?";
 const description =
@@ -20,13 +25,23 @@ export const metadata: Metadata = {
 };
 
 export default function PrivacyScannerVsCookieScannerPage() {
-  const schema = {
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    name: title,
-    description,
-    url: `${SITE_URL}/compare/privacy-scanner-vs-cookie-scanner`
-  };
+  const schema = [
+    createPublicWebPageSchema({
+      title,
+      description,
+      path: "/compare/privacy-scanner-vs-cookie-scanner"
+    }),
+    createPublicArticleSchema({
+      title,
+      description,
+      path: "/compare/privacy-scanner-vs-cookie-scanner"
+    }),
+    createBreadcrumbSchema([
+      { name: "Home", path: "/" },
+      { name: "Compare", path: "/compare/privacy-scanner-vs-cookie-scanner" },
+      { name: title, path: "/compare/privacy-scanner-vs-cookie-scanner" }
+    ])
+  ];
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -50,6 +65,12 @@ export default function PrivacyScannerVsCookieScannerPage() {
               "The output is designed to help teams review risk signals with retained evidence rather than rely only on a static cookie list."
             ]
           }
+        ]}
+        relatedLinks={[
+          { href: "/guides/privacy-scanner-vs-cookie-scanner", label: "privacy scanner vs cookie scanner" },
+          { href: "/compare/website-consent-audit-tools", label: "website consent audit tools" },
+          { href: "/guides/website-consent-audit-checklist", label: "website consent audit checklist" },
+          { href: "/what-is-certscore", label: "what is CertScore.ai" }
         ]}
         showDisclaimer={false}
         title={title}

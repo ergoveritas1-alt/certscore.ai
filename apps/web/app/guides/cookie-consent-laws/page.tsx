@@ -15,6 +15,7 @@ export default function CookieConsentLawsGuidePage() {
       eyebrow="Privacy guide"
       title="Cookie Consent Laws"
       intro="Cookie consent questions usually turn on what tracking technologies run on a site, when they run, and whether users are given understandable controls. Public business websites often add analytics, ad pixels, and third-party scripts without revisiting how those tools behave together."
+      pagePath="/guides/cookie-consent-laws"
       questionTitle="How do cookie consent laws work?"
       whyItMatters={[
         "Privacy-related issues often come from operational drift rather than a deliberate decision to ignore consent requirements.",

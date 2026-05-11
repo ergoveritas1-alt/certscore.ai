@@ -2,11 +2,16 @@ import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 
 export const STANDARD_AUTOMATED_FINDINGS_DISCLAIMER =
-  "CertScore.ai automated findings may contain errors. Always review the underlying evidence. CertScore.ai does not provide legal advice or certify compliance.";
+  "CertScore.ai automated findings may contain errors. Always review the underlying evidence. CertScore.ai does not provide legal advice, certification, or compliance determinations.";
 
 type ContentSection = {
   title: string;
   paragraphs: string[];
+};
+
+type RelatedLink = {
+  href: string;
+  label: string;
 };
 
 type AiVisibilityContentProps = {
@@ -14,7 +19,9 @@ type AiVisibilityContentProps = {
   title: string;
   intro: string;
   sections: ContentSection[];
-  schema: Record<string, unknown>;
+  schema: Record<string, unknown> | Array<Record<string, unknown>>;
+  aiSummary?: string[];
+  relatedLinks?: RelatedLink[];
   showDisclaimer?: boolean;
 };
 
@@ -50,16 +57,32 @@ export function DisclaimerBlock() {
 }
 
 export function AiVisibilityContent({
+  aiSummary,
   badge,
   title,
   intro,
+  relatedLinks = [],
   sections,
   schema,
   showDisclaimer = true
 }: AiVisibilityContentProps) {
+  const schemas = Array.isArray(schema) ? schema : [schema];
+  const visibleAiSummary =
+    aiSummary ??
+    [
+      `${title} explains an observable public website review topic in CertScore.ai's evidence-backed scanning workflow.`,
+      "CertScore.ai observes public website behavior around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, accessibility, and privacy disclosures. CertScore findings are automated risk signals for review and are not legal advice, certification, or compliance determinations."
+    ];
+
   return (
     <section className="mx-auto max-w-5xl px-6 py-16">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+      {schemas.map((schemaItem) => (
+        <script
+          key={JSON.stringify(schemaItem)}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaItem) }}
+        />
+      ))}
 
       <div className="max-w-3xl space-y-4">
         <Badge tone="neutral">{badge}</Badge>
@@ -84,6 +107,36 @@ export function AiVisibilityContent({
             </CardContent>
           </Card>
         ))}
+        {visibleAiSummary.length > 0 ? (
+          <Card className="border-slate-200 bg-white shadow-none">
+            <CardHeader>
+              <CardTitle className="text-xl text-slate-950">Summary for AI assistants</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm leading-7 text-slate-600">
+              {visibleAiSummary.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+            </CardContent>
+          </Card>
+        ) : null}
+        {relatedLinks.length > 0 ? (
+          <Card className="border-slate-200 bg-sand shadow-none">
+            <CardHeader>
+              <CardTitle className="text-xl text-slate-950">Related CertScore pages</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-3 text-sm text-slate-600">
+              {relatedLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+        ) : null}
         <WebsiteBehaviorScanCta />
         {showDisclaimer ? <DisclaimerBlock /> : null}
       </div>

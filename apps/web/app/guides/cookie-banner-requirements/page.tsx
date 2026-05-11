@@ -15,6 +15,7 @@ export default function CookieBannerRequirementsPage() {
       eyebrow="Privacy guide"
       title="Cookie Banner Requirements"
       intro="Cookie banner requirements are usually discussed in terms of clarity, control, and alignment between what the interface offers and what the site actually does. A banner that appears polished can still create risk if the control options are limited or if trackers run before any visible choice."
+      pagePath="/guides/cookie-banner-requirements"
       
       questionTitle="What should a cookie banner include?"
       whyItMatters={[

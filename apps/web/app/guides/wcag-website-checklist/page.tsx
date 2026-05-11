@@ -15,6 +15,7 @@ export default function WcagWebsiteChecklistPage() {
       eyebrow="Accessibility guide"
       title="WCAG Website Checklist"
       intro="A WCAG website checklist helps teams review common accessibility patterns in a consistent way. It is most useful when it focuses on repeatable issue types such as text alternatives, contrast, labels, headings, keyboard access, and page structure."
+      pagePath="/guides/wcag-website-checklist"
       questionTitle="What should a WCAG website checklist include?"
       whyItMatters={[
         "Teams often know accessibility matters but still struggle to turn broad standards into a practical review workflow.",

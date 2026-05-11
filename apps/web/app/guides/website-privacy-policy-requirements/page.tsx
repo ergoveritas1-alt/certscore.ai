@@ -15,6 +15,7 @@ export default function WebsitePrivacyPolicyRequirementsGuidePage() {
       eyebrow="Policy guide"
       title="Website Privacy Policy Requirements"
       intro="A website privacy policy usually explains what information a site collects, how that information is used, which third parties may be involved, and how visitors can contact the site operator. For many teams, the first challenge is simply confirming that a meaningful public-facing policy is present."
+      pagePath="/guides/website-privacy-policy-requirements"
       questionTitle="What should a privacy policy include?"
       whyItMatters={[
         "Privacy expectations often become more important as a site adds analytics, embedded tools, lead forms, email capture, or ecommerce behavior.",

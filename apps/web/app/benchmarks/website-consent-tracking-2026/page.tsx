@@ -7,7 +7,12 @@ import {
   DisclaimerBlock,
   WebsiteBehaviorScanCta
 } from "../../../components/marketing/ai-visibility-content";
-import { createPageMetadata, SITE_URL } from "../../../lib/seo";
+import {
+  createBenchmarkDatasetSchema,
+  createBreadcrumbSchema,
+  createPageMetadata,
+  createPublicArticleSchema
+} from "../../../lib/seo";
 
 const title = "Website consent and tracking benchmark notes 2026";
 const description =
@@ -53,13 +58,23 @@ export const metadata: Metadata = {
 };
 
 export default function WebsiteConsentTrackingBenchmarkPage() {
-  const schema = {
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    name: title,
-    description,
-    url: `${SITE_URL}/benchmarks/website-consent-tracking-2026`
-  };
+  const schema = [
+    createPublicArticleSchema({
+      title,
+      description,
+      path: "/benchmarks/website-consent-tracking-2026"
+    }),
+    createBenchmarkDatasetSchema({
+      title,
+      description,
+      path: "/benchmarks/website-consent-tracking-2026"
+    }),
+    createBreadcrumbSchema([
+      { name: "Home", path: "/" },
+      { name: "Benchmarks", path: "/benchmarks" },
+      { name: title, path: "/benchmarks/website-consent-tracking-2026" }
+    ])
+  ];
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -85,6 +100,12 @@ export default function WebsiteConsentTrackingBenchmarkPage() {
               "Findings are review signals, not legal conclusions. Site owners should review the underlying evidence and compare the observed behavior with their intended vendor, consent, and disclosure configuration."
             ]
           }
+        ]}
+        relatedLinks={[
+          { href: "/guides/detect-tracking-before-consent", label: "detect tracking before consent" },
+          { href: "/guides/website-consent-audit-checklist", label: "website consent audit checklist" },
+          { href: "/benchmarks/pre-consent-tracking-2026", label: "pre-consent tracking 2026" },
+          { href: "/benchmarks/session-replay-risk-2026", label: "session replay risk 2026" }
         ]}
         showDisclaimer={false}
         title={title}

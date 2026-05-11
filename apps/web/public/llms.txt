@@ -1,12 +1,35 @@
 # CertScore.ai
 
-CertScore.ai scans public websites for observable privacy, cookie, consent, tracking, accessibility, session recording, and fingerprinting-related risk signals.
+CertScore.ai is an automated website risk-signal scanner for public websites. It observes evidence-backed signals around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, accessibility issues, privacy disclosure gaps, and policy/runtime consistency.
+
+CertScore.ai findings are automated signals for review. CertScore.ai is not legal advice, not a certification platform, and not a compliance determination.
+
+## What CertScore observes
+
+- Tracking requests and third-party activity
+- Cookies and cookie timing, including cookies that appear before a recorded consent choice
+- Consent behavior, including accept, reject, and preference-control signals where observable
+- Session recording and session replay-related indicators
+- Fingerprinting-related signals
+- Automated homepage accessibility issues
+- Privacy policy, cookie, disclosure, and public-page gaps where evidence is available
+
+## What CertScore is not
+
+- Not legal advice
+- Not certification
+- Not a compliance determination
+- Not a guarantee that a website has or has not met a legal requirement
+- Not a replacement for reviewing retained evidence, vendor configuration, consent settings, and public disclosures
 
 ## Key pages
 
 - https://certscore.ai/
+- https://certscore.ai/how-it-works
 - https://certscore.ai/methodology
+- https://certscore.ai/pricing
 - https://certscore.ai/what-is-certscore
+- https://certscore.ai/guides
 - https://certscore.ai/guides/pre-consent-tracking
 - https://certscore.ai/guides/third-party-cookies-before-consent
 - https://certscore.ai/guides/rtb-cookie-syncing
@@ -15,10 +38,18 @@ CertScore.ai scans public websites for observable privacy, cookie, consent, trac
 - https://certscore.ai/guides/check-website-tracking-before-consent
 - https://certscore.ai/guides/check-third-party-cookies-before-consent
 - https://certscore.ai/guides/website-consent-audit
+- https://certscore.ai/guides/detect-tracking-before-consent
+- https://certscore.ai/guides/reject-consent-tracking-test
+- https://certscore.ai/guides/website-consent-audit-checklist
+- https://certscore.ai/guides/privacy-scanner-vs-cookie-scanner
+- https://certscore.ai/benchmarks
 - https://certscore.ai/benchmarks/website-consent-tracking-2026
+- https://certscore.ai/benchmarks/pre-consent-tracking-2026
+- https://certscore.ai/benchmarks/session-replay-risk-2026
 - https://certscore.ai/compare/privacy-scanner-vs-cookie-scanner
+- https://certscore.ai/compare/website-consent-audit-tools
 - https://certscore.ai/press
 
 ## Important disclaimer
 
-CertScore.ai automated findings may contain errors. Always review the underlying evidence. CertScore.ai does not provide legal advice or certify compliance.
+CertScore.ai automated findings may contain errors. Always review the underlying evidence. CertScore.ai does not provide legal advice, certification, or compliance determinations.

@@ -4,9 +4,14 @@ const resourceLinks = [
   { href: "/what-is-certscore", label: "What is CertScore.ai?" },
   { href: "/methodology", label: "Methodology" },
   { href: "/benchmarks/website-consent-tracking-2026", label: "Website consent benchmark" },
+  { href: "/benchmarks/pre-consent-tracking-2026", label: "Pre-consent tracking benchmark" },
+  { href: "/benchmarks/session-replay-risk-2026", label: "Session replay risk benchmark" },
+  { href: "/guides/detect-tracking-before-consent", label: "Detect tracking before consent" },
+  { href: "/guides/website-consent-audit-checklist", label: "Website consent audit checklist" },
   { href: "/guides/pre-consent-tracking", label: "Pre-consent tracking guide" },
   { href: "/guides/rtb-cookie-syncing", label: "RTB cookie syncing guide" },
   { href: "/compare/privacy-scanner-vs-cookie-scanner", label: "Privacy scanner vs cookie scanner" },
+  { href: "/compare/website-consent-audit-tools", label: "Website consent audit tools" },
   { href: "/press", label: "Press" },
   { href: "/llms.txt", label: "llms.txt" }
 ];

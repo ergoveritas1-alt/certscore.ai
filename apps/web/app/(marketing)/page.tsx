@@ -9,13 +9,13 @@ import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 export const metadata: Metadata = {
   ...createPageMetadata({
-    title: "CertScore.ai — Evidence-Based Website Compliance Scanner",
+    title: "CertScore.ai — Evidence-Based Website Risk Signal Scanner",
     description:
-      "Scan websites to detect pre-consent tracking, third-party requests, cookie activity, consent enforcement gaps, and policy-runtime inconsistencies.",
+      "Scan websites to review pre-consent tracking, third-party requests, cookie activity, consent behavior, and policy-runtime consistency signals.",
     path: "/"
   }),
   title: {
-    absolute: "CertScore.ai — Evidence-Based Website Compliance Scanner"
+    absolute: "CertScore.ai — Evidence-Based Website Risk Signal Scanner"
   }
 };
 
@@ -311,6 +311,23 @@ export default async function MarketingHomePage() {
             </span>
           ))}
         </div>
+        <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-sky-700">
+          <Link href="/guides/detect-tracking-before-consent" className="hover:text-sky-800">
+            Detect tracking before consent
+          </Link>
+          <Link href="/guides/website-consent-audit-checklist" className="hover:text-sky-800">
+            Website consent audit checklist
+          </Link>
+          <Link href="/guides/third-party-cookies-before-consent" className="hover:text-sky-800">
+            Third-party cookies before consent
+          </Link>
+          <Link href="/guides/session-replay-risk" className="hover:text-sky-800">
+            Session replay risk
+          </Link>
+          <Link href="/methodology" className="hover:text-sky-800">
+            CertScore methodology
+          </Link>
+        </div>
       </section>
 
       <section className="border-y border-slate-200 bg-white">
@@ -407,7 +424,7 @@ export default async function MarketingHomePage() {
       <section className="border-t border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-8">
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
-            CertScore provides automated, evidence-based insights into website behavior. It is not a legal certification or guarantee of compliance.
+            CertScore provides automated, evidence-based insights into website behavior. It is not legal advice, certification, or a compliance determination.
           </p>
         </div>
       </section>

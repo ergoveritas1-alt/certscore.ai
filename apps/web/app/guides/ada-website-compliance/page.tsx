@@ -15,6 +15,7 @@ export default function AdaWebsiteComplianceGuidePage() {
       eyebrow="Accessibility guide"
       title="ADA Website Compliance"
       intro="ADA website compliance usually refers to whether a public website creates accessibility barriers that may require remediation or closer review. In practice, teams often look at WCAG-oriented issues because they surface many of the technical patterns that make sites harder to use."
+      pagePath="/guides/ada-website-compliance"
       questionTitle="What is ADA website compliance?"
       whyItMatters={[
         "Accessibility problems can affect real visitors who rely on screen readers, keyboard navigation, readable contrast, or clear form labeling.",

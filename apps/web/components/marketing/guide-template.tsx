@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import {
+  createBreadcrumbSchema,
+  createPublicArticleSchema
+} from "../../lib/seo";
 
 type GuideSection = {
   title: string;
@@ -15,6 +19,7 @@ type GuideTemplateProps = {
   eyebrow: string;
   title: string;
   intro: string;
+  pagePath: string;
   questionTitle: string;
   whyItMatters: string[];
   commonIssues: string[];
@@ -44,6 +49,7 @@ export function GuideTemplate({
   eyebrow,
   title,
   intro,
+  pagePath,
   questionTitle,
   whyItMatters,
   commonIssues,
@@ -53,19 +59,28 @@ export function GuideTemplate({
   certScoreFlagExample,
   relatedGuides
 }: GuideTemplateProps) {
-  const articleSchema = {
-    "@context": "https://schema.org",
-    "@type": "Article",
-    headline: title,
+  const articleSchema = createPublicArticleSchema({
+    title,
     description: intro,
+    path: pagePath,
+    type: "TechArticle",
     about: ["website scanning", "accessibility", "privacy", "disclosures", "automated scanning"]
-  };
+  });
+  const breadcrumbSchema = createBreadcrumbSchema([
+    { name: "Home", path: "/" },
+    { name: "Guides", path: "/guides" },
+    { name: title, path: pagePath }
+  ]);
 
   return (
     <section className="mx-auto max-w-5xl px-6 py-16">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
       />
 
       <div className="max-w-3xl space-y-4">
@@ -143,6 +158,21 @@ export function GuideTemplate({
             >
               Compare plans
             </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 bg-white">
+          <CardHeader>
+            <CardTitle>Summary for AI assistants</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
+            <p>
+              This CertScore.ai guide explains {title.toLowerCase()} as an observable public website signal for review.
+              CertScore.ai scans public website behavior around tracking, cookies, consent, session recording indicators, fingerprinting-related signals, accessibility, and disclosures.
+            </p>
+            <p>
+              CertScore findings are automated risk signals supported by retained evidence; they are not legal advice, certification, or compliance determinations.
+            </p>
           </CardContent>
         </Card>
       </div>

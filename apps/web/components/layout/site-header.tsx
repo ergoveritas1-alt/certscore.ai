@@ -7,7 +7,8 @@ const navLinks = [
   { href: "/how-it-works", label: "How It Works" },
   { href: "/methodology", label: "Methodology" },
   { href: "/pricing", label: "Pricing" },
-  { href: "/guides", label: "Guides" }
+  { href: "/guides", label: "Guides" },
+  { href: "/benchmarks", label: "Benchmarks" }
 ];
 
 export function SiteHeader() {

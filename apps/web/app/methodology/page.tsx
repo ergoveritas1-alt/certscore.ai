@@ -50,7 +50,7 @@ export default function MethodologyPage() {
             <p className="text-lg leading-8 text-slate-600">{INLINE_METHODOLOGY_SUMMARY}</p>
             <p className="text-sm leading-7 text-slate-500">
               This page explains what CertScore tests, what “not detected” means, how evidence is retained, how confidence is assigned,
-              and why the product avoids legal certification or legal pass/fail language.
+              and why the product avoids certification or legal pass/fail language.
             </p>
           </div>
         </div>
@@ -152,6 +152,20 @@ export default function MethodologyPage() {
             </Link>
           </CardContent>
         </Card>
+        <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-sky-700">
+          <Link href="/guides/detect-tracking-before-consent" className="hover:text-sky-800">
+            Detect tracking before consent
+          </Link>
+          <Link href="/guides/website-consent-audit-checklist" className="hover:text-sky-800">
+            Website consent audit checklist
+          </Link>
+          <Link href="/benchmarks/session-replay-risk-2026" className="hover:text-sky-800">
+            Session replay risk benchmark
+          </Link>
+          <Link href="/compare/website-consent-audit-tools" className="hover:text-sky-800">
+            Website consent audit tools
+          </Link>
+        </div>
       </section>
 
       <SiteFooter />

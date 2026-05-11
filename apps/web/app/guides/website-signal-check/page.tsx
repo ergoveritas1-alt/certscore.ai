@@ -15,6 +15,7 @@ export default function WebsiteLegalComplianceChecklistGuidePage() {
       eyebrow="Checklist guide"
       title="Website Signal Review Checklist"
       intro="A website signal review checklist is most useful when it covers the recurring issue areas teams actually miss in production: accessibility, privacy and cookies, public policy pages, and disclosure-related content. The goal is not a formal legal memo. The goal is a repeatable way to review and monitor the public site."
+      pagePath="/guides/website-signal-check"
       questionTitle="How can you review website signals consistently?"
       whyItMatters={[
         "Website issues often span several overlapping areas, and teams tend to review them separately or inconsistently.",

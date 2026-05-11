@@ -15,6 +15,7 @@ export default function PrivacyPolicyExamplesPage() {
       eyebrow="Policy guide"
       title="Privacy Policy Examples"
       intro="Privacy policy examples are most useful when they show structure rather than just reusable legal text. Teams usually want to understand what topics should appear, how those topics relate to actual site behavior, and what obvious gaps a public review can detect."
+      pagePath="/guides/privacy-policy-examples"
       questionTitle="What can privacy policy examples teach you?"
       whyItMatters={[
         "Many businesses copy generic privacy text that does not reflect the real data collection happening on the site.",

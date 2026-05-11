@@ -51,6 +51,26 @@ const guides = [
     description: "Learn how to compare consent interface behavior with observed website tracking and cookie activity."
   },
   {
+    href: "/guides/detect-tracking-before-consent",
+    title: "Detect tracking before consent",
+    description: "Review how teams can detect tracking requests, cookies, and vendor activity before a consent choice."
+  },
+  {
+    href: "/guides/reject-consent-tracking-test",
+    title: "Reject consent tracking test",
+    description: "Understand how to review whether a reject interaction changes observed tracking behavior."
+  },
+  {
+    href: "/guides/website-consent-audit-checklist",
+    title: "Website consent audit checklist",
+    description: "Use a practical checklist for consent controls, cookie timing, tracking requests, and retained evidence."
+  },
+  {
+    href: "/guides/privacy-scanner-vs-cookie-scanner",
+    title: "Privacy scanner vs cookie scanner",
+    description: "Compare cookie inventory tools with behavior-oriented website privacy scanning."
+  },
+  {
     href: "/guides/website-privacy-policy-requirements",
     title: "Privacy policy signals",
     description: "See which privacy-rights, retention, and disclosure cues commonly appear in policy scans."

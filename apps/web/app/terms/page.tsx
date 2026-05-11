@@ -50,7 +50,7 @@ const sections = [
   {
     title: "8. Termination",
     body:
-      "We may suspend or terminate access if the service is used in violation of these terms or in ways that create risk for the platform, other users, or third parties."
+      "We may suspend or terminate access if the service is used in breach of these terms or in ways that create risk for the platform, other users, or third parties."
   },
   {
     title: "9. Governing Law",

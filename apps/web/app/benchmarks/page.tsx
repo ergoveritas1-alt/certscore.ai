@@ -64,6 +64,32 @@ export default function BenchmarksPage() {
               </Link>
             </CardContent>
           </Card>
+          <Card className="border-slate-200 bg-white shadow-none">
+            <CardHeader>
+              <CardTitle className="text-xl text-slate-950">Pre-consent tracking benchmark notes 2026</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm leading-7 text-slate-600">
+              <p>
+                Review cautious benchmark context for observed pre-consent tracking signals in automated public website scans.
+              </p>
+              <Link href="/benchmarks/pre-consent-tracking-2026" className="font-medium text-sky-700 hover:text-sky-800">
+                Open the pre-consent tracking notes
+              </Link>
+            </CardContent>
+          </Card>
+          <Card className="border-slate-200 bg-white shadow-none">
+            <CardHeader>
+              <CardTitle className="text-xl text-slate-950">Session replay risk benchmark notes 2026</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm leading-7 text-slate-600">
+              <p>
+                Review cautious benchmark context for session recording and higher-urgency session replay risk signals.
+              </p>
+              <Link href="/benchmarks/session-replay-risk-2026" className="font-medium text-sky-700 hover:text-sky-800">
+                Open the session replay notes
+              </Link>
+            </CardContent>
+          </Card>
           <DisclaimerBlock />
         </div>
       </section>
