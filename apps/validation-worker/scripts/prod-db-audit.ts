@@ -1,5 +1,15 @@
 import { query, queryOne } from "@website-signal-risk-scanner/db";
-import { deriveSignalEnrichmentWorkflowState } from "@website-signal-risk-scanner/shared";
+import {
+  deriveSignalEnrichmentWorkflowState,
+  getPrimaryCategoryDescription,
+  getPrimaryCategoryLabel,
+  mapSignalKeyToTaxonomy
+} from "@website-signal-risk-scanner/shared";
+import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../../web/lib/scans/nano-document-sources";
+import { buildScanReportUnifiedFindingsForScan } from "../../web/lib/scans/scan-report-unified-findings";
+import type { UnifiedFindingDisplayPacket } from "../../web/lib/scans/unified-findings";
+import type { ScanValidationFinding } from "../../web/lib/scans/validation-review-linking";
+import { repairFindingFamilyPacketEvents } from "../../web/server/scans/family-packet-event-repair";
 
 type AuditInput = {
   candidateLimit?: number;
@@ -126,6 +136,35 @@ type ValidationRuleContinuityRow = {
   rule_key: string;
   scan_id: string;
   severity: string | null;
+};
+
+type ValidationFindingWithVerdictRow = {
+  category: string | null;
+  description: string | null;
+  evidence_json: Record<string, unknown> | null;
+  finding_family: string | null;
+  finding_scope: string | null;
+  finding_source: string | null;
+  finding_subject: string | null;
+  id: string;
+  page_url: string | null;
+  rule_key: string;
+  severity: string | null;
+  subtype: string | null;
+  title: string;
+};
+
+type ValidationVerdictRow = {
+  agreement_score: number | null;
+  confidence: number | null;
+  model: string | null;
+  prompt_version: string | null;
+  rationale: string | null;
+  system_confidence_band: "very_high" | "high" | "moderate" | "low" | "very_low" | null;
+  system_confidence_explanation: string | null;
+  system_confidence_score: number | null;
+  validation_run_finding_id: string;
+  verdict: "supported" | "inconclusive" | "not_supported" | null;
 };
 
 function decodeInput(): AuditInput {
@@ -563,6 +602,250 @@ async function runSignalFindingContinuityAudit(input: AuditInput) {
     readScope: {
       scanCount: scanIds.length,
       tables: ["scan_signals", "scan_snapshots", "validation_runs", "validation_run_findings"]
+    },
+    rows
+  };
+}
+
+async function loadScanRecordForProjectionAudit(input: {
+  runId: string | null;
+  scanId: string;
+}) {
+  const [
+    snapshot,
+    runtimeArtifacts,
+    preconsentViolations,
+    trackerVendors,
+    accessibilityRuleCounts,
+    accessibilityRuleExamples,
+    policyEnrichment,
+    documentSources,
+    policyReviewQueue,
+    signals,
+    events,
+    validationFindingRows
+  ] = await Promise.all([
+    queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [input.scanId], { readOnly: true }),
+    queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [input.scanId], { readOnly: true }),
+    query<Record<string, unknown>>(`select * from scan_preconsent_violations where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_tracker_vendors where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_accessibility_rule_counts where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_accessibility_rule_examples where scan_id = $1`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from policy_enrichment where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from scan_document_sources where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(`select * from policy_review_queue where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select category, signal_key, signal_label, signal_value_json, value_type, population_source
+         from scan_signals
+        where scan_id = $1`,
+      [input.scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select id, event_type, message, metadata_json, created_at
+         from scan_events
+        where scan_id = $1
+        order by created_at asc`,
+      [input.scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    input.runId
+      ? query<ValidationFindingWithVerdictRow>(
+          `select id, category, subtype, finding_family, finding_source, finding_scope, finding_subject, rule_key, title, description, severity, page_url, evidence_json
+             from validation_run_findings
+            where validation_run_id = $1`,
+          [input.runId],
+          { readOnly: true }
+        ).then((result) => result.rows)
+      : Promise.resolve([] as ValidationFindingWithVerdictRow[])
+  ]);
+
+  const validationFindingIds = validationFindingRows.map((row) => row.id);
+  const verdictByFindingId = new Map<string, ValidationVerdictRow>();
+
+  if (validationFindingIds.length > 0) {
+    const verdictRows = await query<ValidationVerdictRow>(
+      `select validation_run_finding_id, verdict, confidence, rationale, agreement_score, model, prompt_version, system_confidence_score, system_confidence_band, system_confidence_explanation
+         from validation_verdicts
+        where validation_run_finding_id = any($1::uuid[])
+        order by created_at desc`,
+      [validationFindingIds],
+      { readOnly: true }
+    ).then((result) => result.rows);
+
+    for (const row of verdictRows) {
+      if (!verdictByFindingId.has(row.validation_run_finding_id)) {
+        verdictByFindingId.set(row.validation_run_finding_id, row);
+      }
+    }
+  }
+
+  const normalizedSignals = ((signals ?? []) as Array<Record<string, unknown>>)
+    .filter((signal) => !signal.population_source || signal.population_source === "scanner")
+    .map((signal) => {
+      const category = String(signal.category ?? "");
+      const key = String(signal.signal_key ?? "");
+      const label = String(signal.signal_label ?? key);
+      const taxonomy = mapSignalKeyToTaxonomy({ category, key, label });
+
+      return {
+        category,
+        key,
+        label,
+        primaryCategory: taxonomy.primaryCategory,
+        primaryCategoryDescription: getPrimaryCategoryDescription(taxonomy.primaryCategory),
+        primaryCategoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
+        subcategory: taxonomy.subcategory ?? null,
+        value: signal.signal_value_json,
+        valueType: String(signal.value_type ?? "unknown")
+      };
+    });
+
+  const normalizedDocumentSources = (documentSources ?? []) as Array<Record<string, unknown>>;
+  const preferDocumentSources = shouldPreferNanoDocumentSources(normalizedDocumentSources);
+  const policySemanticRows = preferDocumentSources
+    ? buildNanoPolicyInputsFromDocumentSources(normalizedDocumentSources)
+    : ((policyEnrichment ?? []) as Array<Record<string, unknown>>);
+  const normalizedPolicyEnrichment = policySemanticRows.map((row, index) => {
+    const next = { ...row };
+    if (typeof next.id !== "string") {
+      next.id = typeof row.source_document_id === "string" ? row.source_document_id : `document-semantic-${index + 1}`;
+    }
+    delete next.created_at;
+    delete next.updated_at;
+    return next;
+  });
+  const repairedEvents = repairFindingFamilyPacketEvents({
+    events: ((events ?? []) as Array<Record<string, unknown>>).map((event) => ({
+      id: String(event.id ?? ""),
+      eventType: String(event.event_type ?? ""),
+      message: typeof event.message === "string" ? event.message : "",
+      metadataJson: (event.metadata_json as Record<string, unknown> | null) ?? undefined,
+      createdAt: String(event.created_at ?? "")
+    })),
+    policyEnrichment: normalizedPolicyEnrichment
+  });
+
+  const mappedValidationFindings: ScanValidationFinding[] = validationFindingRows.map((row) => {
+    const verdict = verdictByFindingId.get(row.id) ?? null;
+    return {
+      agreementScore: verdict?.agreement_score ?? null,
+      category: row.category,
+      description: row.description,
+      evidence: row.evidence_json ?? null,
+      findingFamily: row.finding_family,
+      findingScope: row.finding_scope,
+      findingSource: row.finding_source,
+      findingSubject: row.finding_subject,
+      id: row.id,
+      model: verdict?.model ?? null,
+      modelConfidence: verdict?.confidence ?? null,
+      pageUrl: row.page_url,
+      promptVersion: verdict?.prompt_version ?? null,
+      rationale: verdict?.rationale ?? null,
+      ruleKey: row.rule_key,
+      severity: row.severity,
+      subtype: row.subtype,
+      systemConfidenceBand: verdict?.system_confidence_band ?? null,
+      systemConfidenceExplanation: verdict?.system_confidence_explanation ?? null,
+      systemConfidenceScore: verdict?.system_confidence_score ?? null,
+      title: row.title,
+      verdict: verdict?.verdict ?? null
+    };
+  });
+
+  return {
+    accessibilityRuleCounts: accessibilityRuleCounts as Array<Record<string, unknown>>,
+    accessibilityRuleExamples: accessibilityRuleExamples as Array<Record<string, unknown>>,
+    events: repairedEvents,
+    policyEnrichment: normalizedPolicyEnrichment,
+    policyReviewQueue: (policyReviewQueue as Array<Record<string, unknown>>).map((row) => {
+      const next = { ...row };
+      delete next.created_at;
+      delete next.updated_at;
+      return next;
+    }),
+    preconsentViolations: preconsentViolations as Array<Record<string, unknown>>,
+    runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
+    signals: normalizedSignals,
+    snapshot: (snapshot as Record<string, unknown> | null) ?? null,
+    trackerVendors: trackerVendors as Array<Record<string, unknown>>,
+    validationFindings: mappedValidationFindings
+  };
+}
+
+function summarizeProjectionPackets(packets: UnifiedFindingDisplayPacket[]) {
+  const byStatus: Record<string, number> = {};
+  const packetSummaries = packets
+    .map((packet) => {
+      const status = packet.presentationDecision.status;
+      byStatus[status] = (byStatus[status] ?? 0) + 1;
+      return {
+        id: packet.unifiedFindingId,
+        severity: packet.severity,
+        status,
+        verificationState: packet.presentationDecision.verificationState
+      };
+    })
+    .sort((left, right) => left.id.localeCompare(right.id) || left.status.localeCompare(right.status));
+
+  return {
+    byStatus,
+    idsByStatus: Object.fromEntries(
+      ["surface", "audit_only", "suppress"].map((status) => [
+        status,
+        packetSummaries.filter((packet) => packet.status === status).map((packet) => packet.id)
+      ])
+    ),
+    packetCount: packetSummaries.length,
+    packets: packetSummaries
+  };
+}
+
+async function runUnifiedProjectionContinuityAudit(input: AuditInput) {
+  const scans = requireAuditScans(input);
+  const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
+  const validationRunRows = await query<{ id: string; scan_id: string }>(
+    `select distinct on (scan_id) scan_id::text as scan_id, id::text as id
+       from validation_runs
+      where scan_id = any($1::uuid[])
+      order by scan_id, created_at desc`,
+    [scanIds],
+    { readOnly: true }
+  ).then((result) => result.rows);
+  const runIdByScanId = new Map(validationRunRows.map((row) => [row.scan_id, row.id]));
+
+  const rows = [];
+  for (const scan of scans) {
+    const scanRecord = await loadScanRecordForProjectionAudit({
+      runId: runIdByScanId.get(scan.scanId) ?? null,
+      scanId: scan.scanId
+    });
+    const packets = buildScanReportUnifiedFindingsForScan(scanRecord);
+    rows.push({
+      batch: scan.batch ?? null,
+      domain: scan.domain ?? null,
+      scanId: scan.scanId,
+      ...summarizeProjectionPackets(packets)
+    });
+  }
+  await queryOne<{ ok: number }>("select 1 as ok", [], { readOnly: true });
+
+  return {
+    audit: "unified-projection-continuity",
+    generatedAt: new Date().toISOString(),
+    notes: input.notes ?? null,
+    readScope: {
+      scanCount: scanIds.length,
+      tables: [
+        "scan_snapshots",
+        "scan_runtime_artifacts",
+        "scan_signals",
+        "scan_document_sources",
+        "policy_enrichment",
+        "validation_runs",
+        "validation_run_findings"
+      ]
     },
     rows
   };
@@ -1043,6 +1326,8 @@ async function main() {
         ? await runPriorScanCandidatesAudit(input)
       : auditName === "signal-finding-continuity"
         ? await runSignalFindingContinuityAudit(input)
+      : auditName === "unified-projection-continuity"
+        ? await runUnifiedProjectionContinuityAudit(input)
       : auditName === "scan-timing"
         ? await runScanTimingAudit(input)
         : null;
