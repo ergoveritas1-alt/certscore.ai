@@ -2,6 +2,8 @@ import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { deriveSignalEnrichmentWorkflowState } from "@website-signal-risk-scanner/shared";
 
 type AuditInput = {
+  candidateLimit?: number;
+  sinceDays?: number;
   notes?: string;
   scans?: AuditScanInput[];
 };
@@ -100,6 +102,32 @@ type PriorScanAccelerationDocumentRow = {
   source_status: string | null;
 };
 
+type PriorScanCandidateRow = {
+  completed_at: string;
+  domain_id: string | null;
+  hostname: string | null;
+  normalized_url: string | null;
+  ready_document_count: number;
+  ready_document_types: string[];
+  scan_id: string;
+};
+
+type SignalContinuityRow = {
+  category: string | null;
+  population_source: string | null;
+  population_status: string | null;
+  scan_id: string;
+  signal_count: number;
+};
+
+type ValidationRuleContinuityRow = {
+  finding_source: string | null;
+  rule_count: number;
+  rule_key: string;
+  scan_id: string;
+  severity: string | null;
+};
+
 function decodeInput(): AuditInput {
   const encoded = process.env.OPS_PROD_DB_AUDIT_INPUT_BASE64?.trim();
   const inline = process.env.OPS_PROD_DB_AUDIT_INPUT_JSON?.trim();
@@ -108,18 +136,23 @@ function decodeInput(): AuditInput {
     throw new Error("OPS_PROD_DB_AUDIT_INPUT_BASE64 or OPS_PROD_DB_AUDIT_INPUT_JSON is required.");
   }
   const parsed = JSON.parse(raw) as AuditInput;
-  if (!Array.isArray(parsed.scans) || parsed.scans.length === 0) {
-    throw new Error("Audit input must include a non-empty scans array.");
-  }
-  if (parsed.scans.length > 250) {
+  const scans = Array.isArray(parsed.scans) ? parsed.scans : [];
+  if (scans.length > 250) {
     throw new Error("Audit input is limited to 250 scans per task.");
   }
-  for (const scan of parsed.scans) {
+  for (const scan of scans) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(scan.scanId)) {
       throw new Error(`Invalid scanId in audit input: ${scan.scanId}`);
     }
   }
   return parsed;
+}
+
+function requireAuditScans(input: AuditInput) {
+  if (!Array.isArray(input.scans) || input.scans.length === 0) {
+    throw new Error("Audit input must include a non-empty scans array.");
+  }
+  return input.scans;
 }
 
 function asArray(value: unknown) {
@@ -351,8 +384,192 @@ function summarizeNanoRecheckRows(rows: Array<{ nanoRechecks: ReturnType<typeof 
   };
 }
 
+function clampInteger(value: unknown, fallback: number, min: number, max: number) {
+  const parsed = getNumber(value);
+  if (parsed === null) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.trunc(parsed)));
+}
+
+async function runPriorScanCandidatesAudit(input: AuditInput) {
+  const candidateLimit = clampInteger(input.candidateLimit, 12, 1, 25);
+  const sinceDays = clampInteger(input.sinceDays, 30, 1, 30);
+  const result = await query<PriorScanCandidateRow>(
+    `select s.id::text as scan_id,
+            s.domain_id::text as domain_id,
+            d.hostname,
+            d.normalized_url,
+            s.completed_at::text as completed_at,
+            count(ds.id)::int as ready_document_count,
+            array_remove(array_agg(distinct ds.document_type order by ds.document_type), null) as ready_document_types
+       from scans s
+       join domains d on d.id = s.domain_id
+       join scan_document_sources ds on ds.scan_id = s.id
+      where s.scan_type = 'full'
+        and s.status = 'completed'
+        and s.completed_at >= timezone('utc', now()) - ($1::int * interval '1 day')
+        and ds.source_status = 'ready'
+        and ds.extraction_status = 'ready'
+        and ds.document_type in ('privacy_policy', 'terms_of_service', 'cookie_policy', 'accessibility_statement')
+      group by s.id, s.domain_id, d.hostname, d.normalized_url, s.completed_at
+     having count(ds.id) >= 2
+      order by s.completed_at desc
+      limit $2`,
+    [sinceDays, candidateLimit],
+    { readOnly: true }
+  );
+  await queryOne<{ ok: number }>("select 1 as ok", [], { readOnly: true });
+
+  return {
+    audit: "prior-scan-candidates",
+    generatedAt: new Date().toISOString(),
+    notes: input.notes ?? null,
+    readScope: {
+      maxRows: candidateLimit,
+      sinceDays,
+      tables: ["scans", "domains", "scan_document_sources"]
+    },
+    candidates: result.rows.map((row) => ({
+      completedAt: row.completed_at,
+      domainId: row.domain_id,
+      hostname: row.hostname,
+      normalizedUrl: row.normalized_url,
+      readyDocumentCount: row.ready_document_count,
+      readyDocumentTypes: row.ready_document_types,
+      scanId: row.scan_id
+    }))
+  };
+}
+
+function summarizeContinuityRows(rows: SignalContinuityRow[]) {
+  const bySource: Record<string, number> = {};
+  const byStatus: Record<string, number> = {};
+  const byCategory: Record<string, number> = {};
+  for (const row of rows) {
+    bySource[row.population_source ?? "unknown"] = (bySource[row.population_source ?? "unknown"] ?? 0) + row.signal_count;
+    byStatus[row.population_status ?? "unknown"] = (byStatus[row.population_status ?? "unknown"] ?? 0) + row.signal_count;
+    byCategory[row.category ?? "unknown"] = (byCategory[row.category ?? "unknown"] ?? 0) + row.signal_count;
+  }
+  return { byCategory, bySource, byStatus, total: rows.reduce((sum, row) => sum + row.signal_count, 0) };
+}
+
+function summarizeRuleRows(rows: ValidationRuleContinuityRow[]) {
+  const bySeverity: Record<string, number> = {};
+  const bySource: Record<string, number> = {};
+  for (const row of rows) {
+    bySeverity[row.severity ?? "unknown"] = (bySeverity[row.severity ?? "unknown"] ?? 0) + row.rule_count;
+    bySource[row.finding_source ?? "unknown"] = (bySource[row.finding_source ?? "unknown"] ?? 0) + row.rule_count;
+  }
+  return {
+    bySeverity,
+    bySource,
+    ruleKeys: rows.map((row) => row.rule_key).sort(),
+    total: rows.reduce((sum, row) => sum + row.rule_count, 0)
+  };
+}
+
+async function runSignalFindingContinuityAudit(input: AuditInput) {
+  const scans = requireAuditScans(input);
+  const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
+  const [signalResult, ruleResult, snapshotResult] = await Promise.all([
+    query<SignalContinuityRow>(
+      `select scan_id::text as scan_id,
+              category,
+              population_source,
+              population_status,
+              count(*)::int as signal_count
+         from scan_signals
+        where scan_id = any($1::uuid[])
+        group by scan_id, category, population_source, population_status
+        order by scan_id, category, population_source, population_status`,
+      [scanIds],
+      { readOnly: true }
+    ),
+    query<ValidationRuleContinuityRow>(
+      `select vr.scan_id::text as scan_id,
+              vrf.rule_key,
+              vrf.severity,
+              vrf.finding_source,
+              count(*)::int as rule_count
+         from validation_runs vr
+         join validation_run_findings vrf on vrf.validation_run_id = vr.id
+        where vr.scan_id = any($1::uuid[])
+        group by vr.scan_id, vrf.rule_key, vrf.severity, vrf.finding_source
+        order by vr.scan_id, vrf.rule_key`,
+      [scanIds],
+      { readOnly: true }
+    ),
+    query<SnapshotRow>(
+      `select scan_id::text as scan_id,
+              total_signals,
+              cookie_count_total,
+              third_party_cookie_count,
+              tracker_count_total,
+              tracker_vendor_count,
+              preconsent_tracking_detected,
+              homepage_fetch_status,
+              homepage_fetch_http_status,
+              scan_outcome,
+              access_posture_class,
+              report_finding_count
+         from scan_snapshots
+        where scan_id = any($1::uuid[])`,
+      [scanIds],
+      { readOnly: true }
+    )
+  ]);
+  await queryOne<{ ok: number }>("select 1 as ok", [], { readOnly: true });
+
+  const signalsByScan = new Map<string, SignalContinuityRow[]>();
+  for (const row of signalResult.rows) {
+    const existing = signalsByScan.get(row.scan_id) ?? [];
+    existing.push(row);
+    signalsByScan.set(row.scan_id, existing);
+  }
+  const rulesByScan = new Map<string, ValidationRuleContinuityRow[]>();
+  for (const row of ruleResult.rows) {
+    const existing = rulesByScan.get(row.scan_id) ?? [];
+    existing.push(row);
+    rulesByScan.set(row.scan_id, existing);
+  }
+  const snapshotByScan = new Map(snapshotResult.rows.map((row) => [row.scan_id, row]));
+
+  const rows = scans.map((scan) => {
+    const signalSummary = summarizeContinuityRows(signalsByScan.get(scan.scanId) ?? []);
+    const ruleSummary = summarizeRuleRows(rulesByScan.get(scan.scanId) ?? []);
+    const snapshot = snapshotByScan.get(scan.scanId);
+    return {
+      batch: scan.batch ?? null,
+      domain: scan.domain ?? null,
+      scanId: scan.scanId,
+      signals: signalSummary,
+      validationFindings: ruleSummary,
+      snapshot: {
+        accessPostureClass: snapshot?.access_posture_class ?? null,
+        homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
+        homepageFetchStatus: snapshot?.homepage_fetch_status ?? null,
+        reportFindingCount: snapshot?.report_finding_count ?? null,
+        scanOutcome: snapshot?.scan_outcome ?? null,
+        totalSignals: snapshot?.total_signals ?? null
+      }
+    };
+  });
+
+  return {
+    audit: "signal-finding-continuity",
+    generatedAt: new Date().toISOString(),
+    notes: input.notes ?? null,
+    readScope: {
+      scanCount: scanIds.length,
+      tables: ["scan_signals", "scan_snapshots", "validation_runs", "validation_run_findings"]
+    },
+    rows
+  };
+}
+
 async function runScanTimingAudit(input: AuditInput) {
-  const scans = input.scans ?? [];
+  const scans = requireAuditScans(input);
   const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
   const [scanResult, eventResult, signalCountResult, documentCountResult, findingCountResult] = await Promise.all([
     query<TimingScanRow>(
@@ -491,7 +708,7 @@ async function runScanTimingAudit(input: AuditInput) {
 }
 
 async function runPriorScanAccelerationAudit(input: AuditInput) {
-  const scans = input.scans ?? [];
+  const scans = requireAuditScans(input);
   const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
   const [scanResult, eventResult, documentResult] = await Promise.all([
     query<PriorScanAccelerationScanRow>(
@@ -648,7 +865,7 @@ async function runPriorScanAccelerationAudit(input: AuditInput) {
 }
 
 async function runRtbCookieSyncAudit(input: AuditInput) {
-  const scans = input.scans ?? [];
+  const scans = requireAuditScans(input);
   const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
   const [runtimeResult, snapshotResult, validationResult, eventResult] = await Promise.all([
     query<RuntimeArtifactRow>(
@@ -822,6 +1039,10 @@ async function main() {
       ? await runRtbCookieSyncAudit(input)
       : auditName === "prior-scan-acceleration"
         ? await runPriorScanAccelerationAudit(input)
+      : auditName === "prior-scan-candidates"
+        ? await runPriorScanCandidatesAudit(input)
+      : auditName === "signal-finding-continuity"
+        ? await runSignalFindingContinuityAudit(input)
       : auditName === "scan-timing"
         ? await runScanTimingAudit(input)
         : null;
