@@ -6488,7 +6488,17 @@ export async function processNanoSignalEnrichmentJob(input: {
   const hasActiveValidationRun = validationDerivationState.activeRunCount > 0;
   const scanIsTerminal = scanStatus === "completed" || scanStatus === "failed";
 
-  if (!hasCompletedUnifiedDerivation && (!hasActiveValidationRun || scanIsTerminal)) {
+  if (!hasCompletedUnifiedDerivation && hasActiveValidationRun && !scanIsTerminal) {
+    await requeueNanoSignalEnrichmentPoll({
+      delayMs: VALIDATION_SCAN_HANDOFF_POLL_MS,
+      pollCount,
+      reason: "waiting_for_scanner_terminal_status",
+      scanId
+    });
+    return;
+  }
+
+  if (!hasCompletedUnifiedDerivation) {
     await appendScanWorkflowEvent({
       eventType: SCAN_EVENT_TYPES.signalMergeStarted,
       message: "Merged signal derivation started.",
