@@ -51,6 +51,7 @@ export { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-docum
 const VALIDATION_SCAN_HANDOFF_POLL_MS = 5_000;
 const NANO_DOC_RETRIEVAL_POLL_MS = 5_000;
 const MAX_NANO_DOC_RETRIEVAL_POLLS = 20;
+const NANO_SIGNAL_POLICY_ROW_RECHECK_MS = 750;
 const NANO_SIGNAL_ENRICHMENT_POLL_MS = 2_000;
 const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
 const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 4;
@@ -6409,14 +6410,15 @@ export async function processNanoSignalEnrichmentJob(input: {
   }
 
   if (artifacts.policySemanticRows.length === 0 && scanStatus !== "completed" && scanStatus !== "failed") {
+    const nextPollCount = pollCount + 1;
+    const willContinuePolicyRowPolling = nextPollCount < MAX_NANO_SIGNAL_ENRICHMENT_POLLS;
     await requeueNanoSignalEnrichmentPoll({
-      delayMs:
-        pollCount + 1 < MAX_NANO_SIGNAL_ENRICHMENT_POLLS
-          ? NANO_SIGNAL_ENRICHMENT_POLL_MS
-          : VALIDATION_SCAN_HANDOFF_POLL_MS,
-      pollCount: pollCount + 1,
+      delayMs: willContinuePolicyRowPolling
+        ? NANO_SIGNAL_POLICY_ROW_RECHECK_MS
+        : VALIDATION_SCAN_HANDOFF_POLL_MS,
+      pollCount: nextPollCount,
       reason:
-        pollCount + 1 < MAX_NANO_SIGNAL_ENRICHMENT_POLLS
+        willContinuePolicyRowPolling
           ? "waiting_for_scanner_policy_rows"
           : "waiting_for_scanner_terminal_status",
       scanId
