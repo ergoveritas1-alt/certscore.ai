@@ -2593,10 +2593,11 @@ export function ExecutiveSummaryCard(input: {
   const hasMeaningfulInterruption = hasMeaningfulExecutiveInterruption({ scanInterruptions });
   const pagesScanned = typeof input.pagesScanned === "number" ? input.pagesScanned : 0;
   const retainedFindingCount = Math.max(input.topFindings.length, input.allFindings?.length ?? 0);
+  const policyEnrichmentCount = input.policyEnrichmentCount ?? 0;
   const hasMaterialRetainedCoverage =
     pagesScanned > 0 &&
-    input.thirdPartyRequestCount >= 20 &&
-    (retainedFindingCount >= 3 || coveredPolicySurfaceUrlCount >= 2);
+    (input.thirdPartyRequestCount >= 20 || vendorEvidence.length >= 2 || policyEnrichmentCount >= 2) &&
+    (retainedFindingCount >= 3 || coveredPolicySurfaceUrlCount >= 2 || (input.verifiedPublicSurfacesCount ?? 0) >= 2);
   const hasHardCoverageLimit =
     hasMeaningfulInterruption ||
     input.coverageLevel === "limited_none" ||
