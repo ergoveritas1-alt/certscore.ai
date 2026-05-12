@@ -59,6 +59,35 @@ async function loadFilterContradictoryPositiveSurfaceFindings() {
   }).filterContradictoryPositiveSurfaceFindings;
 }
 
+async function loadHasIncompleteScanCoverage() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule = (
+    sharedScanDetailViewImport as unknown as {
+      default?: Record<string, unknown>;
+      "module.exports"?: Record<string, unknown>;
+      hasIncompleteScanCoverage?: unknown;
+    }
+  ).hasIncompleteScanCoverage
+    ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+    : (
+        sharedScanDetailViewImport as unknown as {
+          default?: Record<string, unknown>;
+          "module.exports"?: Record<string, unknown>;
+        }
+      ).default ??
+      (
+        sharedScanDetailViewImport as unknown as {
+          default?: Record<string, unknown>;
+          "module.exports"?: Record<string, unknown>;
+        }
+      )["module.exports"] ??
+      (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    hasIncompleteScanCoverage: (scanRecord: Record<string, unknown>) => boolean;
+  }).hasIncompleteScanCoverage;
+}
+
 async function loadExecutiveSummaryScanCondition() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule =
@@ -988,6 +1017,56 @@ test("deriveExecutiveAccessLimitationNotice suppresses healthy-looking summaries
   assert.equal(notice?.review.outcomeTitle, "Domain inactive or unstable");
   assert.match(notice?.review.reason ?? "", /HTTP 404 Not Found/i);
   assert.match(notice?.summary ?? "", /No reliable privacy or consent findings were retained/i);
+});
+
+test("hasIncompleteScanCoverage suppresses partial flag when retained coverage is substantial", async () => {
+  const hasIncompleteScanCoverage = await loadHasIncompleteScanCoverage();
+
+  assert.equal(
+    hasIncompleteScanCoverage({
+      events: [],
+      scan: {
+        pagesRequested: 3,
+        pagesScanned: 3,
+        status: "completed"
+      },
+      snapshot: {
+        coverage_level: "limited_partial",
+        incomplete_pages: true,
+        pages_scanned: 3,
+        partial_scan: true,
+        report_finding_count: 16,
+        total_signals: 37,
+        verified_public_surfaces_count: 2
+      }
+    }),
+    false
+  );
+});
+
+test("hasIncompleteScanCoverage keeps warning for thin or hard-limited coverage", async () => {
+  const hasIncompleteScanCoverage = await loadHasIncompleteScanCoverage();
+
+  assert.equal(
+    hasIncompleteScanCoverage({
+      events: [],
+      scan: {
+        pagesRequested: 3,
+        pagesScanned: 1,
+        status: "completed"
+      },
+      snapshot: {
+        blocked_flag: true,
+        coverage_level: "limited_partial",
+        pages_scanned: 1,
+        partial_scan: true,
+        report_finding_count: 0,
+        total_signals: 4,
+        verified_public_surfaces_count: 0
+      }
+    }),
+    true
+  );
 });
 
 test("selectExecutiveAccessLimitationNotice does not replace retained unified findings", async () => {

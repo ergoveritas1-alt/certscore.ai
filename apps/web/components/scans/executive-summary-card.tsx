@@ -2591,12 +2591,22 @@ export function ExecutiveSummaryCard(input: {
     vendorCount: vendorEvidence.length
   });
   const hasMeaningfulInterruption = hasMeaningfulExecutiveInterruption({ scanInterruptions });
-  const hasIncompleteCoverageNotice =
-    displayState === "Limited review" ||
+  const pagesScanned = typeof input.pagesScanned === "number" ? input.pagesScanned : 0;
+  const retainedFindingCount = Math.max(input.topFindings.length, input.allFindings?.length ?? 0);
+  const hasMaterialRetainedCoverage =
+    pagesScanned > 0 &&
+    input.thirdPartyRequestCount >= 20 &&
+    (retainedFindingCount >= 3 || coveredPolicySurfaceUrlCount >= 2);
+  const hasHardCoverageLimit =
     hasMeaningfulInterruption ||
-    input.coverageLevel === "limited_partial" ||
     input.coverageLevel === "limited_none" ||
-    Boolean(input.scanOutcome && /partial|incomplete|degraded|blocked|captcha|auth|challenge|forbidden|timeout|restricted|unknown_access/i.test(input.scanOutcome));
+    Boolean(input.scanOutcome && /blocked|captcha|auth|challenge|forbidden|timeout|restricted|unknown_access/i.test(input.scanOutcome));
+  const hasIncompleteCoverageNotice =
+    (displayState === "Limited review" && !hasMaterialRetainedCoverage) ||
+    hasHardCoverageLimit ||
+    (!hasMaterialRetainedCoverage &&
+      (input.coverageLevel === "limited_partial" ||
+        Boolean(input.scanOutcome && /partial|incomplete|degraded/i.test(input.scanOutcome))));
   const executiveHeadline = input.accessLimitationNotice
     ? input.accessLimitationNotice.message
     : formatTopFindingHeadline(executiveHeadlineFindings);

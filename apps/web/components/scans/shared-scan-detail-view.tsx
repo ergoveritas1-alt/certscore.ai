@@ -324,14 +324,31 @@ export function hasIncompleteScanCoverage(scanRecord: Pick<ScanDetailResponse, "
   const coverageLevel = typeof snapshot.coverage_level === "string" ? snapshot.coverage_level : null;
   const scanOutcome = typeof snapshot.scan_outcome === "string" ? snapshot.scan_outcome : null;
   const pagesScanned = getFiniteNumber(snapshot.pages_scanned) ?? scanRecord.scan.pagesScanned;
+  const pagesRequested = scanRecord.scan.pagesRequested;
+  const totalSignals = getRecordNumber(snapshot, "total_signals");
+  const reportFindingCount = getRecordNumber(snapshot, "report_finding_count");
+  const verifiedPublicSurfacesCount = getRecordNumber(snapshot, "verified_public_surfaces_count");
+  const hasMaterialRetainedCoverage =
+    typeof pagesScanned === "number" &&
+    pagesScanned > 0 &&
+    (typeof pagesRequested !== "number" || pagesScanned >= Math.min(pagesRequested, 3)) &&
+    (totalSignals ?? 0) >= 20 &&
+    ((reportFindingCount ?? 0) >= 3 || (verifiedPublicSurfacesCount ?? 0) >= 2);
+  const hasHardAccessLimitation =
+    snapshot.blocked_flag === true ||
+    snapshot.captcha_flag === true ||
+    snapshot.auth_wall_detected === true ||
+    snapshot.timeout_flag === true ||
+    Boolean(scanOutcome && /blocked|captcha|auth|challenge|forbidden|timeout|restricted|unknown_access/i.test(scanOutcome));
 
   return (
-    coverageLevel === "limited_partial" ||
     coverageLevel === "limited_none" ||
-    snapshot.partial_scan === true ||
-    snapshot.incomplete_pages === true ||
-    snapshot.timeout_flag === true ||
-    Boolean(scanOutcome && /partial|incomplete|degraded|blocked|captcha|auth|challenge|forbidden|timeout|restricted|unknown_access/i.test(scanOutcome)) ||
+    hasHardAccessLimitation ||
+    (!hasMaterialRetainedCoverage &&
+      (coverageLevel === "limited_partial" ||
+        snapshot.partial_scan === true ||
+        snapshot.incomplete_pages === true ||
+        Boolean(scanOutcome && /partial|incomplete|degraded/i.test(scanOutcome)))) ||
     (typeof pagesScanned === "number" && pagesScanned === 0 && coverageLevel !== "broad")
   );
 }
