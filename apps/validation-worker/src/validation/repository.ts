@@ -929,6 +929,11 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
               else null
             end as recheck_after_epoch_ms,
             case when scans.status in ('completed', 'failed') then 1 else 0 end as terminal_priority,
+            exists (
+              select 1
+              from policy_enrichment
+              where policy_enrichment.scan_id = scan_events.scan_id
+            ) as has_policy_rows,
             false as recovered,
             null::text as recovery_mode
           from scan_events
@@ -945,6 +950,7 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
             0 as poll_count,
             null::numeric as recheck_after_epoch_ms,
             1 as terminal_priority,
+            true as has_policy_rows,
             true as recovered,
             'completed_scan_backfill'::text as recovery_mode
           from scans
@@ -970,6 +976,7 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
             0 as poll_count,
             null::numeric as recheck_after_epoch_ms,
             1 as terminal_priority,
+            true as has_policy_rows,
             true as recovered,
             'missing_unified_projection'::text as recovery_mode
           from scans
@@ -989,16 +996,17 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
             )
         ),
         candidates as (
-          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered, recovery_mode from requested
+          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, has_policy_rows, recovered, recovery_mode from requested
           union all
-          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered, recovery_mode from recovered
+          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, has_policy_rows, recovered, recovery_mode from recovered
           union all
-          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, recovered, recovery_mode from unified_recovery
+          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, has_policy_rows, recovered, recovery_mode from unified_recovery
         )
         select candidates.scan_id, candidates.requested_at, candidates.poll_count, candidates.recovered, candidates.recovery_mode
         from candidates
         where (
             candidates.terminal_priority = 1
+            or candidates.has_policy_rows
             or candidates.recheck_after_epoch_ms is null
             or candidates.recheck_after_epoch_ms <= extract(epoch from timezone('utc', now())) * 1000
           )
