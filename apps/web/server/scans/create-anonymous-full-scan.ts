@@ -1,11 +1,11 @@
-import { FULL_SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
+import { FULL_SCAN_EVENT_TYPES, SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { getPlanLimits } from "../plans/get-plan-limits";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
 import { ensureValidationRunForManualScan } from "../validation/repository";
 import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan-repository";
 import { setPreviewDomainLatestScan } from "../preview-scan/db";
-import { createQueuedFullScan, insertQueuedFullScanEvent } from "./repository";
+import { createQueuedFullScan, insertQueuedFullScanEvent, loadPriorScanAccelerationCandidate } from "./repository";
 import { buildQueuedFullScanConfig } from "./full-scan-config";
 
 type ScanQueueProvenance = {
@@ -31,10 +31,22 @@ export async function createAnonymousFullScan(input: { hostname: string; normali
   const planLimits = await getPlanLimits("free");
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
   const pagesRequested = planLimits.maxPagesPerScan;
+  const priorScanAcceleration = await loadPriorScanAccelerationCandidate({
+    domainId: domain.id,
+    normalizedUrl: domain.normalized_url,
+    organizationId: null
+  }).catch((error) => {
+    console.error("[web] anonymous prior scan acceleration lookup failed", {
+      error: error instanceof Error ? error.message : String(error),
+      domainId: domain.id
+    });
+    return null;
+  });
   const scanConfig = buildQueuedFullScanConfig({
     hostname: input.hostname,
     maxPages: pagesRequested,
     normalizedUrl: input.normalizedUrl,
+    priorScanAcceleration,
     profile: planLimits.scanProfile,
     source: "marketing-anonymous-full-scan"
   });
@@ -45,6 +57,26 @@ export async function createAnonymousFullScan(input: { hostname: string; normali
     pagesRequested,
     scanConfigJson: scanConfig,
     submittedByUserId: null
+  });
+
+  await insertQueuedFullScanEvent({
+    domainId: domain.id,
+    eventType: SCAN_EVENT_TYPES.priorScanAccelerationEvaluated,
+    message: priorScanAcceleration
+      ? "Prior scan acceleration metadata attached as non-evidence hints."
+      : "No eligible prior scan acceleration metadata found.",
+    metadataJson: {
+      crawlSeedHintCount: priorScanAcceleration?.crawlSeedHints.length ?? 0,
+      crawlSeedHintTypes: priorScanAcceleration?.priorScan.crawlSeedHintTypes ?? [],
+      found: Boolean(priorScanAcceleration),
+      priorScanSelectionReason: priorScanAcceleration?.priorScan.priorScanSelectionReason ?? null,
+      priorScanSelectionScore: priorScanAcceleration?.priorScan.priorScanSelectionScore ?? null,
+      selectedDocumentSourceCount: priorScanAcceleration?.selectedDocumentSources.length ?? 0,
+      selectedHighYieldPageCount: priorScanAcceleration?.selectedHighYieldPages.length ?? 0,
+      sourceScanId: priorScanAcceleration?.priorScan.sourceScanId ?? null
+    },
+    organizationId: null,
+    scanId: scan.id
   });
 
   await insertQueuedFullScanEvent({

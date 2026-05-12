@@ -1,6 +1,6 @@
 "use server";
 
-import { FULL_SCAN_EVENT_TYPES, USAGE_METRIC_KEYS, getPlanDefinition, type PlanCode } from "@website-signal-risk-scanner/shared";
+import { FULL_SCAN_EVENT_TYPES, SCAN_EVENT_TYPES, USAGE_METRIC_KEYS, getPlanDefinition, type PlanCode } from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
 import { getDashboardContext } from "../auth";
 import { getDomainById } from "../domains/get-domain-by-id";
@@ -12,6 +12,7 @@ import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
 import {
   createQueuedFullScan,
   insertQueuedFullScanEvent,
+  loadPriorScanAccelerationCandidate,
   loadUsageCounter,
   upsertUsageCounter,
   updateDomainLatestScan
@@ -188,10 +189,22 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   }
 
   const pagesRequested = domainRecord.domain.maxPagesOverride ?? planLimits.maxPagesPerScan;
+  const priorScanAcceleration = await loadPriorScanAccelerationCandidate({
+    domainId: domainRecord.domain.id,
+    normalizedUrl: domainRecord.domain.normalizedUrl,
+    organizationId: input.organizationId
+  }).catch((error) => {
+    console.error("[web] prior scan acceleration lookup failed", {
+      error: error instanceof Error ? error.message : String(error),
+      domainId: domainRecord.domain.id
+    });
+    return null;
+  });
   const scanConfig = buildQueuedFullScanConfig({
     hostname: domainRecord.domain.hostname,
     maxPages: pagesRequested,
     normalizedUrl: domainRecord.domain.normalizedUrl,
+    priorScanAcceleration,
     profile: planLimits.scanProfile,
     source: input.source ?? "manual-dashboard"
   });
@@ -214,6 +227,25 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   }
 
   try {
+    await insertQueuedFullScanEvent({
+      domainId: domainRecord.domain.id,
+      eventType: SCAN_EVENT_TYPES.priorScanAccelerationEvaluated,
+      message: priorScanAcceleration
+        ? "Prior scan acceleration metadata attached as non-evidence hints."
+        : "No eligible prior scan acceleration metadata found.",
+      metadataJson: {
+        crawlSeedHintCount: priorScanAcceleration?.crawlSeedHints.length ?? 0,
+        crawlSeedHintTypes: priorScanAcceleration?.priorScan.crawlSeedHintTypes ?? [],
+        found: Boolean(priorScanAcceleration),
+        priorScanSelectionReason: priorScanAcceleration?.priorScan.priorScanSelectionReason ?? null,
+        priorScanSelectionScore: priorScanAcceleration?.priorScan.priorScanSelectionScore ?? null,
+        selectedDocumentSourceCount: priorScanAcceleration?.selectedDocumentSources.length ?? 0,
+        selectedHighYieldPageCount: priorScanAcceleration?.selectedHighYieldPages.length ?? 0,
+        sourceScanId: priorScanAcceleration?.priorScan.sourceScanId ?? null
+      },
+      organizationId: input.organizationId,
+      scanId: scan.id
+    });
     await insertQueuedFullScanEvent({
       domainId: domainRecord.domain.id,
       eventType: FULL_SCAN_EVENT_TYPES.queued,

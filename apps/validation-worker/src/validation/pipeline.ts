@@ -5184,6 +5184,12 @@ async function fetchNanoDocumentSource(input: {
       signal: AbortSignal.timeout(10_000)
     });
     const fetchedUrl = response.url || input.url;
+    const responseFingerprint = {
+      content_length_header: response.headers.get("content-length"),
+      etag: response.headers.get("etag"),
+      final_url: fetchedUrl,
+      last_modified: response.headers.get("last-modified")
+    };
     const canonicalUrl = normalizeDocUrl(fetchedUrl) ?? fetchedUrl;
     const html = await response.text().catch(() => "");
     const title = extractTitle(html);
@@ -5221,6 +5227,7 @@ async function fetchNanoDocumentSource(input: {
             ...baseMetadata,
             ...renderedFallback.metadata,
             content_hash: buildNanoDocumentContentHash(renderedDocumentText),
+            fetch_fingerprint: responseFingerprint,
             http_status: response.status,
             request_referer: request.metadata.referer
           },
@@ -5248,6 +5255,7 @@ async function fetchNanoDocumentSource(input: {
           metadata_json: {
             ...baseMetadata,
             ...(renderedFallback && "error" in renderedFallback ? { render_fallback_error: renderedFallback.error } : {}),
+            fetch_fingerprint: responseFingerprint,
             http_status: response.status,
             request_referer: request.metadata.referer,
             rejection_reason: "non_ok_http_status"
@@ -5276,6 +5284,7 @@ async function fetchNanoDocumentSource(input: {
           metadata_json: {
             ...baseMetadata,
             ...(renderedFallback && "error" in renderedFallback ? { render_fallback_error: renderedFallback.error } : {}),
+            fetch_fingerprint: responseFingerprint,
             http_status: response.status,
             request_referer: request.metadata.referer,
             rejection_reason: "intermediary_or_block_page"
@@ -5304,6 +5313,7 @@ async function fetchNanoDocumentSource(input: {
           metadata_json: {
             ...baseMetadata,
             ...(renderedFallback && "error" in renderedFallback ? { render_fallback_error: renderedFallback.error } : {}),
+            fetch_fingerprint: responseFingerprint,
             http_status: response.status,
             request_referer: request.metadata.referer,
             rejection_reason: "insufficient_document_text"
@@ -5331,6 +5341,7 @@ async function fetchNanoDocumentSource(input: {
         metadata_json: {
           ...baseMetadata,
           content_hash: buildNanoDocumentContentHash(text),
+          fetch_fingerprint: responseFingerprint,
           http_status: response.status,
           request_referer: request.metadata.referer
         },
@@ -5426,43 +5437,29 @@ export function resolveReusableNanoDocumentExtractions(input: {
 }) {
   const reusableByCandidateId = new Map<string, Record<string, unknown>>();
   const priorByCanonicalAndHash = new Map<string, Record<string, unknown>>();
-  const priorByTypeAndHash = new Map<string, Record<string, unknown>>();
 
   for (const row of input.priorExtractions) {
     const canonicalUrl = getString(row.canonical_url) ?? getString(row.canonicalUrl);
-    const documentType = getString(row.document_type) ?? getString(row.documentType);
     const contentHash = getDocumentSourceContentHash(row);
-    if (!contentHash) {
+    if (!canonicalUrl || !contentHash) {
       continue;
     }
 
-    if (canonicalUrl) {
-      const canonicalKey = `${canonicalUrl}::${contentHash}`;
-      if (!priorByCanonicalAndHash.has(canonicalKey)) {
-        priorByCanonicalAndHash.set(canonicalKey, row);
-      }
-    }
-
-    if (documentType) {
-      const typeKey = `${documentType}::${contentHash}`;
-      if (!priorByTypeAndHash.has(typeKey)) {
-        priorByTypeAndHash.set(typeKey, row);
-      }
+    const canonicalKey = `${canonicalUrl}::${contentHash}`;
+    if (!priorByCanonicalAndHash.has(canonicalKey)) {
+      priorByCanonicalAndHash.set(canonicalKey, row);
     }
   }
 
   for (const candidate of input.candidates) {
     const candidateId = getString(candidate.id);
     const canonicalUrl = getString(candidate.canonical_url) ?? getString(candidate.canonicalUrl);
-    const documentType = getString(candidate.document_type) ?? getString(candidate.documentType);
     const contentHash = getDocumentSourceContentHash(candidate);
-    if (!candidateId || !contentHash) {
+    if (!candidateId || !canonicalUrl || !contentHash) {
       continue;
     }
 
-    const match =
-      (canonicalUrl ? priorByCanonicalAndHash.get(`${canonicalUrl}::${contentHash}`) : undefined) ??
-      (documentType ? priorByTypeAndHash.get(`${documentType}::${contentHash}`) : undefined);
+    const match = priorByCanonicalAndHash.get(`${canonicalUrl}::${contentHash}`);
     if (match) {
       reusableByCandidateId.set(candidateId, match);
     }
@@ -6182,6 +6179,14 @@ export async function processNanoSignalEnrichmentJob(input: {
       scanId
     })
   });
+  const reusableExtractionCandidateCount = selectedPendingDocumentSources.length;
+  const reusableExtractionAvoidedCharacterCount = selectedPendingDocumentSources.reduce((sum, row) => {
+    const id = getString(row.id);
+    if (!id || !reusableExtractions.has(id)) {
+      return sum;
+    }
+    return sum + (getString(row.document_text) ?? getString(row.documentText) ?? "").length;
+  }, 0);
   const reusableExtractionUpdates = selectedPendingDocumentSources.flatMap((row) => {
     const id = getString(row.id);
     if (!id) {
@@ -6205,6 +6210,7 @@ export async function processNanoSignalEnrichmentJob(input: {
       metadata: {
         ...getDocumentSourceMetadata(row),
         extraction_reuse_reason: "canonical_url_content_hash_match",
+        extraction_reuse_requires_current_canonical_url_match: true,
         reused_extraction_from_document_source_id: getString(reused.id),
         reused_extraction_from_scan_id: getString(reused.scan_id),
         reused_extraction_updated_at: getString(reused.updated_at)
@@ -6234,6 +6240,14 @@ export async function processNanoSignalEnrichmentJob(input: {
 
   const selectedPendingIds = new Set(selectedPendingDocumentSources.map((row) => String(row.id ?? "")));
   const skippedPendingDocumentSources = pendingDocumentSources.filter((row) => !selectedPendingIds.has(String(row.id ?? "")));
+  let freshExtractionAttemptCount = 0;
+  let freshExtractionCompletedCount = 0;
+  let freshExtractionFailedCount = 0;
+  let freshExtractionCharacterCount = 0;
+  let freshExtractionDurationMs = 0;
+  let freshExtractionPromptTokenCount = 0;
+  let freshExtractionCompletionTokenCount = 0;
+  let freshExtractionTotalTokenCount = 0;
 
   if (skippedPendingDocumentSources.length > 0) {
     await updateScanDocumentSourceExtractions({
@@ -6296,9 +6310,27 @@ export async function processNanoSignalEnrichmentJob(input: {
 
     const extractPendingBatches = async (rows: Array<Record<string, unknown>>) => {
       for (const batch of chunkRows(rows, NANO_DOCUMENT_EXTRACTION_BATCH_SIZE)) {
+        freshExtractionAttemptCount += batch.length;
+        freshExtractionCharacterCount += batch.reduce(
+          (sum, row) => sum + (getString(row.document_text) ?? getString(row.documentText) ?? "").length,
+          0
+        );
+        const batchStartedAt = Date.now();
         const extractionRows = await Promise.all(
           batch.map(async (row) => {
             const result = await extractNanoDocumentSourceWithLlm(row);
+            if (result.extractionStatus === "failed") {
+              freshExtractionFailedCount += 1;
+            } else {
+              freshExtractionCompletedCount += 1;
+            }
+            const usage =
+              typeof result.metadata.model_usage === "object" && result.metadata.model_usage !== null && !Array.isArray(result.metadata.model_usage)
+                ? (result.metadata.model_usage as Record<string, unknown>)
+                : null;
+            freshExtractionPromptTokenCount += typeof usage?.promptTokens === "number" ? usage.promptTokens : 0;
+            freshExtractionCompletionTokenCount += typeof usage?.completionTokens === "number" ? usage.completionTokens : 0;
+            freshExtractionTotalTokenCount += typeof usage?.totalTokens === "number" ? usage.totalTokens : 0;
             return {
               extractedFields: result.extractedFields,
               extractionStatus: result.extractionStatus,
@@ -6313,6 +6345,7 @@ export async function processNanoSignalEnrichmentJob(input: {
             };
           })
         );
+        freshExtractionDurationMs += Date.now() - batchStartedAt;
 
         await updateScanDocumentSourceExtractions({
           rows: extractionRows
@@ -6421,6 +6454,19 @@ export async function processNanoSignalEnrichmentJob(input: {
       policyDocumentCount: artifacts.policySemanticRows.length,
       policyEnrichmentCount: artifacts.rawPolicyEnrichmentRows.length,
       preferDocumentSources: artifacts.preferDocumentSources === true,
+      reusableExtractionAcceptedCount: reusableExtractionUpdates.length,
+      reusableExtractionAvoidedCharacterCount,
+      reusableExtractionCandidateCount,
+      reusableExtractionModelCallAvoidedCount: reusableExtractionUpdates.length,
+      reusableExtractionRejectedCount: Math.max(0, reusableExtractionCandidateCount - reusableExtractionUpdates.length),
+      freshExtractionAttemptCount,
+      freshExtractionCharacterCount,
+      freshExtractionCompletedCount,
+      freshExtractionCompletionTokenCount,
+      freshExtractionDurationMs,
+      freshExtractionFailedCount,
+      freshExtractionPromptTokenCount,
+      freshExtractionTotalTokenCount,
       ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
       scanStartedAt: startedAt,
       stage: "nano_doc_signals",

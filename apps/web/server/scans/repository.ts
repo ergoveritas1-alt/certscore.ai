@@ -1,7 +1,13 @@
 "use server";
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
-import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
+import type {
+  AccessPostureClass,
+  RecoverableFindingClass,
+  ScanExecutionTier,
+  SharedCrawlSeedHint,
+  SharedPriorScanAccelerationConfig
+} from "@website-signal-risk-scanner/shared";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import {
   LEGACY_CHANGE_EVENT_TYPES,
@@ -315,6 +321,22 @@ export type QueuedFullScanInsert = {
   submittedByUserId: string | null;
 };
 
+export type PriorScanAccelerationCandidate = {
+  crawlSeedHints: SharedCrawlSeedHint[];
+  priorScan: SharedPriorScanAccelerationConfig;
+  selectedDocumentSources: Array<{
+    canonicalUrl: string;
+    confidence: number | null;
+    documentType: string;
+    sourceUrl: string | null;
+  }>;
+  selectedHighYieldPages: Array<{
+    confidence: number | null;
+    hintType: string;
+    url: string;
+  }>;
+};
+
 export type DomainBenchmarkEventRow = {
   metadata_json?: unknown;
 };
@@ -327,9 +349,93 @@ type QueryErrorLike = {
 } | null;
 
 const CHANGE_EVENT_BATCH_SIZE = 50;
+const PRIOR_SCAN_ACCELERATION_MAX_AGE_DAYS = 30;
+const PRIOR_SCAN_ACCELERATION_MAX_CRAWL_SEEDS = 20;
+const PRIOR_SCAN_ACCELERATION_MAX_CANDIDATES = 10;
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown database error.";
+}
+
+function getString(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function isProbablyPublicHttpUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function classifyPriorScanHintType(documentType: string) {
+  if (documentType === "privacy_policy") return "privacy_policy";
+  if (documentType === "cookie_policy") return "cookie_policy";
+  if (documentType === "terms_of_service") return "terms_of_service";
+  if (documentType === "accessibility_statement") return "accessibility_statement";
+  if (documentType === "contact_page") return "contact_page";
+  return "legal_document";
+}
+
+function classifyPriorScanPageHintType(pageType: string | null, pageUrl: string) {
+  if (pageType) {
+    return classifyPriorScanHintType(pageType);
+  }
+
+  const pathname = (() => {
+    try {
+      return new URL(pageUrl).pathname.toLowerCase();
+    } catch {
+      return pageUrl.toLowerCase();
+    }
+  })();
+
+  if (/accessibility|a11y/.test(pathname)) return "accessibility_statement";
+  if (/cookie|cookies/.test(pathname)) return "cookie_policy";
+  if (/privacy|do-not-sell|do-not-share|ccpa|privacy-center/.test(pathname)) return "privacy_policy";
+  if (/terms|conditions|tos|legal/.test(pathname)) return "terms_of_service";
+  if (/contact|support|help/.test(pathname)) return "contact_page";
+  return "high_yield_page";
+}
+
+function getPriorScanDocumentTypeScore(documentType: string | null) {
+  if (documentType === "privacy_policy") return 28;
+  if (documentType === "cookie_policy") return 24;
+  if (documentType === "terms_of_service") return 20;
+  if (documentType === "accessibility_statement") return 16;
+  if (documentType === "contact_page") return 10;
+  return 4;
+}
+
+function getPriorScanPageTypeScore(pageType: string | null, pageUrl: string) {
+  const hintType = classifyPriorScanPageHintType(pageType, pageUrl);
+  if (hintType === "privacy_policy") return 18;
+  if (hintType === "cookie_policy") return 16;
+  if (hintType === "terms_of_service") return 14;
+  if (hintType === "accessibility_statement") return 12;
+  if (hintType === "contact_page") return 8;
+  return 3;
+}
+
+function buildPriorScanSelectionReason(input: {
+  documentSourceCount: number;
+  highYieldPageCount: number;
+  matchedByDomainId: boolean;
+  matchedByNormalizedUrl: boolean;
+}) {
+  const matchReason = input.matchedByDomainId
+    ? "same_domain_id"
+    : input.matchedByNormalizedUrl
+      ? "same_normalized_url"
+      : "same_lookup_scope";
+  const sourceReason = input.documentSourceCount > 0
+    ? "ready_document_sources"
+    : input.highYieldPageCount > 0
+      ? "high_yield_pages"
+      : "completed_scan";
+  return `${matchReason}:${sourceReason}`;
 }
 
 function isMissingOptionalTableError(error: { code?: string | null; message?: string | null } | null | undefined) {
@@ -472,6 +578,241 @@ export async function loadUsageCounter(input: {
     [input.organizationId, input.metricKey, input.periodStart, input.periodEnd],
     { readOnly: true }
   );
+}
+
+export async function loadPriorScanAccelerationCandidate(input: {
+  domainId: string;
+  normalizedUrl: string;
+  organizationId: string | null;
+}): Promise<PriorScanAccelerationCandidate | null> {
+  const priorScanRows = await query<{
+    completed_at: string;
+    id: string;
+    matched_by_domain_id: boolean;
+    matched_by_normalized_url: boolean;
+  }>(
+    `
+      select
+             s.id,
+             s.completed_at,
+             (s.domain_id = $3) as matched_by_domain_id,
+             (d.normalized_url = $4) as matched_by_normalized_url
+        from scans s
+        left join domains d on d.id = s.domain_id
+       where s.status = 'completed'
+         and s.completed_at is not null
+         and s.completed_at >= timezone('utc', now()) - ($1::int * interval '1 day')
+         and s.organization_id is not distinct from $2
+         and (
+           s.domain_id = $3
+           or d.normalized_url = $4
+         )
+       order by s.completed_at desc
+       limit $5
+    `,
+    [
+      PRIOR_SCAN_ACCELERATION_MAX_AGE_DAYS,
+      input.organizationId,
+      input.domainId,
+      input.normalizedUrl,
+      PRIOR_SCAN_ACCELERATION_MAX_CANDIDATES
+    ],
+    { readOnly: true }
+  );
+
+  if (priorScanRows.rows.length === 0) {
+    return null;
+  }
+
+  const candidateScanIds = priorScanRows.rows.map((row) => row.id);
+  const documentSourceRows = await query<{
+    canonical_url: string | null;
+    document_type: string | null;
+    scan_id: string;
+    semantic_confidence: number | null;
+    source_url: string | null;
+  }>(
+    `
+      select scan_id, canonical_url, source_url, document_type, semantic_confidence
+        from scan_document_sources
+       where scan_id = any($1::uuid[])
+         and source_status = 'ready'
+         and canonical_url is not null
+       order by scan_id, semantic_confidence desc nulls last, updated_at desc
+    `,
+    [candidateScanIds],
+    { readOnly: true }
+  ).catch((error) => {
+    if (isMissingOptionalTableError(error)) {
+      return { rows: [] };
+    }
+    throw error;
+  });
+
+  const highYieldPageRows = await query<{
+    fetch_status: string | null;
+    page_type: string | null;
+    page_url: string | null;
+    scan_id: string;
+  }>(
+    `
+      select scan_id, page_type, page_url, fetch_status
+        from scan_pages
+       where scan_id = any($1::uuid[])
+         and page_url is not null
+         and coalesce(fetch_status, '') not in ('failed', 'error', 'forbidden')
+       order by scan_id, created_at asc
+    `,
+    [candidateScanIds],
+    { readOnly: true }
+  ).catch((error) => {
+    if (isMissingOptionalTableError(error)) {
+      return { rows: [] };
+    }
+    throw error;
+  });
+
+  const documentsByScanId = new Map<string, typeof documentSourceRows.rows>();
+  for (const row of documentSourceRows.rows) {
+    const rows = documentsByScanId.get(row.scan_id) ?? [];
+    rows.push(row);
+    documentsByScanId.set(row.scan_id, rows);
+  }
+
+  const highYieldPagesByScanId = new Map<string, typeof highYieldPageRows.rows>();
+  for (const row of highYieldPageRows.rows) {
+    const pageUrl = getString(row.page_url);
+    if (!pageUrl || !isProbablyPublicHttpUrl(pageUrl)) {
+      continue;
+    }
+    const score = getPriorScanPageTypeScore(getString(row.page_type), pageUrl);
+    if (score < 8) {
+      continue;
+    }
+    const rows = highYieldPagesByScanId.get(row.scan_id) ?? [];
+    rows.push(row);
+    highYieldPagesByScanId.set(row.scan_id, rows);
+  }
+
+  const scoredCandidates = priorScanRows.rows
+    .map((row, index) => {
+      const documentRows = documentsByScanId.get(row.id) ?? [];
+      const highYieldRows = highYieldPagesByScanId.get(row.id) ?? [];
+      const documentScore = documentRows.reduce(
+        (sum, documentRow) =>
+          sum +
+          getPriorScanDocumentTypeScore(getString(documentRow.document_type)) +
+          (typeof documentRow.semantic_confidence === "number" ? Math.round(documentRow.semantic_confidence * 10) : 0),
+        0
+      );
+      const highYieldPageScore = highYieldRows.reduce(
+        (sum, pageRow) => sum + getPriorScanPageTypeScore(getString(pageRow.page_type), getString(pageRow.page_url) ?? ""),
+        0
+      );
+      const matchScore = row.matched_by_domain_id ? 12 : row.matched_by_normalized_url ? 8 : 0;
+      const recencyScore = Math.max(0, PRIOR_SCAN_ACCELERATION_MAX_CANDIDATES - index);
+      return {
+        documentRows,
+        highYieldRows,
+        row,
+        score: matchScore + recencyScore + documentScore + Math.min(30, highYieldPageScore)
+      };
+    })
+    .sort((left, right) => right.score - left.score);
+
+  const selectedCandidate = scoredCandidates[0];
+  if (!selectedCandidate) {
+    return null;
+  }
+
+  const selectedDocumentSources = [];
+  const selectedHighYieldPages = [];
+  const crawlSeedHints: SharedCrawlSeedHint[] = [];
+  const seenUrls = new Set<string>();
+
+  for (const row of selectedCandidate.documentRows) {
+    const canonicalUrl = getString(row.canonical_url);
+    const documentType = getString(row.document_type);
+    if (
+      crawlSeedHints.length >= PRIOR_SCAN_ACCELERATION_MAX_CRAWL_SEEDS ||
+      !canonicalUrl ||
+      !documentType ||
+      !isProbablyPublicHttpUrl(canonicalUrl) ||
+      seenUrls.has(canonicalUrl)
+    ) {
+      continue;
+    }
+
+    seenUrls.add(canonicalUrl);
+    selectedDocumentSources.push({
+      canonicalUrl,
+      confidence: typeof row.semantic_confidence === "number" ? row.semantic_confidence : null,
+      documentType,
+      sourceUrl: getString(row.source_url)
+    });
+    crawlSeedHints.push({
+      confidence: typeof row.semantic_confidence === "number" ? row.semantic_confidence : null,
+      hintType: classifyPriorScanHintType(documentType),
+      source: "prior_scan_hint",
+      sourceCompletedAt: selectedCandidate.row.completed_at,
+      sourceScanId: selectedCandidate.row.id,
+      url: canonicalUrl
+    });
+  }
+
+  for (const row of selectedCandidate.highYieldRows) {
+    const pageUrl = getString(row.page_url);
+    if (
+      crawlSeedHints.length >= PRIOR_SCAN_ACCELERATION_MAX_CRAWL_SEEDS ||
+      !pageUrl ||
+      !isProbablyPublicHttpUrl(pageUrl) ||
+      seenUrls.has(pageUrl)
+    ) {
+      continue;
+    }
+    const hintType = classifyPriorScanPageHintType(getString(row.page_type), pageUrl);
+    const confidence = hintType === "high_yield_page" ? 0.55 : 0.7;
+    seenUrls.add(pageUrl);
+    selectedHighYieldPages.push({
+      confidence,
+      hintType,
+      url: pageUrl
+    });
+    crawlSeedHints.push({
+      confidence,
+      hintType,
+      source: "prior_scan_hint",
+      sourceCompletedAt: selectedCandidate.row.completed_at,
+      sourceScanId: selectedCandidate.row.id,
+      url: pageUrl
+    });
+  }
+
+  if (crawlSeedHints.length === 0) {
+    return null;
+  }
+
+  return {
+    crawlSeedHints,
+    priorScan: {
+      crawlSeedHintCount: crawlSeedHints.length,
+      crawlSeedHintTypes: [...new Set(crawlSeedHints.map((hint) => hint.hintType))],
+      priorScanSelectionReason: buildPriorScanSelectionReason({
+        documentSourceCount: selectedDocumentSources.length,
+        highYieldPageCount: selectedHighYieldPages.length,
+        matchedByDomainId: selectedCandidate.row.matched_by_domain_id,
+        matchedByNormalizedUrl: selectedCandidate.row.matched_by_normalized_url
+      }),
+      priorScanSelectionScore: selectedCandidate.score,
+      priorHitScanProfile: "hint_first",
+      selectedDocumentSourceCount: selectedDocumentSources.length,
+      selectedHighYieldPageCount: selectedHighYieldPages.length,
+      sourceCompletedAt: selectedCandidate.row.completed_at,
+      sourceScanId: selectedCandidate.row.id
+    },
+    selectedDocumentSources,
+    selectedHighYieldPages
+  };
 }
 
 export async function upsertUsageCounter(input: {

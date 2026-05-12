@@ -84,6 +84,22 @@ type TimingFindingCountRow = {
   scan_id: string;
 };
 
+type PriorScanAccelerationScanRow = {
+  completed_at: string | null;
+  id: string;
+  pages_scanned: number | null;
+  scan_config_json: unknown;
+  started_at: string | null;
+  status: string;
+};
+
+type PriorScanAccelerationDocumentRow = {
+  document_type: string | null;
+  extraction_status: string | null;
+  scan_id: string;
+  source_status: string | null;
+};
+
 function decodeInput(): AuditInput {
   const encoded = process.env.OPS_PROD_DB_AUDIT_INPUT_BASE64?.trim();
   const inline = process.env.OPS_PROD_DB_AUDIT_INPUT_JSON?.trim();
@@ -211,6 +227,15 @@ function summarizeTiming(values: Array<number | null>) {
   };
 }
 
+function millisecondsBetweenIso(start: unknown, end: unknown) {
+  if (typeof start !== "string" || typeof end !== "string") {
+    return null;
+  }
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
+  return Number.isFinite(startMs) && Number.isFinite(endMs) ? endMs - startMs : null;
+}
+
 function getNumber(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -220,6 +245,46 @@ function getNumber(value: unknown) {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function getLatestEventMetadata(events: TimingEventRow[], eventType: string) {
+  const event = [...events].reverse().find((candidate) => candidate.event_type === eventType);
+  return event ? getObject(event.metadata_json) : {};
+}
+
+function getFirstEvent(events: TimingEventRow[], eventType: string) {
+  return events.find((candidate) => candidate.event_type === eventType) ?? null;
+}
+
+function getLastEvent(events: TimingEventRow[], eventType: string) {
+  return [...events].reverse().find((candidate) => candidate.event_type === eventType) ?? null;
+}
+
+function getRuntimeBuildPhaseMetadata(events: TimingEventRow[], phase: string) {
+  const diagnostic = [...events]
+    .reverse()
+    .map((event) => getObject(event.metadata_json))
+    .find((metadata) => eventIsRuntimeBuildPhase(metadata, phase));
+  if (!diagnostic) {
+    return {};
+  }
+  const successMetadata = getObject(diagnostic.successMetadata);
+  const failureMetadata = getObject(diagnostic.failureMetadata);
+  if (Object.keys(successMetadata).length > 0) {
+    return successMetadata;
+  }
+  if (Object.keys(failureMetadata).length > 0) {
+    return failureMetadata;
+  }
+  return diagnostic;
+}
+
+function eventIsRuntimeBuildPhase(metadata: Record<string, unknown>, phase: string) {
+  return metadata.phase === phase || metadata.stepKey === phase;
+}
+
+function getString(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
 function summarizeNanoRechecks(events: TimingEventRow[]) {
@@ -425,6 +490,163 @@ async function runScanTimingAudit(input: AuditInput) {
   };
 }
 
+async function runPriorScanAccelerationAudit(input: AuditInput) {
+  const scans = input.scans ?? [];
+  const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
+  const [scanResult, eventResult, documentResult] = await Promise.all([
+    query<PriorScanAccelerationScanRow>(
+      `select id::text as id,
+              status,
+              pages_scanned,
+              started_at::text as started_at,
+              completed_at::text as completed_at,
+              scan_config_json
+         from scans
+        where id = any($1::uuid[])`,
+      [scanIds],
+      { readOnly: true }
+    ),
+    query<TimingEventRow>(
+      `select scan_id::text as scan_id,
+              event_type,
+              created_at::text as created_at,
+              metadata_json
+         from scan_events
+        where scan_id = any($1::uuid[])
+        order by scan_id, created_at asc`,
+      [scanIds],
+      { readOnly: true }
+    ),
+    query<PriorScanAccelerationDocumentRow>(
+      `select scan_id::text as scan_id,
+              document_type,
+              source_status,
+              extraction_status
+         from scan_document_sources
+        where scan_id = any($1::uuid[])`,
+      [scanIds],
+      { readOnly: true }
+    )
+  ]);
+  await queryOne<{ ok: number }>("select 1 as ok", [], { readOnly: true });
+
+  const scansById = new Map(scanResult.rows.map((row) => [row.id, row]));
+  const eventsByScan = new Map<string, TimingEventRow[]>();
+  for (const event of eventResult.rows) {
+    const existing = eventsByScan.get(event.scan_id) ?? [];
+    existing.push(event);
+    eventsByScan.set(event.scan_id, existing);
+  }
+  const documentsByScan = new Map<string, PriorScanAccelerationDocumentRow[]>();
+  for (const document of documentResult.rows) {
+    const existing = documentsByScan.get(document.scan_id) ?? [];
+    existing.push(document);
+    documentsByScan.set(document.scan_id, existing);
+  }
+
+  const rows = scans.map((inputScan) => {
+    const scan = scansById.get(inputScan.scanId);
+    const events = eventsByScan.get(inputScan.scanId) ?? [];
+    const documents = documentsByScan.get(inputScan.scanId) ?? [];
+    const config = getObject(scan?.scan_config_json);
+    const execution = getObject(config.execution);
+    const prior = getObject(execution.priorScanAcceleration);
+    const crawlSeedHints = asArray(execution.crawlSeedHints).map((hint) => getObject(hint));
+    const nanoEvents = events
+      .filter((event) => event.event_type === "signals.nano_doc_enrichment_completed")
+      .map((event) => getObject(event.metadata_json));
+    const latestNano = nanoEvents[nanoEvents.length - 1] ?? {};
+    const reuseNano = nanoEvents.find((event) => getNumber(event.reusableExtractionAcceptedCount) !== null) ?? latestNano;
+    const preflightMetadata = getRuntimeBuildPhaseMetadata(events, "urlscan_preflight_legal_fetch");
+    const readyDocumentTypes = [
+      ...new Set(
+        documents
+          .filter((document) => document.source_status === "ready" && document.extraction_status === "ready")
+          .map((document) => document.document_type)
+          .filter((value): value is string => typeof value === "string" && value.length > 0)
+      )
+    ].sort();
+    const crawlSeedHintTypes = [
+      ...new Set(crawlSeedHints.map((hint) => getString(hint.hintType)).filter((value): value is string => Boolean(value)))
+    ].sort();
+
+    return {
+      batch: inputScan.batch ?? null,
+      crawlSeedHintCount: crawlSeedHints.length,
+      crawlSeedHintTypes,
+      firstUnifiedFindingMs: millisecondsBetweenIso(scan?.started_at, getFirstEvent(events, "findings.unified_derivation_completed")?.created_at),
+      freshExtractionAttemptCount: getNumber(latestNano.freshExtractionAttemptCount) ?? 0,
+      freshExtractionDurationMs: getNumber(latestNano.freshExtractionDurationMs) ?? 0,
+      freshExtractionTotalTokenCount: getNumber(latestNano.freshExtractionTotalTokenCount) ?? 0,
+      manifestRow: inputScan.manifestRow ?? null,
+      nanoRetrievalMs: millisecondsBetweenIso(
+        getFirstEvent(events, "signals.nano_doc_retrieval_started")?.created_at,
+        getLastEvent(events, "signals.nano_doc_retrieval_completed")?.created_at
+      ),
+      pagesScanned: scan?.pages_scanned ?? null,
+      priorHintAttemptCount: getNumber(preflightMetadata.priorScanHintAttemptCount) ?? 0,
+      priorHintAttemptedCount: getNumber(preflightMetadata.priorScanHintAttemptedCount) ?? 0,
+      priorHintVerifiedCount: getNumber(preflightMetadata.priorScanHintVerifiedCount) ?? 0,
+      priorHit: Boolean(prior.sourceScanId),
+      priorScanSelectionReason: getString(prior.priorScanSelectionReason),
+      priorScanSelectionScore: getNumber(prior.priorScanSelectionScore),
+      readyDocumentTypes,
+      reusableExtractionAcceptedCount: getNumber(reuseNano.reusableExtractionAcceptedCount) ?? 0,
+      reusableExtractionCandidateCount: getNumber(reuseNano.reusableExtractionCandidateCount) ?? 0,
+      reusableExtractionModelCallAvoidedCount: getNumber(reuseNano.reusableExtractionModelCallAvoidedCount) ?? 0,
+      scanId: inputScan.scanId,
+      scannerWallMs: millisecondsBetweenIso(scan?.started_at, scan?.completed_at),
+      sourceScanId: getString(prior.sourceScanId),
+      status: scan?.status ?? "missing"
+    };
+  });
+
+  const priorHitRows = rows.filter((row) => row.priorHit);
+  const hintTypes = [...new Set(rows.flatMap((row) => row.crawlSeedHintTypes))].sort();
+  const attemptedHints = rows.reduce((sum, row) => sum + row.priorHintAttemptedCount, 0);
+
+  return {
+    audit: "prior-scan-acceleration",
+    generatedAt: new Date().toISOString(),
+    notes: input.notes ?? null,
+    readScope: {
+      scanCount: scanIds.length,
+      tables: ["scans", "scan_events", "scan_document_sources"]
+    },
+    summary: {
+      firstUnifiedFinding: summarizeTiming(rows.map((row) => row.firstUnifiedFindingMs)),
+      nanoRetrieval: summarizeTiming(rows.map((row) => row.nanoRetrievalMs)),
+      priorHitRate: rows.length > 0 ? priorHitRows.length / rows.length : 0,
+      scannerWall: summarizeTiming(rows.map((row) => row.scannerWallMs)),
+      totalFreshExtractionAttempts: rows.reduce((sum, row) => sum + row.freshExtractionAttemptCount, 0),
+      totalPriorHintAttemptCount: rows.reduce((sum, row) => sum + row.priorHintAttemptCount, 0),
+      totalPriorHintAttemptedCount: attemptedHints,
+      totalPriorHintVerifiedCount: rows.reduce((sum, row) => sum + row.priorHintVerifiedCount, 0),
+      totalReusableExtractionsAccepted: rows.reduce((sum, row) => sum + row.reusableExtractionAcceptedCount, 0),
+      totalReusableModelCallsAvoided: rows.reduce((sum, row) => sum + row.reusableExtractionModelCallAvoidedCount, 0),
+      priorHintVerificationRate:
+        attemptedHints > 0
+          ? rows.reduce((sum, row) => sum + row.priorHintVerifiedCount, 0) / attemptedHints
+          : 0,
+      hintTypeAcceptance: Object.fromEntries(
+        hintTypes.map((hintType) => {
+          const hintedRows = rows.filter((row) => row.crawlSeedHintTypes.includes(hintType));
+          const acceptedRows = hintedRows.filter((row) => row.readyDocumentTypes.includes(hintType));
+          return [
+            hintType,
+            {
+              acceptedScanCount: acceptedRows.length,
+              hintedScanCount: hintedRows.length,
+              scanAcceptanceRate: hintedRows.length > 0 ? acceptedRows.length / hintedRows.length : 0
+            }
+          ];
+        })
+      )
+    },
+    rows
+  };
+}
+
 async function runRtbCookieSyncAudit(input: AuditInput) {
   const scans = input.scans ?? [];
   const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
@@ -598,6 +820,8 @@ async function main() {
   const result =
     auditName === "rtb-cookie-sync"
       ? await runRtbCookieSyncAudit(input)
+      : auditName === "prior-scan-acceleration"
+        ? await runPriorScanAccelerationAudit(input)
       : auditName === "scan-timing"
         ? await runScanTimingAudit(input)
         : null;

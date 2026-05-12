@@ -27,3 +27,50 @@ test("queued full-scan config keeps anonymous and organization-owned scanner con
   assert.equal(anonymousConfig.maxRequestedTier, "tier5_full_scan");
   assert.equal(anonymousConfig.freshBrowserRequired, true);
 });
+
+test("queued full-scan config carries prior scan acceleration only as execution metadata", () => {
+  const config = buildQueuedFullScanConfig({
+    hostname: "example.com",
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    priorScanAcceleration: {
+      crawlSeedHints: [
+        {
+          confidence: 0.91,
+          hintType: "privacy_policy",
+          source: "prior_scan_hint",
+          sourceCompletedAt: "2026-05-01T00:00:00.000Z",
+          sourceScanId: "scan-prior",
+          url: "https://example.com/privacy"
+        }
+      ],
+      priorScan: {
+        crawlSeedHintCount: 1,
+        selectedDocumentSourceCount: 1,
+        sourceCompletedAt: "2026-05-01T00:00:00.000Z",
+        sourceScanId: "scan-prior"
+      }
+    },
+    profile: "homepage",
+    source: "manual-dashboard"
+  });
+
+  assert.deepEqual(config.execution?.priorScanAcceleration, {
+    crawlSeedHintCount: 1,
+    selectedDocumentSourceCount: 1,
+    sourceCompletedAt: "2026-05-01T00:00:00.000Z",
+    sourceScanId: "scan-prior"
+  });
+  assert.deepEqual(config.execution?.crawlSeedHints, [
+    {
+      confidence: 0.91,
+      hintType: "privacy_policy",
+      source: "prior_scan_hint",
+      sourceCompletedAt: "2026-05-01T00:00:00.000Z",
+      sourceScanId: "scan-prior",
+      url: "https://example.com/privacy"
+    }
+  ]);
+  assert.equal(Object.hasOwn(config, "findings"), false);
+  assert.equal(Object.hasOwn(config, "signals"), false);
+});

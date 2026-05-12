@@ -2066,7 +2066,7 @@ test("resolveReusableNanoDocumentExtractions matches prior ready rows by canonic
   assert.equal(reusable.get("doc-current")?.id, "doc-prior");
 });
 
-test("resolveReusableNanoDocumentExtractions falls back to document type plus content hash when canonical urls differ", () => {
+test("resolveReusableNanoDocumentExtractions rejects reuse when canonical urls differ even if content hash matches", () => {
   const contentHash = buildNanoDocumentContentHash("Shared privacy policy text.");
   const reusable = resolveReusableNanoDocumentExtractions({
     candidates: [
@@ -2091,7 +2091,30 @@ test("resolveReusableNanoDocumentExtractions falls back to document type plus co
     ]
   });
 
-  assert.equal(reusable.get("doc-current")?.id, "doc-prior");
+  assert.equal(reusable.has("doc-current"), false);
+});
+
+test("resolveReusableNanoDocumentExtractions rejects reuse when prior row lacks content hash", () => {
+  const reusable = resolveReusableNanoDocumentExtractions({
+    candidates: [
+      {
+        canonical_url: "https://example.com/privacy",
+        id: "doc-current",
+        metadata_json: {
+          content_hash: buildNanoDocumentContentHash("Current privacy policy text.")
+        }
+      }
+    ],
+    priorExtractions: [
+      {
+        canonical_url: "https://example.com/privacy",
+        id: "doc-prior",
+        metadata_json: {}
+      }
+    ]
+  });
+
+  assert.equal(reusable.has("doc-current"), false);
 });
 
 test("deriveValidationFindings emits pilot financial review rows from retained signal evidence", () => {

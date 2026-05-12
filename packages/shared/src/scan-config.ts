@@ -11,9 +11,35 @@ export type SharedPost403PolicyConfig = {
   verifiedSurfaceTargetsAfter403?: string[];
 };
 
+export type SharedCrawlSeedHint = {
+  confidence?: number | null;
+  hintType: string;
+  source: "prior_scan_hint";
+  sourceCompletedAt: string;
+  sourceScanId: string;
+  url: string;
+};
+
+export type SharedPriorScanAccelerationConfig = {
+  crawlSeedHintCount: number;
+  crawlSeedHintTypes?: string[];
+  priorHitScanProfile?: "hint_first";
+  priorScanSelectionReason?: string;
+  priorScanSelectionScore?: number;
+  selectedDocumentSourceCount: number;
+  selectedHighYieldPageCount?: number;
+  sourceCompletedAt: string;
+  sourceScanId: string;
+};
+
+export type SharedScanExecutionConfig = {
+  crawlSeedHints?: SharedCrawlSeedHint[];
+  priorScanAcceleration?: SharedPriorScanAccelerationConfig;
+} & Record<string, unknown>;
+
 export type SharedScanConfig = {
   crawlerIdentity?: SharedCrawlerIdentityConfig;
-  execution?: Record<string, unknown>;
+  execution?: SharedScanExecutionConfig;
   freshBrowserRequired?: boolean;
   hostname?: string;
   maxPages?: number;
@@ -28,7 +54,7 @@ export type SharedScanConfig = {
 
 type BuildSharedFullScanConfigInput = {
   crawlerIdentity?: SharedCrawlerIdentityConfig;
-  execution?: Record<string, unknown>;
+  execution?: SharedScanExecutionConfig;
   freshBrowserRequired?: boolean;
   hostname?: string;
   maxPages: number;

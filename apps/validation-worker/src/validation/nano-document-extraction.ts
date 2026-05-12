@@ -559,6 +559,11 @@ export async function extractNanoDocumentSourceWithLlm(row: NanoDocumentSourceRo
   const payload = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
     model?: string;
+    usage?: {
+      completion_tokens?: number;
+      prompt_tokens?: number;
+      total_tokens?: number;
+    };
   };
 
   const parsed = JSON.parse(extractJson(payload.choices?.[0]?.message?.content ?? "{}")) as Record<string, unknown>;
@@ -572,7 +577,16 @@ export async function extractNanoDocumentSourceWithLlm(row: NanoDocumentSourceRo
     ...normalized,
     metadata: {
       ...normalized.metadata,
-      model: payload.model ?? env.VALIDATION_NANO_MODEL
+      model: payload.model ?? env.VALIDATION_NANO_MODEL,
+      model_usage:
+        payload.usage && typeof payload.usage === "object"
+          ? {
+              completionTokens:
+                typeof payload.usage.completion_tokens === "number" ? payload.usage.completion_tokens : null,
+              promptTokens: typeof payload.usage.prompt_tokens === "number" ? payload.usage.prompt_tokens : null,
+              totalTokens: typeof payload.usage.total_tokens === "number" ? payload.usage.total_tokens : null
+            }
+          : null
     }
   };
 }

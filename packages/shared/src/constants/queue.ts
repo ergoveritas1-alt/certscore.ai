@@ -41,6 +41,7 @@ export const SCAN_EVENT_TYPES = {
   previewCompleted: "preview_scan.completed",
   previewFailed: "preview_scan.failed",
   fullQueued: "full_scan.queued",
+  priorScanAccelerationEvaluated: "full_scan.prior_scan_acceleration_evaluated",
   fullStarted: "full_scan.started",
   fullRunning: "full_scan.running",
   fullCompleted: "full_scan.completed",
