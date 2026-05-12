@@ -114,6 +114,65 @@ async function requeueNanoSignalEnrichmentPoll(input: {
   }).catch(() => undefined);
 }
 
+async function deriveAndPersistUnifiedFindingsForScan(input: {
+  recoveryMode?: "completed_scan_backfill" | "missing_unified_projection" | null;
+  scanId: string;
+  validationRunId?: string | null;
+}) {
+  await appendScanWorkflowEvent({
+    eventType: SCAN_EVENT_TYPES.signalMergeStarted,
+    message: "Merged signal derivation started.",
+    metadataJson: {
+      ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
+      stage: "signal_merge"
+    },
+    scanId: input.scanId
+  }).catch(() => undefined);
+
+  const refreshedArtifacts = await loadCompletedScanArtifacts(input.scanId);
+
+  await appendScanWorkflowEvent({
+    eventType: SCAN_EVENT_TYPES.signalMergeCompleted,
+    message: "Merged signal derivation completed.",
+    metadataJson: {
+      mergedSignalCount: refreshedArtifacts.mergedSignals.length,
+      ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
+      stage: "signal_merge"
+    },
+    scanId: input.scanId
+  }).catch(() => undefined);
+
+  await appendScanWorkflowEvent({
+    eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted,
+    message: "Unified finding derivation started.",
+    metadataJson: {
+      ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
+      stage: "unified_findings"
+    },
+    scanId: input.scanId
+  }).catch(() => undefined);
+
+  const findings = await deriveUnifiedFindingsWithWorkflowEvents({
+    completionMetadata: (findings) => ({
+      cookieDisclosureGapDiagnostic: deriveCookieDisclosureGapDiagnostic(
+        {
+          policySemanticRows: refreshedArtifacts.policySemanticRows ?? refreshedArtifacts.policySemanticInputs ?? refreshedArtifacts.policyEnrichments ?? [],
+          runtimeArtifacts: refreshedArtifacts.runtimeArtifacts
+        },
+        findings
+      ),
+      ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {})
+    }),
+    deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
+    scanId: input.scanId
+  });
+
+  const targetRun = input.validationRunId ? { id: input.validationRunId } : await ensureCompletedValidationRunForScan(input.scanId);
+  await replaceValidationRunFindings(targetRun.id, findings);
+
+  return findings;
+}
+
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -6486,10 +6545,9 @@ export async function processNanoSignalEnrichmentJob(input: {
     return { activeRunCount: 1, findingCount: 0, runCount: 0, unifiedDerivationCompletedCount: 0 };
   });
   const hasCompletedUnifiedDerivation = validationDerivationState.unifiedDerivationCompletedCount > 0;
-  const hasActiveValidationRun = validationDerivationState.activeRunCount > 0;
   const scanIsTerminal = scanStatus === "completed" || scanStatus === "failed";
 
-  if (!hasCompletedUnifiedDerivation && hasActiveValidationRun && !scanIsTerminal) {
+  if (!hasCompletedUnifiedDerivation && !scanIsTerminal) {
     await requeueNanoSignalEnrichmentPoll({
       delayMs: NANO_SIGNAL_TERMINAL_STATUS_RECHECK_MS,
       pollCount,
@@ -6500,57 +6558,10 @@ export async function processNanoSignalEnrichmentJob(input: {
   }
 
   if (!hasCompletedUnifiedDerivation) {
-    await appendScanWorkflowEvent({
-      eventType: SCAN_EVENT_TYPES.signalMergeStarted,
-      message: "Merged signal derivation started.",
-      metadataJson: {
-        ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
-        stage: "signal_merge"
-      },
-      scanId
-    }).catch(() => undefined);
-
-    const refreshedArtifacts = await loadCompletedScanArtifacts(scanId);
-
-    await appendScanWorkflowEvent({
-      eventType: SCAN_EVENT_TYPES.signalMergeCompleted,
-      message: "Merged signal derivation completed.",
-      metadataJson: {
-        mergedSignalCount: refreshedArtifacts.mergedSignals.length,
-        ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
-        stage: "signal_merge"
-      },
-      scanId
-    }).catch(() => undefined);
-
-    await appendScanWorkflowEvent({
-      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted,
-      message: "Unified finding derivation started.",
-      metadataJson: {
-        ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
-        stage: "unified_findings"
-      },
-      scanId
-    }).catch(() => undefined);
-    const findings = await deriveUnifiedFindingsWithWorkflowEvents({
-      completionMetadata: (findings) => ({
-        cookieDisclosureGapDiagnostic: deriveCookieDisclosureGapDiagnostic(
-          {
-            policySemanticRows:
-              refreshedArtifacts.policySemanticRows ?? refreshedArtifacts.policySemanticInputs ?? refreshedArtifacts.policyEnrichments ?? [],
-            runtimeArtifacts: refreshedArtifacts.runtimeArtifacts
-          },
-          findings
-        ),
-        ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {})
-      }),
-      deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
+    await deriveAndPersistUnifiedFindingsForScan({
+      recoveryMode: input.recoveryMode ?? null,
       scanId
     });
-    if (findings.length > 0) {
-      const completedRun = await ensureCompletedValidationRunForScan(scanId);
-      await replaceValidationRunFindings(completedRun.id, findings);
-    }
 
     const scanType = typeof artifacts.scan?.scan_type === "string" ? artifacts.scan.scan_type : null;
     if (scanType === "preview" && scanStatus !== "completed" && scanStatus !== "failed") {
@@ -6676,48 +6687,10 @@ export async function processValidationRankJob(validationRunId: string) {
       return [];
     });
 
-    await appendScanWorkflowEvent({
-      eventType: SCAN_EVENT_TYPES.signalMergeStarted,
-      message: "Merged signal derivation started.",
-      metadataJson: {
-        stage: "signal_merge"
-      },
-      scanId
-    }).catch(() => undefined);
-    const refreshedArtifacts = await loadCompletedScanArtifacts(scanId);
-    await appendScanWorkflowEvent({
-      eventType: SCAN_EVENT_TYPES.signalMergeCompleted,
-      message: "Merged signal derivation completed.",
-      metadataJson: {
-        mergedSignalCount: refreshedArtifacts.mergedSignals.length,
-        stage: "signal_merge"
-      },
-      scanId
-    }).catch(() => undefined);
-
-    await appendScanWorkflowEvent({
-      eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted,
-      message: "Unified finding derivation started.",
-      metadataJson: {
-        stage: "unified_findings"
-      },
-      scanId
-    }).catch(() => undefined);
-    const findings = await deriveUnifiedFindingsWithWorkflowEvents({
-      completionMetadata: (findings) => ({
-        cookieDisclosureGapDiagnostic: deriveCookieDisclosureGapDiagnostic(
-          {
-            policySemanticRows:
-              refreshedArtifacts.policySemanticRows ?? refreshedArtifacts.policySemanticInputs ?? refreshedArtifacts.policyEnrichments ?? [],
-            runtimeArtifacts: refreshedArtifacts.runtimeArtifacts
-          },
-          findings
-        )
-      }),
-      deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
-      scanId
+    const findings = await deriveAndPersistUnifiedFindingsForScan({
+      scanId,
+      validationRunId
     });
-    await replaceValidationRunFindings(validationRunId, findings);
 
     if (findings.length === 0) {
       await finalizeValidationRun(validationRunId);
