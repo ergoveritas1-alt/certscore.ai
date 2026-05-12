@@ -52,6 +52,7 @@ const VALIDATION_SCAN_HANDOFF_POLL_MS = 5_000;
 const NANO_DOC_RETRIEVAL_POLL_MS = 1_000;
 const MAX_NANO_DOC_RETRIEVAL_POLLS = 20;
 const NANO_SIGNAL_POLICY_ROW_RECHECK_MS = 250;
+const NANO_SIGNAL_TERMINAL_STATUS_RECHECK_MS = 1_000;
 const NANO_SIGNAL_ENRICHMENT_POLL_MS = 2_000;
 const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
 const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 4;
@@ -6490,7 +6491,7 @@ export async function processNanoSignalEnrichmentJob(input: {
 
   if (!hasCompletedUnifiedDerivation && hasActiveValidationRun && !scanIsTerminal) {
     await requeueNanoSignalEnrichmentPoll({
-      delayMs: VALIDATION_SCAN_HANDOFF_POLL_MS,
+      delayMs: NANO_SIGNAL_TERMINAL_STATUS_RECHECK_MS,
       pollCount,
       reason: "waiting_for_scanner_terminal_status",
       scanId
