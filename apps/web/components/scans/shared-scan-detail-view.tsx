@@ -5114,6 +5114,7 @@ export function SharedScanDetailView({
             score={executiveDisplayedScore}
             scanOutcome={typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null}
             sessionReplayVendorNames={certScoreSummary.sessionReplayVendorNames}
+            status={scanRecord.scan.status}
             thirdPartyRequestCount={executiveThirdPartyRequestCount}
             thirdPartyDomains={executiveThirdPartyDomains}
             topFindings={topExecutiveFindings}
