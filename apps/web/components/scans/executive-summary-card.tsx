@@ -2522,6 +2522,7 @@ export function ExecutiveSummaryCard(input: {
   resolvedVendorNames: string[];
   score: number | null;
   scanOutcome?: string | null;
+  status?: string | null;
   sessionReplayVendorNames: string[];
   thirdPartyRequestCount: number;
   thirdPartyDomains: string[];
@@ -2595,7 +2596,7 @@ export function ExecutiveSummaryCard(input: {
   const retainedFindingCount = Math.max(input.topFindings.length, input.allFindings?.length ?? 0);
   const policyEnrichmentCount = input.policyEnrichmentCount ?? 0;
   const hasMaterialRetainedCoverage =
-    pagesScanned > 0 &&
+    (pagesScanned > 0 || input.status === "completed") &&
     (input.thirdPartyRequestCount >= 20 || vendorEvidence.length >= 2 || policyEnrichmentCount >= 2) &&
     retainedFindingCount >= 3;
   const hasHardCoverageLimit =

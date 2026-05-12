@@ -990,6 +990,46 @@ test("ExecutiveSummaryCard suppresses broad incomplete warning when partial cove
   assert.doesNotMatch(html, /This scan has incomplete coverage/);
 });
 
+test("ExecutiveSummaryCard suppresses broad incomplete warning from projected findings even when page-count props are incomplete", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 3,
+      coverageLevel: "limited_partial",
+      domainBenchmark: null,
+      finalHost: "kbdlab.io",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      posture: "Watch",
+      preConsentVendorNames: ["Google Analytics"],
+      requestedHost: "kbdlab.io",
+      resolvedVendorNames: ["Google Analytics", "Google Tag Manager"],
+      scanOutcome: "completed_partial",
+      score: 66,
+      sessionReplayVendorNames: [],
+      status: "completed",
+      thirdPartyRequestCount: 42,
+      thirdPartyDomains: ["google-analytics.com", "googletagmanager.com"],
+      topFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent"),
+        makeFinding("third_party_cookie_pre_consent", "Tracking cookies set before consent"),
+        makeFinding("session_recording_services_detected", "Session recording services detected")
+      ],
+      topObservedEntities: [],
+      trackerSummary: "2 vendors across 2 third-party domains",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { analytics: 2 }
+    })
+  );
+
+  assert.doesNotMatch(html, /This scan has incomplete coverage/);
+});
+
 test("ExecutiveSummaryCard treats interruption-only scans as coverage limited without inventing findings", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
