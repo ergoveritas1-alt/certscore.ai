@@ -370,6 +370,18 @@ function isProbablyPublicHttpUrl(value: string) {
   }
 }
 
+function getPriorScanHintUrlKey(value: string) {
+  try {
+    const parsed = new URL(value);
+    parsed.hash = "";
+    parsed.search = "";
+    const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${pathname.toLowerCase()}`;
+  } catch {
+    return value.trim().replace(/\/+$/, "").toLowerCase();
+  }
+}
+
 function classifyPriorScanHintType(documentType: string) {
   if (documentType === "privacy_policy") return "privacy_policy";
   if (documentType === "cookie_policy") return "cookie_policy";
@@ -628,12 +640,15 @@ export async function loadPriorScanAccelerationCandidate(input: {
   const documentSourceRows = await query<{
     canonical_url: string | null;
     document_type: string | null;
+    extraction_status: string | null;
+    extracted_fields_json: Record<string, unknown> | null;
+    metadata_json: Record<string, unknown> | null;
     scan_id: string;
     semantic_confidence: number | null;
     source_url: string | null;
   }>(
     `
-      select scan_id, canonical_url, source_url, document_type, semantic_confidence
+      select scan_id, canonical_url, source_url, document_type, extraction_status, extracted_fields_json, metadata_json, semantic_confidence
         from scan_document_sources
        where scan_id = any($1::uuid[])
          and source_status = 'ready'
@@ -702,6 +717,8 @@ export async function loadPriorScanAccelerationCandidate(input: {
         (sum, documentRow) =>
           sum +
           getPriorScanDocumentTypeScore(getString(documentRow.document_type)) +
+          (documentRow.extraction_status === "ready" ? 18 : 0) +
+          (getString(documentRow.metadata_json?.content_hash) || getString(documentRow.metadata_json?.document_content_hash) ? 10 : 0) +
           (typeof documentRow.semantic_confidence === "number" ? Math.round(documentRow.semantic_confidence * 10) : 0),
         0
       );
@@ -729,21 +746,42 @@ export async function loadPriorScanAccelerationCandidate(input: {
   const selectedHighYieldPages = [];
   const crawlSeedHints: SharedCrawlSeedHint[] = [];
   const seenUrls = new Set<string>();
+  const seenHintTypes = new Set<string>();
 
-  for (const row of selectedCandidate.documentRows) {
+  const sortedDocumentRows = [...selectedCandidate.documentRows].sort((left, right) => {
+    const leftScore =
+      getPriorScanDocumentTypeScore(getString(left.document_type)) +
+      (left.extraction_status === "ready" ? 18 : 0) +
+      (getString(left.metadata_json?.content_hash) || getString(left.metadata_json?.document_content_hash) ? 10 : 0) +
+      (typeof left.semantic_confidence === "number" ? Math.round(left.semantic_confidence * 10) : 0);
+    const rightScore =
+      getPriorScanDocumentTypeScore(getString(right.document_type)) +
+      (right.extraction_status === "ready" ? 18 : 0) +
+      (getString(right.metadata_json?.content_hash) || getString(right.metadata_json?.document_content_hash) ? 10 : 0) +
+      (typeof right.semantic_confidence === "number" ? Math.round(right.semantic_confidence * 10) : 0);
+    return rightScore - leftScore;
+  });
+
+  for (const row of sortedDocumentRows) {
     const canonicalUrl = getString(row.canonical_url);
     const documentType = getString(row.document_type);
+    const hintType = documentType ? classifyPriorScanHintType(documentType) : null;
+    const urlKey = canonicalUrl ? getPriorScanHintUrlKey(canonicalUrl) : null;
     if (
       crawlSeedHints.length >= PRIOR_SCAN_ACCELERATION_MAX_CRAWL_SEEDS ||
       !canonicalUrl ||
       !documentType ||
+      !hintType ||
+      !urlKey ||
       !isProbablyPublicHttpUrl(canonicalUrl) ||
-      seenUrls.has(canonicalUrl)
+      seenUrls.has(urlKey) ||
+      seenHintTypes.has(hintType)
     ) {
       continue;
     }
 
-    seenUrls.add(canonicalUrl);
+    seenUrls.add(urlKey);
+    seenHintTypes.add(hintType);
     selectedDocumentSources.push({
       canonicalUrl,
       confidence: typeof row.semantic_confidence === "number" ? row.semantic_confidence : null,
@@ -752,7 +790,7 @@ export async function loadPriorScanAccelerationCandidate(input: {
     });
     crawlSeedHints.push({
       confidence: typeof row.semantic_confidence === "number" ? row.semantic_confidence : null,
-      hintType: classifyPriorScanHintType(documentType),
+      hintType,
       source: "prior_scan_hint",
       sourceCompletedAt: selectedCandidate.row.completed_at,
       sourceScanId: selectedCandidate.row.id,
@@ -762,17 +800,19 @@ export async function loadPriorScanAccelerationCandidate(input: {
 
   for (const row of selectedCandidate.highYieldRows) {
     const pageUrl = getString(row.page_url);
+    const urlKey = pageUrl ? getPriorScanHintUrlKey(pageUrl) : null;
     if (
       crawlSeedHints.length >= PRIOR_SCAN_ACCELERATION_MAX_CRAWL_SEEDS ||
       !pageUrl ||
+      !urlKey ||
       !isProbablyPublicHttpUrl(pageUrl) ||
-      seenUrls.has(pageUrl)
+      seenUrls.has(urlKey)
     ) {
       continue;
     }
     const hintType = classifyPriorScanPageHintType(getString(row.page_type), pageUrl);
     const confidence = hintType === "high_yield_page" ? 0.55 : 0.7;
-    seenUrls.add(pageUrl);
+    seenUrls.add(urlKey);
     selectedHighYieldPages.push({
       confidence,
       hintType,

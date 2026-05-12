@@ -997,7 +997,11 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
         )
         select candidates.scan_id, candidates.requested_at, candidates.poll_count, candidates.recovered, candidates.recovery_mode
         from candidates
-        where (candidates.recheck_after_epoch_ms is null or candidates.recheck_after_epoch_ms <= extract(epoch from timezone('utc', now())) * 1000)
+        where (
+            candidates.terminal_priority = 1
+            or candidates.recheck_after_epoch_ms is null
+            or candidates.recheck_after_epoch_ms <= extract(epoch from timezone('utc', now())) * 1000
+          )
           and not exists (
             select 1
             from scan_events completed

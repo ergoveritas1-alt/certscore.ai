@@ -16,7 +16,7 @@ import {
   processValidationVerdictJob
 } from "./pipeline";
 
-const IDLE_POLL_MS = 3_000;
+const IDLE_POLL_MS = 1_000;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
