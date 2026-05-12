@@ -5123,7 +5123,7 @@ export function SharedScanDetailView({
             unresolvedVendorHosts={executiveUnresolvedVendorHosts}
             vendorCategoryCounts={executiveVendorCategoryCounts}
             legalCoverageScore={getFiniteNumber(scanRecord.snapshot?.legal_coverage_score)}
-            pagesScanned={getFiniteNumber(scanRecord.snapshot?.pages_scanned)}
+            pagesScanned={getFiniteNumber(scanRecord.snapshot?.pages_scanned) ?? scanRecord.scan.pagesScanned}
             policyEnrichmentCount={scanRecord.policyEnrichment.length}
             policySurfaces={executivePolicySurfaces}
             scanInterruptions={executiveScanInterruptions}
