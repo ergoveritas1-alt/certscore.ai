@@ -1017,7 +1017,14 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
               and completed.event_type in ($2, $3)
               and completed.created_at >= candidates.requested_at
           )
-        order by candidates.terminal_priority desc, candidates.requested_at desc
+        order by
+          candidates.terminal_priority desc,
+          candidates.has_policy_rows desc,
+          coalesce(
+            candidates.recheck_after_epoch_ms,
+            extract(epoch from timezone('utc', candidates.requested_at)) * 1000
+          ) asc,
+          candidates.requested_at asc
         limit $4
       `,
       [
