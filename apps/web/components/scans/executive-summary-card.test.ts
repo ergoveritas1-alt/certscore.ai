@@ -842,6 +842,9 @@ test("ExecutiveSummaryCard renders limited review for latimes-style interrupted 
       fingerprintNarrative: "No strong fingerprinting signal surfaced.",
       landedOnDifferentHost: false,
       lastScannedAt: "2026-05-10T12:00:00.000Z",
+      coverageLevel: "limited_partial",
+      pagesScanned: 3,
+      policyEnrichmentCount: 2,
       posture: "Clear",
       preConsentVendorNames: [],
       requestedHost: "latimes.com",
@@ -867,6 +870,7 @@ test("ExecutiveSummaryCard renders limited review for latimes-style interrupted 
       unifiedFindings: [],
       unresolvedVendorHosts: ["example-ad-host.test", "metrics.example.test"],
       vendorCategoryCounts: { advertising: 3, analytics: 2 },
+      verifiedPublicSurfacesCount: 2,
       policySurfaces: [
         {
           pageLabel: "Privacy Policy",

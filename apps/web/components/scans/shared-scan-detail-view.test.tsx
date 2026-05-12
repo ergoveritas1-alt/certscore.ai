@@ -1069,6 +1069,31 @@ test("hasIncompleteScanCoverage keeps warning for thin or hard-limited coverage"
   );
 });
 
+test("hasIncompleteScanCoverage keeps warning for partial scans with few retained findings", async () => {
+  const hasIncompleteScanCoverage = await loadHasIncompleteScanCoverage();
+
+  assert.equal(
+    hasIncompleteScanCoverage({
+      events: [],
+      scan: {
+        pagesRequested: 3,
+        pagesScanned: 3,
+        status: "completed"
+      },
+      snapshot: {
+        coverage_level: "limited_partial",
+        incomplete_pages: true,
+        pages_scanned: 3,
+        partial_scan: true,
+        report_finding_count: 0,
+        total_signals: 81,
+        verified_public_surfaces_count: 2
+      }
+    }),
+    true
+  );
+});
+
 test("selectExecutiveAccessLimitationNotice does not replace retained unified findings", async () => {
   const selectExecutiveAccessLimitationNotice = await loadSelectExecutiveAccessLimitationNotice();
   const notice = {

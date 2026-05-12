@@ -2597,7 +2597,7 @@ export function ExecutiveSummaryCard(input: {
   const hasMaterialRetainedCoverage =
     pagesScanned > 0 &&
     (input.thirdPartyRequestCount >= 20 || vendorEvidence.length >= 2 || policyEnrichmentCount >= 2) &&
-    (retainedFindingCount >= 3 || coveredPolicySurfaceUrlCount >= 2 || (input.verifiedPublicSurfacesCount ?? 0) >= 2);
+    retainedFindingCount >= 3;
   const hasHardCoverageLimit =
     hasMeaningfulInterruption ||
     input.coverageLevel === "limited_none" ||

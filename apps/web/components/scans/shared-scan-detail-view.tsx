@@ -333,7 +333,7 @@ export function hasIncompleteScanCoverage(scanRecord: Pick<ScanDetailResponse, "
     pagesScanned > 0 &&
     (typeof pagesRequested !== "number" || pagesScanned >= Math.min(pagesRequested, 3)) &&
     (totalSignals ?? 0) >= 20 &&
-    ((reportFindingCount ?? 0) >= 3 || (verifiedPublicSurfacesCount ?? 0) >= 2);
+    (reportFindingCount ?? 0) >= 3;
   const hasHardAccessLimitation =
     snapshot.blocked_flag === true ||
     snapshot.captcha_flag === true ||
