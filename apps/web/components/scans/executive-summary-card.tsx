@@ -2600,7 +2600,6 @@ export function ExecutiveSummaryCard(input: {
     (input.thirdPartyRequestCount >= 20 || vendorEvidence.length >= 2 || policyEnrichmentCount >= 2) &&
     retainedFindingCount >= 3;
   const hasHardCoverageLimit =
-    hasMeaningfulInterruption ||
     input.coverageLevel === "limited_none" ||
     Boolean(input.scanOutcome && /blocked|captcha|auth|challenge|forbidden|timeout|restricted|unknown_access/i.test(input.scanOutcome));
   const hasIncompleteCoverageNotice =
