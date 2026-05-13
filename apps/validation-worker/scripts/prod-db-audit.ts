@@ -486,6 +486,18 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
         homepageFetchStatus: getString(metadata.homepageFetchStatus ?? detail.homepageFetchStatus),
         homepageSetupSource: getString(metadata.homepageSetupSource ?? detail.homepageSetupSource),
         homepageSetupWaitMs: getNumber(metadata.homepageSetupWaitMs ?? detail.homepageSetupWaitMs),
+        preflightAttemptFetchTimings: asArray(metadata.preflightAttemptFetchTimings ?? detail.preflightAttemptFetchTimings)
+          .map((entry) => {
+            const record = getObject(entry);
+            return {
+              durationMs: getNumber(record.durationMs),
+              fetchStatus: getString(record.fetchStatus),
+              source: getString(record.source),
+              target: getString(record.target),
+              verified: typeof record.verified === "boolean" ? record.verified : null
+            };
+          })
+          .filter((entry) => entry.source && entry.target),
         preflightAttemptRunTimings: asArray(metadata.preflightAttemptRunTimings ?? detail.preflightAttemptRunTimings)
           .map((entry) => {
             const record = getObject(entry);
@@ -1639,7 +1651,7 @@ async function main() {
   const result =
     auditName === "rtb-cookie-sync"
       ? await runRtbCookieSyncAudit(input)
-      : auditName === "prior-scan-acceleration"
+      : auditName === "prior-scan-acceleration" || auditName === "scan-acceleration"
         ? await runPriorScanAccelerationAudit(input)
       : auditName === "prior-scan-candidates"
         ? await runPriorScanCandidatesAudit(input)
