@@ -117,8 +117,17 @@ async function requeueNanoSignalEnrichmentPoll(input: {
 async function deriveAndPersistUnifiedFindingsForScan(input: {
   recoveryMode?: "completed_scan_backfill" | "missing_unified_projection" | null;
   scanId: string;
+  suppressWorkflowEvents?: boolean;
   validationRunId?: string | null;
 }) {
+  if (input.suppressWorkflowEvents) {
+    const refreshedArtifacts = await loadCompletedScanArtifacts(input.scanId);
+    const findings = deriveValidationFindings(refreshedArtifacts);
+    const targetRun = input.validationRunId ? { id: input.validationRunId } : await ensureCompletedValidationRunForScan(input.scanId);
+    await replaceValidationRunFindings(targetRun.id, findings);
+    return findings;
+  }
+
   await appendScanWorkflowEvent({
     eventType: SCAN_EVENT_TYPES.signalMergeStarted,
     message: "Merged signal derivation started.",
@@ -6650,16 +6659,26 @@ export async function processValidationRankJob(validationRunId: string) {
       });
     }
     const scanId = run.scan_id;
-
-    await processNanoDocRetrievalJob({
-      pollCount: 0,
-      scanId
+    const initialDerivationState = await getValidationDerivationStateForScan(scanId).catch((error) => {
+      console.error("[validation-worker] failed to check validation derivation state for rank job", {
+        error: error instanceof Error ? error.message : String(error),
+        scanId
+      });
+      return { activeRunCount: 1, findingCount: 0, runCount: 0, unifiedDerivationCompletedCount: 0 };
     });
+    const scanProjectionAlreadyCompleted = initialDerivationState.unifiedDerivationCompletedCount > 0;
 
-    await processNanoSignalEnrichmentJob({
-      pollCount: 0,
-      scanId
-    });
+    if (!scanProjectionAlreadyCompleted) {
+      await processNanoDocRetrievalJob({
+        pollCount: 0,
+        scanId
+      });
+
+      await processNanoSignalEnrichmentJob({
+        pollCount: 0,
+        scanId
+      });
+    }
 
     await enrichUnknownScanVendors({
       hostname: run.hostname,
@@ -6689,6 +6708,7 @@ export async function processValidationRankJob(validationRunId: string) {
 
     const findings = await deriveAndPersistUnifiedFindingsForScan({
       scanId,
+      suppressWorkflowEvents: scanProjectionAlreadyCompleted,
       validationRunId
     });
 
