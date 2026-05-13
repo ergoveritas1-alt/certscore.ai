@@ -20,6 +20,27 @@ test("bounded key-page discovery unresolved is allowed through to the surfacing 
   );
 });
 
+test("bounded key-page discovery unresolved is blocked when stable expected legal coverage is already retained", () => {
+  assert.equal(
+    shouldSurfacePrimarySignalFinding({
+      fallbackEvidence: {
+        contactPagePresent: true,
+        keyPageAttemptCount: 4,
+        keyPageDiscoverySource: "footer_link",
+        privacyPolicyPresent: true,
+        signalKey: "disclosure.key_page_discovery_unresolved_after_bounded_search",
+        signalLabel: "Bounded key-page discovery unresolved",
+        signalValue: true,
+        termsOfServicePresent: true
+      },
+      key: "disclosure.key_page_discovery_unresolved_after_bounded_search",
+      linkedValidationEvidence: null,
+      signalSource: "snapshot_signal"
+    }),
+    false
+  );
+});
+
 test("policy-backed positive infrastructure findings can reach the surfacing engine even when upstream marked them audit-only", () => {
   assert.equal(
     shouldSurfacePrimarySignalFinding({
