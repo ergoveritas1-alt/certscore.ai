@@ -469,13 +469,13 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
         : Object.keys(failureMetadata).length > 0
           ? failureMetadata
           : metadata;
-      const durationMs =
-        getNumber(metadata.durationMs) ??
-        getNumber(detail.durationMs) ??
-        getNumber(metadata.preflightElapsedMs) ??
-        getNumber(detail.preflightElapsedMs) ??
-        getNumber(metadata.elapsedMs) ??
-        getNumber(detail.elapsedMs);
+      const status = getString(metadata.status ?? detail.status);
+      const durationMs = status === "start"
+        ? null
+        : getNumber(metadata.durationMs) ??
+          getNumber(detail.durationMs) ??
+          getNumber(metadata.preflightElapsedMs) ??
+          getNumber(detail.preflightElapsedMs);
       return {
         completedAt: getString(metadata.completedAt ?? detail.completedAt),
         durationMs,
@@ -500,7 +500,7 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
         preflightAttemptSourceCounts: getObject(metadata.preflightAttemptSourceCounts ?? detail.preflightAttemptSourceCounts),
         preflightAttemptedSourceCounts: getObject(metadata.preflightAttemptedSourceCounts ?? detail.preflightAttemptedSourceCounts),
         preflightVerifiedSourceCounts: getObject(metadata.preflightVerifiedSourceCounts ?? detail.preflightVerifiedSourceCounts),
-        status: getString(metadata.status ?? detail.status),
+        status,
         supplementalDiscoveryTimings: asArray(metadata.supplementalDiscoveryTimings ?? detail.supplementalDiscoveryTimings)
           .map((entry) => {
             const record = getObject(entry);
@@ -526,13 +526,14 @@ function getRuntimeBrowserPassDiagnostics(events: TimingEventRow[]) {
     .filter((event) => event.event_type === "runtime.browser_pass_diagnostic")
     .map((event) => {
       const metadata = getObject(event.metadata_json);
-      const durationMs = getNumber(metadata.durationMs) ?? getNumber(metadata.elapsedMs);
+      const status = getString(metadata.status);
+      const durationMs = status === "start" ? null : getNumber(metadata.durationMs);
       return {
         completedAt: getString(metadata.completedAt),
         durationMs,
         elapsedMs: getNumber(metadata.elapsedMs) ?? durationMs,
         stage: getString(metadata.stage ?? metadata.stepKey),
-        status: getString(metadata.status),
+        status,
         timeoutMs: getNumber(metadata.timeoutMs)
       };
     })
@@ -573,7 +574,7 @@ function summarizeScannerPhaseRows(rows: Array<{
 
     for (const diagnostic of row.runtimeBuildPhaseDiagnostics) {
       const key = diagnostic.phase;
-      if (!key) {
+      if (!key || diagnostic.durationMs === null) {
         continue;
       }
       const existing = diagnosticPhaseDurations.get(key) ?? [];
@@ -583,7 +584,7 @@ function summarizeScannerPhaseRows(rows: Array<{
 
     for (const diagnostic of row.runtimeBrowserPassDiagnostics) {
       const key = diagnostic.stage;
-      if (!key) {
+      if (!key || diagnostic.durationMs === null) {
         continue;
       }
       const existing = browserPassDurations.get(key) ?? [];
