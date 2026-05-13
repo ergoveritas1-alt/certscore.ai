@@ -49,6 +49,7 @@
     "ops:prod-db:audit": "pnpm exec tsx ./scripts/run-prod-db-audit-ecs.ts",
     "ops:scan-acceleration:audit": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/audit-prior-scan-acceleration.ts",
     "ops:scan-acceleration:benchmark": "pnpm exec tsx ./scripts/run-prior-scan-benchmark.ts",
+    "ops:scan-timing:sample": "pnpm exec tsx ./scripts/run-scan-timing-sample.ts",
     "ops:prod-db:nano-backfill": "pnpm exec tsx ./scripts/run-prod-nano-signal-backfill-ecs.ts",
     "smoke:validation:financial": "pnpm --filter @website-signal-risk-scanner/validation-worker smoke:validation:financial",
     "test:web-bot-auth": "pnpm --filter @website-signal-risk-scanner/web-bot-auth build && npx -y node@22 --import tsx --test packages/web-bot-auth/src/index.test.ts",
