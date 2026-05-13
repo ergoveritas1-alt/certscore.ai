@@ -162,3 +162,70 @@ Test both pause paths:
   - confirm scheduler does not claim new targets
 
 Check `validation_audit_events` after each change.
+
+## 9. Scan Timing Sample Gate
+
+Use this gate before starting another scanner-runtime speed pass. It is an
+operator measurement step only; it must not change scan-to-report semantics.
+
+The canonical path remains:
+
+```text
+WS01 observed evidence -> WC01 normalized concern -> concern policy -> unified finding -> executive/regulatory projection
+```
+
+Do not use timing data, prior-scan metadata, display context, or raw scanner
+signals to create, upgrade, or infer report findings. If a valid signal is
+missing, fix the upstream `WS01` observed signal and the `WC01` concern/policy
+mapping instead.
+
+Run a bounded timing sample through the production ECS DB audit runner:
+
+```bash
+AWS_REGION=us-west-1 \
+OPS_PROD_DB_AUDIT_ECS_CLUSTER=certscore-validation-cluster \
+OPS_PROD_DB_AUDIT_ECS_SERVICE=certscore-validation-worker \
+pnpm ops:scan-timing:sample \
+  --domains=kbdlab.io,latimes.com \
+  --repeat=3 \
+  --source=ops-scan-timing-sample \
+  --poll-ms=5000 \
+  --timeout-ms=900000 \
+  --final-readiness-wait-ms=15000
+```
+
+The command queues live scans, waits for completion, then runs read-only,
+scoped production DB audits for:
+
+- scanner phase timing
+- signal/finding continuity
+
+The output is sanitized aggregate JSON. Do not print database URLs, credentials,
+cookies, raw HTML, streamed RSC, or full response bodies.
+
+Use the sample as the go/no-go signal:
+
+- `worth_focused_scanner_optimization`: proceed with a narrow `WS01` scanner
+  pass only if continuity counts are stable.
+- `consider_only_if_scan_latency_is_top_priority`: defer unless scan latency is
+  the current product priority.
+- `likely_diminishing_returns`: move on to product work.
+- `sample_too_small`: collect more scans before deciding.
+
+Before accepting any speed change, compare before/after samples and confirm:
+
+- report finding counts are stable for the same fixed target class
+- persisted signal counts do not drop unexpectedly
+- scanner and nano signals still flow through the canonical concern pipeline
+- no raw-signal, display-layer, repair-based, or synthetic-evidence path was
+  added
+
+Current calibration notes:
+
+- repeated `kbdlab.io` scans are generally in the high-teens to low-20s seconds
+  queue-to-complete range with stable report findings.
+- broader samples including `latimes.com` show domain-specific runtime and
+  legal-preflight cost; robots wait is no longer the main broad blocker.
+- expected safe savings from further current-live scanner runtime tuning is
+  usually in the low single-digit seconds unless the sample reports
+  `worth_focused_scanner_optimization`.
