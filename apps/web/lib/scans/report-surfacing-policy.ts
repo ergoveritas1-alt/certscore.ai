@@ -72,6 +72,7 @@ export type SurfacingPolicyRuleId =
   | "evidence.normalized_concern.audit_only"
   | "evidence.accessibility.summary_review"
   | "evidence.accessibility.task_blocking_review"
+  | "evidence.accessibility.suppress_score_only_context"
   | "evidence.financial.support_only_positive_context"
   | "evidence.financial.confirmed_negative_risk_with_backing"
   | "evidence.financial.review_claim_context"
@@ -89,6 +90,7 @@ export type SurfacingPolicyRuleId =
   | "precedence.blocking_overlay_supports_consent_risk"
   | "precedence.sensitive_tracking_combo_beats_generic_sensitivity"
   | "precedence.weak_cookie_attributes_supports_runtime_finding"
+  | "precedence.regulator_mock_context_suppresses_generic_coverage"
   | "support.orphan_positive_surface_retained"
   | "support.orphan_support_promoted_to_review"
   | "support.orphan_support_suppressed"
@@ -1755,6 +1757,21 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     return;
   }
 
+  if (
+    packet.unifiedFindingId === "accessibility_risk_score" &&
+    negativeFlags.has("missing_representative_accessibility_examples")
+  ) {
+    overrideDecision(decision, {
+      state: "suppressed",
+      lane: "suppressed",
+      tier: "support",
+      reason:
+        "The accessibility risk score was suppressed because no representative axe examples were retained to support reviewer-facing surfacing.",
+      ruleId: "evidence.accessibility.suppress_score_only_context"
+    });
+    return;
+  }
+
   if (packet.unifiedFindingId === "reject_did_not_reduce_tracking" || packet.unifiedFindingId === "reject_did_not_reduce_third_party_cookies") {
     if (
       evidenceFlags.has("reject_evidence_review") ||
@@ -2610,6 +2627,25 @@ function applyCrossFindingRules(decisionsById: Map<string, MutableDecision>, pac
           "A bounded-discovery unresolved sibling means this absence finding should stay review-level rather than confirmed."
         );
       }
+    }
+  }
+
+  const regulatorMockDecision = decisionsById.get("regulator_operated_mock_investment_example");
+  if (regulatorMockDecision && regulatorMockDecision.decisionState !== "suppressed") {
+    for (const findingId of ["accessibility_risk_score"] as const) {
+      const decision = decisionsById.get(findingId);
+      if (!decision || decision.decisionState === "suppressed") {
+        continue;
+      }
+
+      decision.decisionState = "suppressed";
+      decision.reportLane = "suppressed";
+      decision.surfaceTier = "support";
+      decision.suppressedBy = "regulator_operated_mock_investment_example";
+      decision.appliedRules.push("precedence.regulator_mock_context_suppresses_generic_coverage");
+      decision.decisionReasons.push(
+        "Regulator-operated mock context already frames the scan, so generic coverage/risk-score context was suppressed rather than surfaced separately."
+      );
     }
   }
 
