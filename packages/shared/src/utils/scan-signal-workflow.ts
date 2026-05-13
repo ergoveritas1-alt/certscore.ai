@@ -199,6 +199,9 @@ export function deriveSignalEnrichmentWorkflowState(input: {
     failedEventTypes: [SCAN_EVENT_TYPES.unifiedFindingsDerivedFailed],
     startedEventTypes: [SCAN_EVENT_TYPES.unifiedFindingsDerivedStarted]
   });
+  const firstFindingsCompletedAt = getEarliestEventTimestamp(input.events, [
+    SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted
+  ]);
 
   const actualMode =
     (docRetrievalTimestamps.startedAt && scannerCompletedAt && docRetrievalTimestamps.startedAt < scannerCompletedAt) ||
@@ -280,7 +283,7 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       getLatestEventTimestamp(input.events, [SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued]) ?? docRetrievalCompletedAt,
       nanoTimestamps.startedAt
     );
-  const timeToFirstUsefulReportMs = diffMs(reportTimingStartAt, findingsTimestamps.completedAt);
+  const timeToFirstUsefulReportMs = diffMs(reportTimingStartAt, firstFindingsCompletedAt);
   const timeToFinalReportMs = diffMs(reportTimingStartAt, finalReportCompletedAt);
   const projectionRecoveryEvent = getLatestProjectionRecoveryEvent(input.events);
   const projectionRecoveryMode = projectionRecoveryEvent
@@ -383,7 +386,7 @@ export function deriveSignalEnrichmentWorkflowState(input: {
       timeToFirstUsefulReportMs,
       unifiedFindingsDurationMs: diffMs(findingsTimestamps.startedAt, findingsTimestamps.completedAt),
       timeToMergedSignalsMs: diffMs(scannerStartedAt, mergeTimestamps.completedAt),
-      timeToFindingsMs: diffMs(scannerStartedAt, findingsTimestamps.completedAt)
+      timeToFindingsMs: diffMs(scannerStartedAt, firstFindingsCompletedAt)
     },
     preferredMode: "parallel_evidence_collection",
     stages

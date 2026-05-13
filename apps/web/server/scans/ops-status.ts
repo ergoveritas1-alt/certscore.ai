@@ -1,4 +1,5 @@
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { buildScanReportUnifiedFindings } from "../../components/scans/shared-scan-detail-view";
 import { getAnonymousScanById } from "./get-scan-by-id";
@@ -145,7 +146,14 @@ async function loadOpsScanStatusCore(scanId: string) {
     return null;
   }
 
-  const newestUnifiedEvent = events.find((event) => event.event_type === "signal_enrichment.stage_completed" && getMetadataNumber(event.metadata_json, "findingCount") !== null);
+  const newestUnifiedEvent = events.find(
+    (event) =>
+      (
+        event.event_type === SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted ||
+        event.event_type === "signal_enrichment.stage_completed"
+      ) &&
+      getMetadataNumber(event.metadata_json, "findingCount") !== null
+  );
 
   return {
     accessPosture: {

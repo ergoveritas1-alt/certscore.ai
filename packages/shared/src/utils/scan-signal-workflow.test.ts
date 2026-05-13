@@ -246,7 +246,9 @@ test("deriveSignalEnrichmentWorkflowState measures the latest retry attempt for 
 
   assert.equal(workflow.timings.signalMergeDurationMs, 1_000);
   assert.equal(workflow.timings.unifiedFindingsDurationMs, 1_000);
-  assert.equal(workflow.timings.timeToFirstUsefulReportMs, 241_000);
+  assert.equal(workflow.timings.timeToFirstUsefulReportMs, 183_000);
+  assert.equal(workflow.timings.timeToFinalReportMs, 241_000);
+  assert.equal(workflow.timings.timeToFindingsMs, 182_000);
   assert.equal(workflow.timings.projectionRecoveryLatencyMs, null);
   assert.equal(workflow.stages.find((stage) => stage.id === "signal_merge")?.startedAt, "2026-04-02T10:03:00.000Z");
   assert.equal(workflow.stages.find((stage) => stage.id === "unified_findings")?.startedAt, "2026-04-02T10:04:00.000Z");
