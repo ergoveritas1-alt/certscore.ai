@@ -69,6 +69,8 @@ type TimingScanRow = {
   completed_at: string | null;
   created_at: string;
   id: string;
+  scan_config_json?: unknown;
+  started_at?: string | null;
   status: string;
 };
 
@@ -420,6 +422,74 @@ function summarizeNanoRecheckRows(rows: Array<{ nanoRechecks: ReturnType<typeof 
     ),
     sampledRecheckDelay: summarizeTiming(delayValues),
     reasons: Object.fromEntries([...reasonCounts.entries()].sort(([left], [right]) => left.localeCompare(right)))
+  };
+}
+
+function getScannerExecutionSummary(scanConfig: unknown) {
+  const config = getObject(scanConfig);
+  const execution = getObject(config.execution);
+  return getObject(execution.summary);
+}
+
+function getScannerExecutionStages(scanConfig: unknown) {
+  const summary = getScannerExecutionSummary(scanConfig);
+  return asArray(summary.stages)
+    .map((stage) => getObject(stage))
+    .map((stage) => ({
+      attempts: getNumber(stage.attempts),
+      durationMs: getNumber(stage.durationMs),
+      errorCategory: getString(stage.errorCategory),
+      outcome: getString(stage.outcome),
+      recoverable: typeof stage.recoverable === "boolean" ? stage.recoverable : null,
+      stage: getString(stage.stage)
+    }))
+    .filter((stage) => stage.stage);
+}
+
+function getBuildPhaseTimingSummary(events: TimingEventRow[]) {
+  return getRuntimeBuildPhaseMetadata(events, "build_phase_timing_summary");
+}
+
+function summarizeScannerPhaseRows(rows: Array<{
+  buildPhaseTimingSummary: Record<string, unknown>;
+  scannerStages: ReturnType<typeof getScannerExecutionStages>;
+}>) {
+  const scannerStageDurations = new Map<string, Array<number | null>>();
+  const buildPhaseDurations = new Map<string, Array<number | null>>();
+
+  for (const row of rows) {
+    for (const stage of row.scannerStages) {
+      const key = stage.stage;
+      if (!key) {
+        continue;
+      }
+      const existing = scannerStageDurations.get(key) ?? [];
+      existing.push(stage.durationMs);
+      scannerStageDurations.set(key, existing);
+    }
+
+    for (const [key, value] of Object.entries(row.buildPhaseTimingSummary)) {
+      const duration = getNumber(value);
+      if (duration === null) {
+        continue;
+      }
+      const existing = buildPhaseDurations.get(key) ?? [];
+      existing.push(duration);
+      buildPhaseDurations.set(key, existing);
+    }
+  }
+
+  return {
+    buildPhases: Object.fromEntries(
+      [...buildPhaseDurations.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([phase, values]) => [phase, summarizeTiming(values)])
+    ),
+    scannerStages: Object.fromEntries(
+      [...scannerStageDurations.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([stage, values]) => [stage, summarizeTiming(values)])
+    )
   };
 }
 
@@ -990,6 +1060,84 @@ async function runScanTimingAudit(input: AuditInput) {
   };
 }
 
+async function runScannerPhaseTimingAudit(input: AuditInput) {
+  const scans = requireAuditScans(input);
+  const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
+  const [scanResult, eventResult] = await Promise.all([
+    query<TimingScanRow>(
+      `select id::text as id,
+              status,
+              created_at::text as created_at,
+              started_at::text as started_at,
+              completed_at::text as completed_at,
+              scan_config_json
+         from scans
+        where id = any($1::uuid[])`,
+      [scanIds],
+      { readOnly: true }
+    ),
+    query<TimingEventRow>(
+      `select scan_id::text as scan_id,
+              event_type,
+              created_at::text as created_at,
+              metadata_json
+         from scan_events
+        where scan_id = any($1::uuid[])
+          and (
+            event_type in ('full_scan.started', 'full_scan.completed', 'runtime.build_phase_diagnostic')
+            or metadata_json ? 'scannerExecution'
+          )
+        order by scan_id, created_at asc`,
+      [scanIds],
+      { readOnly: true }
+    )
+  ]);
+  await queryOne<{ ok: number }>("select 1 as ok", [], { readOnly: true });
+
+  const scansById = new Map(scanResult.rows.map((row) => [row.id, row]));
+  const eventsByScan = new Map<string, TimingEventRow[]>();
+  for (const event of eventResult.rows) {
+    const existing = eventsByScan.get(event.scan_id) ?? [];
+    existing.push(event);
+    eventsByScan.set(event.scan_id, existing);
+  }
+
+  const rows = scans.map((inputScan) => {
+    const scan = scansById.get(inputScan.scanId);
+    const events = eventsByScan.get(inputScan.scanId) ?? [];
+    const scannerStages = getScannerExecutionStages(scan?.scan_config_json);
+    const buildPhaseTimingSummary = getBuildPhaseTimingSummary(events);
+
+    return {
+      batch: inputScan.batch ?? null,
+      buildPhaseTimingSummary,
+      completedAt: scan?.completed_at ?? null,
+      createdAt: scan?.created_at ?? null,
+      manifestRow: inputScan.manifestRow ?? null,
+      scanId: inputScan.scanId,
+      scannerStages,
+      scannerWallMs: millisecondsBetweenIso(scan?.started_at, scan?.completed_at),
+      startedAt: scan?.started_at ?? null,
+      status: scan?.status ?? "missing"
+    };
+  });
+
+  return {
+    audit: "scanner-phase-timing",
+    generatedAt: new Date().toISOString(),
+    notes: input.notes ?? null,
+    readScope: {
+      scanCount: scanIds.length,
+      tables: ["scans", "scan_events"]
+    },
+    summary: {
+      scannerWall: summarizeTiming(rows.map((row) => row.scannerWallMs)),
+      ...summarizeScannerPhaseRows(rows)
+    },
+    rows
+  };
+}
+
 async function runPriorScanAccelerationAudit(input: AuditInput) {
   const scans = requireAuditScans(input);
   const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
@@ -1330,6 +1478,8 @@ async function main() {
         ? await runUnifiedProjectionContinuityAudit(input)
       : auditName === "scan-timing"
         ? await runScanTimingAudit(input)
+      : auditName === "scanner-phase-timing"
+        ? await runScannerPhaseTimingAudit(input)
         : null;
   if (!result) {
     throw new Error(`Unsupported prod DB audit: ${auditName}`);
