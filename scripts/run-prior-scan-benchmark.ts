@@ -1,5 +1,6 @@
 type QueuedScan = {
   domain: string;
+  iteration: number;
   scanId: string;
   scanUrl: string | null;
 };
@@ -37,6 +38,7 @@ type BenchmarkRow = {
   domain: string;
   errorMessage: string | null;
   findingsReady: boolean | null;
+  iteration: number;
   latestFindingCount: number | null;
   latestFindingStageAt: string | null;
   pagesRequested: number | null;
@@ -54,6 +56,7 @@ const DEFAULT_BASE_URL = "https://certscore.ai";
 const DEFAULT_DOMAINS = ["kbdlab.io"];
 const DEFAULT_POLL_MS = 10_000;
 const DEFAULT_TIMEOUT_MS = 20 * 60_000;
+const DEFAULT_FINAL_READINESS_WAIT_MS = 30_000;
 
 function getArgValue(flag: string) {
   const inline = process.argv.find((arg) => arg.startsWith(`${flag}=`));
@@ -119,6 +122,7 @@ async function queueScan(input: { baseUrl: string; domain: string; dryRun: boole
   if (input.dryRun) {
     return {
       domain: input.domain,
+      iteration: 1,
       scanId: "dry-run",
       scanUrl: null
     } satisfies QueuedScan;
@@ -139,6 +143,7 @@ async function queueScan(input: { baseUrl: string; domain: string; dryRun: boole
 
   return {
     domain: input.domain,
+    iteration: 1,
     scanId,
     scanUrl: typeof body.scanUrl === "string" ? body.scanUrl : null
   } satisfies QueuedScan;
@@ -155,6 +160,7 @@ async function loadScanStatus(input: { baseUrl: string; includeFindings: boolean
 async function waitForScan(input: {
   baseUrl: string;
   domain: string;
+  finalReadinessWaitMs: number;
   pollMs: number;
   scanId: string;
   timeoutMs: number;
@@ -170,6 +176,30 @@ async function waitForScan(input: {
     });
     const status = latest.scan?.status ?? null;
     if (status === "completed" || status === "failed") {
+      if (
+        status === "completed" &&
+        latest.reportReadiness?.findingsReady === true &&
+        latest.workflow?.latestFindingStageAt == null &&
+        input.finalReadinessWaitMs > 0
+      ) {
+        const readinessDeadline = Date.now() + input.finalReadinessWaitMs;
+        while (Date.now() <= readinessDeadline) {
+          const refreshed = await loadScanStatus({
+            baseUrl: input.baseUrl,
+            includeFindings: true,
+            scanId: input.scanId
+          });
+          latest = refreshed;
+          if (
+            refreshed.workflow?.latestFindingStageAt ||
+            refreshed.workflow?.latestFindingCount != null ||
+            refreshed.snapshot?.reportFindingCount != null
+          ) {
+            break;
+          }
+          await sleep(Math.min(input.pollMs, 1_000));
+        }
+      }
       return latest;
     }
     await sleep(input.pollMs);
@@ -178,7 +208,7 @@ async function waitForScan(input: {
   throw new Error(`Timed out waiting for ${input.domain} scan ${input.scanId}. Latest status: ${latest?.scan?.status ?? "unknown"}.`);
 }
 
-function summarizeRow(input: { domain: string; scanId: string; status: ScanStatusPayload }): BenchmarkRow {
+function summarizeRow(input: { domain: string; iteration: number; scanId: string; status: ScanStatusPayload }): BenchmarkRow {
   const scan = input.status.scan ?? {};
   const createdAt = scan.createdAt ?? null;
   const startedAt = scan.startedAt ?? null;
@@ -191,6 +221,7 @@ function summarizeRow(input: { domain: string; scanId: string; status: ScanStatu
     domain: input.domain,
     errorMessage: scan.errorMessage ?? null,
     findingsReady: input.status.reportReadiness?.findingsReady ?? null,
+    iteration: input.iteration,
     latestFindingCount: input.status.workflow?.latestFindingCount ?? null,
     latestFindingStageAt,
     pagesRequested: scan.pagesRequested ?? null,
@@ -209,17 +240,22 @@ async function main() {
   const baseUrl = (getArgValue("--base-url") ?? process.env.LIVE_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
   const domains = parseDomains();
   const dryRun = hasFlag("--dry-run");
+  const finalReadinessWaitMs = parsePositiveInt(getArgValue("--final-readiness-wait-ms"), DEFAULT_FINAL_READINESS_WAIT_MS);
   const pollMs = parsePositiveInt(getArgValue("--poll-ms"), DEFAULT_POLL_MS);
+  const repeat = parsePositiveInt(getArgValue("--repeat"), 1);
   const timeoutMs = parsePositiveInt(getArgValue("--timeout-ms"), DEFAULT_TIMEOUT_MS);
   const source = getArgValue("--source") ?? "ops-prior-scan-benchmark";
 
   const queued: QueuedScan[] = [];
-  for (const domain of domains) {
-    queued.push(await queueScan({ baseUrl, domain, dryRun, source }));
+  for (let iteration = 1; iteration <= repeat; iteration += 1) {
+    for (const domain of domains) {
+      const scan = await queueScan({ baseUrl, domain, dryRun, source });
+      queued.push({ ...scan, iteration });
+    }
   }
 
   if (dryRun) {
-    console.log(JSON.stringify({ baseUrl, domains, dryRun, queued, status: "dry_run" }, null, 2));
+    console.log(JSON.stringify({ baseUrl, domains, dryRun, queued, repeat, status: "dry_run" }, null, 2));
     return;
   }
 
@@ -228,11 +264,12 @@ async function main() {
     const status = await waitForScan({
       baseUrl,
       domain: scan.domain,
+      finalReadinessWaitMs,
       pollMs,
       scanId: scan.scanId,
       timeoutMs
     });
-    rows.push(summarizeRow({ domain: scan.domain, scanId: scan.scanId, status }));
+    rows.push(summarizeRow({ domain: scan.domain, iteration: scan.iteration, scanId: scan.scanId, status }));
   }
 
   console.log(JSON.stringify({
@@ -241,12 +278,14 @@ async function main() {
       scans: rows.map((row) => ({
         batch: source,
         domain: row.domain,
+        iteration: row.iteration,
         scanId: row.scanId
       }))
     },
     baseUrl,
     generatedAt: new Date().toISOString(),
     queued,
+    repeat,
     rows,
     status: rows.every((row) => row.status === "completed") ? "completed" : "incomplete"
   }, null, 2));
