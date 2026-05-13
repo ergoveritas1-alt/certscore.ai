@@ -472,6 +472,8 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
       const durationMs =
         getNumber(metadata.durationMs) ??
         getNumber(detail.durationMs) ??
+        getNumber(metadata.preflightElapsedMs) ??
+        getNumber(detail.preflightElapsedMs) ??
         getNumber(metadata.elapsedMs) ??
         getNumber(detail.elapsedMs);
       return {
@@ -488,13 +490,33 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
     .filter((phase) => phase.phase);
 }
 
+function getRuntimeBrowserPassDiagnostics(events: TimingEventRow[]) {
+  return events
+    .filter((event) => event.event_type === "runtime.browser_pass_diagnostic")
+    .map((event) => {
+      const metadata = getObject(event.metadata_json);
+      const durationMs = getNumber(metadata.durationMs) ?? getNumber(metadata.elapsedMs);
+      return {
+        completedAt: getString(metadata.completedAt),
+        durationMs,
+        elapsedMs: getNumber(metadata.elapsedMs) ?? durationMs,
+        stage: getString(metadata.stage ?? metadata.stepKey),
+        status: getString(metadata.status),
+        timeoutMs: getNumber(metadata.timeoutMs)
+      };
+    })
+    .filter((stage) => stage.stage);
+}
+
 function summarizeScannerPhaseRows(rows: Array<{
   buildPhaseTimingSummary: Record<string, unknown>;
+  runtimeBrowserPassDiagnostics: ReturnType<typeof getRuntimeBrowserPassDiagnostics>;
   runtimeBuildPhaseDiagnostics: ReturnType<typeof getRuntimeBuildPhaseDiagnostics>;
   scannerStages: ReturnType<typeof getScannerExecutionStages>;
 }>) {
   const scannerStageDurations = new Map<string, Array<number | null>>();
   const buildPhaseDurations = new Map<string, Array<number | null>>();
+  const browserPassDurations = new Map<string, Array<number | null>>();
   const diagnosticPhaseDurations = new Map<string, Array<number | null>>();
 
   for (const row of rows) {
@@ -527,6 +549,16 @@ function summarizeScannerPhaseRows(rows: Array<{
       existing.push(diagnostic.durationMs);
       diagnosticPhaseDurations.set(key, existing);
     }
+
+    for (const diagnostic of row.runtimeBrowserPassDiagnostics) {
+      const key = diagnostic.stage;
+      if (!key) {
+        continue;
+      }
+      const existing = browserPassDurations.get(key) ?? [];
+      existing.push(diagnostic.durationMs);
+      browserPassDurations.set(key, existing);
+    }
   }
 
   return {
@@ -539,6 +571,11 @@ function summarizeScannerPhaseRows(rows: Array<{
       [...diagnosticPhaseDurations.entries()]
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([phase, values]) => [phase, summarizeTiming(values)])
+    ),
+    runtimeBrowserPassDiagnostics: Object.fromEntries(
+      [...browserPassDurations.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([stage, values]) => [stage, summarizeTiming(values)])
     ),
     scannerStages: Object.fromEntries(
       [...scannerStageDurations.entries()]
@@ -1139,7 +1176,7 @@ async function runScannerPhaseTimingAudit(input: AuditInput) {
          from scan_events
         where scan_id = any($1::uuid[])
           and (
-            event_type in ('full_scan.started', 'full_scan.completed', 'runtime.build_phase_diagnostic')
+            event_type in ('full_scan.started', 'full_scan.completed', 'runtime.build_phase_diagnostic', 'runtime.browser_pass_diagnostic')
             or metadata_json ? 'scannerExecution'
           )
         order by scan_id, created_at asc`,
@@ -1163,6 +1200,7 @@ async function runScannerPhaseTimingAudit(input: AuditInput) {
     const scannerStages = getScannerExecutionStages(scan?.scan_config_json);
     const buildPhaseTimingSummary = getBuildPhaseTimingSummary(events);
     const runtimeBuildPhaseDiagnostics = getRuntimeBuildPhaseDiagnostics(events);
+    const runtimeBrowserPassDiagnostics = getRuntimeBrowserPassDiagnostics(events);
 
     return {
       batch: inputScan.batch ?? null,
@@ -1171,6 +1209,8 @@ async function runScannerPhaseTimingAudit(input: AuditInput) {
       createdAt: scan?.created_at ?? null,
       manifestRow: inputScan.manifestRow ?? null,
       priorScanAccelerationProfile: getPriorScanAccelerationProfile(scan?.scan_config_json),
+      runtimeBrowserPassDiagnostics,
+      runtimeBrowserPassDiagnosticCount: runtimeBrowserPassDiagnostics.length,
       runtimeBuildPhaseDiagnostics,
       runtimeBuildPhaseDiagnosticCount: runtimeBuildPhaseDiagnostics.length,
       scanId: inputScan.scanId,
