@@ -483,6 +483,7 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
         errorCategory: getString(metadata.errorCategory ?? detail.errorCategory),
         historicalHintResolutionDurationMs: getNumber(metadata.historicalHintResolutionDurationMs ?? detail.historicalHintResolutionDurationMs),
         phase: getString(metadata.phase ?? metadata.stepKey ?? detail.phase ?? detail.stepKey),
+        homepageFetchStatus: getString(metadata.homepageFetchStatus ?? detail.homepageFetchStatus),
         preflightAttemptRunTimings: asArray(metadata.preflightAttemptRunTimings ?? detail.preflightAttemptRunTimings)
           .map((entry) => {
             const record = getObject(entry);
@@ -499,7 +500,26 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
           .filter((entry) => entry.label),
         preflightAttemptSourceCounts: getObject(metadata.preflightAttemptSourceCounts ?? detail.preflightAttemptSourceCounts),
         preflightAttemptedSourceCounts: getObject(metadata.preflightAttemptedSourceCounts ?? detail.preflightAttemptedSourceCounts),
+        preflightHomepageCandidateFetchStatus: getString(
+          metadata.preflightHomepageCandidateFetchStatus ?? detail.preflightHomepageCandidateFetchStatus
+        ),
+        preflightHomepageCandidateFinalUrl: getString(
+          metadata.preflightHomepageCandidateFinalUrl ?? detail.preflightHomepageCandidateFinalUrl
+        ),
+        preflightHomepageCandidatePageUrl: getString(
+          metadata.preflightHomepageCandidatePageUrl ?? detail.preflightHomepageCandidatePageUrl
+        ),
+        preflightHomepageReuseAccepted:
+          typeof (metadata.preflightHomepageReuseAccepted ?? detail.preflightHomepageReuseAccepted) === "boolean"
+            ? (metadata.preflightHomepageReuseAccepted ?? detail.preflightHomepageReuseAccepted) as boolean
+            : null,
+        preflightHomepageReuseReason: getString(metadata.preflightHomepageReuseReason ?? detail.preflightHomepageReuseReason),
         preflightVerifiedSourceCounts: getObject(metadata.preflightVerifiedSourceCounts ?? detail.preflightVerifiedSourceCounts),
+        robotsFetchStatus: getString(metadata.robotsFetchStatus ?? detail.robotsFetchStatus),
+        robotsRulesLoaded:
+          typeof (metadata.robotsRulesLoaded ?? detail.robotsRulesLoaded) === "boolean"
+            ? (metadata.robotsRulesLoaded ?? detail.robotsRulesLoaded) as boolean
+            : null,
         status,
         supplementalDiscoveryTimings: asArray(metadata.supplementalDiscoveryTimings ?? detail.supplementalDiscoveryTimings)
           .map((entry) => {
