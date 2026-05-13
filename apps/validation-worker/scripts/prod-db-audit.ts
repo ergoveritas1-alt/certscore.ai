@@ -481,8 +481,39 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
         durationMs,
         elapsedMs: getNumber(metadata.elapsedMs) ?? getNumber(detail.elapsedMs) ?? durationMs,
         errorCategory: getString(metadata.errorCategory ?? detail.errorCategory),
+        historicalHintResolutionDurationMs: getNumber(metadata.historicalHintResolutionDurationMs ?? detail.historicalHintResolutionDurationMs),
         phase: getString(metadata.phase ?? metadata.stepKey ?? detail.phase ?? detail.stepKey),
+        preflightAttemptRunTimings: asArray(metadata.preflightAttemptRunTimings ?? detail.preflightAttemptRunTimings)
+          .map((entry) => {
+            const record = getObject(entry);
+            return {
+              attemptedCount: getNumber(record.attemptedCount),
+              blockedCount: getNumber(record.blockedCount),
+              concurrent: typeof record.concurrent === "boolean" ? record.concurrent : null,
+              durationMs: getNumber(record.durationMs),
+              failedCount: getNumber(record.failedCount),
+              label: getString(record.label),
+              verifiedCount: getNumber(record.verifiedCount)
+            };
+          })
+          .filter((entry) => entry.label),
+        preflightAttemptSourceCounts: getObject(metadata.preflightAttemptSourceCounts ?? detail.preflightAttemptSourceCounts),
+        preflightAttemptedSourceCounts: getObject(metadata.preflightAttemptedSourceCounts ?? detail.preflightAttemptedSourceCounts),
+        preflightVerifiedSourceCounts: getObject(metadata.preflightVerifiedSourceCounts ?? detail.preflightVerifiedSourceCounts),
         status: getString(metadata.status ?? detail.status),
+        supplementalDiscoveryTimings: asArray(metadata.supplementalDiscoveryTimings ?? detail.supplementalDiscoveryTimings)
+          .map((entry) => {
+            const record = getObject(entry);
+            return {
+              attemptCount: getNumber(record.attemptCount),
+              durationMs: getNumber(record.durationMs),
+              homepageFetchStatus: getString(record.homepageFetchStatus),
+              label: getString(record.label),
+              legalHubFetchStatus: getString(record.legalHubFetchStatus),
+              legalHubTargetCount: getNumber(record.legalHubTargetCount)
+            };
+          })
+          .filter((entry) => entry.label),
         targetCount: getNumber(metadata.targetCount ?? detail.targetCount),
         verifiedCount: getNumber(metadata.verifiedCount ?? detail.verifiedCount)
       };
