@@ -503,8 +503,14 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
         preflightHomepageCandidateFetchStatus: getString(
           metadata.preflightHomepageCandidateFetchStatus ?? detail.preflightHomepageCandidateFetchStatus
         ),
+        preflightHomepageCandidateDurationMs: getNumber(
+          metadata.preflightHomepageCandidateDurationMs ?? detail.preflightHomepageCandidateDurationMs
+        ),
         preflightHomepageCandidateFinalUrl: getString(
           metadata.preflightHomepageCandidateFinalUrl ?? detail.preflightHomepageCandidateFinalUrl
+        ),
+        preflightHomepageCandidateOutcome: getString(
+          metadata.preflightHomepageCandidateOutcome ?? detail.preflightHomepageCandidateOutcome
         ),
         preflightHomepageCandidatePageUrl: getString(
           metadata.preflightHomepageCandidatePageUrl ?? detail.preflightHomepageCandidatePageUrl
