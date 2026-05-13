@@ -450,12 +450,52 @@ function getBuildPhaseTimingSummary(events: TimingEventRow[]) {
   return getRuntimeBuildPhaseMetadata(events, "build_phase_timing_summary");
 }
 
+function getPriorScanAccelerationProfile(scanConfig: unknown) {
+  const config = getObject(scanConfig);
+  const execution = getObject(config.execution);
+  const prior = getObject(execution.priorScanAcceleration);
+  return getString(prior.priorHitScanProfile);
+}
+
+function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
+  return events
+    .filter((event) => event.event_type === "runtime.build_phase_diagnostic")
+    .map((event) => {
+      const metadata = getObject(event.metadata_json);
+      const successMetadata = getObject(metadata.successMetadata);
+      const failureMetadata = getObject(metadata.failureMetadata);
+      const detail = Object.keys(successMetadata).length > 0
+        ? successMetadata
+        : Object.keys(failureMetadata).length > 0
+          ? failureMetadata
+          : metadata;
+      const durationMs =
+        getNumber(metadata.durationMs) ??
+        getNumber(detail.durationMs) ??
+        getNumber(metadata.elapsedMs) ??
+        getNumber(detail.elapsedMs);
+      return {
+        completedAt: getString(metadata.completedAt ?? detail.completedAt),
+        durationMs,
+        elapsedMs: getNumber(metadata.elapsedMs) ?? getNumber(detail.elapsedMs) ?? durationMs,
+        errorCategory: getString(metadata.errorCategory ?? detail.errorCategory),
+        phase: getString(metadata.phase ?? metadata.stepKey ?? detail.phase ?? detail.stepKey),
+        status: getString(metadata.status ?? detail.status),
+        targetCount: getNumber(metadata.targetCount ?? detail.targetCount),
+        verifiedCount: getNumber(metadata.verifiedCount ?? detail.verifiedCount)
+      };
+    })
+    .filter((phase) => phase.phase);
+}
+
 function summarizeScannerPhaseRows(rows: Array<{
   buildPhaseTimingSummary: Record<string, unknown>;
+  runtimeBuildPhaseDiagnostics: ReturnType<typeof getRuntimeBuildPhaseDiagnostics>;
   scannerStages: ReturnType<typeof getScannerExecutionStages>;
 }>) {
   const scannerStageDurations = new Map<string, Array<number | null>>();
   const buildPhaseDurations = new Map<string, Array<number | null>>();
+  const diagnosticPhaseDurations = new Map<string, Array<number | null>>();
 
   for (const row of rows) {
     for (const stage of row.scannerStages) {
@@ -477,11 +517,26 @@ function summarizeScannerPhaseRows(rows: Array<{
       existing.push(duration);
       buildPhaseDurations.set(key, existing);
     }
+
+    for (const diagnostic of row.runtimeBuildPhaseDiagnostics) {
+      const key = diagnostic.phase;
+      if (!key) {
+        continue;
+      }
+      const existing = diagnosticPhaseDurations.get(key) ?? [];
+      existing.push(diagnostic.durationMs);
+      diagnosticPhaseDurations.set(key, existing);
+    }
   }
 
   return {
     buildPhases: Object.fromEntries(
       [...buildPhaseDurations.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([phase, values]) => [phase, summarizeTiming(values)])
+    ),
+    runtimeBuildPhaseDiagnostics: Object.fromEntries(
+      [...diagnosticPhaseDurations.entries()]
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([phase, values]) => [phase, summarizeTiming(values)])
     ),
@@ -1107,6 +1162,7 @@ async function runScannerPhaseTimingAudit(input: AuditInput) {
     const events = eventsByScan.get(inputScan.scanId) ?? [];
     const scannerStages = getScannerExecutionStages(scan?.scan_config_json);
     const buildPhaseTimingSummary = getBuildPhaseTimingSummary(events);
+    const runtimeBuildPhaseDiagnostics = getRuntimeBuildPhaseDiagnostics(events);
 
     return {
       batch: inputScan.batch ?? null,
@@ -1114,6 +1170,9 @@ async function runScannerPhaseTimingAudit(input: AuditInput) {
       completedAt: scan?.completed_at ?? null,
       createdAt: scan?.created_at ?? null,
       manifestRow: inputScan.manifestRow ?? null,
+      priorScanAccelerationProfile: getPriorScanAccelerationProfile(scan?.scan_config_json),
+      runtimeBuildPhaseDiagnostics,
+      runtimeBuildPhaseDiagnosticCount: runtimeBuildPhaseDiagnostics.length,
       scanId: inputScan.scanId,
       scannerStages,
       scannerWallMs: millisecondsBetweenIso(scan?.started_at, scan?.completed_at),
