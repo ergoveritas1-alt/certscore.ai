@@ -565,11 +565,15 @@ function getRuntimeBrowserPassDiagnostics(events: TimingEventRow[]) {
       const status = getString(metadata.status);
       const durationMs = status === "start" ? null : getNumber(metadata.durationMs);
       return {
+        commitWaitMs: getNumber(metadata.commitWaitMs),
         completedAt: getString(metadata.completedAt),
+        domContentLoadedWaitMs: getNumber(metadata.domContentLoadedWaitMs),
         durationMs,
         elapsedMs: getNumber(metadata.elapsedMs) ?? durationMs,
+        navigationOutcome: getString(metadata.navigationOutcome),
         stage: getString(metadata.stage ?? metadata.stepKey),
         status,
+        totalWaitMs: getNumber(metadata.totalWaitMs),
         timeoutMs: getNumber(metadata.timeoutMs)
       };
     })
