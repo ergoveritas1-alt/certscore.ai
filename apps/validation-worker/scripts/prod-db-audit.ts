@@ -484,6 +484,8 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
         historicalHintResolutionDurationMs: getNumber(metadata.historicalHintResolutionDurationMs ?? detail.historicalHintResolutionDurationMs),
         phase: getString(metadata.phase ?? metadata.stepKey ?? detail.phase ?? detail.stepKey),
         homepageFetchStatus: getString(metadata.homepageFetchStatus ?? detail.homepageFetchStatus),
+        homepageSetupSource: getString(metadata.homepageSetupSource ?? detail.homepageSetupSource),
+        homepageSetupWaitMs: getNumber(metadata.homepageSetupWaitMs ?? detail.homepageSetupWaitMs),
         preflightAttemptRunTimings: asArray(metadata.preflightAttemptRunTimings ?? detail.preflightAttemptRunTimings)
           .map((entry) => {
             const record = getObject(entry);
@@ -515,6 +517,9 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
         preflightHomepageCandidatePageUrl: getString(
           metadata.preflightHomepageCandidatePageUrl ?? detail.preflightHomepageCandidatePageUrl
         ),
+        preflightHomepageCandidateWaitMs: getNumber(
+          metadata.preflightHomepageCandidateWaitMs ?? detail.preflightHomepageCandidateWaitMs
+        ),
         preflightHomepageReuseAccepted:
           typeof (metadata.preflightHomepageReuseAccepted ?? detail.preflightHomepageReuseAccepted) === "boolean"
             ? (metadata.preflightHomepageReuseAccepted ?? detail.preflightHomepageReuseAccepted) as boolean
@@ -526,6 +531,11 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
           typeof (metadata.robotsRulesLoaded ?? detail.robotsRulesLoaded) === "boolean"
             ? (metadata.robotsRulesLoaded ?? detail.robotsRulesLoaded) as boolean
             : null,
+        robotsStatePrefetchUsed:
+          typeof (metadata.robotsStatePrefetchUsed ?? detail.robotsStatePrefetchUsed) === "boolean"
+            ? (metadata.robotsStatePrefetchUsed ?? detail.robotsStatePrefetchUsed) as boolean
+            : null,
+        robotsStateWaitMs: getNumber(metadata.robotsStateWaitMs ?? detail.robotsStateWaitMs),
         status,
         supplementalDiscoveryTimings: asArray(metadata.supplementalDiscoveryTimings ?? detail.supplementalDiscoveryTimings)
           .map((entry) => {
