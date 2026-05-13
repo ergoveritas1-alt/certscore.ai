@@ -856,6 +856,56 @@ test("low-confidence ambiguity-only policy clarity evidence stays in confidence 
   assert.ok(clarity?.appliedRules.includes("evidence.policy_extraction.keep_review"));
 });
 
+test("affiliate disclosure present stays support context rather than becoming a top finding", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("affiliate_disclosure_present", {
+        confidenceInputs: {
+          ...makePacket("affiliate_disclosure_present").confidenceInputs,
+          hasPageAttribution: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("affiliate_disclosure_present").evidence,
+          pageUrls: ["https://www.example.com/affiliate-disclosure"],
+          snippets: ["We may earn a commission from purchases made through links on this page."]
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "support_only");
+  assert.notEqual(decision?.reportLane, "main");
+  assert.ok(decision?.appliedRules.includes("support.orphan_positive_surface_retained"));
+});
+
+test("affiliate disclosure scope gap can surface when the projected finding is page-attributed", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("affiliate_disclosure_scope_limited", {
+        confidenceInputs: {
+          ...makePacket("affiliate_disclosure_scope_limited").confidenceInputs,
+          hasPageAttribution: true,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        evidence: {
+          ...makePacket("affiliate_disclosure_scope_limited").evidence,
+          pageUrls: ["https://www.example.com/affiliate-disclosure"],
+          snippets: [
+            "The retained affiliate disclosure evidence came from a dedicated disclosure surface, but the scan did not retain page-attributed evidence showing that disclosure near specific recommendations."
+          ]
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.equal(decision?.reportLane, "main");
+  assert.ok(decision?.appliedRules.includes("evidence.policy_extraction.review_disclosure_placement"));
+});
+
 test("unresolved low-confidence absence still surfaces in confidence and coverage", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
