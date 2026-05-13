@@ -538,6 +538,7 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
             : null,
         preflightHomepageReuseReason: getString(metadata.preflightHomepageReuseReason ?? detail.preflightHomepageReuseReason),
         preflightVerifiedSourceCounts: getObject(metadata.preflightVerifiedSourceCounts ?? detail.preflightVerifiedSourceCounts),
+        robotsFetchDurationMs: getNumber(metadata.robotsFetchDurationMs ?? detail.robotsFetchDurationMs),
         robotsFetchStatus: getString(metadata.robotsFetchStatus ?? detail.robotsFetchStatus),
         robotsRulesLoaded:
           typeof (metadata.robotsRulesLoaded ?? detail.robotsRulesLoaded) === "boolean"
