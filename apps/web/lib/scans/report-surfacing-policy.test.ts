@@ -1650,6 +1650,87 @@ test("task-blocking accessibility finding outranks generic accessibility summary
   assert.equal(summary?.supportTargetId, "keyboard_only_task_completion_blocked");
 });
 
+test("score-only accessibility risk is suppressed when representative examples are missing", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("accessibility_risk_score", {
+        concernContext: {
+          assertionLevels: [],
+          evidenceStrengthFlags: [],
+          externalSurfacingEligibilities: ["eligible"],
+          negativeEvidenceFlags: ["missing_representative_accessibility_examples"],
+          originTypes: [],
+          promotionEligibilities: ["eligible"]
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "suppressed");
+  assert.equal(decision?.reportLane, "suppressed");
+  assert.ok(decision?.appliedRules.includes("evidence.accessibility.suppress_score_only_context"));
+});
+
+test("accessibility risk score remains reviewable when representative examples are retained", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("accessibility_risk_score", {
+        confidenceInputs: {
+          ...makePacket("accessibility_risk_score").confidenceInputs,
+          hasPageAttribution: true,
+          issueCount: 4,
+          signalCount: 2
+        },
+        details: {
+          family: "accessibility",
+          kind: "accessibility_risk_score",
+          ruleExamples: ["form-label", "color-contrast"]
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.equal(decision?.reportLane, "confidence_and_coverage");
+  assert.equal(decision?.reportable, true);
+  assert.ok(!decision?.appliedRules.includes("evidence.accessibility.suppress_score_only_context"));
+});
+
+test("mock regulator context suppresses generic accessibility score context", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("regulator_operated_mock_investment_example", {
+        confidenceBand: "high",
+        confidenceInputs: {
+          ...makePacket("regulator_operated_mock_investment_example").confidenceInputs,
+          hasReadableSurfaceSnippetEvidence: true
+        },
+        details: {
+          family: "financial_promotion",
+          kind: "regulator_operated_mock_investment_example"
+        }
+      }),
+      makePacket("accessibility_risk_score", {
+        details: {
+          family: "accessibility",
+          kind: "accessibility_risk_score",
+          ruleExamples: ["form-label"]
+        }
+      })
+    ]
+  });
+
+  const regulatorMock = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "regulator_operated_mock_investment_example");
+  const accessibilityScore = evaluation.debugDecisions.find((decision) => decision.unifiedFindingId === "accessibility_risk_score");
+
+  assert.notEqual(regulatorMock?.decisionState, "suppressed");
+  assert.equal(accessibilityScore?.decisionState, "suppressed");
+  assert.equal(accessibilityScore?.suppressedBy, "regulator_operated_mock_investment_example");
+  assert.ok(accessibilityScore?.appliedRules.includes("precedence.regulator_mock_context_suppresses_generic_coverage"));
+});
+
 test("support-only findings retain explicit support links", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
