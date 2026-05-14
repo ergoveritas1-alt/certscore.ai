@@ -476,8 +476,21 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
           getNumber(detail.durationMs) ??
           getNumber(metadata.preflightElapsedMs) ??
           getNumber(detail.preflightElapsedMs);
+      const rawSubtimings = getObject(metadata.subtimings ?? detail.subtimings);
+      const subtimings = Object.fromEntries(
+        Object.entries(rawSubtimings)
+          .map(([key, value]) => [key, getNumber(value)] as const)
+          .filter((entry): entry is readonly [string, number] => entry[1] !== null)
+          .sort(([left], [right]) => left.localeCompare(right))
+      );
+      const discoveryDebug = getObject(metadata.discoveryDebug ?? detail.discoveryDebug);
       return {
         completedAt: getString(metadata.completedAt ?? detail.completedAt),
+        discoveryDebug: {
+          candidateCount: getNumber(discoveryDebug.candidateCount),
+          duplicateCount: getNumber(discoveryDebug.duplicateCount),
+          skippedRobotsCount: getNumber(discoveryDebug.skippedRobotsCount)
+        },
         durationMs,
         elapsedMs: getNumber(metadata.elapsedMs) ?? getNumber(detail.elapsedMs) ?? durationMs,
         errorCategory: getString(metadata.errorCategory ?? detail.errorCategory),
@@ -550,6 +563,7 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
             : null,
         robotsStateWaitMs: getNumber(metadata.robotsStateWaitMs ?? detail.robotsStateWaitMs),
         status,
+        subtimings,
         supplementalDiscoveryTimings: asArray(metadata.supplementalDiscoveryTimings ?? detail.supplementalDiscoveryTimings)
           .map((entry) => {
             const record = getObject(entry);
@@ -603,6 +617,8 @@ function summarizeScannerPhaseRows(rows: Array<{
   const buildPhaseDurations = new Map<string, Array<number | null>>();
   const browserPassDurations = new Map<string, Array<number | null>>();
   const diagnosticPhaseDurations = new Map<string, Array<number | null>>();
+  const diagnosticSubtimingDurations = new Map<string, Array<number | null>>();
+  const supplementalDiscoveryDurations = new Map<string, Array<number | null>>();
 
   for (const row of rows) {
     for (const stage of row.scannerStages) {
@@ -633,6 +649,23 @@ function summarizeScannerPhaseRows(rows: Array<{
       const existing = diagnosticPhaseDurations.get(key) ?? [];
       existing.push(diagnostic.durationMs);
       diagnosticPhaseDurations.set(key, existing);
+
+      for (const [subtimingKey, value] of Object.entries(diagnostic.subtimings)) {
+        const subKey = `${key}.${subtimingKey}`;
+        const subExisting = diagnosticSubtimingDurations.get(subKey) ?? [];
+        subExisting.push(value);
+        diagnosticSubtimingDurations.set(subKey, subExisting);
+      }
+
+      for (const supplementalTiming of diagnostic.supplementalDiscoveryTimings) {
+        if (!supplementalTiming.label || supplementalTiming.durationMs === null) {
+          continue;
+        }
+        const supplementalKey = `${key}.${supplementalTiming.label}`;
+        const supplementalExisting = supplementalDiscoveryDurations.get(supplementalKey) ?? [];
+        supplementalExisting.push(supplementalTiming.durationMs);
+        supplementalDiscoveryDurations.set(supplementalKey, supplementalExisting);
+      }
     }
 
     for (const diagnostic of row.runtimeBrowserPassDiagnostics) {
@@ -654,6 +687,16 @@ function summarizeScannerPhaseRows(rows: Array<{
     ),
     runtimeBuildPhaseDiagnostics: Object.fromEntries(
       [...diagnosticPhaseDurations.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([phase, values]) => [phase, summarizeTiming(values)])
+    ),
+    runtimeBuildPhaseSubtimings: Object.fromEntries(
+      [...diagnosticSubtimingDurations.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([phase, values]) => [phase, summarizeTiming(values)])
+    ),
+    supplementalDiscoveryTimings: Object.fromEntries(
+      [...supplementalDiscoveryDurations.entries()]
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([phase, values]) => [phase, summarizeTiming(values)])
     ),
