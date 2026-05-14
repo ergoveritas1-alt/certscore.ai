@@ -328,10 +328,14 @@ export function hasIncompleteScanCoverage(scanRecord: Pick<ScanDetailResponse, "
   const totalSignals = getRecordNumber(snapshot, "total_signals");
   const reportFindingCount = getRecordNumber(snapshot, "report_finding_count");
   const verifiedPublicSurfacesCount = getRecordNumber(snapshot, "verified_public_surfaces_count");
+  const retainedPublicSurfaceCount =
+    typeof pagesScanned === "number"
+      ? Math.max(pagesScanned, verifiedPublicSurfacesCount ?? 0)
+      : verifiedPublicSurfacesCount;
   const hasMaterialRetainedCoverage =
-    typeof pagesScanned === "number" &&
-    pagesScanned > 0 &&
-    (typeof pagesRequested !== "number" || pagesScanned >= Math.min(pagesRequested, 3)) &&
+    typeof retainedPublicSurfaceCount === "number" &&
+    retainedPublicSurfaceCount > 0 &&
+    (typeof pagesRequested !== "number" || retainedPublicSurfaceCount >= Math.min(pagesRequested, 3)) &&
     (totalSignals ?? 0) >= 20 &&
     (reportFindingCount ?? 0) >= 3;
   const hasHardAccessLimitation =

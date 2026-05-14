@@ -1044,6 +1044,31 @@ test("hasIncompleteScanCoverage suppresses partial flag when retained coverage i
   );
 });
 
+test("hasIncompleteScanCoverage accepts verified public surfaces as retained coverage", async () => {
+  const hasIncompleteScanCoverage = await loadHasIncompleteScanCoverage();
+
+  assert.equal(
+    hasIncompleteScanCoverage({
+      events: [],
+      scan: {
+        pagesRequested: 3,
+        pagesScanned: 1,
+        status: "completed"
+      },
+      snapshot: {
+        coverage_level: "limited_partial",
+        incomplete_pages: true,
+        pages_scanned: 1,
+        partial_scan: true,
+        report_finding_count: 16,
+        total_signals: 37,
+        verified_public_surfaces_count: 3
+      }
+    }),
+    false
+  );
+});
+
 test("hasIncompleteScanCoverage keeps warning for thin or hard-limited coverage", async () => {
   const hasIncompleteScanCoverage = await loadHasIncompleteScanCoverage();
 
