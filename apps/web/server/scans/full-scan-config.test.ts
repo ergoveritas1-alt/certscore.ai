@@ -42,11 +42,21 @@ test("queued full-scan config carries prior scan acceleration only as execution 
           sourceCompletedAt: "2026-05-01T00:00:00.000Z",
           sourceScanId: "scan-prior",
           url: "https://example.com/privacy"
+        },
+        {
+          confidence: 0.65,
+          hintType: "homepage_final_url",
+          source: "prior_scan_hint",
+          sourceCompletedAt: "2026-05-01T00:00:00.000Z",
+          sourceScanId: "scan-prior",
+          url: "https://www.example.com/"
         }
       ],
       priorScan: {
-        crawlSeedHintCount: 1,
+        crawlSeedHintCount: 2,
+        crawlSeedHintTypes: ["privacy_policy", "homepage_final_url"],
         selectedDocumentSourceCount: 1,
+        selectedHighYieldPageCount: 1,
         sourceCompletedAt: "2026-05-01T00:00:00.000Z",
         sourceScanId: "scan-prior"
       }
@@ -56,8 +66,10 @@ test("queued full-scan config carries prior scan acceleration only as execution 
   });
 
   assert.deepEqual(config.execution?.priorScanAcceleration, {
-    crawlSeedHintCount: 1,
+    crawlSeedHintCount: 2,
+    crawlSeedHintTypes: ["privacy_policy", "homepage_final_url"],
     selectedDocumentSourceCount: 1,
+    selectedHighYieldPageCount: 1,
     sourceCompletedAt: "2026-05-01T00:00:00.000Z",
     sourceScanId: "scan-prior"
   });
@@ -69,6 +81,14 @@ test("queued full-scan config carries prior scan acceleration only as execution 
       sourceCompletedAt: "2026-05-01T00:00:00.000Z",
       sourceScanId: "scan-prior",
       url: "https://example.com/privacy"
+    },
+    {
+      confidence: 0.65,
+      hintType: "homepage_final_url",
+      source: "prior_scan_hint",
+      sourceCompletedAt: "2026-05-01T00:00:00.000Z",
+      sourceScanId: "scan-prior",
+      url: "https://www.example.com/"
     }
   ]);
   assert.equal(Object.hasOwn(config, "findings"), false);

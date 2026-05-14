@@ -392,6 +392,10 @@ function classifyPriorScanHintType(documentType: string) {
 }
 
 function classifyPriorScanPageHintType(pageType: string | null, pageUrl: string) {
+  if (pageType === "homepage") {
+    return "homepage_final_url";
+  }
+
   if (pageType) {
     return classifyPriorScanHintType(pageType);
   }
@@ -423,6 +427,7 @@ function getPriorScanDocumentTypeScore(documentType: string | null) {
 
 function getPriorScanPageTypeScore(pageType: string | null, pageUrl: string) {
   const hintType = classifyPriorScanPageHintType(pageType, pageUrl);
+  if (hintType === "homepage_final_url") return 8;
   if (hintType === "privacy_policy") return 18;
   if (hintType === "cookie_policy") return 16;
   if (hintType === "terms_of_service") return 14;
@@ -811,7 +816,7 @@ export async function loadPriorScanAccelerationCandidate(input: {
       continue;
     }
     const hintType = classifyPriorScanPageHintType(getString(row.page_type), pageUrl);
-    const confidence = hintType === "high_yield_page" ? 0.55 : 0.7;
+    const confidence = hintType === "high_yield_page" ? 0.55 : hintType === "homepage_final_url" ? 0.65 : 0.7;
     seenUrls.add(urlKey);
     selectedHighYieldPages.push({
       confidence,

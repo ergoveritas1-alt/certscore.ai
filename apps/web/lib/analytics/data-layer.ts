@@ -14,6 +14,11 @@ export type CertScoreDataLayerEvent =
   | { event: "scan_started"; scan_source: ScanSource; scan_target_type: ScanTargetType; scan_status: "queued" }
   | { event: "scan_completed"; scan_source: Extract<ScanSource, "homepage" | "dashboard" | "unknown">; scan_status: "completed" };
 
+type CertScoreDataLayerNavigationEvent = CertScoreDataLayerEvent & {
+  eventCallback?: () => void;
+  eventTimeout?: number;
+};
+
 declare global {
   interface Window {
     dataLayer?: CertScoreDataLayerEvent[];
@@ -29,6 +34,36 @@ export function pushDataLayerEvent(event: CertScoreDataLayerEvent) {
 
   window.dataLayer = window.dataLayer ?? [];
   window.dataLayer.push(event);
+}
+
+export function pushDataLayerEventBeforeNavigation(event: CertScoreDataLayerEvent, timeoutMs = 300) {
+  if (typeof window === "undefined") {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve) => {
+    let didResolve = false;
+    const finish = () => {
+      if (didResolve) {
+        return;
+      }
+
+      didResolve = true;
+      resolve();
+    };
+    const timeout = window.setTimeout(finish, timeoutMs);
+    const eventWithCallback: CertScoreDataLayerNavigationEvent = {
+      ...event,
+      eventCallback: () => {
+        window.clearTimeout(timeout);
+        finish();
+      },
+      eventTimeout: timeoutMs
+    };
+
+    window.dataLayer = window.dataLayer ?? [];
+    window.dataLayer.push(eventWithCallback);
+  });
 }
 
 export function pushDataLayerEventOnce(key: string, event: CertScoreDataLayerEvent) {

@@ -2,8 +2,8 @@
 
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
-import { getScanTargetType, type ScanSource, pushDataLayerEvent } from "../../lib/analytics/data-layer";
+import { type FormEvent, useRef, useState } from "react";
+import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
 
 type DomainScanFormProps = {
   buttonLabel?: string;
@@ -92,6 +92,7 @@ export function DomainScanForm({
   const [domain, setDomain] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   function resetValidationState() {
     setErrorMessage(null);
@@ -99,9 +100,15 @@ export function DomainScanForm({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmittingRef.current) {
+      return;
+    }
+
+    isSubmittingRef.current = true;
     setErrorMessage(null);
 
     if (!domain.trim()) {
+      isSubmittingRef.current = false;
       setErrorMessage("Enter a website domain to scan.");
       return;
     }
@@ -132,6 +139,7 @@ export function DomainScanForm({
           status: response.status
         });
         setErrorMessage(getScanSubmitErrorMessage(mode, payload));
+        isSubmittingRef.current = false;
         setIsSubmitting(false);
         return;
       }
@@ -146,11 +154,12 @@ export function DomainScanForm({
           status: response.status
         });
         setErrorMessage("The scan was accepted, but the result link was missing. Refresh and check scan history.");
+        isSubmittingRef.current = false;
         setIsSubmitting(false);
         return;
       }
 
-      pushDataLayerEvent({
+      await pushDataLayerEventBeforeNavigation({
         event: "scan_started",
         scan_source: scanSource,
         scan_target_type: getScanTargetType(domain),
@@ -165,6 +174,7 @@ export function DomainScanForm({
         stage: "request_failed"
       });
       setErrorMessage("The request did not complete. Check your connection and try again.");
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   }

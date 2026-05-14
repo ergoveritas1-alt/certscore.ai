@@ -50,7 +50,7 @@ const sections = [
   {
     title: "8. Cookies and Tracking",
     body:
-      "CertScore.ai uses cookies and similar technologies to operate the service, maintain sessions, and understand usage. We may also rely on standard hosting or analytics-related tools needed for service delivery."
+      "CertScore.ai uses cookies and similar technologies to operate the service, maintain sessions, and understand usage. We use Google Analytics and Microsoft Clarity for website analytics and session behavior analysis. Microsoft Clarity is configured with strict masking to avoid intentionally collecting sensitive form inputs or private report content."
   },
   {
     title: "9. Security",
