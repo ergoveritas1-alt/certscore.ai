@@ -22,11 +22,20 @@ type AuditScanInput = {
 };
 
 type TimingDiagnostic = {
+  buildPhaseCount?: number | null;
   commitWaitMs?: number | null;
   domContentLoadedWaitMs?: number | null;
   durationMs?: number | null;
   homepageSetupWaitMs?: number | null;
+  longestPhase?: string | null;
+  longestPhaseDurationMs?: number | null;
+  phaseDurationsMs?: Record<string, number>;
   phase?: string | null;
+  phasesByDuration?: Array<{
+    durationMs?: number | null;
+    outcome?: string | null;
+    phase?: string | null;
+  }>;
   preflightAttemptFetchTimings?: Array<{
     durationMs?: number | null;
     fetchStatus?: string | null;
@@ -36,6 +45,7 @@ type TimingDiagnostic = {
   }>;
   robotsFetchDurationMs?: number | null;
   robotsStateWaitMs?: number | null;
+  totalTrackedDurationMs?: number | null;
 };
 
 type ScannerTimingRow = {
@@ -117,6 +127,30 @@ function summarizeCounts(values: Array<number | null | undefined>) {
     p50: percentile(usable, 50),
     p90: percentile(usable, 90)
   };
+}
+
+function summarizeDurationRecords(records: Array<Record<string, number> | null | undefined>) {
+  const durations = new Map<string, number[]>();
+
+  for (const record of records) {
+    if (!record) {
+      continue;
+    }
+    for (const [key, value] of Object.entries(record)) {
+      if (!Number.isFinite(value)) {
+        continue;
+      }
+      const existing = durations.get(key) ?? [];
+      existing.push(value);
+      durations.set(key, existing);
+    }
+  }
+
+  return Object.fromEntries(
+    [...durations.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, values]) => [key, summarize(values)])
+  );
 }
 
 function parseJsonOutput<T>(stdout: string): T {
@@ -243,6 +277,7 @@ async function main() {
   const robotsRemainingWait = timingRows.map((row) => getLatestPhase(row, "robots_homepage_setup")?.robotsStateWaitMs);
   const homepageSetup = timingRows.map((row) => getLatestPhase(row, "robots_homepage_setup")?.homepageSetupWaitMs);
   const preflightLegal = timingRows.map((row) => getLatestPhase(row, "urlscan_preflight_legal_fetch")?.durationMs);
+  const crawlDiscoveryInternalBreakdowns = timingRows.map((row) => getLatestPhase(row, "crawl_discovery_internal_breakdown"));
 
   const queueToCompleted = summarize(benchmarkRows.map((row) => row.queueToCompletedMs));
   const reportFindingCounts = benchmarkRows.map((row) => row.reportFindingCount).filter((value): value is number => Number.isFinite(value));
@@ -252,9 +287,14 @@ async function main() {
     const timing = timingByScan.get(row.scanId);
     const robotPhase = timing ? getLatestPhase(timing, "robots_homepage_setup") : null;
     const browserPhase = timing ? getLatestPhase(timing, "browser_runtime_capture") : null;
+    const crawlBreakdown = timing ? getLatestPhase(timing, "crawl_discovery_internal_breakdown") : null;
     const legalPhase = timing ? getLatestPhase(timing, "urlscan_preflight_legal_fetch") : null;
     return {
       browserRuntimeMs: browserPhase?.durationMs ?? null,
+      crawlDiscoveryInternalBreakdownMs: crawlBreakdown?.phaseDurationsMs ?? null,
+      crawlDiscoveryInternalLongestPhase: crawlBreakdown?.longestPhase ?? null,
+      crawlDiscoveryInternalLongestPhaseMs: crawlBreakdown?.longestPhaseDurationMs ?? null,
+      crawlDiscoveryInternalTotalTrackedMs: crawlBreakdown?.totalTrackedDurationMs ?? null,
       domain: row.domain ?? null,
       iteration: row.iteration ?? null,
       legalPreflightMs: legalPhase?.durationMs ?? null,
@@ -295,6 +335,15 @@ async function main() {
           browserRuntimeCapture: browserSummary,
           homepageSetup: summarize(homepageSetup),
           legalPreflight: summarize(preflightLegal),
+          crawlDiscoveryInternalBreakdown: summarizeDurationRecords(
+            crawlDiscoveryInternalBreakdowns.map((breakdown) => breakdown?.phaseDurationsMs)
+          ),
+          crawlDiscoveryInternalLongestPhase: summarize(
+            crawlDiscoveryInternalBreakdowns.map((breakdown) => breakdown?.longestPhaseDurationMs)
+          ),
+          crawlDiscoveryInternalTotalTracked: summarize(
+            crawlDiscoveryInternalBreakdowns.map((breakdown) => breakdown?.totalTrackedDurationMs)
+          ),
           persistedSignalCount: summarizeCounts(persistedSignalCounts),
           queueToCompleted: queueSummary,
           queueToFindings: summarize(benchmarkRows.map((row) => row.queueToFindingsMs)),

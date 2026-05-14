@@ -321,6 +321,15 @@ function getNumber(value: unknown) {
   return null;
 }
 
+function getNumberRecord(value: unknown) {
+  return Object.fromEntries(
+    Object.entries(getObject(value))
+      .map(([key, recordValue]) => [key, getNumber(recordValue)] as const)
+      .filter((entry): entry is readonly [string, number] => entry[1] !== null)
+      .sort(([left], [right]) => left.localeCompare(right))
+  );
+}
+
 function getLatestEventMetadata(events: TimingEventRow[], eventType: string) {
   const event = [...events].reverse().find((candidate) => candidate.event_type === eventType);
   return event ? getObject(event.metadata_json) : {};
@@ -491,10 +500,24 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
           duplicateCount: getNumber(discoveryDebug.duplicateCount),
           skippedRobotsCount: getNumber(discoveryDebug.skippedRobotsCount)
         },
+        buildPhaseCount: getNumber(metadata.buildPhaseCount ?? detail.buildPhaseCount),
         durationMs,
         elapsedMs: getNumber(metadata.elapsedMs) ?? getNumber(detail.elapsedMs) ?? durationMs,
         errorCategory: getString(metadata.errorCategory ?? detail.errorCategory),
         historicalHintResolutionDurationMs: getNumber(metadata.historicalHintResolutionDurationMs ?? detail.historicalHintResolutionDurationMs),
+        longestPhase: getString(metadata.longestPhase ?? detail.longestPhase),
+        longestPhaseDurationMs: getNumber(metadata.longestPhaseDurationMs ?? detail.longestPhaseDurationMs),
+        phaseDurationsMs: getNumberRecord(metadata.phaseDurationsMs ?? detail.phaseDurationsMs),
+        phasesByDuration: asArray(metadata.phasesByDuration ?? detail.phasesByDuration)
+          .map((entry) => {
+            const record = getObject(entry);
+            return {
+              durationMs: getNumber(record.durationMs),
+              outcome: getString(record.outcome),
+              phase: getString(record.phase)
+            };
+          })
+          .filter((entry) => entry.phase),
         phase: getString(metadata.phase ?? metadata.stepKey ?? detail.phase ?? detail.stepKey),
         homepageFetchStatus: getString(metadata.homepageFetchStatus ?? detail.homepageFetchStatus),
         homepageSetupSource: getString(metadata.homepageSetupSource ?? detail.homepageSetupSource),
@@ -578,6 +601,7 @@ function getRuntimeBuildPhaseDiagnostics(events: TimingEventRow[]) {
           })
           .filter((entry) => entry.label),
         targetCount: getNumber(metadata.targetCount ?? detail.targetCount),
+        totalTrackedDurationMs: getNumber(metadata.totalTrackedDurationMs ?? detail.totalTrackedDurationMs),
         verifiedCount: getNumber(metadata.verifiedCount ?? detail.verifiedCount)
       };
     })
@@ -618,6 +642,7 @@ function summarizeScannerPhaseRows(rows: Array<{
   const browserPassDurations = new Map<string, Array<number | null>>();
   const diagnosticPhaseDurations = new Map<string, Array<number | null>>();
   const diagnosticSubtimingDurations = new Map<string, Array<number | null>>();
+  const internalBreakdownDurations = new Map<string, Array<number | null>>();
   const supplementalDiscoveryDurations = new Map<string, Array<number | null>>();
 
   for (const row of rows) {
@@ -643,18 +668,35 @@ function summarizeScannerPhaseRows(rows: Array<{
 
     for (const diagnostic of row.runtimeBuildPhaseDiagnostics) {
       const key = diagnostic.phase;
-      if (!key || diagnostic.durationMs === null) {
+      if (!key) {
         continue;
       }
-      const existing = diagnosticPhaseDurations.get(key) ?? [];
-      existing.push(diagnostic.durationMs);
-      diagnosticPhaseDurations.set(key, existing);
+
+      if (diagnostic.durationMs !== null) {
+        const existing = diagnosticPhaseDurations.get(key) ?? [];
+        existing.push(diagnostic.durationMs);
+        diagnosticPhaseDurations.set(key, existing);
+      }
 
       for (const [subtimingKey, value] of Object.entries(diagnostic.subtimings)) {
         const subKey = `${key}.${subtimingKey}`;
         const subExisting = diagnosticSubtimingDurations.get(subKey) ?? [];
         subExisting.push(value);
         diagnosticSubtimingDurations.set(subKey, subExisting);
+      }
+
+      for (const [phaseKey, value] of Object.entries(diagnostic.phaseDurationsMs)) {
+        const breakdownKey = `${key}.${phaseKey}`;
+        const breakdownExisting = internalBreakdownDurations.get(breakdownKey) ?? [];
+        breakdownExisting.push(value);
+        internalBreakdownDurations.set(breakdownKey, breakdownExisting);
+      }
+
+      if (diagnostic.totalTrackedDurationMs !== null) {
+        const totalKey = `${key}.totalTrackedDurationMs`;
+        const totalExisting = internalBreakdownDurations.get(totalKey) ?? [];
+        totalExisting.push(diagnostic.totalTrackedDurationMs);
+        internalBreakdownDurations.set(totalKey, totalExisting);
       }
 
       for (const supplementalTiming of diagnostic.supplementalDiscoveryTimings) {
@@ -692,6 +734,11 @@ function summarizeScannerPhaseRows(rows: Array<{
     ),
     runtimeBuildPhaseSubtimings: Object.fromEntries(
       [...diagnosticSubtimingDurations.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([phase, values]) => [phase, summarizeTiming(values)])
+    ),
+    runtimeBuildPhaseInternalBreakdowns: Object.fromEntries(
+      [...internalBreakdownDurations.entries()]
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([phase, values]) => [phase, summarizeTiming(values)])
     ),
