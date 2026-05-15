@@ -21,7 +21,14 @@ function actionClassName(tone: "primary" | "secondary" = "secondary") {
 export function ShareReportActions({ domainLabel }: ShareReportActionsProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [currentUrl, setCurrentUrl] = useState("");
-  const monitorHref = `/monitor-site?website=${encodeURIComponent(domainLabel)}`;
+  const monitorHref = useMemo(() => {
+    const params = new URLSearchParams({ website: domainLabel });
+    if (currentUrl) {
+      params.set("reportUrl", currentUrl);
+      params.set("source", currentUrl);
+    }
+    return `/monitor-site?${params.toString()}`;
+  }, [currentUrl, domainLabel]);
   const mailtoHref = useMemo(() => {
     const subject = `CertScore.ai report for ${domainLabel}`;
     const body = currentUrl

@@ -2,21 +2,34 @@
 
 import { useActionState } from "react";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
-import { sendContactSalesAction, type SendContactSalesActionState } from "../../server/contact-sales/send-contact-sales";
+import {
+  sendMonitorSiteRequestAction,
+  type SendMonitorSiteRequestActionState
+} from "../../server/monitor-site/send-monitor-site-request";
 
 type MonitorSiteFormProps = {
   defaultWebsite?: string;
+  sourcePageUrl?: string;
+  sourceReportUrl?: string;
 };
 
-export function MonitorSiteForm({ defaultWebsite = "" }: MonitorSiteFormProps) {
-  const initialState: SendContactSalesActionState = {
+export function MonitorSiteForm({ defaultWebsite = "", sourcePageUrl = "", sourceReportUrl = "" }: MonitorSiteFormProps) {
+  const initialState: SendMonitorSiteRequestActionState = {
     error: null
   };
-  const [state, action, isPending] = useActionState(sendContactSalesAction, initialState);
+  const [state, action, isPending] = useActionState(sendMonitorSiteRequestAction, initialState);
 
   return (
     <form action={action} className="space-y-5">
-      <input name="requestType" type="hidden" value="monitor-site" />
+      <input name="sourcePageUrl" type="hidden" value={sourcePageUrl} />
+      <input name="sourceReportUrl" type="hidden" value={sourceReportUrl} />
+      <input
+        autoComplete="off"
+        className="hidden"
+        name="companyWebsite"
+        tabIndex={-1}
+        type="text"
+      />
 
       <div className="grid gap-5 md:grid-cols-2">
         <div className="space-y-2">
@@ -84,7 +97,7 @@ export function MonitorSiteForm({ defaultWebsite = "" }: MonitorSiteFormProps) {
           className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400"
         />
         <p className="text-xs leading-5 text-slate-500">
-          Submitting this request does not activate monitoring. We will follow up about available monitoring options.
+          Submitting this request adds the site to a pending monitoring review queue. Monitoring is not activated until we confirm setup with you.
         </p>
       </div>
 

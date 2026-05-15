@@ -13,6 +13,8 @@ export const metadata: Metadata = createPageMetadata({
 
 type MonitorSitePageProps = {
   searchParams: Promise<{
+    reportUrl?: string;
+    source?: string;
     website?: string;
   }>;
 };
@@ -20,6 +22,8 @@ type MonitorSitePageProps = {
 export default async function MonitorSitePage({ searchParams }: MonitorSitePageProps) {
   const params = await searchParams;
   const defaultWebsite = typeof params.website === "string" ? params.website.slice(0, 200) : "";
+  const sourcePageUrl = typeof params.source === "string" ? params.source.slice(0, 1000) : "";
+  const sourceReportUrl = typeof params.reportUrl === "string" ? params.reportUrl.slice(0, 1000) : "";
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -41,7 +45,11 @@ export default async function MonitorSitePage({ searchParams }: MonitorSitePageP
                 <CardTitle>Request monitoring follow-up</CardTitle>
               </CardHeader>
               <CardContent>
-                <MonitorSiteForm defaultWebsite={defaultWebsite} />
+                <MonitorSiteForm
+                  defaultWebsite={defaultWebsite}
+                  sourcePageUrl={sourcePageUrl}
+                  sourceReportUrl={sourceReportUrl}
+                />
               </CardContent>
             </Card>
 
@@ -50,8 +58,8 @@ export default async function MonitorSitePage({ searchParams }: MonitorSitePageP
                 <CardTitle className="text-xl">What this request means</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm leading-7 text-slate-600">
-                <p>We will follow up about monitoring options for the site you submit.</p>
-                <p>Submitting this form does not activate monitoring or change any existing scan results.</p>
+                <p>We will add the site to a pending monitoring review queue and follow up about setup options.</p>
+                <p>Submitting this form does not activate monitoring, create an account monitor, or change any existing scan results.</p>
                 <p>CertScore reports remain automated public-web observations for review, not legal advice or a legal determination.</p>
               </CardContent>
             </Card>
