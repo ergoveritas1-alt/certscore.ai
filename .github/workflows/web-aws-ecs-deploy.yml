@@ -33,6 +33,8 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      DATABASE_SSL_MODE: ${{ vars.DATABASE_SSL_MODE || 'require' }}
+      PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL || secrets.DATABASE_URL }}
       ECR_WEB_REPOSITORY: ${{ vars.AWS_WEB_ECR_REPOSITORY }}
       ECS_CLUSTER_NAME: ${{ vars.AWS_WEB_ECS_CLUSTER }}
       ECS_CERTSCORE_SERVICE_NAME: ${{ vars.AWS_WEB_CERTSCORE_SERVICE }}
@@ -91,6 +93,16 @@ jobs:
           S3_ACCESS_KEY_ID=placeholder \
           S3_SECRET_ACCESS_KEY=placeholder \
           node --enable-source-maps --import tsx ./apps/web/scripts/check-amplify-runtime-env.ts
+
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: ${{ env.PROD_DATABASE_URL }}
+        run: |
+          test -n "${DATABASE_URL}" || (echo "Missing PROD_DATABASE_URL or DATABASE_URL secret" && exit 1)
+          case "${DATABASE_URL}" in
+            *127.0.0.1*|*localhost*) echo "DATABASE_URL points at a local database." && exit 1 ;;
+          esac
+          pnpm db:migrate
 
       - name: Build and push public web image
         env:
