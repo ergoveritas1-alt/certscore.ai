@@ -97,7 +97,7 @@ export function MonitorSiteForm({ defaultWebsite = "", sourcePageUrl = "", sourc
           className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400"
         />
         <p className="text-xs leading-5 text-slate-500">
-          Submitting this request adds the site to a pending monitoring review queue. Monitoring is not activated until we confirm setup with you.
+          Submitting this form creates a pending monitoring request. It does not activate monitoring, schedule scans, or change any existing scan results.
         </p>
       </div>
 

@@ -44,7 +44,7 @@ export function createGrowthPageMetadata(config: GrowthContentPageConfig): Metad
 }
 
 export function GrowthContentPage({ config }: { config: GrowthContentPageConfig }) {
-  const parentPath = config.type === "Comparison" ? "/compare/privacy-scanner-vs-cookie-scanner" : "/guides";
+  const parentPath = config.type === "Comparison" ? "/compare" : "/guides";
   const parentName = config.type === "Comparison" ? "Compare" : "Guides";
   const schema = [
     createPublicWebPageSchema({

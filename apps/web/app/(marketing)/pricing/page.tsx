@@ -18,7 +18,14 @@ const API_ACCESS_COMING_SOON_LABEL = "Coming soon";
 const comparisonRows = [
   { label: "Domains", values: { individual: "1", pro: "20", team: "100" } },
   { label: "Coverage", values: { individual: "Public-site scan coverage", pro: "Public-site scan coverage", team: "Public-site scan coverage" } },
-  { label: "Recurring scan cadence", values: { individual: "Up to hourly", pro: "Up to hourly", team: "Up to hourly" } },
+  {
+    label: "Recurring scan cadence",
+    values: {
+      individual: "Setup options up to hourly",
+      pro: "Setup options up to hourly",
+      team: "Setup options up to hourly"
+    }
+  },
   { label: "Manual re-scan cooldown", values: { individual: "Every 1 minute per domain", pro: "Every 1 minute per domain", team: "Every 1 minute per domain" } },
   { label: "Scan history", values: { individual: "Included", pro: "Included", team: "Included" } },
   { label: "API access", values: { individual: "Not included", pro: "Not included", team: API_ACCESS_COMING_SOON_LABEL } }
@@ -29,7 +36,7 @@ const marketingPlans = [
     code: "individual",
     label: "Individual",
     priceLabel: "$29/mo",
-    description: "Evidence-led monitoring for one domain",
+    description: "Evidence-led monitoring setup for one domain",
     coverageLabel: "Public-site scan coverage",
     maxDomains: 1,
     scanFrequency: "hourly",
@@ -40,7 +47,7 @@ const marketingPlans = [
     code: "pro",
     label: "Pro",
     priceLabel: "$129/mo",
-    description: "Structured findings across a growing portfolio",
+    description: "Structured findings setup across a growing portfolio",
     coverageLabel: "Public-site scan coverage",
     maxDomains: 20,
     scanFrequency: "hourly",
@@ -51,7 +58,7 @@ const marketingPlans = [
     code: "team",
     label: "Ultra",
     priceLabel: "$289/mo",
-    description: "Portfolio-scale scanning and change tracking",
+    description: "Portfolio-scale scan review and change tracking setup",
     coverageLabel: "Public-site scan coverage",
     maxDomains: 100,
     scanFrequency: "hourly",
@@ -70,16 +77,16 @@ const planCardContent = {
     glowClassName: "bg-amber-300/70",
     valueClassName: "text-amber-950",
     statCardClassName: "bg-white/90 ring-amber-100",
-    summaryLabel: "Best for one active domain",
+    summaryLabel: "Best for one reviewed domain",
     bullets: [
       "Structured findings and evidence history for one domain",
-      "Recurring scans up to hourly",
+      "Recurring scan cadence options up to hourly after setup is confirmed",
       "On-demand re-scans every 1 minute per domain",
       "Built for solo operators who only need one monitored domain"
     ],
     footerNote: "Individual matches Pro coverage and cadence, but is limited to one domain.",
-    ctaHref: "/login?next=/app",
-    ctaLabel: "Start with Individual",
+    ctaHref: "/monitor-site?source=pricing&plan=individual",
+    ctaLabel: "Request Individual setup",
     ctaClassName:
       "border-0 bg-[linear-gradient(135deg,#f59e0b_0%,#fbbf24_58%,#fde68a_100%)] text-slate-950 shadow-[0_14px_32px_rgba(245,158,11,0.18)] hover:brightness-[1.03]"
   },
@@ -96,11 +103,11 @@ const planCardContent = {
     bullets: [
       "Structured findings and evidence history across up to twenty domains",
       "Good fit for in-house teams monitoring up to twenty domains",
-      "Recurring scans up to hourly and on-demand re-scans every 1 minute per domain"
+      "Recurring scan cadence options up to hourly after setup is confirmed"
     ],
-    footerNote: "Pro is the cleanest upgrade path if you need recurring monitoring and richer scan history.",
-    ctaHref: "/login?next=/app",
-    ctaLabel: "Start with Pro",
+    footerNote: "Pro is the cleanest upgrade path if you want to discuss recurring monitoring and richer scan history.",
+    ctaHref: "/monitor-site?source=pricing&plan=pro",
+    ctaLabel: "Request Pro setup",
     ctaClassName:
       "border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
   },
@@ -117,11 +124,11 @@ const planCardContent = {
     bullets: [
       "Structured findings and evidence history at portfolio scale",
       "Best for agencies and consultants monitoring up to one hundred domains",
-      "Recurring scans up to hourly; on-demand re-scans every 1 minute per domain"
+      "Recurring scan cadence options up to hourly after setup is confirmed"
     ],
     footerNote: "Ultra is built for agencies, consultants, and teams reviewing many domains in parallel.",
-    ctaHref: process.env.NEXT_PUBLIC_ULTRA_CHECKOUT_URL || "/login?next=/app",
-    ctaLabel: "Buy Ultra",
+    ctaHref: "/monitor-site?source=pricing&plan=ultra",
+    ctaLabel: "Request Ultra setup",
     ctaClassName:
       "border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
   }
@@ -134,9 +141,9 @@ export default function PricingPage() {
       <section className="mx-auto max-w-6xl px-6 py-16">
         <div className="max-w-2xl space-y-4">
           <Badge tone="neutral">Simple limits, aligned with the product.</Badge>
-          <h1 className="text-4xl font-semibold tracking-tight">Pricing for scans, evidence review, and ongoing monitoring.</h1>
+          <h1 className="text-4xl font-semibold tracking-tight">Pricing for scans, evidence review, and monitoring setup.</h1>
           <p className="text-lg text-slate-600">
-            Start with a scan, then add broader domain coverage, change tracking, scan history, and recurring monitoring as your review needs grow.
+            Start with a scan, then request broader domain coverage, change tracking, scan history, and monitoring setup as your review needs grow.
           </p>
           <div className="flex flex-wrap gap-3">
             <PendingButtonLink
@@ -209,7 +216,7 @@ export default function PricingPage() {
                       <div className={`rounded-[16px] px-2 py-2 ring-1 ${planCardContent[plan.code].statCardClassName}`}>
                         <p className="text-[9px] uppercase tracking-[0.12em] text-slate-500">Recurring cadence</p>
                         <p className="mt-1 font-medium text-slate-900">
-                          {plan.scanFrequency === "hourly" ? "Up to hourly" : "Monthly"}
+                          {plan.scanFrequency === "hourly" ? "Setup up to hourly" : "Monthly setup"}
                         </p>
                       </div>
                       <div className={`rounded-[16px] px-2 py-2 ring-1 ${planCardContent[plan.code].statCardClassName}`}>
@@ -240,6 +247,9 @@ export default function PricingPage() {
                       idleContent={planCardContent[plan.code].ctaLabel}
                       pendingContent="Opening..."
                     />
+                    <p className="text-[11px] leading-[1.25rem] text-slate-500">
+                      Submitting a request does not activate monitoring. CertScore will follow up about setup options.
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -291,7 +301,7 @@ export default function PricingPage() {
             </div>
             <div className="space-y-3 md:justify-self-end">
               <p className="text-sm leading-6 text-slate-600 md:max-w-sm">
-                Talk to us if you need procurement support, portfolio-scale monitoring, or a tailored rollout beyond the standard plans.
+                Talk to us if you need procurement support, portfolio-scale monitoring setup, or a tailored rollout beyond the standard plans.
               </p>
               <PendingButtonLink
                 className="w-full border-0 bg-[linear-gradient(135deg,#47b54a_0%,#63c864_58%,#8add89_100%)] text-slate-950 shadow-[0_14px_32px_rgba(71,181,74,0.18)] hover:brightness-[1.03] md:w-auto md:min-w-[180px]"

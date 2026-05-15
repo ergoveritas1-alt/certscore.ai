@@ -19,7 +19,7 @@ CertScore.ai findings are automated signals for review. CertScore.ai is not lega
 - Not legal advice
 - Not certification
 - Not a compliance determination
-- Not a guarantee that a website has or has not met a legal requirement
+- Not a substitute for reviewing whether a website has or has not met a legal requirement
 - Not a replacement for reviewing retained evidence, vendor configuration, consent settings, and public disclosures
 
 ## Key pages
@@ -46,6 +46,7 @@ CertScore.ai findings are automated signals for review. CertScore.ai is not lega
 - https://certscore.ai/benchmarks/website-consent-tracking-2026
 - https://certscore.ai/benchmarks/pre-consent-tracking-2026
 - https://certscore.ai/benchmarks/session-replay-risk-2026
+- https://certscore.ai/compare
 - https://certscore.ai/compare/privacy-scanner-vs-cookie-scanner
 - https://certscore.ai/compare/website-consent-audit-tools
 - https://certscore.ai/press

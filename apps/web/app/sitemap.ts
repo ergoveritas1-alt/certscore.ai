@@ -14,6 +14,7 @@ const staticPaths = [
   "/benchmarks/website-consent-tracking-2026",
   "/benchmarks/pre-consent-tracking-2026",
   "/benchmarks/session-replay-risk-2026",
+  "/compare",
   "/compare/privacy-scanner-vs-cookie-scanner",
   "/compare/website-consent-audit-tools",
   "/compare/cmp-vs-runtime-consent-scanner",

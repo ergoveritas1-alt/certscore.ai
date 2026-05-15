@@ -104,7 +104,7 @@ function getStatusPresentation(input: {
 
   return {
     badge: "Received",
-    body: "This request is in the pending monitoring review queue. Monitoring is not active yet.",
+    body: "This request is in the pending monitoring review queue. Monitoring is not active until setup is confirmed with you.",
     heading: "Request received",
     tone: "warning" as const
   };
@@ -153,7 +153,7 @@ export default async function MonitorSiteStatusPage({ params }: MonitorSiteStatu
             </dl>
 
             <p className="text-sm leading-7 text-slate-600">
-              CertScore.ai uses automated public-web observations as review signals. Status shown here is operational setup context, not legal advice, certification, or a legal determination.
+              CertScore.ai uses automated public-web observations as review signals. Status shown here is operational setup context, not legal advice, and does not replace review of the underlying evidence.
             </p>
 
             <div className="flex flex-wrap gap-3">

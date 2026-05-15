@@ -39,10 +39,10 @@ export default async function MonitorSiteThanksPage({ searchParams }: MonitorSit
               Thanks. We’ll follow up about monitoring{website ? ` ${website}` : " this site"}.
             </h1>
             <p className="text-sm leading-7 text-slate-600">
-              This request was added to a pending monitoring review queue for public-web observations over time. Monitoring is not activated until we confirm setup with you.
+              We received your monitoring request and added it to the pending monitoring review queue. Monitoring is not active until setup is confirmed with you.
             </p>
             <p className="text-sm leading-7 text-slate-600">
-              CertScore uses automated public-web observations as review signals. This is not legal advice or a legal determination.
+              CertScore uses automated public-web observations as review signals. This is not legal advice and should be reviewed with the underlying evidence.
             </p>
             <div className="flex flex-wrap gap-3">
               {statusToken ? (

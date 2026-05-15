@@ -8,7 +8,7 @@ const navLinks = [
   { href: "/methodology", label: "Methodology" },
   { href: "/guides", label: "Guides" },
   { href: "/benchmarks", label: "Benchmarks" },
-  { href: "/compare/privacy-scanner-vs-cookie-scanner", label: "Compare" },
+  { href: "/compare", label: "Compare" },
   { href: "/pricing", label: "Pricing" },
   { href: "/contact-sales", label: "Contact" }
 ];
