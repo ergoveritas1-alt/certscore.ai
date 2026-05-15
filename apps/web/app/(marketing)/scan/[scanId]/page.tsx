@@ -106,19 +106,21 @@ export default async function PublicScanDetailPage({ params }: PublicScanDetailP
           }
           headerActions={
             scanRecord.scan.status === "completed" ? (
-              <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <ShareReportActions
                   domainLabel={getPublicScanDomainLabel(scanRecord.scan.domainHostname)}
                   scanId={scanRecord.scan.id}
                 />
-                <DomainScanForm
-                  buttonLabel="Scan"
-                  compact
-                  inputLabel="Scan another website"
-                  inputPlaceholder="Enter another site"
-                  mode="full"
-                  scanSource="homepage"
-                />
+                <div className="w-full lg:ml-auto lg:max-w-[32rem]">
+                  <DomainScanForm
+                    buttonLabel="Scan"
+                    compact
+                    inputLabel="Scan another website"
+                    inputPlaceholder="Enter another site"
+                    mode="full"
+                    scanSource="homepage"
+                  />
+                </div>
               </div>
             ) : null
           }

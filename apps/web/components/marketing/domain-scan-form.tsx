@@ -187,7 +187,7 @@ export function DomainScanForm({
             autoComplete="url"
             className={
               compact
-                ? "h-12 rounded-[1.2rem] pr-28 text-right text-sm placeholder:text-right"
+                ? "h-12 rounded-[1.2rem] pr-28 text-left text-sm placeholder:text-left"
                 : "h-14 rounded-[1.6rem] pr-20 text-base"
             }
             id="domain"
