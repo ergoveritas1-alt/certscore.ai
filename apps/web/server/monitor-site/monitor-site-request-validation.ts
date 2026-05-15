@@ -11,7 +11,9 @@ export type MonitorSiteRequestInput = {
   fullName: string | null;
   monitoringGoal: string;
   notes: string | null;
+  sourceContext: string | null;
   sourcePageUrl: string | null;
+  sourcePlan: string | null;
   sourceReportUrl: string | null;
   website: string;
   workEmail: string;
@@ -83,6 +85,14 @@ function normalizeSafeUrl(value: string | null) {
   }
 }
 
+function normalizeSourcePlan(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  return ["individual", "pro", "ultra", "enterprise"].includes(value) ? value : null;
+}
+
 export function validateMonitorSiteRequestForm(formData: FormData): MonitorSiteRequestValidationResult {
   const honeypot = compact(formData.get("companyWebsite"), 200);
   if (honeypot) {
@@ -115,7 +125,9 @@ export function validateMonitorSiteRequestForm(formData: FormData): MonitorSiteR
       monitoringGoal,
       normalizedHostname,
       notes: nullableCompact(formData.get("message"), 2000),
+      sourceContext: nullableCompact(formData.get("sourceContext"), 120),
       sourcePageUrl: normalizeSafeUrl(nullableCompact(formData.get("sourcePageUrl"), 1000)),
+      sourcePlan: normalizeSourcePlan(nullableCompact(formData.get("sourcePlan"), 80)),
       sourceReportUrl: normalizeSafeUrl(nullableCompact(formData.get("sourceReportUrl"), 1000)),
       website,
       workEmail

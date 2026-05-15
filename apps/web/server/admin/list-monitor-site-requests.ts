@@ -5,8 +5,10 @@ import {
   loadAdminMonitorSiteRequestCounts,
   loadAdminMonitorSiteRequestRows,
   type AdminMonitorSiteRequestCounts,
+  type AdminMonitorSiteRequestListFilters,
   type AdminMonitorSiteRequestRow,
   type AdminMonitorSiteRequestStatus,
+  type AdminMonitorSiteRequestSetupFilter,
   type AdminOrganizationOptionRow
 } from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
@@ -20,7 +22,9 @@ export type AdminMonitorSiteRequest = {
   monitoringGoal: string;
   normalizedHostname: string;
   notes: string | null;
+  sourceContext: string | null;
   sourcePageUrl: string | null;
+  sourcePlan: string | null;
   sourceReportUrl: string | null;
   status: AdminMonitorSiteRequestStatus;
   updatedAt: string;
@@ -103,7 +107,9 @@ function toMonitorSiteRequest(row: AdminMonitorSiteRequestRow): AdminMonitorSite
     monitorSetup: toSetupMetadata(row.metadata_json),
     monitoringGoal: row.monitoring_goal,
     notes: row.notes,
+    sourceContext: getString(row.metadata_json?.sourceContext),
     sourcePageUrl: row.source_page_url,
+    sourcePlan: getString(row.metadata_json?.sourcePlan),
     sourceReportUrl: row.source_report_url,
     status: row.status,
     createdAt: row.created_at,
@@ -121,13 +127,17 @@ function toOrganizationOption(row: AdminOrganizationOptionRow): AdminOrganizatio
 }
 
 export async function listMonitorSiteRequests(
-  status?: AdminMonitorSiteRequestStatus | null,
+  filters?: AdminMonitorSiteRequestListFilters | AdminMonitorSiteRequestStatus | null,
   limit = 100
 ): Promise<AdminMonitorSiteRequest[]> {
   await requirePlatformAdminContext();
-  const rows = await loadAdminMonitorSiteRequestRows(status, limit);
+  const normalizedFilters =
+    typeof filters === "string" ? { status: filters } : filters ?? {};
+  const rows = await loadAdminMonitorSiteRequestRows(normalizedFilters, limit);
   return rows.map(toMonitorSiteRequest);
 }
+
+export type { AdminMonitorSiteRequestStatus, AdminMonitorSiteRequestSetupFilter };
 
 export async function getMonitorSiteRequestCounts(): Promise<AdminMonitorSiteRequestCounts> {
   await requirePlatformAdminContext();

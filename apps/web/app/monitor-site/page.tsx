@@ -13,6 +13,7 @@ export const metadata: Metadata = createPageMetadata({
 
 type MonitorSitePageProps = {
   searchParams: Promise<{
+    plan?: string;
     reportUrl?: string;
     source?: string;
     website?: string;
@@ -22,6 +23,8 @@ type MonitorSitePageProps = {
 export default async function MonitorSitePage({ searchParams }: MonitorSitePageProps) {
   const params = await searchParams;
   const defaultWebsite = typeof params.website === "string" ? params.website.slice(0, 200) : "";
+  const sourceContext = typeof params.source === "string" ? params.source.slice(0, 120) : "";
+  const sourcePlan = typeof params.plan === "string" ? params.plan.slice(0, 80) : "";
   const sourcePageUrl = typeof params.source === "string" ? params.source.slice(0, 1000) : "";
   const sourceReportUrl = typeof params.reportUrl === "string" ? params.reportUrl.slice(0, 1000) : "";
 
@@ -47,7 +50,9 @@ export default async function MonitorSitePage({ searchParams }: MonitorSitePageP
               <CardContent>
                 <MonitorSiteForm
                   defaultWebsite={defaultWebsite}
+                  sourceContext={sourceContext}
                   sourcePageUrl={sourcePageUrl}
+                  sourcePlan={sourcePlan}
                   sourceReportUrl={sourceReportUrl}
                 />
               </CardContent>

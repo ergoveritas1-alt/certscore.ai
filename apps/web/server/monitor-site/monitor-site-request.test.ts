@@ -21,7 +21,9 @@ test("validateMonitorSiteRequestForm accepts a monitor request with report sourc
       fullName: "Ada Lovelace",
       message: "Watch consent and accessibility drift.",
       monitoringGoal: "pre-consent-tracking",
+      sourceContext: "pricing",
       sourcePageUrl: "https://certscore.ai/monitor-site?website=example.com",
+      sourcePlan: "pro",
       sourceReportUrl: "https://certscore.ai/scans/public/report-123",
       website: "www.example.com",
       workEmail: "ADA@EXAMPLE.COM"
@@ -36,6 +38,8 @@ test("validateMonitorSiteRequestForm accepts a monitor request with report sourc
   assert.equal(result.value.normalizedHostname, "example.com");
   assert.equal(result.value.workEmail, "ada@example.com");
   assert.equal(result.value.monitoringGoal, "pre-consent-tracking");
+  assert.equal(result.value.sourceContext, "pricing");
+  assert.equal(result.value.sourcePlan, "pro");
   assert.equal(result.value.sourceReportUrl, "https://certscore.ai/scans/public/report-123");
 });
 
@@ -62,6 +66,7 @@ test("validateMonitorSiteRequestForm falls back to the default monitoring goal a
     form({
       monitoringGoal: "unsupported",
       sourcePageUrl: "javascript:alert(1)",
+      sourcePlan: "enterprise-plus",
       sourceReportUrl: "ftp://example.com/report",
       website: "https://www.example.org/path",
       workEmail: "name@example.org"
@@ -76,6 +81,7 @@ test("validateMonitorSiteRequestForm falls back to the default monitoring goal a
   assert.equal(result.value.monitoringGoal, "changes");
   assert.equal(result.value.normalizedHostname, "example.org");
   assert.equal(result.value.sourcePageUrl, null);
+  assert.equal(result.value.sourcePlan, null);
   assert.equal(result.value.sourceReportUrl, null);
 });
 

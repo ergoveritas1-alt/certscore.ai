@@ -206,6 +206,15 @@ export type AdminMonitorSiteRequestCounts = {
   total: number;
 };
 
+export type AdminMonitorSiteRequestSetupFilter = "activated" | "pending_setup" | "unprepared";
+
+export type AdminMonitorSiteRequestListFilters = {
+  plan?: string | null;
+  query?: string | null;
+  setup?: AdminMonitorSiteRequestSetupFilter | null;
+  status?: AdminMonitorSiteRequestStatus | null;
+};
+
 export type AdminOrganizationOptionRow = {
   id: string;
   name: string;
@@ -641,56 +650,68 @@ export async function loadPolicyReviewQueueRows(reviewStatus?: string | null): P
 }
 
 export async function loadAdminMonitorSiteRequestRows(
-  status?: AdminMonitorSiteRequestStatus | null,
+  filters: AdminMonitorSiteRequestListFilters = {},
   limit = 100
 ): Promise<AdminMonitorSiteRequestRow[]> {
   await ensureMonitorSiteRequestsTable();
 
   const normalizedLimit = Math.min(Math.max(limit, 1), 250);
-  const result = status
-    ? await query<AdminMonitorSiteRequestRow>(
-        `select id,
-                website,
-                normalized_hostname,
-                work_email,
-                full_name,
-                company,
-                monitoring_goal,
-                notes,
-                source_page_url,
-                source_report_url,
-                metadata_json,
-                status,
-                created_at,
-                updated_at
-           from monitor_site_requests
-          where status = $1
-          order by created_at desc
-          limit $2`,
-        [status, normalizedLimit],
-        { readOnly: true }
-      )
-    : await query<AdminMonitorSiteRequestRow>(
-        `select id,
-                website,
-                normalized_hostname,
-                work_email,
-                full_name,
-                company,
-                monitoring_goal,
-                notes,
-                source_page_url,
-                source_report_url,
-                metadata_json,
-                status,
-                created_at,
-                updated_at
-           from monitor_site_requests
-          order by created_at desc
-          limit $1`,
-        [normalizedLimit],
-        { readOnly: true }
-      );
+  const clauses: string[] = [];
+  const values: unknown[] = [];
+
+  if (filters.status) {
+    values.push(filters.status);
+    clauses.push(`status = $${values.length}`);
+  }
+
+  if (filters.setup === "unprepared") {
+    clauses.push(`metadata_json->'monitorSetup' is null`);
+  } else if (filters.setup) {
+    values.push(filters.setup);
+    clauses.push(`metadata_json->'monitorSetup'->>'setupStatus' = $${values.length}`);
+  }
+
+  if (filters.plan) {
+    values.push(filters.plan);
+    clauses.push(`metadata_json->>'sourcePlan' = $${values.length}`);
+  }
+
+  const normalizedQuery = filters.query?.trim();
+  if (normalizedQuery) {
+    values.push(`%${normalizedQuery.toLowerCase()}%`);
+    clauses.push(`(
+      lower(website) like $${values.length}
+      or lower(normalized_hostname) like $${values.length}
+      or lower(work_email) like $${values.length}
+      or lower(coalesce(full_name, '')) like $${values.length}
+      or lower(coalesce(company, '')) like $${values.length}
+    )`);
+  }
+
+  values.push(normalizedLimit);
+  const whereClause = clauses.length ? `where ${clauses.join(" and ")}` : "";
+  const result = await query<AdminMonitorSiteRequestRow>(
+    `select id,
+            website,
+            normalized_hostname,
+            work_email,
+            full_name,
+            company,
+            monitoring_goal,
+            notes,
+            source_page_url,
+            source_report_url,
+            metadata_json,
+            status,
+            created_at,
+            updated_at
+       from monitor_site_requests
+      ${whereClause}
+      order by created_at desc
+      limit $${values.length}`,
+    values,
+    { readOnly: true }
+  );
 
   return result.rows;
 }

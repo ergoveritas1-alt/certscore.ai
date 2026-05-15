@@ -64,6 +64,11 @@ export async function ensureMonitorSiteRequestsTable() {
 
 async function insertMonitorSiteRequest(input: MonitorSiteRequestInput & { normalizedHostname: string }) {
   const publicStatusToken = randomBytes(24).toString("base64url");
+  const requestMetadata = {
+    publicStatusToken,
+    sourceContext: input.sourceContext,
+    sourcePlan: input.sourcePlan
+  };
   const result = await query<{ id: string; public_status_token: string | null }>(
     `
       insert into monitor_site_requests (
@@ -91,7 +96,7 @@ async function insertMonitorSiteRequest(input: MonitorSiteRequestInput & { norma
       input.notes,
       input.sourcePageUrl,
       input.sourceReportUrl,
-      JSON.stringify({ publicStatusToken })
+      JSON.stringify(requestMetadata)
     ]
   );
 

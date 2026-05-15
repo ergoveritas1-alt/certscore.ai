@@ -9,11 +9,19 @@ import {
 
 type MonitorSiteFormProps = {
   defaultWebsite?: string;
+  sourceContext?: string;
   sourcePageUrl?: string;
+  sourcePlan?: string;
   sourceReportUrl?: string;
 };
 
-export function MonitorSiteForm({ defaultWebsite = "", sourcePageUrl = "", sourceReportUrl = "" }: MonitorSiteFormProps) {
+export function MonitorSiteForm({
+  defaultWebsite = "",
+  sourceContext = "",
+  sourcePageUrl = "",
+  sourcePlan = "",
+  sourceReportUrl = ""
+}: MonitorSiteFormProps) {
   const initialState: SendMonitorSiteRequestActionState = {
     error: null
   };
@@ -21,7 +29,9 @@ export function MonitorSiteForm({ defaultWebsite = "", sourcePageUrl = "", sourc
 
   return (
     <form action={action} className="space-y-5">
+      <input name="sourceContext" type="hidden" value={sourceContext} />
       <input name="sourcePageUrl" type="hidden" value={sourcePageUrl} />
+      <input name="sourcePlan" type="hidden" value={sourcePlan} />
       <input name="sourceReportUrl" type="hidden" value={sourceReportUrl} />
       <input
         autoComplete="off"
@@ -73,7 +83,7 @@ export function MonitorSiteForm({ defaultWebsite = "", sourcePageUrl = "", sourc
         </label>
         <select
           id="monitorSiteInterest"
-          name="monitoringInterest"
+          name="monitoringGoal"
           defaultValue="changes"
           className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400"
         >
