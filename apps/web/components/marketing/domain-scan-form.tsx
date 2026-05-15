@@ -185,7 +185,11 @@ export function DomainScanForm({
         <div className="relative">
           <Input
             autoComplete="url"
-            className={compact ? "h-12 rounded-[1.2rem] pr-28 text-sm" : "h-14 rounded-[1.6rem] pr-20 text-base"}
+            className={
+              compact
+                ? "h-12 rounded-[1.2rem] pr-28 text-right text-sm placeholder:text-right"
+                : "h-14 rounded-[1.6rem] pr-20 text-base"
+            }
             id="domain"
             name="domain"
             onChange={(event) => {
