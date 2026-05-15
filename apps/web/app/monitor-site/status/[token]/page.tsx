@@ -157,6 +157,11 @@ export default async function MonitorSiteStatusPage({ params }: MonitorSiteStatu
             </p>
 
             <div className="flex flex-wrap gap-3">
+              {request.setupStatus !== "activated" && request.status !== "closed" ? (
+                <Button asChild>
+                  <Link href={`/app/monitor-site/setup?token=${encodeURIComponent(token)}`}>Connect to workspace</Link>
+                </Button>
+              ) : null}
               <Button asChild>
                 <Link href="/">Run a scan</Link>
               </Button>
