@@ -5,6 +5,7 @@ import { ensureMonitorSiteRequestsTable } from "./monitor-site-request";
 
 export type PublicMonitorSiteRequestStatus = {
   activeFrequency: string | null;
+  activationConfirmedAt: string | null;
   activatedAt: string | null;
   createdAt: string;
   hostname: string;
@@ -57,6 +58,7 @@ export async function getMonitorSiteRequestStatusByToken(
   const setupStatus = setup?.setupStatus === "activated" || setup?.setupStatus === "pending_setup" ? setup.setupStatus : null;
 
   return {
+    activationConfirmedAt: getString(setup?.activationConfirmedAt),
     activatedAt: getString(setup?.activatedAt),
     activeFrequency: getString(setup?.activeFrequency) ?? getString(setup?.requestedFrequency),
     createdAt: row.created_at,

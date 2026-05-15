@@ -338,6 +338,12 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                               </dd>
                               <dt className="text-slate-500">Requested</dt>
                               <dd className="font-medium text-slate-800">{formatFrequency(request.monitorSetup.requestedFrequency)}</dd>
+                              {request.monitorSetup.previousFrequency ? (
+                                <>
+                                  <dt className="text-slate-500">Previous</dt>
+                                  <dd className="font-medium text-slate-800">{formatFrequency(request.monitorSetup.previousFrequency)}</dd>
+                                </>
+                              ) : null}
                               <dt className="text-slate-500">Current active</dt>
                               <dd className="font-medium text-slate-800">
                                 {request.monitorSetup.setupStatus === "activated"
@@ -358,6 +364,17 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                                     <p className="font-medium text-slate-700">Activated</p>
                                     <p>By {shortId(request.monitorSetup.activatedByUserId)}</p>
                                     <p>{formatDateTime(request.monitorSetup.activatedAt)}</p>
+                                    {request.monitorSetup.activationConfirmedAt ? (
+                                      <p>
+                                        Setup confirmed by {shortId(request.monitorSetup.activationConfirmedByUserId)} at{" "}
+                                        {formatDateTime(request.monitorSetup.activationConfirmedAt)}
+                                      </p>
+                                    ) : null}
+                                    {request.monitorSetup.activationNote ? (
+                                      <p className="mt-1 whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-slate-600">
+                                        {request.monitorSetup.activationNote}
+                                      </p>
+                                    ) : null}
                                   </li>
                                 ) : null}
                                 {request.monitorSetup.confirmationEmailSentAt ? (
@@ -403,6 +420,29 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                                 </p>
                                 <form action={activateMonitorSiteSetupFormAction} className="pt-1">
                                   <input name="requestId" type="hidden" value={request.id} />
+                                  <label className="mb-2 flex items-start gap-2 text-xs leading-5 text-slate-600">
+                                    <input
+                                      className="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                      name="activationConfirmation"
+                                      required
+                                      type="checkbox"
+                                      value="confirmed"
+                                    />
+                                    <span>
+                                      I confirm setup has been reviewed with the requester. Activating will move this domain from
+                                      manual scheduling to the requested cadence.
+                                    </span>
+                                  </label>
+                                  <label className="mb-2 block text-xs font-medium text-slate-600" htmlFor={`activation-note-${request.id}`}>
+                                    Activation note
+                                  </label>
+                                  <textarea
+                                    className="mb-3 min-h-20 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                    id={`activation-note-${request.id}`}
+                                    maxLength={500}
+                                    name="activationNote"
+                                    placeholder="Optional internal note, for example requester approval or setup context."
+                                  />
                                   <PendingSubmitButton
                                     idleContent="Activate cadence"
                                     pendingContent="Activating..."

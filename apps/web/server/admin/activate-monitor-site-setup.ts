@@ -15,6 +15,10 @@ import {
 import { requirePlatformAdminContext } from "./platform-admin";
 
 const activateMonitorSiteSetupSchema = z.object({
+  activationConfirmation: z.literal("confirmed", {
+    errorMap: () => ({ message: "Confirm that monitoring setup is ready before activation." })
+  }),
+  activationNote: z.string().trim().max(500).optional().transform((value) => value || null),
   requestId: z.string().uuid("Invalid monitor request.")
 });
 
@@ -35,6 +39,8 @@ function getFrequency(value: unknown): ScanFrequency | null {
 export async function activateMonitorSiteSetupFormAction(formData: FormData): Promise<void> {
   const { user } = await requirePlatformAdminContext();
   const parsed = activateMonitorSiteSetupSchema.parse({
+    activationConfirmation: formData.get("activationConfirmation"),
+    activationNote: formData.get("activationNote"),
     requestId: formData.get("requestId")
   });
 
@@ -70,11 +76,17 @@ export async function activateMonitorSiteSetupFormAction(formData: FormData): Pr
     scanFrequency: requestedFrequency
   });
 
+  const activatedAt = new Date().toISOString();
+  const previousFrequency = getFrequency(domain.scan_frequency);
+
   await updateAdminMonitorSiteRequestSetup({
     id: request.id,
     metadata: {
       monitorSetup: {
-        activatedAt: new Date().toISOString(),
+        activationConfirmedAt: activatedAt,
+        activationConfirmedByUserId: user.id,
+        activationNote: parsed.activationNote ?? undefined,
+        activatedAt,
         activatedByUserId: user.id,
         activeFrequency: requestedFrequency,
         domainId,
@@ -83,6 +95,7 @@ export async function activateMonitorSiteSetupFormAction(formData: FormData): Pr
         linkedByUserId,
         normalizedUrl,
         organizationId,
+        previousFrequency,
         requestedFrequency,
         setupStatus: "activated"
       }

@@ -147,7 +147,7 @@ export default async function MonitorSiteStatusPage({ params }: MonitorSiteStatu
                   <dt className="font-medium text-slate-500">Cadence</dt>
                   <dd className="text-slate-900">{formatFrequency(request.activeFrequency)}</dd>
                   <dt className="font-medium text-slate-500">Confirmed</dt>
-                  <dd className="text-slate-900">{formatDateTime(request.activatedAt)}</dd>
+                  <dd className="text-slate-900">{formatDateTime(request.activationConfirmedAt ?? request.activatedAt)}</dd>
                 </>
               ) : null}
             </dl>

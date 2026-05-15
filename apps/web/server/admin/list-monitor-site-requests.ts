@@ -33,6 +33,9 @@ export type AdminMonitorSiteRequest = {
 };
 
 export type MonitorRequestSetupMetadata = {
+  activationConfirmedAt: string | null;
+  activationConfirmedByUserId: string | null;
+  activationNote: string | null;
   activatedAt: string | null;
   activatedByUserId: string | null;
   activeFrequency: string | null;
@@ -44,6 +47,7 @@ export type MonitorRequestSetupMetadata = {
   linkedByUserId: string;
   normalizedUrl: string;
   organizationId: string;
+  previousFrequency: string | null;
   requestedFrequency: string;
   setupStatus: "activated" | "pending_setup";
 };
@@ -80,6 +84,9 @@ function toSetupMetadata(metadata: Record<string, unknown> | null): MonitorReque
   }
 
   return {
+    activationConfirmedAt: getString(record.activationConfirmedAt),
+    activationConfirmedByUserId: getString(record.activationConfirmedByUserId),
+    activationNote: getString(record.activationNote),
     activatedAt: getString(record.activatedAt),
     activatedByUserId: getString(record.activatedByUserId),
     activeFrequency: getString(record.activeFrequency),
@@ -91,6 +98,7 @@ function toSetupMetadata(metadata: Record<string, unknown> | null): MonitorReque
     linkedByUserId,
     normalizedUrl,
     organizationId,
+    previousFrequency: getString(record.previousFrequency),
     requestedFrequency,
     setupStatus
   };
