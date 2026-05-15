@@ -1,6 +1,7 @@
 import { FULL_SCAN_EVENT_TYPES, SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { getPlanLimits } from "../plans/get-plan-limits";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
+import { getFullScanQueueMetadata } from "../queue/scan-queue-priority";
 import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
 import { ensureValidationRunForManualScan } from "../validation/repository";
 import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan-repository";
@@ -50,11 +51,17 @@ export async function createAnonymousFullScan(input: { hostname: string; normali
     profile: planLimits.scanProfile,
     source: "marketing-anonymous-full-scan"
   });
+  const queueMetadata = getFullScanQueueMetadata({
+    provenance: input.provenance,
+    scanType: "full"
+  });
 
   const scan = await createQueuedFullScan({
     domainId: domain.id,
     organizationId: null,
     pagesRequested,
+    queueOrigin: queueMetadata.queueOrigin,
+    queuePriority: queueMetadata.queuePriority,
     scanConfigJson: scanConfig,
     submittedByUserId: null
   });
@@ -86,6 +93,8 @@ export async function createAnonymousFullScan(input: { hostname: string; normali
     metadataJson: {
       pagesRequested,
       profile: planLimits.scanProfile,
+      queueOrigin: queueMetadata.queueOrigin,
+      queuePriority: queueMetadata.queuePriority,
       queueAvailabilityReason: fullScanQueueAvailability.reason,
       source: input.provenance?.source ?? scanConfig.source,
       originIp: input.provenance?.originIp ?? null,

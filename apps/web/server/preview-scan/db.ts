@@ -1,6 +1,7 @@
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { PREVIEW_SCAN_EVENT_TYPES, type PreviewScanPayload, type ScanSnapshot, type ScanStatus, type ScanType } from "@website-signal-risk-scanner/shared";
 import { buildDatabaseOperationError } from "../database/describe-database-error";
+import { getPreviewScanQueueMetadata } from "../queue/scan-queue-priority";
 
 export type PreviewDomainRow = {
   id: string;
@@ -232,14 +233,15 @@ export async function createPreviewScanRecord(input: { domainId: string; hostnam
     },
     processor: "live-preview-v1"
   };
+  const queueMetadata = getPreviewScanQueueMetadata();
 
   let scan: PreviewScanRow | null;
   try {
     scan = await queryOne<PreviewScanRow>(
-      `insert into scans (domain_id, scan_type, status, pages_requested, pages_scanned, scan_config_json)
-       values ($1, 'preview', 'queued', 1, 0, $2)
+      `insert into scans (domain_id, scan_type, status, pages_requested, pages_scanned, scan_config_json, queue_priority, queue_origin)
+       values ($1, 'preview', 'queued', 1, 0, $2, $3, $4)
        returning *`,
-      [input.domainId, initialConfig]
+      [input.domainId, initialConfig, queueMetadata.queuePriority, queueMetadata.queueOrigin]
     );
   } catch (error) {
     throw buildDatabaseOperationError("Failed to create preview scan", error);
@@ -253,7 +255,7 @@ export async function createPreviewScanRecord(input: { domainId: string; hostnam
     domainId: input.domainId,
     eventType: PREVIEW_SCAN_EVENT_TYPES.queued,
     message: "Preview scan queued.",
-    metadata: { hostname: input.hostname, normalizedUrl: input.normalizedUrl },
+    metadata: { hostname: input.hostname, normalizedUrl: input.normalizedUrl, ...queueMetadata },
     scanId: scan.id
   });
 

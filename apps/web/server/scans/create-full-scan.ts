@@ -13,6 +13,7 @@ import { getDashboardContext } from "../auth";
 import { getDomainById } from "../domains/get-domain-by-id";
 import { getPlanLimits } from "../plans/get-plan-limits";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
+import { getFullScanQueueMetadata } from "../queue/scan-queue-priority";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import { ensureValidationRunForManualScan } from "../validation/repository";
 import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
@@ -216,6 +217,10 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     profile: planLimits.scanProfile,
     source: input.source ?? "manual-dashboard"
   });
+  const queueMetadata = getFullScanQueueMetadata({
+    provenance: input.provenance,
+    scanType: input.scanType ?? "full"
+  });
 
   let scan;
 
@@ -224,6 +229,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       domainId: domainRecord.domain.id,
       organizationId: input.organizationId,
       pagesRequested,
+      queueOrigin: queueMetadata.queueOrigin,
+      queuePriority: queueMetadata.queuePriority,
       scanType: input.scanType ?? "full",
       scanConfigJson: scanConfig,
       submittedByUserId: input.submittedByUserId
@@ -262,6 +269,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       metadataJson: {
         pagesRequested,
         profile: planLimits.scanProfile,
+        queueOrigin: queueMetadata.queueOrigin,
+        queuePriority: queueMetadata.queuePriority,
         queueAvailabilityReason: fullScanQueueAvailability.reason,
         source: input.provenance?.source ?? scanConfig.source,
         originIp: input.provenance?.originIp ?? null,

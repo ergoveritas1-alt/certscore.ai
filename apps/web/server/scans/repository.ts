@@ -318,6 +318,8 @@ export type QueuedFullScanInsert = {
   domainId: string;
   organizationId: string | null;
   pagesRequested: number;
+  queueOrigin?: string;
+  queuePriority?: number;
   scanType?: Extract<ScanType, "full" | "scheduled">;
   scanConfigJson: Record<string, unknown>;
   submittedByUserId: string | null;
@@ -884,10 +886,30 @@ export async function upsertUsageCounter(input: {
 
 export async function createQueuedFullScan(input: QueuedFullScanInsert): Promise<{ id: string }> {
   const data = await queryOne<{ id: string }>(
-    `insert into scans (organization_id, domain_id, submitted_by_user_id, scan_type, status, pages_requested, pages_scanned, scan_config_json)
-     values ($1, $2, $3, $4, 'queued', $5, 0, $6)
+    `insert into scans (
+       organization_id,
+       domain_id,
+       submitted_by_user_id,
+       scan_type,
+       status,
+       pages_requested,
+       pages_scanned,
+       scan_config_json,
+       queue_priority,
+       queue_origin
+     )
+     values ($1, $2, $3, $4, 'queued', $5, 0, $6, $7, $8)
      returning id`,
-    [input.organizationId, input.domainId, input.submittedByUserId, input.scanType ?? "full", input.pagesRequested, input.scanConfigJson]
+    [
+      input.organizationId,
+      input.domainId,
+      input.submittedByUserId,
+      input.scanType ?? "full",
+      input.pagesRequested,
+      input.scanConfigJson,
+      input.queuePriority ?? 50,
+      input.queueOrigin ?? "user"
+    ]
   );
 
   if (!data) {
