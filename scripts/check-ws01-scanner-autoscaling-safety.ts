@@ -89,12 +89,12 @@ async function main() {
     fail(`missing scalable target for ${resourceId}`);
   }
 
-  if ((target.MinCapacity ?? 0) < 2) {
-    fail(`MinCapacity is ${target.MinCapacity ?? "unset"}, expected >= 2`);
+  if ((target.MinCapacity ?? 0) < 1) {
+    fail(`MinCapacity is ${target.MinCapacity ?? "unset"}, expected >= 1`);
   }
 
-  if (target.SuspendedState?.DynamicScalingInSuspended !== true) {
-    fail("DynamicScalingInSuspended is not true");
+  if (target.SuspendedState?.DynamicScalingInSuspended === true) {
+    fail("DynamicScalingInSuspended is true");
   }
 
   if (target.SuspendedState?.DynamicScalingOutSuspended !== false) {

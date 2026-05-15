@@ -5331,7 +5331,7 @@ export function SharedScanDetailView({
           </CollapsibleSectionCard>
           <div className="space-y-5">
             {executiveFindingsProjection.groupedFindings
-              .filter((group) => !["Privacy & Tracking", "Fingerprinting", "Financial & Claims", "Accessibility"].includes(group.section))
+              .filter((group) => !["Privacy & Tracking", "Fingerprinting", "Financial & Claims", "Accessibility", "Cookies & Storage"].includes(group.section))
               .map((group) => (
                 <FindingsSection key={group.section} findings={group.findings} section={group.section} />
               ))}

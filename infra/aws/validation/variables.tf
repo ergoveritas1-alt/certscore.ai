@@ -246,7 +246,7 @@ variable "worker_memory" {
 variable "web_desired_count" {
   description = "Desired task count for validation ops web."
   type        = number
-  default     = 1
+  default     = 0
 }
 
 variable "worker_desired_count" {

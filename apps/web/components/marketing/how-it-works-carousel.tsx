@@ -12,52 +12,52 @@ type CarouselSlide = {
 
 const SLIDES: CarouselSlide[] = [
   {
-    src: "/images/how-it-works/consent-detail-signals.png",
-    alt: "Consent detail signals section showing consent mechanism and privacy request path fields.",
-    title: "Consent detail signals",
-    highlight: "Spot missing reject controls, DSAR paths, privacy request forms, and cookie volume without digging."
+    src: "/how-it-works/executive-summary.png",
+    alt: "CertScore report executive summary showing score, cookies before consent, third-party requests, and review lenses.",
+    title: "Executive summary",
+    highlight: "Start with a plain-English readout of the site's highest-level privacy, consent, tracker, and accessibility posture."
   },
   {
-    src: "/images/how-it-works/executive-summary-policy-posture.png",
-    alt: "Executive summary and privacy disclosure scan report sections.",
-    title: "Executive summary and policy posture",
-    highlight: "Surface key findings, contradictions, and disclosure coverage in one opening view."
+    src: "/how-it-works/highest-priority-issues.png",
+    alt: "Highest-priority findings cards showing tracking cookies before consent and session recording services detected.",
+    title: "Highest-priority issues",
+    highlight: "Focus first on the findings that are most actionable, with severity, evidence strength, and market-density context."
   },
   {
-    src: "/images/how-it-works/cookie-banner-post-choice-audit.png",
-    alt: "Cookie banner and consent section with post-choice audit details.",
-    title: "Cookie banner and post-choice audit",
-    highlight: "Compare baseline consent posture with post-reject behavior to see whether controls actually change tracking."
+    src: "/how-it-works/detailed-finding-packets.png",
+    alt: "Detailed review findings list with severity, surface, evidence, and review-status badges.",
+    title: "Detailed finding packets",
+    highlight: "Expand lower-level findings when you need the underlying taxonomy, evidence lane, status, and retained signal context."
   },
   {
-    src: "/images/how-it-works/contradictions-policy-records.png",
-    alt: "Contradictions and claim checks with policy document analysis.",
-    title: "Contradictions and policy records",
-    highlight: "Bring policy claims and runtime behavior into the same evidence surface so contradictions stand out immediately."
+    src: "/how-it-works/operational-context.png",
+    alt: "Operational context panel showing observed vendors, infrastructure profile, audience context, and scan warnings.",
+    title: "Operational context",
+    highlight: "Review vendors, scan-pass warnings, infrastructure notes, and audience context that may affect interpretation."
   },
   {
-    src: "/images/how-it-works/regulatory-crosswalk.png",
-    alt: "Regulatory crosswalk showing GDPR, FTC, CPPA, and other mappings.",
-    title: "Regulatory crosswalk",
-    highlight: "Group framework-relevant signals for faster legal, compliance, or analyst review without turning the scan into a legal conclusion."
+    src: "/how-it-works/review-lenses.png",
+    alt: "Regulatory review lens cards grouping findings by EU privacy, California privacy, and U.S. accessibility context.",
+    title: "Review lenses",
+    highlight: "See how findings are organized into privacy, consumer-protection, and accessibility review contexts without making legal conclusions."
   },
   {
-    src: "/images/how-it-works/tracker-data-collection.png",
-    alt: "Tracker and third-party data collection detection details.",
-    title: "Tracker and third-party data collection",
-    highlight: "Inspect tracker counts, request domains, payment processors, and broader collection surface from the same scan."
+    src: "/how-it-works/supporting-analysis.png",
+    alt: "Supporting analysis section showing finding mix bars and coverage navigation tiles.",
+    title: "Supporting analysis",
+    highlight: "Use the finding mix and coverage navigation to understand where signals clustered across the scan."
   },
   {
-    src: "/images/how-it-works/advanced-diagnostics.png",
-    alt: "Advanced diagnostics and raw signals sections.",
-    title: "Advanced diagnostics and raw signals",
-    highlight: "Drill into governance, security, request metadata, and raw detected signals when you need analyst-level detail."
+    src: "/how-it-works/policy-detail.png",
+    alt: "Disclosure clarity finding card with next step, why this matters, how to fix, and JSON evidence section.",
+    title: "Policy detail",
+    highlight: "Review retained disclosure snippets and plain-English remediation guidance when policy language appears weak or generic."
   },
   {
-    src: "/images/how-it-works/consent-detail-signals-variant.png",
-    alt: "Consent detail signals screenshot variant.",
-    title: "Operational consent evidence",
-    highlight: "Use dense signal cards to review implementation posture across request paths, controls, and cookies."
+    src: "/how-it-works/evidence-packets.png",
+    alt: "Tracking cookies set before consent finding card with expanded JSON evidence payload.",
+    title: "Evidence packets",
+    highlight: "Open structured JSON evidence when you need auditable details behind a surfaced finding."
   }
 ];
 
@@ -92,7 +92,7 @@ export function HowItWorksCarousel() {
             </div>
 
             <div className="flex min-h-[245px] flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-none">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Current highlight</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Report highlights</p>
               <p className="mt-2 text-[1.35rem] font-semibold tracking-tight text-slate-950">{activeSlide.title}</p>
               <p className="mt-2 text-[13px] leading-5 text-slate-600">{activeSlide.highlight}</p>
 
@@ -131,7 +131,7 @@ export function HowItWorksCarousel() {
                 src={activeSlide.src}
                 alt={activeSlide.alt}
                 fill
-                className="object-cover object-top"
+                className="object-contain object-top"
                 sizes="(min-width: 1024px) 55vw, 100vw"
                 priority
               />

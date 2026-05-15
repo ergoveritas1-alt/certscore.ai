@@ -183,6 +183,15 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private[each.key].id
 }
 
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = aws_vpc.validation.id
+  service_name      = "com.amazonaws.${var.aws_region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = [for route_table in values(aws_route_table.private) : route_table.id]
+
+  tags = merge(local.common_tags, { Name = "${local.prefix}-s3-endpoint" })
+}
+
 resource "aws_security_group" "alb" {
   name        = "${local.prefix}-alb"
   description = "Public ingress for validation ops web"
@@ -393,6 +402,40 @@ resource "aws_ecr_repository" "web" {
   tags = local.common_tags
 }
 
+resource "aws_ecr_lifecycle_policy" "web" {
+  repository = aws_ecr_repository.web.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Expire untagged images after 14 days"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 14
+        }
+        action = {
+          type = "expire"
+        }
+      },
+      {
+        rulePriority = 10
+        description  = "Keep only the newest 20 images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 20
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_ecr_repository" "worker" {
   name                 = "${local.prefix}-worker"
   image_tag_mutability = "MUTABLE"
@@ -402,6 +445,12 @@ resource "aws_ecr_repository" "worker" {
   }
 
   tags = local.common_tags
+}
+
+resource "aws_ecr_lifecycle_policy" "worker" {
+  repository = aws_ecr_repository.worker.name
+
+  policy = aws_ecr_lifecycle_policy.web.policy
 }
 
 resource "aws_ecs_cluster" "validation" {
