@@ -32,6 +32,8 @@ export type MonitorRequestSetupMetadata = {
   activatedAt: string | null;
   activatedByUserId: string | null;
   activeFrequency: string | null;
+  confirmationEmailSentAt: string | null;
+  confirmationEmailSentByUserId: string | null;
   domainId: string;
   hostname: string;
   linkedAt: string;
@@ -77,6 +79,8 @@ function toSetupMetadata(metadata: Record<string, unknown> | null): MonitorReque
     activatedAt: getString(record.activatedAt),
     activatedByUserId: getString(record.activatedByUserId),
     activeFrequency: getString(record.activeFrequency),
+    confirmationEmailSentAt: getString(record.confirmationEmailSentAt),
+    confirmationEmailSentByUserId: getString(record.confirmationEmailSentByUserId),
     domainId,
     hostname,
     linkedAt,

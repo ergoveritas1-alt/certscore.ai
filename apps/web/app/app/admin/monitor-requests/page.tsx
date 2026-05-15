@@ -8,6 +8,10 @@ import {
 import type { AdminMonitorSiteRequestStatus } from "../../../../server/admin/repository";
 import { activateMonitorSiteSetupFormAction } from "../../../../server/admin/activate-monitor-site-setup";
 import { prepareMonitorSiteSetupFormAction } from "../../../../server/admin/prepare-monitor-site-setup";
+import {
+  isMonitorSiteActivationEmailConfigured,
+  sendMonitorSiteActivationEmailFormAction
+} from "../../../../server/admin/send-monitor-site-activation-email";
 import { updateMonitorSiteRequestStatusFormAction } from "../../../../server/admin/update-monitor-site-request-status";
 import { PendingSubmitButton } from "../../../../components/ui/pending-submit-button";
 
@@ -87,10 +91,11 @@ function filterHref(status: AdminMonitorSiteRequestStatus | null) {
 export default async function MonitorRequestsPage({ searchParams }: MonitorRequestsPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const activeStatus = normalizeStatus(resolvedSearchParams.status);
-  const [requests, counts, organizations] = await Promise.all([
+  const [requests, counts, organizations, monitorActivationEmailConfigured] = await Promise.all([
     listMonitorSiteRequests(activeStatus),
     getMonitorSiteRequestCounts(),
-    listMonitorRequestOrganizationOptions()
+    listMonitorRequestOrganizationOptions(),
+    isMonitorSiteActivationEmailConfigured()
   ]);
 
   return (
@@ -216,12 +221,42 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                                     <p>{formatDateTime(request.monitorSetup.activatedAt)}</p>
                                   </li>
                                 ) : null}
+                                {request.monitorSetup.confirmationEmailSentAt ? (
+                                  <li>
+                                    <p className="font-medium text-slate-700">Confirmation email sent</p>
+                                    <p>By {shortId(request.monitorSetup.confirmationEmailSentByUserId)}</p>
+                                    <p>{formatDateTime(request.monitorSetup.confirmationEmailSentAt)}</p>
+                                  </li>
+                                ) : null}
                               </ol>
                             </div>
                             {request.monitorSetup.setupStatus === "activated" ? (
-                              <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-emerald-800">
-                                This setup has been explicitly activated for the requested cadence.
-                              </p>
+                              <div className="space-y-2">
+                                <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-emerald-800">
+                                  This setup has been explicitly activated for the requested cadence.
+                                </p>
+                                {request.monitorSetup.confirmationEmailSentAt ? (
+                                  <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-600">
+                                    Customer confirmation email has been recorded.
+                                  </p>
+                                ) : (
+                                  <form action={sendMonitorSiteActivationEmailFormAction} className="pt-1">
+                                    <input name="requestId" type="hidden" value={request.id} />
+                                    <PendingSubmitButton
+                                      disabled={!monitorActivationEmailConfigured}
+                                      idleContent="Send confirmation email"
+                                      pendingContent="Sending..."
+                                      size="sm"
+                                      variant="secondary"
+                                    />
+                                    {!monitorActivationEmailConfigured ? (
+                                      <p className="mt-2 text-xs leading-5 text-slate-500">
+                                        Gmail sender config is not available for monitor confirmations.
+                                      </p>
+                                    ) : null}
+                                  </form>
+                                )}
+                              </div>
                             ) : (
                               <>
                                 <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800">
