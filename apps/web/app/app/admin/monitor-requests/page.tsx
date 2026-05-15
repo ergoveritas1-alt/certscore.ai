@@ -6,6 +6,7 @@ import {
   listMonitorSiteRequests
 } from "../../../../server/admin/list-monitor-site-requests";
 import type { AdminMonitorSiteRequestStatus } from "../../../../server/admin/repository";
+import { activateMonitorSiteSetupFormAction } from "../../../../server/admin/activate-monitor-site-setup";
 import { prepareMonitorSiteSetupFormAction } from "../../../../server/admin/prepare-monitor-site-setup";
 import { updateMonitorSiteRequestStatusFormAction } from "../../../../server/admin/update-monitor-site-request-status";
 import { PendingSubmitButton } from "../../../../components/ui/pending-submit-button";
@@ -157,12 +158,32 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                       <td className="max-w-sm py-4 pr-4">
                         {request.monitorSetup ? (
                           <div className="space-y-2 text-xs text-slate-600">
-                            <Badge tone="neutral">Pending setup</Badge>
+                            <Badge tone={request.monitorSetup.setupStatus === "activated" ? "success" : "neutral"}>
+                              {request.monitorSetup.setupStatus === "activated" ? "Activated" : "Pending setup"}
+                            </Badge>
                             <p>Linked domain: {request.monitorSetup.hostname}</p>
                             <p>Workspace ID: {request.monitorSetup.organizationId}</p>
                             <p>Domain ID: {request.monitorSetup.domainId}</p>
                             <p>Requested cadence: {request.monitorSetup.requestedFrequency}</p>
-                            <p>Current schedule remains manual until explicit activation.</p>
+                            {request.monitorSetup.setupStatus === "activated" ? (
+                              <>
+                                <p>Active cadence: {request.monitorSetup.activeFrequency ?? request.monitorSetup.requestedFrequency}</p>
+                                <p>Activated: {formatDateTime(request.monitorSetup.activatedAt)}</p>
+                              </>
+                            ) : (
+                              <>
+                                <p>Current schedule remains manual until explicit activation.</p>
+                                <form action={activateMonitorSiteSetupFormAction} className="pt-1">
+                                  <input name="requestId" type="hidden" value={request.id} />
+                                  <PendingSubmitButton
+                                    idleContent="Activate cadence"
+                                    pendingContent="Activating..."
+                                    size="sm"
+                                    variant="secondary"
+                                  />
+                                </form>
+                              </>
+                            )}
                           </div>
                         ) : (
                           <form action={prepareMonitorSiteSetupFormAction} className="min-w-64 space-y-3">

@@ -29,6 +29,9 @@ export type AdminMonitorSiteRequest = {
 };
 
 export type MonitorRequestSetupMetadata = {
+  activatedAt: string | null;
+  activatedByUserId: string | null;
+  activeFrequency: string | null;
   domainId: string;
   hostname: string;
   linkedAt: string;
@@ -36,7 +39,7 @@ export type MonitorRequestSetupMetadata = {
   normalizedUrl: string;
   organizationId: string;
   requestedFrequency: string;
-  setupStatus: "pending_setup";
+  setupStatus: "activated" | "pending_setup";
 };
 
 export type AdminOrganizationOption = {
@@ -64,13 +67,16 @@ function toSetupMetadata(metadata: Record<string, unknown> | null): MonitorReque
   const normalizedUrl = getString(record.normalizedUrl);
   const organizationId = getString(record.organizationId);
   const requestedFrequency = getString(record.requestedFrequency);
-  const setupStatus = record.setupStatus === "pending_setup" ? "pending_setup" : null;
+  const setupStatus = record.setupStatus === "pending_setup" || record.setupStatus === "activated" ? record.setupStatus : null;
 
   if (!domainId || !hostname || !linkedAt || !linkedByUserId || !normalizedUrl || !organizationId || !requestedFrequency || !setupStatus) {
     return null;
   }
 
   return {
+    activatedAt: getString(record.activatedAt),
+    activatedByUserId: getString(record.activatedByUserId),
+    activeFrequency: getString(record.activeFrequency),
     domainId,
     hostname,
     linkedAt,
