@@ -13,6 +13,7 @@ import { updateDomainScanFrequencyFormAction } from "../../../../server/domains/
 import { getDomainScanHistory } from "../../../../server/history/get-domain-scan-history";
 import { getPlanLimits } from "../../../../server/plans/get-plan-limits";
 import { getDomainMonitoringState } from "../../../../server/scheduling/get-domain-monitoring-state";
+import { getDomainMonitorSiteSetup } from "../../../../server/monitor-site/get-domain-monitor-site-setup";
 import { getQueueAvailability } from "../../../../lib/env";
 
 function formatDateTime(value: string | null) {
@@ -71,6 +72,14 @@ function formatScheduledAt(value: string | null, dueNow: boolean) {
   return formatDateTime(value);
 }
 
+function formatFrequency(value: string | null) {
+  if (!value) {
+    return "Not selected";
+  }
+
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 type DomainDetailPageProps = {
   params: Promise<{
     domainId: string;
@@ -79,7 +88,7 @@ type DomainDetailPageProps = {
 
 export default async function DomainDetailPage({ params }: DomainDetailPageProps) {
   const [{ domainId }, { organization }] = await Promise.all([params, getDashboardContext()]);
-  const [domainRecord, planLimits, scanHistory, monitoringState, industries] = await Promise.all([
+  const [domainRecord, planLimits, scanHistory, monitoringState, monitorSiteSetup, industries] = await Promise.all([
     getDomainById({
       domainId,
       organizationId: organization.id
@@ -90,6 +99,10 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
       organizationId: organization.id
     }),
     getDomainMonitoringState({
+      domainId,
+      organizationId: organization.id
+    }),
+    getDomainMonitorSiteSetup({
       domainId,
       organizationId: organization.id
     }),
@@ -248,6 +261,83 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
           </form>
         </CardContent>
       </Card>
+
+      {monitorSiteSetup ? (
+        <Card className="border border-slate-200 bg-white">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle>Monitor request setup</CardTitle>
+              <Badge tone={monitorSiteSetup.setupStatus === "activated" ? "success" : "neutral"}>
+                {monitorSiteSetup.setupStatus === "activated" ? "Setup confirmed" : "Pending setup confirmation"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm text-slate-600">
+            <p>
+              This website is linked to a monitor request. Monitoring is active only after setup is confirmed; pending
+              setup does not schedule recurring scans or change existing scan results.
+            </p>
+            <dl className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-[12rem_1fr]">
+              <dt className="font-medium text-slate-500">Request status</dt>
+              <dd className="text-slate-900">{formatStatus(monitorSiteSetup.requestStatus)}</dd>
+              <dt className="font-medium text-slate-500">Requested cadence</dt>
+              <dd className="text-slate-900">{formatFrequency(monitorSiteSetup.requestedFrequency)}</dd>
+              <dt className="font-medium text-slate-500">Active cadence</dt>
+              <dd className="text-slate-900">
+                {monitorSiteSetup.setupStatus === "activated" ? formatFrequency(monitorSiteSetup.activeFrequency) : "Not active"}
+              </dd>
+              <dt className="font-medium text-slate-500">Submitted by</dt>
+              <dd className="text-slate-900">{monitorSiteSetup.workEmail}</dd>
+              <dt className="font-medium text-slate-500">Goal</dt>
+              <dd className="text-slate-900">{monitorSiteSetup.monitoringGoal}</dd>
+              <dt className="font-medium text-slate-500">Setup source</dt>
+              <dd className="text-slate-900">
+                {monitorSiteSetup.setupSource === "account_self_serve" ? "Connected from account" : "Admin linked"}
+              </dd>
+              <dt className="font-medium text-slate-500">Last updated</dt>
+              <dd className="text-slate-900">{formatDateTime(monitorSiteSetup.updatedAt)}</dd>
+              {monitorSiteSetup.setupStatus === "activated" ? (
+                <>
+                  <dt className="font-medium text-slate-500">Confirmed</dt>
+                  <dd className="text-slate-900">
+                    {formatDateTime(monitorSiteSetup.activationConfirmedAt ?? monitorSiteSetup.activatedAt)}
+                  </dd>
+                  <dt className="font-medium text-slate-500">Customer confirmation</dt>
+                  <dd className="text-slate-900">
+                    {monitorSiteSetup.confirmationEmailSentAt
+                      ? `Sent ${formatDateTime(monitorSiteSetup.confirmationEmailSentAt)}`
+                      : "Not recorded"}
+                  </dd>
+                </>
+              ) : null}
+            </dl>
+            <div className="flex flex-wrap gap-3">
+              {monitorSiteSetup.publicStatusToken ? (
+                <PendingButtonLink
+                  href={`/monitor-site/status/${encodeURIComponent(monitorSiteSetup.publicStatusToken)}`}
+                  idleContent="View request status"
+                  pendingContent="Opening..."
+                  size="sm"
+                  variant="secondary"
+                />
+              ) : null}
+              {monitorSiteSetup.setupStatus !== "activated" ? (
+                <PendingButtonLink
+                  href="/contact-sales"
+                  idleContent="Contact setup team"
+                  pendingContent="Opening..."
+                  size="sm"
+                  variant="secondary"
+                />
+              ) : null}
+            </div>
+            <p className="text-xs leading-5 text-slate-500">
+              CertScore uses automated public-web observations as review signals. Monitor setup context is operational
+              workflow information, not legal advice, certification, or a compliance determination.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="border border-slate-200 bg-white">
         <CardHeader>

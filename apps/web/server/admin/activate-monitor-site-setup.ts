@@ -83,6 +83,7 @@ export async function activateMonitorSiteSetupFormAction(formData: FormData): Pr
     id: request.id,
     metadata: {
       monitorSetup: {
+        ...setup,
         activationConfirmedAt: activatedAt,
         activationConfirmedByUserId: user.id,
         activationNote: parsed.activationNote ?? undefined,

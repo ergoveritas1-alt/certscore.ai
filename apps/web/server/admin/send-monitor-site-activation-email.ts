@@ -90,6 +90,7 @@ export async function sendMonitorSiteActivationEmailFormAction(formData: FormDat
     id: request.id,
     metadata: {
       monitorSetup: {
+        ...setup,
         activatedAt: getString(setup?.activatedAt),
         activatedByUserId: getString(setup?.activatedByUserId),
         activeFrequency,
