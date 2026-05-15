@@ -4,6 +4,7 @@ import { query, queryOne } from "@website-signal-risk-scanner/db";
 import type {
   AccessPostureClass,
   RecoverableFindingClass,
+  ScanType,
   ScanExecutionTier,
   SharedCrawlSeedHint,
   SharedPriorScanAccelerationConfig
@@ -317,6 +318,7 @@ export type QueuedFullScanInsert = {
   domainId: string;
   organizationId: string | null;
   pagesRequested: number;
+  scanType?: Extract<ScanType, "full" | "scheduled">;
   scanConfigJson: Record<string, unknown>;
   submittedByUserId: string | null;
 };
@@ -883,9 +885,9 @@ export async function upsertUsageCounter(input: {
 export async function createQueuedFullScan(input: QueuedFullScanInsert): Promise<{ id: string }> {
   const data = await queryOne<{ id: string }>(
     `insert into scans (organization_id, domain_id, submitted_by_user_id, scan_type, status, pages_requested, pages_scanned, scan_config_json)
-     values ($1, $2, $3, 'full', 'queued', $4, 0, $5)
+     values ($1, $2, $3, $4, 'queued', $5, 0, $6)
      returning id`,
-    [input.organizationId, input.domainId, input.submittedByUserId, input.pagesRequested, input.scanConfigJson]
+    [input.organizationId, input.domainId, input.submittedByUserId, input.scanType ?? "full", input.pagesRequested, input.scanConfigJson]
   );
 
   if (!data) {

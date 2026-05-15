@@ -44,6 +44,8 @@ jobs:
       OPS_REQUIRE_SCANNER_HEARTBEAT: ${{ vars.OPS_REQUIRE_SCANNER_HEARTBEAT || 'true' }}
       OPS_REQUIRE_VALIDATION_HEARTBEAT: ${{ vars.OPS_REQUIRE_VALIDATION_HEARTBEAT || 'true' }}
       OPS_SCAN_QUEUE_STALE_MINUTES: ${{ vars.OPS_SCAN_QUEUE_STALE_MINUTES || '10' }}
+      OPS_SCHEDULED_MONITORING_SWEEP_ENABLED: ${{ vars.OPS_SCHEDULED_MONITORING_SWEEP_ENABLED || 'false' }}
+      OPS_SCHEDULED_MONITORING_SWEEP_LIMIT: ${{ vars.OPS_SCHEDULED_MONITORING_SWEEP_LIMIT || '50' }}
       OPS_SYNTHETIC_SCAN_DOMAIN: ${{ vars.OPS_SYNTHETIC_SCAN_DOMAIN || 'example.com' }}
       OPS_SYNTHETIC_SCAN_ENABLED: ${{ inputs.synthetic_scan || vars.OPS_SYNTHETIC_SCAN_ENABLED || 'false' }}
       OPS_SYNTHETIC_SCAN_TIMEOUT_MINUTES: ${{ vars.OPS_SYNTHETIC_SCAN_TIMEOUT_MINUTES || '15' }}
@@ -58,6 +60,9 @@ jobs:
           test -n "${OPS_BASE_URL}" || (echo "Missing OPS_BASE_URL" && exit 1)
           if [ "${OPS_REQUIRE_DIRECT_DATABASE}" = "true" ]; then
             test -n "${DATABASE_URL}" || (echo "Missing secret PROD_DATABASE_URL or DATABASE_URL" && exit 1)
+          fi
+          if [ "${OPS_SCHEDULED_MONITORING_SWEEP_ENABLED}" = "true" ]; then
+            test -n "${DATABASE_URL}" || (echo "Missing secret PROD_DATABASE_URL or DATABASE_URL for scheduled monitoring sweep" && exit 1)
           fi
           if [ "${OPS_REQUIRE_DIRECT_DATABASE}" = "true" ] && [ "${OPS_WAKE_SCANNER_ON_QUEUE}" = "true" ]; then
             test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing secret AWS_ROLE_TO_ASSUME" && exit 1)
@@ -101,6 +106,10 @@ jobs:
 
       - name: Run production monitor
         run: pnpm ops:monitor:prod
+
+      - name: Run scheduled monitoring sweep
+        if: ${{ env.OPS_SCHEDULED_MONITORING_SWEEP_ENABLED == 'true' }}
+        run: pnpm ops:monitoring:sweep -- --limit=${OPS_SCHEDULED_MONITORING_SWEEP_LIMIT}
 
       - name: Run AWS-side database and worker probe
         if: ${{ env.OPS_AWS_DB_PROBE_ENABLED == 'true' }}

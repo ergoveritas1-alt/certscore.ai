@@ -1,6 +1,13 @@
 "use server";
 
-import { FULL_SCAN_EVENT_TYPES, SCAN_EVENT_TYPES, USAGE_METRIC_KEYS, getPlanDefinition, type PlanCode } from "@website-signal-risk-scanner/shared";
+import {
+  FULL_SCAN_EVENT_TYPES,
+  SCAN_EVENT_TYPES,
+  USAGE_METRIC_KEYS,
+  getPlanDefinition,
+  type PlanCode,
+  type ScanType
+} from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
 import { getDashboardContext } from "../auth";
 import { getDomainById } from "../domains/get-domain-by-id";
@@ -42,7 +49,8 @@ type QueueFullScanInput = {
   organizationId: string;
   planCode: PlanCode;
   planLimitsOverride?: Awaited<ReturnType<typeof getPlanLimits>>;
-  submittedByUserId: string;
+  submittedByUserId: string | null;
+  scanType?: Extract<ScanType, "full" | "scheduled">;
   enforceCooldown?: boolean;
   enforceMonthlyUsageLimit?: boolean;
   provenance?: {
@@ -216,6 +224,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       domainId: domainRecord.domain.id,
       organizationId: input.organizationId,
       pagesRequested,
+      scanType: input.scanType ?? "full",
       scanConfigJson: scanConfig,
       submittedByUserId: input.submittedByUserId
     });
@@ -295,7 +304,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     normalizedUrl: domainRecord.domain.normalizedUrl,
     organizationId: input.organizationId,
     scanId: scan.id,
-    submittedByUserId: input.submittedByUserId
+    submittedByUserId: input.submittedByUserId,
+    triggerMode: input.scanType === "scheduled" ? "automatic" : "manual"
   }).catch((error) => {
     console.error("[web] validation handoff failed for full scan", {
       error: error instanceof Error ? error.message : String(error),

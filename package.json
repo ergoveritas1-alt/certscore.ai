@@ -46,6 +46,7 @@
     "db:import-json": "pnpm exec tsx ./scripts/import-json-to-postgres.ts",
     "ops:monitor:prod": "pnpm exec tsx ./scripts/monitor-prod-ops.ts",
     "ops:monitor:prod:aws": "pnpm exec tsx ./scripts/run-prod-ops-monitor-ecs.ts",
+    "ops:monitoring:sweep": "pnpm --filter @website-signal-risk-scanner/web monitoring:sweep",
     "ops:prod-db:audit": "pnpm exec tsx ./scripts/run-prod-db-audit-ecs.ts",
     "ops:scan-acceleration:audit": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/audit-prior-scan-acceleration.ts",
     "ops:scan-acceleration:benchmark": "pnpm exec tsx ./scripts/run-prior-scan-benchmark.ts",

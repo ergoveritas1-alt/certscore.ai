@@ -1398,6 +1398,7 @@ export async function ensureValidationRunForManualScan(input: {
   organizationId: string | null;
   scanId: string;
   submittedByUserId: string | null;
+  triggerMode?: ValidationRunMode;
 }) {
   const availability = getValidationQueueAvailability();
   if (!availability.enabled) {
@@ -1468,7 +1469,7 @@ export async function ensureValidationRunForManualScan(input: {
     rank_band: previousRun?.rank_band ?? null,
     scan_id: input.scanId,
     tranco_rank: previousRun?.tranco_rank ?? null,
-    trigger_mode: "manual" as const,
+    trigger_mode: input.triggerMode ?? "manual",
     triggered_by_user_id: input.submittedByUserId
   };
 
@@ -1564,7 +1565,7 @@ export async function ensureValidationRunForManualScan(input: {
       {
         domainId: input.domainId,
         hostname: input.hostname,
-        reason: "manual_scan_created",
+        reason: input.triggerMode === "automatic" ? "scheduled_scan_created" : "manual_scan_created",
         scanId: input.scanId,
         validationRunId: run.id
       }
@@ -1574,7 +1575,7 @@ export async function ensureValidationRunForManualScan(input: {
   try {
     await enqueueValidationCollectJob(run.id);
   } catch (error) {
-    console.error("[validation] failed to enqueue collect job for manual scan validation run", {
+    console.error("[validation] failed to enqueue collect job for scan validation run", {
       error: getErrorMessage(error),
       scanId: input.scanId,
       validationRunId: run.id
