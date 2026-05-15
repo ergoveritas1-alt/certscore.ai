@@ -109,7 +109,9 @@ jobs:
 
       - name: Run scheduled monitoring sweep
         if: ${{ env.OPS_SCHEDULED_MONITORING_SWEEP_ENABLED == 'true' }}
-        run: pnpm ops:monitoring:sweep -- --limit=${OPS_SCHEDULED_MONITORING_SWEEP_LIMIT}
+        env:
+          OPS_AWS_DB_PROBE_COMMAND: pnpm --filter @website-signal-risk-scanner/web monitoring:sweep -- --limit=${{ env.OPS_SCHEDULED_MONITORING_SWEEP_LIMIT }}
+        run: pnpm ops:monitor:prod:aws
 
       - name: Run AWS-side database and worker probe
         if: ${{ env.OPS_AWS_DB_PROBE_ENABLED == 'true' }}
