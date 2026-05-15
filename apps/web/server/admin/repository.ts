@@ -208,10 +208,13 @@ export type AdminMonitorSiteRequestCounts = {
 
 export type AdminMonitorSiteRequestSetupFilter = "activated" | "pending_setup" | "unprepared";
 
+export type AdminMonitorSiteRequestStageFilter = "complete" | "confirmed_not_notified" | "linked_not_confirmed";
+
 export type AdminMonitorSiteRequestListFilters = {
   plan?: string | null;
   query?: string | null;
   setup?: AdminMonitorSiteRequestSetupFilter | null;
+  stage?: AdminMonitorSiteRequestStageFilter | null;
   status?: AdminMonitorSiteRequestStatus | null;
 };
 
@@ -669,6 +672,17 @@ export async function loadAdminMonitorSiteRequestRows(
   } else if (filters.setup) {
     values.push(filters.setup);
     clauses.push(`metadata_json->'monitorSetup'->>'setupStatus' = $${values.length}`);
+  }
+
+  if (filters.stage === "linked_not_confirmed") {
+    clauses.push(`metadata_json->'monitorSetup' is not null`);
+    clauses.push(`metadata_json->'monitorSetup'->>'setupStatus' = 'pending_setup'`);
+  } else if (filters.stage === "confirmed_not_notified") {
+    clauses.push(`metadata_json->'monitorSetup'->>'setupStatus' = 'activated'`);
+    clauses.push(`metadata_json->'monitorSetup'->>'confirmationEmailSentAt' is null`);
+  } else if (filters.stage === "complete") {
+    clauses.push(`metadata_json->'monitorSetup'->>'setupStatus' = 'activated'`);
+    clauses.push(`metadata_json->'monitorSetup'->>'confirmationEmailSentAt' is not null`);
   }
 
   if (filters.plan) {

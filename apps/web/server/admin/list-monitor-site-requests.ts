@@ -8,6 +8,7 @@ import {
   type AdminMonitorSiteRequestListFilters,
   type AdminMonitorSiteRequestRow,
   type AdminMonitorSiteRequestStatus,
+  type AdminMonitorSiteRequestStageFilter,
   type AdminMonitorSiteRequestSetupFilter,
   type AdminOrganizationOptionRow
 } from "./repository";
@@ -145,7 +146,7 @@ export async function listMonitorSiteRequests(
   return rows.map(toMonitorSiteRequest);
 }
 
-export type { AdminMonitorSiteRequestStatus, AdminMonitorSiteRequestSetupFilter };
+export type { AdminMonitorSiteRequestStatus, AdminMonitorSiteRequestSetupFilter, AdminMonitorSiteRequestStageFilter };
 
 export async function getMonitorSiteRequestCounts(): Promise<AdminMonitorSiteRequestCounts> {
   await requirePlatformAdminContext();

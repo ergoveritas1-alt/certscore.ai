@@ -6,6 +6,7 @@ import {
   listMonitorSiteRequests
 } from "../../../../server/admin/list-monitor-site-requests";
 import type {
+  AdminMonitorSiteRequestStageFilter,
   AdminMonitorSiteRequestSetupFilter,
   AdminMonitorSiteRequestStatus
 } from "../../../../server/admin/repository";
@@ -25,6 +26,7 @@ export const revalidate = 0;
 
 const statuses = ["pending", "contacted", "converted", "closed"] as const;
 const setupFilters = ["unprepared", "pending_setup", "activated"] as const;
+const stageFilters = ["linked_not_confirmed", "confirmed_not_notified", "complete"] as const;
 const sourcePlans = ["individual", "pro", "ultra", "enterprise"] as const;
 
 type MonitorRequestsPageProps = {
@@ -32,6 +34,7 @@ type MonitorRequestsPageProps = {
     plan?: string;
     q?: string;
     setup?: string;
+    stage?: string;
     status?: string;
   }>;
 };
@@ -42,6 +45,10 @@ function normalizeStatus(value: string | undefined): AdminMonitorSiteRequestStat
 
 function normalizeSetup(value: string | undefined): AdminMonitorSiteRequestSetupFilter | null {
   return setupFilters.includes(value as AdminMonitorSiteRequestSetupFilter) ? (value as AdminMonitorSiteRequestSetupFilter) : null;
+}
+
+function normalizeStage(value: string | undefined): AdminMonitorSiteRequestStageFilter | null {
+  return stageFilters.includes(value as AdminMonitorSiteRequestStageFilter) ? (value as AdminMonitorSiteRequestStageFilter) : null;
 }
 
 function normalizePlan(value: string | undefined) {
@@ -118,6 +125,18 @@ function setupLabel(setup: AdminMonitorSiteRequestSetupFilter) {
     .join(" ");
 }
 
+function stageLabel(stage: AdminMonitorSiteRequestStageFilter) {
+  if (stage === "linked_not_confirmed") {
+    return "Linked, not confirmed";
+  }
+
+  if (stage === "confirmed_not_notified") {
+    return "Confirmed, not notified";
+  }
+
+  return "Complete";
+}
+
 function planLabel(plan: string | null) {
   if (!plan) {
     return "Any plan";
@@ -134,6 +153,7 @@ function filterHref(input: {
   plan?: string | null;
   query?: string | null;
   setup?: AdminMonitorSiteRequestSetupFilter | null;
+  stage?: AdminMonitorSiteRequestStageFilter | null;
   status?: AdminMonitorSiteRequestStatus | null;
 }) {
   const params = new URLSearchParams();
@@ -142,6 +162,9 @@ function filterHref(input: {
   }
   if (input.setup) {
     params.set("setup", input.setup);
+  }
+  if (input.stage) {
+    params.set("stage", input.stage);
   }
   if (input.plan) {
     params.set("plan", input.plan);
@@ -157,6 +180,7 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const activeStatus = normalizeStatus(resolvedSearchParams.status);
   const activeSetup = normalizeSetup(resolvedSearchParams.setup);
+  const activeStage = normalizeStage(resolvedSearchParams.stage);
   const activePlan = normalizePlan(resolvedSearchParams.plan);
   const activeQuery = normalizeQuery(resolvedSearchParams.q);
   const [requests, counts, organizations, monitorActivationEmailConfigured] = await Promise.all([
@@ -164,6 +188,7 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
       plan: activePlan,
       query: activeQuery,
       setup: activeSetup,
+      stage: activeStage,
       status: activeStatus
     }),
     getMonitorSiteRequestCounts(),
@@ -191,21 +216,24 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
         <CardContent className="space-y-4 pt-0">
           <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
             <Button asChild size="sm" variant={activeStatus === null ? "primary" : "secondary"}>
-              <Link href={filterHref({ plan: activePlan, query: activeQuery, setup: activeSetup })}>All ({counts.total})</Link>
+              <Link href={filterHref({ plan: activePlan, query: activeQuery, setup: activeSetup, stage: activeStage })}>
+                All ({counts.total})
+              </Link>
             </Button>
             {statuses.map((status) => (
               <Button key={status} asChild size="sm" variant={activeStatus === status ? "primary" : "secondary"}>
-                <Link href={filterHref({ plan: activePlan, query: activeQuery, setup: activeSetup, status })}>
+                <Link href={filterHref({ plan: activePlan, query: activeQuery, setup: activeSetup, stage: activeStage, status })}>
                   {statusLabel(status)} ({counts[status]})
                 </Link>
               </Button>
             ))}
           </div>
 
-          <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end">
+          <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 lg:grid-cols-[1fr_auto_auto_auto_auto] lg:items-end">
             <form action="/app/admin/monitor-requests" className="grid gap-3 sm:grid-cols-[1fr_auto]">
               {activeStatus ? <input name="status" type="hidden" value={activeStatus} /> : null}
               {activeSetup ? <input name="setup" type="hidden" value={activeSetup} /> : null}
+              {activeStage ? <input name="stage" type="hidden" value={activeStage} /> : null}
               {activePlan ? <input name="plan" type="hidden" value={activePlan} /> : null}
               <div className="space-y-1">
                 <label className="block text-xs font-medium text-slate-600" htmlFor="monitor-request-search">
@@ -229,12 +257,28 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
               <p className="text-xs font-medium text-slate-600">Setup</p>
               <div className="flex flex-wrap gap-2">
                 <Button asChild size="sm" variant={activeSetup === null ? "primary" : "secondary"}>
-                  <Link href={filterHref({ plan: activePlan, query: activeQuery, status: activeStatus })}>Any setup</Link>
+                  <Link href={filterHref({ plan: activePlan, query: activeQuery, stage: activeStage, status: activeStatus })}>Any setup</Link>
                 </Button>
                 {setupFilters.map((setup) => (
                   <Button key={setup} asChild size="sm" variant={activeSetup === setup ? "primary" : "secondary"}>
-                    <Link href={filterHref({ plan: activePlan, query: activeQuery, setup, status: activeStatus })}>
+                    <Link href={filterHref({ plan: activePlan, query: activeQuery, setup, stage: activeStage, status: activeStatus })}>
                       {setupLabel(setup)}
+                    </Link>
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-slate-600">Follow-up stage</p>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild size="sm" variant={activeStage === null ? "primary" : "secondary"}>
+                  <Link href={filterHref({ plan: activePlan, query: activeQuery, setup: activeSetup, status: activeStatus })}>Any stage</Link>
+                </Button>
+                {stageFilters.map((stage) => (
+                  <Button key={stage} asChild size="sm" variant={activeStage === stage ? "primary" : "secondary"}>
+                    <Link href={filterHref({ plan: activePlan, query: activeQuery, setup: activeSetup, stage, status: activeStatus })}>
+                      {stageLabel(stage)}
                     </Link>
                   </Button>
                 ))}
@@ -245,11 +289,11 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
               <p className="text-xs font-medium text-slate-600">Source plan</p>
               <div className="flex flex-wrap gap-2">
                 <Button asChild size="sm" variant={activePlan === null ? "primary" : "secondary"}>
-                  <Link href={filterHref({ query: activeQuery, setup: activeSetup, status: activeStatus })}>Any plan</Link>
+                  <Link href={filterHref({ query: activeQuery, setup: activeSetup, stage: activeStage, status: activeStatus })}>Any plan</Link>
                 </Button>
                 {sourcePlans.map((plan) => (
                   <Button key={plan} asChild size="sm" variant={activePlan === plan ? "primary" : "secondary"}>
-                    <Link href={filterHref({ plan, query: activeQuery, setup: activeSetup, status: activeStatus })}>
+                    <Link href={filterHref({ plan, query: activeQuery, setup: activeSetup, stage: activeStage, status: activeStatus })}>
                       {planLabel(plan)}
                     </Link>
                   </Button>
@@ -257,7 +301,7 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
               </div>
             </div>
 
-            {activeStatus || activeSetup || activePlan || activeQuery ? (
+            {activeStatus || activeSetup || activeStage || activePlan || activeQuery ? (
               <Button asChild size="sm" variant="secondary">
                 <Link href="/app/admin/monitor-requests">Clear filters</Link>
               </Button>
