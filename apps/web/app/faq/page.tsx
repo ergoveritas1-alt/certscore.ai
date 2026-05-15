@@ -56,7 +56,7 @@ const faqs = [
   {
     question: "How often can my site be rescanned?",
     answer:
-      "That depends on your plan. Legacy Free workspaces include 1 scan per month. Individual, Pro, and Ultra support recurring scans up to hourly, plus on-demand re-scans every 1 minute per domain."
+      "That depends on your plan, included scan credits, and monitoring setup. Manual re-scans and scheduled monitoring consume scan credits; high-frequency monitoring is handled as a custom higher-volume setup."
   },
   {
     question: "What happens if my site changes after the scan?",

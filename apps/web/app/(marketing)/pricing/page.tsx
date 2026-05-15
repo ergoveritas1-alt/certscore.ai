@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
-import Link from "next/link";
-import { Button } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../../components/layout/site-footer";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
@@ -9,67 +7,79 @@ import { createPageMetadata } from "../../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
   title: "Pricing",
-  description: "Compare scans, findings history, monitoring cadence, and domain coverage for CertScore.ai.",
+  description: "Compare monitored domains, scan credits, monitoring cadence, and evidence history for CertScore.ai.",
   path: "/pricing"
 });
 
-const API_ACCESS_COMING_SOON_LABEL = "Coming soon";
-
 const comparisonRows = [
-  { label: "Domains", values: { individual: "1", pro: "20", team: "100" } },
-  { label: "Coverage", values: { individual: "Public-site scan coverage", pro: "Public-site scan coverage", team: "Public-site scan coverage" } },
+  { label: "Monitored domains", values: { starter: "1", pro: "10", agency: "50" } },
+  { label: "Included scan credits/month", values: { starter: "50", pro: "500", agency: "3,000" } },
   {
-    label: "Recurring scan cadence",
+    label: "Monitoring cadence",
     values: {
-      individual: "Setup options up to hourly",
-      pro: "Setup options up to hourly",
-      team: "Setup options up to hourly"
+      starter: "Weekly monitoring",
+      pro: "Daily monitoring available within credits",
+      agency: "Scheduled portfolio monitoring"
     }
   },
-  { label: "Manual re-scan cooldown", values: { individual: "Every 1 minute per domain", pro: "Every 1 minute per domain", team: "Every 1 minute per domain" } },
-  { label: "Scan history", values: { individual: "Included", pro: "Included", team: "Included" } },
-  { label: "API access", values: { individual: "Not included", pro: "Not included", team: API_ACCESS_COMING_SOON_LABEL } }
+  {
+    label: "Manual re-scans",
+    values: {
+      starter: "Use included credits",
+      pro: "Use included credits",
+      agency: "Use included credits"
+    }
+  },
+  { label: "History", values: { starter: "Basic scan history", pro: "Evidence history", agency: "Portfolio evidence history" } },
+  { label: "High-frequency monitoring", values: { starter: "Custom add-on", pro: "Custom add-on", agency: "Custom add-on" } }
 ];
 
 const marketingPlans = [
   {
-    code: "individual",
-    label: "Individual",
-    priceLabel: "$29/mo",
-    description: "Evidence-led monitoring setup for one domain",
-    coverageLabel: "Public-site scan coverage",
-    maxDomains: 1,
-    scanFrequency: "hourly",
-    scanHistoryEnabled: true,
-    apiAccessLabel: "Not included"
+    code: "free",
+    label: "Free / Preview",
+    priceLabel: "$0",
+    description: "A lightweight homepage preview for a submitted public site.",
+    domainsLabel: "1 submitted site",
+    scanCreditsLabel: "Homepage preview",
+    cadenceLabel: "Manual only",
+    historyLabel: "Limited scan evidence"
+  },
+  {
+    code: "starter",
+    label: "Starter",
+    priceLabel: "$39/mo",
+    description: "Simple recurring review signals for one monitored domain.",
+    domainsLabel: "1 monitored domain",
+    scanCreditsLabel: "50 credits/month",
+    cadenceLabel: "Weekly monitoring",
+    historyLabel: "Basic scan history"
   },
   {
     code: "pro",
     label: "Pro",
-    priceLabel: "$129/mo",
-    description: "Structured findings setup across a growing portfolio",
-    coverageLabel: "Public-site scan coverage",
-    maxDomains: 20,
-    scanFrequency: "hourly",
-    scanHistoryEnabled: true,
-    apiAccessLabel: "Not included"
+    priceLabel: "$149/mo",
+    description: "Deeper evidence history and daily monitoring options within credits.",
+    domainsLabel: "10 monitored domains",
+    scanCreditsLabel: "500 credits/month",
+    cadenceLabel: "Daily available within credits",
+    historyLabel: "Evidence history"
   },
   {
-    code: "team",
-    label: "Ultra",
-    priceLabel: "$289/mo",
-    description: "Portfolio-scale scan review and change tracking setup",
-    coverageLabel: "Public-site scan coverage",
-    maxDomains: 100,
-    scanFrequency: "hourly",
-    scanHistoryEnabled: true,
-    apiAccessLabel: API_ACCESS_COMING_SOON_LABEL
+    code: "agency",
+    label: "Agency / Portfolio",
+    priceLabel: "$399/mo",
+    description: "Portfolio monitoring for teams reviewing many public sites.",
+    domainsLabel: "50 monitored domains",
+    scanCreditsLabel: "3,000 credits/month",
+    cadenceLabel: "Scheduled monitoring",
+    historyLabel: "Portfolio evidence history"
   }
 ] as const;
 
 const planCardContent = {
-  individual: {
-    badge: "Solo",
+  free: {
+    badge: "Preview",
     badgeClassName: "bg-amber-100 text-amber-800 ring-amber-200",
     cardClassName:
       "border-amber-200 bg-[linear-gradient(180deg,rgba(255,251,235,1)_0%,rgba(255,255,255,0.98)_100%)] shadow-[0_18px_42px_rgba(245,158,11,0.12)]",
@@ -77,18 +87,40 @@ const planCardContent = {
     glowClassName: "bg-amber-300/70",
     valueClassName: "text-amber-950",
     statCardClassName: "bg-white/90 ring-amber-100",
-    summaryLabel: "Best for one reviewed domain",
+    summaryLabel: "Best for a first look",
     bullets: [
-      "Structured findings and evidence history for one domain",
-      "Recurring scan cadence options up to hourly after setup is confirmed",
-      "On-demand re-scans every 1 minute per domain",
-      "Built for solo operators who only need one monitored domain"
+      "One submitted site or homepage preview",
+      "Limited scan evidence for review",
+      "Manual scan request only",
+      "Automated findings are review signals"
     ],
-    footerNote: "Individual matches Pro coverage and cadence, but is limited to one domain.",
-    ctaHref: "/monitor-site?source=pricing&plan=individual",
-    ctaLabel: "Request Individual setup",
+    footerNote: "Use the preview to see public-web observations before adding monitoring.",
+    ctaHref: "/",
+    ctaLabel: "Run a free scan",
     ctaClassName:
       "border-0 bg-[linear-gradient(135deg,#f59e0b_0%,#fbbf24_58%,#fde68a_100%)] text-slate-950 shadow-[0_14px_32px_rgba(245,158,11,0.18)] hover:brightness-[1.03]"
+  },
+  starter: {
+    badge: "Starter",
+    badgeClassName: "bg-lime-100 text-lime-800 ring-lime-200",
+    cardClassName:
+      "border-lime-200 bg-[linear-gradient(180deg,rgba(250,253,244,1)_0%,rgba(255,255,255,0.98)_100%)] shadow-[0_18px_42px_rgba(132,204,22,0.12)]",
+    accentClassName: "bg-[linear-gradient(90deg,rgba(132,204,22,0.2)_0%,rgba(190,242,100,0.34)_100%)]",
+    glowClassName: "bg-lime-300/70",
+    valueClassName: "text-lime-950",
+    statCardClassName: "bg-white/90 ring-lime-100",
+    summaryLabel: "Best for one monitored site",
+    bullets: [
+      "50 scan credits included each month",
+      "Weekly monitoring for one domain",
+      "Manual re-scans use included credits",
+      "Basic scan history for follow-up review"
+    ],
+    footerNote: "Starter keeps monitoring predictable for a single public site.",
+    ctaHref: "/monitor-site?source=pricing&plan=starter",
+    ctaLabel: "Get started",
+    ctaClassName:
+      "border-0 bg-[linear-gradient(135deg,#65a30d_0%,#84cc16_58%,#bef264_100%)] text-slate-950 shadow-[0_14px_32px_rgba(132,204,22,0.18)] hover:brightness-[1.03]"
   },
   pro: {
     badge: "Most popular",
@@ -101,18 +133,19 @@ const planCardContent = {
     statCardClassName: "bg-white/90 ring-sky-100",
     summaryLabel: "Best value for most teams",
     bullets: [
-      "Structured findings and evidence history across up to twenty domains",
-      "Good fit for in-house teams monitoring up to twenty domains",
-      "Recurring scan cadence options up to hourly after setup is confirmed"
+      "500 scan credits included each month",
+      "Daily monitoring available within credits",
+      "Manual re-scans use included credits",
+      "Evidence history and benchmark context badges"
     ],
-    footerNote: "Pro is the cleanest upgrade path if you want to discuss recurring monitoring and richer scan history.",
+    footerNote: "Pro is the cleanest upgrade path for deeper page coverage and review history.",
     ctaHref: "/monitor-site?source=pricing&plan=pro",
-    ctaLabel: "Request Pro setup",
+    ctaLabel: "Get started",
     ctaClassName:
       "border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
   },
-  team: {
-    badge: "Agencies",
+  agency: {
+    badge: "Portfolio",
     badgeClassName: "bg-emerald-100 text-emerald-800 ring-emerald-200",
     cardClassName:
       "border-emerald-200 bg-[linear-gradient(180deg,rgba(249,253,250,1)_0%,rgba(255,255,255,0.98)_100%)] shadow-[0_24px_56px_rgba(71,181,74,0.15)]",
@@ -122,15 +155,16 @@ const planCardContent = {
     statCardClassName: "bg-white/90 ring-emerald-100",
     summaryLabel: "Built for portfolio monitoring",
     bullets: [
-      "Structured findings and evidence history at portfolio scale",
-      "Best for agencies and consultants monitoring up to one hundred domains",
-      "Recurring scan cadence options up to hourly after setup is confirmed"
+      "3,000 scan credits included each month",
+      "Scheduled monitoring across a portfolio",
+      "Manual re-scans use included credits",
+      "Portfolio evidence history for client or stakeholder review"
     ],
-    footerNote: "Ultra is built for agencies, consultants, and teams reviewing many domains in parallel.",
-    ctaHref: "/monitor-site?source=pricing&plan=ultra",
-    ctaLabel: "Request Ultra setup",
+    footerNote: "Agency is built for agencies, consultants, and teams reviewing many domains in parallel.",
+    ctaHref: "/contact-sales?source=pricing&plan=agency",
+    ctaLabel: "Contact sales",
     ctaClassName:
-      "border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
+      "border-0 bg-[linear-gradient(135deg,#47b54a_0%,#63c864_58%,#8add89_100%)] text-slate-950 shadow-[0_14px_32px_rgba(71,181,74,0.18)] hover:brightness-[1.03]"
   }
 } as const;
 
@@ -140,16 +174,20 @@ export default function PricingPage() {
       <SiteHeader />
       <section className="mx-auto max-w-6xl px-6 py-16">
         <div className="max-w-2xl space-y-4">
-          <Badge tone="neutral">Simple limits, aligned with the product.</Badge>
-          <h1 className="text-4xl font-semibold tracking-tight">Pricing for scans, evidence review, and monitoring setup.</h1>
+          <Badge tone="neutral">Simple limits aligned with scan volume.</Badge>
+          <h1 className="text-4xl font-semibold tracking-tight">Pricing that scales with monitored sites and scan volume.</h1>
           <p className="text-lg text-slate-600">
-            Start with a scan, then request broader domain coverage, change tracking, scan history, and monitoring setup as your review needs grow.
+            Start with lightweight public-site scans, then add recurring monitoring, deeper page coverage, and evidence history as your review needs grow.
+          </p>
+          <p className="text-sm leading-6 text-slate-600">
+            Scan credits keep pricing aligned with actual monitoring depth. Automated findings are review signals, not legal advice or compliance
+            determinations.
           </p>
           <div className="flex flex-wrap gap-3">
             <PendingButtonLink
               className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
               href="/"
-              idleContent="Scan a website"
+              idleContent="Run a free scan"
               pendingContent="Opening..."
             />
             <PendingButtonLink
@@ -162,12 +200,12 @@ export default function PricingPage() {
           </div>
         </div>
 
-        <div className="mt-10 grid gap-2.5 md:grid-cols-3">
+        <div className="mt-10 grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
           {marketingPlans.map((plan) => {
             return (
               <Card
                 key={plan.code}
-                className={`group relative flex h-full min-w-0 max-w-[20.5rem] flex-col overflow-hidden rounded-[22px] transition-transform duration-200 hover:-translate-y-1 ${planCardContent[plan.code].cardClassName}`}
+                className={`group relative flex h-full min-w-0 flex-col overflow-hidden rounded-[22px] transition-transform duration-200 hover:-translate-y-1 ${planCardContent[plan.code].cardClassName}`}
               >
                 <div
                   aria-hidden="true"
@@ -184,9 +222,7 @@ export default function PricingPage() {
                     >
                       {planCardContent[plan.code].badge}
                     </span>
-                    <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
-                      {plan.maxDomains} {plan.maxDomains === 1 ? "domain" : "domains"}
-                    </span>
+                    <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">{plan.domainsLabel}</span>
                   </div>
                   <CardTitle className="space-y-2.5">
                     <div className="space-y-1">
@@ -210,22 +246,20 @@ export default function PricingPage() {
                   <div className="space-y-3 text-[12px] text-slate-700">
                     <div className="grid grid-cols-2 gap-1.5">
                       <div className={`rounded-[16px] px-2 py-2 ring-1 ${planCardContent[plan.code].statCardClassName}`}>
-                        <p className="text-[9px] uppercase tracking-[0.12em] text-slate-500">Coverage</p>
-                        <p className="mt-1 font-medium text-slate-900">{plan.coverageLabel}</p>
+                        <p className="text-[9px] uppercase tracking-[0.12em] text-slate-500">Domains</p>
+                        <p className="mt-1 font-medium text-slate-900">{plan.domainsLabel}</p>
                       </div>
                       <div className={`rounded-[16px] px-2 py-2 ring-1 ${planCardContent[plan.code].statCardClassName}`}>
-                        <p className="text-[9px] uppercase tracking-[0.12em] text-slate-500">Recurring cadence</p>
-                        <p className="mt-1 font-medium text-slate-900">
-                          {plan.scanFrequency === "hourly" ? "Setup up to hourly" : "Monthly setup"}
-                        </p>
+                        <p className="text-[9px] uppercase tracking-[0.12em] text-slate-500">Scan credits</p>
+                        <p className="mt-1 font-medium text-slate-900">{plan.scanCreditsLabel}</p>
+                      </div>
+                      <div className={`rounded-[16px] px-2 py-2 ring-1 ${planCardContent[plan.code].statCardClassName}`}>
+                        <p className="text-[9px] uppercase tracking-[0.12em] text-slate-500">Monitoring</p>
+                        <p className="mt-1 font-medium text-slate-900">{plan.cadenceLabel}</p>
                       </div>
                       <div className={`rounded-[16px] px-2 py-2 ring-1 ${planCardContent[plan.code].statCardClassName}`}>
                         <p className="text-[9px] uppercase tracking-[0.12em] text-slate-500">History</p>
-                        <p className="mt-1 font-medium text-slate-900">{plan.scanHistoryEnabled ? "Included" : "Not included"}</p>
-                      </div>
-                      <div className={`rounded-[16px] px-2 py-2 ring-1 ${planCardContent[plan.code].statCardClassName}`}>
-                        <p className="text-[9px] uppercase tracking-[0.12em] text-slate-500">API access</p>
-                        <p className="mt-1 font-medium text-slate-900">{plan.apiAccessLabel}</p>
+                        <p className="mt-1 font-medium text-slate-900">{plan.historyLabel}</p>
                       </div>
                     </div>
 
@@ -277,7 +311,7 @@ export default function PricingPage() {
               <div className="space-y-2">
                 <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Need a larger rollout or custom terms?</h2>
                 <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                  Enterprise Custom is for larger teams that need custom procurement, API access, onboarding help, or a tailored scanning footprint across many domains.
+                  Enterprise is for larger teams that need custom domains, custom scan volume, onboarding help, priority support, security review, or tailored workflows.
                 </p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -286,22 +320,22 @@ export default function PricingPage() {
                   <p className="mt-1 font-medium text-slate-900">Custom volume</p>
                 </div>
                 <div className="rounded-2xl bg-white/90 px-3 py-3 ring-1 ring-emerald-100">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">API access</p>
-                  <p className="mt-1 font-medium text-slate-900">{API_ACCESS_COMING_SOON_LABEL}</p>
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Scan volume</p>
+                  <p className="mt-1 font-medium text-slate-900">Custom credits</p>
                 </div>
                 <div className="rounded-2xl bg-white/90 px-3 py-3 ring-1 ring-emerald-100">
                   <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Onboarding</p>
                   <p className="mt-1 font-medium text-slate-900">Hands-on</p>
                 </div>
                 <div className="rounded-2xl bg-white/90 px-3 py-3 ring-1 ring-emerald-100">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Commercial terms</p>
-                  <p className="mt-1 font-medium text-slate-900">Custom</p>
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Review needs</p>
+                  <p className="mt-1 font-medium text-slate-900">Retention and security</p>
                 </div>
               </div>
             </div>
             <div className="space-y-3 md:justify-self-end">
               <p className="text-sm leading-6 text-slate-600 md:max-w-sm">
-                Talk to us if you need procurement support, portfolio-scale monitoring setup, or a tailored rollout beyond the standard plans.
+                Talk to us if you need high-frequency monitoring, portfolio-scale coverage, or a tailored rollout beyond the standard plans.
               </p>
               <PendingButtonLink
                 className="w-full border-0 bg-[linear-gradient(135deg,#47b54a_0%,#63c864_58%,#8add89_100%)] text-slate-950 shadow-[0_14px_32px_rgba(71,181,74,0.18)] hover:brightness-[1.03] md:w-auto md:min-w-[180px]"
@@ -311,6 +345,49 @@ export default function PricingPage() {
                 idleContent="Contact us"
                 pendingContent="Opening..."
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="mt-12 grid gap-4 md:grid-cols-3">
+          <Card className="border-slate-200 bg-white shadow-none md:col-span-1">
+            <CardContent className="space-y-3 p-5">
+              <Badge tone="neutral">Scan credits</Badge>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950">What is a scan credit?</h2>
+              <p className="text-sm leading-6 text-slate-600">
+                A scan credit represents one automated scan of one public page or URL under standard scan mode. Monitoring checks and manual re-scans
+                consume scan credits. This keeps pricing predictable for small sites while supporting deeper portfolio coverage when needed.
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-slate-200 bg-white shadow-none md:col-span-2">
+            <CardContent className="space-y-3 p-5">
+              <Badge tone="neutral">Why scan-volume pricing?</Badge>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Coverage needs vary by site and team.</h2>
+              <p className="text-sm leading-6 text-slate-600">
+                Website review needs vary. One team may want weekly homepage monitoring for a single site; another may need recurring checks across a
+                portfolio. Scan credits let teams allocate usage across domains, pages, and monitoring frequency without forcing everyone into the same
+                scan pattern.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="mt-4 border-slate-200 bg-white shadow-none">
+          <CardContent className="grid gap-4 p-5 md:grid-cols-[1fr_1fr]">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Need deeper coverage or more frequent monitoring?</h2>
+              <p className="text-sm leading-6 text-slate-600">
+                Add scan credits or talk to us about portfolio and high-frequency monitoring. Extra scan credit packs, additional domains, and higher-frequency
+                monitoring are available for paid plans.
+              </p>
+            </div>
+            <div className="space-y-2 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+              <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">High-frequency monitoring</p>
+              <p className="text-sm leading-6 text-slate-600">
+                Hourly or high-frequency monitoring is available for higher-volume use cases, but is not included by default on standard plans. Contact us
+                for custom monitoring needs.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -326,18 +403,18 @@ export default function PricingPage() {
                 <thead className="bg-slate-50">
                   <tr className="text-left text-slate-500">
                     <th className="px-6 py-4 font-medium">Feature</th>
-                    <th className="px-6 py-4 font-medium">Individual</th>
+                    <th className="px-6 py-4 font-medium">Starter</th>
                     <th className="px-6 py-4 font-medium">Pro</th>
-                    <th className="px-6 py-4 font-medium">Ultra</th>
+                    <th className="px-6 py-4 font-medium">Agency / Portfolio</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {comparisonRows.map((row) => (
                     <tr key={row.label}>
                       <td className="px-6 py-4 font-medium text-slate-900">{row.label}</td>
-                      <td className="px-6 py-4 text-slate-600">{row.values.individual}</td>
+                      <td className="px-6 py-4 text-slate-600">{row.values.starter}</td>
                       <td className="px-6 py-4 text-slate-600">{row.values.pro}</td>
-                      <td className="px-6 py-4 text-slate-600">{row.values.team}</td>
+                      <td className="px-6 py-4 text-slate-600">{row.values.agency}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -345,6 +422,11 @@ export default function PricingPage() {
             </CardContent>
           </Card>
         </div>
+
+        <p className="mt-8 max-w-3xl text-sm leading-6 text-slate-500">
+          CertScore.ai provides automated public-web observations and evidence-backed review signals. It does not provide legal advice, certification, or
+          compliance determinations.
+        </p>
       </section>
       <SiteFooter />
     </main>
