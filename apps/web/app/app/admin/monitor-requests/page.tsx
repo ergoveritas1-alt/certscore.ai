@@ -2,10 +2,13 @@ import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import {
   getMonitorSiteRequestCounts,
+  listMonitorRequestOrganizationOptions,
   listMonitorSiteRequests
 } from "../../../../server/admin/list-monitor-site-requests";
 import type { AdminMonitorSiteRequestStatus } from "../../../../server/admin/repository";
+import { prepareMonitorSiteSetupFormAction } from "../../../../server/admin/prepare-monitor-site-setup";
 import { updateMonitorSiteRequestStatusFormAction } from "../../../../server/admin/update-monitor-site-request-status";
+import { PendingSubmitButton } from "../../../../components/ui/pending-submit-button";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -64,7 +67,11 @@ function filterHref(status: AdminMonitorSiteRequestStatus | null) {
 export default async function MonitorRequestsPage({ searchParams }: MonitorRequestsPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const activeStatus = normalizeStatus(resolvedSearchParams.status);
-  const [requests, counts] = await Promise.all([listMonitorSiteRequests(activeStatus), getMonitorSiteRequestCounts()]);
+  const [requests, counts, organizations] = await Promise.all([
+    listMonitorSiteRequests(activeStatus),
+    getMonitorSiteRequestCounts(),
+    listMonitorRequestOrganizationOptions()
+  ]);
 
   return (
     <div className="space-y-6">
@@ -107,6 +114,7 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                     <th className="pb-3 pr-4 font-medium">Site</th>
                     <th className="pb-3 pr-4 font-medium">Requester</th>
                     <th className="pb-3 pr-4 font-medium">Context</th>
+                    <th className="pb-3 pr-4 font-medium">Setup</th>
                     <th className="pb-3 pr-4 font-medium">Status</th>
                     <th className="pb-3 font-medium">Update</th>
                   </tr>
@@ -145,6 +153,67 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                             </p>
                           ) : null}
                         </div>
+                      </td>
+                      <td className="max-w-sm py-4 pr-4">
+                        {request.monitorSetup ? (
+                          <div className="space-y-2 text-xs text-slate-600">
+                            <Badge tone="neutral">Pending setup</Badge>
+                            <p>Linked domain: {request.monitorSetup.hostname}</p>
+                            <p>Workspace ID: {request.monitorSetup.organizationId}</p>
+                            <p>Domain ID: {request.monitorSetup.domainId}</p>
+                            <p>Requested cadence: {request.monitorSetup.requestedFrequency}</p>
+                            <p>Current schedule remains manual until explicit activation.</p>
+                          </div>
+                        ) : (
+                          <form action={prepareMonitorSiteSetupFormAction} className="min-w-64 space-y-3">
+                            <input name="requestId" type="hidden" value={request.id} />
+                            <div className="space-y-1">
+                              <label className="block text-xs font-medium text-slate-600" htmlFor={`organization-${request.id}`}>
+                                Workspace
+                              </label>
+                              <select
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                disabled={organizations.length === 0}
+                                id={`organization-${request.id}`}
+                                name="organizationId"
+                                required
+                              >
+                                <option value="">Choose workspace</option>
+                                {organizations.map((organization) => (
+                                  <option key={organization.id} value={organization.id}>
+                                    {organization.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="block text-xs font-medium text-slate-600" htmlFor={`frequency-${request.id}`}>
+                                Requested cadence
+                              </label>
+                              <select
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                defaultValue="weekly"
+                                id={`frequency-${request.id}`}
+                                name="requestedFrequency"
+                              >
+                                <option value="manual">Manual</option>
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                              </select>
+                            </div>
+                            <PendingSubmitButton
+                              disabled={organizations.length === 0}
+                              idleContent="Prepare setup"
+                              pendingContent="Preparing..."
+                              size="sm"
+                              variant="secondary"
+                            />
+                            <p className="text-xs leading-5 text-slate-500">
+                              Creates or links the workspace domain with manual scheduling. Requested cadence is stored for follow-up only.
+                            </p>
+                          </form>
+                        )}
                       </td>
                       <td className="py-4 pr-4">
                         <Badge tone={statusTone(request.status)}>{statusLabel(request.status)}</Badge>

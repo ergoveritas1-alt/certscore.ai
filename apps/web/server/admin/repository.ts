@@ -186,6 +186,7 @@ export type AdminMonitorSiteRequestRow = {
   created_at: string;
   full_name: string | null;
   id: string;
+  metadata_json: Record<string, unknown> | null;
   monitoring_goal: string;
   normalized_hostname: string;
   notes: string | null;
@@ -203,6 +204,13 @@ export type AdminMonitorSiteRequestCounts = {
   converted: number;
   pending: number;
   total: number;
+};
+
+export type AdminOrganizationOptionRow = {
+  id: string;
+  name: string;
+  plan: string | null;
+  slug: string;
 };
 
 export type AdminScanOverviewCounts = {
@@ -651,6 +659,7 @@ export async function loadAdminMonitorSiteRequestRows(
                 notes,
                 source_page_url,
                 source_report_url,
+                metadata_json,
                 status,
                 created_at,
                 updated_at
@@ -672,6 +681,7 @@ export async function loadAdminMonitorSiteRequestRows(
                 notes,
                 source_page_url,
                 source_report_url,
+                metadata_json,
                 status,
                 created_at,
                 updated_at
@@ -683,6 +693,31 @@ export async function loadAdminMonitorSiteRequestRows(
       );
 
   return result.rows;
+}
+
+export async function loadAdminMonitorSiteRequestById(id: string): Promise<AdminMonitorSiteRequestRow | null> {
+  await ensureMonitorSiteRequestsTable();
+
+  return await queryOne<AdminMonitorSiteRequestRow>(
+    `select id,
+            website,
+            normalized_hostname,
+            work_email,
+            full_name,
+            company,
+            monitoring_goal,
+            notes,
+            source_page_url,
+            source_report_url,
+            metadata_json,
+            status,
+            created_at,
+            updated_at
+       from monitor_site_requests
+      where id = $1`,
+    [id],
+    { readOnly: true }
+  );
 }
 
 export async function loadAdminMonitorSiteRequestCounts(): Promise<AdminMonitorSiteRequestCounts> {
@@ -713,6 +748,18 @@ export async function loadAdminMonitorSiteRequestCounts(): Promise<AdminMonitorS
   return counts;
 }
 
+export async function loadAdminOrganizationOptions(): Promise<AdminOrganizationOptionRow[]> {
+  const result = await query<AdminOrganizationOptionRow>(
+    `select id, name, slug, plan
+       from organizations
+      order by name asc, created_at desc`,
+    [],
+    { readOnly: true }
+  );
+
+  return result.rows;
+}
+
 export async function updateAdminMonitorSiteRequestStatus(input: {
   id: string;
   status: AdminMonitorSiteRequestStatus;
@@ -733,10 +780,41 @@ export async function updateAdminMonitorSiteRequestStatus(input: {
                 notes,
                 source_page_url,
                 source_report_url,
+                metadata_json,
                 status,
                 created_at,
                 updated_at`,
     [input.id, input.status]
+  );
+}
+
+export async function updateAdminMonitorSiteRequestSetup(input: {
+  id: string;
+  metadata: Record<string, unknown>;
+  status: AdminMonitorSiteRequestStatus;
+}): Promise<AdminMonitorSiteRequestRow | null> {
+  await ensureMonitorSiteRequestsTable();
+
+  return await queryOne<AdminMonitorSiteRequestRow>(
+    `update monitor_site_requests
+        set status = $2,
+            metadata_json = coalesce(metadata_json, '{}'::jsonb) || $3::jsonb
+      where id = $1
+      returning id,
+                website,
+                normalized_hostname,
+                work_email,
+                full_name,
+                company,
+                monitoring_goal,
+                notes,
+                source_page_url,
+                source_report_url,
+                metadata_json,
+                status,
+                created_at,
+                updated_at`,
+    [input.id, input.status, JSON.stringify(input.metadata)]
   );
 }
 
