@@ -17,10 +17,20 @@ function getRequestOrigin(request: Request) {
 
 export function GET(request: Request) {
   const info = getRuntimeVersionInfo(process.env, { appUrl: getRequestOrigin(request) });
+  const safeInfo = {
+    appUrl: info.appUrl,
+    gitRef: info.gitRef,
+    gitSha: info.gitSha,
+    imageTag: info.imageTag,
+    runtimeTarget: info.runtimeTarget,
+    service: info.service,
+    timestamp: info.timestamp
+  };
 
-  return NextResponse.json(info, {
+  return NextResponse.json(safeInfo, {
     headers: {
       "Cache-Control": "no-store",
+      "X-CertScore-Build-Sha": info.gitSha ?? "unknown",
       "X-CertScore-Git-Ref": info.gitRef ?? "unknown",
       "X-CertScore-Git-Sha": info.gitSha ?? "unknown",
       "X-CertScore-Runtime-Target": info.runtimeTarget

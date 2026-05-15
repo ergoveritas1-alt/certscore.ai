@@ -39,7 +39,7 @@ export function WebsiteBehaviorScanCta() {
           asChild
           className="w-full border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04] sm:w-auto"
         >
-          <Link data-analytics-cta-type="scan" data-analytics-event="guide_cta_clicked" href="/preview">
+          <Link data-analytics-cta-type="scan" data-analytics-event="guide_cta_clicked" href="/">
             Run a scan
           </Link>
         </Button>

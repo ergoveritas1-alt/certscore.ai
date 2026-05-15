@@ -19,9 +19,6 @@ export default function ContactSalesPage() {
         <div className="mx-auto max-w-4xl px-6 py-16">
           <div className="space-y-4">
             <div className="inline-flex items-center gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[linear-gradient(180deg,rgba(224,242,254,0.96)_0%,rgba(239,246,255,0.98)_100%)] text-base font-semibold text-sky-700 ring-1 ring-sky-200">
-                ?
-              </span>
               <h1 className="text-4xl font-semibold tracking-tight text-slate-950">Contact us</h1>
             </div>
             <p className="max-w-2xl text-lg text-slate-600">

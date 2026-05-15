@@ -225,7 +225,7 @@ export default async function MarketingHomePage() {
               />
               <PendingButtonLink
                 className="w-full border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 sm:w-auto"
-                href="/preview"
+                href="/#sample-report"
                 idleContent="See sample findings"
                 pendingContent="Opening..."
                 variant="secondary"
@@ -273,7 +273,7 @@ export default async function MarketingHomePage() {
               Concrete findings from runtime website behavior
             </h2>
           </div>
-          <Link href="/preview" className="text-base font-semibold text-[#2f63ea] hover:text-[#2454db]">
+          <Link href="/#sample-report" className="text-base font-semibold text-[#2f63ea] hover:text-[#2454db]">
             See sample findings →
           </Link>
         </div>
@@ -405,13 +405,13 @@ export default async function MarketingHomePage() {
               <div className="flex flex-col gap-3 sm:flex-row">
                 <PendingButtonLink
                   className="w-full border-0 bg-[linear-gradient(135deg,#2f63ea_0%,#2454db_100%)] text-white shadow-[0_16px_32px_rgba(47,99,234,0.24)] hover:brightness-[1.04] sm:w-auto"
-                  href="/preview"
+                  href="/#homepage-scan"
                   idleContent="Scan a website"
                   pendingContent="Opening..."
                 />
                 <PendingButtonLink
                   className="w-full border border-white/12 bg-white/8 text-white hover:bg-white/12 sm:w-auto"
-                  href="/preview"
+                  href="/#sample-report"
                   idleContent="See sample findings"
                   pendingContent="Opening..."
                   variant="secondary"

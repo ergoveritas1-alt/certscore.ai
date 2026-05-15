@@ -65,18 +65,25 @@ export function GrowthContentPage({ config }: { config: GrowthContentPageConfig 
       { name: config.title, path: config.path }
     ])
   ];
+  const content = (
+    <AiVisibilityContent
+      badge={config.badge}
+      intro={config.intro}
+      relatedLinks={config.relatedLinks}
+      schema={schema}
+      sections={config.sections}
+      title={config.title}
+    />
+  );
+
+  if (config.type === "Guide") {
+    return content;
+  }
 
   return (
     <main className="min-h-screen bg-slate-50">
       <SiteHeader />
-      <AiVisibilityContent
-        badge={config.badge}
-        intro={config.intro}
-        relatedLinks={config.relatedLinks}
-        schema={schema}
-        sections={config.sections}
-        title={config.title}
-      />
+      {content}
       <SiteFooter />
     </main>
   );

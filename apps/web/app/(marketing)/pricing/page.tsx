@@ -141,7 +141,7 @@ export default function PricingPage() {
           <div className="flex flex-wrap gap-3">
             <PendingButtonLink
               className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
-              href="/preview"
+              href="/"
               idleContent="Scan a website"
               pendingContent="Opening..."
             />

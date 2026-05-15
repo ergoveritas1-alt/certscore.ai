@@ -40,7 +40,7 @@ export default async function MonitorSiteThanksPage({ searchParams }: MonitorSit
             </p>
             <div className="flex flex-wrap gap-3">
               <Button asChild>
-                <Link href="/preview">Run another scan</Link>
+                <Link href="/">Run another scan</Link>
               </Button>
               <Button asChild variant="secondary">
                 <Link href="/guides/website-consent-audit-checklist">Review the checklist</Link>
