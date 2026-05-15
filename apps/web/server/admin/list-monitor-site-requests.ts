@@ -4,6 +4,7 @@ import {
   loadAdminOrganizationOptions,
   loadAdminMonitorSiteRequestCounts,
   loadAdminMonitorSiteRequestRows,
+  loadAdminMonitorSiteRequestStageCounts,
   type AdminMonitorSiteRequestCounts,
   type AdminMonitorSiteRequestListFilters,
   type AdminMonitorSiteRequestRow,
@@ -151,6 +152,11 @@ export type { AdminMonitorSiteRequestStatus, AdminMonitorSiteRequestSetupFilter,
 export async function getMonitorSiteRequestCounts(): Promise<AdminMonitorSiteRequestCounts> {
   await requirePlatformAdminContext();
   return await loadAdminMonitorSiteRequestCounts();
+}
+
+export async function getMonitorSiteRequestStageCounts() {
+  await requirePlatformAdminContext();
+  return await loadAdminMonitorSiteRequestStageCounts();
 }
 
 export async function listMonitorRequestOrganizationOptions(): Promise<AdminOrganizationOption[]> {

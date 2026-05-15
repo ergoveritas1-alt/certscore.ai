@@ -206,6 +206,8 @@ export type AdminMonitorSiteRequestCounts = {
   total: number;
 };
 
+export type AdminMonitorSiteRequestStageCounts = Record<AdminMonitorSiteRequestStageFilter, number>;
+
 export type AdminMonitorSiteRequestSetupFilter = "activated" | "pending_setup" | "unprepared";
 
 export type AdminMonitorSiteRequestStageFilter = "complete" | "confirmed_not_notified" | "linked_not_confirmed";
@@ -781,6 +783,41 @@ export async function loadAdminMonitorSiteRequestCounts(): Promise<AdminMonitorS
   }
 
   return counts;
+}
+
+export async function loadAdminMonitorSiteRequestStageCounts(): Promise<AdminMonitorSiteRequestStageCounts> {
+  await ensureMonitorSiteRequestsTable();
+
+  const result = await query<{
+    complete: string;
+    confirmed_not_notified: string;
+    linked_not_confirmed: string;
+  }>(
+    `select
+       count(*) filter (
+         where metadata_json->'monitorSetup' is not null
+           and metadata_json->'monitorSetup'->>'setupStatus' = 'pending_setup'
+       )::text as linked_not_confirmed,
+       count(*) filter (
+         where metadata_json->'monitorSetup'->>'setupStatus' = 'activated'
+           and metadata_json->'monitorSetup'->>'confirmationEmailSentAt' is null
+       )::text as confirmed_not_notified,
+       count(*) filter (
+         where metadata_json->'monitorSetup'->>'setupStatus' = 'activated'
+           and metadata_json->'monitorSetup'->>'confirmationEmailSentAt' is not null
+       )::text as complete
+       from monitor_site_requests`,
+    [],
+    { readOnly: true }
+  );
+
+  const row = result.rows[0];
+
+  return {
+    complete: Number(row?.complete ?? 0),
+    confirmed_not_notified: Number(row?.confirmed_not_notified ?? 0),
+    linked_not_confirmed: Number(row?.linked_not_confirmed ?? 0)
+  };
 }
 
 export async function loadAdminOrganizationOptions(): Promise<AdminOrganizationOptionRow[]> {

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import {
   getMonitorSiteRequestCounts,
+  getMonitorSiteRequestStageCounts,
   listMonitorRequestOrganizationOptions,
   listMonitorSiteRequests
 } from "../../../../server/admin/list-monitor-site-requests";
@@ -183,7 +184,7 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
   const activeStage = normalizeStage(resolvedSearchParams.stage);
   const activePlan = normalizePlan(resolvedSearchParams.plan);
   const activeQuery = normalizeQuery(resolvedSearchParams.q);
-  const [requests, counts, organizations, monitorActivationEmailConfigured] = await Promise.all([
+  const [requests, counts, stageCounts, organizations, monitorActivationEmailConfigured] = await Promise.all([
     listMonitorSiteRequests({
       plan: activePlan,
       query: activeQuery,
@@ -192,9 +193,36 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
       status: activeStatus
     }),
     getMonitorSiteRequestCounts(),
+    getMonitorSiteRequestStageCounts(),
     listMonitorRequestOrganizationOptions(),
     isMonitorSiteActivationEmailConfigured()
   ]);
+
+  const quickQueues: Array<{
+    body: string;
+    count: number;
+    href: string;
+    label: string;
+  }> = [
+    {
+      body: "Prepared monitor requests that still need setup confirmation before monitoring is active.",
+      count: stageCounts.linked_not_confirmed,
+      href: filterHref({ stage: "linked_not_confirmed" }),
+      label: "Needs setup confirmation"
+    },
+    {
+      body: "Activated requests where the customer confirmation email has not been recorded.",
+      count: stageCounts.confirmed_not_notified,
+      href: filterHref({ stage: "confirmed_not_notified" }),
+      label: "Needs customer notification"
+    },
+    {
+      body: "Requests with confirmed setup and recorded customer notification.",
+      count: stageCounts.complete,
+      href: filterHref({ stage: "complete" }),
+      label: "Completed setup"
+    }
+  ];
 
   return (
     <div className="space-y-6">
@@ -214,6 +242,20 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
           </div>
         </CardHeader>
         <CardContent className="space-y-4 pt-0">
+          <div className="grid gap-3 lg:grid-cols-3">
+            {quickQueues.map((queue) => (
+              <Link
+                key={queue.label}
+                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-blue-50"
+                href={queue.href}
+              >
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{queue.label}</p>
+                <p className="mt-2 text-3xl font-semibold text-slate-950">{queue.count}</p>
+                <p className="mt-2 text-xs leading-5 text-slate-600">{queue.body}</p>
+              </Link>
+            ))}
+          </div>
+
           <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
             <Button asChild size="sm" variant={activeStatus === null ? "primary" : "secondary"}>
               <Link href={filterHref({ plan: activePlan, query: activeQuery, setup: activeSetup, stage: activeStage })}>
