@@ -31,6 +31,7 @@ type DomainBenchmarkCardData = {
 type UnifiedRegulatoryContext = {
   beforeConsentCookieEvidence?: Record<string, unknown> | null;
   beforeConsentCookieCount?: number;
+  rawBeforeConsentCookieObservationCount?: number;
   hasSensitiveGamblingTrackingRisk?: boolean;
   hasSensitiveHealthTrackingRisk?: boolean;
   hasTrackingConcern?: boolean;
@@ -433,6 +434,22 @@ function buildObservedCountLensFinding(input: {
       metric: input.metric,
       reason: input.label,
       source: input.source
+    },
+    id: input.id,
+    label: input.label
+  });
+}
+
+function buildRegulatoryLensScoreDriver(input: {
+  evidence?: Record<string, unknown> | null;
+  id: string;
+  label: string;
+}) {
+  return buildRegulatoryLensFinding({
+    evidence: {
+      ...(input.evidence ?? {}),
+      reason: input.label,
+      source: "regulatory_lens_score_driver"
     },
     id: input.id,
     label: input.label
@@ -864,7 +881,7 @@ export function buildRegulatoryLenses(
           count: beforeConsentCookieCount,
           evidence: options?.unifiedContext?.beforeConsentCookieEvidence,
           id: "before_consent_cookie_count",
-          label: `${beforeConsentCookieCount} cookies were observed before consent.`,
+          label: `${beforeConsentCookieCount} classified cookies were observed before consent.`,
           metric: "beforeConsentCookieCount",
           source: "regulatory_counts"
         })
@@ -926,6 +943,90 @@ export function buildRegulatoryLenses(
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
 
+  const cpraFindings = cpraNotes.length > 0 || cpraScore >= 72
+    ? cpraNotes
+    : mergeRegulatoryLensFindings([
+        hasTrackingConcern
+          ? buildRegulatoryLensScoreDriver({
+              evidence: {
+                hasTrackingConcern,
+                mappedTopLevelFindingCount: cpraNotes.length,
+                scoreImpact: -24
+              },
+              id: "cpra_tracking_score_driver",
+              label: "Score driver: retained tracking evidence affected California sale/share review."
+            })
+          : null,
+        beforeConsentCookieCount > 0
+          ? buildObservedCountLensFinding({
+              count: beforeConsentCookieCount,
+              evidence: options?.unifiedContext?.beforeConsentCookieEvidence,
+              id: "cpra_before_consent_cookie_count",
+              label: `${beforeConsentCookieCount} classified cookies were observed before consent.`,
+              metric: "beforeConsentCookieCount",
+              source: "regulatory_counts"
+            })
+          : null,
+        thirdPartyRequestCount > 0
+          ? buildObservedCountLensFinding({
+              count: thirdPartyRequestCount,
+              id: "cpra_third_party_request_count",
+              label: `${thirdPartyRequestCount} third-party requests were observed on the initial path.`,
+              metric: "thirdPartyRequestCount",
+              source: "regulatory_counts"
+            })
+          : null,
+        sensitiveTrackingFinding
+          ? buildRegulatoryLensScoreDriver({
+              evidence: { findingId: sensitiveTrackingFinding.id, scoreImpact: -14 },
+              id: "cpra_sensitive_tracking_score_driver",
+              label: "Score driver: sensitive-data tracking context affected California privacy posture."
+            })
+          : null
+      ].filter((item): item is RegulatoryLensFinding => Boolean(item)));
+  const ftcFindings = ftcNotes.length > 0 || ftcScore >= 72
+    ? ftcNotes
+    : mergeRegulatoryLensFindings([
+        hasTrackingConcern
+          ? buildRegulatoryLensScoreDriver({
+              evidence: {
+                hasTrackingConcern,
+                mappedTopLevelFindingCount: ftcNotes.length,
+                scoreImpact: -18
+              },
+              id: "ftc_tracking_score_driver",
+              label: "Score driver: pre-consent tracking or third-party collection affected the FTC-style review."
+            })
+          : null,
+        hasConsentConcern
+          ? buildRegulatoryLensScoreDriver({
+              evidence: {
+                hasConsentConcern,
+                scoreImpact: -24
+              },
+              id: "ftc_consent_choice_score_driver",
+              label: "Score driver: consent-choice design affected the consumer-protection review."
+            })
+          : null,
+        beforeConsentCookieCount > 0
+          ? buildObservedCountLensFinding({
+              count: beforeConsentCookieCount,
+              evidence: options?.unifiedContext?.beforeConsentCookieEvidence,
+              id: "ftc_before_consent_cookie_count",
+              label: `${beforeConsentCookieCount} classified cookies were observed before consent.`,
+              metric: "beforeConsentCookieCount",
+              source: "regulatory_counts"
+            })
+          : null,
+        sensitiveTrackingFinding
+          ? buildRegulatoryLensScoreDriver({
+              evidence: { findingId: sensitiveTrackingFinding.id, scoreImpact: -12 },
+              id: "ftc_sensitive_tracking_score_driver",
+              label: "Score driver: sensitive-data collection alongside tracking affected the FTC-style review."
+            })
+          : null
+      ].filter((item): item is RegulatoryLensFinding => Boolean(item)));
+
   const gdprTone = buildTone(gdprScore);
   const cpraTone = buildTone(cpraScore);
   const ftcTone = buildTone(ftcScore);
@@ -934,7 +1035,7 @@ export function buildRegulatoryLenses(
     {
       acronym: "CCPA / CPRA / CIPA",
       detailTitle: "Disclosure and downstream sharing issues",
-      findings: cpraNotes,
+      findings: cpraFindings,
       ratingLabel: cpraTone.label,
       score: cpraScore,
       summary: sensitiveTrackingFinding
@@ -962,7 +1063,7 @@ export function buildRegulatoryLenses(
     {
       acronym: "FTC",
       detailTitle: hasStrongDarkPatternConcern ? "Dark pattern and disclosure issues" : "Choice architecture review signals",
-      findings: ftcNotes,
+      findings: ftcFindings,
       ratingLabel: ftcTone.label,
       score: ftcScore,
       summary: hasStrongDarkPatternConcern
@@ -1308,7 +1409,7 @@ export function buildRegulatoryLensesFromUnifiedPackets(
     ])
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join(" ");
-  const packetDerivedBeforeConsentCookieCount = surfacedPackets.reduce((count, packet) => {
+  const packetDerivedBeforeConsentCookieObservationCount = surfacedPackets.reduce((count, packet) => {
     const entities = packet.evidence?.entities ?? {};
     return count + Math.max(
       entities.preconsent_nonessential_cookie_names?.length ?? 0,
@@ -1357,7 +1458,8 @@ export function buildRegulatoryLensesFromUnifiedPackets(
     initiatorUrls: uniqueStrings(consentTrackingPackets.flatMap((packet) =>
       getPacketEntityStrings(packet, ["preconsent_cookie_initiator_urls", "preconsentCookieInitiatorUrls"])
     )),
-    sourceFindingIds: uniqueStrings(consentTrackingPackets.map((packet) => packet.unifiedFindingId))
+    sourceFindingIds: uniqueStrings(consentTrackingPackets.map((packet) => packet.unifiedFindingId)),
+    rawObservationCount: packetDerivedBeforeConsentCookieObservationCount
   };
   const packetDerivedThirdPartyRequestCount = surfacedPackets.reduce((count, packet) => {
     const evidenceUrls = packet.evidence?.entities?.preconsent_tracker_evidence_urls?.length ??
@@ -1377,23 +1479,39 @@ export function buildRegulatoryLensesFromUnifiedPackets(
       packet.unifiedFindingId === "preconsent_tracking" ||
       packet.unifiedFindingId === "session_replay_observed"
     ));
+  const canonicalBeforeConsentCookieCount =
+    counts.beforeConsentCookieCount ??
+    options?.unifiedContext?.beforeConsentCookieCount ??
+    0;
+  const canonicalThirdPartyRequestCount =
+    counts.thirdPartyRequestCount && counts.thirdPartyRequestCount > 0
+      ? counts.thirdPartyRequestCount
+      : packetDerivedThirdPartyRequestCount;
+  const canonicalBeforeConsentCookieEvidence =
+    canonicalBeforeConsentCookieCount > 0
+      ? {
+          ...beforeConsentCookieEvidence,
+          classifiedCookieCount: canonicalBeforeConsentCookieCount
+        }
+      : null;
 
   return buildRegulatoryLenses(
     projection.findings,
     {
-      beforeConsentCookieCount: packetDerivedBeforeConsentCookieCount,
-      thirdPartyRequestCount: packetDerivedThirdPartyRequestCount
+      beforeConsentCookieCount: canonicalBeforeConsentCookieCount,
+      thirdPartyRequestCount: canonicalThirdPartyRequestCount
     },
     {
       ...accessibilityOptions,
       regulatoryRisk: null,
       unifiedContext: {
-        beforeConsentCookieEvidence,
-        beforeConsentCookieCount: packetDerivedBeforeConsentCookieCount,
+        beforeConsentCookieEvidence: canonicalBeforeConsentCookieEvidence,
+        beforeConsentCookieCount: canonicalBeforeConsentCookieCount,
+        rawBeforeConsentCookieObservationCount: packetDerivedBeforeConsentCookieObservationCount,
         hasSensitiveGamblingTrackingRisk,
         hasSensitiveHealthTrackingRisk,
         hasTrackingConcern: surfacedPackets.some((packet) => packet.unifiedFindingId === "preconsent_tracking"),
-        thirdPartyRequestCount: packetDerivedThirdPartyRequestCount
+        thirdPartyRequestCount: canonicalThirdPartyRequestCount
       }
     }
   );
@@ -2213,12 +2331,15 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
             <p className="text-sm leading-6 text-slate-700">This does not independently establish unlawful tracking or legal liability.</p>
           </div>
         ) : null}
-        <details className="group/json min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+        <details
+          className="group/json min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5"
+          suppressHydrationWarning
+        >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
             <span>{"{}"} JSON evidence</span>
             <span className="text-slate-400 transition-transform group-open/json:rotate-180">⌄</span>
           </summary>
-          <div className="relative mt-3 min-w-0 max-w-full overflow-hidden rounded-lg bg-slate-950">
+          <div className="relative mt-3 min-w-0 max-w-full overflow-hidden rounded-lg bg-slate-950" suppressHydrationWarning>
             <CopyJsonButton
               payload={jsonPayload}
               label="Copy evidence JSON"
@@ -2956,7 +3077,9 @@ export function ExecutiveSummaryCard(input: {
                       {scanInterruptions.length} interruption event{scanInterruptions.length === 1 ? "" : "s"} retained
                     </p>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Coverage was limited by site protections. Findings shown here are based on retained observable evidence.
+                      {hasMeaningfulInterruption
+                        ? "Coverage was limited by site protections. Findings shown here are based on retained observable evidence."
+                        : "Protected routes were encountered outside the public homepage. Homepage findings are based on observable public-page evidence."}
                     </p>
                     <div className="mt-3 space-y-2">
                       {scanInterruptions.map((event) => (

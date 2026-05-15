@@ -198,7 +198,7 @@ variable "validation_default_sample_interval_minutes" {
 variable "validation_openai_model" {
   description = "Validation worker model name."
   type        = string
-  default     = "gpt-5.4"
+  default     = "gpt-5.4-nano"
 }
 
 variable "worker_concurrency" {

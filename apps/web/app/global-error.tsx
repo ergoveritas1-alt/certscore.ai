@@ -9,7 +9,7 @@ type GlobalErrorProps = {
 
 export default function GlobalError({ reset }: GlobalErrorProps) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
         <main className="min-h-screen bg-slate-50">
           <div className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center px-6 py-24 text-center">

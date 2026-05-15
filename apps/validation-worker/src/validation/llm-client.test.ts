@@ -6,7 +6,7 @@ const ORIGINAL_FETCH = global.fetch;
 const REQUIRED_ENV = {
   DATABASE_URL: "postgres://example.com/test",
   OPENAI_API_KEY: "test-key",
-  VALIDATION_OPENAI_MODEL: "gpt-5.4",
+  VALIDATION_OPENAI_MODEL: "test-primary-model",
   VALIDATION_NANO_MODEL: "gpt-5.4-nano"
 };
 
@@ -41,7 +41,7 @@ test("validateFindingWithLlm retries quota failures on nano model", async () => 
       const payload = JSON.parse(String(init?.body ?? "{}")) as { model?: string };
       seenModels.push(String(payload.model ?? ""));
 
-      if (payload.model === "gpt-5.4") {
+      if (payload.model === "test-primary-model") {
         return new Response(JSON.stringify({ error: { code: "insufficient_quota" } }), {
           status: 429,
           headers: { "Content-Type": "application/json" }
@@ -77,7 +77,7 @@ test("validateFindingWithLlm retries quota failures on nano model", async () => 
       scanEvidence: { snippets: ["earn 20% monthly"] }
     });
 
-    assert.deepEqual(seenModels, ["gpt-5.4", "gpt-5.4-nano"]);
+    assert.deepEqual(seenModels, ["test-primary-model", "gpt-5.4-nano"]);
     assert.equal(result.model, "gpt-5.4-nano");
     assert.equal(result.verdict, "supported");
   });

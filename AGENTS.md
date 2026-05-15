@@ -66,7 +66,7 @@ WC01/
 - **Database:** PostgreSQL (raw SQL via `pg` package; no ORM)
 - **Storage:** AWS S3-compatible (AWS SDK v3 + presigned URLs)
 - **Browser automation:** Playwright 1.51 (Chromium) — used by validation worker
-- **LLM integration:** OpenAI API (configurable models; default `gpt-5.4` / `gpt-5.4-nano`)
+- **LLM integration:** OpenAI API (configurable models; default `gpt-5.4-nano` / `gpt-5.4-nano`)
 - **Validation / Schema:** Zod
 - **Testing:** Node.js built-in test runner (`node --test`) executed through `tsx`
 - **CI/CD:** GitHub Actions

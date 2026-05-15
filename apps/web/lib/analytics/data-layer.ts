@@ -1,5 +1,7 @@
 "use client";
 
+import { hasAnalyticsConsent } from "./consent";
+
 export type CtaLocation = "header" | "homepage" | "footer" | "unknown";
 export type GuidePageType = "guide" | "benchmark" | "unknown";
 export type GuideCtaType = "scan" | "contact" | "pricing" | "unknown";
@@ -21,14 +23,14 @@ type CertScoreDataLayerNavigationEvent = CertScoreDataLayerEvent & {
 
 declare global {
   interface Window {
-    dataLayer?: CertScoreDataLayerEvent[];
+    dataLayer?: unknown[];
   }
 }
 
 const pushedEventKeys = new Set<string>();
 
 export function pushDataLayerEvent(event: CertScoreDataLayerEvent) {
-  if (typeof window === "undefined") {
+  if (typeof window === "undefined" || !hasAnalyticsConsent()) {
     return;
   }
 
@@ -37,7 +39,7 @@ export function pushDataLayerEvent(event: CertScoreDataLayerEvent) {
 }
 
 export function pushDataLayerEventBeforeNavigation(event: CertScoreDataLayerEvent, timeoutMs = 300) {
-  if (typeof window === "undefined") {
+  if (typeof window === "undefined" || !hasAnalyticsConsent()) {
     return Promise.resolve();
   }
 

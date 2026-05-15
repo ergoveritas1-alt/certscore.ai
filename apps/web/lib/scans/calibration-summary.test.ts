@@ -103,6 +103,30 @@ test("derives limited review for interrupted clear scans with retained runtime c
   assert.equal(displayState, "Limited review");
 });
 
+test("keeps protected routes outside the homepage from triggering limited-review coverage language", () => {
+  const displayState = deriveExecutiveDisplayState({
+    domainBenchmark: {
+      expectedThirdPartyRequests: 55
+    },
+    posture: "Clear",
+    scanInterruptions: [
+      {
+        label: "Protected route encountered",
+        details: [
+          "Some protected routes were encountered outside the public homepage.",
+          "Homepage findings are based on observable public-page evidence."
+        ]
+      }
+    ],
+    thirdPartyDomains: ["www.googletagmanager.com"],
+    thirdPartyRequestCount: 10,
+    topFindingCount: 0,
+    vendorCount: 3
+  });
+
+  assert.equal(displayState, "Clear");
+});
+
 test("keeps clean well-covered scans clear when no interruption context is retained", () => {
   const displayState = deriveExecutiveDisplayState({
     domainBenchmark: {

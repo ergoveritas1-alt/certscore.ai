@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AnalyticsPreferencesButton } from "../analytics/analytics-consent-banner";
 
 const resourceLinks = [
   { href: "/what-is-certscore", label: "What is CertScore.ai?" },
@@ -49,6 +50,7 @@ export function SiteFooter() {
             <Link href="/privacy-request" className="hover:text-slate-900">
               Privacy Request
             </Link>
+            <AnalyticsPreferencesButton />
             <Link data-analytics-cta-location="unknown" data-analytics-event="sign_in_clicked" href="/login" className="hover:text-slate-900">
               Login
             </Link>

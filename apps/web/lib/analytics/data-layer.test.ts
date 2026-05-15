@@ -1,0 +1,178 @@
+import assert from "node:assert/strict";
+import test, { beforeEach } from "node:test";
+import { buildConsentBootstrapScript } from "./consent-bootstrap";
+import { ANALYTICS_CONSENT_STORAGE_KEY, saveAnalyticsConsent } from "./consent";
+import {
+  pushDataLayerEvent,
+  pushDataLayerEventBeforeNavigation,
+  pushDataLayerEventOnce
+} from "./data-layer";
+
+type MockWindow = {
+  certscoreAnalyticsConsent?: "granted" | "denied";
+  certscoreLoadGtm?: () => void;
+  dataLayer?: unknown[];
+  dispatchEvent: (event: Event) => boolean;
+  localStorage: {
+    getItem: (key: string) => string | null;
+    setItem: (key: string, value: string) => void;
+  };
+  setTimeout: typeof setTimeout;
+  clearTimeout: typeof clearTimeout;
+};
+
+const storage = new Map<string, string>();
+
+function installWindow(overrides: Partial<MockWindow> = {}) {
+  const mockWindow: MockWindow = {
+    dataLayer: [],
+    dispatchEvent: () => true,
+    localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        storage.set(key, value);
+      }
+    },
+    setTimeout,
+    clearTimeout,
+    ...overrides
+  };
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: mockWindow
+  });
+
+  if (typeof globalThis.CustomEvent === "undefined") {
+    Object.defineProperty(globalThis, "CustomEvent", {
+      configurable: true,
+      value: class CustomEvent<T = unknown> extends Event {
+        detail: T;
+
+        constructor(type: string, eventInitDict?: CustomEventInit<T>) {
+          super(type, eventInitDict);
+          this.detail = eventInitDict?.detail as T;
+        }
+      }
+    });
+  }
+
+  return mockWindow;
+}
+
+beforeEach(() => {
+  storage.clear();
+  installWindow({ certscoreAnalyticsConsent: "denied", dataLayer: [] });
+});
+
+test("data-layer events are blocked before analytics consent", () => {
+  const mockWindow = installWindow({ certscoreAnalyticsConsent: "denied", dataLayer: [] });
+
+  pushDataLayerEvent({
+    event: "pricing_viewed",
+    page_path: "/pricing"
+  });
+
+  assert.deepEqual(mockWindow.dataLayer, []);
+});
+
+test("data-layer events dispatch after analytics consent is granted", () => {
+  const mockWindow = installWindow({ certscoreAnalyticsConsent: "granted", dataLayer: [] });
+
+  pushDataLayerEvent({
+    event: "contact_clicked",
+    cta_location: "header"
+  });
+
+  assert.deepEqual(mockWindow.dataLayer, [
+    {
+      event: "contact_clicked",
+      cta_location: "header"
+    }
+  ]);
+});
+
+test("pre-navigation scan events resolve without dispatch when consent is denied", async () => {
+  const mockWindow = installWindow({ certscoreAnalyticsConsent: "denied", dataLayer: [] });
+
+  await pushDataLayerEventBeforeNavigation({
+    event: "scan_started",
+    scan_source: "homepage",
+    scan_target_type: "domain",
+    scan_status: "queued"
+  });
+
+  assert.deepEqual(mockWindow.dataLayer, []);
+});
+
+test("pre-navigation scan events still dispatch when consent is granted", async () => {
+  const mockWindow = installWindow({ certscoreAnalyticsConsent: "granted", dataLayer: [] });
+
+  const pending = pushDataLayerEventBeforeNavigation(
+    {
+      event: "scan_started",
+      scan_source: "homepage",
+      scan_target_type: "domain",
+      scan_status: "queued"
+    },
+    10
+  );
+
+  assert.equal(mockWindow.dataLayer?.length, 1);
+  assert.equal((mockWindow.dataLayer?.[0] as { event?: string }).event, "scan_started");
+
+  await pending;
+});
+
+test("saved analytics consent applies Google consent mode and loads GTM only when granted", () => {
+  let loadCount = 0;
+  const mockWindow = installWindow({
+    certscoreAnalyticsConsent: "denied",
+    dataLayer: [],
+    certscoreLoadGtm: () => {
+      loadCount += 1;
+    }
+  });
+
+  saveAnalyticsConsent("denied");
+
+  assert.equal(storage.get(ANALYTICS_CONSENT_STORAGE_KEY), "denied");
+  assert.equal(loadCount, 0);
+  assert.deepEqual(mockWindow.dataLayer?.at(-1), [
+    "consent",
+    "update",
+    {
+      ad_personalization: "denied",
+      ad_storage: "denied",
+      ad_user_data: "denied",
+      analytics_storage: "denied"
+    }
+  ]);
+
+  saveAnalyticsConsent("granted");
+
+  assert.equal(storage.get(ANALYTICS_CONSENT_STORAGE_KEY), "granted");
+  assert.equal(loadCount, 1);
+  assert.deepEqual(mockWindow.dataLayer?.at(-1), [
+    "consent",
+    "update",
+    {
+      ad_personalization: "granted",
+      ad_storage: "granted",
+      ad_user_data: "granted",
+      analytics_storage: "granted"
+    }
+  ]);
+});
+
+test("bootstrap defaults Google consent mode to denied before reading saved consent", () => {
+  const script = buildConsentBootstrapScript("GTM-TEST");
+
+  assert.match(script, /gtag\('consent', 'default'/);
+  assert.match(script, /"analytics_storage":"denied"/);
+  assert.match(script, /"ad_storage":"denied"/);
+  assert.match(script, /"ad_user_data":"denied"/);
+  assert.match(script, /"ad_personalization":"denied"/);
+  assert.match(script, /storedChoice === 'granted'/);
+  assert.doesNotMatch(script, /ns\.html/);
+});

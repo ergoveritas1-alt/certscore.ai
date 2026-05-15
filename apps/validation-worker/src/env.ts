@@ -32,7 +32,7 @@ const workerEnvSchema = z.object({
     z.coerce.number().int().min(1000).default(20_000)
   ),
   VALIDATION_TRANCO_SOURCE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
-  VALIDATION_OPENAI_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).default("gpt-5.4")),
+  VALIDATION_OPENAI_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).default("gpt-5.4-nano")),
   VALIDATION_NANO_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).default("gpt-5.4-nano")),
   WEB_BOT_AUTH_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional()).transform((value) => value === "1"),
   WEB_BOT_AUTH_PRIVATE_KEY_PEM: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),

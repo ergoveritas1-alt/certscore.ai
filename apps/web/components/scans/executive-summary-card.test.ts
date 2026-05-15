@@ -204,6 +204,29 @@ test("buildRegulatoryLenses keeps pre-consent tracking out of FTC unless paired 
   assert.equal(ftcLens?.findings.some((finding) => finding.id === "pre_consent_tracking_detected"), false);
 });
 
+test("buildRegulatoryLenses explains degraded lenses even without mapped top-level findings", () => {
+  const lenses = buildRegulatoryLenses(
+    [],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    },
+    {
+      unifiedContext: {
+        hasTrackingConcern: true
+      }
+    }
+  );
+
+  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
+  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
+
+  assert.equal(cpraLens?.ratingLabel, "Watch");
+  assert.match(regulatoryFindingLabels(cpraLens?.findings ?? []).join(" "), /Score driver: retained tracking evidence/);
+  assert.equal(ftcLens?.ratingLabel, "Watch");
+  assert.match(regulatoryFindingLabels(ftcLens?.findings ?? []).join(" "), /Score driver: pre-consent tracking/);
+});
+
 test("buildRegulatoryLenses retains reject-path tracking failure as dedicated regulatory evidence", () => {
   const lenses = buildRegulatoryLenses([
     makeFinding("reject_tracking_persists_after_reject", "Non-essential tracking continued after reject", {
@@ -421,7 +444,7 @@ test("buildRegulatoryLensesFromUnifiedPackets carries cookie vendors into count 
       })
     ],
     {
-      beforeConsentCookieCount: 0,
+      beforeConsentCookieCount: 2,
       thirdPartyRequestCount: 0
     }
   );
@@ -433,6 +456,92 @@ test("buildRegulatoryLensesFromUnifiedPackets carries cookie vendors into count 
   assert.deepEqual(cookieFinding?.evidence.cookieNames, ["_ga", "_fbp"]);
   assert.deepEqual(cookieFinding?.evidence.cookieVendors, ["Google Analytics", "Meta Pixel"]);
   assert.deepEqual(cookieFinding?.evidence.initiatorDomains, ["www.google-analytics.com", "connect.facebook.net"]);
+});
+
+test("buildRegulatoryLensesFromUnifiedPackets does not convert raw cookie observations into issue copy when canonical count is zero", () => {
+  const lenses = buildRegulatoryLensesFromUnifiedPackets(
+    [
+      makeUnifiedPacket("preconsent_tracking", {
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking",
+          vendors: ["Google Analytics"]
+        },
+        evidence: {
+          counts: {},
+          entities: {
+            preconsent_cookie_categories: ["necessary", "analytics"],
+            preconsent_cookie_initiator_vendors: ["Google Analytics"],
+            preconsent_cookie_names: ["_ga", "__cf_bm"],
+            preconsent_cookie_timing_evidence: ["initial_cookie_snapshot"],
+            preconsent_nonessential_cookie_names: ["_ga"]
+          },
+          fetchQuality: null,
+          flags: ["privacy.preconsent_tracking_detected"],
+          pageUrls: [],
+          snippets: [],
+          sourceUrls: []
+        },
+        summary: "Raw storage observations were retained for review."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 10
+    }
+  );
+
+  const labels = lenses.flatMap((lens) => regulatoryFindingLabels(lens.findings));
+
+  assert.equal(labels.some((label) => /cookies were observed before consent/i.test(label)), false);
+  assert.equal(labels.some((label) => /classified cookies were observed before consent/i.test(label)), false);
+  assert.ok(labels.some((label) => /third-party requests were observed/i.test(label)));
+});
+
+test("buildRegulatoryLensesFromUnifiedPackets ignores downgraded cookie packets for regulatory issue copy", () => {
+  const lenses = buildRegulatoryLensesFromUnifiedPackets(
+    [
+      makeUnifiedPacket("preconsent_tracking", {
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking",
+          vendors: ["Meta Pixel"]
+        },
+        evidence: {
+          counts: {},
+          entities: {
+            preconsent_cookie_categories: ["advertising"],
+            preconsent_cookie_initiator_vendors: ["Meta Pixel"],
+            preconsent_cookie_names: ["_fbp"],
+            preconsent_cookie_timing_evidence: ["before_consent_cookie_write"],
+            preconsent_nonessential_cookie_names: ["_fbp"]
+          },
+          fetchQuality: null,
+          flags: ["privacy.preconsent_tracking_detected"],
+          pageUrls: [],
+          snippets: [],
+          sourceUrls: []
+        },
+        presentationDecision: {
+          confidenceRationale: "Cookie evidence was downgraded by the evidence contract.",
+          downgradeReasons: ["Functional or unclassified storage only."],
+          rationale: "Cookie evidence was downgraded by the evidence contract.",
+          status: "audit_only",
+          verificationLabel: "Audit only",
+          verificationState: "triage"
+        },
+        summary: "Downgraded cookie evidence retained for audit only."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 0,
+      thirdPartyRequestCount: 0
+    }
+  );
+
+  const labels = lenses.flatMap((lens) => regulatoryFindingLabels(lens.findings));
+
+  assert.equal(labels.some((label) => /cookie/i.test(label)), false);
 });
 
 test("buildRegulatoryLenses maps consent-choice review signals into GDPR without lowering the tracking score", () => {
@@ -819,6 +928,55 @@ test("ExecutiveSummaryCard explains interruption-backed limited coverage only wh
   assert.match(withInterruption, /1 interruption event retained/);
   assert.match(withInterruption, /Captcha\/security challenge/);
   assert.doesNotMatch(withoutInterruption, /Coverage was limited by site protections/);
+});
+
+test("ExecutiveSummaryCard treats protected routes outside the homepage as a soft diagnostic", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "certscore.ai",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-14T23:18:11.000Z",
+      pagesScanned: 2,
+      policyEnrichmentCount: 1,
+      posture: "Clear",
+      preConsentVendorNames: [],
+      requestedHost: "certscore.ai",
+      resolvedVendorNames: ["Google Tag Manager"],
+      score: 68,
+      scanInterruptions: [
+        {
+          label: "Protected route encountered",
+          details: [
+            "Some protected routes were encountered outside the public homepage.",
+            "Homepage findings are based on observable public-page evidence."
+          ]
+        }
+      ],
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 10,
+      thirdPartyDomains: ["www.googletagmanager.com"],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "3 vendors across 10 third-party requests",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { analytics: 1 },
+      verifiedPublicSurfacesCount: 1
+    })
+  );
+
+  assert.match(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
+  assert.match(html, /Protected route encountered/);
+  assert.match(html, /Homepage findings are based on observable public-page evidence/);
+  assert.doesNotMatch(html, /Runtime coverage was limited by site protections/);
+  assert.doesNotMatch(html, /Coverage was limited by site protections/);
 });
 
 test("ExecutiveSummaryCard renders limited review for latimes-style interrupted clear scans", () => {
@@ -2003,7 +2161,7 @@ test("ExecutiveSummaryCard keeps tracker disclosure counts aligned with the full
   assert.match(html, /1 vendor names and 13 third-party domains/);
 });
 
-test("ExecutiveSummaryCard keeps regulatory copy packet-derived when unified findings are present", () => {
+test("ExecutiveSummaryCard keeps regulatory cookie copy aligned with canonical classified counts when unified findings are present", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
@@ -2043,15 +2201,14 @@ test("ExecutiveSummaryCard keeps regulatory copy packet-derived when unified fin
     })
   );
 
-  assert.match(html, /No major consent-triggering issue surfaced in the top findings\./);
+  assert.match(html, /Consent and pre-consent tracking risk is the main issue\./);
   assert.match(html, /CCPA \/ CPRA/);
-  assert.match(html, /<span class="block text-xl font-semibold tracking-tight text-slate-900">82<\/span>/);
-  assert.match(html, /No strong sale\/share-style signal surfaced in the top findings\./);
+  assert.match(html, /<span class="block text-xl font-semibold tracking-tight text-slate-900">70<\/span>/);
+  assert.match(html, /Third-party collection and disclosure posture drives this score\./);
   assert.match(html, /FTC/);
-  assert.match(html, /<span class="block text-xl font-semibold tracking-tight text-slate-900">80<\/span>/);
-  assert.match(html, /No strong unfairness\/deception cue surfaced in the top findings\./);
-  assert.doesNotMatch(html, /Consent and pre-consent tracking risk is the main issue\./);
-  assert.doesNotMatch(html, /Pre-consent tracking and third-party collection should be reviewed for unfairness or deception risk\./);
+  assert.match(html, /Pre-consent tracking and third-party collection should be reviewed for unfairness or deception risk\./);
+  assert.match(html, /64 classified cookies were observed before consent\./);
+  assert.doesNotMatch(html, /64 cookies were observed before consent\./);
 });
 
 test("ExecutiveSummaryCard assigns distinct themed icons to sensitive-data and accessibility top findings", () => {

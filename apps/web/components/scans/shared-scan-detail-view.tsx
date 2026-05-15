@@ -332,16 +332,22 @@ export function hasIncompleteScanCoverage(scanRecord: Pick<ScanDetailResponse, "
     typeof pagesScanned === "number"
       ? Math.max(pagesScanned, verifiedPublicSurfacesCount ?? 0)
       : verifiedPublicSurfacesCount;
+  const hasUsableHomepageEvidence =
+    getRecordString(snapshot, "homepage_fetch_status") === "ok" &&
+    (getRecordNumber(snapshot, "homepage_fetch_http_status") ?? 0) < 400 &&
+    (typeof pagesScanned !== "number" || pagesScanned > 0) &&
+    (typeof snapshot.normalized_body_hash === "string" && snapshot.normalized_body_hash.trim().length > 0);
   const hasMaterialRetainedCoverage =
     typeof retainedPublicSurfaceCount === "number" &&
     retainedPublicSurfaceCount > 0 &&
-    (typeof pagesRequested !== "number" || retainedPublicSurfaceCount >= Math.min(pagesRequested, 3)) &&
     (totalSignals ?? 0) >= 20 &&
-    (reportFindingCount ?? 0) >= 3;
+    (
+      ((reportFindingCount ?? 0) >= 3 && hasUsableHomepageEvidence) ||
+      ((reportFindingCount ?? 0) >= 3 &&
+        (typeof pagesRequested !== "number" || retainedPublicSurfaceCount >= Math.min(pagesRequested, 3)))
+    );
   const hasHardAccessLimitation =
-    snapshot.blocked_flag === true ||
-    snapshot.captcha_flag === true ||
-    snapshot.auth_wall_detected === true ||
+    hasMaterialHomepageAccessLimitation(snapshot) ||
     snapshot.timeout_flag === true ||
     Boolean(scanOutcome && /blocked|captcha|auth|challenge|forbidden|timeout|restricted|unknown_access/i.test(scanOutcome));
 
@@ -2259,6 +2265,33 @@ function pushUniqueInterruption(
   interruptions.push({ label, details: normalizedDetails });
 }
 
+function hasMaterialHomepageAccessLimitation(snapshot: Record<string, unknown>) {
+  const homepageFetchHttpStatus = getRecordNumber(snapshot, "homepage_fetch_http_status");
+  const homepageFetchStatus = getRecordString(snapshot, "homepage_fetch_status");
+  const normalizedBodyHash = getRecordString(snapshot, "normalized_body_hash");
+  const pagesScanned = getRecordNumber(snapshot, "pages_scanned") ?? 0;
+  const verifiedPublicSurfacesCount = getRecordNumber(snapshot, "verified_public_surfaces_count") ?? 0;
+  const scanOutcome = getRecordString(snapshot, "scan_outcome");
+  const accessPostureClass = getRecordString(snapshot, "access_posture_class");
+
+  return (
+    homepageFetchStatus === "forbidden" ||
+    homepageFetchStatus === "blocked" ||
+    homepageFetchStatus === "error" ||
+    homepageFetchStatus === "timeout" ||
+    scanOutcome === "transport_failure" ||
+    scanOutcome === "timeout_navigation" ||
+    scanOutcome === "domain_inactive_or_unstable" ||
+    (typeof homepageFetchHttpStatus === "number" && homepageFetchHttpStatus >= 400) ||
+    (snapshot.blocked_flag === true && pagesScanned <= 0) ||
+    ((snapshot.captcha_flag === true || snapshot.auth_wall_detected === true) &&
+      pagesScanned <= 0 &&
+      verifiedPublicSurfacesCount <= 0 &&
+      !normalizedBodyHash) ||
+    accessPostureClass === "early_loss"
+  );
+}
+
 function deriveExecutiveScanInterruptions(
   snapshot: Record<string, unknown> | null | undefined,
   scanEvents: ScanEventSummaryRecord[] = []
@@ -2272,9 +2305,10 @@ function deriveExecutiveScanInterruptions(
     const blockVendorGuess = getRecordString(snapshot, "block_vendor_guess");
     const blockPageClassification = getRecordString(snapshot, "block_page_classification");
     const serverHeader = getRecordString(snapshot, "server_header");
-    const finalEffectiveUrl = getRecordString(snapshot, "final_effective_url");
+    const finalEffectiveUrl = getRecordString(snapshot, "final_effective_url") ?? getRecordString(snapshot, "final_url");
     const stopReasonDetail = getRecordString(snapshot, "stop_reason_detail");
     const stopReasonLabel = getRecordString(snapshot, "stop_reason_label");
+    const materialHomepageAccessLimitation = hasMaterialHomepageAccessLimitation(snapshot);
     const stopReason = deriveScanStopReason({
       accessPostureClass: getRecordString(snapshot, "access_posture_class"),
       authWallDetected: snapshot.auth_wall_detected === true,
@@ -2306,7 +2340,7 @@ function deriveExecutiveScanInterruptions(
       ]);
     }
 
-    if (snapshot.captcha_flag === true || snapshot.challenge_suspected === true) {
+    if (materialHomepageAccessLimitation && (snapshot.captcha_flag === true || snapshot.challenge_suspected === true)) {
       pushUniqueInterruption(interruptions, seen, "Captcha/security challenge", [
         stopReason?.reason,
         blockVendorGuess ? `Block vendor: ${blockVendorGuess}` : null,
@@ -2321,15 +2355,29 @@ function deriveExecutiveScanInterruptions(
       ]);
     }
 
-    if (snapshot.auth_wall_detected === true || snapshot.auth_wall_suspected === true) {
+    if (materialHomepageAccessLimitation && (snapshot.auth_wall_detected === true || snapshot.auth_wall_suspected === true)) {
       pushUniqueInterruption(interruptions, seen, "Authentication wall", [stopReason?.reason, stopReasonDetail]);
     }
 
-    if (snapshot.blocked_flag === true && homepageFetchHttpStatus !== 429) {
+    if (materialHomepageAccessLimitation && snapshot.blocked_flag === true && homepageFetchHttpStatus !== 429) {
       pushUniqueInterruption(interruptions, seen, stopReason?.outcomeTitle ?? "Blocked by site protection", [
         stopReason?.reason,
         stopReasonLabel,
         stopReasonDetail
+      ]);
+    }
+
+    if (
+      !materialHomepageAccessLimitation &&
+      (snapshot.challenge_suspected === true ||
+        snapshot.auth_wall_suspected === true ||
+        snapshot.auth_wall_detected === true ||
+        blockPageClassification === "login_wall_probable")
+    ) {
+      pushUniqueInterruption(interruptions, seen, "Protected route encountered", [
+        "Some protected routes were encountered outside the public homepage.",
+        "Homepage findings are based on observable public-page evidence.",
+        finalEffectiveUrl ? `Homepage URL: ${finalEffectiveUrl}` : null
       ]);
     }
   }
@@ -4988,10 +5036,16 @@ export function SharedScanDetailView({
     : null;
   const executivePolicySurfaces = deriveExecutivePolicySurfaces(scanRecord.policyEnrichment);
   const executiveScanInterruptions = deriveExecutiveScanInterruptions(scanRecord.snapshot, scanRecord.events);
+  const executiveCoverageLevel =
+    scanRecord.snapshot && hasMaterialHomepageAccessLimitation(scanRecord.snapshot)
+      ? typeof scanRecord.snapshot.coverage_level === "string"
+        ? scanRecord.snapshot.coverage_level
+        : null
+      : null;
   const scanCalibrationSummary = buildScanCalibrationSummary({
     accessLimitationNotice: executiveAccessNoticeCardProps,
     beforeConsentCookieCount: cookiesBeforeConsentCount,
-    coverageLevel: typeof scanRecord.snapshot?.coverage_level === "string" ? scanRecord.snapshot.coverage_level : null,
+    coverageLevel: executiveCoverageLevel,
     domain: scanRecord.scan.domainHostname,
     domainBenchmark: scanRecord.domainBenchmark,
     finalHost: certScoreSummary.finalHost,
@@ -5101,7 +5155,7 @@ export function SharedScanDetailView({
             agencyMappings={scanRecord.agencyMappings}
             beforeConsentCookieCount={cookiesBeforeConsentCount}
             coverageMicrocards={coverageMicrocards}
-            coverageLevel={typeof scanRecord.snapshot?.coverage_level === "string" ? scanRecord.snapshot.coverage_level : null}
+            coverageLevel={executiveCoverageLevel}
             domainBenchmark={scanRecord.domainBenchmark}
             externalCoverageContextAvailable={Boolean(fallbackEvidence)}
             finalHost={certScoreSummary.finalHost}
@@ -5257,7 +5311,7 @@ export function SharedScanDetailView({
           </CollapsibleSectionCard>
           <div className="space-y-5">
             {executiveFindingsProjection.groupedFindings
-              .filter((group) => !["Privacy & Tracking", "Fingerprinting", "Financial & Claims"].includes(group.section))
+              .filter((group) => !["Privacy & Tracking", "Fingerprinting", "Financial & Claims", "Accessibility"].includes(group.section))
               .map((group) => (
                 <FindingsSection key={group.section} findings={group.findings} section={group.section} />
               ))}
@@ -5373,13 +5427,6 @@ export function SharedScanDetailView({
           )}
         </>
       ) : null}
-
-      <SignalEnrichmentWorkflowCard
-        finalHost={certScoreSummary.finalHost}
-        landedOnDifferentHost={certScoreSummary.landedOnDifferentHost}
-        requestedHost={certScoreSummary.requestedHost}
-        scanRecord={scanRecord}
-      />
 
       <div className="relative overflow-hidden rounded-2xl">
         <CollapsibleSectionCard

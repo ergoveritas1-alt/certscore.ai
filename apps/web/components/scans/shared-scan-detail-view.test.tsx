@@ -1069,6 +1069,35 @@ test("hasIncompleteScanCoverage accepts verified public surfaces as retained cov
   );
 });
 
+test("hasIncompleteScanCoverage suppresses protected-route-only partial coverage when homepage evidence is usable", async () => {
+  const hasIncompleteScanCoverage = await loadHasIncompleteScanCoverage();
+
+  assert.equal(
+    hasIncompleteScanCoverage({
+      events: [],
+      scan: {
+        pagesRequested: 3,
+        pagesScanned: 2,
+        status: "completed"
+      },
+      snapshot: {
+        auth_wall_suspected: true,
+        block_page_classification: "login_wall_probable",
+        challenge_suspected: true,
+        coverage_level: "limited_partial",
+        homepage_fetch_http_status: 200,
+        homepage_fetch_status: "ok",
+        normalized_body_hash: "homepage-hash",
+        pages_scanned: 2,
+        partial_scan: true,
+        total_signals: 24,
+        verified_public_surfaces_count: 1
+      }
+    }),
+    false
+  );
+});
+
 test("hasIncompleteScanCoverage keeps warning for thin or hard-limited coverage", async () => {
   const hasIncompleteScanCoverage = await loadHasIncompleteScanCoverage();
 

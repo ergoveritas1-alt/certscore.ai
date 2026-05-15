@@ -58,7 +58,7 @@ function main() {
   info("pipeline enabled", values.VALIDATION_PIPELINE_ENABLED ?? "1");
   info("default run mode", values.VALIDATION_DEFAULT_RUN_MODE ?? "manual");
   info("default interval", values.VALIDATION_DEFAULT_SAMPLE_INTERVAL_MINUTES ?? "20");
-  info("validation model", values.VALIDATION_OPENAI_MODEL ?? "gpt-5.4");
+  info("validation model", values.VALIDATION_OPENAI_MODEL ?? "gpt-5.4-nano");
   info("web bot auth enabled", values.WEB_BOT_AUTH_ENABLED ?? "0");
 }
 
