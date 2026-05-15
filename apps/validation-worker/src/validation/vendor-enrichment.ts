@@ -491,10 +491,8 @@ export function collectVendorEnrichmentCandidates(input: {
     ...getStringArray(input.runtimeArtifacts?.scriptSrcDomains)
   ]);
   const hasPreconsentRuntime =
-    input.snapshot?.preconsent_tracking_detected === true ||
-    input.snapshot?.tracking_before_consent_detected === true ||
-    getRecord(hybrid?.networkSummary)?.preConsentThirdPartyRequestCount !== undefined ||
-    getRecord(hybrid?.network_summary)?.pre_consent_third_party_request_count !== undefined;
+    Number(getRecord(hybrid?.networkSummary)?.preConsentThirdPartyRequestCount ?? 0) > 0 ||
+    Number(getRecord(hybrid?.network_summary)?.pre_consent_third_party_request_count ?? 0) > 0;
 
   for (const hostname of rawThirdPartyDomains) {
     const normalizedHost = normalizeHostname(hostname);
@@ -548,7 +546,7 @@ export function collectVendorEnrichmentCandidates(input: {
     if (!hostname) {
       continue;
     }
-    const beforeConsent = input.snapshot?.tracking_before_consent_detected === true;
+    const beforeConsent = hasPreconsentRuntime;
     getOrCreate(hostname, {
       beforeConsent,
       collectionEndpointType: "cname",

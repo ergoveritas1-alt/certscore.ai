@@ -126,6 +126,9 @@ test("normalizes RTB and identity-sync domains from retained runtime domain list
     requestedHostname: "example.com",
     runtimeArtifacts: {
       hybrid_runtime_evidence: {
+        networkSummary: {
+          preConsentThirdPartyRequestCount: 8
+        },
         vendorSummary: {
           rawThirdPartyDomains: [
             "static.criteo.net",
@@ -164,6 +167,28 @@ test("normalizes RTB and identity-sync domains from retained runtime domain list
   assert.equal(criteo?.beforeConsent, true);
   assert.equal(criteo?.collectionEndpointType, "request");
   assert.equal(criteo?.firstPartyOrThirdParty, "third_party");
+});
+
+test("does not promote retained third-party domains as before-consent when the canonical runtime count is zero", () => {
+  const candidates = collectVendorEnrichmentCandidates({
+    requestedHostname: "example.com",
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          preConsentThirdPartyRequestCount: 0
+        },
+        vendorSummary: {
+          rawThirdPartyDomains: ["www.google-analytics.com"]
+        }
+      }
+    },
+    snapshot: {
+      preconsent_tracking_detected: true,
+      tracking_before_consent_detected: true
+    }
+  });
+
+  assert.deepEqual(candidates, []);
 });
 
 test("marks same-site unresolved vendor requests as first-party proxy evidence", () => {

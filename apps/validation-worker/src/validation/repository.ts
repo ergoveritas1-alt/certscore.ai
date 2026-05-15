@@ -139,6 +139,112 @@ type ValidationVerdictRow = {
   verdict: "supported" | "inconclusive" | "not_supported" | null;
 };
 
+function getObjectArray(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+    : [];
+}
+
+function getFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
+}
+
+function hasRuntimePreconsentTrackingEvidence(runtimeArtifacts: Record<string, unknown> | null) {
+  if (!runtimeArtifacts) {
+    return null;
+  }
+
+  if ((getFiniteNumber(runtimeArtifacts.consent_preconsent_violation_count) ?? 0) > 0) {
+    return true;
+  }
+
+  if (getStringArray(runtimeArtifacts.consent_baseline_tracker_evidence_urls).length > 0) {
+    return true;
+  }
+
+  const hybrid = getRecord(runtimeArtifacts.hybrid_runtime_evidence);
+  if (!hybrid) {
+    return null;
+  }
+
+  const networkSummary = getRecord(hybrid.networkSummary ?? hybrid.network_summary);
+  const vendorSummary = getRecord(hybrid.vendorSummary ?? hybrid.vendor_summary);
+  const storageSummary = getRecord(hybrid.storageSummary ?? hybrid.storage_summary);
+  const requestRows = [
+    ...getObjectArray(hybrid.requestToVendorObservations),
+    ...getObjectArray(hybrid.request_to_vendor_observations),
+    ...getObjectArray(hybrid.requestObservations),
+    ...getObjectArray(hybrid.request_observations)
+  ];
+  const cookieRows = [
+    ...getObjectArray(hybrid.cookieWriteObservations),
+    ...getObjectArray(hybrid.cookie_write_observations)
+  ];
+
+  const preConsentThirdPartyRequests =
+    getFiniteNumber(networkSummary?.preConsentThirdPartyRequestCount) ??
+    getFiniteNumber(networkSummary?.pre_consent_third_party_request_count) ??
+    0;
+  const preConsentVendors =
+    getFiniteNumber(vendorSummary?.preConsentVendorCount) ??
+    getFiniteNumber(vendorSummary?.pre_consent_vendor_count) ??
+    0;
+  const preConsentTrackingCookies =
+    getFiniteNumber(storageSummary?.preConsentTrackingCookieCount) ??
+    getFiniteNumber(storageSummary?.pre_consent_tracking_cookie_count) ??
+    0;
+
+  if (preConsentThirdPartyRequests > 0 || preConsentVendors > 0 || preConsentTrackingCookies > 0) {
+    return true;
+  }
+
+  if (
+    requestRows.some(
+      (row) =>
+        (row.preConsent === true || row.pre_consent === true || row.runtimePhase === "pre_consent" || row.runtime_phase === "pre_consent") &&
+        (row.thirdParty === true || row.third_party === true)
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    cookieRows.some(
+      (row) =>
+        (row.beforeConsent === true || row.before_consent === true) &&
+        (row.nonEssential === true || row.non_essential === true || row.category === "advertising" || row.category === "analytics")
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function deriveCanonicalPreconsentTrackingFlag(input: {
+  preconsentViolations: Array<Record<string, unknown>>;
+  runtimeArtifacts: Record<string, unknown> | null;
+  trackerVendors: Array<Record<string, unknown>>;
+}) {
+  const runtimeEvidence = hasRuntimePreconsentTrackingEvidence(input.runtimeArtifacts);
+  const hasPreconsentViolations = input.preconsentViolations.length > 0;
+  const hasBeforeConsentTrackerVendors = input.trackerVendors.some(
+    (row) =>
+      row.before_consent === true &&
+      (row.first_party_or_third_party === "third_party" || row.first_party_or_third_party === "first_party_proxy")
+  );
+
+  if (runtimeEvidence === true || hasPreconsentViolations || hasBeforeConsentTrackerVendors) {
+    return true;
+  }
+
+  return runtimeEvidence === false ? false : null;
+}
+
 type SignalPopulationRow = {
   category: string | null;
   confidence?: number | null;
@@ -2128,6 +2234,27 @@ async function persistValidationRunReportFindingCount(input: {
 
     if (!scanRecord) {
       return;
+    }
+
+    const canonicalPreconsentTracking = deriveCanonicalPreconsentTrackingFlag({
+      preconsentViolations: scanRecord.preconsentViolations,
+      runtimeArtifacts: scanRecord.runtimeArtifacts,
+      trackerVendors: scanRecord.trackerVendors
+    });
+    if (canonicalPreconsentTracking !== null) {
+      await query(
+        `
+          update scan_snapshots
+             set preconsent_tracking_detected = $2,
+                 tracking_before_consent_detected = $2
+           where scan_id = $1
+        `,
+        [input.scanId, canonicalPreconsentTracking]
+      );
+      if (scanRecord.snapshot) {
+        scanRecord.snapshot.preconsent_tracking_detected = canonicalPreconsentTracking;
+        scanRecord.snapshot.tracking_before_consent_detected = canonicalPreconsentTracking;
+      }
     }
 
     const reportFindingCount = buildScanReportUnifiedFindingsForScan(scanRecord).length;
