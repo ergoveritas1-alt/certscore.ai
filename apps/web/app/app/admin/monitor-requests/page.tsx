@@ -61,6 +61,25 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatFrequency(value: string | null) {
+  if (!value) {
+    return "Not set";
+  }
+
+  return value
+    .split("_")
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function shortId(value: string | null) {
+  if (!value) {
+    return "Not available";
+  }
+
+  return value.length > 12 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+}
+
 function filterHref(status: AdminMonitorSiteRequestStatus | null) {
   return status ? `/app/admin/monitor-requests?status=${status}` : "/app/admin/monitor-requests";
 }
@@ -157,22 +176,57 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                       </td>
                       <td className="max-w-sm py-4 pr-4">
                         {request.monitorSetup ? (
-                          <div className="space-y-2 text-xs text-slate-600">
-                            <Badge tone={request.monitorSetup.setupStatus === "activated" ? "success" : "neutral"}>
-                              {request.monitorSetup.setupStatus === "activated" ? "Activated" : "Pending setup"}
-                            </Badge>
-                            <p>Linked domain: {request.monitorSetup.hostname}</p>
-                            <p>Workspace ID: {request.monitorSetup.organizationId}</p>
-                            <p>Domain ID: {request.monitorSetup.domainId}</p>
-                            <p>Requested cadence: {request.monitorSetup.requestedFrequency}</p>
+                          <div className="min-w-72 space-y-3 text-xs text-slate-600">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge tone={request.monitorSetup.setupStatus === "activated" ? "success" : "neutral"}>
+                                {request.monitorSetup.setupStatus === "activated" ? "Activated" : "Pending setup"}
+                              </Badge>
+                              <span className="font-medium text-slate-800">{request.monitorSetup.hostname}</span>
+                            </div>
+                            <dl className="grid grid-cols-[7.5rem_1fr] gap-x-3 gap-y-1 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                              <dt className="text-slate-500">Workspace</dt>
+                              <dd className="font-mono text-[11px] text-slate-700" title={request.monitorSetup.organizationId}>
+                                {shortId(request.monitorSetup.organizationId)}
+                              </dd>
+                              <dt className="text-slate-500">Domain</dt>
+                              <dd className="font-mono text-[11px] text-slate-700" title={request.monitorSetup.domainId}>
+                                {shortId(request.monitorSetup.domainId)}
+                              </dd>
+                              <dt className="text-slate-500">Requested</dt>
+                              <dd className="font-medium text-slate-800">{formatFrequency(request.monitorSetup.requestedFrequency)}</dd>
+                              <dt className="text-slate-500">Current active</dt>
+                              <dd className="font-medium text-slate-800">
+                                {request.monitorSetup.setupStatus === "activated"
+                                  ? formatFrequency(request.monitorSetup.activeFrequency ?? request.monitorSetup.requestedFrequency)
+                                  : "Manual"}
+                              </dd>
+                            </dl>
+                            <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+                              <p className="font-medium text-slate-800">Setup audit</p>
+                              <ol className="space-y-2">
+                                <li>
+                                  <p className="font-medium text-slate-700">Prepared</p>
+                                  <p>By {shortId(request.monitorSetup.linkedByUserId)}</p>
+                                  <p>{formatDateTime(request.monitorSetup.linkedAt)}</p>
+                                </li>
+                                {request.monitorSetup.setupStatus === "activated" ? (
+                                  <li>
+                                    <p className="font-medium text-slate-700">Activated</p>
+                                    <p>By {shortId(request.monitorSetup.activatedByUserId)}</p>
+                                    <p>{formatDateTime(request.monitorSetup.activatedAt)}</p>
+                                  </li>
+                                ) : null}
+                              </ol>
+                            </div>
                             {request.monitorSetup.setupStatus === "activated" ? (
-                              <>
-                                <p>Active cadence: {request.monitorSetup.activeFrequency ?? request.monitorSetup.requestedFrequency}</p>
-                                <p>Activated: {formatDateTime(request.monitorSetup.activatedAt)}</p>
-                              </>
+                              <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-emerald-800">
+                                This setup has been explicitly activated for the requested cadence.
+                              </p>
                             ) : (
                               <>
-                                <p>Current schedule remains manual until explicit activation.</p>
+                                <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800">
+                                  Current schedule remains manual until explicit activation.
+                                </p>
                                 <form action={activateMonitorSiteSetupFormAction} className="pt-1">
                                   <input name="requestId" type="hidden" value={request.id} />
                                   <PendingSubmitButton
