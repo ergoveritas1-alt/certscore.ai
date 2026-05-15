@@ -84,6 +84,79 @@ test("uses a coverage note for thin scans instead of a normal primary-concerns n
   assert.match(presentation.summaryMessage, /These are automated observations from the public scan\. Review the evidence before taking action/);
 });
 
+test("uses accessibility headline for accessibility-only retained top findings", () => {
+  const presentation = deriveExecutiveNarrativePresentation({
+    executiveHeadline: "Visual contrast accessibility issue",
+    finalHost: "certscore.ai",
+    posture: "Action Needed",
+    requestedHost: "certscore.ai",
+    topFindings: [
+      {
+        id: "visual_contrast_accessibility_issue",
+        label: "Visual contrast accessibility issue",
+        section: "Accessibility"
+      }
+    ]
+  });
+
+  assert.equal(presentation.headline, "Accessibility issue detected");
+  assert.doesNotMatch(presentation.headline, /privacy|consent/i);
+});
+
+test("keeps privacy headline for privacy consent retained top findings", () => {
+  const presentation = deriveExecutiveNarrativePresentation({
+    executiveHeadline: "Tracking started before consent",
+    finalHost: "example.com",
+    posture: "Action Needed",
+    requestedHost: "example.com",
+    topFindings: [
+      {
+        id: "pre_consent_tracking_detected",
+        label: "Tracking started before consent",
+        section: "Privacy & Tracking"
+      }
+    ]
+  });
+
+  assert.equal(presentation.headline, "Immediate privacy and consent issues detected");
+});
+
+test("uses mixed headline when retained top findings span privacy and accessibility", () => {
+  const presentation = deriveExecutiveNarrativePresentation({
+    executiveHeadline: "Tracking started before consent · Visual contrast accessibility issue",
+    finalHost: "example.com",
+    posture: "Action Needed",
+    requestedHost: "example.com",
+    topFindings: [
+      {
+        id: "pre_consent_tracking_detected",
+        label: "Tracking started before consent",
+        section: "Privacy & Tracking"
+      },
+      {
+        id: "visual_contrast_accessibility_issue",
+        label: "Visual contrast accessibility issue",
+        section: "Accessibility"
+      }
+    ]
+  });
+
+  assert.equal(presentation.headline, "Automated scan surfaced privacy and accessibility issues");
+});
+
+test("uses neutral headline when no meaningful top findings are retained", () => {
+  const presentation = deriveExecutiveNarrativePresentation({
+    executiveHeadline: "No headline findings surfaced from the available scan coverage.",
+    finalHost: "example.com",
+    posture: "Clear",
+    requestedHost: "example.com",
+    topFindings: []
+  });
+
+  assert.equal(presentation.headline, "No major issues surfaced from retained evidence");
+  assert.doesNotMatch(presentation.headline, /privacy and consent issues/i);
+});
+
 test("derives limited review for interrupted clear scans with retained runtime context", () => {
   const displayState = deriveExecutiveDisplayState({
     domainBenchmark: {

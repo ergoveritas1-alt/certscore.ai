@@ -92,6 +92,22 @@ test("data-layer events dispatch after analytics consent is granted", () => {
   ]);
 });
 
+test("report CTA events dispatch after analytics consent is granted", () => {
+  const mockWindow = installWindow({ certscoreAnalyticsConsent: "granted", dataLayer: [] });
+
+  pushDataLayerEvent({
+    event: "report_cta_clicked",
+    cta_type: "share"
+  });
+
+  assert.deepEqual(mockWindow.dataLayer, [
+    {
+      event: "report_cta_clicked",
+      cta_type: "share"
+    }
+  ]);
+});
+
 test("pre-navigation scan events resolve without dispatch when consent is denied", async () => {
   const mockWindow = installWindow({ certscoreAnalyticsConsent: "denied", dataLayer: [] });
 

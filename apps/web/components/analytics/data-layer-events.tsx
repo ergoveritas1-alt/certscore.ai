@@ -6,6 +6,7 @@ import {
   type CtaLocation,
   type GuideCtaType,
   type GuidePageType,
+  type ReportCtaType,
   type ScanSource,
   pushDataLayerEvent,
   pushDataLayerEventOnce
@@ -23,6 +24,10 @@ function isGuideCtaType(value: string | undefined): value is GuideCtaType {
 
 function isScanSource(value: string | undefined): value is ScanSource {
   return value === "homepage" || value === "header" || value === "dashboard" || value === "unknown";
+}
+
+function isReportCtaType(value: string | undefined): value is ReportCtaType {
+  return value === "share" || value === "email" || value === "monitor" || value === "checklist" || value === "unknown";
 }
 
 function getGuidePageType(pathname: string): GuidePageType {
@@ -101,6 +106,16 @@ export function DataLayerClickTracker() {
           event: "guide_cta_clicked",
           page_type: getGuidePageType(pathname),
           cta_type: isGuideCtaType(trackedElement.dataset.analyticsCtaType)
+            ? trackedElement.dataset.analyticsCtaType
+            : "unknown"
+        });
+        return;
+      }
+
+      if (eventName === "report_cta_clicked") {
+        pushDataLayerEvent({
+          event: "report_cta_clicked",
+          cta_type: isReportCtaType(trackedElement.dataset.analyticsCtaType)
             ? trackedElement.dataset.analyticsCtaType
             : "unknown"
         });

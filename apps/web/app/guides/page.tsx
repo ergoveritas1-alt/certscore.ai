@@ -16,6 +16,31 @@ const guides = [
     description: "Review what it means when tracking requests or non-essential cookies appear before a recorded consent choice."
   },
   {
+    href: "/guides/pre-consent-tracking-detection",
+    title: "Pre-consent tracking detection",
+    description: "Learn how runtime observations can help review whether third-party tracking starts before consent."
+  },
+  {
+    href: "/guides/cookie-consent-enforcement-checker",
+    title: "Cookie consent enforcement checker",
+    description: "Review whether observed cookies and tracking behavior appear aligned with consent choices."
+  },
+  {
+    href: "/guides/detect-trackers-before-cookie-consent",
+    title: "Detect trackers before cookie consent",
+    description: "A practical overview of reviewing tracker requests before cookie consent is recorded."
+  },
+  {
+    href: "/guides/third-party-cookie-checker",
+    title: "Third-party cookie checker",
+    description: "Understand how third-party cookie timing and domains support evidence review."
+  },
+  {
+    href: "/guides/cmp-verification",
+    title: "CMP verification",
+    description: "Use runtime observations to review whether CMP choices appear to affect browser behavior."
+  },
+  {
     href: "/guides/third-party-cookies-before-consent",
     title: "Third-party cookies before consent",
     description: "Understand how third-party cookie timing can become a reviewable risk signal."

@@ -5,6 +5,7 @@ import { hasAnalyticsConsent } from "./consent";
 export type CtaLocation = "header" | "homepage" | "footer" | "unknown";
 export type GuidePageType = "guide" | "benchmark" | "unknown";
 export type GuideCtaType = "scan" | "contact" | "pricing" | "unknown";
+export type ReportCtaType = "share" | "email" | "monitor" | "checklist" | "unknown";
 export type ScanSource = "homepage" | "header" | "dashboard" | "unknown";
 export type ScanTargetType = "domain" | "url" | "unknown";
 
@@ -13,6 +14,7 @@ export type CertScoreDataLayerEvent =
   | { event: "contact_clicked"; cta_location: CtaLocation }
   | { event: "sign_in_clicked"; cta_location: Extract<CtaLocation, "header" | "unknown"> }
   | { event: "guide_cta_clicked"; page_type: GuidePageType; cta_type: GuideCtaType }
+  | { event: "report_cta_clicked"; cta_type: ReportCtaType }
   | { event: "scan_started"; scan_source: ScanSource; scan_target_type: ScanTargetType; scan_status: "queued" }
   | { event: "scan_completed"; scan_source: Extract<ScanSource, "homepage" | "dashboard" | "unknown">; scan_status: "completed" };
 

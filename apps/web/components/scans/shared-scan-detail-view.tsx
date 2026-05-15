@@ -346,10 +346,27 @@ export function hasIncompleteScanCoverage(scanRecord: Pick<ScanDetailResponse, "
       ((reportFindingCount ?? 0) >= 3 &&
         (typeof pagesRequested !== "number" || retainedPublicSurfaceCount >= Math.min(pagesRequested, 3)))
     );
+  const hasMaterialHomepageLimit = hasMaterialHomepageAccessLimitation(snapshot);
   const hasHardAccessLimitation =
-    hasMaterialHomepageAccessLimitation(snapshot) ||
+    hasMaterialHomepageLimit ||
     snapshot.timeout_flag === true ||
-    Boolean(scanOutcome && /blocked|captcha|auth|challenge|forbidden|timeout|restricted|unknown_access/i.test(scanOutcome));
+    Boolean(scanOutcome && /blocked|captcha|forbidden|timeout|restricted|unknown_access/i.test(scanOutcome));
+  const hasProtectedRouteOnlyLimitation =
+    hasUsableHomepageEvidence &&
+    !hasMaterialHomepageLimit &&
+    retainedPublicSurfaceCount !== null &&
+    retainedPublicSurfaceCount > 0 &&
+    (
+      snapshot.auth_wall_suspected === true ||
+      snapshot.auth_wall_detected === true ||
+      snapshot.challenge_suspected === true ||
+      getRecordString(snapshot, "block_page_classification") === "login_wall_probable" ||
+      Boolean(scanOutcome && /auth|login|sign.?in|protected_route/i.test(scanOutcome))
+    );
+
+  if (hasProtectedRouteOnlyLimitation && !hasHardAccessLimitation) {
+    return false;
+  }
 
   return (
     coverageLevel === "limited_none" ||

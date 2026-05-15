@@ -222,20 +222,88 @@ function getPostureHeadline(posture: ExecutivePosture) {
   return "No major privacy and consent issues surfaced";
 }
 
-function getDisplayStateHeadline(displayState: ExecutiveDisplayState, posture: ExecutivePosture) {
+function getFindingTopic(input: { id?: string; label?: string; section?: string }) {
+  const haystack = `${input.id ?? ""} ${input.label ?? ""} ${input.section ?? ""}`.toLowerCase();
+  if (/accessibility|wcag|contrast|keyboard|screen.reader|alt.text|form label|focus/.test(haystack)) {
+    return "accessibility" as const;
+  }
+  if (/financial|claim|pricing|fee|earnings|performance|testimonial/.test(haystack)) {
+    return "financial" as const;
+  }
+  if (/privacy|consent|cookie|tracking|tracker|third.party|session replay|fingerprint|disclosure|policy|sale|share|cpra|gdpr|ftc/.test(haystack)) {
+    return "privacy" as const;
+  }
+  return "other" as const;
+}
+
+function summarizeFindingTopics(findings: Array<{ id?: string; label?: string; section?: string }> = []) {
+  const topics = new Set(findings.map(getFindingTopic));
+  return {
+    hasAccessibility: topics.has("accessibility"),
+    hasFinancial: topics.has("financial"),
+    hasOther: topics.has("other"),
+    hasPrivacy: topics.has("privacy"),
+    hasFindings: findings.length > 0
+  };
+}
+
+function getTopicAwarePostureHeadline(
+  posture: ExecutivePosture,
+  findings: Array<{ id?: string; label?: string; section?: string }> = []
+) {
+  const topics = summarizeFindingTopics(findings);
+
+  if (!topics.hasFindings) {
+    return posture === "Clear" ? "No major issues surfaced from retained evidence" : "No headline findings surfaced from retained evidence";
+  }
+
+  if (topics.hasPrivacy && topics.hasAccessibility) {
+    return "Automated scan surfaced privacy and accessibility issues";
+  }
+
+  if (topics.hasPrivacy) {
+    return getPostureHeadline(posture);
+  }
+
+  if (topics.hasAccessibility) {
+    return posture === "Action Needed" ? "Accessibility issue detected" : "Automated scan surfaced an accessibility issue";
+  }
+
+  if (topics.hasFinancial) {
+    return "Automated scan surfaced financial-claims review signals";
+  }
+
+  return posture === "Action Needed" ? "Automated scan surfaced issues for review" : "Automated scan surfaced review signals";
+}
+
+function getDisplayStateHeadline(
+  displayState: ExecutiveDisplayState,
+  posture: ExecutivePosture,
+  findings: Array<{ id?: string; label?: string; section?: string }> = []
+) {
   if (displayState === "Limited review") {
     return "Runtime coverage was limited by site protections";
   }
 
-  return getPostureHeadline(posture);
+  return getTopicAwarePostureHeadline(posture, findings);
 }
 
-function getCoverageScopedPostureHeadline(posture: ExecutivePosture, findingSections: string[] = []) {
+function getCoverageScopedPostureHeadline(
+  posture: ExecutivePosture,
+  findings: Array<{ id?: string; label?: string; section?: string }> = []
+) {
   if (posture === "Clear") {
-    return "Limited scan coverage did not surface major homepage privacy concerns";
+    return "Limited scan coverage did not surface major homepage issues";
   }
-  if (findingSections.some((section) => section === "Financial & Claims")) {
+  const topics = summarizeFindingTopics(findings);
+  if (topics.hasFinancial) {
     return "Limited scan coverage surfaced possible financial-claims concerns";
+  }
+  if (topics.hasAccessibility && !topics.hasPrivacy) {
+    return "Limited scan coverage surfaced possible accessibility concerns";
+  }
+  if (topics.hasAccessibility && topics.hasPrivacy) {
+    return "Limited scan coverage surfaced possible privacy and accessibility concerns";
   }
 
   return "Limited scan coverage surfaced possible homepage privacy concerns";
@@ -278,7 +346,7 @@ export function deriveExecutiveNarrativePresentation(input: {
   policyEnrichmentCount?: number | null;
   requestedHost: string | null;
   scanOutcome?: string | null;
-  topFindingSections?: string[];
+  topFindings?: Array<{ id?: string; label?: string; section?: string }>;
   verifiedPublicSurfacesCount?: number | null;
 }) {
   const hostResolutionCategory = deriveHostResolutionCategory({
@@ -331,7 +399,7 @@ export function deriveExecutiveNarrativePresentation(input: {
   if (displayState === "Limited review") {
     return {
       findingsHeading: "Automated homepage findings",
-      headline: getDisplayStateHeadline(displayState, input.posture),
+      headline: getDisplayStateHeadline(displayState, input.posture, input.topFindings),
       hostResolutionCategory,
       limitedCoverage: true,
       summaryLabel: "Coverage note:",
@@ -343,7 +411,7 @@ export function deriveExecutiveNarrativePresentation(input: {
   if (limitedCoverage) {
     return {
       findingsHeading: "Automated homepage findings",
-      headline: getCoverageScopedPostureHeadline(input.posture, input.topFindingSections),
+      headline: getCoverageScopedPostureHeadline(input.posture, input.topFindings),
       hostResolutionCategory,
       limitedCoverage,
       summaryLabel: "Coverage note:",
@@ -353,7 +421,7 @@ export function deriveExecutiveNarrativePresentation(input: {
 
   return {
     findingsHeading: "Highest-priority issues",
-    headline: getDisplayStateHeadline(displayState, input.posture),
+    headline: getDisplayStateHeadline(displayState, input.posture, input.topFindings),
     hostResolutionCategory,
     limitedCoverage: false,
     summaryLabel: "Primary concerns:",
@@ -422,7 +490,11 @@ export function buildScanCalibrationSummary(input: {
     posture: input.posture,
     requestedHost: input.requestedHost,
     scanOutcome: input.scanOutcome,
-    topFindingSections: input.topFindings.map((finding) => finding.section),
+    topFindings: input.topFindings.map((finding) => ({
+      id: finding.id,
+      label: finding.label,
+      section: finding.section
+    })),
     verifiedPublicSurfacesCount: input.verifiedPublicSurfacesCount
   });
 

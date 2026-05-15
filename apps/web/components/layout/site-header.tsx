@@ -6,9 +6,11 @@ const navLinks = [
   { href: "/", label: "Home" },
   { href: "/how-it-works", label: "How It Works" },
   { href: "/methodology", label: "Methodology" },
-  { href: "/pricing", label: "Pricing" },
   { href: "/guides", label: "Guides" },
-  { href: "/benchmarks", label: "Benchmarks" }
+  { href: "/benchmarks", label: "Benchmarks" },
+  { href: "/compare/privacy-scanner-vs-cookie-scanner", label: "Compare" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/contact-sales", label: "Contact" }
 ];
 
 export function SiteHeader() {
@@ -28,6 +30,15 @@ export function SiteHeader() {
             </Link>
           ))}
           <PendingButtonLink
+            className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_10px_24px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
+            data-analytics-cta-location="header"
+            data-analytics-event="guide_cta_clicked"
+            href="/preview"
+            idleContent="Free scan"
+            pendingContent="Opening..."
+            size="sm"
+          />
+          <PendingButtonLink
             data-analytics-cta-location="header"
             data-analytics-event="sign_in_clicked"
             href="/login"
@@ -35,15 +46,6 @@ export function SiteHeader() {
             pendingContent="Opening..."
             size="sm"
             variant="secondary"
-          />
-          <PendingButtonLink
-            className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_10px_24px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
-            data-analytics-cta-location="header"
-            data-analytics-event="contact_clicked"
-            href="/contact-sales"
-            idleContent="Contact us"
-            pendingContent="Opening..."
-            size="sm"
           />
         </nav>
 
@@ -72,6 +74,15 @@ export function SiteHeader() {
 
               <div className="mt-3 grid gap-2 border-t border-slate-100 pt-3">
                 <PendingButtonLink
+                  className="w-full justify-center border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_10px_24px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
+                  data-analytics-cta-location="header"
+                  data-analytics-event="guide_cta_clicked"
+                  href="/preview"
+                  idleContent="Free scan"
+                  pendingContent="Opening..."
+                  size="sm"
+                />
+                <PendingButtonLink
                   className="w-full justify-center"
                   data-analytics-cta-location="header"
                   data-analytics-event="sign_in_clicked"
@@ -80,15 +91,6 @@ export function SiteHeader() {
                   pendingContent="Opening..."
                   size="sm"
                   variant="secondary"
-                />
-                <PendingButtonLink
-                  className="w-full justify-center border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_10px_24px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
-                  data-analytics-cta-location="header"
-                  data-analytics-event="contact_clicked"
-                  href="/contact-sales"
-                  idleContent="Contact us"
-                  pendingContent="Opening..."
-                  size="sm"
                 />
               </div>
             </nav>

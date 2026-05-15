@@ -7,14 +7,16 @@ type CreatePageMetadataInput = {
   title: string;
   description: string;
   path: string;
+  robots?: Metadata["robots"];
 };
 
-export function createPageMetadata({ title, description, path }: CreatePageMetadataInput): Metadata {
+export function createPageMetadata({ title, description, path, robots }: CreatePageMetadataInput): Metadata {
   const url = new URL(path, SITE_URL).toString();
 
   return {
     title,
     description,
+    robots,
     alternates: {
       canonical: url
     },
@@ -117,6 +119,6 @@ export function createBenchmarkDatasetSchema({
       url: SITE_URL
     },
     measurementTechnique:
-      "Automated homepage-oriented observation of public website behavior. Results are risk signals for review, not legal advice, certification, or compliance determinations."
+      "Automated homepage-oriented observation of public website behavior. Results are risk signals for review, not legal advice or legal determinations."
   };
 }

@@ -7,12 +7,18 @@ const resourceLinks = [
   { href: "/benchmarks/website-consent-tracking-2026", label: "Website consent benchmark" },
   { href: "/benchmarks/pre-consent-tracking-2026", label: "Pre-consent tracking benchmark" },
   { href: "/benchmarks/session-replay-risk-2026", label: "Session replay risk benchmark" },
+  { href: "/monitor-site", label: "Monitor a site" },
   { href: "/guides/detect-tracking-before-consent", label: "Detect tracking before consent" },
+  { href: "/guides/pre-consent-tracking-detection", label: "Pre-consent tracking detection" },
+  { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement checker" },
+  { href: "/guides/cmp-verification", label: "CMP verification" },
   { href: "/guides/website-consent-audit-checklist", label: "Website consent audit checklist" },
   { href: "/guides/pre-consent-tracking", label: "Pre-consent tracking guide" },
   { href: "/guides/rtb-cookie-syncing", label: "RTB cookie syncing guide" },
   { href: "/compare/privacy-scanner-vs-cookie-scanner", label: "Privacy scanner vs cookie scanner" },
+  { href: "/compare/cmp-vs-runtime-consent-scanner", label: "CMP vs runtime scanner" },
   { href: "/compare/website-consent-audit-tools", label: "Website consent audit tools" },
+  { href: "/contact-sales", label: "Contact sales" },
   { href: "/press", label: "Press" },
   { href: "/llms.txt", label: "llms.txt" }
 ];

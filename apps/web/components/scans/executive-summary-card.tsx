@@ -80,6 +80,96 @@ function formatInlineList(values: string[]) {
   return `${values.slice(0, -1).join(", ")}, and ${values[values.length - 1]}`;
 }
 
+function formatTrackerFootprintSummary(input: {
+  thirdPartyDomainCount: number;
+  vendorCount: number;
+}) {
+  const domainLabel = `${input.thirdPartyDomainCount} third-party domain${input.thirdPartyDomainCount === 1 ? "" : "s"}`;
+  const vendorLabel =
+    input.vendorCount === 0
+      ? "no classified tracker vendors identified"
+      : `${input.vendorCount} classified tracker vendor${input.vendorCount === 1 ? "" : "s"} identified`;
+
+  return `${domainLabel} observed; ${vendorLabel}.`;
+}
+
+function formatTrackerFootprintExpandLabel(input: {
+  thirdPartyDomainCount: number;
+  vendorCount: number;
+}) {
+  if (input.vendorCount > 0) {
+    return "View observed vendors and domains";
+  }
+
+  if (input.thirdPartyDomainCount === 1) {
+    return "View observed third-party domain";
+  }
+
+  if (input.thirdPartyDomainCount > 1) {
+    return "View observed domains";
+  }
+
+  return "";
+}
+
+function getPolicyDisclosureType(label: string) {
+  const normalizedLabel = label.toLowerCase();
+  if (normalizedLabel.includes("cookie")) {
+    return "cookie";
+  }
+  if (normalizedLabel.includes("privacy")) {
+    return "privacy";
+  }
+  if (normalizedLabel.includes("terms")) {
+    return "terms";
+  }
+  return "policy";
+}
+
+function formatPolicyDisclosureTypes(types: string[]) {
+  const orderedTypes = ["cookie", "privacy", "terms", "policy"].filter((type) => types.includes(type));
+  const uniqueTypes = orderedTypes.length > 0 ? orderedTypes : types;
+
+  if (uniqueTypes.length === 2 && uniqueTypes.includes("cookie") && uniqueTypes.includes("privacy")) {
+    return "cookie/privacy";
+  }
+
+  return uniqueTypes.length > 1 ? "multiple disclosure types" : uniqueTypes[0] ?? "policy";
+}
+
+function formatPolicySurfaceSummary(policySurfaces: ExecutivePolicySurface[]) {
+  const coveredPolicySurfaceUrlCount = new Set(policySurfaces.map((surface) => surface.pageUrl).filter(Boolean)).size;
+  const disclosureTypes = uniqueStrings(policySurfaces.map((surface) => getPolicyDisclosureType(surface.pageLabel)));
+
+  if (coveredPolicySurfaceUrlCount === 1 && disclosureTypes.length > 1) {
+    return `1 policy URL covered across ${formatPolicyDisclosureTypes(disclosureTypes)} disclosures`;
+  }
+
+  if (coveredPolicySurfaceUrlCount === 1) {
+    return "1 policy URL covered";
+  }
+
+  if (coveredPolicySurfaceUrlCount > 1) {
+    return disclosureTypes.length > coveredPolicySurfaceUrlCount
+      ? `${coveredPolicySurfaceUrlCount} policy URLs covered across ${disclosureTypes.length} disclosure types`
+      : `${coveredPolicySurfaceUrlCount} policy URLs covered`;
+  }
+
+  return `${policySurfaces.length} policy surface${policySurfaces.length === 1 ? "" : "s"} retained`;
+}
+
+function buildPolicySurfaceSharedUrlLabels(policySurfaces: ExecutivePolicySurface[]) {
+  const labelsByUrl = new Map<string, string[]>();
+  for (const surface of policySurfaces) {
+    if (!surface.pageUrl) {
+      continue;
+    }
+    labelsByUrl.set(surface.pageUrl, uniqueStrings([...(labelsByUrl.get(surface.pageUrl) ?? []), surface.pageLabel]));
+  }
+
+  return labelsByUrl;
+}
+
 function trimTrailingSentencePunctuation(value: string) {
   return value.trim().replace(/[.,;:!?]+$/g, "");
 }
@@ -165,6 +255,9 @@ function getRecommendedNextStep(finding: CertScoreFinding) {
   }
   if (label.includes("reject_tracking") || label.includes("reject")) {
     return "Next step: test whether reject choices suppress non-essential vendors across reloads.";
+  }
+  if (label.includes("contrast")) {
+    return "Next step: review affected text/background color pairs and adjust contrast to meet WCAG contrast guidance.";
   }
   if (label.includes("accessibility") || label.includes("wcag") || label.includes("keyboard")) {
     return "Next step: review affected elements with keyboard and screen-reader checks.";
@@ -1262,16 +1355,23 @@ export function buildRegulatoryLenses(
   ].filter((item): item is RegulatoryLensFinding => Boolean(item));
 
   const adaScore = clampScore(100 - (accessibilityRiskScore ?? (dojAdaMapping?.relevanceLevel === "limited" ? 35 : 50)));
+  const hasAccessibilityDisclosureGap =
+    accessibilityClaimMismatchDetected === true ||
+    normalizedAgencyFindingLabels.some((label) => /disclosure|claim/i.test(label));
   const adaSummary =
     accessibilityClaimMismatchDetected === true
       ? "Accessibility claims appear inconsistent with observed barriers."
       : (typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 1) ||
           (typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0) ||
           (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0)
-        ? "Accessibility barriers and disclosure gaps are the main issue."
+        ? hasAccessibilityDisclosureGap
+          ? "Accessibility barriers and disclosure gaps are the main review area."
+          : "Automated accessibility signals are the main review area."
         : adaScore >= 72
           ? "No significant issues found."
-          : "Accessibility support and disclosure posture needs work.";
+          : hasAccessibilityDisclosureGap
+            ? "Accessibility support and disclosure posture needs work."
+            : "Automated accessibility signals are the main review area.";
   const adaTone = buildTone(adaScore);
 
   lenses.push({
@@ -1785,6 +1885,9 @@ export function deriveBenchmarkScoreExplanation(input: {
       : null,
     findingIds.has("probable_fingerprinting") || findingIds.has("fingerprinting_related_signals_observed")
       ? "fingerprinting-related telemetry"
+      : null,
+    Array.from(findingIds).some((id) => /accessibility|wcag|contrast|keyboard|screen_reader|missing_alt|form_label|focus/.test(id))
+      ? "accessibility"
       : null
   ];
   const driverText = formatInlineList(uniqueStrings(drivers).slice(0, 4));
@@ -1793,6 +1896,12 @@ export function deriveBenchmarkScoreExplanation(input: {
     vendorNames.length > 0 ? ` Representative observed vendors included ${formatInlineList(vendorNames)}.` : "";
 
   if (delta < 0) {
+    if (delta >= -3) {
+      return driverText
+        ? `This score is near the ${input.benchmark.industry} benchmark expectation, with retained review context concentrated in ${driverText}.`
+        : `This score is near the ${input.benchmark.industry} benchmark expectation for the retained evidence.`;
+    }
+
     return driverText
       ? `${sentenceWithPeriod(
           `This score is below the ${input.benchmark.industry} benchmark expectation mainly because retained evidence showed ${driverText}`
@@ -2261,7 +2370,8 @@ function FindingTitleIcon(input: { finding: CertScoreFinding; iconKey?: FindingT
 
 function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const reference = getFindingReferenceLink(input.finding);
-  const jsonPayload = JSON.stringify(buildFindingEvidenceJsonPayload(input.finding), null, 2);
+  const evidencePayload = buildFindingEvidenceJsonPayload(input.finding);
+  const jsonPayload = hasMeaningfulFindingEvidence(input.finding) ? JSON.stringify(evidencePayload, null, 2) : null;
   const tone = getFindingCardTone(input.finding, false);
   const fingerprintTelemetry =
     input.finding.id === "probable_fingerprinting" || input.finding.id === "fingerprinting_related_signals_observed"
@@ -2331,25 +2441,53 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
             <p className="text-sm leading-6 text-slate-700">This does not independently establish unlawful tracking or legal liability.</p>
           </div>
         ) : null}
-        <details
-          className="group/json min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5"
-          suppressHydrationWarning
-        >
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-            <span>{"{}"} JSON evidence</span>
-            <span className="text-slate-400 transition-transform group-open/json:rotate-180">⌄</span>
-          </summary>
-          <div className="relative mt-3 min-w-0 max-w-full overflow-hidden rounded-lg bg-slate-950" suppressHydrationWarning>
-            <CopyJsonButton
-              payload={jsonPayload}
-              label="Copy evidence JSON"
-              className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-200 shadow-sm transition-colors hover:border-slate-500 hover:text-white"
-            />
-            <pre className="max-w-full whitespace-pre-wrap break-words px-3 py-3 pr-12 text-xs leading-5 text-slate-100">{jsonPayload}</pre>
-          </div>
-        </details>
+        {jsonPayload ? (
+          <details
+            className="group/json min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5"
+            suppressHydrationWarning
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+              <span>{"{}"} JSON evidence</span>
+              <span className="text-slate-400 transition-transform group-open/json:rotate-180">⌄</span>
+            </summary>
+            <div className="relative mt-3 min-w-0 max-w-full overflow-hidden rounded-lg bg-slate-950" suppressHydrationWarning>
+              <CopyJsonButton
+                payload={jsonPayload}
+                label="Copy evidence JSON"
+                className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-200 shadow-sm transition-colors hover:border-slate-500 hover:text-white"
+              />
+              <pre className="max-w-full whitespace-pre-wrap break-words px-3 py-3 pr-12 text-xs leading-5 text-slate-100">{jsonPayload}</pre>
+            </div>
+          </details>
+        ) : null}
       </div>
     </details>
+  );
+}
+
+function hasMeaningfulJsonValue(value: unknown): boolean {
+  if (value === null || value === undefined || value === "") {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasMeaningfulJsonValue);
+  }
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).some(hasMeaningfulJsonValue);
+  }
+  return true;
+}
+
+function hasMeaningfulFindingEvidence(finding: CertScoreFinding) {
+  if (CANONICAL_EVIDENCE_FINDING_IDS.has(finding.id)) {
+    return true;
+  }
+
+  return (
+    hasMeaningfulJsonValue(finding.evidenceDetails) ||
+    hasMeaningfulJsonValue(finding.evidencePreview) ||
+    hasMeaningfulJsonValue(finding.evidenceRefs) ||
+    hasMeaningfulJsonValue(finding.evidenceVersion)
   );
 }
 
@@ -2683,7 +2821,7 @@ export function ExecutiveSummaryCard(input: {
     Array.isArray(input.allFindings) && input.allFindings.length > 0 ? input.allFindings : input.topFindings;
   const executiveHeadlineFindings = filteredTopFindings.slice(0, 3);
   const hasScrollableTopFindings = filteredTopFindings.length > 3;
-  const namedVendors = input.resolvedVendorNames.slice(0, 8);
+  const namedVendors = uniqueStrings(input.resolvedVendorNames).slice(0, 8);
   const thirdPartyDomains = input.thirdPartyDomains.slice(0, 9);
   const vendorMixDetails = input.topObservedEntities
     .slice(0, 6)
@@ -2696,8 +2834,17 @@ export function ExecutiveSummaryCard(input: {
     ...namedVendors,
     ...input.unresolvedVendorHosts.slice(0, Math.max(0, 8 - namedVendors.length))
   ];
+  const trackerFootprintDetailSummary = formatTrackerFootprintSummary({
+    thirdPartyDomainCount: input.thirdPartyDomains.length,
+    vendorCount: namedVendors.length
+  });
+  const trackerFootprintExpandLabel = formatTrackerFootprintExpandLabel({
+    thirdPartyDomainCount: input.thirdPartyDomains.length,
+    vendorCount: namedVendors.length
+  });
   const policySurfaces = input.policySurfaces ?? [];
-  const coveredPolicySurfaceUrlCount = new Set(policySurfaces.map((surface) => surface.pageUrl).filter(Boolean)).size;
+  const policySurfaceSummary = formatPolicySurfaceSummary(policySurfaces);
+  const policySurfaceLabelsByUrl = buildPolicySurfaceSharedUrlLabels(policySurfaces);
   const scanInterruptions = input.scanInterruptions ?? [];
   const displayState = deriveExecutiveDisplayState({
     beforeConsentCookieCount: input.beforeConsentCookieCount,
@@ -2723,12 +2870,22 @@ export function ExecutiveSummaryCard(input: {
   const hasHardCoverageLimit =
     input.coverageLevel === "limited_none" ||
     Boolean(input.scanOutcome && /blocked|captcha|auth|challenge|forbidden|timeout|restricted|unknown_access/i.test(input.scanOutcome));
+  const hasProtectedRouteOnlyPartialCoverage =
+    input.status === "completed" &&
+    pagesScanned > 0 &&
+    !hasMeaningfulInterruption &&
+    scanInterruptions.some((interruption) =>
+      /protected route/i.test(`${interruption.label} ${interruption.details.join(" ")}`)
+    );
   const hasIncompleteCoverageNotice =
-    (displayState === "Limited review" && !hasMaterialRetainedCoverage) ||
-    hasHardCoverageLimit ||
-    (!hasMaterialRetainedCoverage &&
-      (input.coverageLevel === "limited_partial" ||
-        Boolean(input.scanOutcome && /partial|incomplete|degraded/i.test(input.scanOutcome))));
+    !hasProtectedRouteOnlyPartialCoverage &&
+    (
+      (displayState === "Limited review" && !hasMaterialRetainedCoverage) ||
+      hasHardCoverageLimit ||
+      (!hasMaterialRetainedCoverage &&
+        (input.coverageLevel === "limited_partial" ||
+          Boolean(input.scanOutcome && /partial|incomplete|degraded/i.test(input.scanOutcome))))
+    );
   const executiveHeadline = input.accessLimitationNotice
     ? input.accessLimitationNotice.message
     : formatTopFindingHeadline(executiveHeadlineFindings);
@@ -2744,7 +2901,11 @@ export function ExecutiveSummaryCard(input: {
     posture: input.posture as ExecutivePosture,
     requestedHost: input.requestedHost,
     scanOutcome: input.scanOutcome,
-    topFindingSections: executiveHeadlineFindings.map((finding) => finding.section),
+    topFindings: executiveHeadlineFindings.map((finding) => ({
+      id: finding.id,
+      label: finding.label,
+      section: finding.section
+    })),
     verifiedPublicSurfacesCount: input.verifiedPublicSurfacesCount
   });
   const regulatoryCounts = {
@@ -3028,24 +3189,22 @@ export function ExecutiveSummaryCard(input: {
                       />
                     ) : null}
                   </p>
-                  <p className="mt-2 text-sm text-slate-800">{input.trackerSummary}</p>
+                  <p className="mt-2 text-sm text-slate-800">{trackerFootprintDetailSummary}</p>
                   {hasMeaningfulInterruption ? (
                     <p className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-950">
                       Observed footprint may be incomplete because site protections interrupted runtime collection.
                     </p>
                   ) : null}
                   <DetailDisclosure
-                    summary={`${vendorEvidence.length} vendor names and ${input.thirdPartyDomains.length} third-party domains`}
-                    title="Observed vendors and domains"
-                    items={[...vendorEvidence, ...thirdPartyDomains]}
+                    summary={trackerFootprintExpandLabel}
+                    title={namedVendors.length > 0 ? "Observed vendors and domains" : "Observed domains"}
+                    items={trackerFootprintExpandLabel ? [...vendorEvidence, ...thirdPartyDomains] : []}
                   />
                 </div>
                 {policySurfaces.length > 0 ? (
                   <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Policy Surfaces</p>
-                    <p className="mt-2 text-sm text-slate-800">
-                      {coveredPolicySurfaceUrlCount} surface URL{coveredPolicySurfaceUrlCount === 1 ? "" : "s"} covered
-                    </p>
+                    <p className="mt-2 text-sm text-slate-800">{policySurfaceSummary}</p>
                     <div className="mt-3 space-y-2">
                       {policySurfaces.map((surface) => (
                         <details key={`${surface.pageLabel}:${surface.pageUrl ?? "unknown"}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
@@ -3055,6 +3214,11 @@ export function ExecutiveSummaryCard(input: {
                           </summary>
                           <div className="mt-3 space-y-2 text-xs leading-5 text-slate-600">
                             {surface.pageUrl ? <p className="break-words font-medium text-slate-800">{surface.pageUrl}</p> : null}
+                            {surface.pageUrl && (policySurfaceLabelsByUrl.get(surface.pageUrl)?.length ?? 0) > 1 ? (
+                              <p>
+                                This URL is shared by {formatInlineList(policySurfaceLabelsByUrl.get(surface.pageUrl) ?? [])}.
+                              </p>
+                            ) : null}
                             {surface.details.length > 0 ? (
                               <ul className="space-y-1">
                                 {surface.details.map((detail) => (

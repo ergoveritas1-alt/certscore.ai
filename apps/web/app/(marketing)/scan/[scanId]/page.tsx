@@ -5,8 +5,10 @@ import { SiteHeader } from "../../../../components/layout/site-header";
 import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
 import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
+import { ShareReportActions } from "../../../../components/scans/share-report-actions";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { hasPendingPostCompletionFindingWork } from "../../../../lib/scans/scan-auto-refresh";
+import { absoluteUrl } from "../../../../lib/seo";
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 
@@ -40,12 +42,19 @@ export async function generateMetadata({ params }: PublicScanDetailPageProps): P
   const domain = getPublicScanDomainLabel(scanRecord.scan.domainHostname);
   const title = `${domain} tracking, cookie, consent, and accessibility scan | CertScore.ai`;
   const description = `Automated CertScore.ai scan summary for ${domain}, including observed tracking, cookie, consent, and accessibility risk signals. Review the evidence; automated findings may contain errors.`;
+  const reportUrl = absoluteUrl(`/scan/${scanId}`);
 
   return {
     title: {
       absolute: title
     },
     description,
+    alternates: {
+      canonical: reportUrl
+    },
+    // Public report pages remain noindex until there is an intentional allowlist
+    // strategy for indexable scans, owner controls, retention rules, and safe
+    // redaction of any sensitive context in generated metadata.
     robots: {
       follow: false,
       index: false
@@ -53,7 +62,8 @@ export async function generateMetadata({ params }: PublicScanDetailPageProps): P
     openGraph: {
       title,
       description,
-      type: "website"
+      type: "website",
+      url: reportUrl
     },
     twitter: {
       card: "summary_large_image",
@@ -96,7 +106,8 @@ export default async function PublicScanDetailPage({ params }: PublicScanDetailP
           }
           headerActions={
             scanRecord.scan.status === "completed" ? (
-              <div className="w-full max-w-[21rem]">
+              <div className="flex w-full flex-col items-end gap-3 lg:flex-row lg:items-start lg:justify-end">
+                <ShareReportActions domainLabel={getPublicScanDomainLabel(scanRecord.scan.domainHostname)} />
                 <DomainScanForm
                   buttonLabel="Scan"
                   compact

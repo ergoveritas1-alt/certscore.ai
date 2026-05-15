@@ -1098,6 +1098,35 @@ test("hasIncompleteScanCoverage suppresses protected-route-only partial coverage
   );
 });
 
+test("hasIncompleteScanCoverage suppresses protected-route-only badge for thin but usable homepage scans", async () => {
+  const hasIncompleteScanCoverage = await loadHasIncompleteScanCoverage();
+
+  assert.equal(
+    hasIncompleteScanCoverage({
+      events: [],
+      scan: {
+        pagesRequested: 1,
+        pagesScanned: 2,
+        status: "completed"
+      },
+      snapshot: {
+        auth_wall_suspected: true,
+        coverage_level: "limited_partial",
+        homepage_fetch_http_status: 200,
+        homepage_fetch_status: "ok",
+        normalized_body_hash: "homepage-hash",
+        pages_scanned: 2,
+        partial_scan: true,
+        report_finding_count: 1,
+        scan_outcome: "protected_route_encountered",
+        total_signals: 12,
+        verified_public_surfaces_count: 1
+      }
+    }),
+    false
+  );
+});
+
 test("hasIncompleteScanCoverage keeps warning for thin or hard-limited coverage", async () => {
   const hasIncompleteScanCoverage = await loadHasIncompleteScanCoverage();
 

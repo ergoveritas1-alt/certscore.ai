@@ -764,7 +764,7 @@ test("buildRegulatoryLenses surfaces scored ADA lens when any WCAG errors are pr
       agencyMappings: [
         makeAgencyMapping({
           relevanceLevel: "limited",
-          triggeredSignals: [{ key: "accessibilityStatementPresent", label: "Accessibility statement missing" }]
+          triggeredSignals: [{ key: "accessibility.representative_axe_examples", label: "Representative axe examples" }]
         })
       ],
       regulatoryRisk: makeRegulatoryRisk({
@@ -779,7 +779,7 @@ test("buildRegulatoryLenses surfaces scored ADA lens when any WCAG errors are pr
   assert.ok(!adaLens?.minimal);
   assert.equal(adaLens?.ratingLabel, "Strong");
   assert.equal(typeof adaLens?.score, "number");
-  assert.equal(adaLens?.summary, "Accessibility barriers and disclosure gaps are the main issue.");
+  assert.equal(adaLens?.summary, "Automated accessibility signals are the main review area.");
   assert.equal(financialLens, undefined);
 });
 
@@ -885,6 +885,34 @@ test("benchmark score explanation uses surfaced findings without percentile clai
   );
   assert.doesNotMatch(explanation ?? "", /policy states a long raw quote/i);
   assert.doesNotMatch(explanation ?? "", /percent|peer/i);
+});
+
+test("benchmark score explanation treats tiny negative deltas as near benchmark", () => {
+  const explanation = deriveBenchmarkScoreExplanation({
+    benchmark: {
+      confidence: "medium",
+      estimatedRankLabel: "Typical",
+      expectedCookiesBeforeConsent: 2,
+      expectedOverallScore: 72,
+      expectedThirdPartyRequests: 24,
+      industry: "SaaS / web application",
+      rationale: "Matched to a SaaS benchmark."
+    },
+    findings: [
+      makeFinding("wcag_color_contrast_issue", "Visual contrast accessibility issue", {
+        section: "Accessibility",
+        severity: "medium"
+      })
+    ],
+    score: 70,
+    vendorNames: []
+  });
+
+  assert.equal(
+    explanation,
+    "This score is near the SaaS / web application benchmark expectation, with retained review context concentrated in accessibility."
+  );
+  assert.doesNotMatch(explanation ?? "", /below the SaaS \/ web application benchmark expectation/i);
 });
 
 test("ExecutiveSummaryCard explains interruption-backed limited coverage only when events are provided", () => {
@@ -1142,6 +1170,53 @@ test("ExecutiveSummaryCard suppresses broad incomplete warning when partial cove
         { pageLabel: "Privacy Policy", pageUrl: "https://kbdlab.io/privacy", details: [] },
         { pageLabel: "Terms of Service", pageUrl: "https://kbdlab.io/terms", details: [] }
       ]
+    })
+  );
+
+  assert.doesNotMatch(html, /This scan has incomplete coverage/);
+});
+
+test("ExecutiveSummaryCard suppresses broad incomplete warning for protected-route-only partial scans", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [makeFinding("wcag_color_contrast_issue", "Visual contrast accessibility issue")],
+      beforeConsentCookieCount: 0,
+      coverageLevel: "limited_partial",
+      domainBenchmark: null,
+      finalHost: "certscore.ai",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      pagesScanned: 2,
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "certscore.ai",
+      resolvedVendorNames: [],
+      scanInterruptions: [
+        {
+          label: "Protected route encountered",
+          details: [
+            "Some protected routes were encountered outside the public homepage.",
+            "Homepage findings are based on observable public-page evidence."
+          ]
+        }
+      ],
+      scanOutcome: "completed_partial",
+      score: 75,
+      sessionReplayVendorNames: [],
+      status: "completed",
+      thirdPartyRequestCount: 1,
+      thirdPartyDomains: ["static.cloudflareinsights.com"],
+      topFindings: [makeFinding("wcag_color_contrast_issue", "Visual contrast accessibility issue")],
+      topObservedEntities: [],
+      trackerSummary: "1 third-party domain observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {},
+      verifiedPublicSurfacesCount: 1
     })
   );
 
@@ -2157,8 +2232,271 @@ test("ExecutiveSummaryCard keeps tracker disclosure counts aligned with the full
     })
   );
 
-  assert.match(html, /1 vendor observed across 13 third-party domains/);
-  assert.match(html, /1 vendor names and 13 third-party domains/);
+  assert.match(html, /13 third-party domains observed; 1 classified tracker vendor identified\./);
+  assert.doesNotMatch(html, /1 vendor names and 13 third-party domains/);
+});
+
+test("ExecutiveSummaryCard uses domain-only tracker expand copy when no classified vendors are present", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "certscore.ai",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      posture: "Watch",
+      preConsentVendorNames: [],
+      requestedHost: "certscore.ai",
+      resolvedVendorNames: [],
+      score: 82,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 1,
+      thirdPartyDomains: ["static.cloudflareinsights.com"],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "1 third-party domain observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /1 third-party domain observed; no classified tracker vendors identified\./);
+  assert.match(html, /View observed third-party domain/);
+  assert.doesNotMatch(html, /View observed vendors and domains/);
+});
+
+test("ExecutiveSummaryCard keeps vendor-and-domain tracker expand copy when classified vendors are present", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      posture: "Watch",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: ["Google Ads", "Microsoft Clarity"],
+      score: 70,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 3,
+      thirdPartyDomains: ["googleadservices.com", "clarity.ms", "doubleclick.net"],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "2 vendors across 3 third-party domains",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { ads: 1, analytics: 1 }
+    })
+  );
+
+  assert.match(html, /3 third-party domains observed; 2 classified tracker vendors identified\./);
+  assert.match(html, /View observed vendors and domains/);
+});
+
+test("ExecutiveSummaryCard explains one policy URL covered across multiple disclosure types", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "certscore.ai",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      policySurfaces: [
+        { pageLabel: "Cookie policy", pageUrl: "https://certscore.ai/privacy", details: [] },
+        { pageLabel: "Privacy policy", pageUrl: "https://certscore.ai/privacy", details: [] }
+      ],
+      posture: "Clear",
+      preConsentVendorNames: [],
+      requestedHost: "certscore.ai",
+      resolvedVendorNames: [],
+      score: 88,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyDomains: [],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "No meaningful third-party footprint observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /1 policy URL covered across cookie\/privacy disclosures/);
+  assert.doesNotMatch(html, /1 surface URL covered/);
+});
+
+test("ExecutiveSummaryCard pluralizes multiple covered policy URLs", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      policySurfaces: [
+        { pageLabel: "Privacy policy", pageUrl: "https://example.com/privacy", details: [] },
+        { pageLabel: "Cookie policy", pageUrl: "https://example.com/cookies", details: [] }
+      ],
+      posture: "Clear",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 88,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyDomains: [],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "No meaningful third-party footprint observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /2 policy URLs covered/);
+  assert.doesNotMatch(html, /2 surface URLs covered/);
+});
+
+test("ExecutiveSummaryCard clarifies when disclosure labels share a policy URL", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      policySurfaces: [
+        { pageLabel: "Privacy policy", pageUrl: "https://example.com/privacy", details: [] },
+        { pageLabel: "Terms of service", pageUrl: "https://example.com/terms", details: [] },
+        { pageLabel: "Cookie policy", pageUrl: "https://example.com/privacy", details: [] }
+      ],
+      posture: "Clear",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 88,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyDomains: [],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "No meaningful third-party footprint observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /2 policy URLs covered across 3 disclosure types/);
+  assert.match(html, /This URL is shared by Privacy policy and Cookie policy/);
+});
+
+test("ExecutiveSummaryCard renders accessibility-only self-scan copy without privacy overstatement", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 1
+      },
+      agencyMappings: [
+        makeAgencyMapping({
+          relevanceLevel: "limited",
+          triggeredSignals: [{ key: "accessibility.representative_axe_examples", label: "Representative axe examples" }]
+        })
+      ],
+      allFindings: [
+        makeFinding("wcag_color_contrast_issue", "Visual contrast accessibility issue", {
+          section: "Accessibility",
+          severity: "medium"
+        })
+      ],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: {
+        confidence: "medium",
+        estimatedRankLabel: "Typical",
+        expectedCookiesBeforeConsent: 2,
+        expectedOverallScore: 72,
+        expectedThirdPartyRequests: 24,
+        industry: "SaaS / web application",
+        rationale: "Matched to a SaaS benchmark."
+      },
+      finalHost: "certscore.ai",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "certscore.ai",
+      resolvedVendorNames: [],
+      score: 70,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 1,
+      thirdPartyDomains: ["static.cloudflareinsights.com"],
+      topFindings: [
+        makeFinding("wcag_color_contrast_issue", "Visual contrast accessibility issue", {
+          section: "Accessibility",
+          severity: "medium"
+        })
+      ],
+      topObservedEntities: [],
+      trackerSummary: "1 third-party domain observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {},
+      verifiedPublicSurfacesCount: 1
+    })
+  );
+
+  assert.match(html, /Accessibility issue detected/);
+  assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
+  assert.match(html, /Primary concerns:<\/span> Visual contrast accessibility issue/);
+  assert.match(html, /Next step: review affected text\/background color pairs and adjust contrast to meet WCAG contrast guidance\./);
+  assert.match(html, /Automated accessibility signals are the main review area\./);
+  assert.match(html, /1 third-party domain observed; no classified tracker vendors identified\./);
+  assert.match(html, /View observed third-party domain/);
+  assert.doesNotMatch(html, /View observed vendors and domains/);
+  assert.equal(
+    (html.match(/1 third-party domain observed; no classified tracker vendors identified\./g) ?? []).length,
+    1
+  );
+  assert.match(
+    html,
+    /This score is near the SaaS \/ web application benchmark expectation, with retained review context concentrated in accessibility\./
+  );
+  assert.doesNotMatch(html, /This score is below the SaaS \/ web application benchmark expectation based on surfaced findings/);
+  assert.doesNotMatch(html, />\{\}<\/pre>|JSON evidence/);
 });
 
 test("ExecutiveSummaryCard keeps regulatory cookie copy aligned with canonical classified counts when unified findings are present", () => {

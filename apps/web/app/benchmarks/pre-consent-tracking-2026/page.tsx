@@ -13,6 +13,7 @@ import {
   createPageMetadata,
   createPublicArticleSchema
 } from "../../../lib/seo";
+import { preConsentTrackingBenchmarkSample as benchmarkSample } from "./benchmark-sample";
 
 const title = "Pre-consent tracking benchmark notes 2026";
 const description =
@@ -66,14 +67,14 @@ export default function PreConsentTrackingBenchmarkPage() {
             title: "Direct answer",
             paragraphs: [
               "Pre-consent tracking means classified tracking requests, vendor activity, or non-essential cookies appear before the scan records a consent choice.",
-              "In recent CertScore.ai benchmark scans, this signal appeared in roughly one in five scanned sites. That frequency is directional and should not be treated as a legal conclusion about any website."
+              `In a ${benchmarkSample.observationWindow} production load-test sample of ${benchmarkSample.completedScans} completed public-web scans, pre-consent tracking appeared in ${benchmarkSample.preConsentTrackingCount} scans, or about ${benchmarkSample.preConsentTrackingPct}%. That figure is directional and should not be treated as a legal conclusion about any website.`
             ]
           },
           {
             title: "Why it matters",
             paragraphs: [
               "Tracking before consent can indicate drift between consent-platform settings, tag-manager rules, and live website behavior.",
-              "Benchmark context helps teams understand that this is a common operational review issue rather than a rare edge case."
+              "Benchmark context can help teams compare patterns across public webpages, but those figures should be used as operational context rather than compliance determinations."
             ]
           },
           {
@@ -96,6 +97,13 @@ export default function PreConsentTrackingBenchmarkPage() {
               "Review tag-manager triggers, consent categories, vendor deployment rules, cookie timing, and whether geography or stored consent state affected the scan.",
               "Repeat scans after changes to confirm whether the observed signal changed."
             ]
+          },
+          {
+            title: "Directional benchmark methodology",
+            paragraphs: [
+              "The figures on this page are derived from recent CertScore.ai production load-test artifacts for completed public-web scans. They are not live-updating and the sample mix can change over time.",
+              "Benchmark figures are directional and based on automated observations from public webpages. They should be used as context, not as compliance determinations."
+            ]
           }
         ]}
         showDisclaimer={false}
@@ -108,8 +116,13 @@ export default function PreConsentTrackingBenchmarkPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm leading-7 text-slate-600">
             <p>Signal: pre-consent tracking.</p>
-            <p>Approximate recent benchmark frequency: roughly one in five scanned sites.</p>
-            <p>Interpretation: common automated review signal that should be checked against retained evidence.</p>
+            <p>
+              Directional sample: {benchmarkSample.preConsentTrackingCount} of {benchmarkSample.completedScans} completed scans, about {benchmarkSample.preConsentTrackingPct}%.
+            </p>
+            <p>
+              Related context: third-party cookies before consent appeared in {benchmarkSample.thirdPartyCookieBeforeConsentCount} scans, about {benchmarkSample.thirdPartyCookieBeforeConsentPct}%; session recording services appeared in {benchmarkSample.sessionRecordingServiceCount} scans, about {benchmarkSample.sessionRecordingServicePct}%.
+            </p>
+            <p>Interpretation: automated review signal that should be checked against retained evidence.</p>
           </CardContent>
         </Card>
         <div className="mt-5">
