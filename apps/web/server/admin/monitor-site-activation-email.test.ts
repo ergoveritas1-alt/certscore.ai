@@ -23,3 +23,16 @@ test("buildMonitorSiteActivationEmailText keeps activation copy cautious", () =>
   assert.doesNotMatch(text, /\bnon-compliant\b/i);
   assert.doesNotMatch(text, /\bguaranteed\b/i);
 });
+
+test("buildMonitorSiteActivationEmailText includes status link when available", () => {
+  const text = buildMonitorSiteActivationEmailText({
+    activeFrequency: "monthly",
+    appUrl: "https://certscore.ai",
+    hostname: "example.com",
+    normalizedUrl: "https://example.com",
+    statusUrl: "https://certscore.ai/monitor-site/status/status-token"
+  });
+
+  assert.match(text, /review the request status at https:\/\/certscore\.ai\/monitor-site\/status\/status-token/);
+  assert.doesNotMatch(text, /\/app\/domains/);
+});

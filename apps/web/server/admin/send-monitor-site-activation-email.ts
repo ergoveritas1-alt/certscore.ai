@@ -48,6 +48,7 @@ export async function sendMonitorSiteActivationEmailFormAction(formData: FormDat
   const organizationId = getString(setup?.organizationId);
   const requestedFrequency = getString(setup?.requestedFrequency);
   const setupStatus = getString(setup?.setupStatus);
+  const publicStatusToken = getString(request.metadata_json?.publicStatusToken);
 
   if (
     setupStatus !== "activated" ||
@@ -79,7 +80,8 @@ export async function sendMonitorSiteActivationEmailFormAction(formData: FormDat
       activeFrequency,
       appUrl: gmailConfig.appUrl,
       hostname,
-      normalizedUrl
+      normalizedUrl,
+      statusUrl: publicStatusToken ? `${gmailConfig.appUrl}/monitor-site/status/${encodeURIComponent(publicStatusToken)}` : null
     }),
     to: request.work_email
   });

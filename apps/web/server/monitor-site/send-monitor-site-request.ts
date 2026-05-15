@@ -18,11 +18,17 @@ export async function sendMonitorSiteRequestAction(
     return { error: validation.error };
   }
 
+  let request: Awaited<ReturnType<typeof createMonitorSiteRequest>>;
   try {
-    await createMonitorSiteRequest(validation.value);
+    request = await createMonitorSiteRequest(validation.value);
   } catch {
     return { error: "Monitoring request could not be saved. Please try again." };
   }
 
-  redirect(`/monitor-site/thanks?website=${encodeURIComponent(validation.value.website)}`);
+  const params = new URLSearchParams({ website: validation.value.website });
+  if (request?.publicStatusToken) {
+    params.set("statusToken", request.publicStatusToken);
+  }
+
+  redirect(`/monitor-site/thanks?${params.toString()}`);
 }

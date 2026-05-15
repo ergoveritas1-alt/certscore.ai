@@ -17,12 +17,15 @@ export const metadata: Metadata = createPageMetadata({
 
 type MonitorSiteThanksPageProps = {
   searchParams: Promise<{
+    statusToken?: string;
     website?: string;
   }>;
 };
 
 export default async function MonitorSiteThanksPage({ searchParams }: MonitorSiteThanksPageProps) {
   const params = await searchParams;
+  const statusToken =
+    typeof params.statusToken === "string" && /^[A-Za-z0-9_-]{20,120}$/.test(params.statusToken) ? params.statusToken : "";
   const website = typeof params.website === "string" ? params.website.slice(0, 200) : "";
 
   return (
@@ -42,7 +45,12 @@ export default async function MonitorSiteThanksPage({ searchParams }: MonitorSit
               CertScore uses automated public-web observations as review signals. This is not legal advice or a legal determination.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button asChild>
+              {statusToken ? (
+                <Button asChild>
+                  <Link href={`/monitor-site/status/${encodeURIComponent(statusToken)}`}>View request status</Link>
+                </Button>
+              ) : null}
+              <Button asChild variant={statusToken ? "secondary" : "primary"}>
                 <Link href="/">Run another scan</Link>
               </Button>
               <Button asChild variant="secondary">

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomBytes } from "node:crypto";
 import { query } from "@website-signal-risk-scanner/db";
 import type { MonitorSiteRequestInput } from "./monitor-site-request-validation";
 
@@ -43,6 +44,9 @@ export async function ensureMonitorSiteRequestsTable() {
       create index if not exists monitor_site_requests_work_email_idx
         on public.monitor_site_requests (work_email);
 
+      create index if not exists monitor_site_requests_public_status_token_idx
+        on public.monitor_site_requests ((metadata_json->>'publicStatusToken'));
+
       drop trigger if exists set_monitor_site_requests_updated_at on public.monitor_site_requests;
       create trigger set_monitor_site_requests_updated_at
       before update on public.monitor_site_requests
@@ -59,7 +63,8 @@ export async function ensureMonitorSiteRequestsTable() {
 }
 
 async function insertMonitorSiteRequest(input: MonitorSiteRequestInput & { normalizedHostname: string }) {
-  const result = await query<{ id: string }>(
+  const publicStatusToken = randomBytes(24).toString("base64url");
+  const result = await query<{ id: string; public_status_token: string | null }>(
     `
       insert into monitor_site_requests (
         website,
@@ -73,8 +78,8 @@ async function insertMonitorSiteRequest(input: MonitorSiteRequestInput & { norma
         source_report_url,
         metadata_json
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, '{}'::jsonb)
-      returning id
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+      returning id, metadata_json->>'publicStatusToken' as public_status_token
     `,
     [
       input.website,
@@ -85,11 +90,13 @@ async function insertMonitorSiteRequest(input: MonitorSiteRequestInput & { norma
       input.monitoringGoal,
       input.notes,
       input.sourcePageUrl,
-      input.sourceReportUrl
+      input.sourceReportUrl,
+      JSON.stringify({ publicStatusToken })
     ]
   );
 
-  return result.rows[0]?.id ?? null;
+  const row = result.rows[0];
+  return row ? { id: row.id, publicStatusToken: row.public_status_token ?? publicStatusToken } : null;
 }
 
 export async function createMonitorSiteRequest(input: MonitorSiteRequestInput & { normalizedHostname: string }) {
