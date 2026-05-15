@@ -234,25 +234,13 @@ variable "web_memory" {
 variable "worker_cpu" {
   description = "CPU units for the validation worker task."
   type        = number
-  default     = 1024
+  default     = 512
 }
 
 variable "worker_memory" {
   description = "Memory for the validation worker task."
   type        = number
   default     = 2048
-}
-
-variable "scheduler_cpu" {
-  description = "CPU units for the validation scheduler task."
-  type        = number
-  default     = 512
-}
-
-variable "scheduler_memory" {
-  description = "Memory for the validation scheduler task."
-  type        = number
-  default     = 1024
 }
 
 variable "web_desired_count" {
@@ -263,12 +251,6 @@ variable "web_desired_count" {
 
 variable "worker_desired_count" {
   description = "Desired task count for validation worker."
-  type        = number
-  default     = 1
-}
-
-variable "scheduler_desired_count" {
-  description = "Desired task count for validation scheduler."
   type        = number
   default     = 1
 }

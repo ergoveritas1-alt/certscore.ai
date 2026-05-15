@@ -23,11 +23,6 @@ output "ecs_worker_service_name" {
   value       = aws_ecs_service.worker.name
 }
 
-output "ecs_scheduler_service_name" {
-  description = "Validation scheduler ECS service name."
-  value       = aws_ecs_service.scheduler.name
-}
-
 output "github_actions_deploy_role_arn" {
   description = "IAM role ARN for the GitHub Actions AWS deploy workflow."
   value       = aws_iam_role.github_actions_deploy.arn

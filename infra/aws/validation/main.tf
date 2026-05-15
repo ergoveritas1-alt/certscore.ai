@@ -640,6 +640,22 @@ resource "aws_ecs_task_definition" "web" {
           awslogs-stream-prefix = "ecs"
         }
       }
+    },
+    {
+      name        = "validation-scheduler"
+      image       = "${aws_ecr_repository.worker.repository_url}:${var.image_tag}"
+      essential   = true
+      command     = ["pnpm", "--filter", "@website-signal-risk-scanner/validation-worker", "start:scheduler"]
+      environment = local.worker_container_environment
+      secrets     = local.worker_container_secrets
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.scheduler.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
     }
   ])
 
@@ -672,42 +688,6 @@ resource "aws_ecs_task_definition" "worker" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.worker.name
-          awslogs-region        = var.aws_region
-          awslogs-stream-prefix = "ecs"
-        }
-      }
-    }
-  ])
-
-  runtime_platform {
-    cpu_architecture        = "X86_64"
-    operating_system_family = "LINUX"
-  }
-
-  tags = local.common_tags
-}
-
-resource "aws_ecs_task_definition" "scheduler" {
-  family                   = "${local.prefix}-scheduler"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = tostring(var.scheduler_cpu)
-  memory                   = tostring(var.scheduler_memory)
-  execution_role_arn       = aws_iam_role.execution.arn
-  task_role_arn            = aws_iam_role.task.arn
-
-  container_definitions = jsonencode([
-    {
-      name        = "validation-scheduler"
-      image       = "${aws_ecr_repository.worker.repository_url}:${var.image_tag}"
-      essential   = true
-      command     = ["pnpm", "--filter", "@website-signal-risk-scanner/validation-worker", "start:scheduler"]
-      environment = local.worker_container_environment
-      secrets     = local.worker_container_secrets
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.scheduler.name
           awslogs-region        = var.aws_region
           awslogs-stream-prefix = "ecs"
         }
@@ -760,28 +740,6 @@ resource "aws_ecs_service" "worker" {
   cluster                = aws_ecs_cluster.validation.id
   task_definition        = aws_ecs_task_definition.worker.arn
   desired_count          = var.worker_desired_count
-  launch_type            = "FARGATE"
-  enable_execute_command = true
-
-  network_configuration {
-    assign_public_ip = false
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    subnets          = [for subnet in values(aws_subnet.private) : subnet.id]
-  }
-
-  deployment_circuit_breaker {
-    enable   = true
-    rollback = true
-  }
-
-  tags = local.common_tags
-}
-
-resource "aws_ecs_service" "scheduler" {
-  name                   = "${local.prefix}-scheduler"
-  cluster                = aws_ecs_cluster.validation.id
-  task_definition        = aws_ecs_task_definition.scheduler.arn
-  desired_count          = var.scheduler_desired_count
   launch_type            = "FARGATE"
   enable_execute_command = true
 

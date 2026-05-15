@@ -107,7 +107,10 @@ export default async function PublicScanDetailPage({ params }: PublicScanDetailP
           headerActions={
             scanRecord.scan.status === "completed" ? (
               <div className="flex w-full flex-col items-end gap-3 lg:flex-row lg:items-start lg:justify-end">
-                <ShareReportActions domainLabel={getPublicScanDomainLabel(scanRecord.scan.domainHostname)} />
+                <ShareReportActions
+                  domainLabel={getPublicScanDomainLabel(scanRecord.scan.domainHostname)}
+                  scanId={scanRecord.scan.id}
+                />
                 <DomainScanForm
                   buttonLabel="Scan"
                   compact
