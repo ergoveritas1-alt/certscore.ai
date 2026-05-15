@@ -3,6 +3,7 @@ import React, { type ReactNode } from "react";
 
 type ScanPageHeaderProps = {
   actions?: ReactNode;
+  actionsPlacement?: "end" | "belowTitle";
   autoRefresh?: ReactNode;
   createdAtLabel?: ReactNode;
   statusLabel?: string;
@@ -21,6 +22,7 @@ function getStatusTone(status: string): "success" | "warning" {
 
 export function ScanPageHeader({
   actions,
+  actionsPlacement = "end",
   autoRefresh,
   createdAtLabel,
   status,
@@ -36,9 +38,10 @@ export function ScanPageHeader({
           <Badge tone={statusTone ?? getStatusTone(status)}>{statusLabel ?? formatStatus(status)}</Badge>
           {createdAtLabel ? <span className="text-sm font-normal text-slate-400">{createdAtLabel}</span> : null}
         </div>
+        {actionsPlacement === "belowTitle" ? actions : null}
         {autoRefresh}
       </div>
-      {actions ? <div>{actions}</div> : null}
+      {actions && actionsPlacement === "end" ? <div>{actions}</div> : null}
     </div>
   );
 }

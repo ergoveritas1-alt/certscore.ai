@@ -45,6 +45,12 @@ export function ShareReportActions({ domainLabel, scanId }: ShareReportActionsPr
     setCurrentUrl(window.location.href);
   }, []);
 
+  useEffect(() => {
+    if (emailState.success) {
+      setIsEmailDialogOpen(false);
+    }
+  }, [emailState.success]);
+
   async function copyReportUrl() {
     try {
       if (!currentUrl || !navigator.clipboard) {
@@ -60,7 +66,7 @@ export function ShareReportActions({ domainLabel, scanId }: ShareReportActionsPr
   }
 
   return (
-    <div className="w-full max-w-[28rem] rounded-[1.1rem] border border-slate-200 bg-slate-50/85 p-3 shadow-sm">
+    <>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -89,9 +95,6 @@ export function ShareReportActions({ domainLabel, scanId }: ShareReportActionsPr
           Monitor this site
         </Link>
       </div>
-      <p className="mt-2 text-xs leading-5 text-slate-500">
-        Automated public-web observations. Review the evidence before relying on findings.
-      </p>
       {copyState === "failed" ? (
         <p className="mt-1 text-xs leading-5 text-amber-700">
           Copy was not available in this browser. Use the page URL from the address bar.
@@ -144,6 +147,6 @@ export function ShareReportActions({ domainLabel, scanId }: ShareReportActionsPr
           </div>
         </div>
       ) : null}
-    </div>
+    </>
   );
 }

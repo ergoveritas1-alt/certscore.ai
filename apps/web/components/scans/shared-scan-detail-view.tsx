@@ -4803,6 +4803,7 @@ type SharedScanDetailViewProps = {
   createAccountHref?: string | null;
   executiveAccessLimitationOverride?: ExecutiveAccessLimitationNotice | null;
   headerActions?: ReactNode;
+  headerActionsPlacement?: "end" | "belowTitle";
   previewNotice?: ReactNode;
   previewPayload?: PreviewScanPayload | null;
   previewMode?: "full" | "homepage";
@@ -4815,6 +4816,7 @@ export function SharedScanDetailView({
   createAccountHref = null,
   executiveAccessLimitationOverride = null,
   headerActions = null,
+  headerActionsPlacement = "end",
   previewNotice = null,
   previewPayload: previewPayloadOverride = null,
   previewMode = "full",
@@ -5102,6 +5104,7 @@ export function SharedScanDetailView({
       />
       <ScanPageHeader
         actions={headerActions}
+        actionsPlacement={headerActionsPlacement}
         autoRefresh={autoRefresh}
         createdAtLabel={
           <>
