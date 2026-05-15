@@ -9,7 +9,7 @@ function isUndefinedTableError(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && error.code === "42P01";
 }
 
-async function ensureMonitorSiteRequestsTable() {
+export async function ensureMonitorSiteRequestsTable() {
   if (!ensureMonitorSiteRequestsTablePromise) {
     ensureMonitorSiteRequestsTablePromise = query(`
       create table if not exists public.monitor_site_requests (

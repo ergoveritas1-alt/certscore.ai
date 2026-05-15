@@ -2,6 +2,7 @@
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
+import { ensureMonitorSiteRequestsTable } from "../monitor-site/monitor-site-request";
 
 export type AdminScanQueryRow = {
   completed_at: string | null;
@@ -176,6 +177,32 @@ export type AdminPolicyReviewQueueRow = {
   reviewed_at: string | null;
   reviewer_notes: string | null;
   scan_id: string | null;
+};
+
+export type AdminMonitorSiteRequestStatus = "pending" | "contacted" | "converted" | "closed";
+
+export type AdminMonitorSiteRequestRow = {
+  company: string | null;
+  created_at: string;
+  full_name: string | null;
+  id: string;
+  monitoring_goal: string;
+  normalized_hostname: string;
+  notes: string | null;
+  source_page_url: string | null;
+  source_report_url: string | null;
+  status: AdminMonitorSiteRequestStatus;
+  updated_at: string;
+  website: string;
+  work_email: string;
+};
+
+export type AdminMonitorSiteRequestCounts = {
+  closed: number;
+  contacted: number;
+  converted: number;
+  pending: number;
+  total: number;
 };
 
 export type AdminScanOverviewCounts = {
@@ -603,6 +630,114 @@ export async function loadPolicyReviewQueueRows(reviewStatus?: string | null): P
       );
 
   return result.rows;
+}
+
+export async function loadAdminMonitorSiteRequestRows(
+  status?: AdminMonitorSiteRequestStatus | null,
+  limit = 100
+): Promise<AdminMonitorSiteRequestRow[]> {
+  await ensureMonitorSiteRequestsTable();
+
+  const normalizedLimit = Math.min(Math.max(limit, 1), 250);
+  const result = status
+    ? await query<AdminMonitorSiteRequestRow>(
+        `select id,
+                website,
+                normalized_hostname,
+                work_email,
+                full_name,
+                company,
+                monitoring_goal,
+                notes,
+                source_page_url,
+                source_report_url,
+                status,
+                created_at,
+                updated_at
+           from monitor_site_requests
+          where status = $1
+          order by created_at desc
+          limit $2`,
+        [status, normalizedLimit],
+        { readOnly: true }
+      )
+    : await query<AdminMonitorSiteRequestRow>(
+        `select id,
+                website,
+                normalized_hostname,
+                work_email,
+                full_name,
+                company,
+                monitoring_goal,
+                notes,
+                source_page_url,
+                source_report_url,
+                status,
+                created_at,
+                updated_at
+           from monitor_site_requests
+          order by created_at desc
+          limit $1`,
+        [normalizedLimit],
+        { readOnly: true }
+      );
+
+  return result.rows;
+}
+
+export async function loadAdminMonitorSiteRequestCounts(): Promise<AdminMonitorSiteRequestCounts> {
+  await ensureMonitorSiteRequestsTable();
+
+  const result = await query<{ count: string; status: AdminMonitorSiteRequestStatus }>(
+    `select status, count(*)::text as count
+       from monitor_site_requests
+      group by status`,
+    [],
+    { readOnly: true }
+  );
+
+  const counts: AdminMonitorSiteRequestCounts = {
+    closed: 0,
+    contacted: 0,
+    converted: 0,
+    pending: 0,
+    total: 0
+  };
+
+  for (const row of result.rows) {
+    const count = Number(row.count);
+    counts[row.status] = count;
+    counts.total += count;
+  }
+
+  return counts;
+}
+
+export async function updateAdminMonitorSiteRequestStatus(input: {
+  id: string;
+  status: AdminMonitorSiteRequestStatus;
+}): Promise<AdminMonitorSiteRequestRow | null> {
+  await ensureMonitorSiteRequestsTable();
+
+  return await queryOne<AdminMonitorSiteRequestRow>(
+    `update monitor_site_requests
+        set status = $2
+      where id = $1
+      returning id,
+                website,
+                normalized_hostname,
+                work_email,
+                full_name,
+                company,
+                monitoring_goal,
+                notes,
+                source_page_url,
+                source_report_url,
+                status,
+                created_at,
+                updated_at`,
+    [input.id, input.status]
+  );
 }
 
 export async function loadPolicyReviewQueueUpdateContext(queueItemId: string): Promise<{

@@ -9,7 +9,8 @@ type AdminLayoutProps = {
 const navItems = [
   { href: "/app/admin", label: "Overview" },
   { href: "/app/admin/users", label: "Users" },
-  { href: "/app/admin/scans", label: "Scans" }
+  { href: "/app/admin/scans", label: "Scans" },
+  { href: "/app/admin/monitor-requests", label: "Monitor Requests" }
 ] as const;
 
 export default async function AdminLayout({ children }: AdminLayoutProps) {

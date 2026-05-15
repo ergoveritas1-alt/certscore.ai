@@ -1,8 +1,8 @@
-import Link from "next/link";
-import { Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { getAdminScanOverviewMetrics, listAdminScans } from "../../../server/admin/list-admin-scans";
 import { listAdminUsers } from "../../../server/admin/list-admin-users";
+import { getMonitorSiteRequestCounts } from "../../../server/admin/list-monitor-site-requests";
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -21,7 +21,12 @@ function formatDateTime(value: string | null) {
 }
 
 export default async function AdminOverviewPage() {
-  const [users, scans, scanMetrics] = await Promise.all([listAdminUsers(), listAdminScans(10), getAdminScanOverviewMetrics()]);
+  const [users, scans, scanMetrics, monitorRequestCounts] = await Promise.all([
+    listAdminUsers(),
+    listAdminScans(10),
+    getAdminScanOverviewMetrics(),
+    getMonitorSiteRequestCounts()
+  ]);
   const organizations = new Set(users.flatMap((user) => (user.organizationId ? [user.organizationId] : [])));
   const activePlans = users.reduce<Record<string, number>>((accumulator, user) => {
     if (!user.plan) {
@@ -74,17 +79,17 @@ export default async function AdminOverviewPage() {
         </Card>
         <Card className="border-slate-200 bg-white">
           <CardHeader>
-            <CardTitle>Access Frictions</CardTitle>
+            <CardTitle>Monitor Intake</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 text-sm text-slate-600">
-            <p>403: {scanMetrics.http403Count}</p>
-            <p>429: {scanMetrics.http429Count}</p>
-            <p>Blocked/CAPTCHA/Degraded: {scanMetrics.blockedOrCaptchaCount}</p>
+            <p>Pending: {monitorRequestCounts.pending}</p>
+            <p>Contacted: {monitorRequestCounts.contacted}</p>
+            <p>Total: {monitorRequestCounts.total}</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6 xl:grid-cols-3">
         <Card className="border-slate-200 bg-white">
           <CardHeader>
             <CardTitle>Recent Users</CardTitle>
@@ -125,6 +130,32 @@ export default async function AdminOverviewPage() {
               </div>
             ))}
             <PendingButtonLink href="/app/admin/scans" idleContent="Open scan admin" pendingContent="Opening..." variant="secondary" />
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 bg-white">
+          <CardHeader>
+            <CardTitle>Operational Signals</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-2xl border border-slate-200 p-4">
+              <p className="font-medium text-slate-900">Access Frictions</p>
+              <p className="mt-2 text-sm text-slate-600">403: {scanMetrics.http403Count}</p>
+              <p className="text-sm text-slate-600">429: {scanMetrics.http429Count}</p>
+              <p className="text-sm text-slate-600">Blocked/CAPTCHA/Degraded: {scanMetrics.blockedOrCaptchaCount}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 p-4">
+              <p className="font-medium text-slate-900">Monitor Requests</p>
+              <p className="mt-2 text-sm text-slate-600">
+                Pending intake records only. These do not activate monitoring or schedule scans by themselves.
+              </p>
+            </div>
+            <PendingButtonLink
+              href="/app/admin/monitor-requests"
+              idleContent="Open monitor queue"
+              pendingContent="Opening..."
+              variant="secondary"
+            />
           </CardContent>
         </Card>
       </div>
