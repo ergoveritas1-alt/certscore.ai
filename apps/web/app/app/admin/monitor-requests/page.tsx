@@ -256,6 +256,16 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
             ))}
           </div>
 
+          {activeStage === "confirmed_not_notified" ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-medium">Customer notification recovery queue</p>
+              <p className="mt-1 leading-6">
+                These monitor setups are activated, but the customer confirmation email has not been recorded. Use the
+                highlighted action in each row to send or retry the confirmation email.
+              </p>
+            </div>
+          ) : null}
+
           <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
             <Button asChild size="sm" variant={activeStatus === null ? "primary" : "secondary"}>
               <Link href={filterHref({ plan: activePlan, query: activeQuery, setup: activeSetup, stage: activeStage })}>
@@ -492,14 +502,38 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                                     Customer confirmation email has been recorded.
                                   </p>
                                 ) : (
-                                  <form action={sendMonitorSiteActivationEmailFormAction} className="pt-1">
+                                  <form
+                                    action={sendMonitorSiteActivationEmailFormAction}
+                                    className={[
+                                      "rounded-xl border p-3",
+                                      activeStage === "confirmed_not_notified"
+                                        ? "border-amber-200 bg-amber-50"
+                                        : "border-slate-200 bg-white"
+                                    ].join(" ")}
+                                  >
                                     <input name="requestId" type="hidden" value={request.id} />
+                                    <p
+                                      className={[
+                                        "mb-2 text-xs font-medium",
+                                        activeStage === "confirmed_not_notified" ? "text-amber-950" : "text-slate-800"
+                                      ].join(" ")}
+                                    >
+                                      Customer notification pending
+                                    </p>
+                                    <p
+                                      className={[
+                                        "mb-3 text-xs leading-5",
+                                        activeStage === "confirmed_not_notified" ? "text-amber-900" : "text-slate-600"
+                                      ].join(" ")}
+                                    >
+                                      Sends the cautious setup confirmation email and records the notification timestamp.
+                                    </p>
                                     <PendingSubmitButton
                                       disabled={!monitorActivationEmailConfigured}
-                                      idleContent="Send confirmation email"
+                                      idleContent="Send customer confirmation"
                                       pendingContent="Sending..."
                                       size="sm"
-                                      variant="secondary"
+                                      variant={activeStage === "confirmed_not_notified" ? "primary" : "secondary"}
                                     />
                                     {!monitorActivationEmailConfigured ? (
                                       <p className="mt-2 text-xs leading-5 text-slate-500">
