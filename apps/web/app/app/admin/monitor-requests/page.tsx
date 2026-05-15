@@ -11,6 +11,7 @@ import type {
 } from "../../../../server/admin/repository";
 import { activateMonitorSiteSetupFormAction } from "../../../../server/admin/activate-monitor-site-setup";
 import { completeMonitorSiteSetupFormAction } from "../../../../server/admin/complete-monitor-site-setup";
+import { MonitorSetupTimeline } from "../../../../components/monitor-site/monitor-setup-timeline";
 import { prepareMonitorSiteSetupFormAction } from "../../../../server/admin/prepare-monitor-site-setup";
 import {
   isMonitorSiteActivationEmailConfigured,
@@ -387,6 +388,14 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                                 ) : null}
                               </ol>
                             </div>
+                            <MonitorSetupTimeline
+                              activatedAt={request.monitorSetup.activatedAt}
+                              activationConfirmedAt={request.monitorSetup.activationConfirmedAt}
+                              confirmationEmailSentAt={request.monitorSetup.confirmationEmailSentAt}
+                              createdAt={request.createdAt}
+                              linkedAt={request.monitorSetup.linkedAt}
+                              setupStatus={request.monitorSetup.setupStatus}
+                            />
                             {request.monitorSetup.setupStatus === "activated" ? (
                               <div className="space-y-2">
                                 <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-emerald-800">

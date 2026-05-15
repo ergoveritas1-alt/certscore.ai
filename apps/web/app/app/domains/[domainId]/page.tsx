@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPlanDefinition } from "@website-signal-risk-scanner/shared";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { MonitorSetupTimeline } from "../../../../components/monitor-site/monitor-setup-timeline";
 import { QueueFullScanForm } from "../../../../components/scans/queue-full-scan-form";
 import { PendingButtonLink } from "../../../../components/ui/pending-link";
 import { PendingSubmitButton } from "../../../../components/ui/pending-submit-button";
@@ -311,6 +312,14 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
                 </>
               ) : null}
             </dl>
+            <MonitorSetupTimeline
+              activatedAt={monitorSiteSetup.activatedAt}
+              activationConfirmedAt={monitorSiteSetup.activationConfirmedAt}
+              confirmationEmailSentAt={monitorSiteSetup.confirmationEmailSentAt}
+              createdAt={monitorSiteSetup.createdAt}
+              linkedAt={monitorSiteSetup.linkedAt}
+              setupStatus={monitorSiteSetup.setupStatus}
+            />
             <div className="flex flex-wrap gap-3">
               {monitorSiteSetup.publicStatusToken ? (
                 <PendingButtonLink

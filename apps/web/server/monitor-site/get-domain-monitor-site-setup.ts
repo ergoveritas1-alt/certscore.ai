@@ -20,6 +20,7 @@ export type DomainMonitorSiteSetup = {
   activationConfirmedAt: string | null;
   confirmationEmailSentAt: string | null;
   createdAt: string;
+  linkedAt: string | null;
   monitoringGoal: string;
   publicStatusToken: string | null;
   requestedFrequency: string | null;
@@ -84,6 +85,7 @@ export async function getDomainMonitorSiteSetup(input: {
     activationConfirmedAt: getString(setup?.activationConfirmedAt),
     confirmationEmailSentAt: getString(setup?.confirmationEmailSentAt),
     createdAt: row.created_at,
+    linkedAt: getString(setup?.linkedAt),
     monitoringGoal: row.monitoring_goal,
     publicStatusToken: getString(row.metadata_json?.publicStatusToken),
     requestedFrequency: getString(setup?.requestedFrequency),

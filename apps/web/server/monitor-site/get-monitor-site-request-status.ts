@@ -7,8 +7,10 @@ export type PublicMonitorSiteRequestStatus = {
   activeFrequency: string | null;
   activationConfirmedAt: string | null;
   activatedAt: string | null;
+  confirmationEmailSentAt: string | null;
   createdAt: string;
   hostname: string;
+  linkedAt: string | null;
   setupStatus: "activated" | "pending_setup" | null;
   status: "pending" | "contacted" | "converted" | "closed";
   updatedAt: string;
@@ -61,8 +63,10 @@ export async function getMonitorSiteRequestStatusByToken(
     activationConfirmedAt: getString(setup?.activationConfirmedAt),
     activatedAt: getString(setup?.activatedAt),
     activeFrequency: getString(setup?.activeFrequency) ?? getString(setup?.requestedFrequency),
+    confirmationEmailSentAt: getString(setup?.confirmationEmailSentAt),
     createdAt: row.created_at,
     hostname: row.normalized_hostname,
+    linkedAt: getString(setup?.linkedAt),
     setupStatus,
     status: row.status,
     updatedAt: row.updated_at,

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Badge, Button, Card, CardContent } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
+import { MonitorSetupTimeline } from "../../../../components/monitor-site/monitor-setup-timeline";
 import { createPageMetadata } from "../../../../lib/seo";
 import { getMonitorSiteRequestStatusByToken } from "../../../../server/monitor-site/get-monitor-site-request-status";
 
@@ -151,6 +152,15 @@ export default async function MonitorSiteStatusPage({ params }: MonitorSiteStatu
                 </>
               ) : null}
             </dl>
+
+            <MonitorSetupTimeline
+              activatedAt={request.activatedAt}
+              activationConfirmedAt={request.activationConfirmedAt}
+              confirmationEmailSentAt={request.confirmationEmailSentAt}
+              createdAt={request.createdAt}
+              linkedAt={request.linkedAt}
+              setupStatus={request.setupStatus}
+            />
 
             <p className="text-sm leading-7 text-slate-600">
               CertScore.ai uses automated public-web observations as review signals. Status shown here is operational setup context, not legal advice, and does not replace review of the underlying evidence.
