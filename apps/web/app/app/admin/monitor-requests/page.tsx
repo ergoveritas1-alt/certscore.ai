@@ -10,6 +10,7 @@ import type {
   AdminMonitorSiteRequestStatus
 } from "../../../../server/admin/repository";
 import { activateMonitorSiteSetupFormAction } from "../../../../server/admin/activate-monitor-site-setup";
+import { completeMonitorSiteSetupFormAction } from "../../../../server/admin/complete-monitor-site-setup";
 import { prepareMonitorSiteSetupFormAction } from "../../../../server/admin/prepare-monitor-site-setup";
 import {
   isMonitorSiteActivationEmailConfigured,
@@ -418,38 +419,77 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                                 <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800">
                                   Current schedule remains manual until explicit activation.
                                 </p>
-                                <form action={activateMonitorSiteSetupFormAction} className="pt-1">
+                                <form action={completeMonitorSiteSetupFormAction} className="rounded-xl border border-blue-200 bg-blue-50 p-3">
                                   <input name="requestId" type="hidden" value={request.id} />
-                                  <label className="mb-2 flex items-start gap-2 text-xs leading-5 text-slate-600">
+                                  <p className="mb-2 text-xs font-medium text-blue-950">Guided completion</p>
+                                  <p className="mb-3 text-xs leading-5 text-blue-900">
+                                    Confirms the requested cadence, activates monitoring for this workspace domain, sends the customer
+                                    confirmation email, and records both audit events.
+                                  </p>
+                                  <label className="mb-2 flex items-start gap-2 text-xs leading-5 text-blue-950">
                                     <input
-                                      className="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                      name="activationConfirmation"
+                                      className="mt-1 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                                      name="setupConfirmation"
                                       required
                                       type="checkbox"
                                       value="confirmed"
                                     />
                                     <span>
-                                      I confirm setup has been reviewed with the requester. Activating will move this domain from
-                                      manual scheduling to the requested cadence.
+                                      I confirm setup has been reviewed with the requester. Completing setup will move this domain from
+                                      manual scheduling to the requested cadence and notify the requester.
                                     </span>
                                   </label>
-                                  <label className="mb-2 block text-xs font-medium text-slate-600" htmlFor={`activation-note-${request.id}`}>
-                                    Activation note
+                                  <label className="mb-2 block text-xs font-medium text-blue-950" htmlFor={`setup-note-${request.id}`}>
+                                    Setup note
                                   </label>
                                   <textarea
                                     className="mb-3 min-h-20 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                                    id={`activation-note-${request.id}`}
+                                    id={`setup-note-${request.id}`}
                                     maxLength={500}
-                                    name="activationNote"
+                                    name="setupNote"
                                     placeholder="Optional internal note, for example requester approval or setup context."
                                   />
                                   <PendingSubmitButton
-                                    idleContent="Activate cadence"
-                                    pendingContent="Activating..."
+                                    disabled={!monitorActivationEmailConfigured}
+                                    idleContent="Confirm setup and notify customer"
+                                    pendingContent="Completing..."
                                     size="sm"
-                                    variant="secondary"
+                                    variant="primary"
                                   />
+                                  {!monitorActivationEmailConfigured ? (
+                                    <p className="mt-2 text-xs leading-5 text-blue-900">
+                                      Gmail sender config is not available, so guided completion is disabled.
+                                    </p>
+                                  ) : null}
                                 </form>
+                                {!monitorActivationEmailConfigured ? (
+                                  <form action={activateMonitorSiteSetupFormAction} className="pt-1">
+                                    <input name="requestId" type="hidden" value={request.id} />
+                                    <input name="activationConfirmation" type="hidden" value="confirmed" />
+                                    <label
+                                      className="mb-2 block text-xs font-medium text-slate-600"
+                                      htmlFor={`activation-note-${request.id}`}
+                                    >
+                                      Activation note
+                                    </label>
+                                    <textarea
+                                      className="mb-3 min-h-20 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                                      id={`activation-note-${request.id}`}
+                                      maxLength={500}
+                                      name="activationNote"
+                                      placeholder="Optional internal note for activation without customer email."
+                                    />
+                                    <PendingSubmitButton
+                                      idleContent="Activate without email"
+                                      pendingContent="Activating..."
+                                      size="sm"
+                                      variant="secondary"
+                                    />
+                                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                                      Use only when customer notification is handled outside CertScore.
+                                    </p>
+                                  </form>
+                                ) : null}
                               </>
                             )}
                           </div>
