@@ -69,7 +69,7 @@ function FindingReferenceSection({
         <div className="min-w-0 space-y-6">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-xs text-slate-500">{finding.id}</span>
+              <span className="max-w-full break-all font-mono text-xs text-slate-500">{finding.id}</span>
               <span className={`border px-2.5 py-1 text-xs font-semibold ${criticalityClasses[finding.criticality]}`}>
                 {finding.criticality}
               </span>
@@ -139,7 +139,7 @@ function FindingReferenceSection({
             <dl className="mt-3 divide-y divide-slate-200 text-sm">
               <div className="grid grid-cols-[6rem_1fr] gap-3 py-2">
                 <dt className="text-slate-500">Finding ID</dt>
-                <dd className="break-words font-mono text-xs text-slate-900">{finding.id}</dd>
+                <dd className="break-all font-mono text-xs text-slate-900">{finding.id}</dd>
               </div>
               <div className="grid grid-cols-[6rem_1fr] gap-3 py-2">
                 <dt className="text-slate-500">Category</dt>
@@ -256,18 +256,18 @@ export function FindingAtlasBrowser({ findings, compact = false }: FindingAtlasB
           </nav>
         </div>
 
-        <div className="grid gap-0 lg:grid-cols-[18rem_1fr]">
-          <div className="border-b border-slate-200 bg-slate-50 p-4 lg:border-b-0 lg:border-r">
-            <div className="sticky top-20 space-y-2">
+        <div className="grid gap-0 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+          <div className="min-w-0 border-b border-slate-200 bg-slate-50 p-4 lg:border-b-0 lg:border-r">
+            <div className="sticky top-20 min-w-0 space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Registry index</p>
               <div className="grid gap-2">
                 {filteredFindings.map((finding) => (
                   <Link
                     key={finding.id}
                     href={`#${finding.id}`}
-                    className="border border-slate-200 bg-white px-3 py-2 text-left hover:border-sky-200 hover:bg-sky-50"
+                    className="block w-full min-w-0 border border-slate-200 bg-white px-3 py-2 text-left hover:border-sky-200 hover:bg-sky-50"
                   >
-                    <span className="block text-sm font-semibold leading-5 text-slate-950">{finding.title}</span>
+                    <span className="block break-words text-sm font-semibold leading-5 text-slate-950">{finding.title}</span>
                     <span className="mt-1 block break-words font-mono text-[11px] leading-4 text-slate-500">{finding.id}</span>
                   </Link>
                 ))}
