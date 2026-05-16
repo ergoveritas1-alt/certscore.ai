@@ -13,14 +13,38 @@ export type DomainSignalOverview = {
   hostname: string;
   latestCompletedAt: string | null;
   totalSignals: number | null;
-      signals: Array<{
-        category: string;
-        categoryLabel: string;
-        key: string;
-        label: string;
-        value: boolean | number | string | string[];
+  signals: Array<{
+    category: string;
+    categoryLabel: string;
+    key: string;
+    label: string;
+    value: boolean | number | string | string[];
   }>;
 };
+
+function hasDisplayableSignalValue(value: unknown) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value > 0;
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  return false;
+}
+
+function isDisplayableSignalValue(value: unknown): value is boolean | number | string | string[] {
+  return typeof value === "boolean" || typeof value === "number" || typeof value === "string" || Array.isArray(value);
+}
 
 export async function getOrganizationSignalOverview(organizationId: string): Promise<DomainSignalOverview[]> {
   const { domains, scans } = await loadSignalOverviewDomainsAndLatestCompletedScans(organizationId);
@@ -57,12 +81,10 @@ export async function getOrganizationSignalOverview(organizationId: string): Pro
       totalSignals: latestScan ? snapshotMap.get(latestScan.id)?.total_signals ?? null : null,
       signals: latestScan
         ? (signalMap.get(latestScan.id) ?? [])
-            .filter((signal) => {
-              const value = signal.signal_value_json;
-              return typeof value === "boolean" ? value : typeof value === "number" ? value > 0 : Array.isArray(value) ? value.length > 0 : value.length > 0;
-            })
+            .filter((signal) => hasDisplayableSignalValue(signal.signal_value_json))
             .slice(0, 8)
             .map((signal) => {
+              const value = signal.signal_value_json;
               const taxonomy = mapSignalKeyToTaxonomy({
                 category: signal.category,
                 key: signal.signal_key,
@@ -74,7 +96,7 @@ export async function getOrganizationSignalOverview(organizationId: string): Pro
                 categoryLabel: getPrimaryCategoryLabel(taxonomy.primaryCategory),
                 key: signal.signal_key,
                 label: signal.signal_label,
-                value: signal.signal_value_json
+                value: isDisplayableSignalValue(value) ? value : String(value)
               };
             })
         : []

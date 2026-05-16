@@ -6,16 +6,14 @@ import { listOrganizationChanges } from "../../server/changes/list-organization-
 import { getOrganizationDomains } from "../../server/domains/get-organization-domains";
 import { getPlanLimits } from "../../server/plans/get-plan-limits";
 import { getOrganizationScans } from "../../server/scans/get-organization-scans";
-import { getOrganizationSignalOverview } from "../../server/signals/get-organization-signal-overview";
 
 export default async function DashboardPage() {
   const { organization } = await getDashboardContext();
-  const [domains, planLimits, recentScans, recentChanges, signalOverview] = await Promise.all([
+  const [domains, planLimits, recentScans, recentChanges] = await Promise.all([
     getOrganizationDomains(organization.id),
     getPlanLimits(organization.plan),
     getOrganizationScans(organization.id),
-    listOrganizationChanges(organization.id, 5),
-    getOrganizationSignalOverview(organization.id)
+    listOrganizationChanges(organization.id, 5)
   ]);
 
   return (
