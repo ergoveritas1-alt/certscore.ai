@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
+import { pushLeadFormSubmitAttempted } from "../analytics/data-layer-events";
 import { sendContactSalesAction, type SendContactSalesActionState } from "../../server/contact-sales/send-contact-sales";
 
 export function ContactSalesForm() {
@@ -11,7 +12,7 @@ export function ContactSalesForm() {
   const [state, action, isPending] = useActionState(sendContactSalesAction, initialState);
 
   return (
-    <form action={action} className="space-y-5">
+    <form action={action} className="space-y-5" onSubmit={() => pushLeadFormSubmitAttempted("contact_sales")}>
       <input name="requestType" type="hidden" value="sales-contact" />
 
       <div className="grid gap-5 md:grid-cols-2">

@@ -5,16 +5,21 @@ import { hasAnalyticsConsent } from "./consent";
 export type CtaLocation = "header" | "homepage" | "footer" | "unknown";
 export type GuidePageType = "guide" | "benchmark" | "unknown";
 export type GuideCtaType = "scan" | "contact" | "pricing" | "unknown";
-export type ReportCtaType = "share" | "email" | "monitor" | "checklist" | "unknown";
+export type ReportCtaType = "share" | "email" | "monitor" | "checklist" | "sample_report" | "pricing" | "unknown";
+export type PricingCtaType = "free_scan" | "sample_report" | "one_time_review" | "monitoring" | "contact_sales" | "unknown";
+export type LeadFormType = "contact_sales" | "monitor_request";
 export type ScanSource = "homepage" | "header" | "dashboard" | "unknown";
 export type ScanTargetType = "domain" | "url" | "unknown";
 
 export type CertScoreDataLayerEvent =
   | { event: "pricing_viewed"; page_path: "/pricing" }
+  | { event: "sample_report_viewed"; page_path: "/sample-report" }
   | { event: "contact_clicked"; cta_location: CtaLocation }
   | { event: "sign_in_clicked"; cta_location: Extract<CtaLocation, "header" | "unknown"> }
   | { event: "guide_cta_clicked"; page_type: GuidePageType; cta_type: GuideCtaType }
   | { event: "report_cta_clicked"; cta_type: ReportCtaType }
+  | { event: "pricing_cta_clicked"; cta_type: PricingCtaType; plan: string }
+  | { event: "lead_form_submit_attempted"; form_type: LeadFormType }
   | { event: "scan_started"; scan_source: ScanSource; scan_target_type: ScanTargetType; scan_status: "queued" }
   | { event: "scan_completed"; scan_source: Extract<ScanSource, "homepage" | "dashboard" | "unknown">; scan_status: "completed" };
 

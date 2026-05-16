@@ -6,6 +6,8 @@ import {
   type CtaLocation,
   type GuideCtaType,
   type GuidePageType,
+  type LeadFormType,
+  type PricingCtaType,
   type ReportCtaType,
   type ScanSource,
   pushDataLayerEvent,
@@ -27,7 +29,15 @@ function isScanSource(value: string | undefined): value is ScanSource {
 }
 
 function isReportCtaType(value: string | undefined): value is ReportCtaType {
-  return value === "share" || value === "email" || value === "monitor" || value === "checklist" || value === "unknown";
+  return value === "share" || value === "email" || value === "monitor" || value === "checklist" || value === "sample_report" || value === "pricing" || value === "unknown";
+}
+
+function isPricingCtaType(value: string | undefined): value is PricingCtaType {
+  return value === "free_scan" || value === "sample_report" || value === "one_time_review" || value === "monitoring" || value === "contact_sales" || value === "unknown";
+}
+
+function isLeadFormType(value: string | undefined): value is LeadFormType {
+  return value === "contact_sales" || value === "monitor_request";
 }
 
 function getGuidePageType(pathname: string): GuidePageType {
@@ -57,6 +67,13 @@ export function DataLayerClickTracker() {
       pushDataLayerEvent({
         event: "pricing_viewed",
         page_path: "/pricing"
+      });
+    }
+
+    if (pathname === "/sample-report") {
+      pushDataLayerEvent({
+        event: "sample_report_viewed",
+        page_path: "/sample-report"
       });
     }
   }, [pathname]);
@@ -118,6 +135,17 @@ export function DataLayerClickTracker() {
           cta_type: isReportCtaType(trackedElement.dataset.analyticsCtaType)
             ? trackedElement.dataset.analyticsCtaType
             : "unknown"
+        });
+        return;
+      }
+
+      if (eventName === "pricing_cta_clicked") {
+        pushDataLayerEvent({
+          event: "pricing_cta_clicked",
+          cta_type: isPricingCtaType(trackedElement.dataset.analyticsCtaType)
+            ? trackedElement.dataset.analyticsCtaType
+            : "unknown",
+          plan: trackedElement.dataset.analyticsPlan ?? "unknown"
         });
       }
     }
@@ -182,4 +210,11 @@ export function ScanCompletedEvent({ scanSource }: { scanSource: Extract<ScanSou
   }, [pathname, scanSource]);
 
   return null;
+}
+
+export function pushLeadFormSubmitAttempted(formType: LeadFormType) {
+  pushDataLayerEvent({
+    event: "lead_form_submit_attempted",
+    form_type: isLeadFormType(formType) ? formType : "contact_sales"
+  });
 }

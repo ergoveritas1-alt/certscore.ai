@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
+import { pushLeadFormSubmitAttempted } from "../analytics/data-layer-events";
 import {
   sendMonitorSiteRequestAction,
   type SendMonitorSiteRequestActionState
@@ -28,7 +29,7 @@ export function MonitorSiteForm({
   const [state, action, isPending] = useActionState(sendMonitorSiteRequestAction, initialState);
 
   return (
-    <form action={action} className="space-y-5">
+    <form action={action} className="space-y-5" onSubmit={() => pushLeadFormSubmitAttempted("monitor_request")}>
       <input name="sourceContext" type="hidden" value={sourceContext} />
       <input name="sourcePageUrl" type="hidden" value={sourcePageUrl} />
       <input name="sourcePlan" type="hidden" value={sourcePlan} />

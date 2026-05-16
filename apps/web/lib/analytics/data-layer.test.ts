@@ -108,6 +108,48 @@ test("report CTA events dispatch after analytics consent is granted", () => {
   ]);
 });
 
+test("sample report and pricing CTA events dispatch after analytics consent is granted", () => {
+  const mockWindow = installWindow({ certscoreAnalyticsConsent: "granted", dataLayer: [] });
+
+  pushDataLayerEvent({
+    event: "sample_report_viewed",
+    page_path: "/sample-report"
+  });
+  pushDataLayerEvent({
+    event: "pricing_cta_clicked",
+    cta_type: "monitoring",
+    plan: "pro"
+  });
+
+  assert.deepEqual(mockWindow.dataLayer, [
+    {
+      event: "sample_report_viewed",
+      page_path: "/sample-report"
+    },
+    {
+      event: "pricing_cta_clicked",
+      cta_type: "monitoring",
+      plan: "pro"
+    }
+  ]);
+});
+
+test("lead form events dispatch after analytics consent is granted", () => {
+  const mockWindow = installWindow({ certscoreAnalyticsConsent: "granted", dataLayer: [] });
+
+  pushDataLayerEvent({
+    event: "lead_form_submit_attempted",
+    form_type: "monitor_request"
+  });
+
+  assert.deepEqual(mockWindow.dataLayer, [
+    {
+      event: "lead_form_submit_attempted",
+      form_type: "monitor_request"
+    }
+  ]);
+});
+
 test("pre-navigation scan events resolve without dispatch when consent is denied", async () => {
   const mockWindow = installWindow({ certscoreAnalyticsConsent: "denied", dataLayer: [] });
 
