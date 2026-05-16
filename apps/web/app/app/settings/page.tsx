@@ -1,10 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { EmailVerificationCard } from "../../../components/settings/email-verification-card";
-import { BrandingSettingsForm } from "../../../components/settings/branding-settings-form";
 import { getDashboardContext } from "../../../server/auth";
 import { getBetterAuthVerificationStatus } from "../../../server/better-auth/user";
 import { getSystemHealth } from "../../../server/health/get-system-health";
-import { getOrganizationSettings } from "../../../server/settings/get-organization-settings";
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -27,10 +25,9 @@ function formatMissingTables(tables: string[]) {
 }
 
 export default async function SettingsPage() {
-  const { organization, user } = await getDashboardContext();
+  const { user } = await getDashboardContext();
   const userProviders = user.authProvider.split(",").map((provider) => provider.trim());
-  const [settings, systemHealth, verificationStatus] = await Promise.all([
-    getOrganizationSettings(organization.id),
+  const [systemHealth, verificationStatus] = await Promise.all([
     getSystemHealth(),
     userProviders.includes("password") ? getBetterAuthVerificationStatus(user.betterAuthUserId ?? user.id) : Promise.resolve(null)
   ]);
@@ -40,23 +37,8 @@ export default async function SettingsPage() {
     <div className="space-y-8">
       <div className="space-y-3">
         <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
-        <p className="max-w-3xl text-slate-600">
-          Configure workspace defaults and review system health. Websites without an override continue to follow your default scan cadence.
-        </p>
+        <p className="max-w-3xl text-slate-600">Review account status and system health.</p>
       </div>
-
-      <Card className="border border-slate-200 bg-white">
-        <CardHeader>
-          <CardTitle>Default monitoring</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <BrandingSettingsForm
-            defaultValues={{
-              defaultScanFrequency: settings?.defaultScanFrequency ?? null
-            }}
-          />
-        </CardContent>
-      </Card>
 
       {verificationStatus ? (
         <Card className="border border-slate-200 bg-white">
