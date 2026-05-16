@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Badge, Button } from "@website-signal-risk-scanner/ui";
+import { Badge } from "@website-signal-risk-scanner/ui";
 import { FindingAtlasBrowser } from "../../../components/marketing/findings/finding-atlas-browser";
-import { getTopFindingAtlasItems } from "../../../lib/marketing/finding-atlas";
+import { getFindingReferenceItems } from "../../../lib/marketing/finding-atlas";
 import {
+  absoluteUrl,
   createBreadcrumbSchema,
   createPageMetadata,
   createPublicArticleSchema,
@@ -12,37 +13,58 @@ import {
 
 export const metadata: Metadata = {
   ...createPageMetadata({
-    title: "Top website scan findings",
+    title: "Findings registry and detection methodology",
     description:
-      "Review the top CertScore automated website findings with density metrics, mitigation guidance, metadata, and sample JSON evidence.",
+      "Reference CertScore finding IDs, evidence semantics, detection methodology, benchmark prevalence, related findings, and limitations.",
     path: "/guides/findings"
   }),
   title: {
-    absolute: "Top website scan findings | CertScore.ai"
+    absolute: "Findings registry and detection methodology | CertScore.ai"
   }
 };
 
 export default function FindingsGuidePage() {
-  const findings = getTopFindingAtlasItems();
+  const findings = getFindingReferenceItems();
   const schemas = [
     createPublicWebPageSchema({
-      title: "Top website scan findings",
+      title: "Findings registry and detection methodology",
       description:
-        "Review the top CertScore automated website findings with density metrics, mitigation guidance, metadata, and sample JSON evidence.",
+        "Reference CertScore finding IDs, evidence semantics, detection methodology, benchmark prevalence, related findings, and limitations.",
       path: "/guides/findings"
     }),
     createPublicArticleSchema({
-      title: "Top website scan findings",
+      title: "Findings registry and detection methodology",
       description:
-        "A practical evidence atlas for common public website scan findings, including density metrics and mitigation guidance.",
+        "A canonical technical reference for CertScore findings, observed signals, retained evidence, confidence semantics, and review limitations.",
       path: "/guides/findings",
       type: "TechArticle",
-      about: ["website scanning", "tracking", "cookies", "accessibility", "consent", "JSON evidence"]
+      about: [
+        "website scanning",
+        "runtime evidence",
+        "finding registry",
+        "tracking signals",
+        "cookies",
+        "accessibility",
+        "consent methodology"
+      ]
     }),
+    {
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      name: "CertScore finding registry",
+      itemListElement: findings.map((finding, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        url: `${absoluteUrl("/guides/findings")}#${finding.id}`,
+        name: finding.title,
+        identifier: finding.id,
+        description: finding.observed
+      }))
+    },
     createBreadcrumbSchema([
       { name: "Home", path: "/" },
       { name: "Guides", path: "/guides" },
-      { name: "Top website scan findings", path: "/guides/findings" }
+      { name: "Findings registry", path: "/guides/findings" }
     ])
   ];
 
@@ -58,26 +80,30 @@ export default function FindingsGuidePage() {
 
       <div className="grid gap-8 lg:grid-cols-[0.8fr_0.5fr] lg:items-end">
         <div className="max-w-3xl space-y-4">
-          <Badge tone="neutral">Evidence atlas</Badge>
+          <Badge tone="neutral">Technical reference</Badge>
           <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-            Top website scan findings
+            CertScore findings registry
           </h1>
           <p className="text-lg leading-8 text-slate-600">
-            A field guide to common CertScore automated findings: what they mean, how often they appear in recent scan samples, what to review, and what sample JSON evidence looks like.
+            Canonical finding IDs, categories, criticality, confidence semantics, observed signals, detection methodology, example evidence, benchmark prevalence, related findings, and review limitations.
+          </p>
+          <p className="text-sm leading-7 text-slate-500">
+            CertScore uses findings, evidence, signals, and observations consistently: signals are raw runtime or page-surface events, evidence is retained support, observations are interpreted evidence context, and findings are promoted review items.
           </p>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-none">
+        <div className="border border-slate-200 bg-white p-5 shadow-none">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Cautious posture</p>
           <p className="text-sm leading-6 text-slate-600">
-            Findings are automated public-web observations for review. Density is directional market context, not a legal conclusion.
+            Findings are runtime evidence and public-surface observations for review. The page avoids pass/fail legal conclusions: observed signals may surface possible concerns, but review is recommended before operational or legal reliance.
           </p>
-          <Button
-            asChild
-            className="mt-4 border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
-          >
-            <Link data-analytics-cta-type="scan" data-analytics-event="finding_atlas_cta_clicked" href="/">
-              Run a scan
+          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm font-medium text-sky-700">
+            <Link href="/methodology" className="hover:text-sky-800">
+              Full methodology
             </Link>
-          </Button>
+            <Link href="/how-it-works" className="hover:text-sky-800">
+              Report workflow
+            </Link>
+          </div>
         </div>
       </div>
 
