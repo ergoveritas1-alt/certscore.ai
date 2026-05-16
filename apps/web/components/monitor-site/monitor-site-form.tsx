@@ -87,7 +87,7 @@ export function MonitorSiteForm({
           defaultValue="changes"
           className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400"
         >
-          <option value="changes">Watch for tracking, consent, and accessibility changes</option>
+          <option value="changes">Tracking, consent, accessibility</option>
           <option value="pre-consent-tracking">Pre-consent tracking changes</option>
           <option value="cookies">Cookie and third-party request changes</option>
           <option value="accessibility">Accessibility review changes</option>
@@ -107,7 +107,7 @@ export function MonitorSiteForm({
           className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400"
         />
         <p className="text-xs leading-5 text-slate-500">
-          Submitting this form creates a pending monitoring request. It does not activate monitoring, schedule scans, or change any existing scan results.
+          Submitting this form creates a pending monitoring request. CertScore reviews requests before activation and follow-up.
         </p>
       </div>
 

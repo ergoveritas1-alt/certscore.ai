@@ -37,7 +37,7 @@ export default async function MonitorSitePage({ searchParams }: MonitorSitePageP
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Monitoring request</p>
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950">Monitor this site for changes</h1>
             <p className="max-w-2xl text-lg leading-8 text-slate-600">
-              Create a pending monitoring request for public-web observations over time, including tracking, cookies, consent behavior, accessibility, and disclosure signals.
+              Request follow-up about public-web observations over time, including tracking, cookies, consent behavior, accessibility, and disclosure signals.
             </p>
           </div>
 
@@ -63,9 +63,9 @@ export default async function MonitorSitePage({ searchParams }: MonitorSitePageP
                 <CardTitle className="text-xl">What this request means</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm leading-7 text-slate-600">
-                <p>We will add the site to a pending monitoring review queue and follow up about setup options.</p>
-                <p>Submitting this form creates a pending monitoring request. It does not activate monitoring, schedule scans, or change any existing scan results.</p>
-                <p>Monitoring is not active until setup is confirmed with you. CertScore reports remain automated public-web observations for review, not legal advice.</p>
+                <p>We use your submitted site and context to review whether monitoring is appropriate.</p>
+                <p>Monitoring cadence and setup are confirmed before activation.</p>
+                <p>This is not a compliance determination or legal review.</p>
               </CardContent>
             </Card>
           </div>

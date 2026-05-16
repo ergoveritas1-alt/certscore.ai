@@ -25,7 +25,7 @@ const footerSections = [
     title: "Resources",
     links: [
       { href: "/guides", label: "Guides" },
-      { href: "/benchmarks", label: "Benchmarks" },
+      { href: "/benchmarks/website-consent-tracking-2026", label: "Benchmarks" },
       { href: "/compare", label: "Compare" },
       { href: "/press", label: "Press" }
     ]
@@ -33,7 +33,7 @@ const footerSections = [
 ];
 
 const companyLegalLinks = [
-  { href: "/contact-sales", label: "Contact" },
+  { href: "/contact", label: "Contact" },
   { href: "/faq", label: "FAQ" },
   { href: "/terms", label: "Terms" },
   { href: "/privacy", label: "Privacy" },

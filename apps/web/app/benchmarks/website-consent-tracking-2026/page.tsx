@@ -166,6 +166,7 @@ export default function WebsiteConsentTrackingBenchmarkPage() {
           {
             title: "Observed benchmark signals",
             paragraphs: [
+              "Percentages are based on recent benchmark batches of homepage-oriented public-site scans and should be treated as directional, not a legal or statistical conclusion.",
               "In recent CertScore.ai benchmark scans, pre-consent tracking appeared in approximately 20% of scanned sites, while third-party cookies before consent appeared in approximately 12%.",
               "RTB cookie sync appeared in approximately 10% of recent benchmark scans, providing a higher-signal advertising ecosystem review cue.",
               "Fingerprinting-related signals appeared in approximately 17% of scans. Probable fingerprinting appeared in approximately 1% of recent benchmark scans, reflecting a deliberately conservative higher-confidence threshold.",
