@@ -12,42 +12,17 @@ export const metadata: Metadata = createPageMetadata({
 const guides = [
   {
     href: "/guides/pre-consent-tracking",
-    title: "Pre-consent tracking",
+    title: "Tracking before consent",
     description: "Review what it means when tracking requests or non-essential cookies appear before a recorded consent choice."
   },
   {
-    href: "/guides/pre-consent-tracking-detection",
-    title: "Pre-consent tracking detection",
-    description: "Learn how runtime observations can help review whether third-party tracking starts before consent."
-  },
-  {
     href: "/guides/cookie-consent-enforcement-checker",
-    title: "Cookie consent enforcement checker",
+    title: "Cookie consent enforcement",
     description: "Review whether observed cookies and tracking behavior appear aligned with consent choices."
   },
   {
-    href: "/guides/detect-trackers-before-cookie-consent",
-    title: "Detect trackers before cookie consent",
-    description: "A practical overview of reviewing tracker requests before cookie consent is recorded."
-  },
-  {
-    href: "/guides/third-party-cookie-checker",
-    title: "Third-party cookie checker",
-    description: "Understand how third-party cookie timing and domains support evidence review."
-  },
-  {
-    href: "/guides/cmp-verification",
-    title: "CMP verification",
-    description: "Use runtime observations to review whether CMP choices appear to affect browser behavior."
-  },
-  {
-    href: "/guides/third-party-cookies-before-consent",
-    title: "Third-party cookies before consent",
-    description: "Understand how third-party cookie timing can become a reviewable risk signal."
-  },
-  {
     href: "/guides/rtb-cookie-syncing",
-    title: "RTB cookie syncing",
+    title: "Third-party cookies and RTB sync",
     description: "Learn how identifier-sharing and cookie-sync signals can be reviewed with vendor evidence."
   },
   {
@@ -56,39 +31,14 @@ const guides = [
     description: "Distinguish session recording service detection from rarer sensitive-input replay risk signals."
   },
   {
-    href: "/guides/accessibility-homepage-signals",
-    title: "Accessibility homepage signals",
-    description: "Review automated homepage accessibility signals without treating them as a full WCAG audit."
+    href: "/guides/wcag-website-checklist",
+    title: "Accessibility signals",
+    description: "Review the most common public-facing accessibility signals that automated scans can surface."
   },
   {
-    href: "/guides/check-website-tracking-before-consent",
-    title: "Check tracking before consent",
-    description: "A practical overview of reviewing first-load tracking behavior against consent timing."
-  },
-  {
-    href: "/guides/check-third-party-cookies-before-consent",
-    title: "Check third-party cookies before consent",
-    description: "A practical overview of reviewing third-party cookie timing before a consent choice."
-  },
-  {
-    href: "/guides/website-consent-audit",
-    title: "Website consent audit",
-    description: "Learn how to compare consent interface behavior with observed website tracking and cookie activity."
-  },
-  {
-    href: "/guides/detect-tracking-before-consent",
-    title: "Detect tracking before consent",
-    description: "Review how teams can detect tracking requests, cookies, and vendor activity before a consent choice."
-  },
-  {
-    href: "/guides/reject-consent-tracking-test",
-    title: "Reject consent tracking test",
-    description: "Understand how to review whether a reject interaction changes observed tracking behavior."
-  },
-  {
-    href: "/guides/website-consent-audit-checklist",
-    title: "Website consent audit checklist",
-    description: "Use a practical checklist for consent controls, cookie timing, tracking requests, and retained evidence."
+    href: "/guides/cmp-verification",
+    title: "CMP verification",
+    description: "Use runtime observations to review whether CMP choices appear to affect browser behavior."
   },
   {
     href: "/guides/privacy-scanner-vs-cookie-scanner",
@@ -96,25 +46,17 @@ const guides = [
     description: "Compare cookie inventory tools with behavior-oriented website privacy scanning."
   },
   {
-    href: "/guides/website-privacy-policy-requirements",
-    title: "Privacy policy signals",
-    description: "See which privacy-rights, retention, and disclosure cues commonly appear in policy scans."
-  },
-  {
-    href: "/guides/cookie-banner-requirements",
-    title: "Cookie banner basics",
-    description: "Understand the banner controls, consent patterns, and cookie signals the scanner looks for."
-  },
-  {
-    href: "/guides/website-disclosure-requirements",
-    title: "Disclosure signals",
-    description: "Learn how policy, terms, and disclosure pages contribute to structured website monitoring."
-  },
-  {
-    href: "/guides/wcag-website-checklist",
-    title: "WCAG website checklist",
-    description: "Review the most common public-facing accessibility signals that automated scans can surface."
+    href: "/guides/website-consent-audit-checklist",
+    title: "Website consent audit checklist",
+    description: "Use a practical checklist for consent controls, cookie timing, tracking requests, and retained evidence."
   }
+];
+
+const relatedConsentGuides = [
+  { href: "/guides/detect-trackers-before-cookie-consent", label: "detect trackers before cookie consent" },
+  { href: "/guides/pre-consent-tracking-detection", label: "pre-consent tracking detection" },
+  { href: "/guides/check-website-tracking-before-consent", label: "check website tracking before consent" },
+  { href: "/guides/third-party-cookies-before-consent", label: "third-party cookies before consent" }
 ];
 
 function GuideCheckIcon() {
@@ -145,9 +87,9 @@ export default function GuidesPage() {
           <Card key={guide.href} className="relative overflow-hidden border-slate-200 bg-white shadow-none">
             <div aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(15,139,215,0.18)_0%,rgba(103,199,240,0.3)_100%)]" />
             <CardHeader>
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3">
                 <GuideCheckIcon />
-                <CardTitle>{guide.title}</CardTitle>
+                <CardTitle className="text-left">{guide.title}</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -163,6 +105,19 @@ export default function GuidesPage() {
             </CardContent>
           </Card>
         ))}
+      </div>
+      <div className="mt-8 max-w-3xl rounded-xl border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600">
+        <p>
+          For narrower consent-timing questions, see{" "}
+          {relatedConsentGuides.map((guide, index) => (
+            <span key={guide.href}>
+              <Link href={guide.href} className="font-medium text-sky-700 hover:text-sky-800">
+                {guide.label}
+              </Link>
+              {index < relatedConsentGuides.length - 2 ? ", " : index === relatedConsentGuides.length - 2 ? ", or " : "."}
+            </span>
+          ))}
+        </p>
       </div>
     </section>
   );

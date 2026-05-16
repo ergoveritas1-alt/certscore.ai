@@ -186,6 +186,14 @@ const evidenceDetails = [
   }
 ];
 
+const buyerQuestions = [
+  "Did tracking start before consent?",
+  "Did rejecting consent actually change behavior?",
+  "Which vendors fired on page load?",
+  "Are cookie, consent, disclosure, and accessibility signals changing over time?",
+  "Is this site's public behavior worth deeper review?"
+];
+
 export default async function MarketingHomePage() {
   const softwareApplicationSchema = {
     "@context": "https://schema.org",
@@ -331,7 +339,7 @@ export default async function MarketingHomePage() {
         </div>
       </section>
 
-      <section className="border-y border-slate-200 bg-white">
+      <section id="sample-report" className="border-y border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-16">
           <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
             <div className="space-y-4">
@@ -355,7 +363,29 @@ export default async function MarketingHomePage() {
         </div>
       </section>
 
-      <section id="sample-report" className="border-y border-slate-200 bg-white">
+      <section className="border-y border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-6 py-16">
+          <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+            <div className="max-w-xl space-y-3">
+              <Badge tone="neutral">Review questions</Badge>
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Use CertScore when you need to know:</h2>
+              <p className="text-sm leading-6 text-slate-600">
+                Turn public website behavior into reviewable questions for product, privacy, agency, and operations teams.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {buyerQuestions.map((question) => (
+                <div key={question} className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <SignalCheckIcon />
+                  <p className="text-sm font-medium leading-6 text-slate-800">{question}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-16">
           <div className="max-w-2xl space-y-3">
             <Badge tone="neutral">Personas</Badge>

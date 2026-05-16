@@ -281,15 +281,15 @@ export default function PricingPage() {
                       idleContent={planCardContent[plan.code].ctaLabel}
                       pendingContent="Opening..."
                     />
-                    <p className="text-[11px] leading-[1.25rem] text-slate-500">
-                      Submitting a request does not activate monitoring. CertScore will follow up about setup options.
-                    </p>
                   </div>
                 </CardContent>
               </Card>
             );
           })}
         </div>
+        <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-500">
+          Monitoring requests are reviewed before activation. Submitting a request does not automatically activate monitoring.
+        </p>
 
         <Card className="relative mt-5 overflow-hidden rounded-[28px] border-emerald-200 bg-[linear-gradient(135deg,rgba(247,253,248,1)_0%,rgba(255,255,255,0.98)_58%,rgba(240,253,244,0.98)_100%)] shadow-[0_24px_56px_rgba(71,181,74,0.12)]">
           <div
