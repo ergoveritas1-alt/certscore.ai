@@ -1,5 +1,10 @@
 import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { ValidationFindingJsonPane } from "../validation/validation-finding-json-pane";
+import {
+  getGuideSampleFindings,
+  type SampleFindingJson
+} from "../../lib/marketing/sample-finding-json";
 
 export const STANDARD_AUTOMATED_FINDINGS_DISCLAIMER =
   "CertScore.ai automated findings may contain errors. Always review the underlying evidence. CertScore.ai does not provide legal advice, certification, or compliance determinations.";
@@ -18,10 +23,12 @@ type AiVisibilityContentProps = {
   badge: string;
   title: string;
   intro: string;
+  path?: string;
   sections: ContentSection[];
   schema: Record<string, unknown> | Array<Record<string, unknown>>;
   aiSummary?: string[];
   relatedLinks?: RelatedLink[];
+  sampleFindingsJson?: SampleFindingJson[];
   showDisclaimer?: boolean;
 };
 
@@ -63,12 +70,15 @@ export function AiVisibilityContent({
   badge,
   title,
   intro,
+  path,
   relatedLinks = [],
+  sampleFindingsJson,
   sections,
   schema,
   showDisclaimer = true
 }: AiVisibilityContentProps) {
   const schemas = Array.isArray(schema) ? schema : [schema];
+  const visibleSampleFindings = sampleFindingsJson ?? getGuideSampleFindings({ path, title });
   const visibleAiSummary =
     aiSummary ??
     [
@@ -109,6 +119,41 @@ export function AiVisibilityContent({
             </CardContent>
           </Card>
         ))}
+        {visibleSampleFindings.length > 0 ? (
+          <Card className="border-slate-200 bg-white shadow-none">
+            <CardHeader className="space-y-3">
+              <div>
+                <Badge tone="neutral">Sample JSON</Badge>
+              </div>
+              <CardTitle className="text-xl text-slate-950">Sample finding JSON from scans</CardTitle>
+              <p className="text-sm leading-7 text-slate-600">
+                Representative payloads from retained scan examples for the finding types discussed on this page.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {visibleSampleFindings.map((sample, index) => (
+                <details
+                  key={sample.findingId}
+                  className="group rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  open={index === 0}
+                >
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-1">
+                        <p className="text-base font-semibold text-slate-950">{sample.label}</p>
+                        <p className="font-mono text-xs text-slate-500">{sample.findingId}</p>
+                      </div>
+                      <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">{sample.sourceLabel}</p>
+                    </div>
+                  </summary>
+                  <div className="mt-4">
+                    <ValidationFindingJsonPane payload={JSON.stringify(sample.payload, null, 2)} />
+                  </div>
+                </details>
+              ))}
+            </CardContent>
+          </Card>
+        ) : null}
         {visibleAiSummary.length > 0 ? (
           <Card className="border-slate-200 bg-white shadow-none">
             <CardHeader>

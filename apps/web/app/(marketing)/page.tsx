@@ -7,6 +7,8 @@ import { DomainScanForm } from "../../components/marketing/domain-scan-form";
 import { PendingButtonLink } from "../../components/ui/pending-link";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
+const SAMPLE_REPORT_URL = "https://certscore.ai/scan/bc6e4dfa-8a25-43f8-822d-a10e89950799";
+
 export const metadata: Metadata = {
   ...createPageMetadata({
     title: "CertScore.ai — Evidence-Based Website Risk Signal Scanner",
@@ -233,8 +235,10 @@ export default async function MarketingHomePage() {
               />
               <PendingButtonLink
                 className="w-full border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 sm:w-auto"
-                href="/#sample-report"
-                idleContent="See sample findings"
+                data-analytics-cta-type="sample_report"
+                data-analytics-event="report_cta_clicked"
+                href={SAMPLE_REPORT_URL}
+                idleContent="See sample report"
                 pendingContent="Opening..."
                 variant="secondary"
               />
@@ -281,8 +285,8 @@ export default async function MarketingHomePage() {
               Concrete findings from runtime website behavior
             </h2>
           </div>
-          <Link href="/#sample-report" className="text-base font-semibold text-[#2f63ea] hover:text-[#2454db]">
-            See sample findings →
+          <Link href={SAMPLE_REPORT_URL} className="text-base font-semibold text-[#2f63ea] hover:text-[#2454db]">
+            See sample report →
           </Link>
         </div>
         <div className="mt-10 grid gap-5 lg:grid-cols-3">
@@ -441,8 +445,10 @@ export default async function MarketingHomePage() {
                 />
                 <PendingButtonLink
                   className="w-full border border-white/12 bg-white/8 text-white hover:bg-white/12 sm:w-auto"
-                  href="/#sample-report"
-                  idleContent="See sample findings"
+                  data-analytics-cta-type="sample_report"
+                  data-analytics-event="report_cta_clicked"
+                  href={SAMPLE_REPORT_URL}
+                  idleContent="See sample report"
                   pendingContent="Opening..."
                   variant="secondary"
                 />

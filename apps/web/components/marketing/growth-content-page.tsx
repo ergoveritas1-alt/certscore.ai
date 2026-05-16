@@ -69,6 +69,7 @@ export function GrowthContentPage({ config }: { config: GrowthContentPageConfig 
     <AiVisibilityContent
       badge={config.badge}
       intro={config.intro}
+      path={config.path}
       relatedLinks={config.relatedLinks}
       schema={schema}
       sections={config.sections}
