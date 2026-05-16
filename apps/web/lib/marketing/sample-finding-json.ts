@@ -459,6 +459,19 @@ const ACCESSIBILITY_SAMPLE: SampleFindingJson = {
   payload: accessibilityRiskScore
 };
 
+const SAMPLE_FINDINGS_BY_ID: Record<string, SampleFindingJson> = {
+  accessibility_risk_score: ACCESSIBILITY_SAMPLE,
+  pre_consent_tracking_detected: PRE_CONSENT_TRACKING_SAMPLE,
+  reject_tracking_persists_after_reject: REJECT_TRACKING_SAMPLE,
+  rtb_cookie_sync_observed: RTB_COOKIE_SYNC_SAMPLE,
+  session_recording_services_detected: SESSION_REPLAY_SAMPLE,
+  third_party_cookie_pre_consent: THIRD_PARTY_COOKIE_SAMPLE
+};
+
+export function getSampleFindingById(findingId: string): SampleFindingJson | null {
+  return SAMPLE_FINDINGS_BY_ID[findingId] ?? null;
+}
+
 export function getGuideSampleFindings(input: { path?: string; title: string }): SampleFindingJson[] {
   const haystack = `${input.path ?? ""} ${input.title}`.toLowerCase();
 

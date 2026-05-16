@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
-import { ValidationFindingJsonPane } from "../validation/validation-finding-json-pane";
+import { FindingAtlasBrowser } from "./findings/finding-atlas-browser";
+import { getTopFindingAtlasItems } from "../../lib/marketing/finding-atlas";
 import {
   getGuideSampleFindings,
   type SampleFindingJson
@@ -79,6 +80,8 @@ export function AiVisibilityContent({
 }: AiVisibilityContentProps) {
   const schemas = Array.isArray(schema) ? schema : [schema];
   const visibleSampleFindings = sampleFindingsJson ?? getGuideSampleFindings({ path, title });
+  const shouldShowFindingAtlas = path?.startsWith("/guides/") || badge.toLowerCase().includes("guide");
+  const findingAtlasItems = shouldShowFindingAtlas ? getTopFindingAtlasItems() : [];
   const visibleAiSummary =
     aiSummary ??
     [
@@ -119,7 +122,9 @@ export function AiVisibilityContent({
             </CardContent>
           </Card>
         ))}
-        {visibleSampleFindings.length > 0 ? (
+        {findingAtlasItems.length > 0 ? (
+          <FindingAtlasBrowser compact findings={findingAtlasItems} />
+        ) : visibleSampleFindings.length > 0 ? (
           <Card className="border-slate-200 bg-white shadow-none">
             <CardHeader className="space-y-3">
               <div>
@@ -147,7 +152,9 @@ export function AiVisibilityContent({
                     </div>
                   </summary>
                   <div className="mt-4">
-                    <ValidationFindingJsonPane payload={JSON.stringify(sample.payload, null, 2)} />
+                    <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-3 text-xs text-slate-600">
+                      {JSON.stringify(sample.payload, null, 2)}
+                    </pre>
                   </div>
                 </details>
               ))}

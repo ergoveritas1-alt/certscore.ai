@@ -36,7 +36,7 @@ function makeDensityBenchmark(
   };
 }
 
-const FINDING_DENSITY_BENCHMARKS: Record<string, FindingDensityBenchmark> = {
+export const FINDING_DENSITY_BENCHMARKS: Record<string, FindingDensityBenchmark> = {
   asymmetric_consent_ui: makeDensityBenchmark("asymmetric_consent_ui", 12),
   consent_dark_patterns_detected: makeDensityBenchmark("consent_dark_patterns_detected", 19),
   cpra_cba_opt_out_missing: makeDensityBenchmark("cpra_cba_opt_out_missing", 17),

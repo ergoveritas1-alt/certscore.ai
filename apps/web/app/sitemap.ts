@@ -25,6 +25,7 @@ const staticPaths = [
   "/terms",
   "/privacy",
   "/privacy-request",
+  "/guides/findings",
   "/guides/pre-consent-tracking",
   "/guides/pre-consent-tracking-detection",
   "/guides/cookie-consent-enforcement-checker",

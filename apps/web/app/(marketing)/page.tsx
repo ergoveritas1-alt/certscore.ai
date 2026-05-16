@@ -21,27 +21,6 @@ export const metadata: Metadata = {
   }
 };
 
-const featureCards = [
-  {
-    icon: "Trace",
-    metric: "Before",
-    title: "Tracking before consent",
-    description: "See whether analytics, ads, pixels, or cookies start before a visitor makes a consent choice."
-  },
-  {
-    icon: "Reject",
-    metric: "After",
-    title: "Reject not respected",
-    description: "Verify consent flows by comparing tracking activity before and after a reject interaction."
-  },
-  {
-    icon: "Gap",
-    metric: "Proof",
-    title: "Third-party tracking activity",
-    description: "Detect vendor requests, RTB or cookie sync behavior, and disclosure gaps using browser-observed evidence."
-  }
-];
-
 const personas = [
   {
     title: "Developers validating tracking behavior",
@@ -161,14 +140,6 @@ function SignalCheckIcon() {
   );
 }
 
-const findingExamples = [
-  "Tracking before consent",
-  "Reject not respected",
-  "Third-party tracking activity",
-  "RTB / cookie sync observed",
-  "Disclosure gaps"
-];
-
 const evidenceDetails = [
   {
     label: "First tracking request",
@@ -244,7 +215,11 @@ export default async function MarketingHomePage() {
               />
             </div>
             <p className="max-w-2xl text-sm leading-6 text-slate-500">
-              Evidence-based scanning for teams comparing live browser behavior with consent controls, cookie posture, and privacy disclosures.
+              Evidence-based scanning for teams comparing live browser behavior with consent controls, cookie posture, and privacy disclosures.{" "}
+              <Link href="/guides/findings" className="font-medium text-sky-700 hover:text-sky-800">
+                Browse the finding atlas
+              </Link>
+              .
             </p>
           </div>
 
@@ -272,74 +247,6 @@ export default async function MarketingHomePage() {
             </Card>
 
           </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-6 py-16">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl space-y-4">
-            <div className="inline-flex rounded-full bg-[linear-gradient(180deg,rgba(241,245,249,0.98)_0%,rgba(226,232,240,0.98)_100%)] px-5 py-2.5 text-[12px] font-medium text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
-              What CertScore surfaces
-            </div>
-            <h2 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-              Concrete findings from runtime website behavior
-            </h2>
-          </div>
-          <Link href={SAMPLE_REPORT_URL} className="text-base font-semibold text-[#2f63ea] hover:text-[#2454db]">
-            See sample report →
-          </Link>
-        </div>
-        <div className="mt-10 grid gap-5 lg:grid-cols-3">
-          {featureCards.map((item, index) => {
-            return (
-              <Card
-                key={item.title}
-                className={
-                  index === 0
-                    ? "relative h-full overflow-hidden rounded-[2rem] border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,252,255,0.94)_100%)] shadow-[0_18px_48px_rgba(148,163,184,0.08)]"
-                    : index === 1
-                      ? "relative h-full overflow-hidden rounded-[2rem] border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,252,255,0.94)_100%)] shadow-[0_18px_48px_rgba(148,163,184,0.08)]"
-                      : "relative h-full overflow-hidden rounded-[2rem] border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,252,255,0.94)_100%)] shadow-[0_18px_48px_rgba(148,163,184,0.08)]"
-                }
-              >
-                <CardHeader className="space-y-5 p-6 pb-0">
-                  <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">{item.icon}</div>
-                  <div className="space-y-3">
-                    <p className="text-6xl font-light leading-none tracking-[-0.06em] text-slate-950">{item.metric}</p>
-                    <CardTitle className="min-h-[3.75rem] text-[1.7rem] leading-none tracking-tight text-slate-950">{item.title}</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-6 pt-5">
-                  <p className="min-h-[12rem] text-lg leading-9 text-slate-500">{item.description}</p>
-                  <div className="mt-8 h-1 rounded-full bg-[linear-gradient(90deg,#4f6edb_0%,#7ea2ff_100%)]" />
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-        <div className="mt-8 flex flex-wrap gap-2">
-          {findingExamples.map((finding) => (
-            <span key={finding} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
-              {finding}
-            </span>
-          ))}
-        </div>
-        <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-sky-700">
-          <Link href="/guides/detect-tracking-before-consent" className="hover:text-sky-800">
-            Detect tracking before consent
-          </Link>
-          <Link href="/guides/website-consent-audit-checklist" className="hover:text-sky-800">
-            Website consent audit checklist
-          </Link>
-          <Link href="/guides/third-party-cookies-before-consent" className="hover:text-sky-800">
-            Third-party cookies before consent
-          </Link>
-          <Link href="/guides/session-replay-risk" className="hover:text-sky-800">
-            Session replay risk
-          </Link>
-          <Link href="/methodology" className="hover:text-sky-800">
-            CertScore methodology
-          </Link>
         </div>
       </section>
 

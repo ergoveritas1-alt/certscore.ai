@@ -25,6 +25,7 @@ const footerSections = [
     title: "Resources",
     links: [
       { href: "/guides", label: "Guides" },
+      { href: "/guides/findings", label: "Finding atlas" },
       { href: "/benchmarks/website-consent-tracking-2026", label: "Benchmarks" },
       { href: "/compare", label: "Compare" },
       { href: "/press", label: "Press" }
