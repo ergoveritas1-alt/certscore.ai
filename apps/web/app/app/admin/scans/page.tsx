@@ -101,7 +101,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                 <tr key={scan.scanId}>
                   <td className="py-4 pr-4 text-slate-700">
                     <p>{scan.organizationName ?? "Unknown workspace"}</p>
-                    <p className="text-xs text-slate-500">Source IP {scan.sourceIp ?? "Not recorded"}</p>
+                    <p className="text-xs text-slate-500">Requester IP {scan.requesterIp ?? "Not recorded"}</p>
                   </td>
                   <td className="py-4 pr-4 text-slate-700">{scan.domainHostname ?? "Unknown domain"}</td>
                   <td className="py-4 pr-4 text-slate-700">
@@ -114,7 +114,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                   </td>
                   <td className="py-4 pr-4 text-slate-700">{formatDateTime(scan.completedAt)}</td>
                   <td className="py-4">
-                    <AdminScanActions scanId={scan.scanId} />
+                    <AdminScanActions scanId={scan.scanId} scanViewHref={scan.scanViewHref} />
                   </td>
                 </tr>
               ))}

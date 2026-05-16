@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 
 type AdminScanActionsProps = {
   scanId: string;
+  scanViewHref: string;
 };
 
 function SimpleScanIcon() {
@@ -74,7 +75,7 @@ function ActionButton({
   );
 }
 
-export function AdminScanActions({ scanId }: AdminScanActionsProps) {
+export function AdminScanActions({ scanId, scanViewHref }: AdminScanActionsProps) {
   const pathname = usePathname();
   const [openingLabel, setOpeningLabel] = useState<string | null>(null);
 
@@ -99,7 +100,7 @@ export function AdminScanActions({ scanId }: AdminScanActionsProps) {
   return (
     <>
       <div className="flex items-center gap-2">
-        <ActionButton href={`/app/scans/${scanId}`} label="Open simple scan view" onNavigate={() => setOpeningLabel("Opening scan view...")}>
+        <ActionButton href={scanViewHref} label="Open simple scan view" onNavigate={() => setOpeningLabel("Opening scan view...")}>
           <SimpleScanIcon />
         </ActionButton>
         <ActionButton href={`/app/admin/scans/${scanId}`} label="Inspect snapshot" onNavigate={() => setOpeningLabel("Opening snapshot...")}>

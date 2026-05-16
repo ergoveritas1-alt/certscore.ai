@@ -44,7 +44,8 @@ export type AdminScanListItem = {
   recoverableFindingClasses: RecoverableFindingClass[];
   robotsFetchHttpStatus: number | null;
   scanId: string;
-  sourceIp: string | null;
+  requesterIp: string | null;
+  scanViewHref: string;
   scanType: string;
   status: string;
   stopTier: ScanExecutionTier | null;
@@ -227,7 +228,8 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       domainId: scan.domain_id,
       domainHostname: scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null,
       organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
-      sourceIp: snapshot?.egress_id ?? snapshot?.egress_type ?? null,
+      requesterIp: selectRequesterIp(diagnosticEventMap.get(scan.id) ?? []),
+      scanViewHref: scan.organization_id ? `/app/scans/${scan.id}` : `/scan/${scan.id}`,
       scanType: scan.scan_type,
       status: scan.status,
       createdAt: displayCreatedAt,
@@ -257,6 +259,37 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
 export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMetrics> {
   await requirePlatformAdminContext();
   return await loadAdminScanOverviewCounts();
+}
+
+function getStringMetadataValue(value: unknown) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized.length > 0 ? normalized : null;
+}
+
+function getNestedMetadataObject(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function selectRequesterIp(events: ScanDiagnosticEventRow[]) {
+  for (const event of events) {
+    const metadata = event.metadata_json;
+    if (!metadata) {
+      continue;
+    }
+
+    const directOriginIp = getStringMetadataValue(metadata.originIp);
+    if (directOriginIp) {
+      return directOriginIp;
+    }
+
+    const provenance = getNestedMetadataObject(metadata.provenance);
+    const provenanceOriginIp = provenance ? getStringMetadataValue(provenance.originIp) : null;
+    if (provenanceOriginIp) {
+      return provenanceOriginIp;
+    }
+  }
+
+  return null;
 }
 
 function incrementCount(map: Map<string, number>, key: string) {
