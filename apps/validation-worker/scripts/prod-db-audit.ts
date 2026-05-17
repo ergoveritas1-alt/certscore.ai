@@ -401,6 +401,73 @@ function countHttpLikeStrings(values: unknown[]) {
   return values.filter((value) => typeof value === "string" && /^https?:\/\//i.test(value)).length;
 }
 
+function getUrlHost(value: unknown) {
+  const raw = getString(value);
+  if (!raw || !/^https?:\/\//i.test(raw)) {
+    return null;
+  }
+  try {
+    return new URL(raw).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function getRuntimeHost(row: Record<string, unknown>) {
+  return (
+    getString(row.hostname) ??
+    getString(row.host) ??
+    getString(row.domain) ??
+    getString(row.requestHost ?? row.request_host) ??
+    getUrlHost(row.requestUrl ?? row.request_url ?? row.url) ??
+    "unknown"
+  ).toLowerCase();
+}
+
+function countBy(values: string[]) {
+  return Object.fromEntries(
+    [...values.reduce((counts, value) => counts.set(value, (counts.get(value) ?? 0) + 1), new Map<string, number>()).entries()].sort(
+      ([left], [right]) => left.localeCompare(right)
+    )
+  );
+}
+
+function summarizeRowsByHost(rows: Record<string, unknown>[]) {
+  const byHost = new Map<string, Record<string, unknown>[]>();
+  for (const row of rows) {
+    const host = getRuntimeHost(row);
+    byHost.set(host, [...(byHost.get(host) ?? []), row]);
+  }
+
+  return [...byHost.entries()]
+    .map(([host, hostRows]) => ({
+      categoryCounts: countBy(hostRows.map((row) => getString(row.category ?? row.vendorCategory ?? row.vendor_category) ?? "unknown")),
+      classificationCounts: countBy(hostRows.map((row) => getString(row.classification ?? row.essentiality) ?? "unknown")),
+      confidenceMax: hostRows.reduce((max, row) => Math.max(max, getNumber(row.confidence ?? row.score) ?? 0), 0),
+      host,
+      resourceTypeCounts: countBy(hostRows.map((row) => getString(row.resourceType ?? row.resource_type) ?? "unknown")),
+      rowCount: hostRows.length,
+      rowsWithHttpUrl: countHttpLikeStrings(hostRows.map((row) => row.requestUrl ?? row.request_url ?? row.url)),
+      serviceClassCounts: countBy(hostRows.map((row) => getString(row.serviceClass ?? row.service_class) ?? "unknown")),
+      thirdPartyRows: hostRows.filter((row) => row.thirdParty === true || row.third_party === true).length,
+      vendorPresentRows: hostRows.filter((row) => Boolean(getString(row.vendor ?? row.vendorName ?? row.vendor_name))).length,
+      vendors: [...new Set(hostRows.map((row) => getString(row.vendor ?? row.vendorName ?? row.vendor_name)).filter(Boolean) as string[])].sort()
+    }))
+    .sort((left, right) => right.rowCount - left.rowCount || left.host.localeCompare(right.host));
+}
+
+function summarizeCookieWriteRows(rows: Record<string, unknown>[]) {
+  return {
+    beforeConsentRows: rows.length,
+    categoryCounts: countBy(rows.map((row) => getString(row.category) ?? "unknown")),
+    cookiePartyCounts: countBy(rows.map((row) => getString(row.cookiePartyType ?? row.cookie_party_type) ?? "unknown")),
+    nonEssentialRows: rows.filter((row) => row.nonEssential === true || row.non_essential === true).length,
+    thirdPartyRows: rows.filter((row) => row.thirdParty === true || row.third_party === true).length,
+    timingEvidenceCounts: countBy(rows.map((row) => getString(row.timingEvidence ?? row.timing_evidence) ?? "unknown")),
+    vendorPresentRows: rows.filter((row) => Boolean(getString(row.cookieInitiatorVendor ?? row.cookie_initiator_vendor ?? row.vendor))).length
+  };
+}
+
 function summarizeEvidenceKeys(record: Record<string, unknown> | null | undefined, keys: string[]) {
   return Object.fromEntries(
     keys.map((key) => {
@@ -1502,6 +1569,106 @@ async function runPreconsentTimingEvidenceAudit(input: AuditInput) {
   };
 }
 
+async function runPreconsentAnchorClassificationAudit(input: AuditInput) {
+  const scans = requireAuditScans(input);
+  const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
+  const rows = [];
+
+  for (const scan of scans) {
+    const scanRecord = await loadScanRecordForProjectionAudit({
+      runId: null,
+      scanId: scan.scanId
+    });
+    const runtimeArtifacts = scanRecord.runtimeArtifacts;
+    const hybrid = getNestedObject(runtimeArtifacts, ["hybrid_runtime_evidence", "hybridRuntimeEvidence"]);
+    const requestPurposeRows = [
+      ...getObjectArray(runtimeArtifacts?.requestPurposeClassificationConfidence),
+      ...getObjectArray(runtimeArtifacts?.request_purpose_classification_confidence),
+      ...getObjectArray(hybrid?.requestPurposeClassificationConfidence),
+      ...getObjectArray(hybrid?.request_purpose_classification_confidence)
+    ];
+    const requestObservationRows = [
+      ...getObjectArray(hybrid?.requestObservations),
+      ...getObjectArray(hybrid?.request_observations)
+    ];
+    const state0Rows = [
+      ...getObjectArray(hybrid?.preconsentState0RequestObservations),
+      ...getObjectArray(hybrid?.preconsent_state0_request_observations)
+    ];
+    const preconsentRequestRows = requestObservationRows.filter((row) =>
+      row.preConsent === true ||
+      row.pre_consent === true ||
+      row.runtimePhase === "pre_consent" ||
+      row.runtime_phase === "pre_consent"
+    );
+    const cookieWriteRows = [
+      ...getObjectArray(hybrid?.cookieWriteObservations),
+      ...getObjectArray(hybrid?.cookie_write_observations)
+    ];
+    const beforeConsentCookieWriteRows = cookieWriteRows.filter((row) =>
+      row.beforeConsent === true ||
+      row.before_consent === true ||
+      row.runtimePhase === "pre_consent" ||
+      row.runtime_phase === "pre_consent"
+    );
+    const nonEssentialRows = requestPurposeRows.filter((row) => {
+      const essentiality = getString(row.essentiality) ?? getString(row.classification);
+      const confidence = getNumber(row.confidence ?? row.score) ?? 0;
+      return essentiality === "non_essential" && confidence >= 0.7;
+    });
+    const packets = buildScanReportUnifiedFindingsForScan(scanRecord);
+    const preconsentPacket = packets.find((packet) => packet.unifiedFindingId === "preconsent_tracking");
+
+    rows.push({
+      batch: scan.batch ?? null,
+      domain: scan.domain ?? null,
+      scanId: scan.scanId,
+      anchorSummary: {
+        beforeConsentCookieRows: beforeConsentCookieWriteRows.length,
+        highConfidenceNonEssentialRequestRows: nonEssentialRows.length,
+        preconsentRequestObservationRows: preconsentRequestRows.length,
+        preconsentRequestRowsWithHttpUrl: countHttpLikeStrings(preconsentRequestRows.map((row) => row.requestUrl ?? row.request_url ?? row.url)),
+        requestClassificationRows: requestPurposeRows.length,
+        requestObservationRows: requestObservationRows.length,
+        state0Rows: state0Rows.length,
+        state0RowsWithHttpUrl: countHttpLikeStrings(state0Rows.map((row) => row.requestUrl ?? row.request_url ?? row.url))
+      },
+      beforeConsentCookieWriteEvidence: summarizeCookieWriteRows(beforeConsentCookieWriteRows),
+      preconsentPacket: {
+        decisionState: preconsentPacket?.surfacingDecision.decisionState ?? null,
+        status: preconsentPacket?.presentationDecision.status ?? null
+      },
+      preconsentRequestObservationHosts: summarizeRowsByHost(preconsentRequestRows),
+      requestClassificationHosts: summarizeRowsByHost(requestPurposeRows).slice(0, 25),
+      state0Hosts: summarizeRowsByHost(state0Rows)
+    });
+  }
+  await queryOne<{ ok: number }>("select 1 as ok", [], { readOnly: true });
+
+  return {
+    audit: "preconsent-anchor-classification",
+    generatedAt: new Date().toISOString(),
+    notes: input.notes ?? null,
+    readScope: {
+      scanCount: scanIds.length,
+      tables: [
+        "scan_snapshots",
+        "scan_runtime_artifacts",
+        "scan_signals",
+        "scan_document_sources",
+        "policy_enrichment",
+        "validation_runs",
+        "validation_run_findings"
+      ]
+    },
+    sanitization: {
+      cookies: "names/domains omitted",
+      requestUrls: "omitted; host-level aggregates only"
+    },
+    rows
+  };
+}
+
 async function runScanTimingAudit(input: AuditInput) {
   const scans = requireAuditScans(input);
   const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
@@ -2066,6 +2233,8 @@ async function main() {
         ? await runUnifiedProjectionContinuityAudit(input)
       : auditName === "preconsent-timing-evidence"
         ? await runPreconsentTimingEvidenceAudit(input)
+      : auditName === "preconsent-anchor-classification"
+        ? await runPreconsentAnchorClassificationAudit(input)
       : auditName === "scan-timing"
         ? await runScanTimingAudit(input)
       : auditName === "scanner-phase-timing"
