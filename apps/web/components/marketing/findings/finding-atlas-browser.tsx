@@ -397,6 +397,21 @@ function EvidenceStandard() {
   );
 }
 
+function MethodologyContext({ finding }: { finding: FindingReferenceItem }) {
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <section className="border border-slate-200 bg-white p-4">
+        <h3 className="text-sm font-semibold text-slate-950">Confidence semantics</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{finding.confidenceSemantics}</p>
+      </section>
+      <section className="border border-slate-200 bg-white p-4">
+        <h3 className="text-sm font-semibold text-slate-950">Detection methodology</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{finding.detectionMethodology}</p>
+      </section>
+    </div>
+  );
+}
+
 function getWhyThisMattersCopy(finding: FindingReferenceItem) {
   if (finding.id === "pre_consent_tracking_detected") {
     return "This can indicate that analytics, advertising, or profiling vendors were allowed to run before the site recorded a user choice. Depending on the site, region, vendor purpose, and consent design, that timing can be relevant to privacy, consent, and consumer-protection review.";
@@ -443,6 +458,8 @@ function FindingReferenceSection({
 
         <DensityBenchmarkGraph finding={finding} />
 
+        <MethodologyContext finding={finding} />
+
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-slate-950">Example evidence</h3>
@@ -451,7 +468,7 @@ function FindingReferenceSection({
               onClick={() => setIsJsonOpen((current) => !current)}
               aria-expanded={isJsonOpen}
               aria-controls={`${finding.id}-example-json`}
-              className="inline-flex items-center gap-2 border border-slate-950 bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-950 bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
             >
               <JsonIcon />
               {isJsonOpen ? "Hide example JSON" : "View example JSON"}
