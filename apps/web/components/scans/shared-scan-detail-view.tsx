@@ -96,6 +96,7 @@ import {
   type PolicyBehaviorRuntimeObservationType
 } from "../../lib/scans/contradiction-evidence-contract";
 import { PRIMARY_SCAN_CATEGORY_META } from "../../lib/scans/signal-taxonomy";
+import { getFindingReferenceHrefForReportFindingId } from "../../lib/marketing/finding-reference-links";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import {
@@ -1263,16 +1264,28 @@ function renderCanonicalTaxonomyReviewSafely(input: CanonicalTaxonomyReviewProps
 }
 
 function ReviewFindingLinks(input: { finding: UnifiedFindingDisplayPacket }) {
+  const findingReferenceHref = getFindingReferenceHrefForReportFindingId(input.finding.unifiedFindingId);
   const shouldShowReferenceLink =
     input.finding.referenceUrl &&
     input.finding.referenceUrl !== input.finding.presentation.suggestedBestPractice?.url;
 
-  if (!input.finding.sourceUrl && !shouldShowReferenceLink) {
+  if (!input.finding.sourceUrl && !shouldShowReferenceLink && !findingReferenceHref) {
     return null;
   }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {findingReferenceHref ? (
+        <Link
+          href={findingReferenceHref}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-sky-800"
+        >
+          <span>↗</span>
+          <span>Learn how CertScore interprets this finding</span>
+        </Link>
+      ) : null}
       {input.finding.sourceUrl ? (
         <Link
           href={input.finding.sourceUrl}

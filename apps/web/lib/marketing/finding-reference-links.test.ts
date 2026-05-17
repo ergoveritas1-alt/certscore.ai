@@ -1,0 +1,30 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  getFindingReferenceHrefForReportFindingId,
+  getFindingReferenceIdForReportFindingId
+} from "./finding-reference-links";
+
+test("getFindingReferenceHrefForReportFindingId maps report aliases to public finding pages", () => {
+  assert.equal(
+    getFindingReferenceHrefForReportFindingId("preconsent_tracking"),
+    "/guides/findings/pre_consent_tracking_detected"
+  );
+  assert.equal(
+    getFindingReferenceHrefForReportFindingId("session_replay_observed"),
+    "/guides/findings/session_recording_services_detected"
+  );
+  assert.equal(
+    getFindingReferenceHrefForReportFindingId("reject_did_not_reduce_tracking"),
+    "/guides/findings/reject_tracking_persists_after_reject"
+  );
+});
+
+test("getFindingReferenceIdForReportFindingId returns direct registry IDs when available", () => {
+  assert.equal(getFindingReferenceIdForReportFindingId("rtb_cookie_sync_observed"), "rtb_cookie_sync_observed");
+  assert.equal(getFindingReferenceIdForReportFindingId("probable_fingerprinting"), "probable_fingerprinting");
+});
+
+test("getFindingReferenceHrefForReportFindingId omits non-registry report findings", () => {
+  assert.equal(getFindingReferenceHrefForReportFindingId("privacy_policy_missing_surface"), null);
+});
