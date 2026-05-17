@@ -857,6 +857,16 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       typeof row.confidence === "number" &&
       row.confidence >= 0.7
   );
+  const retainedPreconsentEvidenceUrls = Array.isArray(preconsentEvidenceRecord?.preconsent_tracker_evidence_urls)
+    ? (preconsentEvidenceRecord.preconsent_tracker_evidence_urls as unknown[]).filter(
+        (value): value is string => typeof value === "string" && /^https?:\/\//i.test(value)
+      )
+    : [];
+  const retainedState0RequestRows = Array.isArray(preconsentEvidenceRecord?.preconsent_state0_request_observations)
+    ? (preconsentEvidenceRecord.preconsent_state0_request_observations as unknown[]).filter(
+        (value): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value)
+      )
+    : [];
   const hasPreconsentSequence =
     firstNonEssentialRequestMs !== null &&
     ((firstCmpVisibleMs !== null && firstNonEssentialRequestMs < firstCmpVisibleMs) ||
@@ -870,30 +880,41 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         firstUserActionMs === null
       ));
 
-  if (nonEssentialRequestRows.length > 0 && firstNonEssentialRequestMs !== null) {
+  if ((nonEssentialRequestRows.length > 0 && firstNonEssentialRequestMs !== null) || retainedState0RequestRows.length > 0) {
+    const hasPromotionReadyRequestEvidence = nonEssentialRequestRows.length > 0 && firstNonEssentialRequestMs !== null;
     candidates.push({
       categoryId: "preconsent_tracking_incidents",
-      description: hasPreconsentSequence
+      description: hasPromotionReadyRequestEvidence && hasPreconsentSequence
         ? "A retained consent timeline places a non-essential request before the CMP was visible or before a consent action."
-        : "A retained non-essential request classification exists, but the timing sequence is incomplete or ambiguous.",
+        : hasPromotionReadyRequestEvidence
+          ? "A retained non-essential request classification exists, but the timing sequence is incomplete or ambiguous."
+          : "A retained state-0 pre-consent request artifact exists, but request purpose, vendor attribution, or timing sequence evidence is incomplete.",
       fallbackEvidence: {
         consentTimeline,
         consentActionableChoiceObserved,
         consentSurfaceObserved,
         requestPurposeClassificationConfidence: requestClassifications,
-        preconsent_tracker_evidence_urls: nonEssentialRequestRows.map((row) => String(row.requestUrl)),
+        preconsent_tracker_evidence_urls: [
+          ...new Set([
+            ...nonEssentialRequestRows.map((row) => String(row.requestUrl)),
+            ...retainedPreconsentEvidenceUrls
+          ])
+        ],
         preconsent_tracker_vendors: nonEssentialRequestRows
           .map((row) => (typeof row.vendor === "string" ? row.vendor : null))
           .filter((value): value is string => Boolean(value)),
         signalKey: "privacy.preconsent_tracking_detected",
         signalLabel: "Pre-consent tracking detected",
         signalValue: true,
+        unifiedFindingId: "preconsent_tracking",
         ...(preconsentEvidenceQuality ?? {})
       },
       id: "runtime-derived-signal-privacy.preconsent_tracking_detected.evidence_quality",
       linkedValidationFinding: null,
-      observedValue: `${nonEssentialRequestRows.length} classified non-essential request(s)`,
-      severity: hasPreconsentSequence ? "high" : "medium",
+      observedValue: hasPromotionReadyRequestEvidence
+        ? `${nonEssentialRequestRows.length} classified non-essential request(s)`
+        : `${retainedState0RequestRows.length} state-0 pre-consent request artifact(s) with incomplete classification`,
+      severity: hasPromotionReadyRequestEvidence && hasPreconsentSequence ? "high" : "medium",
       signalKey: "privacy.preconsent_tracking_detected",
       signalLabel: "Pre-consent tracking detected",
       signalSource: "runtime_artifact_signal",

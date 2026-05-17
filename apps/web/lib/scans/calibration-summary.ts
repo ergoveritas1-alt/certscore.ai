@@ -1,7 +1,9 @@
 import type { CertScoreFinding } from "./finding-registry";
 
 export type ExecutivePosture = "Clear" | "Watch" | "Action Needed";
-export type ExecutiveDisplayState = ExecutivePosture | "Limited review";
+export type ExecutiveDisplayState = ExecutivePosture | "Limited review" | "Evidence review";
+
+const MATERIAL_INCOMPLETE_BEFORE_CONSENT_COOKIE_THRESHOLD = 5;
 
 export type HostResolutionCategory = "same_host" | "same_site_alias" | "off_origin_landing";
 
@@ -178,6 +180,12 @@ export function deriveExecutiveDisplayState(input: {
     (input.thirdPartyDomains?.length ?? 0) > 0 ||
     (input.beforeConsentCookieCount ?? 0) > 0;
   const hasPolicyContext = (input.policySurfaces ?? []).some(policySurfaceSuggestsTrackingContext);
+  const hasMaterialIncompleteRuntimeContext =
+    (input.beforeConsentCookieCount ?? 0) >= MATERIAL_INCOMPLETE_BEFORE_CONSENT_COOKIE_THRESHOLD;
+
+  if (input.posture === "Clear" && hasMaterialIncompleteRuntimeContext) {
+    return "Evidence review";
+  }
 
   if (explicitLimitedCoverage || (meaningfulInterruption && (hasRuntimeContext || hasPolicyContext))) {
     return "Limited review";
@@ -283,6 +291,9 @@ function getDisplayStateHeadline(
 ) {
   if (displayState === "Limited review") {
     return "Runtime coverage was limited by site protections";
+  }
+  if (displayState === "Evidence review") {
+    return "Material runtime evidence needs review";
   }
 
   return getTopicAwarePostureHeadline(posture, findings);
@@ -405,6 +416,18 @@ export function deriveExecutiveNarrativePresentation(input: {
       summaryLabel: "Coverage note:",
       summaryMessage:
         "CertScore did not confirm a headline homepage issue from retained evidence. Observed vendor and request counts may be incomplete. Review retained evidence and consider external corroboration before treating this scan as clean."
+    };
+  }
+
+  if (displayState === "Evidence review") {
+    return {
+      findingsHeading: "Evidence needing review",
+      headline: getDisplayStateHeadline(displayState, input.posture, input.topFindings),
+      hostResolutionCategory,
+      limitedCoverage,
+      summaryLabel: "Evidence note:",
+      summaryMessage:
+        "The scan retained material runtime cookie or tracking context, but did not retain enough canonical evidence to project a headline finding. Review the supporting evidence before treating this scan as clean."
     };
   }
 

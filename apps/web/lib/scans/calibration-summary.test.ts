@@ -200,6 +200,29 @@ test("keeps protected routes outside the homepage from triggering limited-review
   assert.equal(displayState, "Clear");
 });
 
+test("uses evidence-review state for material cookie counts without headline findings", () => {
+  const displayState = deriveExecutiveDisplayState({
+    beforeConsentCookieCount: 19,
+    posture: "Clear",
+    scanInterruptions: [],
+    thirdPartyRequestCount: 12,
+    topFindingCount: 0,
+    vendorCount: 0
+  });
+  const presentation = deriveExecutiveNarrativePresentation({
+    displayState,
+    executiveHeadline: "No headline findings surfaced from the available scan coverage.",
+    finalHost: "example.com",
+    posture: "Clear",
+    requestedHost: "example.com",
+    topFindings: []
+  });
+
+  assert.equal(displayState, "Evidence review");
+  assert.equal(presentation.headline, "Material runtime evidence needs review");
+  assert.doesNotMatch(presentation.headline, /No major issues surfaced/i);
+});
+
 test("keeps clean well-covered scans clear when no interruption context is retained", () => {
   const displayState = deriveExecutiveDisplayState({
     domainBenchmark: {

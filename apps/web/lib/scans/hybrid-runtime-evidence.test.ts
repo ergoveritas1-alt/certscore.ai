@@ -685,6 +685,122 @@ test("builds concrete fallback evidence for hybrid pre-consent request timing", 
   ]);
 });
 
+test("retains state-0 preconsent request artifacts as material incomplete evidence", () => {
+  const runtimeArtifacts = {
+    consent_timeline: {
+      firstCmpVisibleMs: 0,
+      firstConsentActionMs: 0,
+      firstNonEssentialRequestMs: null,
+      firstTrackingCookieSetMs: null,
+      timelineConfidence: "low"
+    },
+    hybrid_runtime_evidence: {
+      consentSummary: {
+        acceptPresent: true,
+        bannerPresent: true,
+        firstVisibleMs: 0
+      },
+      preconsentState0RequestObservations: [
+        {
+          category: "unknown",
+          classification: "third_party_unclassified",
+          confidence: "low",
+          evidenceSource: "state0_request_capture",
+          hostname: "cdn.example-ad.net",
+          requestUrl: "https://cdn.example-ad.net/bootstrap.js",
+          resourceType: "script",
+          runtimePhase: "pre_consent",
+          thirdParty: true,
+          tsMs: 0,
+          vendor: null
+        }
+      ],
+      requestObservations: [
+        {
+          domain: "cdn.example-ad.net",
+          pathSample: "/bootstrap.js",
+          runtimePhase: "pre_consent",
+          thirdParty: true,
+          tsMs: 0
+        }
+      ],
+      requestToVendorObservations: [],
+      timelineMarkers: {
+        consentBannerDetectedMs: 0,
+        firstRequestMs: 0,
+        firstThirdPartyRequestMs: 0
+      }
+    }
+  } satisfies Record<string, unknown>;
+
+  const fallback = buildPreconsentEvidenceQualityFallback(runtimeArtifacts);
+
+  assert.equal(fallback?.runtimeEvidenceQuality, "state0_material_incomplete");
+  assert.equal(fallback?.runtimeEvidenceQualityDisposition, "audit_only_until_request_or_cookie_classification_present");
+  assert.deepEqual(fallback?.runtimeRequestUrls, ["https://cdn.example-ad.net/bootstrap.js"]);
+  assert.deepEqual(fallback?.preconsent_tracker_evidence_urls, []);
+  assert.equal(Array.isArray(fallback?.preconsent_state0_request_observations), true);
+  assert.deepEqual(fallback?.requestPurposeClassificationConfidence, [
+    {
+      category: "unknown",
+      confidence: 0.45,
+      essentiality: "unknown",
+      evidenceSource: "state0_request_capture",
+      requestUrl: "https://cdn.example-ad.net/bootstrap.js",
+      runtimePhase: "pre_consent",
+      tsMs: 0,
+      vendor: null
+    }
+  ]);
+});
+
+test("keeps service-classified state-0 requests out of tracker evidence fields", () => {
+  const runtimeArtifacts = {
+    hybrid_runtime_evidence: {
+      preconsentState0RequestObservations: [
+        {
+          category: "fraud_security",
+          classification: "service_classified",
+          confidence: "high",
+          evidenceSource: "state0_request_capture",
+          hostname: "js.stripe.com",
+          requestUrl: "https://js.stripe.com/v3",
+          resourceType: "script",
+          runtimePhase: "pre_consent",
+          serviceClass: "payment",
+          thirdParty: true,
+          tsMs: 0,
+          vendor: "Stripe.js"
+        }
+      ],
+      requestObservations: [],
+      requestToVendorObservations: [],
+      timelineMarkers: {
+        firstRequestMs: 0,
+        firstThirdPartyRequestMs: 0
+      }
+    }
+  } satisfies Record<string, unknown>;
+
+  const fallback = buildPreconsentEvidenceQualityFallback(runtimeArtifacts);
+
+  assert.deepEqual(fallback?.runtimeRequestUrls, ["https://js.stripe.com/v3"]);
+  assert.deepEqual(fallback?.preconsent_tracker_evidence_urls, []);
+  assert.deepEqual(fallback?.preconsent_tracker_vendors, []);
+  assert.deepEqual(fallback?.requestPurposeClassificationConfidence, [
+    {
+      category: "functional",
+      confidence: 0.9,
+      essentiality: "unknown",
+      evidenceSource: "state0_request_capture",
+      requestUrl: "https://js.stripe.com/v3",
+      runtimePhase: "pre_consent",
+      tsMs: 0,
+      vendor: "Stripe.js"
+    }
+  ]);
+});
+
 test("builds promotion evidence from legacy baseline tracker arrays when quality columns are absent", () => {
   const runtimeArtifacts = {
     consent_baseline_tracker_evidence_urls: [

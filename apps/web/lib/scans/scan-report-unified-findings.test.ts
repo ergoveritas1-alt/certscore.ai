@@ -1075,6 +1075,82 @@ test("observed baseline tracker URL fallback creates canonical preconsent packet
   ]);
 });
 
+test("state-0 preconsent request artifact creates audit-only incomplete preconsent packet", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    runtimeArtifacts: {
+      consent_timeline: {
+        firstCmpVisibleMs: 0,
+        firstConsentActionMs: 0,
+        firstNonEssentialRequestMs: null,
+        timelineConfidence: "low"
+      },
+      hybrid_runtime_evidence: {
+        preconsentState0RequestObservations: [
+          {
+            category: "unknown",
+            classification: "third_party_unclassified",
+            confidence: "low",
+            evidenceSource: "state0_request_capture",
+            hostname: "cdn.example-ad.net",
+            requestUrl: "https://cdn.example-ad.net/bootstrap.js",
+            resourceType: "script",
+            runtimePhase: "pre_consent",
+            thirdParty: true,
+            tsMs: 0,
+            vendor: null
+          }
+        ],
+        requestObservations: [
+          {
+            domain: "cdn.example-ad.net",
+            pathSample: "/bootstrap.js",
+            runtimePhase: "pre_consent",
+            thirdParty: true,
+            tsMs: 0
+          }
+        ],
+        requestToVendorObservations: [],
+        timelineMarkers: {
+          consentBannerDetectedMs: 0,
+          firstRequestMs: 0,
+          firstThirdPartyRequestMs: 0
+        }
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.surfacingDecision.decisionState, "material_incomplete");
+  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("audit_only"), true);
+  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"), true);
+  assert.deepEqual(packet?.evidence?.entities?.runtimeRequestUrls, ["https://cdn.example-ad.net/bootstrap.js"]);
+});
+
 test("runtime pre-submit text capture evidence creates canonical packet", () => {
   const state = buildScanReportUnifiedFindingState({
     accessibilityRuleCounts: [],

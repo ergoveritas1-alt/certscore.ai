@@ -15,7 +15,7 @@ import {
 
 export const REPORT_SURFACING_POLICY_VERSION = "v1";
 
-export type SurfacingDecisionState = "confirmed" | "review" | "support_only" | "suppressed";
+export type SurfacingDecisionState = "confirmed" | "review" | "support_only" | "material_incomplete" | "suppressed";
 export type SurfacingReportLane = "main" | "confidence_and_coverage" | "suppressed";
 export type SurfacingTier = "headline" | "section" | "secondary" | "support";
 
@@ -62,6 +62,7 @@ export type SurfacingPolicyRuleId =
   | "evidence.contradiction.review_without_complete_anchor"
   | "evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"
   | "evidence.preconsent.review_without_runtime_artifacts"
+  | "evidence.preconsent.material_incomplete"
   | "evidence.consent_behavior.confirmed_specific_runtime_failure"
   | "evidence.consent_behavior.review_runtime_without_effect_evidence"
   | "evidence.consent_behavior.review_interface_or_design"
@@ -1367,6 +1368,30 @@ function hasSpecificConsentGatedRuntimeEvidence(packet: UnifiedFindingPacket) {
   return hasVendors && hasRuntimeRequestUrls && (packet.confidenceInputs.hasDirectRuntimeEvidence || hasConcreteRuntimeEvidence(packet));
 }
 
+function hasMaterialIncompletePreconsentEvidence(packet: UnifiedFindingPacket) {
+  if (packet.unifiedFindingId !== "preconsent_tracking" || packet.details?.family !== "consent_tracking") {
+    return false;
+  }
+
+  const negativeFlags = getNegativeEvidenceFlags(packet);
+  const runtimeRequestUrls = packet.evidence?.entities?.runtimeRequestUrls ?? [];
+  const requestPurposeRows = packet.evidence?.entities?.requestPurposeClassificationConfidence ?? [];
+  const hasState0RequestAnchor = requestPurposeRows.some((value) =>
+    /state0_request_capture|\"runtimePhase\":\"pre_consent\"|\"runtime_phase\":\"pre_consent\"/i.test(value)
+  );
+  const hasIncompleteState0Classification = requestPurposeRows.some((value) =>
+    /state0_request_capture|\"runtimePhase\":\"pre_consent\"|\"runtime_phase\":\"pre_consent\"/i.test(value) &&
+    !/\"essentiality\":\"non_essential\"/i.test(value)
+  );
+
+  return (
+    hasState0RequestAnchor &&
+    runtimeRequestUrls.some(isConcreteHttpEvidenceUrl) &&
+    (negativeFlags.has("missing_concrete_preconsent_artifact") || hasIncompleteState0Classification) &&
+    negativeFlags.has("missing_preconsent_sequence_evidence")
+  );
+}
+
 function hasStandalonePreconsentRuntimeEvidence(packet: UnifiedFindingPacket) {
   if (packet.unifiedFindingId !== "preconsent_tracking" || packet.details?.family !== "consent_tracking") {
     return false;
@@ -1706,6 +1731,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   const contractDecision = evaluateFindingEvidenceContractForPacket(packet);
   const hasSpecificPreconsentRuntimeEvidence =
     packet.unifiedFindingId === "preconsent_tracking" && hasSpecificPreconsentEvidence(packet);
+  const hasMaterialIncompletePreconsentRuntimeEvidence = hasMaterialIncompletePreconsentEvidence(packet);
 
   if (packet.concernContext?.externalSurfacingEligibilities?.every((value) => value === "suppress")) {
     overrideDecision(decision, {
@@ -1747,6 +1773,18 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     contractDecision?.externalSurfacingEligibility === "audit_only" &&
     !hasSpecificPreconsentRuntimeEvidence
   ) {
+    if (hasMaterialIncompletePreconsentRuntimeEvidence) {
+      overrideDecision(decision, {
+        state: "material_incomplete",
+        lane: "confidence_and_coverage",
+        tier: "support",
+        reason:
+          "State-0 pre-consent request evidence was retained, but timing sequence, non-essential classification, or vendor attribution is incomplete, so the finding remains audit-only instead of being suppressed or executive-promoted.",
+        ruleId: "evidence.preconsent.material_incomplete"
+      });
+      return;
+    }
+
     overrideDecision(decision, {
       state: "support_only",
       lane: "confidence_and_coverage",
@@ -1821,7 +1859,8 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     ) &&
     packet.concernContext?.externalSurfacingEligibilities?.every((value) => value === "audit_only") &&
     contractDecision?.promotionEligibility !== "eligible" &&
-    !hasSpecificPreconsentRuntimeEvidence
+    !hasSpecificPreconsentRuntimeEvidence &&
+    !hasMaterialIncompletePreconsentRuntimeEvidence
   ) {
     overrideDecision(decision, {
       state: "support_only",
@@ -2738,7 +2777,10 @@ export function mapSurfacingDecisionToLegacyStatus(decision: UnifiedFindingSurfa
     return "audit_only" as const;
   }
 
-  if (decision.decisionState === "support_only" && decision.reportLane !== "main") {
+  if (
+    (decision.decisionState === "support_only" || decision.decisionState === "material_incomplete") &&
+    decision.reportLane !== "main"
+  ) {
     return "audit_only" as const;
   }
 
@@ -2748,7 +2790,15 @@ export function mapSurfacingDecisionToLegacyStatus(decision: UnifiedFindingSurfa
 export function getSurfacingDecisionSortPriority(decision: UnifiedFindingSurfacingDecision) {
   const laneWeight = decision.reportLane === "main" ? 100 : decision.reportLane === "confidence_and_coverage" ? 40 : 0;
   const stateWeight =
-    decision.decisionState === "confirmed" ? 40 : decision.decisionState === "review" ? 20 : decision.decisionState === "support_only" ? 10 : 0;
+    decision.decisionState === "confirmed"
+      ? 40
+      : decision.decisionState === "review"
+        ? 20
+        : decision.decisionState === "material_incomplete"
+          ? 12
+          : decision.decisionState === "support_only"
+            ? 10
+            : 0;
   const tierWeight =
     decision.surfaceTier === "headline" ? 30 : decision.surfaceTier === "section" ? 20 : decision.surfaceTier === "secondary" ? 10 : 0;
 

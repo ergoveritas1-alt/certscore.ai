@@ -7,6 +7,12 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../../web/lib/scans/nano-document-sources";
 import { buildScanReportUnifiedFindingsForScan } from "../../web/lib/scans/scan-report-unified-findings";
+import { buildPreconsentEvidenceQualityFallback } from "../../web/lib/scans/hybrid-runtime-evidence";
+import {
+  diagnosePreConsentCookieEvidence,
+  hasConcretePreconsentArtifact,
+  hasPreconsentSequenceEvidence
+} from "../../web/lib/scans/promotion-evidence-contracts";
 import type { UnifiedFindingDisplayPacket } from "../../web/lib/scans/unified-findings";
 import type { ScanValidationFinding } from "../../web/lib/scans/validation-review-linking";
 import { repairFindingFamilyPacketEvents } from "../../web/server/scans/family-packet-event-repair";
@@ -368,6 +374,47 @@ function eventIsRuntimeBuildPhase(metadata: Record<string, unknown>, phase: stri
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getObjectArray(value: unknown) {
+  return asArray(value).filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry));
+}
+
+function getNestedObject(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  if (!record) {
+    return null;
+  }
+  for (const key of keys) {
+    const value = record[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function hasFiniteNumber(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  return keys.some((key) => getNumber(record?.[key]) !== null);
+}
+
+function countHttpLikeStrings(values: unknown[]) {
+  return values.filter((value) => typeof value === "string" && /^https?:\/\//i.test(value)).length;
+}
+
+function summarizeEvidenceKeys(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  return Object.fromEntries(
+    keys.map((key) => {
+      const value = record?.[key];
+      return [
+        key,
+        Array.isArray(value)
+          ? { present: value.length > 0, count: value.length }
+          : value && typeof value === "object"
+            ? { present: true, count: Object.keys(value as Record<string, unknown>).length }
+            : { present: value !== null && value !== undefined, count: value === null || value === undefined ? 0 : 1 }
+      ] as const;
+    })
+  );
 }
 
 function summarizeNanoRechecks(events: TimingEventRow[]) {
@@ -1188,6 +1235,273 @@ async function runUnifiedProjectionContinuityAudit(input: AuditInput) {
   };
 }
 
+function summarizePreconsentRuntimeArtifacts(runtimeArtifacts: Record<string, unknown> | null) {
+  const hybrid = getNestedObject(runtimeArtifacts, ["hybrid_runtime_evidence", "hybridRuntimeEvidence"]);
+  const directTimeline = getNestedObject(runtimeArtifacts, ["consentTimeline", "consent_timeline"]);
+  const hybridTimeline = getNestedObject(hybrid, ["consentTimeline", "consent_timeline"]);
+  const timelineMarkers = getNestedObject(hybrid, ["timelineMarkers", "timeline_markers"]);
+  const consentSummary = getNestedObject(hybrid, ["consentSummary", "consent_summary"]);
+  const networkSummary = getNestedObject(hybrid, ["networkSummary", "network_summary"]);
+  const vendorSummary = getNestedObject(hybrid, ["vendorSummary", "vendor_summary"]);
+  const storageSummary = getNestedObject(hybrid, ["storageSummary", "storage_summary"]);
+  const requestPurposeRows = [
+    ...getObjectArray(runtimeArtifacts?.requestPurposeClassificationConfidence),
+    ...getObjectArray(runtimeArtifacts?.request_purpose_classification_confidence),
+    ...getObjectArray(hybrid?.requestPurposeClassificationConfidence),
+    ...getObjectArray(hybrid?.request_purpose_classification_confidence)
+  ];
+  const nonEssentialRows = requestPurposeRows.filter((row) => {
+    const essentiality = getString(row.essentiality) ?? getString(row.classification);
+    const confidence = getNumber(row.confidence ?? row.score) ?? 0;
+    return essentiality === "non_essential" && confidence >= 0.7;
+  });
+  const requestObservationRows = [
+    ...getObjectArray(hybrid?.requestObservations),
+    ...getObjectArray(hybrid?.request_observations)
+  ];
+  const preconsentRequestRows = requestObservationRows.filter((row) =>
+    row.preConsent === true ||
+    row.pre_consent === true ||
+    row.runtimePhase === "pre_consent" ||
+    row.runtime_phase === "pre_consent"
+  );
+  const cookieWriteRows = [
+    ...getObjectArray(hybrid?.cookieWriteObservations),
+    ...getObjectArray(hybrid?.cookie_write_observations)
+  ];
+  const beforeConsentCookieWriteRows = cookieWriteRows.filter((row) =>
+    row.beforeConsent === true ||
+    row.before_consent === true ||
+    row.runtimePhase === "pre_consent" ||
+    row.runtime_phase === "pre_consent"
+  );
+  const derivedQuality = buildPreconsentEvidenceQualityFallback(runtimeArtifacts);
+  const derivedEvidence = derivedQuality as Record<string, unknown> | null;
+  const derivedTimeline = getNestedObject(derivedEvidence, ["consentTimeline", "consent_timeline"]);
+
+  return {
+    hasRuntimeArtifacts: Boolean(runtimeArtifacts),
+    hasHybridRuntimeEvidence: Boolean(hybrid && Object.keys(hybrid).length > 0),
+    rawTimingSources: {
+      directConsentTimeline: Boolean(directTimeline),
+      hybridConsentTimeline: Boolean(hybridTimeline),
+      directTimelineFields: {
+        firstCmpVisibleMs: getNumber(directTimeline?.firstCmpVisibleMs ?? directTimeline?.first_cmp_visible_ms),
+        firstConsentActionMs: getNumber(directTimeline?.firstConsentActionMs ?? directTimeline?.first_consent_action_ms),
+        firstNonEssentialRequestMs: getNumber(directTimeline?.firstNonEssentialRequestMs ?? directTimeline?.first_non_essential_request_ms),
+        firstTrackingCookieSetMs: getNumber(directTimeline?.firstTrackingCookieSetMs ?? directTimeline?.first_tracking_cookie_set_ms),
+        timelineConfidence: getString(directTimeline?.timelineConfidence ?? directTimeline?.timeline_confidence)
+      },
+      timelineMarkers: {
+        hasConsentBannerDetectedMs: hasFiniteNumber(timelineMarkers, ["consentBannerDetectedMs", "consent_banner_detected_ms"]),
+        hasConsentChoiceAtMs: hasFiniteNumber(timelineMarkers, [
+          "consentChoiceAtMs",
+          "consent_choice_at_ms",
+          "consentAcceptedAtMs",
+          "consentRejectedAtMs"
+        ]),
+        hasFirstCookieSeenMs: hasFiniteNumber(timelineMarkers, ["firstCookieSeenMs", "first_cookie_seen_ms"]),
+        hasFirstRequestMs: hasFiniteNumber(timelineMarkers, ["firstRequestMs", "first_request_ms"]),
+        hasFirstThirdPartyRequestMs: hasFiniteNumber(timelineMarkers, ["firstThirdPartyRequestMs", "first_third_party_request_ms"])
+      }
+    },
+    derivedTimingEvidence: {
+      present: Boolean(derivedQuality),
+      hasConsentTimeline: Boolean(derivedTimeline),
+      hasPreconsentSequence: hasPreconsentSequenceEvidence(derivedEvidence),
+      hasConcretePreconsentArtifact: hasConcretePreconsentArtifact(derivedEvidence),
+      cookieDiagnostic: diagnosePreConsentCookieEvidence(derivedEvidence),
+      timelineFields: {
+        firstCmpVisibleMs: getNumber(derivedTimeline?.firstCmpVisibleMs ?? derivedTimeline?.first_cmp_visible_ms),
+        firstConsentActionMs: getNumber(derivedTimeline?.firstConsentActionMs ?? derivedTimeline?.first_consent_action_ms),
+        firstNonEssentialRequestMs: getNumber(derivedTimeline?.firstNonEssentialRequestMs ?? derivedTimeline?.first_non_essential_request_ms),
+        firstTrackingCookieSetMs: getNumber(derivedTimeline?.firstTrackingCookieSetMs ?? derivedTimeline?.first_tracking_cookie_set_ms),
+        timelineConfidence: getString(derivedTimeline?.timelineConfidence ?? derivedTimeline?.timeline_confidence)
+      }
+    },
+    requestClassification: {
+      totalRows: requestPurposeRows.length,
+      nonEssentialHighConfidenceRows: nonEssentialRows.length,
+      nonEssentialRowsWithUrl: countHttpLikeStrings(nonEssentialRows.map((row) => row.requestUrl ?? row.request_url ?? row.url))
+    },
+    requestObservations: {
+      totalRows: requestObservationRows.length,
+      preconsentRows: preconsentRequestRows.length,
+      preconsentRowsWithUrl: countHttpLikeStrings(preconsentRequestRows.map((row) => row.url ?? row.requestUrl ?? row.request_url))
+    },
+    cookieWriteObservations: {
+      totalRows: cookieWriteRows.length,
+      beforeConsentRows: beforeConsentCookieWriteRows.length,
+      nonEssentialBeforeConsentRows: beforeConsentCookieWriteRows.filter((row) => row.nonEssential === true || row.non_essential === true).length
+    },
+    summaries: {
+      preConsentThirdPartyRequestCount: getNumber(networkSummary?.preConsentThirdPartyRequestCount ?? networkSummary?.pre_consent_third_party_request_count),
+      preConsentVendorCount: getNumber(vendorSummary?.preConsentVendorCount ?? vendorSummary?.pre_consent_vendor_count),
+      preConsentTrackingCookieCount: getNumber(storageSummary?.preConsentTrackingCookieCount ?? storageSummary?.pre_consent_tracking_cookie_count),
+      consentSurfaceObserved:
+        runtimeArtifacts?.consent_surface_observed === true ||
+        runtimeArtifacts?.consentSurfaceObserved === true ||
+        consentSummary?.bannerPresent === true ||
+        consentSummary?.cmpDetected === true,
+      consentActionableChoiceObserved:
+        runtimeArtifacts?.consent_actionable_choice_observed === true ||
+        runtimeArtifacts?.consentActionableChoiceObserved === true ||
+        consentSummary?.managePresent === true ||
+        consentSummary?.acceptPresent === true ||
+        consentSummary?.rejectPresent === true
+    }
+  };
+}
+
+function summarizePreconsentValidationFinding(finding: ScanValidationFinding | undefined) {
+  const evidence = finding?.evidence && typeof finding.evidence === "object" && !Array.isArray(finding.evidence)
+    ? finding.evidence as Record<string, unknown>
+    : null;
+  return {
+    present: Boolean(finding),
+    severity: finding?.severity ?? null,
+    verdict: finding?.verdict ?? null,
+    evidenceContract: {
+      hasConcretePreconsentArtifact: hasConcretePreconsentArtifact(evidence),
+      hasPreconsentSequence: hasPreconsentSequenceEvidence(evidence),
+      cookieDiagnostic: diagnosePreConsentCookieEvidence(evidence)
+    },
+    evidenceKeys: summarizeEvidenceKeys(evidence, [
+      "consentTimeline",
+      "requestPurposeClassificationConfidence",
+      "preconsent_cookie_evidence",
+      "preconsent_cookie_timing_evidence",
+      "preconsent_tracker_evidence_urls",
+      "preconsent_tracker_vendors",
+      "runtimeRequestUrls",
+      "runtimeVendors",
+      "third_party_cookie_count",
+      "preconsent_violation_count"
+    ]),
+    counts: {
+      preconsentTrackerEvidenceUrlCount: countHttpLikeStrings(getStringArray(evidence?.preconsent_tracker_evidence_urls)),
+      runtimeRequestUrlCount: countHttpLikeStrings(getStringArray(evidence?.runtimeRequestUrls)),
+      runtimeVendorCount: getStringArray(evidence?.runtimeVendors).length,
+      preconsentTrackerVendorCount: getStringArray(evidence?.preconsent_tracker_vendors).length,
+      preconsentCookieEvidenceRows: getObjectArray(evidence?.preconsent_cookie_evidence).length
+    }
+  };
+}
+
+function summarizePreconsentPacket(packet: UnifiedFindingDisplayPacket | undefined) {
+  const entities = packet?.evidence?.entities ?? {};
+  return {
+    present: Boolean(packet),
+    status: packet?.presentationDecision.status ?? null,
+    verificationState: packet?.presentationDecision.verificationState ?? null,
+    decisionState: packet?.surfacingDecision.decisionState ?? null,
+    reportLane: packet?.surfacingDecision.reportLane ?? null,
+    downgradeReasons: packet?.presentationDecision.downgradeReasons ?? [],
+    decisionReasons: packet?.surfacingDecision.decisionReasons ?? [],
+    concernContext: packet?.concernContext
+      ? {
+          assertionLevels: packet.concernContext.assertionLevels,
+          externalSurfacingEligibilities: packet.concernContext.externalSurfacingEligibilities,
+          negativeEvidenceFlags: packet.concernContext.negativeEvidenceFlags,
+          promotionEligibilities: packet.concernContext.promotionEligibilities
+        }
+      : null,
+    evidenceEntityCounts: {
+      consentTimeline: entities.consentTimeline?.length ?? 0,
+      preconsentCookieEvidence: entities.preconsent_cookie_evidence?.length ?? 0,
+      preconsentCookieTimingEvidence: entities.preconsent_cookie_timing_evidence?.length ?? 0,
+      preconsentTrackerEvidenceUrls: entities.preconsent_tracker_evidence_urls?.length ?? 0,
+      preconsentTrackerVendors: entities.preconsent_tracker_vendors?.length ?? 0,
+      runtimeRequestUrls: entities.runtimeRequestUrls?.length ?? 0,
+      runtimeVendors: entities.runtimeVendors?.length ?? 0
+    },
+    sourceRefs: {
+      validationRuleKeys: packet?.sourceRefs.flatMap((sourceRef) => sourceRef.kind === "validation" ? [sourceRef.ruleKey] : []) ?? [],
+      signalKeys: packet?.sourceRefs.flatMap((sourceRef) => sourceRef.kind === "signal" ? [sourceRef.key] : []) ?? []
+    }
+  };
+}
+
+async function runPreconsentTimingEvidenceAudit(input: AuditInput) {
+  const scans = requireAuditScans(input);
+  const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
+  const validationRunRows = await query<{ id: string; scan_id: string }>(
+    `select distinct on (scan_id) scan_id::text as scan_id, id::text as id
+       from validation_runs
+      where scan_id = any($1::uuid[])
+      order by scan_id, created_at desc`,
+    [scanIds],
+    { readOnly: true }
+  ).then((result) => result.rows);
+  const runIdByScanId = new Map(validationRunRows.map((row) => [row.scan_id, row.id]));
+
+  const rows = [];
+  for (const scan of scans) {
+    const scanRecord = await loadScanRecordForProjectionAudit({
+      runId: runIdByScanId.get(scan.scanId) ?? null,
+      scanId: scan.scanId
+    });
+    const snapshot = scanRecord.snapshot;
+    const validationFinding = scanRecord.validationFindings.find(
+      (finding) => finding.ruleKey === "runtime_privacy.preconsent_tracking_observed"
+    );
+    const packets = buildScanReportUnifiedFindingsForScan(scanRecord);
+    const preconsentPacket = packets.find((packet) => packet.unifiedFindingId === "preconsent_tracking");
+    const preconsentViolations = scanRecord.preconsentViolations;
+
+    rows.push({
+      batch: scan.batch ?? null,
+      domain: scan.domain ?? null,
+      scanId: scan.scanId,
+      snapshot: {
+        cookieCountTotal: getNumber(snapshot?.cookie_count_total),
+        preconsentTrackingDetected: snapshot?.preconsent_tracking_detected === true,
+        reportFindingCount: getNumber(snapshot?.report_finding_count),
+        thirdPartyCookieCount: getNumber(snapshot?.third_party_cookie_count),
+        trackerVendorCount: getNumber(snapshot?.tracker_vendor_count)
+      },
+      preconsentViolationTable: {
+        rowCount: preconsentViolations.length,
+        rowsWithEvidenceUrls: preconsentViolations.filter((row) => countHttpLikeStrings(getStringArray(row.evidence_urls ?? row.evidenceUrls)) > 0).length,
+        vendorCount: new Set(preconsentViolations.flatMap((row) => getString(row.vendor_name ?? row.vendorName) ?? [])).size
+      },
+      runtimeArtifacts: summarizePreconsentRuntimeArtifacts(scanRecord.runtimeArtifacts),
+      validationFinding: summarizePreconsentValidationFinding(validationFinding),
+      unifiedPacket: summarizePreconsentPacket(preconsentPacket),
+      lineageInterpretation: {
+        timingLoggedInRuntime:
+          summarizePreconsentRuntimeArtifacts(scanRecord.runtimeArtifacts).rawTimingSources.directConsentTimeline ||
+          summarizePreconsentRuntimeArtifacts(scanRecord.runtimeArtifacts).rawTimingSources.hybridConsentTimeline ||
+          summarizePreconsentRuntimeArtifacts(scanRecord.runtimeArtifacts).derivedTimingEvidence.hasConsentTimeline,
+        timingCarriedInValidationFinding:
+          Boolean(validationFinding?.evidence && typeof validationFinding.evidence === "object" && !Array.isArray(validationFinding.evidence) &&
+            (validationFinding.evidence as Record<string, unknown>).consentTimeline),
+        projectedPreconsentPacketStatus: preconsentPacket?.presentationDecision.status ?? null
+      }
+    });
+  }
+  await queryOne<{ ok: number }>("select 1 as ok", [], { readOnly: true });
+
+  return {
+    audit: "preconsent-timing-evidence",
+    generatedAt: new Date().toISOString(),
+    notes: input.notes ?? null,
+    readScope: {
+      scanCount: scanIds.length,
+      tables: [
+        "scan_snapshots",
+        "scan_runtime_artifacts",
+        "scan_preconsent_violations",
+        "scan_tracker_vendors",
+        "validation_runs",
+        "validation_run_findings",
+        "validation_verdicts"
+      ]
+    },
+    rows
+  };
+}
+
 async function runScanTimingAudit(input: AuditInput) {
   const scans = requireAuditScans(input);
   const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
@@ -1750,6 +2064,8 @@ async function main() {
         ? await runSignalFindingContinuityAudit(input)
       : auditName === "unified-projection-continuity"
         ? await runUnifiedProjectionContinuityAudit(input)
+      : auditName === "preconsent-timing-evidence"
+        ? await runPreconsentTimingEvidenceAudit(input)
       : auditName === "scan-timing"
         ? await runScanTimingAudit(input)
       : auditName === "scanner-phase-timing"

@@ -551,11 +551,28 @@ function getSessionReplayRequestUrls(hybrid: Record<string, unknown> | null) {
 
 function getPreconsentTrackerVendors(hybrid: Record<string, unknown> | null) {
   const requestToVendorObservations = getObjectArray(hybrid?.requestToVendorObservations);
+  const state0RequestObservations = getObjectArray(hybrid?.preconsentState0RequestObservations ?? hybrid?.preconsent_state0_request_observations);
   const vendors = requestToVendorObservations
     .filter((row) => row.pre_consent === true || row.preConsent === true)
     .flatMap((row) => (typeof row.vendor === "string" ? [row.vendor] : []));
 
-  return uniqueStrings(vendors);
+  return uniqueStrings([
+    ...vendors,
+    ...state0RequestObservations
+      .filter(isState0TrackerObservation)
+      .flatMap((row) => getString(row.vendor))
+  ]);
+}
+
+function isState0TrackerObservation(row: Record<string, unknown>) {
+  const classification = getString(row.classification);
+  if (classification === "service_classified") {
+    return false;
+  }
+  if (classification === "known_tracker") {
+    return true;
+  }
+  return categoryToEssentiality(normalizeDerivedVendorCategory(getString(row.category))) === "non_essential";
 }
 
 function isPreconsentRequestObservation(row: Record<string, unknown>, hybrid: Record<string, unknown> | null) {
@@ -602,17 +619,23 @@ function getPreconsentCookieEvidenceRows(
 
 function getPreconsentRequestUrls(hybrid: Record<string, unknown> | null) {
   const requestObservations = getObjectArray(hybrid?.requestObservations);
+  const state0RequestObservations = getObjectArray(hybrid?.preconsentState0RequestObservations ?? hybrid?.preconsent_state0_request_observations);
   const preconsentVendorHosts = getObjectArray(hybrid?.requestToVendorObservations)
     .filter((row) => row.pre_consent === true || row.preConsent === true)
     .flatMap((row) => getString(row.hostname));
   return uniqueStrings(
-    requestObservations
-      .filter((row) => {
-        const domain = getString(row.domain);
-        const matchedPreconsentVendor = Boolean(domain && preconsentVendorHosts.includes(domain));
-        return row.thirdParty === true && (isPreconsentRequestObservation(row, hybrid) || matchedPreconsentVendor);
-      })
-      .flatMap((row) => getRequestUrl(row) ?? [])
+    [
+      ...requestObservations
+        .filter((row) => {
+          const domain = getString(row.domain);
+          const matchedPreconsentVendor = Boolean(domain && preconsentVendorHosts.includes(domain));
+          return row.thirdParty === true && (isPreconsentRequestObservation(row, hybrid) || matchedPreconsentVendor);
+        })
+        .flatMap((row) => getRequestUrl(row) ?? []),
+      ...state0RequestObservations
+        .filter(isState0TrackerObservation)
+        .flatMap((row) => getString(row.requestUrl ?? row.request_url))
+    ]
   );
 }
 
@@ -692,6 +715,25 @@ function getRequestClassificationRows(runtimeArtifacts: Record<string, unknown> 
     ...getNestedObjectArray(runtimeArtifacts, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"]),
     ...getNestedObjectArray(hybrid, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"])
   ];
+  const state0Rows = getNestedObjectArray(hybrid, ["preconsentState0RequestObservations", "preconsent_state0_request_observations"])
+    .filter((row) => {
+      const requestUrl = getString(row.requestUrl) ?? getString(row.request_url);
+      return Boolean(requestUrl && /^https?:\/\//i.test(requestUrl));
+    })
+    .map((row) => {
+      const category = normalizeDerivedVendorCategory(getString(row.category));
+      const essentiality = categoryToEssentiality(category);
+      return {
+        category,
+        confidence: confidenceToNumber(row.confidence) ?? 0.45,
+        essentiality: essentiality ?? "unknown",
+        evidenceSource: getString(row.evidenceSource ?? row.evidence_source) ?? "state0_request_capture",
+        requestUrl: getString(row.requestUrl) ?? getString(row.request_url),
+        runtimePhase: "pre_consent",
+        tsMs: getNumber(row.tsMs ?? row.ts_ms),
+        vendor: getString(row.vendor)
+      };
+    });
   const baselineEvidenceUrls = getExistingArray(runtimeArtifacts ?? {}, [
     "consentBaselineTrackerEvidenceUrls",
     "consent_baseline_tracker_evidence_urls"
@@ -719,9 +761,9 @@ function getRequestClassificationRows(runtimeArtifacts: Record<string, unknown> 
     };
   });
 
-  if (retainedRows.length > 0 || baselineRows.length > 0) {
+  if (retainedRows.length > 0 || baselineRows.length > 0 || state0Rows.length > 0) {
     const byUrl = new Map<string, Record<string, unknown>>();
-    for (const row of [...retainedRows, ...baselineRows]) {
+    for (const row of [...retainedRows, ...baselineRows, ...state0Rows]) {
       const record = row as Record<string, unknown>;
       const requestUrl = getString(record.requestUrl) ?? getString(record.request_url) ?? getString(record.url);
       byUrl.set(requestUrl ?? JSON.stringify(record), record);
@@ -796,6 +838,10 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
     getNestedObject(runtimeArtifacts, ["consentTimeline", "consent_timeline"]) ??
     getNestedObject(hybrid, ["consentTimeline", "consent_timeline"]);
   const requestClassifications = getRequestClassificationRows(runtimeArtifacts, hybrid);
+  const state0RequestRows = getNestedObjectArray(hybrid, [
+    "preconsentState0RequestObservations",
+    "preconsent_state0_request_observations"
+  ]);
   const nonEssentialRequestRows = requestClassifications.filter((row) => {
     const essentiality = getString(row.essentiality) ?? getString(row.classification);
     const confidence = confidenceToNumber(row.confidence ?? row.score);
@@ -824,6 +870,14 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
       .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
   );
   const normalizedFirstTrackingCookieSetMs = Number.isFinite(firstTrackingCookieSetMs) ? firstTrackingCookieSetMs : null;
+  const state0RequestUrls = uniqueStrings(
+    state0RequestRows.flatMap((row) => getString(row.requestUrl) ?? getString(row.request_url))
+  ).filter((url) => /^https?:\/\//i.test(url));
+  const state0TrackerRows = state0RequestRows.filter(isState0TrackerObservation);
+  const state0TrackerRequestUrls = uniqueStrings(
+    state0TrackerRows.flatMap((row) => getString(row.requestUrl) ?? getString(row.request_url))
+  ).filter((url) => /^https?:\/\//i.test(url));
+  const state0Vendors = uniqueStrings(state0TrackerRows.flatMap((row) => getString(row.vendor)));
   const consentTimeline = retainedTimeline ?? (
     normalizedFirstNonEssentialRequestMs !== null || normalizedFirstTrackingCookieSetMs !== null
       ? {
@@ -843,7 +897,7 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
       : null
   );
 
-  if (!consentTimeline && nonEssentialRequestRows.length === 0 && preconsentTrackingCookieRows.length === 0) {
+  if (!consentTimeline && nonEssentialRequestRows.length === 0 && preconsentTrackingCookieRows.length === 0 && state0RequestUrls.length === 0) {
     return null;
   }
 
@@ -854,12 +908,24 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
     consentSurfaceObserved:
       getObservedConsentSurface(hybrid, runtimeArtifacts),
     requestPurposeClassificationConfidence: requestClassifications,
+    runtimeRequestUrls: state0RequestUrls,
     preconsent_tracker_evidence_urls: uniqueStrings(
-      nonEssentialRequestRows.flatMap((row) => getRowString(row, ["requestUrl", "request_url", "url"]))
+      [
+        ...nonEssentialRequestRows.flatMap((row) => getRowString(row, ["requestUrl", "request_url", "url"])),
+        ...state0TrackerRequestUrls
+      ]
     ),
-    preconsent_tracker_vendors: uniqueStrings(nonEssentialRequestRows.flatMap((row) => getString(row.vendor))),
-    runtimeEvidenceQuality: "timeline_and_classification",
-    runtimeEvidenceQualityDisposition: "promotion_contract_ready"
+    preconsent_state0_request_observations: state0RequestRows,
+    preconsent_tracker_vendors: uniqueStrings([
+      ...nonEssentialRequestRows.flatMap((row) => getString(row.vendor)),
+      ...state0Vendors
+    ]),
+    runtimeEvidenceQuality:
+      nonEssentialRequestRows.length > 0 || preconsentTrackingCookieRows.length > 0 ? "timeline_and_classification" : "state0_material_incomplete",
+    runtimeEvidenceQualityDisposition:
+      nonEssentialRequestRows.length > 0 || preconsentTrackingCookieRows.length > 0
+        ? "promotion_contract_ready"
+        : "audit_only_until_request_or_cookie_classification_present"
   };
 }
 
