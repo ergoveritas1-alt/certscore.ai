@@ -5202,6 +5202,7 @@ export function SharedScanDetailView({
             }}
             agencyMappings={scanRecord.agencyMappings}
             beforeConsentCookieCount={cookiesBeforeConsentCount}
+            coverageDiagnosticIndicators={scanCalibrationSummary.coverage.diagnosticIndicators}
             coverageMicrocards={coverageMicrocards}
             coverageLevel={executiveCoverageLevel}
             domainBenchmark={scanRecord.domainBenchmark}

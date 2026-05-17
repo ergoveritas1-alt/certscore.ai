@@ -5,6 +5,7 @@ import {
   deriveExecutiveNarrativePresentation,
   formatTopFindingHeadline,
   hasMeaningfulExecutiveInterruption,
+  type CoverageDiagnosticIndicator,
   type ExecutiveDisplayState,
   type ExecutivePosture
 } from "../../lib/scans/calibration-summary";
@@ -3024,6 +3025,7 @@ export function ExecutiveSummaryCard(input: {
     label: string;
     tone?: "amber" | "slate";
   }> | null;
+  coverageDiagnosticIndicators?: CoverageDiagnosticIndicator[] | null;
   coverageLevel?: string | null;
   domainBenchmark: DomainBenchmarkCardData;
   externalCoverageContextAvailable?: boolean | null;
@@ -3118,6 +3120,13 @@ export function ExecutiveSummaryCard(input: {
     topFindingCount: filteredTopFindings.length,
     vendorCount: vendorEvidence.length
   });
+  const coverageCalloutMicrocards = [
+    ...(input.coverageMicrocards ?? []),
+    ...(input.coverageDiagnosticIndicators ?? []).map((indicator) => ({
+      label: indicator.label,
+      tone: "amber" as const
+    }))
+  ];
   const hasMeaningfulInterruption = hasMeaningfulExecutiveInterruption({ scanInterruptions });
   const pagesScanned = typeof input.pagesScanned === "number" ? input.pagesScanned : 0;
   const retainedFindingCount = Math.max(input.topFindings.length, input.allFindings?.length ?? 0);
@@ -3226,9 +3235,9 @@ export function ExecutiveSummaryCard(input: {
               >
                 <span className="font-medium text-slate-950">{narrativePresentation.summaryLabel}</span>{" "}
                 {narrativePresentation.summaryMessage}
-                {input.coverageMicrocards && input.coverageMicrocards.length > 0 ? (
+                {coverageCalloutMicrocards.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {input.coverageMicrocards.map((card) => (
+                    {coverageCalloutMicrocards.map((card) => (
                       <span
                         key={card.label}
                         className={

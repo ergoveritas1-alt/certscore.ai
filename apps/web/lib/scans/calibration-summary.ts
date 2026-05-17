@@ -4,6 +4,7 @@ export type ExecutivePosture = "Clear" | "Watch" | "Action Needed";
 export type ExecutiveDisplayState = ExecutivePosture | "Limited review" | "Evidence review";
 
 const MATERIAL_INCOMPLETE_BEFORE_CONSENT_COOKIE_THRESHOLD = 5;
+const UNDER_OBSERVED_ECOSYSTEM_REQUEST_RATIO_THRESHOLD = 0.35;
 
 export type HostResolutionCategory = "same_host" | "same_site_alias" | "off_origin_landing";
 
@@ -15,9 +16,33 @@ export type CalibrationFindingSummary = {
   shortSummary: string;
 };
 
+export type CoverageDiagnosticIndicator = {
+  id: "likely_incomplete_tracking_ecosystem";
+  label: string;
+  message: string;
+  severity: "review";
+  evidence: {
+    beforeConsentCookieCount: number;
+    expectedThirdPartyRequests: number;
+    observedThirdPartyDomainCount: number | null;
+    observedThirdPartyRequestCount: number;
+    observedVendorCount: number | null;
+    requestObservationRatio: number;
+  };
+  suspectedCauses: Array<
+    | "blocked_ad_exchange_or_protected_cdn_route"
+    | "consent_layer_branching"
+    | "cookie_state_outpaced_observed_network"
+    | "deferred_adtech_execution"
+    | "interaction_triggered_requests"
+    | "lazy_loaded_monetization"
+  >;
+};
+
 export type ScanCalibrationSummary = {
   coverage: {
     coverageLevel: string | null;
+    diagnosticIndicators: CoverageDiagnosticIndicator[];
     legalCoverageScore: number | null;
     pagesScanned: number | null;
     policyEnrichmentCount: number | null;
@@ -209,6 +234,86 @@ export function hasMeaningfulExecutiveInterruption(input: {
   }> | null;
 }) {
   return (input.scanInterruptions ?? []).some(hasMeaningfulInterruption);
+}
+
+export function deriveCoverageDiagnosticIndicators(input: {
+  beforeConsentCookieCount?: number | null;
+  domainBenchmark?: {
+    expectedThirdPartyRequests: number;
+  } | null;
+  scanInterruptions?: Array<{
+    details?: string[];
+    label: string;
+  }> | null;
+  thirdPartyDomains?: string[] | null;
+  thirdPartyRequestCount?: number | null;
+  vendorCount?: number | null;
+}): CoverageDiagnosticIndicator[] {
+  const beforeConsentCookieCount =
+    typeof input.beforeConsentCookieCount === "number" ? input.beforeConsentCookieCount : 0;
+  const observedThirdPartyRequestCount =
+    typeof input.thirdPartyRequestCount === "number" ? input.thirdPartyRequestCount : null;
+  const expectedThirdPartyRequests =
+    typeof input.domainBenchmark?.expectedThirdPartyRequests === "number"
+      ? input.domainBenchmark.expectedThirdPartyRequests
+      : null;
+
+  if (
+    beforeConsentCookieCount < MATERIAL_INCOMPLETE_BEFORE_CONSENT_COOKIE_THRESHOLD ||
+    observedThirdPartyRequestCount === null ||
+    expectedThirdPartyRequests === null ||
+    expectedThirdPartyRequests <= 0
+  ) {
+    return [];
+  }
+
+  const requestObservationRatio = observedThirdPartyRequestCount / expectedThirdPartyRequests;
+  if (requestObservationRatio > UNDER_OBSERVED_ECOSYSTEM_REQUEST_RATIO_THRESHOLD) {
+    return [];
+  }
+
+  const meaningfulInterruptions = (input.scanInterruptions ?? []).filter(hasMeaningfulInterruption);
+  if (meaningfulInterruptions.length === 0) {
+    return [];
+  }
+
+  const suspectedCauses = new Set<CoverageDiagnosticIndicator["suspectedCauses"][number]>([
+    "blocked_ad_exchange_or_protected_cdn_route",
+    "cookie_state_outpaced_observed_network"
+  ]);
+  const interruptionText = meaningfulInterruptions
+    .map((interruption) => `${interruption.label} ${(interruption.details ?? []).join(" ")}`)
+    .join(" ");
+
+  if (/consent|choice|cmp|privacy/i.test(interruptionText)) {
+    suspectedCauses.add("consent_layer_branching");
+  }
+
+  if (/click|interaction|scroll|hover|gesture/i.test(interruptionText)) {
+    suspectedCauses.add("interaction_triggered_requests");
+  }
+
+  suspectedCauses.add("deferred_adtech_execution");
+  suspectedCauses.add("lazy_loaded_monetization");
+
+  return [
+    {
+      id: "likely_incomplete_tracking_ecosystem",
+      label: "Likely incomplete ecosystem",
+      message:
+        "Observed third-party request volume was far below the benchmark while site protections interrupted collection and before-consent cookies were elevated. Treat tracker/vendor absence as coverage-constrained, not as a clean ecosystem result.",
+      severity: "review",
+      evidence: {
+        beforeConsentCookieCount,
+        expectedThirdPartyRequests,
+        observedThirdPartyDomainCount: Array.isArray(input.thirdPartyDomains) ? input.thirdPartyDomains.length : null,
+        observedThirdPartyRequestCount,
+        observedVendorCount: typeof input.vendorCount === "number" ? input.vendorCount : null,
+        requestObservationRatio
+      },
+      suspectedCauses: [...suspectedCauses]
+    }
+  ];
 }
 
 export function formatTopFindingHeadline(findings: CertScoreFinding[]) {
@@ -496,6 +601,14 @@ export function buildScanCalibrationSummary(input: {
   verifiedPublicSurfacesCount?: number | null;
 }) {
   const executiveHeadline = formatTopFindingHeadline(input.topFindings);
+  const diagnosticIndicators = deriveCoverageDiagnosticIndicators({
+    beforeConsentCookieCount: input.beforeConsentCookieCount,
+    domainBenchmark: input.domainBenchmark,
+    scanInterruptions: input.scanInterruptions,
+    thirdPartyDomains: input.thirdPartyDomains,
+    thirdPartyRequestCount: input.thirdPartyRequestCount,
+    vendorCount: input.vendorCount
+  });
   const displayState = input.displayState ?? deriveExecutiveDisplayState({
     beforeConsentCookieCount: input.beforeConsentCookieCount,
     coverageLevel: input.coverageLevel,
@@ -532,6 +645,7 @@ export function buildScanCalibrationSummary(input: {
   return {
     coverage: {
       coverageLevel: input.coverageLevel ?? null,
+      diagnosticIndicators,
       legalCoverageScore: input.legalCoverageScore ?? null,
       pagesScanned: input.pagesScanned ?? null,
       policyEnrichmentCount: input.policyEnrichmentCount ?? null,

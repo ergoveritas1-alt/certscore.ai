@@ -1133,6 +1133,84 @@ test("ExecutiveSummaryCard keeps clean well-covered scans clear", () => {
   assert.doesNotMatch(html, /This scan has incomplete coverage/);
 });
 
+test("ExecutiveSummaryCard surfaces under-observed ecosystem coverage diagnostics", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 19,
+      coverageDiagnosticIndicators: [
+        {
+          id: "likely_incomplete_tracking_ecosystem",
+          label: "Likely incomplete ecosystem",
+          message:
+            "Observed third-party request volume was far below the benchmark while site protections interrupted collection and before-consent cookies were elevated. Treat tracker/vendor absence as coverage-constrained, not as a clean ecosystem result.",
+          severity: "review",
+          evidence: {
+            beforeConsentCookieCount: 19,
+            expectedThirdPartyRequests: 55,
+            observedThirdPartyDomainCount: 3,
+            observedThirdPartyRequestCount: 9,
+            observedVendorCount: 0,
+            requestObservationRatio: 9 / 55
+          },
+          suspectedCauses: [
+            "blocked_ad_exchange_or_protected_cdn_route",
+            "cookie_state_outpaced_observed_network",
+            "deferred_adtech_execution",
+            "lazy_loaded_monetization"
+          ]
+        }
+      ],
+      domainBenchmark: {
+        confidence: "medium",
+        estimatedRankLabel: "Typical",
+        expectedCookiesBeforeConsent: 2,
+        expectedOverallScore: 82,
+        expectedThirdPartyRequests: 55,
+        industry: "Media / publisher sites",
+        rationale: "Matched to a media benchmark."
+      },
+      finalHost: "www.cnn.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      legalCoverageScore: 30,
+      pagesScanned: 1,
+      policyEnrichmentCount: 1,
+      posture: "Clear",
+      preConsentVendorNames: [],
+      requestedHost: "cnn.com",
+      resolvedVendorNames: [],
+      scanInterruptions: [
+        {
+          label: "Captcha/security challenge",
+          details: ["The public homepage scan was interrupted by a challenge."]
+        }
+      ],
+      score: 76,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 9,
+      thirdPartyDomains: ["cdn.optimizely.com", "turner.map.fastly.net", "cnn.com"],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "3 third-party domains observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {},
+      verifiedPublicSurfacesCount: 1
+    })
+  );
+
+  assert.match(html, /Limited review/);
+  assert.match(html, /Runtime coverage was limited by site protections/);
+  assert.match(html, /Likely incomplete ecosystem/);
+  assert.match(html, /Observed vendor and request counts may be incomplete/);
+  assert.doesNotMatch(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
+});
+
 test("ExecutiveSummaryCard suppresses broad incomplete warning when partial coverage still retained substantial findings", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {

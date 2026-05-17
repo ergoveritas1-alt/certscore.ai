@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildScanCalibrationSummary,
+  deriveCoverageDiagnosticIndicators,
   deriveExecutiveDisplayState,
   deriveExecutiveNarrativePresentation,
   deriveHostResolutionCategory,
@@ -276,6 +277,89 @@ test("uses coverage-constrained messaging for high cookies when media benchmark 
   assert.match(presentation.summaryMessage, /vendor and request counts may be incomplete/i);
 });
 
+test("derives an under-observed ecosystem diagnostic for interrupted high-cookie media scans", () => {
+  const indicators = deriveCoverageDiagnosticIndicators({
+    beforeConsentCookieCount: 19,
+    domainBenchmark: {
+      expectedThirdPartyRequests: 55
+    },
+    scanInterruptions: [
+      {
+        label: "Captcha/security challenge",
+        details: ["The public homepage scan was interrupted by a challenge."]
+      }
+    ],
+    thirdPartyDomains: ["cdn.optimizely.com", "turner.map.fastly.net", "cnn.com"],
+    thirdPartyRequestCount: 9,
+    vendorCount: 0
+  });
+
+  assert.equal(indicators.length, 1);
+  assert.equal(indicators[0]?.id, "likely_incomplete_tracking_ecosystem");
+  assert.equal(indicators[0]?.severity, "review");
+  assert.equal(indicators[0]?.evidence.beforeConsentCookieCount, 19);
+  assert.equal(indicators[0]?.evidence.expectedThirdPartyRequests, 55);
+  assert.equal(indicators[0]?.evidence.observedThirdPartyRequestCount, 9);
+  assert.equal(indicators[0]?.evidence.observedThirdPartyDomainCount, 3);
+  assert.equal(indicators[0]?.evidence.observedVendorCount, 0);
+  assert.ok(indicators[0]?.evidence.requestObservationRatio < 0.35);
+  assert.ok(indicators[0]?.suspectedCauses.includes("blocked_ad_exchange_or_protected_cdn_route"));
+  assert.ok(indicators[0]?.suspectedCauses.includes("deferred_adtech_execution"));
+  assert.ok(indicators[0]?.suspectedCauses.includes("lazy_loaded_monetization"));
+  assert.ok(indicators[0]?.suspectedCauses.includes("cookie_state_outpaced_observed_network"));
+});
+
+test("keeps under-observed ecosystem diagnostic gated by high cookies and meaningful interruptions", () => {
+  assert.deepEqual(
+    deriveCoverageDiagnosticIndicators({
+      beforeConsentCookieCount: 19,
+      domainBenchmark: {
+        expectedThirdPartyRequests: 55
+      },
+      scanInterruptions: [],
+      thirdPartyRequestCount: 9,
+      vendorCount: 0
+    }),
+    []
+  );
+
+  assert.deepEqual(
+    deriveCoverageDiagnosticIndicators({
+      beforeConsentCookieCount: 2,
+      domainBenchmark: {
+        expectedThirdPartyRequests: 55
+      },
+      scanInterruptions: [
+        {
+          label: "Captcha/security challenge",
+          details: ["The public homepage scan was interrupted by a challenge."]
+        }
+      ],
+      thirdPartyRequestCount: 9,
+      vendorCount: 0
+    }),
+    []
+  );
+
+  assert.deepEqual(
+    deriveCoverageDiagnosticIndicators({
+      beforeConsentCookieCount: 19,
+      domainBenchmark: {
+        expectedThirdPartyRequests: 55
+      },
+      scanInterruptions: [
+        {
+          label: "Captcha/security challenge",
+          details: ["The public homepage scan was interrupted by a challenge."]
+        }
+      ],
+      thirdPartyRequestCount: 40,
+      vendorCount: 0
+    }),
+    []
+  );
+});
+
 test("keeps clean well-covered scans clear when no interruption context is retained", () => {
   const displayState = deriveExecutiveDisplayState({
     domainBenchmark: {
@@ -331,7 +415,39 @@ test("builds calibration summary with display state separate from canonical post
 
   assert.equal(summary.executive.posture, "Clear");
   assert.equal(summary.executive.displayState, "Limited review");
+  assert.deepEqual(summary.coverage.diagnosticIndicators, []);
   assert.match(summary.executive.headline, /Runtime coverage was limited/);
+});
+
+test("builds calibration summary with under-observed ecosystem diagnostics", () => {
+  const summary = buildScanCalibrationSummary({
+    beforeConsentCookieCount: 19,
+    domain: "cnn.com",
+    domainBenchmark: {
+      expectedThirdPartyRequests: 55
+    },
+    finalHost: "www.cnn.com",
+    posture: "Clear",
+    requestedHost: "cnn.com",
+    scanId: "scan-cnn",
+    scanInterruptions: [
+      {
+        label: "Captcha/security challenge",
+        details: ["The public homepage scan was interrupted by a challenge."]
+      }
+    ],
+    status: "completed",
+    thirdPartyDomains: ["cdn.optimizely.com", "turner.map.fastly.net", "cnn.com"],
+    thirdPartyRequestCount: 9,
+    topFindings: [],
+    vendorCount: 0
+  });
+
+  assert.equal(summary.executive.posture, "Clear");
+  assert.equal(summary.executive.displayState, "Limited review");
+  assert.equal(summary.coverage.diagnosticIndicators.length, 1);
+  assert.equal(summary.coverage.diagnosticIndicators[0]?.id, "likely_incomplete_tracking_ecosystem");
+  assert.match(summary.coverage.diagnosticIndicators[0]?.message ?? "", /coverage-constrained/);
 });
 
 test("builds a calibration summary that preserves same-site alias posture without flagging an off-origin landing", () => {
