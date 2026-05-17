@@ -288,6 +288,7 @@ function DetailDisclosure(input: {
   items: string[];
   summary: string;
   title: string;
+  truncationNote?: string | null;
 }) {
   const uniqueItems = [...new Set(input.items.filter(Boolean))];
 
@@ -303,6 +304,11 @@ function DetailDisclosure(input: {
       </summary>
       <div className="mt-3 space-y-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{input.title}</p>
+        {input.truncationNote ? (
+          <p className="text-xs leading-5 text-slate-600">
+            {input.truncationNote}
+          </p>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           {uniqueItems.map((item) => (
             <span key={item} className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
@@ -2056,12 +2062,24 @@ export function deriveBenchmarkScoreExplanation(input: {
   const vendorNames = uniqueStrings(input.vendorNames ?? []).slice(0, 3);
   const vendorText =
     vendorNames.length > 0 ? ` Representative observed vendors included ${formatInlineList(vendorNames)}.` : "";
+  const hasConsentUxReviewFinding =
+    findingIds.has("reject_option_missing_or_hidden") ||
+    findingIds.has("asymmetric_consent_ui") ||
+    findingIds.has("forced_consent_interaction") ||
+    findingIds.has("consent_dark_patterns_detected") ||
+    findingIds.has("blocking_overlay_observed") ||
+    findingIds.has("content_obstructed_by_overlay") ||
+    findingIds.has("repeated_consent_prompt");
+  const consentUxBenchmarkNote =
+    hasConsentUxReviewFinding && delta >= -3
+      ? " Overall score remains near benchmark, but consent UX findings require review."
+      : "";
 
   if (delta < 0) {
     if (delta >= -3) {
       return driverText
-        ? `This score is near the ${input.benchmark.industry} benchmark expectation, with retained review context concentrated in ${driverText}.`
-        : `This score is near the ${input.benchmark.industry} benchmark expectation for the retained evidence.`;
+        ? `This score is near the ${input.benchmark.industry} benchmark expectation, with retained review context concentrated in ${driverText}.${consentUxBenchmarkNote}`
+        : `This score is near the ${input.benchmark.industry} benchmark expectation for the retained evidence.${consentUxBenchmarkNote}`;
     }
 
     return driverText
@@ -2073,13 +2091,13 @@ export function deriveBenchmarkScoreExplanation(input: {
 
   if (delta > 0) {
     return driverText
-      ? `This score is above the ${input.benchmark.industry} benchmark expectation, with remaining review context concentrated around ${driverText}.`
-      : `This score is above the ${input.benchmark.industry} benchmark expectation for the retained evidence.`;
+      ? `This score is above the ${input.benchmark.industry} benchmark expectation, with remaining review context concentrated around ${driverText}.${consentUxBenchmarkNote}`
+      : `This score is above the ${input.benchmark.industry} benchmark expectation for the retained evidence.${consentUxBenchmarkNote}`;
   }
 
   return driverText
-    ? `This score is in line with the ${input.benchmark.industry} benchmark expectation, with review context concentrated around ${driverText}.`
-    : `This score is in line with the ${input.benchmark.industry} benchmark expectation.`;
+    ? `This score is in line with the ${input.benchmark.industry} benchmark expectation, with review context concentrated around ${driverText}.${consentUxBenchmarkNote}`
+    : `This score is in line with the ${input.benchmark.industry} benchmark expectation.${consentUxBenchmarkNote}`;
 }
 
 function ExecutiveMetricCard(input: {
@@ -2535,7 +2553,11 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const registryContext = getFindingRegulatoryContext(input.finding.id);
   const registryGuideHref = registryContext ? `/guides/findings/${input.finding.id}` : null;
   const evidencePayload = buildFindingEvidenceJsonPayload(input.finding);
-  const jsonPayload = hasMeaningfulFindingEvidence(input.finding) ? JSON.stringify(evidencePayload, null, 2) : null;
+  const compactedEvidencePayload = compactEvidenceJsonForDisplay(evidencePayload);
+  const jsonPayload =
+    hasMeaningfulFindingEvidence(input.finding) && hasMeaningfulJsonValue(compactedEvidencePayload)
+      ? JSON.stringify(compactedEvidencePayload, null, 2)
+      : null;
   const tone = getFindingCardTone(input.finding, false);
   const fingerprintTelemetry =
     input.finding.id === "probable_fingerprinting" || input.finding.id === "fingerprinting_related_signals_observed"
@@ -2621,7 +2643,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
             suppressHydrationWarning
           >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-              <span>{"{}"} JSON evidence</span>
+              <span>Evidence details</span>
               <span className="text-slate-400 transition-transform group-open/json:rotate-180">⌄</span>
             </summary>
             <div className="relative mt-3 min-w-0 max-w-full overflow-hidden rounded-lg bg-slate-950" suppressHydrationWarning>
@@ -2653,14 +2675,17 @@ function hasMeaningfulJsonValue(value: unknown): boolean {
 }
 
 function hasMeaningfulFindingEvidence(finding: CertScoreFinding) {
+  const hasRetainedEvidence =
+    hasMeaningfulJsonValue(finding.evidenceDetails) ||
+    hasMeaningfulJsonValue(finding.evidencePreview) ||
+    hasMeaningfulJsonValue(finding.evidenceRefs);
+
   if (CANONICAL_EVIDENCE_FINDING_IDS.has(finding.id)) {
-    return true;
+    return hasRetainedEvidence;
   }
 
   return (
-    hasMeaningfulJsonValue(finding.evidenceDetails) ||
-    hasMeaningfulJsonValue(finding.evidencePreview) ||
-    hasMeaningfulJsonValue(finding.evidenceRefs) ||
+    hasRetainedEvidence ||
     hasMeaningfulJsonValue(finding.evidenceVersion)
   );
 }
@@ -3084,7 +3109,7 @@ export function ExecutiveSummaryCard(input: {
   const executiveHeadlineFindings = filteredTopFindings.slice(0, 3);
   const hasScrollableTopFindings = filteredTopFindings.length > 3;
   const namedVendors = uniqueStrings(input.resolvedVendorNames).slice(0, 8);
-  const thirdPartyDomains = input.thirdPartyDomains.slice(0, 9);
+  const thirdPartyDomains = input.thirdPartyDomains.slice(0, 10);
   const vendorMixDetails = input.topObservedEntities
     .slice(0, 6)
     .map((entity) => `${entity.label} · ${formatCategoryLabel(entity.category)} · ${entity.requestCount} req`);
@@ -3104,6 +3129,10 @@ export function ExecutiveSummaryCard(input: {
     thirdPartyDomainCount: input.thirdPartyDomains.length,
     vendorCount: namedVendors.length
   });
+  const domainTruncationNote =
+    thirdPartyDomains.length < input.thirdPartyDomains.length
+      ? `Showing ${thirdPartyDomains.length} of ${input.thirdPartyDomains.length} observed domains.`
+      : null;
   const policySurfaces = input.policySurfaces ?? [];
   const policySurfaceSummary = formatPolicySurfaceSummary(policySurfaces);
   const policySurfaceLabelsByUrl = buildPolicySurfaceSharedUrlLabels(policySurfaces);
@@ -3471,6 +3500,7 @@ export function ExecutiveSummaryCard(input: {
                     summary={trackerFootprintExpandLabel}
                     title={namedVendors.length > 0 ? "Observed vendors and domains" : "Observed domains"}
                     items={trackerFootprintExpandLabel ? [...vendorEvidence, ...thirdPartyDomains] : []}
+                    truncationNote={domainTruncationNote}
                   />
                 </div>
                 {policySurfaces.length > 0 ? (

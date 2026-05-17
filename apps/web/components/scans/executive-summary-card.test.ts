@@ -915,6 +915,30 @@ test("benchmark score explanation treats tiny negative deltas as near benchmark"
   assert.doesNotMatch(explanation ?? "", /below the SaaS \/ web application benchmark expectation/i);
 });
 
+test("benchmark score explanation names consent UX review even when score remains above benchmark", () => {
+  const explanation = deriveBenchmarkScoreExplanation({
+    benchmark: {
+      confidence: "medium",
+      estimatedRankLabel: "Typical",
+      expectedCookiesBeforeConsent: 8,
+      expectedOverallScore: 62,
+      expectedThirdPartyRequests: 55,
+      industry: "Media / publisher sites",
+      rationale: "Matched to a media benchmark."
+    },
+    findings: [
+      makeFinding("reject_option_missing_or_hidden", "Reject option missing or hidden", {
+        shortSummary: "Consent UI requires review."
+      })
+    ],
+    score: 67,
+    vendorNames: []
+  });
+
+  assert.match(explanation ?? "", /above the Media \/ publisher sites benchmark expectation/);
+  assert.match(explanation ?? "", /Overall score remains near benchmark, but consent UX findings require review\./);
+});
+
 test("ExecutiveSummaryCard explains interruption-backed limited coverage only when events are provided", () => {
   const baseProps = {
     accessLimitationNotice: null,
@@ -1911,7 +1935,8 @@ test("ExecutiveSummaryCard renders display criticality independently from confid
 
   assert.match(html, /medium/);
   assert.match(html, /Strong evidence/);
-  assert.match(html, /&quot;severity&quot;: &quot;high&quot;/);
+  assert.doesNotMatch(html, /Evidence details/);
+  assert.doesNotMatch(html, /\{\} JSON evidence|&quot;severity&quot;: &quot;high&quot;/);
 });
 
 test("ExecutiveSummaryCard exposes strong fingerprinting primitives inline", () => {
@@ -2270,6 +2295,7 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
   );
 
   assert.match(html, /consentState/);
+  assert.match(html, /Evidence details/);
   assert.match(html, /evidenceVersion/);
   assert.match(html, /timingAnalysis/);
   assert.match(html, /requestSelectionNote/);
@@ -2279,12 +2305,52 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
   assert.match(html, /interpretation/);
   assert.match(html, /uniquePreConsentTrackingVendorsObserved/);
   assert.doesNotMatch(html, /preConsentTrackingVendors/);
-  assert.match(html, /Representative pre-consent tracking request/);
+  assert.match(html, /googletagmanager\.com/);
   assert.match(html, /userConsentActionObserved/);
   assert.doesNotMatch(html, /runtimeRequestUrls/);
   assert.doesNotMatch(html, /sourceUrls/);
   assert.doesNotMatch(html, /pageUrls/);
+  assert.doesNotMatch(html, /\{\} JSON evidence/);
   assert.doesNotMatch(html, /CIPA violation confirmed|legal liability confirmed/i);
+});
+
+test("ExecutiveSummaryCard hides evidence detail toggle when retained JSON would be metadata-only", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "cnn.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "cnn.com",
+      resolvedVendorNames: [],
+      score: 67,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 9,
+      thirdPartyDomains: [],
+      topFindings: [
+        makeFinding("consent_dark_patterns_detected", "Consent UX requires review", {
+          shortSummary: "Consent UX requires review."
+        })
+      ],
+      topObservedEntities: [],
+      trackerSummary: "No third-party domains observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /Consent UX requires review/);
+  assert.doesNotMatch(html, /Evidence details/);
+  assert.doesNotMatch(html, /\{\} JSON evidence|>\{\}<\/pre>/);
 });
 
 test("ExecutiveSummaryCard renders fractional regulatory rating bar segments", () => {
@@ -2368,6 +2434,7 @@ test("ExecutiveSummaryCard keeps tracker disclosure counts aligned with the full
   );
 
   assert.match(html, /13 third-party domains observed; 1 classified tracker vendor identified\./);
+  assert.match(html, /Showing 10 of 13 observed domains\./);
   assert.doesNotMatch(html, /1 vendor names and 13 third-party domains/);
 });
 
@@ -2404,6 +2471,43 @@ test("ExecutiveSummaryCard uses domain-only tracker expand copy when no classifi
   assert.match(html, /1 third-party domain observed; no classified tracker vendors identified\./);
   assert.match(html, /View observed third-party domain/);
   assert.doesNotMatch(html, /View observed vendors and domains/);
+});
+
+test("ExecutiveSummaryCard labels truncated observed domain lists", () => {
+  const domains = Array.from({ length: 11 }, (_, index) => `observed-${index + 1}.example`);
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "cnn.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      posture: "Watch",
+      preConsentVendorNames: [],
+      requestedHost: "cnn.com",
+      resolvedVendorNames: [],
+      score: 82,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 9,
+      thirdPartyDomains: domains,
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "11 third-party domains observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /11 third-party domains observed; no classified tracker vendors identified\./);
+  assert.match(html, /Showing 10 of 11 observed domains\./);
+  assert.match(html, /observed-10\.example/);
+  assert.doesNotMatch(html, /observed-11\.example/);
 });
 
 test("ExecutiveSummaryCard keeps vendor-and-domain tracker expand copy when classified vendors are present", () => {
