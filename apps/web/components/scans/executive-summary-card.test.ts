@@ -1630,6 +1630,10 @@ test("ExecutiveSummaryCard links mapped findings to registry interpretation cont
   assert.match(html, /Learn how this finding is interpreted/);
   assert.match(html, /Learn how CertScore interprets this finding/);
   assert.match(html, /href="\/guides\/findings\/pre_consent_tracking_detected"/);
+  assert.match(
+    html,
+    /href="\/guides\/findings\/pre_consent_tracking_detected" target="_blank" rel="noreferrer"/
+  );
 });
 
 test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-findings list", () => {

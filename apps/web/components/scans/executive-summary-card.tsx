@@ -2475,6 +2475,8 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
           {registryGuideHref ? (
             <a
               href={registryGuideHref}
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex items-center text-sm font-medium text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
             >
               Learn how CertScore interprets this finding
