@@ -546,7 +546,17 @@ function buildRegulatoryLensEvidencePayload(finding: CertScoreFinding, context?:
       runtimeRequestUrls: compactStringList(details.runtimeRequestUrls, 3, 220),
       evidenceFlags: compactStringList(details.evidenceFlags, 5, 140),
       representativeRequests: compactRepresentativeRequests(details.representativeRequests),
-      cookieEvidence: compactEvidenceRecord(details.cookieEvidence, ["observed", "cookieCount", "thirdPartyCookieCount", "preConsentCookieCount"]),
+      cookieEvidence: compactEvidenceRecord(details.cookieEvidence, [
+        "observed",
+        "cookieCount",
+        "thirdPartyCookieCount",
+        "preConsentCookieCount",
+        "cookieNames",
+        "cookieWriteEvidence",
+        "storageEvidence",
+        "representativePreConsentRequests",
+        "relatedRuntimeRequests"
+      ]),
       consentUiEvidence: compactEvidenceRecord(details.consentUiEvidence, ["observed", "result", "subtype", "rejectOptionSubtype", "userChoiceImpact"]),
       postRejectEvidence: compactEvidenceRecord(details.postRejectEvidence, ["trackingPersistedAfterReject", "baselineRequestCount", "postRejectRequestCount"]),
       optOutControlEvidence: compactEvidenceRecord(details.optOutControlEvidence, ["result", "optOutSubtype", "missingOrAbsent", "incompleteOrUnconfirmed"]),
@@ -641,6 +651,8 @@ function buildObservedCountLensFinding(input: {
   id: string;
   label: string;
   metric: string;
+  reviewContextCopy?: string;
+  reviewContextLabel?: string;
   source: string;
 }) {
   return buildRegulatoryLensFinding({
@@ -652,7 +664,9 @@ function buildObservedCountLensFinding(input: {
       source: input.source
     },
     id: input.id,
-    label: input.label
+    label: input.label,
+    reviewContextCopy: input.reviewContextCopy,
+    reviewContextLabel: input.reviewContextLabel
   });
 }
 
@@ -1017,6 +1031,10 @@ export function buildRegulatoryLenses(
   const beforeConsentCookieCount = options?.unifiedContext?.beforeConsentCookieCount ?? counts.beforeConsentCookieCount;
   const thirdPartyRequestCount = options?.unifiedContext?.thirdPartyRequestCount ?? counts.thirdPartyRequestCount;
   const hasPreConsentCookieConcern = beforeConsentCookieCount > 0;
+  const retainedTrackingContextExplanation =
+    !trackingFinding && (beforeConsentCookieCount > 0 || thirdPartyRequestCount > 0)
+      ? "Cookie timing context was retained, but CertScore did not retain enough classified non-essential tracking/vendor evidence to promote this into a top-level pre-consent tracking finding."
+      : undefined;
   const hasConsentConcern =
     findingIds.has("consent_dark_patterns_detected") ||
     findingIds.has("asymmetric_consent_ui") ||
@@ -1093,14 +1111,16 @@ export function buildRegulatoryLenses(
       findings
     }),
     beforeConsentCookieCount > 0
-      ? buildObservedCountLensFinding({
-          count: beforeConsentCookieCount,
-          evidence: options?.unifiedContext?.beforeConsentCookieEvidence,
-          id: "before_consent_cookie_count",
-          label: `${beforeConsentCookieCount} classified cookies were observed before consent.`,
-          metric: "beforeConsentCookieCount",
-          source: "regulatory_counts"
-        })
+        ? buildObservedCountLensFinding({
+            count: beforeConsentCookieCount,
+            evidence: options?.unifiedContext?.beforeConsentCookieEvidence,
+            id: "before_consent_cookie_count",
+            label: `${beforeConsentCookieCount} classified cookies were observed before consent.`,
+            metric: "beforeConsentCookieCount",
+            reviewContextCopy: retainedTrackingContextExplanation,
+            reviewContextLabel: retainedTrackingContextExplanation ? "Why not top-level?" : undefined,
+            source: "regulatory_counts"
+          })
       : null
   ].filter((item): item is RegulatoryLensFinding => Boolean(item)));
 
@@ -1111,13 +1131,15 @@ export function buildRegulatoryLenses(
       findings
     }),
     thirdPartyRequestCount > 0
-      ? buildObservedCountLensFinding({
-          count: thirdPartyRequestCount,
-          id: "third_party_request_count",
-          label: `${thirdPartyRequestCount} third-party requests were observed on the initial path.`,
-          metric: "thirdPartyRequestCount",
-          source: "regulatory_counts"
-        })
+        ? buildObservedCountLensFinding({
+            count: thirdPartyRequestCount,
+            id: "third_party_request_count",
+            label: `${thirdPartyRequestCount} third-party request records were observed on the initial path.`,
+            metric: "thirdPartyRequestCount",
+            reviewContextCopy: retainedTrackingContextExplanation,
+            reviewContextLabel: retainedTrackingContextExplanation ? "Why not top-level?" : undefined,
+            source: "regulatory_counts"
+          })
       : null
   ].filter((item): item is RegulatoryLensFinding => Boolean(item)));
 
@@ -1180,6 +1202,8 @@ export function buildRegulatoryLenses(
               id: "cpra_before_consent_cookie_count",
               label: `${beforeConsentCookieCount} classified cookies were observed before consent.`,
               metric: "beforeConsentCookieCount",
+              reviewContextCopy: retainedTrackingContextExplanation,
+              reviewContextLabel: retainedTrackingContextExplanation ? "Why not top-level?" : undefined,
               source: "regulatory_counts"
             })
           : null,
@@ -1187,8 +1211,10 @@ export function buildRegulatoryLenses(
           ? buildObservedCountLensFinding({
               count: thirdPartyRequestCount,
               id: "cpra_third_party_request_count",
-              label: `${thirdPartyRequestCount} third-party requests were observed on the initial path.`,
+              label: `${thirdPartyRequestCount} third-party request records were observed on the initial path.`,
               metric: "thirdPartyRequestCount",
+              reviewContextCopy: retainedTrackingContextExplanation,
+              reviewContextLabel: retainedTrackingContextExplanation ? "Why not top-level?" : undefined,
               source: "regulatory_counts"
             })
           : null,
@@ -1231,6 +1257,8 @@ export function buildRegulatoryLenses(
               id: "ftc_before_consent_cookie_count",
               label: `${beforeConsentCookieCount} classified cookies were observed before consent.`,
               metric: "beforeConsentCookieCount",
+              reviewContextCopy: retainedTrackingContextExplanation,
+              reviewContextLabel: retainedTrackingContextExplanation ? "Why not top-level?" : undefined,
               source: "regulatory_counts"
             })
           : null,
@@ -3092,7 +3120,12 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
           "cookieCount",
           "thirdPartyCookieCount",
           "preConsentCookieCount",
-          "basis"
+          "basis",
+          "cookieNames",
+          "cookieWriteEvidence",
+          "storageEvidence",
+          "representativePreConsentRequests",
+          "relatedRuntimeRequests"
         ]) ?? undefined,
         optOutControlEvidence: compactEvidenceRecord(details.optOutControlEvidence, [
           "result",
@@ -3350,6 +3383,14 @@ export function ExecutiveSummaryCard(input: {
     }))
   ];
   const hasMeaningfulInterruption = hasMeaningfulExecutiveInterruption({ scanInterruptions });
+  const hasProtectedRouteInterruption = scanInterruptions.some((interruption) =>
+    /protected route|protected or unavailable|authentication|auth|forbidden|restricted/i.test(
+      `${interruption.label} ${interruption.details.join(" ")}`
+    )
+  );
+  const scanMarkedIncomplete = /incomplete|partial|interrupted|degraded/i.test(`${input.status ?? ""} ${input.scanOutcome ?? ""}`);
+  const shouldShowHomepageRetainedQualifier =
+    scanMarkedIncomplete && filteredTopFindings.length > 0 && (hasProtectedRouteInterruption || hasMeaningfulInterruption);
   const pagesScanned = typeof input.pagesScanned === "number" ? input.pagesScanned : 0;
   const retainedFindingCount = Math.max(input.topFindings.length, input.allFindings?.length ?? 0);
   const policyEnrichmentCount = input.policyEnrichmentCount ?? 0;
@@ -3450,6 +3491,11 @@ export function ExecutiveSummaryCard(input: {
                 >
                   {narrativePresentation.headline}
                 </h2>
+                {shouldShowHomepageRetainedQualifier ? (
+                  <p className="max-w-3xl text-sm leading-6 text-slate-600">
+                    Homepage evidence was retained; some non-homepage routes were protected or unavailable.
+                  </p>
+                ) : null}
               </div>
               <div
                 data-testid="executive-summary-callout"

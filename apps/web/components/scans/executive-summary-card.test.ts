@@ -458,6 +458,77 @@ test("buildRegulatoryLensesFromUnifiedPackets carries cookie vendors into count 
   assert.deepEqual(cookieFinding?.evidence.initiatorDomains, ["www.google-analytics.com", "connect.facebook.net"]);
 });
 
+test("buildRegulatoryLensesFromUnifiedPackets labels classified and raw cookie count semantics separately", () => {
+  const cookieNames = Array.from({ length: 13 }, (_, index) => `cookie_${index + 1}`);
+  const lenses = buildRegulatoryLensesFromUnifiedPackets(
+    [
+      makeUnifiedPacket("preconsent_tracking", {
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking",
+          vendors: ["Microsoft Clarity"]
+        },
+        evidence: {
+          counts: {},
+          entities: {
+            preconsent_cookie_categories: ["analytics"],
+            preconsent_cookie_initiator_vendors: ["Microsoft Clarity"],
+            preconsent_cookie_names: cookieNames,
+            preconsent_cookie_timing_evidence: ["before_consent_cookie_write"],
+            preconsent_nonessential_cookie_names: cookieNames
+          },
+          fetchQuality: null,
+          flags: ["privacy.preconsent_tracking_detected"],
+          pageUrls: [],
+          snippets: [],
+          sourceUrls: []
+        },
+        summary: "Cookie timing context was retained for review."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 15,
+      thirdPartyRequestCount: 0
+    }
+  );
+
+  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
+  const cookieFinding = gdprLens?.findings.find((finding) => finding.id === "before_consent_cookie_count");
+
+  assert.equal(cookieFinding?.label, "15 classified cookies were observed before consent.");
+  assert.equal(cookieFinding?.evidence.classifiedCookieCount, 15);
+  assert.equal(cookieFinding?.evidence.rawObservationCount, 13);
+  assert.deepEqual(cookieFinding?.evidence.cookieNames, cookieNames);
+});
+
+test("buildRegulatoryLenses explains retained cookie timing context when no top-level tracking finding promotes", () => {
+  const lenses = buildRegulatoryLenses(
+    [
+      makeFinding("accessibility_risk_score", "Automated accessibility signals are the main review area", {
+        section: "Accessibility",
+        severity: "medium"
+      })
+    ],
+    {
+      beforeConsentCookieCount: 4,
+      thirdPartyRequestCount: 18
+    }
+  );
+
+  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
+  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
+  const cookieFinding = gdprLens?.findings.find((finding) => finding.id === "before_consent_cookie_count");
+  const requestFinding = cpraLens?.findings.find((finding) => finding.id === "third_party_request_count");
+
+  assert.equal(cookieFinding?.reviewContextLabel, "Why not top-level?");
+  assert.equal(
+    cookieFinding?.reviewContextCopy,
+    "Cookie timing context was retained, but CertScore did not retain enough classified non-essential tracking/vendor evidence to promote this into a top-level pre-consent tracking finding."
+  );
+  assert.equal(requestFinding?.label, "18 third-party request records were observed on the initial path.");
+  assert.equal(requestFinding?.reviewContextLabel, "Why not top-level?");
+});
+
 test("buildRegulatoryLensesFromUnifiedPackets does not convert raw cookie observations into issue copy when canonical count is zero", () => {
   const lenses = buildRegulatoryLensesFromUnifiedPackets(
     [
@@ -495,7 +566,7 @@ test("buildRegulatoryLensesFromUnifiedPackets does not convert raw cookie observ
 
   assert.equal(labels.some((label) => /cookies were observed before consent/i.test(label)), false);
   assert.equal(labels.some((label) => /classified cookies were observed before consent/i.test(label)), false);
-  assert.ok(labels.some((label) => /third-party requests were observed/i.test(label)));
+  assert.ok(labels.some((label) => /third-party request records were observed/i.test(label)));
 });
 
 test("buildRegulatoryLensesFromUnifiedPackets ignores downgraded cookie packets for regulatory issue copy", () => {
@@ -1029,6 +1100,55 @@ test("ExecutiveSummaryCard treats protected routes outside the homepage as a sof
   assert.match(html, /Homepage findings are based on observable public-page evidence/);
   assert.doesNotMatch(html, /Runtime coverage was limited by site protections/);
   assert.doesNotMatch(html, /Coverage was limited by site protections/);
+});
+
+test("ExecutiveSummaryCard qualifies incomplete protected-route scans when homepage evidence is retained", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "kbdlab.io",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-14T23:18:11.000Z",
+      pagesScanned: 1,
+      policyEnrichmentCount: 1,
+      posture: "Action Needed",
+      preConsentVendorNames: ["Microsoft Clarity"],
+      requestedHost: "kbdlab.io",
+      resolvedVendorNames: ["Microsoft Clarity"],
+      score: 52,
+      scanOutcome: "incomplete",
+      status: "incomplete",
+      scanInterruptions: [
+        {
+          label: "Protected route encountered",
+          details: ["Some non-homepage routes were protected or unavailable."]
+        }
+      ],
+      sessionReplayVendorNames: ["Microsoft Clarity"],
+      thirdPartyRequestCount: 12,
+      thirdPartyDomains: ["www.clarity.ms"],
+      topFindings: [
+        makeFinding("session_recording_services_detected", "Session recording service detected", {
+          shortSummary: "Microsoft Clarity session recording service observed."
+        })
+      ],
+      topObservedEntities: [],
+      trackerSummary: "1 vendor across 12 third-party requests",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { session_replay: 1 },
+      verifiedPublicSurfacesCount: 1
+    })
+  );
+
+  assert.match(html, /Homepage evidence was retained; some non-homepage routes were protected or unavailable\./);
+  assert.match(html, /Session recording service detected/);
 });
 
 test("ExecutiveSummaryCard renders limited review for latimes-style interrupted clear scans", () => {

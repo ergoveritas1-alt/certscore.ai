@@ -2683,6 +2683,120 @@ test("projects remaining top finding families with canonical evidence details", 
   assert.equal(byId.get("high_risk_product_risk_disclosure_missing")?.evidenceDetails?.financialClaimsEvidence?.observed, true);
 });
 
+test("keeps scanned page URL separate from representative third-party request URLs", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      details: {
+        family: "consent_tracking",
+        kind: "preconsent_tracking",
+        vendors: ["Microsoft Clarity", "Google Tag Manager", "Microsoft Advertising"]
+      },
+      evidence: {
+        counts: { firstThirdPartyTrackingRequestMs: 120 },
+        entities: {
+          preconsent_tracker_evidence_urls: [
+            "https://www.clarity.ms/tag/abc123",
+            "https://www.googletagmanager.com/gtm.js?id=GTM-ABC",
+            "https://bat.bing.com/bat.js"
+          ],
+          preconsent_tracker_vendor_evidence: [
+            JSON.stringify({
+              url: "https://www.clarity.ms/tag/abc123",
+              vendor: "Microsoft Clarity",
+              category: "session_replay"
+            }),
+            JSON.stringify({
+              url: "https://www.googletagmanager.com/gtm.js?id=GTM-ABC",
+              vendor: "Google Tag Manager",
+              category: "session_replay"
+            }),
+            JSON.stringify({
+              url: "https://bat.bing.com/bat.js",
+              vendor: "Microsoft Advertising",
+              category: "session_replay"
+            })
+          ],
+          preconsent_tracker_vendors: ["Microsoft Clarity", "Google Tag Manager", "Microsoft Advertising"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: ["https://www.kbdlab.io/"],
+        snippets: [],
+        sourceUrls: ["https://www.clarity.ms/tag/abc123"]
+      },
+      primaryPageUrl: "https://www.clarity.ms/tag/abc123",
+      sourceUrl: "https://www.clarity.ms/tag/abc123",
+      severity: "high"
+    })
+  ]);
+  const finding = projection.findings.find((candidate) => candidate.id === "pre_consent_tracking_detected");
+
+  assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://www.kbdlab.io/");
+  assert.deepEqual(
+    finding?.evidenceDetails?.representativeRequests?.map((request) => [request.vendor, request.category]),
+    [
+      ["Microsoft Clarity", "session_replay"],
+      ["Google Tag Manager", "tag_manager"],
+      ["Microsoft Advertising", "advertising_measurement"]
+    ]
+  );
+  assert.deepEqual(
+    finding?.evidenceDetails?.vendors?.map((vendor) => [vendor.name, vendor.category]),
+    [
+      ["Microsoft Clarity", "session_replay"],
+      ["Google Tag Manager", "tag_manager"],
+      ["Microsoft Advertising", "advertising_measurement"]
+    ]
+  );
+});
+
+test("keeps related runtime requests out of direct pre-consent cookie evidence rows", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("third_party_cookie_pre_consent", {
+      details: { family: "consent_tracking", kind: "third_party_cookie_pre_consent" },
+      evidence: {
+        counts: { preconsent_cookie_before_consent_count: 1 },
+        entities: {
+          preconsent_cookie_evidence: [
+            JSON.stringify({
+              cookieName: "_clck",
+              cookieInitiatorVendor: "Microsoft Clarity",
+              category: "session_replay",
+              initiatorUrl: "https://www.clarity.ms/tag/abc123"
+            })
+          ],
+          runtimeRequestUrls: ["https://www.clarity.ms/tag/abc123"],
+          runtimeVendors: ["Microsoft Clarity"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.third_party_cookie_pre_consent"],
+        pageUrls: ["https://www.kbdlab.io/"],
+        snippets: ["Third-party cookie write was retained before consent."],
+        sourceUrls: []
+      },
+      severity: "high"
+    })
+  ]);
+  const finding = projection.findings.find((candidate) => candidate.id === "third_party_cookie_pre_consent");
+  const cookieEvidence = finding?.evidenceDetails?.cookieEvidence;
+
+  assert.equal(finding?.evidenceDetails?.representativeRequests, undefined);
+  assert.equal(cookieEvidence?.observed, true);
+  assert.deepEqual(cookieEvidence?.cookieWriteEvidence, [
+    {
+      cookieName: "_clck",
+      vendor: "Microsoft Clarity",
+      category: "session_replay",
+      initiatorUrl: "https://www.clarity.ms/tag/abc123",
+      timingStatus: "pre_consent"
+    }
+  ]);
+  assert.deepEqual(cookieEvidence?.representativePreConsentRequests, undefined);
+  assert.equal((cookieEvidence?.relatedRuntimeRequests as Array<Record<string, unknown>> | undefined)?.[0]?.preConsent, false);
+  assert.equal((cookieEvidence?.relatedRuntimeRequests as Array<Record<string, unknown>> | undefined)?.[0]?.timingStatus, "unknown");
+  assert.equal((cookieEvidence?.relatedRuntimeRequests as Array<Record<string, unknown>> | undefined)?.[0]?.evidenceRole, "related_vendor_request");
+});
+
 test("records surfaced packets that are not yet mapped into executive findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("some_unmapped_surface", {

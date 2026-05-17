@@ -891,6 +891,44 @@ function getUrlHostname(value: string | null | undefined) {
   }
 }
 
+const KNOWN_TRACKING_REQUEST_HOST_PATTERN =
+  /clarity\.ms|googletagmanager\.com|google-analytics\.com|googleadservices\.com|doubleclick\.net|bat\.bing\.com|connect\.facebook\.net|licdn\.com|hotjar\.com|fullstory\.com|hs-scripts\.com/i;
+
+function isLikelyRuntimeRequestUrl(value: string | null | undefined) {
+  if (!value || !/^https?:\/\//i.test(value)) {
+    return false;
+  }
+  try {
+    const url = new URL(value);
+    const path = `${url.pathname}${url.search}`.toLowerCase();
+    const host = url.hostname.toLowerCase();
+    return (
+      KNOWN_TRACKING_REQUEST_HOST_PATTERN.test(host) ||
+      /\.(?:js|mjs|json|gif|png|jpe?g|webp|svg|css|woff2?)(?:$|[?#])/i.test(path) ||
+      /\/(?:gtm\.js|collect|tag\/|pixel|tr|uet|bat\.js|fbevents|analytics\.js|clarity|events?)(?:$|[/?#])/i.test(path)
+    );
+  } catch {
+    return /(?:clarity\.ms|googletagmanager|gtm\.js|collect|pixel|bat\.bing|fbevents|analytics\.js)/i.test(value);
+  }
+}
+
+function getScannedPageUrl(packet: UnifiedFindingDisplayPacket) {
+  const candidates = uniqueCaseInsensitiveStrings([
+    ...(packet.evidence?.pageUrls ?? []),
+    packet.primaryPageUrl,
+    packet.sourceUrl
+  ]);
+  return candidates.find((url) => /^https?:\/\//i.test(url) && !isLikelyRuntimeRequestUrl(url)) ?? null;
+}
+
+function getScannedPageUrls(packet: UnifiedFindingDisplayPacket) {
+  return uniqueCaseInsensitiveStrings([
+    ...(packet.evidence?.pageUrls ?? []),
+    packet.primaryPageUrl,
+    packet.sourceUrl
+  ]).filter((url) => /^https?:\/\//i.test(url) && !isLikelyRuntimeRequestUrl(url));
+}
+
 function getUrlQueryKeysSample(value: string) {
   try {
     return [...new URL(value).searchParams.keys()].slice(0, 8);
@@ -910,7 +948,7 @@ function getRepresentativeRequestDetails(urls: string[], vendors: string[]) {
       url,
       hostname,
       vendor,
-      category: classifyTrackingCategory(`${vendor ?? ""} ${hostname} ${url}`),
+      category: normalizeVendorCategory(vendor, url, classifyTrackingCategory(`${vendor ?? ""} ${hostname} ${url}`)),
       resourceType: /\.js(?:[?#]|$)|\/gtm\.js|script/i.test(url) ? "script" : null,
       firstSeenMs: null,
       thirdParty: true,
@@ -924,10 +962,12 @@ function getRepresentativeRequestDetails(urls: string[], vendors: string[]) {
 
 function getVendorDetails(vendors: string[], representativeRequests: Array<{ vendor: string | null; url: string; firstSeenMs: number | null; category: string | null }>) {
   return vendors.slice(0, 8).map((name) => {
-    const matchingRequest = representativeRequests.find((request) => request.vendor === name);
+    const matchingRequest = representativeRequests.find((request) =>
+      request.vendor === name || inferVendorNameFromUrl(request.url, [name]) === name
+    );
     return {
       name,
-      category: matchingRequest?.category ?? classifyTrackingCategory(name),
+      category: normalizeVendorCategory(name, matchingRequest?.url ?? null, matchingRequest?.category ?? classifyTrackingCategory(name)),
       preConsent: false,
       representativeUrl: matchingRequest?.url ?? null,
       firstSeenMs: matchingRequest?.firstSeenMs ?? null
@@ -987,6 +1027,24 @@ function classifyTrackingCategory(value: string) {
     return "analytics";
   }
   return "tracking";
+}
+
+function normalizeVendorCategory(
+  vendor: string | null | undefined,
+  url: string | null | undefined,
+  category: string | null | undefined
+) {
+  const normalized = `${vendor ?? ""} ${url ?? ""}`.toLowerCase();
+  if (/microsoft\s+clarity|clarity\.ms|\bclarity\b/i.test(normalized)) {
+    return "session_replay";
+  }
+  if (/google\s+tag\s+manager|googletagmanager\.com|gtm\.js|\bgtm\b/i.test(normalized)) {
+    return "tag_manager";
+  }
+  if (/microsoft\s+advertising|bing\s+uet|bat\.bing\.com|\buet\b|\bbing\b/i.test(normalized)) {
+    return "advertising_measurement";
+  }
+  return category ?? classifyTrackingCategory(`${vendor ?? ""} ${url ?? ""}`);
 }
 
 function isLikelyIdentifierRequest(url: string) {
@@ -1090,6 +1148,7 @@ function buildPreConsentTrackingEvidenceDetails(
 ): CertScoreFindingEvidenceDetails | undefined {
   const vendorRows = getEntityJsonObjects(packet, "preconsent_tracker_vendor_evidence");
   const cookieRows = getEntityJsonObjects(packet, "preconsent_cookie_evidence");
+  const scannedPageUrl = getScannedPageUrl(packet);
   const requestUrls = uniqueCaseInsensitiveStrings([
     ...getEntityUrlValues(packet, /^(?:preconsent_tracker_evidence_urls|runtimeRequestUrls|requestUrls|runtimeEvidenceUrls)$/i),
     ...(packet.details?.family === "consent_tracking" ? (packet.details.requestUrls ?? []) : []),
@@ -1126,7 +1185,12 @@ function buildPreConsentTrackingEvidenceDetails(
       inferVendorNameFromUrl(url, vendors) ??
       vendors[index] ??
       null;
-    const category = getRecordString(matchedRow ?? {}, ["category", "vendorCategory", "classification"]) ?? classifyTrackingCategory(`${vendor ?? ""} ${hostname} ${url}`);
+    const category = normalizeVendorCategory(
+      vendor,
+      url,
+      getRecordString(matchedRow ?? {}, ["category", "vendorCategory", "classification"]) ??
+        classifyTrackingCategory(`${vendor ?? ""} ${hostname} ${url}`)
+    );
     return {
       url,
       hostname,
@@ -1145,11 +1209,11 @@ function buildPreConsentTrackingEvidenceDetails(
 
   const vendorDetails = vendors.slice(0, 8).map((name) => {
     const matchingRequest = representativeRequests.find((request) =>
-      request.vendor === name || classifyTrackingCategory(`${name} ${request.hostname}`) === request.category
+      request.vendor === name || inferVendorNameFromUrl(request.url, [name]) === name
     );
     return {
       name,
-      category: matchingRequest?.category ?? classifyTrackingCategory(name),
+      category: normalizeVendorCategory(name, matchingRequest?.url ?? null, matchingRequest?.category ?? classifyTrackingCategory(name)),
       preConsent: true,
       representativeUrl: matchingRequest?.url ?? null,
       firstSeenMs: matchingRequest?.firstSeenMs ?? null
@@ -1165,7 +1229,7 @@ function buildPreConsentTrackingEvidenceDetails(
 
   const details: CertScoreFindingEvidenceDetails = {
     scanContext: {
-      pageUrl: packet.primaryPageUrl,
+      pageUrl: scannedPageUrl,
       scanMode: "initial_page_load",
       interactionBeforeFinding: false
     },
@@ -1282,7 +1346,7 @@ function buildRejectTrackingEvidenceDetails(packet: UnifiedFindingDisplayPacket)
   return {
     ...(Object.keys(counts).length > 0 ? { counts } : {}),
     scanContext: {
-      pageUrl: packet.primaryPageUrl,
+      pageUrl: getScannedPageUrl(packet),
       scanMode: "initial_page_load",
       interactionBeforeFinding: true
     },
@@ -1348,7 +1412,7 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
 
   return {
     scanContext: {
-      pageUrl: packet.primaryPageUrl,
+      pageUrl: getScannedPageUrl(packet),
       scanMode: "initial_page_load",
       interactionBeforeFinding: false
     },
@@ -1433,7 +1497,7 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
 
   return {
     scanContext: {
-      pageUrl: packet.primaryPageUrl,
+      pageUrl: getScannedPageUrl(packet),
       scanMode: "initial_page_load",
       interactionBeforeFinding: false
     },
@@ -1508,7 +1572,7 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
 
   return {
     scanContext: {
-      pageUrl: packet.primaryPageUrl,
+      pageUrl: getScannedPageUrl(packet),
       scanMode: "initial_page_load",
       interactionBeforeFinding: false
     },
@@ -1652,16 +1716,13 @@ function buildGenericCanonicalEvidenceDetails(
   const sourceSignals = getPacketSourceSignals(packet);
   const evidenceFlags = uniqueStrings(packet.evidence?.flags ?? []);
   const sourceUrls = uniqueStrings(packet.evidence?.sourceUrls ?? []);
-  const pageUrls = uniqueStrings([
-    packet.primaryPageUrl,
-    packet.sourceUrl,
-    ...(packet.evidence?.pageUrls ?? [])
-  ]);
+  const pageUrls = getScannedPageUrls(packet);
   const counts = getPacketCounts(packet);
+  const isCookieEvidenceFinding = COOKIE_EVIDENCE_FINDING_IDS.has(findingId);
   const details: CertScoreFindingEvidenceDetails = {
     ...(Object.keys(counts).length > 0 ? { counts } : {}),
     scanContext: {
-      pageUrl: packet.primaryPageUrl,
+      pageUrl: getScannedPageUrl(packet),
       scanMode: "initial_page_load",
       interactionBeforeFinding: CONSENT_UI_EVIDENCE_FINDING_IDS.has(findingId)
     },
@@ -1688,14 +1749,16 @@ function buildGenericCanonicalEvidenceDetails(
 
   if (runtimeRequestUrls.length > 0) {
     details.runtimeRequestUrls = runtimeRequestUrls;
-    details.representativeRequests = representativeRequests;
     details.requestSelectionNote = "Representative requests are capped examples and are not exhaustive.";
+    if (!isCookieEvidenceFinding) {
+      details.representativeRequests = representativeRequests;
+    }
   }
   if (runtimeVendors.length > 0) {
     details.runtimeVendors = runtimeVendors;
     details.vendors = getVendorDetails(runtimeVendors, representativeRequests);
   }
-  if (representativeRequests.length > 0) {
+  if (representativeRequests.length > 0 && !isCookieEvidenceFinding) {
     details.identifierEvidence = buildIdentifierEvidence(representativeRequests);
   }
   if (evidenceSnippets.length > 0) {
@@ -1714,11 +1777,45 @@ function buildGenericCanonicalEvidenceDetails(
     details.evidenceFlags = evidenceFlags;
   }
 
-  if (COOKIE_EVIDENCE_FINDING_IDS.has(findingId)) {
+  if (isCookieEvidenceFinding) {
+    const cookieRows = getEntityJsonObjects(packet, "preconsent_cookie_evidence");
+    const cookieNames = uniqueStrings([
+      ...getEntityValues(packet, /^preconsent_(?:nonessential_)?cookie_names$/i),
+      ...cookieRows.flatMap((row) => getRecordString(row, ["cookieName", "cookie_name", "name"]))
+    ]);
+    const cookieWriteEvidence = cookieRows.slice(0, 12).map((row) => ({
+      cookieName: getRecordString(row, ["cookieName", "cookie_name", "name"]),
+      vendor: getRecordString(row, ["vendor", "vendorName", "cookieInitiatorVendor", "cookie_initiator_vendor"]),
+      category: normalizeVendorCategory(
+        getRecordString(row, ["vendor", "vendorName", "cookieInitiatorVendor", "cookie_initiator_vendor"]),
+        getRecordString(row, ["url", "requestUrl", "initiatorUrl", "cookieInitiatorUrl"]),
+        getRecordString(row, ["category", "vendorCategory", "classification"])
+      ),
+      initiatorUrl: getRecordString(row, ["url", "requestUrl", "initiatorUrl", "cookieInitiatorUrl"]),
+      timingStatus: getRecordString(row, ["timingStatus", "timing_status"]) ?? "pre_consent"
+    }));
+    const relatedRuntimeRequests = representativeRequests.map((request) => ({
+      ...request,
+      evidenceRole: "related_vendor_request",
+      timingStatus: "unknown"
+    }));
+    const representativePreConsentRequests = representativeRequests
+      .filter((request) => request.preConsent === true)
+      .map((request) => ({
+        ...request,
+        timingStatus: "pre_consent"
+      }));
     details.cookieEvidence = {
       observed: true,
+      cookieCount:
+        getCountValue(packet, ["preConsentTrackingCookies", "preconsent_cookie_before_consent_count", "preconsentCookieCount"]) ??
+        (cookieNames.length > 0 ? cookieNames.length : undefined),
       basis: evidenceSnippets[0] ?? "Cookie or storage evidence was retained for this finding.",
-      preConsentContext: /pre_consent|preconsent/i.test(findingId)
+      preConsentContext: /pre_consent|preconsent/i.test(findingId),
+      ...(cookieNames.length > 0 ? { cookieNames: cookieNames.slice(0, 12) } : {}),
+      ...(cookieWriteEvidence.length > 0 ? { cookieWriteEvidence, storageEvidence: cookieWriteEvidence } : {}),
+      ...(relatedRuntimeRequests.length > 0 ? { relatedRuntimeRequests } : {}),
+      ...(representativePreConsentRequests.length > 0 ? { representativePreConsentRequests } : {})
     };
   }
 
