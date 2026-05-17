@@ -65,8 +65,8 @@ export type DetectionMethodologySection = {
 };
 
 const TOP_FINDING_IDS = [
-  "visual_contrast_accessibility_issue",
   "pre_consent_tracking_detected",
+  "visual_contrast_accessibility_issue",
   "semantic_labeling_accessibility_issue",
   "fingerprinting_related_signals_observed",
   "session_recording_services_detected",

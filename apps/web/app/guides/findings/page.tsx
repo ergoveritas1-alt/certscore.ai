@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Badge } from "@website-signal-risk-scanner/ui";
 import { FindingAtlasBrowser } from "../../../components/marketing/findings/finding-atlas-browser";
 import { getFindingReferenceItems } from "../../../lib/marketing/finding-atlas";
@@ -13,13 +12,13 @@ import {
 
 export const metadata: Metadata = {
   ...createPageMetadata({
-    title: "Findings registry and detection methodology",
+    title: "CertScore findings reference",
     description:
-      "Reference CertScore finding IDs, evidence semantics, detection methodology, benchmark prevalence, related findings, and limitations.",
+      "Review CertScore findings, evidence, signals, and observations surfaced from public-web runtime scans.",
     path: "/guides/findings"
   }),
   title: {
-    absolute: "Findings registry and detection methodology | CertScore.ai"
+    absolute: "CertScore findings reference | CertScore.ai"
   }
 };
 
@@ -27,15 +26,15 @@ export default function FindingsGuidePage() {
   const findings = getFindingReferenceItems();
   const schemas = [
     createPublicWebPageSchema({
-      title: "Findings registry and detection methodology",
+      title: "CertScore findings reference",
       description:
-        "Reference CertScore finding IDs, evidence semantics, detection methodology, benchmark prevalence, related findings, and limitations.",
+        "Review CertScore findings, evidence, signals, and observations surfaced from public-web runtime scans.",
       path: "/guides/findings"
     }),
     createPublicArticleSchema({
-      title: "Findings registry and detection methodology",
+      title: "CertScore findings reference",
       description:
-        "A canonical technical reference for CertScore findings, observed signals, retained evidence, confidence semantics, and review limitations.",
+        "A technical reference for CertScore findings, observed signals, retained evidence, and reviewer context.",
       path: "/guides/findings",
       type: "TechArticle",
       about: [
@@ -69,7 +68,7 @@ export default function FindingsGuidePage() {
   ];
 
   return (
-    <section className="mx-auto max-w-7xl px-6 py-16">
+    <section className="mx-auto max-w-6xl px-6 py-16">
       {schemas.map((schema) => (
         <script
           key={JSON.stringify(schema)}
@@ -78,33 +77,17 @@ export default function FindingsGuidePage() {
         />
       ))}
 
-      <div className="grid gap-8 lg:grid-cols-[0.8fr_0.5fr] lg:items-end">
-        <div className="max-w-3xl space-y-4">
-          <Badge tone="neutral">Technical reference</Badge>
-          <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-            CertScore findings registry
-          </h1>
-          <p className="text-lg leading-8 text-slate-600">
-            Canonical finding IDs, categories, criticality, confidence semantics, observed signals, detection methodology, example evidence, benchmark prevalence, related findings, and review limitations.
-          </p>
-          <p className="text-sm leading-7 text-slate-500">
-            CertScore uses findings, evidence, signals, and observations consistently: signals are raw runtime or page-surface events, evidence is retained support, observations are interpreted evidence context, and findings are promoted review items.
-          </p>
-        </div>
-        <div className="border border-slate-200 bg-white p-5 shadow-none">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Cautious posture</p>
-          <p className="text-sm leading-6 text-slate-600">
-            Findings are runtime evidence and public-surface observations for review. The page avoids pass/fail legal conclusions: observed signals may surface possible concerns, but review is recommended before operational or legal reliance.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm font-medium text-sky-700">
-            <Link href="/methodology" className="hover:text-sky-800">
-              Full methodology
-            </Link>
-            <Link href="/how-it-works" className="hover:text-sky-800">
-              Report workflow
-            </Link>
-          </div>
-        </div>
+      <div className="max-w-3xl space-y-4">
+        <Badge tone="neutral">Technical reference</Badge>
+        <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+          CertScore findings reference
+        </h1>
+        <p className="text-lg leading-8 text-slate-600">
+          CertScore uses findings, evidence, signals, and observations consistently: signals are raw runtime or page-surface events, evidence is retained support, observations are interpreted evidence context, and findings are promoted review items.
+        </p>
+        <p className="text-sm leading-7 text-slate-500">
+          Findings are runtime evidence and public-surface observations for review. Observed signals may surface possible concerns, but review is recommended before operational or legal reliance.
+        </p>
       </div>
 
       <div className="mt-10">
