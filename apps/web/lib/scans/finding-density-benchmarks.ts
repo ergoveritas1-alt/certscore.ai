@@ -8,6 +8,14 @@ export type FindingDensityBenchmark = {
   contextLabel: string;
   tooltip: string;
   sourceLabel: string;
+  slices: FindingDensityBenchmarkSlice[];
+};
+
+export type FindingDensityBenchmarkSlice = {
+  label: string;
+  positiveCount: number;
+  sampleSize: number;
+  densityPct: number;
 };
 
 function formatApproxDensityLabel(densityPct: number) {
@@ -32,7 +40,15 @@ function makeDensityBenchmark(
     densityPct,
     contextLabel: formatApproxDensityLabel(densityPct),
     tooltip: DENSITY_TOOLTIP,
-    sourceLabel: DENSITY_SOURCE_LABEL
+    sourceLabel: DENSITY_SOURCE_LABEL,
+    slices: [
+      {
+        label: "Tranco ranks 851-1205",
+        positiveCount,
+        sampleSize: DENSITY_SAMPLE_SIZE,
+        densityPct
+      }
+    ]
   };
 }
 

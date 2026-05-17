@@ -47,6 +47,59 @@ function BulletList({ items }: { items: string[] }) {
   );
 }
 
+function formatDensity(value: number) {
+  return `${value.toFixed(value < 1 ? 1 : 0)}%`;
+}
+
+function DensityBenchmarkGraph({ finding }: { finding: FindingReferenceItem }) {
+  const rows = finding.benchmark.slices.length > 0
+    ? finding.benchmark.slices
+    : [
+        {
+          label: finding.benchmark.sourceLabel,
+          positiveCount: finding.benchmark.positiveCount,
+          sampleSize: finding.benchmark.sampleSize,
+          densityPct: finding.benchmark.densityPct
+        }
+      ];
+
+  return (
+    <section className="border border-slate-200 bg-white p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-950">Benchmark density</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            Recent Tranco-backed scan batches; directional context, not a legal or statistical conclusion.
+          </p>
+        </div>
+        <p className="shrink-0 text-sm font-semibold text-slate-950">
+          {formatDensity(finding.benchmark.densityPct)}
+        </p>
+      </div>
+      <div className="mt-4 space-y-3">
+        {rows.map((row) => (
+          <div key={row.label} className="space-y-1.5">
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="min-w-0 truncate font-medium text-slate-700">{row.label}</span>
+              <span className="shrink-0 tabular-nums text-slate-500">
+                {formatDensity(row.densityPct)} ({row.positiveCount}/{row.sampleSize})
+              </span>
+            </div>
+            <div className="h-2.5 overflow-hidden bg-slate-100">
+              <div
+                className="h-full bg-sky-500"
+                style={{ width: `${Math.max(1, Math.min(100, row.densityPct))}%` }}
+                aria-label={`${row.label}: ${formatDensity(row.densityPct)}`}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">{finding.benchmark.sourceLabel}</p>
+    </section>
+  );
+}
+
 function FindingReferenceSection({
   finding
 }: {
@@ -70,6 +123,8 @@ function FindingReferenceSection({
             <p className="mt-2 text-sm leading-6 text-slate-700">{finding.userImpact}</p>
           </section>
         ) : null}
+
+        <DensityBenchmarkGraph finding={finding} />
 
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
