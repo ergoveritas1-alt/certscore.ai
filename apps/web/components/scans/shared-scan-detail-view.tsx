@@ -3701,32 +3701,34 @@ function getMatrixCountTone(count: number) {
 }
 
 function buildCategoryFindingSummaryJson(finding: UnifiedFindingDisplayPacket) {
+  const entitySamples = Object.fromEntries(
+    Object.entries(finding.evidence?.entities ?? {}).map(([key, values]) => [
+      key,
+      values.slice(0, 3).map((value) => (value.length > 140 ? `${value.slice(0, 137)}...` : value))
+    ])
+  );
+
   return {
+    payloadScope: "coverage_matrix_summary",
+    note: "This compact JSON supports the coverage matrix. Use the primary evidence-backed findings section for fuller retained evidence context.",
     unifiedFindingId: finding.unifiedFindingId,
     title: finding.title,
     severity: finding.severity,
     confidenceBand: finding.confidenceBand,
     summary: finding.summary,
     presentation: {
-      findingName: finding.presentation.findingName,
-      whyThisMatters: finding.presentation.whyThisMatters,
-      suggestedFix: finding.presentation.suggestedFix
+      findingName: finding.presentation.findingName
     },
     evidence: {
       counts: finding.evidence?.counts ?? {},
-      flags: (finding.evidence?.flags ?? []).slice(0, 8),
-      pageUrls: (finding.evidence?.pageUrls ?? []).slice(0, 3),
-      snippets: (finding.evidence?.snippets ?? []).slice(0, 3),
-      entities: Object.fromEntries(
-        Object.entries(finding.evidence?.entities ?? {}).map(([key, values]) => [key, values.slice(0, 5)])
-      )
+      flags: (finding.evidence?.flags ?? []).slice(0, 5),
+      pageUrls: (finding.evidence?.pageUrls ?? []).slice(0, 2),
+      snippets: (finding.evidence?.snippets ?? []).slice(0, 1),
+      entities: entitySamples
     },
     reviewContext: {
       affectedPageCount: finding.affectedPageCount,
-      categoryAlignments: finding.categoryAlignments.map((alignment) => ({
-        evidenceCategoryId: alignment.evidenceCategoryId,
-        relation: alignment.relation
-      })),
+      categoryAlignmentCount: finding.categoryAlignments.length,
       sourceCounts: {
         issueCount: finding.confidenceInputs.issueCount,
         signalCount: finding.confidenceInputs.signalCount,
