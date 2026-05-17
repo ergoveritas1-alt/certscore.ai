@@ -2043,7 +2043,6 @@ test("ExecutiveSummaryCard renders compact reject-path JSON evidence", () => {
 
   assert.match(html, /postRejectNonEssentialRequests/);
   assert.match(html, /evidenceVersion/);
-  assert.match(html, /evidenceDetails/);
   assert.match(html, /postRejectEvidence/);
   assert.match(html, /policyEvidence/);
   assert.match(html, /ms_after_reject/);

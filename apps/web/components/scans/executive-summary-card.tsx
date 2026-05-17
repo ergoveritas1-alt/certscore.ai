@@ -477,6 +477,93 @@ function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
   }
 }
 
+function compactEvidenceRecord(value: Record<string, unknown> | undefined, keys: string[]) {
+  if (!value) {
+    return undefined;
+  }
+
+  const compacted = compactObject(value, keys);
+  return Object.keys(compacted).length > 0 ? compacted : undefined;
+}
+
+function compactStringList(values: string[] | undefined, maxItems = 4, maxLength = 180) {
+  const items = (values ?? [])
+    .filter((value) => value.trim().length > 0)
+    .filter((value) => !value.trim().startsWith("{"))
+    .slice(0, maxItems)
+    .map((value) => (value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value));
+  return items.length > 0 ? items : undefined;
+}
+
+function compactRepresentativeRequests(requests: unknown) {
+  const items = (Array.isArray(requests) ? requests : [])
+    .filter(isPlainObject)
+    .slice(0, 3)
+    .map((request) =>
+      compactObject(request, [
+        "vendor",
+        "category",
+        "hostname",
+        "firstSeenMs",
+        "ms",
+        "resourceType",
+        "resource_type",
+        "url"
+      ])
+    );
+  return items.length > 0 ? items : undefined;
+}
+
+function buildRegulatoryLensEvidencePayload(finding: CertScoreFinding, context?: Record<string, unknown>) {
+  const details = finding.evidenceDetails ?? {};
+
+  return {
+    context,
+    confidence: finding.confidence,
+    directVsInferred: finding.directVsInferred,
+    evidence: {
+      counts: details.counts ?? {},
+      consentState: details.consentState
+        ? compactObject(details.consentState, [
+            "userConsentActionObserved",
+            "trackingOccurredBeforeConsentChoice",
+            "consentBannerObserved",
+            "userActionType"
+          ])
+        : undefined,
+      timing: details.timing ?? undefined,
+      vendors: compactStringList([
+        ...(details.runtimeVendors ?? []),
+        ...(details.vendors ?? []).map((vendor) => vendor.name)
+      ]),
+      runtimeRequestUrls: compactStringList(details.runtimeRequestUrls, 3, 220),
+      evidenceFlags: compactStringList(details.evidenceFlags, 5, 140),
+      representativeRequests: compactRepresentativeRequests(details.representativeRequests),
+      cookieEvidence: compactEvidenceRecord(details.cookieEvidence, ["observed", "cookieCount", "thirdPartyCookieCount", "preConsentCookieCount"]),
+      consentUiEvidence: compactEvidenceRecord(details.consentUiEvidence, ["observed", "result", "subtype", "rejectOptionSubtype", "userChoiceImpact"]),
+      postRejectEvidence: compactEvidenceRecord(details.postRejectEvidence, ["trackingPersistedAfterReject", "baselineRequestCount", "postRejectRequestCount"]),
+      optOutControlEvidence: compactEvidenceRecord(details.optOutControlEvidence, ["result", "optOutSubtype", "missingOrAbsent", "incompleteOrUnconfirmed"]),
+      sessionReplayEvidence: compactEvidenceRecord(details.sessionReplayEvidence, ["observed", "vendorCount", "requestCount"]),
+      telemetryEvidence: compactEvidenceRecord(details.telemetryEvidence, [
+        "basis",
+        "confidenceExplanation",
+        "identifierLikeRequestCount",
+        "fingerprintPurposeFraming"
+      ]),
+      accessibilityEvidence: compactEvidenceRecord(details.accessibilityEvidence, ["observed", "issueCount", "impact", "wcagRule"]),
+      policyEvidence: details.policyEvidence ?? undefined,
+      limitations: compactStringList(details.limitations, 3, 180)
+    },
+    evidencePreview: compactStringList(finding.evidencePreview, 3, 220),
+    evidenceRefs: compactStringList(finding.evidenceRefs, 3, 220),
+    findingId: finding.id,
+    label: finding.label,
+    section: finding.section,
+    severity: finding.severity,
+    shortSummary: finding.shortSummary
+  };
+}
+
 function buildFindingEvidencePayload(finding: CertScoreFinding, context?: Record<string, unknown>) {
   if (finding.id === "reject_tracking_persists_after_reject") {
     return {
@@ -522,7 +609,7 @@ function buildRegulatoryLensFindingFromCertFinding(
 
   return buildRegulatoryLensFinding({
     evidence: {
-      ...buildFindingEvidencePayload(finding, context),
+      ...buildRegulatoryLensEvidencePayload(finding, context),
       ...(regulatoryContext
         ? {
             regulatoryReviewContext: {
@@ -2643,6 +2730,7 @@ function compactRejectEvidenceJsonPayload(finding: CertScoreFinding) {
     severity: finding.severity,
     confidence: finding.confidence,
     directVsInferred: finding.directVsInferred,
+    evidenceVersion: finding.evidenceVersion ?? "1.1",
     shortSummary: finding.shortSummary,
     whyItMatters: finding.whyItMatters,
     remediation: finding.remediation,
@@ -2802,6 +2890,10 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
 }
 
 function buildFindingEvidenceJsonPayload(finding: CertScoreFinding) {
+  if (finding.id === "reject_tracking_persists_after_reject") {
+    return compactRejectEvidenceJsonPayload(finding);
+  }
+
   if (finding.id === "pre_consent_tracking_detected") {
     return compactPreConsentTrackingEvidenceJsonPayload(finding);
   }
