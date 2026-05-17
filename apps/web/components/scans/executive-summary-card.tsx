@@ -16,6 +16,10 @@ import { getFindingDensityBenchmark } from "../../lib/scans/finding-density-benc
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { rankFindings } from "../../lib/scans/rank-findings";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
+import {
+  getFindingRegulatoryContext,
+  getFindingReviewContextChips
+} from "../../lib/marketing/finding-regulatory-context";
 import { CopyJsonButton } from "./copy-json-button";
 import { InfoTip } from "./info-tip";
 type DomainBenchmarkCardData = {
@@ -323,8 +327,12 @@ type RegulatoryLens = {
 
 type RegulatoryLensFinding = {
   evidence: Record<string, unknown>;
+  guideHref?: string;
   id: string;
   label: string;
+  reviewContextChips?: string[];
+  reviewContextCopy?: string;
+  reviewContextLabel?: string;
 };
 
 const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
@@ -494,8 +502,12 @@ function buildFindingEvidencePayload(finding: CertScoreFinding, context?: Record
 
 function buildRegulatoryLensFinding(input: {
   evidence: Record<string, unknown>;
+  guideHref?: string;
   id: string;
   label: string;
+  reviewContextChips?: string[];
+  reviewContextCopy?: string;
+  reviewContextLabel?: string;
 }) {
   return input satisfies RegulatoryLensFinding;
 }
@@ -505,10 +517,27 @@ function buildRegulatoryLensFindingFromCertFinding(
   label = finding.shortSummary,
   context?: Record<string, unknown>
 ) {
+  const regulatoryContext = getFindingRegulatoryContext(finding.id);
+  const reviewContextChips = getFindingReviewContextChips(finding.id, 4);
+
   return buildRegulatoryLensFinding({
-    evidence: buildFindingEvidencePayload(finding, context),
+    evidence: {
+      ...buildFindingEvidencePayload(finding, context),
+      ...(regulatoryContext
+        ? {
+            regulatoryReviewContext: {
+              caution: regulatoryContext.displayCaution,
+              primaryConcern: regulatoryContext.primaryConcern.label
+            }
+          }
+        : {})
+    },
+    guideHref: regulatoryContext ? `/guides/findings/${finding.id}` : undefined,
     id: finding.id,
-    label
+    label,
+    reviewContextChips,
+    reviewContextCopy: regulatoryContext?.primaryConcern.displayCopy,
+    reviewContextLabel: regulatoryContext?.primaryConcern.label
   });
 }
 
@@ -1667,6 +1696,7 @@ function RegulatoryLensFindingCard(input: {
   finding: RegulatoryLensFinding;
   lens: Pick<RegulatoryLens, "acronym" | "detailTitle" | "ratingLabel" | "score" | "summary">;
 }) {
+  const hiddenChipCount = Math.max(0, (input.finding.reviewContextChips?.length ?? 0) - 3);
   const evidencePayload = JSON.stringify(
     {
       evidence: compactEvidenceJsonForDisplay(input.finding.evidence),
@@ -1687,9 +1717,26 @@ function RegulatoryLensFindingCard(input: {
     <div className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700">
       <details className="group/json">
         <summary className="flex cursor-pointer list-none items-start justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
-          <span className="min-w-0 space-y-1 leading-5">
+          <span className="min-w-0 space-y-1.5 leading-5">
             <span className="line-clamp-2">{input.finding.label}</span>
+            {input.finding.reviewContextLabel ? (
+              <span className="block font-semibold text-slate-900">{input.finding.reviewContextLabel}</span>
+            ) : null}
             <span className="block text-[11px] leading-4 text-slate-500">{getRegulatoryLensMappingReason(input)}</span>
+            {input.finding.reviewContextChips && input.finding.reviewContextChips.length > 0 ? (
+              <span className="flex flex-wrap gap-1.5">
+                {input.finding.reviewContextChips.slice(0, 3).map((chip) => (
+                  <span key={chip} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                    {chip}
+                  </span>
+                ))}
+                {hiddenChipCount > 0 ? (
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                    +{hiddenChipCount} in notes
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
           </span>
           <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-400 hover:text-slate-700">
             <span className="sr-only">Show evidence JSON</span>
@@ -1709,10 +1756,33 @@ function RegulatoryLensFindingCard(input: {
             </svg>
           </span>
         </summary>
-        <div className="relative mt-2 w-full rounded-lg bg-slate-950">
+        <div className="mt-3 space-y-3">
+          {input.finding.reviewContextCopy ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Regulatory review context</p>
+              <p className="mt-1 text-[11px] leading-5 text-slate-600">{input.finding.reviewContextCopy}</p>
+              {input.finding.guideHref ? (
+                <a
+                  href={input.finding.guideHref}
+                  className="mt-2 inline-flex text-[11px] font-semibold text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
+                >
+                  Learn how this finding is interpreted
+                </a>
+              ) : null}
+            </div>
+          ) : input.finding.guideHref ? (
+            <a
+              href={input.finding.guideHref}
+              className="inline-flex text-[11px] font-semibold text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
+            >
+              Learn how this finding is interpreted
+            </a>
+          ) : null}
+          <div className="relative w-full rounded-lg bg-slate-950">
           <pre className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words px-3 py-3 text-[11px] leading-5 text-slate-100">
             {evidencePayload}
           </pre>
+          </div>
         </div>
       </details>
     </div>
@@ -2370,6 +2440,8 @@ function FindingTitleIcon(input: { finding: CertScoreFinding; iconKey?: FindingT
 
 function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const reference = getFindingReferenceLink(input.finding);
+  const registryContext = getFindingRegulatoryContext(input.finding.id);
+  const registryGuideHref = registryContext ? `/guides/findings/${input.finding.id}` : null;
   const evidencePayload = buildFindingEvidenceJsonPayload(input.finding);
   const jsonPayload = hasMeaningfulFindingEvidence(input.finding) ? JSON.stringify(evidencePayload, null, 2) : null;
   const tone = getFindingCardTone(input.finding, false);
@@ -2400,6 +2472,14 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
         <div className="space-y-1.5">
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">How to fix</p>
           <p className="text-sm leading-6 text-slate-700">{getFindingFixText(input.finding)}</p>
+          {registryGuideHref ? (
+            <a
+              href={registryGuideHref}
+              className="inline-flex items-center text-sm font-medium text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
+            >
+              Learn how CertScore interprets this finding
+            </a>
+          ) : null}
           {reference ? (
             <a
               href={reference.href}
@@ -3128,7 +3208,7 @@ export function ExecutiveSummaryCard(input: {
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Review lenses</p>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Findings organized by privacy, consumer protection, and accessibility context. Not a legal determination.
+                    Findings organized by privacy, consumer protection, and accessibility review context. Automated signals for review, not a legal determination.
                   </p>
                   {hasIncompleteCoverageNotice ? (
                     <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">

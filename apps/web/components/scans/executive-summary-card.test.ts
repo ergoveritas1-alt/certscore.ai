@@ -1580,6 +1580,58 @@ test("ExecutiveSummaryCard builds regulatory lenses from all findings instead of
   assert.match(html, /Simulated or hypothetical performance language surfaced without nearby disclosure\./);
 });
 
+test("ExecutiveSummaryCard links mapped findings to registry interpretation context", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+          severity: "critical",
+          shortSummary: "Third-party tracking began before any recorded consent choice."
+        })
+      ],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No fingerprinting evidence detected.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: ["Google Tag Manager"],
+      requestedHost: "example.com",
+      resolvedVendorNames: ["Google Tag Manager"],
+      score: 58,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 14,
+      thirdPartyDomains: ["googletagmanager.com"],
+      topFindings: [
+        makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+          severity: "critical",
+          shortSummary: "Third-party tracking began before any recorded consent choice."
+        })
+      ],
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 0
+      },
+      agencyMappings: [],
+      regulatoryRisk: makeRegulatoryRisk(),
+      topObservedEntities: [{ label: "Google Tag Manager", category: "analytics", requestCount: 4 }],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { analytics: 1 }
+    })
+  );
+
+  assert.match(html, /Regulatory review context/);
+  assert.match(html, /Consent timing: tracking before recorded choice/);
+  assert.match(html, /Learn how this finding is interpreted/);
+  assert.match(html, /Learn how CertScore interprets this finding/);
+  assert.match(html, /href="\/guides\/findings\/pre_consent_tracking_detected"/);
+});
+
 test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-findings list", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
