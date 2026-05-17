@@ -397,6 +397,14 @@ function EvidenceStandard() {
   );
 }
 
+function getWhyThisMattersCopy(finding: FindingReferenceItem) {
+  if (finding.id === "pre_consent_tracking_detected") {
+    return "This can indicate that analytics, advertising, or profiling vendors were allowed to run before the site recorded a user choice. Depending on the site, region, vendor purpose, and consent design, that timing can be relevant to privacy, consent, and consumer-protection review.";
+  }
+
+  return "This observation can help reviewers decide whether the site behavior deserves deeper privacy, accessibility, consent, or consumer-protection review in context.";
+}
+
 function FindingReferenceSection({
   finding
 }: {
@@ -429,7 +437,7 @@ function FindingReferenceSection({
         <section className="border border-sky-100 bg-sky-50 p-4">
           <h3 className="text-sm font-semibold text-slate-950">Why this matters</h3>
           <p className="mt-2 text-sm leading-6 text-slate-700">
-            This can indicate that analytics, advertising, or profiling vendors were allowed to run before the site recorded a user choice.
+            {getWhyThisMattersCopy(finding)}
           </p>
         </section>
 
