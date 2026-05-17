@@ -1278,25 +1278,25 @@ export function buildRegulatoryLenses(
     },
     {
       acronym: "FTC",
-      detailTitle: hasStrongDarkPatternConcern ? "Dark pattern and disclosure issues" : "Choice architecture review signals",
+      detailTitle: hasStrongDarkPatternConcern ? "Consent UX and disclosure review" : "Choice architecture review signals",
       findings: ftcFindings,
       ratingLabel: ftcTone.label,
       score: ftcScore,
       summary: hasStrongDarkPatternConcern
         ? "Choice architecture and disclosure clarity are the main FTC-style concerns."
         : sensitiveTrackingFinding
-          ? "Sensitive-data collection alongside third-party tracking should be reviewed for unfairness or deception risk."
+          ? "Sensitive-data collection alongside third-party tracking should be reviewed for consumer-protection context."
         : hasSensitiveGamblingTrackingRisk
-          ? "High-risk gambling, financial-behavior, and advertising flows elevate FTC unfairness or deception risk."
+          ? "High-risk gambling, financial-behavior, and advertising flows warrant FTC-style review."
         : hasSensitiveHealthTrackingRisk
-          ? "Health-context tracking and advertising/data-broker flows elevate FTC unfairness or deception risk."
+          ? "Health-context tracking and advertising/data-broker flows warrant FTC-style review."
         : hasConsentConcern
           ? "Consent-choice design should be reviewed for clarity."
         : cookieDisclosureFinding
           ? "Cookie disclosures should be reviewed against observed runtime tracking behavior."
         : hasTrackingConcern || counts.beforeConsentCookieCount > 0
-          ? "Pre-consent tracking and third-party collection should be reviewed for unfairness or deception risk."
-            : "No strong unfairness/deception cue surfaced in the top findings.",
+          ? "Pre-consent tracking and third-party collection should be reviewed for consumer-protection context."
+            : "No strong consumer-protection cue surfaced in the top findings.",
       toneClass: ftcTone.toneClass
     }
   ];
@@ -2217,10 +2217,120 @@ function getFindingFixText(finding: CertScoreFinding) {
   }
 
   if (finding.id === "asymmetric_consent_ui") {
-    return "Bring reject and settings up to the first layer, match the visual weight of accept, and avoid button color, size, or placement patterns that steer users toward one choice. Re-test the live banner after the CSS change, not just the design mock.";
+    return "Bring reject and settings up to the first layer, match the visual weight of accept, and avoid button color, size, or placement patterns that make one choice materially easier than another. Re-test the live banner after the CSS change, not just the design mock.";
   }
 
   return finding.remediation;
+}
+
+type EvidenceBasisStatus = "Strong" | "Partial" | "Available" | "Not evaluated";
+
+function getEvidenceBasisTone(status: EvidenceBasisStatus) {
+  switch (status) {
+    case "Strong":
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    case "Available":
+      return "border-sky-200 bg-sky-50 text-sky-800";
+    case "Partial":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "Not evaluated":
+      return "border-slate-200 bg-slate-50 text-slate-600";
+  }
+}
+
+function hasRecords(value: unknown): value is Array<Record<string, unknown>> {
+  return Array.isArray(value) && value.some((entry) => entry && typeof entry === "object" && !Array.isArray(entry));
+}
+
+function hasStringValues(value: unknown): value is string[] {
+  return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
+}
+
+function buildEvidenceBasisItems(finding: CertScoreFinding): Array<{ label: string; status: EvidenceBasisStatus }> {
+  const details = finding.evidenceDetails;
+  if (!details) {
+    return [];
+  }
+
+  const representativeRequests = details.representativeRequests ?? [];
+  const runtimeRequestUrls = details.runtimeRequestUrls ?? [];
+  const vendors = details.vendors ?? [];
+  const runtimeVendors = details.runtimeVendors ?? [];
+  const timing = details.timing;
+  const consentState = details.consentState;
+  const timingAnalysis = details.timingAnalysis;
+  const policyEvidence = details.policyEvidence;
+  const preConsentCookieCount =
+    typeof details.counts?.preConsentTrackingCookies === "number" ? details.counts.preConsentTrackingCookies : 0;
+
+  const runtimeRequests: EvidenceBasisStatus =
+    representativeRequests.length > 0 || runtimeRequestUrls.length > 0
+      ? "Strong"
+      : hasStringValues(finding.evidenceRefs) || hasStringValues(details.sourceUrls)
+        ? "Partial"
+        : "Partial";
+  const vendorAttribution: EvidenceBasisStatus =
+    vendors.some((vendor) => vendor.name && (vendor.category || vendor.representativeUrl))
+      ? "Strong"
+      : vendors.length > 0 || runtimeVendors.length > 0
+        ? "Partial"
+        : "Partial";
+  const cookieTiming: EvidenceBasisStatus =
+    (typeof timing?.firstTrackingCookieSeenMs === "number" && timing.firstTrackingCookieSeenMs >= 0) ||
+    hasRecords(details.rtbCookieSyncEvidence) ||
+    preConsentCookieCount > 0
+      ? "Strong"
+      : details.cookieEvidence
+        ? "Partial"
+        : "Partial";
+  const consentBasis: EvidenceBasisStatus =
+    consentState?.trackingOccurredBeforeConsentChoice === true && timingAnalysis?.trackingBeforeConsentWindow === true
+      ? "Strong"
+      : consentState || timingAnalysis
+        ? "Partial"
+        : "Partial";
+  const policyContext: EvidenceBasisStatus =
+    policyEvidence?.evaluated === true || details.policyRuntimeConflict || details.policyEvidenceDetails
+      ? "Available"
+      : "Not evaluated";
+
+  return [
+    { label: "Runtime requests", status: runtimeRequests },
+    { label: "Vendor attribution", status: vendorAttribution },
+    { label: "Cookie timing", status: cookieTiming },
+    { label: "Consent state", status: consentBasis },
+    { label: "Policy context", status: policyContext }
+  ];
+}
+
+function buildEvidenceBasisCopy(finding: CertScoreFinding) {
+  const details = finding.evidenceDetails;
+  if (!details) {
+    return null;
+  }
+
+  if (finding.id === "pre_consent_tracking_detected") {
+    const firstRequestMs = details.timing?.firstThirdPartyTrackingRequestMs;
+    const vendors = (details.vendors ?? []).map((vendor) => vendor.name).filter(Boolean).slice(0, 3);
+    const consentText = details.consentState?.userConsentActionObserved
+      ? "Observed before the recorded consent choice in the retained timing sequence."
+      : "No accept, reject, manage, or close interaction was recorded before the retained request evidence.";
+    const timingText = typeof firstRequestMs === "number"
+      ? ` First classified non-essential/tracker request timestamp: ${firstRequestMs}ms.`
+      : "";
+    const vendorText = vendors.length > 0 ? ` Representative vendors: ${formatInlineList(vendors)}.` : "";
+    return `Observed runtime behavior: ${consentText}${timingText}${vendorText} Automated runtime observation supports review; it is not a legal determination.`;
+  }
+
+  if (
+    finding.id === "consent_dark_patterns_detected" ||
+    finding.id === "reject_option_missing_or_hidden" ||
+    finding.id === "asymmetric_consent_ui"
+  ) {
+    return "Observed runtime behavior: The retained consent interaction structure shows reject was not available on the first layer. Retained evidence suggests consent UX review; it is not a legal determination.";
+  }
+
+  return null;
 }
 
 function getFindingCardTone(
@@ -2571,6 +2681,8 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
     : [];
   const confidenceExplanation =
     typeof fingerprintTelemetry?.confidenceExplanation === "string" ? fingerprintTelemetry.confidenceExplanation : null;
+  const evidenceBasisItems = buildEvidenceBasisItems(input.finding);
+  const evidenceBasisCopy = buildEvidenceBasisCopy(input.finding);
 
   return (
     <details id={getFindingEvidenceAnchor(input.finding)} className={`group mt-3 scroll-mt-24 rounded-xl border px-3 py-2 ${tone.summary}`}>
@@ -2634,7 +2746,28 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
             {confidenceExplanation ? (
               <p className="text-sm leading-6 text-slate-700">{confidenceExplanation}</p>
             ) : null}
-            <p className="text-sm leading-6 text-slate-700">This does not independently establish unlawful tracking or legal liability.</p>
+            <p className="text-sm leading-6 text-slate-700">This does not independently establish a legal determination or liability.</p>
+          </div>
+        ) : null}
+        {evidenceBasisItems.length > 0 ? (
+          <div className="space-y-3 rounded-lg border border-slate-200 bg-white px-3 py-3">
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Evidence basis</p>
+              {evidenceBasisCopy ? <p className="text-sm leading-6 text-slate-700">{evidenceBasisCopy}</p> : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {evidenceBasisItems.map((item) => (
+                <span
+                  key={`${item.label}:${item.status}`}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${getEvidenceBasisTone(item.status)}`}
+                  title={`${item.label}: ${item.status}`}
+                >
+                  <span>{item.label}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{item.status}</span>
+                </span>
+              ))}
+            </div>
           </div>
         ) : null}
         {jsonPayload ? (

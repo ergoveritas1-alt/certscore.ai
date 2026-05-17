@@ -813,7 +813,7 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
       findingId === "probable_fingerprinting"
         ? null
         : "Observed browser entropy collection alone does not establish cross-site identity tracking.",
-      "This does not independently establish unlawful tracking or legal liability."
+      "This does not independently establish a legal determination."
     ]).slice(0, findingId === "probable_fingerprinting" ? 6 : 5);
   }
 
@@ -1230,7 +1230,7 @@ function buildPreConsentTrackingEvidenceDetails(
       ftcDarkPatternOrDeceptionSupport: "support_only"
     },
     limitations: [
-      "Automated scan does not determine legal liability.",
+      "Automated scan does not determine legal status.",
       "Network requests show browser-to-third-party communication, not the full downstream use of data."
     ]
   };
@@ -1316,7 +1316,7 @@ function buildRejectTrackingEvidenceDetails(packet: UnifiedFindingDisplayPacket)
       ftcDarkPatternOrDeceptionSupport: "support_only"
     },
     limitations: [
-      "Automated scan does not determine legal liability.",
+      "Automated scan does not determine legal status.",
       "Post-reject evidence depends on the retained reject interaction and observation window."
     ],
     runtimeRequestUrls: requestUrls,
@@ -1377,7 +1377,7 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       ftcDarkPatternOrDeceptionSupport: "support_only"
     },
     limitations: [
-      "Automated scan does not determine legal liability.",
+      "Automated scan does not determine legal status.",
       "Session recording detection identifies collection services, not the full contents captured by the vendor."
     ],
     runtimeRequestUrls: requestUrls,
@@ -1467,7 +1467,7 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       ftcDarkPatternOrDeceptionSupport: "not_evaluated"
     },
     limitations: [
-      "Automated scan does not determine legal liability.",
+      "Automated scan does not determine legal status.",
       "RTB and identity-sync patterns indicate request-level sharing signals, not the full downstream use of identifiers."
     ],
     runtimeRequestUrls: requestUrls,
@@ -1552,7 +1552,7 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       ftcDarkPatternOrDeceptionSupport: "support_only"
     },
     limitations: [
-      "Automated scan does not determine legal liability.",
+      "Automated scan does not determine legal status.",
       "Opt-out control detection may miss controls that require deeper navigation, geolocation, account state, or manual review."
     ],
     evidenceSnippets: snippets,
@@ -1681,7 +1681,7 @@ function buildGenericCanonicalEvidenceDetails(
         : "not_evaluated"
     },
     limitations: [
-      "Automated scan does not determine legal liability.",
+      "Automated scan does not determine legal status.",
       "Representative evidence is capped and should be reviewed with the full scan record before final conclusions."
     ]
   };
@@ -2565,7 +2565,7 @@ function buildExecutiveShortSummary(
       ? `, with representative vendors including ${formatVendorList(vendors)}`
       : "";
     return `${trimTrailingSentencePunctuation(
-      `Third-party tracking began before any recorded consent choice.${timingText}${vendorText}`
+      `Observed runtime behavior showed third-party tracking before any recorded consent choice.${timingText}${vendorText}`
     )}.`;
   }
 
@@ -2658,6 +2658,10 @@ function buildExecutiveShortSummary(
       ? " and subsequent third-party network activity associated with a known bot-defense/fingerprinting vendor"
       : " and runtime corroboration";
     return `Probable browser/device fingerprinting behavior was observed. The scan detected coordinated collection of high-entropy browser/device attributes${vendorClause}. This may be used for fraud prevention or security, but it can still create privacy review obligations depending on jurisdiction, disclosure, consent posture, and data sharing.`;
+  }
+
+  if (findingId === "consent_dark_patterns_detected") {
+    return "The retained consent interaction structure shows reject was not available on the first layer.";
   }
 
   if (findingId === "fingerprinting_related_signals_observed") {

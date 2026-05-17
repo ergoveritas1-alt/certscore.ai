@@ -368,9 +368,14 @@ test("projects surfaced unified findings into executive findings and regulatory 
     )
   );
   assert.match(preconsentFinding?.shortSummary ?? "", /before any recorded consent choice/);
+  assert.equal(preconsentFinding?.id, "pre_consent_tracking_detected");
+  assert.equal(preconsentFinding?.label, "Third-party tracking observed before recorded consent");
   assert.match(preconsentFinding?.shortSummary ?? "", /Meta Pixel/);
   assert.match(preconsentFinding?.shortSummary ?? "", /1500ms/);
-  assert.doesNotMatch(preconsentFinding?.shortSummary ?? "", /violation|liability|illegal/i);
+  assert.doesNotMatch(
+    `${preconsentFinding?.label ?? ""} ${preconsentFinding?.shortSummary ?? ""} ${preconsentFinding?.whyItMatters ?? ""}`,
+    /violates?|violation|liability|illegal|deceptive|manipulative|non-compliant/i
+  );
   assert.ok(
     projection.topFindings.every((finding) => projection.findings.some((candidate) => candidate.id === finding.id))
   );
@@ -669,7 +674,16 @@ test("projects concrete reject-missing dark-pattern evidence into the umbrella e
   ]);
 
   assert.ok(projection.findings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
-  assert.ok(projection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+  const umbrellaFinding = projection.findings.find((finding) => finding.id === "consent_dark_patterns_detected");
+  assert.equal(umbrellaFinding?.label, "Consent choice architecture review signals");
+  assert.equal(
+    umbrellaFinding?.shortSummary,
+    "The retained consent interaction structure shows reject was not available on the first layer."
+  );
+  assert.doesNotMatch(
+    `${umbrellaFinding?.label ?? ""} ${umbrellaFinding?.shortSummary ?? ""} ${umbrellaFinding?.whyItMatters ?? ""}`,
+    /dark pattern|violates?|violation|liability|illegal|deceptive|manipulative|non-compliant/i
+  );
   assert.ok(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
 });
 
@@ -2804,6 +2818,6 @@ test("surfaces sensitive-data tracking in regulatory lenses", () => {
   assert.ok(ftcLens?.findings.some((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present"));
   assert.equal(
     ftcLens?.summary,
-    "Sensitive-data collection alongside third-party tracking should be reviewed for unfairness or deception risk."
+    "Sensitive-data collection alongside third-party tracking should be reviewed for consumer-protection context."
   );
 });

@@ -147,7 +147,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
   },
   pre_consent_tracking_detected: {
     findingId: "pre_consent_tracking_detected",
-    label: "Tracking started before consent",
+    label: "Third-party tracking observed before recorded consent",
     category: "Consent",
     regulatoryConcernGroup: "consent_and_tracking",
     primaryConcern: {
@@ -197,7 +197,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       },
       {
         id: "ftc_privacy_claims_review",
-        label: "FTC privacy claim or deceptive-practice review",
+        label: "FTC privacy claim review",
         appliesWhen: "Runtime behavior may conflict with public statements, consent claims, or privacy representations.",
         sourceRefs: ["ftc_dark_patterns"]
       }
@@ -482,14 +482,14 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
   },
   consent_dark_patterns_detected: {
     findingId: "consent_dark_patterns_detected",
-    label: "Dark pattern consent signals detected",
+    label: "Consent choice architecture review signals",
     category: "Consumer protection",
     regulatoryConcernGroup: "consent_experience_and_choice_architecture",
     primaryConcern: {
       id: "consent_choice_architecture_dark_pattern_review",
-      label: "Consent UX: possible dark-pattern review",
+      label: "Consent UX choice architecture review",
       displayCopy:
-        "Consent interface signals suggested that choice architecture may steer users toward acceptance or make refusal materially harder. This is a prompt for design, privacy, and legal review, not a final conclusion."
+        "Consent interface signals suggested that refusal may be materially less available than acceptance. This is a prompt for design, privacy, and legal review, not a final conclusion."
     },
     technicalStandards: [
       {
@@ -512,7 +512,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       },
       {
         id: "ftc_dark_pattern_review",
-        label: "FTC dark-pattern / unfair or deceptive practice review",
+        label: "FTC choice architecture review",
         appliesWhen: "Design choices may obscure or burden user choices involving privacy or commerce.",
         sourceRefs: ["ftc_dark_patterns"]
       }

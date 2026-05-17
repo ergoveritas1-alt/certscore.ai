@@ -185,7 +185,7 @@ const OBSERVED: Record<string, string> = {
   text_alternative_accessibility_issue:
     "Automated accessibility evidence found non-text content, images, or objects without adequate retained text alternative evidence.",
   consent_dark_patterns_detected:
-    "Consent interface signals suggested that the choice architecture may steer users toward acceptance or make refusal materially harder.",
+    "Consent interface signals suggested that refusal may be materially less available than acceptance.",
   cpra_cba_opt_out_missing:
     "Advertising or cross-context tracking signals were observed without retained evidence of a clear CPRA-style opt-out or privacy choices path.",
   forced_consent_interaction:

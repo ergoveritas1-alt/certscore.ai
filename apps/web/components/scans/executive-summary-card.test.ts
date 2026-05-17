@@ -2007,7 +2007,7 @@ test("ExecutiveSummaryCard exposes strong fingerprinting primitives inline", () 
   assert.match(html, /Generic browser context/);
   assert.match(html, /timezone\/locale/);
   assert.match(html, /Multiple high-entropy browser\/device collection primitives observed/);
-  assert.match(html, /This does not independently establish unlawful tracking or legal liability/);
+  assert.match(html, /This does not independently establish a legal determination/);
 });
 
 test("ExecutiveSummaryCard renders compact reject-path JSON evidence", () => {
@@ -2126,7 +2126,7 @@ test("ExecutiveSummaryCard renders compact reject-path JSON evidence", () => {
               cpraSharingSupport: "not_evaluated",
               ftcDarkPatternOrDeceptionSupport: "support_only"
             },
-            limitations: ["Automated scan does not determine legal liability."]
+            limitations: ["Automated scan does not determine legal status."]
           },
           evidenceRefs: ["https://securepubads.g.doubleclick.net/pagead/managed/js/gpt.js"],
           evidenceVersion: "1.1",
@@ -2179,10 +2179,10 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
       thirdPartyRequestCount: 7,
       thirdPartyDomains: ["googletagmanager.com", "js.hs-scripts.com"],
       topFindings: [
-        makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+        makeFinding("pre_consent_tracking_detected", "Third-party tracking observed before recorded consent", {
           confidence: "strong",
           severity: "critical",
-          shortSummary: "Third-party tracking began before any recorded consent choice. The first classified tracking request occurred at 1500ms, with representative vendors including Google Tag Manager and HubSpot.",
+          shortSummary: "Observed runtime behavior showed third-party tracking before any recorded consent choice. The first classified tracking request occurred at 1500ms, with representative vendors including Google Tag Manager and HubSpot.",
           evidenceDetails: {
             scanContext: {
               pageUrl: "https://petdesk.com/",
@@ -2275,7 +2275,7 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
               cpraSharingSupport: "possible",
               ftcDarkPatternOrDeceptionSupport: "support_only"
             },
-            limitations: ["Automated scan does not determine legal liability."]
+            limitations: ["Automated scan does not determine legal status."]
           },
           evidencePreview: ["Representative pre-consent tracking request: https://www.googletagmanager.com/gtm.js"],
           evidenceRefs: ["https://www.googletagmanager.com/gtm.js"]
@@ -2296,6 +2296,14 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
 
   assert.match(html, /consentState/);
   assert.match(html, /Evidence details/);
+  assert.match(html, /Evidence basis/);
+  assert.match(html, /Observed runtime behavior: No accept, reject, manage, or close interaction was recorded before the retained request evidence\./);
+  assert.match(html, /First classified non-essential\/tracker request timestamp: 1500ms\./);
+  assert.match(html, /title="Runtime requests: Strong"/);
+  assert.match(html, /title="Vendor attribution: Strong"/);
+  assert.match(html, /title="Cookie timing: Partial"/);
+  assert.match(html, /title="Consent state: Strong"/);
+  assert.match(html, /title="Policy context: Not evaluated"/);
   assert.match(html, /evidenceVersion/);
   assert.match(html, /timingAnalysis/);
   assert.match(html, /requestSelectionNote/);
@@ -2311,7 +2319,7 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
   assert.doesNotMatch(html, /sourceUrls/);
   assert.doesNotMatch(html, /pageUrls/);
   assert.doesNotMatch(html, /\{\} JSON evidence/);
-  assert.doesNotMatch(html, /CIPA violation confirmed|legal liability confirmed/i);
+  assert.doesNotMatch(html, /CIPA violation confirmed|legal liability|violates?|illegal|deceptive|manipulative|non-compliant/i);
 });
 
 test("ExecutiveSummaryCard hides evidence detail toggle when retained JSON would be metadata-only", () => {
@@ -2783,7 +2791,7 @@ test("ExecutiveSummaryCard keeps regulatory cookie copy aligned with canonical c
   assert.match(html, /<span class="block text-xl font-semibold tracking-tight text-slate-900">70<\/span>/);
   assert.match(html, /Third-party collection and disclosure posture drives this score\./);
   assert.match(html, /FTC/);
-  assert.match(html, /Pre-consent tracking and third-party collection should be reviewed for unfairness or deception risk\./);
+  assert.match(html, /Pre-consent tracking and third-party collection should be reviewed for consumer-protection context\./);
   assert.match(html, /64 classified cookies were observed before consent\./);
   assert.doesNotMatch(html, /64 cookies were observed before consent\./);
 });

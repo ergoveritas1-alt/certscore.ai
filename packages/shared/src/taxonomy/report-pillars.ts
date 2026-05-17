@@ -2676,7 +2676,7 @@ export const REPORT_UNIFIED_FINDINGS = [
 
   defineReportUnifiedFinding({
     id: "preconsent_tracking",
-    label: "Pre-consent tracking",
+    label: "Third-party tracking observed before recorded consent",
     owner: "preconsent_tracking_incidents",
     overlays: ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk", "sale_sharing_targeted_advertising_controls"],
     signalMappings: [{ source: "snapshot_signal", key: "privacy.preconsent_tracking_detected" }],
@@ -2686,6 +2686,7 @@ export const REPORT_UNIFIED_FINDINGS = [
       "Pre-consent tracking incidents detected",
       "Trackers observed before consent",
       "Pre-consent tracking detected",
+      "Pre-consent tracking",
       "Third-party tracking before consent",
       "Third-party cookies before consent",
       "Analytics cookies before consent",

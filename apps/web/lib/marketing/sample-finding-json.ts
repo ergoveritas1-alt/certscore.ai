@@ -84,7 +84,7 @@ const preConsentTrackingDetected = {
   "created_at": "2026-04-22T19:37:42.568Z",
   "scanned_at": "2026-04-22T19:41:54.236Z",
   "finding_id": "pre_consent_tracking_detected",
-  "finding_label": "Tracking started before consent",
+  "finding_label": "Third-party tracking observed before recorded consent",
   "section": "Privacy & Tracking",
   "confidence": "strong",
   "direct_vs_inferred": "direct",
@@ -419,7 +419,7 @@ const thirdPartyCookiePreConsent = {
 
 const PRE_CONSENT_TRACKING_SAMPLE: SampleFindingJson = {
   findingId: "pre_consent_tracking_detected",
-  label: "Tracking started before consent",
+  label: "Third-party tracking observed before recorded consent",
   sourceLabel: "Production finding corpus, 2026-04-28",
   payload: preConsentTrackingDetected
 };

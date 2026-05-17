@@ -204,10 +204,10 @@ export type CertScoreFinding = CertScoreFindingDefinition & {
 export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinition> = {
   pre_consent_tracking_detected: {
     id: "pre_consent_tracking_detected",
-    label: "Tracking started before consent",
+    label: "Third-party tracking observed before recorded consent",
     section: "Privacy & Tracking",
     defaultSurfacePriority: 100,
-    whyItMatters: "This is one of the clearest automated signals that non-essential activity began before the user could choose.",
+    whyItMatters: "Observed runtime behavior placed classified third-party tracking before a recorded consent choice, which is a high-priority implementation review signal.",
     remediation: "Delay non-essential requests until consent state is established."
   },
   reject_tracking_persists_after_reject: {
@@ -307,7 +307,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     label: "Consent choices appear imbalanced",
     section: "Consent Experience",
     defaultSurfacePriority: 84,
-    whyItMatters: "Visual imbalance can steer users toward one outcome.",
+    whyItMatters: "Visual imbalance can make one consent outcome materially easier to choose than another.",
     remediation: "Make accept and reject options equally visible and comparable in emphasis."
   },
   forced_consent_interaction: {
@@ -472,13 +472,13 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   consent_dark_patterns_detected: {
     id: "consent_dark_patterns_detected",
-    label: "Dark pattern consent signals detected",
+    label: "Consent choice architecture review signals",
     section: "Consent Experience",
     defaultSurfacePriority: 95,
     whyItMatters:
-      "Choice architecture that steers users toward acceptance can undermine meaningful consent and create dark-pattern risk.",
+      "Retained consent interaction structure can show that refusal or settings were less available than acceptance, which warrants consent UX review.",
     remediation:
-      "Expose reject and settings at the first layer, remove accept-only or forced paths, and equalize button prominence and interaction cost across consent choices."
+      "Expose reject and settings at the first layer, remove accept-only or forced paths, and keep button prominence and interaction cost comparable across consent choices."
   },
   policy_behavior_contradiction_detected: {
     id: "policy_behavior_contradiction_detected",
@@ -521,7 +521,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     label: "Popup or modal present",
     section: "Runtime & Diagnostics",
     defaultSurfacePriority: 38,
-    whyItMatters: "Popups are not inherently non-compliant, but they can degrade user experience.",
+    whyItMatters: "Popups are not inherently problematic, but they can degrade user experience.",
     remediation: "Reduce unnecessary popups and ensure they are easy to dismiss."
   },
   interstitial_detected: {
