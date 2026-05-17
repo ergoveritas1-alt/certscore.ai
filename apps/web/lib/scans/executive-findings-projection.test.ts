@@ -2797,6 +2797,46 @@ test("keeps related runtime requests out of direct pre-consent cookie evidence r
   assert.equal((cookieEvidence?.relatedRuntimeRequests as Array<Record<string, unknown>> | undefined)?.[0]?.evidenceRole, "related_vendor_request");
 });
 
+test("labels Bing and Clarity sync-style related runtime requests with endpoint and initiating vendors", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("third_party_cookie_pre_consent", {
+      details: { family: "consent_tracking", kind: "third_party_cookie_pre_consent" },
+      evidence: {
+        counts: { preconsent_cookie_before_consent_count: 1 },
+        entities: {
+          preconsent_cookie_evidence: [
+            JSON.stringify({
+              cookieName: "_clsk",
+              cookieInitiatorVendor: "Microsoft Clarity",
+              category: "session_replay",
+              initiatorUrl: "https://c.clarity.ms/c.gif"
+            })
+          ],
+          runtimeRequestUrls: ["https://c.bing.com/c.gif?ctsa=mr&CtsSyncId=abc", "https://c.clarity.ms/c.gif"],
+          runtimeVendors: ["Microsoft Clarity"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.third_party_cookie_pre_consent"],
+        pageUrls: ["https://www.kbdlab.io/"],
+        snippets: ["Third-party cookie write was retained before consent."],
+        sourceUrls: []
+      },
+      severity: "high"
+    })
+  ]);
+  const finding = projection.findings.find((candidate) => candidate.id === "third_party_cookie_pre_consent");
+  const relatedRequests = finding?.evidenceDetails?.cookieEvidence?.relatedRuntimeRequests as Array<Record<string, unknown>> | undefined;
+  const bingRequest = relatedRequests?.find((request) => `${request.url}`.includes("c.bing.com"));
+  const clarityRequest = relatedRequests?.find((request) => `${request.url}`.includes("c.clarity.ms"));
+
+  assert.equal(bingRequest?.endpointVendor, "Microsoft Advertising / Bing UET");
+  assert.equal(bingRequest?.initiatingVendor, "Microsoft Clarity");
+  assert.equal(bingRequest?.category, "advertising_measurement");
+  assert.equal(bingRequest?.evidenceRole, "related_vendor_request");
+  assert.equal(clarityRequest?.endpointVendor, "Microsoft Clarity");
+  assert.equal(clarityRequest?.category, "session_replay_sync");
+});
+
 test("records surfaced packets that are not yet mapped into executive findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("some_unmapped_surface", {

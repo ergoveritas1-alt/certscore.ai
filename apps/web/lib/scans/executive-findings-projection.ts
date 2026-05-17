@@ -1047,6 +1047,35 @@ function normalizeVendorCategory(
   return category ?? classifyTrackingCategory(`${vendor ?? ""} ${url ?? ""}`);
 }
 
+function inferEndpointVendorNameFromUrl(url: string | null | undefined) {
+  if (!url) {
+    return null;
+  }
+  if (/c?\.?bing\.com|bat\.bing\.com/i.test(url)) {
+    return "Microsoft Advertising / Bing UET";
+  }
+  if (/clarity\.ms|c\.clarity\.ms/i.test(url)) {
+    return "Microsoft Clarity";
+  }
+  if (/googletagmanager\.com/i.test(url)) {
+    return "Google Tag Manager";
+  }
+  return null;
+}
+
+function classifyEndpointCategory(url: string | null | undefined, fallback: string | null | undefined) {
+  if (!url) {
+    return fallback ?? "sync_or_measurement";
+  }
+  if (/c\.bing\.com|bat\.bing\.com/i.test(url)) {
+    return "advertising_measurement";
+  }
+  if (/c\.clarity\.ms/i.test(url)) {
+    return "session_replay_sync";
+  }
+  return fallback && fallback !== "session_replay" ? fallback : "sync_or_measurement";
+}
+
 function isLikelyIdentifierRequest(url: string) {
   try {
     return [...new URL(url).searchParams.keys()].some((key) => IDENTIFIER_QUERY_KEY_PATTERN.test(key));
@@ -1794,11 +1823,21 @@ function buildGenericCanonicalEvidenceDetails(
       initiatorUrl: getRecordString(row, ["url", "requestUrl", "initiatorUrl", "cookieInitiatorUrl"]),
       timingStatus: getRecordString(row, ["timingStatus", "timing_status"]) ?? "pre_consent"
     }));
-    const relatedRuntimeRequests = representativeRequests.map((request) => ({
-      ...request,
-      evidenceRole: "related_vendor_request",
-      timingStatus: "unknown"
-    }));
+    const relatedRuntimeRequests = representativeRequests.map((request) => {
+      const endpointVendor = inferEndpointVendorNameFromUrl(request.url);
+      const initiatingVendor =
+        endpointVendor && request.vendor && endpointVendor !== request.vendor ? request.vendor : null;
+      const category = classifyEndpointCategory(request.url, request.category);
+      return {
+        ...request,
+        vendor: endpointVendor ?? request.vendor,
+        endpointVendor,
+        initiatingVendor,
+        category,
+        evidenceRole: "related_vendor_request",
+        timingStatus: "unknown"
+      };
+    });
     const representativePreConsentRequests = representativeRequests
       .filter((request) => request.preConsent === true)
       .map((request) => ({
@@ -1810,6 +1849,10 @@ function buildGenericCanonicalEvidenceDetails(
       cookieCount:
         getCountValue(packet, ["preConsentTrackingCookies", "preconsent_cookie_before_consent_count", "preconsentCookieCount"]) ??
         (cookieNames.length > 0 ? cookieNames.length : undefined),
+      trackingCookieWritesBeforeConsent:
+        getCountValue(packet, ["preConsentTrackingCookies", "preconsent_cookie_before_consent_count", "preconsentCookieCount"]) ??
+        (cookieNames.length > 0 ? cookieNames.length : undefined),
+      totalUniqueCookiesObserved: getCountValue(packet, ["total_cookie_count", "totalCookieCount"]),
       basis: evidenceSnippets[0] ?? "Cookie or storage evidence was retained for this finding.",
       preConsentContext: /pre_consent|preconsent/i.test(findingId),
       ...(cookieNames.length > 0 ? { cookieNames: cookieNames.slice(0, 12) } : {}),

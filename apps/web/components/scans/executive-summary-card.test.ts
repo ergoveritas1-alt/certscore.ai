@@ -495,13 +495,13 @@ test("buildRegulatoryLensesFromUnifiedPackets labels classified and raw cookie c
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
   const cookieFinding = gdprLens?.findings.find((finding) => finding.id === "before_consent_cookie_count");
 
-  assert.equal(cookieFinding?.label, "15 classified cookies were observed before consent.");
+  assert.equal(cookieFinding?.label, "15 classified cookie records were observed before consent.");
   assert.equal(cookieFinding?.evidence.classifiedCookieCount, 15);
   assert.equal(cookieFinding?.evidence.rawObservationCount, 13);
   assert.deepEqual(cookieFinding?.evidence.cookieNames, cookieNames);
 });
 
-test("buildRegulatoryLenses explains retained cookie timing context when no top-level tracking finding promotes", () => {
+test("buildRegulatoryLenses uses metric-specific retained-context explanations when no top-level tracking finding promotes", () => {
   const lenses = buildRegulatoryLenses(
     [
       makeFinding("accessibility_risk_score", "Automated accessibility signals are the main review area", {
@@ -527,6 +527,25 @@ test("buildRegulatoryLenses explains retained cookie timing context when no top-
   );
   assert.equal(requestFinding?.label, "18 third-party request records were observed on the initial path.");
   assert.equal(requestFinding?.reviewContextLabel, "Why not top-level?");
+  assert.equal(
+    requestFinding?.reviewContextCopy,
+    "Third-party request context was retained, but CertScore did not retain enough classified advertising, sharing, sale/share, or disclosure-gap evidence to promote this into a top-level third-party tracking or sharing finding."
+  );
+});
+
+test("buildRegulatoryLenses softens cookie timing copy when attribution arrays are empty", () => {
+  const lenses = buildRegulatoryLenses([], {
+    beforeConsentCookieCount: 19,
+    thirdPartyRequestCount: 0
+  });
+  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
+  const cookieFinding = gdprLens?.findings.find((finding) => finding.id === "before_consent_cookie_count");
+
+  assert.equal(
+    cookieFinding?.label,
+    "19 cookie timing records were retained before consent; vendor/category attribution was not retained."
+  );
+  assert.doesNotMatch(cookieFinding?.label ?? "", /classified cookies/i);
 });
 
 test("buildRegulatoryLensesFromUnifiedPackets does not convert raw cookie observations into issue copy when canonical count is zero", () => {
@@ -645,6 +664,26 @@ test("buildRegulatoryLenses maps consent-choice review signals into GDPR without
   assert.equal(ftcLens?.detailTitle, "Choice architecture review signals");
   assert.equal(ftcLens?.summary, "Consent-choice design should be reviewed for clarity.");
   assert.doesNotMatch(ftcLens?.detailTitle ?? "", /Dark pattern/i);
+});
+
+test("buildRegulatoryLenses restricts EU-specific note pills outside FTC lens", () => {
+  const lenses = buildRegulatoryLenses(
+    [
+      makeFinding("reject_option_missing_or_hidden", "Reject option missing or hidden", {
+        severity: "medium",
+        shortSummary: "Reject choice was not retained as visible on the first consent layer."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 3,
+      thirdPartyRequestCount: 0
+    }
+  );
+  const ftcFinding = lenses.find((lens) => lens.acronym === "FTC")?.findings.find((finding) => finding.id === "reject_option_missing_or_hidden");
+  const gdprFinding = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.find((finding) => finding.id === "reject_option_missing_or_hidden");
+
+  assert.equal(ftcFinding?.reviewContextChips?.some((chip) => /GDPR|ePrivacy|Article 5/i.test(chip)), false);
+  assert.ok(gdprFinding?.reviewContextChips?.some((chip) => /GDPR|ePrivacy|Article 5|consent/i.test(chip)));
 });
 
 test("buildRegulatoryLenses maps dark-pattern umbrella to FTC by default and GDPR only with tracking context", () => {
@@ -1666,7 +1705,7 @@ test("ExecutiveSummaryCard shows benchmark beside posture without scanned timest
   assert.match(html, /line-clamp-2/);
   assert.match(html, /132 third-party requests/);
   assert.match(html, /\+124 above expected for Web portal \/ News &amp; Media \/ Internet services/);
-  assert.match(html, /20 cookies before consent/);
+  assert.match(html, /20 cookie records before consent/);
   assert.match(html, /\+16 above expected for Web portal \/ News &amp; Media \/ Internet services/);
   assert.doesNotMatch(html, /Scanned Apr/);
   assert.ok(html.indexOf("Action Needed") < html.indexOf("Benchmark: Web portal"));
@@ -2442,6 +2481,68 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
   assert.doesNotMatch(html, /CIPA violation confirmed|legal liability|violates?|illegal|deceptive|manipulative|non-compliant/i);
 });
 
+test("ExecutiveSummaryCard explains executive and finding cookie count differences", () => {
+  const cookieFinding = makeFinding("third_party_cookie_pre_consent", "Third-party tracking cookie before consent", {
+    confidence: "strong",
+    evidenceDetails: {
+      counts: {
+        preConsentTrackingCookies: 13,
+        total_cookie_count: 10
+      },
+      cookieEvidence: {
+        observed: true,
+        cookieCount: 13,
+        trackingCookieWritesBeforeConsent: 13,
+        totalUniqueCookiesObserved: 10,
+        cookieWriteEvidence: [{ cookieName: "_clck", timingStatus: "pre_consent" }],
+        storageEvidence: [{ cookieName: "_clck", timingStatus: "pre_consent" }]
+      },
+      scanContext: {
+        pageUrl: "https://www.kbdlab.io/",
+        scanMode: "initial_page_load",
+        interactionBeforeFinding: false
+      },
+      policyEvidence: { evaluated: false }
+    },
+    severity: "high",
+    shortSummary: "Tracking cookie writes were retained before consent."
+  });
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [cookieFinding],
+      beforeConsentCookieCount: 15,
+      domainBenchmark: null,
+      finalHost: "kbdlab.io",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-17T20:00:00.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: ["Microsoft Clarity"],
+      requestedHost: "kbdlab.io",
+      resolvedVendorNames: ["Microsoft Clarity"],
+      score: 48,
+      sessionReplayVendorNames: ["Microsoft Clarity"],
+      thirdPartyRequestCount: 20,
+      thirdPartyDomains: ["www.clarity.ms"],
+      topFindings: [cookieFinding],
+      topObservedEntities: [{ label: "Microsoft Clarity", category: "session_replay", requestCount: 4 }],
+      trackerSummary: "1 vendor across 20 third-party requests",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { session_replay: 1 }
+    })
+  );
+
+  assert.match(html, /Cookie records before consent/);
+  assert.match(html, /15 cookie records before consent/);
+  assert.match(html, /Executive metric includes all retained cookie timing records; this finding shows the subset attributed to tracking\/storage evidence\./);
+  assert.match(html, /trackingCookieWritesBeforeConsent/);
+  assert.match(html, /totalUniqueCookiesObserved/);
+  assert.match(html, /Partial means some timing evidence was retained directly, while related vendor\/request attribution may be aggregated or unavailable\./);
+});
+
 test("ExecutiveSummaryCard hides evidence detail toggle when retained JSON would be metadata-only", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
@@ -2912,7 +3013,8 @@ test("ExecutiveSummaryCard keeps regulatory cookie copy aligned with canonical c
   assert.match(html, /Third-party collection and disclosure posture drives this score\./);
   assert.match(html, /FTC/);
   assert.match(html, /Pre-consent tracking and third-party collection should be reviewed for consumer-protection context\./);
-  assert.match(html, /64 classified cookies were observed before consent\./);
+  assert.match(html, /64 cookie timing records were retained before consent; vendor\/category attribution was not retained\./);
+  assert.doesNotMatch(html, /64 classified cookie records were observed before consent\./);
   assert.doesNotMatch(html, /64 cookies were observed before consent\./);
 });
 

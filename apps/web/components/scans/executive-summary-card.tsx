@@ -551,6 +551,8 @@ function buildRegulatoryLensEvidencePayload(finding: CertScoreFinding, context?:
         "cookieCount",
         "thirdPartyCookieCount",
         "preConsentCookieCount",
+        "trackingCookieWritesBeforeConsent",
+        "totalUniqueCookiesObserved",
         "cookieNames",
         "cookieWriteEvidence",
         "storageEvidence",
@@ -622,7 +624,10 @@ function buildRegulatoryLensFindingFromCertFinding(
   context?: Record<string, unknown>
 ) {
   const regulatoryContext = getFindingRegulatoryContext(finding.id);
-  const reviewContextChips = getFindingReviewContextChips(finding.id, 4);
+  const reviewContextChips = filterReviewContextChipsForLens(
+    getFindingReviewContextChips(finding.id, 6),
+    typeof context?.lens === "string" ? context.lens : null
+  ).slice(0, 4);
 
   return buildRegulatoryLensFinding({
     evidence: {
@@ -643,6 +648,28 @@ function buildRegulatoryLensFindingFromCertFinding(
     reviewContextCopy: regulatoryContext?.primaryConcern.displayCopy,
     reviewContextLabel: regulatoryContext?.primaryConcern.label
   });
+}
+
+function filterReviewContextChipsForLens(chips: string[], lens: string | null) {
+  if (!lens) {
+    return chips;
+  }
+  if (/FTC/i.test(lens)) {
+    return chips.filter((chip) =>
+      /FTC|consumer|deception|unfair|disclosure|choice|dark pattern|clarity|substantiation/i.test(chip) &&
+      !/GDPR|ePrivacy|Article 5|EU\b/i.test(chip)
+    );
+  }
+  if (/CCPA|CPRA|CIPA/i.test(lens)) {
+    return chips.filter((chip) =>
+      /CCPA|CPRA|CIPA|California|sale|share|sharing|disclosure|sensitive|session|wiretap|eavesdrop|recording/i.test(chip) &&
+      !/GDPR|ePrivacy|Article 5|EU\b/i.test(chip)
+    );
+  }
+  if (/GDPR|ePrivacy/i.test(lens)) {
+    return chips.filter((chip) => /GDPR|ePrivacy|Article 5|consent|cookie|tracking/i.test(chip));
+  }
+  return chips;
 }
 
 function buildObservedCountLensFinding(input: {
@@ -668,6 +695,36 @@ function buildObservedCountLensFinding(input: {
     reviewContextCopy: input.reviewContextCopy,
     reviewContextLabel: input.reviewContextLabel
   });
+}
+
+const COOKIE_CONTEXT_NOT_TOP_LEVEL_COPY =
+  "Cookie timing context was retained, but CertScore did not retain enough classified non-essential tracking/vendor evidence to promote this into a top-level pre-consent tracking finding.";
+
+const THIRD_PARTY_REQUEST_CONTEXT_NOT_TOP_LEVEL_COPY =
+  "Third-party request context was retained, but CertScore did not retain enough classified advertising, sharing, sale/share, or disclosure-gap evidence to promote this into a top-level third-party tracking or sharing finding.";
+
+function hasNonEmptyArrayEvidence(value: Record<string, unknown> | null | undefined, keys: string[]) {
+  return keys.some((key) => {
+    const item = value?.[key];
+    return Array.isArray(item) && item.some((entry) => typeof entry === "string" && entry.trim().length > 0);
+  });
+}
+
+function hasBeforeConsentCookieAttribution(evidence: Record<string, unknown> | null | undefined) {
+  return hasNonEmptyArrayEvidence(evidence, [
+    "cookieNames",
+    "cookieCategories",
+    "cookieVendors",
+    "initiatorDomains",
+    "initiatorUrls",
+    "sourceFindingIds"
+  ]);
+}
+
+function formatBeforeConsentCookieCountLabel(count: number, evidence: Record<string, unknown> | null | undefined) {
+  return hasBeforeConsentCookieAttribution(evidence)
+    ? `${count} classified cookie records were observed before consent.`
+    : `${count} cookie timing records were retained before consent; vendor/category attribution was not retained.`;
 }
 
 function buildRegulatoryLensScoreDriver(input: {
@@ -1031,10 +1088,11 @@ export function buildRegulatoryLenses(
   const beforeConsentCookieCount = options?.unifiedContext?.beforeConsentCookieCount ?? counts.beforeConsentCookieCount;
   const thirdPartyRequestCount = options?.unifiedContext?.thirdPartyRequestCount ?? counts.thirdPartyRequestCount;
   const hasPreConsentCookieConcern = beforeConsentCookieCount > 0;
-  const retainedTrackingContextExplanation =
-    !trackingFinding && (beforeConsentCookieCount > 0 || thirdPartyRequestCount > 0)
-      ? "Cookie timing context was retained, but CertScore did not retain enough classified non-essential tracking/vendor evidence to promote this into a top-level pre-consent tracking finding."
-      : undefined;
+  const retainedCookieContextExplanation =
+    !trackingFinding && beforeConsentCookieCount > 0 ? COOKIE_CONTEXT_NOT_TOP_LEVEL_COPY : undefined;
+  const retainedThirdPartyRequestContextExplanation =
+    !trackingFinding && thirdPartyRequestCount > 0 ? THIRD_PARTY_REQUEST_CONTEXT_NOT_TOP_LEVEL_COPY : undefined;
+  const beforeConsentCookieEvidence = options?.unifiedContext?.beforeConsentCookieEvidence;
   const hasConsentConcern =
     findingIds.has("consent_dark_patterns_detected") ||
     findingIds.has("asymmetric_consent_ui") ||
@@ -1113,12 +1171,12 @@ export function buildRegulatoryLenses(
     beforeConsentCookieCount > 0
         ? buildObservedCountLensFinding({
             count: beforeConsentCookieCount,
-            evidence: options?.unifiedContext?.beforeConsentCookieEvidence,
+            evidence: beforeConsentCookieEvidence,
             id: "before_consent_cookie_count",
-            label: `${beforeConsentCookieCount} classified cookies were observed before consent.`,
+            label: formatBeforeConsentCookieCountLabel(beforeConsentCookieCount, beforeConsentCookieEvidence),
             metric: "beforeConsentCookieCount",
-            reviewContextCopy: retainedTrackingContextExplanation,
-            reviewContextLabel: retainedTrackingContextExplanation ? "Why not top-level?" : undefined,
+            reviewContextCopy: retainedCookieContextExplanation,
+            reviewContextLabel: retainedCookieContextExplanation ? "Why not top-level?" : undefined,
             source: "regulatory_counts"
           })
       : null
@@ -1136,8 +1194,8 @@ export function buildRegulatoryLenses(
             id: "third_party_request_count",
             label: `${thirdPartyRequestCount} third-party request records were observed on the initial path.`,
             metric: "thirdPartyRequestCount",
-            reviewContextCopy: retainedTrackingContextExplanation,
-            reviewContextLabel: retainedTrackingContextExplanation ? "Why not top-level?" : undefined,
+            reviewContextCopy: retainedThirdPartyRequestContextExplanation,
+            reviewContextLabel: retainedThirdPartyRequestContextExplanation ? "Why not top-level?" : undefined,
             source: "regulatory_counts"
           })
       : null
@@ -1198,12 +1256,12 @@ export function buildRegulatoryLenses(
         beforeConsentCookieCount > 0
           ? buildObservedCountLensFinding({
               count: beforeConsentCookieCount,
-              evidence: options?.unifiedContext?.beforeConsentCookieEvidence,
+              evidence: beforeConsentCookieEvidence,
               id: "cpra_before_consent_cookie_count",
-              label: `${beforeConsentCookieCount} classified cookies were observed before consent.`,
+              label: formatBeforeConsentCookieCountLabel(beforeConsentCookieCount, beforeConsentCookieEvidence),
               metric: "beforeConsentCookieCount",
-              reviewContextCopy: retainedTrackingContextExplanation,
-              reviewContextLabel: retainedTrackingContextExplanation ? "Why not top-level?" : undefined,
+              reviewContextCopy: retainedCookieContextExplanation,
+              reviewContextLabel: retainedCookieContextExplanation ? "Why not top-level?" : undefined,
               source: "regulatory_counts"
             })
           : null,
@@ -1213,8 +1271,8 @@ export function buildRegulatoryLenses(
               id: "cpra_third_party_request_count",
               label: `${thirdPartyRequestCount} third-party request records were observed on the initial path.`,
               metric: "thirdPartyRequestCount",
-              reviewContextCopy: retainedTrackingContextExplanation,
-              reviewContextLabel: retainedTrackingContextExplanation ? "Why not top-level?" : undefined,
+              reviewContextCopy: retainedThirdPartyRequestContextExplanation,
+              reviewContextLabel: retainedThirdPartyRequestContextExplanation ? "Why not top-level?" : undefined,
               source: "regulatory_counts"
             })
           : null,
@@ -1253,12 +1311,12 @@ export function buildRegulatoryLenses(
         beforeConsentCookieCount > 0
           ? buildObservedCountLensFinding({
               count: beforeConsentCookieCount,
-              evidence: options?.unifiedContext?.beforeConsentCookieEvidence,
+              evidence: beforeConsentCookieEvidence,
               id: "ftc_before_consent_cookie_count",
-              label: `${beforeConsentCookieCount} classified cookies were observed before consent.`,
+              label: formatBeforeConsentCookieCountLabel(beforeConsentCookieCount, beforeConsentCookieEvidence),
               metric: "beforeConsentCookieCount",
-              reviewContextCopy: retainedTrackingContextExplanation,
-              reviewContextLabel: retainedTrackingContextExplanation ? "Why not top-level?" : undefined,
+              reviewContextCopy: retainedCookieContextExplanation,
+              reviewContextLabel: retainedCookieContextExplanation ? "Why not top-level?" : undefined,
               source: "regulatory_counts"
             })
           : null,
@@ -1941,6 +1999,7 @@ function BenchmarkMetricCard(input: {
   benchmarkIndustry?: string | null;
   label: string;
   maxValue?: number;
+  note?: string | null;
 }) {
   const actualValue = typeof input.actualValue === "number" ? input.actualValue : null;
   const benchmarkValue = typeof input.benchmarkValue === "number" ? input.benchmarkValue : null;
@@ -2041,6 +2100,7 @@ function BenchmarkMetricCard(input: {
           {input.maxValue ? <span className="pb-1 text-[2rem] leading-none text-slate-500">/100</span> : null}
         </div>
         <p className="mt-1 text-xs leading-5 text-slate-600">{actualLabel}</p>
+        {input.note ? <p className="mt-2 text-[11px] leading-5 text-slate-500">{input.note}</p> : null}
       </div>
       <div className="mt-5 space-y-2">
         <div className={`relative h-3 rounded-full ${tone.rail}`}>
@@ -2414,6 +2474,21 @@ function buildEvidenceBasisCopy(finding: CertScoreFinding) {
     finding.id === "asymmetric_consent_ui"
   ) {
     return "Observed runtime behavior: The retained consent interaction structure shows reject was not available on the first layer. Retained evidence suggests consent UX review; it is not a legal determination.";
+  }
+
+  if (
+    finding.id === "third_party_cookie_pre_consent" ||
+    finding.id === "analytics_cookie_pre_consent" ||
+    finding.id === "adtech_cookie_pre_consent"
+  ) {
+    const cookieEvidence = details.cookieEvidence;
+    const hasDirectCookieTimingEvidence =
+      hasRecords(cookieEvidence?.cookieWriteEvidence) || hasRecords(cookieEvidence?.storageEvidence);
+    if (cookieEvidence) {
+      return hasDirectCookieTimingEvidence
+        ? "Cookie timing evidence was retained directly for this finding. Partial means some timing evidence was retained directly, while related vendor/request attribution may be aggregated or unavailable."
+        : "Partial means some timing evidence was retained directly, while related vendor/request attribution may be aggregated or unavailable.";
+    }
   }
 
   return null;
@@ -2909,6 +2984,30 @@ function hasMeaningfulFindingEvidence(finding: CertScoreFinding) {
   );
 }
 
+function getFindingCookieWriteCount(finding: CertScoreFinding) {
+  const details = finding.evidenceDetails;
+  const candidate =
+    details?.cookieEvidence?.trackingCookieWritesBeforeConsent ??
+    details?.cookieEvidence?.cookieCount ??
+    details?.counts?.preConsentTrackingCookies;
+  return typeof candidate === "number" && Number.isFinite(candidate) ? candidate : null;
+}
+
+function getCookieCountMismatchNote(input: {
+  beforeConsentCookieCount: number;
+  findings: CertScoreFinding[];
+}) {
+  const findingCount = input.findings
+    .map(getFindingCookieWriteCount)
+    .find((count): count is number => typeof count === "number" && count >= 0);
+
+  if (typeof findingCount !== "number" || findingCount === input.beforeConsentCookieCount) {
+    return null;
+  }
+
+  return "Executive metric includes all retained cookie timing records; this finding shows the subset attributed to tracking/storage evidence.";
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -3120,6 +3219,8 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
           "cookieCount",
           "thirdPartyCookieCount",
           "preConsentCookieCount",
+          "trackingCookieWritesBeforeConsent",
+          "totalUniqueCookiesObserved",
           "basis",
           "cookieNames",
           "cookieWriteEvidence",
@@ -3330,6 +3431,10 @@ export function ExecutiveSummaryCard(input: {
   const topFindingIconKeys = assignUniqueFindingTitleIconKeys(filteredTopFindings);
   const regulatoryFindingInput =
     Array.isArray(input.allFindings) && input.allFindings.length > 0 ? input.allFindings : input.topFindings;
+  const cookieCountMismatchNote = getCookieCountMismatchNote({
+    beforeConsentCookieCount: input.beforeConsentCookieCount,
+    findings: regulatoryFindingInput
+  });
   const executiveHeadlineFindings = filteredTopFindings.slice(0, 3);
   const hasScrollableTopFindings = filteredTopFindings.length > 3;
   const namedVendors = uniqueStrings(input.resolvedVendorNames).slice(0, 8);
@@ -3553,10 +3658,11 @@ export function ExecutiveSummaryCard(input: {
                   benchmarkIndustry={input.domainBenchmark?.industry ?? null}
                 />
                 <BenchmarkMetricCard
-                  label="Cookies before consent"
+                  label="Cookie records before consent"
                   actualValue={input.beforeConsentCookieCount}
                   benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
                   benchmarkIndustry={input.domainBenchmark?.industry ?? null}
+                  note={cookieCountMismatchNote}
                 />
               </div>
               {benchmarkScoreExplanation ? (
