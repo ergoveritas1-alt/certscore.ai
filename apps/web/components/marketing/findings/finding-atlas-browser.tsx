@@ -308,12 +308,12 @@ function TimelineSummary({ events }: { events: TimelineEvent[] }) {
   }
 
   return (
-    <section className="border border-slate-200 bg-white p-4">
-      <h3 className="text-sm font-semibold text-slate-950">Timeline</h3>
-      <ol className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+    <section className="border border-slate-800 bg-slate-950 p-4">
+      <h3 className="text-sm font-semibold text-slate-50">Timeline</h3>
+      <ol className="mt-3 space-y-2 text-sm leading-6 text-slate-200">
         {events.map((event) => (
           <li key={`${event.value}-${event.label}`} className="grid grid-cols-[4.5rem_1fr] gap-3">
-            <span className="font-mono text-xs tabular-nums text-slate-500">{event.value}</span>
+            <span className="font-mono text-xs tabular-nums text-slate-400">{event.value}</span>
             <span>{event.label}</span>
           </li>
         ))}
@@ -331,11 +331,11 @@ function VendorSummary({ vendors }: { vendors: string[] }) {
   const remainingCount = Math.max(0, vendors.length - visibleVendors.length);
 
   return (
-    <section className="border border-slate-200 bg-white p-4">
-      <h3 className="text-sm font-semibold text-slate-950">Observed vendors</h3>
-      <p className="mt-3 text-sm leading-6 text-slate-600">{visibleVendors.join(", ")}</p>
+    <section className="border border-slate-800 bg-slate-950 p-4">
+      <h3 className="text-sm font-semibold text-slate-50">Observed vendors</h3>
+      <p className="mt-3 text-sm leading-6 text-slate-200">{visibleVendors.join(", ")}</p>
       {remainingCount > 0 ? (
-        <p className="mt-2 text-xs font-semibold text-slate-500">+{remainingCount} more</p>
+        <p className="mt-2 text-xs font-semibold text-slate-400">+{remainingCount} more</p>
       ) : null}
     </section>
   );
@@ -450,12 +450,18 @@ function FindingReferenceSection({
               type="button"
               onClick={() => setIsJsonOpen((current) => !current)}
               aria-expanded={isJsonOpen}
-              className="inline-flex items-center gap-2 border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-sky-200 hover:bg-sky-50 hover:text-sky-800"
+              aria-controls={`${finding.id}-example-json`}
+              className="inline-flex items-center gap-2 border border-slate-950 bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
             >
               <JsonIcon />
               {isJsonOpen ? "Hide example JSON" : "View example JSON"}
             </button>
           </div>
+          {isJsonOpen ? (
+            <div id={`${finding.id}-example-json`}>
+              <EvidenceBlock title="Redacted example JSON" code={sampleJson} />
+            </div>
+          ) : null}
           <div className="grid gap-3 lg:grid-cols-2">
             <TimelineSummary events={timelineEvents} />
             <VendorSummary vendors={vendors} />
@@ -466,9 +472,6 @@ function FindingReferenceSection({
             />
           </div>
           <EvidenceStandard />
-          {isJsonOpen ? (
-            <EvidenceBlock title="Redacted example JSON" code={sampleJson} />
-          ) : null}
         </section>
 
         <div className="grid gap-4 lg:grid-cols-2">
