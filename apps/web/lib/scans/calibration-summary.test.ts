@@ -447,7 +447,12 @@ test("builds calibration summary with under-observed ecosystem diagnostics", () 
   assert.equal(summary.executive.displayState, "Limited review");
   assert.equal(summary.coverage.diagnosticIndicators.length, 1);
   assert.equal(summary.coverage.diagnosticIndicators[0]?.id, "likely_incomplete_tracking_ecosystem");
-  assert.match(summary.coverage.diagnosticIndicators[0]?.message ?? "", /coverage-constrained/);
+  assert.match(summary.coverage.diagnosticIndicators[0]?.message ?? "", /^Coverage diagnostic:/);
+  assert.match(summary.coverage.diagnosticIndicators[0]?.message ?? "", /may not have been fully observable/);
+  assert.doesNotMatch(
+    summary.coverage.diagnosticIndicators[0]?.message ?? "",
+    /tracking was missed|blocked trackers detected|non-compliant|hidden tracking/i
+  );
 });
 
 test("builds a calibration summary that preserves same-site alias posture without flagging an off-origin landing", () => {

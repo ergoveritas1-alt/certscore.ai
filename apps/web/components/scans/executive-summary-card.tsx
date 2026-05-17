@@ -3023,6 +3023,7 @@ export function ExecutiveSummaryCard(input: {
   beforeConsentCookieCount: number;
   coverageMicrocards?: Array<{
     label: string;
+    tooltip?: string | null;
     tone?: "amber" | "slate";
   }> | null;
   coverageDiagnosticIndicators?: CoverageDiagnosticIndicator[] | null;
@@ -3124,6 +3125,7 @@ export function ExecutiveSummaryCard(input: {
     ...(input.coverageMicrocards ?? []),
     ...(input.coverageDiagnosticIndicators ?? []).map((indicator) => ({
       label: indicator.label,
+      tooltip: indicator.message,
       tone: "amber" as const
     }))
   ];
@@ -3240,6 +3242,8 @@ export function ExecutiveSummaryCard(input: {
                     {coverageCalloutMicrocards.map((card) => (
                       <span
                         key={card.label}
+                        aria-label={card.tooltip ?? card.label}
+                        title={card.tooltip ?? undefined}
                         className={
                           card.tone === "amber"
                             ? "inline-flex rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-950"

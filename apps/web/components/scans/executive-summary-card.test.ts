@@ -1144,7 +1144,7 @@ test("ExecutiveSummaryCard surfaces under-observed ecosystem coverage diagnostic
           id: "likely_incomplete_tracking_ecosystem",
           label: "Likely incomplete ecosystem",
           message:
-            "Observed third-party request volume was far below the benchmark while site protections interrupted collection and before-consent cookies were elevated. Treat tracker/vendor absence as coverage-constrained, not as a clean ecosystem result.",
+            "Coverage diagnostic: Observed request volume was unusually low for this benchmark while cookies/interruption signals were present. Some deferred or protected tracking paths may not have been fully observable.",
           severity: "review",
           evidence: {
             beforeConsentCookieCount: 19,
@@ -1207,7 +1207,9 @@ test("ExecutiveSummaryCard surfaces under-observed ecosystem coverage diagnostic
   assert.match(html, /Limited review/);
   assert.match(html, /Runtime coverage was limited by site protections/);
   assert.match(html, /Likely incomplete ecosystem/);
+  assert.match(html, /Coverage diagnostic: Observed request volume was unusually low for this benchmark/);
   assert.match(html, /Observed vendor and request counts may be incomplete/);
+  assert.doesNotMatch(html, /tracking was missed|blocked trackers detected|non-compliant|hidden tracking/i);
   assert.doesNotMatch(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
 });
 

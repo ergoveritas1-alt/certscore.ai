@@ -301,7 +301,7 @@ export function deriveCoverageDiagnosticIndicators(input: {
       id: "likely_incomplete_tracking_ecosystem",
       label: "Likely incomplete ecosystem",
       message:
-        "Observed third-party request volume was far below the benchmark while site protections interrupted collection and before-consent cookies were elevated. Treat tracker/vendor absence as coverage-constrained, not as a clean ecosystem result.",
+        "Coverage diagnostic: Observed request volume was unusually low for this benchmark while cookies/interruption signals were present. Some deferred or protected tracking paths may not have been fully observable.",
       severity: "review",
       evidence: {
         beforeConsentCookieCount,
