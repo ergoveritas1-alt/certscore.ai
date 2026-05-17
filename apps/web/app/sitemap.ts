@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { getFindingReferenceItems } from "../lib/marketing/finding-atlas";
 import { SITE_URL } from "../lib/seo";
 
 const staticPaths = [
@@ -59,8 +60,9 @@ const staticPaths = [
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
+  const findingPaths = getFindingReferenceItems().map((finding) => `/guides/findings/${finding.id}`);
 
-  return staticPaths.map((path) => ({
+  return [...staticPaths, ...findingPaths].map((path) => ({
     url: `${SITE_URL}${path}`,
     lastModified: now
   }));

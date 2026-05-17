@@ -4,7 +4,9 @@ import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
 import { DomainScanForm } from "../../components/marketing/domain-scan-form";
+import { HomepageFindingsOverview } from "../../components/marketing/homepage-findings-overview";
 import { PendingButtonLink } from "../../components/ui/pending-link";
+import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 const SAMPLE_REPORT_URL = "https://certscore.ai/scan/bc6e4dfa-8a25-43f8-822d-a10e89950799";
@@ -85,89 +87,8 @@ function PersonaIcon({ index }: { index: number }) {
   );
 }
 
-function ObservableSignalsIcon() {
-  return (
-    <div className="relative flex h-9 w-9 items-center justify-center">
-      <span className="absolute inset-0 rounded-2xl bg-sky-50 ring-1 ring-sky-100" />
-      <svg viewBox="0 0 36 36" className="relative h-6 w-6" aria-hidden="true">
-        <circle cx="18" cy="18" r="8.5" fill="none" stroke="#20b8dd" strokeWidth="2.2" />
-        <circle cx="18" cy="18" r="3" fill="#20b8dd" />
-        <circle cx="10" cy="12" r="2.2" fill="#7c4dff" />
-        <circle cx="25.5" cy="10.5" r="1.9" fill="#0f8bd7" opacity="0.9" />
-        <circle cx="26" cy="25" r="2.2" fill="#67c7f0" />
-      </svg>
-    </div>
-  );
-}
-
-function MinimalStoredDataIcon() {
-  return (
-    <div className="relative flex h-9 w-9 items-center justify-center">
-      <span className="absolute inset-0 rounded-2xl bg-emerald-50 ring-1 ring-emerald-100" />
-      <svg viewBox="0 0 36 36" className="relative h-6 w-6" aria-hidden="true">
-        <ellipse cx="18" cy="10" rx="8.5" ry="4" fill="#47b54a" opacity="0.2" />
-        <ellipse cx="18" cy="10" rx="8.5" ry="4" fill="none" stroke="#47b54a" strokeWidth="2.2" />
-        <path d="M9.5 10v11c0 2.2 3.8 4 8.5 4s8.5-1.8 8.5-4V10" fill="none" stroke="#47b54a" strokeWidth="2.2" />
-        <path d="M13.2 18.4l3.1 3.2 6.5-7.2" fill="none" stroke="#0f8bd7" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </div>
-  );
-}
-
-function ChangeTrackingIcon() {
-  return (
-    <div className="relative flex h-9 w-9 items-center justify-center">
-      <span className="absolute inset-0 rounded-2xl bg-slate-50 ring-1 ring-slate-200" />
-      <svg viewBox="0 0 36 36" className="relative h-6 w-6" aria-hidden="true">
-        <path d="M10 12.5h11.5" stroke="#0f8bd7" strokeWidth="2.2" strokeLinecap="round" />
-        <path d="M10 18h14.5" stroke="#20b8dd" strokeWidth="2.2" strokeLinecap="round" />
-        <path d="M10 23.5h9.5" stroke="#94a3b8" strokeWidth="2.2" strokeLinecap="round" />
-        <path d="M24.8 10.2a7.3 7.3 0 1 1-4.6 13" fill="none" stroke="#7c4dff" strokeWidth="2.2" strokeLinecap="round" />
-        <path d="m18.6 21.2 1.1 3.7 3.7-1.1" fill="none" stroke="#7c4dff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </div>
-  );
-}
-
-function SignalCheckIcon() {
-  return (
-    <div className="relative mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center">
-      <span className="absolute inset-0 rounded-full bg-[linear-gradient(180deg,rgba(224,242,254,0.96)_0%,rgba(239,246,255,0.98)_100%)] ring-1 ring-sky-200" />
-      <svg viewBox="0 0 24 24" className="relative h-4.5 w-4.5" aria-hidden="true">
-        <path d="m7.3 12.1 3 3.1 6.5-7" fill="none" stroke="#0f8bd7" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </div>
-  );
-}
-
-const evidenceDetails = [
-  {
-    label: "First tracking request",
-    value: "420ms after page load, before banner interaction"
-  },
-  {
-    label: "Vendors observed",
-    value: "Google Tag Manager, Meta"
-  },
-  {
-    label: "Explanation",
-    value: "Marketing and analytics requests started before the visitor made a consent choice."
-  },
-  {
-    label: "Recommended fix",
-    value: "Delay marketing tags until opt-in consent is recorded, then re-scan to verify the consent flow."
-  }
-];
-
-const buyerQuestions = [
-  "Did tracking start before consent?",
-  "Did rejecting consent actually change behavior?",
-  "Which vendors fired on page load?",
-  "Are cookie, consent, disclosure, and accessibility signals changing over time?",
-  "Is this site's public behavior worth deeper review?"
-];
-
 export default async function MarketingHomePage() {
+  const findings = getFindingReferenceItems();
   const softwareApplicationSchema = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -177,10 +98,24 @@ export default async function MarketingHomePage() {
     description:
       "CertScore.ai scans public websites for observable tracking, cookie, consent, accessibility, and privacy risk signals."
   };
+  const findingRegistrySchema = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: "CertScore finding reference pages",
+    itemListElement: findings.map((finding, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      url: `${SITE_URL}/guides/findings/${finding.id}`,
+      name: finding.title,
+      identifier: finding.id,
+      description: finding.observed
+    }))
+  };
 
   return (
     <main className="min-h-screen bg-slate-50">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(findingRegistrySchema) }} />
       <SiteHeader />
 
       <section className="border-b border-slate-200 bg-[radial-gradient(circle_at_50%_-12%,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.72)_24%,rgba(238,242,255,0.88)_58%,rgba(244,246,255,0.98)_100%)]">
@@ -250,51 +185,7 @@ export default async function MarketingHomePage() {
         </div>
       </section>
 
-      <section id="sample-report" className="border-y border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-16">
-          <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-            <div className="space-y-4">
-              <Badge tone="neutral">Evidence example</Badge>
-              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Tracking started before consent</h2>
-              <p className="text-sm leading-6 text-slate-600">
-                CertScore records timing, vendors, requests, and consent-flow outcomes so teams can review what happened in the browser.
-              </p>
-            </div>
-            <Card className="border border-slate-200 bg-slate-50 shadow-none">
-              <CardContent className="grid gap-4 p-6">
-                {evidenceDetails.map((item) => (
-                  <div key={item.label} className="grid gap-1 border-b border-slate-200 pb-4 last:border-0 last:pb-0 sm:grid-cols-[12rem_1fr]">
-                    <p className="text-sm font-semibold text-slate-950">{item.label}</p>
-                    <p className="text-sm leading-6 text-slate-600">{item.value}</p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-16">
-          <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
-            <div className="max-w-xl space-y-3">
-              <Badge tone="neutral">Review questions</Badge>
-              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Use CertScore when you need to know:</h2>
-              <p className="text-sm leading-6 text-slate-600">
-                Turn public website behavior into reviewable questions for product, privacy, agency, and operations teams.
-              </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {buyerQuestions.map((question) => (
-                <div key={question} className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <SignalCheckIcon />
-                  <p className="text-sm font-medium leading-6 text-slate-800">{question}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+      <HomepageFindingsOverview findings={findings} />
 
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-16">

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   type FindingReferenceItem
 } from "../../../lib/marketing/finding-atlas";
@@ -9,7 +9,12 @@ import {
 type FindingAtlasBrowserProps = {
   findings: FindingReferenceItem[];
   compact?: boolean;
+  initialFindingId?: string;
 };
+
+function getFindingReferenceHref(findingId: string) {
+  return `/guides/findings/${findingId}`;
+}
 
 function EvidenceBlock({ title, code }: { title: string; code: string }) {
   return (
@@ -50,10 +55,6 @@ function BulletList({ items }: { items: string[] }) {
       ))}
     </ul>
   );
-}
-
-function formatDensity(value: number) {
-  return `${value.toFixed(value < 1 ? 1 : 0)}%`;
 }
 
 function formatChipLabel(value: string) {
@@ -245,63 +246,6 @@ function makeRedactedJson(finding: FindingReferenceItem) {
   };
 }
 
-function DensityBenchmarkGraph({ finding }: { finding: FindingReferenceItem }) {
-  const rows = finding.benchmark.slices.length > 0
-    ? finding.benchmark.slices
-    : [
-        {
-          label: finding.benchmark.sourceLabel,
-          positiveCount: finding.benchmark.positiveCount,
-          sampleSize: finding.benchmark.sampleSize,
-          densityPct: finding.benchmark.densityPct
-        }
-      ];
-
-  return (
-    <section className="border border-slate-200 bg-white p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-950">How common this appeared in recent scans</h3>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            Directional benchmark context, not a legal or statistical conclusion.
-          </p>
-        </div>
-        <p className="shrink-0 text-2xl font-semibold tracking-tight text-slate-950">
-          {formatDensity(finding.benchmark.densityPct)}
-        </p>
-      </div>
-      <div className="mt-4 space-y-3">
-        {rows.map((row) => (
-          <div key={row.label} className="space-y-1.5">
-            <div className="flex flex-col gap-1 text-xs sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-              <span className="min-w-0 truncate font-medium text-slate-700">{row.label}</span>
-              <span className="tabular-nums text-slate-500 sm:text-right">
-                {formatBenchmarkSampleText(row)}
-              </span>
-            </div>
-            <div className="h-2.5 overflow-hidden bg-slate-100">
-              <div
-                className="h-full bg-sky-500"
-                style={{ width: `${Math.max(1, Math.min(100, row.densityPct))}%` }}
-                aria-label={`${row.label}: ${formatDensity(row.densityPct)}`}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-      <p className="mt-3 text-xs leading-5 text-slate-500">{finding.benchmark.sourceLabel}</p>
-    </section>
-  );
-}
-
-function formatBenchmarkSampleText(row: { label: string; positiveCount: number; sampleSize: number }) {
-  if (/tranco ranks 851-1205/i.test(row.label)) {
-    return `${row.positiveCount} of ${row.sampleSize} sampled Tranco rank 851-1205 sites`;
-  }
-
-  return `${row.positiveCount} of ${row.sampleSize} sampled sites`;
-}
-
 function TimelineSummary({ events }: { events: TimelineEvent[] }) {
   if (events.length === 0) {
     return null;
@@ -412,6 +356,78 @@ function MethodologyContext({ finding }: { finding: FindingReferenceItem }) {
   );
 }
 
+function RegulatoryReviewContext({ finding }: { finding: FindingReferenceItem }) {
+  const context = finding.regulatoryContext;
+
+  if (!context) {
+    return null;
+  }
+
+  const visibleChips = [
+    ...context.technicalStandards.map((item) => item.label),
+    ...context.jurisdictionalContexts.map((item) => item.label)
+  ].slice(0, 6);
+  const hiddenCount = Math.max(
+    0,
+    context.technicalStandards.length + context.jurisdictionalContexts.length - visibleChips.length
+  );
+
+  return (
+    <section className="border border-slate-200 bg-white p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Regulatory review context</p>
+      <div className="mt-3 space-y-2">
+        <h3 className="text-base font-semibold text-slate-950">{context.primaryConcern.label}</h3>
+        <p className="text-sm leading-6 text-slate-600">{context.primaryConcern.displayCopy}</p>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {visibleChips.map((chip) => (
+          <span key={chip} className="border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+            {chip}
+          </span>
+        ))}
+        {hiddenCount > 0 ? (
+          <span className="border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+            Additional context in notes
+          </span>
+        ) : null}
+      </div>
+      <details className="mt-3 group">
+        <summary className="inline-flex h-10 cursor-pointer list-none items-center justify-center rounded-md border border-slate-950 bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden">
+          <span>View applicability notes</span>
+        </summary>
+        <div className="mt-3 grid gap-3 text-sm leading-6 text-slate-600 lg:grid-cols-2">
+          <div>
+            <h4 className="font-semibold text-slate-950">Technical standards</h4>
+            <ul className="mt-2 space-y-2">
+              {context.technicalStandards.map((item) => (
+                <li key={item.id}>
+                  <span className="font-medium text-slate-800">{item.label}</span>
+                  {item.level ? <span className="text-slate-500"> ({item.level})</span> : null}
+                  <span className="block text-slate-500">{item.appliesWhen}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-semibold text-slate-950">Jurisdictional contexts</h4>
+            <ul className="mt-2 space-y-2">
+              {context.jurisdictionalContexts.map((item) => (
+                <li key={item.id}>
+                  <span className="font-medium text-slate-800">{item.label}</span>
+                  <span className="block text-slate-500">{item.appliesWhen}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </details>
+      <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
+        {context.displayCaution}
+      </p>
+    </section>
+  );
+}
+
 function getWhyThisMattersCopy(finding: FindingReferenceItem) {
   if (finding.id === "pre_consent_tracking_detected") {
     return "This can indicate that analytics, advertising, or profiling vendors were allowed to run before the site recorded a user choice. Depending on the site, region, vendor purpose, and consent design, that timing can be relevant to privacy, consent, and consumer-protection review.";
@@ -425,7 +441,6 @@ function FindingReferenceSection({
 }: {
   finding: FindingReferenceItem;
 }) {
-  const [isJsonOpen, setIsJsonOpen] = useState(false);
   const badges = useMemo(() => getFindingBadges(finding), [finding]);
   const timelineEvents = useMemo(() => getTimelineEvents(finding), [finding]);
   const vendors = useMemo(() => getRepresentativeVendors(finding), [finding]);
@@ -456,29 +471,21 @@ function FindingReferenceSection({
           </p>
         </section>
 
-        <DensityBenchmarkGraph finding={finding} />
-
-        <MethodologyContext finding={finding} />
+        <RegulatoryReviewContext finding={finding} />
 
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-slate-950">Example evidence</h3>
-            <button
-              type="button"
-              onClick={() => setIsJsonOpen((current) => !current)}
-              aria-expanded={isJsonOpen}
-              aria-controls={`${finding.id}-example-json`}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-950 bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-            >
-              <JsonIcon />
-              {isJsonOpen ? "Hide example JSON" : "View example JSON"}
-            </button>
           </div>
-          {isJsonOpen ? (
-            <div id={`${finding.id}-example-json`}>
+          <details id={`${finding.id}-example-json`} className="group">
+            <summary className="inline-flex h-10 cursor-pointer list-none items-center justify-center gap-2 rounded-md border border-slate-950 bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden">
+              <JsonIcon />
+              <span>View example JSON</span>
+            </summary>
+            <div className="mt-3">
               <EvidenceBlock title="Redacted example JSON" code={sampleJson} />
             </div>
-          ) : null}
+          </details>
           <div className="grid gap-3 lg:grid-cols-2">
             <TimelineSummary events={timelineEvents} />
             <VendorSummary vendors={vendors} />
@@ -505,13 +512,20 @@ function FindingReferenceSection({
             </div>
           </section>
         </div>
+
+        <MethodologyContext finding={finding} />
       </div>
     </article>
   );
 }
 
-export function FindingAtlasBrowser({ findings, compact = false }: FindingAtlasBrowserProps) {
-  const [activeFindingId, setActiveFindingId] = useState("pre_consent_tracking_detected");
+export function FindingAtlasBrowser({ findings, compact = false, initialFindingId = "pre_consent_tracking_detected" }: FindingAtlasBrowserProps) {
+  const [activeFindingId, setActiveFindingId] = useState(initialFindingId);
+
+  useEffect(() => {
+    setActiveFindingId(initialFindingId);
+  }, [initialFindingId]);
+
   const activeFinding = useMemo(
     () => findings.find((finding) => finding.id === activeFindingId) ?? findings[0],
     [activeFindingId, findings]
@@ -533,9 +547,9 @@ export function FindingAtlasBrowser({ findings, compact = false }: FindingAtlasB
                   const isActive = finding.id === activeFinding.id;
 
                   return (
-                    <button
+                    <Link
                       key={finding.id}
-                      type="button"
+                      href={getFindingReferenceHref(finding.id)}
                       onClick={() => setActiveFindingId(finding.id)}
                       className={
                         isActive
@@ -544,7 +558,7 @@ export function FindingAtlasBrowser({ findings, compact = false }: FindingAtlasB
                       }
                     >
                       <span className="block break-words text-sm font-semibold leading-5">{finding.title}</span>
-                    </button>
+                    </Link>
                   );
                 })}
               </div>

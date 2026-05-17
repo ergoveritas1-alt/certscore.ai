@@ -11,6 +11,10 @@ import {
   getSampleFindingById,
   type SampleFindingJson
 } from "./sample-finding-json";
+import {
+  FINDING_REGULATORY_CONTEXTS,
+  type FindingRegulatoryContext
+} from "./finding-regulatory-context";
 
 export type FindingReferenceCategory =
   | "Consent"
@@ -44,6 +48,7 @@ export type FindingReferenceItem = {
   limitations: string[];
   userImpact?: string;
   sample: SampleFindingJson;
+  regulatoryContext?: FindingRegulatoryContext;
 };
 
 export const FINDING_REFERENCE_CATEGORIES: FindingReferenceCategory[] = [
@@ -560,7 +565,8 @@ export function getFindingReferenceItems(): FindingReferenceItem[] {
       benchmarkBadge: makeBenchmarkBadge(benchmark),
       limitations: [...(LIMITATIONS[findingId] ?? []), ...DEFAULT_LIMITATIONS],
       userImpact: USER_IMPACT[findingId],
-      sample: getSampleFindingById(findingId) ?? makeFallbackSample(definition, benchmark)
+      sample: getSampleFindingById(findingId) ?? makeFallbackSample(definition, benchmark),
+      regulatoryContext: FINDING_REGULATORY_CONTEXTS[findingId]
     };
 
     return [item];

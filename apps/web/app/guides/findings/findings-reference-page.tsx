@@ -1,0 +1,176 @@
+import { Badge } from "@website-signal-risk-scanner/ui";
+import { FindingAtlasBrowser } from "../../../components/marketing/findings/finding-atlas-browser";
+import { getFindingReferenceItems, type FindingReferenceItem } from "../../../lib/marketing/finding-atlas";
+import {
+  absoluteUrl,
+  createBreadcrumbSchema,
+  createPublicArticleSchema,
+  createPublicWebPageSchema
+} from "../../../lib/seo";
+
+type FindingsReferencePageProps = {
+  activeFinding?: FindingReferenceItem;
+};
+
+const DEFAULT_FINDING_ID = "pre_consent_tracking_detected";
+
+function getFindingPath(findingId: string) {
+  return `/guides/findings/${findingId}`;
+}
+
+function getPageTitle(activeFinding?: FindingReferenceItem) {
+  return activeFinding ? `${activeFinding.title} finding reference` : "CertScore findings reference";
+}
+
+function getPageDescription(activeFinding?: FindingReferenceItem) {
+  return activeFinding
+    ? `${activeFinding.observed} Review the evidence context, methodology, common causes, and reviewer questions for this CertScore finding.`
+    : "Review CertScore findings, evidence, signals, and observations surfaced from public-web runtime scans.";
+}
+
+function getPagePath(activeFinding?: FindingReferenceItem) {
+  return activeFinding ? getFindingPath(activeFinding.id) : "/guides/findings";
+}
+
+function createFindingSchemas({
+  activeFinding,
+  findings,
+  pageDescription,
+  pagePath,
+  pageTitle
+}: {
+  activeFinding?: FindingReferenceItem;
+  findings: FindingReferenceItem[];
+  pageDescription: string;
+  pagePath: string;
+  pageTitle: string;
+}) {
+  return [
+    createPublicWebPageSchema({
+      title: pageTitle,
+      description: pageDescription,
+      path: pagePath
+    }),
+    createPublicArticleSchema({
+      title: pageTitle,
+      description: activeFinding
+        ? `A technical reference for the ${activeFinding.title} finding, including observed signals, retained evidence, methodology context, and review questions.`
+        : "A technical reference for CertScore findings, observed signals, retained evidence, and reviewer context.",
+      path: pagePath,
+      type: "TechArticle",
+      about: activeFinding
+        ? [
+            activeFinding.category,
+            activeFinding.title,
+            "runtime evidence",
+            "public-web observations",
+            "finding review"
+          ]
+        : [
+            "website scanning",
+            "runtime evidence",
+            "finding registry",
+            "tracking signals",
+            "cookies",
+            "accessibility",
+            "consent methodology"
+          ]
+    }),
+    {
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      name: "CertScore finding registry",
+      itemListElement: findings.map((finding, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        url: absoluteUrl(getFindingPath(finding.id)),
+        name: finding.title,
+        identifier: finding.id,
+        description: finding.observed
+      }))
+    },
+    ...(activeFinding
+      ? [
+          {
+            "@context": "https://schema.org",
+            "@type": "DefinedTerm",
+            name: activeFinding.title,
+            termCode: activeFinding.id,
+            description: activeFinding.observed,
+            inDefinedTermSet: absoluteUrl("/guides/findings"),
+            url: absoluteUrl(getFindingPath(activeFinding.id))
+          }
+        ]
+      : []),
+    createBreadcrumbSchema([
+      { name: "Home", path: "/" },
+      { name: "Guides", path: "/guides" },
+      { name: "Findings registry", path: "/guides/findings" },
+      ...(activeFinding ? [{ name: activeFinding.title, path: getFindingPath(activeFinding.id) }] : [])
+    ])
+  ];
+}
+
+export function getDefaultFindingId() {
+  return DEFAULT_FINDING_ID;
+}
+
+export function getFindingReferencePath(findingId: string) {
+  return getFindingPath(findingId);
+}
+
+export function getFindingReferencePageCopy(activeFinding?: FindingReferenceItem) {
+  return {
+    pageTitle: getPageTitle(activeFinding),
+    pageDescription: getPageDescription(activeFinding),
+    pagePath: getPagePath(activeFinding)
+  };
+}
+
+export function FindingsReferencePage({ activeFinding }: FindingsReferencePageProps) {
+  const findings = getFindingReferenceItems();
+  const initialFindingId = activeFinding?.id ?? DEFAULT_FINDING_ID;
+  const { pageDescription, pagePath, pageTitle } = getFindingReferencePageCopy(activeFinding);
+  const schemas = createFindingSchemas({
+    activeFinding,
+    findings,
+    pageDescription,
+    pagePath,
+    pageTitle
+  });
+
+  return (
+    <section className="mx-auto max-w-6xl px-6 py-16">
+      {schemas.map((schema) => (
+        <script
+          key={JSON.stringify(schema)}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+        />
+      ))}
+
+      <div className="max-w-3xl space-y-4">
+        <Badge tone="neutral">Technical reference</Badge>
+        <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+          CertScore findings reference
+        </h1>
+      </div>
+
+      <div className="mt-10">
+        <FindingAtlasBrowser findings={findings} initialFindingId={initialFindingId} />
+      </div>
+
+      <section className="mt-8 border border-slate-200 bg-white p-5 sm:p-6">
+        <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Reference notes</h2>
+        <div className="mt-3 max-w-3xl space-y-3 text-sm leading-7 text-slate-600">
+          <p>
+            CertScore uses findings, evidence, signals, and observations consistently: signals are raw runtime or page-surface events, evidence is retained support, observations are interpreted evidence context, and findings are promoted review items.
+          </p>
+          <p>
+            Findings are runtime evidence and public-surface observations for review. Observed signals may surface possible concerns, but review is recommended before operational or legal reliance.
+          </p>
+        </div>
+      </section>
+    </section>
+  );
+}

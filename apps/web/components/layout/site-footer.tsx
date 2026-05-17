@@ -5,11 +5,18 @@ const footerSections = [
   {
     title: "Product",
     links: [
-      { href: "/", label: "Free scan" },
-      { href: "/how-it-works", label: "How it works" },
+      { href: "/", label: "Home" },
+      { href: "/how-it-works", label: "How It Works" },
+      { href: "/pricing", label: "Pricing" }
+    ]
+  },
+  {
+    title: "Resources",
+    links: [
+      { href: "/guides", label: "Guides" },
       { href: "/methodology", label: "Methodology" },
-      { href: "/pricing", label: "Pricing" },
-      { href: "/monitor-site", label: "Monitor a site" }
+      { href: "/benchmarks", label: "Benchmarks" },
+      { href: "/compare", label: "Compare" }
     ]
   },
   {
@@ -20,24 +27,15 @@ const footerSections = [
       { href: "/guides/third-party-cookie-checker", label: "Review third-party tracking" },
       { href: "/monitor-site", label: "Monitor vendor changes" }
     ]
-  },
-  {
-    title: "Resources",
-    links: [
-      { href: "/guides", label: "Guides" },
-      { href: "/benchmarks/website-consent-tracking-2026", label: "Benchmarks" },
-      { href: "/compare", label: "Compare" },
-      { href: "/press", label: "Press" }
-    ]
   }
 ];
 
 const companyLegalLinks = [
   { href: "/contact", label: "Contact" },
-  { href: "/faq", label: "FAQ" },
+  { href: "/privacy", label: "Privacy Policy" },
   { href: "/terms", label: "Terms" },
-  { href: "/privacy", label: "Privacy" },
-  { href: "/privacy-request", label: "Privacy Request" }
+  { href: "/privacy-request", label: "Privacy Request" },
+  { href: "/login", label: "Sign in", analyticsEvent: "sign_in_clicked" }
 ];
 
 export function SiteFooter() {
@@ -67,6 +65,8 @@ export function SiteFooter() {
               {companyLegalLinks.map((link) => (
                 <Link
                   key={link.href}
+                  data-analytics-cta-location={link.analyticsEvent ? "unknown" : undefined}
+                  data-analytics-event={link.analyticsEvent}
                   href={link.href}
                   className="hover:text-slate-900"
                 >
@@ -76,9 +76,6 @@ export function SiteFooter() {
               <div className="flex justify-start">
                 <AnalyticsPreferencesButton />
               </div>
-              <Link data-analytics-cta-location="unknown" data-analytics-event="sign_in_clicked" href="/login" className="hover:text-slate-900">
-                Sign in
-              </Link>
             </div>
           </nav>
         </div>

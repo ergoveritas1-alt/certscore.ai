@@ -30,6 +30,7 @@ CertScore.ai findings are automated signals for review. CertScore.ai is not lega
 - https://certscore.ai/pricing
 - https://certscore.ai/what-is-certscore
 - https://certscore.ai/guides
+- https://certscore.ai/guides/findings
 - https://certscore.ai/guides/pre-consent-tracking
 - https://certscore.ai/guides/third-party-cookies-before-consent
 - https://certscore.ai/guides/rtb-cookie-syncing
@@ -50,6 +51,30 @@ CertScore.ai findings are automated signals for review. CertScore.ai is not lega
 - https://certscore.ai/compare/privacy-scanner-vs-cookie-scanner
 - https://certscore.ai/compare/website-consent-audit-tools
 - https://certscore.ai/press
+
+## Findings reference pages
+
+These canonical finding pages describe CertScore review items, observed evidence context, regulatory-review context, example evidence, common causes, and reviewer questions. They are automated public-web observations for review, not legal advice or compliance determinations.
+
+- Tracking started before consent: https://certscore.ai/guides/findings/pre_consent_tracking_detected
+- Visual contrast accessibility issue: https://certscore.ai/guides/findings/visual_contrast_accessibility_issue
+- Semantic labeling accessibility issue: https://certscore.ai/guides/findings/semantic_labeling_accessibility_issue
+- Fingerprinting-related signals observed: https://certscore.ai/guides/findings/fingerprinting_related_signals_observed
+- Session recording services detected: https://certscore.ai/guides/findings/session_recording_services_detected
+- Tracking cookies set before consent: https://certscore.ai/guides/findings/third_party_cookie_pre_consent
+- RTB cookie sync observed: https://certscore.ai/guides/findings/rtb_cookie_sync_observed
+- Text alternative accessibility issue: https://certscore.ai/guides/findings/text_alternative_accessibility_issue
+- Dark pattern consent signals detected: https://certscore.ai/guides/findings/consent_dark_patterns_detected
+- CPRA advertising opt-out missing or incomplete: https://certscore.ai/guides/findings/cpra_cba_opt_out_missing
+- Consent interaction was forced: https://certscore.ai/guides/findings/forced_consent_interaction
+- Reject option missing or hidden: https://certscore.ai/guides/findings/reject_option_missing_or_hidden
+- Sensitive input surfaces detected alongside third-party tracking: https://certscore.ai/guides/findings/sensitive_data_collection_with_third_party_tracking_present
+- Consent choices appear imbalanced: https://certscore.ai/guides/findings/asymmetric_consent_ui
+- Keyboard navigation accessibility issue: https://certscore.ai/guides/findings/keyboard_navigation_accessibility_issue
+- Identifiers shared across domains: https://certscore.ai/guides/findings/cross_domain_identifier_sharing_observed
+- Non-essential tracking continued after reject: https://certscore.ai/guides/findings/reject_tracking_persists_after_reject
+- Possible session replay on a sensitive input surface: https://certscore.ai/guides/findings/possible_session_replay_on_sensitive_input_surface
+- Probable browser/device fingerprinting behavior: https://certscore.ai/guides/findings/probable_fingerprinting
 
 ## Important disclaimer
 
