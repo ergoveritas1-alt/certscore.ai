@@ -12,7 +12,8 @@ import {
   hasSensitiveSessionReplaySurfaceCooccurrenceArtifact,
   hasPreconsentSequenceEvidence,
   hasStrongFingerprintingEvidence,
-  hasStrongPreconsentRuntimeEvidence
+  hasStrongPreconsentRuntimeEvidence,
+  evaluateConsentSurfaceGate
 } from "./promotion-evidence-contracts";
 import type { UnifiedFindingPacket } from "./unified-findings";
 
@@ -23,6 +24,8 @@ export type EvidenceRequirementType =
   | "postRejectTimestampedRuntimeEvidence"
   | "postRejectRuntimeEvidence"
   | "successfulRejectInteraction"
+  | "consentSurfaceEvaluable"
+  | "rejectAbsentFirstLayer"
   | "rejectPathDepthEvidence"
   | "materialChoiceAsymmetryEvidence"
   | "policyAnchor"
@@ -101,6 +104,8 @@ const REQUIREMENT_DESCRIPTIONS: Record<EvidenceRequirementType, string> = {
   postRejectTimestampedRuntimeEvidence: "Timestamped post-reject runtime activity shows non-essential tracking persisted.",
   postRejectRuntimeEvidence: "Post-reject runtime activity or cookie-diff provenance shows non-essential tracking persisted.",
   successfulRejectInteraction: "Reject interaction succeeded before post-reject activity was evaluated.",
+  consentSurfaceEvaluable: "A stable first-layer consent surface was observed in a pre-choice state and was visible or reachable.",
+  rejectAbsentFirstLayer: "The same evaluated first-layer consent surface had accept/control candidates but no first-layer reject candidate.",
   rejectPathDepthEvidence: "Reject path depth and availability were inspected with an explicit outcome.",
   materialChoiceAsymmetryEvidence: "Structured UI evidence shows a material consent choice asymmetry or dark pattern.",
   policyAnchor: "A retained policy/disclosure source was fetched and can anchor the interpretation.",
@@ -268,9 +273,11 @@ export const FINDING_EVIDENCE_CONTRACTS = [
   {
     findingId: "reject_option_missing_or_hidden",
     unifiedFindingIds: ["reject_button_missing"],
-    requiredForStrong: [req("rejectPathDepthEvidence"), req("coverageNotMateriallyBlocked")],
-    requiredForGood: [req("rejectPathDepthEvidence")],
+    requiredForStrong: [req("consentSurfaceEvaluable"), req("rejectAbsentFirstLayer"), req("rejectPathDepthEvidence"), req("coverageNotMateriallyBlocked")],
+    requiredForGood: [req("consentSurfaceEvaluable"), req("rejectAbsentFirstLayer"), req("rejectPathDepthEvidence")],
     downgradeIf: [
+      { ifMissing: "consentSurfaceEvaluable", to: "audit_only", reason: "Reject missing/hidden requires a stable first-layer consent surface observed in a pre-choice state." },
+      { ifMissing: "rejectAbsentFirstLayer", to: "audit_only", reason: "Reject missing/hidden requires evidence that reject was absent from the evaluated first layer." },
       { ifMissing: "rejectPathDepthEvidence", to: "audit_only", reason: "Reject missing/hidden requires inspected reject path depth and availability evidence." }
     ],
     suppressIf: [],
@@ -285,9 +292,10 @@ export const FINDING_EVIDENCE_CONTRACTS = [
   {
     findingId: "dark_pattern_consent_signals_detected",
     unifiedFindingIds: ["accept_more_prominent_than_reject", "accept_only_banner", "dismiss_without_reject", "forced_consent_wall"],
-    requiredForStrong: [req("materialChoiceAsymmetryEvidence"), req("coverageNotMateriallyBlocked")],
-    requiredForGood: [req("materialChoiceAsymmetryEvidence")],
+    requiredForStrong: [req("consentSurfaceEvaluable"), req("materialChoiceAsymmetryEvidence"), req("coverageNotMateriallyBlocked")],
+    requiredForGood: [req("consentSurfaceEvaluable"), req("materialChoiceAsymmetryEvidence")],
     downgradeIf: [
+      { ifMissing: "consentSurfaceEvaluable", to: "audit_only", reason: "Consent UX promotion requires a stable first-layer consent surface observed in a pre-choice state." },
       { ifMissing: "materialChoiceAsymmetryEvidence", to: "audit_only", reason: "Dark-pattern surfacing requires normalized UI/interaction evidence." }
     ],
     suppressIf: [],
@@ -844,6 +852,10 @@ function hasPostRejectRuntimeEvidence(rawEvidence: Record<string, unknown> | nul
 }
 
 function hasRejectPathDepthEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  const gate = evaluateConsentSurfaceGate(rawEvidence);
+  if (!gate.eligibleForConsentUxPromotion) {
+    return false;
+  }
   const rejectPath = getObjectValue(rawEvidence, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]);
   if (!rejectPath) {
     return false;
@@ -881,6 +893,9 @@ function hasRejectPathDepthEvidence(rawEvidence: Record<string, unknown> | null 
 
 function hasMaterialChoiceAsymmetryEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   if (hasNonConsentOverlayWithoutIndependentConsentEvidence(rawEvidence)) {
+    return false;
+  }
+  if (!evaluateConsentSurfaceGate(rawEvidence).eligibleForConsentUxPromotion) {
     return false;
   }
 
@@ -1221,6 +1236,16 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
       return hasPostRejectRuntimeEvidence(rawEvidence);
     case "successfulRejectInteraction":
       return hasSuccessfulRejectInteraction(rawEvidence);
+    case "consentSurfaceEvaluable": {
+      const gate = evaluateConsentSurfaceGate(rawEvidence);
+      return gate.consentSurfaceObserved &&
+        gate.stableRenderedState &&
+        gate.visibleOrReachableSurface &&
+        gate.sameSurfaceCandidates &&
+        gate.preChoiceState;
+    }
+    case "rejectAbsentFirstLayer":
+      return evaluateConsentSurfaceGate(rawEvidence).eligibleForConsentUxPromotion;
     case "rejectPathDepthEvidence":
       return hasRejectPathDepthEvidence(rawEvidence);
     case "materialChoiceAsymmetryEvidence":
@@ -1465,7 +1490,12 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
       )
         ? true
         : getBoolean(entities, ["consentRejectInteractionSucceeded", "consent_reject_interaction_succeeded"]) ?? undefined,
-    consentSurfaceObserved: getBoolean(entities, ["consentSurfaceObserved", "consent_surface_observed"]),
+    consentSurfaceObserved:
+      (entities.consentSurfaceObserved?.[0] ?? entities.consent_surface_observed?.[0]) === "true"
+        ? true
+        : (entities.consentSurfaceObserved?.[0] ?? entities.consent_surface_observed?.[0]) === "false"
+          ? false
+          : getBoolean(entities, ["consentSurfaceObserved", "consent_surface_observed"]) ?? undefined,
 	    consentTimeline: parseFirstObjectValue(entities.consentTimeline ?? entities.consent_timeline),
 	    contradictionEvidence: contradictionDetails
 	      ? {
@@ -1554,6 +1584,10 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
       entities.postRejectNonEssentialRequests ?? entities.post_reject_non_essential_requests
     ),
     postRejectNonEssentialRequestUrls: entities.postRejectNonEssentialRequestUrls ?? entities.post_reject_non_essential_request_urls,
+    consentSurfaceDecisionStates: entities.consentSurfaceDecisionStates ?? entities.consent_surface_decision_states,
+    consentSurfaceDiagnostics: parseFirstObjectValue(
+      entities.consentSurfaceDiagnostics ?? entities.consent_surface_diagnostics
+    ),
     rejectPathDepthAndAvailability: parseFirstObjectValue(
       entities.rejectPathDepthAndAvailability ?? entities.reject_path_depth_and_availability
     ),

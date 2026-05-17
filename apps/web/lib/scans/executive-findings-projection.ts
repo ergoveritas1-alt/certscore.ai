@@ -1726,10 +1726,14 @@ function buildGenericCanonicalEvidenceDetails(
     const rejectOptionSubtype = findingId === "reject_option_missing_or_hidden"
       ? deriveRejectOptionSubtype(packet)
       : null;
+    const consentSurfaceDecisionStates = getEntityValues(packet, /^consentSurfaceDecisionStates$/i);
+    const consentSurfaceDiagnostics = getFirstEntityJsonObject(packet, "consentSurfaceDiagnostics");
     details.consentUiEvidence = {
       observed: true,
       pattern: findingId,
       ...(rejectOptionSubtype ? { rejectOptionSubtype } : {}),
+      ...(consentSurfaceDecisionStates.length > 0 ? { consentSurfaceDecisionStates } : {}),
+      ...(consentSurfaceDiagnostics ? { consentSurfaceDiagnostics } : {}),
       basis: evidenceSnippets[0] ?? packet.summary,
       userChoiceImpact: findingId === "reject_option_missing_or_hidden"
         ? rejectOptionSubtype === "reject_requires_preferences_path"

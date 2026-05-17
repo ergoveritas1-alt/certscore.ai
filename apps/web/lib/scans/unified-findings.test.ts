@@ -2966,6 +2966,13 @@ test("surfaces accept-only consent UI when retained DOM labels satisfy the evide
         description: "The retained consent UI text shows an accept control without a same-layer reject or preferences path.",
         fallbackEvidence: {
           accept_only_banner: true,
+          consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+          consentSurfaceDiagnostics: {
+            bannerRendered: true,
+            hydrationSettleWaitMs: 1500,
+            candidateButtons: [{ label: "accept all", visible: true, interactable: true }],
+            viewportStatus: "visible_in_viewport"
+          },
           consentSurfaceObserved: true,
           hybridConsentSummary: {
             acceptActionLabels: ["accept all"],
@@ -3003,6 +3010,214 @@ test("surfaces accept-only consent UI when retained DOM labels satisfy the evide
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("eligible"), true);
   assert.deepEqual(packet?.evidence?.pageUrls, ["https://example.com/"]);
+});
+
+function buildConsentUxPacketFromEvidence(fallbackEvidence: Record<string, unknown>) {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        categoryId: "choice_symmetry_dark_pattern_indicators",
+        description: "The retained consent UI structure was evaluated for first-layer reject availability.",
+        fallbackEvidence: {
+          pageUrl: "https://example.com/",
+          runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
+          signalKey: "privacy.dark_pattern_reject_button_missing",
+          signalLabel: "Reject button missing",
+          signalValue: true,
+          ...fallbackEvidence
+        },
+        observedValue: "material",
+        severity: "high",
+        signalKey: "privacy.dark_pattern_reject_button_missing",
+        signalLabel: "Reject button missing",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "Reject button missing"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  return packet;
+}
+
+test("does not promote reject-missing when a stable first-layer reject and allow choice are visible", () => {
+  const packet = buildConsentUxPacketFromEvidence({
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_present_first_layer"],
+    consentSurfaceObserved: true,
+    consentActionableChoiceObserved: true,
+    hybridConsentSummary: {
+      acceptActionLabels: ["Allow analytics"],
+      acceptPresent: true,
+      bannerPresent: true,
+      rejectActionLabels: ["Reject analytics"],
+      rejectPresent: true
+    },
+    consentSurfaceDiagnostics: {
+      bannerRendered: true,
+      hydrationSettleWaitMs: 1500,
+      candidateButtons: [
+        { label: "Reject analytics", visible: true, interactable: true },
+        { label: "Allow analytics", visible: true, interactable: true }
+      ],
+      viewportStatus: "visible_in_viewport"
+    },
+    rejectPathDepthAndAvailability: {
+      acceptClickDepth: 1,
+      bannerLayerInspected: true,
+      choiceAsymmetry: "material",
+      rejectAvailableOnFirstLayer: true,
+      rejectClickDepth: 1,
+      status: "available"
+    },
+    reject_button_missing: true
+  });
+
+  assert.equal(packet?.unifiedFindingId, "reject_button_missing");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("eligible"), false);
+});
+
+test("keeps suppressed or previously consented banner states audit-only for consent UX", () => {
+  const packet = buildConsentUxPacketFromEvidence({
+    consentSurfaceDecisionStates: [
+      "prior_consent_or_suppressed_banner_suspected",
+      "consent_surface_not_present"
+    ],
+    consentSurfaceObserved: false,
+    consentActionableChoiceObserved: false,
+    consentSurfaceDiagnostics: {
+      bannerRendered: false,
+      hydrationSettleWaitMs: 1500,
+      priorConsentOrSuppressedBannerSuspected: true,
+      relevantConsentStorageKeys: ["cookie:cs_analytics_consent"],
+      cmpStateHints: ["analytics rejected stored before scan"],
+      viewportStatus: "not_present"
+    },
+    rejectPathDepthAndAvailability: {
+      bannerLayerInspected: true,
+      choiceAsymmetry: "material",
+      rejectAvailableOnFirstLayer: false,
+      status: "not_found"
+    },
+    reject_button_missing: true
+  });
+
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.ok(packet?.evidence?.entities?.consentSurfaceDecisionStates?.includes("prior_consent_or_suppressed_banner_suspected"));
+});
+
+test("promotes accept-only stable consent surface as reject missing", () => {
+  const packet = buildConsentUxPacketFromEvidence({
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+    consentSurfaceObserved: true,
+    consentActionableChoiceObserved: true,
+    accept_only_banner: true,
+    hybridConsentSummary: {
+      acceptActionLabels: ["Accept all"],
+      acceptPresent: true,
+      bannerPresent: true,
+      manageActionLabels: [],
+      managePresent: false,
+      rejectActionLabels: [],
+      rejectPresent: false
+    },
+    hybridConsentVisual: {
+      acceptOnly: true
+    },
+    consentSurfaceDiagnostics: {
+      bannerRendered: true,
+      firstObservedBannerMs: 900,
+      hydrationSettleWaitMs: 2000,
+      candidateButtons: [{ label: "Accept all", visible: true, interactable: true }],
+      viewportStatus: "visible_in_viewport"
+    },
+    rejectPathDepthAndAvailability: {
+      acceptClickDepth: 1,
+      bannerLayerInspected: true,
+      choiceAsymmetry: "material",
+      rejectAvailableOnFirstLayer: false,
+      status: "not_found"
+    },
+    reject_button_missing: true
+  });
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("eligible"), true);
+});
+
+test("waits through delayed hydration before evaluating first-layer reject visibility", () => {
+  const packet = buildConsentUxPacketFromEvidence({
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_present_first_layer"],
+    consentSurfaceObserved: true,
+    consentActionableChoiceObserved: true,
+    hybridConsentSummary: {
+      acceptActionLabels: ["Allow analytics"],
+      acceptPresent: true,
+      bannerPresent: true,
+      rejectActionLabels: ["Reject analytics"],
+      rejectPresent: true
+    },
+    consentSurfaceDiagnostics: {
+      bannerRendered: true,
+      firstObservedBannerMs: 1800,
+      hydrationSettleWaitMs: 2500,
+      candidateButtons: [
+        { label: "Reject analytics", visible: true, interactable: true },
+        { label: "Allow analytics", visible: true, interactable: true }
+      ],
+      viewportStatus: "reachable_via_scroll"
+    },
+    rejectPathDepthAndAvailability: {
+      acceptClickDepth: 1,
+      bannerLayerInspected: true,
+      choiceAsymmetry: "material",
+      rejectAvailableOnFirstLayer: true,
+      rejectClickDepth: 1,
+      status: "available"
+    },
+    reject_button_missing: true
+  });
+
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+});
+
+test("certscore analytics banner with reject analytics and allow analytics does not surface consent architecture", () => {
+  const packet = buildConsentUxPacketFromEvidence({
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_present_first_layer"],
+    consentSurfaceObserved: true,
+    consentActionableChoiceObserved: true,
+    hybridConsentSummary: {
+      acceptActionLabels: ["Allow analytics"],
+      acceptPresent: true,
+      bannerPresent: true,
+      bannerTextSnippet: "Help us improve CertScore with privacy-friendly analytics.",
+      rejectActionLabels: ["Reject analytics"],
+      rejectPresent: true
+    },
+    consentSurfaceDiagnostics: {
+      bannerRendered: true,
+      hydrationSettleWaitMs: 1500,
+      candidateButtons: [
+        { label: "Reject analytics", visible: true, interactable: true },
+        { label: "Allow analytics", visible: true, interactable: true }
+      ],
+      viewportStatus: "visible_in_viewport"
+    },
+    rejectPathDepthAndAvailability: {
+      acceptClickDepth: 1,
+      bannerLayerInspected: true,
+      choiceAsymmetry: "material",
+      rejectAvailableOnFirstLayer: true,
+      rejectClickDepth: 1,
+      status: "available"
+    },
+    reject_button_missing: true
+  });
+
+  assert.notEqual(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible"), false);
 });
 
 test("keeps weak cookie security attributes support-only by default", () => {

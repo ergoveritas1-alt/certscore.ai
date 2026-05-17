@@ -3292,7 +3292,26 @@ test("deriveConcernPolicy requires concrete child evidence for umbrella dark-pat
     evidenceStrengthFlags: ["structured_validation"],
     rawEvidence: {
       accept_more_prominent_than_reject: true,
+      consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+      consentSurfaceDiagnostics: {
+        bannerRendered: true,
+        hydrationSettleWaitMs: 1500,
+        candidateButtons: [
+          { label: "Accept all", visible: true, interactable: true },
+          { label: "Manage choices", visible: true, interactable: true }
+        ],
+        viewportStatus: "visible_in_viewport"
+      },
       consentSurfaceObserved: true,
+      hybridConsentSummary: {
+        acceptActionLabels: ["Accept all"],
+        acceptPresent: true,
+        bannerPresent: true,
+        manageActionLabels: ["Manage choices"],
+        managePresent: true,
+        rejectActionLabels: [],
+        rejectPresent: false
+      },
       runtimeEvidenceArtifacts: ["artifact:consent-ui"]
     }
   });

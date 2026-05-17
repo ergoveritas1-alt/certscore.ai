@@ -34,7 +34,8 @@ import {
   hasStrongSaleSharingControlsMissingEvidence,
   hasStrongRightsFrictionArtifact,
   hasNonConsentOverlayWithoutIndependentConsentEvidence,
-  hasVerifiedConsentUiEvidence
+  hasVerifiedConsentUiEvidence,
+  evaluateConsentSurfaceGate
 } from "./promotion-evidence-contracts";
 import {
   hasConcreteSanitizedNetworkEvidence
@@ -2217,10 +2218,15 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isConsentDarkPatternConcern(input.concern) && !hasConcreteDarkPatternChildEvidence(input.rawEvidence)) {
+    const consentSurfaceGate = evaluateConsentSurfaceGate(input.rawEvidence);
     return {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "audit_only",
-      negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_concrete_dark_pattern_child_finding"] as NormalizedConcernNegativeEvidenceFlag[],
+      negativeEvidenceFlags: [
+        ...negativeEvidenceFlags,
+        ...consentSurfaceGate.states.filter((state) => state !== "consent_surface_observed"),
+        "missing_concrete_dark_pattern_child_finding"
+      ] as NormalizedConcernNegativeEvidenceFlag[],
       promotionEligibility: "internal_only"
     };
   }

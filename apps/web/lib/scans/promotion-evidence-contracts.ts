@@ -14,6 +14,26 @@ type ContractDecision = {
   promotionEligibility: "eligible" | "internal_only" | "blocked";
 };
 
+export type ConsentSurfaceDecisionState =
+  | "consent_surface_observed"
+  | "consent_surface_not_present"
+  | "prior_consent_or_suppressed_banner_suspected"
+  | "consent_surface_unstable_or_not_evaluable"
+  | "reject_present_first_layer"
+  | "reject_absent_first_layer";
+
+export type ConsentSurfaceGateDecision = {
+  states: ConsentSurfaceDecisionState[];
+  consentSurfaceObserved: boolean;
+  rejectAbsentFirstLayer: boolean;
+  rejectPresentFirstLayer: boolean;
+  stableRenderedState: boolean;
+  visibleOrReachableSurface: boolean;
+  sameSurfaceCandidates: boolean;
+  preChoiceState: boolean;
+  eligibleForConsentUxPromotion: boolean;
+};
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
@@ -96,6 +116,307 @@ function getObjectValue(record: Record<string, unknown> | null | undefined, keys
     }
   }
   return null;
+}
+
+function getBooleanFromSources(
+  rawEvidence: Record<string, unknown> | null | undefined,
+  sources: Array<Record<string, unknown> | null | undefined>,
+  keys: string[]
+) {
+  for (const source of [rawEvidence, ...sources]) {
+    for (const key of keys) {
+      if (typeof source?.[key] === "boolean") {
+        return source[key] as boolean;
+      }
+    }
+  }
+  return null;
+}
+
+function getNumberFromSources(
+  rawEvidence: Record<string, unknown> | null | undefined,
+  sources: Array<Record<string, unknown> | null | undefined>,
+  keys: string[]
+) {
+  for (const source of [rawEvidence, ...sources]) {
+    for (const key of keys) {
+      const value = source?.[key];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+      }
+    }
+  }
+  return null;
+}
+
+function getStringFromSources(
+  rawEvidence: Record<string, unknown> | null | undefined,
+  sources: Array<Record<string, unknown> | null | undefined>,
+  keys: string[]
+) {
+  for (const source of [rawEvidence, ...sources]) {
+    for (const key of keys) {
+      const value = source?.[key];
+      if (typeof value === "string" && value.trim().length > 0) {
+        return value.trim();
+      }
+    }
+  }
+  return null;
+}
+
+function getStringArrayFromSources(
+  rawEvidence: Record<string, unknown> | null | undefined,
+  sources: Array<Record<string, unknown> | null | undefined>,
+  keys: string[]
+) {
+  return uniqueStrings([rawEvidence, ...sources].flatMap((source) => getStringArrayValues(source, keys)));
+}
+
+function hasVisibleButtonCandidate(
+  candidates: Array<Record<string, unknown>>,
+  pattern: RegExp
+) {
+  return candidates.some((candidate) => {
+    const label = typeof candidate.label === "string"
+      ? candidate.label
+      : typeof candidate.text === "string"
+        ? candidate.text
+        : "";
+    const visible = candidate.visible === true || candidate.visibility === "visible";
+    const interactable =
+      candidate.interactable === true ||
+      candidate.enabled === true ||
+      candidate.clickable === true ||
+      candidate.disabled === false;
+    return pattern.test(label) && (visible || interactable);
+  });
+}
+
+export function evaluateConsentSurfaceGate(
+  rawEvidence: Record<string, unknown> | null | undefined
+): ConsentSurfaceGateDecision {
+  const consentSummary = getObjectValue(rawEvidence, ["hybridConsentSummary", "hybrid_consent_summary"]);
+  const consentVisual = getObjectValue(rawEvidence, ["hybridConsentVisual", "hybrid_consent_visual"]);
+  const uiSummary = getObjectValue(rawEvidence, ["hybridUiSummary", "hybrid_ui_summary"]);
+  const diagnostics = getObjectValue(rawEvidence, ["consentSurfaceDiagnostics", "consent_surface_diagnostics"]);
+  const rejectPath = getObjectValue(rawEvidence, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]);
+  const sources = [consentSummary, consentVisual, uiSummary, diagnostics, rejectPath];
+  const candidateButtons = [
+    ...getObjectArrayValues(rawEvidence, ["candidateButtons", "candidate_buttons", "consentCandidateButtons", "consent_candidate_buttons"]),
+    ...getObjectArrayValues(diagnostics, ["candidateButtons", "candidate_buttons", "buttons"]),
+    ...getObjectArrayValues(consentSummary, ["candidateButtons", "candidate_buttons", "buttons"])
+  ];
+
+  const explicitStates = getStringArrayFromSources(rawEvidence, [diagnostics], [
+    "consentSurfaceDecisionStates",
+    "consent_surface_decision_states",
+    "decisionStates",
+    "decision_states",
+    "consentSurfaceState",
+    "consent_surface_state"
+  ]).filter((state): state is ConsentSurfaceDecisionState =>
+    [
+      "consent_surface_observed",
+      "consent_surface_not_present",
+      "prior_consent_or_suppressed_banner_suspected",
+      "consent_surface_unstable_or_not_evaluable",
+      "reject_present_first_layer",
+      "reject_absent_first_layer"
+    ].includes(state)
+  );
+
+  const priorConsentSuspected =
+    explicitStates.includes("prior_consent_or_suppressed_banner_suspected") ||
+    getBooleanFromSources(rawEvidence, [diagnostics], [
+      "priorConsentOrSuppressedBannerSuspected",
+      "prior_consent_or_suppressed_banner_suspected",
+      "priorConsentDetected",
+      "prior_consent_detected",
+      "suppressedBannerSuspected",
+      "suppressed_banner_suspected",
+      "storedConsentStateDetected",
+      "stored_consent_state_detected",
+      "consentPreferenceStoredBeforeScan",
+      "consent_preference_stored_before_scan"
+    ]) === true;
+
+  const bannerRendered =
+    getBooleanFromSources(rawEvidence, sources, [
+      "bannerRendered",
+      "banner_rendered",
+      "bannerPresent",
+      "banner_present",
+      "consentSurfaceObserved",
+      "consent_surface_observed",
+      "cookieBannerPresent",
+      "consentBannerPresent"
+    ]);
+  const consentSurfaceObserved = explicitStates.includes("consent_surface_observed") || bannerRendered === true;
+  const explicitNotPresent = explicitStates.includes("consent_surface_not_present") || bannerRendered === false;
+
+  const stableRenderedState =
+    getBooleanFromSources(rawEvidence, sources, [
+      "stableRenderedState",
+      "stable_rendered_state",
+      "renderedStateStable",
+      "rendered_state_stable",
+      "hydrationSettled",
+      "hydration_settled",
+      "settleWindowCompleted",
+      "settle_window_completed"
+    ]) === true ||
+    getNumberFromSources(rawEvidence, [diagnostics], [
+      "hydrationSettleWaitMs",
+      "hydration_settle_wait_ms",
+      "settleWaitMs",
+      "settle_wait_ms"
+    ]) !== null;
+
+  const viewportStatus = getStringFromSources(rawEvidence, sources, [
+    "viewportStatus",
+    "viewport_status",
+    "surfaceViewportStatus",
+    "surface_viewport_status",
+    "scrollReachability",
+    "scroll_reachability"
+  ]);
+  const visibleOrReachableSurface =
+    getBooleanFromSources(rawEvidence, sources, [
+      "visibleInViewport",
+      "visible_in_viewport",
+      "bannerVisibleInViewport",
+      "banner_visible_in_viewport",
+      "reachableViaScroll",
+      "reachable_via_scroll",
+      "surfaceReachableViaScroll",
+      "surface_reachable_via_scroll"
+    ]) === true ||
+    (viewportStatus !== null && /visible|viewport|reachable|scroll/i.test(viewportStatus));
+
+  const acceptLabels = getStringArrayFromSources(rawEvidence, [consentSummary, diagnostics], [
+    "acceptActionLabels",
+    "accept_action_labels",
+    "acceptLabels",
+    "accept_labels"
+  ]);
+  const rejectLabels = getStringArrayFromSources(rawEvidence, [consentSummary, diagnostics], [
+    "rejectActionLabels",
+    "reject_action_labels",
+    "rejectLabels",
+    "reject_labels"
+  ]);
+  const manageLabels = getStringArrayFromSources(rawEvidence, [consentSummary, diagnostics], [
+    "manageActionLabels",
+    "manage_action_labels",
+    "controlActionLabels",
+    "control_action_labels",
+    "manageLabels",
+    "manage_labels"
+  ]);
+  const acceptPresent =
+    getBooleanFromSources(rawEvidence, [consentSummary], ["acceptPresent", "accept_present"]) === true ||
+    acceptLabels.length > 0 ||
+    hasVisibleButtonCandidate(candidateButtons, /accept|allow|agree|ok/i);
+  const rejectPresentFirstLayer =
+    explicitStates.includes("reject_present_first_layer") ||
+    getBooleanFromSources(rawEvidence, [consentSummary, rejectPath], [
+      "rejectPresent",
+      "reject_present",
+      "rejectAvailableOnFirstLayer",
+      "reject_available_on_first_layer"
+    ]) === true ||
+    rejectLabels.length > 0 ||
+    hasVisibleButtonCandidate(candidateButtons, /reject|decline|deny|refuse/i);
+  const managePresent =
+    getBooleanFromSources(rawEvidence, [consentSummary], ["managePresent", "manage_present"]) === true ||
+    manageLabels.length > 0 ||
+    hasVisibleButtonCandidate(candidateButtons, /manage|settings|preferences|customi[sz]e|options|control/i);
+  const sameSurfaceCandidates =
+    getBooleanFromSources(rawEvidence, [diagnostics, rejectPath], [
+      "sameSurfaceCandidates",
+      "same_surface_candidates",
+      "candidateButtonsSameSurface",
+      "candidate_buttons_same_surface",
+      "bannerLayerInspected",
+      "banner_layer_inspected"
+    ]) === true ||
+    (acceptPresent && (rejectPresentFirstLayer || managePresent || candidateButtons.length > 0));
+
+  const preChoiceState =
+    !priorConsentSuspected &&
+    getBooleanFromSources(rawEvidence, [diagnostics], [
+      "preChoiceState",
+      "pre_choice_state",
+      "scanInPreChoiceState",
+      "scan_in_pre_choice_state"
+    ]) !== false &&
+    getBooleanFromSources(rawEvidence, [diagnostics], [
+      "consentChoicePreviouslyStored",
+      "consent_choice_previously_stored",
+      "previouslyConsented",
+      "previously_consented"
+    ]) !== true;
+
+  const unstableOrNotEvaluable =
+    explicitStates.includes("consent_surface_unstable_or_not_evaluable") ||
+    (consentSurfaceObserved && (!stableRenderedState || !visibleOrReachableSurface || !sameSurfaceCandidates));
+  const rejectAbsentFirstLayer =
+    explicitStates.includes("reject_absent_first_layer") ||
+    (
+      consentSurfaceObserved &&
+      stableRenderedState &&
+      sameSurfaceCandidates &&
+      acceptPresent &&
+      !rejectPresentFirstLayer &&
+      (
+        getBooleanFromSources(rawEvidence, [consentSummary, consentVisual], [
+          "rejectPresent",
+          "reject_present"
+        ]) === false ||
+        getBooleanFromSources(rawEvidence, [rejectPath], [
+          "rejectAvailableOnFirstLayer",
+          "reject_available_on_first_layer"
+        ]) === false ||
+        rawEvidence?.reject_button_missing === true ||
+        rawEvidence?.accept_only_banner === true ||
+        consentVisual?.acceptOnly === true ||
+        consentVisual?.accept_only === true ||
+        consentVisual?.rejectHidden === true ||
+        consentVisual?.reject_hidden === true ||
+        consentSummary?.rejectDepthClass === "absent" ||
+        consentSummary?.reject_depth_class === "absent"
+      )
+    );
+
+  const states: ConsentSurfaceDecisionState[] = uniqueStrings([
+    ...explicitStates,
+    priorConsentSuspected ? "prior_consent_or_suppressed_banner_suspected" : null,
+    consentSurfaceObserved ? "consent_surface_observed" : explicitNotPresent ? "consent_surface_not_present" : null,
+    unstableOrNotEvaluable ? "consent_surface_unstable_or_not_evaluable" : null,
+    rejectPresentFirstLayer ? "reject_present_first_layer" : rejectAbsentFirstLayer ? "reject_absent_first_layer" : null
+  ]) as ConsentSurfaceDecisionState[];
+
+  return {
+    states,
+    consentSurfaceObserved,
+    rejectAbsentFirstLayer,
+    rejectPresentFirstLayer,
+    stableRenderedState,
+    visibleOrReachableSurface,
+    sameSurfaceCandidates,
+    preChoiceState,
+    eligibleForConsentUxPromotion:
+      consentSurfaceObserved &&
+      stableRenderedState &&
+      visibleOrReachableSurface &&
+      sameSurfaceCandidates &&
+      preChoiceState &&
+      rejectAbsentFirstLayer &&
+      !rejectPresentFirstLayer &&
+      !priorConsentSuspected &&
+      !unstableOrNotEvaluable
+  };
 }
 
 function getStringArrayValuesFromEvidenceAndEntities(record: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -1465,6 +1786,7 @@ export function hasVerifiedConsentUiEvidence(rawEvidence: Record<string, unknown
     return false;
   }
 
+  const consentSurfaceGate = evaluateConsentSurfaceGate(rawEvidence);
   const consentSummary = getRecordValue(rawEvidence, ["hybridConsentSummary", "hybrid_consent_summary"]);
   const consentVisual = getRecordValue(rawEvidence, ["hybridConsentVisual", "hybrid_consent_visual"]);
   const uiSummary = getRecordValue(rawEvidence, ["hybridUiSummary", "hybrid_ui_summary"]);
@@ -1494,7 +1816,16 @@ export function hasVerifiedConsentUiEvidence(rawEvidence: Record<string, unknown
       uiSummary?.forcedActionRequired === true
   );
 
-  return explicitSurface && specificUiFact && artifactRefs.length > 0;
+  return (
+    explicitSurface &&
+    specificUiFact &&
+    artifactRefs.length > 0 &&
+    consentSurfaceGate.consentSurfaceObserved &&
+    consentSurfaceGate.stableRenderedState &&
+    consentSurfaceGate.visibleOrReachableSurface &&
+    consentSurfaceGate.sameSurfaceCandidates &&
+    consentSurfaceGate.preChoiceState
+  );
 }
 
 export function hasConcreteRuntimeArtifact(rawEvidence: Record<string, unknown> | null | undefined, keys: string[]) {

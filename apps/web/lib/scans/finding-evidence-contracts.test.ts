@@ -702,6 +702,26 @@ test("reject hidden requires inspected banner and reject path evidence", () => {
     privacy_dark_pattern_reject_button_missing: true
   });
   const strongDecision = evaluateFindingEvidenceContractForRawEvidence("reject_button_missing", {
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+    consentSurfaceDiagnostics: {
+      bannerRendered: true,
+      hydrationSettleWaitMs: 1500,
+      candidateButtons: [
+        { label: "Accept all", visible: true, interactable: true },
+        { label: "Manage choices", visible: true, interactable: true }
+      ],
+      viewportStatus: "visible_in_viewport"
+    },
+    consentSurfaceObserved: true,
+    hybridConsentSummary: {
+      acceptActionLabels: ["Accept all"],
+      acceptPresent: true,
+      bannerPresent: true,
+      manageActionLabels: ["Manage choices"],
+      managePresent: true,
+      rejectActionLabels: [],
+      rejectPresent: false
+    },
     rejectPathDepthAndAvailability: {
       availability: "hidden",
       bannerLayerInspected: true,
@@ -717,8 +737,29 @@ test("reject hidden requires inspected banner and reject path evidence", () => {
 
 test("reject behind preferences path satisfies reject path evidence", () => {
   const decision = evaluateFindingEvidenceContractForRawEvidence("reject_button_missing", {
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+    consentSurfaceDiagnostics: {
+      bannerRendered: true,
+      hydrationSettleWaitMs: 1500,
+      candidateButtons: [
+        { label: "Accept all", visible: true, interactable: true },
+        { label: "Manage choices", visible: true, interactable: true }
+      ],
+      viewportStatus: "visible_in_viewport"
+    },
+    consentSurfaceObserved: true,
+    hybridConsentSummary: {
+      acceptActionLabels: ["Accept all"],
+      acceptPresent: true,
+      bannerPresent: true,
+      manageActionLabels: ["Manage choices"],
+      managePresent: true,
+      rejectActionLabels: [],
+      rejectPresent: false
+    },
     rejectPathDepthAndAvailability: {
       acceptClickDepth: 1,
+      bannerLayerInspected: true,
       choiceAsymmetry: "material",
       preferencesRequiredBeforeReject: true,
       rejectAvailableOnFirstLayer: false,
@@ -735,9 +776,17 @@ test("dark-pattern consent signals require verified banner UI evidence", () => {
   });
   const strongDecision = evaluateFindingEvidenceContractForRawEvidence("accept_only_banner", {
     accept_only_banner: true,
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+    consentSurfaceDiagnostics: {
+      bannerRendered: true,
+      hydrationSettleWaitMs: 1500,
+      candidateButtons: [{ label: "Accept all", visible: true, interactable: true }],
+      viewportStatus: "visible_in_viewport"
+    },
     consentSurfaceObserved: true,
     consentUiArtifactRefs: ["hybrid_runtime_evidence"],
     hybridConsentSummary: {
+      acceptActionLabels: ["Accept all"],
       acceptPresent: true,
       bannerPresent: true,
       managePresent: false,
@@ -768,6 +817,16 @@ test("non-consent overlays do not satisfy consent dark-pattern UI evidence by th
     }
   });
   const consentWallDecision = evaluateFindingEvidenceContractForRawEvidence("forced_consent_wall", {
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+    consentSurfaceDiagnostics: {
+      bannerRendered: true,
+      hydrationSettleWaitMs: 1500,
+      candidateButtons: [
+        { label: "Accept all", visible: true, interactable: true },
+        { label: "Manage preferences", visible: true, interactable: true }
+      ],
+      viewportStatus: "visible_in_viewport"
+    },
     consentSurfaceObserved: true,
     consentUiArtifactRefs: ["hybrid_runtime_evidence"],
     forced_consent_wall: true,
@@ -777,6 +836,7 @@ test("non-consent overlays do not satisfy consent dark-pattern UI evidence by th
       bannerPresent: true,
       bannerTextSnippet: "We use cookies. Accept all or manage preferences.",
       manageActionLabels: ["Manage preferences"],
+      rejectPresent: false,
       pageInteractionBlocked: true
     },
     hybridUiSummary: {
@@ -805,6 +865,13 @@ test("dark-pattern consent signals accept retained DOM labels without screenshot
   });
   const retainedLabelDecision = evaluateFindingEvidenceContractForRawEvidence("accept_only_banner", {
     accept_only_banner: true,
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+    consentSurfaceDiagnostics: {
+      bannerRendered: true,
+      hydrationSettleWaitMs: 1500,
+      candidateButtons: [{ label: "accept all", visible: true, interactable: true }],
+      viewportStatus: "visible_in_viewport"
+    },
     consentSurfaceObserved: true,
     hybridConsentSummary: {
       acceptActionLabels: ["accept all"],

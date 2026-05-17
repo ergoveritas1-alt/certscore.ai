@@ -39,6 +39,7 @@ import {
   getPolicySummaryText
 } from "./policy-enrichment-row";
 import { normalizePolicySnippet } from "./policy-snippet-normalization";
+import { evaluateConsentSurfaceGate } from "./promotion-evidence-contracts";
 import {
   buildReviewFindings,
   buildSectionReviewIssues,
@@ -1086,10 +1087,24 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     consentSurfaceObserved === true &&
     consentActionableChoiceObserved === true &&
     (acceptClickDepth !== null || rejectClickDepth !== null || preferencesRequiredBeforeReject);
+  const consentSurfaceDiagnostics =
+    getRuntimeObject(input.runtimeArtifacts, ["consentSurfaceDiagnostics", "consent_surface_diagnostics"]) ??
+    getRuntimeObject(rejectPath, ["consentSurfaceDiagnostics", "consent_surface_diagnostics"]);
+  const consentSurfaceGateEvidence = {
+    consentActionableChoiceObserved,
+    consentSurfaceDiagnostics,
+    consentSurfaceObserved,
+    rejectPathDepthAndAvailability: rejectPath,
+    hybridConsentSummary: getRuntimeObject(input.runtimeArtifacts, ["hybridConsentSummary", "hybrid_consent_summary"]),
+    hybridConsentVisual: getRuntimeObject(input.runtimeArtifacts, ["hybridConsentVisual", "hybrid_consent_visual"]),
+    hybridUiSummary: getRuntimeObject(input.runtimeArtifacts, ["hybridUiSummary", "hybrid_ui_summary"])
+  };
+  const consentSurfaceGate = evaluateConsentSurfaceGate(consentSurfaceGateEvidence);
   if (
     rejectPath &&
     concreteRejectPathObserved &&
     !rejectAvailableOnFirstLayer &&
+    consentSurfaceGate.eligibleForConsentUxPromotion &&
     (choiceAsymmetry === "material" || choiceAsymmetry === "minor")
   ) {
     candidates.push({
@@ -1097,6 +1112,8 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       description: "The retained consent interaction structure shows reject was not available on the first layer.",
       fallbackEvidence: {
         consentActionableChoiceObserved,
+        consentSurfaceDecisionStates: consentSurfaceGate.states,
+        consentSurfaceDiagnostics,
         consentSurfaceObserved,
         rejectPathDepthAndAvailability: rejectPath,
         reject_button_missing: choiceAsymmetry === "material",

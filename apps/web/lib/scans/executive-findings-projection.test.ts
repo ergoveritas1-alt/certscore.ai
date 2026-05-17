@@ -696,9 +696,23 @@ test("projects reject path evidence from packet entities and records reject subt
       evidence: {
         counts: {},
         entities: {
+          consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+          consentSurfaceDiagnostics: [
+            JSON.stringify({
+              bannerRendered: true,
+              hydrationSettleWaitMs: 1500,
+              candidateButtons: [
+                { label: "Accept all", visible: true, interactable: true },
+                { label: "Manage choices", visible: true, interactable: true }
+              ],
+              viewportStatus: "visible_in_viewport"
+            })
+          ],
+          consentSurfaceObserved: ["true"],
           rejectPathDepthAndAvailability: [
             JSON.stringify({
               acceptClickDepth: 1,
+              bannerLayerInspected: true,
               choiceAsymmetry: "material",
               preferencesRequiredBeforeReject: true,
               rejectAvailableOnFirstLayer: false,

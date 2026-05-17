@@ -1769,6 +1769,26 @@ function getRegulatoryLensMappingReason(input: {
   lens: Pick<RegulatoryLens, "acronym" | "summary">;
 }) {
   const text = `${input.lens.acronym} ${input.lens.summary} ${input.finding.id} ${input.finding.label}`.toLowerCase();
+  const findingId = input.finding.id;
+
+  if (
+    findingId === "reject_option_missing_or_hidden" ||
+    findingId === "asymmetric_consent_ui" ||
+    findingId === "consent_dark_patterns_detected" ||
+    findingId === "forced_consent_interaction"
+  ) {
+    return "Shown here because this scan observed consent choice interface signals.";
+  }
+
+  if (
+    findingId === "pre_consent_tracking_detected" ||
+    findingId === "third_party_tracking_pre_consent" ||
+    findingId === "analytics_cookie_pre_consent" ||
+    findingId === "adtech_cookie_pre_consent" ||
+    findingId === "third_party_cookie_pre_consent"
+  ) {
+    return "Shown here because this scan observed tracking before a recorded consent choice.";
+  }
 
   if (text.includes("pre-consent") || text.includes("pre_consent") || text.includes("consent")) {
     return "Shown here because this scan observed tracking before a recorded consent choice or related consent-control signals.";
@@ -2223,7 +2243,7 @@ function getFindingFixText(finding: CertScoreFinding) {
   return finding.remediation;
 }
 
-type EvidenceBasisStatus = "Strong" | "Partial" | "Available" | "Not evaluated";
+type EvidenceBasisStatus = "Strong" | "Partial" | "Available" | "Not applicable" | "Not evaluated";
 
 function getEvidenceBasisTone(status: EvidenceBasisStatus) {
   switch (status) {
@@ -2231,6 +2251,8 @@ function getEvidenceBasisTone(status: EvidenceBasisStatus) {
       return "border-emerald-200 bg-emerald-50 text-emerald-800";
     case "Available":
       return "border-sky-200 bg-sky-50 text-sky-800";
+    case "Not applicable":
+      return "border-slate-200 bg-slate-50 text-slate-600";
     case "Partial":
       return "border-amber-200 bg-amber-50 text-amber-800";
     case "Not evaluated":
@@ -2293,6 +2315,42 @@ function buildEvidenceBasisItems(finding: CertScoreFinding): Array<{ label: stri
     policyEvidence?.evaluated === true || details.policyRuntimeConflict || details.policyEvidenceDetails
       ? "Available"
       : "Not evaluated";
+
+  if (
+    finding.id === "consent_dark_patterns_detected" ||
+    finding.id === "reject_option_missing_or_hidden" ||
+    finding.id === "asymmetric_consent_ui"
+  ) {
+    const consentUiEvidence = details.consentUiEvidence;
+    const decisionStates = Array.isArray(consentUiEvidence?.consentSurfaceDecisionStates)
+      ? consentUiEvidence.consentSurfaceDecisionStates
+      : [];
+    const rejectSubtype = typeof consentUiEvidence?.rejectOptionSubtype === "string"
+      ? consentUiEvidence.rejectOptionSubtype
+      : null;
+    return [
+      {
+        label: "Consent surface observed",
+        status: decisionStates.includes("consent_surface_observed") || consentUiEvidence?.observed === true ? "Strong" : "Partial"
+      },
+      {
+        label: "Reject path visibility",
+        status:
+          decisionStates.includes("reject_absent_first_layer") ||
+          decisionStates.includes("reject_present_first_layer") ||
+          Boolean(rejectSubtype)
+            ? "Strong"
+            : "Partial"
+      },
+      {
+        label: "Button symmetry",
+        status: consentUiEvidence?.observed === true ? "Strong" : "Partial"
+      },
+      { label: "Runtime request evidence", status: "Not applicable" },
+      { label: "Cookie timing", status: "Not applicable" },
+      { label: "Policy context", status: policyContext }
+    ];
+  }
 
   return [
     { label: "Runtime requests", status: runtimeRequests },

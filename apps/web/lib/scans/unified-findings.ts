@@ -310,6 +310,8 @@ function normalizeUnifiedFindingEvidenceRecord(
   assignCanonicalField("hybridConsentSummary", ["hybrid_consent_summary"]);
   assignCanonicalField("hybridUiSummary", ["hybrid_ui_summary"]);
   assignCanonicalField("consentSurfaceObserved", ["consent_surface_observed"]);
+  assignCanonicalField("consentSurfaceDecisionStates", ["consent_surface_decision_states"]);
+  assignCanonicalField("consentSurfaceDiagnostics", ["consent_surface_diagnostics"]);
   assignCanonicalField("consentTimeline", ["consent_timeline"]);
   assignCanonicalField("requestPurposeClassificationConfidence", ["request_purpose_classification_confidence"]);
   assignCanonicalField("blockingOverlayType", ["blocking_overlay_type"]);
@@ -637,6 +639,90 @@ function getPolicyFieldCoverageFlags(record: Record<string, unknown> | null | un
   }
 
   return flags;
+}
+
+function sanitizeConsentSurfaceDiagnostics(record: Record<string, unknown>) {
+  const sanitized: Record<string, unknown> = {};
+  const copyBoolean = (targetKey: string, keys: string[]) => {
+    for (const key of keys) {
+      if (typeof record[key] === "boolean") {
+        sanitized[targetKey] = record[key];
+        return;
+      }
+    }
+  };
+  const copyNumber = (targetKey: string, keys: string[]) => {
+    for (const key of keys) {
+      if (typeof record[key] === "number" && Number.isFinite(record[key] as number)) {
+        sanitized[targetKey] = record[key];
+        return;
+      }
+    }
+  };
+  const copyString = (targetKey: string, keys: string[]) => {
+    for (const key of keys) {
+      if (typeof record[key] === "string" && String(record[key]).trim().length > 0) {
+        sanitized[targetKey] = String(record[key]).trim().slice(0, 120);
+        return;
+      }
+    }
+  };
+  const copyStringArray = (targetKey: string, keys: string[]) => {
+    for (const key of keys) {
+      const value = record[key];
+      if (Array.isArray(value)) {
+        const strings = uniqueStrings(
+          value
+            .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+            .map((entry) => entry.trim().slice(0, 120))
+        ).slice(0, 20);
+        if (strings.length > 0) {
+          sanitized[targetKey] = strings;
+          return;
+        }
+      }
+    }
+  };
+
+  copyStringArray("relevantConsentStorageKeys", [
+    "relevantConsentStorageKeys",
+    "relevant_consent_storage_keys",
+    "consentStorageKeys",
+    "consent_storage_keys"
+  ]);
+  copyStringArray("cmpStateHints", ["cmpStateHints", "cmp_state_hints"]);
+  copyBoolean("bannerRendered", ["bannerRendered", "banner_rendered"]);
+  copyNumber("firstObservedBannerMs", ["firstObservedBannerMs", "first_observed_banner_ms", "firstVisibleMs", "first_visible_ms"]);
+  copyNumber("hydrationSettleWaitMs", ["hydrationSettleWaitMs", "hydration_settle_wait_ms", "settleWaitMs", "settle_wait_ms"]);
+  copyString("viewportStatus", ["viewportStatus", "viewport_status", "surfaceViewportStatus", "surface_viewport_status"]);
+  copyBoolean("priorConsentOrSuppressedBannerSuspected", [
+    "priorConsentOrSuppressedBannerSuspected",
+    "prior_consent_or_suppressed_banner_suspected"
+  ]);
+
+  const candidateButtons = Array.isArray(record.candidateButtons)
+    ? record.candidateButtons
+    : Array.isArray(record.candidate_buttons)
+      ? record.candidate_buttons
+      : [];
+  const sanitizedButtons = candidateButtons
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+    .map((entry) => ({
+      interactable: entry.interactable === true || entry.enabled === true || entry.clickable === true,
+      label: typeof entry.label === "string"
+        ? entry.label.trim().slice(0, 80)
+        : typeof entry.text === "string"
+          ? entry.text.trim().slice(0, 80)
+          : "",
+      visible: entry.visible === true || entry.visibility === "visible"
+    }))
+    .filter((entry) => entry.label.length > 0)
+    .slice(0, 20);
+  if (sanitizedButtons.length > 0) {
+    sanitized.candidateButtons = sanitizedButtons;
+  }
+
+  return sanitized;
 }
 
 function uniqueTitleRecords(values: Array<{ title: string; url: string }>) {
@@ -2156,6 +2242,24 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   }
   if (typeof normalizedFallbackEvidence.consentSurfaceObserved === "boolean") {
     entities.consentSurfaceObserved = [String(normalizedFallbackEvidence.consentSurfaceObserved)];
+  }
+  if (Array.isArray(normalizedFallbackEvidence.consentSurfaceDecisionStates)) {
+    entities.consentSurfaceDecisionStates = uniqueStrings(
+      (normalizedFallbackEvidence.consentSurfaceDecisionStates as unknown[])
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    );
+  }
+  const consentSurfaceDiagnostics =
+    normalizedFallbackEvidence.consentSurfaceDiagnostics &&
+    typeof normalizedFallbackEvidence.consentSurfaceDiagnostics === "object" &&
+    !Array.isArray(normalizedFallbackEvidence.consentSurfaceDiagnostics)
+      ? normalizedFallbackEvidence.consentSurfaceDiagnostics as Record<string, unknown>
+      : null;
+  if (consentSurfaceDiagnostics) {
+    const diagnosticRows = stringifyEvidenceRows([sanitizeConsentSurfaceDiagnostics(consentSurfaceDiagnostics)]);
+    if (diagnosticRows.length > 0) {
+      entities.consentSurfaceDiagnostics = diagnosticRows;
+    }
   }
   if (typeof normalizedFallbackEvidence.consentActionableChoiceObserved === "boolean") {
     entities.consentActionableChoiceObserved = [String(normalizedFallbackEvidence.consentActionableChoiceObserved)];
