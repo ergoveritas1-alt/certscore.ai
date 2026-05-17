@@ -2782,24 +2782,43 @@ function compactPreConsentTrackingEvidenceJsonPayload(finding: CertScoreFinding)
     defaultSurfacePriority: finding.defaultSurfacePriority,
     evidenceVersion: finding.evidenceVersion ?? "1.1",
     shortSummary: finding.shortSummary,
-    whyItMatters: finding.whyItMatters,
-    remediation: finding.remediation,
     evidenceDetails: {
-      scanContext: details.scanContext ?? null,
-      consentState: details.consentState ?? null,
+      scanContext: compactEvidenceRecord(details.scanContext, ["scanMode", "pageUrl", "finalUrl", "hostname"]) ?? null,
+      consentState: compactEvidenceRecord(details.consentState, [
+        "userConsentActionObserved",
+        "trackingOccurredBeforeConsentChoice",
+        "consentBannerObserved",
+        "userActionType"
+      ]) ?? null,
       consentBasis: details.consentBasis ?? null,
-      timingAnalysis: details.timingAnalysis ?? null,
-      timing: details.timing ?? null,
+      timingAnalysis: compactEvidenceRecord(details.timingAnalysis, [
+        "firstTrackingRequestMs",
+        "firstConsentBannerObservedMs",
+        "trackingBeforeConsent"
+      ]) ?? null,
+      timing: compactEvidenceRecord(details.timing, [
+        "pageStartedAtMs",
+        "firstThirdPartyTrackingRequestMs",
+        "firstConsentBannerObservedMs",
+        "firstConsentActionMs"
+      ]) ?? null,
       counts: details.counts ?? {},
       requestSelectionNote: details.requestSelectionNote ?? null,
-      vendors: details.vendors ?? [],
-      representativeRequests: details.representativeRequests ?? [],
-      identifierEvidence: details.identifierEvidence ?? null,
+      vendors: (details.vendors ?? []).slice(0, 5).map((vendor) =>
+        compactObject(vendor, ["name", "category", "preConsent", "firstSeenMs", "representativeUrl"])
+      ),
+      representativeRequests: compactRepresentativeRequests(details.representativeRequests) ?? [],
+      identifierEvidence: compactEvidenceRecord(details.identifierEvidence, [
+        "addressingOrSignalingTransmittedByRequest",
+        "identifierLikeRequestCount",
+        "deviceDataLikeRequestCount",
+        "interpretation"
+      ]) ?? null,
       policyEvidence: details.policyEvidence ?? null,
       legalRelevance: details.legalRelevance ?? null,
-      limitations: details.limitations ?? []
+      limitations: compactStringList(details.limitations, 3, 180) ?? []
     },
-    evidencePreview: finding.evidencePreview
+    evidencePreview: compactStringList(finding.evidencePreview, 3, 220) ?? []
   };
 }
 
@@ -2816,40 +2835,102 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
     defaultSurfacePriority: finding.defaultSurfacePriority,
     evidenceVersion: finding.evidenceVersion ?? "1.1",
     shortSummary: finding.shortSummary,
-    whyItMatters: finding.whyItMatters,
-    remediation: finding.remediation,
     evidenceDetails: compactObject(
       {
-        scanContext: details.scanContext ?? null,
-        consentState: details.consentState ?? undefined,
+        scanContext: compactEvidenceRecord(details.scanContext, ["scanMode", "pageUrl", "finalUrl", "hostname"]) ?? null,
+        consentState: compactEvidenceRecord(details.consentState, [
+          "userConsentActionObserved",
+          "trackingOccurredBeforeConsentChoice",
+          "consentBannerObserved",
+          "userActionType"
+        ]) ?? undefined,
         consentBasis: details.consentBasis ?? undefined,
-        timingAnalysis: details.timingAnalysis ?? undefined,
-        timing: details.timing ?? undefined,
-        rejectInteraction: details.rejectInteraction ?? undefined,
-        postRejectEvidence: details.postRejectEvidence ?? undefined,
-        sessionReplayEvidence: details.sessionReplayEvidence ?? undefined,
-        inputSurfaceEvidence: details.inputSurfaceEvidence ?? undefined,
-        syncEvidence: details.syncEvidence ?? undefined,
-        cookieEvidence: details.cookieEvidence ?? undefined,
-        optOutControlEvidence: details.optOutControlEvidence ?? undefined,
+        timingAnalysis: compactEvidenceRecord(details.timingAnalysis, [
+          "firstTrackingRequestMs",
+          "firstConsentBannerObservedMs",
+          "trackingBeforeConsent"
+        ]) ?? undefined,
+        timing: compactEvidenceRecord(details.timing, [
+          "pageStartedAtMs",
+          "firstThirdPartyTrackingRequestMs",
+          "firstConsentBannerObservedMs",
+          "firstConsentActionMs"
+        ]) ?? undefined,
+        rejectInteraction: compactEvidenceRecord(details.rejectInteraction, ["action_type", "selector", "label", "timestamp_ms"]) ?? undefined,
+        postRejectEvidence: compactEvidenceRecord(details.postRejectEvidence, [
+          "trackingPersistedAfterReject",
+          "baselineRequestCount",
+          "postRejectRequestCount",
+          "basis"
+        ]) ?? undefined,
+        sessionReplayEvidence: compactEvidenceRecord(details.sessionReplayEvidence, ["observed", "vendorCount", "requestCount", "basis"]) ?? undefined,
+        inputSurfaceEvidence: compactEvidenceRecord(details.inputSurfaceEvidence, ["observed", "sensitiveFieldCount", "evaluated", "basis"]) ?? undefined,
+        syncEvidence: compactEvidenceRecord(details.syncEvidence, ["observed", "syncRequestCount", "destinationCount", "basis"]) ?? undefined,
+        cookieEvidence: compactEvidenceRecord(details.cookieEvidence, [
+          "observed",
+          "cookieCount",
+          "thirdPartyCookieCount",
+          "preConsentCookieCount",
+          "basis"
+        ]) ?? undefined,
+        optOutControlEvidence: compactEvidenceRecord(details.optOutControlEvidence, [
+          "result",
+          "optOutSubtype",
+          "missingOrAbsent",
+          "incompleteOrUnconfirmed",
+          "basis"
+        ]) ?? undefined,
         jurisdictionOrPolicyContext: details.jurisdictionOrPolicyContext ?? undefined,
-        trackingOrSharingContext: details.trackingOrSharingContext ?? undefined,
-        trackingEvidence: details.trackingEvidence ?? undefined,
-        consentUiEvidence: details.consentUiEvidence ?? undefined,
-        sensitiveDataEvidence: details.sensitiveDataEvidence ?? undefined,
-        telemetryEvidence: details.telemetryEvidence ?? undefined,
-        accessibilityEvidence: details.accessibilityEvidence ?? undefined,
-        policyEvidenceDetails: details.policyEvidenceDetails ?? undefined,
-        financialClaimsEvidence: details.financialClaimsEvidence ?? undefined,
-        disclosureEvidence: details.disclosureEvidence ?? undefined,
+        trackingOrSharingContext: compactEvidenceRecord(details.trackingOrSharingContext, [
+          "cbaVendorEvidenceObserved",
+          "advertisingVendorEvidenceObserved",
+          "thirdPartyTrackingObserved"
+        ]) ?? undefined,
+        trackingEvidence: compactEvidenceRecord(details.trackingEvidence, [
+          "identifierLikeRequestCount",
+          "destinationDomainCount",
+          "basis"
+        ]) ?? undefined,
+        consentUiEvidence: compactEvidenceRecord(details.consentUiEvidence, [
+          "observed",
+          "result",
+          "subtype",
+          "rejectOptionSubtype",
+          "userChoiceImpact",
+          "basis"
+        ]) ?? undefined,
+        sensitiveDataEvidence: compactEvidenceRecord(details.sensitiveDataEvidence, [
+          "observed",
+          "sensitiveFieldCount",
+          "sensitiveDataTypes",
+          "basis"
+        ]) ?? undefined,
+        telemetryEvidence: compactEvidenceRecord(details.telemetryEvidence, [
+          "basis",
+          "confidenceExplanation",
+          "identifierLikeRequestCount",
+          "fingerprintPurposeFraming",
+          "fingerprintPromotionAnnotation"
+        ]) ?? undefined,
+        accessibilityEvidence: compactEvidenceRecord(details.accessibilityEvidence, ["observed", "issueCount", "impact", "wcagRule", "basis"]) ?? undefined,
+        policyEvidenceDetails: compactEvidenceRecord(details.policyEvidenceDetails, ["observed", "evaluated", "basis", "clarityRiskObserved"]) ?? undefined,
+        financialClaimsEvidence: compactEvidenceRecord(details.financialClaimsEvidence, ["observed", "offerCount", "basis"]) ?? undefined,
+        disclosureEvidence: compactEvidenceRecord(details.disclosureEvidence, ["observed", "missingDisclosureCount", "basis"]) ?? undefined,
         counts: details.counts ?? {},
         requestSelectionNote: details.requestSelectionNote ?? undefined,
-        vendors: details.vendors ?? [],
-        representativeRequests: details.representativeRequests ?? undefined,
-        identifierEvidence: details.identifierEvidence ?? undefined,
+        vendors: (details.vendors ?? []).slice(0, 5).map((vendor) =>
+          compactObject(vendor, ["name", "category", "preConsent", "firstSeenMs", "representativeUrl"])
+        ),
+        representativeRequests: compactRepresentativeRequests(details.representativeRequests),
+        identifierEvidence: compactEvidenceRecord(details.identifierEvidence, [
+          "addressingOrSignalingTransmittedByRequest",
+          "identifierLikeRequestCount",
+          "deviceDataLikeRequestCount",
+          "interpretation"
+        ]) ?? undefined,
         policyEvidence: details.policyEvidence ?? { evaluated: false },
         legalRelevance: details.legalRelevance ?? undefined,
-        limitations: details.limitations ?? []
+        limitations: compactStringList(details.limitations, 3, 180) ?? []
       },
       [
         "scanContext",
@@ -2885,7 +2966,7 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
         "limitations"
       ]
     ),
-    evidencePreview: finding.evidencePreview
+    evidencePreview: compactStringList(finding.evidencePreview, 3, 220) ?? []
   };
 }
 

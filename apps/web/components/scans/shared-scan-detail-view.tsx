@@ -1598,7 +1598,10 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
   const positiveSurfaceFinding = isPositiveSurfaceFinding(input.finding);
 
   return (
-    <details className={`group/finding rounded-lg border px-3 py-3 ${getFindingToneClasses(input.finding)}`}>
+    <details
+      id={getReviewFindingAnchor(input.finding)}
+      className={`group/finding scroll-mt-24 rounded-lg border px-3 py-3 ${getFindingToneClasses(input.finding)}`}
+    >
       <summary className="flex cursor-pointer list-none items-center gap-2 marker:hidden [&::-webkit-details-marker]:hidden">
         <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/finding:rotate-90">
           <DisclosureChevron />
@@ -3690,16 +3693,6 @@ function summarizeSectionFindingCoverage(input: {
   return summarizeSectionFindings(findings);
 }
 
-function getMatrixCountTone(count: number) {
-  if (count >= 3) {
-    return "bg-rose-100 text-rose-900";
-  }
-  if (count >= 1) {
-    return "bg-amber-100 text-amber-900";
-  }
-  return "bg-slate-100 text-slate-600";
-}
-
 function truncateJsonSample(value: string, maxLength = 140) {
   return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
 }
@@ -3761,30 +3754,8 @@ function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPacket) {
   };
 }
 
-function buildCategoryFindingSummaryJson(finding: UnifiedFindingDisplayPacket) {
-  return {
-    payloadScope: "coverage_matrix_reference",
-    unifiedFindingId: finding.unifiedFindingId,
-    title: finding.title,
-    severity: finding.severity,
-    confidenceBand: finding.confidenceBand,
-    summary: finding.summary,
-    evidence: {
-      counts: finding.evidence?.counts ?? {},
-      flags: (finding.evidence?.flags ?? []).slice(0, 3),
-      pageCount: finding.evidence?.pageUrls?.length ?? 0,
-      snippetCount: finding.evidence?.snippets?.length ?? 0,
-      entityKeys: Object.keys(finding.evidence?.entities ?? {}).slice(0, 6)
-    },
-    reviewContext: {
-      affectedPageCount: finding.affectedPageCount,
-      categoryAlignmentCount: finding.categoryAlignments.length,
-      surfacing: {
-        decision: finding.surfacingDecision.decisionState,
-        lane: finding.surfacingDecision.reportLane
-      }
-    }
-  };
+function getReviewFindingAnchor(finding: Pick<UnifiedFindingDisplayPacket, "unifiedFindingId">) {
+  return `review-finding-${finding.unifiedFindingId}`;
 }
 
 function CategorySeverityCounts(input: { findings: UnifiedFindingDisplayPacket[] }) {
@@ -3823,68 +3794,25 @@ function CategorySeverityCounts(input: { findings: UnifiedFindingDisplayPacket[]
 
 function CategoryFindingSummaryCard(input: { finding: UnifiedFindingDisplayPacket }) {
   const summary = getCollapsedFindingSummary(input.finding) ?? input.finding.presentation.whyThisMatters;
-  const whyItMatters = input.finding.presentation.whyThisMatters;
-  const suggestedFix = input.finding.presentation.suggestedFix;
-  const findingJsonPayload = JSON.stringify(buildCategoryFindingSummaryJson(input.finding), null, 2);
   const positiveSurfaceFinding = isPositiveSurfaceFinding(input.finding);
 
   return (
-    <div className="relative rounded-lg border border-slate-200 bg-white px-3 pt-3 pb-12">
-      <div className="flex items-start gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-medium text-slate-900">{input.finding.presentation.findingName}</p>
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding)}`}>
-            {positiveSurfaceFinding ? "positive surface" : input.finding.severity}
-          </span>
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="line-clamp-1 text-sm font-medium text-slate-900">{input.finding.presentation.findingName}</p>
+          <p className="mt-1 line-clamp-2 text-xs text-slate-600">{summary}</p>
         </div>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding)}`}>
+          {positiveSurfaceFinding ? "positive surface" : input.finding.severity}
+        </span>
       </div>
-      <p className="mt-2 text-xs text-slate-600">{summary}</p>
-      <div className="mt-3 space-y-2">
-        <div className="space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Why it matters</p>
-          <p className="text-xs text-slate-700">{whyItMatters}</p>
-        </div>
-        <div className="space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Fix it</p>
-          <p className="text-xs text-slate-700">{suggestedFix}</p>
-        </div>
-        {input.finding.presentation.suggestedBestPractice ? (
-          <Link
-            href={input.finding.presentation.suggestedBestPractice.url}
-            target="_blank"
-            rel="noreferrer"
-            className="absolute right-3 bottom-3 inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-700"
-          >
-            <span>↗</span>
-            <span>{input.finding.presentation.suggestedBestPractice.label}</span>
-          </Link>
-        ) : null}
-        <details className="group/json mt-3 group-open/json:rounded-lg group-open/json:bg-slate-50 group-open/json:p-3">
-          <summary className="absolute bottom-3 left-3 inline-flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500 shadow-sm marker:hidden transition-colors hover:border-slate-400 hover:text-slate-700 group-open/json:static group-open/json:mb-2 group-open/json:border-slate-200 group-open/json:bg-white/80 [&::-webkit-details-marker]:hidden">
-            <span className="sr-only">Show technical JSON</span>
-            <svg
-              viewBox="0 0 24 24"
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M8 4 4 12l4 8" />
-              <path d="M16 4l4 8-4 8" />
-              <path d="M14 3 10 21" />
-            </svg>
-          </summary>
-          <div className="relative">
-            <CopyJsonButton payload={findingJsonPayload} label="Copy evidence JSON" />
-            <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-white p-3 pr-12 text-[11px] leading-5 text-slate-600">
-              {findingJsonPayload}
-            </pre>
-          </div>
-        </details>
-      </div>
+      <a
+        href={`#${getReviewFindingAnchor(input.finding)}`}
+        className="mt-2 inline-flex text-[11px] font-semibold text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
+      >
+        Open detailed finding
+      </a>
     </div>
   );
 }
