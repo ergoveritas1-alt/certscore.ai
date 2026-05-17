@@ -88,6 +88,7 @@ import {
   getPolicyPageUrl,
   getPolicySummaryText
 } from "../../lib/scans/policy-enrichment-row";
+import { isGenericBrowserCookieHelpUrl } from "../../lib/scans/policy-surface-url-hygiene";
 import { deriveHighRiskTrackingContext } from "../../lib/scans/high-risk-tracking-context";
 import {
   getAllowedConflictType,
@@ -2188,12 +2189,17 @@ function humanizePolicyFlag(flag: string) {
     .join(" ");
 }
 
+function isReportPolicySurfaceRow(row: Record<string, unknown>) {
+  const pageType = String(getPolicyPageType(row) ?? "");
+  if (pageType !== "privacy_policy" && pageType !== "terms_of_service" && pageType !== "cookie_policy") {
+    return false;
+  }
+  return !(pageType === "cookie_policy" && isGenericBrowserCookieHelpUrl(getPolicyPageUrl(row)));
+}
+
 function deriveVerifiedPolicyInsights(policyEnrichments: Array<Record<string, unknown>>) {
   return policyEnrichments
-    .filter((row) => {
-      const pageType = String(getPolicyPageType(row) ?? "");
-      return pageType === "privacy_policy" || pageType === "terms_of_service" || pageType === "cookie_policy";
-    })
+    .filter(isReportPolicySurfaceRow)
     .map((row) => {
       const pageType = String(getPolicyPageType(row) ?? "");
       const pageUrl = getPolicyPageUrl(row);
@@ -2235,10 +2241,7 @@ function deriveVerifiedPolicyInsights(policyEnrichments: Array<Record<string, un
 
 function deriveExecutivePolicySurfaces(policyEnrichments: Array<Record<string, unknown>>): ExecutivePolicySurface[] {
   return policyEnrichments
-    .filter((row) => {
-      const pageType = String(getPolicyPageType(row) ?? "");
-      return pageType === "privacy_policy" || pageType === "terms_of_service" || pageType === "cookie_policy";
-    })
+    .filter(isReportPolicySurfaceRow)
     .map((row) => {
       const pageType = String(getPolicyPageType(row) ?? "");
       const pageUrl = getPolicyPageUrl(row);

@@ -2263,7 +2263,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
           lane: fingerprintTier >= 2 ? "main" : "confidence_and_coverage",
           tier: fingerprintTier >= 2 ? decision.surfaceTier : "support",
           reason: fingerprintTier >= 2
-            ? "Fingerprinting-related browser telemetry was retained, but probable fingerprinting requires identity linkage, vendor attribution, outbound entropy transmission, repeat sequencing, or cross-context linkage."
+            ? "Multi-signal browser/device telemetry was retained for fingerprinting review, but identity-oriented fingerprinting would require identity linkage, vendor attribution, outbound entropy transmission, repeat sequencing, or cross-context linkage."
             : "Browser/device entropy collection was retained only as support because identity-oriented fingerprinting evidence was not present.",
           ruleId: "evidence.consent_behavior.review_runtime_without_effect_evidence"
         });

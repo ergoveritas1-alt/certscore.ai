@@ -892,7 +892,7 @@ function getUrlHostname(value: string | null | undefined) {
 }
 
 const KNOWN_TRACKING_REQUEST_HOST_PATTERN =
-  /clarity\.ms|googletagmanager\.com|google-analytics\.com|googleadservices\.com|doubleclick\.net|bat\.bing\.com|connect\.facebook\.net|licdn\.com|hotjar\.com|fullstory\.com|hs-scripts\.com/i;
+  /amazon-adsystem\.com|clarity\.ms|googletagmanager\.com|google-analytics\.com|googleadservices\.com|doubleclick\.net|bat\.bing\.com|connect\.facebook\.net|licdn\.com|hotjar\.com|fullstory\.com|hs-scripts\.com/i;
 
 function isLikelyRuntimeRequestUrl(value: string | null | undefined) {
   if (!value || !/^https?:\/\//i.test(value)) {
@@ -904,29 +904,37 @@ function isLikelyRuntimeRequestUrl(value: string | null | undefined) {
     const host = url.hostname.toLowerCase();
     return (
       KNOWN_TRACKING_REQUEST_HOST_PATTERN.test(host) ||
+      /\/(?:configs?|config|cdn-cgi\/trace)(?:$|[/?#])/i.test(path) ||
       /\.(?:js|mjs|json|gif|png|jpe?g|webp|svg|css|woff2?)(?:$|[?#])/i.test(path) ||
       /\/(?:gtm\.js|collect|tag\/|pixel|tr|uet|bat\.js|fbevents|analytics\.js|clarity|events?)(?:$|[/?#])/i.test(path)
     );
   } catch {
-    return /(?:clarity\.ms|googletagmanager|gtm\.js|collect|pixel|bat\.bing|fbevents|analytics\.js)/i.test(value);
+    return /(?:amazon-adsystem|clarity\.ms|googletagmanager|gtm\.js|collect|pixel|bat\.bing|fbevents|analytics\.js)/i.test(value);
   }
 }
 
-function getScannedPageUrl(packet: UnifiedFindingDisplayPacket) {
-  const candidates = uniqueCaseInsensitiveStrings([
-    ...(packet.evidence?.pageUrls ?? []),
+function isSameAuditHost(value: string, auditedUrl: string | null) {
+  const valueHost = getUrlHostname(value);
+  const auditedHost = getUrlHostname(auditedUrl);
+  return Boolean(valueHost && auditedHost && (valueHost === auditedHost || valueHost.endsWith(`.${auditedHost}`) || auditedHost.endsWith(`.${valueHost}`)));
+}
+
+function getAuditPageUrlCandidates(packet: UnifiedFindingDisplayPacket) {
+  const initialCandidates = uniqueCaseInsensitiveStrings([
     packet.primaryPageUrl,
+    ...(packet.evidence?.pageUrls ?? []),
     packet.sourceUrl
-  ]);
-  return candidates.find((url) => /^https?:\/\//i.test(url) && !isLikelyRuntimeRequestUrl(url)) ?? null;
+  ]).filter((url) => /^https?:\/\//i.test(url) && !isLikelyRuntimeRequestUrl(url));
+  const auditedUrl = initialCandidates.find((url) => url === packet.primaryPageUrl) ?? initialCandidates[0] ?? null;
+  return initialCandidates.filter((url) => !auditedUrl || isSameAuditHost(url, auditedUrl));
+}
+
+function getScannedPageUrl(packet: UnifiedFindingDisplayPacket) {
+  return getAuditPageUrlCandidates(packet)[0] ?? null;
 }
 
 function getScannedPageUrls(packet: UnifiedFindingDisplayPacket) {
-  return uniqueCaseInsensitiveStrings([
-    ...(packet.evidence?.pageUrls ?? []),
-    packet.primaryPageUrl,
-    packet.sourceUrl
-  ]).filter((url) => /^https?:\/\//i.test(url) && !isLikelyRuntimeRequestUrl(url));
+  return getAuditPageUrlCandidates(packet);
 }
 
 function getUrlQueryKeysSample(value: string) {
@@ -1734,6 +1742,14 @@ function getPacketEvidenceSnippets(packet: UnifiedFindingDisplayPacket) {
   return uniqueStrings(packet.evidence?.snippets ?? []).map((snippet) => truncateDisplaySnippet(snippet)).slice(0, 5);
 }
 
+function sanitizeFingerprintReviewText(value: string) {
+  return value
+    .replace(/\bconsistent with likely fingerprinting\b/gi, "retained as a potential fingerprinting review signal")
+    .replace(/\blikely fingerprinting\b/gi, "potential fingerprinting review signal")
+    .replace(/\bprobable fingerprinting\b/gi, "fingerprinting review signal")
+    .replace(/\bprobable browser\/device fingerprinting behavior\b/gi, "browser/device telemetry retained for fingerprinting review");
+}
+
 function buildGenericCanonicalEvidenceDetails(
   packet: UnifiedFindingDisplayPacket,
   findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
@@ -1741,7 +1757,9 @@ function buildGenericCanonicalEvidenceDetails(
   const runtimeRequestUrls = getPacketRuntimeRequestUrls(packet);
   const runtimeVendors = getPacketRuntimeVendors(packet);
   const representativeRequests = getRepresentativeRequestDetails(runtimeRequestUrls, runtimeVendors);
-  const evidenceSnippets = getPacketEvidenceSnippets(packet);
+  const evidenceSnippets = getPacketEvidenceSnippets(packet).map((snippet) =>
+    findingId === "fingerprinting_related_signals_observed" ? sanitizeFingerprintReviewText(snippet) : snippet
+  );
   const sourceSignals = getPacketSourceSignals(packet);
   const evidenceFlags = uniqueStrings(packet.evidence?.flags ?? []);
   const sourceUrls = uniqueStrings(packet.evidence?.sourceUrls ?? []);
@@ -1932,8 +1950,8 @@ function buildGenericCanonicalEvidenceDetails(
       observed: true,
       basis: findingId === "fingerprinting_related_signals_observed"
         ? (fingerprintTierResult?.tier ?? 0) >= 2
-        ? "Fingerprinting-related browser telemetry was retained for review, but identity-oriented fingerprinting was not established."
-        : "Elevated browser/device entropy collection was retained for review, but identity-oriented fingerprinting was not established."
+        ? "Multi-signal browser/device telemetry was retained for fingerprinting review, but identity-oriented fingerprinting was not established."
+        : "Potential fingerprinting review signals were retained, but identity-oriented fingerprinting was not established."
         : findingId === "probable_fingerprinting"
           ? "Probable browser/device fingerprinting behavior was observed. The retained evidence shows coordinated high-entropy browser/device collection with runtime corroboration."
         : evidenceSnippets[0] ?? packet.summary,
@@ -1970,7 +1988,10 @@ function buildGenericCanonicalEvidenceDetails(
           }
         : findingId === "fingerprinting_related_signals_observed"
           ? {
-              confidenceExplanation: fingerprintTierResult?.confidenceExplanation ?? "Browser/device entropy collection retained without identity-oriented fingerprinting evidence.",
+              confidenceExplanation: sanitizeFingerprintReviewText(
+                fingerprintTierResult?.confidenceExplanation ??
+                  "Browser/device entropy collection retained without identity-oriented fingerprinting evidence."
+              ),
               limitations: [
                 "Observed signals may also appear in fraud prevention, performance optimization, or advanced analytics contexts.",
                 "Observed browser entropy collection alone does not establish cross-site identity tracking."
@@ -2065,10 +2086,21 @@ function buildGenericCanonicalEvidenceDetails(
     findingId === "text_alternative_accessibility_issue" ||
     findingId === "visual_contrast_accessibility_issue"
   ) {
+    const accessibilityRuleCodes = uniqueStrings(getEntityValues(packet, /accessibilityRuleCodes|axeRuleId|ruleCode/i));
+    const accessibilityImpacts = uniqueStrings([
+      ...getEntityValues(packet, /accessibilityImpacts|axeImpact/i),
+      ...getEntityValues(packet, /maxAxeImpact/i)
+    ]);
+    const accessibilitySeverities = uniqueStrings(getEntityValues(packet, /accessibilitySeverities|severity/i));
     details.accessibilityEvidence = {
       observed: true,
       basis: evidenceSnippets[0] ?? packet.summary,
-      representativeExamplesRetained: evidenceSnippets.length
+      representativeExamplesRetained: evidenceSnippets.length,
+      affectedNodes: getCountValue(packet, ["representativeAxeExampleCount", "wcagErrorCountTotal"]),
+      pageCount: getCountValue(packet, ["representativeAxePageCount"]),
+      ...(accessibilityRuleCodes[0] ? { axeRuleId: accessibilityRuleCodes[0], ruleCodes: accessibilityRuleCodes.slice(0, 8) } : {}),
+      ...(accessibilityImpacts[0] ? { impact: accessibilityImpacts[0], impacts: accessibilityImpacts.slice(0, 8) } : {}),
+      ...(accessibilitySeverities[0] ? { severity: accessibilitySeverities[0] } : {})
     };
   }
 
@@ -2811,8 +2843,8 @@ function buildExecutiveShortSummary(
   if (findingId === "fingerprinting_related_signals_observed") {
     const tier = deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet)).tier;
     return tier >= 2
-      ? "Fingerprinting-related browser telemetry was observed, but retained evidence does not establish identity-oriented fingerprinting."
-      : "Elevated browser/device entropy collection was observed, but retained evidence does not establish identity-oriented fingerprinting.";
+      ? "Multi-signal browser/device telemetry was retained for fingerprinting review, but retained evidence does not establish identity-oriented fingerprinting."
+      : "Potential fingerprinting review signals were retained, but retained evidence does not establish identity-oriented fingerprinting.";
   }
 
   if (findingId === "policy_behavior_contradiction_detected") {

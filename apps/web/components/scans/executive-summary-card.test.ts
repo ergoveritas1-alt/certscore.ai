@@ -548,6 +548,43 @@ test("buildRegulatoryLenses softens cookie timing copy when attribution arrays a
   assert.doesNotMatch(cookieFinding?.label ?? "", /classified cookies/i);
 });
 
+test("buildRegulatoryLenses caps count-only privacy lenses at Watch", () => {
+  const lenses = buildRegulatoryLenses(
+    [],
+    {
+      beforeConsentCookieCount: 19,
+      thirdPartyRequestCount: 131
+    },
+    {
+      unifiedContext: {
+        beforeConsentCookieCount: 19,
+        beforeConsentCookieEvidence: {
+          cookieNames: [],
+          cookieCategories: [],
+          cookieVendors: [],
+          initiatorDomains: [],
+          initiatorUrls: [],
+          sourceFindingIds: []
+        },
+        hasTrackingConcern: true,
+        thirdPartyRequestCount: 131
+      }
+    }
+  );
+
+  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
+  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
+
+  assert.equal(gdprLens?.ratingLabel, "Watch");
+  assert.equal(cpraLens?.ratingLabel, "Watch");
+  assert.match(regulatoryFindingLabels(gdprLens?.findings ?? []).join(" "), /cookie timing records were retained before consent/i);
+  assert.match(regulatoryFindingLabels(cpraLens?.findings ?? []).join(" "), /131 third-party request records were observed/i);
+  assert.equal(
+    cpraLens?.findings.find((finding) => finding.id === "third_party_request_count")?.reviewContextCopy,
+    "Third-party request context was retained, but CertScore did not retain enough classified advertising, sharing, sale/share, or disclosure-gap evidence to promote this into a top-level third-party tracking or sharing finding."
+  );
+});
+
 test("buildRegulatoryLensesFromUnifiedPackets does not convert raw cookie observations into issue copy when canonical count is zero", () => {
   const lenses = buildRegulatoryLensesFromUnifiedPackets(
     [
@@ -1047,6 +1084,34 @@ test("benchmark score explanation names consent UX review even when score remain
 
   assert.match(explanation ?? "", /above the Media \/ publisher sites benchmark expectation/);
   assert.match(explanation ?? "", /Overall score remains near benchmark, but consent UX findings require review\./);
+});
+
+test("benchmark score explanation avoids vendor score-driver copy for accessibility-only findings", () => {
+  const explanation = deriveBenchmarkScoreExplanation({
+    benchmark: {
+      confidence: "medium",
+      estimatedRankLabel: "Typical",
+      expectedCookiesBeforeConsent: 2,
+      expectedOverallScore: 78,
+      expectedThirdPartyRequests: 24,
+      industry: "Media / publisher",
+      rationale: "Matched to a media benchmark."
+    },
+    findings: [
+      makeFinding("visual_contrast_accessibility_issue", "Visual contrast accessibility issue", {
+        section: "Accessibility",
+        shortSummary: "Retained evidence showed accessibility issues."
+      })
+    ],
+    score: 61,
+    vendorNames: ["Google Ads", "Amazon Ads"]
+  });
+
+  assert.equal(
+    explanation,
+    "This score is below the Media / publisher benchmark expectation mainly because retained evidence showed accessibility. Third-party and cookie context was retained for review but did not promote to a top-level privacy finding."
+  );
+  assert.doesNotMatch(explanation ?? "", /Representative observed vendors/i);
 });
 
 test("ExecutiveSummaryCard explains interruption-backed limited coverage only when events are provided", () => {
@@ -2541,6 +2606,62 @@ test("ExecutiveSummaryCard explains executive and finding cookie count differenc
   assert.match(html, /trackingCookieWritesBeforeConsent/);
   assert.match(html, /totalUniqueCookiesObserved/);
   assert.match(html, /Partial means some timing evidence was retained directly, while related vendor\/request attribution may be aggregated or unavailable\./);
+});
+
+test("ExecutiveSummaryCard uses accessibility-specific evidence basis rows", () => {
+  const finding = makeFinding("visual_contrast_accessibility_issue", "Visual contrast accessibility issue", {
+    section: "Accessibility",
+    confidence: "good",
+    evidenceDetails: {
+      accessibilityEvidence: {
+        observed: true,
+        affectedNodes: 11,
+        axeRuleId: "color-contrast",
+        impact: "critical",
+        pageCount: 1
+      },
+      pageUrls: ["https://certscore.ai/"]
+    },
+    severity: "critical",
+    shortSummary: "Automated contrast issue retained from axe evidence."
+  });
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [finding],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "certscore.ai",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-17T20:00:00.000Z",
+      posture: "Watch",
+      preConsentVendorNames: [],
+      requestedHost: "certscore.ai",
+      resolvedVendorNames: [],
+      score: 91,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyDomains: [],
+      topFindings: [finding],
+      topObservedEntities: [],
+      trackerSummary: "No meaningful third-party footprint observed",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /title="Axe rule retained: Strong"/);
+  assert.match(html, /title="Affected nodes: 11"/);
+  assert.match(html, /title="Page coverage: 1 page"/);
+  assert.match(html, /title="Impact\/severity: Critical"/);
+  assert.match(html, /title="Manual verification: Recommended"/);
+  assert.doesNotMatch(html, /title="Runtime requests:/);
+  assert.doesNotMatch(html, /title="Vendor attribution:/);
+  assert.doesNotMatch(html, /title="Cookie timing:/);
+  assert.doesNotMatch(html, /title="Consent state:/);
 });
 
 test("ExecutiveSummaryCard hides evidence detail toggle when retained JSON would be metadata-only", () => {

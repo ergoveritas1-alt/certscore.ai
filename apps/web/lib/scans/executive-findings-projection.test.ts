@@ -1789,12 +1789,47 @@ test("projects tier-2 fingerprinting-related telemetry only with corroborating t
   assert.equal(finding.severity, "medium");
   assert.equal(
     finding.shortSummary,
-    "Fingerprinting-related browser telemetry was observed, but retained evidence does not establish identity-oriented fingerprinting."
+    "Multi-signal browser/device telemetry was retained for fingerprinting review, but retained evidence does not establish identity-oriented fingerprinting."
   );
   assert.equal(
     finding.evidenceDetails?.telemetryEvidence?.basis,
-    "Fingerprinting-related browser telemetry was retained for review, but identity-oriented fingerprinting was not established."
+    "Multi-signal browser/device telemetry was retained for fingerprinting review, but identity-oriented fingerprinting was not established."
   );
+});
+
+test("keeps fingerprinting-related review wording below probable language", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      severity: "high",
+      summary: "Tracking started before consent."
+    }),
+    makePacket("fingerprinting_observed", {
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: { fingerprintTier: 2, mergedSignalConfidence: 1 },
+        entities: {
+          fingerprintAttributeCategories: ["canvas_webgl", "audio", "fonts_plugins"],
+          fingerprintingSignals: ["canvas_webgl", "audio", "fonts_plugins"]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: ["https://www.nytimes.com/"],
+        snippets: ["Browser/device signals were consistent with likely fingerprinting."],
+        sourceUrls: ["https://config.aps.amazon-adsystem.com/configs/3030"]
+      },
+      severity: "high",
+      summary: "Probable fingerprinting behavior."
+    })
+  ]);
+  const finding = projection.findings.find((entry) => entry.id === "fingerprinting_related_signals_observed");
+  const serialized = JSON.stringify(finding);
+
+  assert.ok(finding);
+  assert.doesNotMatch(serialized, /likely fingerprinting|probable fingerprinting/i);
+  assert.match(serialized, /potential fingerprinting review signal|multi-signal browser\/device telemetry/i);
+  assert.match(serialized, /does not establish identity-oriented fingerprinting/i);
 });
 
 test("keeps probable fingerprinting wording for strong high-entropy evidence with outbound correlation", () => {
@@ -2748,6 +2783,93 @@ test("keeps scanned page URL separate from representative third-party request UR
       ["Microsoft Advertising", "advertising_measurement"]
     ]
   );
+});
+
+test("keeps scanned page URL separate from Amazon Ads config URLs", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      severity: "high",
+      summary: "Tracking started before consent."
+    }),
+    makePacket("fingerprinting_observed", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: { fingerprintTier: 3, mergedSignalConfidence: 1 },
+        entities: {
+          fingerprintAttributeCategories: ["canvas_webgl", "audio", "fonts_plugins"],
+          runtimeRequestUrls: ["https://config.aps.amazon-adsystem.com/configs/3030"],
+          runtimeVendors: ["Amazon Ads"]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: ["https://www.nytimes.com/", "https://config.aps.amazon-adsystem.com/configs/3030"],
+        snippets: ["Coordinated browser/device collection was retained."],
+        sourceUrls: ["https://config.aps.amazon-adsystem.com/configs/3030"]
+      },
+      primaryPageUrl: "https://www.nytimes.com/",
+      sourceUrl: "https://config.aps.amazon-adsystem.com/configs/3030",
+      severity: "high"
+    })
+  ]);
+  const finding = projection.findings.find((candidate) => candidate.id === "fingerprinting_related_signals_observed");
+
+  assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://www.nytimes.com/");
+  assert.ok(finding?.evidenceDetails?.runtimeRequestUrls?.includes("https://config.aps.amazon-adsystem.com/configs/3030"));
+  assert.notEqual(finding?.evidenceDetails?.scanContext?.pageUrl, "https://config.aps.amazon-adsystem.com/configs/3030");
+});
+
+test("keeps top-level finding scanContext page URLs on the audited origin", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      details: { family: "consent_tracking", kind: "preconsent_tracking", vendors: ["Microsoft Clarity"] },
+      evidence: {
+        counts: { firstThirdPartyTrackingRequestMs: 120 },
+        entities: {
+          preconsent_tracker_evidence_urls: ["https://www.clarity.ms/tag/abc123"],
+          preconsent_tracker_vendors: ["Microsoft Clarity"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: ["https://www.kbdlab.io/", "https://www.clarity.ms/tag/abc123"],
+        snippets: [],
+        sourceUrls: ["https://www.clarity.ms/tag/abc123"]
+      },
+      primaryPageUrl: "https://www.kbdlab.io/",
+      sourceUrl: "https://www.clarity.ms/tag/abc123",
+      severity: "high"
+    }),
+    makePacket("fingerprinting_observed", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "fingerprinting_observed" },
+      evidence: {
+        counts: { fingerprintTier: 3, mergedSignalConfidence: 1 },
+        entities: {
+          fingerprintAttributeCategories: ["canvas_webgl", "audio", "fonts_plugins"],
+          runtimeRequestUrls: ["https://config.aps.amazon-adsystem.com/configs/3030"],
+          runtimeVendors: ["Amazon Ads"]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: ["https://www.nytimes.com/", "https://config.aps.amazon-adsystem.com/configs/3030"],
+        snippets: [],
+        sourceUrls: ["https://config.aps.amazon-adsystem.com/configs/3030"]
+      },
+      primaryPageUrl: "https://www.nytimes.com/",
+      sourceUrl: "https://config.aps.amazon-adsystem.com/configs/3030",
+      severity: "high"
+    })
+  ]);
+
+  const expectedHosts = new Set(["www.kbdlab.io", "www.nytimes.com"]);
+  for (const finding of projection.findings) {
+    const pageUrl = finding.evidenceDetails?.scanContext?.pageUrl;
+    assert.ok(pageUrl);
+    assert.ok(expectedHosts.has(new URL(pageUrl).hostname), `${finding.id} used unexpected scanContext.pageUrl ${pageUrl}`);
+    assert.doesNotMatch(pageUrl, /clarity\.ms|amazon-adsystem\.com/i);
+  }
 });
 
 test("keeps related runtime requests out of direct pre-consent cookie evidence rows", () => {

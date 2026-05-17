@@ -342,6 +342,8 @@ type RegulatoryLensFinding = {
   reviewContextLabel?: string;
 };
 
+const CONTEXT_ONLY_REGULATORY_FINDING_SOURCES = new Set(["regulatory_counts", "regulatory_lens_score_driver"]);
+
 const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected",
@@ -569,7 +571,16 @@ function buildRegulatoryLensEvidencePayload(finding: CertScoreFinding, context?:
         "identifierLikeRequestCount",
         "fingerprintPurposeFraming"
       ]),
-      accessibilityEvidence: compactEvidenceRecord(details.accessibilityEvidence, ["observed", "issueCount", "impact", "wcagRule"]),
+      accessibilityEvidence: compactEvidenceRecord(details.accessibilityEvidence, [
+        "observed",
+        "affectedNodes",
+        "axeRuleId",
+        "impact",
+        "issueCount",
+        "pageCount",
+        "ruleCodes",
+        "wcagRule"
+      ]),
       policyEvidence: details.policyEvidence ?? undefined,
       limitations: compactStringList(details.limitations, 3, 180)
     },
@@ -754,6 +765,28 @@ function mergeRegulatoryLensFindings(items: RegulatoryLensFinding[]) {
   });
 }
 
+function isContextOnlyLensFinding(finding: RegulatoryLensFinding) {
+  return CONTEXT_ONLY_REGULATORY_FINDING_SOURCES.has(String(finding.evidence.source ?? ""));
+}
+
+function capContextOnlyLensTone(input: {
+  findings: RegulatoryLensFinding[];
+  score: number;
+  tone: ReturnType<typeof buildTone>;
+}) {
+  if (input.tone.label !== "Needs work") {
+    return { score: input.score, tone: input.tone };
+  }
+  if (input.findings.length === 0 || input.findings.some((finding) => !isContextOnlyLensFinding(finding))) {
+    return { score: input.score, tone: input.tone };
+  }
+
+  return {
+    score: Math.max(input.score, 50),
+    tone: buildWatchTone()
+  };
+}
+
 function buildMappedRegulatoryLensFindings(input: {
   context?: Record<string, unknown>;
   findingIds: Set<string>;
@@ -910,6 +943,10 @@ function buildTone(score: number) {
     return { label: "Watch", toneClass: "border-amber-200 bg-amber-50 text-amber-800" };
   }
   return { label: "Needs work", toneClass: "border-rose-200 bg-rose-50 text-rose-800" };
+}
+
+function buildWatchTone() {
+  return { label: "Watch", toneClass: "border-amber-200 bg-amber-50 text-amber-800" };
 }
 
 function buildMinimalRegulatoryLens(input: {
@@ -1329,17 +1366,17 @@ export function buildRegulatoryLenses(
           : null
       ].filter((item): item is RegulatoryLensFinding => Boolean(item)));
 
-  const gdprTone = buildTone(gdprScore);
-  const cpraTone = buildTone(cpraScore);
-  const ftcTone = buildTone(ftcScore);
+  const gdprDisplay = capContextOnlyLensTone({ findings: privacyTrackingNotes, score: gdprScore, tone: buildTone(gdprScore) });
+  const cpraDisplay = capContextOnlyLensTone({ findings: cpraFindings, score: cpraScore, tone: buildTone(cpraScore) });
+  const ftcDisplay = capContextOnlyLensTone({ findings: ftcFindings, score: ftcScore, tone: buildTone(ftcScore) });
 
   const lenses: RegulatoryLens[] = [
     {
       acronym: "CCPA / CPRA / CIPA",
       detailTitle: "Disclosure and downstream sharing issues",
       findings: cpraFindings,
-      ratingLabel: cpraTone.label,
-      score: cpraScore,
+      ratingLabel: cpraDisplay.tone.label,
+      score: cpraDisplay.score,
       summary: sensitiveTrackingFinding
         ? "Sensitive-data collection and downstream third-party exposure drive this score."
         : cpraCbaOptOutFinding
@@ -1347,27 +1384,27 @@ export function buildRegulatoryLenses(
         : replayFinding || hasTrackingConcern || hasPreConsentCookieConcern
         ? "Third-party collection and disclosure posture drives this score."
         : "No strong sale/share-style signal surfaced in the top findings.",
-      toneClass: cpraTone.toneClass
+      toneClass: cpraDisplay.tone.toneClass
     },
     {
       acronym: "GDPR / ePrivacy",
       detailTitle: "Consent and tracking issues",
       findings: privacyTrackingNotes,
-      ratingLabel: gdprTone.label,
-      score: gdprScore,
+      ratingLabel: gdprDisplay.tone.label,
+      score: gdprDisplay.score,
       summary: sensitiveTrackingFinding
         ? "Sensitive-data collection and tracking exposure are the main issue."
         : hasTrackingConcern || hasPreConsentCookieConcern
         ? "Consent and pre-consent tracking risk is the main issue."
         : "No major consent-triggering issue surfaced in the top findings.",
-      toneClass: gdprTone.toneClass
+      toneClass: gdprDisplay.tone.toneClass
     },
     {
       acronym: "FTC",
       detailTitle: hasStrongDarkPatternConcern ? "Consent UX and disclosure review" : "Choice architecture review signals",
       findings: ftcFindings,
-      ratingLabel: ftcTone.label,
-      score: ftcScore,
+      ratingLabel: ftcDisplay.tone.label,
+      score: ftcDisplay.score,
       summary: hasStrongDarkPatternConcern
         ? "Choice architecture and disclosure clarity are the main FTC-style concerns."
         : sensitiveTrackingFinding
@@ -1383,7 +1420,7 @@ export function buildRegulatoryLenses(
         : hasTrackingConcern || counts.beforeConsentCookieCount > 0
           ? "Pre-consent tracking and third-party collection should be reviewed for consumer-protection context."
             : "No strong consumer-protection cue surfaced in the top findings.",
-      toneClass: ftcTone.toneClass
+      toneClass: ftcDisplay.tone.toneClass
     }
   ];
 
@@ -2168,8 +2205,18 @@ export function deriveBenchmarkScoreExplanation(input: {
   ];
   const driverText = formatInlineList(uniqueStrings(drivers).slice(0, 4));
   const vendorNames = uniqueStrings(input.vendorNames ?? []).slice(0, 3);
+  const promotedPrivacyDriverCount = drivers
+    .filter((driver): driver is string => typeof driver === "string")
+    .filter((driver) => driver !== "accessibility").length;
+  const onlyAccessibilityPromoted = promotedPrivacyDriverCount === 0 && drivers.includes("accessibility");
   const vendorText =
-    vendorNames.length > 0 ? ` Representative observed vendors included ${formatInlineList(vendorNames)}.` : "";
+    vendorNames.length > 0 && promotedPrivacyDriverCount > 0
+      ? ` Representative observed vendors included ${formatInlineList(vendorNames)}.`
+      : "";
+  const retainedPrivacyContextText =
+    onlyAccessibilityPromoted && vendorNames.length > 0
+      ? " Third-party and cookie context was retained for review but did not promote to a top-level privacy finding."
+      : "";
   const hasConsentUxReviewFinding =
     findingIds.has("reject_option_missing_or_hidden") ||
     findingIds.has("asymmetric_consent_ui") ||
@@ -2193,7 +2240,7 @@ export function deriveBenchmarkScoreExplanation(input: {
     return driverText
       ? `${sentenceWithPeriod(
           `This score is below the ${input.benchmark.industry} benchmark expectation mainly because retained evidence showed ${driverText}`
-        )}${vendorText}`
+        )}${retainedPrivacyContextText}${vendorText}`
       : `This score is below the ${input.benchmark.industry} benchmark expectation based on surfaced findings.`;
   }
 
@@ -2331,7 +2378,7 @@ function getFindingFixText(finding: CertScoreFinding) {
   return finding.remediation;
 }
 
-type EvidenceBasisStatus = "Strong" | "Partial" | "Available" | "Not applicable" | "Not evaluated";
+type EvidenceBasisStatus = "Strong" | "Partial" | "Available" | "Not applicable" | "Not evaluated" | string;
 
 function getEvidenceBasisTone(status: EvidenceBasisStatus) {
   switch (status) {
@@ -2345,6 +2392,8 @@ function getEvidenceBasisTone(status: EvidenceBasisStatus) {
       return "border-amber-200 bg-amber-50 text-amber-800";
     case "Not evaluated":
       return "border-slate-200 bg-slate-50 text-slate-600";
+    default:
+      return "border-slate-200 bg-white text-slate-700";
   }
 }
 
@@ -2354,6 +2403,36 @@ function hasRecords(value: unknown): value is Array<Record<string, unknown>> {
 
 function hasStringValues(value: unknown): value is string[] {
   return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
+}
+
+const ACCESSIBILITY_FINDING_IDS = new Set([
+  "semantic_labeling_accessibility_issue",
+  "visual_contrast_accessibility_issue",
+  "keyboard_navigation_accessibility_issue",
+  "text_alternative_accessibility_issue"
+]);
+
+function formatEvidenceCount(value: unknown, fallback = "Not retained") {
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : fallback;
+}
+
+function formatPageCoverage(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return "Partial";
+  }
+  return `${value} page${value === 1 ? "" : "s"}`;
+}
+
+function getAccessibilityImpact(finding: CertScoreFinding) {
+  const details = finding.evidenceDetails;
+  const impact =
+    details?.accessibilityEvidence?.impact ??
+    details?.accessibilityEvidence?.axeImpact ??
+    details?.accessibilityEvidence?.severity ??
+    (Array.isArray(details?.accessibilityEvidence?.impacts) ? details.accessibilityEvidence.impacts[0] : null);
+  return typeof impact === "string" && impact.trim().length > 0
+    ? impact.trim().replace(/^\w/, (letter) => letter.toUpperCase())
+    : finding.severity.replace(/^\w/, (letter) => letter.toUpperCase());
 }
 
 function buildEvidenceBasisItems(finding: CertScoreFinding): Array<{ label: string; status: EvidenceBasisStatus }> {
@@ -2372,6 +2451,33 @@ function buildEvidenceBasisItems(finding: CertScoreFinding): Array<{ label: stri
   const policyEvidence = details.policyEvidence;
   const preConsentCookieCount =
     typeof details.counts?.preConsentTrackingCookies === "number" ? details.counts.preConsentTrackingCookies : 0;
+
+  if (ACCESSIBILITY_FINDING_IDS.has(finding.id)) {
+    const axeRule =
+      details.accessibilityEvidence?.wcagRule ??
+      details.accessibilityEvidence?.axeRuleId ??
+      details.accessibilityEvidence?.ruleCode ??
+      (Array.isArray(details.accessibilityEvidence?.ruleCodes) ? details.accessibilityEvidence.ruleCodes[0] : null);
+    const affectedNodes =
+      details.accessibilityEvidence?.affectedNodes ??
+      details.accessibilityEvidence?.nodeCount ??
+      details.accessibilityEvidence?.issueCount ??
+      details.counts?.representativeAxeExampleCount ??
+      details.counts?.wcagErrorCountTotal;
+    const pageCoverage =
+      details.accessibilityEvidence?.pageCoverage ??
+      details.accessibilityEvidence?.pageCount ??
+      details.counts?.representativeAxePageCount ??
+      (Array.isArray(details.pageUrls) ? details.pageUrls.length : null);
+
+    return [
+      { label: "Axe rule retained", status: typeof axeRule === "string" && axeRule.trim().length > 0 ? "Strong" : "Partial" },
+      { label: "Affected nodes", status: formatEvidenceCount(affectedNodes, "Partial") },
+      { label: "Page coverage", status: formatPageCoverage(pageCoverage) },
+      { label: "Impact/severity", status: getAccessibilityImpact(finding) },
+      { label: "Manual verification", status: "Recommended" }
+    ];
+  }
 
   const runtimeRequests: EvidenceBasisStatus =
     representativeRequests.length > 0 || runtimeRequestUrls.length > 0
