@@ -1851,6 +1851,8 @@ function RegulatoryLensFindingCard(input: {
               {input.finding.guideHref ? (
                 <a
                   href={input.finding.guideHref}
+                  target="_blank"
+                  rel="noreferrer"
                   className="mt-2 inline-flex text-[11px] font-semibold text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
                 >
                   Learn how this finding is interpreted
@@ -1860,6 +1862,8 @@ function RegulatoryLensFindingCard(input: {
           ) : input.finding.guideHref ? (
             <a
               href={input.finding.guideHref}
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex text-[11px] font-semibold text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
             >
               Learn how this finding is interpreted
