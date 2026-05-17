@@ -443,7 +443,7 @@ async function loadPreviewExecutiveAccessLimitationNotice() {
   }).buildPreviewExecutiveAccessLimitationNotice;
 }
 
-test("buildScanReportUnifiedFindings suppresses standalone privacy-rights paths when they do not support a stronger finding", async () => {
+test("buildScanReportUnifiedFindings surfaces page-attributed privacy-rights paths as review evidence", async () => {
   const buildScanReportUnifiedFindings = await loadBuildScanReportUnifiedFindings();
 
   const findings = buildScanReportUnifiedFindings({
@@ -490,8 +490,23 @@ test("buildScanReportUnifiedFindings suppresses standalone privacy-rights paths 
   });
 
   const rightsFinding = findings.find((finding) => finding.unifiedFindingId === "privacy_rights_path_present");
+  const surfacingDecision = rightsFinding?.surfacingDecision as
+    | {
+        appliedRules: string[];
+        decisionState: string;
+        reportLane: string;
+      }
+    | undefined;
+  const presentationDecision = rightsFinding?.presentationDecision as
+    | {
+        status: string;
+      }
+    | undefined;
 
-  assert.equal(rightsFinding, undefined);
+  assert.equal(surfacingDecision?.decisionState, "review");
+  assert.equal(surfacingDecision?.reportLane, "main");
+  assert.equal(presentationDecision?.status, "surface");
+  assert.ok(surfacingDecision?.appliedRules.includes("evidence.positive_surface.review_high_value_policy_path"));
 });
 
 test("buildScanReportUnifiedFindings suppresses standalone positive surfaces and thin affiliate evidence", async () => {
@@ -1282,8 +1297,8 @@ test("deriveExecutiveDisplayedScore applies financial penalty for full scans wit
 
   const score = deriveExecutiveDisplayedScore({
     findings: [
-      { id: "guaranteed_outcome_claim_detected", severity: "critical" },
-      { id: "leveraged_or_high_risk_product_promotion", severity: "high" }
+      { id: "guaranteed_or_high_return_claims_present", severity: "critical" },
+      { id: "high_risk_product_risk_disclosure_missing", severity: "high" }
     ],
     previewMode: "full",
     snapshot: null,
