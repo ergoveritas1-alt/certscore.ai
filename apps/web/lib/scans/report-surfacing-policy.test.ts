@@ -1981,6 +1981,38 @@ test("pre-consent tracking stays review-level when concrete URL evidence is miss
   assert.ok(decision?.appliedRules.includes("evidence.preconsent.review_without_runtime_artifacts"));
 });
 
+test("pre-consent tracking stays review-level when vendor attribution is missing", () => {
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("preconsent_tracking", {
+        confidenceInputs: {
+          ...makePacket("preconsent_tracking").confidenceInputs,
+          hasDirectRuntimeEvidence: true
+        },
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking",
+          requestUrls: ["https://www.facebook.com/tr/?id=123&ev=PageView"],
+          vendors: []
+        },
+        evidence: {
+          flags: ["preconsent_tracking_detected"],
+          pageUrls: [],
+          snippets: [],
+          sourceUrls: [],
+          entities: {
+            runtimeRequestUrls: ["https://www.facebook.com/tr/?id=123&ev=PageView"]
+          }
+        }
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions[0];
+  assert.equal(decision?.decisionState, "review");
+  assert.ok(decision?.appliedRules.includes("evidence.preconsent.review_without_runtime_artifacts"));
+});
+
 test("pre-consent tracking does not treat generic page URLs as request URL evidence", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [

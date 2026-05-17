@@ -174,6 +174,10 @@ export function deriveExecutiveDisplayState(input: {
     typeof input.thirdPartyRequestCount === "number" &&
     typeof input.domainBenchmark?.expectedThirdPartyRequests === "number" &&
     input.thirdPartyRequestCount > input.domainBenchmark.expectedThirdPartyRequests;
+  const belowBenchmarkRequests =
+    typeof input.thirdPartyRequestCount === "number" &&
+    typeof input.domainBenchmark?.expectedThirdPartyRequests === "number" &&
+    input.thirdPartyRequestCount < input.domainBenchmark.expectedThirdPartyRequests;
   const hasRuntimeContext =
     aboveBenchmarkRequests ||
     (input.vendorCount ?? 0) > 0 ||
@@ -182,6 +186,10 @@ export function deriveExecutiveDisplayState(input: {
   const hasPolicyContext = (input.policySurfaces ?? []).some(policySurfaceSuggestsTrackingContext);
   const hasMaterialIncompleteRuntimeContext =
     (input.beforeConsentCookieCount ?? 0) >= MATERIAL_INCOMPLETE_BEFORE_CONSENT_COOKIE_THRESHOLD;
+
+  if (meaningfulInterruption && hasMaterialIncompleteRuntimeContext && belowBenchmarkRequests) {
+    return "Limited review";
+  }
 
   if (input.posture === "Clear" && hasMaterialIncompleteRuntimeContext) {
     return "Evidence review";

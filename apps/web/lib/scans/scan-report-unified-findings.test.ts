@@ -1075,8 +1075,8 @@ test("observed baseline tracker URL fallback creates canonical preconsent packet
   ]);
 });
 
-test("state-0 preconsent request artifact creates audit-only incomplete preconsent packet", () => {
-  const state = buildScanReportUnifiedFindingState({
+function buildPreconsentRuntimeState(runtimeArtifacts: Record<string, unknown>, snapshot: Record<string, unknown> = {}) {
+  return buildScanReportUnifiedFindingState({
     accessibilityRuleCounts: [],
     accessibilityRuleExamples: [],
     events: [],
@@ -1085,7 +1085,29 @@ test("state-0 preconsent request artifact creates audit-only incomplete preconse
     pageEvidence: [],
     policyEnrichment: [],
     policyReviewQueue: [],
-    runtimeArtifacts: {
+    runtimeArtifacts,
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com",
+      ...snapshot
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+}
+
+test("state-0 preconsent request artifact creates audit-only incomplete preconsent packet", () => {
+  const state = buildPreconsentRuntimeState({
       consent_timeline: {
         firstCmpVisibleMs: 0,
         firstConsentActionMs: 0,
@@ -1124,23 +1146,6 @@ test("state-0 preconsent request artifact creates audit-only incomplete preconse
           firstThirdPartyRequestMs: 0
         }
       }
-    },
-    scan: {},
-    signalHits: [],
-    signals: [],
-    snapshot: {
-      final_url: "https://www.example.com/",
-      registered_domain: "example.com"
-    },
-    trackerVendors: [],
-    validationFindings: []
-  } as never, {
-    deriveAccessibilityIssueRows: () => [],
-    deriveAccessibilityRuleEvidenceRows: () => [],
-    deriveConsentAuditFindings: () => [],
-    derivePolicyBehaviorContradictions: () => [],
-    derivePreconsentViolationRows: () => [],
-    filterContradictoryPositiveSurfaceFindings: (findings) => findings
   });
   const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
 
@@ -1149,6 +1154,110 @@ test("state-0 preconsent request artifact creates audit-only incomplete preconse
   assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("audit_only"), true);
   assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"), true);
   assert.deepEqual(packet?.evidence?.entities?.runtimeRequestUrls, ["https://cdn.example-ad.net/bootstrap.js"]);
+});
+
+test("promotion-grade preconsent timing and vendor anchors surface as executive findings", () => {
+  const state = buildPreconsentRuntimeState({
+    consent_timeline: {
+      firstCmpVisibleMs: 1000,
+      firstConsentActionMs: 4000,
+      firstNonEssentialRequestMs: 250,
+      timelineConfidence: "high"
+    },
+    hybrid_runtime_evidence: {
+      requestPurposeClassificationConfidence: [
+        {
+          category: "advertising",
+          confidence: 0.95,
+          essentiality: "non_essential",
+          hostname: "www.facebook.com",
+          requestUrl: "https://www.facebook.com/tr/?id=123&ev=PageView",
+          runtimePhase: "pre_consent",
+          tsMs: 250,
+          vendor: "Meta Pixel"
+        }
+      ],
+      requestObservations: [
+        {
+          classification: "known_tracker",
+          domain: "www.facebook.com",
+          pathSample: "/tr/",
+          requestUrl: "https://www.facebook.com/tr/?id=123&ev=PageView",
+          runtimePhase: "pre_consent",
+          thirdParty: true,
+          tsMs: 250,
+          vendor: "Meta Pixel"
+        }
+      ],
+      timelineMarkers: {
+        consentBannerDetectedMs: 1000,
+        firstRequestMs: 250,
+        firstThirdPartyRequestMs: 250
+      }
+    }
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.ok(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.equal(projection.posture, "Action Needed");
+});
+
+test("service-only state-zero requests stay audit-only and out of tracker promotion", () => {
+  const serviceRows = [
+    ["cdn.optimizely.com", "https://cdn.optimizely.com/public/123/s/project.js", "Optimizely Web Experimentation", "experimentation", "personalization"],
+    ["js.stripe.com", "https://js.stripe.com/v3", "Stripe.js", "payment", "fraud_security"],
+    ["cookies-data.onetrust.io", "https://cookies-data.onetrust.io/cfw/cmp/v1/session", "OneTrust CMP data service", "cmp", "cdn_infra"],
+    ["accounts.google.com", "https://accounts.google.com/gsi/client", "Google Identity Services", "identity", "identity"]
+  ].map(([hostname, requestUrl, vendor, serviceClass, category], index) => ({
+    category,
+    classification: "service_classified",
+    confidence: "medium",
+    evidenceSource: "state0_request_capture",
+    hostname,
+    requestUrl,
+    resourceType: "script",
+    runtimePhase: "pre_consent",
+    serviceClass,
+    thirdParty: true,
+    tsMs: index,
+    vendor
+  }));
+  const state = buildPreconsentRuntimeState({
+    consent_timeline: {
+      firstCmpVisibleMs: 0,
+      firstConsentActionMs: null,
+      firstNonEssentialRequestMs: null,
+      timelineConfidence: "low"
+    },
+    hybrid_runtime_evidence: {
+      preconsentState0RequestObservations: serviceRows,
+      requestObservations: serviceRows.map((row) => ({
+        category: row.category,
+        classification: row.classification,
+        domain: row.hostname,
+        evidenceSource: row.evidenceSource,
+        pathSample: "/",
+        requestUrl: row.requestUrl,
+        runtimePhase: "pre_consent",
+        serviceClass: row.serviceClass,
+        thirdParty: true,
+        tsMs: row.tsMs,
+        vendor: row.vendor
+      })),
+      requestToVendorObservations: []
+    }
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.surfacingDecision.decisionState, "material_incomplete");
+  assert.deepEqual(packet?.evidence?.entities?.preconsent_tracker_vendors ?? [], []);
+  assert.deepEqual(packet?.evidence?.entities?.preconsent_tracker_evidence_urls ?? [], []);
+  assert.equal(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"), false);
 });
 
 test("runtime pre-submit text capture evidence creates canonical packet", () => {

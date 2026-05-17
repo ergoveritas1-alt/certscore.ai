@@ -223,6 +223,59 @@ test("uses evidence-review state for material cookie counts without headline fin
   assert.doesNotMatch(presentation.headline, /No major issues surfaced/i);
 });
 
+test("keeps low cookie counts with weak anchors in the clear executive state", () => {
+  const displayState = deriveExecutiveDisplayState({
+    beforeConsentCookieCount: 2,
+    posture: "Clear",
+    scanInterruptions: [],
+    thirdPartyRequestCount: 3,
+    topFindingCount: 0,
+    vendorCount: 0
+  });
+  const presentation = deriveExecutiveNarrativePresentation({
+    displayState,
+    executiveHeadline: "No headline findings surfaced from the available scan coverage.",
+    finalHost: "example.com",
+    posture: "Clear",
+    requestedHost: "example.com",
+    topFindings: []
+  });
+
+  assert.equal(displayState, "Clear");
+  assert.equal(presentation.headline, "No major issues surfaced from retained evidence");
+});
+
+test("uses coverage-constrained messaging for high cookies when media benchmark requests are interrupted", () => {
+  const displayState = deriveExecutiveDisplayState({
+    beforeConsentCookieCount: 19,
+    domainBenchmark: {
+      expectedThirdPartyRequests: 55
+    },
+    posture: "Clear",
+    scanInterruptions: [
+      {
+        label: "Captcha/security challenge",
+        details: ["The public homepage scan was interrupted by a challenge."]
+      }
+    ],
+    thirdPartyRequestCount: 8,
+    topFindingCount: 0,
+    vendorCount: 0
+  });
+  const presentation = deriveExecutiveNarrativePresentation({
+    displayState,
+    executiveHeadline: "No headline findings surfaced from the available scan coverage.",
+    finalHost: "example.com",
+    posture: "Clear",
+    requestedHost: "example.com",
+    topFindings: []
+  });
+
+  assert.equal(displayState, "Limited review");
+  assert.equal(presentation.headline, "Runtime coverage was limited by site protections");
+  assert.match(presentation.summaryMessage, /vendor and request counts may be incomplete/i);
+});
+
 test("keeps clean well-covered scans clear when no interruption context is retained", () => {
   const displayState = deriveExecutiveDisplayState({
     domainBenchmark: {
