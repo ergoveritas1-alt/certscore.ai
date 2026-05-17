@@ -3700,6 +3700,47 @@ function getMatrixCountTone(count: number) {
   return "bg-slate-100 text-slate-600";
 }
 
+function buildCategoryFindingSummaryJson(finding: UnifiedFindingDisplayPacket) {
+  return {
+    unifiedFindingId: finding.unifiedFindingId,
+    title: finding.title,
+    severity: finding.severity,
+    confidenceBand: finding.confidenceBand,
+    summary: finding.summary,
+    presentation: {
+      findingName: finding.presentation.findingName,
+      whyThisMatters: finding.presentation.whyThisMatters,
+      suggestedFix: finding.presentation.suggestedFix
+    },
+    evidence: {
+      counts: finding.evidence?.counts ?? {},
+      flags: (finding.evidence?.flags ?? []).slice(0, 8),
+      pageUrls: (finding.evidence?.pageUrls ?? []).slice(0, 3),
+      snippets: (finding.evidence?.snippets ?? []).slice(0, 3),
+      entities: Object.fromEntries(
+        Object.entries(finding.evidence?.entities ?? {}).map(([key, values]) => [key, values.slice(0, 5)])
+      )
+    },
+    reviewContext: {
+      affectedPageCount: finding.affectedPageCount,
+      categoryAlignments: finding.categoryAlignments.map((alignment) => ({
+        evidenceCategoryId: alignment.evidenceCategoryId,
+        relation: alignment.relation
+      })),
+      sourceCounts: {
+        issueCount: finding.confidenceInputs.issueCount,
+        signalCount: finding.confidenceInputs.signalCount,
+        sourceCount: finding.confidenceInputs.sourceCount,
+        validationCount: finding.confidenceInputs.validationCount
+      },
+      surfacing: {
+        decision: finding.surfacingDecision.decisionState,
+        lane: finding.surfacingDecision.reportLane
+      }
+    }
+  };
+}
+
 function CategorySeverityCounts(input: { findings: UnifiedFindingDisplayPacket[] }) {
   const highCount = input.findings.filter((finding) => finding.severity === "high").length;
   const mediumCount = input.findings.filter((finding) => finding.severity === "medium").length;
@@ -3738,7 +3779,7 @@ function CategoryFindingSummaryCard(input: { finding: UnifiedFindingDisplayPacke
   const summary = getCollapsedFindingSummary(input.finding) ?? input.finding.presentation.whyThisMatters;
   const whyItMatters = input.finding.presentation.whyThisMatters;
   const suggestedFix = input.finding.presentation.suggestedFix;
-  const findingJsonPayload = JSON.stringify(compactEvidenceJsonForDisplay(input.finding), null, 2);
+  const findingJsonPayload = JSON.stringify(buildCategoryFindingSummaryJson(input.finding), null, 2);
   const positiveSurfaceFinding = isPositiveSurfaceFinding(input.finding);
 
   return (
