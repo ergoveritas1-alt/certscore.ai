@@ -121,10 +121,6 @@ function getFindingBadges(finding: FindingReferenceItem) {
   ];
 }
 
-function getCoverageFlags(finding: FindingReferenceItem) {
-  return getStringArrayField(getPayloadRecord(finding), "coverage_flags");
-}
-
 function getRepresentativeVendors(finding: FindingReferenceItem) {
   const evidence = getNestedRecord(getPayloadRecord(finding), "evidence");
   const vendors = getStringArrayField(evidence, "vendors");
@@ -408,7 +404,6 @@ function FindingReferenceSection({
 }) {
   const [isJsonOpen, setIsJsonOpen] = useState(false);
   const badges = useMemo(() => getFindingBadges(finding), [finding]);
-  const coverageFlags = useMemo(() => getCoverageFlags(finding), [finding]);
   const timelineEvents = useMemo(() => getTimelineEvents(finding), [finding]);
   const vendors = useMemo(() => getRepresentativeVendors(finding), [finding]);
   const requestCount = useMemo(() => getPreConsentRequestCount(finding), [finding]);
@@ -463,11 +458,6 @@ function FindingReferenceSection({
             />
           </div>
           <EvidenceStandard />
-          {coverageFlags.length > 0 ? (
-            <p className="border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
-              Coverage note: This example came from a partial scan, so the evidence is illustrative rather than a full-site conclusion.
-            </p>
-          ) : null}
           {isJsonOpen ? (
             <EvidenceBlock title="Redacted example JSON" code={sampleJson} />
           ) : null}
