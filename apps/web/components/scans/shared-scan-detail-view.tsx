@@ -1594,7 +1594,7 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
   const evidenceSummary = summarizeEvidence(input.finding);
   const confidenceRationale = input.finding.presentationDecision.confidenceRationale;
   const collapsedSummary = getCollapsedFindingSummary(input.finding);
-  const findingJsonPayload = JSON.stringify(compactEvidenceJsonForDisplay(input.finding), null, 2);
+  const findingJsonPayload = JSON.stringify(buildReviewFindingSummaryJson(input.finding), null, 2);
   const positiveSurfaceFinding = isPositiveSurfaceFinding(input.finding);
 
   return (
@@ -3700,41 +3700,85 @@ function getMatrixCountTone(count: number) {
   return "bg-slate-100 text-slate-600";
 }
 
-function buildCategoryFindingSummaryJson(finding: UnifiedFindingDisplayPacket) {
-  const entitySamples = Object.fromEntries(
-    Object.entries(finding.evidence?.entities ?? {}).map(([key, values]) => [
-      key,
-      values.slice(0, 3).map((value) => (value.length > 140 ? `${value.slice(0, 137)}...` : value))
-    ])
-  );
+function truncateJsonSample(value: string, maxLength = 140) {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
+}
 
+function buildEntitySamples(
+  entities: NonNullable<UnifiedFindingDisplayPacket["evidence"]>["entities"] | undefined,
+  input?: { maxKeys?: number; maxValues?: number; maxLength?: number }
+) {
+  const maxKeys = input?.maxKeys ?? 4;
+  const maxValues = input?.maxValues ?? 3;
+  const maxLength = input?.maxLength ?? 140;
+
+  return Object.fromEntries(
+    Object.entries(entities ?? {} as Record<string, string[]>)
+      .slice(0, maxKeys)
+      .map(([key, values]) => [key, values.slice(0, maxValues).map((value) => truncateJsonSample(value, maxLength))])
+  );
+}
+
+function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPacket) {
   return {
-    payloadScope: "coverage_matrix_summary",
-    note: "This compact JSON supports the coverage matrix. Use the primary evidence-backed findings section for fuller retained evidence context.",
+    payloadScope: "detailed_review_summary",
+    note: "Compact public report JSON for the expanded finding card. Fuller retained evidence is summarized in the primary evidence-backed findings area.",
     unifiedFindingId: finding.unifiedFindingId,
     title: finding.title,
     severity: finding.severity,
     confidenceBand: finding.confidenceBand,
     summary: finding.summary,
+    observedValue: finding.observedValue ?? null,
+    primaryPageUrl: finding.primaryPageUrl ?? null,
+    affectedPageCount: finding.affectedPageCount,
     presentation: {
-      findingName: finding.presentation.findingName
+      findingName: finding.presentation.findingName,
+      whyThisMatters: finding.presentation.whyThisMatters,
+      suggestedFix: finding.presentation.suggestedFix
     },
     evidence: {
       counts: finding.evidence?.counts ?? {},
-      flags: (finding.evidence?.flags ?? []).slice(0, 5),
-      pageUrls: (finding.evidence?.pageUrls ?? []).slice(0, 2),
-      snippets: (finding.evidence?.snippets ?? []).slice(0, 1),
-      entities: entitySamples
+      flags: (finding.evidence?.flags ?? []).slice(0, 6),
+      pageUrls: (finding.evidence?.pageUrls ?? []).slice(0, 3),
+      snippets: (finding.evidence?.snippets ?? []).slice(0, 2).map((snippet) => truncateJsonSample(snippet, 220)),
+      entities: buildEntitySamples(finding.evidence?.entities, { maxKeys: 4, maxValues: 3, maxLength: 140 })
     },
     reviewContext: {
-      affectedPageCount: finding.affectedPageCount,
-      categoryAlignmentCount: finding.categoryAlignments.length,
       sourceCounts: {
         issueCount: finding.confidenceInputs.issueCount,
         signalCount: finding.confidenceInputs.signalCount,
         sourceCount: finding.confidenceInputs.sourceCount,
         validationCount: finding.confidenceInputs.validationCount
       },
+      confidenceRationale: finding.presentationDecision.confidenceRationale,
+      surfacing: {
+        decision: finding.surfacingDecision.decisionState,
+        lane: finding.surfacingDecision.reportLane,
+        reasons: finding.surfacingDecision.decisionReasons.slice(0, 2),
+        appliedRules: finding.surfacingDecision.appliedRules.slice(0, 3)
+      }
+    }
+  };
+}
+
+function buildCategoryFindingSummaryJson(finding: UnifiedFindingDisplayPacket) {
+  return {
+    payloadScope: "coverage_matrix_reference",
+    unifiedFindingId: finding.unifiedFindingId,
+    title: finding.title,
+    severity: finding.severity,
+    confidenceBand: finding.confidenceBand,
+    summary: finding.summary,
+    evidence: {
+      counts: finding.evidence?.counts ?? {},
+      flags: (finding.evidence?.flags ?? []).slice(0, 3),
+      pageCount: finding.evidence?.pageUrls?.length ?? 0,
+      snippetCount: finding.evidence?.snippets?.length ?? 0,
+      entityKeys: Object.keys(finding.evidence?.entities ?? {}).slice(0, 6)
+    },
+    reviewContext: {
+      affectedPageCount: finding.affectedPageCount,
+      categoryAlignmentCount: finding.categoryAlignments.length,
       surfacing: {
         decision: finding.surfacingDecision.decisionState,
         lane: finding.surfacingDecision.reportLane
