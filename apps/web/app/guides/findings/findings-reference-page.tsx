@@ -2,8 +2,10 @@ import { Badge } from "@website-signal-risk-scanner/ui";
 import { FindingAtlasBrowser } from "../../../components/marketing/findings/finding-atlas-browser";
 import { getFindingReferenceItems, type FindingReferenceItem } from "../../../lib/marketing/finding-atlas";
 import {
-  absoluteUrl,
   createBreadcrumbSchema,
+  createDefinedTermSchema,
+  createDefinedTermSetSchema,
+  createItemListSchema,
   createPublicArticleSchema,
   createPublicWebPageSchema
 } from "../../../lib/seo";
@@ -45,6 +47,15 @@ function createFindingSchemas({
   pagePath: string;
   pageTitle: string;
 }) {
+  const findingTermInputs = findings.map((finding) => ({
+    category: finding.category,
+    description: finding.observed,
+    inDefinedTermSetPath: "/guides/findings",
+    name: finding.title,
+    path: getFindingPath(finding.id),
+    termCode: finding.id
+  }));
+
   return [
     createPublicWebPageSchema({
       title: pageTitle,
@@ -76,30 +87,34 @@ function createFindingSchemas({
             "consent methodology"
           ]
     }),
-    {
-      "@context": "https://schema.org",
-      "@type": "ItemList",
-      name: "CertScore finding registry",
-      itemListElement: findings.map((finding, index) => ({
-        "@type": "ListItem",
-        position: index + 1,
-        url: absoluteUrl(getFindingPath(finding.id)),
+    createDefinedTermSetSchema({
+      title: "CertScore finding registry",
+      description:
+        "Canonical CertScore finding terms for automated public-web observations, retained evidence, runtime signals, and review-oriented findings.",
+      path: "/guides/findings",
+      terms: findingTermInputs
+    }),
+    createItemListSchema({
+      name: "CertScore finding registry index",
+      description: "Index of CertScore finding reference pages.",
+      path: "/guides/findings",
+      items: findings.map((finding) => ({
+        path: getFindingPath(finding.id),
         name: finding.title,
         identifier: finding.id,
         description: finding.observed
       }))
-    },
+    }),
     ...(activeFinding
       ? [
-          {
-            "@context": "https://schema.org",
-            "@type": "DefinedTerm",
-            name: activeFinding.title,
-            termCode: activeFinding.id,
+          createDefinedTermSchema({
+            category: activeFinding.category,
             description: activeFinding.observed,
-            inDefinedTermSet: absoluteUrl("/guides/findings"),
-            url: absoluteUrl(getFindingPath(activeFinding.id))
-          }
+            inDefinedTermSetPath: "/guides/findings",
+            name: activeFinding.title,
+            path: getFindingPath(activeFinding.id),
+            termCode: activeFinding.id
+          })
         ]
       : []),
     createBreadcrumbSchema([

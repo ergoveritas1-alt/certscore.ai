@@ -48,6 +48,22 @@ type PublicArticleSchemaInput = {
   about?: string[];
 };
 
+type ItemListSchemaItem = {
+  description?: string;
+  identifier?: string;
+  name: string;
+  path: string;
+};
+
+type DefinedTermSchemaInput = {
+  category?: string;
+  description: string;
+  inDefinedTermSetPath: string;
+  name: string;
+  path: string;
+  termCode: string;
+};
+
 export function absoluteUrl(path: string) {
   return new URL(path, SITE_URL).toString();
 }
@@ -99,6 +115,82 @@ export function createPublicWebPageSchema({
     name: title,
     description,
     url: absoluteUrl(path)
+  };
+}
+
+export function createItemListSchema({
+  description,
+  items,
+  name,
+  path
+}: {
+  description?: string;
+  items: ItemListSchemaItem[];
+  name: string;
+  path: string;
+}) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name,
+    description,
+    url: absoluteUrl(path),
+    itemListElement: items.map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      url: absoluteUrl(item.path),
+      name: item.name,
+      ...(item.identifier ? { identifier: item.identifier } : {}),
+      ...(item.description ? { description: item.description } : {})
+    }))
+  };
+}
+
+export function createDefinedTermSchema({
+  category,
+  description,
+  inDefinedTermSetPath,
+  name,
+  path,
+  termCode
+}: DefinedTermSchemaInput) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "DefinedTerm",
+    name,
+    termCode,
+    description,
+    url: absoluteUrl(path),
+    inDefinedTermSet: absoluteUrl(inDefinedTermSetPath),
+    ...(category ? { additionalType: category } : {})
+  };
+}
+
+export function createDefinedTermSetSchema({
+  description,
+  terms,
+  title,
+  path
+}: {
+  description: string;
+  terms: DefinedTermSchemaInput[];
+  title: string;
+  path: string;
+}) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "DefinedTermSet",
+    name: title,
+    description,
+    url: absoluteUrl(path),
+    hasDefinedTerm: terms.map(({ category, description: termDescription, name, path: termPath, termCode }) => ({
+      "@type": "DefinedTerm",
+      name,
+      termCode,
+      description: termDescription,
+      url: absoluteUrl(termPath),
+      ...(category ? { additionalType: category } : {})
+    }))
   };
 }
 

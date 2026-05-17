@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import {
   createBreadcrumbSchema,
+  createItemListSchema,
   createPublicArticleSchema
 } from "../../lib/seo";
 
@@ -71,6 +72,21 @@ export function GuideTemplate({
     { name: "Guides", path: "/guides" },
     { name: title, path: pagePath }
   ]);
+  const relatedGuidesSchema = createItemListSchema({
+    name: `${title} related guides`,
+    description: `Related CertScore guide pages for ${title.toLowerCase()}.`,
+    path: pagePath,
+    items: [
+      ...relatedGuides.map((guide) => ({
+        name: guide.label,
+        path: guide.href
+      })),
+      {
+        name: "Compare plans",
+        path: "/pricing"
+      }
+    ]
+  });
 
   return (
     <section className="mx-auto max-w-5xl px-6 py-16">
@@ -81,6 +97,10 @@ export function GuideTemplate({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(relatedGuidesSchema) }}
       />
 
       <div className="max-w-3xl space-y-4">
