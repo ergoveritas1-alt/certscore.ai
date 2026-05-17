@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Resolve live calibration configuration
         id: live-db
@@ -44,12 +44,12 @@ jobs:
           echo "enabled=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.6.3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -85,7 +85,7 @@ jobs:
 
       - name: Upload production finding calibration report
         if: always() && steps.live-db.outputs.enabled == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: production-finding-calibration
           path: artifacts/finding-calibration/production-finding-calibration.md

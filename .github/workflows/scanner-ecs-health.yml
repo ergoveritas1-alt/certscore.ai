@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate scanner health configuration
         run: |
@@ -39,7 +39,7 @@ jobs:
           test -n "${AWS_SCANNER_LOG_GROUP}" || (echo "Missing var AWS_SCANNER_LOG_GROUP" && exit 1)
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
