@@ -185,6 +185,10 @@ export default function PricingPage() {
         </div>
 
         <p className="mt-8 max-w-3xl text-sm leading-6 text-slate-500">
+          Monitoring requests are reviewed before activation. Submitting a request does not automatically activate monitoring.
+        </p>
+
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
           CertScore.ai surfaces automated public-web observations for review. It does not provide legal advice, certification, or compliance determinations.
         </p>
       </section>

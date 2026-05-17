@@ -11,11 +11,6 @@ export const metadata: Metadata = createPageMetadata({
 
 const guides = [
   {
-    href: "/guides/findings",
-    title: "Top website scan findings",
-    description: "Browse 19 common automated findings with density metrics, mitigation guidance, metadata, and sample JSON evidence."
-  },
-  {
     href: "/guides/pre-consent-tracking",
     title: "Tracking before consent",
     description: "Review what it means when tracking requests or non-essential cookies appear before a recorded consent choice."
@@ -113,9 +108,9 @@ export default function GuidesPage() {
       </div>
       <div className="mt-8 max-w-3xl rounded-xl border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600">
         <p>
-          For a deeper evidence view, browse the{" "}
+          For a canonical evidence reference, browse the{" "}
           <Link href="/guides/findings" className="font-medium text-sky-700 hover:text-sky-800">
-            top website scan findings
+            findings registry and detection methodology
           </Link>
           .{" "}
           For narrower consent-timing questions, see{" "}

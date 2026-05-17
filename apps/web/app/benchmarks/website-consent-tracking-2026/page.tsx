@@ -210,8 +210,8 @@ export default function WebsiteConsentTrackingBenchmarkPage() {
           <CardHeader>
             <CardTitle className="text-xl text-slate-950">Citation-friendly benchmark table</CardTitle>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <table className="w-full min-w-[64rem] border-collapse text-left text-sm">
+          <CardContent className="max-w-full overflow-x-auto">
+            <table className="w-full min-w-full table-fixed border-collapse text-left text-sm md:min-w-[64rem]">
               <thead className="border-b border-slate-200 text-xs uppercase tracking-[0.14em] text-slate-500">
                 <tr>
                   <th className="py-3 pr-4 font-semibold">Signal</th>
@@ -223,10 +223,10 @@ export default function WebsiteConsentTrackingBenchmarkPage() {
               <tbody className="divide-y divide-slate-100 text-slate-600">
                 {benchmarkRows.map((row) => (
                   <tr key={row.signal}>
-                    <td className="w-[13rem] py-4 pr-4 align-top font-medium text-slate-900">{row.signal}</td>
-                    <td className="w-[9rem] py-4 pr-4 align-top font-semibold text-slate-950">{row.frequency}</td>
-                    <td className="w-[22rem] py-4 pr-4 align-top">{row.definition}</td>
-                    <td className="py-4 align-top">{row.interpretation}</td>
+                    <td className="break-words py-4 pr-4 align-top font-medium text-slate-900 md:w-[13rem]">{row.signal}</td>
+                    <td className="break-words py-4 pr-4 align-top font-semibold text-slate-950 md:w-[9rem]">{row.frequency}</td>
+                    <td className="break-words py-4 pr-4 align-top md:w-[22rem]">{row.definition}</td>
+                    <td className="break-words py-4 align-top">{row.interpretation}</td>
                   </tr>
                 ))}
               </tbody>

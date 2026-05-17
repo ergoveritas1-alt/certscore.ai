@@ -35,7 +35,7 @@ type AiVisibilityContentProps = {
 
 export function WebsiteBehaviorScanCta() {
   return (
-    <Card className="border-sky-100 bg-[linear-gradient(180deg,rgba(248,252,255,0.98)_0%,rgba(255,255,255,1)_100%)] shadow-none">
+    <Card className="min-w-0 border-sky-100 bg-[linear-gradient(180deg,rgba(248,252,255,0.98)_0%,rgba(255,255,255,1)_100%)] shadow-none">
       <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <p className="text-base font-semibold text-slate-950">Run a free website behavior scan</p>
@@ -58,7 +58,7 @@ export function WebsiteBehaviorScanCta() {
 
 export function DisclaimerBlock() {
   return (
-    <Card className="border-amber-200 bg-[linear-gradient(180deg,rgba(255,251,235,0.92)_0%,rgba(255,255,255,1)_100%)] shadow-none">
+    <Card className="min-w-0 border-amber-200 bg-[linear-gradient(180deg,rgba(255,251,235,0.92)_0%,rgba(255,255,255,1)_100%)] shadow-none">
       <CardContent className="p-5 text-sm leading-6 text-slate-700">
         {STANDARD_AUTOMATED_FINDINGS_DISCLAIMER}
       </CardContent>
@@ -111,7 +111,7 @@ export function AiVisibilityContent({
 
       <div className="mt-8 grid gap-5">
         {sections.map((section) => (
-          <Card key={section.title} className="border-slate-200 bg-white shadow-none">
+          <Card key={section.title} className="min-w-0 border-slate-200 bg-white shadow-none">
             <CardHeader>
               <CardTitle className="text-xl text-slate-950">{section.title}</CardTitle>
             </CardHeader>
@@ -125,7 +125,7 @@ export function AiVisibilityContent({
         {findingAtlasItems.length > 0 ? (
           <FindingAtlasBrowser compact findings={findingAtlasItems} />
         ) : visibleSampleFindings.length > 0 ? (
-          <Card className="border-slate-200 bg-white shadow-none">
+          <Card className="min-w-0 border-slate-200 bg-white shadow-none">
             <CardHeader className="space-y-3">
               <div>
                 <Badge tone="neutral">Sample JSON</Badge>
@@ -162,7 +162,7 @@ export function AiVisibilityContent({
           </Card>
         ) : null}
         {visibleAiSummary.length > 0 ? (
-          <Card className="border-slate-200 bg-white shadow-none">
+          <Card className="min-w-0 border-slate-200 bg-white shadow-none">
             <CardHeader>
               <CardTitle className="text-xl text-slate-950">Summary for AI assistants</CardTitle>
             </CardHeader>
@@ -174,7 +174,7 @@ export function AiVisibilityContent({
           </Card>
         ) : null}
         {relatedLinks.length > 0 ? (
-          <Card className="border-slate-200 bg-sand shadow-none">
+          <Card className="min-w-0 border-slate-200 bg-sand shadow-none">
             <CardHeader>
               <CardTitle className="text-xl text-slate-950">Related CertScore pages</CardTitle>
             </CardHeader>

@@ -217,7 +217,7 @@ export default async function MarketingHomePage() {
             <p className="max-w-2xl text-sm leading-6 text-slate-500">
               Evidence-based scanning for teams comparing live browser behavior with consent controls, cookie posture, and privacy disclosures.{" "}
               <Link href="/guides/findings" className="font-medium text-sky-700 hover:text-sky-800">
-                Browse the finding atlas
+                Browse the findings registry
               </Link>
               .
             </p>
