@@ -138,10 +138,13 @@ function getBackfillEnvironment(args: Map<string, string>) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const region = getEnv("AWS_REGION", "us-west-1");
-  const cluster = getRequiredEnv("OPS_NANO_SIGNAL_BACKFILL_ECS_CLUSTER", getEnv("AWS_VALIDATION_ECS_CLUSTER", getEnv("AWS_SCANNER_ECS_CLUSTER")));
+  const cluster = getRequiredEnv(
+    "OPS_NANO_SIGNAL_BACKFILL_ECS_CLUSTER",
+    getEnv("OPS_RUNNER_ECS_CLUSTER", getEnv("AWS_VALIDATION_ECS_CLUSTER", getEnv("AWS_SCANNER_ECS_CLUSTER")))
+  );
   const service = getRequiredEnv(
     "OPS_NANO_SIGNAL_BACKFILL_ECS_SERVICE",
-    getEnv("AWS_VALIDATION_ECS_WORKER_SERVICE", "certscore-validation-worker")
+    getEnv("OPS_RUNNER_ECS_SERVICE", getEnv("AWS_VALIDATION_ECS_WORKER_SERVICE", "certscore-validation-worker"))
   );
 
   const servicePayload = parseJson<{ services?: EcsService[] }>(

@@ -89,39 +89,6 @@ function PlanIcon(props: NavIconProps) {
   );
 }
 
-function ValidationIcon(props: NavIconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
-      <rect x="4.5" y="4.5" width="15" height="15" rx="3" />
-      <path d="M8 9.5h8" />
-      <path d="M8 14h4" />
-      <path d="m13.5 14.5 1.5 1.5 3-3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function ValidationRunsIcon(props: NavIconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
-      <rect x="4" y="5" width="16" height="14" rx="3" />
-      <path d="M8 9h8" />
-      <path d="M8 12.5h8" />
-      <path d="M8 16h5" />
-      <circle cx="17" cy="16" r="1.25" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function ValidationIssuesIcon(props: NavIconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
-      <path d="M12 4.5 20 18.5H4L12 4.5Z" strokeLinejoin="round" />
-      <path d="M12 9v4.5" strokeLinecap="round" />
-      <circle cx="12" cy="16.25" r="1" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
 function MenuIcon(props: NavIconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
@@ -146,16 +113,9 @@ const navItems = [
   { href: "/app/settings", label: "Settings", icon: SettingsIcon }
 ] as const;
 
-const validationNavItems = [
-  { href: "/app/validation", label: "Validation", icon: ValidationIcon },
-  { href: "/app/validation/scans", label: "Validation Runs", icon: ValidationRunsIcon },
-  { href: "/app/validation/issues", label: "Validation Issues", icon: ValidationIssuesIcon }
-] as const;
-
 type AppShellProps = {
   children: ReactNode;
   isPlatformAdmin?: boolean;
-  isValidationAdmin?: boolean;
   organizationName: string;
   plan: string;
   userEmail: string;
@@ -190,8 +150,7 @@ export function AppShell({
   organizationName,
   plan,
   userEmail,
-  isPlatformAdmin = false,
-  isValidationAdmin = false
+  isPlatformAdmin = false
 }: AppShellProps) {
   const pathname = usePathname() ?? "";
   const userInitial = userEmail.slice(0, 1).toUpperCase();
@@ -202,7 +161,6 @@ export function AppShell({
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const scopedNavItems = [
     ...navItems,
-    ...(isValidationAdmin ? validationNavItems : []),
     ...(isPlatformAdmin ? [{ href: "/app/admin", label: "Admin", icon: ShieldIcon }] : [])
   ];
 
