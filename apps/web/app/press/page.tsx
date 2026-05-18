@@ -7,6 +7,7 @@ import {
   DisclaimerBlock,
   WebsiteBehaviorScanCta
 } from "../../components/marketing/ai-visibility-content";
+import { getFindingDensityBenchmark } from "../../lib/scans/finding-density-benchmarks";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 const title = "Press and media information";
@@ -33,6 +34,10 @@ const scanCategories = [
   "Homepage accessibility signals",
   "Policy/runtime consistency review signals where evidence is available"
 ];
+
+function benchmarkLabel(findingId: Parameters<typeof getFindingDensityBenchmark>[0]) {
+  return getFindingDensityBenchmark(findingId)?.contextLabel.toLowerCase() ?? "observed in recent benchmark scans";
+}
 
 export default function PressPage() {
   const schema = {
@@ -88,9 +93,12 @@ export default function PressPage() {
               <CardTitle className="text-xl text-slate-950">Benchmark highlights</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm leading-7 text-slate-600">
-              <p>In recent CertScore.ai benchmark scans, pre-consent tracking appeared in roughly one in five scanned sites.</p>
-              <p>RTB cookie sync appeared in roughly one in ten scanned sites.</p>
-              <p>Fingerprinting-related signals appeared in roughly 17% of scans, while probable fingerprinting remained rare.</p>
+              <p>Pre-consent tracking was {benchmarkLabel("pre_consent_tracking_detected")}.</p>
+              <p>RTB cookie sync was {benchmarkLabel("rtb_cookie_sync_observed")}.</p>
+              <p>
+                Fingerprinting-related signals were {benchmarkLabel("fingerprinting_related_signals_observed")}, while probable fingerprinting was {benchmarkLabel("probable_fingerprinting")}.
+              </p>
+              <p>Session recording services were {benchmarkLabel("session_recording_services_detected")}.</p>
             </CardContent>
           </Card>
 

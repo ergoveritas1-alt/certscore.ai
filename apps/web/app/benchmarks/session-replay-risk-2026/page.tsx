@@ -13,10 +13,17 @@ import {
   createPageMetadata,
   createPublicArticleSchema
 } from "../../../lib/seo";
+import {
+  FINDING_DENSITY_BENCHMARK_SCOPE,
+  getFindingDensityBenchmark
+} from "../../../lib/scans/finding-density-benchmarks";
 
 const title = "Session replay risk benchmark notes 2026";
 const description =
   "Cautious CertScore.ai benchmark notes on observed session recording and session replay risk signals in public website scans.";
+
+const sessionRecordingBenchmark = getFindingDensityBenchmark("session_recording_services_detected");
+const sensitiveReplayBenchmark = getFindingDensityBenchmark("possible_session_replay_on_sensitive_input_surface");
 
 export const metadata: Metadata = {
   ...createPageMetadata({
@@ -66,7 +73,7 @@ export default function SessionReplayRiskBenchmarkPage() {
             title: "Direct answer",
             paragraphs: [
               "Session replay risk signals appear when a scan observes session recording technology or more sensitive replay-related behavior that should be reviewed in context.",
-              "In recent CertScore.ai benchmark notes, severe session replay on sensitive input surfaces remained rare, while broader session recording service detection should still be reviewed with evidence."
+              `In the ${FINDING_DENSITY_BENCHMARK_SCOPE.label}, possible session replay on sensitive input surfaces was ${sensitiveReplayBenchmark?.contextLabel.toLowerCase() ?? "rare"}, while broader session recording service detection was ${sessionRecordingBenchmark?.contextLabel.toLowerCase() ?? "observed in recent benchmark scans"}.`
             ]
           },
           {
@@ -108,7 +115,9 @@ export default function SessionReplayRiskBenchmarkPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm leading-7 text-slate-600">
             <p>Signal family: session recording and session replay risk.</p>
-            <p>Approximate recent benchmark frequency: severe sensitive-input replay signals were rare.</p>
+            <p>
+              Approximate recent benchmark frequency: session recording services appeared in {sessionRecordingBenchmark?.positiveCount ?? 0} of about {FINDING_DENSITY_BENCHMARK_SCOPE.sampleSizeApprox.toLocaleString()} scans, while possible session replay on sensitive input surfaces appeared in {sensitiveReplayBenchmark?.positiveCount ?? 0}.
+            </p>
             <p>Interpretation: higher-urgency review cue when supported by retained evidence.</p>
           </CardContent>
         </Card>

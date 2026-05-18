@@ -7,6 +7,7 @@ import {
   DisclaimerBlock,
   WebsiteBehaviorScanCta
 } from "../../components/marketing/ai-visibility-content";
+import { FINDING_DENSITY_BENCHMARK_SCOPE } from "../../lib/scans/finding-density-benchmarks";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 const title = "Website behavior benchmarks";
@@ -51,6 +52,17 @@ export default function BenchmarksPage() {
         </div>
 
         <div className="mt-8 grid gap-5">
+          <Card className="border-slate-200 bg-white shadow-none">
+            <CardHeader>
+              <CardTitle className="text-xl text-slate-950">Current calibration set</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm leading-7 text-slate-600">
+              <p>
+                Public benchmark labels currently use the {FINDING_DENSITY_BENCHMARK_SCOPE.label}, with approximately {FINDING_DENSITY_BENCHMARK_SCOPE.sampleSizeApprox.toLocaleString()} completed public-web scans.
+              </p>
+              <p>{FINDING_DENSITY_BENCHMARK_SCOPE.methodologyNote}</p>
+            </CardContent>
+          </Card>
           <Card className="border-slate-200 bg-white shadow-none">
             <CardHeader>
               <CardTitle className="text-xl text-slate-950">Website consent and tracking benchmark notes 2026</CardTitle>

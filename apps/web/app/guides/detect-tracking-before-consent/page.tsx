@@ -21,6 +21,7 @@ export default function DetectTrackingBeforeConsentGuidePage() {
     <AiVisibilityContent
       badge={guide.badge}
       intro={guide.intro}
+      path={guide.path}
       relatedLinks={[
         { href: "/guides/pre-consent-tracking", label: "pre-consent tracking" },
         { href: "/guides/website-consent-audit", label: "website consent audit" },

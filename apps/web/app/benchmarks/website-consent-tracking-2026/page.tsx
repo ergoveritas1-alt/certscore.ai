@@ -13,22 +13,30 @@ import {
   createPageMetadata,
   createPublicArticleSchema
 } from "../../../lib/seo";
+import {
+  FINDING_DENSITY_BENCHMARK_SCOPE,
+  getFindingDensityBenchmark
+} from "../../../lib/scans/finding-density-benchmarks";
 
 const title = "Website consent and tracking benchmark notes 2026";
 const description =
   "CertScore.ai benchmark frequencies for observed pre-consent tracking, RTB cookie sync, fingerprinting signals, session replay risk, and related public-web review signals.";
 
+function benchmarkLabel(findingId: Parameters<typeof getFindingDensityBenchmark>[0]) {
+  return getFindingDensityBenchmark(findingId)?.contextLabel ?? "Observed in recent benchmark scans";
+}
+
 const benchmarkRows = [
   {
     definition:
       "Non-essential third-party tracking or identifier-bearing requests observed before a clear user consent action.",
-    frequency: "~20%",
+    frequency: benchmarkLabel("pre_consent_tracking_detected"),
     interpretation: "Common consent-timing review signal; review vendor necessity, CMP timing, and default firing rules.",
     signal: "Pre-consent tracking"
   },
   {
     definition: "Third-party cookies or cookie-like identifiers observed before a consent action.",
-    frequency: "~12%",
+    frequency: benchmarkLabel("third_party_cookie_pre_consent"),
     interpretation:
       "More specific cookie-layer subset of pre-consent tracking; useful for reviewing consent gating and tag manager rules.",
     signal: "Third-party cookies before consent"
@@ -36,21 +44,21 @@ const benchmarkRows = [
   {
     definition:
       "Adtech synchronization behavior consistent with vendors mapping identifiers across domains or partners.",
-    frequency: "~10%",
+    frequency: benchmarkLabel("rtb_cookie_sync_observed"),
     interpretation:
       "Higher-signal advertising ecosystem telemetry; review consent basis, vendor disclosures, and whether sync behavior is expected.",
     signal: "RTB cookie sync"
   },
   {
     definition: "Session recording / replay vendor activity or instrumentation observed during the automated scan.",
-    frequency: "~14%",
+    frequency: benchmarkLabel("session_recording_services_detected"),
     interpretation: "Broad replay-service presence signal; not necessarily sensitive-input capture by itself.",
     signal: "Session recording services detected"
   },
   {
     definition:
       "Browser, device, canvas/WebGL, hardware, viewport, locale, storage, or network-surface telemetry that can be fingerprinting-adjacent.",
-    frequency: "~17%",
+    frequency: benchmarkLabel("fingerprinting_related_signals_observed"),
     interpretation:
       "Broad review signal; intentionally includes lower-confidence telemetry and should not be treated as confirmed fingerprinting.",
     signal: "Fingerprinting-related signals"
@@ -58,30 +66,31 @@ const benchmarkRows = [
   {
     definition:
       "Consent interface review signal where rejecting or declining tracking appears unavailable, difficult to access, or placed behind additional preference steps.",
-    frequency: "~4%",
+    frequency: benchmarkLabel("reject_option_missing_or_hidden"),
     interpretation: "Choice-architecture review signal; confirm actual CMP configuration and regional behavior.",
     signal: "Reject option missing or hidden"
   },
   {
     definition:
       "Higher-confidence fingerprinting subset supported by stronger evidence such as high-entropy telemetry, known vendor corroboration, identifier shaping, transmission, or cross-context linkage.",
-    frequency: "~1%",
+    frequency: benchmarkLabel("probable_fingerprinting"),
     interpretation: "Conservative signal; should remain much lower than broad fingerprinting-related signals.",
     signal: "Probable fingerprinting"
   },
   {
     definition:
       "Higher-urgency subset where replay/session-recording activity appears near sensitive input surfaces such as forms collecting personal, account, financial, health, or similar sensitive information.",
-    frequency: "~1%",
+    frequency: benchmarkLabel("possible_session_replay_on_sensitive_input_surface"),
     interpretation: "Uncommon but high-priority review signal when supported by evidence.",
-    signal: "Severe session replay on sensitive input surfaces"
+    signal: "Possible session replay on sensitive input surfaces"
   }
 ];
 
 const datasetNotes = [
-  "Current estimates are based on recent CertScore benchmark scan batches across public websites, with emphasis on Tranco-rank benchmark ranges used for calibration.",
+  `Current estimates are based on the ${FINDING_DENSITY_BENCHMARK_SCOPE.label}, an approximately ${FINDING_DENSITY_BENCHMARK_SCOPE.sampleSizeApprox.toLocaleString()}-scan public-web calibration set.`,
   "Percentages are approximate and will be refreshed as the benchmark corpus grows.",
-  "Homepage-oriented scans can undercount behavior that appears only after navigation, login, checkout, geolocation changes, or delayed consent interactions."
+  "Homepage-oriented scans can undercount behavior that appears only after navigation, login, checkout, geolocation changes, or delayed consent interactions.",
+  FINDING_DENSITY_BENCHMARK_SCOPE.methodologyNote
 ];
 
 const readingNotes = [
@@ -167,10 +176,10 @@ export default function WebsiteConsentTrackingBenchmarkPage() {
             title: "Observed benchmark signals",
             paragraphs: [
               "Percentages are based on recent benchmark batches of homepage-oriented public-site scans and should be treated as directional, not a legal or statistical conclusion.",
-              "In recent CertScore.ai benchmark scans, pre-consent tracking appeared in approximately 20% of scanned sites, while third-party cookies before consent appeared in approximately 12%.",
-              "RTB cookie sync appeared in approximately 10% of recent benchmark scans, providing a higher-signal advertising ecosystem review cue.",
-              "Fingerprinting-related signals appeared in approximately 17% of scans. Probable fingerprinting appeared in approximately 1% of recent benchmark scans, reflecting a deliberately conservative higher-confidence threshold.",
-              "Session recording services were detected in approximately 14% of recent benchmark scans. Severe session replay on sensitive input surfaces appeared in approximately 1% of recent benchmark scans. Although uncommon, this remains a high-priority review signal when evidence shows replay activity near sensitive fields."
+              `Pre-consent tracking was ${benchmarkLabel("pre_consent_tracking_detected").toLowerCase()}, while third-party cookies before consent were ${benchmarkLabel("third_party_cookie_pre_consent").toLowerCase()}.`,
+              `RTB cookie sync was ${benchmarkLabel("rtb_cookie_sync_observed").toLowerCase()}, providing a higher-signal advertising ecosystem review cue.`,
+              `Fingerprinting-related signals were ${benchmarkLabel("fingerprinting_related_signals_observed").toLowerCase()}. Probable fingerprinting was ${benchmarkLabel("probable_fingerprinting").toLowerCase()}, reflecting a deliberately conservative higher-confidence threshold.`,
+              `Session recording services were ${benchmarkLabel("session_recording_services_detected").toLowerCase()}. Possible session replay on sensitive input surfaces was ${benchmarkLabel("possible_session_replay_on_sensitive_input_surface").toLowerCase()}. Although uncommon, this remains a high-priority review signal when evidence shows replay activity near sensitive fields.`
             ]
           },
           {

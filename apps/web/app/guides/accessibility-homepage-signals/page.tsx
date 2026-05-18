@@ -12,5 +12,5 @@ export const metadata: Metadata = createPageMetadata({
 });
 
 export default function AccessibilityHomepageSignalsGuidePage() {
-  return <AiVisibilityContent badge={guide.badge} intro={guide.intro} schema={buildArticleSchema(guide)} sections={guide.sections} title={guide.title} />;
+  return <AiVisibilityContent badge={guide.badge} intro={guide.intro} path={guide.path} schema={buildArticleSchema(guide)} sections={guide.sections} title={guide.title} />;
 }

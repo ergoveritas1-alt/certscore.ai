@@ -21,6 +21,7 @@ export default function RejectConsentTrackingTestGuidePage() {
     <AiVisibilityContent
       badge={guide.badge}
       intro={guide.intro}
+      path={guide.path}
       relatedLinks={[
         { href: "/guides/website-consent-audit-checklist", label: "website consent audit checklist" },
         { href: "/guides/detect-tracking-before-consent", label: "detect tracking before consent" },

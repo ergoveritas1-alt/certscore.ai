@@ -21,7 +21,7 @@ function ArrowIcon({ direction }: { direction: "left" | "right" }) {
 }
 
 function formatPrevalence(finding: FindingReferenceItem) {
-  return `Seen on ~${Math.round(finding.benchmark.densityPct)}% of sampled sites`;
+  return finding.benchmark.contextLabel;
 }
 
 function getCondensedEvidence(finding: FindingReferenceItem) {

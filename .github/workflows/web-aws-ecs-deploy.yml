@@ -36,6 +36,7 @@ jobs:
       ECR_WEB_REPOSITORY: ${{ vars.AWS_WEB_ECR_REPOSITORY }}
       ECS_CLUSTER_NAME: ${{ vars.AWS_WEB_ECS_CLUSTER }}
       ECS_CERTSCORE_SERVICE_NAME: ${{ vars.AWS_WEB_CERTSCORE_SERVICE }}
+      ECS_CONSENTCHECK_SERVICE_NAME: ${{ vars.AWS_WEB_CONSENTCHECK_SERVICE }}
       CERTSCORE_BASE_URL: ${{ vars.AWS_WEB_CERTSCORE_BASE_URL }}
 
     steps:
@@ -48,6 +49,7 @@ jobs:
           test -n "${ECR_WEB_REPOSITORY}" || (echo "Missing var AWS_WEB_ECR_REPOSITORY" && exit 1)
           test -n "${ECS_CLUSTER_NAME}" || (echo "Missing var AWS_WEB_ECS_CLUSTER" && exit 1)
           test -n "${ECS_CERTSCORE_SERVICE_NAME}" || (echo "Missing var AWS_WEB_CERTSCORE_SERVICE" && exit 1)
+          test -n "${ECS_CONSENTCHECK_SERVICE_NAME}" || (echo "Missing var AWS_WEB_CONSENTCHECK_SERVICE" && exit 1)
           test -n "${CERTSCORE_BASE_URL}" || (echo "Missing var AWS_WEB_CERTSCORE_BASE_URL" && exit 1)
 
       - name: Configure AWS credentials
@@ -112,7 +114,8 @@ jobs:
       - name: Force ECS deployments
         run: |
           aws ecs update-service --cluster "${ECS_CLUSTER_NAME}" --service "${ECS_CERTSCORE_SERVICE_NAME}" --force-new-deployment >/dev/null
+          aws ecs update-service --cluster "${ECS_CLUSTER_NAME}" --service "${ECS_CONSENTCHECK_SERVICE_NAME}" --force-new-deployment >/dev/null
 
       - name: Wait for ECS services to stabilize
         run: |
-          aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_CERTSCORE_SERVICE_NAME}"
+          aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_CERTSCORE_SERVICE_NAME}" "${ECS_CONSENTCHECK_SERVICE_NAME}"

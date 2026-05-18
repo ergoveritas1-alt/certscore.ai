@@ -1,6 +1,7 @@
 import { Badge } from "@website-signal-risk-scanner/ui";
 import { FindingAtlasBrowser } from "../../../components/marketing/findings/finding-atlas-browser";
 import { getFindingReferenceItems, type FindingReferenceItem } from "../../../lib/marketing/finding-atlas";
+import { FINDING_DENSITY_BENCHMARK_SCOPE } from "../../../lib/scans/finding-density-benchmarks";
 import {
   createBreadcrumbSchema,
   createDefinedTermSchema,
@@ -183,6 +184,9 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
           </p>
           <p>
             Findings are runtime evidence and public-surface observations for review. Observed signals may surface possible concerns, but review is recommended before operational or legal reliance.
+          </p>
+          <p>
+            Prevalence labels use the {FINDING_DENSITY_BENCHMARK_SCOPE.label}, an approximately {FINDING_DENSITY_BENCHMARK_SCOPE.sampleSizeApprox.toLocaleString()}-scan directional calibration set.
           </p>
         </div>
       </section>

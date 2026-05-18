@@ -13,11 +13,18 @@ import {
   createPageMetadata,
   createPublicArticleSchema
 } from "../../../lib/seo";
-import { preConsentTrackingBenchmarkSample as benchmarkSample } from "./benchmark-sample";
+import {
+  FINDING_DENSITY_BENCHMARK_SCOPE,
+  getFindingDensityBenchmark
+} from "../../../lib/scans/finding-density-benchmarks";
 
 const title = "Pre-consent tracking benchmark notes 2026";
 const description =
   "Cautious CertScore.ai benchmark notes on observed pre-consent tracking signals in automated public website scans.";
+
+const preConsentBenchmark = getFindingDensityBenchmark("pre_consent_tracking_detected");
+const thirdPartyCookieBenchmark = getFindingDensityBenchmark("third_party_cookie_pre_consent");
+const sessionRecordingBenchmark = getFindingDensityBenchmark("session_recording_services_detected");
 
 export const metadata: Metadata = {
   ...createPageMetadata({
@@ -67,7 +74,7 @@ export default function PreConsentTrackingBenchmarkPage() {
             title: "Direct answer",
             paragraphs: [
               "Pre-consent tracking means classified tracking requests, vendor activity, or non-essential cookies appear before the scan records a consent choice.",
-              `In a ${benchmarkSample.observationWindow} production load-test sample of ${benchmarkSample.completedScans} completed public-web scans, pre-consent tracking appeared in ${benchmarkSample.preConsentTrackingCount} scans, or about ${benchmarkSample.preConsentTrackingPct}%. That figure is directional and should not be treated as a legal conclusion about any website.`
+              `In the ${FINDING_DENSITY_BENCHMARK_SCOPE.label}, pre-consent tracking appeared in ${preConsentBenchmark?.positiveCount ?? 0} scans, or about ${Math.round(preConsentBenchmark?.densityPct ?? 0)}%. That figure is directional and should not be treated as a legal conclusion about any website.`
             ]
           },
           {
@@ -101,7 +108,7 @@ export default function PreConsentTrackingBenchmarkPage() {
           {
             title: "Directional benchmark methodology",
             paragraphs: [
-              "The figures on this page are derived from recent CertScore.ai production load-test artifacts for completed public-web scans. They are not live-updating and the sample mix can change over time.",
+              `The figures on this page are derived from recent CertScore.ai production load-test artifacts for approximately ${FINDING_DENSITY_BENCHMARK_SCOPE.sampleSizeApprox.toLocaleString()} completed public-web scans. They are not live-updating and the sample mix can change over time.`,
               "Benchmark figures are directional and based on automated observations from public webpages. They should be used as context, not as compliance determinations."
             ]
           }
@@ -117,10 +124,10 @@ export default function PreConsentTrackingBenchmarkPage() {
           <CardContent className="space-y-2 text-sm leading-7 text-slate-600">
             <p>Signal: pre-consent tracking.</p>
             <p>
-              Directional sample: {benchmarkSample.preConsentTrackingCount} of {benchmarkSample.completedScans} completed scans, about {benchmarkSample.preConsentTrackingPct}%.
+              Directional sample: {preConsentBenchmark?.positiveCount ?? 0} of about {FINDING_DENSITY_BENCHMARK_SCOPE.sampleSizeApprox.toLocaleString()} completed scans, about {Math.round(preConsentBenchmark?.densityPct ?? 0)}%.
             </p>
             <p>
-              Related context: third-party cookies before consent appeared in {benchmarkSample.thirdPartyCookieBeforeConsentCount} scans, about {benchmarkSample.thirdPartyCookieBeforeConsentPct}%; session recording services appeared in {benchmarkSample.sessionRecordingServiceCount} scans, about {benchmarkSample.sessionRecordingServicePct}%.
+              Related context: third-party cookies before consent appeared in {thirdPartyCookieBenchmark?.positiveCount ?? 0} scans, about {Math.round(thirdPartyCookieBenchmark?.densityPct ?? 0)}%; session recording services appeared in {sessionRecordingBenchmark?.positiveCount ?? 0} scans, about {Math.round(sessionRecordingBenchmark?.densityPct ?? 0)}%.
             </p>
             <p>Interpretation: automated review signal that should be checked against retained evidence.</p>
           </CardContent>

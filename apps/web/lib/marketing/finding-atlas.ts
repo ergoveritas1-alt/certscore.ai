@@ -344,6 +344,10 @@ const DEFAULT_LIMITATIONS = [
 ];
 
 function makeBenchmarkBadge(benchmark: FindingDensityBenchmark) {
+  if (benchmark.contextLabel.includes("<1%")) {
+    return "Rare (<1%)";
+  }
+
   if (benchmark.densityPct < 1.5) {
     return "Rare (~1%)";
   }
@@ -409,6 +413,33 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
     ];
   }
 
+  if (id === "semantic_labeling_accessibility_issue") {
+    return [
+      {
+        title: "Semantic labeling example",
+        code: "rule=label\nselector=form input[name=\"email\"]\nissue=input_missing_accessible_name\nwcag_refs=1.3.1 Info and Relationships, 4.1.2 Name Role Value\nuser_impact=Screen reader users may not know what information the field expects."
+      }
+    ];
+  }
+
+  if (id === "text_alternative_accessibility_issue") {
+    return [
+      {
+        title: "Text alternative example",
+        code: "rule=image-alt\nselector=main img.product-badge\nissue=missing_alt_text\nwcag_refs=1.1.1 Non-text Content\nuser_impact=Users who cannot perceive the image may miss the badge meaning."
+      }
+    ];
+  }
+
+  if (id === "keyboard_navigation_accessibility_issue") {
+    return [
+      {
+        title: "Keyboard navigation example",
+        code: "rule=keyboard\nselector=button[data-menu-trigger]\nissue=control_not_keyboard_operable\nwcag_refs=2.1.1 Keyboard, 2.4.7 Focus Visible\nuser_impact=Keyboard-only users may be unable to open or exit the control."
+      }
+    ];
+  }
+
   if (id === "session_recording_services_detected" || id === "possible_session_replay_on_sensitive_input_surface") {
     return [
       {
@@ -422,6 +453,24 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
     ];
   }
 
+  if (id === "cross_domain_identifier_sharing_observed") {
+    return [
+      {
+        title: "Identifier-sharing request",
+        code: "identifier_like_value_present=true\ndestination=idsync.rlcdn.com\nsource_domain=example.com\nquery_keys: partner_uid, redirect, gdpr\nreview_recommended=true"
+      }
+    ];
+  }
+
+  if (id === "sensitive_data_collection_with_third_party_tracking_present") {
+    return [
+      {
+        title: "Sensitive surface with third-party context",
+        code: "page_url=/apply\nfield_contexts: income, account number, date of birth\nthird_party_tracking_present=true\nobserved_vendors=Google Analytics, Meta Pixel\nreview_recommended=true"
+      }
+    ];
+  }
+
   if (id.includes("fingerprinting")) {
     return [
       {
@@ -431,11 +480,20 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
     ];
   }
 
+  if (id === "visual_contrast_accessibility_issue") {
+    return [
+      {
+        title: "Visual contrast example",
+        code: "rule=color-contrast\nselector=footer > p\nimpact=serious\nwcag_refs=1.4.3 Contrast (Minimum)\nuser_impact=Low-vision users may struggle to read the text."
+      }
+    ];
+  }
+
   if (id.includes("accessibility")) {
     return [
       {
         title: "Accessibility issue example",
-        code: "rule=color-contrast\nselector=footer > p\nimpact=serious\nwcag_refs=1.4.3 Contrast (Minimum)\nuser_impact=Low-vision users may struggle to read the text."
+        code: "rule=automated_accessibility_check\nselector=representative affected node\nimpact=review\nwcag_refs=review applicable success criterion\nuser_impact=Review the retained selector and page context."
       }
     ];
   }
@@ -458,7 +516,43 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
     ];
   }
 
-  if (id.includes("consent") || id.includes("reject") || id === "asymmetric_consent_ui") {
+  if (id === "consent_dark_patterns_detected") {
+    return [
+      {
+        title: "Consent choice architecture",
+        code: "accept_prominence=primary_button\nreject_visible=false\nsettings_visible=true\nrefusal_path=secondary_settings_flow\nreview_recommended=true"
+      }
+    ];
+  }
+
+  if (id === "forced_consent_interaction") {
+    return [
+      {
+        title: "Forced consent interaction",
+        code: "banner_blocks_content=true\nclose_visible=false\ncontinue_without_accepting_visible=false\npage_scroll_blocked=true\nreview_recommended=true"
+      }
+    ];
+  }
+
+  if (id === "reject_option_missing_or_hidden") {
+    return [
+      {
+        title: "Reject path visibility",
+        code: "accept_visible=true\nreject_visible=false\nsettings_visible=true\nsteps_to_accept=1\nsteps_to_reject=3\nreview_recommended=true"
+      }
+    ];
+  }
+
+  if (id === "asymmetric_consent_ui") {
+    return [
+      {
+        title: "Consent choice imbalance",
+        code: "interaction_cost_imbalanced=true\naccept_style=primary_button\nreject_style=text_link\naccept_position=first_layer\nreject_position=settings_layer"
+      }
+    ];
+  }
+
+  if (id.includes("consent") || id.includes("reject")) {
     return [
       {
         title: "Consent UI observation",

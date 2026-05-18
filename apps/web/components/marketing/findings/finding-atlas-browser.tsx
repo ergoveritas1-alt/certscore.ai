@@ -118,7 +118,7 @@ function getFindingBadges(finding: FindingReferenceItem) {
     `${formatChipLabel(confidence)} evidence`,
     observationLabel,
     contextLabel,
-    `Seen on ~${Math.round(finding.benchmark.densityPct)}% of sampled sites`
+    finding.benchmark.contextLabel
   ];
 }
 
@@ -224,24 +224,32 @@ function getTimelineEvents(finding: FindingReferenceItem): TimelineEvent[] {
 
 function makeRedactedJson(finding: FindingReferenceItem) {
   const payload = getPayloadRecord(finding);
-  const evidence = getNestedRecord(payload, "evidence");
-  const counts = getNestedRecord(evidence, "counts");
   const vendors = getRepresentativeVendors(finding);
   const consentActionObserved = getConsentActionObserved(finding);
   const preConsentTrackingRequests = getPreConsentRequestCount(finding);
+  const timelineEvents = getTimelineEvents(finding);
+  const evidenceCounts = {
+    ...(preConsentTrackingRequests !== null ? { preConsentTrackingRequests } : {}),
+    ...(vendors.length > 0 ? { representativeVendorCount: vendors.length } : {})
+  };
 
   return {
     findingId: finding.id,
     label: finding.title,
+    category: finding.category,
+    criticality: finding.criticality,
     confidence: getStringField(payload, "confidence") ?? "review",
     directVsInferred: getStringField(payload, "direct_vs_inferred") ?? "observation",
     evidence: {
-      firstTrackingRequestMs: getNumberField(counts, "firstRequestMs"),
-      consentActionObserved,
-      preConsentTrackingRequests,
-      uniquePreConsentVendors: getNumberField(counts, "total_tracker_count") ?? vendors.length,
-      representativeVendors: vendors.slice(0, 4),
-      timelineEvents: getTimelineEvents(finding)
+      summary: finding.observed,
+      examples: finding.exampleEvidence.map((example) => ({
+        title: example.title,
+        lines: example.code.split("\n")
+      })),
+      ...(Object.keys(evidenceCounts).length > 0 ? { counts: evidenceCounts } : {}),
+      ...(consentActionObserved !== null ? { consentActionObserved } : {}),
+      ...(vendors.length > 0 ? { representativeVendors: vendors.slice(0, 4) } : {}),
+      ...(timelineEvents.length > 0 ? { timelineEvents } : {})
     }
   };
 }

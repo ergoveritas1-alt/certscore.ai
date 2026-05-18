@@ -21,6 +21,7 @@ export default function PrivacyScannerVsCookieScannerGuidePage() {
     <AiVisibilityContent
       badge={guide.badge}
       intro={guide.intro}
+      path={guide.path}
       relatedLinks={[
         { href: "/compare/privacy-scanner-vs-cookie-scanner", label: "privacy scanner vs cookie scanner comparison" },
         { href: "/guides/website-consent-audit-checklist", label: "website consent audit checklist" },

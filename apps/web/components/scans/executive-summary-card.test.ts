@@ -2064,15 +2064,15 @@ test("ExecutiveSummaryCard renders directional finding-density context for surfa
   assert.match(html, /Consent timing/);
   assert.match(html, /Good evidence/);
   assert.match(html, /Good evidence means the signal is supported/);
-  assert.match(html, /Seen on ~18% of sites/);
-  assert.match(html, /Seen on ~12% of sites/);
+  assert.match(html, /Seen on ~18% of scanned top sites/);
+  assert.match(html, /Seen on ~9% of scanned top sites/);
   assert.match(html, /directional market context/);
   assert.match(html, /not a compliance benchmark or legal conclusion/);
   assert.doesNotMatch(html, /View evidence/);
   assert.doesNotMatch(html, /Audit finding/);
   assert.match(html, /Next step: confirm whether these vendors are necessary before consent/);
-  assert.equal(html.match(/Seen on ~18% of sites/g)?.length, 2);
-  assert.equal(html.match(/Seen on ~12% of sites/g)?.length, 2);
+  assert.equal(html.match(/Seen on ~18% of scanned top sites/g)?.length, 2);
+  assert.equal(html.match(/Seen on ~9% of scanned top sites/g)?.length, 2);
 
   const nonBenchmarkedHtml = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {

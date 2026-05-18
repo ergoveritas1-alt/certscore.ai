@@ -80,7 +80,8 @@ export function AiVisibilityContent({
 }: AiVisibilityContentProps) {
   const schemas = Array.isArray(schema) ? schema : [schema];
   const visibleSampleFindings = sampleFindingsJson ?? getGuideSampleFindings({ path, title });
-  const shouldShowFindingAtlas = path?.startsWith("/guides/") || badge.toLowerCase().includes("guide");
+  const shouldShowFindingAtlas =
+    visibleSampleFindings.length === 0 && (path?.startsWith("/guides/") || badge.toLowerCase().includes("guide"));
   const findingAtlasItems = shouldShowFindingAtlas ? getTopFindingAtlasItems() : [];
   const visibleAiSummary =
     aiSummary ??
@@ -122,9 +123,7 @@ export function AiVisibilityContent({
             </CardContent>
           </Card>
         ))}
-        {findingAtlasItems.length > 0 ? (
-          <FindingAtlasBrowser compact findings={findingAtlasItems} />
-        ) : visibleSampleFindings.length > 0 ? (
+        {visibleSampleFindings.length > 0 ? (
           <Card className="min-w-0 border-slate-200 bg-white shadow-none">
             <CardHeader className="space-y-3">
               <div>
@@ -160,6 +159,8 @@ export function AiVisibilityContent({
               ))}
             </CardContent>
           </Card>
+        ) : findingAtlasItems.length > 0 ? (
+          <FindingAtlasBrowser compact findings={findingAtlasItems} />
         ) : null}
         {visibleAiSummary.length > 0 ? (
           <Card className="min-w-0 border-slate-200 bg-white shadow-none">

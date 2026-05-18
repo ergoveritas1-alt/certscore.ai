@@ -17,5 +17,5 @@ export const metadata: Metadata = {
 };
 
 export default function CheckThirdPartyCookiesBeforeConsentGuidePage() {
-  return <AiVisibilityContent badge={guide.badge} intro={guide.intro} schema={buildArticleSchema(guide)} sections={guide.sections} title={guide.title} />;
+  return <AiVisibilityContent badge={guide.badge} intro={guide.intro} path={guide.path} schema={buildArticleSchema(guide)} sections={guide.sections} title={guide.title} />;
 }
