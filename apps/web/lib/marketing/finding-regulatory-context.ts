@@ -65,19 +65,19 @@ const CONSENT_JURISDICTIONAL_CONTEXTS: FindingRegulatoryContextItem[] = [
   {
     id: "eu_gdpr_eprivacy_consent_ui_review",
     label: "EU GDPR/ePrivacy consent UI review",
-    appliesWhen: "EU/EEA users and cookie or tracking consent UI are in scope.",
+    appliesWhen: "EU/EEA users and cookie or tracking consent UI may be in scope.",
     sourceRefs: ["edpb_consent_guidelines", "edpb_cookie_banner_taskforce"]
   },
   {
     id: "uk_pecr_cookie_choice_review",
     label: "UK PECR / ICO cookie-choice review",
-    appliesWhen: "UK users and non-essential cookie choices are in scope.",
+    appliesWhen: "UK users and non-essential cookie choices may be in scope.",
     sourceRefs: ["ico_cookies"]
   },
   {
     id: "us_privacy_dark_pattern_review",
-    label: "U.S. privacy dark-pattern review",
-    appliesWhen: "The UI affects privacy choices, opt-outs, consent, or targeted advertising controls.",
+    label: "U.S. privacy choice-architecture / dark-pattern review context",
+    appliesWhen: "Retained UI evidence suggests privacy choices, opt-outs, consent, or targeted advertising controls may be affected.",
     sourceRefs: ["cppa_dark_patterns", "ftc_dark_patterns"]
   }
 ];
@@ -124,26 +124,26 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "low_visual_contrast_accessibility_review",
       label: "Accessibility: low visual contrast",
       displayCopy:
-        "Low-contrast text, controls, or visual indicators may make content harder to perceive for users with low vision, color-vision differences, glare, zoomed interfaces, or other visual accessibility needs. This is a signal for accessibility review, not a legal conclusion."
+        "Retained automated accessibility evidence showed text or controls with contrast-related signals that may be relevant to WCAG-oriented accessibility review. Applicability depends on the affected element, visual state, text size, purpose, decorative or inactive status, page context, organization type, jurisdiction, and manual accessibility review."
     },
     technicalStandards: [
       {
         id: "wcag_1_4_3_contrast_minimum",
         label: "WCAG 1.4.3 Contrast (Minimum)",
         level: "AA",
-        appliesWhen: "Text or images of text have insufficient foreground/background contrast.",
+        appliesWhen: "Text or images of text have contrast-related evidence that may require Contrast (Minimum) review.",
         sourceRefs: ["wcag_2_2"]
       },
       {
         id: "wcag_1_4_11_non_text_contrast",
         label: "WCAG 1.4.11 Non-text Contrast",
         level: "AA",
-        appliesWhen: "Controls, icons, focus states, boundaries, or meaningful graphical objects have insufficient contrast.",
+        appliesWhen: "Controls, icons, focus states, boundaries, or meaningful graphical objects have contrast-related evidence that may require non-text contrast review.",
         sourceRefs: ["wcag_non_text_contrast", "wcag_2_2"]
       }
     ],
     jurisdictionalContexts: ACCESSIBILITY_JURISDICTIONAL_CONTEXTS,
-    displayCaution: "Applicability depends on the affected element, page context, user impact, organization type, jurisdiction, and manual accessibility review."
+    displayCaution: "This finding does not determine legal status or WCAG conformance. Review the retained selector, color pair, text size, component state, element purpose, page context, applicable exceptions, organization type, jurisdiction, and manual accessibility findings."
   },
   pre_consent_tracking_detected: {
     findingId: "pre_consent_tracking_detected",
@@ -154,7 +154,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "pre_consent_non_essential_tracking_review",
       label: "Consent timing: tracking before recorded choice",
       displayCopy:
-        "Runtime evidence showed non-essential tracking requests, vendors, or storage activity before the scan recorded a consent choice. This may be relevant to consent, cookie, tracking, and transparency review depending on jurisdiction and purpose."
+        "Runtime evidence showed a classified non-essential tracking, analytics, advertising, cross-site measurement, or storage signal before CertScore observed a consent action or a prior consent state associated with that purpose. This may be relevant to consent timing, cookie/tracker, storage, transparency, and user-choice review depending on jurisdiction, purpose, configuration, and exemptions."
     },
     technicalStandards: [
       {
@@ -202,7 +202,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
         sourceRefs: ["ftc_dark_patterns"]
       }
     ],
-    displayCaution: "This finding does not determine legal status. Review vendor purpose, necessity, consent state, disclosure, region targeting, and exemptions."
+    displayCaution: "This finding does not determine legal status. Review the retained runtime anchors, vendor purpose, necessity, consent state, disclosure, region targeting, CMP configuration, prior consent state, and any applicable exemptions."
   },
   semantic_labeling_accessibility_issue: {
     findingId: "semantic_labeling_accessibility_issue",
@@ -213,16 +213,9 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "accessible_name_role_semantics_review",
       label: "Accessibility: semantic labels and programmatic meaning",
       displayCopy:
-        "Missing, invalid, or ambiguous accessible names, labels, roles, regions, or ARIA relationships may make controls harder to understand or operate with assistive technologies. This is a signal for accessibility review, not a legal conclusion."
+        "Retained automated accessibility evidence showed label, accessible-name, ARIA, role, relationship, or name/role/value signals that may be relevant to WCAG-oriented accessibility review. Applicability depends on the affected element, component behavior, semantic intent, user impact, organization type, jurisdiction, and manual accessibility review."
     },
     technicalStandards: [
-      {
-        id: "wcag_4_1_2_name_role_value",
-        label: "WCAG 4.1.2 Name, Role, Value",
-        level: "A",
-        appliesWhen: "Custom controls, form elements, or ARIA usage do not expose accurate names, roles, states, or values to assistive technologies.",
-        sourceRefs: ["wcag_2_2"]
-      },
       {
         id: "wcag_1_3_1_info_and_relationships",
         label: "WCAG 1.3.1 Info and Relationships",
@@ -238,15 +231,22 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
         sourceRefs: ["wcag_2_2"]
       },
       {
-        id: "wcag_2_4_4_link_purpose",
-        label: "WCAG 2.4.4 Link Purpose (In Context)",
+        id: "wcag_4_1_2_name_role_value",
+        label: "WCAG 4.1.2 Name, Role, Value",
         level: "A",
-        appliesWhen: "Links or controls have ambiguous accessible names without context.",
+        appliesWhen: "Custom controls, form elements, or ARIA usage may require name, role, state, or value review.",
+        sourceRefs: ["wcag_2_2"]
+      },
+      {
+        id: "wcag_2_4_6_headings_and_labels",
+        label: "WCAG 2.4.6 Headings and Labels",
+        level: "AA",
+        appliesWhen: "Headings or labels may not describe topic or purpose clearly enough for review.",
         sourceRefs: ["wcag_2_2"]
       }
     ],
     jurisdictionalContexts: ACCESSIBILITY_JURISDICTIONAL_CONTEXTS,
-    displayCaution: "Automated semantic checks need manual review with keyboard, screen reader, visible-label, and component-context testing."
+    displayCaution: "This finding does not determine legal status or WCAG conformance. Review the retained selector, visible label, accessible name, role, state, value, ARIA relationship, component behavior, page context, organization type, jurisdiction, and manual accessibility findings."
   },
   fingerprinting_related_signals_observed: {
     findingId: "fingerprinting_related_signals_observed",
@@ -257,25 +257,25 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "fingerprinting_related_device_signal_review",
       label: "Device/browser signal collection review",
       displayCopy:
-        "Browser, device, canvas, storage, or high-entropy environment signals were observed. This may be relevant to fingerprinting, device-access, profiling, minimization, and disclosure review, but it does not by itself show that a persistent fingerprint was created."
+        "Retained runtime evidence showed browser, device, canvas, storage, or other high-entropy environment signals that may be relevant to fingerprinting, device-access, profiling, minimization, and disclosure review. This related signal does not by itself show that a persistent fingerprint was created."
     },
     technicalStandards: [
       {
         id: "eprivacy_article_5_3_device_access_review",
         label: "ePrivacy Article 5(3) device access review",
-        appliesWhen: "The observed technique stores information on, or gains access to information from, a user's terminal equipment.",
+        appliesWhen: "Retained evidence suggests browser/device signals may involve storing information on, or gaining access to information from, user terminal equipment.",
         sourceRefs: ["eprivacy_directive_article_5_3", "edpb_eprivacy_art_5_3_scope"]
       },
       {
         id: "gdpr_online_identifier_and_profiling_review",
         label: "GDPR online identifier / profiling review",
-        appliesWhen: "Device or browser identifiers may relate to an identified or identifiable person or may be combined to create profiles.",
+        appliesWhen: "Device or browser signals may relate to online identifiers, profiling, or identifiability depending on purpose, linkage, and manual review.",
         sourceRefs: ["gdpr", "gdpr_article_4"]
       },
       {
         id: "gdpr_data_minimization_and_transparency_review",
         label: "GDPR minimization and transparency review",
-        appliesWhen: "High-entropy collection, profiling, or third-party use may require purpose, legal basis, transparency, minimization, and default-setting review.",
+        appliesWhen: "High-entropy collection, profiling, or third-party use may require review of purpose, transparency, minimization, and default settings.",
         sourceRefs: ["gdpr_article_13", "gdpr_article_25"]
       }
     ],
@@ -283,23 +283,23 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "eu_eprivacy_fingerprinting_review",
         label: "EU ePrivacy fingerprinting/device-access review",
-        appliesWhen: "EU/EEA users and device/browser signals are collected through terminal-equipment access.",
+        appliesWhen: "EU/EEA users and device/browser signal collection may be in scope depending on terminal-equipment access, purpose, consent state, and manual review.",
         sourceRefs: ["edpb_eprivacy_art_5_3_scope"]
       },
       {
         id: "uk_pecr_similar_technology_review",
         label: "UK PECR similar-technology review",
-        appliesWhen: "UK users and non-cookie tracking or device access are in scope.",
+        appliesWhen: "UK users and non-cookie tracking or device-access signals may be in scope depending on purpose, consent state, and manual review.",
         sourceRefs: ["ico_cookies"]
       },
       {
         id: "ccpa_cpra_cross_context_ad_or_profiling_review",
         label: "CCPA/CPRA advertising, sharing, or profiling review",
-        appliesWhen: "California users, cross-context behavioral advertising, sale/share, or sensitive personal information are in scope.",
+        appliesWhen: "California users, cross-context behavioral advertising, sale/share, or sensitive personal information context may be relevant depending on purpose, user region, and manual review.",
         sourceRefs: ["california_oag_ccpa", "cppa_faq"]
       }
     ],
-    displayCaution: "This is a lower-confidence fingerprinting-related signal. Security, fraud-prevention, analytics, and personalization scripts may collect similar attributes for different purposes."
+    displayCaution: "This finding does not determine legal status, consent validity, personal identity, identity resolution, persistent fingerprint creation, user singling-out, or compliance status. Security, fraud-prevention, analytics, compatibility, and personalization scripts may collect similar attributes for different purposes."
   },
   session_recording_services_detected: {
     findingId: "session_recording_services_detected",
@@ -310,25 +310,25 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "session_replay_behavior_analytics_review",
       label: "Session replay and behavior analytics review",
       displayCopy:
-        "A script or vendor associated with session replay, recording, heatmaps, or behavior analytics appeared in runtime evidence. This is a signal to review disclosure, consent gating, masking, sampling, sensitive-page exclusions, and vendor configuration."
+        "Retained runtime evidence showed session replay, heatmap, recording, or behavior-analytics signals that may be relevant to consent, transparency, minimization, security, sensitive-page exclusion, and vendor-governance review. Applicability depends on vendor configuration, masking, sampling, payload contents, page context, consent state, jurisdiction, and manual review."
     },
     technicalStandards: [
       {
         id: "gdpr_transparency_minimization_security_review",
         label: "GDPR transparency, minimization, and security review",
-        appliesWhen: "Behavioral recordings or interaction telemetry involve personal data, identifiers, form interactions, or user behavior profiles.",
+        appliesWhen: "Behavior-analytics or replay signals may involve personal data, identifiers, form interactions, or user behavior profiles depending on implementation and context.",
         sourceRefs: ["gdpr_article_4", "gdpr_article_13", "gdpr_article_25"]
       },
       {
         id: "eprivacy_device_access_or_storage_review",
         label: "ePrivacy device access/storage review",
-        appliesWhen: "Replay tooling stores identifiers, accesses device/browser information, or uses cookies/similar technologies.",
+        appliesWhen: "Replay tooling may store identifiers, access device/browser information, or use cookies/similar technologies depending on vendor configuration.",
         sourceRefs: ["eprivacy_directive_article_5_3", "edpb_eprivacy_art_5_3_scope"]
       },
       {
         id: "wiretap_eavesdropping_manual_review",
         label: "Wiretap/eavesdropping law review",
-        appliesWhen: "The implementation records, intercepts, or transmits user communications or interactions in jurisdictions where such theories may be relevant.",
+        appliesWhen: "Replay or recording signals may require jurisdiction-specific review where interaction capture or communications theories may be relevant.",
         sourceRefs: ["ecpa_18_usc_2511"]
       }
     ],
@@ -336,41 +336,41 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "eu_gdpr_eprivacy_session_replay_review",
         label: "EU GDPR/ePrivacy session replay review",
-        appliesWhen: "EU/EEA users, identifiers, behavior telemetry, cookies, or device access are in scope.",
+        appliesWhen: "EU/EEA users, identifiers, behavior telemetry, cookies, or device-access signals may be in scope depending on purpose, consent state, and jurisdictional context.",
         sourceRefs: ["gdpr", "eprivacy_directive_article_5_3"]
       },
       {
         id: "uk_pecr_uk_gdpr_behavior_analytics_review",
         label: "UK PECR / UK GDPR behavior analytics review",
-        appliesWhen: "UK users, cookies/similar technologies, or personal-data behavior analytics are in scope.",
+        appliesWhen: "UK users, cookies/similar technologies, or personal-data behavior analytics may be in scope depending on purpose, consent state, and manual review.",
         sourceRefs: ["ico_cookies"]
       },
       ...HEALTH_CONTEXTS.slice(0, 2)
     ],
-    displayCaution: "Detecting a replay vendor does not show that keystrokes, sensitive values, or full recordings were retained. Review vendor settings, consent posture, masking, sampling, and page-level exclusions."
+    displayCaution: "This finding does not determine legal status, consent validity, keystroke capture, sensitive-value capture, full recording retention, or compliance status. Review retained runtime anchors, vendor configuration, masking, sampling, consent state, payload contents, and page exclusions."
   },
   third_party_cookie_pre_consent: {
     findingId: "third_party_cookie_pre_consent",
-    label: "Tracking cookies set before consent",
+    label: "Third-party cookie observed before consent",
     category: "Cookies",
     regulatoryConcernGroup: "cookies_and_storage",
     primaryConcern: {
       id: "third_party_cookie_before_consent_review",
       label: "Cookie/storage timing: third-party cookie before recorded choice",
       displayCopy:
-        "A cookie associated with a third-party service or non-essential purpose was observed before a recorded consent action. This may be relevant to cookie consent, device storage/access, disclosure, and opt-out-effect review."
+        "Retained runtime evidence showed third-party cookie or storage timing signals that may be relevant to cookie/tracker, consent timing, storage/access, transparency, and vendor-governance review. Applicability depends on jurisdiction, purpose, domain/scope, consent state, necessity, exemptions, and manual review."
     },
     technicalStandards: [
       {
         id: "eprivacy_article_5_3_cookie_storage_review",
         label: "ePrivacy Article 5(3) cookie/storage review",
-        appliesWhen: "A cookie or similar storage is set or accessed before consent and is not strictly necessary for a user-requested service.",
+        appliesWhen: "Retained evidence suggests cookie or similar-storage timing may require review before treating the purpose as consent-gated, necessary, or exempt.",
         sourceRefs: ["eprivacy_directive_article_5_3"]
       },
       {
         id: "gdpr_consent_and_transparency_review",
         label: "GDPR consent and transparency review",
-        appliesWhen: "Cookie identifiers or tracking storage relate to personal data, profiling, analytics, or advertising.",
+        appliesWhen: "Cookie identifiers or tracking storage may relate to personal data, profiling, analytics, or advertising depending on purpose and context.",
         sourceRefs: ["gdpr", "gdpr_article_4", "gdpr_article_13", "edpb_consent_guidelines"]
       }
     ],
@@ -394,7 +394,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
         sourceRefs: ["california_oag_ccpa", "cppa_faq"]
       }
     ],
-    displayCaution: "Review whether the cookie is strictly necessary, the timing of consent, user region, vendor purpose, and whether opt-out or reject states suppress or clear the cookie."
+    displayCaution: "This finding does not determine legal status, consent validity, necessity, exemption status, or compliance status. Review the retained cookie/storage anchor, domain/scope, timing, vendor purpose, consent state, regional configuration, and applicable exemptions."
   },
   rtb_cookie_sync_observed: {
     findingId: "rtb_cookie_sync_observed",
@@ -405,19 +405,19 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "rtb_cookie_sync_identity_matching_review",
       label: "Adtech identity sync / cookie matching review",
       displayCopy:
-        "Advertising or identity endpoints appeared to match, sync, redirect, or share identifiers across adtech domains. This may be relevant to cookie consent, sale/share, targeted advertising, profiling, and third-party disclosure review."
+        "Retained network evidence showed adtech, RTB, sync, redirect, or identifier-like request patterns that may be relevant to cookie/tracker, advertising, consent, transparency, sale/share, and vendor-governance review. Applicability depends on endpoint purpose, identifier scope, consent state, jurisdiction, vendor role, server-side behavior, and manual review."
     },
     technicalStandards: [
       {
         id: "eprivacy_cookie_sync_storage_access_review",
         label: "ePrivacy cookie sync storage/access review",
-        appliesWhen: "Syncing involves cookies, redirect identifiers, device storage, or terminal-equipment access.",
+        appliesWhen: "Sync-style requests may involve cookies, redirect identifiers, device storage, or terminal-equipment access.",
         sourceRefs: ["eprivacy_directive_article_5_3", "edpb_eprivacy_art_5_3_scope"]
       },
       {
         id: "gdpr_online_identifier_profiling_transparency_review",
         label: "GDPR online identifier, profiling, and transparency review",
-        appliesWhen: "Identifier sharing, profiling, advertising, or data transfers involve personal data or online identifiers.",
+        appliesWhen: "Identifier sharing, profiling, advertising, or data-transfer review may be relevant where personal data or online identifiers are in scope.",
         sourceRefs: ["gdpr_article_4", "gdpr_article_13", "gdpr_article_25"]
       }
     ],
@@ -425,7 +425,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "eu_eprivacy_gdpr_adtech_review",
         label: "EU ePrivacy/GDPR adtech review",
-        appliesWhen: "EU/EEA users and adtech cookie sync or identity matching are in scope.",
+        appliesWhen: "EU/EEA users and adtech cookie sync or identity-matching signals may be in scope depending on endpoint purpose, consent state, and jurisdictional context.",
         sourceRefs: ["eprivacy_directive_article_5_3", "gdpr"]
       },
       {
@@ -437,11 +437,11 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "ccpa_cpra_sale_share_cross_context_ad_review",
         label: "CCPA/CPRA sale/share and cross-context behavioral advertising review",
-        appliesWhen: "California users, advertising sharing, or cross-context behavioral advertising are in scope.",
+        appliesWhen: "California users, advertising-sharing signals, or cross-context behavioral advertising context may be in scope depending on purpose, user region, and manual review.",
         sourceRefs: ["california_oag_ccpa", "cppa_faq"]
       }
     ],
-    displayCaution: "This finding is about observed sync-style runtime evidence, not a conclusion about every downstream partner, data use, or legal status."
+    displayCaution: "This finding does not determine legal status, personal identity, complete identity graph, consent validity, sale/share status, or compliance status. Review the retained request anchors, vendor purpose, redacted identifier-like keys, redirect context, consent timing, regional configuration, and applicable exemptions."
   },
   text_alternative_accessibility_issue: {
     findingId: "text_alternative_accessibility_issue",
@@ -452,7 +452,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "missing_or_weak_text_alternatives_review",
       label: "Accessibility: missing or weak text alternatives",
       displayCopy:
-        "Non-text content, images, icons, objects, or functional image controls without adequate text alternative evidence may prevent users of assistive technologies from perceiving equivalent meaning or purpose. This is a signal for accessibility review, not a legal conclusion."
+        "Retained automated accessibility evidence showed non-text content, images, icons, SVGs, or media-related elements with text-alternative signals that may be relevant to WCAG-oriented accessibility review. Applicability depends on element purpose, decorative or informative status, functional behavior, surrounding content, organization type, jurisdiction, and manual accessibility review."
     },
     technicalStandards: [
       {
@@ -478,100 +478,106 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       }
     ],
     jurisdictionalContexts: ACCESSIBILITY_JURISDICTIONAL_CONTEXTS,
-    displayCaution: "Manual review should distinguish decorative, informative, functional, and complex images before determining the appropriate remediation."
+    displayCaution: "This finding does not determine legal status or WCAG conformance. Review the retained selector, element purpose, accessible name or text alternative, surrounding text, decorative or informative status, functional behavior, page context, organization type, jurisdiction, and manual accessibility findings."
   },
   consent_dark_patterns_detected: {
     findingId: "consent_dark_patterns_detected",
     label: "Consent choice architecture review signals",
-    category: "Consumer protection",
+    category: "Consumer protection / Consent UX",
     regulatoryConcernGroup: "consent_experience_and_choice_architecture",
     primaryConcern: {
       id: "consent_choice_architecture_dark_pattern_review",
       label: "Consent UX choice architecture review",
       displayCopy:
-        "Consent interface signals suggested that refusal may be materially less available than acceptance. This is a prompt for design, privacy, and legal review, not a final conclusion."
+        "Retained consent-surface evidence showed choice-architecture signals that may be relevant to consent, cookie/tracker, transparency, accessibility, consumer-protection, and privacy-claims review. Applicability depends on jurisdiction, region, purpose, CMP configuration, equivalent choice paths, public statements, accessibility, user impact, and manual review."
     },
     technicalStandards: [
       {
         id: "gdpr_valid_consent_free_specific_informed_unambiguous",
         label: "GDPR valid consent review",
-        appliesWhen: "Consent is used for cookies, tracking, personal data processing, profiling, or advertising.",
+        appliesWhen: "Consent may be used for cookies, tracking, personal data processing, profiling, or advertising.",
         sourceRefs: ["gdpr", "edpb_consent_guidelines"]
       },
       {
         id: "edpb_cookie_banner_design_review",
         label: "EDPB cookie banner design review",
-        appliesWhen: "Cookie banners use hidden reject paths, preselected choices, confusing hierarchy, or unequal interaction cost.",
+        appliesWhen: "Retained consent-surface evidence suggests hidden reject paths, preselected choices, confusing hierarchy, or unequal interaction cost may require review.",
         sourceRefs: ["edpb_cookie_banner_taskforce"]
       },
       {
         id: "ccpa_cpra_dark_pattern_consent_or_request_review",
-        label: "CCPA/CPRA dark-pattern review",
-        appliesWhen: "The interface affects California privacy choices, opt-out paths, or consent.",
+        label: "CCPA/CPRA choice-architecture / dark-pattern review context",
+        appliesWhen: "The interface may affect California privacy choices, opt-out paths, or consent.",
         sourceRefs: ["cppa_dark_patterns", "california_oag_ccpa"]
       },
       {
         id: "ftc_dark_pattern_review",
-        label: "FTC choice architecture review",
-        appliesWhen: "Design choices may obscure or burden user choices involving privacy or commerce.",
+        label: "FTC choice architecture / dark-pattern review context",
+        appliesWhen: "Design choices may obscure, burden, or otherwise affect user choices involving privacy or commerce.",
         sourceRefs: ["ftc_dark_patterns"]
       }
     ],
     jurisdictionalContexts: CONSENT_JURISDICTIONAL_CONTEXTS,
-    displayCaution: "Dark-pattern review involves context, visual hierarchy, user flow, wording, region behavior, and user-impact judgment."
+    displayCaution: "This finding does not determine legal status, deception, unfairness, dark-pattern status, consent validity, or compliance status. Review the retained consent-surface evidence, labels, hierarchy, path depth, prompt behavior, region targeting, CMP configuration, accessibility, public statements, and applicable exemptions."
   },
   cpra_cba_opt_out_missing: {
     findingId: "cpra_cba_opt_out_missing",
-    label: "CPRA advertising opt-out missing or incomplete",
+    label: "CPRA / privacy choice opt-out review signal",
     category: "Disclosure gaps",
     regulatoryConcernGroup: "privacy_choices_and_opt_outs",
     primaryConcern: {
       id: "cpra_cross_context_advertising_opt_out_review",
       label: "California privacy choices: sale/share or cross-context advertising opt-out review",
       displayCopy:
-        "Advertising or cross-context tracking signals were observed without retained evidence of a clear CPRA-style privacy choices, Do Not Sell or Share, or comparable opt-out path. This is a review signal, not a CPRA legal determination."
+        "Retained public-surface and runtime evidence showed privacy-choice, advertising, cross-context behavioral advertising, or sale/share-related review signals that may be relevant to CPRA, opt-out, GPC, disclosure, consent, and vendor-governance review. Applicability depends on organization scope, user region, purpose, vendor role, sale/share or cross-context behavioral advertising analysis, exemptions, GPC handling, and manual review."
     },
     technicalStandards: [
       {
         id: "ccpa_cpra_sale_share_opt_out_review",
-        label: "CCPA/CPRA sale/share opt-out review",
-        appliesWhen: "California users and sale, sharing, or cross-context behavioral advertising may be in scope.",
+        label: "CPRA Do Not Sell or Share review context",
+        appliesWhen: "Retained evidence suggests sale/share or cross-context behavioral advertising signals may be relevant depending on organization scope, user region, purpose, exemptions, and manual review.",
         sourceRefs: ["california_oag_ccpa", "cppa_faq"]
       },
       {
         id: "gpc_and_privacy_choice_honoring_review",
         label: "Global Privacy Control / privacy-choice honoring review",
-        appliesWhen: "User-enabled opt-out preference signals or visible privacy-choice paths should be reviewed.",
+        appliesWhen: "GPC or privacy-choice handling may require review where retained public-surface evidence suggests relevant choice paths or opt-out context.",
         sourceRefs: ["california_oag_ccpa"]
       },
       {
         id: "privacy_notice_and_runtime_consistency_review",
-        label: "Privacy notice and runtime consistency review",
-        appliesWhen: "Runtime advertising-sharing evidence should be compared with policy text, footer links, privacy choices, and actual opt-out effects.",
+        label: "California privacy notice and rights-flow review",
+        appliesWhen: "Retained policy, footer, preference-center, or privacy-link evidence may require review against the observed runtime or public-surface context.",
         sourceRefs: ["california_oag_ccpa", "cppa_dark_patterns"]
       }
     ],
     jurisdictionalContexts: [
       {
         id: "california_ccpa_cpra_review",
-        label: "California CCPA/CPRA review",
-        appliesWhen: "The organization is covered by CCPA/CPRA and California consumer data, sale/share, or cross-context advertising is in scope.",
+        label: "CCPA/CPRA opt-out / privacy choice review",
+        appliesWhen: "California privacy-choice review may be relevant depending on organization scope, user region, data purpose, sale/share analysis, cross-context behavioral advertising context, and exemptions.",
         sourceRefs: ["california_oag_ccpa", "cppa_faq"]
       },
       {
         id: "us_state_privacy_targeted_ad_opt_out_review",
         label: "U.S. state privacy targeted-advertising opt-out review",
-        appliesWhen: "Other U.S. state comprehensive privacy laws and targeted-advertising opt-outs may be in scope.",
+        appliesWhen: "Other U.S. state targeted-advertising or privacy-choice contexts may be relevant depending on state scope, purpose, user region, and manual review.",
         sourceRefs: []
       },
       {
         id: "ftc_privacy_representation_review",
-        label: "FTC privacy representation review",
-        appliesWhen: "Public privacy statements, consent choices, or opt-out claims may not align with runtime behavior.",
+        label: "FTC privacy claims / choice architecture review context",
+        appliesWhen: "Public privacy statements, consent choices, opt-out paths, or runtime behavior may be relevant to consumer-protection review without determining deception, unfairness, or legal status.",
         sourceRefs: ["ftc_dark_patterns"]
+      },
+      {
+        id: "eprivacy_consent_choice_review",
+        label: "ePrivacy / consent review where cookies or trackers are connected to the choice interface",
+        appliesWhen: "Cookie, tracker, consent, or similar-technology context may be relevant where retained runtime evidence is connected to the privacy-choice interface.",
+        sourceRefs: ["ico_cookies", "edpb_consent_guidelines"]
       }
     ],
-    displayCaution: "A valid opt-out path may exist outside the observed page surface or may be regionally targeted. Review the public path, policy text, GPC handling, and runtime opt-out effect together."
+    displayCaution: "This finding does not determine legal status, CPRA applicability, sale/share status, cross-context behavioral advertising status, opt-out sufficiency, GPC handling, exemption status, or compliance status. Review the retained public-surface evidence, privacy links, policy text, preference-center behavior, runtime context, user region, organization scope, and applicable exemptions."
   },
   forced_consent_interaction: {
     findingId: "forced_consent_interaction",
@@ -582,30 +588,30 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "forced_consent_or_cookie_wall_review",
       label: "Consent UX: forced interaction or cookie-wall review",
       displayCopy:
-        "The observed page flow appeared to require interaction with a consent prompt before normal browsing could continue. This may be relevant to review of consent freedom, access conditioning, consent-wall design, and accessibility impact."
+        "Retained consent-surface evidence showed overlay, blocking, or required-interaction signals that may be relevant to consent, cookie/tracker, transparency, accessibility, and choice-architecture review. Applicability depends on jurisdiction, region, service necessity, CMP configuration, available choice paths, accessibility, and manual review."
     },
     technicalStandards: [
       {
         id: "gdpr_freely_given_consent_review",
         label: "GDPR freely given consent review",
-        appliesWhen: "The user is asked to consent to tracking or personal-data processing as a condition of access or ordinary browsing.",
+        appliesWhen: "Retained consent-surface evidence suggests consent may be requested for tracking or personal-data processing before ordinary access or browsing continues.",
         sourceRefs: ["edpb_consent_guidelines"]
       },
       {
         id: "eprivacy_cookie_consent_review",
         label: "ePrivacy cookie consent review",
-        appliesWhen: "The prompt governs non-essential cookies or similar technologies.",
+        appliesWhen: "The prompt may govern non-essential cookies or similar technologies.",
         sourceRefs: ["eprivacy_directive_article_5_3", "edpb_cookie_banner_taskforce"]
       },
       {
         id: "accessibility_modal_or_overlay_review",
         label: "Accessibility overlay/modal review",
-        appliesWhen: "The consent overlay blocks content, traps focus, prevents keyboard operation, or interferes with screen-reader flow.",
+        appliesWhen: "Retained consent-surface evidence suggests an overlay or modal may affect content access, focus, keyboard operation, or screen-reader flow.",
         sourceRefs: ["wcag_2_2"]
       }
     ],
     jurisdictionalContexts: CONSENT_JURISDICTIONAL_CONTEXTS,
-    displayCaution: "Forced-interaction signals need review of the full flow, region behavior, alternative access paths, business model, and accessibility behavior."
+    displayCaution: "This finding does not determine legal status, consent validity, deception, unfairness, or dark-pattern status. Review the retained consent-surface evidence, blocking behavior, available controls, service context, region targeting, CMP configuration, accessibility, and applicable exemptions."
   },
   reject_option_missing_or_hidden: {
     findingId: "reject_option_missing_or_hidden",
@@ -616,36 +622,36 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "missing_or_hidden_reject_path_review",
       label: "Consent UX: missing or hidden reject path",
       displayCopy:
-        "A first-layer reject path was not visible, was less prominent, or appeared harder to reach than the accept path. This may be relevant to consent validity, cookie-banner design, opt-out friction, and dark-pattern review."
+        "Retained consent-surface evidence showed refusal-control availability or path-depth signals that may be relevant to consent, cookie/tracker, transparency, and choice-architecture review. Applicability depends on jurisdiction, region, purpose, CMP configuration, equivalent choice paths, accessibility, and manual review."
     },
     technicalStandards: [
       {
         id: "edpb_cookie_banner_reject_path_review",
         label: "EDPB cookie banner reject-path review",
-        appliesWhen: "A banner offers accept on the first layer but no equivalent reject or refusal path is visible or easy to reach.",
+        appliesWhen: "Retained consent-surface evidence suggests accept is available on the first layer while an equivalent reject or refusal path may be absent, less visible, or harder to reach.",
         sourceRefs: ["edpb_cookie_banner_taskforce"]
       },
       {
         id: "gdpr_freely_given_unambiguous_consent_review",
         label: "GDPR freely given and unambiguous consent review",
-        appliesWhen: "Consent is used for cookies, tracking, personal data processing, profiling, or advertising.",
+        appliesWhen: "Consent may be used for cookies, tracking, personal data processing, profiling, or advertising.",
         sourceRefs: ["edpb_consent_guidelines", "gdpr"]
       },
       {
         id: "ccpa_cpra_dark_pattern_opt_out_friction_review",
-        label: "CCPA/CPRA dark-pattern and opt-out friction review",
-        appliesWhen: "The interface affects California privacy choices, opt-out paths, or consent.",
+        label: "CCPA/CPRA choice-architecture and opt-out friction review",
+        appliesWhen: "The interface may affect California privacy choices, opt-out paths, or consent.",
         sourceRefs: ["cppa_dark_patterns", "california_oag_ccpa"]
       },
       {
         id: "ftc_dark_pattern_review",
-        label: "FTC dark-pattern / choice architecture review",
+        label: "FTC choice architecture / dark-pattern review context",
         appliesWhen: "The flow may obscure or burden refusal or privacy choices.",
         sourceRefs: ["ftc_dark_patterns"]
       }
     ],
     jurisdictionalContexts: CONSENT_JURISDICTIONAL_CONTEXTS,
-    displayCaution: "A hidden or missing reject path is a review signal. Applicability depends on region, consent model, exact UI text, visual hierarchy, and whether a meaningful refusal path exists elsewhere."
+    displayCaution: "This finding does not determine legal status, consent validity, deception, unfairness, or dark-pattern status. Review the retained consent-surface evidence, labels, paths, region targeting, CMP configuration, accessibility, and applicable exemptions."
   },
   sensitive_data_collection_with_third_party_tracking_present: {
     findingId: "sensitive_data_collection_with_third_party_tracking_present",
@@ -656,30 +662,30 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "sensitive_surface_third_party_tracking_review",
       label: "Sensitive surface with third-party tracking review",
       displayCopy:
-        "A page or form that appeared to collect sensitive information loaded third-party tracking or analytics context in the same observed flow. This is a high-priority signal to review data sensitivity, vendor access, consent, minimization, and page-level exclusions."
+        "Retained page and runtime evidence showed sensitive-input or sensitive-context signals alongside third-party tracking context that may be relevant to privacy, consent, minimization, sensitive-data, and vendor-governance review. Applicability depends on field purpose, payload contents, vendor role, consent state, jurisdiction, and manual review."
     },
     technicalStandards: [
       {
         id: "gdpr_special_category_and_sensitive_context_review",
         label: "GDPR special-category or sensitive-context review",
-        appliesWhen: "The surface may involve health, financial, biometric, sexual-orientation, political, religious, or other sensitive data categories.",
+        appliesWhen: "The retained surface context may involve health, financial, biometric, sexual-orientation, political, religious, or other sensitive data categories depending on manual review.",
         sourceRefs: ["gdpr_article_9"]
       },
       {
         id: "gdpr_minimization_security_transparency_review",
         label: "GDPR minimization, security, and transparency review",
-        appliesWhen: "Third-party vendors, tracking, or identifiers appear on sensitive data collection surfaces.",
+        appliesWhen: "Third-party vendor, tracking, or identifier-like signals appear near sensitive data collection surfaces and may require minimization, transparency, or security review.",
         sourceRefs: ["gdpr_article_4", "gdpr_article_13", "gdpr_article_25"]
       },
       {
         id: "eprivacy_tracking_on_sensitive_surface_review",
         label: "ePrivacy cookie/device-access review",
-        appliesWhen: "The sensitive surface uses cookies, device access, analytics, advertising, or similar tracking technologies.",
+        appliesWhen: "The sensitive surface may involve cookies, device access, analytics, advertising, or similar tracking technologies depending on retained runtime evidence and manual review.",
         sourceRefs: ["eprivacy_directive_article_5_3", "edpb_eprivacy_art_5_3_scope"]
       }
     ],
     jurisdictionalContexts: HEALTH_CONTEXTS,
-    displayCaution: "Co-occurrence does not show that sensitive field values were transmitted. Review field masking, vendor requests, page templates, event capture, consent gating, and actual payload evidence."
+    displayCaution: "This finding does not determine legal status, consent validity, sensitive-value transmission, third-party receipt, or compliance status. Review retained surface context, runtime anchors, payload evidence, vendor purpose, consent state, minimization, and page-level exclusions."
   },
   asymmetric_consent_ui: {
     findingId: "asymmetric_consent_ui",
@@ -690,36 +696,36 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "asymmetric_consent_choice_architecture_review",
       label: "Consent UX: imbalanced accept/reject choices",
       displayCopy:
-        "The accept and reject choices appeared visually or procedurally imbalanced in retained consent UI evidence. This may be relevant to consent validity, cookie-banner fairness, opt-out friction, and dark-pattern review."
+        "Retained consent-surface evidence showed visual, procedural, or structural choice-architecture signals that may be relevant to consent, cookie/tracker, transparency, accessibility, and consumer-protection review. Applicability depends on jurisdiction, region, purpose, CMP configuration, available choice paths, accessibility, user impact, and manual review."
     },
     technicalStandards: [
       {
         id: "edpb_cookie_banner_visual_hierarchy_review",
         label: "EDPB cookie banner visual hierarchy review",
-        appliesWhen: "Reject is hidden, de-emphasized, nested, link-only, or materially harder than accept.",
+        appliesWhen: "Retained consent-surface evidence suggests reject may be hidden, de-emphasized, nested, link-only, or materially harder than accept.",
         sourceRefs: ["edpb_cookie_banner_taskforce"]
       },
       {
         id: "gdpr_freely_given_specific_informed_unambiguous_consent_review",
         label: "GDPR consent quality review",
-        appliesWhen: "Consent is requested through imbalanced wording, layout, visual hierarchy, or interaction cost.",
+        appliesWhen: "Consent may be requested through imbalanced wording, layout, visual hierarchy, or interaction cost.",
         sourceRefs: ["edpb_consent_guidelines", "gdpr"]
       },
       {
         id: "ccpa_cpra_clear_and_balanced_choice_review",
         label: "CCPA/CPRA clear and balanced choice review",
-        appliesWhen: "California privacy choices, opt-out requests, or consent flows are affected by unclear or imbalanced UI.",
+        appliesWhen: "California privacy choices, opt-out requests, or consent flows may be affected by unclear or imbalanced UI.",
         sourceRefs: ["cppa_dark_patterns"]
       },
       {
         id: "ftc_dark_pattern_choice_architecture_review",
-        label: "FTC dark-pattern choice architecture review",
-        appliesWhen: "Design choices may manipulate or burden privacy choices.",
+        label: "FTC choice architecture / dark-pattern review context",
+        appliesWhen: "Design choices may obscure, burden, or otherwise affect privacy choices.",
         sourceRefs: ["ftc_dark_patterns"]
       }
     ],
     jurisdictionalContexts: CONSENT_JURISDICTIONAL_CONTEXTS,
-    displayCaution: "Imbalance requires contextual UI review, including button prominence, wording, position, keyboard flow, number of steps, and region-specific variants."
+    displayCaution: "This finding does not determine legal status, deception, unfairness, dark-pattern status, consent validity, or compliance status. Review the retained consent-surface evidence, labels, hierarchy, path depth, region targeting, CMP configuration, accessibility, and applicable exemptions."
   },
   keyboard_navigation_accessibility_issue: {
     findingId: "keyboard_navigation_accessibility_issue",
@@ -730,7 +736,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "keyboard_operability_and_focus_review",
       label: "Accessibility: keyboard operability and focus",
       displayCopy:
-        "Important controls may be hard to reach, operate, exit, or understand through keyboard-only interaction. This is a signal for accessibility review, not a legal conclusion."
+        "Retained automated accessibility evidence showed keyboard, focus, interaction, or custom-control signals that may be relevant to WCAG-oriented accessibility review. Applicability depends on the affected element, interaction state, keyboard path, focus behavior, component behavior, organization type, jurisdiction, and manual accessibility review."
     },
     technicalStandards: [
       {
@@ -767,39 +773,46 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
         level: "AA",
         appliesWhen: "Focused components are hidden or obscured by sticky headers, overlays, cookie banners, or modals.",
         sourceRefs: ["wcag_2_2"]
+      },
+      {
+        id: "wcag_4_1_2_name_role_value_keyboard_controls",
+        label: "WCAG 4.1.2 Name, Role, Value",
+        level: "A",
+        appliesWhen: "Custom controls may require name, role, state, or value review to support keyboard and assistive-technology interaction.",
+        sourceRefs: ["wcag_2_2"]
       }
     ],
     jurisdictionalContexts: ACCESSIBILITY_JURISDICTIONAL_CONTEXTS,
-    displayCaution: "Manual keyboard testing is needed to confirm reachability, focus order, focus visibility, escape behavior, and operability across modals, menus, forms, and consent banners."
+    displayCaution: "This finding does not determine legal status or WCAG conformance. Review the retained selector, element role, keyboard operability, focus visibility, focus order, interaction state, component behavior, page context, organization type, jurisdiction, and manual accessibility findings."
   },
   cross_domain_identifier_sharing_observed: {
     findingId: "cross_domain_identifier_sharing_observed",
-    label: "Identifiers shared across domains",
+    label: "Identifier-like values observed across domains",
     category: "Third-party tracking",
     regulatoryConcernGroup: "adtech_identity_sync",
     primaryConcern: {
       id: "cross_domain_identifier_disclosure_review",
       label: "Cross-domain identifier sharing review",
       displayCopy:
-        "Identifier-like values appeared in outbound requests to external advertising, identity, measurement, or attribution destinations. This may be relevant to transparency, consent, sale/share, profiling, and third-party disclosure review."
+        "Retained outbound request evidence showed identifier-like cross-domain request patterns that may be relevant to tracking, advertising, analytics, attribution, consent, transparency, sale/share, and vendor-governance review. Applicability depends on identifier scope, purpose, destination role, consent state, jurisdiction, server-side behavior, and manual review."
     },
     technicalStandards: [
       {
         id: "gdpr_online_identifier_personal_data_review",
         label: "GDPR online identifier review",
-        appliesWhen: "Cookie IDs, IP addresses, device IDs, or other online identifiers may relate to an identified or identifiable person.",
+        appliesWhen: "Cookie IDs, IP addresses, device IDs, or other online identifiers may require review where they could relate to an identified or identifiable person.",
         sourceRefs: ["gdpr_article_4", "gdpr"]
       },
       {
         id: "gdpr_transparency_third_party_disclosure_review",
         label: "GDPR transparency and third-party disclosure review",
-        appliesWhen: "Identifiers are shared with third-party analytics, advertising, attribution, or identity partners.",
+        appliesWhen: "Retained evidence suggests identifiers may move to third-party analytics, advertising, attribution, or identity partners.",
         sourceRefs: ["gdpr_article_13", "gdpr_article_25"]
       },
       {
         id: "eprivacy_storage_access_or_cookie_identifier_review",
         label: "ePrivacy cookie/device identifier review",
-        appliesWhen: "Identifier sharing involves cookies, browser storage, redirects, or access to terminal-equipment information.",
+        appliesWhen: "Identifier-sharing review may be relevant where cookies, browser storage, redirects, or terminal-equipment information are involved.",
         sourceRefs: ["eprivacy_directive_article_5_3", "edpb_eprivacy_art_5_3_scope"]
       }
     ],
@@ -813,7 +826,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "ccpa_cpra_sale_share_cross_context_ad_review",
         label: "CCPA/CPRA sale/share and cross-context behavioral advertising review",
-        appliesWhen: "California users and identifiers are shared for advertising, identity matching, attribution, or cross-context behavioral advertising.",
+        appliesWhen: "California users and identifier-like request signals may be relevant to advertising, identity matching, attribution, or cross-context behavioral advertising review.",
         sourceRefs: ["california_oag_ccpa", "cppa_faq"]
       },
       {
@@ -823,7 +836,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
         sourceRefs: ["ftc_dark_patterns"]
       }
     ],
-    displayCaution: "Identifier-like evidence requires review of payloads, hashing, partner purpose, disclosure, consent state, opt-out effect, and whether the value can reasonably identify or profile a person."
+    displayCaution: "This finding does not determine legal status, personal identity, identity resolution, sale/share status, consent validity, or compliance status. Review the retained request anchors, redacted identifier-like keys, source and destination context, vendor purpose, consent timing, regional configuration, and applicable exemptions."
   },
   reject_tracking_persists_after_reject: {
     findingId: "reject_tracking_persists_after_reject",
@@ -834,25 +847,25 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "post_reject_tracking_persistence_review",
       label: "Consent effect: tracking persisted after reject",
       displayCopy:
-        "Tracking activity remained visible after the scanner performed a reject-style interaction and compared post-reject evidence. This may be relevant to consent effectiveness, opt-out honoring, cookie suppression, and runtime enforcement review."
+        "Retained runtime evidence showed post-reject request or storage signals that may be relevant to consent enforcement, cookie/tracker, storage/access, transparency, and vendor-governance review. Applicability depends on reject success, timing, purpose, consent state, necessity, exemptions, jurisdiction, and manual review."
     },
     technicalStandards: [
       {
         id: "eprivacy_reject_effect_cookie_storage_review",
         label: "ePrivacy cookie/storage refusal effect review",
-        appliesWhen: "Non-essential cookies, storage, or similar technologies remain active after a refusal or reject action.",
+        appliesWhen: "Retained evidence suggests non-essential cookies, storage, or similar technologies may remain active after a refusal or reject action.",
         sourceRefs: ["eprivacy_directive_article_5_3", "edpb_cookie_banner_taskforce"]
       },
       {
         id: "gdpr_withdrawal_and_consent_effect_review",
         label: "GDPR consent effect and withdrawal review",
-        appliesWhen: "Consent is used for personal-data processing and a refusal or withdrawal should affect downstream processing.",
+        appliesWhen: "Consent-effect review may be relevant where consent is used for personal-data processing and a refusal or withdrawal should affect downstream processing.",
         sourceRefs: ["edpb_consent_guidelines", "gdpr"]
       },
       {
         id: "ccpa_cpra_opt_out_honoring_review",
         label: "CCPA/CPRA opt-out honoring review",
-        appliesWhen: "The reject or opt-out interaction should suppress sale, sharing, or cross-context behavioral advertising for California users.",
+        appliesWhen: "The reject or opt-out interaction may affect sale, sharing, or cross-context behavioral advertising choices for California users.",
         sourceRefs: ["california_oag_ccpa", "cppa_faq"]
       }
     ],
@@ -876,7 +889,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
         sourceRefs: ["california_oag_ccpa", "cppa_dark_patterns", "ftc_dark_patterns"]
       }
     ],
-    displayCaution: "Review whether the reject action was successfully detected, whether residual requests were essential or already-loaded beacons, whether cookies were cleared or suppressed, and whether vendors listen to the same consent state."
+    displayCaution: "This finding does not determine legal status, consent validity, vendor responsibility, necessity, exemption status, or compliance status. Review the retained interaction evidence, post-reject runtime anchors, vendor purpose, queued-beacon timing, consent-state propagation, regional configuration, and applicable exemptions."
   },
   possible_session_replay_on_sensitive_input_surface: {
     findingId: "possible_session_replay_on_sensitive_input_surface",
@@ -887,7 +900,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "sensitive_surface_session_replay_review",
       label: "Session replay near sensitive input review",
       displayCopy:
-        "Replay-related runtime evidence appeared near a page or form surface that may collect sensitive information. This is a high-priority review signal for masking, exclusion, consent gating, vendor access, and sensitive-data handling."
+        "Retained runtime and page-surface evidence showed session-replay-related signals near a sensitive-input or sensitive-context surface that may be relevant to masking, consent, sensitive-data, security, and vendor-governance review. Applicability depends on active collection, masking, sampling, payload contents, page exclusions, consent state, jurisdiction, and manual review."
     },
     technicalStandards: [
       {
@@ -899,13 +912,13 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "gdpr_minimization_security_and_transparency_review",
         label: "GDPR minimization, security, and transparency review",
-        appliesWhen: "Replay telemetry, identifiers, form context, or user behavior may involve personal data or sensitive inferences.",
+        appliesWhen: "Replay telemetry, identifiers, form context, or user behavior signals may involve personal data or sensitive inferences depending on implementation and manual review.",
         sourceRefs: ["gdpr_article_4", "gdpr_article_13", "gdpr_article_25"]
       },
       {
         id: "wiretap_eavesdropping_manual_review",
         label: "Wiretap/eavesdropping law review",
-        appliesWhen: "The implementation records, intercepts, or transmits user communications or form interactions in jurisdictions where such theories may be relevant.",
+        appliesWhen: "Replay or recording signals near form interactions may require jurisdiction-specific review where interaction capture or communications theories may be relevant.",
         sourceRefs: ["ecpa_18_usc_2511"]
       }
     ],
@@ -914,11 +927,11 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "state_wiretap_or_session_replay_litigation_review",
         label: "State wiretap/eavesdropping or session-replay review",
-        appliesWhen: "Jurisdiction-specific consent-to-record, wiretap, or eavesdropping theories may apply to session replay or interaction capture.",
+        appliesWhen: "Jurisdiction-specific consent-to-record, wiretap, or eavesdropping theories may be relevant to session replay or interaction-capture review.",
         sourceRefs: ["ecpa_18_usc_2511"]
       }
     ],
-    displayCaution: "Co-occurrence does not show that sensitive field values were captured. Manual review should confirm masking, sampling, payload contents, page-level exclusions, consent gating, and vendor configuration."
+    displayCaution: "This finding does not determine legal status, consent validity, keystroke capture, screenshot capture, sensitive-value capture, recording retention, or compliance status. Review retained replay anchors, sensitive-surface context, masking, sampling, payload evidence, consent state, and vendor configuration."
   },
   probable_fingerprinting: {
     findingId: "probable_fingerprinting",
@@ -929,25 +942,25 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "probable_device_fingerprinting_review",
       label: "Probable browser/device fingerprinting review",
       displayCopy:
-        "A cluster of high-entropy browser or device collection signals was strong enough to warrant fingerprinting-specific review. Purpose, disclosure, consent posture, minimization, and downstream identity use should be reviewed."
+        "Retained runtime evidence showed a clustered set of high-entropy browser or device collection signals that may warrant probable fingerprinting review. Purpose, disclosure, consent state, minimization, security or fraud-prevention context, and downstream use should be reviewed."
     },
     technicalStandards: [
       {
         id: "eprivacy_article_5_3_fingerprinting_review",
         label: "ePrivacy Article 5(3) fingerprinting/device-access review",
-        appliesWhen: "Fingerprinting or device-signal collection stores information on, or gains access to information from, terminal equipment.",
+        appliesWhen: "Retained clustered browser/device signals may involve storing information on, or gaining access to information from, terminal equipment.",
         sourceRefs: ["eprivacy_directive_article_5_3", "edpb_eprivacy_art_5_3_scope"]
       },
       {
         id: "gdpr_online_identifier_profiling_review",
         label: "GDPR online identifier and profiling review",
-        appliesWhen: "High-entropy browser/device signals may identify, single out, profile, or be combined with identifiers.",
+        appliesWhen: "High-entropy browser/device signals may be relevant to online identifier, profiling, or identifiability review depending on linkage, purpose, and manual review.",
         sourceRefs: ["gdpr_article_4", "gdpr_article_13", "gdpr_article_25"]
       },
       {
         id: "gdpr_data_minimization_purpose_limitation_review",
         label: "GDPR minimization and purpose review",
-        appliesWhen: "Collection includes high-entropy attributes beyond what is necessary for a stated purpose.",
+        appliesWhen: "Collection may include high-entropy attributes that may warrant purpose, necessity, minimization, and default-setting review.",
         sourceRefs: ["gdpr_article_25"]
       }
     ],
@@ -955,29 +968,29 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "eu_eprivacy_gdpr_fingerprinting_review",
         label: "EU ePrivacy/GDPR fingerprinting review",
-        appliesWhen: "EU/EEA users and high-entropy device/browser signals are in scope.",
+        appliesWhen: "EU/EEA users and high-entropy device/browser signals may be in scope depending on terminal-equipment access, purpose, consent state, and manual review.",
         sourceRefs: ["edpb_eprivacy_art_5_3_scope", "gdpr_article_4"]
       },
       {
         id: "uk_pecr_fingerprinting_or_similar_technology_review",
         label: "UK PECR fingerprinting/similar-technology review",
-        appliesWhen: "UK users and non-cookie tracking, device access, or similar technology are in scope.",
+        appliesWhen: "UK users and non-cookie tracking, device access, or similar technology may be in scope depending on purpose, consent state, and manual review.",
         sourceRefs: ["ico_cookies"]
       },
       {
         id: "ccpa_cpra_profiling_adtech_sensitive_review",
         label: "CCPA/CPRA profiling, advertising, or sensitive-data review",
-        appliesWhen: "California users, cross-context advertising, sale/share, sensitive data, or profiling-related uses are in scope.",
+        appliesWhen: "California users, cross-context advertising, sale/share, sensitive data, or profiling-related use context may be relevant depending on purpose, user region, and manual review.",
         sourceRefs: ["california_oag_ccpa", "cppa_faq"]
       },
       {
         id: "security_or_fraud_exception_review",
         label: "Security/fraud-prevention purpose review",
-        appliesWhen: "The collection is claimed to support fraud prevention, bot detection, abuse prevention, or security rather than advertising or profiling.",
+        appliesWhen: "The collection may support fraud prevention, bot detection, abuse prevention, or security rather than advertising or profiling, subject to implementation and manual review.",
         sourceRefs: ["gdpr_article_25"]
       }
     ],
-    displayCaution: "Probable fingerprinting is inferred from clustered signals, not from observing a vendor's internal identity graph. Fraud-prevention or abuse-prevention use cases may explain some high-entropy collection."
+    displayCaution: "This finding does not determine legal status, consent validity, persistent fingerprint creation, personal identity, identity resolution, user singling-out, complete identity graph, or compliance status. Probable fingerprinting is inferred from clustered retained signals, and fraud-prevention or abuse-prevention use cases may explain some high-entropy collection."
   }
 };
 

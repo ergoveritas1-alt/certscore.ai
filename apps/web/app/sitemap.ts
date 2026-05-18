@@ -44,6 +44,8 @@ const staticPaths = [
   "/guides/reject-consent-tracking-test",
   "/guides/website-consent-audit-checklist",
   "/guides/privacy-scanner-vs-cookie-scanner",
+  "/guides/website-fingerprinting",
+  "/guides/website-scanning-basics",
   "/guides/ada-website-compliance",
   "/guides/cookie-consent-laws",
   "/guides/wcag-website-checklist",

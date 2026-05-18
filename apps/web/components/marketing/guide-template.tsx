@@ -5,6 +5,10 @@ import {
   createItemListSchema,
   createPublicArticleSchema
 } from "../../lib/seo";
+import {
+  getGuideSampleFindings,
+  type SampleFindingJson
+} from "../../lib/marketing/sample-finding-json";
 
 type GuideSection = {
   title: string;
@@ -29,6 +33,7 @@ type GuideTemplateProps = {
   certScoreHelp: string[];
   certScoreFlagExample: string;
   relatedGuides: RelatedLink[];
+  sampleFindingsJson?: SampleFindingJson[];
 };
 
 function GuideTextSection({ title, paragraphs }: GuideSection) {
@@ -58,8 +63,10 @@ export function GuideTemplate({
   automatedScanningHelp,
   certScoreHelp,
   certScoreFlagExample,
-  relatedGuides
+  relatedGuides,
+  sampleFindingsJson
 }: GuideTemplateProps) {
+  const visibleSampleFindings = sampleFindingsJson ?? getGuideSampleFindings({ path: pagePath, title });
   const articleSchema = createPublicArticleSchema({
     title,
     description: intro,
@@ -159,6 +166,44 @@ export function GuideTemplate({
             </div>
           </CardContent>
         </Card>
+
+        {visibleSampleFindings.length > 0 ? (
+          <Card className="border-slate-200 bg-white">
+            <CardHeader className="space-y-3">
+              <div>
+                <Badge tone="neutral">Sample JSON</Badge>
+              </div>
+              <CardTitle>Sample finding JSON from scans</CardTitle>
+              <p className="text-sm leading-6 text-slate-600">
+                Representative payloads showing the structured evidence CertScore.ai can surface for this guide topic.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {visibleSampleFindings.map((sample, index) => (
+                <details
+                  key={sample.findingId}
+                  className="group rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  open={index === 0}
+                >
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-1">
+                        <p className="text-base font-semibold text-slate-950">{sample.label}</p>
+                        <p className="font-mono text-xs text-slate-500">{sample.findingId}</p>
+                      </div>
+                      <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">{sample.sourceLabel}</p>
+                    </div>
+                  </summary>
+                  <div className="mt-4">
+                    <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-3 text-xs text-slate-600">
+                      {JSON.stringify(sample.payload, null, 2)}
+                    </pre>
+                  </div>
+                </details>
+              ))}
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card className="border-slate-200 bg-sand">
           <CardHeader>

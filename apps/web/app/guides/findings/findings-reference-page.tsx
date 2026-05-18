@@ -35,6 +35,46 @@ function getPagePath(activeFinding?: FindingReferenceItem) {
   return activeFinding ? getFindingPath(activeFinding.id) : "/guides/findings";
 }
 
+export function getReferenceNotes(activeFinding?: FindingReferenceItem) {
+  const commonNotes = [
+    "CertScore uses findings, evidence, signals, and observations consistently: signals are raw runtime or page-surface events, evidence is retained support, observations are interpreted evidence context, and findings are promoted review items.",
+    "Findings are runtime evidence and public-surface observations for review. Observed signals may surface possible concerns, but review is recommended before operational or legal reliance."
+  ];
+
+  if (activeFinding?.category === "Accessibility") {
+    const accessibilityReviewNote = activeFinding.id === "visual_contrast_accessibility_issue"
+      ? "WCAG 2.2 contrast guidance is relevant to text contrast, non-text contrast, large-text thresholds, inactive components, incidental content, decorative graphics, and logo or brand-mark exceptions."
+      : "Automated accessibility evidence can support WCAG-oriented review, but manual review is needed to confirm context, applicable success criterion, user impact, exception status, assistive-technology behavior, keyboard behavior, and remediation quality.";
+
+    return [
+      ...commonNotes,
+      accessibilityReviewNote,
+      "ADA Title II, ADA Title III, Section 508, EN 301 549, and UK public-sector accessibility contexts may be relevant depending on organization type, procurement context, jurisdiction, and manual review.",
+      `Prevalence labels use the ${FINDING_DENSITY_BENCHMARK_SCOPE.label}, an approximately ${FINDING_DENSITY_BENCHMARK_SCOPE.sampleSizeApprox.toLocaleString()}-scan directional calibration set.`
+    ];
+  }
+
+  if (activeFinding?.id === "cpra_cba_opt_out_missing") {
+    return [
+      ...commonNotes,
+      "CPRA opt-out, Do Not Sell or Share, and privacy-choice obligations may depend on organization scope, user region, data purpose, sale/share analysis, cross-context behavioral advertising context, exemptions, and manual review.",
+      "GPC handling may require region-specific and implementation-specific review; this public finding does not determine backend preference handling.",
+      "FTC privacy claims and choice-architecture materials may be relevant where public statements, opt-out paths, or runtime behavior affect user expectations, but this finding does not determine deception, unfairness, legal status, or compliance status.",
+      `Prevalence labels use the ${FINDING_DENSITY_BENCHMARK_SCOPE.label}, an approximately ${FINDING_DENSITY_BENCHMARK_SCOPE.sampleSizeApprox.toLocaleString()}-scan directional calibration set.`
+    ];
+  }
+
+  return [
+    ...commonNotes,
+    "EDPB consent guidance is relevant to consent quality and affirmative indication where consent is relied upon.",
+    "EU ePrivacy cookie/tracker principles are relevant to storing information or gaining access to information on user terminal equipment.",
+    "ICO cookie and similar technologies guidance is relevant to active consent, clear explanation, and essential-cookie exceptions.",
+    "CNIL cookie/tracker and analytics guidance is relevant to tracker consent and limited analytics exemptions.",
+    "FTC dark-pattern and commercial-surveillance materials may be relevant to hidden tracking or unclear user-choice review, but this finding does not determine deception, unfairness, or legal status.",
+    `Prevalence labels use the ${FINDING_DENSITY_BENCHMARK_SCOPE.label}, an approximately ${FINDING_DENSITY_BENCHMARK_SCOPE.sampleSizeApprox.toLocaleString()}-scan directional calibration set.`
+  ];
+}
+
 function createFindingSchemas({
   activeFinding,
   findings,
@@ -147,6 +187,8 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
   const findings = getFindingReferenceItems();
   const initialFindingId = activeFinding?.id ?? DEFAULT_FINDING_ID;
   const { pageDescription, pagePath, pageTitle } = getFindingReferencePageCopy(activeFinding);
+  const headingTitle = activeFinding?.title ?? "CertScore findings reference";
+  const eyebrow = activeFinding ? "Finding reference" : "Technical reference";
   const schemas = createFindingSchemas({
     activeFinding,
     findings,
@@ -166,10 +208,13 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
       ))}
 
       <div className="max-w-3xl space-y-4">
-        <Badge tone="neutral">Technical reference</Badge>
+        <Badge tone="neutral">{eyebrow}</Badge>
         <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-          CertScore findings reference
+          {headingTitle}
         </h1>
+        {activeFinding ? (
+          <p className="text-base leading-7 text-slate-600">{pageDescription}</p>
+        ) : null}
       </div>
 
       <div className="mt-10">
@@ -178,17 +223,14 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
 
       <section className="mt-8 border border-slate-200 bg-white p-5 sm:p-6">
         <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Reference notes</h2>
-        <div className="mt-3 max-w-3xl space-y-3 text-sm leading-7 text-slate-600">
-          <p>
-            CertScore uses findings, evidence, signals, and observations consistently: signals are raw runtime or page-surface events, evidence is retained support, observations are interpreted evidence context, and findings are promoted review items.
-          </p>
-          <p>
-            Findings are runtime evidence and public-surface observations for review. Observed signals may surface possible concerns, but review is recommended before operational or legal reliance.
-          </p>
-          <p>
-            Prevalence labels use the {FINDING_DENSITY_BENCHMARK_SCOPE.label}, an approximately {FINDING_DENSITY_BENCHMARK_SCOPE.sampleSizeApprox.toLocaleString()}-scan directional calibration set.
-          </p>
-        </div>
+        <ul className="mt-3 max-w-3xl space-y-2 text-sm leading-7 text-slate-600">
+          {getReferenceNotes(activeFinding).map((note) => (
+            <li key={note} className="flex gap-2">
+              <span aria-hidden="true" className="mt-3 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
+              <span>{note}</span>
+            </li>
+          ))}
+        </ul>
       </section>
     </section>
   );
