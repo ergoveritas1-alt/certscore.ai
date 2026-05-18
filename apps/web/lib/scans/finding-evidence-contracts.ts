@@ -1474,6 +1474,10 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
     entities.requestPurposeClassificationConfidence ?? entities.request_purpose_classification_confidence
   );
   return {
+    accept_more_prominent_than_reject:
+      packet.unifiedFindingId === "accept_more_prominent_than_reject" ||
+      packet.evidence?.flags?.some((flag) => /accept_button_prominence|accept_more_prominent/i.test(flag)) ||
+      undefined,
     advertisingSharingRuntimeEvidence: entities.advertisingSharingRuntimeEvidence,
     botBlockChallengeEvidence: packet.concernContext?.negativeEvidenceFlags.includes("blocked_or_interstitial_evidence_observed")
       ? { blocked: true, coverageImpact: "material" }
@@ -1551,6 +1555,10 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
         ? true
         : undefined,
     flags: packet.evidence?.flags ?? [],
+    forced_consent_wall:
+      packet.unifiedFindingId === "forced_consent_wall" ||
+      packet.evidence?.flags?.some((flag) => /forced_consent_wall/i.test(flag)) ||
+      undefined,
     crossDomainIdentifierSharingDestinationEtlds:
       entities.crossDomainIdentifierSharingDestinationEtlds ?? entities.cross_domain_identifier_sharing_destination_etlds,
     crossDomainIdentifierSharingEvidence:

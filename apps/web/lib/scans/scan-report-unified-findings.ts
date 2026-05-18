@@ -1128,7 +1128,8 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
           rejectClickDepth !== null && acceptClickDepth !== null
             ? `Reject required ${rejectClickDepth} interaction step(s), while accept required ${acceptClickDepth}.`
             : "Reject was not available on the first consent layer in the retained consent interaction structure."
-        ]
+        ],
+        unifiedFindingId: "reject_button_missing"
       },
       id: "runtime-derived-signal-privacy.dark_pattern_reject_button_missing.evidence_quality",
       linkedValidationFinding: null,
@@ -1140,6 +1141,91 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       sourceType: "signal",
       title: "Reject button missing"
     });
+
+    candidates.push({
+      categoryId: "choice_symmetry_dark_pattern_indicators",
+      description: "The retained consent interaction structure shows accept was materially easier than reject.",
+      fallbackEvidence: {
+        accept_more_prominent_than_reject: true,
+        asymmetric_consent_ui: true,
+        consentActionableChoiceObserved,
+        consentSurfaceDecisionStates: consentSurfaceGate.states,
+        consentSurfaceDiagnostics,
+        consentSurfaceObserved,
+        rejectPathDepthAndAvailability: rejectPath,
+        runtimeEvidenceArtifacts: ["scan_runtime_artifacts.reject_path_depth_and_availability"],
+        signalKey: "privacy.dark_pattern_accept_button_prominence",
+        signalLabel: "Accept action more prominent than reject",
+        signalValue: true,
+        snippets: [
+          rejectClickDepth !== null && acceptClickDepth !== null
+            ? `Accept required ${acceptClickDepth} interaction step(s), while reject required ${rejectClickDepth}.`
+            : "Accept was available before an equivalent reject action in the retained consent interaction structure."
+        ],
+        unifiedFindingId: "accept_more_prominent_than_reject"
+      },
+      id: "runtime-derived-signal-privacy.dark_pattern_accept_button_prominence.evidence_quality",
+      linkedValidationFinding: null,
+      observedValue: choiceAsymmetry,
+      severity: choiceAsymmetry === "material" ? "high" : "medium",
+      signalKey: "privacy.dark_pattern_accept_button_prominence",
+      signalLabel: "Accept action more prominent than reject",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Accept action more prominent than reject"
+    });
+
+    if (
+      preferencesRequiredBeforeReject ||
+      (
+        acceptClickDepth !== null &&
+        rejectClickDepth !== null &&
+        rejectClickDepth > acceptClickDepth
+      )
+    ) {
+      candidates.push({
+        categoryId: "choice_symmetry_dark_pattern_indicators",
+        description: "The retained consent interaction structure required additional interaction before reject was available.",
+        fallbackEvidence: {
+          consentActionableChoiceObserved,
+          consentSurfaceDecisionStates: consentSurfaceGate.states,
+          consentSurfaceDiagnostics,
+          consentSurfaceObserved,
+          forced_consent_wall: true,
+          hybridConsentSummary: {
+            ...(getRuntimeObject(input.runtimeArtifacts, ["hybridConsentSummary", "hybrid_consent_summary"]) ?? {}),
+            bannerPresent: true,
+            pageInteractionBlocked: true
+          },
+          hybridUiSummary: {
+            ...(getRuntimeObject(input.runtimeArtifacts, ["hybridUiSummary", "hybrid_ui_summary"]) ?? {}),
+            forcedActionRequired: true
+          },
+          overlayKind: "consent_modal",
+          pageAccessBlockedUntilChoice: true,
+          rejectPathDepthAndAvailability: rejectPath,
+          runtimeEvidenceArtifacts: ["scan_runtime_artifacts.reject_path_depth_and_availability"],
+          signalKey: "privacy.dark_pattern_forced_consent_wall",
+          signalLabel: "Forced consent interaction",
+          signalValue: true,
+          snippets: [
+            rejectClickDepth !== null && acceptClickDepth !== null
+              ? `Reject required ${rejectClickDepth} interaction step(s), while accept required ${acceptClickDepth}.`
+              : "Reject required a preferences or manage-choices path before the user could refuse."
+          ],
+          unifiedFindingId: "forced_consent_wall"
+        },
+        id: "runtime-derived-signal-privacy.dark_pattern_forced_consent_wall.evidence_quality",
+        linkedValidationFinding: null,
+        observedValue: preferencesRequiredBeforeReject ? "preferences_required_before_reject" : choiceAsymmetry,
+        severity: "high",
+        signalKey: "privacy.dark_pattern_forced_consent_wall",
+        signalLabel: "Forced consent interaction",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "Forced consent interaction"
+      });
+    }
   }
 
   const coverageImpact = String(botBlockChallengeEvidence?.coverageImpact ?? botBlockChallengeEvidence?.coverage_impact ?? "none");

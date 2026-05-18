@@ -1106,7 +1106,21 @@ function hasConcreteDarkPatternChildEvidence(rawEvidence: Record<string, unknown
     return false;
   }
 
-  return hasVerifiedConsentUiEvidence(rawEvidence);
+  if (hasVerifiedConsentUiEvidence(rawEvidence)) {
+    return true;
+  }
+
+  const consentSurfaceGate = evaluateConsentSurfaceGate(rawEvidence);
+  const flags = getStringArrayValues(rawEvidence, ["flags", "evidenceFlags", "uiEvidenceFlags"]);
+  return (
+    consentSurfaceGate.consentSurfaceObserved &&
+    consentSurfaceGate.rejectAbsentFirstLayer &&
+    consentSurfaceGate.preChoiceState &&
+    !consentSurfaceGate.hasExplicitPromotionSuppressor &&
+    flags.some((flag) =>
+      /privacy\.dark_pattern_(?:accept_button_prominence|forced_consent_wall|reject_button_missing)|accept_more_prominent|forced_consent_wall|reject_button_missing/i.test(flag)
+    )
+  );
 }
 
 function hasConfirmedRejectTimingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -1412,16 +1426,35 @@ function isBlockingOverlayConcern(
 }
 
 function isConsentDarkPatternConcern(
-  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "originKey" | "suggestedUnifiedFindingId" | "title">
 ) {
-  return concern.suggestedUnifiedFindingId === "consent_dark_patterns_detected";
+  const haystack = [
+    concern.canonicalConcernKey,
+    concern.originKey,
+    concern.suggestedUnifiedFindingId,
+    concern.title
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /consent_dark_patterns_detected|asymmetric_consent_ui|accept_more_prominent_than_reject|accept_button_prominence|accept action more prominent/.test(haystack);
 }
 
 function isForcedConsentInteractionConcern(
-  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "originKey" | "suggestedUnifiedFindingId" | "title">
 ) {
-  return concern.suggestedUnifiedFindingId === "forced_consent_interaction" ||
-    concern.suggestedUnifiedFindingId === "forced_consent_wall";
+  const haystack = [
+    concern.canonicalConcernKey,
+    concern.originKey,
+    concern.suggestedUnifiedFindingId,
+    concern.title
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /forced_consent_interaction|forced_consent_wall|forced consent interaction/.test(haystack);
 }
 
 function isAccessibilityIssueFindingConcern(
@@ -2165,7 +2198,11 @@ export function deriveConcernPolicy(input: {
   if (
     findingEvidenceContractDecision &&
     findingEvidenceContractDecision.promotionEligibility !== "eligible" &&
-    !(isRejectTrackingPersistenceConcern(input.concern) && hasStrongPostRejectTrackerVendorEvidence(input.rawEvidence))
+    !(isRejectTrackingPersistenceConcern(input.concern) && hasStrongPostRejectTrackerVendorEvidence(input.rawEvidence)) &&
+    !(
+      (isConsentDarkPatternConcern(input.concern) || isForcedConsentInteractionConcern(input.concern)) &&
+      hasConcreteDarkPatternChildEvidence(input.rawEvidence)
+    )
   ) {
     return {
       allowedNarrativeTier: findingEvidenceContractDecision.allowedNarrativeTier,
@@ -2214,6 +2251,15 @@ export function deriveConcernPolicy(input: {
       externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_consent_specific_blocking_evidence"] as NormalizedConcernNegativeEvidenceFlag[],
       promotionEligibility: "internal_only"
+    };
+  }
+
+  if (isForcedConsentInteractionConcern(input.concern) && hasConcreteDarkPatternChildEvidence(input.rawEvidence)) {
+    return {
+      allowedNarrativeTier: "strong",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags] as NormalizedConcernNegativeEvidenceFlag[],
+      promotionEligibility: "eligible"
     };
   }
 
