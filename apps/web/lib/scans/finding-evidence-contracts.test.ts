@@ -770,6 +770,55 @@ test("reject behind preferences path satisfies reject path evidence", () => {
   assert.equal(decision?.status, "pass_strong");
 });
 
+test("retained reject path satisfies consent UX contracts without optional viewport diagnostics", () => {
+  const rejectDecision = evaluateFindingEvidenceContractForRawEvidence("reject_button_missing", {
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+    consentSurfaceObserved: true,
+    hybridConsentSummary: {
+      acceptActionLabels: ["Accept all"],
+      acceptPresent: true,
+      bannerPresent: true,
+      rejectActionLabels: [],
+      rejectPresent: false
+    },
+    rejectPathDepthAndAvailability: {
+      acceptClickDepth: 1,
+      bannerLayerInspected: true,
+      choiceAsymmetry: "material",
+      rejectAvailableOnFirstLayer: false,
+      rejectClickDepth: 2,
+      status: "hidden"
+    }
+  });
+  const darkPatternDecision = evaluateFindingEvidenceContractForRawEvidence("accept_only_banner", {
+    accept_only_banner: true,
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+    consentSurfaceObserved: true,
+    consentUiArtifactRefs: ["hybrid_runtime_evidence"],
+    hybridConsentSummary: {
+      acceptActionLabels: ["Accept all"],
+      acceptPresent: true,
+      bannerPresent: true,
+      rejectActionLabels: [],
+      rejectPresent: false
+    },
+    hybridConsentVisual: {
+      acceptOnly: true
+    },
+    rejectPathDepthAndAvailability: {
+      acceptClickDepth: 1,
+      bannerLayerInspected: true,
+      choiceAsymmetry: "material",
+      rejectAvailableOnFirstLayer: false,
+      rejectClickDepth: 2,
+      status: "hidden"
+    }
+  });
+
+  assert.equal(rejectDecision?.status, "pass_strong");
+  assert.equal(darkPatternDecision?.status, "pass_strong");
+});
+
 test("dark-pattern consent signals require verified banner UI evidence", () => {
   const weakDecision = evaluateFindingEvidenceContractForRawEvidence("accept_only_banner", {
     accept_only_banner: true

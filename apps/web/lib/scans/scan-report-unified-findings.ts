@@ -1104,7 +1104,10 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     rejectPath &&
     concreteRejectPathObserved &&
     !rejectAvailableOnFirstLayer &&
-    consentSurfaceGate.eligibleForConsentUxPromotion &&
+    (
+      consentSurfaceGate.eligibleForConsentUxPromotion ||
+      consentSurfaceGate.eligibleForRetainedRejectPathPromotion
+    ) &&
     (choiceAsymmetry === "material" || choiceAsymmetry === "minor")
   ) {
     candidates.push({

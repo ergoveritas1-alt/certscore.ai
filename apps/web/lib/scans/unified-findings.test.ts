@@ -3147,6 +3147,34 @@ test("promotes accept-only stable consent surface as reject missing", () => {
   assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("eligible"), true);
 });
 
+test("promotes retained reject-path consent evidence without optional viewport diagnostics", () => {
+  const packet = buildConsentUxPacketFromEvidence({
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+    consentSurfaceObserved: true,
+    consentActionableChoiceObserved: true,
+    hybridConsentSummary: {
+      acceptActionLabels: ["Accept all"],
+      acceptPresent: true,
+      bannerPresent: true,
+      rejectActionLabels: [],
+      rejectPresent: false
+    },
+    rejectPathDepthAndAvailability: {
+      acceptClickDepth: 1,
+      bannerLayerInspected: true,
+      choiceAsymmetry: "material",
+      rejectAvailableOnFirstLayer: false,
+      rejectClickDepth: 2,
+      status: "hidden"
+    },
+    reject_button_missing: true
+  });
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("eligible"), true);
+  assert.equal(packet?.evidence?.entities?.consentSurfaceDecisionStates?.includes("consent_surface_unstable_or_not_evaluable"), false);
+});
+
 test("waits through delayed hydration before evaluating first-layer reject visibility", () => {
   const packet = buildConsentUxPacketFromEvidence({
     consentSurfaceDecisionStates: ["consent_surface_observed", "reject_present_first_layer"],

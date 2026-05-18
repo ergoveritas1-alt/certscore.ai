@@ -13,6 +13,7 @@ import {
   hasPreconsentSequenceEvidence,
   hasStrongFingerprintingEvidence,
   hasStrongPreconsentRuntimeEvidence,
+  consentSurfaceGateAllowsConsentUxPromotion,
   evaluateConsentSurfaceGate
 } from "./promotion-evidence-contracts";
 import type { UnifiedFindingPacket } from "./unified-findings";
@@ -853,7 +854,7 @@ function hasPostRejectRuntimeEvidence(rawEvidence: Record<string, unknown> | nul
 
 function hasRejectPathDepthEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   const gate = evaluateConsentSurfaceGate(rawEvidence);
-  if (!gate.eligibleForConsentUxPromotion) {
+  if (!consentSurfaceGateAllowsConsentUxPromotion(gate)) {
     return false;
   }
   const rejectPath = getObjectValue(rawEvidence, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]);
@@ -895,7 +896,7 @@ function hasMaterialChoiceAsymmetryEvidence(rawEvidence: Record<string, unknown>
   if (hasNonConsentOverlayWithoutIndependentConsentEvidence(rawEvidence)) {
     return false;
   }
-  if (!evaluateConsentSurfaceGate(rawEvidence).eligibleForConsentUxPromotion) {
+  if (!consentSurfaceGateAllowsConsentUxPromotion(evaluateConsentSurfaceGate(rawEvidence))) {
     return false;
   }
 
@@ -1238,14 +1239,10 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
       return hasSuccessfulRejectInteraction(rawEvidence);
     case "consentSurfaceEvaluable": {
       const gate = evaluateConsentSurfaceGate(rawEvidence);
-      return gate.consentSurfaceObserved &&
-        gate.stableRenderedState &&
-        gate.visibleOrReachableSurface &&
-        gate.sameSurfaceCandidates &&
-        gate.preChoiceState;
+      return consentSurfaceGateAllowsConsentUxPromotion(gate);
     }
     case "rejectAbsentFirstLayer":
-      return evaluateConsentSurfaceGate(rawEvidence).eligibleForConsentUxPromotion;
+      return consentSurfaceGateAllowsConsentUxPromotion(evaluateConsentSurfaceGate(rawEvidence));
     case "rejectPathDepthEvidence":
       return hasRejectPathDepthEvidence(rawEvidence);
     case "materialChoiceAsymmetryEvidence":

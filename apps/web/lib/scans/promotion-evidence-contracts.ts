@@ -25,13 +25,16 @@ export type ConsentSurfaceDecisionState =
 export type ConsentSurfaceGateDecision = {
   states: ConsentSurfaceDecisionState[];
   consentSurfaceObserved: boolean;
+  retainedRejectPathEvidence: boolean;
   rejectAbsentFirstLayer: boolean;
   rejectPresentFirstLayer: boolean;
   stableRenderedState: boolean;
   visibleOrReachableSurface: boolean;
   sameSurfaceCandidates: boolean;
   preChoiceState: boolean;
+  hasExplicitPromotionSuppressor: boolean;
   eligibleForConsentUxPromotion: boolean;
+  eligibleForRetainedRejectPathPromotion: boolean;
 };
 
 function uniqueStrings(values: Array<string | null | undefined>) {
@@ -332,6 +335,43 @@ export function evaluateConsentSurfaceGate(
     getBooleanFromSources(rawEvidence, [consentSummary], ["managePresent", "manage_present"]) === true ||
     manageLabels.length > 0 ||
     hasVisibleButtonCandidate(candidateButtons, /manage|settings|preferences|customi[sz]e|options|control/i);
+  const acceptClickDepth = getNumberFromSources(rawEvidence, [rejectPath], [
+    "acceptClickDepth",
+    "accept_click_depth"
+  ]);
+  const rejectClickDepth = getNumberFromSources(rawEvidence, [rejectPath], [
+    "rejectClickDepth",
+    "reject_click_depth",
+    "depth"
+  ]);
+  const preferencesRequiredBeforeReject =
+    getBooleanFromSources(rawEvidence, [rejectPath], [
+      "preferencesRequiredBeforeReject",
+      "preferences_required_before_reject"
+    ]) === true;
+  const rejectAvailableOnFirstLayer =
+    getBooleanFromSources(rawEvidence, [rejectPath], [
+      "rejectAvailableOnFirstLayer",
+      "reject_available_on_first_layer"
+    ]);
+  const retainedRejectPathEvidence =
+    consentSurfaceObserved &&
+    (
+      acceptClickDepth !== null ||
+      rejectClickDepth !== null ||
+      preferencesRequiredBeforeReject ||
+      rejectPath?.bannerLayerInspected === true ||
+      rejectPath?.banner_layer_inspected === true ||
+      rejectPath?.rejectPathTested === true ||
+      rejectPath?.reject_path_tested === true
+    );
+  const retainedRejectPathShowsRejectAbsent =
+    retainedRejectPathEvidence &&
+    (
+      rejectAvailableOnFirstLayer === false ||
+      preferencesRequiredBeforeReject ||
+      (acceptClickDepth !== null && rejectClickDepth !== null && rejectClickDepth > acceptClickDepth)
+    );
   const sameSurfaceCandidates =
     getBooleanFromSources(rawEvidence, [diagnostics, rejectPath], [
       "sameSurfaceCandidates",
@@ -341,6 +381,7 @@ export function evaluateConsentSurfaceGate(
       "bannerLayerInspected",
       "banner_layer_inspected"
     ]) === true ||
+    retainedRejectPathEvidence ||
     (acceptPresent && (rejectPresentFirstLayer || managePresent || candidateButtons.length > 0));
 
   const preChoiceState =
@@ -360,9 +401,14 @@ export function evaluateConsentSurfaceGate(
 
   const unstableOrNotEvaluable =
     explicitStates.includes("consent_surface_unstable_or_not_evaluable") ||
-    (consentSurfaceObserved && (!stableRenderedState || !visibleOrReachableSurface || !sameSurfaceCandidates));
+    (
+      consentSurfaceObserved &&
+      !retainedRejectPathEvidence &&
+      (!stableRenderedState || !visibleOrReachableSurface || !sameSurfaceCandidates)
+    );
   const rejectAbsentFirstLayer =
     explicitStates.includes("reject_absent_first_layer") ||
+    retainedRejectPathShowsRejectAbsent ||
     (
       consentSurfaceObserved &&
       stableRenderedState &&
@@ -388,6 +434,18 @@ export function evaluateConsentSurfaceGate(
         consentSummary?.reject_depth_class === "absent"
       )
     );
+  const hasExplicitPromotionSuppressor =
+    explicitNotPresent ||
+    priorConsentSuspected ||
+    rejectPresentFirstLayer ||
+    explicitStates.includes("consent_surface_unstable_or_not_evaluable");
+  const eligibleForRetainedRejectPathPromotion =
+    consentSurfaceObserved &&
+    retainedRejectPathEvidence &&
+    retainedRejectPathShowsRejectAbsent &&
+    sameSurfaceCandidates &&
+    preChoiceState &&
+    !hasExplicitPromotionSuppressor;
 
   const states: ConsentSurfaceDecisionState[] = uniqueStrings([
     ...explicitStates,
@@ -400,12 +458,14 @@ export function evaluateConsentSurfaceGate(
   return {
     states,
     consentSurfaceObserved,
+    retainedRejectPathEvidence,
     rejectAbsentFirstLayer,
     rejectPresentFirstLayer,
     stableRenderedState,
     visibleOrReachableSurface,
     sameSurfaceCandidates,
     preChoiceState,
+    hasExplicitPromotionSuppressor,
     eligibleForConsentUxPromotion:
       consentSurfaceObserved &&
       stableRenderedState &&
@@ -415,8 +475,13 @@ export function evaluateConsentSurfaceGate(
       rejectAbsentFirstLayer &&
       !rejectPresentFirstLayer &&
       !priorConsentSuspected &&
-      !unstableOrNotEvaluable
+      !unstableOrNotEvaluable,
+    eligibleForRetainedRejectPathPromotion
   };
+}
+
+export function consentSurfaceGateAllowsConsentUxPromotion(gate: ConsentSurfaceGateDecision) {
+  return gate.eligibleForConsentUxPromotion || gate.eligibleForRetainedRejectPathPromotion;
 }
 
 function getStringArrayValuesFromEvidenceAndEntities(record: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -1821,10 +1886,10 @@ export function hasVerifiedConsentUiEvidence(rawEvidence: Record<string, unknown
     specificUiFact &&
     artifactRefs.length > 0 &&
     consentSurfaceGate.consentSurfaceObserved &&
-    consentSurfaceGate.stableRenderedState &&
-    consentSurfaceGate.visibleOrReachableSurface &&
     consentSurfaceGate.sameSurfaceCandidates &&
-    consentSurfaceGate.preChoiceState
+    consentSurfaceGate.preChoiceState &&
+    !consentSurfaceGate.hasExplicitPromotionSuppressor &&
+    consentSurfaceGateAllowsConsentUxPromotion(consentSurfaceGate)
   );
 }
 
