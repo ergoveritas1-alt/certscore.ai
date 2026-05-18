@@ -8,6 +8,324 @@ type HomepageFindingsOverviewProps = {
   findings: FindingReferenceItem[];
 };
 
+type HomepageFindingCarouselCopy = {
+  overview: string;
+  regulatoryLabel: string;
+  regulatoryCopy: string;
+  evidence: {
+    title: string;
+    lines: string[];
+  };
+  reviewPrompts: string[];
+};
+
+const HOMEPAGE_FINDING_CAROUSEL_COPY: Record<string, HomepageFindingCarouselCopy> = {
+  pre_consent_tracking_detected: {
+    overview:
+      "Runtime evidence ties a classified non-essential request or storage event to the page-load timeline before a recorded consent action or prior consent state.",
+    regulatoryLabel: "Consent timing before recorded choice",
+    regulatoryCopy:
+      "Useful for reviewing whether non-essential tracking, measurement, advertising, or storage began before a recorded choice point was observed.",
+    evidence: {
+      title: "Pre-consent timeline sample",
+      lines: [
+        "{\"artifact\":\"req_pre_consent_001\",\"role\":\"supporting\"}",
+        "{\"surface\":\"homepage\",\"consentState\":\"no_choice_observed\"}",
+        "{\"signal\":\"analytics_collect\",\"firstSeenMs\":3405,\"values\":\"redacted\"}"
+      ]
+    },
+    reviewPrompts: ["What was the first concrete pre-consent signal, and what retained timeline supports it?"]
+  },
+  visual_contrast_accessibility_issue: {
+    overview:
+      "Automated accessibility evidence flags text or UI controls whose retained contrast signal may need manual review against the affected state and element purpose.",
+    regulatoryLabel: "Accessibility contrast review",
+    regulatoryCopy:
+      "Useful for triaging likely WCAG contrast concerns while preserving the need to review text size, state, purpose, and exceptions.",
+    evidence: {
+      title: "Contrast evidence sample",
+      lines: [
+        "{\"artifact\":\"contrast_001\",\"rule\":\"color-contrast\"}",
+        "{\"surface\":\"pricing\",\"selector\":\"pricing-card muted copy\"}",
+        "{\"impact\":\"serious\",\"wcag\":\"1.4.3\",\"values\":\"not_public\"}"
+      ]
+    },
+    reviewPrompts: ["Which selector, component, page, and visual state produced the contrast evidence?"]
+  },
+  semantic_labeling_accessibility_issue: {
+    overview:
+      "Automated evidence identifies controls, fields, links, landmarks, or ARIA relationships where programmatic labels or semantics may not match user intent.",
+    regulatoryLabel: "Accessibility semantics review",
+    regulatoryCopy:
+      "Useful for reviewing whether labels, accessible names, roles, states, and relationships support assistive-technology use.",
+    evidence: {
+      title: "Semantic labeling sample",
+      lines: [
+        "{\"artifact\":\"semantic_001\",\"rule\":\"label\"}",
+        "{\"surface\":\"signup\",\"element\":\"email input\"}",
+        "{\"signal\":\"missing_or_unassociated_label\",\"wcag\":\"1.3.1/4.1.2\"}"
+      ]
+    },
+    reviewPrompts: ["Which element and programmatic relationship triggered the semantic-labeling evidence?"]
+  },
+  fingerprinting_related_signals_observed: {
+    overview:
+      "Runtime evidence shows one or more browser or device-signal observations relevant to fingerprinting review, but not enough for a probable cluster.",
+    regulatoryLabel: "Device/browser signal review",
+    regulatoryCopy:
+      "Useful for reviewing high-entropy collection, device access, minimization, purpose, disclosure, and whether signals are linked to identifiers.",
+    evidence: {
+      title: "Device-signal sample",
+      lines: [
+        "{\"artifact\":\"fp_related_001\",\"role\":\"supporting\"}",
+        "{\"signals\":[\"canvas_or_webgl\",\"storage\"],\"rawValues\":\"not_retained\"}",
+        "{\"clusterStrength\":\"related_not_probable\",\"purpose\":\"review\"}"
+      ]
+    },
+    reviewPrompts: ["Which browser or device signal categories were retained, and what script produced them?"]
+  },
+  session_recording_services_detected: {
+    overview:
+      "Runtime evidence shows a script, endpoint, or vendor pattern associated with session replay, heatmaps, recording, or behavior analytics.",
+    regulatoryLabel: "Session replay and behavior analytics review",
+    regulatoryCopy:
+      "Useful for reviewing consent posture, transparency, masking, sampling, payload behavior, page exclusions, and vendor configuration.",
+    evidence: {
+      title: "Replay vendor sample",
+      lines: [
+        "{\"artifact\":\"replay_req_001\",\"role\":\"supporting\"}",
+        "{\"surface\":\"public_page\",\"requestOrigin\":\"https://replay.example\"}",
+        "{\"signal\":\"replay_library_or_endpoint\",\"payloadValues\":\"not_retained\"}"
+      ]
+    },
+    reviewPrompts: ["Which script, request, endpoint, or vendor pattern triggered the replay signal?"]
+  },
+  third_party_cookie_pre_consent: {
+    overview:
+      "A third-party cookie or storage artifact was retained before CertScore recorded a matching consent action or prior consent state.",
+    regulatoryLabel: "Cookie/storage timing before choice",
+    regulatoryCopy:
+      "Useful for reviewing cookie consent timing, domain and scope, storage purpose, vendor role, necessity, exemptions, and regional configuration.",
+    evidence: {
+      title: "Third-party storage sample",
+      lines: [
+        "{\"artifact\":\"storage_001\",\"type\":\"cookie_observed\"}",
+        "{\"domain\":\".ads.example\",\"scope\":\"third_party\",\"value\":\"redacted\"}",
+        "{\"firstSeenMs\":1840,\"consentBeforeFirstSeen\":false}"
+      ]
+    },
+    reviewPrompts: ["Which cookie or storage key appeared, and what domain or scope set it?"]
+  },
+  rtb_cookie_sync_observed: {
+    overview:
+      "Network evidence shows adtech sync, match, redirect, or identifier-like request patterns that may indicate RTB or identity matching.",
+    regulatoryLabel: "Adtech sync and identity matching review",
+    regulatoryCopy:
+      "Useful for reviewing sync endpoints, identifier scope, redirects, consent timing, sale/share context, and vendor-governance questions.",
+    evidence: {
+      title: "Adtech sync sample",
+      lines: [
+        "{\"artifact\":\"sync_req_001\",\"role\":\"supporting\"}",
+        "{\"origin\":\"https://sync.ads.example\",\"path\":\"/user_sync\"}",
+        "{\"keys\":[\"uid\",\"partner_id\"],\"values\":\"redacted\"}"
+      ]
+    },
+    reviewPrompts: ["Which request origin, path, or redirect endpoint supported the sync classification?"]
+  },
+  text_alternative_accessibility_issue: {
+    overview:
+      "Automated evidence flags images, SVGs, icons, controls, or media elements whose text alternative may need manual accessibility review.",
+    regulatoryLabel: "Accessibility text-alternative review",
+    regulatoryCopy:
+      "Useful for triaging non-text content where reviewers must confirm whether the element is informative, functional, decorative, or redundant.",
+    evidence: {
+      title: "Text alternative sample",
+      lines: [
+        "{\"artifact\":\"alt_001\",\"rule\":\"image-alt\"}",
+        "{\"surface\":\"features\",\"element\":\"feature-card image\"}",
+        "{\"signal\":\"missing_text_alternative\",\"wcag\":\"1.1.1\"}"
+      ]
+    },
+    reviewPrompts: ["Which non-text element triggered the evidence, and what purpose does it serve?"]
+  },
+  consent_dark_patterns_detected: {
+    overview:
+      "Consent-surface evidence shows a cluster of choice-architecture signals such as nested refusal, forced interaction, hierarchy, or repeated prompts.",
+    regulatoryLabel: "Consent choice-architecture review",
+    regulatoryCopy:
+      "Useful for reviewing whether consent controls, labels, visual hierarchy, path depth, accessibility, and repetition affect user choice.",
+    evidence: {
+      title: "Choice architecture sample",
+      lines: [
+        "{\"artifact\":\"consent_ui_004\",\"component\":\"cookie_banner\"}",
+        "{\"signals\":[\"reject_path_nested\",\"accept_primary\",\"repeated_prompt\"]}",
+        "{\"accept\":\"Accept all\",\"rejectLocation\":\"preferences_layer\"}"
+      ]
+    },
+    reviewPrompts: ["Which consent-surface signals were retained, and how do they affect the choice path?"]
+  },
+  cpra_cba_opt_out_missing: {
+    overview:
+      "Public-surface and runtime evidence suggests advertising or sale/share review context, but no clear California privacy choice path was observed.",
+    regulatoryLabel: "California privacy choice review",
+    regulatoryCopy:
+      "Useful for reviewing Do Not Sell or Share, Your Privacy Choices, opt-out, GPC, footer, policy, and preference-center coverage.",
+    evidence: {
+      title: "Privacy choice sample",
+      lines: [
+        "{\"artifact\":\"privacy_choice_001\",\"surface\":\"footer_and_privacy_links\"}",
+        "{\"adOrCrossContextSignal\":true,\"dnsLinkObserved\":false}",
+        "{\"stateChoiceObserved\":false,\"gpcHandling\":\"not_determined\"}"
+      ]
+    },
+    reviewPrompts: ["Which public surface was retained, and what made the opt-out path relevant?"]
+  },
+  forced_consent_interaction: {
+    overview:
+      "Consent-surface evidence shows an overlay or prompt that appeared to block ordinary page access or require interaction before the scan continued.",
+    regulatoryLabel: "Forced consent interaction review",
+    regulatoryCopy:
+      "Useful for reviewing cookie-wall behavior, equivalent non-accept paths, page blocking, accessibility, necessity, and regional configuration.",
+    evidence: {
+      title: "Blocking overlay sample",
+      lines: [
+        "{\"artifact\":\"consent_ui_002\",\"component\":\"consent_overlay\"}",
+        "{\"ordinaryPageAccess\":\"blocked\",\"scrollState\":\"blocked_or_obscured\"}",
+        "{\"controls\":[\"Accept all\",\"Manage choices\"],\"dismissObserved\":false}"
+      ]
+    },
+    reviewPrompts: ["What prompt, overlay, modal, or interaction state was retained?"]
+  },
+  reject_option_missing_or_hidden: {
+    overview:
+      "Consent UI evidence shows an accept path while a reject, decline, or equivalent refusal control was absent or less direct on the observed layer.",
+    regulatoryLabel: "Reject path availability review",
+    regulatoryCopy:
+      "Useful for reviewing whether refusal is available, equally direct, accessible, and visible for the relevant region, language, and viewport.",
+    evidence: {
+      title: "Reject availability sample",
+      lines: [
+        "{\"artifact\":\"consent_ui_001\",\"component\":\"cookie_banner\"}",
+        "{\"layer\":\"initial\",\"accept\":\"Accept all\",\"rejectObserved\":false}",
+        "{\"preferences\":\"Manage choices\",\"consentActionObserved\":false}"
+      ]
+    },
+    reviewPrompts: ["Which consent layer and browser state produced the missing or hidden reject observation?"]
+  },
+  sensitive_data_collection_with_third_party_tracking_present: {
+    overview:
+      "Page-surface evidence for a sensitive form or context appears alongside third-party tracking, analytics, advertising, replay, or measurement activity.",
+    regulatoryLabel: "Sensitive surface tracking review",
+    regulatoryCopy:
+      "Useful for reviewing co-occurrence of sensitive contexts with vendors, payload behavior, minimization, consent state, and page-level exclusions.",
+    evidence: {
+      title: "Sensitive surface sample",
+      lines: [
+        "{\"artifact\":\"sensitive_tracking_001\",\"surface\":\"application_form\"}",
+        "{\"sensitiveContext\":\"financial_or_identity\",\"values\":\"not_retained\"}",
+        "{\"thirdPartyOrigin\":\"https://analytics.example\",\"payload\":\"redacted\"}"
+      ]
+    },
+    reviewPrompts: ["Which page, form, field, or flow produced the sensitive-context evidence?"]
+  },
+  asymmetric_consent_ui: {
+    overview:
+      "Consent-surface evidence shows accept and refusal choices that appear visually, procedurally, or structurally imbalanced in the observed flow.",
+    regulatoryLabel: "Imbalanced accept/reject choice review",
+    regulatoryCopy:
+      "Useful for reviewing step count, visual hierarchy, labels, same-layer availability, accessibility, localization, and CMP configuration.",
+    evidence: {
+      title: "Choice imbalance sample",
+      lines: [
+        "{\"artifact\":\"consent_ui_003\",\"component\":\"cookie_banner\"}",
+        "{\"accept\":{\"layer\":\"initial\",\"steps\":1},\"reject\":{\"layer\":\"settings\",\"steps\":3}}",
+        "{\"visualHierarchy\":\"accept_primary_vs_reject_secondary\",\"review\":\"manual\"}"
+      ]
+    },
+    reviewPrompts: ["What controls or paths were available for acceptance and refusal?"]
+  },
+  keyboard_navigation_accessibility_issue: {
+    overview:
+      "Automated accessibility evidence flags interactive elements, focus behavior, or custom controls that may require keyboard-operability review.",
+    regulatoryLabel: "Keyboard operability and focus review",
+    regulatoryCopy:
+      "Useful for reviewing focus visibility, focus order, keyboard operation, traps, custom controls, menus, modals, and responsive states.",
+    evidence: {
+      title: "Keyboard evidence sample",
+      lines: [
+        "{\"artifact\":\"keyboard_001\",\"rule\":\"keyboard\"}",
+        "{\"surface\":\"navigation\",\"element\":\"nav-menu trigger\"}",
+        "{\"signal\":\"keyboard_or_focus_review_needed\",\"wcag\":\"2.1.1/2.4.7\"}"
+      ]
+    },
+    reviewPrompts: ["Which selector, component, page, and interaction state triggered the keyboard evidence?"]
+  },
+  cross_domain_identifier_sharing_observed: {
+    overview:
+      "Outbound request evidence shows identifier-like keys or values moving from the site to a different domain or third-party context.",
+    regulatoryLabel: "Cross-domain identifier sharing review",
+    regulatoryCopy:
+      "Useful for reviewing identifier scope, destination role, purpose, consent timing, attribution, advertising, analytics, and vendor governance.",
+    evidence: {
+      title: "Identifier request sample",
+      lines: [
+        "{\"artifact\":\"identifier_req_001\",\"role\":\"supporting\"}",
+        "{\"source\":\"https://example.com\",\"destination\":\"https://measure.example\"}",
+        "{\"keys\":[\"client_id\",\"campaign_id\"],\"values\":\"redacted\"}"
+      ]
+    },
+    reviewPrompts: ["Which outbound request carried the identifier-like key or value?"]
+  },
+  reject_tracking_persists_after_reject: {
+    overview:
+      "Runtime evidence shows a reject-style interaction followed by classified non-essential request or storage activity in the same observed scope.",
+    regulatoryLabel: "Post-reject tracking effect review",
+    regulatoryCopy:
+      "Useful for reviewing whether rejection propagated to tags, vendors, cookies, storage, consent mode, queued beacons, and purpose controls.",
+    evidence: {
+      title: "Post-reject artifact sample",
+      lines: [
+        "{\"artifact\":\"post_reject_req_001\",\"role\":\"supporting\"}",
+        "{\"rejectObserved\":true,\"rejectMs\":2600,\"postRejectMs\":4120}",
+        "{\"origin\":\"https://analytics.example\",\"essentiality\":\"non_essential\"}"
+      ]
+    },
+    reviewPrompts: ["Was a reject-style interaction actually observed and timestamped?"]
+  },
+  possible_session_replay_on_sensitive_input_surface: {
+    overview:
+      "Replay-related runtime evidence appears on or near a form, flow, or page surface that may collect sensitive information.",
+    regulatoryLabel: "Replay near sensitive surface review",
+    regulatoryCopy:
+      "Useful for reviewing masking, page exclusions, active collection, visual capture, keystroke behavior, payload contents, and consent posture.",
+    evidence: {
+      title: "Replay near sensitive surface sample",
+      lines: [
+        "{\"artifact\":\"replay_sensitive_001\",\"surface\":\"application_form\"}",
+        "{\"replayOrigin\":\"https://replay.example\",\"path\":\"/collect\"}",
+        "{\"sensitiveContext\":\"financial_or_identity\",\"values\":\"not_retained\"}"
+      ]
+    },
+    reviewPrompts: ["Which replay runtime artifact and sensitive surface were retained together?"]
+  },
+  probable_fingerprinting: {
+    overview:
+      "Runtime evidence shows a clustered set of high-entropy browser or device signals that may warrant probable fingerprinting review.",
+    regulatoryLabel: "Probable fingerprinting cluster review",
+    regulatoryCopy:
+      "Useful for reviewing multi-signal entropy, purpose, device access, disclosure, consent state, minimization, identity linkage, and security context.",
+    evidence: {
+      title: "Fingerprinting cluster sample",
+      lines: [
+        "{\"artifact\":\"fp_cluster_001\",\"role\":\"supporting\"}",
+        "{\"signals\":[\"canvas_or_webgl\",\"audio\",\"storage\",\"screen_locale\"]}",
+        "{\"tier\":\"probable_review_signal\",\"rawValues\":\"not_retained\"}"
+      ]
+    },
+    reviewPrompts: ["Which high-entropy browser or device signal categories co-occurred?"]
+  }
+};
+
 function getFindingHref(findingId: string) {
   return `/guides/findings/${findingId}`;
 }
@@ -82,11 +400,13 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
     return null;
   }
 
-  const regulatoryLabel = activeFinding.regulatoryContext?.primaryConcern.label;
-  const regulatoryCopy = activeFinding.regulatoryContext?.primaryConcern.displayCopy;
+  const carouselCopy = HOMEPAGE_FINDING_CAROUSEL_COPY[activeFinding.id];
+  const findingOverview = carouselCopy?.overview ?? activeFinding.observed;
+  const regulatoryLabel = carouselCopy?.regulatoryLabel ?? activeFinding.regulatoryContext?.primaryConcern.label;
+  const regulatoryCopy = carouselCopy?.regulatoryCopy ?? activeFinding.regulatoryContext?.primaryConcern.displayCopy;
   const reviewLensBadges = getReviewLensBadges(activeFinding);
-  const evidence = getCondensedEvidence(activeFinding);
-  const visibleReviewQuestions = activeFinding.reviewQuestions.slice(0, 2);
+  const evidence = carouselCopy?.evidence ?? getCondensedEvidence(activeFinding);
+  const visibleReviewQuestions = (carouselCopy?.reviewPrompts ?? activeFinding.reviewQuestions).slice(0, 2);
 
   function showPrevious() {
     setActiveIndex((current) => (current === 0 ? findings.length - 1 : current - 1));
@@ -111,7 +431,7 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
             <div className="flex h-[22rem] flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-none">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Finding highlights</p>
               <p className="mt-2 line-clamp-3 text-[1.35rem] font-semibold tracking-tight text-slate-950">{activeFinding.title}</p>
-              <p className="mt-2 line-clamp-5 text-[13px] leading-5 text-slate-600">{activeFinding.observed}</p>
+              <p className="mt-2 line-clamp-5 text-[13px] leading-5 text-slate-600">{findingOverview}</p>
 
               <div className="mt-auto flex items-center gap-3 pt-4">
                 <button
@@ -157,14 +477,18 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                 </div>
                 <div>
                   <h3 className="text-2xl font-semibold tracking-tight text-slate-950">{activeFinding.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">{activeFinding.observed}</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">{findingOverview}</p>
                 </div>
                 {regulatoryLabel ? (
                   <div className="rounded-2xl border border-slate-200 bg-white p-4">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Brief regulatory context</p>
                     <p className="mt-2 text-sm font-semibold text-slate-950">{regulatoryLabel}</p>
                     <p className="mt-1 text-xs leading-5 text-slate-500">
-                      {regulatoryCopy ? `${regulatoryCopy.split(". ")[0]}.` : "Automated public-web signals for review, not a legal conclusion."}
+                      {regulatoryCopy
+                        ? carouselCopy
+                          ? regulatoryCopy
+                          : `${regulatoryCopy.split(". ")[0]}.`
+                        : "Automated public-web signals for review, not a legal conclusion."}
                     </p>
                     {reviewLensBadges.length > 0 ? (
                       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -186,7 +510,7 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                     <p className="text-xs font-semibold text-slate-100">{evidence.title}</p>
                     <div className="mt-2 space-y-1 font-mono text-[11px] leading-5 text-slate-300">
                       {evidence.lines.map((line) => (
-                        <p key={line}>{line}</p>
+                        <p key={line} className="break-all">{line}</p>
                       ))}
                     </div>
                   </div>
