@@ -12,8 +12,6 @@ This runbook describes the lower-cost AWS shape for CertScore while preserving t
 
 ## Cold or on-demand services
 
-- `certscore-validation-ops-web`
-- `certscore-validation-scheduler`
 - `certscore-validation-worker`
 - `ws01-scanner-worker`
 
@@ -76,7 +74,7 @@ The monitor checks:
 
 - `/api/health`
 - `/api/health/database`
-- configured ECS services from `OPS_ECS_SERVICE_TARGETS` or the `AWS_WEB_*`, `AWS_VALIDATION_*`, and `AWS_SCANNER_*` variables
+- configured ECS services from `OPS_ECS_SERVICE_TARGETS` or the active `AWS_WEB_*`, validation worker, and `AWS_SCANNER_*` variables
 - validation worker heartbeat when direct database checks are enabled and validation heartbeat checks are not disabled
 - scanner heartbeat when direct database checks are enabled and scanner heartbeat checks are not disabled
 - queued full scans older than `OPS_SCAN_QUEUE_STALE_MINUTES` when direct database checks are enabled

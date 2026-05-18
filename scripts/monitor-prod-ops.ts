@@ -324,14 +324,8 @@ function getEcsServiceTargets() {
     process.env.AWS_WEB_ECS_CLUSTER && process.env.AWS_WEB_CERTSCORE_SERVICE
       ? `${process.env.AWS_WEB_ECS_CLUSTER}/${process.env.AWS_WEB_CERTSCORE_SERVICE}`
       : null,
-    process.env.AWS_VALIDATION_ECS_CLUSTER && process.env.AWS_VALIDATION_ECS_WEB_SERVICE
-      ? `${process.env.AWS_VALIDATION_ECS_CLUSTER}/${process.env.AWS_VALIDATION_ECS_WEB_SERVICE}`
-      : null,
     process.env.AWS_VALIDATION_ECS_CLUSTER && process.env.AWS_VALIDATION_ECS_WORKER_SERVICE
       ? `${process.env.AWS_VALIDATION_ECS_CLUSTER}/${process.env.AWS_VALIDATION_ECS_WORKER_SERVICE}`
-      : null,
-    process.env.AWS_VALIDATION_ECS_CLUSTER && process.env.AWS_VALIDATION_ECS_SCHEDULER_SERVICE
-      ? `${process.env.AWS_VALIDATION_ECS_CLUSTER}/${process.env.AWS_VALIDATION_ECS_SCHEDULER_SERVICE}`
       : null,
     process.env.AWS_SCANNER_ECS_CLUSTER && process.env.AWS_SCANNER_ECS_SERVICE
       ? `${process.env.AWS_SCANNER_ECS_CLUSTER}/${process.env.AWS_SCANNER_ECS_SERVICE}`
