@@ -108,10 +108,10 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
               </h2>
             </div>
 
-            <div className="flex min-h-[245px] flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-none">
+            <div className="flex h-[22rem] flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-none">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Finding highlights</p>
-              <p className="mt-2 text-[1.35rem] font-semibold tracking-tight text-slate-950">{activeFinding.title}</p>
-              <p className="mt-2 text-[13px] leading-5 text-slate-600">{activeFinding.observed}</p>
+              <p className="mt-2 line-clamp-3 text-[1.35rem] font-semibold tracking-tight text-slate-950">{activeFinding.title}</p>
+              <p className="mt-2 line-clamp-5 text-[13px] leading-5 text-slate-600">{activeFinding.observed}</p>
 
               <div className="mt-auto flex items-center gap-3 pt-4">
                 <button
