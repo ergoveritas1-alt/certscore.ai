@@ -208,7 +208,8 @@ test("finding atlas browser renders evidence standards from atlas data", () => {
   assert.match(source, /function EvidenceStandard\(\{ finding \}/);
   assert.match(source, /const \{ evidenceStandard: standard \} = finding/);
   assert.match(source, /<section className="space-y-3">[\s\S]*<EvidenceExampleCards examples=\{finding\.exampleEvidence\} \/>[\s\S]*<\/section>[\s\S]*<RegulatoryReviewContext finding=\{finding\} \/>[\s\S]*<EvidenceStandard finding=\{finding\} \/>[\s\S]*Common causes/);
-  assert.match(source, /<summary[\s\S]*View sample JSON/);
+  assert.match(source, /<summary[\s\S]*View redacted sample JSON/);
+  assert.match(source, /<summary[\s\S]*Hide redacted sample JSON/);
   assert.match(source, /<EvidenceExampleCards examples=\{finding\.exampleEvidence\} \/>[\s\S]*<details id=\{`\$\{finding\.id\}-example-json`\}/);
   assert.doesNotMatch(source, /Vendor or request activity before consent/);
 });
@@ -227,6 +228,8 @@ test("reviewed finding reference pages render populated header and why-this-matt
       "Finding reference",
       finding.title,
       copy.pageDescription,
+      "Observed",
+      finding.observed,
       "Why this matters",
       whyThisMatters
     ].join("\n");
@@ -235,6 +238,86 @@ test("reviewed finding reference pages render populated header and why-this-matt
     assert.ok(copy.pageDescription.trim().length > 0, `${findingId} page description should be populated`);
     assert.ok(whyThisMatters.trim().length > 0, `${findingId} why-this-matters copy should be populated`);
     assert.doesNotMatch(renderedText, /\bundefined\b/, `${findingId} rendered reference text should not contain undefined`);
+    assert.ok(renderedText.indexOf("Observed") < renderedText.indexOf("Why this matters"), `${findingId} should render Observed before Why this matters`);
+  }
+});
+
+test("finding atlas index groups all reviewed findings with registry context", () => {
+  const source = readFileSync("apps/web/components/marketing/findings/finding-atlas-browser.tsx", "utf8");
+  const pageSource = readFileSync("apps/web/app/guides/findings/findings-reference-page.tsx", "utf8");
+
+  assert.match(pageSource, /CertScore's findings registry explains the automated observations/);
+  assert.match(pageSource, /How to read a finding/);
+  assert.match(pageSource, /Findings are automated public-web observations for review/);
+  assert.match(pageSource, /finding references are reviewed periodically/);
+  assert.match(source, /Consent and choice architecture/);
+  assert.match(source, /Third-party tracking and adtech/);
+  assert.match(source, /Fingerprinting and device signals/);
+  assert.match(source, /Privacy choice \/ CPRA/);
+  assert.match(source, /finding\.category[\s\S]*formatChipLabel\(finding\.criticality\)[\s\S]*finding\.benchmark\.contextLabel/);
+
+  for (const findingId of REVIEWED_FINDING_REFERENCE_IDS) {
+    assert.match(source, new RegExp(findingId), `${findingId} should be present in the grouped registry index`);
+  }
+});
+
+test("reference notes include content currency note", () => {
+  for (const finding of getFindingReferenceItems()) {
+    assert.match(getReferenceNotes(finding).join("\n"), /Finding reference content is reviewed periodically/);
+  }
+});
+
+test("finding atlas browser uses family-aware evidence footer text", () => {
+  const source = readFileSync("apps/web/components/marketing/findings/finding-atlas-browser.tsx", "utf8");
+
+  assert.match(source, /Evidence levels explain how CertScore treats retained accessibility artifacts\. They are not legal conclusions\./);
+  assert.match(source, /Evidence levels explain how CertScore treats retained consent-surface artifacts\. They are not legal conclusions\./);
+  assert.match(source, /Evidence levels explain how CertScore treats retained runtime artifacts\. They are not legal conclusions\./);
+  assert.match(source, /Evidence levels explain how CertScore treats retained public-surface and runtime artifacts\. They are not legal conclusions\./);
+});
+
+test("finding atlas browser uses clearer regulatory labels", () => {
+  const source = readFileSync("apps/web/components/marketing/findings/finding-atlas-browser.tsx", "utf8");
+
+  assert.match(source, /Legal and regulatory frameworks/);
+  assert.match(source, /More context in reference notes/);
+  assert.match(source, /Additional framework context appears in the Reference notes section near the bottom of this page/);
+  assert.doesNotMatch(source, />Technical standards</);
+  assert.doesNotMatch(source, /Additional context in notes/);
+});
+
+test("fingerprinting relationship callouts render only for the fingerprinting pair", () => {
+  const source = readFileSync("apps/web/components/marketing/findings/finding-atlas-browser.tsx", "utf8");
+
+  assert.match(source, /FINGERPRINTING_RELATIONSHIP_COPY/);
+  assert.match(source, /lower-tier fingerprinting\/device-signal review signal/);
+  assert.match(source, /higher-tier fingerprinting\/device-signal review signal/);
+  assert.match(source, /const copy = FINGERPRINTING_RELATIONSHIP_COPY\[finding\.id\]/);
+});
+
+test("common remediation approaches and prevalence notes are targeted", () => {
+  const source = readFileSync("apps/web/components/marketing/findings/finding-atlas-browser.tsx", "utf8");
+  const remediationIds = [
+    "pre_consent_tracking_detected",
+    "reject_tracking_persists_after_reject",
+    "rtb_cookie_sync_observed",
+    "probable_fingerprinting",
+    "sensitive_data_collection_with_third_party_tracking_present"
+  ];
+  const prevalenceIds = [
+    "pre_consent_tracking_detected",
+    "reject_tracking_persists_after_reject",
+    "rtb_cookie_sync_observed",
+    "probable_fingerprinting"
+  ];
+
+  assert.match(source, /Common remediation approaches/);
+  assert.match(source, /PREVALENCE_INTERPRETATION_NOTES/);
+  for (const findingId of remediationIds) {
+    assert.match(source, new RegExp(`${findingId}:`), `${findingId} should have remediation guidance`);
+  }
+  for (const findingId of prevalenceIds) {
+    assert.match(source, new RegExp(`${findingId}:`), `${findingId} should have a prevalence interpretation note`);
   }
 });
 
@@ -987,6 +1070,16 @@ test("runtime tracking hardening keeps titles and applicability copy cautious", 
   assert.match(crossDomainAppliesWhen, /identifier-like request signals may be relevant/);
 });
 
+test("public regulatory applicability copy avoids deterministic in-scope phrasing", () => {
+  const appliesWhenCopy = getFindingReferenceItems().flatMap((finding) => [
+    ...(finding.regulatoryContext?.technicalStandards ?? []).map((item) => item.appliesWhen),
+    ...(finding.regulatoryContext?.jurisdictionalContexts ?? []).map((item) => item.appliesWhen)
+  ]).join("\n");
+
+  assert.doesNotMatch(appliesWhenCopy, /\b(?:are|is) in scope\./);
+  assert.match(appliesWhenCopy, /may be in scope depending on/);
+});
+
 test("visual contrast atlas copy keeps automated evidence limits explicit", () => {
   const finding = getFindingReferenceItems().find((item) => item.id === "visual_contrast_accessibility_issue");
 
@@ -1039,7 +1132,7 @@ test("visual contrast atlas copy keeps automated evidence limits explicit", () =
 
   const source = readFileSync("apps/web/components/marketing/findings/finding-atlas-browser.tsx", "utf8");
   assert.match(source, /retained accessibility artifacts/);
-  assert.match(source, /computed color pair, contrast ratio, text-size classification, and visual state may require manual review or future retained-evidence enrichment/);
+  assert.doesNotMatch(source, /computed color pair, contrast ratio, text-size classification, and visual state may require manual review or future retained-evidence enrichment/);
 });
 
 test("pre-consent pilot remains the canonical finding reference template", () => {

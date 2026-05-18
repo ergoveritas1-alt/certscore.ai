@@ -32,7 +32,7 @@ const ACCESSIBILITY_JURISDICTIONAL_CONTEXTS: FindingRegulatoryContextItem[] = [
   {
     id: "ada_title_ii_web_mobile_accessibility",
     label: "ADA Title II web/mobile accessibility review",
-    appliesWhen: "State or local government web content or mobile apps are in scope.",
+    appliesWhen: "State or local government web content or mobile apps may be in scope depending on organization context, service context, and manual review.",
     sourceRefs: ["ada_title_ii_web_rule"]
   },
   {
@@ -44,19 +44,19 @@ const ACCESSIBILITY_JURISDICTIONAL_CONTEXTS: FindingRegulatoryContextItem[] = [
   {
     id: "section_508_ict_accessibility",
     label: "Section 508 ICT accessibility review",
-    appliesWhen: "Federal agency ICT, federal web content, or federal procurement/vendor review is in scope.",
+    appliesWhen: "Federal agency ICT, federal web content, or federal procurement/vendor review may be in scope depending on organization context, procurement context, and manual review.",
     sourceRefs: ["section_508_mapping"]
   },
   {
     id: "en_301_549_eu_accessibility",
     label: "EN 301 549 / EU accessibility review",
-    appliesWhen: "EU public-sector, procurement, Web Accessibility Directive, or European Accessibility Act service context is in scope.",
+    appliesWhen: "EU public-sector, procurement, Web Accessibility Directive, or European Accessibility Act service context may be in scope depending on organization context, service context, and manual review.",
     sourceRefs: ["eu_web_accessibility_directive_en_301_549", "eu_eaa"]
   },
   {
     id: "uk_public_sector_accessibility",
     label: "UK public-sector accessibility review",
-    appliesWhen: "UK public-sector website or mobile app is in scope.",
+    appliesWhen: "UK public-sector website or mobile app may be in scope depending on organization context, service context, and manual review.",
     sourceRefs: ["uk_public_sector_accessibility"]
   }
 ];
@@ -180,19 +180,19 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "eu_eprivacy_gdpr_tracking_consent",
         label: "EU ePrivacy/GDPR tracking consent review",
-        appliesWhen: "EU/EEA users, cookies, device access, analytics, advertising, or profiling are in scope.",
+        appliesWhen: "EU/EEA users, cookies, device access, analytics, advertising, or profiling may be in scope depending on purpose, consent state, jurisdictional context, and manual review.",
         sourceRefs: ["eprivacy_directive_article_5_3", "edpb_consent_guidelines"]
       },
       {
         id: "uk_pecr_cookie_consent_review",
         label: "UK PECR / ICO cookie consent review",
-        appliesWhen: "UK users and non-essential cookies or similar technologies are in scope.",
+        appliesWhen: "UK users and non-essential cookies or similar technologies may be in scope depending on purpose, consent state, jurisdictional context, and manual review.",
         sourceRefs: ["ico_cookies"]
       },
       {
         id: "ccpa_cpra_sale_share_or_targeted_ad_review",
         label: "CCPA/CPRA sale, share, or cross-context advertising review",
-        appliesWhen: "California users, advertising sharing, sale/share signals, or opt-out honoring are in scope.",
+        appliesWhen: "California users, advertising sharing, sale/share signals, or opt-out honoring may be in scope depending on purpose, user region, and manual review.",
         sourceRefs: ["california_oag_ccpa", "cppa_faq"]
       },
       {
@@ -378,13 +378,13 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "eu_cookie_consent_review",
         label: "EU cookie consent review",
-        appliesWhen: "EU/EEA users and non-essential cookies or storage are in scope.",
+        appliesWhen: "EU/EEA users and non-essential cookies or storage may be in scope depending on purpose, consent state, jurisdictional context, and manual review.",
         sourceRefs: ["eprivacy_directive_article_5_3", "edpb_cookie_banner_taskforce"]
       },
       {
         id: "uk_pecr_cookie_consent_review",
         label: "UK PECR / ICO cookie consent review",
-        appliesWhen: "UK users and non-essential cookies are in scope.",
+        appliesWhen: "UK users and non-essential cookies may be in scope depending on purpose, consent state, jurisdictional context, and manual review.",
         sourceRefs: ["ico_cookies"]
       },
       {
@@ -417,7 +417,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "gdpr_online_identifier_profiling_transparency_review",
         label: "GDPR online identifier, profiling, and transparency review",
-        appliesWhen: "Identifier sharing, profiling, advertising, or data-transfer review may be relevant where personal data or online identifiers are in scope.",
+        appliesWhen: "Identifier sharing, profiling, advertising, or data-transfer review may be relevant where personal data or online identifiers may be in scope depending on purpose, context, and manual review.",
         sourceRefs: ["gdpr_article_4", "gdpr_article_13", "gdpr_article_25"]
       }
     ],
@@ -431,7 +431,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "uk_pecr_adtech_cookie_review",
         label: "UK PECR adtech cookie/similar-technology review",
-        appliesWhen: "UK users and non-essential adtech cookies or similar technologies are in scope.",
+        appliesWhen: "UK users and non-essential adtech cookies or similar technologies may be in scope depending on purpose, consent state, jurisdictional context, and manual review.",
         sourceRefs: ["ico_cookies"]
       },
       {
@@ -820,7 +820,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "eu_gdpr_eprivacy_identifier_sharing_review",
         label: "EU GDPR/ePrivacy identifier sharing review",
-        appliesWhen: "EU/EEA users, online identifiers, profiling, cookies, or third-party sharing are in scope.",
+        appliesWhen: "EU/EEA users, online identifiers, profiling, cookies, or third-party sharing may be in scope depending on purpose, consent state, jurisdictional context, and manual review.",
         sourceRefs: ["gdpr_article_4", "eprivacy_directive_article_5_3"]
       },
       {
@@ -873,13 +873,13 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       {
         id: "eu_gdpr_eprivacy_post_reject_review",
         label: "EU GDPR/ePrivacy post-reject tracking review",
-        appliesWhen: "EU/EEA users and cookies, tracking, analytics, advertising, or profiling are in scope.",
+        appliesWhen: "EU/EEA users and cookies, tracking, analytics, advertising, or profiling may be in scope depending on purpose, consent state, jurisdictional context, and manual review.",
         sourceRefs: ["eprivacy_directive_article_5_3", "edpb_consent_guidelines"]
       },
       {
         id: "uk_pecr_post_reject_review",
         label: "UK PECR / ICO post-reject cookie review",
-        appliesWhen: "UK users and non-essential cookies or similar technologies are in scope.",
+        appliesWhen: "UK users and non-essential cookies or similar technologies may be in scope depending on purpose, consent state, jurisdictional context, and manual review.",
         sourceRefs: ["ico_cookies"]
       },
       {

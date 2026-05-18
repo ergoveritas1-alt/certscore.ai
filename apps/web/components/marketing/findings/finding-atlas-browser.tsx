@@ -402,6 +402,127 @@ const EVIDENCE_STANDARD_SECTIONS: Array<{
   { key: "insufficient", title: "Insufficient" }
 ];
 
+const CONSENT_UI_FINDING_IDS = new Set([
+  "reject_option_missing_or_hidden",
+  "forced_consent_interaction",
+  "asymmetric_consent_ui",
+  "consent_dark_patterns_detected"
+]);
+
+const RUNTIME_ARTIFACT_FINDING_IDS = new Set([
+  "pre_consent_tracking_detected",
+  "third_party_cookie_pre_consent",
+  "reject_tracking_persists_after_reject",
+  "rtb_cookie_sync_observed",
+  "cross_domain_identifier_sharing_observed",
+  "session_recording_services_detected",
+  "possible_session_replay_on_sensitive_input_surface",
+  "sensitive_data_collection_with_third_party_tracking_present",
+  "fingerprinting_related_signals_observed",
+  "probable_fingerprinting"
+]);
+
+const FINGERPRINTING_RELATIONSHIP_COPY: Record<string, string> = {
+  fingerprinting_related_signals_observed:
+    "This finding is the lower-tier fingerprinting/device-signal review signal. It is used when retained evidence shows browser or device signal collection that may warrant review, but the retained cluster does not support the higher-tier probable fingerprinting finding. A site may show this finding on its own, or alongside probable fingerprinting when stronger multi-category clustering is also retained.",
+  probable_fingerprinting:
+    "This finding is the higher-tier fingerprinting/device-signal review signal. It is used when retained evidence shows a stronger clustered set of high-entropy browser or device signals, such as multiple signal categories or stronger corroboration, that may warrant probable fingerprinting review. A site may also show the related lower-tier fingerprinting signal when additional device-signal context is retained."
+};
+
+const COMMON_REMEDIATION_APPROACHES: Record<string, string[]> = {
+  pre_consent_tracking_detected: [
+    "Teams commonly review whether consent mode or CMP state is initialized before the tag manager or vendor scripts can fire.",
+    "Tag-manager triggers may need to be gated on consent-state variables rather than page-load timing alone.",
+    "CMP event listeners are often reviewed to confirm that analytics, advertising, measurement, and replay vendors are blocked until the intended consent state is available.",
+    "Clean-profile testing with the browser network panel open can help compare the first non-essential request timestamp against banner visibility and consent-state observations.",
+    "Regional CMP configuration should be tested separately where consent behavior varies by geography."
+  ],
+  reject_tracking_persists_after_reject: [
+    "Teams commonly replay the reject path with the browser network panel open and compare pre-reject and post-reject request timing.",
+    "CMP-to-tag-manager propagation is often reviewed to confirm that reject state reaches the data layer, consent mode, and vendor trigger conditions.",
+    "Queued or delayed beacons may need special review because a request can fire after reject even if it was initiated before the choice.",
+    "Cookie and storage behavior should be reviewed to confirm whether non-essential identifiers are cleared, suppressed, or not written after reject.",
+    "Regional CMP variants should be tested separately where reject behavior differs by jurisdiction or language."
+  ],
+  rtb_cookie_sync_observed: [
+    "Teams commonly audit which programmatic advertising tags, header-bidding wrappers, or adtech adapters trigger sync-style requests.",
+    "Header bidding initialization, including Prebid-style adapter loading, may need review against consent state and vendor-suppression rules.",
+    "Audience manager, DMP, retargeting, and identity-match integrations should be reviewed for sync, match, or redirect endpoints.",
+    "Sync endpoints may need to be suppressed until the relevant consent or opt-out state has been evaluated.",
+    "Privacy and adtech teams should compare observed sync-chain behavior with the site's privacy disclosures and vendor list."
+  ],
+  probable_fingerprinting: [
+    "Teams commonly identify which script, SDK, or vendor owns the high-entropy signal cluster by reviewing initiator chains and retained request anchors.",
+    "Fraud-prevention, bot-detection, security, analytics, and identity SDKs should be reviewed for purpose, necessity, and configuration options.",
+    "Vendors may need to explain whether high-entropy browser or device attributes are necessary for the stated purpose and whether collection can be minimized.",
+    "Teams should review whether consent gating or purpose-based suppression applies to the identified script or endpoint.",
+    "Raw device attribute values, identifiers, and payloads should remain out of public evidence while preserving stable anchors for review."
+  ],
+  sensitive_data_collection_with_third_party_tracking_present: [
+    "Teams commonly review page-level tag exclusions for sensitive form pages, account flows, application flows, and other high-review surfaces.",
+    "Session replay and analytics vendors should be reviewed for field masking, event suppression, and page-exclusion settings on sensitive inputs.",
+    "Analytics event tracking should be tested on the specific form page, not only the homepage or shared template.",
+    "Tag-manager rules should be reviewed to confirm that sensitive pages do not inherit unnecessary advertising, replay, or measurement tags.",
+    "Payload and event-name review may help confirm whether only co-occurrence is present or whether field-level transmission requires deeper review."
+  ]
+};
+
+const PREVALENCE_INTERPRETATION_NOTES: Record<string, string> = {
+  pre_consent_tracking_detected:
+    "Directionally, this is one of the more common findings in the calibration set. It suggests that consent-timing enforcement remains a recurring implementation challenge across public websites.",
+  reject_tracking_persists_after_reject:
+    "This pattern appears less often in the calibration set, but it can be higher-priority when observed because it concerns behavior after an explicit reject-style interaction rather than only initial consent timing.",
+  rtb_cookie_sync_observed:
+    "This prevalence is concentrated around adtech-heavy implementations. The signal is most relevant where programmatic advertising, identity matching, or audience-management integrations are active.",
+  probable_fingerprinting:
+    "This is rare in the calibration set and uses a higher evidence bar than a single device-signal observation. When present, it indicates a stronger multi-signal cluster that may warrant focused fingerprinting review."
+};
+
+const FINDING_REGISTRY_GROUPS: Array<{
+  title: string;
+  findingIds: string[];
+}> = [
+  {
+    title: "Consent and choice architecture",
+    findingIds: [
+      "pre_consent_tracking_detected",
+      "reject_tracking_persists_after_reject",
+      "third_party_cookie_pre_consent",
+      "forced_consent_interaction",
+      "reject_option_missing_or_hidden",
+      "asymmetric_consent_ui",
+      "consent_dark_patterns_detected"
+    ]
+  },
+  {
+    title: "Third-party tracking and adtech",
+    findingIds: [
+      "session_recording_services_detected",
+      "possible_session_replay_on_sensitive_input_surface",
+      "sensitive_data_collection_with_third_party_tracking_present",
+      "rtb_cookie_sync_observed",
+      "cross_domain_identifier_sharing_observed"
+    ]
+  },
+  {
+    title: "Fingerprinting and device signals",
+    findingIds: ["probable_fingerprinting", "fingerprinting_related_signals_observed"]
+  },
+  {
+    title: "Accessibility",
+    findingIds: [
+      "visual_contrast_accessibility_issue",
+      "semantic_labeling_accessibility_issue",
+      "text_alternative_accessibility_issue",
+      "keyboard_navigation_accessibility_issue"
+    ]
+  },
+  {
+    title: "Privacy choice / CPRA",
+    findingIds: ["cpra_cba_opt_out_missing"]
+  }
+];
+
 const PRIVACY_RELATED_READING = [
   { href: "/guides/pre-consent-tracking", label: "Tracking before consent" },
   { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement" },
@@ -466,6 +587,26 @@ function getRelatedReadingLinks(finding: FindingReferenceItem) {
   return PRIVACY_RELATED_READING;
 }
 
+function getEvidenceStandardNote(finding: FindingReferenceItem) {
+  if (finding.category === "Accessibility") {
+    return "Evidence levels explain how CertScore treats retained accessibility artifacts. They are not legal conclusions.";
+  }
+
+  if (CONSENT_UI_FINDING_IDS.has(finding.id)) {
+    return "Evidence levels explain how CertScore treats retained consent-surface artifacts. They are not legal conclusions.";
+  }
+
+  if (finding.id === "cpra_cba_opt_out_missing") {
+    return "Evidence levels explain how CertScore treats retained public-surface and runtime artifacts. They are not legal conclusions.";
+  }
+
+  if (RUNTIME_ARTIFACT_FINDING_IDS.has(finding.id)) {
+    return "Evidence levels explain how CertScore treats retained runtime artifacts. They are not legal conclusions.";
+  }
+
+  return "Evidence levels explain how CertScore treats retained review artifacts. They are not legal conclusions.";
+}
+
 function EvidenceStandard({ finding }: { finding: FindingReferenceItem }) {
   const { evidenceStandard: standard } = finding;
 
@@ -473,13 +614,7 @@ function EvidenceStandard({ finding }: { finding: FindingReferenceItem }) {
     return null;
   }
 
-  const note = finding.id === "visual_contrast_accessibility_issue"
-    ? "Evidence levels explain how CertScore treats retained accessibility artifacts. They are not legal conclusions. Fields such as computed color pair, contrast ratio, text-size classification, and visual state may require manual review or future retained-evidence enrichment when not present in the automated artifact."
-    : finding.category === "Accessibility"
-      ? "Evidence levels explain how CertScore treats retained accessibility artifacts. They are not legal conclusions. Assistive-technology behavior, keyboard paths, semantic intent, and remediation quality may require manual review or future retained-evidence enrichment when not present in the automated artifact."
-      : finding.category === "Consent" || finding.category === "Consumer protection"
-        ? "Evidence levels explain how CertScore treats retained consent-surface artifacts. They are not legal conclusions. Equivalent choice paths, regional configuration, accessibility, user impact, and legal interpretation require manual review."
-    : "Evidence levels explain how CertScore treats retained runtime artifacts. They are not legal conclusions.";
+  const note = getEvidenceStandardNote(finding);
 
   return (
     <section className="border border-slate-200 bg-slate-50 p-4">
@@ -548,8 +683,11 @@ function RegulatoryReviewContext({ finding }: { finding: FindingReferenceItem })
           </span>
         ))}
         {hiddenCount > 0 ? (
-          <span className="border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
-            Additional context in notes
+          <span
+            className="border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500"
+            title="Additional framework context appears in the Reference notes section near the bottom of this page."
+          >
+            More context in reference notes
           </span>
         ) : null}
       </div>
@@ -560,7 +698,7 @@ function RegulatoryReviewContext({ finding }: { finding: FindingReferenceItem })
         </summary>
         <div className="mt-3 grid gap-3 text-sm leading-6 text-slate-600 lg:grid-cols-2">
           <div>
-            <h4 className="font-semibold text-slate-950">Technical standards</h4>
+            <h4 className="font-semibold text-slate-950">Legal and regulatory frameworks</h4>
             <ul className="mt-2 space-y-2">
               {context.technicalStandards.map((item) => (
                 <li key={item.id}>
@@ -603,6 +741,52 @@ function LimitationsContext({ finding }: { finding: FindingReferenceItem }) {
         <BulletList items={finding.limitations} />
       </div>
     </section>
+  );
+}
+
+function FingerprintingRelationshipCallout({ finding }: { finding: FindingReferenceItem }) {
+  const copy = FINGERPRINTING_RELATIONSHIP_COPY[finding.id];
+
+  if (!copy) {
+    return null;
+  }
+
+  return (
+    <section className="border border-indigo-100 bg-indigo-50 p-4">
+      <h3 className="text-sm font-semibold text-slate-950">Finding relationship</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-700">{copy}</p>
+    </section>
+  );
+}
+
+function CommonRemediationApproaches({ finding }: { finding: FindingReferenceItem }) {
+  const approaches = COMMON_REMEDIATION_APPROACHES[finding.id];
+
+  if (!approaches) {
+    return null;
+  }
+
+  return (
+    <section className="border border-slate-200 bg-white p-4">
+      <h3 className="text-sm font-semibold text-slate-950">Common remediation approaches</h3>
+      <div className="mt-3">
+        <BulletList items={approaches} />
+      </div>
+    </section>
+  );
+}
+
+function PrevalenceInterpretationNote({ finding }: { finding: FindingReferenceItem }) {
+  const note = PREVALENCE_INTERPRETATION_NOTES[finding.id];
+
+  if (!note) {
+    return null;
+  }
+
+  return (
+    <p className="border-l-2 border-sky-200 pl-3 text-sm leading-6 text-slate-600">
+      {note}
+    </p>
   );
 }
 
@@ -711,7 +895,11 @@ function FindingReferenceSection({
               </span>
             ))}
           </div>
-          <p className="text-base leading-7 text-slate-600">{finding.observed}</p>
+          <PrevalenceInterpretationNote finding={finding} />
+          <section>
+            <h3 className="text-sm font-semibold text-slate-950">Observed</h3>
+            <p className="mt-2 text-base leading-7 text-slate-600">{finding.observed}</p>
+          </section>
         </div>
 
         <section className="border border-sky-100 bg-sky-50 p-4">
@@ -722,6 +910,8 @@ function FindingReferenceSection({
         </section>
 
         <MethodologyContext finding={finding} />
+
+        <FingerprintingRelationshipCallout finding={finding} />
 
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -740,7 +930,8 @@ function FindingReferenceSection({
           <details id={`${finding.id}-example-json`} className="group">
             <summary className="inline-flex h-10 cursor-pointer list-none items-center justify-center gap-2 rounded-md border border-slate-950 bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden">
               <JsonIcon />
-              <span>View sample JSON</span>
+              <span className="group-open:hidden">View redacted sample JSON</span>
+              <span className="hidden group-open:inline">Hide redacted sample JSON</span>
             </summary>
             <div className="mt-3">
               <EvidenceBlock title="Redacted sample JSON" code={sampleJson} />
@@ -752,20 +943,21 @@ function FindingReferenceSection({
 
         <EvidenceStandard finding={finding} />
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <section className="border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-slate-950">Common causes</h3>
-            <div className="mt-3">
-              <BulletList items={finding.commonCauses} />
-            </div>
-          </section>
-          <section className="border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-slate-950">Recommended review questions</h3>
-            <div className="mt-3">
-              <BulletList items={finding.reviewQuestions} />
-            </div>
-          </section>
-        </div>
+        <section className="border border-slate-200 bg-white p-4">
+          <h3 className="text-sm font-semibold text-slate-950">Common causes</h3>
+          <div className="mt-3">
+            <BulletList items={finding.commonCauses} />
+          </div>
+        </section>
+
+        <CommonRemediationApproaches finding={finding} />
+
+        <section className="border border-slate-200 bg-white p-4">
+          <h3 className="text-sm font-semibold text-slate-950">Recommended review questions</h3>
+          <div className="mt-3">
+            <BulletList items={finding.reviewQuestions} />
+          </div>
+        </section>
 
         <LimitationsContext finding={finding} />
       </div>
@@ -790,6 +982,15 @@ export function FindingAtlasBrowser({ findings, compact = false, initialFindingI
   }
 
   const relatedReadingLinks = getRelatedReadingLinks(activeFinding);
+  const findingsById = new Map(findings.map((finding) => [finding.id, finding]));
+  const groupedFindings = FINDING_REGISTRY_GROUPS.map((group) => ({
+    ...group,
+    findings: group.findingIds.flatMap((findingId) => {
+      const finding = findingsById.get(findingId);
+
+      return finding ? [finding] : [];
+    })
+  })).filter((group) => group.findings.length > 0);
 
   return (
     <div className="space-y-8">
@@ -798,25 +999,40 @@ export function FindingAtlasBrowser({ findings, compact = false, initialFindingI
           <aside className="min-w-0 border-b border-slate-200 bg-slate-50 lg:border-b-0 lg:border-r">
             <div className="min-w-0 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Registry index</p>
-              <div className="mt-3 grid max-h-[14rem] gap-2 overflow-y-auto pr-1 lg:max-h-[34rem]">
-                {findings.map((finding) => {
-                  const isActive = finding.id === activeFinding.id;
+              <div className="mt-3 max-h-[16rem] space-y-4 overflow-y-auto pr-1 lg:max-h-[38rem]">
+                {groupedFindings.map((group) => (
+                  <section key={group.title} className="space-y-2">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      {group.title}
+                    </h3>
+                    <div className="grid gap-2">
+                      {group.findings.map((finding) => {
+                        const isActive = finding.id === activeFinding.id;
 
-                  return (
-                    <Link
-                      key={finding.id}
-                      href={getFindingReferenceHref(finding.id)}
-                      onClick={() => setActiveFindingId(finding.id)}
-                      className={
-                        isActive
-                          ? "block w-full min-w-0 border border-slate-950 bg-slate-950 px-3 py-3 text-left text-white"
-                          : "block w-full min-w-0 border border-slate-200 bg-white px-3 py-3 text-left text-slate-800 hover:border-sky-200 hover:bg-sky-50"
-                      }
-                    >
-                      <span className="block break-words text-sm font-semibold leading-5">{finding.title}</span>
-                    </Link>
-                  );
-                })}
+                        return (
+                          <Link
+                            key={finding.id}
+                            href={getFindingReferenceHref(finding.id)}
+                            onClick={() => setActiveFindingId(finding.id)}
+                            className={
+                              isActive
+                                ? "block w-full min-w-0 border border-slate-950 bg-slate-950 px-3 py-3 text-left text-white"
+                                : "block w-full min-w-0 border border-slate-200 bg-white px-3 py-3 text-left text-slate-800 hover:border-sky-200 hover:bg-sky-50"
+                            }
+                          >
+                            <span className="block break-words text-sm font-semibold leading-5">{finding.title}</span>
+                            <span className={isActive ? "mt-2 block text-xs leading-5 text-slate-300" : "mt-2 block text-xs leading-5 text-slate-500"}>
+                              {finding.category} · {formatChipLabel(finding.criticality)}
+                            </span>
+                            <span className={isActive ? "mt-2 inline-block border border-slate-600 px-2 py-0.5 text-[11px] font-semibold text-slate-200" : "mt-2 inline-block border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-500"}>
+                              {finding.benchmark.contextLabel}
+                            </span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
               </div>
             </div>
           </aside>

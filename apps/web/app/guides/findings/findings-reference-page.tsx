@@ -38,7 +38,8 @@ function getPagePath(activeFinding?: FindingReferenceItem) {
 export function getReferenceNotes(activeFinding?: FindingReferenceItem) {
   const commonNotes = [
     "CertScore uses findings, evidence, signals, and observations consistently: signals are raw runtime or page-surface events, evidence is retained support, observations are interpreted evidence context, and findings are promoted review items.",
-    "Findings are runtime evidence and public-surface observations for review. Observed signals may surface possible concerns, but review is recommended before operational or legal reliance."
+    "Findings are runtime evidence and public-surface observations for review. Observed signals may surface possible concerns, but review is recommended before operational or legal reliance.",
+    "Finding reference content is reviewed periodically and updated when material guidance changes. CertScore monitors guidance families such as EDPB consent and ePrivacy materials, ICO cookie guidance, CNIL tracker recommendations, FTC privacy and dark-pattern materials, and relevant accessibility guidance where applicable."
   ];
 
   if (activeFinding?.category === "Accessibility") {
@@ -214,7 +215,28 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
         </h1>
         {activeFinding ? (
           <p className="text-base leading-7 text-slate-600">{pageDescription}</p>
-        ) : null}
+        ) : (
+          <div className="space-y-4 text-base leading-7 text-slate-600">
+            <p>
+              CertScore's findings registry explains the automated observations that may appear in a public website scan. It is designed for privacy engineers, legal and compliance teams, accessibility reviewers, and product teams that need to understand what a finding means before taking action.
+            </p>
+            <p>
+              Each finding page describes what CertScore observed, how the evidence is evaluated, what does and does not count, and what reviewers should check next. The examples are sanitized public-reference examples, not raw customer data.
+            </p>
+            <p>
+              Findings are automated public-web observations for review. They are not legal conclusions, certifications, compliance determinations, or proof of non-compliance.
+            </p>
+            <div className="border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+              <h2 className="text-sm font-semibold text-slate-950">How to read a finding</h2>
+              <p className="mt-2">
+                Use the badges and evidence tiers together: criticality describes review priority, confidence describes evidence strength, prevalence gives directional calibration context, and regulatory context shows review lenses that may be relevant depending on jurisdiction, purpose, and manual review.
+              </p>
+            </div>
+            <p className="text-sm leading-6 text-slate-500">
+              CertScore's finding references are reviewed periodically and updated when material regulatory or accessibility guidance changes. Guidance families monitored include EDPB consent and ePrivacy materials, ICO cookie guidance, CNIL tracker recommendations, FTC privacy and dark-pattern materials, CPRA/privacy-choice materials, and accessibility guidance where applicable.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="mt-10">
