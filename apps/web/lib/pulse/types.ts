@@ -15,6 +15,7 @@ export type PulseJobStatus =
 export type PulseCoverageStatus = "complete" | "partial" | "limited" | "blocked" | "unknown";
 export type PulseFeedbackRating = (typeof PULSE_FEEDBACK_RATINGS)[number];
 export type PulseFeedbackReason = (typeof PULSE_FEEDBACK_REASONS)[number];
+export type PulseAgentResponseClass = "completed_pulse" | "pending_pulse" | "api_error" | "rate_limited";
 
 export type PulseRequestContext = {
   apiKeyId?: string | null;

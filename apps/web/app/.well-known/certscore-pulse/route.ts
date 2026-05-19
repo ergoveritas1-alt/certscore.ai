@@ -18,11 +18,23 @@ const discoveryDocument = {
   openapi: "https://certscore.ai/api/v1/openapi.json",
   chatgptOpenapi: "https://certscore.ai/api/v1/openapi.chatgpt.json",
   docs: "https://certscore.ai/api-pulse",
+  agentGuide: "https://certscore.ai/api-pulse-agent-guide.txt",
+  selfTest: "https://certscore.ai/api/v1/pulse-self-test",
+  health: "https://certscore.ai/api/v1/pulse-health",
   formats: ["json", "markdown"],
   detailLevels: ["tiny", "standard", "full"],
   detailAliases: { quick: "tiny" },
   example: "https://certscore.ai/api/v1/pulse?url=https://example.com",
   statusExample: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
+  recommendedCalls: {
+    userFacingSummary: "GET /api/v1/pulse?url=https://example.com&format=markdown&detail=standard",
+    quickMachineTriage: "GET /api/v1/pulse?url=https://example.com&detail=tiny",
+    evidenceReview: "GET /api/v1/pulse?url=https://example.com&detail=full",
+    connectivityCheck: "GET /api/v1/pulse-self-test",
+    healthCheck: "GET /api/v1/pulse-health"
+  },
+  agentFetchLimitations:
+    "Some agent environments may fail before receiving an HTTP response because of DNS, sandbox, TLS, proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or x-certscore-* diagnostic headers, do not conclude CertScore Pulse is unavailable. First try /api/v1/pulse-self-test, /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and /api/v1/openapi.chatgpt.json. If those also fail without HTTP status or CertScore diagnostic headers, report it as a client/network fetch limitation rather than a CertScore API result.",
   feedbackEmail: "support@certscore.ai",
   disclaimer: "Automated public-web observations for review. Not legal advice, certification, or a compliance determination."
 } as const;

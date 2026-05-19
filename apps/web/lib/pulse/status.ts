@@ -9,6 +9,7 @@ import {
   PULSE_STATUS_STEPS,
   PULSE_VERSION
 } from "./constants";
+import { buildPulseAgentInterpretation } from "./agent-interpretation";
 
 type PulseStatusInput = {
   jobId: string;
@@ -67,6 +68,19 @@ function defaultMessage(status: string, phase: string) {
   return "Pulse scan request is queued.";
 }
 
+function responseClassForStatus(status: string) {
+  if (status === "completed" || status === "completed_limited") {
+    return "completed_pulse" as const;
+  }
+  if (status === "rate_limited") {
+    return "rate_limited" as const;
+  }
+  if (status === "failed" || status === "expired") {
+    return "api_error" as const;
+  }
+  return "pending_pulse" as const;
+}
+
 export function buildPulseStatus(input: PulseStatusInput) {
   const phase = publicPhase(input.status, input.phase);
   const phaseIndex = Math.max(0, PULSE_STATUS_STEPS.indexOf(phase as (typeof PULSE_STATUS_STEPS)[number]));
@@ -109,6 +123,10 @@ export function buildPulseStatus(input: PulseStatusInput) {
     reportUrl,
     retryAfterSeconds: input.status === "rate_limited" ? input.retryAfterSeconds ?? null : null,
     capabilities: PULSE_CAPABILITIES,
+    agentInterpretation: buildPulseAgentInterpretation({
+      responseClass: responseClassForStatus(input.status),
+      safeSummaryUse: input.status === "completed" || input.status === "completed_limited"
+    }),
     disclaimer: PULSE_STANDARD_DISCLAIMER
   };
 }

@@ -94,6 +94,15 @@ Basic HTTP agent quick start:
 5. If the request fails before status/body/headers are visible, open:
    https://certscore.ai/api-pulse-agent-guide.txt
 
+Recommended calls:
+- User-facing summary: GET /api/v1/pulse?url=https://example.com&format=markdown&detail=standard
+- Quick machine triage: GET /api/v1/pulse?url=https://example.com&detail=tiny
+- Evidence/deeper review: GET /api/v1/pulse?url=https://example.com&detail=full
+- Connectivity check: GET /api/v1/pulse-self-test
+- Health check: GET /api/v1/pulse-health
+
+Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Full is best for evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.
+
 OpenAPI / GPT Action quick start:
 1. If you support OpenAPI actions/tools, import:
    https://certscore.ai/api/v1/openapi.chatgpt.json
@@ -122,6 +131,12 @@ The detail=quick query value is accepted as an alias for detail=tiny.
 Status:
 https://certscore.ai/api/v1/pulse/status/<jobId>
 
+Self-test:
+https://certscore.ai/api/v1/pulse-self-test
+
+Health:
+https://certscore.ai/api/v1/pulse-health
+
 Wait behavior:
 The wait query parameter accepts 0 to 80 seconds. It only controls how long the current HTTP request may be held open. Queue backlog, worker availability, page load time, and scan finalization can make total completion take longer than 80 seconds. If the API returns HTTP 202, poll the status URL until completed.
 
@@ -148,7 +163,8 @@ Send comments to support@certscore.ai or use the feedbackUrl included in Pulse r
 
 Guidance:
 Treat CertScore outputs as automated public-web observations for review, not legal advice, certification, or compliance determinations. Results may be incomplete or contain errors. Do not treat absence of findings as proof of compliance.
-If a fetch tool reports an internal error and cannot show x-certscore-pulse: v1 plus x-certscore-route, treat that as a client fetch/DNS failure rather than proof that CertScore returned the error.
+Agent fetch limitations:
+Some agent environments may fail before receiving an HTTP response because of DNS, sandbox, TLS, proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or x-certscore-* diagnostic headers, do not conclude CertScore Pulse is unavailable. First try /api/v1/pulse-self-test, /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and /api/v1/openapi.chatgpt.json. If those also fail without HTTP status or CertScore diagnostic headers, report it as a client/network fetch limitation rather than a CertScore API result.
 For a Custom GPT Action, import https://certscore.ai/api/v1/openapi.chatgpt.json. Prefer operation getPulseForUrl with format=markdown for user-facing answers, detail=tiny for compact checks, and detail=full only when the user asks for evidence or additional review context.
 
 ## Important disclaimer

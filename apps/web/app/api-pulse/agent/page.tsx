@@ -17,6 +17,7 @@ export const metadata: Metadata = createPageMetadata({
 });
 
 const endpoints = [
+  ["Self-test canary", "https://certscore.ai/api/v1/pulse-self-test"],
   ["Health canary", "https://certscore.ai/api/v1/pulse-health"],
   ["OpenAPI JSON", "https://certscore.ai/api/v1/openapi.json"],
   ["ChatGPT Action schema", "https://certscore.ai/api/v1/openapi.chatgpt.json"],
@@ -30,9 +31,17 @@ const endpoints = [
 
 const expectedHeaders = [
   "x-certscore-pulse: v1",
-  "x-certscore-route: pulse-health | openapi | openapi-chatgpt | discovery | pulse | pulse-status",
+  "x-certscore-route: pulse-self-test | pulse-health | openapi | openapi-chatgpt | discovery | pulse | pulse-status",
   "x-certscore-request-id: <uuid>"
 ];
+
+const recommendedCalls = [
+  ["User-facing summary", "GET /api/v1/pulse?url=https://example.com&format=markdown&detail=standard"],
+  ["Quick machine triage", "GET /api/v1/pulse?url=https://example.com&detail=tiny"],
+  ["Evidence/deeper review", "GET /api/v1/pulse?url=https://example.com&detail=full"],
+  ["Connectivity check", "GET /api/v1/pulse-self-test"],
+  ["Health check", "GET /api/v1/pulse-health"]
+] as const;
 
 export default function PulseAgentFallbackPage() {
   return (
@@ -75,6 +84,19 @@ export default function PulseAgentFallbackPage() {
             </li>
             <li>If API fetch fails before headers, body, or status are visible, do not infer CertScore returned an error.</li>
           </ol>
+          <h3 className="mt-5 font-semibold text-slate-950">Recommended calls</h3>
+          <div className="mt-3 divide-y divide-sky-100 rounded-lg border border-sky-100 bg-white">
+            {recommendedCalls.map(([label, call]) => (
+              <div key={call} className="grid gap-2 p-3 md:grid-cols-[12rem_1fr]">
+                <p className="font-semibold text-slate-900">{label}</p>
+                <code className="break-all rounded bg-slate-50 px-2 py-1 text-slate-800">{call}</code>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3">
+            Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Full is best for
+            evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.
+          </p>
           <h3 className="mt-5 font-semibold text-slate-950">OpenAPI / GPT Action agents</h3>
           <ol className="mt-3 list-decimal space-y-2 pl-5">
             <li>
@@ -106,6 +128,14 @@ export default function PulseAgentFallbackPage() {
           <p className="mt-2">
             A successful CertScore Pulse response includes the diagnostic headers below. If a checker reports an internal fetch error
             and cannot show these headers, it did not successfully evaluate the CertScore application response.
+          </p>
+          <p className="mt-2">
+            Agent fetch limitations: Some agent environments may fail before receiving an HTTP response because of DNS, sandbox, TLS,
+            proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or x-certscore-*
+            diagnostic headers, do not conclude CertScore Pulse is unavailable. First try /api/v1/pulse-self-test,
+            /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and
+            /api/v1/openapi.chatgpt.json. If those also fail without HTTP status or CertScore diagnostic headers, report it as a
+            client/network fetch limitation rather than a CertScore API result.
           </p>
           <ul className="mt-3 list-disc space-y-1 pl-5">
             {expectedHeaders.map((header) => (

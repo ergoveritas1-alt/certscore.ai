@@ -23,6 +23,7 @@ const publicAllowPaths = [
   "/api/v1/pulse",
   "/api/v1/pulse/",
   "/api/v1/pulse-health",
+  "/api/v1/pulse-self-test",
   "/faq",
   "/insights/",
   "/llms.txt"

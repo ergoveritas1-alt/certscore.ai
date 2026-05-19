@@ -17,6 +17,16 @@ const pulseCapabilities = {
   doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
 } as const;
 
+const diagnosticHeaders = {
+  "x-certscore-pulse": { schema: { type: "string", const: "v1" }, description: "CertScore Pulse API version marker." },
+  "x-certscore-route": { schema: { type: "string" }, description: "Public Pulse route identifier." },
+  "x-certscore-request-id": { schema: { type: "string" }, description: "Request identifier for support and diagnostics." }
+} as const;
+
+const retryAfterHeader = {
+  "Retry-After": { schema: { type: "integer" }, description: "Recommended retry or polling delay in seconds." }
+} as const;
+
 const openApiDocument = {
   openapi: "3.1.0",
   info: {
@@ -43,20 +53,22 @@ const openApiDocument = {
         responses: {
           "200": {
             description: "Completed Pulse response",
+            headers: diagnosticHeaders,
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseResponse" } }, "text/markdown": { schema: { type: "string" } } }
           },
           "202": {
             description: "Pulse job queued or running",
-            headers: { "Retry-After": { schema: { type: "integer" }, description: "Recommended polling delay in seconds." } },
+            headers: { ...diagnosticHeaders, ...retryAfterHeader },
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseStatus" } } }
           },
           "400": {
             description: "Invalid input",
+            headers: diagnosticHeaders,
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
           },
           "429": {
             description: "Throttled",
-            headers: { "Retry-After": { schema: { type: "integer" }, description: "Recommended retry delay in seconds." } },
+            headers: { ...diagnosticHeaders, ...retryAfterHeader },
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
           }
         }
@@ -70,21 +82,50 @@ const openApiDocument = {
         responses: {
           "200": {
             description: "Pulse job status",
+            headers: diagnosticHeaders,
             content: { "application/json": { schema: { oneOf: [{ $ref: "#/components/schemas/PulseStatus" }, { $ref: "#/components/schemas/PulseResponse" }] } } }
           },
           "202": {
             description: "Pulse job queued or running",
-            headers: { "Retry-After": { schema: { type: "integer" }, description: "Recommended polling delay in seconds." } },
+            headers: { ...diagnosticHeaders, ...retryAfterHeader },
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseStatus" } } }
           },
           "429": {
             description: "Pulse job is rate limited",
-            headers: { "Retry-After": { schema: { type: "integer" }, description: "Recommended retry delay in seconds." } },
+            headers: { ...diagnosticHeaders, ...retryAfterHeader },
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseStatus" } } }
           },
           "404": {
             description: "Pulse job not found",
+            headers: diagnosticHeaders,
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/pulse-health": {
+      get: {
+        summary: "Dependency-free Pulse health canary.",
+        description: "Returns lightweight JSON so agents and CI can verify the Pulse API layer is reachable.",
+        responses: {
+          "200": {
+            description: "Pulse health response",
+            headers: diagnosticHeaders,
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseHealth" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/pulse-self-test": {
+      get: {
+        summary: "Pulse public self-test route.",
+        description:
+          "Stable public canary for agents, CI, and humans to verify Pulse routes, capabilities, diagnostic headers, and public guidance.",
+        responses: {
+          "200": {
+            description: "Pulse self-test response",
+            headers: diagnosticHeaders,
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseSelfTest" } } }
           }
         }
       }
@@ -120,6 +161,16 @@ const openApiDocument = {
           feedbackUrl: { type: "string" }
         }
       },
+      PulseAgentInterpretation: {
+        type: "object",
+        required: ["responseClass", "safeSummaryUse", "requiresHumanReview", "doNotCallThis"],
+        properties: {
+          responseClass: { type: "string", enum: ["completed_pulse", "pending_pulse", "api_error", "rate_limited"] },
+          safeSummaryUse: { type: "boolean" },
+          requiresHumanReview: { type: "boolean", const: true },
+          doNotCallThis: { type: "array", items: { type: "string", enum: [...pulseCapabilities.doesNotProvide] } }
+        }
+      },
       PulseCoverageInterruption: {
         type: "object",
         additionalProperties: true,
@@ -134,7 +185,7 @@ const openApiDocument = {
       PulseResponse: {
         type: "object",
         additionalProperties: true,
-        required: ["type", "meta", "summary", "topFindings", "links", "feedback", "capabilities", "disclaimer"],
+        required: ["type", "meta", "summary", "topFindings", "links", "feedback", "capabilities", "agentInterpretation", "disclaimer"],
         properties: {
           type: { type: "string", const: "certscore_pulse" },
           meta: { type: "object", additionalProperties: true },
@@ -176,13 +227,14 @@ const openApiDocument = {
           },
           feedback: { $ref: "#/components/schemas/PulseFeedback" },
           capabilities: { $ref: "#/components/schemas/PulseCapabilities" },
+          agentInterpretation: { $ref: "#/components/schemas/PulseAgentInterpretation" },
           disclaimer: { type: "string" }
         }
       },
       PulseStatus: {
         type: "object",
         additionalProperties: true,
-        required: ["type", "jobId", "status", "capabilities", "disclaimer"],
+        required: ["type", "jobId", "status", "capabilities", "agentInterpretation", "disclaimer"],
         properties: {
           type: { type: "string", const: "certscore_pulse_status" },
           jobId: { type: "string" },
@@ -196,13 +248,14 @@ const openApiDocument = {
           reportUrl: { type: ["string", "null"] },
           retryAfterSeconds: { type: ["integer", "null"] },
           capabilities: { $ref: "#/components/schemas/PulseCapabilities" },
+          agentInterpretation: { $ref: "#/components/schemas/PulseAgentInterpretation" },
           disclaimer: { type: "string" }
         }
       },
       PulseError: {
         type: "object",
         additionalProperties: true,
-        required: ["type", "error", "feedback", "disclaimer"],
+        required: ["type", "error", "feedback", "agentInterpretation", "disclaimer"],
         properties: {
           type: { type: "string", const: "certscore_pulse_error" },
           error: {
@@ -210,12 +263,37 @@ const openApiDocument = {
             required: ["code", "message"],
             additionalProperties: true,
             properties: {
-              code: { type: "string" },
+              code: { type: "string", enum: ["invalid_url", "not_found", "pulse_throttled", "rate_limited", "internal_error", "scan_unavailable"] },
               message: { type: "string" },
               retryAfterSeconds: { type: ["integer", "null"] }
             }
           },
           feedback: { $ref: "#/components/schemas/PulseFeedback" },
+          agentInterpretation: { $ref: "#/components/schemas/PulseAgentInterpretation" },
+          disclaimer: { type: "string" }
+        }
+      },
+      PulseHealth: {
+        type: "object",
+        required: ["ok", "service", "version", "generatedAt"],
+        properties: {
+          ok: { type: "boolean", const: true },
+          service: { type: "string", const: "certscore-pulse" },
+          version: { type: "string", const: "v1" },
+          generatedAt: { type: "string", format: "date-time" }
+        }
+      },
+      PulseSelfTest: {
+        type: "object",
+        required: ["ok", "type", "service", "version", "timestamp", "routes", "capabilities", "disclaimer"],
+        properties: {
+          ok: { type: "boolean", const: true },
+          type: { type: "string", const: "certscore_pulse_self_test" },
+          service: { type: "string", const: "certscore_pulse" },
+          version: { type: "string", const: "v1" },
+          timestamp: { type: "string", format: "date-time" },
+          routes: { type: "object", additionalProperties: { type: "string" } },
+          capabilities: { $ref: "#/components/schemas/PulseCapabilities" },
           disclaimer: { type: "string" }
         }
       }

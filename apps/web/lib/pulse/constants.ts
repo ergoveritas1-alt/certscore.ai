@@ -31,6 +31,8 @@ export const PULSE_CAPABILITIES = {
   doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
 } as const;
 
+export const PULSE_AGENT_DO_NOT_CALL_THIS = ["legal_advice", "certification", "compliance_determination"] as const;
+
 export const PULSE_PURPOSE_STATEMENT =
   "CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.";
 

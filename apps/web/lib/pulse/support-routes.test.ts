@@ -6,8 +6,10 @@ import { GET as discoveryGET } from "../../app/.well-known/certscore-pulse/route
 import { GET as chatGptOpenApiGET } from "../../app/api/v1/openapi.chatgpt.json/route";
 import { GET as openApiGET } from "../../app/api/v1/openapi.json/route";
 import { GET as pulseHealthGET } from "../../app/api/v1/pulse-health/route";
+import { GET as pulseSelfTestGET } from "../../app/api/v1/pulse-self-test/route";
 import { POST as feedbackPOST } from "../../app/api/v1/pulse/feedback/route";
 import { buildPulseError } from "./error";
+import { renderPulseMarkdown } from "./markdown";
 import { normalizePulseUrl } from "./request";
 
 test("OpenAPI route returns valid Pulse API JSON", async () => {
@@ -40,8 +42,15 @@ test("OpenAPI route returns valid Pulse API JSON", async () => {
   assert.ok(body.components.schemas.PulseResponse);
   assert.ok(body.components.schemas.PulseStatus);
   assert.ok(body.components.schemas.PulseError);
+  assert.ok(body.components.schemas.PulseCapabilities);
+  assert.ok(body.components.schemas.PulseAgentInterpretation);
   assert.equal(body.components.schemas.PulseCoverageInterruption.required[0], "label");
-  assert.match(JSON.stringify(body.components.schemas.PulseResponse), /coverageNote|capabilities|interruptions/);
+  assert.match(JSON.stringify(body.components.schemas.PulseResponse), /coverageNote|capabilities|agentInterpretation|interruptions/);
+  assert.ok(body.paths["/api/v1/pulse-health"]);
+  assert.ok(body.paths["/api/v1/pulse-self-test"]);
+  assert.ok(body.paths["/api/v1/pulse"].get.responses["200"].headers["x-certscore-pulse"]);
+  assert.ok(body.paths["/api/v1/pulse"].get.responses["202"].headers["Retry-After"]);
+  assert.ok(body.paths["/api/v1/pulse"].get.responses["429"].headers["Retry-After"]);
   assert.doesNotMatch(JSON.stringify(body), /stack trace|internal-only|raw DOM/i);
 });
 
@@ -61,6 +70,12 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.operationId, "getPulseJobStatus");
   assert.ok(body.paths["/api/v1/pulse"].get.parameters.some((parameter: { name: string; required?: boolean }) => parameter.name === "url" && parameter.required === true));
   assert.ok(body.paths["/api/v1/pulse"].get.responses["200"].content["text/markdown"]);
+  assert.ok(body.paths["/api/v1/pulse-self-test"]);
+  assert.ok(body.components.schemas.PulseCapabilities);
+  assert.ok(body.components.schemas.PulseAgentInterpretation);
+  assert.ok(body.components.schemas.PulseCoverageInterruption);
+  assert.ok(body.paths["/api/v1/pulse"].get.responses["200"].headers["x-certscore-request-id"]);
+  assert.ok(body.paths["/api/v1/pulse"].get.responses["202"].headers["Retry-After"]);
   assert.match(JSON.stringify(body), /format=markdown|getPulseForUrl|automated public-web observations for review|automated_runtime_analysis/);
   assert.doesNotMatch(JSON.stringify(body), /pre_consent_tracking_detected|raw DOM|DATABASE_URL|AUTH_SECRET/i);
 });
@@ -97,6 +112,8 @@ test("Pulse discovery route returns compact machine-readable metadata", async ()
   assert.equal(body.openapi, "https://certscore.ai/api/v1/openapi.json");
   assert.equal(body.chatgptOpenapi, "https://certscore.ai/api/v1/openapi.chatgpt.json");
   assert.equal(body.docs, "https://certscore.ai/api-pulse");
+  assert.equal(body.selfTest, "https://certscore.ai/api/v1/pulse-self-test");
+  assert.equal(body.health, "https://certscore.ai/api/v1/pulse-health");
   assert.deepEqual(body.formats, ["json", "markdown"]);
   assert.ok(body.detailLevels.includes("tiny"));
   assert.ok(body.detailLevels.includes("standard"));
@@ -106,6 +123,8 @@ test("Pulse discovery route returns compact machine-readable metadata", async ()
   assert.equal(body.feedbackEmail, "support@certscore.ai");
   assert.equal(body.capabilities.method, "automated_runtime_analysis");
   assert.ok(body.capabilities.observes.includes("pre_consent_tracking"));
+  assert.match(body.agentFetchLimitations, /pulse-self-test/);
+  assert.equal(body.recommendedCalls.connectivityCheck, "GET /api/v1/pulse-self-test");
   assert.equal(body.disclaimer, "Automated public-web observations for review. Not legal advice, certification, or a compliance determination.");
 });
 
@@ -125,6 +144,33 @@ test("Pulse health canary route is dependency-free JSON", async () => {
   assert.match(body.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
 
   const source = readFileSync("apps/web/app/api/v1/pulse-health/route.ts", "utf8");
+  assert.doesNotMatch(source, /^import\s/m);
+  assert.doesNotMatch(source, /from\s+["'][^"']*(db|server|auth|queue|redis|pulse\/repository|internal)["']/i);
+  assert.doesNotMatch(source, /fetch\(/i);
+});
+
+test("Pulse self-test route is dependency-free JSON with capabilities", async () => {
+  const response = pulseSelfTestGET(new Request("https://certscore.ai/api/v1/pulse-self-test"));
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/);
+  assert.equal(response.headers.get("x-certscore-pulse"), "v1");
+  assert.equal(response.headers.get("x-certscore-route"), "pulse-self-test");
+  assert.match(response.headers.get("x-certscore-request-id") ?? "", /.+/);
+
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.type, "certscore_pulse_self_test");
+  assert.equal(body.service, "certscore_pulse");
+  assert.equal(body.version, "v1");
+  assert.equal(body.routes.health, "/api/v1/pulse-health");
+  assert.equal(body.routes.openapi, "/api/v1/openapi.json");
+  assert.equal(body.routes.chatgptOpenapi, "/api/v1/openapi.chatgpt.json");
+  assert.equal(body.capabilities.method, "automated_runtime_analysis");
+  assert.ok(body.capabilities.observes.includes("pre_consent_tracking"));
+  assert.match(body.disclaimer, /automated public-web observations for review/i);
+
+  const source = readFileSync("apps/web/app/api/v1/pulse-self-test/route.ts", "utf8");
   assert.doesNotMatch(source, /^import\s/m);
   assert.doesNotMatch(source, /from\s+["'][^"']*(db|server|auth|queue|redis|pulse\/repository|internal)["']/i);
   assert.doesNotMatch(source, /fetch\(/i);
@@ -171,11 +217,15 @@ test("Pulse agent fallback page documents the fetch failure diagnostic contract"
   assert.match(source, /detail=standard/);
   assert.match(source, /format=markdown/);
   assert.match(source, /x-certscore-pulse: v1/);
-  assert.match(source, /x-certscore-route: pulse-health \| openapi \| openapi-chatgpt \| discovery \| pulse \| pulse-status/);
-  assert.match(source, /tool fetch\/DNS failure/);
+  assert.match(source, /x-certscore-route: pulse-self-test \| pulse-health \| openapi \| openapi-chatgpt \| discovery \| pulse \| pulse-status/);
+  assert.match(source, /Agent fetch limitations/);
+  assert.match(source, /client\/network fetch limitation/);
+  assert.match(source, /GET \/api\/v1\/pulse-self-test/);
+  assert.match(source, /Markdown is best for conversational summaries/);
   assert.match(source, /https:\/\/certscore\.ai\/api-pulse-agent-guide\.txt/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/openapi\.chatgpt\.json/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse-health/);
+  assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse-self-test/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/example\.com&format=markdown/);
   assert.match(source, /PULSE_STANDARD_DISCLAIMER/);
   assert.match(source, /PULSE_PURPOSE_STATEMENT/);
@@ -194,12 +244,64 @@ test("Pulse plain text agent guide is retrievable and covers fetch failures", ()
   assert.match(source, /https:\/\/certscore\.ai\/api-pulse\/agent/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/openapi\.chatgpt\.json/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse-health/);
+  assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse-self-test/);
   assert.match(source, /x-certscore-pulse: v1/);
+  assert.match(source, /x-certscore-route: pulse-self-test \| pulse-health/);
   assert.match(source, /getPulseForUrl/);
-  assert.match(source, /UnexpectedStatusCode/);
-  assert.match(source, /client fetch\/DNS\/network limitation/);
+  assert.match(source, /Agent fetch limitations/);
+  assert.match(source, /client\/network fetch limitation/);
+  assert.match(source, /Recommended calls/);
+  assert.match(source, /Markdown is best for conversational summaries/);
   assert.match(source, /automated public-web observations for review/);
   assert.match(source, /automated runtime analysis of public websites/);
+});
+
+test("Pulse public text surfaces keep cautious language outside explicit avoid guidance", async () => {
+  const markdown = renderPulseMarkdown({
+    type: "certscore_pulse",
+    meta: { generatedAt: "2026-05-19T00:00:00.000Z", detail: "standard" },
+    domain: "example.com",
+    scanId: "scan_test",
+    scanStatus: "completed",
+    summary: {
+      score: 82,
+      riskLevel: "monitor",
+      headline: "No major automated review signals were surfaced in this scan."
+    },
+    topFindings: [],
+    coverage: {
+      summary: "Automated public-web scan completed for the observed public surfaces.",
+      limitations: ["Automated public-web scan only."]
+    },
+    links: {
+      fullReportUrl: "https://certscore.ai/scan/scan_test",
+      docsUrl: "https://certscore.ai/api-pulse",
+      findingsReferenceUrl: "https://certscore.ai/findings"
+    },
+    feedback: { feedbackUrl: "https://certscore.ai/pulse/feedback?pulseRequestId=pulse_req_test" }
+  });
+  const guide = readFileSync("apps/web/public/api-pulse-agent-guide.txt", "utf8");
+  const llms = readFileSync("apps/web/public/llms.txt", "utf8");
+  const discovery = await (discoveryGET(new Request("https://certscore.ai/.well-known/certscore-pulse"))).text();
+  const openApi = await (openApiGET(new Request("https://certscore.ai/api/v1/openapi.json"))).text();
+
+  const text = [markdown, guide, llms, discovery, openApi]
+    .join("\n")
+    .split("\n")
+    .filter((line) => !/Do not say|Avoid claims|avoidClaims/i.test(line))
+    .join("\n")
+    .replaceAll("does not determine whether a website violates law", "canonical disclaimer");
+
+  assert.doesNotMatch(text, /\billegal\b/i);
+  assert.doesNotMatch(text, /\bviolation\b/i);
+  assert.doesNotMatch(text, /\bnon-compliant\b/i);
+  assert.doesNotMatch(text, /\bunlawful\b/i);
+  assert.doesNotMatch(text, /\bbreach of law\b/i);
+  assert.doesNotMatch(text, /\bcertifies compliance\b/i);
+  assert.doesNotMatch(text, /\bdetermines compliance\b/i);
+  assert.match(text, /automated public-web observations for review|automated runtime analysis/i);
+  assert.match(text, /review signals?|evidence for review|coverage limitation/i);
+  assert.match(text, /not legal advice/i);
 });
 
 test("Robots allows public Pulse docs and support endpoints while keeping generic API private", async () => {
@@ -218,6 +320,7 @@ test("Robots allows public Pulse docs and support endpoints while keeping generi
     assert.ok(allow.includes("/api/v1/openapi.chatgpt.json"));
     assert.ok(allow.includes("/api/v1/pulse"));
     assert.ok(allow.includes("/api/v1/pulse-health"));
+    assert.ok(allow.includes("/api/v1/pulse-self-test"));
     assert.ok(allow.includes("/.well-known/certscore-pulse"));
     assert.ok(disallow.includes("/api/"));
   }
@@ -241,7 +344,8 @@ test("Pulse OpenAPI and discovery routes stay static and dependency-light", () =
     "apps/web/app/api/v1/openapi.json/route.ts",
     "apps/web/app/api/v1/openapi.chatgpt.json/route.ts",
     "apps/web/app/.well-known/certscore-pulse/route.ts",
-    "apps/web/app/api/v1/pulse-health/route.ts"
+    "apps/web/app/api/v1/pulse-health/route.ts",
+    "apps/web/app/api/v1/pulse-self-test/route.ts"
   ];
 
   for (const routePath of supportRoutes) {
@@ -260,6 +364,8 @@ test("Pulse invalid-input errors use the documented public-safe shape", () => {
   assert.equal(body.request.detail, "tiny");
   assert.equal(body.error.code, "invalid_url");
   assert.equal(body.feedback.email, "support@certscore.ai");
+  assert.equal(body.agentInterpretation.responseClass, "api_error");
+  assert.equal(body.agentInterpretation.requiresHumanReview, true);
   assert.match(body.disclaimer, /automated public-web observations for review/i);
   assert.doesNotMatch(JSON.stringify(body), /stack|DATABASE_URL|token|secret/i);
 });
@@ -284,6 +390,7 @@ test("Pulse malformed URL contract is public-safe before DB or queue work", () =
   assert.equal(body.request.format, "json");
   assert.equal(body.error.code, "invalid_url");
   assert.equal(body.error.message, "Enter a valid public URL or domain.");
+  assert.equal(body.agentInterpretation.responseClass, "api_error");
   assert.doesNotMatch(JSON.stringify(body), /Internal Error|stack|DATABASE_URL|token|secret/i);
 });
 

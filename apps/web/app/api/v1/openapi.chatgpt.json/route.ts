@@ -17,6 +17,16 @@ const pulseCapabilities = {
   doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
 } as const;
 
+const diagnosticHeaders = {
+  "x-certscore-pulse": { schema: { type: "string", const: "v1" }, description: "CertScore Pulse API version marker." },
+  "x-certscore-route": { schema: { type: "string" }, description: "Public Pulse route identifier." },
+  "x-certscore-request-id": { schema: { type: "string" }, description: "Request identifier for support and diagnostics." }
+} as const;
+
+const retryAfterHeader = {
+  "Retry-After": { schema: { type: "integer" }, description: "Recommended retry or polling delay in seconds." }
+} as const;
+
 const chatGptOpenApiDocument = {
   openapi: "3.1.0",
   info: {
@@ -72,6 +82,7 @@ const chatGptOpenApiDocument = {
         responses: {
           "200": {
             description: "Completed Pulse response as JSON or markdown.",
+            headers: diagnosticHeaders,
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/PulseResponse" },
@@ -98,6 +109,12 @@ const chatGptOpenApiDocument = {
                       },
                       feedback: { email: "support@certscore.ai", feedbackUrl: "https://certscore.ai/pulse/feedback?pulseRequestId=pulse_req_123" },
                       capabilities: pulseCapabilities,
+                      agentInterpretation: {
+                        responseClass: "completed_pulse",
+                        safeSummaryUse: true,
+                        requiresHumanReview: true,
+                        doNotCallThis: pulseCapabilities.doesNotProvide
+                      },
                       disclaimer: standardDisclaimer
                     }
                   }
@@ -117,6 +134,7 @@ const chatGptOpenApiDocument = {
           },
           "202": {
             description: "Pulse scan is queued or running. Poll the statusUrl.",
+            headers: { ...diagnosticHeaders, ...retryAfterHeader },
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/PulseStatus" },
@@ -128,6 +146,12 @@ const chatGptOpenApiDocument = {
                       jobId: "pulse_job_123",
                       statusUrl: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
                       capabilities: pulseCapabilities,
+                      agentInterpretation: {
+                        responseClass: "pending_pulse",
+                        safeSummaryUse: false,
+                        requiresHumanReview: true,
+                        doNotCallThis: pulseCapabilities.doesNotProvide
+                      },
                       feedback: { email: "support@certscore.ai" },
                       disclaimer: standardDisclaimer
                     }
@@ -138,6 +162,7 @@ const chatGptOpenApiDocument = {
           },
           "400": {
             description: "Invalid URL or request input.",
+            headers: diagnosticHeaders,
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/PulseError" },
@@ -147,6 +172,12 @@ const chatGptOpenApiDocument = {
                       type: "certscore_pulse_error",
                       error: { code: "invalid_url", message: "Enter a valid public URL or domain.", retryAfterSeconds: null },
                       feedback: { email: "support@certscore.ai" },
+                      agentInterpretation: {
+                        responseClass: "api_error",
+                        safeSummaryUse: false,
+                        requiresHumanReview: true,
+                        doNotCallThis: pulseCapabilities.doesNotProvide
+                      },
                       disclaimer: standardDisclaimer
                     }
                   }
@@ -156,6 +187,7 @@ const chatGptOpenApiDocument = {
           },
           "429": {
             description: "The request was throttled.",
+            headers: { ...diagnosticHeaders, ...retryAfterHeader },
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/PulseError" },
@@ -165,6 +197,12 @@ const chatGptOpenApiDocument = {
                       type: "certscore_pulse_error",
                       error: { code: "rate_limited", message: "Pulse is receiving too many requests. Try again shortly.", retryAfterSeconds: 60 },
                       feedback: { email: "support@certscore.ai" },
+                      agentInterpretation: {
+                        responseClass: "rate_limited",
+                        safeSummaryUse: false,
+                        requiresHumanReview: true,
+                        doNotCallThis: pulseCapabilities.doesNotProvide
+                      },
                       disclaimer: standardDisclaimer
                     }
                   }
@@ -192,19 +230,47 @@ const chatGptOpenApiDocument = {
         responses: {
           "200": {
             description: "Pulse job status.",
+            headers: diagnosticHeaders,
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseStatus" } } }
           },
           "202": {
             description: "Pulse job is still queued or running.",
+            headers: { ...diagnosticHeaders, ...retryAfterHeader },
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseStatus" } } }
           },
           "429": {
             description: "Pulse job is rate limited.",
+            headers: { ...diagnosticHeaders, ...retryAfterHeader },
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseStatus" } } }
           },
           "404": {
             description: "Pulse job was not found.",
+            headers: diagnosticHeaders,
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/pulse-health": {
+      get: {
+        summary: "Dependency-free Pulse health canary.",
+        responses: {
+          "200": {
+            description: "Pulse health response.",
+            headers: diagnosticHeaders,
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseHealth" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/pulse-self-test": {
+      get: {
+        summary: "Pulse public self-test route.",
+        responses: {
+          "200": {
+            description: "Pulse self-test response.",
+            headers: diagnosticHeaders,
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseSelfTest" } } }
           }
         }
       }
@@ -215,7 +281,7 @@ const chatGptOpenApiDocument = {
       PulseResponse: {
         type: "object",
         additionalProperties: true,
-        required: ["type", "summary", "feedback", "capabilities", "disclaimer"],
+        required: ["type", "summary", "feedback", "capabilities", "agentInterpretation", "disclaimer"],
         properties: {
           type: { type: "string", const: "certscore_pulse" },
           scanStatus: { type: "string" },
@@ -242,19 +308,21 @@ const chatGptOpenApiDocument = {
           links: { type: "object", additionalProperties: true },
           feedback: { $ref: "#/components/schemas/PulseFeedback" },
           capabilities: { $ref: "#/components/schemas/PulseCapabilities" },
+          agentInterpretation: { $ref: "#/components/schemas/PulseAgentInterpretation" },
           disclaimer: { type: "string" }
         }
       },
       PulseStatus: {
         type: "object",
         additionalProperties: true,
-        required: ["type", "status", "capabilities", "disclaimer"],
+        required: ["type", "status", "capabilities", "agentInterpretation", "disclaimer"],
         properties: {
           type: { type: "string", const: "certscore_pulse_status" },
           status: { type: "string" },
           jobId: { type: "string" },
           statusUrl: { type: "string" },
           capabilities: { $ref: "#/components/schemas/PulseCapabilities" },
+          agentInterpretation: { $ref: "#/components/schemas/PulseAgentInterpretation" },
           feedback: { $ref: "#/components/schemas/PulseFeedback" },
           disclaimer: { type: "string" }
         }
@@ -262,7 +330,7 @@ const chatGptOpenApiDocument = {
       PulseError: {
         type: "object",
         additionalProperties: true,
-        required: ["type", "error", "feedback", "disclaimer"],
+        required: ["type", "error", "feedback", "agentInterpretation", "disclaimer"],
         properties: {
           type: { type: "string", const: "certscore_pulse_error" },
           error: {
@@ -270,12 +338,13 @@ const chatGptOpenApiDocument = {
             required: ["code", "message"],
             additionalProperties: true,
             properties: {
-              code: { type: "string" },
+              code: { type: "string", enum: ["invalid_url", "not_found", "pulse_throttled", "rate_limited", "internal_error", "scan_unavailable"] },
               message: { type: "string" },
               retryAfterSeconds: { type: ["integer", "null"] }
             }
           },
           feedback: { $ref: "#/components/schemas/PulseFeedback" },
+          agentInterpretation: { $ref: "#/components/schemas/PulseAgentInterpretation" },
           disclaimer: { type: "string" }
         }
       },
@@ -296,6 +365,16 @@ const chatGptOpenApiDocument = {
           doesNotProvide: { type: "array", items: { type: "string", enum: [...pulseCapabilities.doesNotProvide] } }
         }
       },
+      PulseAgentInterpretation: {
+        type: "object",
+        required: ["responseClass", "safeSummaryUse", "requiresHumanReview", "doNotCallThis"],
+        properties: {
+          responseClass: { type: "string", enum: ["completed_pulse", "pending_pulse", "api_error", "rate_limited"] },
+          safeSummaryUse: { type: "boolean" },
+          requiresHumanReview: { type: "boolean", const: true },
+          doNotCallThis: { type: "array", items: { type: "string", enum: [...pulseCapabilities.doesNotProvide] } }
+        }
+      },
       PulseCoverageInterruption: {
         type: "object",
         additionalProperties: true,
@@ -305,6 +384,30 @@ const chatGptOpenApiDocument = {
           reason: { type: "string" },
           reviewTitle: { type: "string" },
           reviewReason: { type: "string" }
+        }
+      },
+      PulseHealth: {
+        type: "object",
+        required: ["ok", "service", "version", "generatedAt"],
+        properties: {
+          ok: { type: "boolean", const: true },
+          service: { type: "string", const: "certscore-pulse" },
+          version: { type: "string", const: "v1" },
+          generatedAt: { type: "string", format: "date-time" }
+        }
+      },
+      PulseSelfTest: {
+        type: "object",
+        required: ["ok", "type", "service", "version", "timestamp", "routes", "capabilities", "disclaimer"],
+        properties: {
+          ok: { type: "boolean", const: true },
+          type: { type: "string", const: "certscore_pulse_self_test" },
+          service: { type: "string", const: "certscore_pulse" },
+          version: { type: "string", const: "v1" },
+          timestamp: { type: "string", format: "date-time" },
+          routes: { type: "object", additionalProperties: { type: "string" } },
+          capabilities: { $ref: "#/components/schemas/PulseCapabilities" },
+          disclaimer: { type: "string" }
         }
       }
     }

@@ -6,6 +6,7 @@ import {
   PULSE_STANDARD_DISCLAIMER,
   PULSE_VERSION
 } from "./constants";
+import { buildPulseAgentInterpretation } from "./agent-interpretation";
 import type { PulseDetail, PulseFormat } from "./types";
 
 export function buildPulseError(input: {
@@ -38,6 +39,10 @@ export function buildPulseError(input: {
     feedback: {
       email: PULSE_FEEDBACK_EMAIL
     },
+    agentInterpretation: buildPulseAgentInterpretation({
+      responseClass: input.code === "pulse_throttled" || input.code === "rate_limited" ? "rate_limited" : "api_error",
+      safeSummaryUse: false
+    }),
     disclaimer: PULSE_STANDARD_DISCLAIMER
   };
 }

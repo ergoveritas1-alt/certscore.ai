@@ -18,6 +18,15 @@ Basic HTTP agent quick start:
 5. If the request fails before status/body/headers are visible, open:
    https://certscore.ai/api-pulse-agent-guide.txt
 
+Recommended calls:
+- User-facing summary: GET /api/v1/pulse?url=https://example.com&format=markdown&detail=standard
+- Quick machine triage: GET /api/v1/pulse?url=https://example.com&detail=tiny
+- Evidence/deeper review: GET /api/v1/pulse?url=https://example.com&detail=full
+- Connectivity check: GET /api/v1/pulse-self-test
+- Health check: GET /api/v1/pulse-health
+
+Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Full is best for evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.
+
 OpenAPI / GPT Action quick start:
 1. If you support OpenAPI actions/tools, import:
    https://certscore.ai/api/v1/openapi.chatgpt.json
@@ -47,6 +56,9 @@ https://certscore.ai/api/v1/openapi.chatgpt.json
 Health canary:
 https://certscore.ai/api/v1/pulse-health
 
+Self-test canary:
+https://certscore.ai/api/v1/pulse-self-test
+
 Primary endpoint:
 https://certscore.ai/api/v1/pulse?url=https://example.com
 
@@ -64,13 +76,16 @@ https://certscore.ai/api/v1/pulse/status/<jobId>
 
 Expected diagnostic headers on CertScore-generated Pulse support responses:
 - x-certscore-pulse: v1
-- x-certscore-route: pulse-health | openapi | openapi-chatgpt | discovery | pulse | pulse-status
+- x-certscore-route: pulse-self-test | pulse-health | openapi | openapi-chatgpt | discovery | pulse | pulse-status
 - x-certscore-request-id: <request id>
 
+Agent fetch limitations:
+Some agent environments may fail before receiving an HTTP response because of DNS, sandbox, TLS, proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or x-certscore-* diagnostic headers, do not conclude CertScore Pulse is unavailable. First try /api/v1/pulse-self-test, /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and /api/v1/openapi.chatgpt.json. If those also fail without HTTP status or CertScore diagnostic headers, report it as a client/network fetch limitation rather than a CertScore API result.
+
 Troubleshooting fetch failures:
-1. Fetch https://certscore.ai/api/v1/pulse-health first.
-2. If your client cannot retrieve status, content type, or the x-certscore-* headers, do not infer that CertScore returned an application error.
-3. If your client reports DNS resolution failure, UnexpectedStatusCode, Internal Error, or a generic fetch failure before headers are available, treat it as a client fetch/DNS/network limitation unless another independent HTTP client reproduces it.
+1. Fetch https://certscore.ai/api/v1/pulse-self-test first.
+2. Fetch https://certscore.ai/api/v1/pulse-health if you need a smaller health-only check.
+3. If your client cannot retrieve status, content type, or the x-certscore-* headers, do not infer that CertScore returned an application error.
 4. If you receive a response with x-certscore-pulse: v1, use x-certscore-route and x-certscore-request-id when reporting the behavior.
 5. If JSON retrieval is unreliable in your environment, use the markdown endpoint or the browser-readable fallback page.
 

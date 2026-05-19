@@ -48,6 +48,14 @@ const copyPasteExamples = [
   },
   {
     command: `curl "https://certscore.ai/api/v1/pulse/status/<jobId>"`
+  },
+  {
+    command: `curl "https://certscore.ai/api/v1/pulse-self-test"`,
+    href: "https://certscore.ai/api/v1/pulse-self-test"
+  },
+  {
+    command: `curl "https://certscore.ai/api/v1/pulse-health"`,
+    href: "https://certscore.ai/api/v1/pulse-health"
   }
 ];
 
@@ -99,6 +107,40 @@ const exampleFeedback = {
   feedbackUrl: "https://certscore.ai/pulse/feedback?pulseRequestId=pulse_req_123",
   positiveUrl: "https://certscore.ai/pulse/feedback?pulseRequestId=pulse_req_123&rating=useful",
   negativeUrl: "https://certscore.ai/pulse/feedback?pulseRequestId=pulse_req_123&rating=not_useful"
+};
+
+const exampleCapabilities = {
+  method: "automated_runtime_analysis",
+  observes: [
+    "pre_consent_tracking",
+    "third_party_requests",
+    "consent_enforcement_gaps",
+    "cookie_activity",
+    "accessibility_signals",
+    "disclosure_inconsistencies"
+  ],
+  doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
+};
+
+const completedAgentInterpretation = {
+  responseClass: "completed_pulse",
+  safeSummaryUse: true,
+  requiresHumanReview: true,
+  doNotCallThis: ["legal_advice", "certification", "compliance_determination"]
+};
+
+const pendingAgentInterpretation = {
+  responseClass: "pending_pulse",
+  safeSummaryUse: false,
+  requiresHumanReview: true,
+  doNotCallThis: ["legal_advice", "certification", "compliance_determination"]
+};
+
+const errorAgentInterpretation = {
+  responseClass: "api_error",
+  safeSummaryUse: false,
+  requiresHumanReview: true,
+  doNotCallThis: ["legal_advice", "certification", "compliance_determination"]
 };
 
 const exampleLinks = {
@@ -173,18 +215,8 @@ const responseExamples = [
       },
       links: exampleLinks,
       feedback: exampleFeedback,
-      capabilities: {
-        method: "automated_runtime_analysis",
-        observes: [
-          "pre_consent_tracking",
-          "third_party_requests",
-          "consent_enforcement_gaps",
-          "cookie_activity",
-          "accessibility_signals",
-          "disclosure_inconsistencies"
-        ],
-        doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
-      },
+      capabilities: exampleCapabilities,
+      agentInterpretation: completedAgentInterpretation,
       disclaimer: PULSE_STANDARD_DISCLAIMER
     }
   },
@@ -238,6 +270,8 @@ const responseExamples = [
       },
       links: exampleLinks,
       feedback: exampleFeedback,
+      capabilities: exampleCapabilities,
+      agentInterpretation: completedAgentInterpretation,
       disclaimer: PULSE_STANDARD_DISCLAIMER
     }
   },
@@ -275,14 +309,19 @@ const responseExamples = [
       },
       coverage: {
         status: "partial",
-        diagnostics: {
-          interruptionCount: 1,
-          interruptions: { shown: 1, total: 1, truncated: false }
-        },
+        interruptionCount: 1,
+        interruptions: [
+          {
+            label: "Access limited",
+            reason: "Protected route encountered outside the public homepage."
+          }
+        ],
         limitations: ["Full mode is still a public report projection; raw internal artifacts are not included."]
       },
       links: exampleLinks,
       feedback: exampleFeedback,
+      capabilities: exampleCapabilities,
+      agentInterpretation: completedAgentInterpretation,
       disclaimer: PULSE_STANDARD_DISCLAIMER
     }
   },
@@ -303,6 +342,8 @@ const responseExamples = [
       statusUrl: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
       nextCheckUrl: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
       reportUrl: "https://certscore.ai/scan/scan_abc123",
+      capabilities: exampleCapabilities,
+      agentInterpretation: pendingAgentInterpretation,
       disclaimer: PULSE_STANDARD_DISCLAIMER
     }
   },
@@ -318,6 +359,8 @@ const responseExamples = [
       completedAt: "2026-05-18T23:15:31Z",
       resultUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_abc123",
       reportUrl: "https://certscore.ai/scan/scan_abc123",
+      capabilities: exampleCapabilities,
+      agentInterpretation: completedAgentInterpretation,
       disclaimer: PULSE_STANDARD_DISCLAIMER
     }
   },
@@ -335,6 +378,7 @@ const responseExamples = [
       feedback: {
         email: PULSE_FEEDBACK_EMAIL
       },
+      agentInterpretation: { ...errorAgentInterpretation, responseClass: "rate_limited" },
       disclaimer: PULSE_STANDARD_DISCLAIMER
     }
   },
@@ -357,6 +401,7 @@ const responseExamples = [
       feedback: {
         email: PULSE_FEEDBACK_EMAIL
       },
+      agentInterpretation: errorAgentInterpretation,
       disclaimer: PULSE_STANDARD_DISCLAIMER
     }
   },
@@ -423,6 +468,14 @@ export default function ApiPulsePage() {
    GET https://certscore.ai/api/v1/pulse/status/<jobId>
 5. If the request fails before status/body/headers are visible, open:
    https://certscore.ai/api-pulse-agent-guide.txt`}</CodeBlock>
+            <CodeBlock>{`Recommended calls:
+- User-facing summary: GET /api/v1/pulse?url=https://example.com&format=markdown&detail=standard
+- Quick machine triage: GET /api/v1/pulse?url=https://example.com&detail=tiny
+- Evidence/deeper review: GET /api/v1/pulse?url=https://example.com&detail=full
+- Connectivity check: GET /api/v1/pulse-self-test
+- Health check: GET /api/v1/pulse-health
+
+Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Full is best for evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.`}</CodeBlock>
             <CodeBlock>{`OpenAPI / GPT Action quick start:
 1. If you support OpenAPI actions/tools, import:
    https://certscore.ai/api/v1/openapi.chatgpt.json
@@ -433,6 +486,12 @@ export default function ApiPulsePage() {
 3. Use detail=tiny for quick checks.
 4. Use detail=full only when the user asks for evidence or deeper review context.
 5. If API fetch fails before headers/body/status are visible, do not infer CertScore returned an error. Read /api-pulse/agent and /api-pulse-agent-guide.txt.`}</CodeBlock>
+            <p>
+              Agent fetch limitations: Some agent environments may fail before receiving an HTTP response because of DNS, sandbox,
+              TLS, proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or
+              x-certscore-* diagnostic headers, do not conclude CertScore Pulse is unavailable. First try /api/v1/pulse-self-test,
+              /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and /api/v1/openapi.chatgpt.json.
+            </p>
             <div className="flex flex-wrap gap-3">
               <Link
                 className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
@@ -445,6 +504,12 @@ export default function ApiPulsePage() {
                 href="/api/v1/pulse?url=https://example.com&format=markdown&detail=standard"
               >
                 Open basic HTTP example
+              </Link>
+              <Link
+                className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
+                href="/api/v1/pulse-self-test"
+              >
+                Open self-test
               </Link>
               <Link
                 className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"

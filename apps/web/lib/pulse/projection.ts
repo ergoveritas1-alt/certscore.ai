@@ -18,6 +18,7 @@ import {
   PULSE_VERSION,
   PULSE_COVERAGE_LIMITATION_COPY
 } from "./constants";
+import { buildPulseAgentInterpretation } from "./agent-interpretation";
 import type { PulseDetail, PulseFormat, PulseFreshnessMode } from "./types";
 
 type PulseProjectionInput = {
@@ -542,6 +543,10 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     },
     links,
     feedback,
+    agentInterpretation: buildPulseAgentInterpretation({
+      responseClass: "completed_pulse",
+      safeSummaryUse: true
+    }),
     disclaimer: PULSE_STANDARD_DISCLAIMER
   };
 
@@ -575,6 +580,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
         feedbackUrl: feedback.feedbackUrl
       },
       capabilities: base.capabilities,
+      agentInterpretation: base.agentInterpretation,
       disclaimer: base.disclaimer
     };
   }
