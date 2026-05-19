@@ -610,6 +610,9 @@ Content-Type: application/json
             <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api/v1/openapi.json">
               OpenAPI JSON
             </Link>
+            <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api/v1/openapi.chatgpt.json">
+              ChatGPT Action schema
+            </Link>
             <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/.well-known/certscore-pulse">
               Discovery JSON
             </Link>

@@ -24,6 +24,7 @@ const staticPaths = [
   "/api-pulse",
   "/api-pulse/agent",
   "/api-pulse-agent-guide.txt",
+  "/api/v1/openapi.chatgpt.json",
   "/llms.txt",
   "/faq",
   "/terms",

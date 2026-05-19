@@ -95,6 +95,14 @@ async function main() {
   assert.ok(openapiBody.paths?.["/api/v1/pulse"]);
   results.push(openapi);
 
+  const chatGptOpenapi = await get("/api/v1/openapi.chatgpt.json");
+  assert.equal(chatGptOpenapi.response.status, 200);
+  assertPulseHeaders(chatGptOpenapi, "openapi-chatgpt");
+  const chatGptOpenapiBody = json(chatGptOpenapi);
+  assert.equal(chatGptOpenapiBody.openapi, "3.1.0");
+  assert.equal(chatGptOpenapiBody.paths?.["/api/v1/pulse"]?.get?.operationId, "getPulseForUrl");
+  results.push(chatGptOpenapi);
+
   const discovery = await get("/.well-known/certscore-pulse");
   assert.equal(discovery.response.status, 200);
   assertPulseHeaders(discovery, "discovery");

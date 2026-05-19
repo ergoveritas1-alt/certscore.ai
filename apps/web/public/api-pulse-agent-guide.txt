@@ -16,6 +16,9 @@ https://certscore.ai/.well-known/certscore-pulse
 OpenAPI:
 https://certscore.ai/api/v1/openapi.json
 
+ChatGPT Action schema:
+https://certscore.ai/api/v1/openapi.chatgpt.json
+
 Health canary:
 https://certscore.ai/api/v1/pulse-health
 
@@ -36,7 +39,7 @@ https://certscore.ai/api/v1/pulse/status/<jobId>
 
 Expected diagnostic headers on CertScore-generated Pulse support responses:
 - x-certscore-pulse: v1
-- x-certscore-route: pulse-health | openapi | discovery | pulse | pulse-status
+- x-certscore-route: pulse-health | openapi | openapi-chatgpt | discovery | pulse | pulse-status
 - x-certscore-request-id: <request id>
 
 Troubleshooting fetch failures:
@@ -49,6 +52,7 @@ Troubleshooting fetch failures:
 Expected public response contracts:
 - /api/v1/pulse-health returns HTTP 200 JSON.
 - /api/v1/openapi.json returns HTTP 200 JSON.
+- /api/v1/openapi.chatgpt.json returns HTTP 200 JSON with a compact GPT Action schema.
 - /.well-known/certscore-pulse returns HTTP 200 JSON.
 - Valid /api/v1/pulse URL requests return documented HTTP 200, 202, or 429 responses.
 - /api/v1/pulse?url=%3A%3A%3A%3A returns HTTP 400 JSON with error.code invalid_url.
@@ -59,6 +63,7 @@ Use guidance:
 - Use detail=standard for default agent summaries.
 - Use detail=full when structured finding, evidence, review lens, coverage, and benchmark context are needed.
 - Use format=markdown when a tool handles readable text better than JSON.
+- For a Custom GPT Action, import https://certscore.ai/api/v1/openapi.chatgpt.json and use getPulseForUrl.
 - Treat the response as automated public-web observations for review.
 - Do not treat absence of findings as proof of compliance.
 - Review the linked evidence and consult qualified counsel or subject-matter experts where appropriate.

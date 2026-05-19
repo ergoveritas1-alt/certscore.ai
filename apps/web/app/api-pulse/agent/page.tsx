@@ -19,6 +19,7 @@ export const metadata: Metadata = createPageMetadata({
 const endpoints = [
   ["Health canary", "https://certscore.ai/api/v1/pulse-health"],
   ["OpenAPI JSON", "https://certscore.ai/api/v1/openapi.json"],
+  ["ChatGPT Action schema", "https://certscore.ai/api/v1/openapi.chatgpt.json"],
   ["Discovery JSON", "https://certscore.ai/.well-known/certscore-pulse"],
   ["Tiny Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=tiny"],
   ["Full Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=full"],
@@ -27,7 +28,11 @@ const endpoints = [
   ["Missing job contract", "https://certscore.ai/api/v1/pulse/status/pulse_job_nonexistent_test"]
 ] as const;
 
-const expectedHeaders = ["x-certscore-pulse: v1", "x-certscore-route: pulse-health | openapi | discovery | pulse | pulse-status", "x-certscore-request-id: <uuid>"];
+const expectedHeaders = [
+  "x-certscore-pulse: v1",
+  "x-certscore-route: pulse-health | openapi | openapi-chatgpt | discovery | pulse | pulse-status",
+  "x-certscore-request-id: <uuid>"
+];
 
 export default function PulseAgentFallbackPage() {
   return (
@@ -93,6 +98,7 @@ export default function PulseAgentFallbackPage() {
             <li>Open the health canary first and confirm the CertScore diagnostic headers.</li>
             <li>If the health canary is unavailable only inside one tool, treat that as a tool fetch/DNS failure.</li>
             <li>Use the Pulse markdown endpoint when a tool prefers readable text over JSON.</li>
+            <li>Use the ChatGPT Action schema when configuring a Custom GPT action.</li>
             <li>Use the full JSON endpoint when structured finding, evidence, and review context are needed.</li>
           </ol>
         </section>
@@ -107,6 +113,9 @@ export default function PulseAgentFallbackPage() {
           </Link>
           <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api-pulse-agent-guide.txt">
             Plain text guide
+          </Link>
+          <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api/v1/openapi.chatgpt.json">
+            ChatGPT Action schema
           </Link>
           <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/llms.txt">
             llms.txt

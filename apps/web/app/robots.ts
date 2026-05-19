@@ -19,6 +19,7 @@ const publicAllowPaths = [
   "/api-pulse/",
   "/api-pulse-agent-guide.txt",
   "/api/v1/openapi.json",
+  "/api/v1/openapi.chatgpt.json",
   "/api/v1/pulse",
   "/api/v1/pulse/",
   "/api/v1/pulse-health",

@@ -3,6 +3,7 @@ const discoveryDocument = {
   description: "Retrieve automated public-web risk signal summaries for a URL.",
   api: "https://certscore.ai/api/v1/pulse",
   openapi: "https://certscore.ai/api/v1/openapi.json",
+  chatgptOpenapi: "https://certscore.ai/api/v1/openapi.chatgpt.json",
   docs: "https://certscore.ai/api-pulse",
   formats: ["json", "markdown"],
   detailLevels: ["tiny", "standard", "full"],

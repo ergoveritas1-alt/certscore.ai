@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { hasDatabaseEnv } from "@website-signal-risk-scanner/db";
 import { GET as discoveryGET } from "../../app/.well-known/certscore-pulse/route";
+import { GET as chatGptOpenApiGET } from "../../app/api/v1/openapi.chatgpt.json/route";
 import { GET as openApiGET } from "../../app/api/v1/openapi.json/route";
 import { GET as pulseHealthGET } from "../../app/api/v1/pulse-health/route";
 import { POST as feedbackPOST } from "../../app/api/v1/pulse/feedback/route";
@@ -36,6 +37,26 @@ test("OpenAPI route returns valid Pulse API JSON", async () => {
   assert.doesNotMatch(JSON.stringify(body), /stack trace|internal-only|raw DOM/i);
 });
 
+test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () => {
+  const response = chatGptOpenApiGET(new Request("https://certscore.ai/api/v1/openapi.chatgpt.json"));
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /application\/json/);
+  assert.equal(response.headers.get("x-certscore-pulse"), "v1");
+  assert.equal(response.headers.get("x-certscore-route"), "openapi-chatgpt");
+  assert.match(response.headers.get("x-certscore-request-id") ?? "", /.+/);
+
+  const body = await response.json();
+  assert.equal(body.openapi, "3.1.0");
+  assert.equal(body.info.title, "CertScore Pulse GPT Action API");
+  assert.equal(body.paths["/api/v1/pulse"].get.operationId, "getPulseForUrl");
+  assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.operationId, "getPulseJobStatus");
+  assert.ok(body.paths["/api/v1/pulse"].get.parameters.some((parameter: { name: string; required?: boolean }) => parameter.name === "url" && parameter.required === true));
+  assert.ok(body.paths["/api/v1/pulse"].get.responses["200"].content["text/markdown"]);
+  assert.match(JSON.stringify(body), /format=markdown|getPulseForUrl|automated public-web observations for review/);
+  assert.doesNotMatch(JSON.stringify(body), /scan_abc123|pre_consent_tracking_detected|raw DOM|DATABASE_URL|AUTH_SECRET/i);
+});
+
 test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app error page", async () => {
   const response = openApiGET(new Request("https://certscore.ai/api/v1/openapi.json"));
 
@@ -66,6 +87,7 @@ test("Pulse discovery route returns compact machine-readable metadata", async ()
   assert.equal(body.name, "CertScore Pulse");
   assert.equal(body.api, "https://certscore.ai/api/v1/pulse");
   assert.equal(body.openapi, "https://certscore.ai/api/v1/openapi.json");
+  assert.equal(body.chatgptOpenapi, "https://certscore.ai/api/v1/openapi.chatgpt.json");
   assert.equal(body.docs, "https://certscore.ai/api-pulse");
   assert.deepEqual(body.formats, ["json", "markdown"]);
   assert.ok(body.detailLevels.includes("tiny"));
@@ -108,6 +130,7 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /Copy\/paste examples/);
   assert.match(source, /Agent fallback page/);
   assert.match(source, /Agent text guide/);
+  assert.match(source, /ChatGPT Action schema/);
   assert.match(source, /Open quick-start endpoint/);
   assert.match(source, /Open test URL/);
   assert.match(source, /href: "https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/example\.com&detail=tiny"/);
@@ -126,9 +149,10 @@ test("Pulse agent fallback page documents the fetch failure diagnostic contract"
 
   assert.match(source, /Agent-readable fallback/);
   assert.match(source, /x-certscore-pulse: v1/);
-  assert.match(source, /x-certscore-route: pulse-health \| openapi \| discovery \| pulse \| pulse-status/);
+  assert.match(source, /x-certscore-route: pulse-health \| openapi \| openapi-chatgpt \| discovery \| pulse \| pulse-status/);
   assert.match(source, /tool fetch\/DNS failure/);
   assert.match(source, /https:\/\/certscore\.ai\/api-pulse-agent-guide\.txt/);
+  assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/openapi\.chatgpt\.json/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse-health/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/example\.com&format=markdown/);
   assert.match(source, /PULSE_STANDARD_DISCLAIMER/);
@@ -140,8 +164,10 @@ test("Pulse plain text agent guide is retrievable and covers fetch failures", ()
   assert.match(source, /CertScore Pulse agent guide/);
   assert.match(source, /https:\/\/certscore\.ai\/api-pulse/);
   assert.match(source, /https:\/\/certscore\.ai\/api-pulse\/agent/);
+  assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/openapi\.chatgpt\.json/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse-health/);
   assert.match(source, /x-certscore-pulse: v1/);
+  assert.match(source, /getPulseForUrl/);
   assert.match(source, /UnexpectedStatusCode/);
   assert.match(source, /client fetch\/DNS\/network limitation/);
   assert.match(source, /automated public-web observations for review/);
@@ -160,6 +186,7 @@ test("Robots allows public Pulse docs and support endpoints while keeping generi
     assert.ok(allow.includes("/api-pulse/"));
     assert.ok(allow.includes("/api-pulse-agent-guide.txt"));
     assert.ok(allow.includes("/api/v1/openapi.json"));
+    assert.ok(allow.includes("/api/v1/openapi.chatgpt.json"));
     assert.ok(allow.includes("/api/v1/pulse"));
     assert.ok(allow.includes("/api/v1/pulse-health"));
     assert.ok(allow.includes("/.well-known/certscore-pulse"));
@@ -183,6 +210,7 @@ test("Pulse OpenAPI documents the public status contracts without runtime exampl
 test("Pulse OpenAPI and discovery routes stay static and dependency-light", () => {
   const supportRoutes = [
     "apps/web/app/api/v1/openapi.json/route.ts",
+    "apps/web/app/api/v1/openapi.chatgpt.json/route.ts",
     "apps/web/app/.well-known/certscore-pulse/route.ts",
     "apps/web/app/api/v1/pulse-health/route.ts"
   ];
