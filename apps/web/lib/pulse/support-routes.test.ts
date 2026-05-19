@@ -106,6 +106,8 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /PULSE_FEEDBACK_EMAIL/);
   assert.match(source, /PULSE_STANDARD_DISCLAIMER/);
   assert.match(source, /Copy\/paste examples/);
+  assert.match(source, /Agent fallback page/);
+  assert.match(source, /Agent text guide/);
   assert.match(source, /Open quick-start endpoint/);
   assert.match(source, /Open test URL/);
   assert.match(source, /href: "https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/example\.com&detail=tiny"/);
@@ -117,6 +119,52 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /200 completed full JSON/);
   assert.match(source, /202 pending\/running response/);
   assert.match(source, /429 throttled response/);
+});
+
+test("Pulse agent fallback page documents the fetch failure diagnostic contract", () => {
+  const source = readFileSync("apps/web/app/api-pulse/agent/page.tsx", "utf8");
+
+  assert.match(source, /Agent-readable fallback/);
+  assert.match(source, /x-certscore-pulse: v1/);
+  assert.match(source, /x-certscore-route: pulse-health \| openapi \| discovery \| pulse \| pulse-status/);
+  assert.match(source, /tool fetch\/DNS failure/);
+  assert.match(source, /https:\/\/certscore\.ai\/api-pulse-agent-guide\.txt/);
+  assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse-health/);
+  assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/example\.com&format=markdown/);
+  assert.match(source, /PULSE_STANDARD_DISCLAIMER/);
+});
+
+test("Pulse plain text agent guide is retrievable and covers fetch failures", () => {
+  const source = readFileSync("apps/web/public/api-pulse-agent-guide.txt", "utf8");
+
+  assert.match(source, /CertScore Pulse agent guide/);
+  assert.match(source, /https:\/\/certscore\.ai\/api-pulse/);
+  assert.match(source, /https:\/\/certscore\.ai\/api-pulse\/agent/);
+  assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse-health/);
+  assert.match(source, /x-certscore-pulse: v1/);
+  assert.match(source, /UnexpectedStatusCode/);
+  assert.match(source, /client fetch\/DNS\/network limitation/);
+  assert.match(source, /automated public-web observations for review/);
+});
+
+test("Robots allows public Pulse docs and support endpoints while keeping generic API private", async () => {
+  const { default: robots } = await import("../../app/robots");
+  const result = robots();
+  const rules = Array.isArray(result.rules) ? result.rules : [result.rules];
+
+  for (const rule of rules) {
+    const allow = Array.isArray(rule.allow) ? rule.allow : [rule.allow].filter(Boolean);
+    const disallow = Array.isArray(rule.disallow) ? rule.disallow : [rule.disallow].filter(Boolean);
+
+    assert.ok(allow.includes("/api-pulse"));
+    assert.ok(allow.includes("/api-pulse/"));
+    assert.ok(allow.includes("/api-pulse-agent-guide.txt"));
+    assert.ok(allow.includes("/api/v1/openapi.json"));
+    assert.ok(allow.includes("/api/v1/pulse"));
+    assert.ok(allow.includes("/api/v1/pulse-health"));
+    assert.ok(allow.includes("/.well-known/certscore-pulse"));
+    assert.ok(disallow.includes("/api/"));
+  }
 });
 
 test("Pulse OpenAPI documents the public status contracts without runtime examples", async () => {

@@ -1,0 +1,67 @@
+# CertScore Pulse agent guide
+
+Last updated: 2026-05-19
+
+CertScore Pulse provides automated public-web observations for review. CertScore does not provide legal advice, certify compliance, or determine whether a website violates law.
+
+Canonical documentation:
+https://certscore.ai/api-pulse
+
+Plain browser-readable fallback:
+https://certscore.ai/api-pulse/agent
+
+Machine-readable discovery:
+https://certscore.ai/.well-known/certscore-pulse
+
+OpenAPI:
+https://certscore.ai/api/v1/openapi.json
+
+Health canary:
+https://certscore.ai/api/v1/pulse-health
+
+Primary endpoint:
+https://certscore.ai/api/v1/pulse?url=https://example.com
+
+Markdown endpoint:
+https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown
+
+Full-detail endpoint:
+https://certscore.ai/api/v1/pulse?url=https://example.com&detail=full
+
+Quick endpoint:
+https://certscore.ai/api/v1/pulse?url=https://example.com&detail=tiny
+
+Status endpoint:
+https://certscore.ai/api/v1/pulse/status/<jobId>
+
+Expected diagnostic headers on CertScore-generated Pulse support responses:
+- x-certscore-pulse: v1
+- x-certscore-route: pulse-health | openapi | discovery | pulse | pulse-status
+- x-certscore-request-id: <request id>
+
+Troubleshooting fetch failures:
+1. Fetch https://certscore.ai/api/v1/pulse-health first.
+2. If your client cannot retrieve status, content type, or the x-certscore-* headers, do not infer that CertScore returned an application error.
+3. If your client reports DNS resolution failure, UnexpectedStatusCode, Internal Error, or a generic fetch failure before headers are available, treat it as a client fetch/DNS/network limitation unless another independent HTTP client reproduces it.
+4. If you receive a response with x-certscore-pulse: v1, use x-certscore-route and x-certscore-request-id when reporting the behavior.
+5. If JSON retrieval is unreliable in your environment, use the markdown endpoint or the browser-readable fallback page.
+
+Expected public response contracts:
+- /api/v1/pulse-health returns HTTP 200 JSON.
+- /api/v1/openapi.json returns HTTP 200 JSON.
+- /.well-known/certscore-pulse returns HTTP 200 JSON.
+- Valid /api/v1/pulse URL requests return documented HTTP 200, 202, or 429 responses.
+- /api/v1/pulse?url=%3A%3A%3A%3A returns HTTP 400 JSON with error.code invalid_url.
+- /api/v1/pulse/status/pulse_job_nonexistent_test returns HTTP 404 JSON with error.code not_found.
+
+Use guidance:
+- Use detail=tiny for compact badges, CLI summaries, or simple agents.
+- Use detail=standard for default agent summaries.
+- Use detail=full when structured finding, evidence, review lens, coverage, and benchmark context are needed.
+- Use format=markdown when a tool handles readable text better than JSON.
+- Treat the response as automated public-web observations for review.
+- Do not treat absence of findings as proof of compliance.
+- Review the linked evidence and consult qualified counsel or subject-matter experts where appropriate.
+
+Support:
+support@certscore.ai

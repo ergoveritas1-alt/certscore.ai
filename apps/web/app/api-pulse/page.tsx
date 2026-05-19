@@ -601,6 +601,12 @@ Content-Type: application/json
             <CardTitle>Links</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3 text-sm">
+            <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api-pulse/agent">
+              Agent fallback page
+            </Link>
+            <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api-pulse-agent-guide.txt">
+              Agent text guide
+            </Link>
             <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api/v1/openapi.json">
               OpenAPI JSON
             </Link>

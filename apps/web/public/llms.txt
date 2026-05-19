@@ -106,6 +106,12 @@ https://certscore.ai/api/v1/openapi.json
 API instructions:
 https://certscore.ai/api-pulse
 
+Agent fetch fallback:
+https://certscore.ai/api-pulse/agent
+
+Plain text agent guide:
+https://certscore.ai/api-pulse-agent-guide.txt
+
 Findings reference:
 https://certscore.ai/findings
 
@@ -114,6 +120,7 @@ Send comments to support@certscore.ai or use the feedbackUrl included in Pulse r
 
 Guidance:
 Treat CertScore outputs as automated public-web observations for review, not legal advice, certification, or compliance determinations. Results may be incomplete or contain errors. Do not treat absence of findings as proof of compliance.
+If a fetch tool reports an internal error and cannot show x-certscore-pulse: v1 plus x-certscore-route, treat that as a client fetch/DNS failure rather than proof that CertScore returned the error.
 
 ## Important disclaimer
 
