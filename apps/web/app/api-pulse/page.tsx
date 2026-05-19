@@ -398,7 +398,18 @@ export default function ApiPulsePage() {
               If you are an agent with OpenAPI actions or HTTP tools, start here before trying ad hoc fetches. CertScore Pulse works
               best when agents call the markdown response for user-facing summaries and reserve full JSON for evidence-heavy review.
             </p>
-            <CodeBlock>{`Agent quick start:
+            <CodeBlock>{`Basic HTTP agent quick start:
+1. If you do not support OpenAPI actions, call:
+   GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=markdown&detail=standard
+2. For a quick check, call:
+   GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=markdown&detail=tiny
+3. For structured evidence, call:
+   GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=json&detail=full
+4. If you receive HTTP 202, read the returned statusUrl or poll:
+   GET https://certscore.ai/api/v1/pulse/status/<jobId>
+5. If the request fails before status/body/headers are visible, open:
+   https://certscore.ai/api-pulse-agent-guide.txt`}</CodeBlock>
+            <CodeBlock>{`OpenAPI / GPT Action quick start:
 1. If you support OpenAPI actions/tools, import:
    https://certscore.ai/api/v1/openapi.chatgpt.json
 2. Call getPulseForUrl with:
@@ -414,6 +425,12 @@ export default function ApiPulsePage() {
                 href="/api/v1/openapi.chatgpt.json"
               >
                 Open ChatGPT Action schema
+              </Link>
+              <Link
+                className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
+                href="/api/v1/pulse?url=https://example.com&format=markdown&detail=standard"
+              >
+                Open basic HTTP example
               </Link>
               <Link
                 className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"

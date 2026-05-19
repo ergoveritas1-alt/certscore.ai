@@ -4,7 +4,19 @@ Last updated: 2026-05-19
 
 CertScore Pulse provides automated public-web observations for review. CertScore does not provide legal advice, certify compliance, or determine whether a website violates law.
 
-Agent quick start:
+Basic HTTP agent quick start:
+1. If you do not support OpenAPI actions, call:
+   GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=markdown&detail=standard
+2. For a quick check, call:
+   GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=markdown&detail=tiny
+3. For structured evidence, call:
+   GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=json&detail=full
+4. If you receive HTTP 202, read the returned statusUrl or poll:
+   GET https://certscore.ai/api/v1/pulse/status/<jobId>
+5. If the request fails before status/body/headers are visible, open:
+   https://certscore.ai/api-pulse-agent-guide.txt
+
+OpenAPI / GPT Action quick start:
 1. If you support OpenAPI actions/tools, import:
    https://certscore.ai/api/v1/openapi.chatgpt.json
 2. Call getPulseForUrl with:

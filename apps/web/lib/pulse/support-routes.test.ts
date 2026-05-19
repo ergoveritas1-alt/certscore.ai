@@ -129,9 +129,11 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /PULSE_STANDARD_DISCLAIMER/);
   assert.match(source, /Copy\/paste examples/);
   assert.match(source, /For AI agents/);
-  assert.match(source, /Agent quick start/);
+  assert.match(source, /Basic HTTP agent quick start/);
+  assert.match(source, /OpenAPI \/ GPT Action quick start/);
   assert.match(source, /Call getPulseForUrl with/);
   assert.match(source, /format: markdown/);
+  assert.match(source, /GET https:\/\/certscore\.ai\/api\/v1\/pulse\?url=<public URL>&format=markdown&detail=standard/);
   assert.match(source, /Agent fallback page/);
   assert.match(source, /Agent text guide/);
   assert.match(source, /ChatGPT Action schema/);
@@ -153,8 +155,10 @@ test("Pulse agent fallback page documents the fetch failure diagnostic contract"
 
   assert.match(source, /Agent-readable fallback/);
   assert.match(source, /Agent quick start/);
+  assert.match(source, /Basic HTTP agents/);
   assert.match(source, /getPulseForUrl/);
   assert.match(source, /detail=standard/);
+  assert.match(source, /format=markdown/);
   assert.match(source, /x-certscore-pulse: v1/);
   assert.match(source, /x-certscore-route: pulse-health \| openapi \| openapi-chatgpt \| discovery \| pulse \| pulse-status/);
   assert.match(source, /tool fetch\/DNS failure/);
@@ -169,9 +173,11 @@ test("Pulse plain text agent guide is retrievable and covers fetch failures", ()
   const source = readFileSync("apps/web/public/api-pulse-agent-guide.txt", "utf8");
 
   assert.match(source, /CertScore Pulse agent guide/);
-  assert.match(source, /Agent quick start/);
+  assert.match(source, /Basic HTTP agent quick start/);
+  assert.match(source, /OpenAPI \/ GPT Action quick start/);
   assert.match(source, /format: markdown/);
   assert.match(source, /detail: standard/);
+  assert.match(source, /GET https:\/\/certscore\.ai\/api\/v1\/pulse\?url=<public URL>&format=markdown&detail=standard/);
   assert.match(source, /https:\/\/certscore\.ai\/api-pulse/);
   assert.match(source, /https:\/\/certscore\.ai\/api-pulse\/agent/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/openapi\.chatgpt\.json/);

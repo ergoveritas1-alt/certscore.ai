@@ -48,10 +48,40 @@ export default function PulseAgentFallbackPage() {
 
         <section className="mt-8 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm leading-7 text-slate-800">
           <h2 className="font-semibold text-slate-950">Agent quick start</h2>
+          <h3 className="mt-3 font-semibold text-slate-950">Basic HTTP agents</h3>
+          <ol className="mt-3 list-decimal space-y-2 pl-5">
+            <li>
+              If you do not support OpenAPI actions, call{" "}
+              <a
+                className="break-all font-semibold text-sky-700"
+                href="https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown&detail=standard"
+              >
+                https://certscore.ai/api/v1/pulse?url=&lt;public URL&gt;&amp;format=markdown&amp;detail=standard
+              </a>
+              .
+            </li>
+            <li>
+              For a quick check, use <code className="rounded bg-white px-1">format=markdown</code> and{" "}
+              <code className="rounded bg-white px-1">detail=tiny</code>.
+            </li>
+            <li>
+              For structured evidence, use <code className="rounded bg-white px-1">format=json</code> and{" "}
+              <code className="rounded bg-white px-1">detail=full</code>.
+            </li>
+            <li>
+              If you receive HTTP 202, read the returned <code className="rounded bg-white px-1">statusUrl</code> or poll{" "}
+              <code className="rounded bg-white px-1">/api/v1/pulse/status/&lt;jobId&gt;</code>.
+            </li>
+            <li>If API fetch fails before headers, body, or status are visible, do not infer CertScore returned an error.</li>
+          </ol>
+          <h3 className="mt-5 font-semibold text-slate-950">OpenAPI / GPT Action agents</h3>
           <ol className="mt-3 list-decimal space-y-2 pl-5">
             <li>
               If you support OpenAPI actions or tools, import{" "}
-              <a className="break-all font-semibold text-sky-700" href="https://certscore.ai/api/v1/openapi.chatgpt.json">
+              <a
+                className="break-all font-semibold text-sky-700"
+                href="https://certscore.ai/api/v1/openapi.chatgpt.json"
+              >
                 https://certscore.ai/api/v1/openapi.chatgpt.json
               </a>
               .
@@ -67,7 +97,6 @@ export default function PulseAgentFallbackPage() {
             <li>
               Use <code className="rounded bg-white px-1">detail=full</code> only when the user asks for evidence or deeper review context.
             </li>
-            <li>If API fetch fails before headers, body, or status are visible, do not infer CertScore returned an error.</li>
           </ol>
         </section>
 
