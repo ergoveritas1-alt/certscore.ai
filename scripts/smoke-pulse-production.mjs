@@ -32,6 +32,12 @@ function assertDisclaimer(body, url) {
   assert.match(String(body.disclaimer ?? ""), disclaimerPattern, `${url} omitted the standard disclaimer`);
 }
 
+function assertPulseHeaders(result, route) {
+  assert.equal(result.response.headers.get("x-certscore-pulse"), "v1", `${result.url} omitted X-CertScore-Pulse`);
+  assert.equal(result.response.headers.get("x-certscore-route"), route, `${result.url} omitted X-CertScore-Route=${route}`);
+  assert.match(result.response.headers.get("x-certscore-request-id") ?? "", /.+/, `${result.url} omitted X-CertScore-Request-Id`);
+}
+
 function assertPulseShape(result, allowedStatuses) {
   assert.ok(allowedStatuses.includes(result.response.status), `${result.url} returned ${result.response.status}`);
 
@@ -73,14 +79,17 @@ async function main() {
 
   const health = await get("/api/v1/pulse-health");
   assert.equal(health.response.status, 200);
+  assertPulseHeaders(health, "pulse-health");
   const healthBody = json(health);
   assert.equal(healthBody.ok, true);
   assert.equal(healthBody.service, "certscore-pulse");
   assert.equal(healthBody.version, "v1");
+  assert.match(healthBody.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
   results.push(health);
 
   const openapi = await get("/api/v1/openapi.json");
   assert.equal(openapi.response.status, 200);
+  assertPulseHeaders(openapi, "openapi");
   const openapiBody = json(openapi);
   assert.equal(openapiBody.openapi, "3.1.0");
   assert.ok(openapiBody.paths?.["/api/v1/pulse"]);
@@ -88,6 +97,7 @@ async function main() {
 
   const discovery = await get("/.well-known/certscore-pulse");
   assert.equal(discovery.response.status, 200);
+  assertPulseHeaders(discovery, "discovery");
   const discoveryBody = json(discovery);
   for (const field of ["api", "openapi", "docs", "feedbackEmail", "disclaimer"]) {
     assert.ok(discoveryBody[field], `${discovery.url} missing ${field}`);
@@ -99,16 +109,19 @@ async function main() {
     "/api/v1/pulse?url=https%3A%2F%2Fexample.com&detail=full"
   ]) {
     const result = await get(path);
+    assertPulseHeaders(result, "pulse");
     assertPulseShape(result, [200, 202, 429]);
     results.push(result);
   }
 
   const markdown = await get("/api/v1/pulse?url=https%3A%2F%2Fexample.com&format=markdown");
+  assertPulseHeaders(markdown, "pulse");
   assertPulseShape(markdown, [200, 202, 429]);
   results.push(markdown);
 
   const invalid = await get("/api/v1/pulse?url=%3A%3A%3A%3A");
   assert.equal(invalid.response.status, 400);
+  assertPulseHeaders(invalid, "pulse");
   const invalidBody = json(invalid);
   assert.equal(invalidBody.type, "certscore_pulse_error");
   assert.equal(invalidBody.error?.code, "invalid_url");
@@ -116,6 +129,7 @@ async function main() {
   results.push(invalid);
 
   const missingStatus = await get("/api/v1/pulse/status/pulse_job_nonexistent_test");
+  assertPulseHeaders(missingStatus, "pulse-status");
   assertPulseShape(missingStatus, [404]);
   results.push(missingStatus);
 

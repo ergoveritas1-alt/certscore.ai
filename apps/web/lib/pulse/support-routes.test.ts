@@ -10,10 +10,13 @@ import { buildPulseError } from "./error";
 import { normalizePulseUrl } from "./request";
 
 test("OpenAPI route returns valid Pulse API JSON", async () => {
-  const response = openApiGET();
+  const response = openApiGET(new Request("https://certscore.ai/api/v1/openapi.json"));
 
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /application\/json/);
+  assert.equal(response.headers.get("x-certscore-pulse"), "v1");
+  assert.equal(response.headers.get("x-certscore-route"), "openapi");
+  assert.match(response.headers.get("x-certscore-request-id") ?? "", /.+/);
 
   const body = await response.json();
   assert.equal(body.openapi, "3.1.0");
@@ -34,7 +37,7 @@ test("OpenAPI route returns valid Pulse API JSON", async () => {
 });
 
 test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app error page", async () => {
-  const response = openApiGET();
+  const response = openApiGET(new Request("https://certscore.ai/api/v1/openapi.json"));
 
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/);
@@ -51,10 +54,13 @@ test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app 
 });
 
 test("Pulse discovery route returns compact machine-readable metadata", async () => {
-  const response = discoveryGET();
+  const response = discoveryGET(new Request("https://certscore.ai/.well-known/certscore-pulse"));
 
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /application\/json/);
+  assert.equal(response.headers.get("x-certscore-pulse"), "v1");
+  assert.equal(response.headers.get("x-certscore-route"), "discovery");
+  assert.match(response.headers.get("x-certscore-request-id") ?? "", /.+/);
 
   const body = await response.json();
   assert.equal(body.name, "CertScore Pulse");
@@ -72,17 +78,19 @@ test("Pulse discovery route returns compact machine-readable metadata", async ()
 });
 
 test("Pulse health canary route is dependency-free JSON", async () => {
-  const response = pulseHealthGET();
+  const response = pulseHealthGET(new Request("https://certscore.ai/api/v1/pulse-health"));
 
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/);
+  assert.equal(response.headers.get("x-certscore-pulse"), "v1");
+  assert.equal(response.headers.get("x-certscore-route"), "pulse-health");
+  assert.match(response.headers.get("x-certscore-request-id") ?? "", /.+/);
 
   const body = await response.json();
-  assert.deepEqual(body, {
-    ok: true,
-    service: "certscore-pulse",
-    version: "v1"
-  });
+  assert.equal(body.ok, true);
+  assert.equal(body.service, "certscore-pulse");
+  assert.equal(body.version, "v1");
+  assert.match(body.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
 
   const source = readFileSync("apps/web/app/api/v1/pulse-health/route.ts", "utf8");
   assert.doesNotMatch(source, /^import\s/m);
@@ -112,7 +120,7 @@ test("Pulse docs page source includes integration-critical guidance", () => {
 });
 
 test("Pulse OpenAPI documents the public status contracts without runtime examples", async () => {
-  const response = openApiGET();
+  const response = openApiGET(new Request("https://certscore.ai/api/v1/openapi.json"));
   const body = await response.json();
   const responses = body.paths["/api/v1/pulse"].get.responses;
 

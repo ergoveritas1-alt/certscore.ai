@@ -13,10 +13,21 @@ const discoveryDocument = {
   disclaimer: "Automated public-web observations for review. Not legal advice, certification, or a compliance determination."
 } as const;
 
-export function GET() {
-  return Response.json(discoveryDocument, {
+function requestId(request: Request) {
+  return request.headers.get("x-request-id") ?? crypto.randomUUID();
+}
+
+export function GET(request: Request) {
+  const id = requestId(request);
+
+  return new Response(JSON.stringify(discoveryDocument), {
     headers: {
-      "Cache-Control": "no-store"
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json; charset=utf-8",
+      "X-CertScore-Pulse": "v1",
+      "X-CertScore-Route": "discovery",
+      "X-CertScore-Request-Id": id,
+      "X-Content-Type-Options": "nosniff"
     },
     status: 200
   });

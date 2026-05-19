@@ -35,28 +35,36 @@ function etagFor(scanId: string, detail: string, format: string) {
   return `"pulse-v1-scan-${scanId}-${detail}-${format}"`;
 }
 
-function completedResponse(pulse: any, format: "json" | "markdown") {
+function diagnosticHeaders(route: string, requestId: string, headers?: HeadersInit) {
+  const nextHeaders = new Headers(headers);
+  nextHeaders.set("X-CertScore-Pulse", "v1");
+  nextHeaders.set("X-CertScore-Route", route);
+  nextHeaders.set("X-CertScore-Request-Id", requestId);
+  return nextHeaders;
+}
+
+function completedResponse(pulse: any, format: "json" | "markdown", requestId: string) {
   const scanId = pulse.scan?.scanId ?? pulse.links?.scanJsonUrl?.split("scanId=")[1] ?? "unknown";
   if (format === "markdown") {
     return new NextResponse(renderPulseMarkdown(pulse), {
-      headers: {
+      headers: diagnosticHeaders("pulse", requestId, {
         "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
         "Content-Type": "text/markdown; charset=utf-8",
         ETag: etagFor(scanId, pulse.meta.detail, "md")
-      }
+      })
     });
   }
   return NextResponse.json(pulse, {
-    headers: {
+    headers: diagnosticHeaders("pulse", requestId, {
       "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
       "Content-Type": "application/json; charset=utf-8",
       ETag: etagFor(scanId, pulse.meta.detail, "json")
-    }
+    })
   });
 }
 
-function pulseJson(body: unknown, init?: ResponseInit) {
-  const headers = new Headers(init?.headers);
+function pulseJson(body: unknown, init: ResponseInit | undefined, requestId: string) {
+  const headers = diagnosticHeaders("pulse", requestId, init?.headers);
   headers.set("Content-Type", "application/json; charset=utf-8");
   return new Response(JSON.stringify(body), {
     ...init,
@@ -85,6 +93,7 @@ async function buildAndLogCompletedPulse(input: {
   resolutionMode: string;
   scanRecord: NonNullable<Awaited<ReturnType<typeof getAnonymousScanById>>>;
   waitSeconds: number;
+  requestId: string;
   refresh?: Record<string, unknown> | null;
 }) {
   const pulse = buildPulseProjection({
@@ -113,7 +122,7 @@ async function buildAndLogCompletedPulse(input: {
       coverageStatus: pulse.coverage?.status ?? null
     }
   }).catch((error) => console.error("[pulse] request completion update failed", error));
-  return completedResponse(pulse, input.format);
+  return completedResponse(pulse, input.format, input.requestId);
 }
 
 export async function GET(request: Request) {
@@ -132,7 +141,7 @@ export async function GET(request: Request) {
   try {
     if (scanId) {
       if (!SCAN_ID_PATTERN.test(scanId)) {
-        return pulseJson(buildPulseError({ code: "invalid_url", message: "Invalid scan ID.", detail, format }), { status: 400 });
+        return pulseJson(buildPulseError({ code: "invalid_url", message: "Invalid scan ID.", detail, format }), { status: 400 }, requestId);
       }
       const { publicId } = await createPulseRequest({
         context: { ...contextBase, mode: "scanId" },
@@ -143,7 +152,7 @@ export async function GET(request: Request) {
       });
       const scanRecord = await getAnonymousScanById(scanId);
       if (!scanRecord || scanRecord.scan.status !== "completed") {
-        return pulseJson(buildPulseError({ code: "not_found", message: "Scan not found or not eligible for public Pulse.", detail, format }), { status: 404 });
+        return pulseJson(buildPulseError({ code: "not_found", message: "Scan not found or not eligible for public Pulse.", detail, format }), { status: 404 }, requestId);
       }
       return buildAndLogCompletedPulse({
         detail,
@@ -153,14 +162,15 @@ export async function GET(request: Request) {
         requestedUrl: scanRecord.scan.domainHostname ? `https://${scanRecord.scan.domainHostname}` : null,
         resolutionMode: "reused_existing_scan",
         scanRecord,
-        waitSeconds
+        waitSeconds,
+        requestId
       });
     }
 
     if (jobId) {
       const pulseRequest = await getPulseRequestByJobId(jobId);
       if (!pulseRequest) {
-        return pulseJson(buildPulseError({ code: "not_found", message: "Pulse job not found.", detail, format }), { status: 404 });
+        return pulseJson(buildPulseError({ code: "not_found", message: "Pulse job not found.", detail, format }), { status: 404 }, requestId);
       }
       if (pulseRequest.scan_id) {
         const scanRecord = await getAnonymousScanById(pulseRequest.scan_id).catch(() => null);
@@ -173,7 +183,8 @@ export async function GET(request: Request) {
             requestedUrl: pulseRequest.requested_url,
             resolutionMode: pulseRequest.resolution_mode ?? "reused_existing_scan",
             scanRecord,
-            waitSeconds
+            waitSeconds,
+            requestId
           });
         }
       }
@@ -190,19 +201,20 @@ export async function GET(request: Request) {
         reportUrl: pulseRequest.result_report_url,
         retryAfterSeconds: pulseRequest.retry_after_seconds
       });
-      return pulseJson(status, { headers: { "Cache-Control": "no-store" }, status: pulseRequest.status === "completed" ? 200 : 202 });
+      return pulseJson(status, { headers: { "Cache-Control": "no-store" }, status: pulseRequest.status === "completed" ? 200 : 202 }, requestId);
     }
 
     if (!rawUrl) {
       return pulseJson(
         buildPulseError({ code: "invalid_url", message: "Provide url, scanId, or jobId.", detail, format }),
-        { status: 400 }
+        { status: 400 },
+        requestId
       );
     }
 
     const normalized = normalizePulseUrl(rawUrl);
     if (!normalized.ok) {
-      return pulseJson(buildPulseError({ code: "invalid_url", message: normalized.message, url: rawUrl, detail, format }), { status: 400 });
+      return pulseJson(buildPulseError({ code: "invalid_url", message: normalized.message, url: rawUrl, detail, format }), { status: 400 }, requestId);
     }
 
     const { publicId, jobId: createdJobId } = await createPulseRequest({
@@ -225,7 +237,8 @@ export async function GET(request: Request) {
         requestedUrl: rawUrl,
         resolutionMode: "reused_existing_scan",
         scanRecord: latestScanRecord,
-        waitSeconds
+        waitSeconds,
+        requestId
       });
     }
 
@@ -245,6 +258,7 @@ export async function GET(request: Request) {
           resolutionMode: "returned_stale_while_refreshing",
           scanRecord: latestScanRecord,
           waitSeconds,
+          requestId,
           refresh: {
             requested: freshness === "refresh",
             performed: false,
@@ -265,13 +279,14 @@ export async function GET(request: Request) {
         {
           headers: { "Cache-Control": "no-store", "Retry-After": String(throttle.retryAfterSeconds) },
           status: 429
-        }
+        },
+        requestId
       );
     }
 
     const dnsStatus = await checkDomainDns(normalized.normalizedDomain);
     if (!dnsStatus.exists) {
-      return pulseJson(buildPulseError({ code: "invalid_url", message: dnsStatus.reason, url: rawUrl, detail, format }), { status: 400 });
+      return pulseJson(buildPulseError({ code: "invalid_url", message: dnsStatus.reason, url: rawUrl, detail, format }), { status: 400 }, requestId);
     }
 
     const queued = await createAnonymousFullScan({
@@ -302,7 +317,8 @@ export async function GET(request: Request) {
           requestedUrl: rawUrl,
           resolutionMode: "queued_new_scan",
           scanRecord: completed,
-          waitSeconds
+          waitSeconds,
+          requestId
         });
       }
     }
@@ -324,7 +340,8 @@ export async function GET(request: Request) {
         nextCheckUrl: absoluteUrl(`/api/v1/pulse?jobId=${createdJobId}`),
         lastKnownPulse: latestScanRecord ? absoluteUrl(`/api/v1/pulse?scanId=${latestScanRecord.scan.id}`) : null
       },
-      { headers: { "Cache-Control": "no-store" }, status: 202 }
+      { headers: { "Cache-Control": "no-store" }, status: 202 },
+      requestId
     );
   } catch (error) {
     console.error("[pulse] request failed", { requestId, error });
@@ -336,7 +353,8 @@ export async function GET(request: Request) {
         detail,
         format
       }),
-      { headers: { "Cache-Control": "no-store", "Retry-After": "60" }, status: 503 }
+      { headers: { "Cache-Control": "no-store", "Retry-After": "60" }, status: 503 },
+      requestId
     );
   }
 }

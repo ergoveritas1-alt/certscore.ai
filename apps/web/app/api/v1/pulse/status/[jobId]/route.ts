@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { NextResponse } from "next/server";
 import { buildPulseError } from "../../../../../../lib/pulse/error";
 import { buildPulseStatus } from "../../../../../../lib/pulse/status";
 import { getAnonymousScanById } from "../../../../../../server/scans/get-scan-by-id";
@@ -12,8 +11,16 @@ type RouteContext = {
   params: Promise<{ jobId: string }>;
 };
 
-function pulseJson(body: unknown, init?: ResponseInit) {
-  const headers = new Headers(init?.headers);
+function diagnosticHeaders(requestId: string, headers?: HeadersInit) {
+  const nextHeaders = new Headers(headers);
+  nextHeaders.set("X-CertScore-Pulse", "v1");
+  nextHeaders.set("X-CertScore-Route", "pulse-status");
+  nextHeaders.set("X-CertScore-Request-Id", requestId);
+  return nextHeaders;
+}
+
+function pulseJson(body: unknown, init: ResponseInit | undefined, requestId: string) {
+  const headers = diagnosticHeaders(requestId, init?.headers);
   headers.set("Content-Type", "application/json; charset=utf-8");
   return new Response(JSON.stringify(body), {
     ...init,
@@ -26,13 +33,13 @@ export async function GET(request: Request, context: RouteContext) {
   try {
     const { jobId } = await context.params;
     if (!jobId || jobId.length > 160) {
-      return pulseJson(buildPulseError({ code: "not_found", message: "Pulse job not found." }), { status: 404 });
+      return pulseJson(buildPulseError({ code: "not_found", message: "Pulse job not found." }), { status: 404 }, requestId);
     }
 
     const pulseRequest = await getPulseRequestByJobId(jobId);
 
     if (!pulseRequest) {
-      return pulseJson(buildPulseError({ code: "not_found", message: "Pulse job not found." }), { status: 404 });
+      return pulseJson(buildPulseError({ code: "not_found", message: "Pulse job not found." }), { status: 404 }, requestId);
     }
 
     let status = pulseRequest.status;
@@ -75,7 +82,7 @@ export async function GET(request: Request, context: RouteContext) {
     return pulseJson(body, {
       headers,
       status: status === "completed" || status === "completed_limited" ? 200 : status === "rate_limited" ? 429 : 202
-    });
+    }, requestId);
   } catch (error) {
     console.error("[pulse-status] request failed", { requestId, error });
     return pulseJson(
@@ -83,7 +90,8 @@ export async function GET(request: Request, context: RouteContext) {
         code: "internal_error",
         message: "Pulse is temporarily unavailable. Try again later."
       }),
-      { headers: { "Cache-Control": "no-store", "Retry-After": "60" }, status: 503 }
+      { headers: { "Cache-Control": "no-store", "Retry-After": "60" }, status: 503 },
+      requestId
     );
   }
 }
