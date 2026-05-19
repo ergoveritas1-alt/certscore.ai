@@ -1268,7 +1268,7 @@ function getDowngradeReasons(packet: UnifiedFindingPacket): string[] {
       ? "Concrete request or vendor artifacts were not retained for the pre-consent tracking claim."
       : null,
     negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence")
-      ? "The retained evidence does not yet prove the request sequence happened before a clear consent choice."
+      ? "The retained evidence does not yet fully support the request sequence before a clear consent choice."
       : null,
     negativeEvidenceFlags.includes("missing_concrete_sensitive_payload")
       ? "The retained evidence does not yet confirm that sensitive input or payload data was actually involved."

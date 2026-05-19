@@ -1712,7 +1712,7 @@ test("keeps runtime-backed session recording in top findings when consent issues
         verificationState: "runtime"
       },
       severity: "medium",
-      summary: "Microsoft Clarity session recording was observed."
+      summary: "Microsoft Clarity session replay service signals were observed."
     })
   ]);
 
@@ -1721,7 +1721,7 @@ test("keeps runtime-backed session recording in top findings when consent issues
   assert.ok(topFindingIds.includes("asymmetric_consent_ui"));
   assert.equal(
     projection.topFindings.find((finding) => finding.id === "session_recording_services_detected")?.shortSummary,
-    "Microsoft Clarity session recording was observed during runtime collection."
+    "Microsoft Clarity session replay service signals were observed during runtime collection."
   );
 });
 
@@ -2341,7 +2341,7 @@ test("projects concrete session replay vendor evidence into executive finding js
   assert.ok(finding?.evidencePreview.includes("Runtime vendor: Qualtrics SiteIntercept"));
   assert.equal(
     finding?.shortSummary,
-    "Qualtrics SiteIntercept session recording was observed during runtime collection."
+    "Qualtrics SiteIntercept session replay service signals were observed during runtime collection."
   );
 });
 

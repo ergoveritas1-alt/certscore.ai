@@ -2780,11 +2780,11 @@ function buildExecutiveShortSummary(
     if (vendors.length > 0) {
       const vendorList = formatVendorList(vendors);
       return vendors.length === 1
-        ? `${vendorList} session recording was observed during runtime collection.`
-        : `${vendorList} session recording services were observed during runtime collection.`;
+        ? `${vendorList} session replay service signals were observed during runtime collection.`
+        : `${vendorList} session replay service signals were observed during runtime collection.`;
     }
 
-    return "Session recording services were observed during runtime collection.";
+    return "Session replay service signals were observed during runtime collection.";
   }
 
   if (findingId === "rtb_cookie_sync_observed") {

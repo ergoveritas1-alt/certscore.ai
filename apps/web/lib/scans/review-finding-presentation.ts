@@ -613,7 +613,7 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
       suggestedFix:
         "Perform a targeted DOM audit to resolve the identified WCAG failures. Prioritize Level A remediation: ensure all images have descriptive alt text, interactive elements (buttons/links) have unique aria-labels, and the tabindex sequence is logically structured to prevent keyboard traps in dynamic page components.",
       whyThisMatters:
-        "The automated detector confirmed distinct WCAG rule violations, signaling structural defects in the DOM. In technical auditing, even a low error count can indicate critical barriers, such as missing ARIA landmarks or broken keyboard focus, that render core navigation or interactive elements inaccessible to users relying on assistive technologies."
+        "The automated detector retained automated accessibility rule examples for review, signaling structural issues in the DOM. In technical auditing, even a low example count can indicate barriers, such as missing ARIA landmarks or broken keyboard focus, that may affect core navigation or interactive elements for users relying on assistive technologies."
     },
     evidenceAwareOverrides: [
       {
@@ -1551,7 +1551,7 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
 
     if (hasWeakPreconsentEvidence) {
       presentation.whyThisMatters =
-        "The automated scan retained a detector-backed signal that may indicate initial-load tracking, but the retained evidence does not yet preserve both a concrete runtime artifact and a clear before-consent sequence. This is useful for audit triage, not for treating the behavior as a confirmed consent violation.";
+        "The automated scan retained a detector-backed signal that may indicate initial-load tracking, but the retained evidence does not yet preserve both a concrete runtime artifact and a clear before-consent sequence. This is useful for audit triage, not for treating the behavior as a confirmed consent-timing finding.";
       presentation.suggestedFix =
         "Replay the consent flow with network capture enabled, retain the concrete request or vendor artifact that fired, and confirm whether it occurred before a meaningful user choice was available.";
       presentation.confidenceScore = "0.45";
@@ -1564,7 +1564,7 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
       presentation.whyThisMatters =
         `The automated scan observed ${preconsentEvidence.violationCount} pre-consent tracking request${preconsentEvidence.violationCount === 1 ? "" : "s"} before the visitor could act on the consent interface. That pattern suggests one or more non-essential third-party tags or scripts began transmitting data during initial render rather than waiting for a confirmed consent state.`;
       presentation.suggestedFix =
-        `Audit the non-essential scripts responsible for these ${preconsentEvidence.violationCount} request${preconsentEvidence.violationCount === 1 ? "" : "s"} and block them by default. They should initialize only after the Consent Management Platform, consent banner, or equivalent control records an affirmative opt-in state.`;
+        `Teams commonly review the non-essential scripts responsible for these ${preconsentEvidence.violationCount} request${preconsentEvidence.violationCount === 1 ? "" : "s"} and whether they are gated by default. Manual review should confirm whether they initialize only after the Consent Management Platform, consent banner, or equivalent control records the intended consent state.`;
       presentation.confidenceScore = "1.0";
     } else if (preconsentEvidence.evidenceUrls.length > 0 && maxAssertionLevel !== "weak") {
       presentation.whyThisMatters =
@@ -1573,32 +1573,32 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
           : `The automated scan captured representative ${activityLabel} requests to ${vendorList} during the initial page-load sequence, before any consent state was confirmed in the retained evidence.`;
       presentation.suggestedFix =
         hasObservedConsentChoice
-          ? "Block or defer these vendor requests until an affirmative consent choice is stored. Review tag-manager triggers, inline loaders, and third-party bootstrap scripts so they do not fire on initial page load before consent is granted."
-          : "Audit the scripts and network calls that run on initial page load, then defer any non-essential analytics, advertising, or measurement behavior until the site has a confirmed consent state.";
+          ? "Teams commonly review whether these vendor requests are gated until the intended consent state is stored. Review tag-manager triggers, inline loaders, and third-party bootstrap scripts so they do not fire on initial page load before consent state is available."
+          : "Teams commonly review the scripts and network calls that run on initial page load, then evaluate whether non-essential analytics, advertising, or measurement behavior should wait until the site has a confirmed consent state.";
       presentation.confidenceScore = hasObservedConsentChoice ? "1.0" : "0.85";
     } else if (preconsentEvidence.vendors.length > 0 && maxAssertionLevel !== "weak") {
       presentation.whyThisMatters =
         hasObservedConsentChoice
           ? `The automated scan observed vendor activity before a recorded consent choice, including ${vendorList}. That suggests non-essential vendor code may be initializing too early.`
-          : `The automated scan observed initial-load vendor activity, including ${vendorList}. That is useful technical evidence to review, but it does not by itself prove a consent violation without a clearly observed consent surface and timing relationship.`;
+          : `The automated scan observed initial-load vendor activity, including ${vendorList}. That is useful technical evidence to review, but it does not by itself fully support a consent-timing finding without a clearly observed consent surface and timing relationship.`;
       presentation.suggestedFix =
         hasObservedConsentChoice
-          ? "Identify where these vendor tags are loaded and gate them behind a positive consent signal. The default behavior should suppress non-essential advertising, analytics, and measurement vendors until the visitor opts in."
-          : "Trace where these vendors are initialized on first render and confirm whether they are essential. If they are non-essential, defer them until the site has a confirmed consent state.";
+          ? "Teams commonly identify where these vendor tags are loaded and review whether they are gated behind the intended consent signal. The default behavior may need to suppress non-essential advertising, analytics, and measurement vendors until the visitor opts in."
+          : "Teams commonly trace where these vendors are initialized on first render and confirm whether they are essential. If they are non-essential, teams may review whether they should wait until the site has a confirmed consent state.";
       presentation.confidenceScore = hasObservedConsentChoice ? "1.0" : "0.8";
     } else if (typeof requestCount === "number" && requestCount > 0) {
       presentation.whyThisMatters =
         hasObservedConsentChoice
           ? `The automated scan observed ${requestCount} tracking-related request${requestCount === 1 ? "" : "s"} before the visitor had a meaningful chance to choose.`
-          : `The automated scan observed ${requestCount} tracking- or measurement-related request${requestCount === 1 ? "" : "s"} during initial page load. That is a useful signal to review, but the retained evidence does not by itself prove that the activity occurred before an actionable consent choice.`;
+          : `The automated scan observed ${requestCount} tracking- or measurement-related request${requestCount === 1 ? "" : "s"} during initial page load. That is a useful signal to review, but the retained evidence does not by itself fully support that the activity occurred before an actionable consent choice.`;
       presentation.suggestedFix =
-        "Audit the scripts and network calls that run during initial render, then suppress non-essential advertising, analytics, and measurement behavior until a positive consent state is present.";
+        "Teams commonly review the scripts and network calls that run during initial render, then evaluate whether non-essential advertising, analytics, and measurement behavior should wait until the intended consent state is present.";
       presentation.confidenceScore = hasObservedConsentChoice ? "0.95" : "0.75";
     } else {
       presentation.whyThisMatters =
         negativeEvidenceFlags.has("no_consent_surface_observed") || negativeEvidenceFlags.has("no_consent_actionable_choice_observed")
-          ? "The automated scan retained signals consistent with initial-load tracking or measurement activity, but no clear consent surface or actionable choice was retained in the evidence. Additional evidence is needed before treating that activity as a confirmed pre-consent violation."
-          : "The automated scan retained signals consistent with initial-load tracking or measurement activity. Additional evidence is needed before treating that activity as a confirmed pre-consent violation.";
+          ? "The automated scan retained signals consistent with initial-load tracking or measurement activity, but no clear consent surface or actionable choice was retained in the evidence. Additional evidence is needed before treating that activity as a confirmed pre-consent tracking sequence."
+          : "The automated scan retained signals consistent with initial-load tracking or measurement activity. Additional evidence is needed before treating that activity as a confirmed pre-consent tracking sequence.";
       presentation.suggestedFix =
         "Review the retained requests alongside the live consent flow and confirm whether any non-essential vendors initialize before the site has a confirmed consent state.";
       presentation.confidenceScore = /pre-consent tracking detected/i.test(input.haystack) ? "0.7" : "0.8";
@@ -1862,7 +1862,7 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
         url: "https://www.w3.org/TR/privacy-principles/#data-minimization"
       };
       presentation.whyThisMatters =
-        `The scan retained third-party payload evidence with field-level indicators of ${dataTypeLabel} data sent to ${vendorLabel}. This is stronger than a generic tracker signal, but the retained evidence does not yet prove plaintext exfiltration with the same confidence as a direct email or phone match.${sourceContext}${inputHintContext}`;
+        `The scan retained third-party payload evidence with field-level indicators of ${dataTypeLabel} data sent to ${vendorLabel}. This is stronger than a generic tracker signal, but the retained evidence does not yet fully support plaintext exfiltration with the same confidence as a direct email or phone match.${sourceContext}${inputHintContext}`;
       presentation.suggestedFix =
         "Inspect the affected third-party payload construction logic and remove high-sensitivity fields from outbound requests by default. If the integration truly requires them, gate dispatch appropriately and apply redaction or approved irreversible hashing before transmission.";
       presentation.confidenceScore = "0.7";
@@ -1920,7 +1920,7 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
 
     if (typeof count === "number" && count >= 20) {
       presentation.whyThisMatters =
-        `The automated scan confirmed ${count} distinct landmark violations, identifying a significant defect in the site's semantic architecture. Landmarks, such as main, nav, and header regions, are the primary method screen reader users use to skip repetitive content and navigate directly to page sections. A high count of ${count} suggests these structural markers are either entirely missing or improperly nested across multiple site templates.`;
+        `The automated scan retained ${count} automated landmark rule examples for review, identifying a significant issue in the site's semantic architecture. Landmarks, such as main, nav, and header regions, are a primary method screen reader users use to skip repetitive content and navigate directly to page sections. A high count of ${count} suggests these structural markers may be missing or improperly nested across multiple site templates.`;
       presentation.suggestedFix =
         "Refactor global page templates to implement a standard ARIA landmark structure. Ensure that each page contains exactly one main element and that all navigation blocks are wrapped in nav tags. If a page contains multiple navigation regions, provide unique aria-label attributes to each to distinguish their specific purpose, such as Primary versus Footer navigation.";
       presentation.confidenceScore = "1.0";
@@ -1965,7 +1965,7 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
 
     if (typeof count === "number" && count >= 50) {
       presentation.whyThisMatters =
-        `The automated scan confirmed ${count} distinct WCAG rule violations, identifying a high density of structural defects in the site's DOM. Technical telemetry specifically flagged ARIA configuration errors and broken focus indicators. These issues prevent assistive technologies from correctly identifying interactive elements and obstruct keyboard-only navigation, creating functional barriers to site access.`;
+        `The automated scan retained ${count} automated accessibility rule examples for review, identifying a high density of structural issues in the site's DOM. Technical telemetry specifically flagged ARIA configuration errors and focus indicators. These issues may affect how assistive technologies identify interactive elements and how keyboard-only users navigate the site.`;
       presentation.suggestedFix =
         `Perform a systematic DOM audit to remediate the ${count} identified WCAG failures. Prioritize fixing the focus indicator logic to ensure all interactive elements have a visible outline during keyboard navigation. Additionally, audit ARIA attributes to ensure they match the functional roles of the elements they describe, and verify that all non-text content includes appropriate text alternatives.`;
       presentation.confidenceScore = "1.0";

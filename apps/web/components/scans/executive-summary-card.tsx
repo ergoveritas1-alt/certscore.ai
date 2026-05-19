@@ -12,9 +12,13 @@ import {
 import { formatRepresentativeAccessibilityCoverage } from "../../lib/scans/accessibility-evidence";
 import { compactEvidenceJsonForDisplay } from "../../lib/scans/compact-evidence-json";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
-import { getFindingCriticalityBadge, type FindingCriticalityBadge } from "../../lib/scans/finding-criticality-badges";
+import type { FindingCriticalityBadge } from "../../lib/scans/finding-criticality-badges";
 import { getFindingDensityBenchmark } from "../../lib/scans/finding-density-benchmarks";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
+import {
+  getPublicReportConfidenceDefinition,
+  getPublicReportFindingDisplayForCertFinding
+} from "../../lib/scans/public-report-finding-display";
 import { rankFindings } from "../../lib/scans/rank-findings";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 import {
@@ -209,16 +213,6 @@ function getEvidenceConfidenceLabel(confidence: CertScoreFinding["confidence"]) 
     return "Good evidence";
   }
   return "Review evidence";
-}
-
-function getEvidenceConfidenceDefinition(confidence: CertScoreFinding["confidence"]) {
-  if (confidence === "strong") {
-    return "Strong evidence means CertScore observed direct behavior during the scan, such as a classified tracking request before a consent choice.";
-  }
-  if (confidence === "good") {
-    return "Good evidence means the signal is supported but may rely on partial, contextual, or vendor-pattern evidence.";
-  }
-  return "Retained for analyst review; not enough to stand alone as a confirmed finding.";
 }
 
 function getFindingTypeLabel(finding: CertScoreFinding) {
@@ -525,6 +519,7 @@ function compactRepresentativeRequests(requests: unknown) {
 
 function buildRegulatoryLensEvidencePayload(finding: CertScoreFinding, context?: Record<string, unknown>) {
   const details = finding.evidenceDetails ?? {};
+  const display = getPublicReportFindingDisplayForCertFinding(finding);
 
   return {
     context,
@@ -587,14 +582,16 @@ function buildRegulatoryLensEvidencePayload(finding: CertScoreFinding, context?:
     evidencePreview: compactStringList(finding.evidencePreview, 3, 220),
     evidenceRefs: compactStringList(finding.evidenceRefs, 3, 220),
     findingId: finding.id,
-    label: finding.label,
+    label: display.title,
     section: finding.section,
-    severity: finding.severity,
+    criticality: display.criticality,
+    scanPriority: finding.severity,
     shortSummary: finding.shortSummary
   };
 }
 
 function buildFindingEvidencePayload(finding: CertScoreFinding, context?: Record<string, unknown>) {
+  const display = getPublicReportFindingDisplayForCertFinding(finding);
   if (finding.id === "reject_tracking_persists_after_reject") {
     return {
       context,
@@ -610,9 +607,10 @@ function buildFindingEvidencePayload(finding: CertScoreFinding, context?: Record
     evidencePreview: finding.evidencePreview,
     evidenceRefs: finding.evidenceRefs,
     findingId: finding.id,
-    label: finding.label,
+    label: display.title,
     section: finding.section,
-    severity: finding.severity,
+    criticality: display.criticality,
+    scanPriority: finding.severity,
     shortSummary: finding.shortSummary
   };
 }
@@ -635,6 +633,7 @@ function buildRegulatoryLensFindingFromCertFinding(
   context?: Record<string, unknown>
 ) {
   const regulatoryContext = getFindingRegulatoryContext(finding.id);
+  const display = getPublicReportFindingDisplayForCertFinding(finding);
   const reviewContextChips = filterReviewContextChipsForLens(
     getFindingReviewContextChips(finding.id, 6),
     typeof context?.lens === "string" ? context.lens : null
@@ -654,7 +653,7 @@ function buildRegulatoryLensFindingFromCertFinding(
     },
     guideHref: regulatoryContext ? `/guides/findings/${finding.id}` : undefined,
     id: finding.id,
-    label,
+    label: display.referenceId && (label === finding.shortSummary || label === finding.label) ? display.title : label,
     reviewContextChips,
     reviewContextCopy: regulatoryContext?.primaryConcern.displayCopy,
     reviewContextLabel: regulatoryContext?.primaryConcern.label
@@ -2363,6 +2362,11 @@ function getFindingReferenceLink(finding: CertScoreFinding) {
 }
 
 function getFindingFixText(finding: CertScoreFinding) {
+  const display = getPublicReportFindingDisplayForCertFinding(finding);
+  if (display.remediation) {
+    return display.remediation;
+  }
+
   if (finding.id === "third_party_tracking_pre_consent") {
     return "Move non-essential analytics, adtech, and session-replay tags behind a consent gate. Load them only after an explicit accept signal and verify that the default page path produces zero third-party tracking requests before consent.";
   }
@@ -2963,7 +2967,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
           <p className="text-sm leading-6 text-slate-700">{input.finding.whyItMatters}</p>
         </div>
         <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">How to fix</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Review and remediation starting points</p>
           <p className="text-sm leading-6 text-slate-700">{getFindingFixText(input.finding)}</p>
           {registryGuideHref ? (
             <a
@@ -3167,6 +3171,7 @@ function compactRejectConsentInteraction(value: Record<string, unknown>) {
 
 function compactRejectEvidenceJsonPayload(finding: CertScoreFinding) {
   const details = finding.evidenceDetails ?? {};
+  const display = getPublicReportFindingDisplayForCertFinding(finding);
   const postRejectRequests = (details.postRejectNonEssentialRequests ?? [])
     .filter(isPlainObject)
     .map(compactRejectRequest)
@@ -3180,14 +3185,15 @@ function compactRejectEvidenceJsonPayload(finding: CertScoreFinding) {
 
   return {
     id: finding.id,
-    label: finding.label,
-    severity: finding.severity,
+    label: display.title,
+    criticality: display.criticality,
+    scanPriority: finding.severity,
     confidence: finding.confidence,
     directVsInferred: finding.directVsInferred,
     evidenceVersion: finding.evidenceVersion ?? "1.1",
     shortSummary: finding.shortSummary,
     whyItMatters: finding.whyItMatters,
-    remediation: finding.remediation,
+    remediation: display.remediation,
     evidence: {
       counts: details.counts ?? {},
       vendors: Array.from(
@@ -3225,12 +3231,14 @@ function compactRejectEvidenceJsonPayload(finding: CertScoreFinding) {
 
 function compactPreConsentTrackingEvidenceJsonPayload(finding: CertScoreFinding) {
   const details = finding.evidenceDetails ?? {};
+  const display = getPublicReportFindingDisplayForCertFinding(finding);
 
   return {
     id: finding.id,
-    label: finding.label,
+    label: display.title,
     section: finding.section,
-    severity: finding.severity,
+    criticality: display.criticality,
+    scanPriority: finding.severity,
     confidence: finding.confidence,
     directVsInferred: finding.directVsInferred,
     defaultSurfacePriority: finding.defaultSurfacePriority,
@@ -3278,12 +3286,14 @@ function compactPreConsentTrackingEvidenceJsonPayload(finding: CertScoreFinding)
 
 function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
   const details = finding.evidenceDetails ?? {};
+  const display = getPublicReportFindingDisplayForCertFinding(finding);
 
   return {
     id: finding.id,
-    label: finding.label,
+    label: display.title,
     section: finding.section,
-    severity: finding.severity,
+    criticality: display.criticality,
+    scanPriority: finding.severity,
     confidence: finding.confidence,
     directVsInferred: finding.directVsInferred,
     defaultSurfacePriority: finding.defaultSurfacePriority,
@@ -3645,7 +3655,7 @@ export function ExecutiveSummaryCard(input: {
     scanOutcome: input.scanOutcome,
     topFindings: executiveHeadlineFindings.map((finding) => ({
       id: finding.id,
-      label: finding.label,
+      label: getPublicReportFindingDisplayForCertFinding(finding).title,
       section: finding.section
     })),
     verifiedPublicSurfacesCount: input.verifiedPublicSurfacesCount
@@ -3799,7 +3809,8 @@ export function ExecutiveSummaryCard(input: {
               filteredTopFindings.map((finding, index) => {
                 const iconKey = topFindingIconKeys.get(finding.id) ?? getFindingTitleIconKey(finding.id);
                 const densityBenchmark = getFindingDensityBenchmark(finding.id);
-                const criticalityBadge = getFindingCriticalityBadge(finding.id) ?? finding.severity;
+                const display = getPublicReportFindingDisplayForCertFinding(finding);
+                const criticalityBadge = display.criticality;
                 const cardTone = getFindingCardTone(finding, index === 0, criticalityBadge);
                 return (
                 <div key={finding.id} className={`overflow-hidden rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${cardTone.card}`}>
@@ -3814,7 +3825,15 @@ export function ExecutiveSummaryCard(input: {
                     </span>
                     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${cardTone.confidenceBadge}`}>
                       {getEvidenceConfidenceLabel(finding.confidence)}
-                      <InfoTip align="start" placement="bottom" text={getEvidenceConfidenceDefinition(finding.confidence)} />
+                      <InfoTip
+                        align="start"
+                        placement="bottom"
+                        text={getPublicReportConfidenceDefinition({
+                          confidence: finding.confidence,
+                          findingId: finding.id,
+                          section: finding.section
+                        })}
+                      />
                     </span>
                     {densityBenchmark ? (
                       <span
@@ -3839,7 +3858,7 @@ export function ExecutiveSummaryCard(input: {
                       <FindingTitleIcon finding={finding} iconKey={iconKey} />
                     </div>
                     <p data-testid="executive-finding-label" className="pt-0.5 text-[17px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">
-                      {finding.label}
+                      {display.title}
                     </p>
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-700">{getRecommendedNextStep(finding)}</p>

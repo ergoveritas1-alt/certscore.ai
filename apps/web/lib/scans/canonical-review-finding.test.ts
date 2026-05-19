@@ -339,7 +339,7 @@ test("uses calibrated max-confidence copy for 71 pre-consent tracking requests",
   );
   assert.equal(
     presentation.suggestedFix,
-    "Audit the non-essential scripts responsible for these 71 requests and block them by default. They should initialize only after the Consent Management Platform, consent banner, or equivalent control records an affirmative opt-in state."
+    "Teams commonly review the non-essential scripts responsible for these 71 requests and whether they are gated by default. Manual review should confirm whether they initialize only after the Consent Management Platform, consent banner, or equivalent control records the intended consent state."
   );
   assert.equal(presentation.suggestedBestPractice?.title, "Guidance on cookies and similar technologies");
   assert.equal(presentation.confidenceScore, "1.0");
@@ -382,7 +382,7 @@ test("uses summarized pre-consent evidence from supporting signals without requi
   );
   assert.match(
     presentation.suggestedFix,
-    /Block or defer these vendor requests until an affirmative consent choice is stored/i
+    /Teams commonly review whether these vendor requests are gated until the intended consent state is stored/i
   );
   assert.equal(presentation.confidenceScore, "1.0");
 });
@@ -712,7 +712,7 @@ test("uses strong accessibility copy and high confidence for confirmed WCAG issu
   assert.equal(presentation.findingName, "WCAG errors");
   assert.match(
     presentation.whyThisMatters,
-    /distinct WCAG rule violations|structural defects in the DOM|missing ARIA landmarks|broken keyboard focus/i
+    /automated accessibility rule examples for review|structural issues in the DOM|missing ARIA landmarks|broken keyboard focus/i
   );
   assert.match(
     presentation.suggestedFix,
@@ -826,7 +826,7 @@ test("uses max-strength copy for high-volume WCAG errors", () => {
   assert.equal(presentation.findingName, "WCAG errors");
   assert.match(
     presentation.whyThisMatters,
-    /63 distinct WCAG rule violations|high density of structural defects|ARIA configuration errors|broken focus indicators/i
+    /63 automated accessibility rule examples for review|high density of structural issues|ARIA configuration errors|focus indicators/i
   );
   assert.match(
     presentation.suggestedFix,
@@ -1750,7 +1750,7 @@ test("uses medium-high confidence risk copy for field-level sensitive payload in
   assert.equal(presentation.findingName, "Potential high-sensitivity data collection risk");
   assert.match(
     presentation.whyThisMatters,
-    /field-level indicators of insurance member id data|does not yet prove plaintext exfiltration/i
+    /field-level indicators of insurance member id data|does not yet fully support plaintext exfiltration/i
   );
   assert.equal(presentation.confidenceScore, "0.7");
 });
