@@ -103,7 +103,7 @@ function deriveFreshness(completedAt: string | null, generated: string) {
 function deriveCoverage(scanRecord: ScanDetailResponse) {
   const posture = scanRecord.accessPostureSummary;
   const interruptions =
-    posture.interruptionLabel || posture.interruptionReason || posture.stopReviewTitle || posture.stopReason
+    posture.interruptionLabel || posture.interruptionReason || posture.stopOutcomeTitle || posture.stopReviewTitle || posture.stopReason
       ? [
           {
             label: posture.interruptionLabel ?? posture.stopReviewTitle ?? "Access limited",
@@ -111,7 +111,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
               posture.interruptionReason ??
               posture.stopReason ??
               "Scan coverage was limited before meaningful public evidence was retained.",
-            ...(posture.stopReviewTitle ? { reviewTitle: posture.stopReviewTitle } : {}),
+            ...(posture.stopOutcomeTitle || posture.stopReviewTitle ? { reviewTitle: posture.stopOutcomeTitle ?? posture.stopReviewTitle } : {}),
             ...(posture.stopReason ? { reviewReason: posture.stopReason } : {})
           }
         ]
@@ -577,7 +577,9 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       },
       feedback: {
         email: feedback.email,
-        feedbackUrl: feedback.feedbackUrl
+        feedbackUrl: feedback.feedbackUrl,
+        positiveUrl: feedback.positiveUrl,
+        negativeUrl: feedback.negativeUrl
       },
       capabilities: base.capabilities,
       agentInterpretation: base.agentInterpretation,

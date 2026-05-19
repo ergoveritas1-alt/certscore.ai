@@ -137,6 +137,9 @@ elif [[ "$LAST_STATUS" == "200" ]]; then
     if (!body.summary || !body.disclaimer) process.exit(1);
     if (!requiredLinks.every((key) => body.links?.[key])) process.exit(1);
     if (body.feedback?.email !== "support@certscore.ai") process.exit(1);
+    if (body.request?.pulseRequestId || body.feedback?.feedbackUrl) {
+      if (!body.feedback?.feedbackUrl || !body.feedback?.positiveUrl || !body.feedback?.negativeUrl) process.exit(1);
+    }
     if (body.capabilities?.method !== "automated_runtime_analysis") process.exit(1);
     if (body.agentInterpretation?.responseClass !== "completed_pulse") process.exit(1);
     const topFindings = Array.isArray(body.topFindings) ? body.topFindings : [];
@@ -186,6 +189,14 @@ elif ! grep -Eq "automated runtime analysis|automated public-web" "$LAST_BODY"; 
   fail "markdown pulse" "Missing capabilities or purpose language."
 elif grep -q "Scan completed: Not available" "$LAST_BODY"; then
   fail "markdown pulse" "Markdown shows unavailable completed timestamp."
+elif ! grep -q "| Field | Value |" "$LAST_BODY"; then
+  fail "markdown pulse" "Missing top summary table."
+elif ! grep -q "## Highest-priority findings" "$LAST_BODY"; then
+  fail "markdown pulse" "Missing stable highest-priority findings heading."
+elif ! grep -q "## Privacy and consent signals" "$LAST_BODY"; then
+  fail "markdown pulse" "Missing stable privacy and consent heading."
+elif ! grep -q "## Coverage and limitations" "$LAST_BODY"; then
+  fail "markdown pulse" "Missing stable coverage heading."
 else
   pass "markdown pulse"
 fi
@@ -242,9 +253,10 @@ check_openapi() {
     const fs = require("fs");
     const body = JSON.parse(fs.readFileSync(process.env.BODY_FILE, "utf8"));
     const schemas = body.components?.schemas ?? {};
-    for (const name of ["PulseResponse", "PulseStatus", "PulseError", "PulseCapabilities", "PulseAgentInterpretation"]) {
+    for (const name of ["PulseResponse", "PulseStatus", "PulseError", "PulseFeedback", "PulseCapabilities", "PulseAgentInterpretation", "PulseCoverageInterruption"]) {
       if (!schemas[name]) process.exit(1);
     }
+    if (!body.paths?.["/api/v1/pulse"]?.get?.responses?.["200"]?.content?.["application/json"]?.schema) process.exit(1);
     const serialized = JSON.stringify(body);
     if (!serialized.includes("capabilities") || !serialized.includes("agentInterpretation")) process.exit(1);
     for (const header of ["x-certscore-pulse", "x-certscore-route", "x-certscore-request-id"]) {

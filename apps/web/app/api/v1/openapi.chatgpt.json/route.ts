@@ -353,7 +353,9 @@ const chatGptOpenApiDocument = {
         additionalProperties: true,
         properties: {
           email: { type: "string", const: "support@certscore.ai" },
-          feedbackUrl: { type: "string" }
+          feedbackUrl: { type: "string" },
+          positiveUrl: { type: "string" },
+          negativeUrl: { type: "string" }
         }
       },
       PulseCapabilities: {

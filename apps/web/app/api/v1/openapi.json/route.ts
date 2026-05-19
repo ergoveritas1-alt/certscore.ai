@@ -158,7 +158,9 @@ const openApiDocument = {
         required: ["email"],
         properties: {
           email: { type: "string", const: "support@certscore.ai" },
-          feedbackUrl: { type: "string" }
+          feedbackUrl: { type: "string" },
+          positiveUrl: { type: "string" },
+          negativeUrl: { type: "string" }
         }
       },
       PulseAgentInterpretation: {

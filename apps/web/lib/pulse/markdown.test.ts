@@ -51,7 +51,16 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
     disclaimer: PULSE_STANDARD_DISCLAIMER
   });
 
-  assert.match(markdown, /^# CertScore Pulse: example\.com/m);
+  assert.match(markdown, /^# CertScore Pulse/m);
+  assert.match(markdown, /\| Domain \| example\.com \|/);
+  assert.match(markdown, /\| High-priority findings \| 0 \|/);
+  assert.match(markdown, /## Summary/);
+  assert.match(markdown, /## Highest-priority findings/);
+  assert.match(markdown, /## Privacy and consent signals/);
+  assert.match(markdown, /## Cookie and third-party request activity/);
+  assert.match(markdown, /## Accessibility signals/);
+  assert.match(markdown, /## Disclosure and trust signals/);
+  assert.match(markdown, /## Coverage and limitations/);
   assert.match(markdown, /automated runtime analysis of public websites/);
   assert.match(markdown, /No major automated review signals were surfaced in this scan\./);
   assert.match(markdown, /support@certscore\.ai/);

@@ -409,7 +409,7 @@ const responseExamples = [
     title: "Markdown response",
     language: "markdown",
     value:
-      "# CertScore Pulse: example.com\n\nStatus: Completed\nScore: 72/100\nRisk level: Review recommended\n\n## Quick readout\n\nAutomated scan surfaced consent-timing and third-party collection review signals.\n\n## Coverage\n\nCoverage was limited; absence of findings should not be interpreted as absence of risk.\n\n## Disclaimer\n\n" +
+      "# CertScore Pulse\n\n| Field | Value |\n|---|---|\n| Domain | example.com |\n| Score | 72/100 |\n| Risk level | Review recommended |\n| High-priority findings | 1 |\n| Total observations | 3 |\n| Scan completed | 2026-05-18T23:15:31Z |\n| Coverage status | Partial |\n\n## Summary\n\nAutomated scan surfaced consent-timing and third-party collection review signals.\n\n## Highest-priority findings\n\n1. Tracking started before consent\n\n## Privacy and consent signals\n\n- Tracker footprint: 7 third-party domains observed; 2 classified tracker vendors identified.\n\n## Cookie and third-party request activity\n\n- Vendor mix: cdn infra 1 · session replay 1\n\n## Accessibility signals\n\n- Accessibility-related findings: 0\n\n## Disclosure and trust signals\n\n- Policy surfaces: 2 policy URLs covered.\n\n## Coverage and limitations\n\nCoverage was limited; absence of findings should not be interpreted as absence of risk.\n\n## Links\n\nFull report: https://certscore.ai/scan/scan_abc123\n\n## Disclaimer\n\n" +
       PULSE_STANDARD_DISCLAIMER
   }
 ] as const;
@@ -627,6 +627,10 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
               `wait` accepts 0 to 80 seconds and may return a completed Pulse if the scan finishes during that window.
             </p>
             <p>
+              Pending HTTP 202 responses include `Retry-After` when CertScore can recommend a polling delay. Throttled HTTP 429
+              responses include `Retry-After` when retry timing is known.
+            </p>
+            <p>
               Estimated wait values are approximate. Queue backlog, worker availability, page load time, and scan finalization can make total
               completion take longer than 80 seconds.
             </p>
@@ -658,6 +662,10 @@ Public-safe phase message:
                 `refresh.requested=true`, `refresh.performed=false`, `refresh.reason="domain_throttle"`, and `refresh.retryAfterSeconds`.
                 If no completed scan exists and scan creation is throttled, the API returns HTTP 429 with `Retry-After`.
               </p>
+              <p>
+                Pulse uses `freshness=latest` and `freshness=refresh`; there is no separate `refresh=true` parameter. Broad
+                `X-RateLimit-*` headers are not emitted unless the route has accurate enforced bucket state.
+              </p>
             </CardContent>
           </Card>
 
@@ -676,6 +684,39 @@ https://certscore.ai/api/v1/pulse?scanId=<scanId>&format=markdown`}</CodeBlock>
             </CardContent>
           </Card>
         </div>
+
+        <Card className="border-slate-200 bg-white shadow-none">
+          <CardHeader>
+            <CardTitle>Markdown structure</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm leading-7 text-slate-600">
+            <p>
+              Standard markdown starts with a compact summary table and stable headings so agents can parse it reliably without large JSON
+              blocks.
+            </p>
+            <CodeBlock>{`# CertScore Pulse
+
+| Field | Value |
+|---|---|
+| Domain | example.com |
+| Score | 72/100 |
+| Risk level | Review recommended |
+| High-priority findings | 1 |
+| Total observations | 3 |
+| Scan completed | 2026-05-18T23:15:31Z |
+| Coverage status | Partial |
+
+## Summary
+## Highest-priority findings
+## Privacy and consent signals
+## Cookie and third-party request activity
+## Accessibility signals
+## Disclosure and trust signals
+## Coverage and limitations
+## Links
+## Disclaimer`}</CodeBlock>
+          </CardContent>
+        </Card>
 
         <Card className="border-slate-200 bg-white shadow-none">
           <CardHeader>

@@ -27,6 +27,11 @@ Recommended calls:
 
 Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Full is best for evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.
 
+Standard markdown structure:
+- Starts with a compact Field/Value summary table.
+- Stable headings: Summary, Highest-priority findings, Privacy and consent signals, Cookie and third-party request activity, Accessibility signals, Disclosure and trust signals, Coverage and limitations, Links, Disclaimer.
+- Does not embed the full JSON payload.
+
 OpenAPI / GPT Action quick start:
 1. If you support OpenAPI actions/tools, import:
    https://certscore.ai/api/v1/openapi.chatgpt.json
@@ -97,6 +102,10 @@ Expected public response contracts:
 - Valid /api/v1/pulse URL requests return documented HTTP 200, 202, or 429 responses.
 - /api/v1/pulse?url=%3A%3A%3A%3A returns HTTP 400 JSON with error.code invalid_url.
 - /api/v1/pulse/status/pulse_job_nonexistent_test returns HTTP 404 JSON with error.code not_found.
+- HTTP 202 pending responses include Retry-After when a polling delay is recommended.
+- HTTP 429 throttled responses include Retry-After when retry timing is known.
+- Pulse uses freshness=latest and freshness=refresh. There is no refresh=true parameter.
+- X-RateLimit-* headers are not emitted unless a route has accurate enforced bucket state.
 
 Use guidance:
 - Use detail=tiny for compact badges, CLI summaries, or simple agents.
