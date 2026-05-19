@@ -306,7 +306,7 @@ const openApiDocument = {
                 }
               },
               "500": {
-                description: "Unexpected internal error with public-safe message.",
+                description: "Temporary unavailable response with public-safe message.",
                 content: {
                   "application/json": {
                     examples: {

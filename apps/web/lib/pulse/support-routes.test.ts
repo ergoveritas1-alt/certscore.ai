@@ -37,6 +37,7 @@ test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app 
 
   const rawBody = await response.text();
   assert.doesNotMatch(rawBody, /<!doctype html|<html|__NEXT_DATA__|sign in|login/i);
+  assert.doesNotMatch(rawBody, /Internal Error|internal error|stack trace|DATABASE_URL|AUTH_SECRET|PRIVATE_KEY/);
 
   const body = JSON.parse(rawBody);
   assert.equal(body.openapi, "3.1.0");
