@@ -69,13 +69,6 @@ export function ShareReportActions({ domainLabel, scanId }: ShareReportActionsPr
     await copyValue(currentUrl);
   }
 
-  function absoluteAppUrl(path: string) {
-    if (!currentUrl) {
-      return path;
-    }
-    return new URL(path, currentUrl).toString();
-  }
-
   return (
     <>
       <div className="flex flex-wrap gap-2">
@@ -105,23 +98,6 @@ export function ShareReportActions({ domainLabel, scanId }: ShareReportActionsPr
         >
           Monitor this site
         </Link>
-      </div>
-      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Agent summary</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Link className={actionClassName()} href={`/pulse/${encodeURIComponent(domainLabel)}`}>
-            View Pulse page
-          </Link>
-          <button className={actionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}`))} type="button">
-            Copy Pulse JSON URL
-          </button>
-          <button className={actionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&format=markdown`))} type="button">
-            Copy Pulse Markdown URL
-          </button>
-          <button className={actionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&detail=full`))} type="button">
-            Copy Full Pulse JSON URL
-          </button>
-        </div>
       </div>
       {copyState === "failed" ? (
         <p className="mt-1 text-xs leading-5 text-amber-700">
@@ -176,5 +152,68 @@ export function ShareReportActions({ domainLabel, scanId }: ShareReportActionsPr
         </div>
       ) : null}
     </>
+  );
+}
+
+export function AgentSummaryActions({ domainLabel, scanId }: ShareReportActionsProps) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [currentUrl, setCurrentUrl] = useState("");
+
+  useEffect(() => {
+    setCurrentUrl(window.location.href);
+  }, []);
+
+  async function copyValue(value: string) {
+    try {
+      if (!value || !navigator.clipboard) {
+        setCopyState("failed");
+        return;
+      }
+      await navigator.clipboard.writeText(value);
+      setCopyState("copied");
+      window.setTimeout(() => setCopyState("idle"), 2400);
+    } catch {
+      setCopyState("failed");
+    }
+  }
+
+  function absoluteAppUrl(path: string) {
+    if (!currentUrl) {
+      return path;
+    }
+    return new URL(path, currentUrl).toString();
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Agent summary</p>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            Share this scan through the CertScore Pulse API using this report's scan ID.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link className={actionClassName()} href={`/pulse/${encodeURIComponent(domainLabel)}`}>
+            View Pulse page
+          </Link>
+          <button className={actionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}`))} type="button">
+            Copy Pulse JSON URL
+          </button>
+          <button className={actionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&format=markdown`))} type="button">
+            Copy Pulse Markdown URL
+          </button>
+          <button className={actionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&detail=full`))} type="button">
+            Copy Full Pulse JSON URL
+          </button>
+        </div>
+      </div>
+      {copyState === "copied" ? <p className="mt-2 text-xs leading-5 text-emerald-700">Pulse URL copied.</p> : null}
+      {copyState === "failed" ? (
+        <p className="mt-2 text-xs leading-5 text-amber-700">
+          Copy was not available in this browser. Use the Pulse API links from this section.
+        </p>
+      ) : null}
+    </section>
   );
 }

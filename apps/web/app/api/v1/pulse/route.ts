@@ -175,7 +175,8 @@ export async function GET(request: Request) {
         lastUpdatedAt: pulseRequest.updated_at,
         scanId: pulseRequest.scan_id,
         resultUrl: pulseRequest.result_pulse_url,
-        reportUrl: pulseRequest.result_report_url
+        reportUrl: pulseRequest.result_report_url,
+        retryAfterSeconds: pulseRequest.retry_after_seconds
       });
       return NextResponse.json(status, { headers: { "Cache-Control": "no-store" }, status: pulseRequest.status === "completed" ? 200 : 202 });
     }

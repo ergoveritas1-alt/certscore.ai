@@ -6,6 +6,8 @@ test("Pulse request parsing applies canonical defaults and wait bounds", () => {
   assert.equal(parsePulseFormat(null), "json");
   assert.equal(parsePulseFormat("markdown"), "markdown");
   assert.equal(parsePulseDetail(null), "standard");
+  assert.equal(parsePulseDetail("quick"), "tiny");
+  assert.equal(parsePulseDetail("tiny"), "tiny");
   assert.equal(parsePulseDetail("full"), "full");
   assert.equal(parsePulseFreshness(null), "latest");
   assert.equal(parsePulseFreshness("refresh"), "refresh");

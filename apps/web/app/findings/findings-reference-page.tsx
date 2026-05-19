@@ -217,12 +217,6 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
         ) : (
           <div className="space-y-4 text-base leading-7 text-slate-600">
             <p>
-              CertScore's findings registry explains the automated observations that may appear in a public website scan. It is designed for privacy engineers, legal and compliance teams, accessibility reviewers, and product teams that need to understand what a finding means before taking action.
-            </p>
-            <p>
-              Each finding page describes what CertScore observed, how the evidence is evaluated, what does and does not count, and what reviewers should check next. The examples are sanitized public-reference examples, not raw customer data.
-            </p>
-            <p>
               Findings are automated public-web observations for review. They are not legal conclusions, certifications, compliance determinations, or proof of non-compliance.
             </p>
             <div className="border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">

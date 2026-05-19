@@ -11,7 +11,7 @@ export function GET() {
       docs: "https://certscore.ai/api-pulse",
       findingsReference: "https://certscore.ai/findings",
       formats: ["json", "markdown"],
-      detailLevels: ["tiny", "standard", "full"],
+      detailLevels: ["tiny", "quick", "standard", "full"],
       example: "https://certscore.ai/api/v1/pulse?url=https://example.com",
       statusExample: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
       feedbackEmail: PULSE_FEEDBACK_EMAIL,

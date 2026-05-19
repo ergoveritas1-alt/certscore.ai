@@ -89,8 +89,16 @@ https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown
 Full detail:
 https://certscore.ai/api/v1/pulse?url=https://example.com&detail=full
 
+Quick detail:
+https://certscore.ai/api/v1/pulse?url=https://example.com&detail=tiny
+
+The detail=quick query value is accepted as an alias for detail=tiny.
+
 Status:
 https://certscore.ai/api/v1/pulse/status/<jobId>
+
+Wait behavior:
+The wait query parameter accepts 0 to 80 seconds. It only controls how long the current HTTP request may be held open. Queue backlog, worker availability, page load time, and scan finalization can make total completion take longer than 80 seconds. If the API returns HTTP 202, poll the status URL until completed.
 
 OpenAPI:
 https://certscore.ai/api/v1/openapi.json

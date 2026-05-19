@@ -21,6 +21,7 @@ const staticPaths = [
   "/compare/cmp-vs-runtime-consent-scanner",
   "/compare/cookiebot-alternative-runtime-testing",
   "/compare/onetrust-runtime-consent-testing",
+  "/api-pulse",
   "/llms.txt",
   "/faq",
   "/terms",

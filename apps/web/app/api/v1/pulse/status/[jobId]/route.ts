@@ -45,13 +45,19 @@ export async function GET(_request: Request, context: RouteContext) {
     lastUpdatedAt: pulseRequest.updated_at,
     scanId: pulseRequest.scan_id,
     resultUrl: pulseRequest.result_pulse_url,
-    reportUrl: pulseRequest.result_report_url
+    reportUrl: pulseRequest.result_report_url,
+    retryAfterSeconds: pulseRequest.retry_after_seconds
   });
 
+  const headers: Record<string, string> = {
+    "Cache-Control": "no-store"
+  };
+  if (status === "rate_limited" && pulseRequest.retry_after_seconds) {
+    headers["Retry-After"] = String(pulseRequest.retry_after_seconds);
+  }
+
   return NextResponse.json(body, {
-    headers: {
-      "Cache-Control": status === "completed" || status === "completed_limited" ? "no-store" : "no-store"
-    },
+    headers,
     status: status === "completed" || status === "completed_limited" ? 200 : status === "rate_limited" ? 429 : 202
   });
 }

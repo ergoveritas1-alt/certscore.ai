@@ -7,6 +7,9 @@ export function parsePulseFormat(value: string | null): PulseFormat {
 }
 
 export function parsePulseDetail(value: string | null): PulseDetail {
+  if (value === "quick") {
+    return "tiny";
+  }
   if (value === "tiny" || value === "full") {
     return value;
   }

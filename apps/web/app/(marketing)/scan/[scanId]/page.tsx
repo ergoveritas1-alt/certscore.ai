@@ -5,7 +5,7 @@ import { SiteHeader } from "../../../../components/layout/site-header";
 import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
 import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
-import { ShareReportActions } from "../../../../components/scans/share-report-actions";
+import { AgentSummaryActions, ShareReportActions } from "../../../../components/scans/share-report-actions";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { hasPendingPostCompletionFindingWork } from "../../../../lib/scans/scan-auto-refresh";
 import { absoluteUrl } from "../../../../lib/seo";
@@ -91,6 +91,7 @@ export default async function PublicScanDetailPage({ params }: PublicScanDetailP
     signalEnrichmentWorkflow: scanRecord.signalEnrichmentWorkflow,
     status: scanRecord.scan.status
   });
+  const publicScanDomainLabel = getPublicScanDomainLabel(scanRecord.scan.domainHostname);
 
   return (
     <main className="min-h-screen bg-white">
@@ -108,7 +109,7 @@ export default async function PublicScanDetailPage({ params }: PublicScanDetailP
             scanRecord.scan.status === "completed" ? (
               <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <ShareReportActions
-                  domainLabel={getPublicScanDomainLabel(scanRecord.scan.domainHostname)}
+                  domainLabel={publicScanDomainLabel}
                   scanId={scanRecord.scan.id}
                 />
                 <div className="w-full lg:ml-auto lg:max-w-[32rem]">
@@ -127,6 +128,11 @@ export default async function PublicScanDetailPage({ params }: PublicScanDetailP
           headerActionsPlacement="belowTitle"
           scanRecord={scanRecord}
         />
+        {scanRecord.scan.status === "completed" ? (
+          <div className="mt-8">
+            <AgentSummaryActions domainLabel={publicScanDomainLabel} scanId={scanRecord.scan.id} />
+          </div>
+        ) : null}
       </section>
       <SiteFooter />
     </main>

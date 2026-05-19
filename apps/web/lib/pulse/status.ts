@@ -22,6 +22,7 @@ type PulseStatusInput = {
   resultUrl?: string | null;
   reportUrl?: string | null;
   message?: string | null;
+  retryAfterSeconds?: number | null;
 };
 
 function elapsedSeconds(createdAt: string, completedAt?: string | null) {
@@ -105,6 +106,7 @@ export function buildPulseStatus(input: PulseStatusInput) {
     },
     resultUrl,
     reportUrl,
+    retryAfterSeconds: input.status === "rate_limited" ? input.retryAfterSeconds ?? null : null,
     disclaimer: PULSE_STANDARD_DISCLAIMER
   };
 }

@@ -246,7 +246,7 @@ test("finding atlas index groups all reviewed findings with registry context", (
   const source = readFileSync("apps/web/components/marketing/findings/finding-atlas-browser.tsx", "utf8");
   const pageSource = readFileSync("apps/web/app/findings/findings-reference-page.tsx", "utf8");
 
-  assert.match(pageSource, /CertScore's findings registry explains the automated observations/);
+  assert.doesNotMatch(pageSource, /CertScore's findings registry explains the automated observations/);
   assert.match(pageSource, /How to read a finding/);
   assert.match(pageSource, /Findings are automated public-web observations for review/);
   assert.match(pageSource, /finding references are reviewed periodically/);
