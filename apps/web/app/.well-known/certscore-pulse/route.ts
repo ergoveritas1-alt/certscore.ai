@@ -1,5 +1,3 @@
-import { PULSE_SHORT_DISCLAIMER, PULSE_FEEDBACK_EMAIL } from "../../../lib/pulse/constants";
-
 const discoveryDocument = {
   name: "CertScore Pulse",
   description: "Retrieve automated public-web risk signal summaries for a URL. detail=quick is accepted as an alias for detail=tiny.",
@@ -12,15 +10,17 @@ const discoveryDocument = {
   detailAliases: { quick: "tiny" },
   example: "https://certscore.ai/api/v1/pulse?url=https://example.com",
   statusExample: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
-  feedbackEmail: PULSE_FEEDBACK_EMAIL,
-  disclaimer: PULSE_SHORT_DISCLAIMER
+  feedbackEmail: "support@certscore.ai",
+  disclaimer: "Automated public-web observations for review. Not legal advice, certification, or a compliance determination."
 } as const;
 
 export function GET() {
   return new Response(JSON.stringify(discoveryDocument), {
     headers: {
-      "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
-      "Content-Type": "application/json; charset=utf-8"
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      "Content-Type": "application/json; charset=utf-8",
+      "Surrogate-Control": "no-store",
+      "X-Content-Type-Options": "nosniff"
     },
     status: 200
   });
