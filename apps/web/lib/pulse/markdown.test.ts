@@ -9,7 +9,7 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
       detail: "standard",
       generatedAt: "2026-05-18T23:15:32Z"
     },
-    domain: "example.com",
+    domain: "kbdlab.io",
     scanId: "scan_123",
     scanStatus: "completed",
     summary: {
@@ -40,11 +40,11 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
     },
     links: {
       fullReportUrl: "https://certscore.ai/scan/scan_123",
-      jsonUrl: "https://certscore.ai/api/v1/pulse?url=https://example.com",
+      jsonUrl: "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io",
       immutableJsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_123",
       immutableMarkdownUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_123&format=markdown",
       immutableFullJsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_123&detail=full",
-      fullJsonUrl: "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=full",
+      fullJsonUrl: "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=full",
       docsUrl: "https://certscore.ai/api-pulse",
       findingsReferenceUrl: "https://certscore.ai/findings"
     },
@@ -52,7 +52,7 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
   });
 
   assert.match(markdown, /^# CertScore Pulse/m);
-  assert.match(markdown, /\| Domain \| example\.com \|/);
+  assert.match(markdown, /\| Domain \| kbdlab\.io \|/);
   assert.match(markdown, /\| High-priority findings \| 0 \|/);
   assert.match(markdown, /## Summary/);
   assert.match(markdown, /## Highest-priority findings/);
@@ -62,7 +62,8 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
   assert.match(markdown, /## Disclosure and trust signals/);
   assert.match(markdown, /## Coverage and limitations/);
   assert.match(markdown, /automated runtime analysis of public websites/);
-  assert.match(markdown, /No major automated review signals were surfaced in this scan\./);
+  assert.match(markdown, /No top automated findings were surfaced in this scan\./);
+  assert.match(markdown, /Absence of findings does not mean absence of risk\./);
   assert.match(markdown, /support@certscore\.ai/);
   assert.match(markdown, /Scan ID: scan_123/);
   assert.match(markdown, /Immutable JSON: https:\/\/certscore\.ai\/api\/v1\/pulse\?scanId=scan_123/);
@@ -76,7 +77,7 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
 test("Pulse markdown uses available top-level completedAt before showing unavailable", () => {
   const markdown = renderPulseMarkdown({
     meta: { detail: "standard", generatedAt: "2026-05-18T23:15:32Z" },
-    domain: "example.com",
+    domain: "kbdlab.io",
     scanStatus: "completed",
     completedAt: "2026-05-18T23:15:31Z",
     summary: { score: 88, riskLevel: "monitor", humanSummary: "No major automated review signals were surfaced in this scan." },
@@ -92,7 +93,7 @@ test("Pulse markdown uses available top-level completedAt before showing unavail
 test("Pulse markdown formats Date completedAt values before JSON serialization", () => {
   const markdown = renderPulseMarkdown({
     meta: { detail: "standard", generatedAt: "2026-05-18T23:15:32Z" },
-    domain: "example.com",
+    domain: "kbdlab.io",
     scanStatus: "completed",
     timestamps: {
       completedAt: new Date("2026-05-18T23:15:31.000Z")
@@ -111,7 +112,7 @@ test("GPT Action markdown uses GPT-safe no-finding copy and CertScore footer lin
   const markdown = renderPulseMarkdown(
     {
       meta: { detail: "standard", generatedAt: "2026-05-18T23:15:32Z" },
-      domain: "example.com",
+      domain: "kbdlab.io",
       scanStatus: "completed",
       summary: { score: 88, riskLevel: "monitor", humanSummary: "Automated scan completed for the observed public surfaces." },
       topFindings: [],
@@ -130,11 +131,41 @@ test("GPT Action markdown uses GPT-safe no-finding copy and CertScore footer lin
     { gptAction: true }
   );
 
-  assert.match(markdown, /No top findings were surfaced in this automated scan/);
+  assert.match(markdown, /No top automated findings were surfaced in this scan/);
   assert.match(markdown, /\*\*Coverage limitation:\*\*/);
   assert.match(markdown, /View this scan on CertScore: https:\/\/certscore\.ai\/scan\/scan_123/);
-  assert.match(markdown, /Explore finding definitions: https:\/\/certscore\.ai\/guides\/findings/);
+  assert.match(markdown, /Explore finding definitions: https:\/\/certscore\.ai\/findings/);
+  assert.doesNotMatch(markdown, /guides\/findings/);
+  assert.equal((markdown.match(/Findings reference:|Explore finding definitions:/g) ?? []).length, 1);
   assert.match(markdown, /Run another scan: https:\/\/certscore\.ai/);
   assert.equal((markdown.match(/## Disclaimer/g) ?? []).length, 1);
   assert.equal((markdown.match(/CertScore provides automated public-web observations for review/g) ?? []).length, 1);
+});
+
+test("Pulse markdown uses review-signal lens status labels", () => {
+  const markdown = renderPulseMarkdown({
+    meta: { detail: "standard", generatedAt: "2026-05-18T23:15:32Z" },
+    domain: "kbdlab.io",
+    scanStatus: "completed",
+    summary: { score: 82, riskLevel: "monitor", humanSummary: "No major automated review signals were surfaced in this scan." },
+    topFindings: [],
+    reviewContext: {
+      lenses: [
+        { name: "CCPA / CPRA / CIPA", status: "needs_work", summary: "Third-party collection, privacy-choice, and disclosure posture may warrant review." },
+        { name: "GDPR / ePrivacy", status: "clear", summary: "Consent timing, consent surface, and tracker behavior were reviewed within scan coverage." },
+        { name: "FTC", status: "clear", summary: "Consumer-facing claims, tracking posture, and disclosure signals were reviewed within scan coverage." },
+        { name: "DOJ / ADA accessibility", status: "action_needed", summary: "Automated accessibility checks surfaced items for review." }
+      ]
+    },
+    coverage: { status: "partial", summary: "Automated public-web scan completed with partial coverage." },
+    links: {},
+    feedback: {},
+    disclaimer: PULSE_STANDARD_DISCLAIMER
+  });
+
+  assert.match(markdown, /CCPA \/ CPRA \/ CIPA: Review context retained/);
+  assert.match(markdown, /GDPR \/ ePrivacy: No top automated findings surfaced/);
+  assert.match(markdown, /FTC: No top automated findings surfaced/);
+  assert.match(markdown, /DOJ \/ ADA accessibility: Review recommended/);
+  assert.doesNotMatch(markdown, /Needs Work|: Clear/);
 });

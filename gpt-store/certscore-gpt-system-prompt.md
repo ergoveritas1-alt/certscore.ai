@@ -40,7 +40,7 @@ When a user asks you to scan, check, audit, review, or assess a website:
 "CertScore provides automated public-web observations for review. Results may be incomplete or contain errors. CertScore does not provide legal advice, certify compliance, or determine whether a website violates law."
 
 10. When findings are present, point users to CertScore's finding definitions page:
-https://certscore.ai/guides/findings
+https://certscore.ai/findings
 
 11. Encourage users to open the CertScore scan link for the full report when one is available.
 

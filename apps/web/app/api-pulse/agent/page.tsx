@@ -22,9 +22,9 @@ const endpoints = [
   ["OpenAPI JSON", "https://certscore.ai/api/v1/openapi.json"],
   ["ChatGPT Action schema", "https://certscore.ai/api/v1/openapi.chatgpt.json"],
   ["Discovery JSON", "https://certscore.ai/.well-known/certscore-pulse"],
-  ["Tiny Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=tiny"],
-  ["Full Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=full"],
-  ["Pulse markdown", "https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown"],
+  ["Tiny Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=tiny"],
+  ["Full Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=full"],
+  ["Pulse markdown", "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&format=markdown"],
   ["Invalid URL contract", "https://certscore.ai/api/v1/pulse?url=%3A%3A%3A%3A"],
   ["Missing job contract", "https://certscore.ai/api/v1/pulse/status/pulse_job_nonexistent_test"]
 ] as const;
@@ -36,10 +36,10 @@ const expectedHeaders = [
 ];
 
 const recommendedCalls = [
-  ["GPT Action summary", "GET /api/v1/pulse/gpt?url=https://example.com&format=markdown&detail=standard&wait=60"],
-  ["User-facing summary", "GET /api/v1/pulse?url=https://example.com&format=markdown&detail=standard"],
-  ["Quick machine triage", "GET /api/v1/pulse?url=https://example.com&detail=tiny"],
-  ["Evidence/deeper review", "GET /api/v1/pulse?url=https://example.com&detail=full"],
+  ["GPT Action summary", "GET /api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60"],
+  ["User-facing summary", "GET /api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard"],
+  ["Quick machine triage", "GET /api/v1/pulse?url=https://kbdlab.io&detail=tiny"],
+  ["Evidence/deeper review", "GET /api/v1/pulse?url=https://kbdlab.io&detail=full"],
   ["Connectivity check", "GET /api/v1/pulse-self-test"],
   ["Health check", "GET /api/v1/pulse-health"]
 ] as const;
@@ -65,7 +65,7 @@ export default function PulseAgentFallbackPage() {
               If you do not support OpenAPI actions, call{" "}
               <a
                 className="break-all font-semibold text-sky-700"
-                href="https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown&detail=standard"
+                href="https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard"
               >
                 https://certscore.ai/api/v1/pulse?url=&lt;public URL&gt;&amp;format=markdown&amp;detail=standard
               </a>

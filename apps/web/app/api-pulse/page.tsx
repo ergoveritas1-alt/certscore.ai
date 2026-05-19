@@ -26,26 +26,26 @@ export const metadata: Metadata = createPageMetadata({
 
 const copyPasteExamples = [
   {
-    command: `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=tiny"`,
-    href: "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=tiny"
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=tiny"`,
+    href: "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=tiny"
   },
   {
-    command: `curl "https://certscore.ai/api/v1/pulse?url=https://example.com"`,
-    href: "https://certscore.ai/api/v1/pulse?url=https://example.com"
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io"`,
+    href: "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io"
   },
   {
-    command: `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=full"`,
-    href: "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=full"
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=full"`,
+    href: "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=full"
   },
   {
-    command: `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown"`,
-    href: "https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown"
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&format=markdown"`,
+    href: "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&format=markdown"
   },
   {
-    command: `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&freshness=refresh"`
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&freshness=refresh"`
   },
   {
-    command: `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&wait=60"`
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&wait=60"`
   },
   {
     command: `curl "https://certscore.ai/api/v1/pulse/status/<jobId>"`
@@ -145,7 +145,7 @@ const errorAgentInterpretation = {
 };
 
 const exampleLinks = {
-  canonicalPulseUrl: "https://certscore.ai/pulse/example.com",
+  canonicalPulseUrl: "https://certscore.ai/pulse/kbdlab.io",
   jsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_abc123",
   markdownUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_abc123&format=markdown",
   fullJsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_abc123&detail=full",
@@ -194,7 +194,7 @@ const responseExamples = [
     value: {
       type: "certscore_pulse",
       meta: { ...exampleMeta, format: "json", detail: "tiny" },
-      domain: "example.com",
+      domain: "kbdlab.io",
       scanId: "scan_abc123",
       scanStatus: "completed",
       summary: {
@@ -229,9 +229,9 @@ const responseExamples = [
       meta: { ...exampleMeta, format: "json", detail: "standard" },
       request: {
         pulseRequestId: "pulse_req_123",
-        url: "https://example.com",
-        normalizedUrl: "https://example.com/",
-        domain: "example.com",
+        url: "https://kbdlab.io",
+        normalizedUrl: "https://kbdlab.io/",
+        domain: "kbdlab.io",
         detail: "standard",
         format: "json",
         freshness: "latest",
@@ -282,7 +282,7 @@ const responseExamples = [
     value: {
       type: "certscore_pulse",
       meta: { ...exampleMeta, format: "json", detail: "full" },
-      domain: "example.com",
+      domain: "kbdlab.io",
       scanId: "scan_abc123",
       scanStatus: "completed",
       findings: [exampleFinding],
@@ -334,7 +334,7 @@ const responseExamples = [
       meta: { ...exampleMeta, format: "json", detail: "standard" },
       jobId: "pulse_job_123",
       scanId: "scan_abc123",
-      domain: "example.com",
+      domain: "kbdlab.io",
       status: "running",
       phase: "runtime_observation",
       message: "Observing public-page behavior and collecting automated evidence signals.",
@@ -355,7 +355,7 @@ const responseExamples = [
       type: "certscore_pulse_status",
       jobId: "pulse_job_123",
       scanId: "scan_abc123",
-      domain: "example.com",
+      domain: "kbdlab.io",
       status: "completed",
       completedAt: "2026-05-18T23:15:31Z",
       resultUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_abc123",
@@ -410,7 +410,7 @@ const responseExamples = [
     title: "Markdown response",
     language: "markdown",
     value:
-      "# CertScore Pulse\n\n| Field | Value |\n|---|---|\n| Domain | example.com |\n| Score | 72/100 |\n| Risk level | Review recommended |\n| High-priority findings | 1 |\n| Total observations | 3 |\n| Scan completed | 2026-05-18T23:15:31Z |\n| Coverage status | Partial |\n\n## Summary\n\nAutomated scan surfaced consent-timing and third-party collection review signals.\n\n## Highest-priority findings\n\n1. Tracking started before consent\n\n## Privacy and consent signals\n\n- Tracker footprint: 7 third-party domains observed; 2 classified tracker vendors identified.\n\n## Cookie and third-party request activity\n\n- Vendor mix: cdn infra 1 · session replay 1\n\n## Accessibility signals\n\n- Accessibility-related findings: 0\n\n## Disclosure and trust signals\n\n- Policy surfaces: 2 policy URLs covered.\n\n## Coverage and limitations\n\nCoverage was limited; absence of findings should not be interpreted as absence of risk.\n\n## Links\n\nFull report: https://certscore.ai/scan/scan_abc123\n\n## Disclaimer\n\n" +
+      "# CertScore Pulse\n\n| Field | Value |\n|---|---|\n| Domain | kbdlab.io |\n| Score | 72/100 |\n| Risk level | Review recommended |\n| High-priority findings | 1 |\n| Total observations | 3 |\n| Scan completed | 2026-05-18T23:15:31Z |\n| Coverage status | Partial |\n\n## Summary\n\nAutomated scan surfaced consent-timing and third-party collection review signals.\n\n## Highest-priority findings\n\n1. Tracking started before consent\n\n## Privacy and consent signals\n\n- Tracker footprint: 7 third-party domains observed; 2 classified tracker vendors identified.\n\n## Cookie and third-party request activity\n\n- Vendor mix: cdn infra 1 · session replay 1\n\n## Accessibility signals\n\n- Accessibility-related findings: 0\n\n## Disclosure and trust signals\n\n- Policy surfaces: 2 policy URLs covered.\n\n## Coverage and limitations\n\nCoverage was limited; absence of findings should not be interpreted as absence of risk.\n\n## Links\n\nFull report: https://certscore.ai/scan/scan_abc123\n\n## Disclaimer\n\n" +
       PULSE_STANDARD_DISCLAIMER
   }
 ] as const;
@@ -488,9 +488,9 @@ export default function ApiPulsePage() {
 5. If the request fails before status/body/headers are visible, open:
    https://certscore.ai/api-pulse-agent-guide.txt`}</CodeBlock>
             <CodeBlock>{`Recommended calls:
-- User-facing summary: GET /api/v1/pulse?url=https://example.com&format=markdown&detail=standard
-- Quick machine triage: GET /api/v1/pulse?url=https://example.com&detail=tiny
-- Evidence/deeper review: GET /api/v1/pulse?url=https://example.com&detail=full
+- User-facing summary: GET /api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard
+- Quick machine triage: GET /api/v1/pulse?url=https://kbdlab.io&detail=tiny
+- Evidence/deeper review: GET /api/v1/pulse?url=https://kbdlab.io&detail=full
 - Connectivity check: GET /api/v1/pulse-self-test
 - Health check: GET /api/v1/pulse-health
 
@@ -521,7 +521,7 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
               </Link>
               <Link
                 className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
-                href="/api/v1/pulse/gpt?url=https://example.com&format=markdown&detail=standard&wait=60"
+                href="/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60"
               >
                 Open GPT Action example
               </Link>
@@ -563,10 +563,10 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
             <CardTitle>Quick start</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-7 text-slate-600">
-            <CodeBlock>GET https://certscore.ai/api/v1/pulse?url=https://example.com</CodeBlock>
+            <CodeBlock>GET https://certscore.ai/api/v1/pulse?url=https://kbdlab.io</CodeBlock>
             <a
               className="inline-flex w-fit rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-sky-700 hover:border-sky-300 hover:bg-sky-50"
-              href="https://certscore.ai/api/v1/pulse?url=https://example.com"
+              href="https://certscore.ai/api/v1/pulse?url=https://kbdlab.io"
             >
               Open quick-start endpoint
             </a>
@@ -729,7 +729,7 @@ https://certscore.ai/api/v1/pulse?scanId=<scanId>&format=markdown`}</CodeBlock>
 
 | Field | Value |
 |---|---|
-| Domain | example.com |
+| Domain | kbdlab.io |
 | Score | 72/100 |
 | Risk level | Review recommended |
 | High-priority findings | 1 |
@@ -773,7 +773,7 @@ Content-Type: application/json
   "rating": "useful",
   "reason": "not_enough_detail",
   "comment": "Optional comment up to 2000 characters.",
-  "email": "optional@example.com"
+  "email": "optional@kbdlab.io"
 }`}</CodeBlock>
             <p>
               The feedback endpoint validates rating and reason values, caps comments at 2000 characters, accepts an optional email field, and
@@ -790,7 +790,7 @@ Content-Type: application/json
             <p>
               Pulse summarizes already-surfaced public report findings and review context. It does not create findings from raw signals, and
               absence of findings should not be interpreted as absence of risk. If no major findings are surfaced, Pulse says:
-              “No major automated review signals were surfaced in this scan.”
+              “No top automated findings were surfaced in this scan.”
             </p>
             <p>{PULSE_COVERAGE_LIMITATION_COPY}</p>
             <p>

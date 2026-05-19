@@ -19,9 +19,9 @@ Basic HTTP agent quick start:
    https://certscore.ai/api-pulse-agent-guide.txt
 
 Recommended calls:
-- User-facing summary: GET /api/v1/pulse?url=https://example.com&format=markdown&detail=standard
-- Quick machine triage: GET /api/v1/pulse?url=https://example.com&detail=tiny
-- Evidence/deeper review: GET /api/v1/pulse?url=https://example.com&detail=full
+- User-facing summary: GET /api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard
+- Quick machine triage: GET /api/v1/pulse?url=https://kbdlab.io&detail=tiny
+- Evidence/deeper review: GET /api/v1/pulse?url=https://kbdlab.io&detail=full
 - Connectivity check: GET /api/v1/pulse-self-test
 - Health check: GET /api/v1/pulse-health
 
@@ -45,7 +45,7 @@ OpenAPI / GPT Action quick start:
 5. If API fetch fails before headers/body/status are visible, do not infer CertScore returned an error. Read /api-pulse/agent and /api-pulse-agent-guide.txt.
 
 GPT Action endpoint:
-https://certscore.ai/api/v1/pulse/gpt?url=https://example.com&format=markdown&detail=standard&wait=60
+https://certscore.ai/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60
 
 Canonical documentation:
 https://certscore.ai/api-pulse
@@ -69,16 +69,16 @@ Self-test canary:
 https://certscore.ai/api/v1/pulse-self-test
 
 Primary endpoint:
-https://certscore.ai/api/v1/pulse?url=https://example.com
+https://certscore.ai/api/v1/pulse?url=https://kbdlab.io
 
 Markdown endpoint:
-https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown
+https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&format=markdown
 
 Full-detail endpoint:
-https://certscore.ai/api/v1/pulse?url=https://example.com&detail=full
+https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=full
 
 Quick endpoint:
-https://certscore.ai/api/v1/pulse?url=https://example.com&detail=tiny
+https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=tiny
 
 Status endpoint:
 https://certscore.ai/api/v1/pulse/status/<jobId>

@@ -121,7 +121,7 @@ node_check "self-test body" '
   if (!body.disclaimer?.includes("automated public-web observations for review")) process.exit(1);
 '
 
-request "/api/v1/pulse?url=https://example.com&detail=tiny"
+request "/api/v1/pulse?url=https://kbdlab.io&detail=tiny"
 if [[ "$LAST_STATUS" != "200" && "$LAST_STATUS" != "202" ]]; then
   fail "tiny pulse" "Expected HTTP 200 or 202."
 elif [[ "$LAST_CONTENT_TYPE" != application/json* ]]; then
@@ -153,7 +153,7 @@ else
   pass "tiny pulse"
 fi
 
-request "/api/v1/pulse?url=https://example.com&detail=full"
+request "/api/v1/pulse?url=https://kbdlab.io&detail=full"
 if [[ "$LAST_STATUS" != "200" && "$LAST_STATUS" != "202" ]]; then
   fail "full pulse" "Expected HTTP 200 or 202."
 elif [[ "$LAST_CONTENT_TYPE" != application/json* ]]; then
@@ -176,7 +176,7 @@ else
   pass "full pulse"
 fi
 
-request "/api/v1/pulse?url=https://example.com&format=markdown&detail=standard"
+request "/api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard"
 if [[ "$LAST_STATUS" != "200" ]]; then
   fail "markdown pulse" "Expected HTTP 200."
 elif [[ "$LAST_CONTENT_TYPE" != text/markdown* ]]; then
@@ -201,7 +201,7 @@ else
   pass "markdown pulse"
 fi
 
-request "/api/v1/pulse/gpt?url=https://example.com&format=markdown&detail=standard&wait=60"
+request "/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60"
 if [[ "$LAST_STATUS" != "200" && "$LAST_STATUS" != "202" ]]; then
   fail "gpt pulse" "Expected HTTP 200 or 202."
 elif [[ "$LAST_STATUS" == "200" && "$LAST_CONTENT_TYPE" != text/markdown* ]]; then
@@ -218,7 +218,7 @@ else
   pass "gpt pulse"
 fi
 
-request "/api/v1/pulse/gpt?url=https://example.com&detail=full"
+request "/api/v1/pulse/gpt?url=https://kbdlab.io&detail=full"
 if [[ "$LAST_STATUS" != "400" ]]; then
   fail "gpt full gate" "Expected HTTP 400."
 elif [[ "$LAST_CONTENT_TYPE" != application/json* ]]; then
@@ -238,7 +238,7 @@ else
   ' && pass "gpt full gate"
 fi
 
-request "/api/v1/pulse/gpt?url=https://example.com&freshness=refresh"
+request "/api/v1/pulse/gpt?url=https://kbdlab.io&freshness=refresh"
 if [[ "$LAST_STATUS" != "400" ]]; then
   fail "gpt refresh gate" "Expected HTTP 400."
 elif [[ "$LAST_CONTENT_TYPE" != application/json* ]]; then

@@ -28,9 +28,9 @@ export function GET(request: Request) {
     timestamp: new Date().toISOString(),
     routes: {
       health: "/api/v1/pulse-health",
-      pulseTiny: "/api/v1/pulse?url=https://example.com&detail=tiny",
-      pulseMarkdown: "/api/v1/pulse?url=https://example.com&format=markdown&detail=standard",
-      pulseFull: "/api/v1/pulse?url=https://example.com&detail=full",
+      pulseTiny: "/api/v1/pulse?url=https://kbdlab.io&detail=tiny",
+      pulseMarkdown: "/api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard",
+      pulseFull: "/api/v1/pulse?url=https://kbdlab.io&detail=full",
       openapi: "/api/v1/openapi.json",
       chatgptOpenapi: "/api/v1/openapi.chatgpt.json",
       agentGuide: "/api-pulse-agent-guide.txt",

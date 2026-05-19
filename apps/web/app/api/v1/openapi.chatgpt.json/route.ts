@@ -47,7 +47,7 @@ const chatGptOpenApiDocument = {
             name: "url",
             in: "query",
             required: true,
-            description: "The public website URL or domain to review, for example https://example.com.",
+            description: "The public website URL or domain to review, for example https://kbdlab.io.",
             schema: { type: "string" }
           },
           {
@@ -85,7 +85,7 @@ const chatGptOpenApiDocument = {
                     value: {
                       type: "certscore_pulse",
                       status: "completed",
-                      target: { inputUrl: "https://example.com", normalizedUrl: "https://example.com/" },
+                      target: { inputUrl: "https://kbdlab.io", normalizedUrl: "https://kbdlab.io/" },
                       summary: {
                         score: 64,
                         riskLevel: "review_recommended",
@@ -94,11 +94,11 @@ const chatGptOpenApiDocument = {
                       },
                       topFindings: [],
                       links: {
-                        canonicalPulseUrl: "https://certscore.ai/pulse/example.com",
+                        canonicalPulseUrl: "https://certscore.ai/pulse/kbdlab.io",
                         fullReportUrl: "https://certscore.ai/scan/scan_abc123",
                         markdownUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_abc123&format=markdown",
                         docsUrl: "https://certscore.ai/api-pulse",
-                        findingsReferenceUrl: "https://certscore.ai/guides/findings"
+                        findingsReferenceUrl: "https://certscore.ai/findings"
                       },
                       feedback: { email: "support@certscore.ai", feedbackUrl: "https://certscore.ai/pulse/feedback?pulseRequestId=pulse_req_123" },
                       capabilities: pulseCapabilities,
@@ -119,7 +119,7 @@ const chatGptOpenApiDocument = {
                   completed: {
                     summary: "Markdown completed response",
                     value:
-                      "# CertScore Pulse\n\nNo major automated review signals were surfaced in this scan.\n\nCertScore provides automated public-web observations for review. It does not provide legal advice, certification, or a compliance determination."
+                      "# CertScore Pulse\n\nNo top automated findings were surfaced in this scan.\n\nCertScore provides automated public-web observations for review. It does not provide legal advice, certification, or a compliance determination."
                   }
                 }
               }

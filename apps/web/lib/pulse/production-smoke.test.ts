@@ -12,9 +12,9 @@ type SmokeTarget = {
 
 const smokeTargets: SmokeTarget[] = [
   { path: "/api/v1/openapi.json", kind: "openapi" },
-  { path: "/api/v1/pulse?url=https://example.com&detail=tiny", kind: "pulse" },
-  { path: "/api/v1/pulse?url=https://example.com&detail=full", kind: "pulse" },
-  { path: "/api/v1/pulse?url=https://example.com&format=markdown", kind: "pulse" },
+  { path: "/api/v1/pulse?url=https://kbdlab.io&detail=tiny", kind: "pulse" },
+  { path: "/api/v1/pulse?url=https://kbdlab.io&detail=full", kind: "pulse" },
+  { path: "/api/v1/pulse?url=https://kbdlab.io&format=markdown", kind: "pulse" },
   { path: "/api/v1/pulse?url=::::", kind: "pulse" },
   { path: "/api/v1/pulse/status/pulse_job_nonexistent_test", kind: "pulse" },
   { path: "/.well-known/certscore-pulse", kind: "discovery" },

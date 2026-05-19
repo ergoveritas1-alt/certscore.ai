@@ -84,7 +84,7 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["200"].headers["x-certscore-request-id"]);
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["202"].headers["Retry-After"]);
   assert.match(JSON.stringify(body), /format=markdown|getPulseForUrl|automated public-web observations for review|automated_runtime_analysis/);
-  assert.match(JSON.stringify(body), /https:\/\/certscore\.ai\/guides\/findings/);
+  assert.match(JSON.stringify(body), /https:\/\/certscore\.ai\/findings/);
   assert.doesNotMatch(JSON.stringify(body.paths["/api/v1/pulse/gpt"].get.parameters), /refresh|full/);
   assert.doesNotMatch(JSON.stringify(body.paths), /pulse-health|pulse-self-test/);
   assert.doesNotMatch(JSON.stringify(body), /pre_consent_tracking_detected|raw DOM|DATABASE_URL|AUTH_SECRET/i);
@@ -219,8 +219,8 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /ChatGPT Action schema/);
   assert.match(source, /Open quick-start endpoint/);
   assert.match(source, /Open test URL/);
-  assert.match(source, /href: "https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/example\.com&detail=tiny"/);
-  assert.match(source, /href: "https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/example\.com&format=markdown"/);
+  assert.match(source, /href: "https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/kbdlab\.io&detail=tiny"/);
+  assert.match(source, /href: "https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/kbdlab\.io&format=markdown"/);
   assert.match(source, /detail=quick/);
   assert.match(source, /Status lifecycle|queued to running to finalizing to completed/);
   assert.match(source, /`scanId` is the canonical field name/);
@@ -249,7 +249,7 @@ test("Pulse agent fallback page documents the fetch failure diagnostic contract"
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/openapi\.chatgpt\.json/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse-health/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse-self-test/);
-  assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/example\.com&format=markdown/);
+  assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/kbdlab\.io&format=markdown/);
   assert.match(source, /PULSE_STANDARD_DISCLAIMER/);
   assert.match(source, /PULSE_PURPOSE_STATEMENT/);
 });
@@ -283,13 +283,13 @@ test("Pulse public text surfaces keep cautious language outside explicit avoid g
   const markdown = renderPulseMarkdown({
     type: "certscore_pulse",
     meta: { generatedAt: "2026-05-19T00:00:00.000Z", detail: "standard" },
-    domain: "example.com",
+    domain: "kbdlab.io",
     scanId: "scan_test",
     scanStatus: "completed",
     summary: {
       score: 82,
       riskLevel: "monitor",
-      headline: "No major automated review signals were surfaced in this scan."
+      headline: "No top automated findings were surfaced in this scan."
     },
     topFindings: [],
     coverage: {
