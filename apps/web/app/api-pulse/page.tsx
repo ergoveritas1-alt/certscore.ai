@@ -427,6 +427,7 @@ function CodeBlock({ children }: { children: string }) {
 }
 
 export default function ApiPulsePage() {
+  const certscoreGptUrl = process.env.NEXT_PUBLIC_CERTSCORE_GPT_URL;
   return (
     <main className="min-h-screen bg-slate-50">
       <SiteHeader />
@@ -483,8 +484,9 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
    url: <public URL>
    format: markdown
    detail: standard
+   wait: 60
 3. Use detail=tiny for quick checks.
-4. Use detail=full only when the user asks for evidence or deeper review context.
+4. Public GPT Action access uses latest-mode summaries and does not expose full detail or refresh scans.
 5. If API fetch fails before headers/body/status are visible, do not infer CertScore returned an error. Read /api-pulse/agent and /api-pulse-agent-guide.txt.`}</CodeBlock>
             <p>
               Agent fetch limitations: Some agent environments may fail before receiving an HTTP response because of DNS, sandbox,
@@ -501,10 +503,22 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
               </Link>
               <Link
                 className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
-                href="/api/v1/pulse?url=https://example.com&format=markdown&detail=standard"
+                href="/api/v1/pulse/gpt?url=https://example.com&format=markdown&detail=standard&wait=60"
               >
-                Open basic HTTP example
+                Open GPT Action example
               </Link>
+              {certscoreGptUrl ? (
+                <a
+                  className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
+                  href={certscoreGptUrl}
+                >
+                  Try the CertScore GPT
+                </a>
+              ) : (
+                <span className="inline-flex w-fit rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-500">
+                  CertScore GPT coming soon
+                </span>
+              )}
               <Link
                 className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
                 href="/api/v1/pulse-self-test"

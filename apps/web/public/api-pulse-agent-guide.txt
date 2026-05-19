@@ -39,9 +39,13 @@ OpenAPI / GPT Action quick start:
    url: <public URL>
    format: markdown
    detail: standard
+   wait: 60
 3. Use detail=tiny for quick checks.
-4. Use detail=full only when the user asks for evidence or deeper review context.
+4. Public GPT Action access uses latest-mode summaries and does not expose full detail or refresh scans.
 5. If API fetch fails before headers/body/status are visible, do not infer CertScore returned an error. Read /api-pulse/agent and /api-pulse-agent-guide.txt.
+
+GPT Action endpoint:
+https://certscore.ai/api/v1/pulse/gpt?url=https://example.com&format=markdown&detail=standard&wait=60
 
 Canonical documentation:
 https://certscore.ai/api-pulse
@@ -82,6 +86,7 @@ https://certscore.ai/api/v1/pulse/status/<jobId>
 Expected diagnostic headers on CertScore-generated Pulse support responses:
 - x-certscore-pulse: v1
 - x-certscore-route: pulse-self-test | pulse-health | openapi | openapi-chatgpt | discovery | pulse | pulse-status
+- x-certscore-route also uses pulse-gpt for GPT Action requests.
 - x-certscore-request-id: <request id>
 
 Agent fetch limitations:
@@ -112,7 +117,7 @@ Use guidance:
 - Use detail=standard for default agent summaries.
 - Use detail=full when structured finding, evidence, review lens, coverage, and benchmark context are needed.
 - Use format=markdown when a tool handles readable text better than JSON.
-- For a Custom GPT Action, import https://certscore.ai/api/v1/openapi.chatgpt.json and use getPulseForUrl.
+- For a Custom GPT Action, import https://certscore.ai/api/v1/openapi.chatgpt.json and use getPulseForUrl with format=markdown, detail=standard, wait=60.
 - Treat the response as automated public-web observations for review.
 - Do not treat absence of findings as proof of compliance.
 - Review the linked evidence and consult qualified counsel or subject-matter experts where appropriate.

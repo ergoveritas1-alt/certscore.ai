@@ -66,18 +66,35 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   const body = await response.json();
   assert.equal(body.openapi, "3.1.0");
   assert.equal(body.info.title, "CertScore Pulse GPT Action API");
-  assert.equal(body.paths["/api/v1/pulse"].get.operationId, "getPulseForUrl");
+  assert.equal(body.paths["/api/v1/pulse/gpt"].get.operationId, "getPulseForUrl");
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.operationId, "getPulseJobStatus");
-  assert.ok(body.paths["/api/v1/pulse"].get.parameters.some((parameter: { name: string; required?: boolean }) => parameter.name === "url" && parameter.required === true));
-  assert.ok(body.paths["/api/v1/pulse"].get.responses["200"].content["text/markdown"]);
+  assert.equal(body.paths["/api/v1/pulse/gpt/scan/{scanId}"].get.operationId, "getPulseByScanId");
+  assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; required?: boolean }) => parameter.name === "url" && parameter.required === true));
+  assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { maximum?: number } }) => parameter.name === "wait" && parameter.schema.maximum === 60));
+  assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["200"].content["text/markdown"]);
+  assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["500"].content["application/json"]);
   assert.ok(body.paths["/api/v1/pulse-self-test"]);
   assert.ok(body.components.schemas.PulseCapabilities);
   assert.ok(body.components.schemas.PulseAgentInterpretation);
   assert.ok(body.components.schemas.PulseCoverageInterruption);
-  assert.ok(body.paths["/api/v1/pulse"].get.responses["200"].headers["x-certscore-request-id"]);
-  assert.ok(body.paths["/api/v1/pulse"].get.responses["202"].headers["Retry-After"]);
+  assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["200"].headers["x-certscore-request-id"]);
+  assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["202"].headers["Retry-After"]);
   assert.match(JSON.stringify(body), /format=markdown|getPulseForUrl|automated public-web observations for review|automated_runtime_analysis/);
+  assert.doesNotMatch(JSON.stringify(body.paths["/api/v1/pulse/gpt"].get.parameters), /refresh|full/);
   assert.doesNotMatch(JSON.stringify(body), /pre_consent_tracking_detected|raw DOM|DATABASE_URL|AUTH_SECRET/i);
+});
+
+test("GPT Pulse route source preserves public-mode gates", () => {
+  const source = readFileSync("apps/web/app/api/v1/pulse/route.ts", "utf8");
+  const gptRoute = readFileSync("apps/web/app/api/v1/pulse/gpt/route.ts", "utf8");
+
+  assert.match(source, /gptAction && detail === "full"/);
+  assert.match(source, /Full evidence detail is not available through the public GPT Action/);
+  assert.match(source, /gptAction && requestedFreshness === "refresh"/);
+  assert.match(source, /public GPT Action uses latest available Pulse results only/);
+  assert.match(source, /GPT_ACTION_HOURLY_LIMIT = 5/);
+  assert.match(source, /GPT_ACTION_DAILY_LIMIT = 20/);
+  assert.match(gptRoute, /channel", "gpt_action"/);
 });
 
 test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app error page", async () => {

@@ -15,6 +15,7 @@ const discoveryDocument = {
     doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
   },
   api: "https://certscore.ai/api/v1/pulse",
+  gptActionApi: "https://certscore.ai/api/v1/pulse/gpt",
   openapi: "https://certscore.ai/api/v1/openapi.json",
   chatgptOpenapi: "https://certscore.ai/api/v1/openapi.chatgpt.json",
   docs: "https://certscore.ai/api-pulse",
@@ -28,6 +29,7 @@ const discoveryDocument = {
   statusExample: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
   recommendedCalls: {
     userFacingSummary: "GET /api/v1/pulse?url=https://example.com&format=markdown&detail=standard",
+    gptActionSummary: "GET /api/v1/pulse/gpt?url=https://example.com&format=markdown&detail=standard&wait=60",
     quickMachineTriage: "GET /api/v1/pulse?url=https://example.com&detail=tiny",
     evidenceReview: "GET /api/v1/pulse?url=https://example.com&detail=full",
     connectivityCheck: "GET /api/v1/pulse-self-test",

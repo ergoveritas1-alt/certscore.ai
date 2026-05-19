@@ -55,6 +55,7 @@ export async function createPulseRequest(input: {
   context: PulseRequestContext;
   normalizedDomain?: string | null;
   normalizedUrl?: string | null;
+  requestChannel?: string;
   requestedUrl?: string | null;
   resolutionMode: string;
   scanId?: string | null;
@@ -66,16 +67,17 @@ export async function createPulseRequest(input: {
   await query(
     `insert into pulse_requests (
        public_id, job_id, requested_url, normalized_url, normalized_domain,
-       requested_by, request_context, status, scan_id, api_version, schema_version,
+       request_channel, requested_by, request_context, status, scan_id, api_version, schema_version,
        pulse_version, projection_version, resolution_mode
      )
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
     [
       publicId,
       jobId,
       input.requestedUrl ?? null,
       input.normalizedUrl ?? null,
       input.normalizedDomain ?? null,
+      input.requestChannel ?? input.context.channel ?? input.context.source ?? "pulse_api",
       {
         userId: input.context.userId ?? null,
         accountId: input.context.accountId ?? null,
@@ -91,7 +93,9 @@ export async function createPulseRequest(input: {
         detail: input.context.detail,
         freshness: input.context.freshness,
         waitSeconds: input.context.waitSeconds,
-        mode: input.context.mode
+        mode: input.context.mode,
+        source: input.context.source ?? input.context.channel ?? "pulse_api",
+        channel: input.context.channel ?? input.context.source ?? "pulse_api"
       },
       input.status,
       input.scanId ?? null,
@@ -104,6 +108,30 @@ export async function createPulseRequest(input: {
   );
 
   return { publicId, jobId };
+}
+
+export async function getPulseGptActionUsage(input: { ipHash: string | null }) {
+  await ensurePulseTables();
+  if (!input.ipHash) {
+    return { hourlyCount: 0, dailyCount: 0 };
+  }
+
+  const result = await queryOne<{ hourly_count: number; daily_count: number }>(
+    `select
+       count(*) filter (where requested_at > timezone('utc', now()) - interval '1 hour')::int as hourly_count,
+       count(*) filter (where requested_at > timezone('utc', now()) - interval '1 day')::int as daily_count
+       from pulse_requests
+      where request_channel = 'gpt_action'
+        and request_context->>'mode' = 'url'
+        and request_context->>'ipHash' = $1`,
+    [input.ipHash],
+    { readOnly: true }
+  );
+
+  return {
+    hourlyCount: result?.hourly_count ?? 0,
+    dailyCount: result?.daily_count ?? 0
+  };
 }
 
 export async function updatePulseRequestCompleted(input: {

@@ -106,3 +106,35 @@ test("Pulse markdown formats Date completedAt values before JSON serialization",
   assert.match(markdown, /Scan completed: 2026-05-18T23:15:31.000Z/);
   assert.doesNotMatch(markdown, /Scan completed: Not available/);
 });
+
+test("GPT Action markdown uses GPT-safe no-finding copy and CertScore footer links", () => {
+  const markdown = renderPulseMarkdown(
+    {
+      meta: { detail: "standard", generatedAt: "2026-05-18T23:15:32Z" },
+      domain: "example.com",
+      scanStatus: "completed",
+      summary: { score: 88, riskLevel: "monitor", humanSummary: "Automated scan completed for the observed public surfaces." },
+      topFindings: [],
+      coverage: {
+        status: "partial",
+        summary: "Coverage was limited; absence of findings should not be interpreted as absence of risk.",
+        limitations: ["Automated public-web scan only."]
+      },
+      links: {
+        fullReportUrl: "https://certscore.ai/scan/scan_123",
+        findingsReferenceUrl: "https://certscore.ai/guides/findings"
+      },
+      feedback: {},
+      disclaimer: PULSE_STANDARD_DISCLAIMER
+    },
+    { gptAction: true }
+  );
+
+  assert.match(markdown, /No top findings were surfaced in this automated scan/);
+  assert.match(markdown, /\*\*Coverage limitation:\*\*/);
+  assert.match(markdown, /View this scan on CertScore: https:\/\/certscore\.ai\/scan\/scan_123/);
+  assert.match(markdown, /Explore finding definitions: https:\/\/certscore\.ai\/guides\/findings/);
+  assert.match(markdown, /Run another scan: https:\/\/certscore\.ai/);
+  assert.equal((markdown.match(/## Disclaimer/g) ?? []).length, 1);
+  assert.equal((markdown.match(/CertScore provides automated public-web observations for review/g) ?? []).length, 1);
+});

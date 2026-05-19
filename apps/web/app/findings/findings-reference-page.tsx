@@ -185,6 +185,7 @@ export function getFindingReferencePageCopy(activeFinding?: FindingReferenceItem
 
 export function FindingsReferencePage({ activeFinding }: FindingsReferencePageProps) {
   const findings = getFindingReferenceItems();
+  const certscoreGptUrl = process.env.NEXT_PUBLIC_CERTSCORE_GPT_URL;
   const initialFindingId = activeFinding?.id ?? DEFAULT_FINDING_ID;
   const { pageDescription, pagePath, pageTitle } = getFindingReferencePageCopy(activeFinding);
   const headingTitle = activeFinding?.title ?? "CertScore findings reference";
@@ -227,6 +228,17 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
             </div>
             <p className="text-sm leading-6 text-slate-500">
               CertScore's finding references are reviewed periodically and updated when material regulatory or accessibility guidance changes. Guidance families monitored include EDPB consent and ePrivacy materials, ICO cookie guidance, CNIL tracker recommendations, FTC privacy and dark-pattern materials, CPRA/privacy-choice materials, and accessibility guidance where applicable.
+            </p>
+            <p className="text-sm leading-6">
+              {certscoreGptUrl ? (
+                <a className="font-semibold text-sky-700 hover:text-sky-800" href={certscoreGptUrl}>
+                  Scan a website in ChatGPT
+                </a>
+              ) : (
+                <a className="font-semibold text-sky-700 hover:text-sky-800" href="/api-pulse">
+                  CertScore GPT coming soon
+                </a>
+              )}
             </p>
           </div>
         )}

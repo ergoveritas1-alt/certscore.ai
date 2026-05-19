@@ -20,6 +20,7 @@ import {
   claimPulseDomainScanCreation,
   createPulseRequest,
   findLatestCompletedAnonymousScanForDomain,
+  getPulseGptActionUsage,
   getPulseRequestByJobId,
   updatePulseRequestCompleted,
   updatePulseRequestQueued,
@@ -30,6 +31,13 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const SCAN_ID_PATTERN = /^[0-9a-f-]{32,36}$/i;
+const GPT_ACTION_HOURLY_LIMIT = 5;
+const GPT_ACTION_DAILY_LIMIT = 20;
+
+type PulseRouteOptions = {
+  gptAction?: boolean;
+  routeName?: string;
+};
 
 function etagFor(scanId: string, detail: string, format: string) {
   return `"pulse-v1-scan-${scanId}-${detail}-${format}"`;
@@ -43,11 +51,11 @@ function diagnosticHeaders(route: string, requestId: string, headers?: HeadersIn
   return nextHeaders;
 }
 
-function completedResponse(pulse: any, format: "json" | "markdown", requestId: string) {
+function completedResponse(pulse: any, format: "json" | "markdown", requestId: string, options: PulseRouteOptions = {}) {
   const scanId = pulse.scan?.scanId ?? pulse.links?.scanJsonUrl?.split("scanId=")[1] ?? "unknown";
   if (format === "markdown") {
-    return new NextResponse(renderPulseMarkdown(pulse), {
-      headers: diagnosticHeaders("pulse", requestId, {
+    return new NextResponse(renderPulseMarkdown(pulse, { gptAction: options.gptAction }), {
+      headers: diagnosticHeaders(options.routeName ?? "pulse", requestId, {
         "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
         "Content-Type": "text/markdown; charset=utf-8",
         ETag: etagFor(scanId, pulse.meta.detail, "md")
@@ -55,7 +63,7 @@ function completedResponse(pulse: any, format: "json" | "markdown", requestId: s
     });
   }
   return NextResponse.json(pulse, {
-    headers: diagnosticHeaders("pulse", requestId, {
+    headers: diagnosticHeaders(options.routeName ?? "pulse", requestId, {
       "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
       "Content-Type": "application/json; charset=utf-8",
       ETag: etagFor(scanId, pulse.meta.detail, "json")
@@ -63,8 +71,8 @@ function completedResponse(pulse: any, format: "json" | "markdown", requestId: s
   });
 }
 
-function pulseJson(body: unknown, init: ResponseInit | undefined, requestId: string) {
-  const headers = diagnosticHeaders("pulse", requestId, init?.headers);
+function pulseJson(body: unknown, init: ResponseInit | undefined, requestId: string, routeName = "pulse") {
+  const headers = diagnosticHeaders(routeName, requestId, init?.headers);
   headers.set("Content-Type", "application/json; charset=utf-8");
   return new Response(JSON.stringify(body), {
     ...init,
@@ -99,7 +107,9 @@ async function buildAndLogCompletedPulse(input: {
   waitSeconds: number;
   requestId: string;
   refresh?: Record<string, unknown> | null;
+  routeOptions?: PulseRouteOptions;
 }) {
+  const startedAt = Date.now();
   const pulse = buildPulseProjection({
     detail: input.detail,
     format: input.format,
@@ -112,6 +122,15 @@ async function buildAndLogCompletedPulse(input: {
   });
   if (input.refresh && typeof pulse === "object") {
     (pulse as Record<string, unknown>).refresh = input.refresh;
+  }
+  if (input.routeOptions?.gptAction && typeof pulse === "object") {
+    (pulse as Record<string, unknown>).gptAction = {
+      channel: "gpt_action",
+      detail: input.detail,
+      format: input.format,
+      freshness: "latest",
+      fullDetailAvailableAt: pulse.links?.fullReportUrl ?? absoluteUrl(`/scan/${input.scanRecord.scan.id}`)
+    };
   }
   await updatePulseRequestCompleted({
     pulseRequestId: input.pulseRequestId,
@@ -126,29 +145,116 @@ async function buildAndLogCompletedPulse(input: {
       coverageStatus: pulse.coverage?.status ?? null
     }
   }).catch((error) => console.error("[pulse] request completion update failed", error));
-  return completedResponse(pulse, input.format, input.requestId);
+  if (input.routeOptions?.gptAction) {
+    logPulseGptActionEvent("pulse_gpt_action_scan_completed", {
+      detail: input.detail,
+      elapsedMs: Date.now() - startedAt,
+      format: input.format,
+      hostname: input.scanRecord.scan.domainHostname ?? null,
+      scanId: input.scanRecord.scan.id,
+      statusCode: 200,
+      topFindingIds: Array.isArray(pulse.topFindings) ? pulse.topFindings.map((finding: any) => finding.id).slice(0, 10) : [],
+      coverageStatus: pulse.coverage?.status ?? null,
+      wasCached: input.resolutionMode === "reused_existing_scan" || input.resolutionMode === "returned_stale_while_refreshing"
+    });
+  }
+  return completedResponse(pulse, input.format, input.requestId, input.routeOptions);
 }
 
-export async function GET(request: Request) {
+function isGptActionRequest(url: URL, options: PulseRouteOptions) {
+  return (
+    options.gptAction === true ||
+    url.searchParams.get("channel") === "gpt_action" ||
+    url.searchParams.get("source") === "gpt_action"
+  );
+}
+
+function parseGptPulseFormat(url: URL) {
+  const value = url.searchParams.get("format");
+  return value === "json" ? "json" : "markdown";
+}
+
+function parseGptPulseWaitSeconds(url: URL) {
+  const value = url.searchParams.get("wait");
+  if (!value) {
+    return 60;
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return 60;
+  }
+  return Math.max(0, Math.min(60, parsed));
+}
+
+function logPulseGptActionEvent(event: string, fields: Record<string, unknown>) {
+  console.info("[pulse:gpt_action]", JSON.stringify({ event, timestamp: new Date().toISOString(), source: "gpt_action", channel: "gpt_action", ...fields }));
+}
+
+async function checkGptActionLimit(ipHash: string | null) {
+  const usage = await getPulseGptActionUsage({ ipHash });
+  if (usage.hourlyCount >= GPT_ACTION_HOURLY_LIMIT) {
+    return { allowed: false as const, retryAfterSeconds: 3600 };
+  }
+  if (usage.dailyCount >= GPT_ACTION_DAILY_LIMIT) {
+    return { allowed: false as const, retryAfterSeconds: 86400 };
+  }
+  return { allowed: true as const, retryAfterSeconds: 0 };
+}
+
+async function handlePulseGET(request: Request, options: PulseRouteOptions = {}) {
   const requestId = request.headers.get("x-request-id") ?? randomUUID();
   const url = new URL(request.url);
-  const format = parsePulseFormat(url.searchParams.get("format"));
+  const gptAction = isGptActionRequest(url, options);
+  const routeName = options.routeName ?? (gptAction ? "pulse-gpt" : "pulse");
+  const format = gptAction ? parseGptPulseFormat(url) : parsePulseFormat(url.searchParams.get("format"));
   const detail = parsePulseDetail(url.searchParams.get("detail"));
-  const freshness = parsePulseFreshness(url.searchParams.get("freshness"));
-  const waitSeconds = parsePulseWaitSeconds(url.searchParams.get("wait"));
+  const requestedFreshness = parsePulseFreshness(url.searchParams.get("freshness"));
+  const freshness = gptAction ? "latest" : requestedFreshness;
+  const waitSeconds = gptAction ? parseGptPulseWaitSeconds(url) : parsePulseWaitSeconds(url.searchParams.get("wait"));
   const requester = getPulseRequesterContext(request);
-  const contextBase = { ...requester, format, detail, freshness, waitSeconds };
+  const contextBase = { ...requester, format, detail, freshness, waitSeconds, channel: gptAction ? "gpt_action" : "pulse_api", source: gptAction ? "gpt_action" : "pulse_api" };
   const scanId = url.searchParams.get("scanId")?.trim() || null;
   const jobId = url.searchParams.get("jobId")?.trim() || null;
   const rawUrl = url.searchParams.get("url")?.trim() || null;
+  const startedAt = Date.now();
 
   try {
+    if (gptAction && detail === "full") {
+      logPulseGptActionEvent("pulse_gpt_action_error", { detail, format, statusCode: 400, reason: "full_detail_requires_certscore" });
+      return pulseJson(
+        buildPulseError({
+          code: "scan_unavailable",
+          message: "Full evidence detail is not available through the public GPT Action. Open the CertScore report or use the standard Pulse API for public-safe full detail.",
+          detail: "standard",
+          format
+        }),
+        { headers: { "Cache-Control": "no-store" }, status: 400 },
+        requestId,
+        routeName
+      );
+    }
+    if (gptAction && requestedFreshness === "refresh") {
+      logPulseGptActionEvent("pulse_gpt_action_error", { detail, format, statusCode: 400, reason: "refresh_not_available" });
+      return pulseJson(
+        buildPulseError({
+          code: "scan_unavailable",
+          message: "The public GPT Action uses latest available Pulse results only. Fresh refresh scans require using certscore.ai or a future API-key flow.",
+          detail,
+          format
+        }),
+        { headers: { "Cache-Control": "no-store" }, status: 400 },
+        requestId,
+        routeName
+      );
+    }
+
     if (scanId) {
       if (!SCAN_ID_PATTERN.test(scanId)) {
-        return pulseJson(buildPulseError({ code: "invalid_url", message: "Invalid scan ID.", detail, format }), { status: 400 }, requestId);
+        return pulseJson(buildPulseError({ code: "invalid_url", message: "Invalid scan ID.", detail, format }), { status: 400 }, requestId, routeName);
       }
       const { publicId } = await createPulseRequest({
         context: { ...contextBase, mode: "scanId" },
+        requestChannel: gptAction ? "gpt_action" : "pulse_api",
         requestedUrl: null,
         resolutionMode: "reused_existing_scan",
         scanId,
@@ -156,7 +262,7 @@ export async function GET(request: Request) {
       });
       const scanRecord = await getAnonymousScanById(scanId);
       if (!scanRecord || scanRecord.scan.status !== "completed") {
-        return pulseJson(buildPulseError({ code: "not_found", message: "Scan not found or not eligible for public Pulse.", detail, format }), { status: 404 }, requestId);
+        return pulseJson(buildPulseError({ code: "not_found", message: "Scan not found or not eligible for public Pulse.", detail, format }), { status: 404 }, requestId, routeName);
       }
       return buildAndLogCompletedPulse({
         detail,
@@ -167,14 +273,15 @@ export async function GET(request: Request) {
         resolutionMode: "reused_existing_scan",
         scanRecord,
         waitSeconds,
-        requestId
+        requestId,
+        routeOptions: { gptAction, routeName }
       });
     }
 
     if (jobId) {
       const pulseRequest = await getPulseRequestByJobId(jobId);
       if (!pulseRequest) {
-        return pulseJson(buildPulseError({ code: "not_found", message: "Pulse job not found.", detail, format }), { status: 404 }, requestId);
+        return pulseJson(buildPulseError({ code: "not_found", message: "Pulse job not found.", detail, format }), { status: 404 }, requestId, routeName);
       }
       if (pulseRequest.scan_id) {
         const scanRecord = await getAnonymousScanById(pulseRequest.scan_id).catch(() => null);
@@ -188,7 +295,8 @@ export async function GET(request: Request) {
             resolutionMode: pulseRequest.resolution_mode ?? "reused_existing_scan",
             scanRecord,
             waitSeconds,
-            requestId
+            requestId,
+            routeOptions: { gptAction, routeName }
           });
         }
       }
@@ -215,7 +323,8 @@ export async function GET(request: Request) {
               : { "Cache-Control": "no-store" },
           status: responseStatus
         },
-        requestId
+        requestId,
+        routeName
       );
     }
 
@@ -223,19 +332,65 @@ export async function GET(request: Request) {
       return pulseJson(
         buildPulseError({ code: "invalid_url", message: "Provide url, scanId, or jobId.", detail, format }),
         { status: 400 },
-        requestId
+        requestId,
+        routeName
       );
     }
 
     const normalized = normalizePulseUrl(rawUrl);
     if (!normalized.ok) {
-      return pulseJson(buildPulseError({ code: "invalid_url", message: normalized.message, url: rawUrl, detail, format }), { status: 400 }, requestId);
+      return pulseJson(buildPulseError({ code: "invalid_url", message: normalized.message, url: rawUrl, detail, format }), { status: 400 }, requestId, routeName);
+    }
+
+    if (gptAction) {
+      logPulseGptActionEvent("pulse_gpt_action_scan_requested", {
+        detail,
+        format,
+        freshness,
+        hostname: normalized.normalizedDomain,
+        statusCode: null
+      });
+      const gptLimit = await checkGptActionLimit(requester.ipHash);
+      if (!gptLimit.allowed) {
+        const { publicId } = await createPulseRequest({
+          context: { ...contextBase, mode: "url" },
+          normalizedDomain: normalized.normalizedDomain,
+          normalizedUrl: normalized.normalizedUrl,
+          requestChannel: "gpt_action",
+          requestedUrl: rawUrl,
+          resolutionMode: "rate_limited",
+          status: "rate_limited"
+        });
+        await updatePulseRequestRateLimited({ pulseRequestId: publicId, retryAfterSeconds: gptLimit.retryAfterSeconds });
+        logPulseGptActionEvent("pulse_gpt_action_rate_limited", {
+          detail,
+          elapsedMs: Date.now() - startedAt,
+          format,
+          hostname: normalized.normalizedDomain,
+          retryAfterSeconds: gptLimit.retryAfterSeconds,
+          statusCode: 429
+        });
+        return pulseJson(
+          buildPulseError({
+            code: "rate_limited",
+            message: "The public GPT Action is receiving too many scan requests from this client. Try again after the retry window.",
+            retryAfterSeconds: gptLimit.retryAfterSeconds,
+            url: rawUrl,
+            detail,
+            format
+          }),
+          { headers: { "Cache-Control": "no-store", "Retry-After": String(gptLimit.retryAfterSeconds) }, status: 429 },
+          requestId,
+          routeName
+        );
+      }
     }
 
     const { publicId, jobId: createdJobId } = await createPulseRequest({
       context: { ...contextBase, mode: "url" },
       normalizedDomain: normalized.normalizedDomain,
       normalizedUrl: normalized.normalizedUrl,
+      requestChannel: gptAction ? "gpt_action" : "pulse_api",
       requestedUrl: rawUrl,
       resolutionMode: "created_new_scan",
       status: "queued"
@@ -253,7 +408,8 @@ export async function GET(request: Request) {
         resolutionMode: "reused_existing_scan",
         scanRecord: latestScanRecord,
         waitSeconds,
-        requestId
+        requestId,
+        routeOptions: { gptAction, routeName }
       });
     }
 
@@ -274,6 +430,7 @@ export async function GET(request: Request) {
           scanRecord: latestScanRecord,
           waitSeconds,
           requestId,
+          routeOptions: { gptAction, routeName },
           refresh: {
             requested: freshness === "refresh",
             performed: false,
@@ -295,20 +452,21 @@ export async function GET(request: Request) {
           headers: { "Cache-Control": "no-store", "Retry-After": String(throttle.retryAfterSeconds) },
           status: 429
         },
-        requestId
+        requestId,
+        routeName
       );
     }
 
     const dnsStatus = await checkDomainDns(normalized.normalizedDomain);
     if (!dnsStatus.exists) {
-      return pulseJson(buildPulseError({ code: "invalid_url", message: dnsStatus.reason, url: rawUrl, detail, format }), { status: 400 }, requestId);
+      return pulseJson(buildPulseError({ code: "invalid_url", message: dnsStatus.reason, url: rawUrl, detail, format }), { status: 400 }, requestId, routeName);
     }
 
     const queued = await createAnonymousFullScan({
       hostname: normalized.normalizedDomain,
       normalizedUrl: normalized.normalizedUrl,
       provenance: {
-        source: "pulse_api",
+        source: gptAction ? "gpt_action" : "pulse_api",
         host: request.headers.get("host"),
         userAgent: requester.userAgent,
         originIp: requester.ipHash
@@ -320,6 +478,17 @@ export async function GET(request: Request) {
       resultPulseUrl: absoluteUrl(`/api/v1/pulse?scanId=${queued.scan.id}`),
       resultReportUrl: absoluteUrl(`/scan/${queued.scan.id}`)
     });
+    if (gptAction) {
+      logPulseGptActionEvent("pulse_gpt_action_scan_queued", {
+        detail,
+        elapsedMs: Date.now() - startedAt,
+        format,
+        hostname: normalized.normalizedDomain,
+        jobId: createdJobId,
+        scanId: queued.scan.id,
+        statusCode: 202
+      });
+    }
 
     if (waitSeconds > 0) {
       const completed = await waitForCompletedScan(queued.scan.id, waitSeconds);
@@ -333,7 +502,8 @@ export async function GET(request: Request) {
           resolutionMode: "queued_new_scan",
           scanRecord: completed,
           waitSeconds,
-          requestId
+          requestId,
+          routeOptions: { gptAction, routeName }
         });
       }
     }
@@ -356,10 +526,19 @@ export async function GET(request: Request) {
         lastKnownPulse: latestScanRecord ? absoluteUrl(`/api/v1/pulse?scanId=${latestScanRecord.scan.id}`) : null
       },
       { headers: { "Cache-Control": "no-store", "Retry-After": String(retryAfterForStatus(status)) }, status: 202 },
-      requestId
+      requestId,
+      routeName
     );
   } catch (error) {
     console.error("[pulse] request failed", { requestId, error });
+    if (gptAction) {
+      logPulseGptActionEvent("pulse_gpt_action_error", {
+        detail,
+        elapsedMs: Date.now() - startedAt,
+        format,
+        statusCode: 503
+      });
+    }
     return pulseJson(
       buildPulseError({
         code: "internal_error",
@@ -369,7 +548,12 @@ export async function GET(request: Request) {
         format
       }),
       { headers: { "Cache-Control": "no-store", "Retry-After": "60" }, status: 503 },
-      requestId
+      requestId,
+      routeName
     );
   }
+}
+
+export async function GET(request: Request) {
+  return handlePulseGET(request);
 }

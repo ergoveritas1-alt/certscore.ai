@@ -36,6 +36,7 @@ const expectedHeaders = [
 ];
 
 const recommendedCalls = [
+  ["GPT Action summary", "GET /api/v1/pulse/gpt?url=https://example.com&format=markdown&detail=standard&wait=60"],
   ["User-facing summary", "GET /api/v1/pulse?url=https://example.com&format=markdown&detail=standard"],
   ["Quick machine triage", "GET /api/v1/pulse?url=https://example.com&detail=tiny"],
   ["Evidence/deeper review", "GET /api/v1/pulse?url=https://example.com&detail=full"],
@@ -112,13 +113,14 @@ export default function PulseAgentFallbackPage() {
             <li>
               Call <code className="rounded bg-white px-1">getPulseForUrl</code> with <code className="rounded bg-white px-1">url</code>,{" "}
               <code className="rounded bg-white px-1">format=markdown</code>, and{" "}
-              <code className="rounded bg-white px-1">detail=standard</code>.
+              <code className="rounded bg-white px-1">detail=standard</code>, and <code className="rounded bg-white px-1">wait=60</code>.
             </li>
             <li>
               Use <code className="rounded bg-white px-1">detail=tiny</code> for quick checks.
             </li>
             <li>
-              Use <code className="rounded bg-white px-1">detail=full</code> only when the user asks for evidence or deeper review context.
+              Public GPT Action access uses latest-mode summaries and does not expose full detail or refresh scans. Link users to the
+              CertScore report when they need more evidence.
             </li>
           </ol>
         </section>

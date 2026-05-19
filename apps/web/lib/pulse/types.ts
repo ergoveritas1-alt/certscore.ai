@@ -19,6 +19,7 @@ export type PulseAgentResponseClass = "completed_pulse" | "pending_pulse" | "api
 
 export type PulseRequestContext = {
   apiKeyId?: string | null;
+  channel?: "pulse_api" | "gpt_action" | string | null;
   format: PulseFormat;
   detail: PulseDetail;
   freshness: PulseFreshnessMode;
@@ -26,6 +27,7 @@ export type PulseRequestContext = {
   mode: "url" | "scanId" | "jobId";
   referer: string | null;
   sourceIp: string | null;
+  source?: "pulse_api" | "gpt_action" | string | null;
   userAgent: string | null;
   userId?: string | null;
   accountId?: string | null;

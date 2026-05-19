@@ -201,6 +201,63 @@ else
   pass "markdown pulse"
 fi
 
+request "/api/v1/pulse/gpt?url=https://example.com&format=markdown&detail=standard&wait=60"
+if [[ "$LAST_STATUS" != "200" && "$LAST_STATUS" != "202" ]]; then
+  fail "gpt pulse" "Expected HTTP 200 or 202."
+elif [[ "$LAST_STATUS" == "200" && "$LAST_CONTENT_TYPE" != text/markdown* ]]; then
+  fail "gpt pulse" "Expected markdown content type for completed GPT Pulse."
+elif [[ "$LAST_STATUS" == "202" && "$LAST_CONTENT_TYPE" != application/json* ]]; then
+  fail "gpt pulse" "Expected JSON content type for pending GPT Pulse."
+elif ! require_diag_headers "gpt pulse"; then
+  true
+elif [[ "$LAST_ROUTE" != "pulse-gpt" ]]; then
+  fail "gpt pulse" "Expected pulse-gpt route header."
+elif [[ "$LAST_STATUS" == "200" ]] && ! grep -q "Run another scan: https://certscore.ai" "$LAST_BODY"; then
+  fail "gpt pulse" "Missing GPT footer link."
+else
+  pass "gpt pulse"
+fi
+
+request "/api/v1/pulse/gpt?url=https://example.com&detail=full"
+if [[ "$LAST_STATUS" != "400" ]]; then
+  fail "gpt full gate" "Expected HTTP 400."
+elif [[ "$LAST_CONTENT_TYPE" != application/json* ]]; then
+  fail "gpt full gate" "Expected JSON content type."
+elif ! require_diag_headers "gpt full gate"; then
+  true
+elif [[ "$LAST_ROUTE" != "pulse-gpt" ]]; then
+  fail "gpt full gate" "Expected pulse-gpt route header."
+else
+  node_check "gpt full gate" '
+    const fs = require("fs");
+    const body = JSON.parse(fs.readFileSync(process.env.BODY_FILE, "utf8"));
+    if (body.type !== "certscore_pulse_error") process.exit(1);
+    if (body.error?.code !== "scan_unavailable") process.exit(1);
+    if (!/Full evidence detail/.test(body.error?.message ?? "")) process.exit(1);
+    if (!body.disclaimer) process.exit(1);
+  ' && pass "gpt full gate"
+fi
+
+request "/api/v1/pulse/gpt?url=https://example.com&freshness=refresh"
+if [[ "$LAST_STATUS" != "400" ]]; then
+  fail "gpt refresh gate" "Expected HTTP 400."
+elif [[ "$LAST_CONTENT_TYPE" != application/json* ]]; then
+  fail "gpt refresh gate" "Expected JSON content type."
+elif ! require_diag_headers "gpt refresh gate"; then
+  true
+elif [[ "$LAST_ROUTE" != "pulse-gpt" ]]; then
+  fail "gpt refresh gate" "Expected pulse-gpt route header."
+else
+  node_check "gpt refresh gate" '
+    const fs = require("fs");
+    const body = JSON.parse(fs.readFileSync(process.env.BODY_FILE, "utf8"));
+    if (body.type !== "certscore_pulse_error") process.exit(1);
+    if (body.error?.code !== "scan_unavailable") process.exit(1);
+    if (!/latest available Pulse results only/.test(body.error?.message ?? "")) process.exit(1);
+    if (!body.disclaimer) process.exit(1);
+  ' && pass "gpt refresh gate"
+fi
+
 request "/api/v1/pulse?url=%3A%3A%3A%3A"
 if [[ "$LAST_STATUS" != "400" ]]; then
   fail "invalid URL" "Expected HTTP 400."
@@ -256,7 +313,6 @@ check_openapi() {
     for (const name of ["PulseResponse", "PulseStatus", "PulseError", "PulseFeedback", "PulseCapabilities", "PulseAgentInterpretation", "PulseCoverageInterruption"]) {
       if (!schemas[name]) process.exit(1);
     }
-    if (!body.paths?.["/api/v1/pulse"]?.get?.responses?.["200"]?.content?.["application/json"]?.schema) process.exit(1);
     const serialized = JSON.stringify(body);
     if (!serialized.includes("capabilities") || !serialized.includes("agentInterpretation")) process.exit(1);
     for (const header of ["x-certscore-pulse", "x-certscore-route", "x-certscore-request-id"]) {
@@ -272,7 +328,11 @@ check_openapi() {
         for (const child of Object.values(value)) walk(child);
       };
       walk(body.paths);
-      if (!ops.includes("getPulseForUrl") || !ops.includes("getPulseJobStatus")) process.exit(1);
+      if (!body.paths?.["/api/v1/pulse/gpt"]?.get?.responses?.["200"]?.content?.["text/markdown"]?.schema) process.exit(1);
+      if (serialized.includes("\"refresh\"") || serialized.includes("\"full\"")) process.exit(1);
+      if (!ops.includes("getPulseForUrl") || !ops.includes("getPulseJobStatus") || !ops.includes("getPulseByScanId")) process.exit(1);
+    } else {
+      if (!body.paths?.["/api/v1/pulse"]?.get?.responses?.["200"]?.content?.["application/json"]?.schema) process.exit(1);
     }
   ' && pass "$label"
 }

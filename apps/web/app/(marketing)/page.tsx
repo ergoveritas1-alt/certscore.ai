@@ -89,6 +89,7 @@ function PersonaIcon({ index }: { index: number }) {
 
 export default async function MarketingHomePage() {
   const findings = getFindingReferenceItems();
+  const certscoreGptUrl = process.env.NEXT_PUBLIC_CERTSCORE_GPT_URL;
   const softwareApplicationSchema = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -156,6 +157,17 @@ export default async function MarketingHomePage() {
               </Link>
               .
             </p>
+            <div className="text-sm">
+              {certscoreGptUrl ? (
+                <a className="font-semibold text-sky-700 hover:text-sky-800" href={certscoreGptUrl}>
+                  Scan a website in ChatGPT
+                </a>
+              ) : (
+                <Link className="font-semibold text-sky-700 hover:text-sky-800" href="/api-pulse">
+                  CertScore GPT coming soon
+                </Link>
+              )}
+            </div>
           </div>
 
           <div className="space-y-4">

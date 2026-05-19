@@ -36,12 +36,12 @@ const chatGptOpenApiDocument = {
   },
   servers: [{ url: "https://certscore.ai" }],
   paths: {
-    "/api/v1/pulse": {
+    "/api/v1/pulse/gpt": {
       get: {
         operationId: "getPulseForUrl",
-        summary: "Retrieve a CertScore Pulse summary for a public URL.",
+        summary: "Retrieve a GPT-safe CertScore Pulse summary for a public URL.",
         description:
-          `${purposeStatement} Use this operation when a user asks CertScore to scan or summarize a public website. Prefer format=markdown for natural-language answers. Use detail=tiny for compact summaries and detail=full only when the user asks for evidence or more context.`,
+          `${purposeStatement} Automated public-web observations for review. Not legal advice or a compliance determination. Use this operation when a user asks CertScore to scan or summarize a public website. Prefer format=markdown and detail=standard for natural-language answers. This public GPT Action does not expose refresh or full-detail evidence access; higher-volume, refresh, and full evidence access may require API keys later.`,
         parameters: [
           {
             name: "url",
@@ -61,22 +61,15 @@ const chatGptOpenApiDocument = {
             name: "detail",
             in: "query",
             required: false,
-            description: "tiny is compact; standard is balanced; full includes more evidence and review context. quick is accepted as an alias for tiny.",
-            schema: { type: "string", enum: ["tiny", "quick", "standard", "full"], default: "standard" }
-          },
-          {
-            name: "freshness",
-            in: "query",
-            required: false,
-            description: "Use latest by default. Use refresh only when the user explicitly asks for a fresh run.",
-            schema: { type: "string", enum: ["latest", "refresh"], default: "latest" }
+            description: "tiny is compact; standard is balanced and best for GPT responses. quick is accepted by the API as an alias for tiny but omitted here to keep the GPT schema simple.",
+            schema: { type: "string", enum: ["tiny", "standard"], default: "standard" }
           },
           {
             name: "wait",
             in: "query",
             required: false,
             description: "Optional seconds to wait for completion during this request. If a 202 response is returned, poll the statusUrl.",
-            schema: { type: "integer", minimum: 0, maximum: 80, default: 0 }
+            schema: { type: "integer", minimum: 0, maximum: 60, default: 60 }
           }
         ],
         responses: {
@@ -209,6 +202,72 @@ const chatGptOpenApiDocument = {
                 }
               }
             }
+          },
+          "500": {
+            description: "Unexpected public-safe API error.",
+            headers: { ...diagnosticHeaders, ...retryAfterHeader },
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/pulse/gpt/scan/{scanId}": {
+      get: {
+        operationId: "getPulseByScanId",
+        summary: "Retrieve a GPT-safe CertScore Pulse summary by durable scanId.",
+        description:
+          "Retrieve a completed scan-backed Pulse result using scanId, the durable handle returned by CertScore Pulse. Automated public-web observations for review. Not legal advice or a compliance determination.",
+        parameters: [
+          {
+            name: "scanId",
+            in: "path",
+            required: true,
+            description: "The durable CertScore scanId returned by getPulseForUrl or a CertScore report URL.",
+            schema: { type: "string" }
+          },
+          {
+            name: "format",
+            in: "query",
+            required: false,
+            description: "Return JSON for structured processing or markdown for readable GPT responses.",
+            schema: { type: "string", enum: ["json", "markdown"], default: "markdown" }
+          },
+          {
+            name: "detail",
+            in: "query",
+            required: false,
+            description: "tiny is compact; standard is balanced and best for GPT responses.",
+            schema: { type: "string", enum: ["tiny", "standard"], default: "standard" }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Completed Pulse response as JSON or markdown.",
+            headers: diagnosticHeaders,
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/PulseResponse" } },
+              "text/markdown": { schema: { type: "string" } }
+            }
+          },
+          "400": {
+            description: "Invalid scanId or request input.",
+            headers: diagnosticHeaders,
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
+          },
+          "404": {
+            description: "Scan not found or not eligible for public Pulse.",
+            headers: diagnosticHeaders,
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
+          },
+          "429": {
+            description: "The request was throttled.",
+            headers: { ...diagnosticHeaders, ...retryAfterHeader },
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
+          },
+          "500": {
+            description: "Unexpected public-safe API error.",
+            headers: { ...diagnosticHeaders, ...retryAfterHeader },
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
           }
         }
       }
@@ -217,7 +276,7 @@ const chatGptOpenApiDocument = {
       get: {
         operationId: "getPulseJobStatus",
         summary: "Retrieve the status of a queued CertScore Pulse job.",
-        description: `${purposeStatement} Use this operation only after a Pulse response returns a jobId or statusUrl.`,
+        description: `${purposeStatement} Automated public-web observations for review. Not legal advice or a compliance determination. Use this operation only after a Pulse response returns a jobId or statusUrl.`,
         parameters: [
           {
             name: "jobId",
@@ -246,6 +305,11 @@ const chatGptOpenApiDocument = {
           "404": {
             description: "Pulse job was not found.",
             headers: diagnosticHeaders,
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
+          },
+          "500": {
+            description: "Unexpected public-safe API error.",
+            headers: { ...diagnosticHeaders, ...retryAfterHeader },
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
           }
         }

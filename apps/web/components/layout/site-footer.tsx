@@ -41,6 +41,7 @@ const companyLegalLinks = [
 ];
 
 export function SiteFooter() {
+  const certscoreGptUrl = process.env.NEXT_PUBLIC_CERTSCORE_GPT_URL;
   return (
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8 text-sm text-slate-500">
@@ -75,6 +76,15 @@ export function SiteFooter() {
                   {link.label}
                 </Link>
               ))}
+              {certscoreGptUrl ? (
+                <a href={certscoreGptUrl} className="hover:text-slate-900">
+                  Try the CertScore GPT
+                </a>
+              ) : (
+                <Link href="/api-pulse" className="hover:text-slate-900">
+                  CertScore GPT coming soon
+                </Link>
+              )}
               <div className="flex justify-start">
                 <AnalyticsPreferencesButton />
               </div>

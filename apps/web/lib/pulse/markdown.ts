@@ -29,7 +29,11 @@ function totalObservationCount(pulse: PulseMarkdownInput, findings: any[]) {
   return findings.length;
 }
 
-function compactFindings(findings: any[]) {
+function compactFindings(findings: any[], options: { gptAction?: boolean } = {}) {
+  if (findings.length === 0 && options.gptAction) {
+    return "No top findings were surfaced in this automated scan. This does not mean the site has no privacy, accessibility, security, or legal risk. Review scope and coverage before relying on the result.";
+  }
+
   return findings.length > 0
     ? findings
         .map((finding: any, index: number) =>
@@ -47,7 +51,22 @@ function compactFindings(findings: any[]) {
     : "No major automated review signals were surfaced in this scan.";
 }
 
-export function renderPulseMarkdown(pulse: PulseMarkdownInput) {
+function isLimitedCoverage(status: unknown) {
+  return ["partial", "limited", "blocked", "unknown"].includes(String(status ?? "").toLowerCase());
+}
+
+function gptFooter(pulse: PulseMarkdownInput) {
+  const links = pulse.links ?? {};
+  return [
+    "---",
+    "",
+    "View this scan on CertScore: " + line(links.fullReportUrl),
+    "Explore finding definitions: " + line(links.findingsReferenceUrl ?? "https://certscore.ai/guides/findings"),
+    "Run another scan: https://certscore.ai"
+  ].join("\n");
+}
+
+export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAction?: boolean } = {}) {
   const findings = Array.isArray(pulse.topFindings) ? pulse.topFindings : [];
   const lenses = Array.isArray(pulse.reviewContext?.lenses) ? pulse.reviewContext.lenses : [];
   const highlights = pulse.evidenceHighlights ?? {};
@@ -81,10 +100,17 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput) {
     "## Summary",
     "",
     line(pulse.summary?.humanSummary ?? pulse.summary?.headline),
+    ...(options.gptAction && isLimitedCoverage(pulse.coverage?.status)
+      ? [
+          "",
+          "**Coverage limitation:** " +
+            line(pulse.coverage?.summary ?? "Coverage was limited; absence of findings should not be interpreted as absence of risk.")
+        ]
+      : []),
     "",
     "## Highest-priority findings",
     "",
-    compactFindings(findings),
+    compactFindings(findings, options),
     "",
     "## Review lenses",
     "",
@@ -142,11 +168,13 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput) {
     pulse.disclaimer ?? PULSE_STANDARD_DISCLAIMER
   ].join("\n");
 
+  const withGptFooter = options.gptAction ? `${markdown}\n\n${gptFooter(pulse)}` : markdown;
+
   if (pulse.meta?.detail === "full" && Array.isArray(pulse.findings) && pulse.findings.length > findings.length) {
-    return `${markdown}\n\n## All Surfaced Findings\n\n${pulse.findings
+    return `${withGptFooter}\n\n## All Surfaced Findings\n\n${pulse.findings
       .map((finding: any, index: number) => `${index + 1}. ${line(finding.label)} - ${line(finding.evidence?.summary)}`)
       .join("\n")}\n`;
   }
 
-  return `${markdown}\n`;
+  return `${withGptFooter}\n`;
 }
