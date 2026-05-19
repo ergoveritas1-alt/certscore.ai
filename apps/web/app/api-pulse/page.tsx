@@ -389,6 +389,48 @@ export default function ApiPulsePage() {
       </section>
 
       <section className="mx-auto grid max-w-5xl gap-6 px-6 py-12">
+        <Card className="border-sky-200 bg-sky-50 shadow-none">
+          <CardHeader>
+            <CardTitle>For AI agents</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm leading-7 text-slate-700">
+            <p>
+              If you are an agent with OpenAPI actions or HTTP tools, start here before trying ad hoc fetches. CertScore Pulse works
+              best when agents call the markdown response for user-facing summaries and reserve full JSON for evidence-heavy review.
+            </p>
+            <CodeBlock>{`Agent quick start:
+1. If you support OpenAPI actions/tools, import:
+   https://certscore.ai/api/v1/openapi.chatgpt.json
+2. Call getPulseForUrl with:
+   url: <public URL>
+   format: markdown
+   detail: standard
+3. Use detail=tiny for quick checks.
+4. Use detail=full only when the user asks for evidence or deeper review context.
+5. If API fetch fails before headers/body/status are visible, do not infer CertScore returned an error. Read /api-pulse/agent and /api-pulse-agent-guide.txt.`}</CodeBlock>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
+                href="/api/v1/openapi.chatgpt.json"
+              >
+                Open ChatGPT Action schema
+              </Link>
+              <Link
+                className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
+                href="/api-pulse/agent"
+              >
+                Open agent fallback
+              </Link>
+              <Link
+                className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
+                href="/api-pulse-agent-guide.txt"
+              >
+                Open plain text guide
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="border-slate-200 bg-white shadow-none">
           <CardHeader>
             <CardTitle>Quick start</CardTitle>

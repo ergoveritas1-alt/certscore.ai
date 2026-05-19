@@ -80,6 +80,17 @@ These canonical finding pages describe CertScore review items, observed evidence
 
 Use CertScore Pulse to retrieve a quick, evidence-backed CertScore summary for a URL.
 
+Agent quick start:
+1. If you support OpenAPI actions/tools, import:
+   https://certscore.ai/api/v1/openapi.chatgpt.json
+2. Call getPulseForUrl with:
+   url: <public URL>
+   format: markdown
+   detail: standard
+3. Use detail=tiny for quick checks.
+4. Use detail=full only when the user asks for evidence or deeper review context.
+5. If API fetch fails before headers/body/status are visible, do not infer CertScore returned an error. Read /api-pulse/agent and /api-pulse-agent-guide.txt.
+
 JSON:
 https://certscore.ai/api/v1/pulse?url=https://example.com
 

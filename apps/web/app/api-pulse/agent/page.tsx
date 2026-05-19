@@ -46,6 +46,31 @@ export default function PulseAgentFallbackPage() {
           endpoints. The canonical Pulse API remains <code className="rounded bg-slate-100 px-1">/api/v1/pulse</code>.
         </p>
 
+        <section className="mt-8 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm leading-7 text-slate-800">
+          <h2 className="font-semibold text-slate-950">Agent quick start</h2>
+          <ol className="mt-3 list-decimal space-y-2 pl-5">
+            <li>
+              If you support OpenAPI actions or tools, import{" "}
+              <a className="break-all font-semibold text-sky-700" href="https://certscore.ai/api/v1/openapi.chatgpt.json">
+                https://certscore.ai/api/v1/openapi.chatgpt.json
+              </a>
+              .
+            </li>
+            <li>
+              Call <code className="rounded bg-white px-1">getPulseForUrl</code> with <code className="rounded bg-white px-1">url</code>,{" "}
+              <code className="rounded bg-white px-1">format=markdown</code>, and{" "}
+              <code className="rounded bg-white px-1">detail=standard</code>.
+            </li>
+            <li>
+              Use <code className="rounded bg-white px-1">detail=tiny</code> for quick checks.
+            </li>
+            <li>
+              Use <code className="rounded bg-white px-1">detail=full</code> only when the user asks for evidence or deeper review context.
+            </li>
+            <li>If API fetch fails before headers, body, or status are visible, do not infer CertScore returned an error.</li>
+          </ol>
+        </section>
+
         <section className="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-950">
           <h2 className="font-semibold">How to interpret fetch failures</h2>
           <p className="mt-2">
