@@ -18,6 +18,14 @@ test("getFindingReferenceHrefForReportFindingId maps report aliases to public fi
     getFindingReferenceHrefForReportFindingId("reject_did_not_reduce_tracking"),
     "/guides/findings/reject_tracking_persists_after_reject"
   );
+  assert.equal(
+    getFindingReferenceHrefForReportFindingId("tracking_cookies_set_before_consent"),
+    "/guides/findings/third_party_cookie_pre_consent"
+  );
+  assert.equal(
+    getFindingReferenceHrefForReportFindingId("fingerprinting_observed"),
+    "/guides/findings/probable_fingerprinting"
+  );
 });
 
 test("getFindingReferenceIdForReportFindingId returns direct registry IDs when available", () => {

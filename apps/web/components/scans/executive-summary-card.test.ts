@@ -254,8 +254,8 @@ test("buildRegulatoryLenses retains reject-path tracking failure as dedicated re
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
   const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
 
-  assert.ok(gdprLens?.findings.some((finding) => /reject interaction/i.test(finding.label)));
-  assert.ok(ftcLens?.findings.some((finding) => /reject interaction/i.test(finding.label)));
+  assert.ok(gdprLens?.findings.some((finding) => /Non-essential tracking continued after reject/i.test(finding.label)));
+  assert.ok(ftcLens?.findings.some((finding) => /Non-essential tracking continued after reject/i.test(finding.label)));
 });
 
 test("buildRegulatoryLenses maps CPRA CBA opt-out missing into the CCPA CPRA lens", () => {
@@ -274,7 +274,7 @@ test("buildRegulatoryLenses maps CPRA CBA opt-out missing into the CCPA CPRA len
   const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
 
   assert.equal(cpraLens?.summary, "Cross-context behavioral advertising and CPRA opt-out posture drive this score.");
-  assert.ok(regulatoryFindingLabels(cpraLens?.findings ?? []).includes("CPRA opt-out missing for advertising sharing"));
+  assert.ok(regulatoryFindingLabels(cpraLens?.findings ?? []).includes("CPRA / privacy choice opt-out review signal"));
 });
 
 test("buildRegulatoryLenses maps cross-domain identifiers to GDPR only with tracking or device context", () => {
@@ -695,8 +695,8 @@ test("buildRegulatoryLenses maps consent-choice review signals into GDPR without
   assert.equal(gdprLens?.summary, "No major consent-triggering issue surfaced in the top findings.");
   assert.equal(gdprLens?.ratingLabel, "Strong");
   assert.deepEqual(regulatoryFindingLabels(gdprLens?.findings ?? []), [
-    "Promotional or choice architecture may need closer disclosure review.",
-    "Promotional or choice architecture may need closer disclosure review."
+    "Reject option missing or hidden",
+    "Consent interaction was forced"
   ]);
   assert.equal(ftcLens?.detailTitle, "Choice architecture review signals");
   assert.equal(ftcLens?.summary, "Consent-choice design should be reviewed for clarity.");
@@ -2012,7 +2012,7 @@ test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-f
   assert.match(html, /max-h-\[31\.5rem\]/);
   assert.match(html, /Tracking started before consent/);
   assert.match(html, /Non-essential tracking continued after reject/);
-  assert.match(html, /Session recording services detected/);
+  assert.match(html, /Session replay service signal observed/);
   assert.match(html, /Automated accessibility issues observed/);
 });
 
@@ -2063,7 +2063,7 @@ test("ExecutiveSummaryCard renders directional finding-density context for surfa
   assert.match(html, /critical/);
   assert.match(html, /Consent timing/);
   assert.match(html, /Good evidence/);
-  assert.match(html, /Good evidence means the signal is supported/);
+  assert.match(html, /Manual review is still needed for purpose, consent state, exemptions, and configuration/);
   assert.match(html, /Seen on ~18% of scanned top sites/);
   assert.match(html, /Seen on ~9% of scanned top sites/);
   assert.match(html, /directional market context/);

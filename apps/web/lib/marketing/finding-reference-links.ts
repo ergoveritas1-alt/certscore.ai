@@ -9,6 +9,7 @@ const REPORT_FINDING_ID_TO_REFERENCE_ID: Record<string, string> = {
   preconsent_tracking: "pre_consent_tracking_detected",
   reject_button_missing: "reject_option_missing_or_hidden",
   reject_did_not_reduce_tracking: "reject_tracking_persists_after_reject",
+  tracking_cookies_set_before_consent: "third_party_cookie_pre_consent",
   session_replay_observed: "session_recording_services_detected",
   session_replay_undisclosed: "session_recording_services_detected"
 };

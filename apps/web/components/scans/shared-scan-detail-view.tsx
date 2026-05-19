@@ -39,7 +39,10 @@ import {
   deriveCertScoreFindings,
 } from "../../lib/scans/derive-findings";
 import { buildScanCalibrationSummary } from "../../lib/scans/calibration-summary";
-import { compactEvidenceJsonForDisplay } from "../../lib/scans/compact-evidence-json";
+import {
+  compactEvidenceJsonForDisplay,
+  sanitizePublicReportEvidenceText
+} from "../../lib/scans/compact-evidence-json";
 import {
   dedupeHeadlineFindings,
   deriveConsentAuditFindings
@@ -98,6 +101,10 @@ import {
 } from "../../lib/scans/contradiction-evidence-contract";
 import { PRIMARY_SCAN_CATEGORY_META } from "../../lib/scans/signal-taxonomy";
 import { getFindingReferenceHrefForReportFindingId } from "../../lib/marketing/finding-reference-links";
+import {
+  getPublicReportFindingDisplay,
+  getPublicReportFindingFallbackNote
+} from "../../lib/scans/public-report-finding-display";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import {
@@ -1266,11 +1273,12 @@ function renderCanonicalTaxonomyReviewSafely(input: CanonicalTaxonomyReviewProps
 
 function ReviewFindingLinks(input: { finding: UnifiedFindingDisplayPacket }) {
   const findingReferenceHref = getFindingReferenceHrefForReportFindingId(input.finding.unifiedFindingId);
+  const fallbackNote = getPublicReportFindingFallbackNote(input.finding.unifiedFindingId);
   const shouldShowReferenceLink =
     input.finding.referenceUrl &&
     input.finding.referenceUrl !== input.finding.presentation.suggestedBestPractice?.url;
 
-  if (!input.finding.sourceUrl && !shouldShowReferenceLink && !findingReferenceHref) {
+  if (!input.finding.sourceUrl && !shouldShowReferenceLink && !findingReferenceHref && !fallbackNote) {
     return null;
   }
 
@@ -1286,6 +1294,11 @@ function ReviewFindingLinks(input: { finding: UnifiedFindingDisplayPacket }) {
           <span>↗</span>
           <span>Learn how CertScore interprets this finding</span>
         </Link>
+      ) : null}
+      {!findingReferenceHref && fallbackNote ? (
+        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-700">
+          {fallbackNote}
+        </span>
       ) : null}
       {input.finding.sourceUrl ? (
         <Link
@@ -1512,12 +1525,14 @@ function getFindingToneClasses(finding: UnifiedFindingDisplayPacket) {
   }
 }
 
-function getFindingBadgeClasses(finding: UnifiedFindingDisplayPacket) {
+function getFindingBadgeClasses(finding: UnifiedFindingDisplayPacket, criticality: string = finding.severity) {
   if (isPositiveSurfaceFinding(finding)) {
     return "bg-emerald-100 text-emerald-900";
   }
 
-  switch (finding.severity) {
+  switch (criticality) {
+    case "critical":
+      return "bg-rose-100 text-rose-900";
     case "high":
       return "bg-rose-100 text-rose-900";
     case "medium":
@@ -1581,7 +1596,8 @@ function getCollapsedFindingSummary(finding: UnifiedFindingDisplayPacket) {
     return null;
   }
 
-  const normalized = source.endsWith(".") ? source.slice(0, -1) : source;
+  const sanitized = sanitizePublicReportEvidenceText(source);
+  const normalized = sanitized.endsWith(".") ? sanitized.slice(0, -1) : sanitized;
   if (normalized.length <= 120) {
     return normalized;
   }
@@ -1608,7 +1624,15 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
   const evidenceSummary = summarizeEvidence(input.finding);
   const confidenceRationale = input.finding.presentationDecision.confidenceRationale;
   const collapsedSummary = getCollapsedFindingSummary(input.finding);
-  const findingJsonPayload = JSON.stringify(buildReviewFindingSummaryJson(input.finding), null, 2);
+  const display = getPublicReportFindingDisplay({
+    confidence: input.finding.confidenceBand,
+    findingId: input.finding.unifiedFindingId,
+    label: input.finding.presentation.findingName,
+    remediation: input.finding.presentation.suggestedFix,
+    severity: input.finding.severity,
+    title: input.finding.title
+  });
+  const findingJsonPayload = JSON.stringify(compactEvidenceJsonForDisplay(buildReviewFindingSummaryJson(input.finding)), null, 2);
   const positiveSurfaceFinding = isPositiveSurfaceFinding(input.finding);
 
   return (
@@ -1621,10 +1645,10 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
           <DisclosureChevron />
         </span>
         <p className="shrink-0 whitespace-nowrap text-sm font-semibold text-slate-950">
-          {input.finding.presentation.findingName}
+          {display.title}
         </p>
-        <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding)}`}>
-          {positiveSurfaceFinding ? "Positive surface" : input.finding.severity}
+        <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding, display.criticality)}`}>
+          {positiveSurfaceFinding ? "Positive surface" : display.criticality}
         </span>
         <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getPresentationStatusBadgeClasses(input.finding.presentationDecision.status)}`}>
           {input.finding.presentationDecision.status === "surface"
@@ -1656,7 +1680,11 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
         <div className="min-w-0 space-y-2">
           <div>
             <p className="mt-1 text-sm text-slate-700">
-              {input.finding.observedValue ?? (positiveSurfaceFinding ? "Positive surface detected" : `${input.finding.severity} severity`)}
+              {input.finding.observedValue
+                ? sanitizePublicReportEvidenceText(input.finding.observedValue)
+                : positiveSurfaceFinding
+                  ? "Positive surface detected"
+                  : `${display.criticality} reference criticality`}
             </p>
             {pageAttribution ? <p className="mt-1 text-xs text-slate-500">{pageAttribution}</p> : null}
           </div>
@@ -1671,8 +1699,8 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
         </div>
         <div className="min-w-0 space-y-2">
           <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Suggested Fix</p>
-            <p className="text-sm text-slate-700">{input.finding.presentation.suggestedFix}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Review and remediation starting points</p>
+            <p className="text-sm text-slate-700">{display.remediation}</p>
           </div>
           {input.finding.presentation.suggestedBestPractice ? (
             <Link
@@ -1698,6 +1726,11 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
         <div className="mt-2 space-y-2 text-xs text-slate-500">
           <p>{evidenceSummary}</p>
           <p>{confidenceRationale}</p>
+          {display.referenceId === "third_party_cookie_pre_consent" ? (
+            <p>
+              Related requests provide vendor or endpoint context and may not be the artifact that supports the pre-consent timing finding.
+            </p>
+          ) : null}
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Surfacing Decision</p>
             <div className="flex flex-wrap items-center gap-2">
@@ -3428,7 +3461,14 @@ export function deriveFindingEvidenceDiagnosticRows(findings: UnifiedFindingDisp
   return findings.map((finding) => ({
     decisionState: finding.surfacingDecision.decisionState,
     fetchQuality: finding.evidence?.fetchQuality ?? null,
-    findingName: finding.presentation.findingName,
+    findingName: getPublicReportFindingDisplay({
+      confidence: finding.confidenceBand,
+      findingId: finding.unifiedFindingId,
+      label: finding.presentation.findingName,
+      remediation: finding.presentation.suggestedFix,
+      severity: finding.severity,
+      title: finding.title
+    }).title,
     negativeEvidenceFlags: finding.concernContext?.negativeEvidenceFlags ?? [],
     reportLane: finding.surfacingDecision.reportLane,
     status: finding.presentationDecision.status,
@@ -3677,7 +3717,18 @@ function summarizeSectionFindings(findings: UnifiedFindingDisplayPacket[]) {
 
   const labels = findings
     .slice(0, 3)
-    .map((finding) => formatReviewFindingSummaryTitle(finding.presentation.findingName));
+    .map((finding) =>
+      formatReviewFindingSummaryTitle(
+        getPublicReportFindingDisplay({
+          confidence: finding.confidenceBand,
+          findingId: finding.unifiedFindingId,
+          label: finding.presentation.findingName,
+          remediation: finding.presentation.suggestedFix,
+          severity: finding.severity,
+          title: finding.title
+        }).title
+      )
+    );
   const remainder = findings.length - labels.length;
 
   return `${findings.length} surfaced finding${findings.length === 1 ? "" : "s"}${
@@ -3729,21 +3780,31 @@ function buildEntitySamples(
 }
 
 function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPacket) {
+  const display = getPublicReportFindingDisplay({
+    confidence: finding.confidenceBand,
+    findingId: finding.unifiedFindingId,
+    label: finding.presentation.findingName,
+    remediation: finding.presentation.suggestedFix,
+    severity: finding.severity,
+    title: finding.title
+  });
+
   return {
-    payloadScope: "detailed_review_summary",
+    evidenceScope: "detailed_review_summary",
     note: "Compact public report JSON for the expanded finding card. Fuller retained evidence is summarized in the primary evidence-backed findings area.",
     unifiedFindingId: finding.unifiedFindingId,
-    title: finding.title,
-    severity: finding.severity,
+    title: display.title,
+    criticality: display.criticality,
+    scanPriority: finding.severity,
     confidenceBand: finding.confidenceBand,
     summary: finding.summary,
     observedValue: finding.observedValue ?? null,
     primaryPageUrl: finding.primaryPageUrl ?? null,
     affectedPageCount: finding.affectedPageCount,
     presentation: {
-      findingName: finding.presentation.findingName,
+      findingName: display.title,
       whyThisMatters: finding.presentation.whyThisMatters,
-      suggestedFix: finding.presentation.suggestedFix
+      suggestedFix: display.remediation
     },
     evidence: {
       counts: finding.evidence?.counts ?? {},
@@ -3811,16 +3872,24 @@ function CategorySeverityCounts(input: { findings: UnifiedFindingDisplayPacket[]
 function CategoryFindingSummaryCard(input: { finding: UnifiedFindingDisplayPacket }) {
   const summary = getCollapsedFindingSummary(input.finding) ?? input.finding.presentation.whyThisMatters;
   const positiveSurfaceFinding = isPositiveSurfaceFinding(input.finding);
+  const display = getPublicReportFindingDisplay({
+    confidence: input.finding.confidenceBand,
+    findingId: input.finding.unifiedFindingId,
+    label: input.finding.presentation.findingName,
+    remediation: input.finding.presentation.suggestedFix,
+    severity: input.finding.severity,
+    title: input.finding.title
+  });
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="line-clamp-1 text-sm font-medium text-slate-900">{input.finding.presentation.findingName}</p>
+          <p className="line-clamp-1 text-sm font-medium text-slate-900">{display.title}</p>
           <p className="mt-1 line-clamp-2 text-xs text-slate-600">{summary}</p>
         </div>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding)}`}>
-          {positiveSurfaceFinding ? "positive surface" : input.finding.severity}
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding, display.criticality)}`}>
+          {positiveSurfaceFinding ? "positive surface" : display.criticality}
         </span>
       </div>
       <a
@@ -4412,7 +4481,16 @@ function buildResultHeroHighlights(input: {
   if (highlights.length === 0) {
     const topFindings = input.findingPackets
       .slice(0, 3)
-      .map((finding) => finding.presentation.findingName)
+      .map((finding) =>
+        getPublicReportFindingDisplay({
+          confidence: finding.confidenceBand,
+          findingId: finding.unifiedFindingId,
+          label: finding.presentation.findingName,
+          remediation: finding.presentation.suggestedFix,
+          severity: finding.severity,
+          title: finding.title
+        }).title
+      )
       .filter((value, index, values) => values.indexOf(value) === index);
     highlights.push(...topFindings);
   }
