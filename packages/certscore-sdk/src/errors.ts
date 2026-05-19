@@ -1,0 +1,73 @@
+export class CertScoreError extends Error {
+  status?: number;
+  code?: string;
+  responseBody?: unknown;
+
+  constructor(message: string, options: { status?: number; code?: string; responseBody?: unknown; cause?: unknown } = {}) {
+    super(message);
+    this.name = "CertScoreError";
+    this.status = options.status;
+    this.code = options.code;
+    this.responseBody = options.responseBody;
+    if (options.cause !== undefined) {
+      this.cause = options.cause;
+    }
+  }
+}
+
+export class CertScoreApiError extends CertScoreError {
+  declare status: number;
+
+  constructor(message: string, options: { status: number; code?: string; responseBody?: unknown; cause?: unknown }) {
+    super(message, options);
+    this.name = "CertScoreApiError";
+    this.status = options.status;
+  }
+}
+
+export class ScanTimeoutError extends CertScoreError {
+  jobId: string;
+  scanId?: string;
+
+  constructor(message: string, options: { jobId: string; scanId?: string; cause?: unknown }) {
+    super(message, { cause: options.cause });
+    this.name = "ScanTimeoutError";
+    this.jobId = options.jobId;
+    this.scanId = options.scanId;
+  }
+}
+
+export class InvalidUrlError extends CertScoreError {
+  constructor(message: string, options: { status?: number; code?: string; responseBody?: unknown; cause?: unknown } = {}) {
+    super(message, options);
+    this.name = "InvalidUrlError";
+  }
+}
+
+export class ThrottledError extends CertScoreError {
+  retryAfterSeconds?: number;
+
+  constructor(
+    message: string,
+    options: { status?: number; code?: string; retryAfterSeconds?: number; responseBody?: unknown; cause?: unknown } = {}
+  ) {
+    super(message, options);
+    this.name = "ThrottledError";
+    this.retryAfterSeconds = options.retryAfterSeconds;
+  }
+}
+
+export class ScanFailedError extends CertScoreError {
+  scanId?: string;
+  jobId?: string;
+
+  constructor(
+    message: string,
+    options: { scanId?: string | null; jobId?: string | null; status?: number; code?: string; responseBody?: unknown; cause?: unknown } = {}
+  ) {
+    super(message, options);
+    this.name = "ScanFailedError";
+    this.scanId = options.scanId ?? undefined;
+    this.jobId = options.jobId ?? undefined;
+  }
+}

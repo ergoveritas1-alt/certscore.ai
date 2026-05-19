@@ -1,0 +1,33 @@
+{
+  "name": "@certscore/sdk",
+  "version": "0.1.0",
+  "description": "Official TypeScript SDK for the CertScore Pulse API.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test src/*.test.ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "certscore",
+    "pulse",
+    "privacy",
+    "consent",
+    "runtime-analysis"
+  ],
+  "license": "UNLICENSED",
+  "dependencies": {}
+}
