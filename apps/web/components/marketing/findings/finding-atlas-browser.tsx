@@ -14,7 +14,7 @@ type FindingAtlasBrowserProps = {
 };
 
 function getFindingReferenceHref(findingId: string) {
-  return `/guides/findings/${findingId}`;
+  return `/findings/${findingId}`;
 }
 
 function EvidenceBlock({ title, code }: { title: string; code: string }) {

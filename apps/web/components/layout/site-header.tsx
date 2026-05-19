@@ -4,6 +4,7 @@ import { PendingButtonLink } from "../ui/pending-link";
 
 const navLinks = [
   { href: "/how-it-works", label: "How It Works" },
+  { href: "/findings", label: "Findings" },
   { href: "/pricing", label: "Pricing" },
   { href: "/contact", label: "Contact" }
 ];
@@ -24,7 +25,7 @@ export function SiteHeader() {
         </div>
 
         <nav className="hidden items-center gap-3 md:flex">
-          {navLinks.slice(0, 2).map((link) => (
+          {navLinks.slice(0, 3).map((link) => (
             <Link key={link.href} href={link.href} className="text-sm text-slate-600 hover:text-ink">
               {link.label}
             </Link>
@@ -53,7 +54,7 @@ export function SiteHeader() {
               </nav>
             </div>
           </details>
-          {navLinks.slice(2).map((link) => (
+          {navLinks.slice(3).map((link) => (
             <Link key={link.href} href={link.href} className="text-sm text-slate-600 hover:text-ink">
               {link.label}
             </Link>
@@ -91,7 +92,7 @@ export function SiteHeader() {
 
           <div className="absolute right-0 top-[calc(100%+0.75rem)] z-50 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white p-3 shadow-[0_22px_55px_rgba(15,23,42,0.14)]">
             <nav className="flex flex-col">
-              {navLinks.slice(0, 2).map((link) => (
+              {navLinks.slice(0, 3).map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
@@ -112,7 +113,7 @@ export function SiteHeader() {
                   {link.label}
                 </Link>
               ))}
-              {navLinks.slice(2).map((link) => (
+              {navLinks.slice(3).map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}

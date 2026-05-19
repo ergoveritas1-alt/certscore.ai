@@ -13,8 +13,8 @@ Production report URLs audited:
 
 Reference atlas:
 
-- https://certscore.ai/guides/findings
-- https://certscore.ai/guides/findings/[findingId]
+- https://certscore.ai/findings
+- https://certscore.ai/findings/[findingId]
 - WC01 local source on current `main`:
   - `apps/web/lib/marketing/finding-atlas.ts`
   - `apps/web/lib/marketing/finding-reference-links.ts`
@@ -99,14 +99,14 @@ For unmapped findings, do not create broken atlas links. Use fallback copy:
 | blocking | nytimes, latimes, fandango | `preconsent_tracking`, `third_party_cookie_pre_consent`, `rtb_cookie_sync_observed` | evidence JSON | full URLs with `?` query strings | Query values and identifier-like values exposed | Redact to origin/path, `queryRedacted: true`, query keys only | runtime tracking atlas pages |
 | blocking | nytimes, latimes, certscore | `preconsent_tracking` | limitation/detail | “The retained evidence does not yet prove the request sequence happened before a clear consent choice.” | Prohibited “prove” framing | “The retained evidence does not yet fully support the request sequence before a clear consent choice.” | `pre_consent_tracking_detected` |
 | high | all | multiple | card section label | `HOW TO FIX`, `SUGGESTED FIX` | Too directive and not atlas-aligned | `Review and remediation starting points` | all atlas pages |
-| high | nytimes | `third_party_cookie_pre_consent` | title | “Tracking cookies set before consent” | Old title | “Third-party cookie observed before consent” | `/guides/findings/third_party_cookie_pre_consent` |
-| high | nytimes | `third_party_cookie_pre_consent` | remediation | “Prevent non-essential tracking cookie writes before consent or remove the vendor.” | Directive; implies known tracking purpose | “Teams commonly review whether third-party cookie or storage writes are gated until consent state is available, and manually confirm purpose, necessity, exemption status, and vendor configuration.” | `/guides/findings/third_party_cookie_pre_consent` |
-| high | all target reports | `preconsent_tracking` | remediation | “Block non-essential trackers until consent is captured...” | Directive; “captured” framing | “Teams commonly review whether non-essential trackers are gated until the intended consent state is available, then compare runtime evidence before and after changes.” | `/guides/findings/pre_consent_tracking_detected` |
+| high | nytimes | `third_party_cookie_pre_consent` | title | “Tracking cookies set before consent” | Old title | “Third-party cookie observed before consent” | `/findings/third_party_cookie_pre_consent` |
+| high | nytimes | `third_party_cookie_pre_consent` | remediation | “Prevent non-essential tracking cookie writes before consent or remove the vendor.” | Directive; implies known tracking purpose | “Teams commonly review whether third-party cookie or storage writes are gated until consent state is available, and manually confirm purpose, necessity, exemption status, and vendor configuration.” | `/findings/third_party_cookie_pre_consent` |
+| high | all target reports | `preconsent_tracking` | remediation | “Block non-essential trackers until consent is captured...” | Directive; “captured” framing | “Teams commonly review whether non-essential trackers are gated until the intended consent state is available, then compare runtime evidence before and after changes.” | `/findings/pre_consent_tracking_detected` |
 | high | all target reports where present | `fingerprinting_observed` | title | “Fingerprinting observed” | Sounds conclusive and not atlas-aligned | Use mapped atlas title only for already-projected finding ID. Do not infer probable vs related in renderer. | fingerprinting atlas pages |
 | high | all target reports where present | `fingerprinting_observed` | confidence/surfacing text | `family.consent_tracking.default`, “Consent and tracking findings...” | Wrong family-specific tooltip/context | Use fingerprinting-specific confidence/context copy without identity or persistent fingerprint determination | fingerprinting atlas pages |
 | high | latimes/fandango/certscore | accessibility findings | copy | “confirmed distinct WCAG rule violations” | Implies conformance/non-conformance determination | “retained automated WCAG-oriented rule examples” | accessibility atlas pages |
 | high | fandango/certscore | `visual_contrast_accessibility_issue`, `keyboard_navigation_accessibility_issue` | criticality | report high vs atlas medium | Same label conflicts with atlas | Use atlas criticality, or label report value as `Scan priority` and separately show `Reference criticality` | accessibility atlas pages |
-| medium | nytimes | `third_party_cookie_pre_consent` | evidence role | related runtime requests show `preConsent: false`, `timingStatus: unknown` near pre-consent cookie evidence | Can look contradictory | Add note: “Related requests provide vendor or endpoint context and may not be the artifact that supports the pre-consent timing finding.” | `/guides/findings/third_party_cookie_pre_consent` |
+| medium | nytimes | `third_party_cookie_pre_consent` | evidence role | related runtime requests show `preConsent: false`, `timingStatus: unknown` near pre-consent cookie evidence | Can look contradictory | Add note: “Related requests provide vendor or endpoint context and may not be the artifact that supports the pre-consent timing finding.” | `/findings/third_party_cookie_pre_consent` |
 | medium | all | regulatory JSON | `preconsent_violation_count` | Field name overclaims | Rename public field to `preConsentSignalCount` or omit from public JSON | runtime tracking atlas pages |
 | polish | all | unmapped findings | atlas link/copy | no consistent fallback | Missing reference page posture | “Policy review signal. Reference page not yet available.” | n/a |
 

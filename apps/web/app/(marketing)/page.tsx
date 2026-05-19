@@ -105,7 +105,7 @@ export default async function MarketingHomePage() {
     itemListElement: findings.map((finding, index) => ({
       "@type": "ListItem",
       position: index + 1,
-      url: `${SITE_URL}/guides/findings/${finding.id}`,
+      url: `${SITE_URL}/findings/${finding.id}`,
       name: finding.title,
       identifier: finding.id,
       description: finding.observed
@@ -151,7 +151,7 @@ export default async function MarketingHomePage() {
             </div>
             <p className="max-w-2xl text-sm leading-6 text-slate-500">
               Evidence-based scanning for teams comparing live browser behavior with consent controls, cookie posture, and privacy disclosures.{" "}
-              <Link href="/guides/findings" className="font-medium text-sky-700 hover:text-sky-800">
+              <Link href="/findings" className="font-medium text-sky-700 hover:text-sky-800">
                 Browse the findings registry
               </Link>
               .

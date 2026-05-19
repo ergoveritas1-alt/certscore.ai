@@ -651,7 +651,7 @@ function buildRegulatoryLensFindingFromCertFinding(
           }
         : {})
     },
-    guideHref: regulatoryContext ? `/guides/findings/${finding.id}` : undefined,
+    guideHref: regulatoryContext ? `/findings/${finding.id}` : undefined,
     id: finding.id,
     label: display.referenceId && (label === finding.shortSummary || label === finding.label) ? display.title : label,
     reviewContextChips,
@@ -2932,7 +2932,7 @@ function FindingTitleIcon(input: { finding: CertScoreFinding; iconKey?: FindingT
 function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const reference = getFindingReferenceLink(input.finding);
   const registryContext = getFindingRegulatoryContext(input.finding.id);
-  const registryGuideHref = registryContext ? `/guides/findings/${input.finding.id}` : null;
+  const registryGuideHref = registryContext ? `/findings/${input.finding.id}` : null;
   const evidencePayload = buildFindingEvidenceJsonPayload(input.finding);
   const compactedEvidencePayload = compactEvidenceJsonForDisplay(evidencePayload);
   const jsonPayload =

@@ -1,19 +1,5 @@
-import type { Metadata } from "next";
-import { createPageMetadata } from "../../../lib/seo";
-import { FindingsReferencePage } from "./findings-reference-page";
-
-export const metadata: Metadata = {
-  ...createPageMetadata({
-    title: "CertScore findings reference",
-    description:
-      "Review CertScore findings, evidence, signals, and observations surfaced from public-web runtime scans.",
-    path: "/guides/findings"
-  }),
-  title: {
-    absolute: "CertScore findings reference | CertScore.ai"
-  }
-};
+import { permanentRedirect } from "next/navigation";
 
 export default function FindingsGuidePage() {
-  return <FindingsReferencePage />;
+  permanentRedirect("/findings");
 }

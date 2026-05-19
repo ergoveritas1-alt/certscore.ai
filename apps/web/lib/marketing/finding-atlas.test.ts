@@ -8,7 +8,7 @@ import {
   getFindingReferencePageCopy,
   getFindingReferencePath,
   getReferenceNotes
-} from "../../app/guides/findings/findings-reference-page";
+} from "../../app/findings/findings-reference-page";
 import { getWhyThisMattersCopy } from "../../components/marketing/findings/finding-atlas-browser";
 
 const PROHIBITED_OVERCLAIM_PATTERNS = [
@@ -244,7 +244,7 @@ test("reviewed finding reference pages render populated header and why-this-matt
 
 test("finding atlas index groups all reviewed findings with registry context", () => {
   const source = readFileSync("apps/web/components/marketing/findings/finding-atlas-browser.tsx", "utf8");
-  const pageSource = readFileSync("apps/web/app/guides/findings/findings-reference-page.tsx", "utf8");
+  const pageSource = readFileSync("apps/web/app/findings/findings-reference-page.tsx", "utf8");
 
   assert.match(pageSource, /CertScore's findings registry explains the automated observations/);
   assert.match(pageSource, /How to read a finding/);
@@ -1162,14 +1162,14 @@ test("pre-consent pilot remains the canonical finding reference template", () =>
 
 test("pre-consent finding detail route has SEO and GEO-ready page copy", () => {
   const finding = getFindingReferenceItems().find((item) => item.id === "pre_consent_tracking_detected");
-  const pageSource = readFileSync("apps/web/app/guides/findings/findings-reference-page.tsx", "utf8");
+  const pageSource = readFileSync("apps/web/app/findings/findings-reference-page.tsx", "utf8");
 
   assert.ok(finding);
-  assert.equal(getFindingReferencePath(finding.id), "/guides/findings/pre_consent_tracking_detected");
+  assert.equal(getFindingReferencePath(finding.id), "/findings/pre_consent_tracking_detected");
 
   const copy = getFindingReferencePageCopy(finding);
 
-  assert.equal(copy.pagePath, "/guides/findings/pre_consent_tracking_detected");
+  assert.equal(copy.pagePath, "/findings/pre_consent_tracking_detected");
   assert.equal(copy.pageTitle, "Third-party tracking observed before recorded consent finding reference");
   assert.match(copy.pageDescription, /classified non-essential/);
   assert.match(copy.pageDescription, /prior consent state associated with that purpose/);

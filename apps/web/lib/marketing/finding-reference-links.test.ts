@@ -8,23 +8,23 @@ import {
 test("getFindingReferenceHrefForReportFindingId maps report aliases to public finding pages", () => {
   assert.equal(
     getFindingReferenceHrefForReportFindingId("preconsent_tracking"),
-    "/guides/findings/pre_consent_tracking_detected"
+    "/findings/pre_consent_tracking_detected"
   );
   assert.equal(
     getFindingReferenceHrefForReportFindingId("session_replay_observed"),
-    "/guides/findings/session_recording_services_detected"
+    "/findings/session_recording_services_detected"
   );
   assert.equal(
     getFindingReferenceHrefForReportFindingId("reject_did_not_reduce_tracking"),
-    "/guides/findings/reject_tracking_persists_after_reject"
+    "/findings/reject_tracking_persists_after_reject"
   );
   assert.equal(
     getFindingReferenceHrefForReportFindingId("tracking_cookies_set_before_consent"),
-    "/guides/findings/third_party_cookie_pre_consent"
+    "/findings/third_party_cookie_pre_consent"
   );
   assert.equal(
     getFindingReferenceHrefForReportFindingId("fingerprinting_observed"),
-    "/guides/findings/probable_fingerprinting"
+    "/findings/probable_fingerprinting"
   );
 });
 

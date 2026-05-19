@@ -26,7 +26,7 @@ const staticPaths = [
   "/terms",
   "/privacy",
   "/privacy-request",
-  "/guides/findings",
+  "/findings",
   "/guides/pre-consent-tracking",
   "/guides/pre-consent-tracking-detection",
   "/guides/cookie-consent-enforcement-checker",
@@ -62,7 +62,7 @@ const staticPaths = [
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
-  const findingPaths = getFindingReferenceItems().map((finding) => `/guides/findings/${finding.id}`);
+  const findingPaths = getFindingReferenceItems().map((finding) => `/findings/${finding.id}`);
 
   return [...staticPaths, ...findingPaths].map((path) => ({
     url: `${SITE_URL}${path}`,

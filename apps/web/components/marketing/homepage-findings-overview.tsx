@@ -327,7 +327,7 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY: Record<string, HomepageFindingCarouselCopy
 };
 
 function getFindingHref(findingId: string) {
-  return `/guides/findings/${findingId}`;
+  return `/findings/${findingId}`;
 }
 
 function ArrowIcon({ direction }: { direction: "left" | "right" }) {

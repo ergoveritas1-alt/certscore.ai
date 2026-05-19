@@ -7,6 +7,7 @@ const footerSections = [
     links: [
       { href: "/", label: "Home" },
       { href: "/how-it-works", label: "How It Works" },
+      { href: "/findings", label: "Findings" },
       { href: "/pricing", label: "Pricing" }
     ]
   },

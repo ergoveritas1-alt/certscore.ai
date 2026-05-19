@@ -159,7 +159,7 @@ const guides: GuideCard[] = [
     title: "Findings reference",
     description: "Browse CertScore finding definitions and representative evidence.",
     category: "Scanning Basics",
-    href: "/guides/findings"
+    href: "/findings"
   }
 ];
 

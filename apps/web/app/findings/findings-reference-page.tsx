@@ -1,7 +1,7 @@
 import { Badge } from "@website-signal-risk-scanner/ui";
-import { FindingAtlasBrowser } from "../../../components/marketing/findings/finding-atlas-browser";
-import { getFindingReferenceItems, type FindingReferenceItem } from "../../../lib/marketing/finding-atlas";
-import { FINDING_DENSITY_BENCHMARK_SCOPE } from "../../../lib/scans/finding-density-benchmarks";
+import { FindingAtlasBrowser } from "../../components/marketing/findings/finding-atlas-browser";
+import { getFindingReferenceItems, type FindingReferenceItem } from "../../lib/marketing/finding-atlas";
+import { FINDING_DENSITY_BENCHMARK_SCOPE } from "../../lib/scans/finding-density-benchmarks";
 import {
   createBreadcrumbSchema,
   createDefinedTermSchema,
@@ -9,7 +9,7 @@ import {
   createItemListSchema,
   createPublicArticleSchema,
   createPublicWebPageSchema
-} from "../../../lib/seo";
+} from "../../lib/seo";
 
 type FindingsReferencePageProps = {
   activeFinding?: FindingReferenceItem;
@@ -18,7 +18,7 @@ type FindingsReferencePageProps = {
 const DEFAULT_FINDING_ID = "pre_consent_tracking_detected";
 
 function getFindingPath(findingId: string) {
-  return `/guides/findings/${findingId}`;
+  return `/findings/${findingId}`;
 }
 
 function getPageTitle(activeFinding?: FindingReferenceItem) {
@@ -32,7 +32,7 @@ function getPageDescription(activeFinding?: FindingReferenceItem) {
 }
 
 function getPagePath(activeFinding?: FindingReferenceItem) {
-  return activeFinding ? getFindingPath(activeFinding.id) : "/guides/findings";
+  return activeFinding ? getFindingPath(activeFinding.id) : "/findings";
 }
 
 export function getReferenceNotes(activeFinding?: FindingReferenceItem) {
@@ -92,7 +92,7 @@ function createFindingSchemas({
   const findingTermInputs = findings.map((finding) => ({
     category: finding.category,
     description: finding.observed,
-    inDefinedTermSetPath: "/guides/findings",
+    inDefinedTermSetPath: "/findings",
     name: finding.title,
     path: getFindingPath(finding.id),
     termCode: finding.id
@@ -133,13 +133,13 @@ function createFindingSchemas({
       title: "CertScore finding registry",
       description:
         "Canonical CertScore finding terms for automated public-web observations, retained evidence, runtime signals, and review-oriented findings.",
-      path: "/guides/findings",
+      path: "/findings",
       terms: findingTermInputs
     }),
     createItemListSchema({
       name: "CertScore finding registry index",
       description: "Index of CertScore finding reference pages.",
-      path: "/guides/findings",
+      path: "/findings",
       items: findings.map((finding) => ({
         path: getFindingPath(finding.id),
         name: finding.title,
@@ -152,7 +152,7 @@ function createFindingSchemas({
           createDefinedTermSchema({
             category: activeFinding.category,
             description: activeFinding.observed,
-            inDefinedTermSetPath: "/guides/findings",
+            inDefinedTermSetPath: "/findings",
             name: activeFinding.title,
             path: getFindingPath(activeFinding.id),
             termCode: activeFinding.id
@@ -161,8 +161,7 @@ function createFindingSchemas({
       : []),
     createBreadcrumbSchema([
       { name: "Home", path: "/" },
-      { name: "Guides", path: "/guides" },
-      { name: "Findings registry", path: "/guides/findings" },
+      { name: "Findings registry", path: "/findings" },
       ...(activeFinding ? [{ name: activeFinding.title, path: getFindingPath(activeFinding.id) }] : [])
     ])
   ];

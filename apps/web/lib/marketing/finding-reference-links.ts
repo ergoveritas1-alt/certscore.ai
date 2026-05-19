@@ -23,5 +23,5 @@ export function getFindingReferenceIdForReportFindingId(findingId: string) {
 
 export function getFindingReferenceHrefForReportFindingId(findingId: string) {
   const referenceId = getFindingReferenceIdForReportFindingId(findingId);
-  return referenceId ? `/guides/findings/${referenceId}` : null;
+  return referenceId ? `/findings/${referenceId}` : null;
 }
