@@ -71,6 +71,14 @@ async function main() {
   assert.match(docs.bodyText, /CertScore Pulse API/);
   results.push(docs);
 
+  const health = await get("/api/v1/pulse-health");
+  assert.equal(health.response.status, 200);
+  const healthBody = json(health);
+  assert.equal(healthBody.ok, true);
+  assert.equal(healthBody.service, "certscore-pulse");
+  assert.equal(healthBody.version, "v1");
+  results.push(health);
+
   const openapi = await get("/api/v1/openapi.json");
   assert.equal(openapi.response.status, 200);
   const openapiBody = json(openapi);

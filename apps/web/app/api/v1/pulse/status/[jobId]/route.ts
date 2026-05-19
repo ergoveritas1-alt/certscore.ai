@@ -12,14 +12,27 @@ type RouteContext = {
   params: Promise<{ jobId: string }>;
 };
 
+function pulseJson(body: unknown, init?: ResponseInit) {
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json; charset=utf-8");
+  return new Response(JSON.stringify(body), {
+    ...init,
+    headers
+  });
+}
+
 export async function GET(request: Request, context: RouteContext) {
   const requestId = request.headers.get("x-request-id") ?? randomUUID();
   try {
     const { jobId } = await context.params;
+    if (!jobId || jobId.length > 160) {
+      return pulseJson(buildPulseError({ code: "not_found", message: "Pulse job not found." }), { status: 404 });
+    }
+
     const pulseRequest = await getPulseRequestByJobId(jobId);
 
     if (!pulseRequest) {
-      return NextResponse.json(buildPulseError({ code: "not_found", message: "Pulse job not found." }), { status: 404 });
+      return pulseJson(buildPulseError({ code: "not_found", message: "Pulse job not found." }), { status: 404 });
     }
 
     let status = pulseRequest.status;
@@ -59,13 +72,13 @@ export async function GET(request: Request, context: RouteContext) {
       headers["Retry-After"] = String(pulseRequest.retry_after_seconds);
     }
 
-    return NextResponse.json(body, {
+    return pulseJson(body, {
       headers,
       status: status === "completed" || status === "completed_limited" ? 200 : status === "rate_limited" ? 429 : 202
     });
   } catch (error) {
     console.error("[pulse-status] request failed", { requestId, error });
-    return NextResponse.json(
+    return pulseJson(
       buildPulseError({
         code: "internal_error",
         message: "Pulse is temporarily unavailable. Try again later."

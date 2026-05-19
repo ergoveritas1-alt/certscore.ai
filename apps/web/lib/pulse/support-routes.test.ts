@@ -4,6 +4,7 @@ import test from "node:test";
 import { hasDatabaseEnv } from "@website-signal-risk-scanner/db";
 import { GET as discoveryGET } from "../../app/.well-known/certscore-pulse/route";
 import { GET as openApiGET } from "../../app/api/v1/openapi.json/route";
+import { GET as pulseHealthGET } from "../../app/api/v1/pulse-health/route";
 import { POST as feedbackPOST } from "../../app/api/v1/pulse/feedback/route";
 import { buildPulseError } from "./error";
 import { normalizePulseUrl } from "./request";
@@ -68,6 +69,25 @@ test("Pulse discovery route returns compact machine-readable metadata", async ()
   assert.equal(body.disclaimer, "Automated public-web observations for review. Not legal advice, certification, or a compliance determination.");
 });
 
+test("Pulse health canary route is dependency-free JSON", async () => {
+  const response = pulseHealthGET();
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/);
+
+  const body = await response.json();
+  assert.deepEqual(body, {
+    ok: true,
+    service: "certscore-pulse",
+    version: "v1"
+  });
+
+  const source = readFileSync("apps/web/app/api/v1/pulse-health/route.ts", "utf8");
+  assert.doesNotMatch(source, /^import\s/m);
+  assert.doesNotMatch(source, /from\s+["'][^"']*(db|server|auth|queue|redis|pulse\/repository|internal)["']/i);
+  assert.doesNotMatch(source, /fetch\(/i);
+});
+
 test("Pulse docs page source includes integration-critical guidance", () => {
   const source = readFileSync("apps/web/app/api-pulse/page.tsx", "utf8");
 
@@ -109,7 +129,8 @@ test("Pulse OpenAPI includes documented live response examples", async () => {
 test("Pulse OpenAPI and discovery routes stay static and dependency-light", () => {
   const supportRoutes = [
     "apps/web/app/api/v1/openapi.json/route.ts",
-    "apps/web/app/.well-known/certscore-pulse/route.ts"
+    "apps/web/app/.well-known/certscore-pulse/route.ts",
+    "apps/web/app/api/v1/pulse-health/route.ts"
   ];
 
   for (const routePath of supportRoutes) {
