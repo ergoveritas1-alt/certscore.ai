@@ -15,7 +15,7 @@ const discoveryDocument = {
 } as const;
 
 export function GET() {
-  return new Response(JSON.stringify(discoveryDocument), {
+  return new Response(JSON.stringify(discoveryDocument, null, 2), {
     headers: {
       "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
       "Content-Type": "application/json; charset=utf-8",

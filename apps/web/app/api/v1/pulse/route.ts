@@ -48,8 +48,18 @@ function completedResponse(pulse: any, format: "json" | "markdown") {
   return NextResponse.json(pulse, {
     headers: {
       "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
+      "Content-Type": "application/json; charset=utf-8",
       ETag: etagFor(scanId, pulse.meta.detail, "json")
     }
+  });
+}
+
+function pulseJson(body: unknown, init?: ResponseInit) {
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json; charset=utf-8");
+  return new Response(JSON.stringify(body), {
+    ...init,
+    headers
   });
 }
 
@@ -120,7 +130,7 @@ export async function GET(request: Request) {
   try {
     if (scanId) {
       if (!SCAN_ID_PATTERN.test(scanId)) {
-        return NextResponse.json(buildPulseError({ code: "invalid_url", message: "Invalid scan ID.", detail, format }), { status: 400 });
+        return pulseJson(buildPulseError({ code: "invalid_url", message: "Invalid scan ID.", detail, format }), { status: 400 });
       }
       const { publicId } = await createPulseRequest({
         context: { ...contextBase, mode: "scanId" },
@@ -131,7 +141,7 @@ export async function GET(request: Request) {
       });
       const scanRecord = await getAnonymousScanById(scanId);
       if (!scanRecord || scanRecord.scan.status !== "completed") {
-        return NextResponse.json(buildPulseError({ code: "not_found", message: "Scan not found or not eligible for public Pulse.", detail, format }), { status: 404 });
+        return pulseJson(buildPulseError({ code: "not_found", message: "Scan not found or not eligible for public Pulse.", detail, format }), { status: 404 });
       }
       return buildAndLogCompletedPulse({
         detail,
@@ -148,7 +158,7 @@ export async function GET(request: Request) {
     if (jobId) {
       const pulseRequest = await getPulseRequestByJobId(jobId);
       if (!pulseRequest) {
-        return NextResponse.json(buildPulseError({ code: "not_found", message: "Pulse job not found.", detail, format }), { status: 404 });
+        return pulseJson(buildPulseError({ code: "not_found", message: "Pulse job not found.", detail, format }), { status: 404 });
       }
       if (pulseRequest.scan_id) {
         const scanRecord = await getAnonymousScanById(pulseRequest.scan_id).catch(() => null);
@@ -178,11 +188,11 @@ export async function GET(request: Request) {
         reportUrl: pulseRequest.result_report_url,
         retryAfterSeconds: pulseRequest.retry_after_seconds
       });
-      return NextResponse.json(status, { headers: { "Cache-Control": "no-store" }, status: pulseRequest.status === "completed" ? 200 : 202 });
+      return pulseJson(status, { headers: { "Cache-Control": "no-store" }, status: pulseRequest.status === "completed" ? 200 : 202 });
     }
 
     if (!rawUrl) {
-      return NextResponse.json(
+      return pulseJson(
         buildPulseError({ code: "invalid_url", message: "Provide url, scanId, or jobId.", detail, format }),
         { status: 400 }
       );
@@ -190,7 +200,7 @@ export async function GET(request: Request) {
 
     const normalized = normalizePulseUrl(rawUrl);
     if (!normalized.ok) {
-      return NextResponse.json(buildPulseError({ code: "invalid_url", message: normalized.message, url: rawUrl, detail, format }), { status: 400 });
+      return pulseJson(buildPulseError({ code: "invalid_url", message: normalized.message, url: rawUrl, detail, format }), { status: 400 });
     }
 
     const { publicId, jobId: createdJobId } = await createPulseRequest({
@@ -241,7 +251,7 @@ export async function GET(request: Request) {
           }
         });
       }
-      return NextResponse.json(
+      return pulseJson(
         buildPulseError({
           code: "pulse_throttled",
           message: "A Pulse scan for this domain was requested recently. Try again in a few minutes.",
@@ -259,7 +269,7 @@ export async function GET(request: Request) {
 
     const dnsStatus = await checkDomainDns(normalized.normalizedDomain);
     if (!dnsStatus.exists) {
-      return NextResponse.json(buildPulseError({ code: "invalid_url", message: dnsStatus.reason, url: rawUrl, detail, format }), { status: 400 });
+      return pulseJson(buildPulseError({ code: "invalid_url", message: dnsStatus.reason, url: rawUrl, detail, format }), { status: 400 });
     }
 
     const queued = await createAnonymousFullScan({
@@ -305,7 +315,7 @@ export async function GET(request: Request) {
       resultUrl: absoluteUrl(`/api/v1/pulse?scanId=${queued.scan.id}`),
       reportUrl: absoluteUrl(`/scan/${queued.scan.id}`)
     });
-    return NextResponse.json(
+    return pulseJson(
       {
         ...status,
         statusUrl: absoluteUrl(`/api/v1/pulse/status/${createdJobId}`),
@@ -316,7 +326,7 @@ export async function GET(request: Request) {
     );
   } catch (error) {
     console.error("[pulse] request failed", error);
-    return NextResponse.json(
+    return pulseJson(
       buildPulseError({
         code: "internal_error",
         message: "Pulse is temporarily unavailable. Try again later.",

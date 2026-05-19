@@ -219,7 +219,7 @@ const openApiDocument = {
 } as const;
 
 export function GET() {
-  return new Response(JSON.stringify(openApiDocument), {
+  return new Response(JSON.stringify(openApiDocument, null, 2), {
     headers: {
       "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
       "Content-Type": "application/json; charset=utf-8",
