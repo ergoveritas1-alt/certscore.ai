@@ -15,7 +15,8 @@ const smokeTargets: SmokeTarget[] = [
   { path: "/api/v1/pulse?url=https://example.com&detail=tiny", kind: "pulse" },
   { path: "/api/v1/pulse?url=https://example.com&detail=full", kind: "pulse" },
   { path: "/api/v1/pulse?url=https://example.com&format=markdown", kind: "pulse" },
-  { path: "/api/v1/pulse?url=not-a-url", kind: "pulse" },
+  { path: "/api/v1/pulse?url=::::", kind: "pulse" },
+  { path: "/api/v1/pulse/status/pulse_job_nonexistent_test", kind: "pulse" },
   { path: "/.well-known/certscore-pulse", kind: "discovery" },
   { path: "/api-pulse", kind: "docs" }
 ];
@@ -96,6 +97,8 @@ test(
           const body = JSON.parse(bodyText) as { api?: unknown; openapi?: unknown; disclaimer?: unknown };
           assert.equal(body.api, "https://certscore.ai/api/v1/pulse");
           assert.equal(body.openapi, "https://certscore.ai/api/v1/openapi.json");
+          assert.deepEqual((body as { detailLevels?: unknown }).detailLevels, ["tiny", "standard", "full"]);
+          assert.deepEqual((body as { detailAliases?: unknown }).detailAliases, { quick: "tiny" });
           assert.match(String(body.disclaimer ?? ""), /not legal advice/i);
           return;
         }

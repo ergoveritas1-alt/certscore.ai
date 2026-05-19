@@ -319,12 +319,12 @@ export async function GET(request: Request) {
     return NextResponse.json(
       buildPulseError({
         code: "internal_error",
-        message: "Pulse could not be completed right now. Please try again.",
+        message: "Pulse is temporarily unavailable. Try again later.",
         url: rawUrl,
         detail,
         format
       }),
-      { status: 500 }
+      { headers: { "Cache-Control": "no-store", "Retry-After": "60" }, status: 503 }
     );
   }
 }

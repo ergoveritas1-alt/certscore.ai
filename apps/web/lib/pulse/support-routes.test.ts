@@ -58,9 +58,10 @@ test("Pulse discovery route returns compact machine-readable metadata", async ()
   assert.equal(body.docs, "https://certscore.ai/api-pulse");
   assert.deepEqual(body.formats, ["json", "markdown"]);
   assert.ok(body.detailLevels.includes("tiny"));
-  assert.ok(body.detailLevels.includes("quick"));
   assert.ok(body.detailLevels.includes("standard"));
   assert.ok(body.detailLevels.includes("full"));
+  assert.deepEqual(body.detailLevels, ["tiny", "standard", "full"]);
+  assert.deepEqual(body.detailAliases, { quick: "tiny" });
   assert.equal(body.feedbackEmail, "support@certscore.ai");
   assert.equal(body.disclaimer, "Automated public-web observations for review. Not legal advice, certification, or a compliance determination.");
 });
@@ -80,6 +81,27 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /detail=quick/);
   assert.match(source, /Status lifecycle|queued to running to finalizing to completed/);
   assert.match(source, /`scanId` is the canonical field name/);
+  assert.match(source, /200 completed tiny JSON/);
+  assert.match(source, /200 completed full JSON/);
+  assert.match(source, /202 pending\/running response/);
+  assert.match(source, /429 throttled response/);
+});
+
+test("Pulse OpenAPI includes documented live response examples", async () => {
+  const response = openApiGET();
+  const body = await response.json();
+  const responses = body.paths["/api/v1/pulse"].get.responses;
+
+  assert.ok(responses["200"].content["application/json"].examples.tiny);
+  assert.ok(responses["200"].content["application/json"].examples.standard);
+  assert.ok(responses["200"].content["application/json"].examples.full);
+  assert.ok(responses["200"].content["text/markdown"].examples.markdown);
+  assert.ok(responses["202"].content["application/json"].examples.pending);
+  assert.ok(responses["400"].content["application/json"].examples.invalidUrl);
+  assert.ok(responses["429"].content["application/json"].examples.throttled);
+  assert.equal(responses["202"].content["application/json"].examples.pending.value.type, "certscore_pulse_status");
+  assert.equal(responses["429"].content["application/json"].examples.throttled.value.error.code, "pulse_throttled");
+  assert.match(JSON.stringify(responses), /CertScore provides automated public-web observations for review/);
 });
 
 test("Pulse invalid-input errors use the documented public-safe shape", () => {

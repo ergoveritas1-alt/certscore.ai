@@ -35,7 +35,7 @@
     "ops:smoke:auth": "pnpm exec tsx ./scripts/check-production-auth-smoke.ts",
     "ops:smoke:ada-financial": "pnpm exec tsx ./scripts/check-ada-financial-live-smoke.ts",
     "ops:smoke:findings": "pnpm exec tsx ./scripts/check-live-finding-smoke.ts",
-    "ops:smoke:pulse": "PULSE_SMOKE_BASE_URL=https://certscore.ai node --import tsx --test apps/web/lib/pulse/production-smoke.test.ts",
+    "ops:smoke:pulse": "BASE_URL=https://certscore.ai node --import tsx ./scripts/smoke-pulse-endpoints.ts",
     "ops:preconsent:diagnose": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/preconsent-cookie-evidence-ops.ts diagnose",
     "ops:preconsent:backfill-cookies": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/preconsent-cookie-evidence-ops.ts backfill",
     "ops:preconsent:queue-reruns": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/preconsent-cookie-evidence-ops.ts queue-reruns",

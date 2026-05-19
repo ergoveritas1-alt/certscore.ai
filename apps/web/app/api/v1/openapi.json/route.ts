@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { PULSE_FEEDBACK_EMAIL, PULSE_STANDARD_DISCLAIMER } from "../../../../lib/pulse/constants";
 
 const metaExample = {
@@ -59,9 +58,7 @@ const feedbackExample = {
   feedbackUrl: "https://certscore.ai/pulse/feedback?pulseRequestId=pulse_req_123"
 };
 
-export function GET() {
-  return NextResponse.json(
-    {
+const openApiDocument = {
       openapi: "3.1.0",
       info: {
         title: "CertScore Pulse API",
@@ -262,7 +259,24 @@ export function GET() {
                   }
                 }
               },
-              "404": { description: "Scan or Pulse job not found." },
+              "404": {
+                description: "Scan or Pulse job not found.",
+                content: {
+                  "application/json": {
+                    examples: {
+                      notFound: {
+                        value: {
+                          type: "certscore_pulse_error",
+                          meta: metaExample,
+                          error: { code: "not_found", message: "Pulse job not found.", retryAfterSeconds: null },
+                          feedback: { email: PULSE_FEEDBACK_EMAIL },
+                          disclaimer: PULSE_STANDARD_DISCLAIMER
+                        }
+                      }
+                    }
+                  }
+                }
+              },
               "429": {
                 description: "Rate limited. Expensive scan creation is limited by normalized domain.",
                 headers: {
@@ -291,7 +305,28 @@ export function GET() {
                   }
                 }
               },
-              "500": { description: "Unexpected internal error with public-safe message." }
+              "500": {
+                description: "Unexpected internal error with public-safe message.",
+                content: {
+                  "application/json": {
+                    examples: {
+                      internalError: {
+                        value: {
+                          type: "certscore_pulse_error",
+                          meta: metaExample,
+                          error: {
+                            code: "internal_error",
+                            message: "Pulse is temporarily unavailable. Try again later.",
+                            retryAfterSeconds: null
+                          },
+                          feedback: { email: PULSE_FEEDBACK_EMAIL },
+                          disclaimer: PULSE_STANDARD_DISCLAIMER
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -458,11 +493,14 @@ export function GET() {
           }
         }
       }
+    } as const;
+
+export function GET() {
+  return new Response(JSON.stringify(openApiDocument), {
+    headers: {
+      "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
+      "Content-Type": "application/json; charset=utf-8"
     },
-    {
-      headers: {
-        "Cache-Control": "public, max-age=3600"
-      }
-    }
-  );
+    status: 200
+  });
 }
