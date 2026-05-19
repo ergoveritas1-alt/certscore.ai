@@ -31,6 +31,8 @@ export type AdminPulseRequestListItem = {
   resultPulseUrl: string | null;
   resultReportUrl: string | null;
   scanId: string | null;
+  sourceIp: string | null;
+  sourceIpHash: string | null;
   status: string;
   topFindingIds: string[];
 };
@@ -108,6 +110,8 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
     scanId: typeof row.scan_id === "string" ? row.scan_id : null,
+    sourceIp: getRequestContextString(requestContext, "sourceIp"),
+    sourceIpHash: getRequestContextString(requestContext, "ipHash"),
     status: String(row.status),
     topFindingIds: asStringArray(responseSummary.topFindingIds)
   };
@@ -151,7 +155,7 @@ export async function listAdminPulseRequests(input: {
 } = {}): Promise<AdminPulseRequestListItem[]> {
   await requirePlatformAdminContext();
   await ensurePulseTables();
-  const limit = Math.max(1, Math.min(100, input.limit ?? 50));
+  const limit = Math.max(1, Math.min(100, input.limit ?? 20));
   const offset = Math.max(0, input.offset ?? 0);
   const search = input.query?.trim() || null;
   const rows = await query<Record<string, unknown>>(

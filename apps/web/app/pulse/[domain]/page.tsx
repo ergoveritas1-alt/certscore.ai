@@ -54,6 +54,7 @@ export default async function PulseDomainPage({ params }: PulsePageProps) {
       ipHash: null,
       mode: "url",
       referer: null,
+      sourceIp: null,
       userAgent: null,
       waitSeconds: 0
     },

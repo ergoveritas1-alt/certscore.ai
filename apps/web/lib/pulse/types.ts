@@ -24,6 +24,7 @@ export type PulseRequestContext = {
   ipHash: string | null;
   mode: "url" | "scanId" | "jobId";
   referer: string | null;
+  sourceIp: string | null;
   userAgent: string | null;
   userId?: string | null;
   accountId?: string | null;

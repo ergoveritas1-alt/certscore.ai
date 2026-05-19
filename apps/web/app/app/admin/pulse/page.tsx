@@ -10,11 +10,13 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const statuses = ["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited"] as const;
-const PAGE_SIZE = 50;
+const pageSizeOptions = [10, 20, 50, 100] as const;
+const DEFAULT_PAGE_SIZE = 20;
 
 type AdminPulsePageProps = {
   searchParams?: Promise<{
     page?: string;
+    perPage?: string;
     q?: string;
     status?: string;
   }>;
@@ -52,10 +54,18 @@ function formatLabel(value: string | null) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function filterHref(input: { page?: number; query?: string | null; status?: string | null }) {
+function normalizePageSize(value: string | undefined) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return pageSizeOptions.includes(parsed as (typeof pageSizeOptions)[number]) ? parsed : DEFAULT_PAGE_SIZE;
+}
+
+function filterHref(input: { page?: number; pageSize?: number; query?: string | null; status?: string | null }) {
   const params = new URLSearchParams();
   if (input.status) {
     params.set("status", input.status);
+  }
+  if (input.pageSize && input.pageSize !== DEFAULT_PAGE_SIZE) {
+    params.set("perPage", String(input.pageSize));
   }
   if (input.query) {
     params.set("q", input.query);
@@ -65,6 +75,16 @@ function filterHref(input: { page?: number; query?: string | null; status?: stri
   }
   const query = params.toString();
   return query ? `/app/admin/pulse?${query}` : "/app/admin/pulse";
+}
+
+function sourceIpLabel(request: { sourceIp: string | null; sourceIpHash: string | null }) {
+  if (request.sourceIp) {
+    return request.sourceIp;
+  }
+  if (request.sourceIpHash) {
+    return `Hash ${request.sourceIpHash.slice(0, 12)}`;
+  }
+  return "Not recorded";
 }
 
 function statusClass(status: string) {
@@ -81,13 +101,14 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   const resolved = searchParams ? await searchParams : {};
   const activeStatus = normalizeStatus(resolved.status);
   const activeQuery = normalizeQuery(resolved.q);
+  const pageSize = normalizePageSize(resolved.perPage);
   const requestedPage = Number.parseInt(resolved.page ?? "1", 10);
   const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const [counts, requests] = await Promise.all([
     getAdminPulseOverviewCounts(),
     listAdminPulseRequests({
-      limit: PAGE_SIZE,
-      offset: (page - 1) * PAGE_SIZE,
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
       query: activeQuery,
       status: activeStatus
     })
@@ -127,6 +148,13 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                   </option>
                 ))}
               </select>
+              <select className="min-h-9 rounded-lg border border-slate-300 px-3 text-sm" defaultValue={pageSize} name="perPage">
+                {pageSizeOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option} per page
+                  </option>
+                ))}
+              </select>
               <Button size="sm" type="submit" variant="secondary">
                 Filter
               </Button>
@@ -135,18 +163,40 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
         </CardHeader>
         <CardContent className="space-y-4 pt-0">
           <div className="flex flex-wrap gap-2">
-            <Link className="rounded-full border border-slate-200 px-3 py-2 text-sm text-slate-700" href={filterHref({ query: activeQuery })}>
+            <Link className="rounded-full border border-slate-200 px-3 py-2 text-sm text-slate-700" href={filterHref({ pageSize, query: activeQuery })}>
               All
             </Link>
             {statuses.map((status) => (
               <Link
                 className="rounded-full border border-slate-200 px-3 py-2 text-sm text-slate-700"
-                href={filterHref({ query: activeQuery, status })}
+                href={filterHref({ pageSize, query: activeQuery, status })}
                 key={status}
               >
                 {formatLabel(status)}
               </Link>
             ))}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-y border-slate-100 py-3">
+            <p className="text-sm text-slate-600">
+              Page {page} · {pageSize} per page
+            </p>
+            <div className="flex items-center gap-2">
+              <Button asChild disabled={page <= 1} size="sm" variant="secondary">
+                {page <= 1 ? (
+                  <span className="cursor-not-allowed text-slate-400">Previous</span>
+                ) : (
+                  <Link href={filterHref({ page: page - 1, pageSize, query: activeQuery, status: activeStatus })}>Previous</Link>
+                )}
+              </Button>
+              <Button asChild disabled={requests.length < pageSize} size="sm" variant="secondary">
+                {requests.length < pageSize ? (
+                  <span className="cursor-not-allowed text-slate-400">Next</span>
+                ) : (
+                  <Link href={filterHref({ page: page + 1, pageSize, query: activeQuery, status: activeStatus })}>Next</Link>
+                )}
+              </Button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -166,7 +216,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                   <tr key={request.publicId}>
                     <td className="py-4 pr-4 text-slate-700">
                       <p className="font-medium text-slate-900">{request.publicId}</p>
-                      <p className="text-xs text-slate-500">{request.jobId}</p>
+                      <p className="text-xs text-slate-500">Source IP {sourceIpLabel(request)}</p>
                       <p className="mt-1 text-xs text-slate-500">{formatDateTime(request.requestedAt)}</p>
                     </td>
                     <td className="py-4 pr-4 text-slate-700">
@@ -201,15 +251,6 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
             </table>
           </div>
 
-          <div className="flex items-center justify-end gap-2">
-            <Button asChild disabled={page <= 1} size="sm" variant="secondary">
-              {page <= 1 ? <span className="cursor-not-allowed text-slate-400">Previous</span> : <Link href={filterHref({ page: page - 1, query: activeQuery, status: activeStatus })}>Previous</Link>}
-            </Button>
-            <span className="text-sm text-slate-600">Page {page}</span>
-            <Button asChild disabled={requests.length < PAGE_SIZE} size="sm" variant="secondary">
-              {requests.length < PAGE_SIZE ? <span className="cursor-not-allowed text-slate-400">Next</span> : <Link href={filterHref({ page: page + 1, query: activeQuery, status: activeStatus })}>Next</Link>}
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>

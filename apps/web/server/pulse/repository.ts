@@ -84,6 +84,7 @@ export async function createPulseRequest(input: {
       },
       {
         ipHash: input.context.ipHash,
+        sourceIp: input.context.sourceIp,
         userAgent: input.context.userAgent,
         referer: input.context.referer,
         format: input.context.format,

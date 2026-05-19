@@ -134,6 +134,7 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
             <Field label="Type" value={request.requestType} />
             <Field label="Channel" value={request.requestChannel} />
             <Field label="Anonymous" value={String(request.requestedBy.anonymous ?? "unknown")} />
+            <Field label="Source IP" value={getString(request.requestContext, "sourceIp") ?? "Not recorded"} />
             <Field label="IP hash" value={getString(request.requestContext, "ipHash") ?? "Not recorded"} />
             <Field label="User agent" value={getString(request.requestContext, "userAgent") ?? "Not recorded"} />
             <Field label="Referer" value={getString(request.requestContext, "referer") ?? "Not recorded"} />

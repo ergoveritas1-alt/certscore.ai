@@ -62,6 +62,7 @@ export function getPulseRequesterContext(request: Request) {
   return {
     ipHash: ip ? createHash("sha256").update(ip).digest("hex") : null,
     referer: headers.get("referer")?.slice(0, 500) || null,
+    sourceIp: ip?.slice(0, 120) || null,
     userAgent: headers.get("user-agent")?.slice(0, 500) || null
   };
 }
