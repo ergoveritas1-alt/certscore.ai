@@ -41,7 +41,7 @@ const chatGptOpenApiDocument = {
         operationId: "getPulseForUrl",
         summary: "Retrieve a GPT-safe CertScore Pulse summary for a public URL.",
         description:
-          `${purposeStatement} Automated public-web observations for review. Not legal advice or a compliance determination. Use this operation when a user asks CertScore to scan or summarize a public website. Prefer format=markdown and detail=standard for natural-language answers. This public GPT Action does not expose refresh or full-detail evidence access; higher-volume, refresh, and full evidence access may require API keys later.`,
+          "Scan a public website URL with CertScore Pulse and return automated privacy, consent, tracking, accessibility, and disclosure observations. Use markdown and standard detail by default. Not legal advice or a compliance determination.",
         parameters: [
           {
             name: "url",
@@ -98,7 +98,7 @@ const chatGptOpenApiDocument = {
                         fullReportUrl: "https://certscore.ai/scan/scan_abc123",
                         markdownUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_abc123&format=markdown",
                         docsUrl: "https://certscore.ai/api-pulse",
-                        findingsReferenceUrl: "https://certscore.ai/findings"
+                        findingsReferenceUrl: "https://certscore.ai/guides/findings"
                       },
                       feedback: { email: "support@certscore.ai", feedbackUrl: "https://certscore.ai/pulse/feedback?pulseRequestId=pulse_req_123" },
                       capabilities: pulseCapabilities,
@@ -216,7 +216,7 @@ const chatGptOpenApiDocument = {
         operationId: "getPulseByScanId",
         summary: "Retrieve a GPT-safe CertScore Pulse summary by durable scanId.",
         description:
-          "Retrieve a completed scan-backed Pulse result using scanId, the durable handle returned by CertScore Pulse. Automated public-web observations for review. Not legal advice or a compliance determination.",
+          "Retrieve a completed CertScore Pulse result by durable scanId. Use this when a prior scan returned a scanId or report link. Automated observations for review, not legal advice or a compliance determination.",
         parameters: [
           {
             name: "scanId",
@@ -276,7 +276,8 @@ const chatGptOpenApiDocument = {
       get: {
         operationId: "getPulseJobStatus",
         summary: "Retrieve the status of a queued CertScore Pulse job.",
-        description: `${purposeStatement} Automated public-web observations for review. Not legal advice or a compliance determination. Use this operation only after a Pulse response returns a jobId or statusUrl.`,
+        description:
+          "Check the status of a queued or running CertScore Pulse job by jobId. Use after getPulseForUrl returns a pending scan. Not legal advice or a compliance determination.",
         parameters: [
           {
             name: "jobId",
@@ -300,7 +301,7 @@ const chatGptOpenApiDocument = {
           "429": {
             description: "Pulse job is rate limited.",
             headers: { ...diagnosticHeaders, ...retryAfterHeader },
-            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseStatus" } } }
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
           },
           "404": {
             description: "Pulse job was not found.",
@@ -311,30 +312,6 @@ const chatGptOpenApiDocument = {
             description: "Unexpected public-safe API error.",
             headers: { ...diagnosticHeaders, ...retryAfterHeader },
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
-          }
-        }
-      }
-    },
-    "/api/v1/pulse-health": {
-      get: {
-        summary: "Dependency-free Pulse health canary.",
-        responses: {
-          "200": {
-            description: "Pulse health response.",
-            headers: diagnosticHeaders,
-            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseHealth" } } }
-          }
-        }
-      }
-    },
-    "/api/v1/pulse-self-test": {
-      get: {
-        summary: "Pulse public self-test route.",
-        responses: {
-          "200": {
-            description: "Pulse self-test response.",
-            headers: diagnosticHeaders,
-            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseSelfTest" } } }
           }
         }
       }
@@ -450,30 +427,6 @@ const chatGptOpenApiDocument = {
           reason: { type: "string" },
           reviewTitle: { type: "string" },
           reviewReason: { type: "string" }
-        }
-      },
-      PulseHealth: {
-        type: "object",
-        required: ["ok", "service", "version", "generatedAt"],
-        properties: {
-          ok: { type: "boolean", const: true },
-          service: { type: "string", const: "certscore-pulse" },
-          version: { type: "string", const: "v1" },
-          generatedAt: { type: "string", format: "date-time" }
-        }
-      },
-      PulseSelfTest: {
-        type: "object",
-        required: ["ok", "type", "service", "version", "timestamp", "routes", "capabilities", "disclaimer"],
-        properties: {
-          ok: { type: "boolean", const: true },
-          type: { type: "string", const: "certscore_pulse_self_test" },
-          service: { type: "string", const: "certscore_pulse" },
-          version: { type: "string", const: "v1" },
-          timestamp: { type: "string", format: "date-time" },
-          routes: { type: "object", additionalProperties: { type: "string" } },
-          capabilities: { $ref: "#/components/schemas/PulseCapabilities" },
-          disclaimer: { type: "string" }
         }
       }
     }

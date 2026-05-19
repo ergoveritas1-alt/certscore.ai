@@ -69,18 +69,24 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.equal(body.paths["/api/v1/pulse/gpt"].get.operationId, "getPulseForUrl");
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.operationId, "getPulseJobStatus");
   assert.equal(body.paths["/api/v1/pulse/gpt/scan/{scanId}"].get.operationId, "getPulseByScanId");
+  assert.deepEqual(Object.keys(body.paths).sort(), ["/api/v1/pulse/gpt", "/api/v1/pulse/gpt/scan/{scanId}", "/api/v1/pulse/status/{jobId}"].sort());
+  assert.equal(body.paths["/api/v1/pulse/gpt"].get.description.length < 300, true);
+  assert.equal(body.paths["/api/v1/pulse/gpt/scan/{scanId}"].get.description.length < 300, true);
+  assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.description.length < 300, true);
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; required?: boolean }) => parameter.name === "url" && parameter.required === true));
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { maximum?: number } }) => parameter.name === "wait" && parameter.schema.maximum === 60));
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["200"].content["text/markdown"]);
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["500"].content["application/json"]);
-  assert.ok(body.paths["/api/v1/pulse-self-test"]);
+  assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.responses["429"].content["application/json"].schema.$ref, "#/components/schemas/PulseError");
   assert.ok(body.components.schemas.PulseCapabilities);
   assert.ok(body.components.schemas.PulseAgentInterpretation);
   assert.ok(body.components.schemas.PulseCoverageInterruption);
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["200"].headers["x-certscore-request-id"]);
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["202"].headers["Retry-After"]);
   assert.match(JSON.stringify(body), /format=markdown|getPulseForUrl|automated public-web observations for review|automated_runtime_analysis/);
+  assert.match(JSON.stringify(body), /https:\/\/certscore\.ai\/guides\/findings/);
   assert.doesNotMatch(JSON.stringify(body.paths["/api/v1/pulse/gpt"].get.parameters), /refresh|full/);
+  assert.doesNotMatch(JSON.stringify(body.paths), /pulse-health|pulse-self-test/);
   assert.doesNotMatch(JSON.stringify(body), /pre_consent_tracking_detected|raw DOM|DATABASE_URL|AUTH_SECRET/i);
 });
 
