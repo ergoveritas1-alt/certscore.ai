@@ -79,3 +79,21 @@ test("Pulse markdown uses available top-level completedAt before showing unavail
   assert.match(markdown, /Scan completed: 2026-05-18T23:15:31Z/);
   assert.doesNotMatch(markdown, /Scan completed: Not available/);
 });
+
+test("Pulse markdown formats Date completedAt values before JSON serialization", () => {
+  const markdown = renderPulseMarkdown({
+    meta: { detail: "standard", generatedAt: "2026-05-18T23:15:32Z" },
+    domain: "example.com",
+    scanStatus: "completed",
+    timestamps: {
+      completedAt: new Date("2026-05-18T23:15:31.000Z")
+    },
+    summary: { score: 88, riskLevel: "monitor", humanSummary: "No major automated review signals were surfaced in this scan." },
+    topFindings: [],
+    links: {},
+    feedback: {}
+  });
+
+  assert.match(markdown, /Scan completed: 2026-05-18T23:15:31.000Z/);
+  assert.doesNotMatch(markdown, /Scan completed: Not available/);
+});

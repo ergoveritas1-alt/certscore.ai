@@ -9,6 +9,9 @@ function formatLabel(value: unknown) {
 }
 
 function line(value: unknown) {
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return value.toISOString();
+  }
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : "Not available";
 }
 
