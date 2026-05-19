@@ -170,9 +170,13 @@ export async function listAdminPulseRequests(input: {
             pr.completed_at,
             pr.elapsed_seconds,
             pr.created_at,
-            count(pf.id)::int as feedback_count
+            coalesce(pf.feedback_count, 0)::int as feedback_count
        from pulse_requests pr
-       left join pulse_feedback pf on pf.pulse_request_id = pr.public_id
+       left join lateral (
+         select count(*)::int as feedback_count
+           from pulse_feedback
+          where pulse_request_id = pr.public_id
+       ) pf on true
       where ($1::text is null or pr.status = $1)
         and (
           $2::text is null
@@ -182,7 +186,6 @@ export async function listAdminPulseRequests(input: {
           or pr.requested_url ilike '%' || $2 || '%'
           or pr.scan_id::text ilike '%' || $2 || '%'
         )
-      group by pr.public_id
       order by pr.requested_at desc
       limit $3 offset $4`,
     [input.status ?? null, search, limit, offset],
@@ -226,11 +229,14 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               pr.elapsed_seconds,
               pr.created_at,
               pr.updated_at,
-              count(pf.id)::int as feedback_count
+              coalesce(pf.feedback_count, 0)::int as feedback_count
          from pulse_requests pr
-         left join pulse_feedback pf on pf.pulse_request_id = pr.public_id
+         left join lateral (
+           select count(*)::int as feedback_count
+             from pulse_feedback
+            where pulse_request_id = pr.public_id
+         ) pf on true
         where pr.public_id = $1 or pr.job_id = $1
-        group by pr.public_id
         limit 1`,
       [pulseRequestId],
       { readOnly: true }
@@ -308,11 +314,14 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
             pr.completed_at,
             pr.elapsed_seconds,
             pr.created_at,
-            count(pf.id)::int as feedback_count
+            coalesce(pf.feedback_count, 0)::int as feedback_count
        from pulse_requests pr
-       left join pulse_feedback pf on pf.pulse_request_id = pr.public_id
+       left join lateral (
+         select count(*)::int as feedback_count
+           from pulse_feedback
+          where pulse_request_id = pr.public_id
+       ) pf on true
       where pr.scan_id = $1
-      group by pr.public_id
       order by pr.requested_at desc
       limit 25`,
     [scanId],
