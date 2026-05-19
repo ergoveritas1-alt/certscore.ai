@@ -51,18 +51,29 @@ export function ShareReportActions({ domainLabel, scanId }: ShareReportActionsPr
     }
   }, [emailState.success]);
 
-  async function copyReportUrl() {
+  async function copyValue(value: string) {
     try {
-      if (!currentUrl || !navigator.clipboard) {
+      if (!value || !navigator.clipboard) {
         setCopyState("failed");
         return;
       }
-      await navigator.clipboard.writeText(currentUrl);
+      await navigator.clipboard.writeText(value);
       setCopyState("copied");
       window.setTimeout(() => setCopyState("idle"), 2400);
     } catch {
       setCopyState("failed");
     }
+  }
+
+  async function copyReportUrl() {
+    await copyValue(currentUrl);
+  }
+
+  function absoluteAppUrl(path: string) {
+    if (!currentUrl) {
+      return path;
+    }
+    return new URL(path, currentUrl).toString();
   }
 
   return (
@@ -94,6 +105,23 @@ export function ShareReportActions({ domainLabel, scanId }: ShareReportActionsPr
         >
           Monitor this site
         </Link>
+      </div>
+      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Agent summary</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Link className={actionClassName()} href={`/pulse/${encodeURIComponent(domainLabel)}`}>
+            View Pulse page
+          </Link>
+          <button className={actionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}`))} type="button">
+            Copy Pulse JSON URL
+          </button>
+          <button className={actionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&format=markdown`))} type="button">
+            Copy Pulse Markdown URL
+          </button>
+          <button className={actionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&detail=full`))} type="button">
+            Copy Full Pulse JSON URL
+          </button>
+        </div>
       </div>
       {copyState === "failed" ? (
         <p className="mt-1 text-xs leading-5 text-amber-700">

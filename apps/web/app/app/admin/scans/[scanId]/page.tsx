@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { RegulatoryRelevanceSection } from "../../../../../components/scans/regulatory-relevance-section";
 import { getAdminScanDetail } from "../../../../../server/admin/get-admin-scan-detail";
+import { listAdminPulseRequestsForScan } from "../../../../../server/admin/list-pulse-requests";
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -313,13 +314,20 @@ type AdminScanDetailPageProps = {
 
 export default async function AdminScanDetailPage({ params }: AdminScanDetailPageProps) {
   const { scanId } = await params;
-  const record = await getAdminScanDetail(scanId);
+  const [record, pulseRequests] = await Promise.all([
+    getAdminScanDetail(scanId),
+    listAdminPulseRequestsForScan(scanId)
+  ]);
 
   if (!record) {
     notFound();
   }
 
   const executionPlan = getExecutionPlan(record.scan.scanConfigJson);
+  const scanSource =
+    record.scan.scanConfigJson && typeof record.scan.scanConfigJson.source === "string"
+      ? record.scan.scanConfigJson.source
+      : null;
 
   return (
     <div className="space-y-8">
@@ -334,6 +342,12 @@ export default async function AdminScanDetailPage({ params }: AdminScanDetailPag
             <p>Domain: {record.domainHostname ?? "Unknown"}</p>
             <p>Type: {record.scan.scanType}</p>
             <p>Status: {record.scan.status}</p>
+            <p>
+              Source: {scanSource ?? "Not recorded"}{" "}
+              {scanSource === "pulse_api" ? (
+                <span className="ml-2 inline-flex rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">Pulse API</span>
+              ) : null}
+            </p>
             <p>Pages requested: {record.scan.pagesRequested}</p>
             <p>Pages scanned: {record.scan.pagesScanned}</p>
           </CardContent>
@@ -359,6 +373,32 @@ export default async function AdminScanDetailPage({ params }: AdminScanDetailPag
           </CardContent>
         </Card>
       </div>
+
+      {pulseRequests.length > 0 ? (
+        <Card className="border-slate-200 bg-white">
+          <CardHeader>
+            <CardTitle>Linked Pulse Requests</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {pulseRequests.map((request) => (
+              <div className="rounded-lg border border-slate-200 p-4 text-sm text-slate-700" key={request.publicId}>
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="font-medium text-slate-900">{request.publicId}</p>
+                    <p className="text-xs text-slate-500">
+                      {request.status} · {request.detail ?? "standard"} · {request.format ?? "json"} · {request.resolutionMode ?? "unknown"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <a className="font-semibold text-sky-700" href={`/app/admin/pulse/${request.publicId}`}>Pulse detail</a>
+                    {request.resultPulseUrl ? <a className="font-semibold text-sky-700" href={request.resultPulseUrl}>Pulse API</a> : null}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <RegulatoryRelevanceSection mappings={record.agencyMappings} />
 

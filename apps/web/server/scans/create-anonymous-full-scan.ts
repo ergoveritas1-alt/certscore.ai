@@ -49,7 +49,7 @@ export async function createAnonymousFullScan(input: { hostname: string; normali
     normalizedUrl: input.normalizedUrl,
     priorScanAcceleration,
     profile: planLimits.scanProfile,
-    source: "marketing-anonymous-full-scan"
+    source: input.provenance?.source ?? "marketing-anonymous-full-scan"
   });
   const queueMetadata = getFullScanQueueMetadata({
     provenance: input.provenance,

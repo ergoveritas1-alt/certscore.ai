@@ -107,6 +107,9 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                   <td className="py-4 pr-4 text-slate-700">
                     <p>{scan.status}</p>
                     <p>{scan.pagesScanned} pages</p>
+                    {scan.source === "pulse_api" ? (
+                      <p className="mt-1 inline-flex rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">Pulse API</p>
+                    ) : null}
                   </td>
                   <td className="py-4 pr-4 text-slate-700">
                     <p>Signals {scan.totalSignals ?? 0}</p>

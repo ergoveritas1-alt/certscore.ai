@@ -3,6 +3,7 @@ import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { getAdminScanOverviewMetrics, listAdminScans } from "../../../server/admin/list-admin-scans";
 import { listAdminUsers } from "../../../server/admin/list-admin-users";
 import { getMonitorSiteRequestCounts } from "../../../server/admin/list-monitor-site-requests";
+import { getAdminPulseOverviewCounts, listAdminPulseRequests } from "../../../server/admin/list-pulse-requests";
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -21,11 +22,13 @@ function formatDateTime(value: string | null) {
 }
 
 export default async function AdminOverviewPage() {
-  const [users, scans, scanMetrics, monitorRequestCounts] = await Promise.all([
+  const [users, scans, scanMetrics, monitorRequestCounts, pulseCounts, pulseRequests] = await Promise.all([
     listAdminUsers(),
     listAdminScans(10),
     getAdminScanOverviewMetrics(),
-    getMonitorSiteRequestCounts()
+    getMonitorSiteRequestCounts(),
+    getAdminPulseOverviewCounts(),
+    listAdminPulseRequests({ limit: 6 })
   ]);
   const organizations = new Set(users.flatMap((user) => (user.organizationId ? [user.organizationId] : [])));
   const activePlans = users.reduce<Record<string, number>>((accumulator, user) => {
@@ -87,9 +90,19 @@ export default async function AdminOverviewPage() {
             <p>Total: {monitorRequestCounts.total}</p>
           </CardContent>
         </Card>
+        <Card className="border-slate-200 bg-white">
+          <CardHeader>
+            <CardTitle>Pulse API</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm text-slate-600">
+            <p>Total: {pulseCounts.total}</p>
+            <p>Completed: {pulseCounts.completed}</p>
+            <p>Feedback: {pulseCounts.feedback}</p>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid gap-6 xl:grid-cols-4">
         <Card className="border-slate-200 bg-white">
           <CardHeader>
             <CardTitle>Recent Users</CardTitle>
@@ -156,6 +169,29 @@ export default async function AdminOverviewPage() {
               pendingContent="Opening..."
               variant="secondary"
             />
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 bg-white">
+          <CardHeader>
+            <CardTitle>Recent Pulse Requests</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {pulseRequests.map((request) => (
+              <div key={request.publicId} className="rounded-2xl border border-slate-200 p-4">
+                <p className="font-medium text-slate-900">{request.normalizedDomain ?? "Unknown domain"}</p>
+                <p className="text-sm text-slate-500">
+                  {request.status} · {request.detail ?? "standard"} · {request.format ?? "json"}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Feedback {request.feedbackCount} · Requested {formatDateTime(request.requestedAt)}
+                </p>
+                <div className="mt-3">
+                  <PendingButtonLink href={`/app/admin/pulse/${request.publicId}`} idleContent="Inspect Pulse" pendingContent="Opening..." size="sm" variant="secondary" />
+                </div>
+              </div>
+            ))}
+            <PendingButtonLink href="/app/admin/pulse" idleContent="Open Pulse admin" pendingContent="Opening..." variant="secondary" />
           </CardContent>
         </Card>
       </div>

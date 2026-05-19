@@ -47,6 +47,7 @@ export type AdminScanListItem = {
   requesterIp: string | null;
   scanViewHref: string;
   scanType: string;
+  source: string | null;
   status: string;
   stopTier: ScanExecutionTier | null;
   totalSignals: number | null;
@@ -231,6 +232,7 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       requesterIp: selectRequesterIp(diagnosticEventMap.get(scan.id) ?? []),
       scanViewHref: scan.organization_id ? `/app/scans/${scan.id}` : `/scan/${scan.id}`,
       scanType: scan.scan_type,
+      source: typeof scan.scan_config_json?.source === "string" ? scan.scan_config_json.source : null,
       status: scan.status,
       createdAt: displayCreatedAt,
       completedAt: scan.completed_at,

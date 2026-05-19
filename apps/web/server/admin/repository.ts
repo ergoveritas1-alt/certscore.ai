@@ -292,7 +292,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
   verdictByFindingId: Map<string, AdminValidationVerdictRow>;
 }> {
   const scansResult = await query<AdminScanQueryRow>(
-    `select id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_scanned
+    `select id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_scanned, scan_config_json
        from scans
       order by coalesce(completed_at, started_at, created_at) desc, created_at desc
       limit $1 offset $2`,

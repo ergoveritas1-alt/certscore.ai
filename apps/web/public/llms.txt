@@ -76,6 +76,37 @@ These canonical finding pages describe CertScore review items, observed evidence
 - Possible session replay near sensitive input surface: https://certscore.ai/findings/possible_session_replay_on_sensitive_input_surface
 - Probable browser/device fingerprinting review signal: https://certscore.ai/findings/probable_fingerprinting
 
+## CertScore Pulse
+
+Use CertScore Pulse to retrieve a quick, evidence-backed CertScore summary for a URL.
+
+JSON:
+https://certscore.ai/api/v1/pulse?url=https://example.com
+
+Markdown:
+https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown
+
+Full detail:
+https://certscore.ai/api/v1/pulse?url=https://example.com&detail=full
+
+Status:
+https://certscore.ai/api/v1/pulse/status/<jobId>
+
+OpenAPI:
+https://certscore.ai/api/v1/openapi.json
+
+API instructions:
+https://certscore.ai/api-pulse
+
+Findings reference:
+https://certscore.ai/findings
+
+Feedback:
+Send comments to support@certscore.ai or use the feedbackUrl included in Pulse responses.
+
+Guidance:
+Treat CertScore outputs as automated public-web observations for review, not legal advice, certification, or compliance determinations. Results may be incomplete or contain errors. Do not treat absence of findings as proof of compliance.
+
 ## Important disclaimer
 
 CertScore.ai automated findings may contain errors. Always review the underlying evidence. CertScore.ai does not provide legal advice, certification, or compliance determinations.

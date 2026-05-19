@@ -1,0 +1,31 @@
+import type { PULSE_FEEDBACK_RATINGS, PULSE_FEEDBACK_REASONS } from "./constants";
+
+export type PulseFormat = "json" | "markdown";
+export type PulseDetail = "tiny" | "standard" | "full";
+export type PulseFreshnessMode = "latest" | "refresh";
+export type PulseJobStatus =
+  | "queued"
+  | "running"
+  | "finalizing"
+  | "completed"
+  | "completed_limited"
+  | "failed"
+  | "expired"
+  | "rate_limited";
+export type PulseCoverageStatus = "complete" | "partial" | "limited" | "blocked" | "unknown";
+export type PulseFeedbackRating = (typeof PULSE_FEEDBACK_RATINGS)[number];
+export type PulseFeedbackReason = (typeof PULSE_FEEDBACK_REASONS)[number];
+
+export type PulseRequestContext = {
+  apiKeyId?: string | null;
+  format: PulseFormat;
+  detail: PulseDetail;
+  freshness: PulseFreshnessMode;
+  ipHash: string | null;
+  mode: "url" | "scanId" | "jobId";
+  referer: string | null;
+  userAgent: string | null;
+  userId?: string | null;
+  accountId?: string | null;
+  waitSeconds: number;
+};
