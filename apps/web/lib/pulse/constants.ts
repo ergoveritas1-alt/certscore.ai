@@ -18,6 +18,22 @@ export const PULSE_REVIEW_CONTEXT_DISCLAIMER =
 export const PULSE_COVERAGE_LIMITATION_COPY =
   "Coverage may be affected by bot defenses, geography, consent flow branching, lazy loading, protected routes, authenticated-only areas, or other runtime conditions. Absence of findings should not be interpreted as absence of risk.";
 
+export const PULSE_CAPABILITIES = {
+  method: "automated_runtime_analysis",
+  observes: [
+    "pre_consent_tracking",
+    "third_party_requests",
+    "consent_enforcement_gaps",
+    "cookie_activity",
+    "accessibility_signals",
+    "disclosure_inconsistencies"
+  ],
+  doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
+} as const;
+
+export const PULSE_PURPOSE_STATEMENT =
+  "CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.";
+
 export const PULSE_USAGE_GUIDANCE = {
   allowedSummary: "Automated scan surfaced review signals.",
   avoidClaims: [

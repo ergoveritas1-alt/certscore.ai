@@ -72,6 +72,10 @@ function pulseJson(body: unknown, init: ResponseInit | undefined, requestId: str
   });
 }
 
+function retryAfterForStatus(status: { retryAfterSeconds?: number | null; estimatedWaitSeconds?: number | null }) {
+  return status.retryAfterSeconds ?? status.estimatedWaitSeconds ?? 30;
+}
+
 async function waitForCompletedScan(scanId: string, waitSeconds: number) {
   const deadline = Date.now() + waitSeconds * 1000;
   while (Date.now() < deadline) {
@@ -201,7 +205,18 @@ export async function GET(request: Request) {
         reportUrl: pulseRequest.result_report_url,
         retryAfterSeconds: pulseRequest.retry_after_seconds
       });
-      return pulseJson(status, { headers: { "Cache-Control": "no-store" }, status: pulseRequest.status === "completed" ? 200 : 202 }, requestId);
+      const responseStatus = pulseRequest.status === "completed" ? 200 : pulseRequest.status === "rate_limited" ? 429 : 202;
+      return pulseJson(
+        status,
+        {
+          headers:
+            responseStatus === 202 || responseStatus === 429
+              ? { "Cache-Control": "no-store", "Retry-After": String(retryAfterForStatus(status)) }
+              : { "Cache-Control": "no-store" },
+          status: responseStatus
+        },
+        requestId
+      );
     }
 
     if (!rawUrl) {
@@ -340,7 +355,7 @@ export async function GET(request: Request) {
         nextCheckUrl: absoluteUrl(`/api/v1/pulse?jobId=${createdJobId}`),
         lastKnownPulse: latestScanRecord ? absoluteUrl(`/api/v1/pulse?scanId=${latestScanRecord.scan.id}`) : null
       },
-      { headers: { "Cache-Control": "no-store" }, status: 202 },
+      { headers: { "Cache-Control": "no-store", "Retry-After": String(retryAfterForStatus(status)) }, status: 202 },
       requestId
     );
   } catch (error) {

@@ -34,6 +34,14 @@ test("OpenAPI route returns valid Pulse API JSON", async () => {
   assert.ok(body.paths["/api/v1/pulse"].get.responses["202"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["400"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["429"]);
+  assert.equal(body.paths["/api/v1/pulse"].get.responses["200"].content["application/json"].schema.$ref, "#/components/schemas/PulseResponse");
+  assert.equal(body.paths["/api/v1/pulse"].get.responses["202"].content["application/json"].schema.$ref, "#/components/schemas/PulseStatus");
+  assert.equal(body.paths["/api/v1/pulse"].get.responses["400"].content["application/json"].schema.$ref, "#/components/schemas/PulseError");
+  assert.ok(body.components.schemas.PulseResponse);
+  assert.ok(body.components.schemas.PulseStatus);
+  assert.ok(body.components.schemas.PulseError);
+  assert.equal(body.components.schemas.PulseCoverageInterruption.required[0], "label");
+  assert.match(JSON.stringify(body.components.schemas.PulseResponse), /coverageNote|capabilities|interruptions/);
   assert.doesNotMatch(JSON.stringify(body), /stack trace|internal-only|raw DOM/i);
 });
 
@@ -53,8 +61,8 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.operationId, "getPulseJobStatus");
   assert.ok(body.paths["/api/v1/pulse"].get.parameters.some((parameter: { name: string; required?: boolean }) => parameter.name === "url" && parameter.required === true));
   assert.ok(body.paths["/api/v1/pulse"].get.responses["200"].content["text/markdown"]);
-  assert.match(JSON.stringify(body), /format=markdown|getPulseForUrl|automated public-web observations for review/);
-  assert.doesNotMatch(JSON.stringify(body), /scan_abc123|pre_consent_tracking_detected|raw DOM|DATABASE_URL|AUTH_SECRET/i);
+  assert.match(JSON.stringify(body), /format=markdown|getPulseForUrl|automated public-web observations for review|automated_runtime_analysis/);
+  assert.doesNotMatch(JSON.stringify(body), /pre_consent_tracking_detected|raw DOM|DATABASE_URL|AUTH_SECRET/i);
 });
 
 test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app error page", async () => {
@@ -71,7 +79,7 @@ test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app 
   assert.equal(body.openapi, "3.1.0");
   assert.equal(body.info.title, "CertScore Pulse API");
   assert.ok(body.paths["/api/v1/pulse"]);
-  assert.match(rawBody, /CertScore Pulse provides automated public-web observations for review/);
+  assert.match(rawBody, /automated runtime analysis of public websites/);
 });
 
 test("Pulse discovery route returns compact machine-readable metadata", async () => {
@@ -96,6 +104,8 @@ test("Pulse discovery route returns compact machine-readable metadata", async ()
   assert.deepEqual(body.detailLevels, ["tiny", "standard", "full"]);
   assert.deepEqual(body.detailAliases, { quick: "tiny" });
   assert.equal(body.feedbackEmail, "support@certscore.ai");
+  assert.equal(body.capabilities.method, "automated_runtime_analysis");
+  assert.ok(body.capabilities.observes.includes("pre_consent_tracking"));
   assert.equal(body.disclaimer, "Automated public-web observations for review. Not legal advice, certification, or a compliance determination.");
 });
 
@@ -127,6 +137,7 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /OpenAPI JSON/);
   assert.match(source, /PULSE_FEEDBACK_EMAIL/);
   assert.match(source, /PULSE_STANDARD_DISCLAIMER/);
+  assert.match(source, /PULSE_PURPOSE_STATEMENT/);
   assert.match(source, /Copy\/paste examples/);
   assert.match(source, /For AI agents/);
   assert.match(source, /Basic HTTP agent quick start/);
@@ -167,6 +178,7 @@ test("Pulse agent fallback page documents the fetch failure diagnostic contract"
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse-health/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/example\.com&format=markdown/);
   assert.match(source, /PULSE_STANDARD_DISCLAIMER/);
+  assert.match(source, /PULSE_PURPOSE_STATEMENT/);
 });
 
 test("Pulse plain text agent guide is retrievable and covers fetch failures", () => {
@@ -187,6 +199,7 @@ test("Pulse plain text agent guide is retrievable and covers fetch failures", ()
   assert.match(source, /UnexpectedStatusCode/);
   assert.match(source, /client fetch\/DNS\/network limitation/);
   assert.match(source, /automated public-web observations for review/);
+  assert.match(source, /automated runtime analysis of public websites/);
 });
 
 test("Robots allows public Pulse docs and support endpoints while keeping generic API private", async () => {

@@ -1,4 +1,4 @@
-import { PULSE_STANDARD_DISCLAIMER } from "./constants";
+import { PULSE_PURPOSE_STATEMENT, PULSE_STANDARD_DISCLAIMER } from "./constants";
 
 type PulseMarkdownInput = Record<string, any>;
 
@@ -21,12 +21,14 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput) {
   const markdown = [
     `# CertScore Pulse: ${titleDomain}`,
     "",
+    PULSE_PURPOSE_STATEMENT,
+    "",
     `Status: ${formatLabel(pulse.scanStatus)}`,
     `Score: ${pulse.summary?.score ?? "Not available"}/100`,
     `Risk level: ${formatLabel(pulse.summary?.riskLevel)}`,
     `Benchmark: ${line(pulse.summary?.benchmark)}`,
     `Generated: ${line(pulse.meta?.generatedAt)}`,
-    `Scan completed: ${line(pulse.timestamps?.completedAt ?? pulse.scan?.completedAt)}`,
+    `Scan completed: ${line(pulse.timestamps?.completedAt ?? pulse.scan?.completedAt ?? pulse.completedAt)}`,
     `Freshness: ${formatLabel(pulse.freshness?.status)}`,
     `Scan ID: ${line(pulse.scanId ?? pulse.scan_id ?? pulse.scan?.scanId)}`,
     "",

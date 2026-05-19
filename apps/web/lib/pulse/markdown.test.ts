@@ -52,6 +52,7 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
   });
 
   assert.match(markdown, /^# CertScore Pulse: example\.com/m);
+  assert.match(markdown, /automated runtime analysis of public websites/);
   assert.match(markdown, /No major automated review signals were surfaced in this scan\./);
   assert.match(markdown, /support@certscore\.ai/);
   assert.match(markdown, /Scan ID: scan_123/);
@@ -61,4 +62,20 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
   assert.match(markdown, /## Disclaimer/);
   assert.match(markdown, /does not provide legal advice/);
   assert.doesNotMatch(markdown, /\bclean\b/i);
+});
+
+test("Pulse markdown uses available top-level completedAt before showing unavailable", () => {
+  const markdown = renderPulseMarkdown({
+    meta: { detail: "standard", generatedAt: "2026-05-18T23:15:32Z" },
+    domain: "example.com",
+    scanStatus: "completed",
+    completedAt: "2026-05-18T23:15:31Z",
+    summary: { score: 88, riskLevel: "monitor", humanSummary: "No major automated review signals were surfaced in this scan." },
+    topFindings: [],
+    links: {},
+    feedback: {}
+  });
+
+  assert.match(markdown, /Scan completed: 2026-05-18T23:15:31Z/);
+  assert.doesNotMatch(markdown, /Scan completed: Not available/);
 });

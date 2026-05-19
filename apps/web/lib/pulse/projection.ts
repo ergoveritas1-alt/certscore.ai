@@ -6,6 +6,7 @@ import { buildScanReportUnifiedFindings } from "../../components/scans/shared-sc
 import { absoluteUrl } from "../seo";
 import {
   PULSE_API_VERSION,
+  PULSE_CAPABILITIES,
   PULSE_FEEDBACK_EMAIL,
   PULSE_MAX_RECOMMENDED_AGE_HOURS,
   PULSE_PROJECTION_VERSION,
@@ -100,12 +101,20 @@ function deriveFreshness(completedAt: string | null, generated: string) {
 
 function deriveCoverage(scanRecord: ScanDetailResponse) {
   const posture = scanRecord.accessPostureSummary;
-  const interruptionReasons = uniqueStrings([
-    posture.interruptionLabel,
-    posture.interruptionReason,
-    posture.stopReviewTitle,
-    posture.stopReason
-  ]);
+  const interruptions =
+    posture.interruptionLabel || posture.interruptionReason || posture.stopReviewTitle || posture.stopReason
+      ? [
+          {
+            label: posture.interruptionLabel ?? posture.stopReviewTitle ?? "Access limited",
+            reason:
+              posture.interruptionReason ??
+              posture.stopReason ??
+              "Scan coverage was limited before meaningful public evidence was retained.",
+            ...(posture.stopReviewTitle ? { reviewTitle: posture.stopReviewTitle } : {}),
+            ...(posture.stopReason ? { reviewReason: posture.stopReason } : {})
+          }
+        ]
+      : [];
   const homepageObserved = scanRecord.scan.pagesScanned > 0 || posture.homepageFetchStatus === "ok";
   const limited =
     scanRecord.scan.status !== "completed" ||
@@ -126,10 +135,10 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
   return {
     status,
     homepageObserved,
-    interruptionCount: interruptionReasons.length,
+    interruptionCount: interruptions.length,
     summary,
     limitations: ["Automated public-web scan only.", PULSE_COVERAGE_LIMITATION_COPY],
-    interruptions: interruptionReasons.slice(0, 10)
+    interruptions: interruptions.slice(0, 10)
   };
 }
 
@@ -464,6 +473,23 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     findings: allFindings,
     score
   });
+  const topFindingCount = topFindings.length;
+  const tinySummary =
+    topFindingCount === 0 &&
+    summary.score !== null &&
+    (summary.score < 70 || !["clear", "monitor"].includes(summary.riskLevel))
+      ? {
+          headline: summary.headline,
+          score: summary.score,
+          riskLevel: summary.riskLevel,
+          coverageNote:
+            "Score reflects scan coverage limitations. No specific findings were surfaced. Review the full report for coverage diagnostics."
+        }
+      : {
+          headline: summary.headline,
+          score: summary.score,
+          riskLevel: summary.riskLevel
+        };
   const timestamps = {
     createdAt: scan.createdAt,
     startedAt: scan.startedAt,
@@ -509,6 +535,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     scanStatus: scan.status,
     summary,
     topFindings,
+    capabilities: PULSE_CAPABILITIES,
     coverage: {
       status: coverage.status,
       summary: coverage.summary
@@ -525,11 +552,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       domain: base.domain,
       scanId: base.scanId,
       scanStatus: base.scanStatus,
-      summary: {
-        headline: summary.headline,
-        score: summary.score,
-        riskLevel: summary.riskLevel
-      },
+      summary: tinySummary,
       topFindings: topFindings.map((finding) => ({
         id: finding.id,
         label: finding.label,
@@ -538,13 +561,20 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       })),
       coverage: base.coverage,
       links: {
+        canonicalPulseUrl: links.canonicalPulseUrl,
+        fullReportUrl: links.fullReportUrl,
+        markdownUrl: links.markdownUrl,
+        docsUrl: links.docsUrl,
+        findingsReferenceUrl: links.findingsReferenceUrl,
         jsonUrl: links.jsonUrl,
         fullJsonUrl: links.fullJsonUrl,
-        docsUrl: links.docsUrl
+        scanJsonUrl: links.scanJsonUrl
       },
       feedback: {
-        email: feedback.email
+        email: feedback.email,
+        feedbackUrl: feedback.feedbackUrl
       },
+      capabilities: base.capabilities,
       disclaimer: base.disclaimer
     };
   }

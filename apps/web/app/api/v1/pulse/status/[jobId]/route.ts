@@ -77,6 +77,8 @@ export async function GET(request: Request, context: RouteContext) {
     };
     if (status === "rate_limited" && pulseRequest.retry_after_seconds) {
       headers["Retry-After"] = String(pulseRequest.retry_after_seconds);
+    } else if (status !== "completed" && status !== "completed_limited") {
+      headers["Retry-After"] = String(body.retryAfterSeconds ?? body.estimatedWaitSeconds ?? 30);
     }
 
     return pulseJson(body, {

@@ -1,6 +1,19 @@
 const discoveryDocument = {
   name: "CertScore Pulse",
-  description: "Retrieve automated public-web risk signal summaries for a URL.",
+  description:
+    "CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.",
+  capabilities: {
+    method: "automated_runtime_analysis",
+    observes: [
+      "pre_consent_tracking",
+      "third_party_requests",
+      "consent_enforcement_gaps",
+      "cookie_activity",
+      "accessibility_signals",
+      "disclosure_inconsistencies"
+    ],
+    doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
+  },
   api: "https://certscore.ai/api/v1/pulse",
   openapi: "https://certscore.ai/api/v1/openapi.json",
   chatgptOpenapi: "https://certscore.ai/api/v1/openapi.chatgpt.json",

@@ -6,6 +6,7 @@ import { SiteHeader } from "../../components/layout/site-header";
 import {
   PULSE_COVERAGE_LIMITATION_COPY,
   PULSE_FEEDBACK_EMAIL,
+  PULSE_PURPOSE_STATEMENT,
   PULSE_SHORT_DISCLAIMER,
   PULSE_STANDARD_DISCLAIMER
 } from "../../lib/pulse/constants";
@@ -172,6 +173,18 @@ const responseExamples = [
       },
       links: exampleLinks,
       feedback: exampleFeedback,
+      capabilities: {
+        method: "automated_runtime_analysis",
+        observes: [
+          "pre_consent_tracking",
+          "third_party_requests",
+          "consent_enforcement_gaps",
+          "cookie_activity",
+          "accessibility_signals",
+          "disclosure_inconsistencies"
+        ],
+        doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
+      },
       disclaimer: PULSE_STANDARD_DISCLAIMER
     }
   },
@@ -381,6 +394,7 @@ export default function ApiPulsePage() {
               Retrieve a quick, evidence-backed CertScore summary for a public URL. Pulse is designed for AI agents, developer tools,
               CLIs, and humans that need a compact scan summary with links to the durable full report.
             </p>
+            <p className="text-base leading-7 text-slate-700">{PULSE_PURPOSE_STATEMENT}</p>
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
               {PULSE_STANDARD_DISCLAIMER}
             </p>

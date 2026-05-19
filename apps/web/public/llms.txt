@@ -80,6 +80,8 @@ These canonical finding pages describe CertScore review items, observed evidence
 
 Use CertScore Pulse to retrieve a quick, evidence-backed CertScore summary for a URL.
 
+CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.
+
 Basic HTTP agent quick start:
 1. If you do not support OpenAPI actions, call:
    GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=markdown&detail=standard

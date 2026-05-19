@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { SiteFooter } from "../../../components/layout/site-footer";
 import { SiteHeader } from "../../../components/layout/site-header";
-import { PULSE_STANDARD_DISCLAIMER } from "../../../lib/pulse/constants";
+import { PULSE_PURPOSE_STATEMENT, PULSE_STANDARD_DISCLAIMER } from "../../../lib/pulse/constants";
 import { createPageMetadata } from "../../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
@@ -45,6 +45,7 @@ export default function PulseAgentFallbackPage() {
           This page is a plain browser-readable fallback for agents or review tools whose JSON fetch layer cannot retrieve API
           endpoints. The canonical Pulse API remains <code className="rounded bg-slate-100 px-1">/api/v1/pulse</code>.
         </p>
+        <p className="mt-3 max-w-3xl text-base leading-7 text-slate-700">{PULSE_PURPOSE_STATEMENT}</p>
 
         <section className="mt-8 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm leading-7 text-slate-800">
           <h2 className="font-semibold text-slate-950">Agent quick start</h2>

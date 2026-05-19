@@ -4,6 +4,8 @@ Last updated: 2026-05-19
 
 CertScore Pulse provides automated public-web observations for review. CertScore does not provide legal advice, certify compliance, or determine whether a website violates law.
 
+CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.
+
 Basic HTTP agent quick start:
 1. If you do not support OpenAPI actions, call:
    GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=markdown&detail=standard

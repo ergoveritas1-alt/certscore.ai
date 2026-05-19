@@ -1,13 +1,28 @@
 const standardDisclaimer =
   "CertScore provides automated public-web observations for review. Results may be incomplete or contain errors. CertScore does not provide legal advice, certify compliance, or determine whether a website violates law. Always review the underlying evidence and consult qualified counsel or subject-matter experts where appropriate.";
 
+const purposeStatement =
+  "CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.";
+
+const pulseCapabilities = {
+  method: "automated_runtime_analysis",
+  observes: [
+    "pre_consent_tracking",
+    "third_party_requests",
+    "consent_enforcement_gaps",
+    "cookie_activity",
+    "accessibility_signals",
+    "disclosure_inconsistencies"
+  ],
+  doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
+} as const;
+
 const chatGptOpenApiDocument = {
   openapi: "3.1.0",
   info: {
     title: "CertScore Pulse GPT Action API",
     version: "1.0.0",
-    description:
-      "A compact GPT Action schema for retrieving CertScore Pulse summaries. CertScore provides automated public-web observations for review. It does not provide legal advice, certify compliance, or determine whether a website violates law."
+    description: `A compact GPT Action schema for retrieving CertScore Pulse summaries. ${purposeStatement} ${standardDisclaimer}`
   },
   servers: [{ url: "https://certscore.ai" }],
   paths: {
@@ -16,7 +31,7 @@ const chatGptOpenApiDocument = {
         operationId: "getPulseForUrl",
         summary: "Retrieve a CertScore Pulse summary for a public URL.",
         description:
-          "Use this operation when a user asks CertScore to scan or summarize a public website. Prefer format=markdown for natural-language answers. Use detail=tiny for compact summaries and detail=full only when the user asks for evidence or more context.",
+          `${purposeStatement} Use this operation when a user asks CertScore to scan or summarize a public website. Prefer format=markdown for natural-language answers. Use detail=tiny for compact summaries and detail=full only when the user asks for evidence or more context.`,
         parameters: [
           {
             name: "url",
@@ -67,8 +82,22 @@ const chatGptOpenApiDocument = {
                       type: "certscore_pulse",
                       status: "completed",
                       target: { inputUrl: "https://example.com", normalizedUrl: "https://example.com/" },
-                      summary: "No major automated review signals were surfaced in this scan.",
-                      feedback: { email: "support@certscore.ai" },
+                      summary: {
+                        score: 64,
+                        riskLevel: "review_recommended",
+                        coverageNote:
+                          "Score reflects scan coverage limitations. No specific findings were surfaced. Review the full report for coverage diagnostics."
+                      },
+                      topFindings: [],
+                      links: {
+                        canonicalPulseUrl: "https://certscore.ai/pulse/example.com",
+                        fullReportUrl: "https://certscore.ai/scan/scan_abc123",
+                        markdownUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_abc123&format=markdown",
+                        docsUrl: "https://certscore.ai/api-pulse",
+                        findingsReferenceUrl: "https://certscore.ai/findings"
+                      },
+                      feedback: { email: "support@certscore.ai", feedbackUrl: "https://certscore.ai/pulse/feedback?pulseRequestId=pulse_req_123" },
+                      capabilities: pulseCapabilities,
                       disclaimer: standardDisclaimer
                     }
                   }
@@ -98,6 +127,7 @@ const chatGptOpenApiDocument = {
                       status: "running",
                       jobId: "pulse_job_123",
                       statusUrl: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
+                      capabilities: pulseCapabilities,
                       feedback: { email: "support@certscore.ai" },
                       disclaimer: standardDisclaimer
                     }
@@ -149,7 +179,7 @@ const chatGptOpenApiDocument = {
       get: {
         operationId: "getPulseJobStatus",
         summary: "Retrieve the status of a queued CertScore Pulse job.",
-        description: "Use this operation only after a Pulse response returns a jobId or statusUrl.",
+        description: `${purposeStatement} Use this operation only after a Pulse response returns a jobId or statusUrl.`,
         parameters: [
           {
             name: "jobId",
@@ -168,6 +198,10 @@ const chatGptOpenApiDocument = {
             description: "Pulse job is still queued or running.",
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseStatus" } } }
           },
+          "429": {
+            description: "Pulse job is rate limited.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseStatus" } } }
+          },
           "404": {
             description: "Pulse job was not found.",
             content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
@@ -181,26 +215,46 @@ const chatGptOpenApiDocument = {
       PulseResponse: {
         type: "object",
         additionalProperties: true,
-        required: ["type", "status", "summary", "feedback", "disclaimer"],
+        required: ["type", "summary", "feedback", "capabilities", "disclaimer"],
         properties: {
           type: { type: "string", const: "certscore_pulse" },
-          status: { type: "string" },
+          scanStatus: { type: "string" },
           target: { type: "object", additionalProperties: true },
-          summary: { type: "string" },
+          summary: {
+            type: "object",
+            additionalProperties: true,
+            properties: {
+              score: { type: ["integer", "null"] },
+              riskLevel: { type: "string" },
+              coverageNote: { type: "string" }
+            }
+          },
           findings: { type: "array", items: { type: "object", additionalProperties: true } },
+          topFindings: { type: "array", items: { type: "object", additionalProperties: true } },
+          coverage: {
+            type: "object",
+            additionalProperties: true,
+            properties: {
+              interruptionCount: { type: "integer" },
+              interruptions: { type: "array", items: { $ref: "#/components/schemas/PulseCoverageInterruption" } }
+            }
+          },
+          links: { type: "object", additionalProperties: true },
           feedback: { $ref: "#/components/schemas/PulseFeedback" },
+          capabilities: { $ref: "#/components/schemas/PulseCapabilities" },
           disclaimer: { type: "string" }
         }
       },
       PulseStatus: {
         type: "object",
         additionalProperties: true,
-        required: ["type", "status", "feedback", "disclaimer"],
+        required: ["type", "status", "capabilities", "disclaimer"],
         properties: {
           type: { type: "string", const: "certscore_pulse_status" },
           status: { type: "string" },
           jobId: { type: "string" },
           statusUrl: { type: "string" },
+          capabilities: { $ref: "#/components/schemas/PulseCapabilities" },
           feedback: { $ref: "#/components/schemas/PulseFeedback" },
           disclaimer: { type: "string" }
         }
@@ -229,7 +283,28 @@ const chatGptOpenApiDocument = {
         type: "object",
         additionalProperties: true,
         properties: {
-          email: { type: "string", const: "support@certscore.ai" }
+          email: { type: "string", const: "support@certscore.ai" },
+          feedbackUrl: { type: "string" }
+        }
+      },
+      PulseCapabilities: {
+        type: "object",
+        required: ["method", "observes", "doesNotProvide"],
+        properties: {
+          method: { type: "string", const: pulseCapabilities.method },
+          observes: { type: "array", items: { type: "string", enum: [...pulseCapabilities.observes] } },
+          doesNotProvide: { type: "array", items: { type: "string", enum: [...pulseCapabilities.doesNotProvide] } }
+        }
+      },
+      PulseCoverageInterruption: {
+        type: "object",
+        additionalProperties: true,
+        required: ["label", "reason"],
+        properties: {
+          label: { type: "string" },
+          reason: { type: "string" },
+          reviewTitle: { type: "string" },
+          reviewReason: { type: "string" }
         }
       }
     }

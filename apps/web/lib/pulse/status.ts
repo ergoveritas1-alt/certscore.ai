@@ -1,6 +1,7 @@
 import { absoluteUrl } from "../seo";
 import {
   PULSE_API_VERSION,
+  PULSE_CAPABILITIES,
   PULSE_PROJECTION_VERSION,
   PULSE_SCHEMA_VERSION,
   PULSE_SOURCE,
@@ -107,6 +108,7 @@ export function buildPulseStatus(input: PulseStatusInput) {
     resultUrl,
     reportUrl,
     retryAfterSeconds: input.status === "rate_limited" ? input.retryAfterSeconds ?? null : null,
+    capabilities: PULSE_CAPABILITIES,
     disclaimer: PULSE_STANDARD_DISCLAIMER
   };
 }
