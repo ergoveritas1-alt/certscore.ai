@@ -29,6 +29,22 @@ test("OpenAPI route returns valid Pulse API JSON", async () => {
   assert.doesNotMatch(JSON.stringify(body), /stack trace|internal-only|raw DOM/i);
 });
 
+test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app error page", async () => {
+  const response = openApiGET();
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/);
+
+  const rawBody = await response.text();
+  assert.doesNotMatch(rawBody, /<!doctype html|<html|__NEXT_DATA__|sign in|login/i);
+
+  const body = JSON.parse(rawBody);
+  assert.equal(body.openapi, "3.1.0");
+  assert.equal(body.info.title, "CertScore Pulse API");
+  assert.ok(body.paths["/api/v1/pulse"]);
+  assert.match(rawBody, /CertScore provides automated public-web observations for review/);
+});
+
 test("Pulse discovery route returns compact machine-readable metadata", async () => {
   const response = discoveryGET();
 
@@ -57,6 +73,10 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /PULSE_FEEDBACK_EMAIL/);
   assert.match(source, /PULSE_STANDARD_DISCLAIMER/);
   assert.match(source, /Copy\/paste examples/);
+  assert.match(source, /Open quick-start endpoint/);
+  assert.match(source, /Open test URL/);
+  assert.match(source, /href: "https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/example\.com&detail=tiny"/);
+  assert.match(source, /href: "https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/example\.com&format=markdown"/);
   assert.match(source, /detail=quick/);
   assert.match(source, /Status lifecycle|queued to running to finalizing to completed/);
   assert.match(source, /`scanId` is the canonical field name/);

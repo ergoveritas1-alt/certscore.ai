@@ -23,13 +23,31 @@ export const metadata: Metadata = createPageMetadata({
 });
 
 const copyPasteExamples = [
-  `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=tiny"`,
-  `curl "https://certscore.ai/api/v1/pulse?url=https://example.com"`,
-  `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=full"`,
-  `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown"`,
-  `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&freshness=refresh"`,
-  `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&wait=60"`,
-  `curl "https://certscore.ai/api/v1/pulse/status/<jobId>"`
+  {
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=tiny"`,
+    href: "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=tiny"
+  },
+  {
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://example.com"`,
+    href: "https://certscore.ai/api/v1/pulse?url=https://example.com"
+  },
+  {
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=full"`,
+    href: "https://certscore.ai/api/v1/pulse?url=https://example.com&detail=full"
+  },
+  {
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown"`,
+    href: "https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown"
+  },
+  {
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&freshness=refresh"`
+  },
+  {
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://example.com&wait=60"`
+  },
+  {
+    command: `curl "https://certscore.ai/api/v1/pulse/status/<jobId>"`
+  }
 ];
 
 const parameters = [
@@ -377,6 +395,12 @@ export default function ApiPulsePage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-7 text-slate-600">
             <CodeBlock>GET https://certscore.ai/api/v1/pulse?url=https://example.com</CodeBlock>
+            <a
+              className="inline-flex w-fit rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-sky-700 hover:border-sky-300 hover:bg-sky-50"
+              href="https://certscore.ai/api/v1/pulse?url=https://example.com"
+            >
+              Open quick-start endpoint
+            </a>
             <p>
               If a completed eligible scan exists, the API returns a completed Pulse. If no completed scan exists, the API may queue a new scan
               and return HTTP 202 with `jobId`, `statusUrl`, `nextCheckUrl`, and any `scanId` available for the queued scan.
@@ -390,7 +414,17 @@ export default function ApiPulsePage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {copyPasteExamples.map((example) => (
-              <CodeBlock key={example}>{example}</CodeBlock>
+              <div key={example.command} className="space-y-2">
+                <CodeBlock>{example.command}</CodeBlock>
+                {example.href ? (
+                  <a
+                    className="inline-flex w-fit rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-sky-700 hover:border-sky-300 hover:bg-sky-50"
+                    href={example.href}
+                  >
+                    Open test URL
+                  </a>
+                ) : null}
+              </div>
             ))}
           </CardContent>
         </Card>
