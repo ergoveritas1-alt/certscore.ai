@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { buildPulseError } from "../../../../../../lib/pulse/error";
 import { buildPulseStatus } from "../../../../../../lib/pulse/status";
@@ -11,7 +12,8 @@ type RouteContext = {
   params: Promise<{ jobId: string }>;
 };
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
+  const requestId = request.headers.get("x-request-id") ?? randomUUID();
   try {
     const { jobId } = await context.params;
     const pulseRequest = await getPulseRequestByJobId(jobId);
@@ -62,7 +64,7 @@ export async function GET(_request: Request, context: RouteContext) {
       status: status === "completed" || status === "completed_limited" ? 200 : status === "rate_limited" ? 429 : 202
     });
   } catch (error) {
-    console.error("[pulse-status] request failed", error);
+    console.error("[pulse-status] request failed", { requestId, error });
     return NextResponse.json(
       buildPulseError({
         code: "internal_error",

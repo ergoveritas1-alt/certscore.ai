@@ -6,6 +6,7 @@ import { GET as discoveryGET } from "../../app/.well-known/certscore-pulse/route
 import { GET as openApiGET } from "../../app/api/v1/openapi.json/route";
 import { POST as feedbackPOST } from "../../app/api/v1/pulse/feedback/route";
 import { buildPulseError } from "./error";
+import { normalizePulseUrl } from "./request";
 
 test("OpenAPI route returns valid Pulse API JSON", async () => {
   const response = openApiGET();
@@ -105,6 +106,21 @@ test("Pulse OpenAPI includes documented live response examples", async () => {
   assert.match(JSON.stringify(responses), /CertScore provides automated public-web observations for review/);
 });
 
+test("Pulse OpenAPI and discovery routes stay static and dependency-light", () => {
+  const supportRoutes = [
+    "apps/web/app/api/v1/openapi.json/route.ts",
+    "apps/web/app/.well-known/certscore-pulse/route.ts"
+  ];
+
+  for (const routePath of supportRoutes) {
+    const source = readFileSync(routePath, "utf8");
+    assert.doesNotMatch(source, /^import\s/m, `${routePath} should not import runtime dependencies`);
+    assert.doesNotMatch(source, /from\s+["'][^"']*(db|server|auth|queue|redis|pulse\/repository|internal)["']/i);
+    assert.doesNotMatch(source, /fetch\(/i, `${routePath} should not call internal or external fetch`);
+    assert.doesNotMatch(source, /process\.env/i, `${routePath} should not depend on runtime environment variables`);
+  }
+});
+
 test("Pulse invalid-input errors use the documented public-safe shape", () => {
   const body = buildPulseError({ code: "invalid_url", message: "Enter a valid public website URL or domain.", detail: "tiny", format: "json" });
 
@@ -114,6 +130,29 @@ test("Pulse invalid-input errors use the documented public-safe shape", () => {
   assert.equal(body.feedback.email, "support@certscore.ai");
   assert.match(body.disclaimer, /automated public-web observations for review/i);
   assert.doesNotMatch(JSON.stringify(body), /stack|DATABASE_URL|token|secret/i);
+});
+
+test("Pulse malformed URL contract is public-safe before DB or queue work", () => {
+  const normalized = normalizePulseUrl("::::");
+
+  assert.equal(normalized.ok, false);
+  assert.equal(normalized.message, "Enter a valid public URL or domain.");
+
+  const body = buildPulseError({
+    code: "invalid_url",
+    message: normalized.message,
+    url: "::::",
+    detail: "standard",
+    format: "json"
+  });
+
+  assert.equal(body.type, "certscore_pulse_error");
+  assert.equal(body.request.url, "::::");
+  assert.equal(body.request.detail, "standard");
+  assert.equal(body.request.format, "json");
+  assert.equal(body.error.code, "invalid_url");
+  assert.equal(body.error.message, "Enter a valid public URL or domain.");
+  assert.doesNotMatch(JSON.stringify(body), /Internal Error|stack|DATABASE_URL|token|secret/i);
 });
 
 test("Pulse status lookup for unknown job returns public-safe 404", { skip: !hasDatabaseEnv() }, async () => {

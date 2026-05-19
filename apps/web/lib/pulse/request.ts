@@ -36,7 +36,7 @@ export function normalizePulseUrl(value: string) {
   if (!parsed.success) {
     return {
       ok: false as const,
-      message: parsed.error.issues[0]?.message ?? "Enter a valid public website URL or domain."
+      message: "Enter a valid public URL or domain."
     };
   }
 

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { absoluteUrl } from "../../../../lib/seo";
 import { buildPulseError } from "../../../../lib/pulse/error";
@@ -116,6 +117,7 @@ async function buildAndLogCompletedPulse(input: {
 }
 
 export async function GET(request: Request) {
+  const requestId = request.headers.get("x-request-id") ?? randomUUID();
   const url = new URL(request.url);
   const format = parsePulseFormat(url.searchParams.get("format"));
   const detail = parsePulseDetail(url.searchParams.get("detail"));
@@ -325,7 +327,7 @@ export async function GET(request: Request) {
       { headers: { "Cache-Control": "no-store" }, status: 202 }
     );
   } catch (error) {
-    console.error("[pulse] request failed", error);
+    console.error("[pulse] request failed", { requestId, error });
     return pulseJson(
       buildPulseError({
         code: "internal_error",
