@@ -169,3 +169,40 @@ test("Pulse markdown uses review-signal lens status labels", () => {
   assert.match(markdown, /DOJ \/ ADA accessibility: Review recommended/);
   assert.doesNotMatch(markdown, /Needs Work|: Clear/);
 });
+
+test("Pulse markdown keeps lens labels cautious when surfaced findings reference the lens", () => {
+  const markdown = renderPulseMarkdown({
+    meta: { detail: "standard", generatedAt: "2026-05-18T23:15:32Z" },
+    domain: "kbdlab.io",
+    scanStatus: "completed",
+    summary: { score: 72, riskLevel: "review_recommended", humanSummary: "Automated scan surfaced review signals." },
+    topFindings: [
+      {
+        id: "pre_consent_tracking_detected",
+        label: "Third-party tracking observed before recorded consent",
+        criticality: "high",
+        confidence: "strong",
+        reviewLenses: ["GDPR / ePrivacy", "CCPA / CPRA / CIPA", "FTC"],
+        evidence: { summary: "Runtime evidence was retained for review.", fullEvidenceUrl: "https://certscore.ai/scan/scan_123#finding" }
+      }
+    ],
+    reviewContext: {
+      lenses: [
+        { name: "CCPA / CPRA / CIPA", status: "clear", summary: "Third-party collection, privacy-choice, and disclosure posture drive this review context." },
+        { name: "GDPR / ePrivacy", status: "clear", summary: "Consent timing, consent surface, and tracker behavior drive this review context." },
+        { name: "FTC", status: "watch", summary: "Consumer-facing claims, tracking posture, and disclosure signals should be reviewed together." },
+        { name: "DOJ / ADA accessibility", status: "clear", summary: "Automated accessibility signals are the main review area for this lens." }
+      ]
+    },
+    coverage: { status: "partial", summary: "Automated public-web scan completed with partial coverage." },
+    links: {},
+    feedback: {},
+    disclaimer: PULSE_STANDARD_DISCLAIMER
+  });
+
+  assert.match(markdown, /CCPA \/ CPRA \/ CIPA: Review context retained/);
+  assert.match(markdown, /GDPR \/ ePrivacy: Review context retained/);
+  assert.match(markdown, /FTC: Review context retained/);
+  assert.match(markdown, /DOJ \/ ADA accessibility: No top automated findings surfaced/);
+  assert.doesNotMatch(markdown, /Needs Work|: Clear/);
+});

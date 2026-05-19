@@ -27,7 +27,24 @@ function safeSummary(value: unknown) {
   return text.replaceAll("No major automated review signals were surfaced in this scan.", NO_TOP_FINDINGS_COPY);
 }
 
-function safeLensStatus(value: unknown) {
+function findingAppliesToLens(finding: any, lensName: string) {
+  const normalizedLensName = lensName.toLowerCase();
+  return Array.isArray(finding.reviewLenses) && finding.reviewLenses.some((name: unknown) => String(name ?? "").toLowerCase() === normalizedLensName);
+}
+
+function lensHasSurfacedFinding(lens: any, findings: any[]) {
+  const lensName = line(lens.name);
+  return (
+    (Array.isArray(lens.contributingFindingIds) && lens.contributingFindingIds.length > 0) ||
+    findings.some((finding) => findingAppliesToLens(finding, lensName))
+  );
+}
+
+function safeLensStatus(value: unknown, options: { hasSurfacedFinding?: boolean } = {}) {
+  if (options.hasSurfacedFinding) {
+    return "Review context retained";
+  }
+
   switch (String(value ?? "").toLowerCase()) {
     case "clear":
       return "No top automated findings surfaced";
@@ -149,7 +166,10 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
     "",
     lenses.length > 0
       ? lenses
-          .map((lens: any) => `- ${line(lens.name)}: ${safeLensStatus(lens.status)} - ${line(lens.summary)}`)
+          .map(
+            (lens: any) =>
+              `- ${line(lens.name)}: ${safeLensStatus(lens.status, { hasSurfacedFinding: lensHasSurfacedFinding(lens, findings) })} - ${line(lens.summary)}`
+          )
           .join("\n")
       : "- Review lenses were not evaluated for this Pulse.",
     "",
