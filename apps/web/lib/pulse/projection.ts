@@ -519,7 +519,34 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   };
 
   if (input.detail === "tiny") {
-    return base;
+    return {
+      type: base.type,
+      meta: base.meta,
+      domain: base.domain,
+      scanId: base.scanId,
+      scanStatus: base.scanStatus,
+      summary: {
+        headline: summary.headline,
+        score: summary.score,
+        riskLevel: summary.riskLevel
+      },
+      topFindings: topFindings.map((finding) => ({
+        id: finding.id,
+        label: finding.label,
+        criticality: finding.criticality,
+        confidence: finding.confidence
+      })),
+      coverage: base.coverage,
+      links: {
+        jsonUrl: links.jsonUrl,
+        fullJsonUrl: links.fullJsonUrl,
+        docsUrl: links.docsUrl
+      },
+      feedback: {
+        email: feedback.email
+      },
+      disclaimer: base.disclaimer
+    };
   }
 
   const standard = {
