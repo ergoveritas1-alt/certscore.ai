@@ -151,20 +151,20 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function formatValue(value: unknown) {
+function formatValue(value: unknown): string {
   if (value === null || value === undefined) {
     return "Not observed";
   }
 
   if (Array.isArray(value)) {
-    return value.length > 0 ? value.join(", ") : "[]";
+    return value.length > 0 ? value.map((item): string => sanitizePublicReportEvidenceText(formatValue(item))).join(", ") : "[]";
   }
 
   if (typeof value === "boolean") {
     return value ? "Yes" : "No";
   }
 
-  return String(value);
+  return sanitizePublicReportEvidenceText(String(value));
 }
 
 function formatCompactValue(value: unknown) {
@@ -5121,6 +5121,22 @@ export function SharedScanDetailView({
   const topExecutiveFindings = executiveAccessLimitationNotice
     ? [executiveAccessLimitationNotice.finding]
     : executiveFindingsProjection.topFindings;
+  const publicTopExecutiveFindings = topExecutiveFindings.map((finding) => {
+    const display = getPublicReportFindingDisplay({
+      confidence: finding.confidence,
+      findingId: finding.id,
+      label: finding.label,
+      remediation: finding.remediation,
+      section: finding.section,
+      severity: finding.severity,
+      title: finding.label
+    });
+    return {
+      ...finding,
+      label: display.title,
+      severity: display.criticality
+    };
+  });
   const scanExecutionSummary = deriveScanExecutionSummary({
     accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
     authWallDetected: snapshot?.auth_wall_detected === true,
@@ -5189,7 +5205,7 @@ export function SharedScanDetailView({
     status: scanRecord.scan.status,
     thirdPartyDomains: executiveThirdPartyDomains,
     thirdPartyRequestCount: executiveThirdPartyRequestCount,
-    topFindings: topExecutiveFindings,
+    topFindings: publicTopExecutiveFindings,
     vendorCount: executiveResolvedVendorNames.length + executiveUnresolvedVendorHosts.length,
     verifiedPublicSurfacesCount: getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)
   });
@@ -5208,7 +5224,7 @@ export function SharedScanDetailView({
         type="application/json"
         data-testid="scan-surfacing-trace"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(executiveFindingsProjection.trace).replace(/</g, "\\u003c")
+          __html: JSON.stringify(compactEvidenceJsonForDisplay(executiveFindingsProjection.trace)).replace(/</g, "\\u003c")
         }}
       />
       <ScanPageHeader
@@ -5697,7 +5713,7 @@ export function SharedScanDetailView({
                   <p className="font-medium text-slate-900">{signal.label}</p>
                   <p className="mt-1 text-sm text-slate-500">{signal.primaryCategoryLabel}{signal.subcategory ? ` · ${signal.subcategory}` : ""}</p>
                   <p className="mt-3 text-sm text-slate-700">
-                    {Array.isArray(signal.value) ? signal.value.join(", ") : String(signal.value)}
+                    {formatValue(signal.value)}
                   </p>
                 </div>
               ))}
