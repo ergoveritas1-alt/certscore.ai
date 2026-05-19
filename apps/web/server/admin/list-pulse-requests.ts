@@ -1,6 +1,7 @@
 "use server";
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { ensurePulseTables } from "../pulse/schema";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminPulseRequestStatus =
@@ -114,6 +115,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
 
 export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewCounts> {
   await requirePlatformAdminContext();
+  await ensurePulseTables();
   const result = await queryOne<{
     completed: number;
     feedback: number;
@@ -148,6 +150,7 @@ export async function listAdminPulseRequests(input: {
   status?: AdminPulseRequestStatus | null;
 } = {}): Promise<AdminPulseRequestListItem[]> {
   await requirePlatformAdminContext();
+  await ensurePulseTables();
   const limit = Math.max(1, Math.min(100, input.limit ?? 50));
   const offset = Math.max(0, input.offset ?? 0);
   const search = input.query?.trim() || null;
@@ -191,6 +194,7 @@ export async function listAdminPulseRequests(input: {
 
 export async function getAdminPulseRequestDetail(pulseRequestId: string): Promise<AdminPulseRequestDetail | null> {
   await requirePlatformAdminContext();
+  await ensurePulseTables();
   const [request, feedbackRows] = await Promise.all([
     queryOne<Record<string, unknown>>(
       `select pr.public_id,
@@ -287,6 +291,7 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
 
 export async function listAdminPulseRequestsForScan(scanId: string): Promise<AdminPulseRequestListItem[]> {
   await requirePlatformAdminContext();
+  await ensurePulseTables();
   const rows = await query<Record<string, unknown>>(
     `select pr.public_id,
             pr.job_id,

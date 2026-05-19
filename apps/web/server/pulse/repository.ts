@@ -7,6 +7,7 @@ import {
   PULSE_VERSION
 } from "../../lib/pulse/constants";
 import type { PulseRequestContext } from "../../lib/pulse/types";
+import { ensurePulseTables } from "./schema";
 
 type PulseRequestRow = {
   public_id: string;
@@ -34,6 +35,7 @@ export function createPulsePublicId(prefix = "pulse_req") {
 }
 
 export async function findLatestCompletedAnonymousScanForDomain(normalizedDomain: string) {
+  await ensurePulseTables();
   return queryOne<{ id: string }>(
     `select s.id
        from scans s
@@ -58,6 +60,7 @@ export async function createPulseRequest(input: {
   scanId?: string | null;
   status: string;
 }) {
+  await ensurePulseTables();
   const publicId = createPulsePublicId();
   const jobId = `pulse_job_${publicId.replace(/^pulse_req_/, "")}`;
   await query(
@@ -110,6 +113,7 @@ export async function updatePulseRequestCompleted(input: {
   responseSummary: Record<string, unknown>;
   resolutionMode?: string;
 }) {
+  await ensurePulseTables();
   await query(
     `update pulse_requests
         set status = 'completed',
@@ -131,6 +135,7 @@ export async function updatePulseRequestQueued(input: {
   resultPulseUrl: string | null;
   resultReportUrl: string | null;
 }) {
+  await ensurePulseTables();
   await query(
     `update pulse_requests
         set status = 'queued',
@@ -148,6 +153,7 @@ export async function updatePulseRequestRateLimited(input: {
   retryAfterSeconds: number;
   scanId?: string | null;
 }) {
+  await ensurePulseTables();
   await query(
     `update pulse_requests
         set status = 'rate_limited',
@@ -161,6 +167,7 @@ export async function updatePulseRequestRateLimited(input: {
 }
 
 export async function getPulseRequestByJobId(jobId: string) {
+  await ensurePulseTables();
   return queryOne<PulseRequestRow>(
     `select public_id, job_id, requested_url, normalized_url, normalized_domain, status, phase,
             scan_id, result_pulse_url, result_report_url, resolution_mode,
@@ -174,6 +181,7 @@ export async function getPulseRequestByJobId(jobId: string) {
 }
 
 export async function claimPulseDomainScanCreation(input: { normalizedDomain: string; pulseRequestId: string }) {
+  await ensurePulseTables();
   const existing = await queryOne<{ expires_at: string }>(
     `select expires_at
        from pulse_domain_throttles
@@ -203,6 +211,7 @@ export async function claimPulseDomainScanCreation(input: { normalizedDomain: st
 }
 
 export async function getPulseFeedbackCount(input: { pulseRequestId: string; ipHash: string | null }) {
+  await ensurePulseTables();
   const result = await queryOne<{ count: number }>(
     `select count(*)::int as count
        from pulse_feedback
@@ -224,6 +233,7 @@ export async function savePulseFeedback(input: {
   ipHash: string | null;
   userAgent: string | null;
 }) {
+  await ensurePulseTables();
   const request = await queryOne<{ scan_id: string | null; normalized_domain: string | null }>(
     `select scan_id, normalized_domain from pulse_requests where public_id = $1`,
     [input.pulseRequestId],

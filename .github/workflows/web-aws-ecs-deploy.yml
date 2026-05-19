@@ -76,14 +76,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Apply database migrations
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DATABASE_SSL_MODE: ${{ vars.DATABASE_SSL_MODE || 'require' }}
-        run: |
-          test -n "${DATABASE_URL}" || (echo "Missing secret DATABASE_URL" && exit 1)
-          pnpm db:migrate
-
       - name: Typecheck web
         run: pnpm --filter @website-signal-risk-scanner/web typecheck
 
