@@ -1,10 +1,9 @@
 const discoveryDocument = {
   name: "CertScore Pulse",
-  description: "Retrieve automated public-web risk signal summaries for a URL. detail=quick is accepted as an alias for detail=tiny.",
+  description: "Retrieve automated public-web risk signal summaries for a URL.",
   api: "https://certscore.ai/api/v1/pulse",
   openapi: "https://certscore.ai/api/v1/openapi.json",
   docs: "https://certscore.ai/api-pulse",
-  findingsReference: "https://certscore.ai/findings",
   formats: ["json", "markdown"],
   detailLevels: ["tiny", "standard", "full"],
   detailAliases: { quick: "tiny" },
@@ -15,12 +14,9 @@ const discoveryDocument = {
 } as const;
 
 export function GET() {
-  return new Response(JSON.stringify(discoveryDocument, null, 2), {
+  return Response.json(discoveryDocument, {
     headers: {
-      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-      "Content-Type": "application/json; charset=utf-8",
-      "Surrogate-Control": "no-store",
-      "X-Content-Type-Options": "nosniff"
+      "Cache-Control": "no-store"
     },
     status: 200
   });

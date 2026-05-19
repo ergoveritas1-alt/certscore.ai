@@ -26,8 +26,10 @@ test("OpenAPI route returns valid Pulse API JSON", async () => {
     ["url", "scanId", "jobId", "format", "detail", "freshness", "wait"].every((name) => pulseParameters.includes(name)),
     true
   );
-  assert.match(JSON.stringify(body), /api-pulse/);
-  assert.match(JSON.stringify(body), /findings/);
+  assert.ok(body.paths["/api/v1/pulse"].get.responses["200"]);
+  assert.ok(body.paths["/api/v1/pulse"].get.responses["202"]);
+  assert.ok(body.paths["/api/v1/pulse"].get.responses["400"]);
+  assert.ok(body.paths["/api/v1/pulse"].get.responses["429"]);
   assert.doesNotMatch(JSON.stringify(body), /stack trace|internal-only|raw DOM/i);
 });
 
@@ -45,7 +47,7 @@ test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app 
   assert.equal(body.openapi, "3.1.0");
   assert.equal(body.info.title, "CertScore Pulse API");
   assert.ok(body.paths["/api/v1/pulse"]);
-  assert.match(rawBody, /CertScore provides automated public-web observations for review/);
+  assert.match(rawBody, /CertScore Pulse provides automated public-web observations for review/);
 });
 
 test("Pulse discovery route returns compact machine-readable metadata", async () => {
@@ -109,21 +111,17 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /429 throttled response/);
 });
 
-test("Pulse OpenAPI includes documented live response examples", async () => {
+test("Pulse OpenAPI documents the public status contracts without runtime examples", async () => {
   const response = openApiGET();
   const body = await response.json();
   const responses = body.paths["/api/v1/pulse"].get.responses;
 
-  assert.ok(responses["200"].content["application/json"].examples.tiny);
-  assert.ok(responses["200"].content["application/json"].examples.standard);
-  assert.ok(responses["200"].content["application/json"].examples.full);
-  assert.ok(responses["200"].content["text/markdown"].examples.markdown);
-  assert.ok(responses["202"].content["application/json"].examples.pending);
-  assert.ok(responses["400"].content["application/json"].examples.invalidUrl);
-  assert.ok(responses["429"].content["application/json"].examples.throttled);
-  assert.equal(responses["202"].content["application/json"].examples.pending.value.type, "certscore_pulse_status");
-  assert.equal(responses["429"].content["application/json"].examples.throttled.value.error.code, "pulse_throttled");
-  assert.match(JSON.stringify(responses), /CertScore provides automated public-web observations for review/);
+  assert.equal(responses["200"].description, "Completed Pulse response");
+  assert.equal(responses["202"].description, "Pulse job queued or running");
+  assert.equal(responses["400"].description, "Invalid input");
+  assert.equal(responses["429"].description, "Throttled");
+  assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.responses["404"].description, "Pulse job not found");
+  assert.doesNotMatch(JSON.stringify(body), /scan_abc123|pre_consent_tracking_detected|raw DOM/i);
 });
 
 test("Pulse OpenAPI and discovery routes stay static and dependency-light", () => {
