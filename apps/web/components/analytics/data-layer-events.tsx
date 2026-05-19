@@ -6,6 +6,7 @@ import {
   type CtaLocation,
   type GuideCtaType,
   type GuidePageType,
+  type GptCtaLocation,
   type LeadFormType,
   type PricingCtaType,
   type ReportCtaType,
@@ -38,6 +39,10 @@ function isPricingCtaType(value: string | undefined): value is PricingCtaType {
 
 function isLeadFormType(value: string | undefined): value is LeadFormType {
   return value === "contact_sales" || value === "monitor_request";
+}
+
+function isGptCtaLocation(value: string | undefined): value is GptCtaLocation {
+  return value === "footer" || value === "api_pulse" || value === "guides_findings" || value === "homepage";
 }
 
 function getGuidePageType(pathname: string): GuidePageType {
@@ -146,6 +151,18 @@ export function DataLayerClickTracker() {
             ? trackedElement.dataset.analyticsCtaType
             : "unknown",
           plan: trackedElement.dataset.analyticsPlan ?? "unknown"
+        });
+        return;
+      }
+
+      if (eventName === "gpt_cta_clicked") {
+        pushDataLayerEvent({
+          event: "gpt_cta_clicked",
+          location: isGptCtaLocation(trackedElement.dataset.analyticsCtaLocation)
+            ? trackedElement.dataset.analyticsCtaLocation
+            : "homepage",
+          destination: "certscore_gpt",
+          url: trackedElement.dataset.analyticsDestinationUrl ?? href
         });
       }
     }

@@ -1,5 +1,6 @@
 import { Badge } from "@website-signal-risk-scanner/ui";
 import { FindingAtlasBrowser } from "../../components/marketing/findings/finding-atlas-browser";
+import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import { getFindingReferenceItems, type FindingReferenceItem } from "../../lib/marketing/finding-atlas";
 import { FINDING_DENSITY_BENCHMARK_SCOPE } from "../../lib/scans/finding-density-benchmarks";
 import {
@@ -185,7 +186,7 @@ export function getFindingReferencePageCopy(activeFinding?: FindingReferenceItem
 
 export function FindingsReferencePage({ activeFinding }: FindingsReferencePageProps) {
   const findings = getFindingReferenceItems();
-  const certscoreGptUrl = process.env.NEXT_PUBLIC_CERTSCORE_GPT_URL;
+  const certscoreGptUrl = getCertScoreGptUrl();
   const initialFindingId = activeFinding?.id ?? DEFAULT_FINDING_ID;
   const { pageDescription, pagePath, pageTitle } = getFindingReferencePageCopy(activeFinding);
   const headingTitle = activeFinding?.title ?? "CertScore findings reference";
@@ -229,17 +230,23 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
             <p className="text-sm leading-6 text-slate-500">
               CertScore's finding references are reviewed periodically and updated when material regulatory or accessibility guidance changes. Guidance families monitored include EDPB consent and ePrivacy materials, ICO cookie guidance, CNIL tracker recommendations, FTC privacy and dark-pattern materials, CPRA/privacy-choice materials, and accessibility guidance where applicable.
             </p>
-            <p className="text-sm leading-6">
-              {certscoreGptUrl ? (
-                <a className="font-semibold text-sky-700 hover:text-sky-800" href={certscoreGptUrl}>
-                  Scan a website in ChatGPT
-                </a>
-              ) : (
-                <a className="font-semibold text-sky-700 hover:text-sky-800" href="/api-pulse">
-                  CertScore GPT coming soon
-                </a>
-              )}
-            </p>
+            <div className="border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-slate-700">
+              <p>Want to test these findings on a public website? Use the CertScore GPT to scan a public website from ChatGPT.</p>
+              <p className="mt-1 text-slate-600">
+                Results are automated public-web observations for review, not legal advice or a compliance determination.
+              </p>
+              <a
+                className="mt-3 inline-flex rounded-full border border-sky-300 bg-white px-3 py-2 font-semibold text-sky-700 hover:bg-sky-50"
+                data-analytics-cta-location="guides_findings"
+                data-analytics-destination-url={certscoreGptUrl}
+                data-analytics-event="gpt_cta_clicked"
+                href={certscoreGptUrl}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Open CertScore GPT
+              </a>
+            </div>
           </div>
         )}
       </div>

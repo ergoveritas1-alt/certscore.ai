@@ -150,6 +150,26 @@ test("lead form events dispatch after analytics consent is granted", () => {
   ]);
 });
 
+test("GPT CTA events dispatch after analytics consent is granted", () => {
+  const mockWindow = installWindow({ certscoreAnalyticsConsent: "granted", dataLayer: [] });
+
+  pushDataLayerEvent({
+    event: "gpt_cta_clicked",
+    location: "api_pulse",
+    destination: "certscore_gpt",
+    url: "https://chatgpt.com/g/g-6a0cbbf2d9888191b9486207296a6c11-certscore-ai-website-privacy-scanner"
+  });
+
+  assert.deepEqual(mockWindow.dataLayer, [
+    {
+      event: "gpt_cta_clicked",
+      location: "api_pulse",
+      destination: "certscore_gpt",
+      url: "https://chatgpt.com/g/g-6a0cbbf2d9888191b9486207296a6c11-certscore-ai-website-privacy-scanner"
+    }
+  ]);
+});
+
 test("pre-navigation scan events resolve without dispatch when consent is denied", async () => {
   const mockWindow = installWindow({ certscoreAnalyticsConsent: "denied", dataLayer: [] });
 

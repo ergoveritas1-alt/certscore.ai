@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import { AnalyticsPreferencesButton } from "../analytics/analytics-consent-banner";
 
 const footerSections = [
@@ -41,7 +42,24 @@ const companyLegalLinks = [
 ];
 
 export function SiteFooter() {
-  const certscoreGptUrl = process.env.NEXT_PUBLIC_CERTSCORE_GPT_URL;
+  const certscoreGptUrl = getCertScoreGptUrl();
+  const sections = footerSections.map((section) =>
+    section.title === "Resources"
+      ? {
+          ...section,
+          links: [
+            ...section.links,
+            {
+              href: certscoreGptUrl,
+              label: "CertScore GPT",
+              external: true,
+              analyticsEvent: "gpt_cta_clicked",
+              analyticsLocation: "footer"
+            }
+          ]
+        }
+      : section
+  );
   return (
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8 text-sm text-slate-500">
@@ -50,15 +68,30 @@ export function SiteFooter() {
           <p className="text-sm leading-6 text-slate-500">Evidence-led scanning for public website signals.</p>
         </div>
         <div className="grid gap-7 border-t border-slate-100 pt-6 sm:grid-cols-2 lg:grid-cols-4">
-          {footerSections.map((section) => (
+          {sections.map((section) => (
             <nav key={section.title} aria-label={section.title} className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{section.title}</p>
               <div className="flex flex-col gap-2">
-                {section.links.map((link) => (
-                  <Link key={link.href} href={link.href} className="hover:text-slate-900">
-                    {link.label}
-                  </Link>
-                ))}
+                {section.links.map((link) =>
+                  "external" in link && link.external ? (
+                    <a
+                      key={link.href}
+                      className="hover:text-slate-900"
+                      data-analytics-cta-location={link.analyticsLocation}
+                      data-analytics-destination-url={link.href}
+                      data-analytics-event={link.analyticsEvent}
+                      href={link.href}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      {link.label}
+                    </a>
+                  ) : (
+                    <Link key={link.href} href={link.href} className="hover:text-slate-900">
+                      {link.label}
+                    </Link>
+                  )
+                )}
               </div>
             </nav>
           ))}
@@ -76,15 +109,6 @@ export function SiteFooter() {
                   {link.label}
                 </Link>
               ))}
-              {certscoreGptUrl ? (
-                <a href={certscoreGptUrl} className="hover:text-slate-900">
-                  Try the CertScore GPT
-                </a>
-              ) : (
-                <Link href="/api-pulse" className="hover:text-slate-900">
-                  CertScore GPT coming soon
-                </Link>
-              )}
               <div className="flex justify-start">
                 <AnalyticsPreferencesButton />
               </div>

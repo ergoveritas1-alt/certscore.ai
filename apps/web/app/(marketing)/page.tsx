@@ -7,6 +7,7 @@ import { DomainScanForm } from "../../components/marketing/domain-scan-form";
 import { HomepageFindingsOverview } from "../../components/marketing/homepage-findings-overview";
 import { PendingButtonLink } from "../../components/ui/pending-link";
 import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
+import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 const SAMPLE_REPORT_URL = "https://certscore.ai/scan/bc6e4dfa-8a25-43f8-822d-a10e89950799";
@@ -89,7 +90,7 @@ function PersonaIcon({ index }: { index: number }) {
 
 export default async function MarketingHomePage() {
   const findings = getFindingReferenceItems();
-  const certscoreGptUrl = process.env.NEXT_PUBLIC_CERTSCORE_GPT_URL;
+  const certscoreGptUrl = getCertScoreGptUrl();
   const softwareApplicationSchema = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -158,15 +159,17 @@ export default async function MarketingHomePage() {
               .
             </p>
             <div className="text-sm">
-              {certscoreGptUrl ? (
-                <a className="font-semibold text-sky-700 hover:text-sky-800" href={certscoreGptUrl}>
-                  Scan a website in ChatGPT
-                </a>
-              ) : (
-                <Link className="font-semibold text-sky-700 hover:text-sky-800" href="/api-pulse">
-                  CertScore GPT coming soon
-                </Link>
-              )}
+              <a
+                className="font-semibold text-sky-700 hover:text-sky-800"
+                data-analytics-cta-location="homepage"
+                data-analytics-destination-url={certscoreGptUrl}
+                data-analytics-event="gpt_cta_clicked"
+                href={certscoreGptUrl}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Try CertScore in ChatGPT
+              </a>
             </div>
           </div>
 

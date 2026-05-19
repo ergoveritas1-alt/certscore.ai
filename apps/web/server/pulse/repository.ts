@@ -15,6 +15,7 @@ type PulseRequestRow = {
   requested_url: string | null;
   normalized_url: string | null;
   normalized_domain: string | null;
+  request_channel: string | null;
   status: string;
   phase: string | null;
   scan_id: string | null;
@@ -198,7 +199,7 @@ export async function updatePulseRequestRateLimited(input: {
 export async function getPulseRequestByJobId(jobId: string) {
   await ensurePulseTables();
   return queryOne<PulseRequestRow>(
-    `select public_id, job_id, requested_url, normalized_url, normalized_domain, status, phase,
+    `select public_id, job_id, requested_url, normalized_url, normalized_domain, request_channel, status, phase,
             scan_id, result_pulse_url, result_report_url, resolution_mode,
             retry_after_seconds, error_code, error_message, requested_at, created_at, updated_at, completed_at
        from pulse_requests
