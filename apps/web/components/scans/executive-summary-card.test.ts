@@ -1252,7 +1252,7 @@ test("ExecutiveSummaryCard qualifies incomplete protected-route scans when homep
   );
 
   assert.match(html, /Homepage evidence was retained; some non-homepage routes were protected or unavailable\./);
-  assert.match(html, /Session recording service detected/);
+  assert.match(html, /Session replay service signal observed/);
 });
 
 test("ExecutiveSummaryCard renders limited review for latimes-style interrupted clear scans", () => {
@@ -3347,7 +3347,7 @@ test("ExecutiveSummaryCard scopes the hero copy when scan coverage is thin", () 
   );
 
   assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
-  assert.match(html, /Coverage note:<\/span> These are automated observations from the public scan\. Review the evidence before taking action\. Tracking started before consent/);
+  assert.match(html, /Coverage note:<\/span> These are automated observations from the public scan\. Review the evidence before taking action\. Third-party tracking observed before recorded consent/);
   assert.match(html, /Automated homepage findings/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
 });
@@ -3391,7 +3391,7 @@ test("ExecutiveSummaryCard scopes the hero copy when the scan outcome shows bloc
   );
 
   assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
-  assert.match(html, /Coverage note:<\/span> These are automated observations from the public scan\. Review the evidence before taking action\. Tracking started before consent/);
+  assert.match(html, /Coverage note:<\/span> These are automated observations from the public scan\. Review the evidence before taking action\. Third-party tracking observed before recorded consent/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
 });
 
@@ -3435,7 +3435,7 @@ test("ExecutiveSummaryCard scopes the hero copy when coverage level is limited p
   );
 
   assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
-  assert.match(html, /Coverage note:<\/span> These are automated observations from the public scan\. Review the evidence before taking action\. Tracking started before consent/);
+  assert.match(html, /Coverage note:<\/span> These are automated observations from the public scan\. Review the evidence before taking action\. Third-party tracking observed before recorded consent/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
 });
 

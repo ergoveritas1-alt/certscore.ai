@@ -3456,6 +3456,10 @@ function buildFindingEvidenceJsonPayload(finding: CertScoreFinding) {
     return compactCanonicalEvidenceJsonPayload(finding);
   }
 
+  if (getPublicReportFindingDisplayForCertFinding(finding).referenceId) {
+    return compactCanonicalEvidenceJsonPayload(finding);
+  }
+
   return finding;
 }
 
@@ -3551,7 +3555,14 @@ export function ExecutiveSummaryCard(input: {
     beforeConsentCookieCount: input.beforeConsentCookieCount,
     findings: regulatoryFindingInput
   });
-  const executiveHeadlineFindings = filteredTopFindings.slice(0, 3);
+  const executiveHeadlineFindings = filteredTopFindings.slice(0, 3).map((finding) => {
+    const display = getPublicReportFindingDisplayForCertFinding(finding);
+    return {
+      ...finding,
+      label: display.title,
+      severity: display.criticality
+    };
+  });
   const hasScrollableTopFindings = filteredTopFindings.length > 3;
   const namedVendors = uniqueStrings(input.resolvedVendorNames).slice(0, 8);
   const thirdPartyDomains = input.thirdPartyDomains.slice(0, 10);
