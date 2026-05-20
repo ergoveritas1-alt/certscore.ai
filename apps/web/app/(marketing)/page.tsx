@@ -141,6 +141,17 @@ export default async function MarketingHomePage() {
                 idleContent="Scan a website"
                 pendingContent="Opening..."
               />
+              <a
+                className="inline-flex w-full items-center justify-center rounded-full border border-sky-300 bg-white px-4 py-2.5 text-sm font-semibold text-sky-700 shadow-[0_10px_22px_rgba(14,165,233,0.10)] hover:bg-sky-50 sm:w-auto"
+                data-analytics-cta-location="homepage"
+                data-analytics-destination-url={certscoreGptUrl}
+                data-analytics-event="gpt_cta_clicked"
+                href={certscoreGptUrl}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Try CertScore GPT beta
+              </a>
               <PendingButtonLink
                 className="w-full border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 sm:w-auto"
                 data-analytics-cta-type="sample_report"
@@ -158,19 +169,9 @@ export default async function MarketingHomePage() {
               </Link>
               .
             </p>
-            <div className="text-sm">
-              <a
-                className="font-semibold text-sky-700 hover:text-sky-800"
-                data-analytics-cta-location="homepage"
-                data-analytics-destination-url={certscoreGptUrl}
-                data-analytics-event="gpt_cta_clicked"
-                href={certscoreGptUrl}
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                Try CertScore in ChatGPT
-              </a>
-            </div>
+            <p className="max-w-2xl text-xs leading-5 text-slate-500">
+              CertScore GPT beta lets you ask for a Pulse summary inside ChatGPT. Results are automated public-web observations for review, not legal advice or a compliance determination.
+            </p>
           </div>
 
           <div className="space-y-4">
@@ -183,7 +184,7 @@ export default async function MarketingHomePage() {
                   buttonLabel="Scan a website"
                   helperText="CertScore will queue the domain, run a browser-based scan, and open the saved scan record when it is accepted."
                   inputLabel="Website to analyze"
-                  inputPlaceholder="example.com"
+                  inputPlaceholder="kbdlab.io"
                   mode="full"
                   scanSource="homepage"
                 />

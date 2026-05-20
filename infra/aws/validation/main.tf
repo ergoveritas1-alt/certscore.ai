@@ -18,6 +18,10 @@ locals {
   certificate_arn         = var.existing_certificate_arn != "" ? var.existing_certificate_arn : local.create_certificate ? aws_acm_certificate.validation[0].arn : null
   validation_ops_base_url = var.validation_domain_name != "" ? "https://${var.validation_domain_name}" : "http://${aws_lb.validation.dns_name}"
   common_tags             = merge(var.tags, { Project = local.prefix, ManagedBy = "terraform", Stack = "validation" })
+  ecs_task_subnets        = length(var.ecs_task_subnet_ids) > 0 ? var.ecs_task_subnet_ids : [for subnet in values(aws_subnet.private) : subnet.id]
+  ecs_task_security_groups = length(var.ecs_task_security_group_ids) > 0 ? var.ecs_task_security_group_ids : [
+    aws_security_group.ecs_tasks.id
+  ]
   web_container_environment = concat(
     [
       { name = "APP_FLAVOR", value = "validation_ops" },
@@ -761,9 +765,9 @@ resource "aws_ecs_service" "web" {
   enable_execute_command = true
 
   network_configuration {
-    assign_public_ip = false
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    subnets          = [for subnet in values(aws_subnet.private) : subnet.id]
+    assign_public_ip = var.ecs_task_assign_public_ip
+    security_groups  = local.ecs_task_security_groups
+    subnets          = local.ecs_task_subnets
   }
 
   load_balancer {
@@ -793,9 +797,9 @@ resource "aws_ecs_service" "worker" {
   enable_execute_command = true
 
   network_configuration {
-    assign_public_ip = false
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    subnets          = [for subnet in values(aws_subnet.private) : subnet.id]
+    assign_public_ip = var.ecs_task_assign_public_ip
+    security_groups  = local.ecs_task_security_groups
+    subnets          = local.ecs_task_subnets
   }
 
   deployment_circuit_breaker {

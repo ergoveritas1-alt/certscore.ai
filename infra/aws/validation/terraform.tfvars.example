@@ -5,6 +5,13 @@ validation_domain_name          = "validation.certscore.ai"
 hosted_zone_id                  = "Z1234567890"
 existing_certificate_arn        = ""
 
+# Use these overrides when the production database is still reachable only from
+# the DB/default VPC. Without them, validation tasks run in the isolated
+# validation VPC and cannot reach Postgres.
+ecs_task_subnet_ids             = ["subnet-053d0eaa45152d300", "subnet-000adac289b27c3ac"]
+ecs_task_security_group_ids     = ["sg-0503154fb5532cb04"]
+ecs_task_assign_public_ip       = true
+
 database_url_secret_arn         = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/database-url"
 better_auth_secret_arn          = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/better-auth-secret"
 google_client_id_secret_arn     = ""

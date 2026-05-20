@@ -1,5 +1,6 @@
 const discoveryDocument = {
-  name: "CertScore Pulse",
+  name: "CertScore Pulse beta",
+  version: "0.5.1",
   description:
     "CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.",
   capabilities: {
@@ -25,13 +26,13 @@ const discoveryDocument = {
   formats: ["json", "markdown"],
   detailLevels: ["tiny", "standard", "full"],
   detailAliases: { quick: "tiny" },
-  example: "https://certscore.ai/api/v1/pulse?url=https://example.com",
+  example: "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io",
   statusExample: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
   recommendedCalls: {
-    userFacingSummary: "GET /api/v1/pulse?url=https://example.com&format=markdown&detail=standard",
-    gptActionSummary: "GET /api/v1/pulse/gpt?url=https://example.com&format=markdown&detail=standard&wait=60",
-    quickMachineTriage: "GET /api/v1/pulse?url=https://example.com&detail=tiny",
-    evidenceReview: "GET /api/v1/pulse?url=https://example.com&detail=full",
+    userFacingSummary: "GET /api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard",
+    gptActionSummary: "GET /api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60",
+    quickMachineTriage: "GET /api/v1/pulse?url=https://kbdlab.io&detail=tiny",
+    evidenceReview: "GET /api/v1/pulse?url=https://kbdlab.io&detail=full",
     connectivityCheck: "GET /api/v1/pulse-self-test",
     healthCheck: "GET /api/v1/pulse-health"
   },
@@ -52,7 +53,7 @@ const discoveryDocument = {
   retryBehavior:
     "HTTP 202 pending responses include Retry-After when a polling delay is recommended. HTTP 429 throttled responses include Retry-After when retry timing is known.",
   freshness:
-    "Use freshness=latest for cached/latest eligible completed results and freshness=refresh to request a new scan subject to throttling. There is no refresh=true parameter.",
+    "Use freshness=latest for eligible completed results within the 24-hour reuse window. Use forceNewScan=true to bypass the 24-hour reuse check. New scan generation remains subject to the 5-minute normalized-domain throttle.",
   agentFetchLimitations:
     "Some agent environments may fail before receiving an HTTP response because of DNS, sandbox, TLS, proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or x-certscore-* diagnostic headers, do not conclude CertScore Pulse is unavailable. First try /api/v1/pulse-self-test, /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and /api/v1/openapi.chatgpt.json. If those also fail without HTTP status or CertScore diagnostic headers, report it as a client/network fetch limitation rather than a CertScore API result.",
   feedbackEmail: "support@certscore.ai",

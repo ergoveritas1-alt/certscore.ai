@@ -11,6 +11,7 @@ import { repairFindingFamilyPacketEvents } from "../scans/family-packet-event-re
 import {
   loadAdminScanOverviewCounts,
   loadAdminScanListPageData,
+  loadAdminScanRequestRows,
   loadBlockedRunTelemetryRows,
   type AdminBlockedRunTelemetryRow,
   type AdminPolicyEnrichmentRow as PolicyEnrichmentRow,
@@ -18,6 +19,7 @@ import {
   type AdminScanDomainRow as DomainRow,
   type AdminScanOrganizationRow as OrganizationRow,
   type AdminScanQueryRow as ScanRow,
+  type AdminScanRequestRow as ScanRequestRow,
   type AdminScanSnapshotRow as SnapshotRow,
   type AdminValidationFindingSummaryRow as ValidationFindingSummaryRow,
   type AdminValidationRunSummaryRow as ValidationRunSummaryRow,
@@ -27,6 +29,8 @@ import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminScanListItem = {
   accessPostureClass: AccessPostureClass | null;
+  activityAt: string;
+  activityId: string;
   blockedFlag: boolean | null;
   captchaFlag: boolean | null;
   certscoreOverall: number | null;
@@ -39,12 +43,20 @@ export type AdminScanListItem = {
   homepageFetchHttpStatus: number | null;
   interruptionLabel: string | null;
   interruptionReason: string | null;
+  linkedScanId: string | null;
   organizationName: string | null;
   pagesScanned: number;
   recoverableFindingClasses: RecoverableFindingClass[];
   robotsFetchHttpStatus: number | null;
   scanId: string;
   requesterIp: string | null;
+  requestPublicId: string | null;
+  requestChannel: string | null;
+  requestResolutionMode: string | null;
+  requestedUrl: string | null;
+  reusedCompletedAt: string | null;
+  reuseWindowHours: number | null;
+  rowKind: "scan" | "request";
   scanViewHref: string;
   scanType: string;
   source: string | null;
@@ -57,6 +69,8 @@ export type AdminScanOverviewMetrics = {
   blockedOrCaptchaCount: number;
   http403Count: number;
   http429Count: number;
+  totalPhysicalScans: number;
+  totalScanRequests: number;
   totalScans: number;
 };
 
@@ -72,6 +86,11 @@ export type BlockedRunTelemetry = {
 
 export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanListItem[]> {
   await requirePlatformAdminContext();
+  const activityWindowLimit = Math.max(limit + offset, limit);
+  const [scanPageData, scanRequestRows] = await Promise.all([
+    loadAdminScanListPageData(activityWindowLimit, 0),
+    loadAdminScanRequestRows(activityWindowLimit)
+  ]);
   const {
     diagnosticEvents,
     domains,
@@ -82,7 +101,7 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
     validationFindingRows,
     validationRuns,
     verdictByFindingId
-  } = await loadAdminScanListPageData(limit, offset);
+  } = scanPageData;
 
   const domainMap = new Map(domains.flatMap((domain) => (domain.id ? [[domain.id, domain] as const] : [])));
   const organizationMap = new Map(organizations.flatMap((organization) => (organization.id ? [[organization.id, organization] as const] : [])));
@@ -197,7 +216,7 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
     );
   }
 
-  return scanRows.map((scan) => {
+  const scanItems: AdminScanListItem[] = scanRows.map((scan) => {
     const snapshot = snapshotMap.get(scan.id) ?? null;
     const normalizedAccessPosture = normalizeAccessPostureSummary({
       accessPostureClass: snapshot?.access_posture_class ?? null,
@@ -225,7 +244,17 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
     });
 
     return {
+      activityAt: displayCreatedAt,
+      activityId: `scan:${scan.id}`,
       scanId: scan.id,
+      rowKind: "scan",
+      linkedScanId: scan.id,
+      requestPublicId: null,
+      requestChannel: null,
+      requestResolutionMode: null,
+      requestedUrl: null,
+      reusedCompletedAt: null,
+      reuseWindowHours: null,
       domainId: scan.domain_id,
       domainHostname: scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null,
       organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
@@ -256,11 +285,72 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       interruptionReason: accessPosture.reason
     };
   });
+
+  const requestItems: AdminScanListItem[] = scanRequestRows.map((request) => mapScanRequestRow(request));
+
+  return [...scanItems, ...requestItems]
+    .sort((left, right) => new Date(right.activityAt).getTime() - new Date(left.activityAt).getTime())
+    .slice(offset, offset + limit);
 }
 
 export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMetrics> {
   await requirePlatformAdminContext();
   return await loadAdminScanOverviewCounts();
+}
+
+function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
+  const linkedScanId = request.fulfilled_by_scan_id ?? request.scan_id ?? null;
+  const organizationName =
+    request.organization_name ?? (request.organization_id || request.scan_organization_id ? "Unknown workspace" : "Public / anonymous");
+  const requestContext = getNestedMetadataObject(request.request_context);
+  const requestedBy = getNestedMetadataObject(request.requested_by);
+  const provenance = requestContext ? getNestedMetadataObject(requestContext.provenance) : null;
+  const requesterIp =
+    (provenance ? getStringMetadataValue(provenance.originIp) : null) ??
+    (requestContext ? getStringMetadataValue(requestContext.originIp) : null) ??
+    (requestedBy ? getStringMetadataValue(requestedBy.ipHash) : null);
+
+  return {
+    accessPostureClass: null,
+    activityAt: request.requested_at,
+    activityId: `request:${request.public_id}`,
+    blockedFlag: null,
+    captchaFlag: null,
+    certscoreOverall: null,
+    completedAt: request.reused_completed_at,
+    createdAt: request.requested_at,
+    domainHostname: request.scan_domain_hostname ?? request.normalized_domain,
+    domainId: null,
+    findingCount: null,
+    highestSuccessfulTier: null,
+    homepageFetchHttpStatus: null,
+    interruptionLabel: null,
+    interruptionReason: request.error_message,
+    linkedScanId,
+    organizationName,
+    pagesScanned: 0,
+    recoverableFindingClasses: [],
+    requestChannel: request.request_channel,
+    requestPublicId: request.public_id,
+    requestResolutionMode: request.resolution_mode,
+    requestedUrl: request.requested_url,
+    requesterIp,
+    reusedCompletedAt: request.reused_completed_at,
+    reuseWindowHours: request.reuse_window_hours,
+    robotsFetchHttpStatus: null,
+    rowKind: "request",
+    scanId: linkedScanId ?? request.public_id,
+    scanType: request.request_type,
+    scanViewHref: linkedScanId
+      ? request.organization_id || request.scan_organization_id
+        ? `/app/scans/${linkedScanId}`
+        : `/scan/${linkedScanId}`
+      : "",
+    source: request.request_channel,
+    status: request.status,
+    stopTier: null,
+    totalSignals: null
+  };
 }
 
 function getStringMetadataValue(value: unknown) {

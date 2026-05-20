@@ -30,9 +30,9 @@ const retryAfterHeader = {
 const openApiDocument = {
   openapi: "3.1.0",
   info: {
-    title: "CertScore Pulse API",
-    version: "1.0.0",
-    description: `${purposeStatement} ${standardDisclaimer}`
+    title: "CertScore Pulse API beta",
+    version: "0.5.1",
+    description: `Beta API. ${purposeStatement} ${standardDisclaimer}`
   },
   servers: [{ url: "https://certscore.ai" }],
   paths: {
@@ -48,6 +48,12 @@ const openApiDocument = {
           { name: "format", in: "query", schema: { type: "string", enum: ["json", "markdown"], default: "json" } },
           { name: "detail", in: "query", schema: { type: "string", enum: ["tiny", "quick", "standard", "full"], default: "standard" } },
           { name: "freshness", in: "query", schema: { type: "string", enum: ["latest", "refresh"], default: "latest" } },
+          {
+            name: "forceNewScan",
+            in: "query",
+            description: "Set true to bypass the 24-hour recent-scan reuse check. This does not bypass validation or the 5-minute scan-generation throttle.",
+            schema: { type: "boolean", default: false }
+          },
           { name: "wait", in: "query", schema: { type: "integer", minimum: 0, maximum: 80 } }
         ],
         responses: {
@@ -93,7 +99,7 @@ const openApiDocument = {
           "429": {
             description: "Pulse job is rate limited",
             headers: { ...diagnosticHeaders, ...retryAfterHeader },
-            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseStatus" } } }
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
           },
           "404": {
             description: "Pulse job not found",

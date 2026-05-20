@@ -6,9 +6,9 @@ import { PULSE_PURPOSE_STATEMENT, PULSE_STANDARD_DISCLAIMER } from "../../../lib
 import { createPageMetadata } from "../../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
-  title: "CertScore Pulse Agent Fallback",
+  title: "CertScore Pulse API Beta Agent Fallback",
   description:
-    "Plain, browser-readable CertScore Pulse fallback instructions for agents whose fetch tools cannot retrieve JSON endpoints.",
+    "Plain, browser-readable CertScore Pulse API beta fallback instructions for agents whose fetch tools cannot retrieve JSON endpoints.",
   path: "/api-pulse/agent",
   robots: {
     follow: true,
@@ -20,7 +20,7 @@ const endpoints = [
   ["Self-test canary", "https://certscore.ai/api/v1/pulse-self-test"],
   ["Health canary", "https://certscore.ai/api/v1/pulse-health"],
   ["OpenAPI JSON", "https://certscore.ai/api/v1/openapi.json"],
-  ["ChatGPT Action schema", "https://certscore.ai/api/v1/openapi.chatgpt.json"],
+  ["ChatGPT Action beta schema", "https://certscore.ai/api/v1/openapi.chatgpt.json"],
   ["Discovery JSON", "https://certscore.ai/.well-known/certscore-pulse"],
   ["Tiny Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=tiny"],
   ["Full Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=full"],
@@ -36,7 +36,7 @@ const expectedHeaders = [
 ];
 
 const recommendedCalls = [
-  ["GPT Action summary", "GET /api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60"],
+  ["GPT Action beta summary", "GET /api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60"],
   ["User-facing summary", "GET /api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard"],
   ["Quick machine triage", "GET /api/v1/pulse?url=https://kbdlab.io&detail=tiny"],
   ["Evidence/deeper review", "GET /api/v1/pulse?url=https://kbdlab.io&detail=full"],
@@ -49,11 +49,12 @@ export default function PulseAgentFallbackPage() {
     <main className="min-h-screen bg-white">
       <SiteHeader />
       <section className="mx-auto max-w-4xl px-6 py-14">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">CertScore Pulse</p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950">Agent-readable fallback</h1>
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">CertScore Pulse API beta</p>
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950">Agent-readable beta fallback</h1>
         <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">
           This page is a plain browser-readable fallback for agents or review tools whose JSON fetch layer cannot retrieve API
-          endpoints. The canonical Pulse API remains <code className="rounded bg-slate-100 px-1">/api/v1/pulse</code>.
+          endpoints. This is beta software. The current Pulse API beta version is 0.5.1. The canonical Pulse API remains{" "}
+          <code className="rounded bg-slate-100 px-1">/api/v1/pulse</code>.
         </p>
         <p className="mt-3 max-w-3xl text-base leading-7 text-slate-700">{PULSE_PURPOSE_STATEMENT}</p>
 
@@ -70,6 +71,11 @@ export default function PulseAgentFallbackPage() {
                 https://certscore.ai/api/v1/pulse?url=&lt;public URL&gt;&amp;format=markdown&amp;detail=standard
               </a>
               .
+            </li>
+            <li>
+              Pulse reuses an eligible completed scan from the prior 24 hours before queueing a new scan. Time comparisons use UTC
+              instants. Use <code className="rounded bg-white px-1">forceNewScan=true</code> only when you need to bypass that reuse
+              check; it does not bypass validation or throttles.
             </li>
             <li>
               For a quick check, use <code className="rounded bg-white px-1">format=markdown</code> and{" "}
@@ -98,7 +104,7 @@ export default function PulseAgentFallbackPage() {
             Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Full is best for
             evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.
           </p>
-          <h3 className="mt-5 font-semibold text-slate-950">OpenAPI / GPT Action agents</h3>
+          <h3 className="mt-5 font-semibold text-slate-950">OpenAPI / GPT Action beta agents</h3>
           <ol className="mt-3 list-decimal space-y-2 pl-5">
             <li>
               If you support OpenAPI actions or tools, import{" "}
@@ -119,7 +125,7 @@ export default function PulseAgentFallbackPage() {
               Use <code className="rounded bg-white px-1">detail=tiny</code> for quick checks.
             </li>
             <li>
-              Public GPT Action access uses latest-mode summaries and does not expose full detail or refresh scans. Link users to the
+              Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans. Link users to the
               CertScore report when they need more evidence.
             </li>
           </ol>
@@ -185,7 +191,7 @@ export default function PulseAgentFallbackPage() {
             <li>Open the health canary first and confirm the CertScore diagnostic headers.</li>
             <li>If the health canary is unavailable only inside one tool, treat that as a tool fetch/DNS failure.</li>
             <li>Use the Pulse markdown endpoint when a tool prefers readable text over JSON.</li>
-            <li>Use the ChatGPT Action schema when configuring a Custom GPT action.</li>
+            <li>Use the ChatGPT Action beta schema when configuring a Custom GPT beta action.</li>
             <li>Use the full JSON endpoint when structured finding, evidence, and review context are needed.</li>
           </ol>
         </section>
@@ -202,7 +208,7 @@ export default function PulseAgentFallbackPage() {
             Plain text guide
           </Link>
           <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api/v1/openapi.chatgpt.json">
-            ChatGPT Action schema
+            ChatGPT Action beta schema
           </Link>
           <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/llms.txt">
             llms.txt

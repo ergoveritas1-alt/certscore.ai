@@ -30,9 +30,9 @@ const retryAfterHeader = {
 const chatGptOpenApiDocument = {
   openapi: "3.1.0",
   info: {
-    title: "CertScore Pulse GPT Action API",
-    version: "1.0.0",
-    description: `A compact GPT Action schema for retrieving CertScore Pulse summaries. ${purposeStatement} ${standardDisclaimer}`
+    title: "CertScore Pulse GPT Action API beta",
+    version: "0.5.1",
+    description: `A compact beta GPT Action schema for retrieving CertScore Pulse summaries. ${purposeStatement} ${standardDisclaimer}`
   },
   servers: [{ url: "https://certscore.ai" }],
   paths: {

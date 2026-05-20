@@ -23,6 +23,7 @@ export type PulseRequestContext = {
   format: PulseFormat;
   detail: PulseDetail;
   freshness: PulseFreshnessMode;
+  forceNewScan?: boolean;
   ipHash: string | null;
   mode: "url" | "scanId" | "jobId";
   referer: string | null;

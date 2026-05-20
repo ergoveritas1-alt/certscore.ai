@@ -34,6 +34,24 @@ variable "nat_gateway_count" {
   default     = 1
 }
 
+variable "ecs_task_subnet_ids" {
+  description = "Optional subnet ids for validation ECS tasks. Use the DB VPC subnets until the validation VPC has private database routing."
+  type        = list(string)
+  default     = []
+}
+
+variable "ecs_task_security_group_ids" {
+  description = "Optional security group ids for validation ECS tasks. Use a group allowed by the production database security group when tasks need direct Postgres access."
+  type        = list(string)
+  default     = []
+}
+
+variable "ecs_task_assign_public_ip" {
+  description = "Whether validation ECS tasks receive public IPs. Set true when using public/default DB-VPC subnets."
+  type        = bool
+  default     = false
+}
+
 variable "validation_domain_name" {
   description = "Public hostname for the validation ops web surface."
   type        = string

@@ -80,6 +80,8 @@ These canonical finding pages describe CertScore review items, observed evidence
 
 Use CertScore Pulse to retrieve a quick, evidence-backed CertScore summary for a URL.
 
+This is beta software. The current Pulse API beta version is 0.5.1.
+
 CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.
 
 Basic HTTP agent quick start:
@@ -108,7 +110,7 @@ Standard markdown structure:
 - Stable headings: Summary, Highest-priority findings, Privacy and consent signals, Cookie and third-party request activity, Accessibility signals, Disclosure and trust signals, Coverage and limitations, Links, Disclaimer.
 - Does not embed the full JSON payload.
 
-OpenAPI / GPT Action quick start:
+OpenAPI / GPT Action beta quick start:
 1. If you support OpenAPI actions/tools, import:
    https://certscore.ai/api/v1/openapi.chatgpt.json
 2. Call getPulseForUrl with:
@@ -117,10 +119,10 @@ OpenAPI / GPT Action quick start:
    detail: standard
    wait: 60
 3. Use detail=tiny for quick checks.
-4. Public GPT Action access uses latest-mode summaries and does not expose full detail or refresh scans.
+4. Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans.
 5. If API fetch fails before headers/body/status are visible, do not infer CertScore returned an error. Read /api-pulse/agent and /api-pulse-agent-guide.txt.
 
-GPT Action endpoint:
+GPT Action beta endpoint:
 https://certscore.ai/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60
 
 JSON:
@@ -150,12 +152,12 @@ Wait behavior:
 The wait query parameter accepts 0 to 80 seconds. It only controls how long the current HTTP request may be held open. Queue backlog, worker availability, page load time, and scan finalization can make total completion take longer than 80 seconds. If the API returns HTTP 202, poll the status URL until completed.
 
 Freshness and retry behavior:
-Pulse uses freshness=latest and freshness=refresh. There is no refresh=true parameter. HTTP 202 pending responses include Retry-After when a polling delay is recommended. HTTP 429 throttled responses include Retry-After when retry timing is known. X-RateLimit-* headers are not emitted unless a route has accurate enforced bucket state.
+Pulse uses freshness=latest and freshness=refresh. There is no refresh=true parameter. Pulse reuses an eligible completed scan from the prior 24 hours before queueing a new scan. Time comparisons use UTC instants. Use forceNewScan=true only when you need to bypass the 24-hour reuse check. It does not bypass validation or the 5-minute normalized-domain scan-generation throttle. HTTP 202 pending responses include Retry-After when a polling delay is recommended. HTTP 429 throttled responses include Retry-After when retry timing is known. X-RateLimit-* headers are not emitted unless a route has accurate enforced bucket state.
 
 OpenAPI:
 https://certscore.ai/api/v1/openapi.json
 
-ChatGPT Action schema:
+ChatGPT Action beta schema:
 https://certscore.ai/api/v1/openapi.chatgpt.json
 
 API instructions:
@@ -177,7 +179,7 @@ Guidance:
 Treat CertScore outputs as automated public-web observations for review, not legal advice, certification, or compliance determinations. Results may be incomplete or contain errors. Do not treat absence of findings as proof of compliance.
 Agent fetch limitations:
 Some agent environments may fail before receiving an HTTP response because of DNS, sandbox, TLS, proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or x-certscore-* diagnostic headers, do not conclude CertScore Pulse is unavailable. First try /api/v1/pulse-self-test, /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and /api/v1/openapi.chatgpt.json. If those also fail without HTTP status or CertScore diagnostic headers, report it as a client/network fetch limitation rather than a CertScore API result.
-For a Custom GPT Action, import https://certscore.ai/api/v1/openapi.chatgpt.json. Prefer operation getPulseForUrl with format=markdown, detail=standard, and wait=60 for user-facing answers. Use detail=tiny for compact checks. Link users to the CertScore report when they need more evidence.
+For a Custom GPT Action beta, import https://certscore.ai/api/v1/openapi.chatgpt.json. Prefer operation getPulseForUrl with format=markdown, detail=standard, and wait=60 for user-facing answers. Use detail=tiny for compact checks. Link users to the CertScore report when they need more evidence.
 
 ## Important disclaimer
 

@@ -25,8 +25,9 @@ const initialState: CreateDomainActionState = {
 };
 
 export async function createOrQueueDomainScan(input: {
-  domain: string;
   allowExistingDomainRescan?: boolean;
+  bypassRecentScanReuse?: boolean;
+  domain: string;
   provenance?: {
     githubActor?: string | null;
     githubRunId?: string | null;
@@ -38,15 +39,6 @@ export async function createOrQueueDomainScan(input: {
     userAgent?: string | null;
   };
 }) {
-  const queueAvailability = getQueueAvailability();
-
-  if (!queueAvailability.enabled) {
-    return {
-      error: queueAvailability.reason,
-      scanId: null
-    };
-  }
-
   const dashboardContext = await getDashboardContext();
   const parsedInput = createDomainRequestSchema.safeParse({
     domain: input.domain
@@ -99,11 +91,13 @@ export async function createOrQueueDomainScan(input: {
       enforceCooldown: true,
       enforceMonthlyUsageLimit: false,
       provenance: input.provenance,
+      bypassRecentScanReuse: input.bypassRecentScanReuse,
       source: "marketing-full-scan"
     });
 
     return {
       error: queueResult.error,
+      reusedExistingScan: queueResult.reusedExistingScan,
       scanId: queueResult.scanId
     };
   }
@@ -111,6 +105,15 @@ export async function createOrQueueDomainScan(input: {
   if (existingDomain) {
     return {
       error: "This domain is already connected to your workspace.",
+      scanId: null
+    };
+  }
+
+  const queueAvailability = getQueueAvailability();
+
+  if (!queueAvailability.enabled) {
+    return {
+      error: queueAvailability.reason,
       scanId: null
     };
   }
@@ -163,12 +166,14 @@ export async function createOrQueueDomainScan(input: {
     planLimitsOverride: planLimits,
     submittedByUserId: dashboardContext.user.id,
     enforceMonthlyUsageLimit: true,
+    bypassRecentScanReuse: input.bypassRecentScanReuse,
     provenance: input.provenance,
     source: "new-domain-overview"
   });
 
   return {
     error: queueResult.error,
+    reusedExistingScan: queueResult.reusedExistingScan,
     scanId: queueResult.scanId
   };
 }

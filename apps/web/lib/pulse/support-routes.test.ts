@@ -29,7 +29,7 @@ test("OpenAPI route returns valid Pulse API JSON", async () => {
 
   const pulseParameters = body.paths["/api/v1/pulse"].get.parameters.map((parameter: { name: string }) => parameter.name);
   assert.deepEqual(
-    ["url", "scanId", "jobId", "format", "detail", "freshness", "wait"].every((name) => pulseParameters.includes(name)),
+    ["url", "scanId", "jobId", "format", "detail", "freshness", "forceNewScan", "wait"].every((name) => pulseParameters.includes(name)),
     true
   );
   assert.ok(body.paths["/api/v1/pulse"].get.responses["200"]);
@@ -65,7 +65,8 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
 
   const body = await response.json();
   assert.equal(body.openapi, "3.1.0");
-  assert.equal(body.info.title, "CertScore Pulse GPT Action API");
+  assert.equal(body.info.title, "CertScore Pulse GPT Action API beta");
+  assert.equal(body.info.version, "0.5.1");
   assert.equal(body.paths["/api/v1/pulse/gpt"].get.operationId, "getPulseForUrl");
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.operationId, "getPulseJobStatus");
   assert.equal(body.paths["/api/v1/pulse/gpt/scan/{scanId}"].get.operationId, "getPulseByScanId");
@@ -103,6 +104,26 @@ test("GPT Pulse route source preserves public-mode gates", () => {
   assert.match(gptRoute, /channel", "gpt_action"/);
 });
 
+test("Pulse and full-scan routes preserve 24-hour reuse and forceNewScan bypass", () => {
+  const pulseRoute = readFileSync("apps/web/app/api/v1/pulse/route.ts", "utf8");
+  const fullScanRoute = readFileSync("apps/web/app/api/full-scan/route.ts", "utf8");
+  const anonymousScanSource = readFileSync("apps/web/server/scans/create-anonymous-full-scan.ts", "utf8");
+  const authenticatedScanSource = readFileSync("apps/web/server/scans/create-full-scan.ts", "utf8");
+  const domainSource = readFileSync("apps/web/server/domains/create-domain.ts", "utf8");
+  const reuseSource = readFileSync("apps/web/server/scans/recent-scan-reuse.ts", "utf8");
+
+  assert.match(reuseSource, /RECENT_SCAN_REUSE_WINDOW_HOURS = 24/);
+  assert.match(reuseSource, /getTime\(\)/);
+  assert.match(pulseRoute, /forceNewScan = gptAction \? false/);
+  assert.match(pulseRoute, /maxAgeHours: RECENT_SCAN_REUSE_WINDOW_HOURS/);
+  assert.match(pulseRoute, /resolutionMode: "reused_existing_scan"/);
+  assert.match(fullScanRoute, /parseForceNewScan/);
+  assert.match(fullScanRoute, /bypassRecentScanReuse: forceNewScan/);
+  assert.match(anonymousScanSource, /findRecentCompletedScanForDomain/);
+  assert.match(authenticatedScanSource, /findRecentCompletedScanInHistory/);
+  assert.match(domainSource, /reusedExistingScan: queueResult\.reusedExistingScan/);
+});
+
 test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app error page", async () => {
   const response = openApiGET(new Request("https://certscore.ai/api/v1/openapi.json"));
 
@@ -115,8 +136,11 @@ test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app 
 
   const body = JSON.parse(rawBody);
   assert.equal(body.openapi, "3.1.0");
-  assert.equal(body.info.title, "CertScore Pulse API");
+  assert.equal(body.info.title, "CertScore Pulse API beta");
+  assert.equal(body.info.version, "0.5.1");
   assert.ok(body.paths["/api/v1/pulse"]);
+  assert.match(rawBody, /forceNewScan/);
+  assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.responses["429"].content["application/json"].schema.$ref, "#/components/schemas/PulseError");
   assert.match(rawBody, /automated runtime analysis of public websites/);
 });
 
@@ -130,7 +154,8 @@ test("Pulse discovery route returns compact machine-readable metadata", async ()
   assert.match(response.headers.get("x-certscore-request-id") ?? "", /.+/);
 
   const body = await response.json();
-  assert.equal(body.name, "CertScore Pulse");
+  assert.equal(body.name, "CertScore Pulse beta");
+  assert.equal(body.version, "0.5.1");
   assert.equal(body.api, "https://certscore.ai/api/v1/pulse");
   assert.equal(body.openapi, "https://certscore.ai/api/v1/openapi.json");
   assert.equal(body.chatgptOpenapi, "https://certscore.ai/api/v1/openapi.chatgpt.json");
@@ -148,6 +173,8 @@ test("Pulse discovery route returns compact machine-readable metadata", async ()
   assert.ok(body.capabilities.observes.includes("pre_consent_tracking"));
   assert.match(body.agentFetchLimitations, /pulse-self-test/);
   assert.equal(body.recommendedCalls.connectivityCheck, "GET /api/v1/pulse-self-test");
+  assert.match(body.freshness, /24-hour reuse window/);
+  assert.match(body.freshness, /forceNewScan=true/);
   assert.equal(body.disclaimer, "Automated public-web observations for review. Not legal advice, certification, or a compliance determination.");
 });
 
@@ -164,6 +191,7 @@ test("Pulse health canary route is dependency-free JSON", async () => {
   assert.equal(body.ok, true);
   assert.equal(body.service, "certscore-pulse");
   assert.equal(body.version, "v1");
+  assert.equal(body.betaVersion, "0.5.1");
   assert.match(body.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
 
   const source = readFileSync("apps/web/app/api/v1/pulse-health/route.ts", "utf8");
@@ -186,6 +214,7 @@ test("Pulse self-test route is dependency-free JSON with capabilities", async ()
   assert.equal(body.type, "certscore_pulse_self_test");
   assert.equal(body.service, "certscore_pulse");
   assert.equal(body.version, "v1");
+  assert.equal(body.betaVersion, "0.5.1");
   assert.equal(body.routes.health, "/api/v1/pulse-health");
   assert.equal(body.routes.openapi, "/api/v1/openapi.json");
   assert.equal(body.routes.chatgptOpenapi, "/api/v1/openapi.chatgpt.json");
@@ -202,7 +231,11 @@ test("Pulse self-test route is dependency-free JSON with capabilities", async ()
 test("Pulse docs page source includes integration-critical guidance", () => {
   const source = readFileSync("apps/web/app/api-pulse/page.tsx", "utf8");
 
-  assert.match(source, /CertScore Pulse API/);
+  assert.match(source, /CertScore Pulse API beta/);
+  assert.match(source, /0\.5\.1/);
+  assert.match(source, /forceNewScan/);
+  assert.match(source, /24-hour reuse/);
+  assert.match(source, /5-minute normalized-domain/);
   assert.match(source, /OpenAPI JSON/);
   assert.match(source, /PULSE_FEEDBACK_EMAIL/);
   assert.match(source, /PULSE_STANDARD_DISCLAIMER/);
@@ -210,13 +243,13 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /Copy\/paste examples/);
   assert.match(source, /For AI agents/);
   assert.match(source, /Basic HTTP agent quick start/);
-  assert.match(source, /OpenAPI \/ GPT Action quick start/);
+  assert.match(source, /OpenAPI \/ GPT Action beta quick start/);
   assert.match(source, /Call getPulseForUrl with/);
   assert.match(source, /format: markdown/);
   assert.match(source, /GET https:\/\/certscore\.ai\/api\/v1\/pulse\?url=<public URL>&format=markdown&detail=standard/);
   assert.match(source, /Agent fallback page/);
   assert.match(source, /Agent text guide/);
-  assert.match(source, /ChatGPT Action schema/);
+  assert.match(source, /ChatGPT Action beta schema/);
   assert.match(source, /Open quick-start endpoint/);
   assert.match(source, /Open test URL/);
   assert.match(source, /href: "https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/kbdlab\.io&detail=tiny"/);
@@ -233,7 +266,10 @@ test("Pulse docs page source includes integration-critical guidance", () => {
 test("Pulse agent fallback page documents the fetch failure diagnostic contract", () => {
   const source = readFileSync("apps/web/app/api-pulse/agent/page.tsx", "utf8");
 
-  assert.match(source, /Agent-readable fallback/);
+  assert.match(source, /Agent-readable beta fallback/);
+  assert.match(source, /0\.5\.1/);
+  assert.match(source, /forceNewScan=true/);
+  assert.match(source, /24 hours/);
   assert.match(source, /Agent quick start/);
   assert.match(source, /Basic HTTP agents/);
   assert.match(source, /getPulseForUrl/);
@@ -257,9 +293,13 @@ test("Pulse agent fallback page documents the fetch failure diagnostic contract"
 test("Pulse plain text agent guide is retrievable and covers fetch failures", () => {
   const source = readFileSync("apps/web/public/api-pulse-agent-guide.txt", "utf8");
 
-  assert.match(source, /CertScore Pulse agent guide/);
+  assert.match(source, /CertScore Pulse beta agent guide/);
+  assert.match(source, /0\.5\.1/);
+  assert.match(source, /forceNewScan=true/);
+  assert.match(source, /24-hour reuse/);
+  assert.match(source, /5-minute normalized-domain/);
   assert.match(source, /Basic HTTP agent quick start/);
-  assert.match(source, /OpenAPI \/ GPT Action quick start/);
+  assert.match(source, /OpenAPI \/ GPT Action beta quick start/);
   assert.match(source, /format: markdown/);
   assert.match(source, /detail: standard/);
   assert.match(source, /GET https:\/\/certscore\.ai\/api\/v1\/pulse\?url=<public URL>&format=markdown&detail=standard/);

@@ -41,10 +41,27 @@ type ScanDetailPageProps = {
   params: Promise<{
     scanId: string;
   }>;
+  searchParams?: Promise<{
+    recentScanReused?: string;
+  }>;
 };
 
-export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
+function RecentScanReuseNotice() {
+  return (
+    <section className="rounded-[1.2rem] border border-sky-200 bg-sky-50 px-5 py-4 text-sm leading-6 text-slate-700">
+      <p className="font-semibold text-slate-950">Recent scan reused</p>
+      <p className="mt-1">
+        CertScore found a completed scan for this website from the past 24 hours, so this request opened the existing report instead of
+        starting a duplicate scan.
+      </p>
+    </section>
+  );
+}
+
+export default async function ScanDetailPage({ params, searchParams }: ScanDetailPageProps) {
   const [{ scanId }, { organization, user }] = await Promise.all([params, getDashboardContext()]);
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const recentScanReused = resolvedSearchParams.recentScanReused === "1";
   const scanRecord = await getScanById({
     organizationId: organization.id,
     scanId,
@@ -104,6 +121,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
             rescanDisabled={Boolean(rescanAvailability && !rescanAvailability.allowed)}
           />
         }
+        previewNotice={recentScanReused ? <RecentScanReuseNotice /> : null}
         scanRecord={scanRecord}
       />
     </>

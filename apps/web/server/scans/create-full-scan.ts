@@ -26,6 +26,8 @@ import {
   updateDomainLatestScan
 } from "./repository";
 import { buildQueuedFullScanConfig } from "./full-scan-config";
+import { findRecentCompletedScanInHistory, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
+import { logScanRequestFailure, recordScanRequest, type ScanRequestStatus } from "./scan-request-log";
 
 export type CreateFullScanActionState = {
   error: string | null;
@@ -47,6 +49,7 @@ type QueueFullScanInput = {
     };
   };
   domainId: string;
+  bypassRecentScanReuse?: boolean;
   organizationId: string;
   planCode: PlanCode;
   planLimitsOverride?: Awaited<ReturnType<typeof getPlanLimits>>;
@@ -81,19 +84,9 @@ function getCurrentMonthWindow(now = new Date()) {
 
 export async function queueFullScanForDomain(input: QueueFullScanInput): Promise<{
   error: string | null;
+  reusedExistingScan?: boolean;
   scanId: string | null;
 }> {
-  const fullScanQueueAvailability = await getFullScanQueueAvailability({
-    allowDegradedScanner: process.env.FULL_SCAN_QUEUE_ALLOW_DEGRADED_HEARTBEAT === "true"
-  });
-
-  if (!fullScanQueueAvailability.enabled) {
-    return {
-      error: fullScanQueueAvailability.reason,
-      scanId: null
-    };
-  }
-
   const planLimits = input.planLimitsOverride ?? (await getPlanLimits(input.planCode));
   const planDefinition = getPlanDefinition(planLimits.planCode);
   const domainRecord = input.domainContext
@@ -115,6 +108,82 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     };
   }
 
+  const logRequest = (details: {
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    fulfilledByScanId?: string | null;
+    resolutionMode?: string | null;
+    reusedCompletedAt?: string | null;
+    scanId?: string | null;
+    status: ScanRequestStatus;
+  }) =>
+    recordScanRequest({
+      errorCode: details.errorCode ?? null,
+      errorMessage: details.errorMessage ?? null,
+      fulfilledByScanId: details.fulfilledByScanId ?? details.scanId ?? null,
+      normalizedDomain: domainRecord.domain.hostname,
+      normalizedUrl: domainRecord.domain.normalizedUrl,
+      organizationId: input.organizationId,
+      requestChannel: input.provenance?.source ?? input.source ?? "manual-dashboard",
+      requestedBy: {
+        anonymous: !input.submittedByUserId,
+        userId: input.submittedByUserId
+      },
+      requestedUrl: domainRecord.domain.normalizedUrl,
+      requestContext: {
+        bypassRecentScanReuse: Boolean(input.bypassRecentScanReuse),
+        enforceCooldown: Boolean(input.enforceCooldown),
+        enforceMonthlyUsageLimit: Boolean(input.enforceMonthlyUsageLimit),
+        planCode: input.planCode,
+        provenance: input.provenance ?? null,
+        scanType: input.scanType ?? "full",
+        source: input.source ?? null
+      },
+      resolutionMode: details.resolutionMode ?? null,
+      reusedCompletedAt: details.reusedCompletedAt ?? null,
+      reuseWindowHours:
+        details.resolutionMode === "reused_existing_scan" ? RECENT_SCAN_REUSE_WINDOW_HOURS : null,
+      scanId: details.scanId ?? null,
+      status: details.status
+    }).catch((error) => logScanRequestFailure("workspace_full_scan_request", error));
+
+  if (!input.bypassRecentScanReuse) {
+    const recentScan = findRecentCompletedScanInHistory(domainRecord.scans);
+    if (recentScan) {
+      await logRequest({
+        fulfilledByScanId: recentScan.id,
+        resolutionMode: "reused_existing_scan",
+        reusedCompletedAt: recentScan.completedAt,
+        scanId: recentScan.id,
+        status: "reused_recent_scan"
+      });
+
+      return {
+        error: null,
+        reusedExistingScan: true,
+        scanId: recentScan.id
+      };
+    }
+  }
+
+  const fullScanQueueAvailability = await getFullScanQueueAvailability({
+    allowDegradedScanner: process.env.FULL_SCAN_QUEUE_ALLOW_DEGRADED_HEARTBEAT === "true"
+  });
+
+  if (!fullScanQueueAvailability.enabled) {
+    await logRequest({
+      errorCode: "queue_unavailable",
+      errorMessage: fullScanQueueAvailability.reason ?? null,
+      resolutionMode: "queue_unavailable",
+      status: "rejected"
+    });
+
+    return {
+      error: fullScanQueueAvailability.reason,
+      scanId: null
+    };
+  }
+
   const activeScanExists = domainRecord.scans.some((scan) => scan.status === "queued" || scan.status === "running");
   const lastScannedAt =
     domainRecord.domain.lastScannedAt ??
@@ -130,11 +199,28 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
 
     if (!availability.allowed) {
       if (availability.reason) {
+        await logRequest({
+          errorCode: "rescan_cooldown",
+          errorMessage: availability.reason,
+          resolutionMode: "rescan_cooldown",
+          status: "rejected"
+        });
+
         return {
           error: availability.reason,
           scanId: null
         };
       }
+
+      await logRequest({
+        errorCode: "rescan_cooldown",
+        errorMessage:
+          input.planCode === "free"
+            ? "Free plan domains can only be re-scanned once every 30 days."
+            : "This domain was scanned recently. Pro and Ultra plans allow one re-scan every 1 minute per domain.",
+        resolutionMode: "rescan_cooldown",
+        status: "rejected"
+      });
 
       return {
         error:
@@ -159,8 +245,16 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         periodEnd: monthWindow.periodEnd
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not verify scan limits.";
+      await logRequest({
+        errorCode: "usage_limit_check_failed",
+        errorMessage: message,
+        resolutionMode: "usage_limit_check_failed",
+        status: "failed"
+      });
+
       return {
-        error: error instanceof Error ? error.message : "Could not verify scan limits.",
+        error: message,
         scanId: null
       };
     }
@@ -169,11 +263,19 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     const monthlyLimit = planLimits.manualRescanLimitPerMonth;
 
     if (monthlyLimit !== null && currentUsage >= monthlyLimit) {
+      const message =
+        planLimits.planCode === "free"
+          ? "You’ve already used the Free plan scan for this month."
+          : `You’ve reached the ${planDefinition.label} manual scan limit of ${monthlyLimit} for this billing period.`;
+      await logRequest({
+        errorCode: "monthly_usage_limit",
+        errorMessage: message,
+        resolutionMode: "monthly_usage_limit",
+        status: "rejected"
+      });
+
       return {
-        error:
-          planLimits.planCode === "free"
-            ? "You’ve already used the Free plan scan for this month."
-            : `You’ve reached the ${planDefinition.label} manual scan limit of ${monthlyLimit} for this billing period.`,
+        error: message,
         scanId: null
       };
     }
@@ -190,8 +292,16 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         value: nextUsageValue
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Scan created but usage tracking failed.";
+      await logRequest({
+        errorCode: "usage_tracking_failed",
+        errorMessage: message,
+        resolutionMode: "usage_tracking_failed",
+        status: "failed"
+      });
+
       return {
-        error: error instanceof Error ? error.message : "Scan created but usage tracking failed.",
+        error: message,
         scanId: null
       };
     }
@@ -236,11 +346,26 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       submittedByUserId: input.submittedByUserId
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not create full scan.";
+    await logRequest({
+      errorCode: "scan_create_failed",
+      errorMessage: message,
+      resolutionMode: "scan_create_failed",
+      status: "failed"
+    });
+
     return {
-      error: error instanceof Error ? error.message : "Could not create full scan.",
+      error: message,
       scanId: null
     };
   }
+
+  await logRequest({
+    fulfilledByScanId: scan.id,
+    resolutionMode: "queued_new_scan",
+    scanId: scan.id,
+    status: "queued"
+  });
 
   try {
     await insertQueuedFullScanEvent({

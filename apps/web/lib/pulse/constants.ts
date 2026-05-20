@@ -1,5 +1,5 @@
 export const PULSE_API_VERSION = "v1";
-export const PULSE_SCHEMA_VERSION = "1.0.0";
+export const PULSE_SCHEMA_VERSION = "0.5.1";
 export const PULSE_VERSION = "2026-05-18";
 export const PULSE_PROJECTION_VERSION = "pulse-public-v1";
 export const PULSE_SOURCE = "certscore.ai";

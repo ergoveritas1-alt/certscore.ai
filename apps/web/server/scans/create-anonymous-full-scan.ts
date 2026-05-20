@@ -8,6 +8,8 @@ import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan
 import { setPreviewDomainLatestScan } from "../preview-scan/db";
 import { createQueuedFullScan, insertQueuedFullScanEvent, loadPriorScanAccelerationCandidate } from "./repository";
 import { buildQueuedFullScanConfig } from "./full-scan-config";
+import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
+import { logScanRequestFailure, recordScanRequest } from "./scan-request-log";
 
 type ScanQueueProvenance = {
   githubActor?: string | null;
@@ -20,17 +22,80 @@ type ScanQueueProvenance = {
   userAgent?: string | null;
 };
 
-export async function createAnonymousFullScan(input: { hostname: string; normalizedUrl: string; provenance?: ScanQueueProvenance }) {
+export async function createAnonymousFullScan(input: {
+  bypassRecentScanReuse?: boolean;
+  hostname: string;
+  normalizedUrl: string;
+  provenance?: ScanQueueProvenance;
+}) {
+  const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
+  if (!input.bypassRecentScanReuse) {
+    const recentScan = await findRecentCompletedScanForDomain({
+      normalizedDomain: input.hostname,
+      normalizedUrl: input.normalizedUrl,
+      organizationId: null
+    }).catch((error) => {
+      console.error("[web] anonymous recent scan reuse lookup failed", {
+        error: error instanceof Error ? error.message : String(error),
+        domainId: domain.id
+      });
+      return null;
+    });
+
+    if (recentScan) {
+      await recordScanRequest({
+        fulfilledByScanId: recentScan.id,
+        normalizedDomain: input.hostname,
+        normalizedUrl: input.normalizedUrl,
+        organizationId: null,
+        requestChannel: input.provenance?.source ?? "marketing-anonymous-full-scan",
+        requestedBy: { anonymous: true },
+        requestedUrl: input.normalizedUrl,
+        requestContext: {
+          bypassRecentScanReuse: Boolean(input.bypassRecentScanReuse),
+          provenance: input.provenance ?? null
+        },
+        resolutionMode: "reused_existing_scan",
+        reusedCompletedAt: recentScan.completedAt,
+        reuseWindowHours: RECENT_SCAN_REUSE_WINDOW_HOURS,
+        scanId: recentScan.id,
+        status: "reused_recent_scan"
+      }).catch((error) => logScanRequestFailure("anonymous_recent_scan_reuse", error));
+
+      return {
+        domain,
+        reusedExistingScan: true as const,
+        scan: { id: recentScan.id }
+      };
+    }
+  }
+
   const fullScanQueueAvailability = await getFullScanQueueAvailability({
     allowDegradedScanner: process.env.FULL_SCAN_QUEUE_ALLOW_DEGRADED_HEARTBEAT === "true"
   });
 
   if (!fullScanQueueAvailability.enabled) {
+    await recordScanRequest({
+      normalizedDomain: input.hostname,
+      normalizedUrl: input.normalizedUrl,
+      organizationId: null,
+      requestChannel: input.provenance?.source ?? "marketing-anonymous-full-scan",
+      requestedBy: { anonymous: true },
+      requestedUrl: input.normalizedUrl,
+      requestContext: {
+        bypassRecentScanReuse: Boolean(input.bypassRecentScanReuse),
+        provenance: input.provenance ?? null
+      },
+      errorCode: "queue_unavailable",
+      errorMessage: fullScanQueueAvailability.reason ?? "Full scan queue is unavailable.",
+      resolutionMode: "queue_unavailable",
+      status: "rejected"
+    }).catch((error) => logScanRequestFailure("anonymous_queue_unavailable", error));
+
     throw new Error(fullScanQueueAvailability.reason ?? "Full scan queue is unavailable.");
   }
 
   const planLimits = await getPlanLimits("free");
-  const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
   const pagesRequested = planLimits.maxPagesPerScan;
   const priorScanAcceleration = await loadPriorScanAccelerationCandidate({
     domainId: domain.id,
@@ -65,6 +130,26 @@ export async function createAnonymousFullScan(input: { hostname: string; normali
     scanConfigJson: scanConfig,
     submittedByUserId: null
   });
+
+  await recordScanRequest({
+    fulfilledByScanId: scan.id,
+    normalizedDomain: input.hostname,
+    normalizedUrl: input.normalizedUrl,
+    organizationId: null,
+    requestChannel: input.provenance?.source ?? "marketing-anonymous-full-scan",
+    requestedBy: { anonymous: true },
+    requestedUrl: input.normalizedUrl,
+    requestContext: {
+      bypassRecentScanReuse: Boolean(input.bypassRecentScanReuse),
+      pagesRequested,
+      provenance: input.provenance ?? null,
+      queueOrigin: queueMetadata.queueOrigin,
+      queuePriority: queueMetadata.queuePriority
+    },
+    resolutionMode: "queued_new_scan",
+    scanId: scan.id,
+    status: "queued"
+  }).catch((error) => logScanRequestFailure("anonymous_queued_new_scan", error));
 
   await insertQueuedFullScanEvent({
     domainId: domain.id,

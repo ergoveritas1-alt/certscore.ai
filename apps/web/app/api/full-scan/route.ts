@@ -64,9 +64,14 @@ function getScanRequestProvenance(request: Request) {
   };
 }
 
+function parseForceNewScan(value: unknown) {
+  return value === true || value === "true" || value === "1";
+}
+
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
+    const forceNewScan = parseForceNewScan(payload?.forceNewScan);
     const provenance = getScanRequestProvenance(request);
     const rawDomain = typeof payload?.domain === "string" ? payload.domain : "";
     const parsedBatch = parseDomainBatchInput(rawDomain);
@@ -138,6 +143,7 @@ export async function POST(request: Request) {
       }
 
       const anonymousScan = await createAnonymousFullScan({
+        bypassRecentScanReuse: forceNewScan,
         hostname: firstDomain.hostname,
         normalizedUrl: firstDomain.normalizedUrl,
         provenance
@@ -163,6 +169,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           queuedCount: 1,
+          reusedExistingScan: "reusedExistingScan" in anonymousScan ? anonymousScan.reusedExistingScan : false,
           scanId: anonymousScan.scan.id,
           scanUrl:
             "mode" in anonymousScan && anonymousScan.mode === "preview"
@@ -180,7 +187,7 @@ export async function POST(request: Request) {
           headers: {
             "Cache-Control": "no-store"
           },
-          status: 202
+          status: "reusedExistingScan" in anonymousScan && anonymousScan.reusedExistingScan ? 200 : 202
         }
       );
     }
@@ -189,6 +196,7 @@ export async function POST(request: Request) {
       intakeDomains.map((item) =>
         createOrQueueDomainScan({
           allowExistingDomainRescan: true,
+          bypassRecentScanReuse: forceNewScan,
           domain: item.normalizedUrl,
           provenance
         })
@@ -211,6 +219,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         queuedCount: queuedScans.length,
+        reusedExistingScan: queuedScans.length === 1 ? Boolean(queuedScans[0]?.reusedExistingScan) : false,
         scanId: queuedScans[0]?.scanId ?? null,
         scanUrl: queuedScans.length === 1 ? `/app/scans/${queuedScans[0]?.scanId}` : "/app/scans"
       },
@@ -218,7 +227,7 @@ export async function POST(request: Request) {
         headers: {
           "Cache-Control": "no-store"
         },
-        status: 202
+        status: queuedScans.length === 1 && queuedScans[0]?.reusedExistingScan ? 200 : 202
       }
     );
   } catch (error) {

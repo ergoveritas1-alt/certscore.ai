@@ -14,9 +14,9 @@ import {
 import { createPageMetadata } from "../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
-  title: "CertScore Pulse API",
+  title: "CertScore Pulse API Beta",
   description:
-    "Agent-readable instructions for using the CertScore Pulse API to retrieve evidence-backed public-web scan summaries for URLs.",
+    "Agent-readable beta instructions for using the CertScore Pulse API to retrieve evidence-backed public-web scan summaries for URLs.",
   path: "/api-pulse",
   robots: {
     follow: true,
@@ -45,6 +45,9 @@ const copyPasteExamples = [
     command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&freshness=refresh"`
   },
   {
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&forceNewScan=true"`
+  },
+  {
     command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&wait=60"`
   },
   {
@@ -67,6 +70,7 @@ const parameters = [
   ["format", "`json` or `markdown`. Defaults to `json`."],
   ["detail", "`tiny`, `quick`, `standard`, or `full`. Defaults to `standard`. `quick` is an alias for `tiny`."],
   ["freshness", "`latest` or `refresh`. Defaults to `latest`."],
+  ["forceNewScan", "`true` or `1` bypasses the 24-hour recent-scan reuse check. It does not bypass throttles or validation."],
   [
     "wait",
     "Integer seconds from 0 to 80. This is only the maximum HTTP hold window for the current request; total queue plus scan time can be longer when workers are busy."
@@ -95,7 +99,7 @@ const detailLevels = [
 
 const exampleMeta = {
   apiVersion: "v1",
-  schemaVersion: "1.0.0",
+  schemaVersion: "0.5.1",
   pulseVersion: "2026-05-18",
   projectionVersion: "pulse-public-v1",
   generatedAt: "2026-05-18T23:15:32Z",
@@ -435,10 +439,10 @@ export default function ApiPulsePage() {
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-5xl px-6 py-16">
           <div className="max-w-3xl space-y-4">
-            <Badge tone="neutral">Agent API</Badge>
-            <h1 className="text-4xl font-semibold tracking-tight text-slate-950">CertScore Pulse API</h1>
+            <Badge tone="neutral">Agent API beta</Badge>
+            <h1 className="text-4xl font-semibold tracking-tight text-slate-950">CertScore Pulse API beta</h1>
             <p className="text-lg leading-8 text-slate-600">
-              Retrieve a quick, evidence-backed CertScore summary for a public URL. Pulse is designed for AI agents, developer tools,
+              Retrieve a quick, evidence-backed CertScore summary for a public URL. Pulse API beta is designed for AI agents, developer tools,
               CLIs, and humans that need a compact scan summary with links to the durable full report.
             </p>
             <p className="text-base leading-7 text-slate-700">{PULSE_PURPOSE_STATEMENT}</p>
@@ -456,7 +460,7 @@ export default function ApiPulsePage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-7 text-slate-700">
             <div className="rounded-lg border border-sky-200 bg-white p-4">
-              <h2 className="text-base font-semibold text-slate-950">Try CertScore in ChatGPT</h2>
+              <h2 className="text-base font-semibold text-slate-950">Try CertScore GPT beta</h2>
               <p className="mt-1 text-sm leading-6 text-slate-600">
                 Paste a public website URL and get a CertScore Pulse summary inside ChatGPT. Automated observations for review, not legal advice or a compliance determination.
               </p>
@@ -469,7 +473,7 @@ export default function ApiPulsePage() {
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                Open CertScore GPT
+                Open CertScore GPT beta
               </a>
             </div>
             <p>
@@ -495,7 +499,7 @@ export default function ApiPulsePage() {
 - Health check: GET /api/v1/pulse-health
 
 Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Full is best for evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.`}</CodeBlock>
-            <CodeBlock>{`OpenAPI / GPT Action quick start:
+            <CodeBlock>{`OpenAPI / GPT Action beta quick start:
 1. If you support OpenAPI actions/tools, import:
    https://certscore.ai/api/v1/openapi.chatgpt.json
 2. Call getPulseForUrl with:
@@ -504,7 +508,7 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
    detail: standard
    wait: 60
 3. Use detail=tiny for quick checks.
-4. Public GPT Action access uses latest-mode summaries and does not expose full detail or refresh scans.
+4. Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans.
 5. If API fetch fails before headers/body/status are visible, do not infer CertScore returned an error. Read /api-pulse/agent and /api-pulse-agent-guide.txt.`}</CodeBlock>
             <p>
               Agent fetch limitations: Some agent environments may fail before receiving an HTTP response because of DNS, sandbox,
@@ -517,13 +521,13 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
                 className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
                 href="/api/v1/openapi.chatgpt.json"
               >
-                Open ChatGPT Action schema
+                Open ChatGPT Action beta schema
               </Link>
               <Link
                 className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
                 href="/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60"
               >
-                Open GPT Action example
+                Open GPT Action beta example
               </Link>
               <a
                 className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
@@ -534,7 +538,7 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                Open CertScore GPT
+                Open CertScore GPT beta
               </a>
               <Link
                 className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
@@ -571,7 +575,7 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
               Open quick-start endpoint
             </a>
             <p>
-              If a completed eligible scan exists, the API returns a completed Pulse. If no completed scan exists, the API may queue a new scan
+              If a completed eligible scan exists within the 24-hour reuse window, the API returns that completed Pulse. If no completed scan exists within that UTC-normalized window, the API may queue a new scan
               and return HTTP 202 with `jobId`, `statusUrl`, `nextCheckUrl`, and any `scanId` available for the queued scan.
             </p>
           </CardContent>
@@ -681,17 +685,17 @@ Public-safe phase message:
             </CardHeader>
             <CardContent className="space-y-3 text-sm leading-7 text-slate-600">
               <p>
-                `freshness=latest` returns the latest eligible completed Pulse when available. If no completed eligible scan exists, CertScore
-                may queue a first-time scan.
+                `freshness=latest` returns the latest eligible completed Pulse when it was completed in the prior 24 hours. If no completed eligible scan exists within that UTC-normalized window, CertScore
+                may queue a new scan.
               </p>
               <p>
-                `freshness=refresh` requests a new scan even if an older completed scan exists. Scan generation is limited to one new Pulse scan
-                per normalized domain every five minutes.
+                `freshness=refresh` requests a new scan only when the 24-hour reuse window does not already contain an eligible completed scan. To bypass the 24-hour reuse check, pass `forceNewScan=true`. Scan generation is still limited to one new Pulse scan
+                per normalized domain every five minutes under the 5-minute normalized-domain throttle.
               </p>
               <p>
                 If refresh is throttled but a completed scan exists, CertScore may return the latest completed Pulse with
                 `refresh.requested=true`, `refresh.performed=false`, `refresh.reason="domain_throttle"`, and `refresh.retryAfterSeconds`.
-                If no completed scan exists and scan creation is throttled, the API returns HTTP 429 with `Retry-After`.
+                If no completed scan exists and scan creation is throttled, the API returns HTTP 429 with `Retry-After`, `error.code="pulse_throttled"`, and support contact guidance at support@certscore.ai.
               </p>
               <p>
                 Pulse uses `freshness=latest` and `freshness=refresh`; there is no separate `refresh=true` parameter. Broad
@@ -821,7 +825,7 @@ Content-Type: application/json
               OpenAPI JSON
             </Link>
             <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api/v1/openapi.chatgpt.json">
-              ChatGPT Action schema
+              ChatGPT Action beta schema
             </Link>
             <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/.well-known/certscore-pulse">
               Discovery JSON

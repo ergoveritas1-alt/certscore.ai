@@ -35,6 +35,18 @@ function buildPageHref(page: number) {
   return page <= 1 ? "/app/admin/scans" : `/app/admin/scans?page=${page}`;
 }
 
+function formatResolutionMode(value: string | null) {
+  if (!value) {
+    return "Request recorded";
+  }
+
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default async function AdminScansPage({ searchParams }: AdminScansPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const requestedPage = Number.parseInt(resolvedSearchParams.page ?? "1", 10);
@@ -55,14 +67,17 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
             <CardTitle>Scan Admin</CardTitle>
             <p className="text-sm text-slate-500">Newest scan activity first.</p>
           </div>
-          <p className="text-sm text-slate-500">{scanMetrics.totalScans} scans recorded</p>
+          <p className="text-sm text-slate-500">
+            {scanMetrics.totalScans} activity rows · {scanMetrics.totalPhysicalScans} scanner runs ·{" "}
+            {scanMetrics.totalScanRequests} submitted requests
+          </p>
         </div>
       </CardHeader>
       <CardContent className="space-y-3 pt-0">
         <AdminScansAutoRefresh hasActiveScans={hasActiveScans} />
         <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-slate-600">
-            Showing {pageStart}-{pageEnd} of {scanMetrics.totalScans} scan history items
+            Showing {pageStart}-{pageEnd} of {scanMetrics.totalScans} scan activity items
           </p>
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <Button asChild disabled={normalizedPage <= 1} size="sm" variant="secondary">
@@ -92,32 +107,77 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                 <th className="pb-3 pr-4 font-medium">Domain</th>
                 <th className="pb-3 pr-4 font-medium">Scan</th>
                 <th className="pb-3 pr-4 font-medium">Snapshot</th>
-                <th className="pb-3 pr-4 font-medium">Completed</th>
+                <th className="pb-3 pr-4 font-medium">Activity time</th>
                 <th className="pb-3 font-medium">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {scans.map((scan) => (
-                <tr key={scan.scanId}>
+                <tr key={scan.activityId}>
                   <td className="py-4 pr-4 text-slate-700">
                     <p>{scan.organizationName ?? "Unknown workspace"}</p>
                     <p className="text-xs text-slate-500">Requester IP {scan.requesterIp ?? "Not recorded"}</p>
                   </td>
                   <td className="py-4 pr-4 text-slate-700">{scan.domainHostname ?? "Unknown domain"}</td>
                   <td className="py-4 pr-4 text-slate-700">
-                    <p>{scan.status}</p>
-                    <p>{scan.pagesScanned} pages</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p>{scan.status}</p>
+                      {scan.rowKind === "request" ? (
+                        <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                          Submitted request
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                          Scanner run
+                        </span>
+                      )}
+                    </div>
+                    {scan.rowKind === "request" ? (
+                      <>
+                        <p className="text-xs text-slate-500">{formatResolutionMode(scan.requestResolutionMode)}</p>
+                        {scan.requestPublicId ? <p className="text-xs text-slate-400">{scan.requestPublicId}</p> : null}
+                      </>
+                    ) : (
+                      <p>{scan.pagesScanned} pages</p>
+                    )}
                     {scan.source === "pulse_api" ? (
                       <p className="mt-1 inline-flex rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">Pulse API</p>
                     ) : null}
+                    {scan.requestChannel === "gpt_action" ? (
+                      <p className="mt-1 inline-flex rounded-full bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-700">
+                        GPT Action
+                      </p>
+                    ) : null}
                   </td>
                   <td className="py-4 pr-4 text-slate-700">
-                    <p>Signals {scan.totalSignals ?? 0}</p>
-                    <p>Findings {scan.findingCount ?? 0}</p>
+                    {scan.rowKind === "request" ? (
+                      <>
+                        <p>
+                          {scan.linkedScanId
+                            ? scan.requestResolutionMode === "reused_existing_scan"
+                              ? "Fulfilled by recent scan"
+                              : "Fulfilled by scan"
+                            : "No scan linked"}
+                        </p>
+                        {scan.linkedScanId ? <p className="text-xs text-slate-500">{scan.linkedScanId}</p> : null}
+                        {scan.reuseWindowHours ? (
+                          <p className="text-xs text-slate-500">Reuse window {scan.reuseWindowHours}h</p>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        <p>Signals {scan.totalSignals ?? 0}</p>
+                        <p>Findings {scan.findingCount ?? 0}</p>
+                      </>
+                    )}
                   </td>
-                  <td className="py-4 pr-4 text-slate-700">{formatDateTime(scan.completedAt)}</td>
+                  <td className="py-4 pr-4 text-slate-700">{formatDateTime(scan.activityAt)}</td>
                   <td className="py-4">
-                    <AdminScanActions scanId={scan.scanId} scanViewHref={scan.scanViewHref} />
+                    {scan.linkedScanId && scan.scanViewHref ? (
+                      <AdminScanActions scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} />
+                    ) : (
+                      <span className="text-xs text-slate-400">No report</span>
+                    )}
                   </td>
                 </tr>
               ))}

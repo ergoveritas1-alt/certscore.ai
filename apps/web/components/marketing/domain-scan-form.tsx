@@ -21,6 +21,7 @@ type ScanSubmitPayload = {
   code?: string | null;
   error?: string | null;
   previewUrl?: string | null;
+  reusedExistingScan?: boolean | null;
   scanUrl?: string | null;
 };
 
@@ -77,6 +78,21 @@ function recordScanSubmitFailure(event: ScanSubmitFailure) {
     keepalive: true,
     method: "POST"
   }).catch(() => {});
+}
+
+function appendRecentScanReuseParam(destination: string, reusedExistingScan?: boolean | null) {
+  if (!reusedExistingScan) {
+    return destination;
+  }
+
+  try {
+    const url = new URL(destination, window.location.origin);
+    url.searchParams.set("recentScanReused", "1");
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    const separator = destination.includes("?") ? "&" : "?";
+    return `${destination}${separator}recentScanReused=1`;
+  }
 }
 
 export function DomainScanForm({
@@ -165,7 +181,7 @@ export function DomainScanForm({
         scan_target_type: getScanTargetType(domain),
         scan_status: "queued"
       });
-      router.push(destination);
+      router.push(appendRecentScanReuseParam(destination, payload.reusedExistingScan));
     } catch (error) {
       recordScanSubmitFailure({
         domain,

@@ -1,8 +1,10 @@
-# CertScore Pulse agent guide
+# CertScore Pulse beta agent guide
 
 Last updated: 2026-05-19
 
 CertScore Pulse provides automated public-web observations for review. CertScore does not provide legal advice, certify compliance, or determine whether a website violates law.
+
+This is beta software. The current Pulse API beta version is 0.5.1.
 
 CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.
 
@@ -32,7 +34,7 @@ Standard markdown structure:
 - Stable headings: Summary, Highest-priority findings, Privacy and consent signals, Cookie and third-party request activity, Accessibility signals, Disclosure and trust signals, Coverage and limitations, Links, Disclaimer.
 - Does not embed the full JSON payload.
 
-OpenAPI / GPT Action quick start:
+OpenAPI / GPT Action beta quick start:
 1. If you support OpenAPI actions/tools, import:
    https://certscore.ai/api/v1/openapi.chatgpt.json
 2. Call getPulseForUrl with:
@@ -41,10 +43,10 @@ OpenAPI / GPT Action quick start:
    detail: standard
    wait: 60
 3. Use detail=tiny for quick checks.
-4. Public GPT Action access uses latest-mode summaries and does not expose full detail or refresh scans.
+4. Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans.
 5. If API fetch fails before headers/body/status are visible, do not infer CertScore returned an error. Read /api-pulse/agent and /api-pulse-agent-guide.txt.
 
-GPT Action endpoint:
+GPT Action beta endpoint:
 https://certscore.ai/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60
 
 Canonical documentation:
@@ -59,7 +61,7 @@ https://certscore.ai/.well-known/certscore-pulse
 OpenAPI:
 https://certscore.ai/api/v1/openapi.json
 
-ChatGPT Action schema:
+ChatGPT Action beta schema:
 https://certscore.ai/api/v1/openapi.chatgpt.json
 
 Health canary:
@@ -86,7 +88,7 @@ https://certscore.ai/api/v1/pulse/status/<jobId>
 Expected diagnostic headers on CertScore-generated Pulse support responses:
 - x-certscore-pulse: v1
 - x-certscore-route: pulse-self-test | pulse-health | openapi | openapi-chatgpt | discovery | pulse | pulse-status
-- x-certscore-route also uses pulse-gpt for GPT Action requests.
+- x-certscore-route also uses pulse-gpt for GPT Action beta requests.
 - x-certscore-request-id: <request id>
 
 Agent fetch limitations:
@@ -102,7 +104,7 @@ Troubleshooting fetch failures:
 Expected public response contracts:
 - /api/v1/pulse-health returns HTTP 200 JSON.
 - /api/v1/openapi.json returns HTTP 200 JSON.
-- /api/v1/openapi.chatgpt.json returns HTTP 200 JSON with a compact GPT Action schema.
+- /api/v1/openapi.chatgpt.json returns HTTP 200 JSON with a compact GPT Action beta schema.
 - /.well-known/certscore-pulse returns HTTP 200 JSON.
 - Valid /api/v1/pulse URL requests return documented HTTP 200, 202, or 429 responses.
 - /api/v1/pulse?url=%3A%3A%3A%3A returns HTTP 400 JSON with error.code invalid_url.
@@ -110,6 +112,9 @@ Expected public response contracts:
 - HTTP 202 pending responses include Retry-After when a polling delay is recommended.
 - HTTP 429 throttled responses include Retry-After when retry timing is known.
 - Pulse uses freshness=latest and freshness=refresh. There is no refresh=true parameter.
+- Pulse reuses an eligible completed scan from the prior 24 hours before queueing a new scan. Time comparisons use UTC instants.
+- Use forceNewScan=true only when you need to bypass the 24-hour reuse check. It does not bypass validation or the 5-minute normalized-domain scan-generation throttle.
+- New Pulse scan generation is throttled to one submitted scan job per normalized domain every 5 minutes. A throttled request returns HTTP 429, Retry-After when known, and support guidance at support@certscore.ai.
 - X-RateLimit-* headers are not emitted unless a route has accurate enforced bucket state.
 
 Use guidance:
@@ -117,7 +122,7 @@ Use guidance:
 - Use detail=standard for default agent summaries.
 - Use detail=full when structured finding, evidence, review lens, coverage, and benchmark context are needed.
 - Use format=markdown when a tool handles readable text better than JSON.
-- For a Custom GPT Action, import https://certscore.ai/api/v1/openapi.chatgpt.json and use getPulseForUrl with format=markdown, detail=standard, wait=60.
+- For a Custom GPT Action beta, import https://certscore.ai/api/v1/openapi.chatgpt.json and use getPulseForUrl with format=markdown, detail=standard, wait=60.
 - Treat the response as automated public-web observations for review.
 - Do not treat absence of findings as proof of compliance.
 - Review the linked evidence and consult qualified counsel or subject-matter experts where appropriate.

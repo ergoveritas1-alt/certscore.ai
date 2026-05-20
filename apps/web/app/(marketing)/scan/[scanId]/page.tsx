@@ -19,6 +19,9 @@ type PublicScanDetailPageProps = {
   params: Promise<{
     scanId: string;
   }>;
+  searchParams?: Promise<{
+    recentScanReused?: string;
+  }>;
 };
 
 function getPublicScanDomainLabel(domainHostname: string | null) {
@@ -73,8 +76,22 @@ export async function generateMetadata({ params }: PublicScanDetailPageProps): P
   };
 }
 
-export default async function PublicScanDetailPage({ params }: PublicScanDetailPageProps) {
+function RecentScanReuseNotice() {
+  return (
+    <section className="rounded-[1.2rem] border border-sky-200 bg-sky-50 px-5 py-4 text-sm leading-6 text-slate-700">
+      <p className="font-semibold text-slate-950">Recent scan reused</p>
+      <p className="mt-1">
+        CertScore found a completed scan for this website from the past 24 hours, so this request opened the existing report instead of
+        starting a duplicate scan.
+      </p>
+    </section>
+  );
+}
+
+export default async function PublicScanDetailPage({ params, searchParams }: PublicScanDetailPageProps) {
   const { scanId } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const recentScanReused = resolvedSearchParams.recentScanReused === "1";
   const scanRecord = await getAnonymousScanById(scanId);
 
   if (!scanRecord) {
@@ -126,6 +143,7 @@ export default async function PublicScanDetailPage({ params }: PublicScanDetailP
             ) : null
           }
           headerActionsPlacement="belowTitle"
+          previewNotice={recentScanReused ? <RecentScanReuseNotice /> : null}
           scanRecord={scanRecord}
         />
         {scanRecord.scan.status === "completed" ? (

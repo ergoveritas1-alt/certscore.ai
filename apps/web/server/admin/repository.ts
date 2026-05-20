@@ -3,6 +3,7 @@
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { ensureMonitorSiteRequestsTable } from "../monitor-site/monitor-site-request";
+import { ensureScanRequestLogTable } from "../scans/scan-request-log";
 
 export type AdminScanQueryRow = {
   completed_at: string | null;
@@ -14,6 +15,32 @@ export type AdminScanQueryRow = {
   pages_scanned: number;
   scan_config_json?: Record<string, unknown> | null;
   scan_type: string;
+  status: string;
+};
+
+export type AdminScanRequestRow = {
+  created_at: string;
+  error_code: string | null;
+  error_message: string | null;
+  fulfilled_by_scan_id: string | null;
+  organization_id: string | null;
+  organization_name: string | null;
+  normalized_domain: string | null;
+  normalized_url: string | null;
+  public_id: string;
+  request_channel: string | null;
+  request_context: Record<string, unknown> | null;
+  requested_at: string;
+  requested_by: Record<string, unknown> | null;
+  requested_url: string | null;
+  request_type: string;
+  resolution_mode: string | null;
+  reused_completed_at: string | null;
+  reuse_window_hours: number | null;
+  scan_domain_hostname: string | null;
+  scan_id: string | null;
+  scan_organization_id: string | null;
+  scan_status: string | null;
   status: string;
 };
 
@@ -231,6 +258,8 @@ export type AdminScanOverviewCounts = {
   blockedOrCaptchaCount: number;
   http403Count: number;
   http429Count: number;
+  totalPhysicalScans: number;
+  totalScanRequests: number;
   totalScans: number;
 };
 
@@ -473,6 +502,45 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
     validationRuns,
     verdictByFindingId
   };
+}
+
+export async function loadAdminScanRequestRows(limit: number): Promise<AdminScanRequestRow[]> {
+  await ensureScanRequestLogTable();
+  const result = await query<AdminScanRequestRow>(
+    `select sr.public_id,
+            sr.request_type,
+            sr.request_channel,
+            sr.requested_url,
+            sr.normalized_url,
+            sr.normalized_domain,
+            sr.organization_id,
+            org.name as organization_name,
+            sr.requested_by,
+            sr.request_context,
+            sr.status,
+            sr.resolution_mode,
+            sr.scan_id,
+            sr.fulfilled_by_scan_id,
+            sr.reuse_window_hours,
+            sr.reused_completed_at,
+            sr.error_code,
+            sr.error_message,
+            sr.requested_at,
+            sr.created_at,
+            scan.status as scan_status,
+            scan.organization_id as scan_organization_id,
+            domain.hostname as scan_domain_hostname
+       from public.scan_requests sr
+       left join public.scans scan on scan.id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+       left join public.domains domain on domain.id = scan.domain_id
+       left join public.organizations org on org.id = sr.organization_id
+      order by sr.requested_at desc
+      limit $1`,
+    [limit],
+    { readOnly: true }
+  );
+
+  return result.rows;
 }
 
 export async function loadAdminScanDetailData(scanId: string): Promise<{
@@ -976,8 +1044,10 @@ export async function updateAdminOrganizationPlan(input: {
 }
 
 export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCounts> {
-  const [totalScansResult, http403Result, http429Result, blockedOrCaptchaResult] = await Promise.all([
+  await ensureScanRequestLogTable();
+  const [totalScansResult, totalScanRequestsResult, http403Result, http429Result, blockedOrCaptchaResult] = await Promise.all([
     query<{ count: string }>(`select count(*)::text as count from scans`, [], { readOnly: true }),
+    query<{ count: string }>(`select count(*)::text as count from scan_requests`, [], { readOnly: true }),
     query<{ count: string }>(
       `select count(*)::text as count
          from scan_snapshots
@@ -1005,8 +1075,13 @@ export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCo
     )
   ]);
 
+  const totalPhysicalScans = Number(totalScansResult.rows[0]?.count ?? "0");
+  const totalScanRequests = Number(totalScanRequestsResult.rows[0]?.count ?? "0");
+
   return {
-    totalScans: Number(totalScansResult.rows[0]?.count ?? "0"),
+    totalScans: totalPhysicalScans + totalScanRequests,
+    totalPhysicalScans,
+    totalScanRequests,
     http403Count: Number(http403Result.rows[0]?.count ?? "0"),
     http429Count: Number(http429Result.rows[0]?.count ?? "0"),
     blockedOrCaptchaCount: Number(blockedOrCaptchaResult.rows[0]?.count ?? "0")

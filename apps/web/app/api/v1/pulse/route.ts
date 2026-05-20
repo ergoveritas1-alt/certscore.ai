@@ -22,6 +22,7 @@ import { buildPulseStatus } from "../../../../lib/pulse/status";
 import { checkDomainDns } from "../../../../server/domains/domain-dns";
 import { createAnonymousFullScan } from "../../../../server/scans/create-anonymous-full-scan";
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
+import { RECENT_SCAN_REUSE_WINDOW_HOURS } from "../../../../server/scans/recent-scan-reuse";
 import {
   claimPulseDomainScanCreation,
   createPulseRequest,
@@ -88,6 +89,10 @@ function pulseJson(body: unknown, init: ResponseInit | undefined, requestId: str
 
 function retryAfterForStatus(status: { retryAfterSeconds?: number | null; estimatedWaitSeconds?: number | null }) {
   return status.retryAfterSeconds ?? status.estimatedWaitSeconds ?? 30;
+}
+
+function parseForceNewScan(value: string | null) {
+  return value === "true" || value === "1";
 }
 
 async function waitForCompletedScan(scanId: string, waitSeconds: number) {
@@ -221,7 +226,8 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   const freshness = gptAction ? "latest" : requestedFreshness;
   const waitSeconds = gptAction ? parseGptPulseWaitSeconds(url) : parsePulseWaitSeconds(url.searchParams.get("wait"));
   const requester = getPulseRequesterContext(request);
-  const contextBase = { ...requester, format, detail, freshness, waitSeconds, channel: gptAction ? "gpt_action" : "pulse_api", source: gptAction ? "gpt_action" : "pulse_api" };
+  const forceNewScan = gptAction ? false : parseForceNewScan(url.searchParams.get("forceNewScan"));
+  const contextBase = { ...requester, format, detail, freshness, forceNewScan, waitSeconds, channel: gptAction ? "gpt_action" : "pulse_api", source: gptAction ? "gpt_action" : "pulse_api" };
   const scanId = url.searchParams.get("scanId")?.trim() || null;
   const jobId = url.searchParams.get("jobId")?.trim() || null;
   const rawUrl = url.searchParams.get("url")?.trim() || null;
@@ -452,10 +458,14 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       resolutionMode: "created_new_scan",
       status: "queued"
     });
-    const latestScan = await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain);
+    const recentScan = forceNewScan
+      ? null
+      : await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, { maxAgeHours: RECENT_SCAN_REUSE_WINDOW_HOURS });
+    const latestScan = recentScan ?? (await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain));
     const latestScanRecord = latestScan ? await getAnonymousScanById(latestScan.id).catch(() => null) : null;
+    const recentScanRecord = recentScan ? latestScanRecord : null;
 
-    if (latestScanRecord && freshness === "latest") {
+    if (recentScanRecord) {
       return buildAndLogCompletedPulse({
         detail,
         format,
@@ -463,7 +473,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         pulseRequestId: publicId,
         requestedUrl: rawUrl,
         resolutionMode: "reused_existing_scan",
-        scanRecord: latestScanRecord,
+        scanRecord: recentScanRecord,
         waitSeconds,
         requestId,
         routeOptions: { gptAction, routeName }
@@ -513,7 +523,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       return pulseJson(
         buildPulseError({
           code: "pulse_throttled",
-          message: "A Pulse scan for this domain was requested recently. Try again in a few minutes.",
+          message: "A Pulse scan for this domain was requested recently. Try again in a few minutes or contact support@certscore.ai for help.",
           retryAfterSeconds: throttle.retryAfterSeconds,
           url: rawUrl,
           detail,
@@ -547,6 +557,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     }
 
     const queued = await createAnonymousFullScan({
+      bypassRecentScanReuse: forceNewScan,
       hostname: normalized.normalizedDomain,
       normalizedUrl: normalized.normalizedUrl,
       provenance: {
@@ -556,6 +567,23 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         originIp: requester.ipHash
       }
     });
+    if ("reusedExistingScan" in queued && queued.reusedExistingScan) {
+      const reusedScanRecord = await getAnonymousScanById(queued.scan.id).catch(() => null);
+      if (reusedScanRecord?.scan.status === "completed") {
+        return buildAndLogCompletedPulse({
+          detail,
+          format,
+          freshness,
+          pulseRequestId: publicId,
+          requestedUrl: rawUrl,
+          resolutionMode: "reused_existing_scan",
+          scanRecord: reusedScanRecord,
+          waitSeconds,
+          requestId,
+          routeOptions: { gptAction, routeName }
+        });
+      }
+    }
     await updatePulseRequestQueued({
       pulseRequestId: publicId,
       scanId: queued.scan.id,

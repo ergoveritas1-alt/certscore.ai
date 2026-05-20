@@ -35,8 +35,12 @@ export function createPulsePublicId(prefix = "pulse_req") {
   return `${prefix}_${randomUUID()}`;
 }
 
-export async function findLatestCompletedAnonymousScanForDomain(normalizedDomain: string) {
+export async function findLatestCompletedAnonymousScanForDomain(normalizedDomain: string, input?: { maxAgeHours?: number }) {
   await ensurePulseTables();
+  const maxAgeClause =
+    typeof input?.maxAgeHours === "number"
+      ? "and s.completed_at is not null and s.completed_at >= timezone('utc', now()) - ($3::int * interval '1 hour')"
+      : "";
   return queryOne<{ id: string }>(
     `select s.id
        from scans s
@@ -45,9 +49,10 @@ export async function findLatestCompletedAnonymousScanForDomain(normalizedDomain
         and d.organization_id is null
         and s.status = 'completed'
         and (lower(d.hostname) = lower($1) or lower(d.normalized_url) = lower($2))
+        ${maxAgeClause}
       order by s.completed_at desc nulls last, s.created_at desc
       limit 1`,
-    [normalizedDomain, `https://${normalizedDomain}`],
+    typeof input?.maxAgeHours === "number" ? [normalizedDomain, `https://${normalizedDomain}`, input.maxAgeHours] : [normalizedDomain, `https://${normalizedDomain}`],
     { readOnly: true }
   );
 }
@@ -93,6 +98,7 @@ export async function createPulseRequest(input: {
         format: input.context.format,
         detail: input.context.detail,
         freshness: input.context.freshness,
+        forceNewScan: input.context.forceNewScan ?? false,
         waitSeconds: input.context.waitSeconds,
         mode: input.context.mode,
         source: input.context.source ?? input.context.channel ?? "pulse_api",

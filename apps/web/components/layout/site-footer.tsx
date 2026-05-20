@@ -9,7 +9,7 @@ const footerSections = [
       { href: "/", label: "Home" },
       { href: "/how-it-works", label: "How It Works" },
       { href: "/findings", label: "Findings" },
-      { href: "/api-pulse", label: "Pulse API" },
+      { href: "/api-pulse", label: "Pulse API beta" },
       { href: "/pricing", label: "Pricing" }
     ]
   },
@@ -51,7 +51,7 @@ export function SiteFooter() {
             ...section.links,
             {
               href: certscoreGptUrl,
-              label: "CertScore GPT",
+              label: "CertScore GPT beta",
               external: true,
               analyticsEvent: "gpt_cta_clicked",
               analyticsLocation: "footer"
