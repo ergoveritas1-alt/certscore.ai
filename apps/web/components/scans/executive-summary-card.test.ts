@@ -1770,7 +1770,7 @@ test("ExecutiveSummaryCard shows benchmark beside posture without scanned timest
   assert.match(html, /line-clamp-2/);
   assert.match(html, /132 third-party requests/);
   assert.match(html, /\+124 above expected for Web portal \/ News &amp; Media \/ Internet services/);
-  assert.match(html, /20 cookie records before consent/);
+  assert.match(html, /20 cookies before consent/);
   assert.match(html, /\+16 above expected for Web portal \/ News &amp; Media \/ Internet services/);
   assert.doesNotMatch(html, /Scanned Apr/);
   assert.ok(html.indexOf("Action Needed") < html.indexOf("Benchmark: Web portal"));
@@ -2009,7 +2009,8 @@ test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-f
   );
 
   assert.match(html, /data-testid="executive-top-findings-list"/);
-  assert.match(html, /max-h-\[38\.375rem\]/);
+  assert.match(html, /lg:flex-1/);
+  assert.doesNotMatch(html, /max-h-\[38\.375rem\]/);
   assert.match(html, /Tracking started before consent/);
   assert.match(html, /Non-essential tracking continued after reject/);
   assert.match(html, /Session replay service signal observed/);
@@ -2600,8 +2601,8 @@ test("ExecutiveSummaryCard explains executive and finding cookie count differenc
     })
   );
 
-  assert.match(html, /Cookie records before consent/);
-  assert.match(html, /15 cookie records before consent/);
+  assert.match(html, /Cookies before consent/);
+  assert.match(html, /15 cookies before consent/);
   assert.match(html, /Executive metric includes all retained cookie timing records; this finding shows the subset attributed to tracking\/storage evidence\./);
   assert.match(html, /trackingCookieWritesBeforeConsent/);
   assert.match(html, /totalUniqueCookiesObserved/);

@@ -123,7 +123,7 @@ export default function PricingPage() {
                     </div>
                     <div className="flex items-end gap-2">
                       <span className="text-4xl font-semibold tracking-tight text-emerald-700">{LAUNCH_ACCESS.amountDueLabel}</span>
-                      <span className="pb-1 text-sm font-semibold text-emerald-700">due now</span>
+                      <span className="pb-1 text-sm font-semibold text-emerald-700">per month during launch</span>
                     </div>
                     <p className="text-sm font-semibold text-slate-900">{plan.scanAllowance}</p>
                   </div>

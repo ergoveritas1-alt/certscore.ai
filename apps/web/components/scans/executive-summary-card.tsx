@@ -2101,11 +2101,12 @@ function BenchmarkMetricCard(input: {
         };
   const deltaClassName =
     delta === null ? "text-slate-500" : delta > 0 ? tone.deltaPositive : delta < 0 ? tone.deltaNegative : "text-slate-500";
-  const benchmarkTooltip = deltaLabel
+  const benchmarkTooltipBase = deltaLabel
     ? `${deltaLabel}. Expected ${benchmarkValue}.`
     : benchmarkValue !== null
       ? `Expected ${benchmarkValue}.`
       : null;
+  const benchmarkTooltip = [benchmarkTooltipBase, input.note].filter(Boolean).join(" ");
 
   return (
     <div className={`relative overflow-visible rounded-[1.6rem] border border-slate-200 px-5 py-4 ${tone.card}`}>
@@ -2138,7 +2139,6 @@ function BenchmarkMetricCard(input: {
           {input.maxValue ? <span className="pb-1 text-[2rem] leading-none text-slate-500">/100</span> : null}
         </div>
         <p className="mt-1 text-xs leading-5 text-slate-600">{actualLabel}</p>
-        {input.note ? <p className="mt-2 text-[11px] leading-5 text-slate-500">{input.note}</p> : null}
       </div>
       <div className="mt-5 space-y-2">
         <div className={`relative h-3 rounded-full ${tone.rail}`}>
@@ -3700,8 +3700,8 @@ export function ExecutiveSummaryCard(input: {
 
   return (
     <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
-      <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.35fr_0.9fr] lg:px-8">
-        <div className="space-y-5">
+      <div className="grid items-stretch gap-6 px-6 py-6 lg:grid-cols-[1.35fr_0.9fr] lg:px-8">
+        <div className="flex flex-col gap-5 lg:min-h-0">
           <div className="rounded-[1.8rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,1))] p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.28)]">
             <div className="flex flex-wrap items-center gap-3">
               <span
@@ -3787,7 +3787,7 @@ export function ExecutiveSummaryCard(input: {
                   benchmarkIndustry={input.domainBenchmark?.industry ?? null}
                 />
                 <BenchmarkMetricCard
-                  label="Cookie records before consent"
+                  label="Cookies before consent"
                   actualValue={input.beforeConsentCookieCount}
                   benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
                   benchmarkIndustry={input.domainBenchmark?.industry ?? null}
@@ -3813,7 +3813,7 @@ export function ExecutiveSummaryCard(input: {
           <div
             className={
               hasScrollableTopFindings
-                ? "grid max-h-[38.375rem] gap-3 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]"
+                ? "grid gap-3 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable] lg:min-h-0 lg:flex-1"
                 : "grid gap-3"
             }
             data-testid="executive-top-findings-list"
