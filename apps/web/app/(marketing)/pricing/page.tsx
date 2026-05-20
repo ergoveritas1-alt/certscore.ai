@@ -29,7 +29,7 @@ const standardPlans = [
     highlights: [
       "Temporary launch pricing: $0",
       "50 included page scans each month",
-      "One scan request every 5 minutes",
+      "Up to 1 scan request every 5 minutes",
       "Show scan history for follow-up review"
     ]
   },
@@ -49,7 +49,7 @@ const standardPlans = [
     highlights: [
       "Temporary launch pricing: $0",
       "500 included page scans each month",
-      "One scan request every 5 minutes",
+      "Up to 1 scan request every 5 minutes",
       "Show scan history for follow-up review"
     ]
   }
