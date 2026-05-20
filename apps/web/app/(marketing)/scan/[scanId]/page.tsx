@@ -143,11 +143,11 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
             ) : null
           }
           headerActionsPlacement="belowTitle"
-          previewNotice={recentScanReused ? <RecentScanReuseNotice /> : null}
           scanRecord={scanRecord}
         />
         {scanRecord.scan.status === "completed" ? (
-          <div className="mt-8">
+          <div className="mt-8 space-y-4">
+            {recentScanReused ? <RecentScanReuseNotice /> : null}
             <AgentSummaryActions domainLabel={publicScanDomainLabel} scanId={scanRecord.scan.id} />
           </div>
         ) : null}

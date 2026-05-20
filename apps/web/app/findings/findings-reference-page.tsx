@@ -227,26 +227,6 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
                 Use the badges and evidence tiers together: criticality describes review priority, confidence describes evidence strength, prevalence gives directional calibration context, and regulatory context shows review lenses that may be relevant depending on jurisdiction, purpose, and manual review.
               </p>
             </div>
-            <p className="text-sm leading-6 text-slate-500">
-              CertScore's finding references are reviewed periodically and updated when material regulatory or accessibility guidance changes. Guidance families monitored include EDPB consent and ePrivacy materials, ICO cookie guidance, CNIL tracker recommendations, FTC privacy and dark-pattern materials, CPRA/privacy-choice materials, and accessibility guidance where applicable.
-            </p>
-            <div className="border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-slate-700">
-              <p>Want to test these findings on a public website? Use the CertScore GPT to scan a public website from ChatGPT.</p>
-              <p className="mt-1 text-slate-600">
-                Results are automated public-web observations for review, not legal advice or a compliance determination.
-              </p>
-              <a
-                className="mt-3 inline-flex rounded-full border border-sky-300 bg-white px-3 py-2 font-semibold text-sky-700 hover:bg-sky-50"
-                data-analytics-cta-location="guides_findings"
-                data-analytics-destination-url={certscoreGptUrl}
-                data-analytics-event="gpt_cta_clicked"
-                href={certscoreGptUrl}
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                Open CertScore GPT
-              </a>
-            </div>
           </div>
         )}
       </div>
@@ -266,6 +246,33 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
           ))}
         </ul>
       </section>
+
+      {!activeFinding ? (
+        <section className="mt-8 space-y-4 border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600 sm:p-6">
+          <p>
+            CertScore's finding references are reviewed periodically and updated when material regulatory or accessibility guidance changes.
+            Guidance families monitored include EDPB consent and ePrivacy materials, ICO cookie guidance, CNIL tracker recommendations, FTC
+            privacy and dark-pattern materials, CPRA/privacy-choice materials, and accessibility guidance where applicable.
+          </p>
+          <div className="border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-slate-700">
+            <p>Want to test these findings on a public website? Use the CertScore GPT to scan a public website from ChatGPT.</p>
+            <p className="mt-1 text-slate-600">
+              Results are automated public-web observations for review, not legal advice or a compliance determination.
+            </p>
+            <a
+              className="mt-3 inline-flex rounded-full border border-sky-300 bg-white px-3 py-2 font-semibold text-sky-700 hover:bg-sky-50"
+              data-analytics-cta-location="guides_findings"
+              data-analytics-destination-url={certscoreGptUrl}
+              data-analytics-event="gpt_cta_clicked"
+              href={certscoreGptUrl}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              Open CertScore GPT
+            </a>
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 }

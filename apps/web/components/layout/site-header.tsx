@@ -72,8 +72,8 @@ export function SiteHeader() {
             className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_10px_24px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
             data-analytics-cta-location="header"
             data-analytics-event="guide_cta_clicked"
-            href="/"
-            idleContent="Free scan"
+            href="/pricing"
+            idleContent="Free sign-up"
             pendingContent="Opening..."
             size="sm"
           />
@@ -138,8 +138,8 @@ export function SiteHeader() {
                   className="w-full justify-center border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_10px_24px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
                   data-analytics-cta-location="header"
                   data-analytics-event="guide_cta_clicked"
-                  href="/"
-                  idleContent="Free scan"
+                  href="/pricing"
+                  idleContent="Free sign-up"
                   pendingContent="Opening..."
                   size="sm"
                 />

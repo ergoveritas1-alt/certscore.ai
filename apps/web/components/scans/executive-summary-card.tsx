@@ -3813,7 +3813,7 @@ export function ExecutiveSummaryCard(input: {
           <div
             className={
               hasScrollableTopFindings
-                ? "grid max-h-[35.25rem] gap-3 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]"
+                ? "grid max-h-[38.375rem] gap-3 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]"
                 : "grid gap-3"
             }
             data-testid="executive-top-findings-list"

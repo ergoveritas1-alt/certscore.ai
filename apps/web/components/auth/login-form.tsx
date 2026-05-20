@@ -309,7 +309,7 @@ export function LoginForm(input?: {
 
         {allowCreateAccount && isCreateAccount ? (
           <p className="text-xs leading-5 text-slate-500">
-            {LAUNCH_ACCESS.statusLabel}: {LAUNCH_ACCESS.amountDueLabel} due during the initial launch period. No credit card required.
+            {LAUNCH_ACCESS.statusLabel}: {LAUNCH_ACCESS.amountDueLabel} due during the initial launch period.
           </p>
         ) : null}
       </form>

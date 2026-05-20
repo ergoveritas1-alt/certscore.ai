@@ -21,16 +21,15 @@ const standardPlans = [
     summary: "For teams that need repeatable page-level checks without a large volume commitment.",
     scanAllowance: "50 page scans / month",
     ctaHref: "/login?mode=create_account",
-    ctaLabel: "Create free account",
+    ctaLabel: "Create account",
     ctaType: "sign_in",
     plan: "starter",
     ctaClassName:
       "w-fit rounded-full border-0 bg-[#0f8bd7] px-5 text-white shadow-[0_10px_22px_rgba(15,139,215,0.24)] hover:bg-[#0b78bf]",
     highlights: [
-      "Launch phase pricing: $0, no credit card needed",
+      "Temporary launch pricing: $0",
       "50 included page scans each month",
-      "Scan requests throttled to no more than once every 5 minutes",
-      "Manual re-scans use included scan credits",
+      "One scan request every 5 minutes",
       "Show scan history for follow-up review"
     ]
   },
@@ -42,16 +41,15 @@ const standardPlans = [
     summary: "For ongoing review work, deeper page coverage, and recurring scan history.",
     scanAllowance: "500 page scans / month",
     ctaHref: "/login?mode=create_account",
-    ctaLabel: "Create free account",
+    ctaLabel: "Create account",
     ctaType: "sign_in",
     plan: "pro",
     ctaClassName:
       "w-fit rounded-full border-0 bg-[#0f8bd7] px-5 text-white shadow-[0_10px_22px_rgba(15,139,215,0.24)] hover:bg-[#0b78bf]",
     highlights: [
-      "Launch phase pricing: $0, no credit card needed",
+      "Temporary launch pricing: $0",
       "500 included page scans each month",
-      "Scan requests throttled to no more than once every 5 minutes",
-      "Daily recurring scans available within credits",
+      "One scan request every 5 minutes",
       "Show scan history for follow-up review"
     ]
   }
@@ -65,30 +63,14 @@ export default function PricingPage() {
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-16">
           <div className="max-w-2xl space-y-5">
-            <Badge tone="neutral">{LAUNCH_ACCESS.statusLabel}: {LAUNCH_ACCESS.amountDueLabel} due now</Badge>
+            <Badge tone="neutral">Free monthly subscription during launch</Badge>
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
               Pricing based on pages scanned
             </h1>
             <p className="text-base leading-7 text-slate-600">
-              Start with a free launch account and run public-web scans without a credit card. Starter and Pro plans are currently billed
-              at {LAUNCH_ACCESS.amountDueLabel}; scan requests are paced at one every {LAUNCH_ACCESS.scanThrottleMinutes} minutes to keep
-              service quality steady.
+              Start with a free launch account and run public-web scans. Starter and Pro plans are currently billed at{" "}
+              {LAUNCH_ACCESS.amountDueLabel}; launch access includes one scan request every {LAUNCH_ACCESS.scanThrottleMinutes} minutes.
             </p>
-            <PendingButtonLink
-              className="w-fit rounded-full border-0 bg-slate-950 px-5 text-white shadow-[0_10px_22px_rgba(15,23,42,0.2)] hover:bg-slate-800"
-              data-analytics-cta-type="launch_signup"
-              data-analytics-event="pricing_cta_clicked"
-              data-analytics-plan="launch"
-              href="/login?mode=create_account"
-              idleContent={
-                <span className="inline-flex items-center gap-2">
-                  Create free account
-                  <span aria-hidden="true">›</span>
-                </span>
-              }
-              pendingContent="Opening..."
-              size="sm"
-            />
           </div>
         </div>
       </section>
@@ -125,12 +107,24 @@ export default function PricingPage() {
                     ) : null}
                   </div>
 
-                  <div className="space-y-1">
-                    <div className="flex items-end gap-2">
-                      <span className="text-5xl font-semibold tracking-tight text-slate-950">{LAUNCH_ACCESS.amountDueLabel}</span>
-                      <span className="pb-1 text-sm text-emerald-700">due now</span>
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <div className="flex items-end gap-2">
+                        <span className="relative inline-flex text-5xl font-semibold tracking-tight text-slate-400">
+                          {plan.price}
+                          <span
+                            aria-hidden="true"
+                            className="absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 rotate-[-8deg] rounded-full bg-rose-500/85"
+                          />
+                        </span>
+                        <span className="pb-1 text-sm text-slate-500">{plan.priceNote}</span>
+                      </div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-700">Temporary launch offer</p>
                     </div>
-                    <p className="text-sm text-slate-500">Standard price after launch: {plan.price} {plan.priceNote}</p>
+                    <div className="flex items-end gap-2">
+                      <span className="text-4xl font-semibold tracking-tight text-emerald-700">{LAUNCH_ACCESS.amountDueLabel}</span>
+                      <span className="pb-1 text-sm font-semibold text-emerald-700">due now</span>
+                    </div>
                     <p className="text-sm font-semibold text-slate-900">{plan.scanAllowance}</p>
                   </div>
 
@@ -218,10 +212,6 @@ export default function PricingPage() {
             </CardContent>
           </Card>
         </div>
-
-        <p className="mt-8 max-w-3xl text-sm leading-6 text-slate-500">
-          Need higher request throughput, batch scans, or portfolio onboarding? Contact {LAUNCH_ACCESS.salesEmail} for a custom plan.
-        </p>
 
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
           CertScore.ai surfaces automated public-web observations for review. It does not provide legal advice, certification, or compliance determinations.

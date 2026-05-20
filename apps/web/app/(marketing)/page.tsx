@@ -142,17 +142,18 @@ export default async function MarketingHomePage() {
                 idleContent="Scan a website"
                 pendingContent="Opening..."
               />
-              <a
-                className="inline-flex w-full items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-none transition hover:bg-slate-100 sm:w-auto"
+              <PendingButtonLink
+                className="w-full border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 sm:w-auto"
                 data-analytics-cta-location="homepage"
                 data-analytics-destination-url={certscoreGptUrl}
                 data-analytics-event="gpt_cta_clicked"
                 href={certscoreGptUrl}
+                idleContent="Try CertScore GPT beta"
+                pendingContent="Opening..."
                 rel="noopener noreferrer"
                 target="_blank"
-              >
-                Try CertScore GPT beta
-              </a>
+                variant="secondary"
+              />
               <PendingButtonLink
                 className="w-full border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 sm:w-auto"
                 data-analytics-cta-type="sample_report"
