@@ -7,7 +7,6 @@ import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import {
   PULSE_COVERAGE_LIMITATION_COPY,
   PULSE_FEEDBACK_EMAIL,
-  PULSE_PURPOSE_STATEMENT,
   PULSE_SHORT_DISCLAIMER,
   PULSE_STANDARD_DISCLAIMER
 } from "../../lib/pulse/constants";
@@ -445,7 +444,6 @@ export default function ApiPulsePage() {
               Retrieve a quick, evidence-backed CertScore summary for a public URL. Pulse API beta is designed for AI agents, developer tools,
               CLIs, and humans that need a compact scan summary with links to the durable full report.
             </p>
-            <p className="text-base leading-7 text-slate-700">{PULSE_PURPOSE_STATEMENT}</p>
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
               {PULSE_STANDARD_DISCLAIMER}
             </p>
