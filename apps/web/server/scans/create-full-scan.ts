@@ -27,7 +27,7 @@ import {
   updateDomainLatestScan
 } from "./repository";
 import { buildQueuedFullScanConfig } from "./full-scan-config";
-import { findRecentCompletedScanInHistory, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
+import { findRecentCompletedScanForDomain, findRecentCompletedScanInHistory, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest, type ScanRequestStatus } from "./scan-request-log";
 
 export type CreateFullScanActionState = {
@@ -149,7 +149,20 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     }).catch((error) => logScanRequestFailure("workspace_full_scan_request", error));
 
   if (!input.bypassRecentScanReuse) {
-    const recentScan = findRecentCompletedScanInHistory(domainRecord.scans);
+    const recentScan =
+      findRecentCompletedScanInHistory(domainRecord.scans) ??
+      (await findRecentCompletedScanForDomain({
+        normalizedDomain: domainRecord.domain.hostname,
+        normalizedUrl: domainRecord.domain.normalizedUrl,
+        organizationId: input.organizationId
+      }).catch((error) => {
+        console.error("[web] workspace recent scan reuse lookup failed", {
+          domainId: domainRecord.domain.id,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        return null;
+      }));
+
     if (recentScan) {
       await logRequest({
         fulfilledByScanId: recentScan.id,

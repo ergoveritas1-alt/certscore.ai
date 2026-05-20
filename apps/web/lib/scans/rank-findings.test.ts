@@ -52,6 +52,20 @@ test("selectTopFindings can select the consent dark-pattern umbrella while exclu
   );
 });
 
+test("selectTopFindings suppresses cookie-before-consent when broader pre-consent tracking is present", () => {
+  const selected = selectTopFindings(
+    [
+      makePrivacyFinding("third_party_cookie_pre_consent", 200),
+      makePrivacyFinding("pre_consent_tracking_detected", 100),
+      makeFinding("consent_dark_patterns_detected", 90)
+    ],
+    3
+  );
+
+  assert.ok(selected.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.ok(!selected.some((finding) => finding.id === "third_party_cookie_pre_consent"));
+});
+
 test("selectTopFindings forces cross-domain identifier sharing into top findings", () => {
   const selected = selectTopFindings(
     [

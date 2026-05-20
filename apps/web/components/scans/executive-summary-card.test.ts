@@ -11,6 +11,7 @@ import {
 } from "./executive-summary-card";
 import { ADA_ACCESSIBILITY_FIXTURES } from "../../lib/scans/ada-accessibility.fixtures";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
+import { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../../lib/scans/rank-findings";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 
 function makeFinding(
@@ -2009,7 +2010,8 @@ test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-f
   );
 
   assert.match(html, /data-testid="executive-top-findings-list"/);
-  assert.match(html, /lg:flex-1/);
+  assert.match(html, /data-executive-top-findings-list="true"/);
+  assert.match(html, /data-executive-snapshot-pane="true"/);
   assert.doesNotMatch(html, /max-h-\[38\.375rem\]/);
   assert.match(html, /Tracking started before consent/);
   assert.match(html, /Non-essential tracking continued after reject/);
@@ -3275,6 +3277,51 @@ test("ExecutiveSummaryCard assigns specific icons to accessibility and policy ru
   const iconKeys = [...html.matchAll(/data-finding-icon="([^"]+)"/g)].map((match) => match[1]);
   assert.deepEqual(iconKeys, ["keyboard-key", "policy-sync", "contrast-circle"]);
   assert.equal(new Set(iconKeys).size, iconKeys.length);
+});
+
+test("ExecutiveSummaryCard assigns distinct preferred icons to executive top finding ids", () => {
+  const topFindings = [
+    ...EXECUTIVE_SUMMARY_TOP_FINDING_IDS.map((id) => makeFinding(id, id, {
+      section: id.includes("accessibility") || id.includes("keyboard") || id.includes("contrast") || id.includes("focus") || id.includes("semantic") || id.includes("alternative")
+        ? "Accessibility"
+        : "Privacy & Tracking"
+    })),
+    makeFinding("policy_clarity_risk", "Disclosure clarity remains weak")
+  ];
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 62,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 12,
+      thirdPartyDomains: ["googleadservices.com"],
+      topFindings,
+      topObservedEntities: [],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { ads: 1 }
+    })
+  );
+
+  const iconKeys = [...html.matchAll(/data-finding-icon="([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(iconKeys.length, topFindings.length);
+  assert.equal(new Set(iconKeys).size, iconKeys.length);
+  assert.doesNotMatch(iconKeys.join(" "), /default-circle/);
+  assert.match(iconKeys.join(" "), /document-clarity/);
+  assert.match(iconKeys.join(" "), /browser-fingerprint/);
 });
 
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {

@@ -121,6 +121,7 @@ test("Pulse and full-scan routes preserve 24-hour reuse and forceNewScan bypass"
   assert.match(fullScanRoute, /bypassRecentScanReuse: forceNewScan/);
   assert.match(anonymousScanSource, /findRecentCompletedScanForDomain/);
   assert.match(authenticatedScanSource, /findRecentCompletedScanInHistory/);
+  assert.match(authenticatedScanSource, /findRecentCompletedScanForDomain/);
   assert.match(domainSource, /reusedExistingScan: queueResult\.reusedExistingScan/);
 });
 

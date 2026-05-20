@@ -10,6 +10,7 @@ import { getRescanAvailability } from "../../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../../server/auth";
 import { getScanById } from "../../../../server/scans/get-scan-by-id";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
+import { isScanWithinReuseWindow } from "../../../../server/scans/recent-scan-reuse";
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -85,6 +86,10 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   });
 
   const canRescan = scanRecord.scan.status === "completed" && Boolean(scanRecord.scan.domainId);
+  const recentScanActivityAt = scanRecord.scan.completedAt ?? scanRecord.scan.startedAt ?? scanRecord.scan.createdAt;
+  const scanIsWithinReuseWindow = isScanWithinReuseWindow({
+    completedAt: recentScanActivityAt
+  });
   const rescanAvailability = canRescan
     ? getRescanAvailability({
         activeScanExists: false,
@@ -92,8 +97,9 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
         planCode: organization.plan
       })
     : null;
+  const showRescan = canRescan && !scanIsWithinReuseWindow && Boolean(scanRecord.scan.domainId) && Boolean(rescanAvailability);
   const rescanCooldownMessage =
-    canRescan && rescanAvailability
+    showRescan && rescanAvailability
       ? rescanAvailability.reason
         ? rescanAvailability.reason
         : !rescanAvailability.allowed
@@ -116,7 +122,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
           <ScanViewActions
             alternateHref={canRescan ? `/app/scans/${scanRecord.scan.id}/json` : null}
             alternateLabel={canRescan ? "json-view" : null}
-            canRescan={canRescan && Boolean(scanRecord.scan.domainId) && Boolean(rescanAvailability)}
+            canRescan={showRescan}
             cooldownMessage={rescanCooldownMessage}
             domainId={scanRecord.scan.domainId}
             rescanDisabled={Boolean(rescanAvailability && !rescanAvailability.allowed)}

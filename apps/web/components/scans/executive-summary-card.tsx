@@ -29,6 +29,7 @@ import {
 import { CopyJsonButton } from "./copy-json-button";
 import { FindingHashFocus } from "./finding-hash-focus";
 import { InfoTip } from "./info-tip";
+import { TopFindingsHeightSync } from "./top-findings-height-sync";
 type DomainBenchmarkCardData = {
   confidence: "low" | "medium" | "high";
   estimatedRankLabel: string;
@@ -2649,16 +2650,25 @@ type FindingTitleIconKey =
   | "shield-balance"
   | "circle-x"
   | "chain-link"
+  | "globe-link"
   | "device-telemetry"
   | "cookie-storage"
   | "fingerprint"
+  | "browser-fingerprint"
   | "up-arrow"
   | "accessibility-figure"
   | "keyboard-key"
   | "contrast-circle"
+  | "label-tag"
+  | "image-alt"
+  | "focus-target"
   | "warning-triangle"
   | "privacy-choice"
+  | "hidden-choice"
+  | "split-choice"
+  | "hand-stop"
   | "policy-sync"
+  | "document-clarity"
   | "ad-exchange"
   | "default-circle";
 
@@ -2672,6 +2682,8 @@ function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKe
       return ["arrow-transfer", "pulse-tracking", "ad-exchange"];
     case "rtb_cookie_sync_observed":
       return ["ad-exchange", "arrow-transfer", "chain-link"];
+    case "cross_domain_identifier_sharing_observed":
+      return ["globe-link", "chain-link", "arrow-transfer"];
     case "cpra_cba_opt_out_missing":
       return ["privacy-choice", "shield-balance", "ad-exchange"];
     case "session_recording_services_detected":
@@ -2683,11 +2695,11 @@ function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKe
     case "consent_dark_patterns_detected":
       return ["shield-balance", "circle-x"];
     case "asymmetric_consent_ui":
-      return ["shield-balance", "circle-x"];
+      return ["split-choice", "privacy-choice", "shield-balance"];
     case "reject_option_missing_or_hidden":
-      return ["circle-x", "shield-balance"];
+      return ["hidden-choice", "circle-x", "shield-balance"];
     case "forced_consent_interaction":
-      return ["circle-x", "warning-triangle"];
+      return ["hand-stop", "warning-triangle", "circle-x"];
     case "identifier_transmission_detected":
       return ["chain-link", "arrow-transfer"];
     case "device_data_collection_detected":
@@ -2702,6 +2714,8 @@ function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKe
       return ["cookie-storage", "arrow-transfer"];
     case "probable_fingerprinting":
       return ["fingerprint", "device-telemetry"];
+    case "fingerprinting_related_signals_observed":
+      return ["browser-fingerprint", "device-telemetry", "fingerprint"];
     case "accessibility_risk_score":
       return ["accessibility-figure", "warning-triangle"];
     case "keyboard_navigation_accessibility_issue":
@@ -2709,13 +2723,15 @@ function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKe
     case "visual_contrast_accessibility_issue":
       return ["contrast-circle", "accessibility-figure", "warning-triangle"];
     case "semantic_labeling_accessibility_issue":
-      return ["accessibility-figure", "warning-triangle"];
+      return ["label-tag", "accessibility-figure", "warning-triangle"];
     case "text_alternative_accessibility_issue":
-      return ["accessibility-figure", "contrast-circle"];
+      return ["image-alt", "accessibility-figure", "contrast-circle"];
     case "focus_management_issue":
-      return ["keyboard-key", "warning-triangle"];
+      return ["focus-target", "keyboard-key", "warning-triangle"];
     case "policy_behavior_contradiction_detected":
       return ["policy-sync", "shield-balance", "chain-link"];
+    case "policy_clarity_risk":
+      return ["document-clarity", "policy-sync", "default-circle"];
     case "access_limited_no_reliable_findings":
       return ["warning-triangle", "default-circle"];
     default:
@@ -2818,6 +2834,16 @@ function FindingTitleIcon(input: { finding: CertScoreFinding; iconKey?: FindingT
     );
   }
 
+  if (iconKey === "globe-link") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.7" />
+        <path d="M4.8 11h12.4M11 4.5c1.7 1.7 2.5 3.9 2.5 6.5s-.8 4.8-2.5 6.5M11 4.5C9.3 6.2 8.5 8.4 8.5 11s.8 4.8 2.5 6.5" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" />
+        <path d="M15.5 16.5 19 20M17.5 14.6l2.8 2.8" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
   if (iconKey === "privacy-choice") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-rose-700`} aria-hidden="true">
@@ -2868,6 +2894,17 @@ function FindingTitleIcon(input: { finding: CertScoreFinding; iconKey?: FindingT
     );
   }
 
+  if (iconKey === "browser-fingerprint") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <rect x="4" y="5.5" width="16" height="13" rx="2.2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+        <path d="M4 9h16M8.2 7.2h.01M11 7.2h.01" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+        <path d="M12 11.2c1.4 0 2.5 1.1 2.5 2.5 0 1.5-.9 2.3-2.5 3.8-1.6-1.5-2.5-2.3-2.5-3.8 0-1.4 1.1-2.5 2.5-2.5Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+        <path d="M12 13.1v2.1" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
   if (iconKey === "up-arrow") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
@@ -2904,6 +2941,36 @@ function FindingTitleIcon(input: { finding: CertScoreFinding; iconKey?: FindingT
     );
   }
 
+  if (iconKey === "label-tag") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-amber-700`} aria-hidden="true">
+        <path d="M5 6.5h8.5L19 12l-5.5 5.5H5z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+        <circle cx="8.5" cy="12" r="1.1" fill="currentColor" />
+        <path d="M11 10h3M11 14h2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "image-alt") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-amber-700`} aria-hidden="true">
+        <rect x="4.5" y="5" width="15" height="14" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M7.5 16l3.2-3.2 2.2 2.2 1.6-1.6 2 2.6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M8 8.5h2.4M8 11h1.6M13 8.5h3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "focus-target") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-amber-700`} aria-hidden="true">
+        <path d="M7 4.5H5.5A1.5 1.5 0 0 0 4 6v1.5M17 4.5h1.5A1.5 1.5 0 0 1 20 6v1.5M7 19.5H5.5A1.5 1.5 0 0 1 4 18v-1.5M17 19.5h1.5A1.5 1.5 0 0 0 20 18v-1.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+        <path d="M12 9v6M9 12h6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
   if (iconKey === "policy-sync") {
     return (
       <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
@@ -2911,6 +2978,44 @@ function FindingTitleIcon(input: { finding: CertScoreFinding; iconKey?: FindingT
         <path d="M14 4.5v3h3M9.5 11h5M9.5 14h3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M17.8 11.2c1 .7 1.7 1.7 1.7 3 0 2.2-1.8 4-4 4h-.5M12.2 17.8c-1-.7-1.7-1.7-1.7-3 0-2.2 1.8-4 4-4h.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         <path d="M17.1 9.7h2.2v2.2M12.9 19.3h-2.2v-2.2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "hidden-choice") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <path d="M4 12s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+        <circle cx="12" cy="12" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M5 19 19 5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "split-choice") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <path d="M5 7h7M12 7l-2.5-2.5M12 7 9.5 9.5M5 17h14M19 17l-2.5-2.5M19 17l-2.5 2.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M8.5 11.5h7" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.55" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "hand-stop") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-amber-700`} aria-hidden="true">
+        <path d="M8 11V6.8a1.2 1.2 0 0 1 2.4 0V11M10.4 10V5.8a1.2 1.2 0 0 1 2.4 0V10M12.8 10.5V7a1.2 1.2 0 0 1 2.4 0v5M15.2 12V9.2a1.2 1.2 0 0 1 2.4 0v4.6c0 3.4-2.4 5.7-5.7 5.7-2.1 0-3.7-.9-4.9-2.6L5.2 14a1.3 1.3 0 0 1 2.1-1.5l1.1 1.4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "document-clarity") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <path d="M7 4.5h7l3 3v12H7z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+        <path d="M14 4.5v3h3M9.5 11h5M9.5 14h4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="16.8" cy="16.6" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M18.4 18.2 20 19.8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
     );
   }
@@ -3700,7 +3805,10 @@ export function ExecutiveSummaryCard(input: {
 
   return (
     <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
-      <div className="grid items-stretch gap-6 px-6 py-6 lg:grid-cols-[1.35fr_0.9fr] lg:px-8">
+      <div
+        className="grid items-stretch gap-6 px-6 py-6 lg:grid-cols-[1.35fr_0.9fr] lg:px-8"
+        data-executive-summary-layout
+      >
         <div className="flex flex-col gap-5 lg:min-h-0">
           <div className="rounded-[1.8rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,1))] p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.28)]">
             <div className="flex flex-wrap items-center gap-3">
@@ -3813,11 +3921,13 @@ export function ExecutiveSummaryCard(input: {
           <div
             className={
               hasScrollableTopFindings
-                ? "grid gap-3 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable] lg:min-h-0 lg:flex-1"
+                ? "grid gap-3 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable] lg:min-h-0"
                 : "grid gap-3"
             }
+            data-executive-top-findings-list
             data-testid="executive-top-findings-list"
           >
+            {hasScrollableTopFindings ? <TopFindingsHeightSync /> : null}
             <FindingHashFocus />
             {filteredTopFindings.length > 0 ? (
               filteredTopFindings.map((finding, index) => {
@@ -3891,7 +4001,10 @@ export function ExecutiveSummaryCard(input: {
           </div>
         </div>
 
-        <div className="space-y-4 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]">
+        <div
+          className="space-y-4 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]"
+          data-executive-snapshot-pane
+        >
           {input.accessLimitationNotice ? (
             <>
               <div className="space-y-1">

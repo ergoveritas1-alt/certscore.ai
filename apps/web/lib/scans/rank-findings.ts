@@ -72,6 +72,7 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
 
   if (ranked.some((finding) => finding.id === "pre_consent_tracking_detected")) {
     suppressedIds.add("third_party_tracking_pre_consent");
+    suppressedIds.add("third_party_cookie_pre_consent");
   }
   if (ranked.some((finding) => finding.id === "probable_fingerprinting")) {
     suppressedIds.add("fingerprinting_related_signals_observed");

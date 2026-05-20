@@ -27,7 +27,6 @@ const standardPlans = [
     ctaClassName:
       "w-fit rounded-full border-0 bg-[#0f8bd7] px-5 text-white shadow-[0_10px_22px_rgba(15,139,215,0.24)] hover:bg-[#0b78bf]",
     highlights: [
-      "Temporary launch pricing: $0",
       "50 included page scans each month",
       "Up to 1 scan request every 5 minutes",
       "Show scan history for follow-up review"
@@ -47,7 +46,6 @@ const standardPlans = [
     ctaClassName:
       "w-fit rounded-full border-0 bg-[#0f8bd7] px-5 text-white shadow-[0_10px_22px_rgba(15,139,215,0.24)] hover:bg-[#0b78bf]",
     highlights: [
-      "Temporary launch pricing: $0",
       "500 included page scans each month",
       "Up to 1 scan request every 5 minutes",
       "Show scan history for follow-up review"
@@ -68,8 +66,8 @@ export default function PricingPage() {
               Pricing based on pages scanned
             </h1>
             <p className="text-base leading-7 text-slate-600">
-              Start with a free launch account and run public-web scans. Starter and Pro plans are currently billed at{" "}
-              {LAUNCH_ACCESS.amountDueLabel}; launch access allows up to 1 scan request every {LAUNCH_ACCESS.scanThrottleMinutes} minutes.
+              Sign up now, Starter and Pro plans are temporarily free during our launch period; launch access allows up to 1 scan request every{" "}
+              {LAUNCH_ACCESS.scanThrottleMinutes} minutes.
             </p>
           </div>
         </div>

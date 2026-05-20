@@ -25,6 +25,58 @@ function actionClassName(tone: "primary" | "secondary" = "secondary") {
   return `${base} border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950`;
 }
 
+function iconActionClassName(tone: "primary" | "secondary" = "secondary") {
+  const base =
+    "group relative inline-flex h-10 w-10 items-center justify-center rounded-full text-sm shadow-sm transition focus:outline-none focus:ring-2 focus:ring-sky-200 focus:ring-offset-2";
+
+  if (tone === "primary") {
+    return `${base} border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white hover:brightness-[1.04]`;
+  }
+
+  return `${base} border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950`;
+}
+
+function IconTooltip({ label }: { label: string }) {
+  return (
+    <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+      {label}
+    </span>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24">
+      <path
+        d="M8.5 13.5 15.5 17M15.5 7 8.5 10.5M7 14.5a3 3 0 1 1 0-6 3 3 0 0 1 0 6ZM17 8.5a3 3 0 1 1 0-6 3 3 0 0 1 0 6ZM17 21.5a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function EmailIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24">
+      <rect x="4" y="6" width="16" height="12" rx="2.4" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="m5.5 8 6.5 5 6.5-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function MonitorIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24">
+      <path d="M6 18h12M8 18v-5a4 4 0 0 1 8 0v5M10 20.2a2.4 2.4 0 0 0 4 0" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <path d="M6.5 10.5a6 6 0 0 1 11 0M4.5 8a9 9 0 0 1 15 0" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" opacity="0.65" />
+    </svg>
+  );
+}
+
 export function ShareReportActions({ domainLabel, scanId }: ShareReportActionsProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [currentUrl, setCurrentUrl] = useState("");
@@ -74,29 +126,38 @@ export function ShareReportActions({ domainLabel, scanId }: ShareReportActionsPr
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className={actionClassName("primary")}
+          aria-label={copyState === "copied" ? "Report URL copied" : "Copy link to report"}
+          className={iconActionClassName("primary")}
           data-analytics-cta-type="share"
           data-analytics-event="report_cta_clicked"
           onClick={copyReportUrl}
+          title="Copy link to report"
         >
-          {copyState === "copied" ? "Report URL copied" : "Share report"}
+          <ShareIcon />
+          <IconTooltip label={copyState === "copied" ? "Report URL copied" : "Copy link to report"} />
         </button>
         <button
           type="button"
-          className={actionClassName()}
+          aria-label="Email report"
+          className={iconActionClassName()}
           data-analytics-cta-type="email"
           data-analytics-event="report_cta_clicked"
           onClick={() => setIsEmailDialogOpen(true)}
+          title="Email report"
         >
-          {emailState.success ? "Sent" : "Email me this report"}
+          <EmailIcon />
+          <IconTooltip label={emailState.success ? "Sent" : "Email report"} />
         </button>
         <Link
-          className={actionClassName()}
+          aria-label="Monitor this site"
+          className={iconActionClassName()}
           data-analytics-cta-type="monitor"
           data-analytics-event="report_cta_clicked"
           href={monitorHref}
+          title="Monitor this site"
         >
-          Monitor this site
+          <MonitorIcon />
+          <IconTooltip label="Monitor this site" />
         </Link>
       </div>
       {copyState === "failed" ? (
