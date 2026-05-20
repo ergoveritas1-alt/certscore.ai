@@ -5,6 +5,159 @@ export type SampleFindingJson = {
   payload: Record<string, unknown>;
 };
 
+type EvidenceConfidence = "strong" | "good" | "review_signal";
+type DirectVsInferred =
+  | "direct_observation"
+  | "correlated_observation"
+  | "absence_observation"
+  | "clustered_inference";
+
+const SAMPLE_EVIDENCE_PROFILE: Record<string, { evidenceConfidence: EvidenceConfidence; directVsInferred: DirectVsInferred }> = {
+  asymmetric_consent_ui: { evidenceConfidence: "good", directVsInferred: "correlated_observation" },
+  consent_dark_patterns_detected: { evidenceConfidence: "good", directVsInferred: "correlated_observation" },
+  cpra_cba_opt_out_missing: { evidenceConfidence: "review_signal", directVsInferred: "absence_observation" },
+  cross_domain_identifier_sharing_observed: { evidenceConfidence: "review_signal", directVsInferred: "direct_observation" },
+  fingerprinting_related_signals_observed: { evidenceConfidence: "review_signal", directVsInferred: "direct_observation" },
+  forced_consent_interaction: { evidenceConfidence: "good", directVsInferred: "direct_observation" },
+  keyboard_navigation_accessibility_issue: { evidenceConfidence: "good", directVsInferred: "direct_observation" },
+  possible_session_replay_on_sensitive_input_surface: { evidenceConfidence: "review_signal", directVsInferred: "correlated_observation" },
+  pre_consent_tracking_detected: { evidenceConfidence: "strong", directVsInferred: "direct_observation" },
+  probable_fingerprinting: { evidenceConfidence: "review_signal", directVsInferred: "clustered_inference" },
+  reject_option_missing_or_hidden: { evidenceConfidence: "good", directVsInferred: "absence_observation" },
+  reject_tracking_persists_after_reject: { evidenceConfidence: "good", directVsInferred: "direct_observation" },
+  rtb_cookie_sync_observed: { evidenceConfidence: "review_signal", directVsInferred: "direct_observation" },
+  semantic_labeling_accessibility_issue: { evidenceConfidence: "good", directVsInferred: "direct_observation" },
+  sensitive_data_collection_with_third_party_tracking_present: {
+    evidenceConfidence: "review_signal",
+    directVsInferred: "correlated_observation"
+  },
+  session_recording_services_detected: { evidenceConfidence: "review_signal", directVsInferred: "direct_observation" },
+  text_alternative_accessibility_issue: { evidenceConfidence: "good", directVsInferred: "direct_observation" },
+  third_party_cookie_pre_consent: { evidenceConfidence: "review_signal", directVsInferred: "direct_observation" },
+  visual_contrast_accessibility_issue: { evidenceConfidence: "good", directVsInferred: "direct_observation" }
+};
+
+const SAMPLE_TOP_FINDING_CALIBRATION: Record<string, Record<string, string[]>> = {
+  pre_consent_tracking_detected: {
+    minimumToSurface: ["Classified non-essential request/storage before observed consent."],
+    highConfidenceRequires: ["Usable coverage.", "Purpose classification.", "Runtime anchor."],
+    criticalOrTopRankingRequires: ["Advertising/replay/identifier-sync or sensitive-surface context."],
+    demoteOrSuppressWhen: ["Tag manager only.", "Strict necessity.", "Blocked scan.", "Unreliable timing."]
+  },
+  visual_contrast_accessibility_issue: {
+    minimumToSurface: ["Automated contrast rule with selector/page/WCAG ref."],
+    highConfidenceRequires: ["Color pair or ratio.", "Element state.", "Meaningful visible content."],
+    criticalOrTopRankingRequires: ["Repeated component.", "Critical user path.", "Control/focus indicator."],
+    demoteOrSuppressWhen: ["Decorative/inactive/logo/incidental without context review."]
+  },
+  semantic_labeling_accessibility_issue: {
+    minimumToSurface: ["Automated label/name/role rule with selector/page/WCAG ref."],
+    highConfidenceRequires: ["Visible-label/accessibility-name/role context."],
+    criticalOrTopRankingRequires: ["Required or sensitive form field.", "Repeated component.", "Blocking control."],
+    demoteOrSuppressWhen: ["Selector only.", "ARIA attribute only.", "No affected element."]
+  },
+  fingerprinting_related_signals_observed: {
+    minimumToSurface: ["Retained high-entropy signal with script/request context."],
+    highConfidenceRequires: ["Multiple categories or known signal script with runtime context."],
+    criticalOrTopRankingRequires: ["Cluster plus identifier/cross-domain/pre-consent context."],
+    demoteOrSuppressWhen: ["Isolated common environment read.", "Vendor name only.", "Generic analytics."]
+  },
+  session_recording_services_detected: {
+    minimumToSurface: ["Replay-related script/request/vendor artifact."],
+    highConfidenceRequires: ["Endpoint or service classification plus page/timing/vendor context."],
+    criticalOrTopRankingRequires: ["Collection endpoint.", "Sensitive page.", "Pre-consent/post-reject.", "No masking/exclusion observed."],
+    demoteOrSuppressWhen: ["Vendor name only.", "Generic analytics.", "Policy text only."]
+  },
+  third_party_cookie_pre_consent: {
+    minimumToSurface: ["Third-party cookie/storage artifact before consent."],
+    highConfidenceRequires: ["Domain/scope/timing plus purpose or vendor classification."],
+    criticalOrTopRankingRequires: ["Advertising/identity/sync persistent storage or repeated pages."],
+    demoteOrSuppressWhen: ["Request only.", "Cookie name only.", "Unknown timing.", "Blocked scan."]
+  },
+  rtb_cookie_sync_observed: {
+    minimumToSurface: ["Sync/match/adtech identity-like request or redirect."],
+    highConfidenceRequires: ["Origin/path.", "Vendor/category.", "Identifier-like keys.", "Redaction."],
+    criticalOrTopRankingRequires: ["Multi-hop redirect.", "Repeated sync endpoints.", "Pre-consent.", "Cross-domain identifier sharing."],
+    demoteOrSuppressWhen: ["Generic ad script.", "Ad impression.", "Vendor name only."]
+  },
+  text_alternative_accessibility_issue: {
+    minimumToSurface: ["Automated alt/text alternative rule with selector/page/WCAG ref."],
+    highConfidenceRequires: ["Element purpose context and accessible-name context."],
+    criticalOrTopRankingRequires: ["Functional control.", "Important chart/graphic.", "Repeated CMS/template issue."],
+    demoteOrSuppressWhen: ["Decorative/redundant/logo context without manual review."]
+  },
+  consent_dark_patterns_detected: {
+    minimumToSurface: ["Concrete consent-surface choice architecture signal."],
+    highConfidenceRequires: ["Two or more signals retained."],
+    criticalOrTopRankingRequires: ["Forced interaction plus missing/nested reject or repeated prompt."],
+    demoteOrSuppressWhen: ["CMP name only.", "Banner presence only.", "Unrelated modal."]
+  },
+  cpra_cba_opt_out_missing: {
+    minimumToSurface: [
+      "Advertising, cross-context behavioral advertising, or sale/share review signal plus retained public-surface search with no opt-out path observed."
+    ],
+    highConfidenceRequires: ["Footer, policy, CMP, state-rights, and preference-center coverage."],
+    criticalOrTopRankingRequires: [
+      "GPC scan state sent plus likely cross-context behavioral advertising or sale/share context plus no handling/path."
+    ],
+    demoteOrSuppressWhen: ["Adtech vendor only.", "No link coverage.", "No policy coverage.", "No region/context."]
+  },
+  forced_consent_interaction: {
+    minimumToSurface: ["Consent UI artifact plus blocking/interruption signal."],
+    highConfidenceRequires: ["Scroll/content/focus blocking plus visible controls and unrelated interruptions excluded."],
+    criticalOrTopRankingRequires: ["Full blocking with no equivalent non-accept path."],
+    demoteOrSuppressWhen: ["Generic modal.", "Paywall.", "Bot challenge.", "Age gate.", "Login wall."]
+  },
+  reject_option_missing_or_hidden: {
+    minimumToSurface: ["Accept visible plus reject/refusal not observed or nested."],
+    highConfidenceRequires: ["Visible controls retained plus preference path inspected."],
+    criticalOrTopRankingRequires: ["Accept one step and reject unavailable or materially harder."],
+    demoteOrSuppressWhen: ["Labels not retained.", "Scan did not reach consent surface.", "Unrelated overlay."]
+  },
+  sensitive_data_collection_with_third_party_tracking_present: {
+    minimumToSurface: ["Retained sensitive surface plus retained third-party tracking on same page/flow."],
+    highConfidenceRequires: ["Field/surface context plus vendor category, timing, and coverage."],
+    criticalOrTopRankingRequires: ["Sensitive page plus advertising/replay/measurement plus consent concern or event-capture signal."],
+    demoteOrSuppressWhen: ["Sensitive field alone.", "Vendor elsewhere on site.", "No same-surface runtime artifact."]
+  },
+  asymmetric_consent_ui: {
+    minimumToSurface: ["Retained accept/refusal relationship."],
+    highConfidenceRequires: ["Step count, layer, and labels retained."],
+    criticalOrTopRankingRequires: ["Materially higher refusal effort plus visual hierarchy imbalance."],
+    demoteOrSuppressWhen: ["Button color alone.", "Accept button alone.", "No refusal path context."]
+  },
+  keyboard_navigation_accessibility_issue: {
+    minimumToSurface: ["Automated keyboard/focus rule with selector/page/WCAG ref."],
+    highConfidenceRequires: ["Keyboard path/focus/interaction state context."],
+    criticalOrTopRankingRequires: ["Trap.", "Primary nav blocked.", "Form submit blocked.", "Repeated component."],
+    demoteOrSuppressWhen: ["Selector only.", "Inactive/hidden/decorative element."]
+  },
+  cross_domain_identifier_sharing_observed: {
+    minimumToSurface: ["Identifier-like key/value pattern in outbound cross-domain request."],
+    highConfidenceRequires: ["Source/destination plus redacted key and vendor/category."],
+    criticalOrTopRankingRequires: ["Persistent/scoped identifier to adtech/identity destination or pre-consent/post-reject."],
+    demoteOrSuppressWhen: ["Generic query key.", "Destination unknown.", "Unredacted identifiers."]
+  },
+  reject_tracking_persists_after_reject: {
+    minimumToSurface: ["Reject interaction plus post-reject classified non-essential request/storage."],
+    highConfidenceRequires: ["Reject success.", "Pre/post sequence.", "Artifact classification."],
+    criticalOrTopRankingRequires: ["Post-reject advertising/replay/identifier sync or repeated post-reject artifacts."],
+    demoteOrSuppressWhen: ["Reject button present but not clicked.", "Unknown essentiality.", "Queued pre-reject beacon likely."]
+  },
+  possible_session_replay_on_sensitive_input_surface: {
+    minimumToSurface: ["Replay signal plus sensitive surface in same observed scope."],
+    highConfidenceRequires: ["Replay collection endpoint or strong replay runtime signal plus sensitive field/page context."],
+    criticalOrTopRankingRequires: ["Collection endpoint plus sensitive form plus no masking/exclusion observed or consent concern."],
+    demoteOrSuppressWhen: ["Replay library only.", "Global script only.", "Sensitive field not same page/flow.", "Masking/page exclusion observed."]
+  },
+  probable_fingerprinting: {
+    minimumToSurface: ["Multi-signal high-entropy cluster."],
+    highConfidenceRequires: ["Cluster plus script/request and tier/context."],
+    criticalOrTopRankingRequires: ["Cluster plus identifier/cross-domain/pre-consent/adtech context."],
+    demoteOrSuppressWhen: ["Single common attribute.", "Vendor name only.", "Security script without retained cluster."]
+  }
+};
+
 const INTERNAL_PUBLIC_SAMPLE_KEYS = new Set([
   "appeared_in_executive_summary",
   "conflict_bridge",
@@ -62,6 +215,241 @@ function sanitizeSampleValue(value: unknown, primaryDomain: string | null): unkn
   );
 }
 
+function getRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function getEvidenceRecord(payload: Record<string, unknown>) {
+  return getRecord(payload.evidence);
+}
+
+function getCountsRecord(payload: Record<string, unknown>) {
+  return getRecord(getEvidenceRecord(payload).counts);
+}
+
+function getFirstStringArrayValue(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is string => typeof entry === "string").slice(0, 6);
+    }
+  }
+
+  return [];
+}
+
+function getFirstNumberValue(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function buildCategoryEvidenceBlocks(findingId: string, payload: Record<string, unknown>) {
+  const evidence = getEvidenceRecord(payload);
+  const counts = getCountsRecord(payload);
+  const requestSamples = Array.isArray(evidence.request_samples) ? evidence.request_samples.slice(0, 3) : [];
+  const cookieSamples = Array.isArray(evidence.cookie_samples) ? evidence.cookie_samples.slice(0, 3) : [];
+  const runtimeAnchors = getFirstStringArrayValue(evidence, ["runtime_anchors", "evidence_snippets"]);
+  const vendorCategory = getFirstStringArrayValue(evidence, ["vendors"])[0] ?? "manual_review_recommended";
+  const blocks: Record<string, unknown> = {};
+
+  if (
+    findingId === "pre_consent_tracking_detected" ||
+    findingId === "third_party_cookie_pre_consent" ||
+    findingId === "reject_tracking_persists_after_reject"
+  ) {
+    blocks.consentTimeline = {
+      firstRequestMs: getFirstNumberValue(counts, ["firstRequestMs"]),
+      firstThirdPartyRequestMs: getFirstNumberValue(counts, ["firstThirdPartyRequestMs"]),
+      firstCookieSeenMs: getFirstNumberValue(counts, ["firstCookieSeenMs"]),
+      consentActionObservedBeforeFirstSignal: false,
+      consentStateBasis: "observed_scan_scope",
+      manualReviewNeeded: true
+    };
+  }
+
+  if (
+    findingId === "pre_consent_tracking_detected" ||
+    findingId === "third_party_cookie_pre_consent" ||
+    findingId === "rtb_cookie_sync_observed" ||
+    findingId === "cross_domain_identifier_sharing_observed" ||
+    findingId === "reject_tracking_persists_after_reject"
+  ) {
+    blocks.networkEvidence = {
+      artifactRefs: requestSamples.length > 0 ? requestSamples : runtimeAnchors.slice(0, 3),
+      cookieOrStorageArtifacts: cookieSamples,
+      vendorCategory,
+      queryStringsRedacted: true,
+      valuesRedacted: true,
+      manualReviewNeeded: true
+    };
+  }
+
+  if (
+    findingId === "forced_consent_interaction" ||
+    findingId === "reject_option_missing_or_hidden" ||
+    findingId === "asymmetric_consent_ui" ||
+    findingId === "consent_dark_patterns_detected" ||
+    findingId === "cpra_cba_opt_out_missing"
+  ) {
+    blocks.uiEvidence = {
+      observedSurface: findingId === "cpra_cba_opt_out_missing" ? "footer_policy_cmp_preference_center_scope" : "consent_surface",
+      retainedControlContext: true,
+      labelsOrPathsRetained: true,
+      absenceObservationRequiresCoverage: findingId === "reject_option_missing_or_hidden" || findingId === "cpra_cba_opt_out_missing",
+      manualReviewNeeded: true
+    };
+  }
+
+  if (
+    findingId === "visual_contrast_accessibility_issue" ||
+    findingId === "semantic_labeling_accessibility_issue" ||
+    findingId === "text_alternative_accessibility_issue" ||
+    findingId === "keyboard_navigation_accessibility_issue"
+  ) {
+    blocks.accessibilityEvidence = {
+      ruleId: "representative_automated_rule",
+      selector: "redacted_selector_reference",
+      pageUrl: "https://example.com/",
+      impact: payload.criticality ?? "review",
+      wcagRefs: ["WCAG-oriented automated review reference"],
+      elementType: "user_visible_element",
+      elementState: "observed_state",
+      repeatedInstanceCount: getFirstNumberValue(counts, ["representativeAxeExampleCount"]) ?? 1,
+      componentOrTemplateScope: "manual_review_recommended",
+      exceptionContext: "not_determined",
+      manualReviewNeeded: true
+    };
+  }
+
+  if (findingId === "session_recording_services_detected" || findingId === "possible_session_replay_on_sensitive_input_surface") {
+    blocks.sessionReplayEvidence = {
+      replayArtifactObserved: true,
+      replayCollectionEndpointObserved: findingId === "possible_session_replay_on_sensitive_input_surface" ? "not_determined" : "unknown",
+      maskingOrPageExclusionObserved: "not_determined",
+      captureOrRetentionDetermined: false,
+      manualReviewNeeded: true
+    };
+  }
+
+  if (
+    findingId === "sensitive_data_collection_with_third_party_tracking_present" ||
+    findingId === "possible_session_replay_on_sensitive_input_surface"
+  ) {
+    blocks.sensitiveSurfaceEvidence = {
+      sensitiveSurfaceObserved: true,
+      surfaceCategory: "sensitive_or_high_risk_context_review",
+      article9SpecialCategoryDetermined: false,
+      samePageOrFlowRuntimeContextRequired: true,
+      userEnteredValuesRetained: false,
+      manualReviewNeeded: true
+    };
+  }
+
+  if (findingId === "fingerprinting_related_signals_observed" || findingId === "probable_fingerprinting") {
+    blocks.fingerprintEvidence = {
+      clusterSize: findingId === "probable_fingerprinting" ? "multi_signal_cluster" : "related_signal",
+      entropyTiers: findingId === "probable_fingerprinting" ? ["high", "medium"] : ["review"],
+      clusterStrength: findingId === "probable_fingerprinting" ? "probable_review_signal" : "related_signal_not_probable",
+      identifierLinkageContext: "manual_review_recommended",
+      possibleSecurityOrFraudPurpose: "not_determined",
+      rawDeviceValuesRetained: false,
+      manualReviewNeeded: true
+    };
+  }
+
+  return blocks;
+}
+
+function normalizeSamplePayload(findingId: string, label: string, payload: Record<string, unknown>) {
+  const profile = SAMPLE_EVIDENCE_PROFILE[findingId] ?? {
+    evidenceConfidence: payload.evidenceConfidence === "strong" || payload.evidenceConfidence === "good"
+      ? payload.evidenceConfidence
+      : "review_signal",
+    directVsInferred:
+      payload.directVsInferred === "correlated_observation" ||
+      payload.directVsInferred === "absence_observation" ||
+      payload.directVsInferred === "clustered_inference"
+        ? payload.directVsInferred
+        : "direct_observation"
+  };
+  const coverageFlags = Array.isArray(payload.coverage_flags)
+    ? payload.coverage_flags.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const evidence = getEvidenceRecord(payload);
+  const artifacts = {
+    runtimeAnchors: getFirstStringArrayValue(evidence, ["runtime_anchors", "evidence_snippets"]),
+    requestSamples: Array.isArray(evidence.request_samples) ? evidence.request_samples.slice(0, 3) : [],
+    cookieOrStorageSamples: Array.isArray(evidence.cookie_samples) ? evidence.cookie_samples.slice(0, 3) : [],
+    policyAnchors: getFirstStringArrayValue(evidence, ["policy_anchors"]),
+    rawValuesRetained: false
+  };
+
+  return {
+    ...payload,
+    finding_id: typeof payload.finding_id === "string" ? payload.finding_id : findingId,
+    finding_label: typeof payload.finding_label === "string" ? payload.finding_label : label,
+    evidenceVersion: "2.0",
+    evidenceConfidence: profile.evidenceConfidence,
+    directVsInferred: profile.directVsInferred,
+    scanContext: {
+      domain: typeof payload.domain === "string" ? payload.domain : "example.com",
+      requestedUrl: typeof payload.requested_url === "string" ? payload.requested_url : "https://example.com/",
+      finalUrl: typeof payload.final_url === "string" ? payload.final_url : "https://example.com/",
+      publicWebObservation: true,
+      legalConclusion: false
+    },
+    artifacts,
+    classification: {
+      section: typeof payload.section === "string" ? payload.section : "Review signal",
+      criticality: typeof payload.criticality === "string" ? payload.criticality : "review",
+      evidenceConfidence: profile.evidenceConfidence,
+      directVsInferred: profile.directVsInferred,
+      legalStatusDetermined: false
+    },
+    coverage: {
+      coverageFlags,
+      coverageReliableForTopRanking: coverageFlags.length === 0,
+      notDetectedMeans: "not_observed_in_scan_scope",
+      manualReviewNeeded: true
+    },
+    topFindingCalibration: SAMPLE_TOP_FINDING_CALIBRATION[findingId] ?? {
+      minimumToSurface: ["Retained evidence supports the finding under the canonical concern/policy/unified-finding pipeline."],
+      highConfidenceRequires: ["Corroborated retained evidence and usable coverage."],
+      criticalOrTopRankingRequires: ["Stronger directness, corroboration, affected surface, and review relevance."],
+      demoteOrSuppressWhen: ["Evidence is ambiguous, unsupported, blocked, or audit-only."]
+    },
+    automationLimits: Array.isArray(payload.automationLimits)
+      ? payload.automationLimits
+      : [
+          "Automated public-web observations do not determine legal status, compliance status, proof that a law was breached, proof of data capture, or tracking lawfulness.",
+          "Manual review is needed to confirm purpose, necessity, jurisdiction, configuration, exemptions, and remediation quality."
+        ],
+    redaction: {
+      rawIdentifiersRetained: false,
+      storageValueContentsRetained: false,
+      completeQueryStringsRetained: false,
+      requestBodiesRetained: false,
+      renderedPageImagesRetained: false,
+      sourceMarkupRetained: false,
+      userEnteredValuesRetained: false
+    },
+    selectionReason: typeof payload.selectionReason === "string"
+      ? payload.selectionReason
+      : typeof payload.selection_reason === "string"
+        ? payload.selection_reason
+        : "Illustrative public sample selected to show retained evidence, directness, limits, and top-finding calibration.",
+    ...buildCategoryEvidenceBlocks(findingId, payload)
+  };
+}
+
 function makePublicSample(sample: SampleFindingJson): SampleFindingJson {
   const primaryDomain = typeof sample.payload.domain === "string" ? sample.payload.domain : null;
   const sanitizedPayload = sanitizeSampleValue(sample.payload, primaryDomain) as Record<string, unknown>;
@@ -81,7 +469,7 @@ function makePublicSample(sample: SampleFindingJson): SampleFindingJson {
   return {
     ...sample,
     sourceLabel: sample.sourceLabel.includes("Production") ? "Redacted illustrative example" : sample.sourceLabel,
-    payload: sanitizedPayload
+    payload: normalizeSamplePayload(sample.findingId, sample.label, sanitizedPayload)
   };
 }
 
@@ -96,8 +484,8 @@ const accessibilityRiskScore = {
   "finding_id": "accessibility_risk_score",
   "finding_label": "Representative accessibility barriers detected",
   "section": "Accessibility",
-  "confidence": "good",
-  "direct_vs_inferred": "direct",
+  "evidenceConfidence": "good",
+  "directVsInferred": "direct_observation",
   "surface_priority": 72,
   "appeared_in_executive_summary": true,
   "regulatory_lanes": [],
@@ -165,8 +553,8 @@ const preConsentTrackingDetected = {
   "finding_id": "pre_consent_tracking_detected",
   "finding_label": "Third-party tracking observed before recorded consent",
   "section": "Privacy & Tracking",
-  "confidence": "strong",
-  "direct_vs_inferred": "direct",
+  "evidenceConfidence": "strong",
+  "directVsInferred": "direct_observation",
   "evidence": {
     "counts": {
       "firstRequestMs": 1137,
@@ -258,8 +646,8 @@ const rejectTrackingPersistsAfterReject = {
   "finding_id": "reject_tracking_persists_after_reject",
   "finding_label": "Non-essential tracking continued after reject",
   "section": "Privacy & Tracking",
-  "confidence": "good",
-  "direct_vs_inferred": "direct",
+  "evidenceConfidence": "good",
+  "directVsInferred": "direct_observation",
   "evidence_source": "Production scan corpus",
   "evidence_summary": "Scan ID: 6375819a-dc84-4da8-8eba-0a415059255f, vendors: Adobe Analytics + Google Ads, confidence: good, direct evidence",
   "verification_method": "Kimi-reviewed runtime artifact",
@@ -275,10 +663,10 @@ const rtbCookieSyncObserved = {
   "created_at": "2026-04-29T15:48:39.215Z",
   "scanned_at": "2026-04-29T15:49:46.818Z",
   "finding_id": "rtb_cookie_sync_observed",
-  "finding_label": "RTB cookie sync observed",
+  "finding_label": "Adtech identity sync-like request observed",
   "section": "Vendors & Requests",
-  "confidence": "strong",
-  "direct_vs_inferred": "direct",
+  "evidenceConfidence": "strong",
+  "directVsInferred": "direct_observation",
   "surface_priority": 94,
   "appeared_in_executive_summary": true,
   "regulatory_lanes": [],
@@ -447,10 +835,10 @@ const sessionRecordingServicesDetected = {
   "created_at": "2026-03-30T00:59:42.069Z",
   "scanned_at": "2026-03-30T01:01:03.193Z",
   "finding_id": "session_recording_services_detected",
-  "finding_label": "Session recording services detected",
+  "finding_label": "Session replay service signal observed",
   "section": "Privacy & Tracking",
-  "confidence": "good",
-  "direct_vs_inferred": "direct",
+  "evidenceConfidence": "good",
+  "directVsInferred": "direct_observation",
   "surface_priority": 89,
   "appeared_in_executive_summary": true,
   "regulatory_lanes": ["CCPA/CPRA", "COPPA"],
@@ -499,10 +887,10 @@ const thirdPartyCookiePreConsent = {
   "domain": "marketwatch.com",
   "requested_url": "https://marketwatch.com",
   "finding_id": "third_party_cookie_pre_consent",
-  "finding_label": "Third-party cookie observed before consent",
+  "finding_label": "Third-party cookie or storage observed before consent",
   "section": "Cookies & Storage",
-  "confidence": "good",
-  "direct_vs_inferred": "direct",
+  "evidenceConfidence": "good",
+  "directVsInferred": "direct_observation",
   "evidence_source": "Production scan corpus",
   "evidence_summary": "icu@.adnxs.com, TDID@.adsrvr.org, ad-id@.amazon-adsystem.com, cto_bundle@.criteo.com, demdex@.demdex.net, IDE@.doubleclick.net",
   "verification_method": "Kimi-reviewed runtime artifact",
@@ -520,8 +908,8 @@ const cookieBannerRequirements = {
   "finding_id": "cookie_banner_control_gap",
   "finding_label": "Cookie banner lacks an obvious reject control",
   "section": "Cookies & Storage",
-  "confidence": "good",
-  "direct_vs_inferred": "direct",
+  "evidenceConfidence": "good",
+  "directVsInferred": "direct_observation",
   "surface_priority": 86,
   "appeared_in_executive_summary": true,
   "evidence": {
@@ -566,8 +954,8 @@ const privacyPolicySignals = {
   "finding_id": "privacy_policy_thin_coverage",
   "finding_label": "Privacy policy topic coverage appears limited",
   "section": "Privacy & Disclosures",
-  "confidence": "good",
-  "direct_vs_inferred": "direct",
+  "evidenceConfidence": "good",
+  "directVsInferred": "direct_observation",
   "surface_priority": 74,
   "appeared_in_executive_summary": true,
   "evidence": {
@@ -610,8 +998,8 @@ const disclosureSignals = {
   "finding_id": "endorsement_disclosure_gap",
   "finding_label": "Endorsement-style content lacks obvious disclosure language",
   "section": "Privacy & Disclosures",
-  "confidence": "good",
-  "direct_vs_inferred": "inferred",
+  "evidenceConfidence": "good",
+  "directVsInferred": "correlated_observation",
   "surface_priority": 68,
   "appeared_in_executive_summary": true,
   "evidence": {
@@ -654,8 +1042,8 @@ const fingerprintingSignals = {
   "finding_id": "fingerprinting_or_device_signals_detected",
   "finding_label": "Fingerprinting-related device signals detected",
   "section": "Privacy & Tracking",
-  "confidence": "good",
-  "direct_vs_inferred": "inferred",
+  "evidenceConfidence": "good",
+  "directVsInferred": "correlated_observation",
   "surface_priority": 82,
   "appeared_in_executive_summary": true,
   "evidence": {
@@ -698,8 +1086,8 @@ const websiteScanningBasics = {
   "finding_id": "website_signal_review_summary",
   "finding_label": "Website scan surfaced multiple review signals",
   "section": "Website Signals",
-  "confidence": "good",
-  "direct_vs_inferred": "direct",
+  "evidenceConfidence": "good",
+  "directVsInferred": "direct_observation",
   "surface_priority": 70,
   "appeared_in_executive_summary": true,
   "evidence": {
@@ -730,11 +1118,11 @@ const websiteScanningBasics = {
 
 const illustrativeThirdPartyCookiePreConsent = {
   finding_id: "third_party_cookie_pre_consent",
-  finding_label: "Third-party cookie observed before consent",
+  finding_label: "Third-party cookie or storage observed before consent",
   category: "Cookies",
   criticality: "high",
-  confidence: "review",
-  direct_vs_inferred: "observation",
+  evidenceConfidence: "review_signal",
+  directVsInferred: "direct_observation",
   observed:
     "Retained runtime evidence showed a third-party cookie or storage artifact observed before CertScore recorded a consent action or a prior consent state associated with that purpose.",
   evidence: {
@@ -771,8 +1159,8 @@ const illustrativeRejectTrackingPersistsAfterReject = {
   finding_label: "Non-essential tracking continued after reject",
   category: "Consent / tracking",
   criticality: "high",
-  confidence: "review",
-  direct_vs_inferred: "observation",
+  evidenceConfidence: "good",
+  directVsInferred: "direct_observation",
   observed:
     "Retained runtime evidence showed a reject-style consent interaction followed by classified non-essential request or storage activity in the observed scan scope.",
   evidence: {
@@ -805,16 +1193,16 @@ const illustrativeRejectTrackingPersistsAfterReject = {
 
 const illustrativeRtbCookieSyncObserved = {
   finding_id: "rtb_cookie_sync_observed",
-  finding_label: "RTB cookie sync observed",
+  finding_label: "Adtech identity sync-like request observed",
   category: "Third-party tracking",
   criticality: "high",
-  confidence: "review",
-  direct_vs_inferred: "observation",
+  evidenceConfidence: "review_signal",
+  directVsInferred: "direct_observation",
   observed:
-    "Retained network evidence showed adtech or RTB-related sync, match, redirect, or identifier-like request patterns in the observed scan scope.",
+    "Retained network evidence showed adtech, RTB, sync, match, redirect, or identifier-like request patterns that may be relevant to cookie/tracker, advertising, consent, transparency, sale/share, and vendor-governance review.",
   evidence: {
     summary:
-      "Retained network evidence showed adtech or RTB-related sync, match, redirect, or identifier-like request patterns in the observed scan scope.",
+      "Retained network evidence showed adtech, RTB, sync, match, redirect, or identifier-like request patterns that may be relevant to cookie/tracker, advertising, consent, transparency, sale/share, and vendor-governance review.",
     examples: [
       {
         title: "Adtech sync request example",
@@ -826,7 +1214,7 @@ const illustrativeRtbCookieSyncObserved = {
           "request_path=/user_sync [query_redacted=true]",
           "resource_type=image_or_redirect",
           "vendor_category=adtech_or_exchange",
-          "detected_pattern=cookie_sync_like_request",
+          "detected_pattern=identity_sync_like_request",
           "identifier_like_keys=uid, partner_id [values_redacted=true]",
           "timestamp_ms=2860",
           "review_caveat=manual review should confirm endpoint purpose, identifier scope, consent timing, redirects, jurisdiction, and server-side behavior"
@@ -834,7 +1222,7 @@ const illustrativeRtbCookieSyncObserved = {
       }
     ],
     automationLimits: [
-      "Automated network evidence does not infer a complete identity graph or determine personal identity.",
+      "Automated network evidence does not confirm cookie syncing, infer a complete identity graph, or determine personal identity.",
       "Manual review is needed to confirm endpoint purpose, identifier scope, consent timing, and server-side behavior."
     ]
   }
@@ -845,8 +1233,8 @@ const illustrativeCrossDomainIdentifierSharingObserved = {
   finding_label: "Identifier-like values observed across domains",
   category: "Third-party tracking",
   criticality: "high",
-  confidence: "review",
-  direct_vs_inferred: "observation",
+  evidenceConfidence: "review_signal",
+  directVsInferred: "direct_observation",
   observed:
     "Retained outbound request evidence showed identifier-like keys or values moving to a different domain or third-party context within the observed scan scope.",
   evidence: {
@@ -859,7 +1247,7 @@ const illustrativeCrossDomainIdentifierSharingObserved = {
           "artifact=req_004",
           "role=finding_supporting_artifact",
           "url=https://example.com/",
-          "request_origin=https://example.com",
+          "initiator_origin=https://example.com",
           "destination_origin=https://measure.example",
           "request_path=/collect [query_redacted=true]",
           "third_party_context=true",
@@ -882,8 +1270,8 @@ const illustrativeSessionRecordingServicesDetected = {
   finding_label: "Session replay service signal observed",
   category: "Third-party tracking",
   criticality: "high",
-  confidence: "review",
-  direct_vs_inferred: "observation",
+  evidenceConfidence: "review_signal",
+  directVsInferred: "direct_observation",
   observed:
     "Retained runtime evidence showed a script, request, or vendor pattern associated with session replay, heatmaps, recording, or behavior analytics in the observed public-page scope.",
   evidence: {
@@ -918,8 +1306,8 @@ const illustrativePossibleSessionReplaySensitiveSurface = {
   finding_label: "Possible session replay near sensitive input surface",
   category: "Third-party tracking",
   criticality: "critical",
-  confidence: "review",
-  direct_vs_inferred: "observation",
+  evidenceConfidence: "review_signal",
+  directVsInferred: "correlated_observation",
   observed:
     "Retained runtime and page-surface evidence showed session-replay-related signals on or near a form, flow, or page surface that may collect sensitive information.",
   evidence: {
@@ -935,14 +1323,14 @@ const illustrativePossibleSessionReplaySensitiveSurface = {
           "replay_request_origin=https://replay.example",
           "replay_request_path=/collect [query_redacted=true]",
           "surface_context=application_form",
-          "sensitive_field_context=financial_or_identity [values_not_retained]",
+          "sensitive_field_context=financial_or_identity_high_risk_context [values_not_retained; not_article_9_by_itself]",
           "detected_pattern=replay_runtime_on_sensitive_surface",
           "review_caveat=manual review should confirm active collection, masking, visual-capture settings, keystroke capture, payload contents, consent state, and page exclusions"
         ]
       }
     ],
     automationLimits: [
-      "Co-occurrence of replay-related runtime evidence and sensitive surface context does not determine that sensitive values, keystrokes, form contents, visual captures, or recordings were captured.",
+      "Co-occurrence of replay-related runtime evidence and sensitive surface context does not determine that sensitive values, keystrokes, form contents, visual captures, or recordings were captured, or that GDPR Article 9 applies.",
       "Manual review is needed to confirm masking, sampling, payload contents, page exclusions, consent state, and vendor configuration."
     ]
   }
@@ -953,8 +1341,8 @@ const illustrativeSensitiveTrackingSurface = {
   finding_label: "Sensitive input surface with third-party tracking context",
   category: "Third-party tracking",
   criticality: "high",
-  confidence: "review",
-  direct_vs_inferred: "observation",
+  evidenceConfidence: "review_signal",
+  directVsInferred: "correlated_observation",
   observed:
     "Retained page and runtime evidence showed a sensitive-input or sensitive-context surface alongside third-party tracking, analytics, advertising, replay, or measurement context in the observed scan scope.",
   evidence: {
@@ -968,7 +1356,7 @@ const illustrativeSensitiveTrackingSurface = {
           "role=finding_supporting_artifact",
           "url=https://example.com/apply",
           "surface_context=application_form",
-          "sensitive_field_context=financial_or_identity [values_not_retained]",
+          "sensitive_field_context=financial_or_identity_high_risk_context [values_not_retained; not_article_9_by_itself]",
           "third_party_request_origin=https://analytics.example",
           "third_party_request_path=/collect [query_redacted=true]",
           "vendor_category=analytics_or_measurement",
@@ -978,7 +1366,7 @@ const illustrativeSensitiveTrackingSurface = {
       }
     ],
     automationLimits: [
-      "Co-occurrence of sensitive surface context and third-party tracking evidence does not determine that sensitive values were transmitted, captured, read, or linked to a third party.",
+      "Co-occurrence of sensitive surface context and third-party tracking evidence does not determine that sensitive values were transmitted, captured, read, linked to a third party, or that GDPR Article 9 applies.",
       "Manual review is needed to confirm data sensitivity, payload contents, purpose, consent state, minimization, and remediation quality."
     ]
   }
@@ -989,8 +1377,8 @@ const illustrativeFingerprintingRelatedSignals = {
   finding_label: "Fingerprinting-related browser/device signals observed",
   category: "Fingerprinting",
   criticality: "high",
-  confidence: "review",
-  direct_vs_inferred: "observation",
+  evidenceConfidence: "review_signal",
+  directVsInferred: "direct_observation",
   observed:
     "Retained runtime evidence showed browser, device, canvas, storage, or other high-entropy environment signals that may be relevant to fingerprinting review, without enough retained context to treat the cluster as probable fingerprinting.",
   evidence: {
@@ -1024,13 +1412,13 @@ const illustrativeProbableFingerprinting = {
   finding_label: "Probable browser/device fingerprinting review signal",
   category: "Fingerprinting",
   criticality: "critical",
-  confidence: "review",
-  direct_vs_inferred: "observation",
+  evidenceConfidence: "review_signal",
+  directVsInferred: "clustered_inference",
   observed:
-    "Retained runtime evidence showed a clustered set of high-entropy browser or device collection signals that may warrant probable fingerprinting review.",
+    "Retained runtime evidence showed a clustered high-entropy browser/device signal pattern that may warrant probable fingerprinting review.",
   evidence: {
     summary:
-      "Retained runtime evidence showed a clustered set of high-entropy browser or device collection signals that may warrant probable fingerprinting review.",
+      "Retained runtime evidence showed a clustered high-entropy browser/device signal pattern that may warrant probable fingerprinting review.",
     examples: [
       {
         title: "Probable fingerprinting cluster example",
@@ -1059,8 +1447,8 @@ const illustrativeCpraPrivacyChoiceOptOut = {
   finding_label: "CPRA / privacy choice opt-out review signal",
   category: "Disclosure gaps",
   criticality: "high",
-  confidence: "review",
-  direct_vs_inferred: "observation",
+  evidenceConfidence: "review_signal",
+  directVsInferred: "absence_observation",
   observed:
     "Retained public-surface and runtime evidence showed advertising, cross-context behavioral advertising, or sale/share-related review signals without a clearly observed California privacy choice, Do Not Sell or Share, opt-out, or comparable privacy-choice path in the observed scan scope.",
   evidence: {
@@ -1078,13 +1466,14 @@ const illustrativeCpraPrivacyChoiceOptOut = {
           "do_not_sell_or_share_link_observed=false",
           "state_privacy_choice_link_observed=false",
           "privacy_policy_url=https://example.com/privacy",
+          "gpc_specific_request_state=not_sent_or_not_retained",
           "gpc_handling=not_determined",
-          "review_caveat=manual review should confirm CPRA applicability, sale/share or cross-context behavioral advertising status, opt-out path availability, GPC handling, exemptions, and regional configuration"
+          "review_caveat=manual review should confirm CPRA applicability, sale/share or cross-context behavioral advertising status, opt-out path availability, GPC-specific scan state, exemptions, and regional configuration"
         ]
       }
     ],
     automationLimits: [
-      "Automated public-surface evidence does not determine CPRA applicability, sale/share status, cross-context behavioral advertising status, GPC handling, opt-out sufficiency, legal status, or compliance status.",
+      "Automated public-surface evidence does not determine CPRA applicability, sale/share status, cross-context behavioral advertising status, GPC handling, opt-out sufficiency, legal status, or compliance status. GPC handling is not determined unless a GPC-specific request state was sent and retained.",
       "Manual review is needed to confirm organization scope, privacy-choice paths, exemptions, regional configuration, and remediation quality."
     ]
   }
@@ -1099,7 +1488,7 @@ const PRE_CONSENT_TRACKING_SAMPLE: SampleFindingJson = {
 
 const THIRD_PARTY_COOKIE_SAMPLE: SampleFindingJson = {
   findingId: "third_party_cookie_pre_consent",
-  label: "Third-party cookie observed before consent",
+  label: "Third-party cookie or storage observed before consent",
   sourceLabel: "Illustrative public evidence sample",
   payload: illustrativeThirdPartyCookiePreConsent
 };
@@ -1113,7 +1502,7 @@ const REJECT_TRACKING_SAMPLE: SampleFindingJson = {
 
 const RTB_COOKIE_SYNC_SAMPLE: SampleFindingJson = {
   findingId: "rtb_cookie_sync_observed",
-  label: "RTB cookie sync observed",
+  label: "Adtech identity sync-like request observed",
   sourceLabel: "Illustrative public evidence sample",
   payload: illustrativeRtbCookieSyncObserved
 };

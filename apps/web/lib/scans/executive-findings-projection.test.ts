@@ -4,6 +4,7 @@ import {
   buildRegulatoryLenses,
   buildRegulatoryLensesFromUnifiedPackets
 } from "../../components/scans/executive-summary-card";
+import { getSampleFindingById } from "../marketing/sample-finding-json";
 import { ADA_ACCESSIBILITY_FIXTURES } from "./ada-accessibility.fixtures";
 import { projectExecutiveFindingsFromUnifiedPackets } from "./executive-findings-projection";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
@@ -2583,7 +2584,7 @@ test("projects CPRA CBA opt-out missing into executive findings and top findings
   assert.equal(finding?.section, "Privacy & Tracking");
   assert.equal(finding?.severity, "high");
   assert.equal(finding?.evidenceVersion, "1.1");
-  assert.equal(finding?.label, "CPRA advertising opt-out missing or incomplete");
+  assert.equal(finding?.label, "CPRA / privacy choice opt-out review signal");
   assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.result, "absent");
   assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.optOutSubtype, "opt_out_absent");
   assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.missingOrAbsent, true);
@@ -3110,4 +3111,50 @@ test("surfaces sensitive-data tracking in regulatory lenses", () => {
     ftcLens?.summary,
     "Sensitive-data collection alongside third-party tracking should be reviewed for consumer-protection context."
   );
+});
+
+test("keeps public reference evidence schema separate from runtime report evidence packets", () => {
+  const referenceSample = getSampleFindingById("pre_consent_tracking_detected");
+  assert.equal((referenceSample?.payload as Record<string, unknown> | undefined)?.evidenceVersion, "2.0");
+
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      evidence: {
+        counts: {
+          cmpVisibleMs: 0,
+          firstRequestMs: 712,
+          firstThirdPartyRequestMs: 1500,
+          preconsentViolationCount: 2
+        },
+        entities: {
+          runtimeRequestUrls: ["https://analytics.example/collect"],
+          runtimeVendors: ["Example Analytics"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Trackers fired before consent interaction."],
+        sourceUrls: ["https://analytics.example/collect"]
+      },
+      severity: "high",
+      summary: "2 third-party requests fired before any consent action."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "pre_consent_tracking_detected");
+
+  assert.equal(finding?.evidenceVersion, "1.1");
+  assert.equal(finding?.directVsInferred, "direct");
+  assert.equal(projection.topFindingEligibility.pre_consent_tracking_detected?.eligibility, "top_candidate");
+  assert.ok(
+    projection.topFindingEligibility.pre_consent_tracking_detected?.matchedCriteria.includes("runtime_request_anchor")
+  );
+  assert.equal(
+    projection.topFindings.find((entry) => entry.id === "pre_consent_tracking_detected")?.evidenceVersion,
+    "1.1"
+  );
+  assert.equal("evidenceConfidence" in (finding?.evidenceDetails ?? {}), false);
+  assert.equal("topFindingCalibration" in (finding?.evidenceDetails ?? {}), false);
 });

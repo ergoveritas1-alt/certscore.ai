@@ -61,13 +61,13 @@ These canonical finding pages describe CertScore review items, observed evidence
 - Semantic labeling accessibility issue: https://certscore.ai/findings/semantic_labeling_accessibility_issue
 - Fingerprinting-related browser/device signals observed: https://certscore.ai/findings/fingerprinting_related_signals_observed
 - Session replay service signal observed: https://certscore.ai/findings/session_recording_services_detected
-- Third-party cookie observed before consent: https://certscore.ai/findings/third_party_cookie_pre_consent
-- RTB cookie sync observed: https://certscore.ai/findings/rtb_cookie_sync_observed
+- Third-party cookie or storage observed before consent: https://certscore.ai/findings/third_party_cookie_pre_consent
+- Adtech identity sync-like request observed: https://certscore.ai/findings/rtb_cookie_sync_observed
 - Text alternative accessibility issue: https://certscore.ai/findings/text_alternative_accessibility_issue
 - Consent choice architecture review signals: https://certscore.ai/findings/consent_dark_patterns_detected
 - CPRA / privacy choice opt-out review signal: https://certscore.ai/findings/cpra_cba_opt_out_missing
-- Consent interaction was forced: https://certscore.ai/findings/forced_consent_interaction
-- Reject option missing or hidden: https://certscore.ai/findings/reject_option_missing_or_hidden
+- Consent prompt appeared to require interaction: https://certscore.ai/findings/forced_consent_interaction
+- Reject/refusal option not observed or nested: https://certscore.ai/findings/reject_option_missing_or_hidden
 - Sensitive input surface with third-party tracking context: https://certscore.ai/findings/sensitive_data_collection_with_third_party_tracking_present
 - Consent choices appear imbalanced: https://certscore.ai/findings/asymmetric_consent_ui
 - Keyboard navigation accessibility issue: https://certscore.ai/findings/keyboard_navigation_accessibility_issue

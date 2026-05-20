@@ -227,6 +227,14 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
                 Use the badges and evidence tiers together: criticality describes review priority, confidence describes evidence strength, prevalence gives directional calibration context, and regulatory context shows review lenses that may be relevant depending on jurisdiction, purpose, and manual review.
               </p>
             </div>
+            <div className="border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-slate-700">
+              <h2 className="text-sm font-semibold text-slate-950">How top findings are calibrated</h2>
+              <p className="mt-2">
+                CertScore ranks findings using evidence strength, directness, corroboration, affected surface, and review relevance.
+                Benchmark frequency is market context only. A rare finding is not automatically critical, and a common finding is not automatically low risk.
+                Findings remain automated public-web observations for review, not legal conclusions.
+              </p>
+            </div>
           </div>
         )}
       </div>

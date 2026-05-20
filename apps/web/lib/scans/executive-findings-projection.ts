@@ -17,6 +17,7 @@ import {
   deriveFingerprintEvidenceTier,
   hasStrongFingerprintingEvidence
 } from "./promotion-evidence-contracts";
+import { evaluateTopFindingEligibility, type TopFindingEligibilityDecision } from "./top-finding-eligibility";
 
 const MAX_DISPLAY_SNIPPET_LENGTH = 240;
 
@@ -1446,6 +1447,7 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     category: "session_replay"
   }));
   const firstPartyProxyObserved = hasFirstPartyProxySessionReplayEvidence(packet, requestUrls);
+  const sessionReplaySummary = getFirstEntityJsonObject(packet, "sessionReplayEvidenceSummary");
 
   return {
     scanContext: {
@@ -1461,6 +1463,7 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     sessionReplayEvidence: {
       observed: true,
       firstPartyProxyObserved,
+      ...(sessionReplaySummary ? { runtimeSummary: sessionReplaySummary } : {}),
       basis: firstPartyProxyObserved
         ? "Session recording collection appears proxied through the scanned first-party host."
         : "Session recording vendor or request evidence was retained during runtime collection."
@@ -1595,6 +1598,10 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
   const optOutUiResult = uniqueStrings(getEntityValues(packet, /optOutUiResult|opt_out_ui_result/i))[0] ?? null;
   const optOutControlFound = parseBooleanEntity(getEntityValues(packet, /optOutControlFound|opt_out_control_found/i)[0]);
   const choiceControlsInspected = parseBooleanEntity(getEntityValues(packet, /choiceControlsInspected|choice_controls_inspected/i)[0]);
+  const gpcClientSignalObserved = parseBooleanEntity(getEntityValues(packet, /gpcClientSignalObserved|gpc_client_signal_observed/i)[0]);
+  const gpcHandlingObserved = uniqueStrings(getEntityValues(packet, /gpcHandlingObserved|gpc_handling_observed/i))[0] ?? null;
+  const gpcRequestHeadersApplied = parseBooleanEntity(getEntityValues(packet, /gpcRequestHeadersApplied|gpc_request_headers_applied/i)[0]);
+  const gpcScanStateSent = parseBooleanEntity(getEntityValues(packet, /gpcScanStateSent|gpc_scan_state_sent/i)[0]);
   const policyCbaLanguage = uniqueStrings(getEntityValues(packet, /policyCbaLanguage|policy_cba_language/i))[0] ?? null;
   const policyUiCongruent = parseBooleanEntity(getEntityValues(packet, /policyUiCongruent|policy_ui_congruent/i)[0]);
   const optOutSubtype = deriveCpraOptOutSubtype({ optOutControlFound, optOutUiResult });
@@ -1630,6 +1637,10 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       result: optOutUiResult,
       optOutControlFound,
       choiceControlsInspected,
+      gpcClientSignalObserved,
+      gpcHandlingObserved,
+      gpcRequestHeadersApplied,
+      gpcScanStateSent,
       missingOrAbsent,
       incompleteOrUnconfirmed: !missingOrAbsent,
       basis
@@ -2639,6 +2650,21 @@ function buildExecutiveEvidenceDetails(
     if (sensitiveFieldContexts.length > 0) {
       details.sensitiveFieldContexts = sensitiveFieldContexts;
     }
+    const sensitivePayloadRows = getEntityJsonObjects(packet, "sensitivePayloadViolations");
+    if (sensitivePayloadRows.length > 0) {
+      details.inputSurfaceEvidence = {
+        ...(details.inputSurfaceEvidence ?? {}),
+        sensitivePayloadViolations: sensitivePayloadRows.slice(0, 10)
+      };
+    }
+    const sessionReplaySummary = getFirstEntityJsonObject(packet, "sessionReplayEvidenceSummary");
+    if (findingId === "possible_session_replay_on_sensitive_input_surface" && sessionReplaySummary) {
+      details.sessionReplayEvidence = {
+        ...(details.sessionReplayEvidence ?? {}),
+        observed: true,
+        runtimeSummary: sessionReplaySummary
+      };
+    }
   }
   if (sourceSignals.length > 0) {
     details.sourceSignals = sourceSignals;
@@ -2670,6 +2696,41 @@ function buildExecutiveEvidenceDetails(
     if (Object.keys(timing).length > 0) {
       details.timing = timing;
     }
+  }
+
+  const consentUiPathEvidence = getFirstEntityJsonObject(packet, "consentUiPathEvidence");
+  if (
+    consentUiPathEvidence &&
+    (
+      findingId === "forced_consent_interaction" ||
+      findingId === "reject_option_missing_or_hidden" ||
+      findingId === "asymmetric_consent_ui" ||
+      findingId === "consent_dark_patterns_detected"
+    )
+  ) {
+    details.consentUiEvidence = {
+      ...(details.consentUiEvidence ?? {}),
+      runtimePath: consentUiPathEvidence
+    };
+  }
+
+  const fingerprintClusterSummary = getFirstEntityJsonObject(packet, "fingerprintClusterSummary");
+  if (
+    fingerprintClusterSummary &&
+    (findingId === "probable_fingerprinting" || findingId === "fingerprinting_related_signals_observed")
+  ) {
+    details.telemetryEvidence = {
+      ...(details.telemetryEvidence ?? {}),
+      fingerprintClusterSummary
+    };
+  }
+
+  const focusManagementEvidence = getEntityJsonObjects(packet, "focusManagementEvidence");
+  if (focusManagementEvidence.length > 0 && findingId === "keyboard_navigation_accessibility_issue") {
+    details.accessibilityEvidence = {
+      ...(details.accessibilityEvidence ?? {}),
+      focusManagementEvidence: focusManagementEvidence.slice(0, 12)
+    };
   }
 
   if (findingId === "rtb_cookie_sync_observed") {
@@ -2932,6 +2993,7 @@ export type ExecutiveFindingsProjection = {
   groupedFindings: Array<{ section: CertScoreFindingSection; findings: CertScoreFinding[] }>;
   posture: "Clear" | "Watch" | "Action Needed";
   topFindings: CertScoreFinding[];
+  topFindingEligibility: Record<string, TopFindingEligibilityDecision>;
   trace: {
     packets: Array<{
       executiveFindingId: string | null;
@@ -3001,7 +3063,13 @@ export function projectExecutiveFindingsFromUnifiedPackets(
       .filter((finding) => finding.section === section)
       .sort((left, right) => getFindingSurfaceScore(right) - getFindingSurfaceScore(left))
   })).filter((group) => group.findings.length > 0);
-  const topFindings = rankFindings(findings);
+  const topFindingEligibility = Object.fromEntries(
+    findings.map((finding) => [finding.id, evaluateTopFindingEligibility(finding)])
+  );
+  const topFindings = rankFindings(findings).filter((finding) => {
+    const eligibility = topFindingEligibility[finding.id]?.eligibility;
+    return eligibility !== "suppress" && eligibility !== "audit_only";
+  });
   const topFindingIds = new Set(topFindings.map((finding) => finding.id));
 
   return {
@@ -3010,6 +3078,7 @@ export function projectExecutiveFindingsFromUnifiedPackets(
     groupedFindings,
     posture: deriveExecutivePosture(findings),
     topFindings,
+    topFindingEligibility,
     trace: {
       packets: mappedPacketRows.map(({ packet, findingId }) => ({
         executiveFindingId: findingId,

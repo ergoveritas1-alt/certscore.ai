@@ -140,7 +140,7 @@ test("illustrative public samples remain sanitized for client exposure", () => {
 
   assert.equal(getSampleFindingById("rtb_cookie_sync_observed")?.payload.criticality, "high");
   assert.equal(getSampleFindingById("cross_domain_identifier_sharing_observed")?.payload.criticality, "high");
-  assert.equal(getSampleFindingById("third_party_cookie_pre_consent")?.label, "Third-party cookie observed before consent");
+  assert.equal(getSampleFindingById("third_party_cookie_pre_consent")?.label, "Third-party cookie or storage observed before consent");
   assert.equal(getSampleFindingById("session_recording_services_detected")?.label, "Session replay service signal observed");
   assert.equal(
     getSampleFindingById("possible_session_replay_on_sensitive_input_surface")?.payload.criticality,
@@ -189,7 +189,7 @@ test("illustrative public samples remain sanitized for client exposure", () => {
   assert.match(JSON.stringify(getSampleFindingById("probable_fingerprinting")?.payload), /raw_values_not_retained/);
   assert.match(
     JSON.stringify(getSampleFindingById("probable_fingerprinting")?.payload),
-    /clustered set of high-entropy browser or device collection signals that may warrant probable fingerprinting review/
+    /clustered high-entropy browser\/device signal pattern that may warrant probable fingerprinting review/
   );
   assert.doesNotMatch(
     JSON.stringify(getSampleFindingById("probable_fingerprinting")?.payload),

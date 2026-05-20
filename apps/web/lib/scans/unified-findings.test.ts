@@ -2181,7 +2181,7 @@ test("surfaces RTB cookie sync with compact request-level evidence", () => {
     id: "val-rtb-1",
     ruleKey: "runtime_privacy.rtb_cookie_sync_observed",
     severity: "high",
-    title: "RTB cookie sync observed",
+    title: "Adtech identity sync-like request observed",
     evidence: {
       preconsent_tracking_detected: true,
       rtb_cookie_sync_detected: true,
@@ -2222,7 +2222,7 @@ test("keeps RTB cookie sync suppressed without concrete sync request evidence", 
     id: "val-rtb-weak",
     ruleKey: "runtime_privacy.rtb_cookie_sync_observed",
     severity: "high",
-    title: "RTB cookie sync observed",
+    title: "Adtech identity sync-like request observed",
     evidence: {
       preconsent_tracking_detected: true,
       rtb_cookie_sync_detected: true,

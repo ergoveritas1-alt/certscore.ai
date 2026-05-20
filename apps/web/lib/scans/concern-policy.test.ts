@@ -2926,7 +2926,7 @@ test("deriveConcernPolicy promotes RTB cookie sync only with concrete request-le
       originKey: "runtime_privacy.rtb_cookie_sync_observed",
       originType: "validation_rule",
       suggestedUnifiedFindingId: "rtb_cookie_sync_observed",
-      title: "RTB cookie sync observed"
+      title: "Adtech identity sync-like request observed"
     }),
     evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
     rawEvidence: {
@@ -3361,7 +3361,7 @@ test("deriveConcernPolicy keeps RTB cookie sync audit-only for vendor names or g
         originKey: "runtime_privacy.rtb_cookie_sync_observed",
         originType: "validation_rule",
         suggestedUnifiedFindingId: "rtb_cookie_sync_observed",
-        title: "RTB cookie sync observed"
+        title: "Adtech identity sync-like request observed"
       }),
       evidenceStrengthFlags: ["structured_validation"],
       rawEvidence
@@ -3380,7 +3380,7 @@ test("deriveConcernPolicy keeps single sync-path-only RTB evidence audit-only", 
       originKey: "runtime_privacy.rtb_cookie_sync_observed",
       originType: "validation_rule",
       suggestedUnifiedFindingId: "rtb_cookie_sync_observed",
-      title: "RTB cookie sync observed"
+      title: "Adtech identity sync-like request observed"
     }),
     evidenceStrengthFlags: ["structured_validation"],
     rawEvidence: {

@@ -228,21 +228,21 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   rtb_cookie_sync_observed: {
     id: "rtb_cookie_sync_observed",
-    label: "RTB cookie sync observed",
+    label: "Adtech identity sync-like request observed",
     section: "Vendors & Requests",
     defaultSurfacePriority: 94,
-    whyItMatters: "Cookie-sync and identity-sync requests can transmit advertising identifiers across multiple third parties during the initial page load.",
-    remediation: "Inventory the sync endpoints, suppress non-essential RTB or identity-sync calls until consent permits them, and verify the request path after deployment."
+    whyItMatters: "Adtech sync-like and identity-like requests may transmit advertising identifiers across multiple third parties during the initial page load.",
+    remediation: "Inventory the sync-like endpoints, suppress non-essential RTB or identity-sync calls until consent permits them, and verify the request path after deployment."
   },
   cpra_cba_opt_out_missing: {
     id: "cpra_cba_opt_out_missing",
-    label: "CPRA advertising opt-out missing or incomplete",
+    label: "CPRA / privacy choice opt-out review signal",
     section: "Privacy & Tracking",
     defaultSurfacePriority: 96,
     whyItMatters:
-      "Cross-context behavioral advertising vendors create CPRA opt-out expectations when the site does not expose or confirm a complete Do Not Sell or Share or Your Privacy Choices mechanism.",
+      "Advertising, cross-context behavioral advertising, or sale/share-related review signals can make privacy-choice path availability important for manual CPRA review.",
     remediation:
-      "Add or verify a CPRA-specific opt-out mechanism, include the required privacy choices treatment, and confirm that advertising-sharing vendors are suppressed when opt-out signals apply."
+      "Verify applicable privacy-choice paths, GPC-specific behavior where retained, and vendor suppression rules before treating the signal as resolved."
   },
   cross_domain_identifier_sharing_observed: {
     id: "cross_domain_identifier_sharing_observed",
@@ -264,11 +264,11 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   third_party_cookie_pre_consent: {
     id: "third_party_cookie_pre_consent",
-    label: "Tracking cookies set before consent",
+    label: "Third-party cookie or storage observed before consent",
     section: "Cookies & Storage",
     defaultSurfacePriority: 92,
-    whyItMatters: "This is direct evidence of pre-consent tracking persistence, including first-party-domain cookies written by third-party scripts.",
-    remediation: "Prevent non-essential tracking cookie writes before consent or remove the vendor."
+    whyItMatters: "Third-party cookie or storage timing before a recorded choice is a concrete implementation review signal for consent and storage/access controls.",
+    remediation: "Prevent non-essential tracking cookie or storage writes before consent or remove the vendor."
   },
   analytics_cookie_pre_consent: {
     id: "analytics_cookie_pre_consent",
@@ -296,7 +296,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   reject_option_missing_or_hidden: {
     id: "reject_option_missing_or_hidden",
-    label: "Reject option missing or hidden",
+    label: "Reject/refusal option not observed or nested",
     section: "Consent Experience",
     defaultSurfacePriority: 90,
     whyItMatters: "Users should be able to refuse non-essential processing as easily as they accept it.",
@@ -312,7 +312,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   forced_consent_interaction: {
     id: "forced_consent_interaction",
-    label: "Consent interaction was forced",
+    label: "Consent prompt appeared to require interaction",
     section: "Consent Experience",
     defaultSurfacePriority: 86,
     whyItMatters: "Blocking normal use increases friction and can undermine meaningful choice.",
@@ -354,7 +354,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   session_recording_services_detected: {
     id: "session_recording_services_detected",
-    label: "Session recording services detected",
+    label: "Session replay service signal observed",
     section: "Privacy & Tracking",
     defaultSurfacePriority: 89,
     whyItMatters: "Session replay or recording tools can capture detailed on-page behavior and require careful consent, masking, and disclosure controls.",

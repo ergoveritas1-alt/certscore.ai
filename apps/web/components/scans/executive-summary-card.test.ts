@@ -161,7 +161,7 @@ test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards 
       makeFinding("consent_dark_patterns_detected", "Dark pattern consent signals detected", {
         shortSummary: "Accept appears more prominent than reject or settings."
       }),
-      makeFinding("reject_option_missing_or_hidden", "Reject option missing or hidden", {
+      makeFinding("reject_option_missing_or_hidden", "Reject/refusal option not observed or nested", {
         shortSummary: "The consent UI did not present a clear reject path."
       })
     ],
@@ -295,7 +295,7 @@ test("buildRegulatoryLenses maps cross-domain identifiers to GDPR only with trac
       makeFinding("cross_domain_identifier_sharing_observed", "Identifiers shared across domains", {
         shortSummary: "Identifier-like values were observed in cross-domain requests."
       }),
-      makeFinding("rtb_cookie_sync_observed", "RTB cookie sync observed", {
+      makeFinding("rtb_cookie_sync_observed", "Adtech identity sync-like request observed", {
         shortSummary: "RTB sync evidence was retained."
       })
     ],
@@ -323,7 +323,7 @@ test("buildRegulatoryLenses uses gambling-specific FTC copy for sensitive tracki
       makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
         shortSummary: "Pre-consent tracking was observed on a sports betting or gambling site."
       }),
-      makeFinding("session_recording_services_detected", "Session recording services detected", {
+      makeFinding("session_recording_services_detected", "Session replay service signal observed", {
         shortSummary: "FullStory session replay was observed before consent."
       })
     ],
@@ -351,7 +351,7 @@ test("buildRegulatoryLenses does not activate financial claims lens from gamblin
         severity: "critical",
         shortSummary: "Pre-consent tracking was observed on a sports betting or gambling site."
       }),
-      makeFinding("session_recording_services_detected", "Session recording services detected", {
+      makeFinding("session_recording_services_detected", "Session replay service signal observed", {
         severity: "high",
         shortSummary: "FullStory session replay was observed before consent."
       })
@@ -675,11 +675,11 @@ test("buildRegulatoryLensesFromUnifiedPackets ignores downgraded cookie packets 
 test("buildRegulatoryLenses maps consent-choice review signals into GDPR without lowering the tracking score", () => {
   const lenses = buildRegulatoryLenses(
     [
-      makeFinding("reject_option_missing_or_hidden", "Reject option missing or hidden", {
+      makeFinding("reject_option_missing_or_hidden", "Reject/refusal option not observed or nested", {
         severity: "medium",
         shortSummary: "Promotional or choice architecture may need closer disclosure review."
       }),
-      makeFinding("forced_consent_interaction", "Consent interaction was forced", {
+      makeFinding("forced_consent_interaction", "Consent prompt appeared to require interaction", {
         severity: "medium",
         shortSummary: "Promotional or choice architecture may need closer disclosure review."
       })
@@ -696,8 +696,8 @@ test("buildRegulatoryLenses maps consent-choice review signals into GDPR without
   assert.equal(gdprLens?.summary, "No major consent-triggering issue surfaced in the top findings.");
   assert.equal(gdprLens?.ratingLabel, "Strong");
   assert.deepEqual(regulatoryFindingLabels(gdprLens?.findings ?? []), [
-    "Reject option missing or hidden",
-    "Consent interaction was forced"
+    "Reject/refusal option not observed or nested",
+    "Consent prompt appeared to require interaction"
   ]);
   assert.equal(ftcLens?.detailTitle, "Choice architecture review signals");
   assert.equal(ftcLens?.summary, "Consent-choice design should be reviewed for clarity.");
@@ -707,7 +707,7 @@ test("buildRegulatoryLenses maps consent-choice review signals into GDPR without
 test("buildRegulatoryLenses restricts EU-specific note pills outside FTC lens", () => {
   const lenses = buildRegulatoryLenses(
     [
-      makeFinding("reject_option_missing_or_hidden", "Reject option missing or hidden", {
+      makeFinding("reject_option_missing_or_hidden", "Reject/refusal option not observed or nested", {
         severity: "medium",
         shortSummary: "Reject choice was not retained as visible on the first consent layer."
       })
@@ -761,7 +761,7 @@ test("buildRegulatoryLenses maps dark-pattern umbrella to FTC by default and GDP
 test("buildRegulatoryLenses maps session recording to CCPA only with sensitive or disclosure context", () => {
   const baseLenses = buildRegulatoryLenses(
     [
-      makeFinding("session_recording_services_detected", "Session recording services detected", {
+      makeFinding("session_recording_services_detected", "Session replay service signal observed", {
         shortSummary: "Session replay tooling was observed."
       })
     ],
@@ -772,7 +772,7 @@ test("buildRegulatoryLenses maps session recording to CCPA only with sensitive o
   );
   const sensitiveLenses = buildRegulatoryLenses(
     [
-      makeFinding("session_recording_services_detected", "Session recording services detected", {
+      makeFinding("session_recording_services_detected", "Session replay service signal observed", {
         shortSummary: "Session replay tooling was observed."
       }),
       makeFinding("possible_session_replay_on_sensitive_input_surface", "Possible session replay on a sensitive input surface", {
@@ -1016,7 +1016,7 @@ test("benchmark score explanation uses surfaced findings without percentile clai
       makeFinding("third_party_cookie_pre_consent", "Third-party cookies before consent", {
         shortSummary: "cookie activity before consent"
       }),
-      makeFinding("rtb_cookie_sync_observed", "RTB cookie sync observed", {
+      makeFinding("rtb_cookie_sync_observed", "Adtech identity sync-like request observed", {
         shortSummary: "RTB sync"
       }),
       makeFinding("policy_behavior_contradiction_detected", "Policy/runtime alignment review", {
@@ -1075,7 +1075,7 @@ test("benchmark score explanation names consent UX review even when score remain
       rationale: "Matched to a media benchmark."
     },
     findings: [
-      makeFinding("reject_option_missing_or_hidden", "Reject option missing or hidden", {
+      makeFinding("reject_option_missing_or_hidden", "Reject/refusal option not observed or nested", {
         shortSummary: "Consent UI requires review."
       })
     ],
@@ -1579,7 +1579,7 @@ test("ExecutiveSummaryCard suppresses broad incomplete warning from projected fi
       topFindings: [
         makeFinding("pre_consent_tracking_detected", "Tracking started before consent"),
         makeFinding("third_party_cookie_pre_consent", "Tracking cookies set before consent"),
-        makeFinding("session_recording_services_detected", "Session recording services detected")
+        makeFinding("session_recording_services_detected", "Session replay service signal observed")
       ],
       topObservedEntities: [],
       trackerSummary: "2 vendors across 2 third-party domains",
@@ -1958,10 +1958,10 @@ test("ExecutiveSummaryCard links mapped findings to registry interpretation cont
   assert.match(html, /Consent timing: tracking before recorded choice/);
   assert.match(html, /Learn how this finding is interpreted/);
   assert.match(html, /Learn how CertScore interprets this finding/);
-  assert.match(html, /href="\/guides\/findings\/pre_consent_tracking_detected"/);
+  assert.match(html, /href="\/findings\/pre_consent_tracking_detected"/);
   assert.match(
     html,
-    /href="\/guides\/findings\/pre_consent_tracking_detected" target="_blank" rel="noreferrer"/
+    /href="\/findings\/pre_consent_tracking_detected" target="_blank" rel="noreferrer"/
   );
 });
 
@@ -1991,7 +1991,7 @@ test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-f
           severity: "critical"
         }),
         makeFinding("reject_tracking_persists_after_reject", "Non-essential tracking continued after reject"),
-        makeFinding("session_recording_services_detected", "Session recording services detected"),
+        makeFinding("session_recording_services_detected", "Session replay service signal observed"),
         makeFinding("accessibility_risk_score", "Automated accessibility issues observed", {
           section: "Accessibility"
         })
@@ -2045,7 +2045,7 @@ test("ExecutiveSummaryCard renders directional finding-density context for surfa
           confidence: "good",
           severity: "critical"
         }),
-        makeFinding("session_recording_services_detected", "Session recording services detected", {
+        makeFinding("session_recording_services_detected", "Session replay service signal observed", {
           confidence: "strong",
           severity: "high"
         })
@@ -2141,7 +2141,7 @@ test("ExecutiveSummaryCard renders display criticality independently from confid
       thirdPartyRequestCount: 12,
       thirdPartyDomains: ["www.clarity.ms"],
       topFindings: [
-        makeFinding("session_recording_services_detected", "Session recording services detected", {
+        makeFinding("session_recording_services_detected", "Session replay service signal observed", {
           confidence: "strong",
           severity: "high",
           shortSummary: "Session recording was observed on the scanned path."

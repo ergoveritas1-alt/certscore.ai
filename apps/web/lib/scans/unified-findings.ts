@@ -2068,6 +2068,10 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   addCpraEntity("optOutUiResult", cpraCbaOptOutEvidence.optOutUiResult ?? cpraCbaOptOutEvidence.opt_out_ui_result);
   addCpraEntity("optOutControlFound", cpraCbaOptOutEvidence.optOutControlFound ?? cpraCbaOptOutEvidence.opt_out_control_found);
   addCpraEntity("choiceControlsInspected", cpraCbaOptOutEvidence.choiceControlsInspected ?? cpraCbaOptOutEvidence.choice_controls_inspected);
+  addCpraEntity("gpcClientSignalObserved", cpraCbaOptOutEvidence.gpcClientSignalObserved ?? cpraCbaOptOutEvidence.gpc_client_signal_observed);
+  addCpraEntity("gpcHandlingObserved", cpraCbaOptOutEvidence.gpcHandlingObserved ?? cpraCbaOptOutEvidence.gpc_handling_observed);
+  addCpraEntity("gpcRequestHeadersApplied", cpraCbaOptOutEvidence.gpcRequestHeadersApplied ?? cpraCbaOptOutEvidence.gpc_request_headers_applied);
+  addCpraEntity("gpcScanStateSent", cpraCbaOptOutEvidence.gpcScanStateSent ?? cpraCbaOptOutEvidence.gpc_scan_state_sent);
   addCpraEntity("policyCbaLanguage", cpraCbaOptOutEvidence.policyCbaLanguage ?? cpraCbaOptOutEvidence.policy_cba_language);
   addCpraEntity("policyUiCongruent", cpraCbaOptOutEvidence.policyUiCongruent ?? cpraCbaOptOutEvidence.policy_ui_congruent);
   addCpraEntity("scanOriginGeo", cpraCbaOptOutEvidence.scanOriginGeo ?? cpraCbaOptOutEvidence.scan_origin_geo);
@@ -2236,6 +2240,30 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       return [];
     }
   };
+  const consentUiPathRows = stringifyEvidenceObject(
+    normalizedFallbackEvidence.consentUiPathEvidence ?? normalizedFallbackEvidence.consent_ui_path_evidence
+  );
+  if (consentUiPathRows.length > 0) {
+    entities.consentUiPathEvidence = consentUiPathRows;
+  }
+  const fingerprintClusterRows = stringifyEvidenceObject(
+    normalizedFallbackEvidence.fingerprintClusterSummary ?? normalizedFallbackEvidence.fingerprint_cluster_summary
+  );
+  if (fingerprintClusterRows.length > 0) {
+    entities.fingerprintClusterSummary = fingerprintClusterRows;
+  }
+  const sessionReplaySummaryRows = stringifyEvidenceObject(
+    normalizedFallbackEvidence.sessionReplayEvidenceSummary ?? normalizedFallbackEvidence.session_replay_evidence_summary
+  );
+  if (sessionReplaySummaryRows.length > 0) {
+    entities.sessionReplayEvidenceSummary = sessionReplaySummaryRows;
+  }
+  const focusManagementRows = stringifyEvidenceRows(
+    normalizedFallbackEvidence.focusManagementEvidence ?? normalizedFallbackEvidence.focus_management_evidence
+  );
+  if (focusManagementRows.length > 0) {
+    entities.focusManagementEvidence = focusManagementRows.slice(0, 12);
+  }
   const sensitivePayloadRows = stringifyEvidenceRows(sensitivePayloadViolations);
   if (sensitivePayloadRows.length > 0) {
     entities.sensitivePayloadViolations = sensitivePayloadRows;

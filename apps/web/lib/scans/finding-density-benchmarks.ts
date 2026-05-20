@@ -7,6 +7,7 @@ export type FindingDensityBenchmark = {
   densityPct: number;
   contextLabel: string;
   tooltip: string;
+  calibrationNote: string;
   sourceLabel: string;
   slices: FindingDensityBenchmarkSlice[];
 };
@@ -29,6 +30,8 @@ const DENSITY_SAMPLE_SIZE = FINDING_DENSITY_BENCHMARK_SCOPE.sampleSizeApprox;
 const DENSITY_SOURCE_LABEL = FINDING_DENSITY_BENCHMARK_SCOPE.label;
 const DENSITY_TOOLTIP =
   "Based on recent CertScore scan calibration batches across public websites. This is directional market context, not a compliance benchmark or legal conclusion.";
+export const FINDING_DENSITY_CALIBRATION_NOTE =
+  "Benchmark frequency is directional market context only. It is not a compliance benchmark, legal conclusion, or severity score. Rare findings may be top-ranked only when retained evidence is strong; common findings may remain medium when evidence is automated or context-dependent. Rarity is not severity, and prevalence is not compliance risk.";
 
 const FINDING_DENSITY_INPUTS: Partial<Record<CertScoreFinding["id"], { count: number; densityPct: number; label: string }>> = {
   visual_contrast_accessibility_issue: { count: 581, densityPct: 23, label: "Seen on ~23% of scanned top sites" },
@@ -64,6 +67,7 @@ function makeDensityBenchmark(findingId: CertScoreFinding["id"]): FindingDensity
     densityPct,
     contextLabel: input?.label ?? `Seen on ~${Math.round(densityPct)}% of scanned top sites`,
     tooltip: DENSITY_TOOLTIP,
+    calibrationNote: FINDING_DENSITY_CALIBRATION_NOTE,
     sourceLabel: DENSITY_SOURCE_LABEL,
     slices: [
       {

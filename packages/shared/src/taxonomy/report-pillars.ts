@@ -2710,7 +2710,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     validationRuleKeys: ["runtime_privacy.rtb_cookie_sync_observed"],
     aliases: [
       "Programmatic adtech and identity-sync activity observed",
-      "RTB cookie sync observed",
+      "Adtech identity sync-like request observed",
       "Identity-sync activity observed"
     ]
   }),

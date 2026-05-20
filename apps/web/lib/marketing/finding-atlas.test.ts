@@ -87,8 +87,11 @@ const REVIEWED_FINDING_REFERENCE_IDS = [
 
 function makePublicHiddenSampleJson(finding: ReturnType<typeof getFindingReferenceItems>[number]) {
   const payload = finding.sample.payload as Record<string, unknown>;
-  const confidence = typeof payload.confidence === "string" ? payload.confidence : "review";
-  const directVsInferred = typeof payload.direct_vs_inferred === "string" ? payload.direct_vs_inferred : "observation";
+  const confidence =
+    typeof payload.evidenceConfidence === "string"
+      ? payload.evidenceConfidence
+      : "review_signal";
+  const directVsInferred = typeof payload.directVsInferred === "string" ? payload.directVsInferred : "direct_observation";
 
   return {
     findingId: finding.id,
@@ -707,7 +710,7 @@ test("runtime tracking batch findings use sanitized evidence-first copy", () => 
   const thirdPartyCookie = findings.get("third_party_cookie_pre_consent");
   const crossDomain = findings.get("cross_domain_identifier_sharing_observed");
 
-  assert.equal(thirdPartyCookie?.title, "Third-party cookie observed before consent");
+  assert.equal(thirdPartyCookie?.title, "Third-party cookie or storage observed before consent");
   assert.notEqual(thirdPartyCookie?.title, "Tracking cookies set before consent");
   assert.equal(crossDomain?.title, "Identifier-like values observed across domains");
   assert.notEqual(crossDomain?.title, "Identifiers shared across domains");
@@ -959,7 +962,7 @@ test("fingerprinting micro-polish keeps probable wording cautious", () => {
   assert.doesNotMatch(probablePublicText, /strong enough to warrant probable fingerprinting review/);
   assert.match(
     probablePublicText,
-    /clustered set of high-entropy browser or device collection signals that may warrant probable fingerprinting review/
+    /clustered high-entropy browser\/device signal pattern that may warrant probable fingerprinting review/
   );
   assert.match(
     probable.regulatoryContext?.technicalStandards.find(

@@ -39,6 +39,13 @@ export type FindingEvidenceStandard = {
   insufficient: string[];
 };
 
+export type FindingTopFindingRule = {
+  minimumToSurface: string[];
+  highConfidenceRequires: string[];
+  criticalOrTopRankingRequires: string[];
+  demoteOrSuppressWhen: string[];
+};
+
 export type FindingReferenceItem = {
   id: string;
   title: string;
@@ -49,6 +56,7 @@ export type FindingReferenceItem = {
   observed: string;
   detectionMethodology: string;
   evidenceStandard?: FindingEvidenceStandard;
+  topFindingRule: FindingTopFindingRule;
   exampleEvidence: FindingReferenceExample[];
   commonCauses: string[];
   reviewQuestions: string[];
@@ -123,6 +131,53 @@ const ILLUSTRATIVE_PUBLIC_SAMPLE_FINDING_IDS = new Set<string>([
   "probable_fingerprinting"
 ]);
 
+const SAMPLE_EVIDENCE_CONFIDENCE: Record<string, "strong" | "good" | "review_signal"> = {
+  asymmetric_consent_ui: "good",
+  consent_dark_patterns_detected: "good",
+  cpra_cba_opt_out_missing: "review_signal",
+  cross_domain_identifier_sharing_observed: "review_signal",
+  fingerprinting_related_signals_observed: "review_signal",
+  forced_consent_interaction: "good",
+  keyboard_navigation_accessibility_issue: "good",
+  possible_session_replay_on_sensitive_input_surface: "review_signal",
+  pre_consent_tracking_detected: "strong",
+  probable_fingerprinting: "review_signal",
+  reject_option_missing_or_hidden: "good",
+  reject_tracking_persists_after_reject: "good",
+  rtb_cookie_sync_observed: "review_signal",
+  semantic_labeling_accessibility_issue: "good",
+  sensitive_data_collection_with_third_party_tracking_present: "review_signal",
+  session_recording_services_detected: "review_signal",
+  text_alternative_accessibility_issue: "good",
+  third_party_cookie_pre_consent: "review_signal",
+  visual_contrast_accessibility_issue: "good"
+};
+
+const SAMPLE_DIRECTNESS: Record<
+  string,
+  "direct_observation" | "correlated_observation" | "absence_observation" | "clustered_inference"
+> = {
+  asymmetric_consent_ui: "correlated_observation",
+  consent_dark_patterns_detected: "correlated_observation",
+  cpra_cba_opt_out_missing: "absence_observation",
+  cross_domain_identifier_sharing_observed: "direct_observation",
+  fingerprinting_related_signals_observed: "direct_observation",
+  forced_consent_interaction: "direct_observation",
+  keyboard_navigation_accessibility_issue: "direct_observation",
+  possible_session_replay_on_sensitive_input_surface: "correlated_observation",
+  pre_consent_tracking_detected: "direct_observation",
+  probable_fingerprinting: "clustered_inference",
+  reject_option_missing_or_hidden: "absence_observation",
+  reject_tracking_persists_after_reject: "direct_observation",
+  rtb_cookie_sync_observed: "direct_observation",
+  semantic_labeling_accessibility_issue: "direct_observation",
+  sensitive_data_collection_with_third_party_tracking_present: "correlated_observation",
+  session_recording_services_detected: "direct_observation",
+  text_alternative_accessibility_issue: "direct_observation",
+  third_party_cookie_pre_consent: "direct_observation",
+  visual_contrast_accessibility_issue: "direct_observation"
+};
+
 const SEVERITY_BY_SECTION: Record<CertScoreFindingDefinition["section"], CertScoreFindingSeverity> = {
   Accessibility: "medium",
   "Consent Experience": "medium",
@@ -173,7 +228,10 @@ const PUBLIC_TITLE_OVERRIDES: Record<string, string> = {
   probable_fingerprinting: "Probable browser/device fingerprinting review signal",
   sensitive_data_collection_with_third_party_tracking_present: "Sensitive input surface with third-party tracking context",
   session_recording_services_detected: "Session replay service signal observed",
-  third_party_cookie_pre_consent: "Third-party cookie observed before consent"
+  forced_consent_interaction: "Consent prompt appeared to require interaction",
+  reject_option_missing_or_hidden: "Reject/refusal option not observed or nested",
+  rtb_cookie_sync_observed: "Adtech identity sync-like request observed",
+  third_party_cookie_pre_consent: "Third-party cookie or storage observed before consent"
 };
 
 const RELATED_FINDINGS: Record<string, string[]> = {
@@ -183,18 +241,17 @@ const RELATED_FINDINGS: Record<string, string[]> = {
   cross_domain_identifier_sharing_observed: ["rtb_cookie_sync_observed", "pre_consent_tracking_detected", "cpra_cba_opt_out_missing"],
   fingerprinting_related_signals_observed: ["probable_fingerprinting", "pre_consent_tracking_detected", "cross_domain_identifier_sharing_observed"],
   forced_consent_interaction: ["reject_option_missing_or_hidden", "asymmetric_consent_ui", "consent_dark_patterns_detected"],
-  keyboard_navigation_accessibility_issue: ["focus_management_issue", "semantic_labeling_accessibility_issue", "visual_contrast_accessibility_issue"],
+  keyboard_navigation_accessibility_issue: ["semantic_labeling_accessibility_issue", "visual_contrast_accessibility_issue"],
   possible_session_replay_on_sensitive_input_surface: [
     "session_recording_services_detected",
-    "sensitive_data_collection_with_third_party_tracking_present",
-    "pre_submit_text_capture_detected"
+    "sensitive_data_collection_with_third_party_tracking_present"
   ],
   pre_consent_tracking_detected: ["third_party_cookie_pre_consent", "rtb_cookie_sync_observed", "reject_tracking_persists_after_reject"],
   probable_fingerprinting: ["fingerprinting_related_signals_observed", "cross_domain_identifier_sharing_observed", "rtb_cookie_sync_observed"],
   reject_option_missing_or_hidden: ["asymmetric_consent_ui", "forced_consent_interaction", "consent_dark_patterns_detected"],
   reject_tracking_persists_after_reject: ["pre_consent_tracking_detected", "third_party_cookie_pre_consent", "reject_option_missing_or_hidden"],
   rtb_cookie_sync_observed: ["cross_domain_identifier_sharing_observed", "pre_consent_tracking_detected", "cpra_cba_opt_out_missing"],
-  semantic_labeling_accessibility_issue: ["keyboard_navigation_accessibility_issue", "text_alternative_accessibility_issue", "focus_management_issue"],
+  semantic_labeling_accessibility_issue: ["keyboard_navigation_accessibility_issue", "text_alternative_accessibility_issue"],
   sensitive_data_collection_with_third_party_tracking_present: [
     "possible_session_replay_on_sensitive_input_surface",
     "session_recording_services_detected",
@@ -208,6 +265,134 @@ const RELATED_FINDINGS: Record<string, string[]> = {
   text_alternative_accessibility_issue: ["semantic_labeling_accessibility_issue", "visual_contrast_accessibility_issue"],
   third_party_cookie_pre_consent: ["pre_consent_tracking_detected", "rtb_cookie_sync_observed", "reject_tracking_persists_after_reject"],
   visual_contrast_accessibility_issue: ["text_alternative_accessibility_issue", "semantic_labeling_accessibility_issue"]
+};
+
+export const FINDING_TOP_FINDING_RULES: Record<string, FindingTopFindingRule> = {
+  pre_consent_tracking_detected: {
+    minimumToSurface: ["Classified non-essential request or storage before observed consent."],
+    highConfidenceRequires: ["Usable coverage.", "Purpose classification.", "Runtime anchor."],
+    criticalOrTopRankingRequires: ["Advertising, replay, identifier-sync, or sensitive-surface context."],
+    demoteOrSuppressWhen: ["Tag manager only.", "Strict necessity.", "Blocked scan.", "Unreliable timing."]
+  },
+  visual_contrast_accessibility_issue: {
+    minimumToSurface: ["Automated contrast rule with selector, page, and WCAG reference."],
+    highConfidenceRequires: ["Color pair or ratio.", "Element state.", "Meaningful visible content."],
+    criticalOrTopRankingRequires: ["Repeated component.", "Critical user path.", "Control or focus indicator."],
+    demoteOrSuppressWhen: ["Decorative, inactive, logo, or incidental context without manual review."]
+  },
+  semantic_labeling_accessibility_issue: {
+    minimumToSurface: ["Automated label, name, or role rule with selector, page, and WCAG reference."],
+    highConfidenceRequires: ["Visible-label context.", "Accessibility-name context.", "Role context."],
+    criticalOrTopRankingRequires: ["Required or sensitive form field.", "Repeated component.", "Blocking control."],
+    demoteOrSuppressWhen: ["Selector only.", "ARIA attribute only.", "No affected element."]
+  },
+  fingerprinting_related_signals_observed: {
+    minimumToSurface: ["Retained high-entropy signal with script or request context."],
+    highConfidenceRequires: ["Multiple categories or known signal script with runtime context."],
+    criticalOrTopRankingRequires: ["Cluster plus identifier, cross-domain, or pre-consent context."],
+    demoteOrSuppressWhen: ["Isolated common environment read.", "Vendor name only.", "Generic analytics."]
+  },
+  session_recording_services_detected: {
+    minimumToSurface: ["Replay-related script, request, vendor, or endpoint artifact."],
+    highConfidenceRequires: ["Endpoint or service classification plus page, timing, and vendor context."],
+    criticalOrTopRankingRequires: ["Collection endpoint.", "Sensitive page.", "Pre-consent or post-reject timing.", "No masking or exclusion observed."],
+    demoteOrSuppressWhen: ["Vendor name only.", "Generic analytics.", "Policy text only."]
+  },
+  third_party_cookie_pre_consent: {
+    minimumToSurface: ["Third-party cookie or storage artifact before consent."],
+    highConfidenceRequires: ["Domain or scope.", "Timing.", "Purpose or vendor classification."],
+    criticalOrTopRankingRequires: ["Advertising, identity, sync, or persistent storage.", "Repeated pages."],
+    demoteOrSuppressWhen: ["Request only.", "Cookie name only.", "Unknown timing.", "Blocked scan."]
+  },
+  rtb_cookie_sync_observed: {
+    minimumToSurface: ["Sync, match, adtech identity-like request, or redirect."],
+    highConfidenceRequires: ["Origin or path.", "Vendor/category.", "Identifier-like keys.", "Redaction."],
+    criticalOrTopRankingRequires: ["Multi-hop redirect.", "Repeated sync endpoints.", "Pre-consent timing.", "Cross-domain identifier sharing."],
+    demoteOrSuppressWhen: ["Generic ad script.", "Ad impression.", "Vendor name only."]
+  },
+  text_alternative_accessibility_issue: {
+    minimumToSurface: ["Automated alt/text alternative rule with selector, page, and WCAG reference."],
+    highConfidenceRequires: ["Element purpose context.", "Accessible-name context."],
+    criticalOrTopRankingRequires: ["Functional control.", "Important chart or graphic.", "Repeated CMS/template issue."],
+    demoteOrSuppressWhen: ["Decorative, redundant, or logo context without manual review."]
+  },
+  consent_dark_patterns_detected: {
+    minimumToSurface: ["Concrete consent-surface choice architecture signal."],
+    highConfidenceRequires: ["Two or more retained choice-architecture signals."],
+    criticalOrTopRankingRequires: ["Forced interaction plus missing/nested reject or repeated prompt."],
+    demoteOrSuppressWhen: ["CMP name only.", "Banner presence only.", "Unrelated modal."]
+  },
+  cpra_cba_opt_out_missing: {
+    minimumToSurface: [
+      "Advertising, cross-context behavioral advertising, or sale/share review signal plus retained public-surface search with no opt-out path observed."
+    ],
+    highConfidenceRequires: ["Footer, policy, CMP, state-rights, and preference-center coverage."],
+    criticalOrTopRankingRequires: [
+      "GPC scan state sent plus likely cross-context behavioral advertising or sale/share context plus no handling/path."
+    ],
+    demoteOrSuppressWhen: ["Adtech vendor only.", "No link coverage.", "No policy coverage.", "No region/context."]
+  },
+  forced_consent_interaction: {
+    minimumToSurface: ["Consent UI artifact plus blocking or interruption signal."],
+    highConfidenceRequires: ["Scroll/content/focus blocking plus visible controls and unrelated interruptions excluded."],
+    criticalOrTopRankingRequires: ["Full blocking with no equivalent non-accept path."],
+    demoteOrSuppressWhen: ["Generic modal.", "Paywall.", "Bot challenge.", "Age gate.", "Login wall."]
+  },
+  reject_option_missing_or_hidden: {
+    minimumToSurface: ["Accept visible plus reject/refusal not observed or nested."],
+    highConfidenceRequires: ["Visible controls retained plus preference path inspected."],
+    criticalOrTopRankingRequires: ["Accept one step and reject unavailable or materially harder."],
+    demoteOrSuppressWhen: ["Labels not retained.", "Scan did not reach consent surface.", "Unrelated overlay."]
+  },
+  sensitive_data_collection_with_third_party_tracking_present: {
+    minimumToSurface: ["Retained sensitive surface plus retained third-party tracking on same page or flow."],
+    highConfidenceRequires: ["Field/surface context plus vendor category, timing, and coverage."],
+    criticalOrTopRankingRequires: ["Sensitive page plus advertising, replay, or measurement plus consent concern or event-capture signal."],
+    demoteOrSuppressWhen: ["Sensitive field alone.", "Vendor elsewhere on site.", "No same-surface runtime artifact."]
+  },
+  asymmetric_consent_ui: {
+    minimumToSurface: ["Retained accept/refusal relationship."],
+    highConfidenceRequires: ["Step count, layer, and labels retained."],
+    criticalOrTopRankingRequires: ["Materially higher refusal effort plus visual hierarchy imbalance."],
+    demoteOrSuppressWhen: ["Button color alone.", "Accept button alone.", "No refusal path context."]
+  },
+  keyboard_navigation_accessibility_issue: {
+    minimumToSurface: ["Automated keyboard/focus rule with selector, page, and WCAG reference."],
+    highConfidenceRequires: ["Keyboard path, focus, and interaction state context."],
+    criticalOrTopRankingRequires: ["Trap.", "Primary navigation blocked.", "Form submit blocked.", "Repeated component."],
+    demoteOrSuppressWhen: ["Selector only.", "Inactive, hidden, or decorative element."]
+  },
+  cross_domain_identifier_sharing_observed: {
+    minimumToSurface: ["Identifier-like key/value pattern in outbound cross-domain request."],
+    highConfidenceRequires: ["Source/destination plus redacted key and vendor/category."],
+    criticalOrTopRankingRequires: ["Persistent or scoped identifier to adtech/identity destination or pre-consent/post-reject timing."],
+    demoteOrSuppressWhen: ["Generic query key.", "Destination unknown.", "Unredacted identifiers."]
+  },
+  reject_tracking_persists_after_reject: {
+    minimumToSurface: ["Reject interaction plus post-reject classified non-essential request or storage."],
+    highConfidenceRequires: ["Reject success, pre/post sequence, and artifact classification."],
+    criticalOrTopRankingRequires: ["Post-reject advertising, replay, identifier sync, or repeated post-reject artifacts."],
+    demoteOrSuppressWhen: ["Reject button present but not clicked.", "Unknown essentiality.", "Queued pre-reject beacon likely."]
+  },
+  possible_session_replay_on_sensitive_input_surface: {
+    minimumToSurface: ["Replay signal plus sensitive surface in same observed scope."],
+    highConfidenceRequires: ["Replay collection endpoint or strong replay runtime signal plus sensitive field/page context."],
+    criticalOrTopRankingRequires: ["Collection endpoint plus sensitive form plus no masking/exclusion observed or consent concern."],
+    demoteOrSuppressWhen: ["Replay library only.", "Global script only.", "Sensitive field not same page/flow.", "Masking or page exclusion observed."]
+  },
+  probable_fingerprinting: {
+    minimumToSurface: ["Multi-signal high-entropy cluster."],
+    highConfidenceRequires: ["Cluster plus script/request and tier/context."],
+    criticalOrTopRankingRequires: ["Cluster plus identifier, cross-domain, pre-consent, or adtech context."],
+    demoteOrSuppressWhen: ["Single common attribute.", "Vendor name only.", "Security script without retained cluster."]
+  }
+};
+
+const DEFAULT_TOP_FINDING_RULE: FindingTopFindingRule = {
+  minimumToSurface: ["Retained evidence supports the finding through the canonical concern/policy/unified-finding pipeline."],
+  highConfidenceRequires: ["Corroborated retained evidence and usable coverage."],
+  criticalOrTopRankingRequires: ["Stronger directness, corroboration, affected surface, and review relevance."],
+  demoteOrSuppressWhen: ["Evidence is ambiguous, unsupported, blocked, or audit-only."]
 };
 
 const OBSERVED: Record<string, string> = {
@@ -224,7 +409,7 @@ const OBSERVED: Record<string, string> = {
   third_party_cookie_pre_consent:
     "Retained runtime evidence showed a third-party cookie or storage artifact observed before CertScore recorded a consent action or a prior consent state associated with that purpose.",
   rtb_cookie_sync_observed:
-    "Retained network evidence showed adtech or RTB-related sync, match, redirect, or identifier-like request patterns in the observed scan scope.",
+    "Retained network evidence showed adtech, RTB, sync, match, redirect, or identifier-like request patterns that may be relevant to cookie/tracker, advertising, consent, transparency, sale/share, and vendor-governance review.",
   text_alternative_accessibility_issue:
     "Retained automated accessibility evidence showed non-text content, images, SVGs, icons, or media-related elements with text-alternative signals that may require accessibility review.",
   consent_dark_patterns_detected:
@@ -248,7 +433,7 @@ const OBSERVED: Record<string, string> = {
   possible_session_replay_on_sensitive_input_surface:
     "Retained runtime and page-surface evidence showed session-replay-related signals on or near a form, flow, or page surface that may collect sensitive information.",
   probable_fingerprinting:
-    "Retained runtime evidence showed a clustered set of high-entropy browser or device collection signals that may warrant probable fingerprinting review."
+    "Retained runtime evidence showed a clustered high-entropy browser/device signal pattern that may warrant probable fingerprinting review."
 };
 
 const METHODOLOGY: Record<string, string> = {
@@ -265,19 +450,19 @@ const METHODOLOGY: Record<string, string> = {
   third_party_cookie_pre_consent:
     "CertScore records timestamped page-load, consent-state, cookie, storage, request, vendor, and coverage observations where available. This finding is surfaced when retained runtime evidence shows a third-party cookie or storage artifact before CertScore observed a consent action or a prior consent state associated with that purpose. CertScore treats third-party cookie-before-consent evidence as a review signal. The scanner does not determine legal status, consent validity, necessity, exemption status, or compliance status. Reviewers should consider cookie domain and scope, first-seen timestamp, purpose classification, whether the storage is strictly necessary or exempt, consent state, region, returning-user state, CMP configuration, and scan coverage reliability.",
   rtb_cookie_sync_observed:
-    "CertScore inspects retained network evidence for adtech, exchange, sync, match, redirect, and cookie-matching style request patterns, including request origin/path, classified vendor/category, redirect or sync context where available, identifier-like query keys with values redacted, and scan coverage context. This finding is surfaced when retained evidence shows a request or redirect pattern consistent with RTB, adtech sync, user match, or cookie-sync-like behavior in the observed scan scope. CertScore treats RTB cookie-sync evidence as a review signal. The scanner does not infer a complete identity graph, determine personal identity, or determine legal status, consent validity, or compliance status. Reviewers should consider endpoint purpose, vendor role, identifier scope, consent timing, redirects, jurisdiction, server-side behavior not visible to the browser, and whether the retained request pattern is sufficient for the intended review.",
+    "CertScore inspects retained network evidence for adtech, exchange, sync, match, redirect, and identifier-like request patterns, including request origin/path, classified vendor/category, redirect or sync context where available, identifier-like query keys with values redacted, and scan coverage context. This finding is surfaced when retained evidence shows a request or redirect pattern consistent with RTB, adtech sync, user match, or identity sync-like behavior in the observed scan scope. CertScore treats adtech identity sync-like evidence as a review signal. The scanner does not infer confirmed cookie syncing, a complete identity graph, personal identity, legal status, consent validity, or compliance status. Reviewers should consider endpoint purpose, vendor role, identifier scope, consent timing, redirects, jurisdiction, server-side behavior not visible to the browser, and whether the retained request pattern is sufficient for the intended review.",
   text_alternative_accessibility_issue:
     "CertScore retains representative automated accessibility evidence for text-alternative checks, including the rule identifier, affected selector or element reference, page URL, impact label when available, and WCAG-oriented references. The finding is surfaced when retained evidence indicates that non-text content, images, SVGs, icons, controls, or media-related elements may lack an appropriate text alternative or may require review to determine whether the content is informative, functional, decorative, redundant, or exempt. CertScore treats automated text-alternative results as review signals. The scanner does not infer full WCAG conformance or non-conformance from a single automated rule result. Reviewers should consider the element purpose, surrounding text, whether the content is decorative or informative, whether an icon acts as a control, whether an image contains text, and whether the retained evidence reflects the user-visible and assistive-technology-relevant context.",
   consent_dark_patterns_detected:
     "CertScore retains representative consent-surface evidence for visible controls, button labels, path depth, first-layer availability, hierarchy cues, overlays, repeated prompts, preference paths, and scan coverage context where available. The finding is surfaced when retained evidence indicates a cluster of consent choice-architecture signals that may affect how users encounter, compare, accept, reject, or revisit privacy choices in the observed scan scope. CertScore treats consent choice-architecture results as review signals. The scanner does not determine that dark-pattern status, deception, unfairness, consent validity, legal status, or compliance status occurred. Reviewers should consider jurisdiction, region, CMP configuration, prior consent state, user intent, accessibility, localization, repeated prompts, equivalent choice paths, public claims, and whether the retained evidence reflects the relevant user-facing consent surface.",
   cpra_cba_opt_out_missing:
-    "CertScore compares retained public-surface evidence for privacy links, footer links, policy language, state-specific rights references, Do Not Sell or Share wording, opt-out links, preference centers, and privacy-choice controls with retained runtime or page-surface signals that may be relevant to advertising, cross-context behavioral advertising, sale/share, tracking, or vendor-governance review. The finding is surfaced when retained evidence indicates relevant advertising or privacy-choice context, but a clear California privacy choice, Do Not Sell or Share, opt-out, or comparable choice path was not observed in the scanned public-page scope. CertScore treats CPRA opt-out availability results as review signals. The scanner does not determine legal status, CPRA applicability, sale/share status, cross-context behavioral advertising status, opt-out failure, GPC handling, or compliance status. Reviewers should consider organization scope, user region, purpose, vendor role, policy text, footer links, preference-center behavior, GPC handling, CMP configuration, exemptions, and whether the retained evidence reflects the relevant public user journey.",
+    "CertScore compares retained public-surface evidence for privacy links, footer links, policy language, state-specific rights references, Do Not Sell or Share wording, opt-out links, preference centers, and privacy-choice controls with retained runtime or page-surface signals that may be relevant to advertising, cross-context behavioral advertising, sale/share, tracking, or vendor-governance review. The finding is surfaced when retained evidence indicates relevant advertising or privacy-choice context, but a clear California privacy choice, Do Not Sell or Share, opt-out, or comparable choice path was not observed in the scanned public-page scope. CertScore treats CPRA opt-out availability results as review signals. The scanner does not determine legal status, CPRA applicability, sale/share status, cross-context behavioral advertising status, opt-out failure, GPC handling, or compliance status. GPC handling is not determined unless a GPC-specific request state was sent and retained. Reviewers should consider organization scope, user region, purpose, vendor role, policy text, footer links, preference-center behavior, GPC-specific scan state, CMP configuration, exemptions, and whether the retained evidence reflects the relevant public user journey.",
   forced_consent_interaction:
-    "CertScore retains representative evidence for consent prompts, overlays, modal behavior, scroll blocking, visible controls, dismiss paths, and page-interaction state where available. The finding is surfaced when retained evidence indicates that the consent interface appeared to prevent ordinary page access, block scrolling or navigation, obscure primary content, or require interaction before the scan could proceed in the observed public-page scope. CertScore treats forced-interaction signals as review signals. The scanner does not determine whether consent was freely given, and does not determine legal status, deception, unfairness, consent validity, or compliance status. Reviewers should consider whether non-essential content was blocked, whether a reject or continue-without-accepting path exists, whether blocking is necessary for the service, whether accessibility is affected, and whether the retained evidence reflects the relevant region, viewport, browser state, and CMP configuration.",
+    "CertScore retains representative evidence for consent prompts, overlays, modal behavior, scroll blocking, visible controls, dismiss paths, and page-interaction state where available. The finding is surfaced when retained evidence indicates that the consent interface appeared to prevent ordinary page access, block scrolling or navigation, obscure primary content, or require interaction before the scan could proceed in the observed public-page scope. CertScore treats required-interaction signals as review signals. The scanner does not determine whether consent was freely given, and does not determine legal status, deception, unfairness, consent validity, or compliance status. Reviewers should consider whether non-essential content was blocked, whether a reject or continue-without-accepting path exists, whether blocking is necessary for the service, whether accessibility is affected, and whether the retained evidence reflects the relevant region, viewport, browser state, and CMP configuration.",
   reject_option_missing_or_hidden:
-    "CertScore retains representative consent-surface evidence for visible controls, button labels, link text, consent-layer structure, first-layer availability, preference or settings paths, and scan coverage context where available. The finding is surfaced when retained evidence indicates that an accept path was observed but a reject, decline, or equivalent refusal control was not observed on the same layer, was hidden behind additional steps, or was materially less direct in the observed scan scope. CertScore treats missing or hidden reject signals as review signals. The scanner does not determine legal status, deception, unfairness, consent validity, or compliance status. Reviewers should consider region, CMP configuration, prior consent state, localization, viewport, accessibility, whether an equivalent refusal path exists, and whether the retained evidence reflects the relevant user-facing consent surface.",
+    "CertScore retains representative consent-surface evidence for visible controls, button labels, link text, consent-layer structure, first-layer availability, preference or settings paths, and scan coverage context where available. The finding is surfaced when retained evidence indicates that an accept path was observed but a reject, decline, or equivalent refusal control was not observed on the same layer, was nested behind additional steps, or was materially less direct in the observed scan scope. CertScore treats refusal-path availability signals as review signals. The scanner does not determine that a reject option does not exist in every region or layer, legal status, deception, unfairness, consent validity, or compliance status. Reviewers should consider region, CMP configuration, prior consent state, localization, viewport, accessibility, whether an equivalent refusal path exists, and whether the retained evidence reflects the relevant user-facing consent surface.",
   sensitive_data_collection_with_third_party_tracking_present:
-    "CertScore compares retained page-surface evidence for sensitive input fields, form context, page purpose, and semantic cues with retained runtime evidence for third-party tracking, analytics, advertising, replay, measurement, or vendor requests observed in the same scan scope. The finding is surfaced when a sensitive-input or sensitive-context surface appears alongside third-party tracking context. CertScore treats this co-occurrence as a review signal. The scanner does not determine that sensitive field values were transmitted, captured, read, or linked to a third party. Reviewers should consider field purpose, form state, masking, event listeners, payload evidence, vendor category, consent state, page template reuse, and whether the retained evidence reflects the affected user-facing flow.",
+    "CertScore compares retained page-surface evidence for sensitive input fields, form context, page purpose, and semantic cues with retained runtime evidence for third-party tracking, analytics, advertising, replay, measurement, or vendor requests observed in the same scan scope. The finding is surfaced when a sensitive-input or sensitive-context surface appears alongside third-party tracking context. CertScore treats this co-occurrence as a review signal. The scanner does not determine that sensitive field values were transmitted, captured, read, linked to a third party, or that GDPR Article 9 applies. Financial, identity, contact, location, employment, children, protected-class, or other high-risk context signals require manual review and are not automatically GDPR Article 9 special-category data. Reviewers should consider field purpose, form state, masking, event listeners, payload evidence, vendor category, consent state, page template reuse, and whether the retained evidence reflects the affected user-facing flow.",
   asymmetric_consent_ui:
     "CertScore retains representative consent-surface evidence for button labels, visible controls, first-layer availability, hierarchy cues, step counts, preference paths, and scan coverage context where available. The finding is surfaced when retained evidence indicates that accepting may be materially easier, more visually prominent, or more direct than refusing within the observed consent interface. CertScore treats asymmetric consent UI signals as review signals. The scanner does not determine legal status, deception, unfairness, consent validity, compliance status, or dark-pattern status. Reviewers should consider equivalent choice paths, visual hierarchy, copy, localization, accessibility, viewport, region, CMP configuration, prior consent state, and whether the retained evidence reflects the relevant user-facing consent surface.",
   keyboard_navigation_accessibility_issue:
@@ -287,9 +472,9 @@ const METHODOLOGY: Record<string, string> = {
   reject_tracking_persists_after_reject:
     "CertScore records consent interaction events, consent-state observations, runtime requests, cookie/storage activity, vendor classification, and coverage context where available. This finding is surfaced when retained evidence shows a reject-style interaction followed by a classified non-essential request or storage artifact after that interaction within the observed scan scope. CertScore treats post-reject tracking evidence as a review signal. The scanner does not determine legal status, consent validity, vendor responsibility, or compliance status. Reviewers should confirm the reject interaction succeeded, whether the activity began before or after the reject action, whether the post-reject artifact was non-essential, whether queued or delayed beacons explain the timing, and whether CMP, consent-mode, tag-manager, or vendor configuration affected the result.",
   possible_session_replay_on_sensitive_input_surface:
-    "CertScore correlates retained session-replay-related runtime evidence with retained page-surface evidence for sensitive input fields, sensitive form context, or sensitive page purpose. The finding is surfaced when replay-style tooling appears on or near a surface that may collect health, financial, identity, location, contact, or other sensitive information in the observed scan scope. CertScore treats the co-occurrence as a review signal. The scanner does not determine that sensitive values, keystrokes, form contents, screenshots, or recordings were captured. Reviewers should confirm masking, sampling, page exclusions, payload contents, event capture, consent state, vendor configuration, and whether the retained evidence reflects the affected user-visible state.",
+    "CertScore correlates retained session-replay-related runtime evidence with retained page-surface evidence for sensitive input fields, sensitive form context, or sensitive page purpose. The finding is surfaced when replay-style tooling appears on or near a surface that may collect health, financial, identity, location, contact, or other sensitive information in the observed scan scope. CertScore treats the co-occurrence as a review signal. The scanner does not determine that sensitive values, keystrokes, form contents, screenshots, recordings, or intercepted communications were captured, or that GDPR Article 9 applies. Financial, identity, contact, location, employment, children, protected-class, or other high-risk context signals require manual review and are not automatically GDPR Article 9 special-category data. Reviewers should confirm masking, sampling, page exclusions, payload contents, event capture, consent state, vendor configuration, and whether the retained evidence reflects the affected user-visible state.",
   probable_fingerprinting:
-    "CertScore clusters retained runtime evidence for high-entropy browser and device signals, including canvas or WebGL behavior, audio or media characteristics, storage probes, font or plugin signals, screen or locale attributes, script/request context, identifier-like context, and coverage signals where available. The finding is surfaced when retained evidence includes a stronger multi-signal cluster than a single generic device observation. CertScore treats probable fingerprinting as a review signal, not proof of identity, identity resolution, persistent fingerprint creation, user singling-out, legal status, consent validity, or compliance status. Reviewers should consider purpose, necessity, security or fraud-prevention use, consent state, vendor role, whether identifiers are linked, and whether retained evidence is sufficient for the intended review."
+    "CertScore clusters retained runtime evidence for high-entropy browser and device signals, including canvas or WebGL behavior, audio or media characteristics, storage probes, font or plugin signals, screen or locale attributes, script/request context, identifier-like context, and coverage signals where available. The finding is surfaced when retained evidence includes a stronger multi-signal cluster than a single generic device observation. CertScore treats probable fingerprinting as a review signal, not proof of identity, identity resolution, persistent fingerprint creation, user singling-out, legal status, consent validity, or compliance status. A security, fraud-prevention, bot-detection, or abuse-prevention purpose may explain collection, but does not automatically exempt terminal-equipment access or personal-data processing from applicable review. Reviewers should consider purpose, necessity, security or fraud-prevention use, consent state, vendor role, whether identifiers are linked, and whether retained evidence is sufficient for the intended review."
 };
 
 const COMMON_CAUSES: Record<string, string[]> = {
@@ -490,7 +675,7 @@ const REVIEW_QUESTIONS: Record<string, string[]> = {
     "Are cookie values and query strings redacted while retaining enough anchors for review?"
   ],
   rtb_cookie_sync_observed: [
-    "Which request origin/path or redirect endpoint supported the sync classification?",
+    "Which request origin/path or redirect endpoint supported the sync-like classification?",
     "Which vendor/category owns the endpoint?",
     "Which identifier-like query keys or redirect parameters were retained, and were values redacted?",
     "Is the request a sync/match/user-match pattern or a generic ad impression/script request?",
@@ -528,7 +713,7 @@ const REVIEW_QUESTIONS: Record<string, string[]> = {
     "Was the choice path discoverable from the footer, privacy policy, CMP, cookie settings, or preference center?",
     "Does the site process data in ways that could be sale/share or cross-context behavioral advertising under applicable context?",
     "Does the organization fall within CPRA scope, and do exemptions or thresholds apply?",
-    "Is GPC handled, ignored, or not determined by the retained evidence?",
+    "Was a GPC-specific request state sent and retained, or is GPC handling not determined by this scan?",
     "Could region, viewport, language, prior consent state, or CMP configuration affect whether the choice path appears?",
     "Should privacy and legal review confirm applicability, opt-out sufficiency, GPC handling, exemptions, and remediation quality?"
   ],
@@ -975,16 +1160,16 @@ const EVIDENCE_STANDARDS: Record<string, FindingEvidenceStandard> = {
   },
   rtb_cookie_sync_observed: {
     strong: [
-      "Retained network evidence includes a request or redirect endpoint consistent with cookie sync, user match, RTB, ad exchange, or adtech identity flow.",
+      "Retained network evidence includes a request or redirect endpoint consistent with adtech identity sync-like, user match, RTB, ad exchange, or adtech identity flow.",
       "Evidence includes origin and path, timing, vendor or category classification, and query redaction.",
-      "Evidence includes identifier-like query keys, redirect context, or cookie-matching pattern with values redacted or hashed where retained.",
+      "Evidence includes identifier-like query keys, redirect context, or sync-like pattern with values redacted or hashed where retained.",
       "Evidence distinguishes sync or match context from a generic ad script or ad impression request where possible.",
       "Coverage context indicates request ordering and retained anchors were not materially blocked or unreliable."
     ],
     good: [
-      "Retained request evidence is consistent with adtech sync or user-match behavior, but redirect-chain completeness, identifier scope, or endpoint purpose requires manual review.",
+      "Retained request evidence is consistent with adtech sync-like or user-match behavior, but redirect-chain completeness, identifier scope, or endpoint purpose requires manual review.",
       "The retained example is enough for a reviewer to inspect origin and path, vendor or category, redacted parameters, and timing manually.",
-      "The evidence is likely an RTB or adtech sync review signal, but consent state, legal relevance, and server-side behavior require manual review."
+      "The evidence is likely an adtech identity sync-like review signal, but consent state, legal relevance, and server-side behavior require manual review."
     ],
     auditOnly: [
       "Generic adtech request or script is present, but sync or match pattern is not retained.",
@@ -997,7 +1182,7 @@ const EVIDENCE_STANDARDS: Record<string, FindingEvidenceStandard> = {
       "Policy text alone.",
       "Identifier-like key without request origin, path, and context.",
       "Unredacted identifiers or payloads in public examples.",
-      "Claims about complete identity graph, personal identity, legal status, compliance status, or tracking lawfulness based only on automated evidence."
+      "Claims about confirmed cookie syncing, complete identity graph, personal identity, legal status, compliance status, or tracking lawfulness based only on automated evidence."
     ]
   },
   cross_domain_identifier_sharing_observed: {
@@ -1368,7 +1553,7 @@ function confidenceSemanticsFor(id: string, benchmark: FindingDensityBenchmark) 
   }
 
   if (id === "cpra_cba_opt_out_missing") {
-    return "Good when retained evidence includes advertising or sale/share-related review signals, public page context, footer or privacy-link observations, policy or choice-link context, and enough detail for reviewer inspection; stronger when retained evidence also includes state-specific rights path context, GPC or preference-center context where retained, repeated observations across pages, and usable coverage. Manual review is still needed for CPRA applicability, sale/share status, opt-out sufficiency, GPC handling, exemptions, and remediation quality.";
+    return "Good when retained evidence includes advertising or sale/share-related review signals, public page context, footer or privacy-link observations, policy or choice-link context, and enough detail for reviewer inspection; stronger when retained evidence also includes state-specific rights path context, GPC-specific request state or preference-center context where retained, repeated observations across pages, and usable coverage. Manual review is still needed for CPRA applicability, sale/share status, opt-out sufficiency, GPC handling, exemptions, and remediation quality.";
   }
 
   if (id === "third_party_cookie_pre_consent") {
@@ -1400,11 +1585,11 @@ function confidenceSemanticsFor(id: string, benchmark: FindingDensityBenchmark) 
   }
 
   if (id === "probable_fingerprinting") {
-    return "Good when retained runtime evidence includes a multi-signal high-entropy browser/device cluster, signal categories, script or request context, and enough detail for reviewer inspection; stronger when retained evidence also includes fingerprint tier context, artifact references, identity-like or cross-domain context, consent timing, repeated examples, and usable coverage. Manual review is still needed for purpose, necessity, identity linkage, consent state, downstream use, and remediation quality.";
+    return "Good when retained runtime evidence includes a multi-signal high-entropy browser/device cluster, signal categories, script or request context, and enough detail for reviewer inspection; stronger when retained evidence also includes fingerprint tier context, artifact references, identity-like or cross-domain context, consent timing, repeated examples, and usable coverage. A security or fraud-prevention purpose may explain collection but does not automatically exempt terminal-equipment access or personal-data processing. Manual review is still needed for purpose, necessity, identity linkage, consent state, downstream use, and remediation quality.";
   }
 
   if (id === "fingerprinting_related_signals_observed") {
-    return "Good when retained runtime evidence includes browser/device signal category, script or request context, page context, and enough detail for reviewer inspection; stronger when retained evidence also includes multiple signal categories, artifact references, vendor attribution, consent timing, and usable coverage. Manual review is still needed for purpose, entropy, necessity, identity linkage, consent state, and remediation quality.";
+    return "Good when retained runtime evidence includes browser/device signal category, script or request context, page context, and enough detail for reviewer inspection; stronger when retained evidence also includes multiple signal categories, artifact references, vendor attribution, consent timing, and usable coverage. Isolated common environment reads should remain audit-only unless paired with script or request context and a high-entropy signal category. Manual review is still needed for purpose, entropy, necessity, identity linkage, consent state, and remediation quality.";
   }
 
   if (id.includes("accessibility")) {
@@ -1459,7 +1644,7 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
     return [
       {
         title: "Adtech sync request example",
-        code: "artifact=req_003\nrole=finding_supporting_artifact\nurl=https://example.com/\nrequest_origin=https://sync.ads.example\nrequest_path=/user_sync [query_redacted=true]\nresource_type=image_or_redirect\nvendor_category=adtech_or_exchange\ndetected_pattern=cookie_sync_like_request\nidentifier_like_keys=uid, partner_id [values_redacted=true]\ntimestamp_ms=2860\nreview_caveat=manual review should confirm endpoint purpose, identifier scope, consent timing, redirects, jurisdiction, and server-side behavior"
+        code: "artifact=req_003\nrole=finding_supporting_artifact\nurl=https://example.com/\nrequest_origin=https://sync.ads.example\nrequest_path=/user_sync [query_redacted=true]\nresource_type=image_or_redirect\nvendor_category=adtech_or_exchange\ndetected_pattern=identity_sync_like_request\nidentifier_like_keys=uid, partner_id [values_redacted=true]\ntimestamp_ms=2860\nreview_caveat=manual review should confirm endpoint purpose, identifier scope, consent timing, redirects, jurisdiction, and server-side behavior"
       },
       {
         title: "Review context",
@@ -1493,7 +1678,7 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
     return [
       {
         title: "Cross-domain identifier request example",
-        code: "artifact=req_004\nrole=finding_supporting_artifact\nurl=https://example.com/\nrequest_origin=https://example.com\ndestination_origin=https://measure.example\nrequest_path=/collect [query_redacted=true]\nthird_party_context=true\nidentifier_like_keys=client_id, campaign_id [values_redacted=true]\ntimestamp_ms=3180\nvendor_category=analytics_or_ad_measurement\nreview_caveat=manual review should confirm purpose, identifier scope, consent timing, destination role, and whether the value is pseudonymous, scoped, hashed, or otherwise limited"
+        code: "artifact=req_004\nrole=finding_supporting_artifact\nurl=https://example.com/\ninitiator_origin=https://example.com\ndestination_origin=https://measure.example\nrequest_path=/collect [query_redacted=true]\nthird_party_context=true\nidentifier_like_keys=client_id, campaign_id [values_redacted=true]\ntimestamp_ms=3180\nvendor_category=analytics_or_ad_measurement\nreview_caveat=manual review should confirm purpose, identifier scope, consent timing, destination role, and whether the value is pseudonymous, scoped, hashed, or otherwise limited"
       },
       {
         title: "Review context",
@@ -1672,7 +1857,7 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
     return [
       {
         title: "Privacy choice review signal",
-        code: "artifact=privacy_choice_001\nrole=finding_supporting_artifact\nurl=https://example.com/\nobserved_surface=footer_and_privacy_links\nadvertising_or_cross_context_signal=true [manual_review_recommended]\ndo_not_sell_or_share_link_observed=false\nstate_privacy_choice_link_observed=false\nprivacy_policy_url=https://example.com/privacy\ngpc_handling=not_determined\nreview_caveat=manual review should confirm CPRA applicability, sale/share or cross-context behavioral advertising status, opt-out path availability, GPC handling, exemptions, and regional configuration"
+        code: "artifact=privacy_choice_001\nrole=finding_supporting_artifact\nurl=https://example.com/\nobserved_surface=footer_and_privacy_links\nadvertising_or_cross_context_signal=true [manual_review_recommended]\ndo_not_sell_or_share_link_observed=false\nstate_privacy_choice_link_observed=false\nprivacy_policy_url=https://example.com/privacy\ngpc_specific_request_state=not_sent_or_not_retained\ngpc_handling=not_determined\nreview_caveat=manual review should confirm CPRA applicability, sale/share or cross-context behavioral advertising status, opt-out path availability, GPC-specific scan state, exemptions, and regional configuration"
       },
       {
         title: "Review context",
@@ -1770,6 +1955,109 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
   ];
 }
 
+function makeFallbackEvidenceBlocks(findingId: string): Record<string, unknown> {
+  const blocks: Record<string, unknown> = {};
+
+  if (
+    findingId === "pre_consent_tracking_detected" ||
+    findingId === "third_party_cookie_pre_consent" ||
+    findingId === "reject_tracking_persists_after_reject"
+  ) {
+    blocks.consentTimeline = {
+      consentStateBasis: "observed_scan_scope",
+      consentActionObservedBeforeFirstSignal: false,
+      manualReviewNeeded: true
+    };
+  }
+
+  if (
+    findingId === "pre_consent_tracking_detected" ||
+    findingId === "third_party_cookie_pre_consent" ||
+    findingId === "reject_tracking_persists_after_reject" ||
+    findingId === "rtb_cookie_sync_observed" ||
+    findingId === "cross_domain_identifier_sharing_observed"
+  ) {
+    blocks.networkEvidence = {
+      artifactRefs: [],
+      queryStringsRedacted: true,
+      valuesRedacted: true,
+      manualReviewNeeded: true
+    };
+  }
+
+  if (
+    findingId === "reject_option_missing_or_hidden" ||
+    findingId === "forced_consent_interaction" ||
+    findingId === "asymmetric_consent_ui" ||
+    findingId === "consent_dark_patterns_detected" ||
+    findingId === "cpra_cba_opt_out_missing"
+  ) {
+    blocks.uiEvidence = {
+      observedSurface: findingId === "cpra_cba_opt_out_missing" ? "public_privacy_choice_surface" : "consent_surface",
+      retainedControlContext: true,
+      manualReviewNeeded: true
+    };
+  }
+
+  if (
+    findingId === "visual_contrast_accessibility_issue" ||
+    findingId === "semantic_labeling_accessibility_issue" ||
+    findingId === "text_alternative_accessibility_issue" ||
+    findingId === "keyboard_navigation_accessibility_issue"
+  ) {
+    blocks.accessibilityEvidence = {
+      ruleId: "representative_automated_rule",
+      selector: "redacted_selector_reference",
+      pageUrl: "https://example.com/",
+      impact: "review",
+      wcagRefs: ["WCAG-oriented automated review reference"],
+      elementType: "user_visible_element",
+      elementState: "observed_state",
+      repeatedInstanceCount: 1,
+      componentOrTemplateScope: "manual_review_recommended",
+      exceptionContext: "not_determined",
+      manualReviewNeeded: true
+    };
+  }
+
+  if (findingId === "session_recording_services_detected" || findingId === "possible_session_replay_on_sensitive_input_surface") {
+    blocks.sessionReplayEvidence = {
+      replayArtifactObserved: true,
+      replayCollectionEndpointObserved: "not_determined",
+      maskingOrPageExclusionObserved: "not_determined",
+      captureOrRetentionDetermined: false,
+      manualReviewNeeded: true
+    };
+  }
+
+  if (
+    findingId === "sensitive_data_collection_with_third_party_tracking_present" ||
+    findingId === "possible_session_replay_on_sensitive_input_surface"
+  ) {
+    blocks.sensitiveSurfaceEvidence = {
+      sensitiveSurfaceObserved: true,
+      surfaceCategory: "sensitive_or_high_risk_context_review",
+      article9SpecialCategoryDetermined: false,
+      userEnteredValuesRetained: false,
+      manualReviewNeeded: true
+    };
+  }
+
+  if (findingId === "fingerprinting_related_signals_observed" || findingId === "probable_fingerprinting") {
+    blocks.fingerprintEvidence = {
+      clusterSize: findingId === "probable_fingerprinting" ? "multi_signal_cluster" : "related_signal",
+      entropyTiers: findingId === "probable_fingerprinting" ? ["high", "medium"] : ["review"],
+      clusterStrength: findingId === "probable_fingerprinting" ? "probable_review_signal" : "related_signal_not_probable",
+      identifierLinkageContext: "manual_review_recommended",
+      possibleSecurityOrFraudPurpose: "not_determined",
+      rawDeviceValuesRetained: false,
+      manualReviewNeeded: true
+    };
+  }
+
+  return blocks;
+}
+
 function makeFallbackSample(definition: CertScoreFindingDefinition, benchmark: FindingDensityBenchmark): SampleFindingJson {
   return {
     findingId: definition.id,
@@ -1784,10 +2072,56 @@ function makeFallbackSample(definition: CertScoreFindingDefinition, benchmark: F
       section: definition.section,
       criticality: SEVERITY_OVERRIDES[definition.id] ?? SEVERITY_BY_SECTION[definition.section],
       confidenceSemantics: confidenceSemanticsFor(definition.id, benchmark),
-      evidenceVersion: "1.1",
+      evidenceVersion: "2.0",
+      evidenceConfidence: SAMPLE_EVIDENCE_CONFIDENCE[definition.id] ?? "review_signal",
+      directVsInferred: SAMPLE_DIRECTNESS[definition.id] ?? "direct_observation",
+      scanContext: {
+        domain: "example.com",
+        requestedUrl: "https://example.com/",
+        finalUrl: "https://example.com/",
+        publicWebObservation: true,
+        legalConclusion: false
+      },
+      artifacts: {
+        runtimeAnchors: [],
+        requestSamples: [],
+        cookieOrStorageSamples: [],
+        policyAnchors: [],
+        rawValuesRetained: false
+      },
+      classification: {
+        section: definition.section,
+        criticality: SEVERITY_OVERRIDES[definition.id] ?? SEVERITY_BY_SECTION[definition.section],
+        evidenceConfidence: SAMPLE_EVIDENCE_CONFIDENCE[definition.id] ?? "review_signal",
+        directVsInferred: SAMPLE_DIRECTNESS[definition.id] ?? "direct_observation",
+        legalStatusDetermined: false
+      },
+      coverage: {
+        coverageFlags: [],
+        coverageReliableForTopRanking: true,
+        notDetectedMeans: "not_observed_in_scan_scope",
+        manualReviewNeeded: true
+      },
       observed: OBSERVED[definition.id] ?? definition.whyItMatters,
       detectionMethodology: METHODOLOGY[definition.id] ?? definition.whyItMatters,
+      topFindingCalibration: FINDING_TOP_FINDING_RULES[definition.id] ?? DEFAULT_TOP_FINDING_RULE,
       evidenceExamples: makeEvidenceExamples(definition.id),
+      automationLimits: [
+        "Automated public-web observations do not determine legal status, compliance status, proof that a law was breached, proof of data capture, or tracking lawfulness.",
+        "Manual review is needed to confirm purpose, necessity, jurisdiction, configuration, exemptions, and remediation quality."
+      ],
+      redaction: {
+        rawIdentifiersRetained: false,
+        storageValueContentsRetained: false,
+        completeQueryStringsRetained: false,
+        requestBodiesRetained: false,
+        renderedPageImagesRetained: false,
+        sourceMarkupRetained: false,
+        userEnteredValuesRetained: false
+      },
+      selectionReason:
+        "Illustrative public sample selected to show retained evidence, directness, limits, and top-finding calibration.",
+      ...makeFallbackEvidenceBlocks(definition.id),
       limitations: LIMITATIONS[definition.id] ?? DEFAULT_LIMITATIONS
     }
   };
@@ -1855,6 +2189,7 @@ export function getFindingReferenceItems(): FindingReferenceItem[] {
       observed: OBSERVED[findingId] ?? definition.whyItMatters,
       detectionMethodology: METHODOLOGY[findingId] ?? definition.whyItMatters,
       evidenceStandard: EVIDENCE_STANDARDS[findingId],
+      topFindingRule: FINDING_TOP_FINDING_RULES[findingId] ?? DEFAULT_TOP_FINDING_RULE,
       exampleEvidence: makeEvidenceExamples(findingId),
       commonCauses: COMMON_CAUSES[findingId] ?? ["Unexpected runtime configuration", "Third-party tag behavior changed", "Public surface differed from expected implementation"],
       reviewQuestions: REVIEW_QUESTIONS[findingId] ?? ["What signal was retained?", "Which public surface or runtime event supports it?", "What implementation owner can confirm the behavior?"],

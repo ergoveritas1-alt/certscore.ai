@@ -8,7 +8,7 @@ import {
 
 test("uses atlas public titles and criticality for mapped report findings", () => {
   const cases = [
-    ["third_party_cookie_pre_consent", "Third-party cookie observed before consent", "high"],
+    ["third_party_cookie_pre_consent", "Third-party cookie or storage observed before consent", "high"],
     ["session_recording_services_detected", "Session replay service signal observed", "high"],
     ["fingerprinting_related_signals_observed", "Fingerprinting-related browser/device signals observed", "high"],
     ["cross_domain_identifier_sharing_observed", "Identifier-like values observed across domains", "high"],

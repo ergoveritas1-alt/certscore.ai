@@ -21,6 +21,7 @@ import {
   getPublicReportFindingDisplayForCertFinding
 } from "../../lib/scans/public-report-finding-display";
 import { rankFindings } from "../../lib/scans/rank-findings";
+import { evaluateTopFindingEligibility } from "../../lib/scans/top-finding-eligibility";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 import {
   getFindingRegulatoryContext,
@@ -518,6 +519,59 @@ function compactRepresentativeRequests(requests: unknown) {
       ])
     );
   return items.length > 0 ? items : undefined;
+}
+
+function getRuntimeEvidenceConfidence(finding: CertScoreFinding) {
+  if (finding.confidence === "strong") {
+    return "strong";
+  }
+  if (finding.confidence === "good") {
+    return "good";
+  }
+  return "review_signal";
+}
+
+function getRuntimeDirectnessLabel(finding: CertScoreFinding) {
+  switch (finding.directVsInferred) {
+    case "direct":
+      return "direct_observation";
+    case "mixed":
+      return "correlated_observation";
+    case "inferred":
+      return "clustered_inference";
+    default:
+      return "direct_observation";
+  }
+}
+
+function buildRuntimeEvidenceMetadata(finding: CertScoreFinding) {
+  const eligibility = evaluateTopFindingEligibility(finding);
+
+  return {
+    evidenceSchema: "runtime_report_evidence",
+    evidenceVersion: finding.evidenceVersion ?? "1.1",
+    evidenceConfidence: eligibility.evidenceConfidence ?? getRuntimeEvidenceConfidence(finding),
+    directnessClassification: getRuntimeDirectnessLabel(finding),
+    topFindingEligibility: {
+      eligibility: eligibility.eligibility,
+      matchedCriteria: eligibility.matchedCriteria,
+      missingCorroborators: eligibility.missingCorroborators,
+      demotionReasons: eligibility.demotionReasons
+    },
+    redaction: {
+      queryStrings: "redacted",
+      cookieValues: "not_retained_or_redacted",
+      payloadBodies: "not_retained_or_redacted",
+      screenshots: "not_included",
+      rawDom: "not_included",
+      userInputValues: "not_retained"
+    },
+    automationLimits: [
+      "Automated public-web observation for review, not a legal conclusion.",
+      "Not detected means not observed within scan scope, not proof of absence.",
+      "Runtime report evidence uses live scan artifacts; /findings sample JSON is illustrative reference copy."
+    ]
+  };
 }
 
 function buildRegulatoryLensEvidencePayload(finding: CertScoreFinding, context?: Record<string, unknown>) {
@@ -3348,8 +3402,8 @@ function compactPreConsentTrackingEvidenceJsonPayload(finding: CertScoreFinding)
     scanPriority: finding.severity,
     confidence: finding.confidence,
     directVsInferred: finding.directVsInferred,
+    ...buildRuntimeEvidenceMetadata(finding),
     defaultSurfacePriority: finding.defaultSurfacePriority,
-    evidenceVersion: finding.evidenceVersion ?? "1.1",
     shortSummary: finding.shortSummary,
     evidenceDetails: {
       scanContext: compactEvidenceRecord(details.scanContext, ["scanMode", "pageUrl", "finalUrl", "hostname"]) ?? null,
@@ -3403,8 +3457,8 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
     scanPriority: finding.severity,
     confidence: finding.confidence,
     directVsInferred: finding.directVsInferred,
+    ...buildRuntimeEvidenceMetadata(finding),
     defaultSurfacePriority: finding.defaultSurfacePriority,
-    evidenceVersion: finding.evidenceVersion ?? "1.1",
     shortSummary: finding.shortSummary,
     evidenceDetails: compactObject(
       {
@@ -3434,8 +3488,21 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
           "postRejectRequestCount",
           "basis"
         ]) ?? undefined,
-        sessionReplayEvidence: compactEvidenceRecord(details.sessionReplayEvidence, ["observed", "vendorCount", "requestCount", "basis"]) ?? undefined,
-        inputSurfaceEvidence: compactEvidenceRecord(details.inputSurfaceEvidence, ["observed", "sensitiveFieldCount", "evaluated", "basis"]) ?? undefined,
+        sessionReplayEvidence: compactEvidenceRecord(details.sessionReplayEvidence, [
+          "observed",
+          "vendorCount",
+          "requestCount",
+          "basis",
+          "firstPartyProxyObserved",
+          "runtimeSummary"
+        ]) ?? undefined,
+        inputSurfaceEvidence: compactEvidenceRecord(details.inputSurfaceEvidence, [
+          "observed",
+          "sensitiveFieldCount",
+          "evaluated",
+          "basis",
+          "sensitivePayloadViolations"
+        ]) ?? undefined,
         syncEvidence: compactEvidenceRecord(details.syncEvidence, ["observed", "syncRequestCount", "destinationCount", "basis"]) ?? undefined,
         cookieEvidence: compactEvidenceRecord(details.cookieEvidence, [
           "observed",
@@ -3456,6 +3523,11 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
           "optOutSubtype",
           "missingOrAbsent",
           "incompleteOrUnconfirmed",
+          "choiceControlsInspected",
+          "gpcClientSignalObserved",
+          "gpcHandlingObserved",
+          "gpcRequestHeadersApplied",
+          "gpcScanStateSent",
           "basis"
         ]) ?? undefined,
         jurisdictionOrPolicyContext: details.jurisdictionOrPolicyContext ?? undefined,
@@ -3475,6 +3547,7 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
           "subtype",
           "rejectOptionSubtype",
           "userChoiceImpact",
+          "runtimePath",
           "basis"
         ]) ?? undefined,
         sensitiveDataEvidence: compactEvidenceRecord(details.sensitiveDataEvidence, [
@@ -3488,9 +3561,19 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
           "confidenceExplanation",
           "identifierLikeRequestCount",
           "fingerprintPurposeFraming",
-          "fingerprintPromotionAnnotation"
+          "fingerprintPromotionAnnotation",
+          "fingerprintClusterSummary",
+          "strongFingerprintSignalLabels",
+          "genericFingerprintSignalLabels"
         ]) ?? undefined,
-        accessibilityEvidence: compactEvidenceRecord(details.accessibilityEvidence, ["observed", "issueCount", "impact", "wcagRule", "basis"]) ?? undefined,
+        accessibilityEvidence: compactEvidenceRecord(details.accessibilityEvidence, [
+          "observed",
+          "issueCount",
+          "impact",
+          "wcagRule",
+          "basis",
+          "focusManagementEvidence"
+        ]) ?? undefined,
         policyEvidenceDetails: compactEvidenceRecord(details.policyEvidenceDetails, ["observed", "evaluated", "basis", "clarityRiskObserved"]) ?? undefined,
         financialClaimsEvidence: compactEvidenceRecord(details.financialClaimsEvidence, ["observed", "offerCount", "basis"]) ?? undefined,
         disclosureEvidence: compactEvidenceRecord(details.disclosureEvidence, ["observed", "missingDisclosureCount", "basis"]) ?? undefined,
@@ -3500,6 +3583,11 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
           compactObject(vendor, ["name", "category", "preConsent", "firstSeenMs", "representativeUrl"])
         ),
         representativeRequests: compactRepresentativeRequests(details.representativeRequests),
+        rtbCookieSyncEvidence: details.rtbCookieSyncEvidence?.slice(0, 5),
+        rtbCookieSyncEvidenceSubtypes: details.rtbCookieSyncEvidenceSubtypes,
+        rtbCookieSyncIdentifierQueryKeys: details.rtbCookieSyncIdentifierQueryKeys,
+        rtbCookieSyncRedirectTargets: details.rtbCookieSyncRedirectTargets,
+        crossDomainIdentifierSharingEvidence: details.crossDomainIdentifierSharingEvidence?.slice(0, 5),
         identifierEvidence: compactEvidenceRecord(details.identifierEvidence, [
           "addressingOrSignalingTransmittedByRequest",
           "identifierLikeRequestCount",
@@ -3538,6 +3626,11 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
         "requestSelectionNote",
         "vendors",
         "representativeRequests",
+        "rtbCookieSyncEvidence",
+        "rtbCookieSyncEvidenceSubtypes",
+        "rtbCookieSyncIdentifierQueryKeys",
+        "rtbCookieSyncRedirectTargets",
+        "crossDomainIdentifierSharingEvidence",
         "identifierEvidence",
         "policyEvidence",
         "legalRelevance",

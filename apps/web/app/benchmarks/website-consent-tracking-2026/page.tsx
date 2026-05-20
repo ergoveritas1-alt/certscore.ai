@@ -53,7 +53,7 @@ const benchmarkRows = [
     definition: "Session recording / replay vendor activity or instrumentation observed during the automated scan.",
     frequency: benchmarkLabel("session_recording_services_detected"),
     interpretation: "Broad replay-service presence signal; not necessarily sensitive-input capture by itself.",
-    signal: "Session recording services detected"
+    signal: "Session replay service signal observed"
   },
   {
     definition:
@@ -68,7 +68,7 @@ const benchmarkRows = [
       "Consent interface review signal where rejecting or declining tracking appears unavailable, difficult to access, or placed behind additional preference steps.",
     frequency: benchmarkLabel("reject_option_missing_or_hidden"),
     interpretation: "Choice-architecture review signal; confirm actual CMP configuration and regional behavior.",
-    signal: "Reject option missing or hidden"
+    signal: "Reject/refusal option not observed or nested"
   },
   {
     definition:
@@ -119,13 +119,13 @@ const definitions = [
   },
   {
     description:
-      "Session recording services detected is a broad vendor-presence or instrumentation signal. Sensitive-input session replay is a higher-urgency subset where replay-like activity appears near sensitive input surfaces.",
+      "Session replay service signal observed is a broad vendor-presence or instrumentation signal. Sensitive-input session replay is a higher-urgency subset where replay-like activity appears near sensitive input surfaces.",
     title: "Session recording services vs sensitive-input session replay"
   },
   {
     description:
-      "Reject option missing or hidden is a consent-interface review signal where declining tracking appears unavailable, difficult to access, or placed behind additional preference steps. Confirm the actual CMP configuration and regional behavior before acting.",
-    title: "Reject option missing or hidden"
+      "Reject/refusal option not observed or nested is a consent-interface review signal where declining tracking appears unavailable, difficult to access, or placed behind additional preference steps. Confirm the actual CMP configuration and regional behavior before acting.",
+    title: "Reject/refusal option not observed or nested"
   },
   {
     description:

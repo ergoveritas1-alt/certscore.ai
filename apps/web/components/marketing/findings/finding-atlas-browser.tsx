@@ -151,10 +151,20 @@ function getStringArrayField(record: Record<string, unknown>, key: string) {
 
 function getFindingBadges(finding: FindingReferenceItem) {
   const payload = getPayloadRecord(finding);
-  const confidence = getStringField(payload, "confidence") ?? "review";
-  const directVsInferred = getStringField(payload, "direct_vs_inferred");
+  // Keep legacy field fallbacks while public samples migrate to evidenceConfidence/directVsInferred.
+  const confidence = getStringField(payload, "evidenceConfidence") ?? getStringField(payload, "confidence") ?? "review_signal";
+  const directVsInferred = getStringField(payload, "directVsInferred") ?? getStringField(payload, "direct_vs_inferred");
   const severityLabel = formatChipLabel(finding.criticality);
-  const observationLabel = directVsInferred === "direct" ? "Direct observation" : "Observation for review";
+  const observationLabel =
+    directVsInferred === "direct_observation" || directVsInferred === "direct"
+      ? "Direct observation"
+      : directVsInferred === "correlated_observation"
+        ? "Correlated observation"
+        : directVsInferred === "absence_observation"
+          ? "Absence observation"
+          : directVsInferred === "clustered_inference"
+            ? "Clustered inference"
+            : "Observation for review";
   const contextLabel = finding.id === "pre_consent_tracking_detected" ? "Consent timing" : finding.category;
 
   return [
@@ -164,6 +174,18 @@ function getFindingBadges(finding: FindingReferenceItem) {
     contextLabel,
     finding.benchmark.contextLabel
   ];
+}
+
+function getEvidenceConfidence(finding: FindingReferenceItem) {
+  const payload = getPayloadRecord(finding);
+
+  return getStringField(payload, "evidenceConfidence") ?? "review_signal";
+}
+
+function getDirectness(finding: FindingReferenceItem) {
+  const payload = getPayloadRecord(finding);
+
+  return getStringField(payload, "directVsInferred") ?? "direct_observation";
 }
 
 function getRepresentativeVendors(finding: FindingReferenceItem) {
@@ -294,8 +316,8 @@ function makeRedactedJson(finding: FindingReferenceItem) {
     label: finding.title,
     category: finding.category,
     criticality: finding.criticality,
-    confidence: getStringField(payload, "confidence") ?? "review",
-    directVsInferred: getStringField(payload, "direct_vs_inferred") ?? "observation",
+    evidenceConfidence: getStringField(payload, "evidenceConfidence") ?? getStringField(payload, "confidence") ?? "review_signal",
+    directVsInferred: getStringField(payload, "directVsInferred") ?? getStringField(payload, "direct_vs_inferred") ?? "direct_observation",
     evidence: {
       summary: finding.observed,
       examples: finding.exampleEvidence.map((example) => ({
@@ -641,6 +663,53 @@ function EvidenceStandard({ finding }: { finding: FindingReferenceItem }) {
   );
 }
 
+function TopFindingRule({ finding }: { finding: FindingReferenceItem }) {
+  const rule = finding.topFindingRule;
+
+  return (
+    <details className="group border border-slate-200 bg-white p-4">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+        <span>
+          <span className="block text-sm font-semibold text-slate-950">Top-finding calibration</span>
+          <span className="mt-1 block text-xs leading-5 text-slate-500">
+            What must be retained to surface, top-rank, demote, or suppress this finding.
+          </span>
+        </span>
+        <DisclosureChevronIcon />
+      </summary>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <section className="border border-slate-200 bg-slate-50 p-3">
+          <h4 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Minimum to surface</h4>
+          <div className="mt-2">
+            <BulletList items={rule.minimumToSurface} />
+          </div>
+        </section>
+        <section className="border border-slate-200 bg-slate-50 p-3">
+          <h4 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">High confidence requires</h4>
+          <div className="mt-2">
+            <BulletList items={rule.highConfidenceRequires} />
+          </div>
+        </section>
+        <section className="border border-slate-200 bg-slate-50 p-3">
+          <h4 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Top ranking requires</h4>
+          <div className="mt-2">
+            <BulletList items={rule.criticalOrTopRankingRequires} />
+          </div>
+        </section>
+        <section className="border border-rose-100 bg-rose-50 p-3">
+          <h4 className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-700">Demote or suppress when</h4>
+          <div className="mt-2">
+            <BulletList items={rule.demoteOrSuppressWhen} />
+          </div>
+        </section>
+      </div>
+      <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
+        These rules describe ranking calibration for already-projected findings. They do not create findings from raw signals.
+      </p>
+    </details>
+  );
+}
+
 function MethodologyContext({ finding }: { finding: FindingReferenceItem }) {
   return (
     <section className="border border-slate-200 bg-white p-4">
@@ -896,6 +965,9 @@ function FindingReferenceSection({
             ))}
           </div>
           <PrevalenceInterpretationNote finding={finding} />
+          <p className="border-l-2 border-slate-200 pl-3 text-xs leading-5 text-slate-500">
+            {finding.benchmark.calibrationNote}
+          </p>
           <section>
             <h3 className="text-sm font-semibold text-slate-950">Observed</h3>
             <p className="mt-2 text-base leading-7 text-slate-600">{finding.observed}</p>
@@ -910,6 +982,8 @@ function FindingReferenceSection({
         </section>
 
         <MethodologyContext finding={finding} />
+
+        <TopFindingRule finding={finding} />
 
         <FingerprintingRelationshipCallout finding={finding} />
 
@@ -967,6 +1041,8 @@ function FindingReferenceSection({
 
 export function FindingAtlasBrowser({ findings, compact = false, initialFindingId = "pre_consent_tracking_detected" }: FindingAtlasBrowserProps) {
   const [activeFindingId, setActiveFindingId] = useState(initialFindingId);
+  const [confidenceFilter, setConfidenceFilter] = useState("all");
+  const [directnessFilter, setDirectnessFilter] = useState("all");
 
   useEffect(() => {
     setActiveFindingId(initialFindingId);
@@ -983,10 +1059,16 @@ export function FindingAtlasBrowser({ findings, compact = false, initialFindingI
 
   const relatedReadingLinks = getRelatedReadingLinks(activeFinding);
   const findingsById = new Map(findings.map((finding) => [finding.id, finding]));
+  const visibleFindingsById = new Map(
+    findings
+      .filter((finding) => confidenceFilter === "all" || getEvidenceConfidence(finding) === confidenceFilter)
+      .filter((finding) => directnessFilter === "all" || getDirectness(finding) === directnessFilter)
+      .map((finding) => [finding.id, finding])
+  );
   const groupedFindings = FINDING_REGISTRY_GROUPS.map((group) => ({
     ...group,
     findings: group.findingIds.flatMap((findingId) => {
-      const finding = findingsById.get(findingId);
+      const finding = visibleFindingsById.get(findingId);
 
       return finding ? [finding] : [];
     })
@@ -999,6 +1081,35 @@ export function FindingAtlasBrowser({ findings, compact = false, initialFindingI
           <aside className="min-w-0 border-b border-slate-200 bg-slate-50 lg:border-b-0 lg:border-r">
             <div className="min-w-0 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Registry index</p>
+              <div className="mt-3 grid gap-2">
+                <label className="grid gap-1 text-xs font-semibold text-slate-600">
+                  Evidence
+                  <select
+                    value={confidenceFilter}
+                    onChange={(event) => setConfidenceFilter(event.target.value)}
+                    className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-medium text-slate-800"
+                  >
+                    <option value="all">All confidence levels</option>
+                    <option value="strong">Strong</option>
+                    <option value="good">Good</option>
+                    <option value="review_signal">Review signal</option>
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs font-semibold text-slate-600">
+                  Directness
+                  <select
+                    value={directnessFilter}
+                    onChange={(event) => setDirectnessFilter(event.target.value)}
+                    className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-medium text-slate-800"
+                  >
+                    <option value="all">All observation types</option>
+                    <option value="direct_observation">Direct observation</option>
+                    <option value="correlated_observation">Correlated observation</option>
+                    <option value="absence_observation">Absence observation</option>
+                    <option value="clustered_inference">Clustered inference</option>
+                  </select>
+                </label>
+              </div>
               <div className="mt-3 max-h-[16rem] space-y-4 overflow-y-auto pr-1 lg:max-h-[38rem]">
                 {groupedFindings.map((group) => (
                   <section key={group.title} className="space-y-2">
