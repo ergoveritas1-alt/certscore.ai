@@ -11,6 +11,7 @@ type DomainScanFormProps = {
   helperText?: string;
   inputLabel?: string;
   inputPlaceholder?: string;
+  emptySubmitDomain?: string;
   mode?: "full" | "preview";
   scanSource?: ScanSource;
 };
@@ -98,6 +99,7 @@ function appendRecentScanReuseParam(destination: string, reusedExistingScan?: bo
 export function DomainScanForm({
   buttonLabel = "Start full scan",
   compact = false,
+  emptySubmitDomain = "",
   helperText,
   inputLabel = "Website domain",
   inputPlaceholder = "Enter yoursite.com",
@@ -123,7 +125,9 @@ export function DomainScanForm({
     isSubmittingRef.current = true;
     setErrorMessage(null);
 
-    if (!domain.trim()) {
+    const submittedDomain = domain.trim() || emptySubmitDomain.trim();
+
+    if (!submittedDomain) {
       isSubmittingRef.current = false;
       setErrorMessage("Enter a website domain to scan.");
       return;
@@ -134,7 +138,7 @@ export function DomainScanForm({
     try {
       const response = await fetch(mode === "preview" ? "/api/preview-scan" : "/api/full-scan", {
         body: JSON.stringify({
-          domain
+          domain: submittedDomain
         }),
         headers: {
           "Content-Type": "application/json"
@@ -148,7 +152,7 @@ export function DomainScanForm({
       if (!response.ok) {
         recordScanSubmitFailure({
           code: payload.code,
-          domain,
+          domain: submittedDomain,
           error: payload.error,
           mode,
           stage: "api_rejected",
@@ -163,7 +167,7 @@ export function DomainScanForm({
       if (!destination) {
         recordScanSubmitFailure({
           code: payload.code,
-          domain,
+          domain: submittedDomain,
           error: payload.error,
           mode,
           stage: "missing_destination",
@@ -178,13 +182,13 @@ export function DomainScanForm({
       await pushDataLayerEventBeforeNavigation({
         event: "scan_started",
         scan_source: scanSource,
-        scan_target_type: getScanTargetType(domain),
+        scan_target_type: getScanTargetType(submittedDomain),
         scan_status: "queued"
       });
       router.push(appendRecentScanReuseParam(destination, payload.reusedExistingScan));
     } catch (error) {
       recordScanSubmitFailure({
-        domain,
+        domain: submittedDomain,
         error: error instanceof Error ? error.message : String(error),
         mode,
         stage: "request_failed"

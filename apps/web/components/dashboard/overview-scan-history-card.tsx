@@ -3,12 +3,14 @@
 import { useMemo, useState } from "react";
 import type { PlanCode } from "@website-signal-risk-scanner/shared/types/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { getLaunchScanThrottleCopy } from "../../lib/launch-mode";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import type { OrganizationScanListItem } from "../../server/scans/get-organization-scans";
 import { RescanDomainForm } from "../scans/rescan-domain-form";
 import { PendingButtonLink } from "../ui/pending-link";
 
-const SCAN_HISTORY_PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+const DEFAULT_SCAN_HISTORY_PAGE_SIZE = 20;
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -27,14 +29,13 @@ function formatDateTime(value: string | null) {
 }
 
 function formatRescanCooldownMessage(nextAllowedAt: string | null, planCode: PlanCode) {
+  void planCode;
+
   if (!nextAllowedAt) {
-    return "This website was scanned recently. Please try again later.";
+    return getLaunchScanThrottleCopy();
   }
 
-  const formattedTime = formatDateTime(nextAllowedAt);
-  return planCode === "free"
-    ? `Free plans can re-scan once every 30 days. Try again after ${formattedTime}.`
-    : `This website was scanned recently. Try again after ${formattedTime}.`;
+  return getLaunchScanThrottleCopy(formatDateTime(nextAllowedAt));
 }
 
 function ViewScanIcon() {
@@ -103,6 +104,7 @@ type OverviewScanHistoryCardProps = {
 
 export function OverviewScanHistoryCard({ planCode, scans }: OverviewScanHistoryCardProps) {
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_SCAN_HISTORY_PAGE_SIZE);
   const scanGroups = useMemo(
     () =>
       scans.reduce<
@@ -133,10 +135,10 @@ export function OverviewScanHistoryCard({ planCode, scans }: OverviewScanHistory
     [scans]
   );
 
-  const totalPages = Math.max(1, Math.ceil(scanGroups.length / SCAN_HISTORY_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(scanGroups.length / pageSize));
   const normalizedPage = Math.min(currentPage, totalPages);
-  const pageStart = (normalizedPage - 1) * SCAN_HISTORY_PAGE_SIZE;
-  const visibleGroups = scanGroups.slice(pageStart, pageStart + SCAN_HISTORY_PAGE_SIZE);
+  const pageStart = (normalizedPage - 1) * pageSize;
+  const visibleGroups = scanGroups.slice(pageStart, pageStart + pageSize);
 
   return (
     <Card className="border-slate-200 bg-white">
@@ -156,9 +158,24 @@ export function OverviewScanHistoryCard({ planCode, scans }: OverviewScanHistory
           <div className="space-y-3">
             <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-slate-600">
-                Showing {pageStart + 1}-{Math.min(pageStart + visibleGroups.length, scanGroups.length)} of {scanGroups.length} scan history items
+                Showing {scanGroups.length === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + visibleGroups.length, scanGroups.length)} of{" "}
+                {scanGroups.length} scan history items · Page {normalizedPage} of {totalPages}
               </p>
-              <div className="flex items-center gap-2 self-start sm:self-auto">
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                <select
+                  className="h-9 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700"
+                  value={pageSize}
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value));
+                    setCurrentPage(1);
+                  }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option} per page
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
@@ -172,9 +189,6 @@ export function OverviewScanHistoryCard({ planCode, scans }: OverviewScanHistory
                 >
                   Previous
                 </button>
-                <span className="text-sm text-slate-600">
-                  Page {normalizedPage} of {totalPages}
-                </span>
                 <button
                   type="button"
                   onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}

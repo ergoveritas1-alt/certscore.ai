@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useActionState, useEffect, useRef, useState } from "react";
+import { LAUNCH_ACCESS } from "../../lib/launch-mode";
 import { submitCredentialsAction } from "../../server/auth-flows/credentials-actions";
 import { initialCredentialsActionState, type CredentialsActionState } from "../../server/auth-flows/action-state";
 
@@ -55,7 +56,10 @@ export function LoginForm(input?: {
   const allowCreateAccount = input?.allowCreateAccount ?? true;
   const initialMessage = searchParams?.get("message") ?? null;
   const initialError = searchParams?.get("error") ?? null;
-  const [mode, setMode] = useState<AuthMode>("sign_in");
+  const requestedMode = searchParams?.get("mode") ?? null;
+  const initialMode: AuthMode =
+    allowCreateAccount && (requestedMode === "create_account" || requestedMode === "create") ? "create_account" : "sign_in";
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [createStep, setCreateStep] = useState<1 | 2>(1);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -299,11 +303,15 @@ export function LoginForm(input?: {
             type="submit"
             variant="secondary"
           >
-            {isCreateAccount ? (isCreatePasswordStep ? "Request access" : "Continue") : "Sign in"}
+            {isCreateAccount ? (isCreatePasswordStep ? "Create free account" : "Continue") : "Sign in"}
           </Button>
         </div>
 
-        {allowCreateAccount && isCreateAccount ? <p className="text-xs text-slate-500">No credit card required.</p> : null}
+        {allowCreateAccount && isCreateAccount ? (
+          <p className="text-xs leading-5 text-slate-500">
+            {LAUNCH_ACCESS.statusLabel}: {LAUNCH_ACCESS.amountDueLabel} due during the initial launch period. No credit card required.
+          </p>
+        ) : null}
       </form>
 
       {actionError ? <p className="text-sm text-red-600">{actionError}</p> : null}

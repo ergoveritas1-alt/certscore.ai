@@ -129,10 +129,11 @@ export default async function MarketingHomePage() {
                 backgroundImage: "linear-gradient(180deg, #020617 0%, #0f172a 24%, #334155 62%, #94a3b8 100%)"
               }}
             >
-              See how websites actually handle tracking, cookies, and consent — not just what their policies claim.
+              See how websites actually handle privacy and accessibility.
             </h1>
             <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
-              Detect pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, and disclosure inconsistencies using automated runtime analysis.
+              Automated runtime analysis surfacing pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity,
+              accessibility issues, and disclosure inconsistencies — based on observed behavior, not policy claims.
             </p>
             <div className="flex flex-col gap-3 pt-1 sm:flex-row">
               <PendingButtonLink
@@ -142,7 +143,7 @@ export default async function MarketingHomePage() {
                 pendingContent="Opening..."
               />
               <a
-                className="inline-flex w-full items-center justify-center rounded-full border border-sky-300 bg-white px-4 py-2.5 text-sm font-semibold text-sky-700 shadow-[0_10px_22px_rgba(14,165,233,0.10)] hover:bg-sky-50 sm:w-auto"
+                className="inline-flex w-full items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-none transition hover:bg-slate-100 sm:w-auto"
                 data-analytics-cta-location="homepage"
                 data-analytics-destination-url={certscoreGptUrl}
                 data-analytics-event="gpt_cta_clicked"
@@ -182,6 +183,7 @@ export default async function MarketingHomePage() {
               <CardContent className="space-y-4">
                 <DomainScanForm
                   buttonLabel="Scan a website"
+                  emptySubmitDomain="kbdlab.io"
                   helperText="CertScore will queue the domain, run a browser-based scan, and open the saved scan record when it is accepted."
                   inputLabel="Website to analyze"
                   inputPlaceholder="kbdlab.io"

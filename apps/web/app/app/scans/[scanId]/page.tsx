@@ -5,6 +5,7 @@ import { buildScanReportUnifiedFindings } from "../../../../components/scans/sha
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { hasPendingPostCompletionFindingWork } from "../../../../lib/scans/scan-auto-refresh";
 import { ScanViewActions } from "../../../../components/scans/scan-view-actions";
+import { getLaunchScanThrottleCopy } from "../../../../lib/launch-mode";
 import { getRescanAvailability } from "../../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../../server/auth";
 import { getScanById } from "../../../../server/scans/get-scan-by-id";
@@ -28,13 +29,13 @@ function formatDateTime(value: string | null) {
 }
 
 function formatRescanCooldownMessage(value: string | null, planCode: string) {
+  void planCode;
+
   if (!value) {
-    return "This domain cannot be re-scanned yet.";
+    return getLaunchScanThrottleCopy();
   }
 
-  return `Next re-scan available ${formatDateTime(value)} for this ${
-    planCode === "free" ? "Free" : planCode === "pro" ? "Pro" : "Ultra"
-  } plan domain.`;
+  return getLaunchScanThrottleCopy(formatDateTime(value));
 }
 
 type ScanDetailPageProps = {

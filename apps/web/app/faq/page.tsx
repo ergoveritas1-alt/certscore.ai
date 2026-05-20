@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
+import { LAUNCH_ACCESS } from "../../lib/launch-mode";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
@@ -56,7 +57,7 @@ const faqs = [
   {
     question: "How often can my site be rescanned?",
     answer:
-      "That depends on your plan, included scan credits, and monitoring setup. Manual re-scans and scheduled monitoring consume scan credits; high-frequency monitoring is handled as a custom higher-volume setup."
+      `During launch access, scan requests are paced at one request every ${LAUNCH_ACCESS.scanThrottleMinutes} minutes. Manual re-scans and scheduled monitoring still consume scan credits; high-frequency monitoring and batch scanning are handled as custom higher-volume setups.`
   },
   {
     question: "What happens if my site changes after the scan?",

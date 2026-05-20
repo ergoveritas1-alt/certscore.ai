@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { MembershipRoleForm } from "../../../../components/admin/membership-role-form";
 import { OrganizationPlanForm } from "../../../../components/admin/organization-plan-form";
+import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { listAdminUsers } from "../../../../server/admin/list-admin-users";
 import { updateMembershipRoleFormAction } from "../../../../server/admin/update-membership-role";
 import { updateOrganizationPlanFormAction } from "../../../../server/admin/update-organization-plan";
@@ -32,15 +33,37 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-export default async function AdminUsersPage() {
-  const users = await listAdminUsers();
+type AdminUsersPageProps = {
+  searchParams?: Promise<{
+    page?: string;
+    perPage?: string;
+  }>;
+};
+
+export default async function AdminUsersPage({ searchParams }: AdminUsersPageProps) {
+  const resolved = searchParams ? await searchParams : {};
+  const pageSize = normalizePageSize(resolved.perPage);
+  const requestedPage = normalizePage(resolved.page);
+  const allUsers = await listAdminUsers();
+  const pageCount = Math.max(1, Math.ceil(allUsers.length / pageSize));
+  const page = Math.min(requestedPage, pageCount);
+  const users = allUsers.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <Card className="border-slate-200 bg-white">
       <CardHeader>
         <CardTitle>User And Workspace Admin</CardTitle>
       </CardHeader>
-      <CardContent className="overflow-visible">
+      <CardContent className="space-y-3 overflow-visible">
+        <PaginationControls
+          basePath="/app/admin/users"
+          itemLabel="users"
+          page={page}
+          pageCount={pageCount}
+          pageSize={pageSize}
+          totalCount={allUsers.length}
+          visibleCount={users.length}
+        />
         <div className="overflow-x-auto overflow-y-visible">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead>

@@ -1,8 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { EmailVerificationCard } from "../../../components/settings/email-verification-card";
+import { LAUNCH_ACCESS } from "../../../lib/launch-mode";
 import { getDashboardContext } from "../../../server/auth";
 import { getBetterAuthVerificationStatus } from "../../../server/better-auth/user";
+import { getDashboardScanUsage } from "../../../server/dashboard/get-dashboard-scan-usage";
 import { getSystemHealth } from "../../../server/health/get-system-health";
+import { getPlanLimits } from "../../../server/plans/get-plan-limits";
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -20,18 +23,49 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatDate(value: string | null) {
+  if (!value) {
+    return "Not available";
+  }
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00`) : new Date(value);
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "America/Los_Angeles"
+  }).format(date);
+}
+
+function formatPlanLabel(plan: string) {
+  if (plan === "team") {
+    return "Ultra";
+  }
+  return plan.charAt(0).toUpperCase() + plan.slice(1);
+}
+
 function formatMissingTables(tables: string[]) {
   return tables.join(", ");
 }
 
 export default async function SettingsPage() {
-  const { user } = await getDashboardContext();
+  const { organization, profile, user } = await getDashboardContext();
   const userProviders = user.authProvider.split(",").map((provider) => provider.trim());
-  const [systemHealth, verificationStatus] = await Promise.all([
+  const [planLimits, systemHealth, verificationStatus] = await Promise.all([
+    getPlanLimits(organization.plan),
     getSystemHealth(),
     userProviders.includes("password") ? getBetterAuthVerificationStatus(user.betterAuthUserId ?? user.id) : Promise.resolve(null)
   ]);
+  const scanUsage = await getDashboardScanUsage({
+    accountCreatedAt: profile.created_at,
+    monthlyLimit: planLimits.manualRescanLimitPerMonth,
+    organizationId: organization.id
+  });
   const verificationIsVerified = Boolean(verificationStatus?.isVerified);
+  const monthlyLimitLabel = scanUsage.monthlyLimit === null ? "unlimited" : String(scanUsage.monthlyLimit);
+  const remainingScans =
+    scanUsage.monthlyLimit === null ? null : Math.max(0, scanUsage.monthlyLimit - scanUsage.monthlyScansUsed);
+  const remainingScansLabel = remainingScans === null ? "Unlimited" : `${remainingScans}`;
 
   return (
     <div className="space-y-8">
@@ -39,6 +73,55 @@ export default async function SettingsPage() {
         <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
         <p className="max-w-3xl text-slate-600">Review account status and system health.</p>
       </div>
+
+      <Card className="border border-slate-200 bg-white">
+        <CardHeader>
+          <CardTitle>Account basics</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-4 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-5">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Subscription</p>
+              <p className="mt-2 text-lg font-semibold text-slate-950">{formatPlanLabel(organization.plan)}</p>
+              <p className="mt-1 text-xs text-slate-500">{formatPlanLabel(organization.planStatus)}</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-emerald-700">Amount due</p>
+              <p className="mt-2 text-lg font-semibold text-emerald-950">{LAUNCH_ACCESS.amountDueLabel}</p>
+              <p className="mt-1 text-xs text-emerald-700">{LAUNCH_ACCESS.statusLabel}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Account created</p>
+              <p className="mt-2 text-lg font-semibold text-slate-950">{formatDate(profile.created_at)}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Monthly cycle ends</p>
+              <p className="mt-2 text-lg font-semibold text-slate-950">{formatDate(scanUsage.monthlyPeriodEnd)}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Usage remaining</p>
+              <p className="mt-2 text-lg font-semibold text-slate-950">
+                {remainingScansLabel}/{monthlyLimitLabel} scans
+              </p>
+              <p className="mt-1 text-xs text-slate-500">{scanUsage.monthlyScansUsed} used this month</p>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 text-sm leading-6 text-slate-700">
+            <p className="font-semibold text-slate-950">Launch access is active</p>
+            <p className="mt-1">
+              Accounts and monthly subscriptions are billed at {LAUNCH_ACCESS.amountDueLabel} during the initial launch period. To keep
+              capacity reliable, scan requests are limited to one request every {LAUNCH_ACCESS.scanThrottleMinutes} minutes.
+            </p>
+            <p className="mt-2">
+              Teams interested in higher request throughput or batch scanning can contact{" "}
+              <a className="font-semibold text-sky-800 underline decoration-sky-300 underline-offset-2" href={LAUNCH_ACCESS.salesHref}>
+                {LAUNCH_ACCESS.salesEmail}
+              </a>
+              .
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {verificationStatus ? (
         <Card className="border border-slate-200 bg-white">

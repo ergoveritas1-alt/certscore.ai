@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
 import {
   getAdminPulseOverviewCounts,
@@ -11,8 +12,6 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const statuses = ["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited"] as const;
-const pageSizeOptions = [10, 20, 50, 100] as const;
-const DEFAULT_PAGE_SIZE = 20;
 
 type AdminPulsePageProps = {
   searchParams?: Promise<{
@@ -56,17 +55,12 @@ function formatLabel(value: string | null) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function normalizePageSize(value: string | undefined) {
-  const parsed = Number.parseInt(value ?? "", 10);
-  return pageSizeOptions.includes(parsed as (typeof pageSizeOptions)[number]) ? parsed : DEFAULT_PAGE_SIZE;
-}
-
 function filterHref(input: { page?: number; pageSize?: number; query?: string | null; status?: string | null }) {
   const params = new URLSearchParams();
   if (input.status) {
     params.set("status", input.status);
   }
-  if (input.pageSize && input.pageSize !== DEFAULT_PAGE_SIZE) {
+  if (input.pageSize && input.pageSize !== 20) {
     params.set("perPage", String(input.pageSize));
   }
   if (input.query) {
@@ -104,8 +98,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   const activeStatus = normalizeStatus(resolved.status);
   const activeQuery = normalizeQuery(resolved.q);
   const pageSize = normalizePageSize(resolved.perPage);
-  const requestedPage = Number.parseInt(resolved.page ?? "1", 10);
-  const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const page = normalizePage(resolved.page);
   const [counts, requests] = await Promise.all([
     getAdminPulseOverviewCounts(),
     listAdminPulseRequests({
@@ -117,8 +110,8 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   ]);
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-5">
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-5">
         <Metric label="Total" value={counts.total} />
         <Metric label="Completed" value={counts.completed} />
         <Metric label="Queued/running" value={counts.queuedOrRunning} />
@@ -131,9 +124,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
           <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <CardTitle>Pulse Requests</CardTitle>
-              <p className="mt-1 max-w-3xl text-sm text-slate-500">
-                First-class audit trail for Pulse API and public Pulse page requests. Feedback is private and linked to the originating request.
-              </p>
+              <p className="mt-1 max-w-3xl text-sm text-slate-500">Newest Pulse API and public page requests first.</p>
             </div>
             <form action="/app/admin/pulse" className="flex flex-wrap gap-2">
               <input
@@ -150,20 +141,13 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                   </option>
                 ))}
               </select>
-              <select className="min-h-9 rounded-lg border border-slate-300 px-3 text-sm" defaultValue={pageSize} name="perPage">
-                {pageSizeOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option} per page
-                  </option>
-                ))}
-              </select>
               <Button size="sm" type="submit" variant="secondary">
                 Filter
               </Button>
             </form>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4 pt-0">
+        <CardContent className="space-y-3 pt-0">
           <div className="flex flex-wrap gap-2">
             <Link className="rounded-full border border-slate-200 px-3 py-2 text-sm text-slate-700" href={filterHref({ pageSize, query: activeQuery })}>
               All
@@ -179,37 +163,33 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-y border-slate-100 py-3">
-            <p className="text-sm text-slate-600">
-              Page {page} · {pageSize} per page
-            </p>
-            <div className="flex items-center gap-2">
-              <Button asChild disabled={page <= 1} size="sm" variant="secondary">
-                {page <= 1 ? (
-                  <span className="cursor-not-allowed text-slate-400">Previous</span>
-                ) : (
-                  <Link href={filterHref({ page: page - 1, pageSize, query: activeQuery, status: activeStatus })}>Previous</Link>
-                )}
-              </Button>
-              <Button asChild disabled={requests.length < pageSize} size="sm" variant="secondary">
-                {requests.length < pageSize ? (
-                  <span className="cursor-not-allowed text-slate-400">Next</span>
-                ) : (
-                  <Link href={filterHref({ page: page + 1, pageSize, query: activeQuery, status: activeStatus })}>Next</Link>
-                )}
-              </Button>
-            </div>
-          </div>
+          <PaginationControls
+            basePath="/app/admin/pulse"
+            hasNext={requests.length >= pageSize}
+            itemLabel="Pulse requests"
+            page={page}
+            pageSize={pageSize}
+            searchParams={{ q: activeQuery, status: activeStatus }}
+            visibleCount={requests.length}
+          />
 
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <table className="min-w-[1180px] table-fixed divide-y divide-slate-200 text-sm">
+              <colgroup>
+                <col style={{ width: "220px" }} />
+                <col style={{ width: "220px" }} />
+                <col style={{ width: "240px" }} />
+                <col style={{ width: "330px" }} />
+                <col style={{ width: "120px" }} />
+                <col style={{ width: "50px" }} />
+              </colgroup>
               <thead>
                 <tr className="text-left text-slate-500">
                   <th className="pb-3 pr-4 font-medium">Request</th>
                   <th className="pb-3 pr-4 font-medium">Target</th>
                   <th className="pb-3 pr-4 font-medium">Mode</th>
                   <th className="pb-3 pr-4 font-medium">Result</th>
-                  <th className="pb-3 pr-4 font-medium">Feedback</th>
+                  <th className="pb-3 pr-4 font-medium">Activity</th>
                   <th className="pb-3 font-medium">Open</th>
                 </tr>
               </thead>
@@ -222,42 +202,40 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                   });
                   return (
                     <tr key={request.publicId}>
-                      <td className="py-4 pr-4 text-slate-700">
-                        <p className="font-medium text-slate-900">{request.publicId}</p>
-                        <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${provenance.className}`}>
+                      <td className="py-3 pr-4 align-top text-slate-700">
+                        <p className="truncate font-mono text-xs text-slate-900" title={request.publicId}>{request.publicId}</p>
+                        <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${provenance.className}`}>
                           {provenance.label}
                         </span>
-                        <p className="mt-1 text-xs text-slate-500">Source IP {sourceIpLabel(request)}</p>
-                        <p className="mt-1 text-xs text-slate-500">{formatDateTime(request.requestedAt)}</p>
+                        <p className="mt-1 text-xs leading-snug text-slate-500">
+                          <span>IP </span>
+                          <span className="break-all">{sourceIpLabel(request)}</span>
+                        </p>
                       </td>
-                      <td className="py-4 pr-4 text-slate-700">
-                        <p>{request.normalizedDomain ?? "Unknown domain"}</p>
+                      <td className="py-3 pr-4 align-top text-slate-700">
+                        <p className="truncate" title={request.normalizedDomain ?? "Unknown domain"}>{request.normalizedDomain ?? "Unknown domain"}</p>
                         <p className="max-w-xs truncate text-xs text-slate-500">{request.requestedUrl ?? "No requested URL"}</p>
                       </td>
-                      <td className="py-4 pr-4 text-slate-700">
-                        <p>
-                          {formatLabel(request.detail)} · {formatLabel(request.format)}
+                      <td className="py-3 pr-4 align-top text-slate-700">
+                        <p className="font-medium text-slate-900">{formatLabel(request.detail)} · {formatLabel(request.format)}</p>
+                        <p className="text-xs text-slate-500">
+                          {formatLabel(request.freshness)} · {formatLabel(request.resolutionMode)}
                         </p>
-                        <p className="text-xs text-slate-500">{formatLabel(request.freshness)}</p>
-                        <p className="text-xs text-slate-500">{formatLabel(request.resolutionMode)}</p>
                       </td>
-                      <td className="py-4 pr-4 text-slate-700">
-                        <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusClass(request.status)}`}>
+                      <td className="py-3 pr-4 align-top text-slate-700">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${statusClass(request.status)}`}>
                           {formatLabel(request.status)}
                         </span>
-                        <p className="mt-2 text-xs text-slate-500">Scan {request.scanId ?? "Not linked"}</p>
+                        <p className="mt-1 truncate font-mono text-xs text-slate-500">Scan {request.scanId ?? "Not linked"}</p>
                         {request.scanId ? (
                           <p className="mt-1 text-xs text-slate-500">
-                            Snapshot: Signals {request.snapshotTotalSignals ?? 0}, Findings {request.snapshotFindingCount ?? 0}, Top findings{" "}
-                            {request.topFindingIds.length}
+                            Signals {request.snapshotTotalSignals ?? 0} · Findings {request.snapshotFindingCount ?? 0} · Top {request.topFindingIds.length}
                           </p>
                         ) : null}
-                        {request.topFindingIds.length > 0 ? (
-                          <p className="mt-1 max-w-xs truncate text-xs text-slate-500">{request.topFindingIds.join(", ")}</p>
-                        ) : null}
+                        <p className="mt-1 text-xs text-slate-500">Feedback {request.feedbackCount}</p>
                       </td>
-                      <td className="py-4 pr-4 text-slate-700">{request.feedbackCount}</td>
-                      <td className="py-4">
+                      <td className="py-3 pr-4 align-top text-xs text-slate-600">{formatDateTime(request.requestedAt)}</td>
+                      <td className="py-3 align-top">
                         <Link className="text-sm font-semibold text-sky-700" href={`/app/admin/pulse/${request.publicId}`}>
                           Details
                         </Link>
@@ -278,10 +256,10 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
 function Metric({ label, value }: { label: string; value: number }) {
   return (
     <Card className="border-slate-200 bg-white">
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-1 pt-4">
         <CardTitle className="text-sm">{label}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pb-4">
         <p className="text-2xl font-semibold text-slate-900">{value}</p>
       </CardContent>
     </Card>

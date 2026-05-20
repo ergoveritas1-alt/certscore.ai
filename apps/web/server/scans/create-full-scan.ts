@@ -14,6 +14,7 @@ import { getDomainById } from "../domains/get-domain-by-id";
 import { getPlanLimits } from "../plans/get-plan-limits";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getFullScanQueueMetadata } from "../queue/scan-queue-priority";
+import { LAUNCH_ACCESS, getLaunchScanThrottleCopy } from "../../lib/launch-mode";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import { ensureValidationRunForManualScan } from "../validation/repository";
 import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
@@ -212,21 +213,17 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         };
       }
 
+      const launchThrottleMessage = `${getLaunchScanThrottleCopy()} For higher-throughput scanning or batch workflows, contact ${LAUNCH_ACCESS.salesEmail}.`;
+
       await logRequest({
         errorCode: "rescan_cooldown",
-        errorMessage:
-          input.planCode === "free"
-            ? "Free plan domains can only be re-scanned once every 30 days."
-            : "This domain was scanned recently. Pro and Ultra plans allow one re-scan every 1 minute per domain.",
+        errorMessage: launchThrottleMessage,
         resolutionMode: "rescan_cooldown",
         status: "rejected"
       });
 
       return {
-        error:
-          input.planCode === "free"
-            ? "Free plan domains can only be re-scanned once every 30 days."
-            : "This domain was scanned recently. Pro and Ultra plans allow one re-scan every 1 minute per domain.",
+        error: launchThrottleMessage,
         scanId: null
       };
     }

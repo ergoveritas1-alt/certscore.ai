@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
 import { getAdminScanOverviewMetrics, listAdminScans } from "../../../../server/admin/list-admin-scans";
 import { AdminScanActions } from "./admin-scan-actions";
@@ -8,11 +8,10 @@ import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const ADMIN_SCAN_PAGE_SIZE = 25;
-
 type AdminScansPageProps = {
   searchParams?: Promise<{
     page?: string;
+    perPage?: string;
   }>;
 };
 
@@ -31,10 +30,6 @@ function formatDateTime(value: string | null) {
     timeZone: "America/Los_Angeles",
     timeZoneName: "short"
   }).format(new Date(value));
-}
-
-function buildPageHref(page: number) {
-  return page <= 1 ? "/app/admin/scans" : `/app/admin/scans?page=${page}`;
 }
 
 function formatResolutionMode(value: string | null) {
@@ -72,14 +67,12 @@ function getScanFreshnessBadge(scan: { requestResolutionMode: string | null; row
 
 export default async function AdminScansPage({ searchParams }: AdminScansPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const requestedPage = Number.parseInt(resolvedSearchParams.page ?? "1", 10);
-  const currentPage = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const currentPage = normalizePage(resolvedSearchParams.page);
+  const pageSize = normalizePageSize(resolvedSearchParams.perPage);
   const scanMetrics = await getAdminScanOverviewMetrics();
-  const totalPages = Math.max(1, Math.ceil(scanMetrics.totalScans / ADMIN_SCAN_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(scanMetrics.totalScans / pageSize));
   const normalizedPage = Math.min(currentPage, totalPages);
-  const scans = await listAdminScans(ADMIN_SCAN_PAGE_SIZE, (normalizedPage - 1) * ADMIN_SCAN_PAGE_SIZE);
-  const pageStart = scanMetrics.totalScans === 0 ? 0 : (normalizedPage - 1) * ADMIN_SCAN_PAGE_SIZE + 1;
-  const pageEnd = Math.min((normalizedPage - 1) * ADMIN_SCAN_PAGE_SIZE + scans.length, scanMetrics.totalScans);
+  const scans = await listAdminScans(pageSize, (normalizedPage - 1) * pageSize);
   const hasActiveScans = scans.some((scan) => scan.status === "queued" || scan.status === "running");
 
   return (
@@ -98,48 +91,33 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
       </CardHeader>
       <CardContent className="space-y-3 pt-0">
         <AdminScansAutoRefresh hasActiveScans={hasActiveScans} />
-        <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-slate-600">
-            Showing {pageStart}-{pageEnd} of {scanMetrics.totalScans} scan activity items
-          </p>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <Button asChild disabled={normalizedPage <= 1} size="sm" variant="secondary">
-              {normalizedPage <= 1 ? (
-                <span className="cursor-not-allowed text-slate-400">Previous</span>
-              ) : (
-                <Link href={buildPageHref(normalizedPage - 1)}>Previous</Link>
-              )}
-            </Button>
-            <span className="text-sm text-slate-600">
-              Page {normalizedPage} of {totalPages}
-            </span>
-            <Button asChild disabled={normalizedPage >= totalPages} size="sm" variant="secondary">
-              {normalizedPage >= totalPages ? (
-                <span className="cursor-not-allowed text-slate-400">Next</span>
-              ) : (
-                <Link href={buildPageHref(normalizedPage + 1)}>Next</Link>
-              )}
-            </Button>
-          </div>
-        </div>
+        <PaginationControls
+          basePath="/app/admin/scans"
+          itemLabel="scan activity items"
+          page={normalizedPage}
+          pageCount={totalPages}
+          pageSize={pageSize}
+          totalCount={scanMetrics.totalScans}
+          visibleCount={scans.length}
+        />
         <div className="overflow-x-auto">
-          <table className="min-w-[1400px] table-fixed divide-y divide-slate-200 text-sm">
+          <table className="min-w-[1180px] table-fixed divide-y divide-slate-200 text-sm">
             <colgroup>
-              <col className="w-[5%]" />
-              <col className="w-[13%]" />
-              <col className="w-[42%]" />
-              <col className="w-[24%]" />
-              <col className="w-[10%]" />
-              <col className="w-[6%]" />
+              <col style={{ width: "190px" }} />
+              <col style={{ width: "170px" }} />
+              <col style={{ width: "360px" }} />
+              <col style={{ width: "260px" }} />
+              <col style={{ width: "140px" }} />
+              <col style={{ width: "60px" }} />
             </colgroup>
             <thead>
               <tr className="text-left text-slate-500">
-                <th className="pb-3 pr-4 font-medium">Workspace</th>
-                <th className="pb-3 pr-4 font-medium">Domain</th>
+                <th className="pb-3 pr-4 font-medium">Request</th>
+                <th className="pb-3 pr-4 font-medium">Target</th>
                 <th className="pb-3 pr-4 font-medium">Scan</th>
-                <th className="pb-3 pr-4 font-medium">Snapshot</th>
-                <th className="pb-3 pr-4 font-medium">Activity time</th>
-                <th className="pb-3 font-medium">Action</th>
+                <th className="pb-3 pr-4 font-medium">Result</th>
+                <th className="pb-3 pr-4 font-medium">Activity</th>
+                <th className="pb-3 font-medium">Open</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -152,74 +130,78 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                 });
                 return (
                   <tr key={scan.activityId}>
-                    <td className="py-4 pr-4 text-slate-700">
-                      <p className="truncate" title={scan.organizationName ?? "Unknown workspace"}>{scan.organizationName ?? "Unknown workspace"}</p>
-                      <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${provenance.className}`}>
+                    <td className="py-3 pr-4 align-top text-slate-700">
+                      <p className="truncate font-medium text-slate-900" title={scan.organizationName ?? "Unknown workspace"}>
+                        {scan.organizationName ?? "Unknown workspace"}
+                      </p>
+                      <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${provenance.className}`}>
                         {provenance.label}
                       </span>
-                      <p className="mt-1 text-xs text-slate-500">Requester IP {scan.requesterIp ?? "Not recorded"}</p>
+                      <p className="mt-1 text-xs leading-snug text-slate-500">
+                        <span>IP </span>
+                        <span className="break-all">{scan.requesterIp ?? "Not recorded"}</span>
+                      </p>
                     </td>
-                    <td className="py-4 pr-4 text-slate-700">{scan.domainHostname ?? "Unknown domain"}</td>
-                    <td className="py-4 pr-4 text-slate-700">
-                      <p className="font-mono text-xs text-slate-500">scan_id {scan.linkedScanId ?? scan.scanId}</p>
+                    <td className="py-3 pr-4 align-top text-slate-700">
+                      <p className="truncate" title={scan.domainHostname ?? "Unknown domain"}>{scan.domainHostname ?? "Unknown domain"}</p>
+                    </td>
+                    <td className="py-3 pr-4 align-top text-slate-700">
+                      <p className="truncate font-mono text-xs text-slate-500" title={scan.linkedScanId ?? scan.scanId}>
+                        scan_id {scan.linkedScanId ?? scan.scanId}
+                      </p>
                       <p className="text-xs text-slate-500">First generated {formatDateTime(scan.firstGeneratedAt)}</p>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p>{scan.status}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span className="font-medium text-slate-900">{scan.status}</span>
                         {(() => {
                           const badge = getScanFreshnessBadge(scan);
                           return (
-                            <span className={`rounded-full px-2 py-1 text-xs font-semibold ${badge.className}`}>
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${badge.className}`}>
                               {badge.label}
                             </span>
                           );
                         })()}
                         {scan.rowKind === "request" ? (
-                          <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
-                            Submitted request
-                          </span>
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Request</span>
                         ) : (
-                          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
-                            Scanner run
-                          </span>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">Run</span>
                         )}
+                        {scan.rowKind === "scan" ? <span className="text-xs text-slate-500">{scan.pagesScanned} pages</span> : null}
                       </div>
                       {scan.rowKind === "request" ? (
-                        <>
-                          <p className="text-xs text-slate-500">{formatResolutionMode(scan.requestResolutionMode)}</p>
-                          {scan.requestPublicId ? <p className="text-xs text-slate-400">{scan.requestPublicId}</p> : null}
-                        </>
+                        <p className="mt-1 truncate text-xs text-slate-500">
+                          {formatResolutionMode(scan.requestResolutionMode)}
+                          {scan.requestPublicId ? ` · ${scan.requestPublicId}` : ""}
+                        </p>
                       ) : (
-                        <>
-                          <p>{scan.pagesScanned} pages</p>
-                          {scan.requestPublicId ? <p className="text-xs text-slate-400">Request {scan.requestPublicId}</p> : null}
-                        </>
+                        scan.requestPublicId ? <p className="mt-1 truncate text-xs text-slate-400">Request {scan.requestPublicId}</p> : null
                       )}
                     </td>
-                    <td className="py-4 pr-4 text-slate-700">
+                    <td className="py-3 pr-4 align-top text-slate-700">
                       {scan.rowKind === "request" ? (
                         <>
-                          <p>
+                          <p className="font-medium text-slate-900">
                             {scan.linkedScanId
                               ? scan.requestResolutionMode === "reused_existing_scan"
                                 ? "Fulfilled by recent scan"
                                 : "Fulfilled by scan"
                               : "No scan linked"}
                           </p>
-                          {scan.linkedScanId ? <p className="text-xs text-slate-500">{scan.linkedScanId}</p> : null}
+                          {scan.linkedScanId ? <p className="truncate font-mono text-xs text-slate-500">{scan.linkedScanId}</p> : null}
                           {scan.reuseWindowHours ? (
                             <p className="text-xs text-slate-500">Reuse window {scan.reuseWindowHours}h</p>
                           ) : null}
                         </>
                       ) : (
                         <>
-                          <p>Signals {scan.totalSignals ?? 0}</p>
-                          <p>Findings {scan.findingCount ?? 0}</p>
-                          <p>Top findings {scan.topFindingCount ?? 0}</p>
+                          <p className="font-medium text-slate-900">
+                            Signals {scan.totalSignals ?? 0} · Findings {scan.findingCount ?? 0}
+                          </p>
+                          <p className="text-xs text-slate-500">Top findings {scan.topFindingCount ?? 0}</p>
                         </>
                       )}
                     </td>
-                    <td className="py-4 pr-4 text-slate-700">{formatDateTime(scan.activityAt)}</td>
-                    <td className="py-4">
+                    <td className="py-3 pr-4 align-top text-xs text-slate-600">{formatDateTime(scan.activityAt)}</td>
+                    <td className="py-3 align-top">
                       {scan.linkedScanId && scan.scanViewHref ? (
                         <AdminScanActions scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} />
                       ) : (

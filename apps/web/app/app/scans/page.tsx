@@ -1,10 +1,11 @@
-import Link from "next/link";
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { PendingScanStartedEvent } from "../../../components/analytics/data-layer-events";
 import { RescanDomainForm } from "../../../components/scans/rescan-domain-form";
 import { ScanHistoryLiveRefresh } from "../../../components/scans/scan-history-live-refresh";
+import { PaginationControls, normalizePage, normalizePageSize } from "../../../components/ui/pagination-controls";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
+import { getLaunchScanThrottleCopy } from "../../../lib/launch-mode";
 import { getRescanAvailability } from "../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../server/auth";
 import { getOrganizationScansPage } from "../../../server/scans/get-organization-scans";
@@ -21,6 +22,7 @@ function formatDateTime(value: string | null) {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
+    timeZone: "America/Los_Angeles",
     timeZoneName: "short"
   }).format(new Date(value));
 }
@@ -86,28 +88,31 @@ function getPrimaryBadgeLabel(scan: Awaited<ReturnType<typeof getOrganizationSca
 }
 
 function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
+  void planCode;
+
   if (!value) {
-    return "This domain cannot be re-scanned yet.";
+    return getLaunchScanThrottleCopy();
   }
 
-  return `Next re-scan available ${formatDateTime(value)} for this ${
-    planCode === "free" ? "Free" : planCode === "pro" ? "Pro" : "Ultra"
-  } plan domain.`;
+  return getLaunchScanThrottleCopy(formatDateTime(value));
 }
 
 type ScansPageProps = {
   searchParams?: Promise<{
     focusScanId?: string;
     page?: string;
+    perPage?: string;
   }>;
 };
 
 export default async function ScansPage({ searchParams }: ScansPageProps) {
   const { organization } = await getDashboardContext();
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const page = Number.parseInt(resolvedSearchParams.page ?? "1", 10);
+  const page = normalizePage(resolvedSearchParams.page);
+  const pageSize = normalizePageSize(resolvedSearchParams.perPage);
   const result = await getOrganizationScansPage(organization.id, {
-    page: Number.isFinite(page) && page > 0 ? page : 1
+    page,
+    pageSize
   });
   const scans = result.items;
   const focusScanId = resolvedSearchParams.focusScanId ?? null;
@@ -116,17 +121,6 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
   const runningCount = scans.filter((scan) => scan.status === "running").length;
   const queuedCount = scans.filter((scan) => scan.status === "queued").length;
   const totalSignals = scans.reduce((sum, scan) => sum + (scan.totalSignals ?? 0), 0);
-  const pageStart = result.totalCount === 0 ? 0 : (result.page - 1) * 25 + 1;
-  const pageEnd = pageStart === 0 ? 0 : pageStart + scans.length - 1;
-  const pageQuery = (targetPage: number) => {
-    const params = new URLSearchParams();
-    params.set("page", String(targetPage));
-    if (focusScanId) {
-      params.set("focusScanId", focusScanId);
-    }
-
-    return params.toString();
-  };
 
   return (
     <div className="space-y-6 pb-6">
@@ -384,29 +378,16 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                 );
               })}
             </div>
-            <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-              <p>
-                Showing {pageStart}-{pageEnd} of {result.totalCount} scans. Page {result.page} of {Math.max(1, result.pageCount)}.
-              </p>
-              <div className="flex gap-3">
-                {result.page > 1 ? (
-                  <Link
-                    className="rounded-full border border-slate-300 px-4 py-2 transition hover:border-slate-400 hover:text-slate-950"
-                    href={`/app/scans?${pageQuery(result.page - 1)}`}
-                  >
-                    Previous
-                  </Link>
-                ) : null}
-                {result.page < result.pageCount ? (
-                  <Link
-                    className="rounded-full border border-slate-300 px-4 py-2 transition hover:border-slate-400 hover:text-slate-950"
-                    href={`/app/scans?${pageQuery(result.page + 1)}`}
-                  >
-                    Next
-                  </Link>
-                ) : null}
-              </div>
-            </div>
+            <PaginationControls
+              basePath="/app/scans"
+              itemLabel="scans"
+              page={result.page}
+              pageCount={result.pageCount}
+              pageSize={pageSize}
+              searchParams={{ focusScanId }}
+              totalCount={result.totalCount}
+              visibleCount={scans.length}
+            />
             </>
           )}
         </CardContent>

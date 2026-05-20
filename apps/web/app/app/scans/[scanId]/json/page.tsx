@@ -6,6 +6,7 @@ import { ScanFindingsPane } from "../../../../../components/scans/scan-findings-
 import { ScanViewActions } from "../../../../../components/scans/scan-view-actions";
 import { ScanStatusAutoRefresh } from "../../../../../components/scans/scan-status-auto-refresh";
 import { hasPendingPostCompletionFindingWork } from "../../../../../lib/scans/scan-auto-refresh";
+import { getLaunchScanThrottleCopy } from "../../../../../lib/launch-mode";
 import { getRescanAvailability } from "../../../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../../../server/auth";
 import { getScanById } from "../../../../../server/scans/get-scan-by-id";
@@ -39,13 +40,13 @@ function formatStatus(status: string) {
 }
 
 function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
+  void planCode;
+
   if (!value) {
-    return "This domain cannot be re-scanned yet.";
+    return getLaunchScanThrottleCopy();
   }
 
-  return `Next re-scan available ${formatDateTime(value)} for this ${
-    planCode === "free" ? "Free" : planCode === "pro" ? "Pro" : "Ultra"
-  } plan domain.`;
+  return getLaunchScanThrottleCopy(formatDateTime(value));
 }
 
 export default async function ScanJsonPage({ params }: ScanJsonPageProps) {

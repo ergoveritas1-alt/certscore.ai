@@ -670,7 +670,7 @@ export async function getOrganizationScansPage(
     pageSize?: number;
   }
 ) {
-  const pageSize = Math.max(1, input?.pageSize ?? 25);
+  const pageSize = Math.max(1, input?.pageSize ?? 20);
   const page = Math.max(1, input?.page ?? 1);
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
