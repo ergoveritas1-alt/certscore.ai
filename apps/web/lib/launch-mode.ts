@@ -10,5 +10,5 @@ export const LAUNCH_ACCESS = {
 export function getLaunchScanThrottleCopy(nextAllowedAtLabel?: string) {
   const retryCopy = nextAllowedAtLabel ? ` Try again after ${nextAllowedAtLabel}.` : " Please try again shortly.";
 
-  return `Launch access currently allows one scan request every ${LAUNCH_ACCESS.scanThrottleMinutes} minutes.${retryCopy}`;
+  return `Launch access allows up to 1 scan request every ${LAUNCH_ACCESS.scanThrottleMinutes} minutes.${retryCopy}`;
 }

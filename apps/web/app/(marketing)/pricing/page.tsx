@@ -38,7 +38,7 @@ const standardPlans = [
     eyebrow: "Pro",
     price: "$200",
     priceNote: "per month",
-    summary: "For ongoing review work, deeper page coverage, and recurring scan history.",
+    summary: "For ongoing review work, more page coverage, and recurring scan history.",
     scanAllowance: "500 page scans / month",
     ctaHref: "/login?mode=create_account",
     ctaLabel: "Create account",
@@ -69,7 +69,7 @@ export default function PricingPage() {
             </h1>
             <p className="text-base leading-7 text-slate-600">
               Start with a free launch account and run public-web scans. Starter and Pro plans are currently billed at{" "}
-              {LAUNCH_ACCESS.amountDueLabel}; launch access includes one scan request every {LAUNCH_ACCESS.scanThrottleMinutes} minutes.
+              {LAUNCH_ACCESS.amountDueLabel}; launch access allows up to 1 scan request every {LAUNCH_ACCESS.scanThrottleMinutes} minutes.
             </p>
           </div>
         </div>
