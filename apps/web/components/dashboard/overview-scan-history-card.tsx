@@ -236,6 +236,7 @@ export function OverviewScanHistoryCard({ planCode, scans }: OverviewScanHistory
                           </span>
                           <span>Signals {latestScan.totalSignals ?? 0}</span>
                           <span>Findings {latestScan.findingCount}</span>
+                          <span>Top findings {latestScan.topFindingCount}</span>
                           {latestScan.certscoreOverall !== null ? <span>Overall {latestScan.certscoreOverall}</span> : null}
                           {latestScan.cmpVendorName ? <span>CMP {latestScan.cmpVendorName}</span> : null}
                           {latestScan.cookieBannerPresent === false ? <span>Banner not visible</span> : null}

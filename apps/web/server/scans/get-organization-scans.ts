@@ -10,6 +10,7 @@ import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary
 import { deriveUnverifiedHomepageReason } from "../../lib/scans/unverified-homepage-reason";
 import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
+import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import {
   summarizeLegacyChangeEvents,
@@ -51,6 +52,7 @@ export type OrganizationScanListItem = {
   accessibilityScore: number | null;
   totalSignals: number | null;
   findingCount: number;
+  topFindingCount: number;
   cookieBannerPresent: boolean | null;
   cmpVendorName: string | null;
   consentAuditCompleted: boolean | null;
@@ -462,6 +464,7 @@ async function loadOrganizationScans(
     validationFindingsByRunId.set(row.validation_run_id, existing);
   }
   const surfacedFindingCountMap = new Map<string, number>();
+  const topFindingCountMap = new Map<string, number>();
   for (const scan of scanRows) {
     const scanEvents = diagnosticEventMap.get(scan.id) ?? [];
     const repairedEvents = repairFindingFamilyPacketEvents({
@@ -495,6 +498,7 @@ async function loadOrganizationScans(
       scan.id,
       displayPackets.filter((finding) => finding.presentationDecision.status !== "suppress").length
     );
+    topFindingCountMap.set(scan.id, projectExecutiveFindingsFromUnifiedPackets(displayPackets).topFindings.length);
   }
   const changeMap = new Map<
     string,
@@ -616,6 +620,7 @@ async function loadOrganizationScans(
           findingCountMap.get(scan.id) ?? 0,
           surfacedFindingCountMap.get(scan.id) ?? 0
         ),
+        topFindingCount: topFindingCountMap.get(scan.id) ?? 0,
         cookieBannerPresent: snapshot?.cookie_banner_present ?? null,
         cmpVendorName: snapshot?.cmp_vendor_name ?? null,
         consentAuditCompleted:

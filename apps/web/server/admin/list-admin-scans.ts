@@ -4,6 +4,7 @@ import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } f
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
+import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { deriveDisplayCreatedAt } from "../scans/display-state";
 import { loadMergedSignalsByScanId } from "../scans/merged-signal-summary";
@@ -64,6 +65,7 @@ export type AdminScanListItem = {
   status: string;
   stopTier: ScanExecutionTier | null;
   totalSignals: number | null;
+  topFindingCount: number | null;
 };
 
 export type AdminScanOverviewMetrics = {
@@ -182,6 +184,7 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
     scanIds: scanRows.map((scan) => scan.id)
   });
   const surfacedFindingCountMap = new Map<string, number>();
+  const topFindingCountMap = new Map<string, number>();
   for (const scan of scanRows) {
     const scanEvents = diagnosticEventMap.get(scan.id) ?? [];
     const repairedEvents = repairFindingFamilyPacketEvents({
@@ -215,10 +218,20 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       scan.id,
       displayPackets.filter((finding) => finding.presentationDecision.status !== "suppress").length
     );
+    topFindingCountMap.set(scan.id, projectExecutiveFindingsFromUnifiedPackets(displayPackets).topFindings.length);
+  }
+
+  const requestByLinkedScanId = new Map<string, ScanRequestRow>();
+  for (const request of scanRequestRows) {
+    const linkedScanId = getLinkedScanIdForRequest(request);
+    if (linkedScanId && request.resolution_mode !== "reused_existing_scan" && !requestByLinkedScanId.has(linkedScanId)) {
+      requestByLinkedScanId.set(linkedScanId, request);
+    }
   }
 
   const scanItems: AdminScanListItem[] = scanRows.map((scan) => {
     const snapshot = snapshotMap.get(scan.id) ?? null;
+    const linkedRequest = requestByLinkedScanId.get(scan.id) ?? null;
     const normalizedAccessPosture = normalizeAccessPostureSummary({
       accessPostureClass: snapshot?.access_posture_class ?? null,
       highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
@@ -250,12 +263,12 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       scanId: scan.id,
       rowKind: "scan",
       linkedScanId: scan.id,
-      requestPublicId: null,
-      requestChannel: null,
-      requestResolutionMode: null,
-      requestedUrl: null,
-      reusedCompletedAt: null,
-      reuseWindowHours: null,
+      requestPublicId: linkedRequest?.public_id ?? null,
+      requestChannel: linkedRequest?.request_channel ?? null,
+      requestResolutionMode: linkedRequest?.resolution_mode ?? null,
+      requestedUrl: linkedRequest?.requested_url ?? null,
+      reusedCompletedAt: linkedRequest?.reused_completed_at ?? null,
+      reuseWindowHours: linkedRequest?.reuse_window_hours ?? null,
       domainId: scan.domain_id,
       domainHostname: scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null,
       organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
@@ -269,6 +282,7 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       completedAt: scan.completed_at,
       pagesScanned: scan.pages_scanned,
       totalSignals: snapshot?.total_signals ?? null,
+      topFindingCount: topFindingCountMap.get(scan.id) ?? null,
       findingCount: Math.max(
         snapshot?.report_finding_count ?? 0,
         findingCountMap.get(scan.id) ?? 0,
@@ -288,7 +302,9 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
     };
   });
 
-  const requestItems: AdminScanListItem[] = scanRequestRows.map((request) => mapScanRequestRow(request));
+  const requestItems: AdminScanListItem[] = scanRequestRows
+    .filter((request) => !getLinkedScanIdForRequest(request) || request.resolution_mode === "reused_existing_scan")
+    .map((request) => mapScanRequestRow(request));
 
   return [...scanItems, ...requestItems]
     .sort((left, right) => new Date(right.activityAt).getTime() - new Date(left.activityAt).getTime())
@@ -301,7 +317,7 @@ export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMe
 }
 
 function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
-  const linkedScanId = request.fulfilled_by_scan_id ?? request.scan_id ?? null;
+  const linkedScanId = getLinkedScanIdForRequest(request);
   const organizationName =
     request.organization_name ?? (request.organization_id || request.scan_organization_id ? "Unknown workspace" : "Public / anonymous");
   const requestContext = getNestedMetadataObject(request.request_context);
@@ -352,8 +368,13 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
     source: request.request_channel,
     status: request.status,
     stopTier: null,
-    totalSignals: null
+    totalSignals: null,
+    topFindingCount: null
   };
+}
+
+function getLinkedScanIdForRequest(request: ScanRequestRow) {
+  return request.fulfilled_by_scan_id ?? request.scan_id ?? null;
 }
 
 function getStringMetadataValue(value: unknown) {

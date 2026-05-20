@@ -31,6 +31,8 @@ export type AdminPulseRequestListItem = {
   resultPulseUrl: string | null;
   resultReportUrl: string | null;
   scanId: string | null;
+  requestChannel: string | null;
+  requestedByAnonymous: boolean | null;
   sourceIp: string | null;
   sourceIpHash: string | null;
   status: string;
@@ -49,6 +51,7 @@ export type AdminPulseRequestDetail = AdminPulseRequestListItem & {
   pulseVersion: string;
   requestChannel: string;
   requestContext: Record<string, unknown>;
+  requestedByAnonymous: boolean | null;
   requestedBy: Record<string, unknown>;
   requestType: string;
   responseSummary: Record<string, unknown> | null;
@@ -94,6 +97,7 @@ function getRequestContextString(value: unknown, key: string) {
 
 function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestListItem {
   const requestContext = asRecord(row.request_context);
+  const requestedBy = asRecord(row.requested_by);
   const responseSummary = asRecord(row.response_summary);
   return {
     completedAt: typeof row.completed_at === "string" ? row.completed_at : null,
@@ -112,6 +116,8 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
     scanId: typeof row.scan_id === "string" ? row.scan_id : null,
+    requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
+    requestedByAnonymous: typeof requestedBy.anonymous === "boolean" ? requestedBy.anonymous : null,
     sourceIp: getRequestContextString(requestContext, "sourceIp"),
     sourceIpHash: getRequestContextString(requestContext, "ipHash"),
     status: String(row.status),
@@ -169,6 +175,8 @@ export async function listAdminPulseRequests(input: {
             pr.normalized_domain,
             pr.requested_at,
             pr.request_context,
+            pr.request_channel,
+            pr.requested_by,
             pr.status,
             pr.scan_id::text as scan_id,
             pr.result_pulse_url,
@@ -286,6 +294,7 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
     pulseVersion: String(request.pulse_version),
     requestChannel: String(request.request_channel),
     requestContext: asRecord(request.request_context),
+    requestedByAnonymous: typeof asRecord(request.requested_by).anonymous === "boolean" ? (asRecord(request.requested_by).anonymous as boolean) : null,
     requestedBy: asRecord(request.requested_by),
     requestType: String(request.request_type),
     responseSummary: request.response_summary ? asRecord(request.response_summary) : null,

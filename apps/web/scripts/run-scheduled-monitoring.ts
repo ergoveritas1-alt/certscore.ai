@@ -25,10 +25,28 @@ function getLimit(argv: string[]) {
   return Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : undefined;
 }
 
+function getStringArg(argv: string[], name: string) {
+  const prefix = `--${name}=`;
+  const arg = argv.find((value) => value.startsWith(prefix));
+  const value = arg?.slice(prefix.length).trim() || process.env[`OPS_${name.replaceAll("-", "_").toUpperCase()}`]?.trim();
+  return value && value.length > 0 ? value : undefined;
+}
+
+function getStringListArg(argv: string[], name: string) {
+  const value = getStringArg(argv, name);
+  return value
+    ?.split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 async function main() {
+  const argv = process.argv.slice(2);
   const { runScheduledMonitoringSweep } = await import("../server/scheduling/run-scheduled-monitoring");
   const result = await runScheduledMonitoringSweep({
-    limit: getLimit(process.argv.slice(2))
+    canaryDomain: getStringArg(argv, "canary-domain") ?? process.env.OPS_SCHEDULED_MONITORING_CANARY_DOMAIN,
+    excludedOrganizationSlugs: getStringListArg(argv, "excluded-org-slugs"),
+    limit: getLimit(argv)
   });
 
   console.info("[scheduled-monitoring] sweep complete", result);

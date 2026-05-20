@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
 import { getAdminScanOverviewMetrics, listAdminScans } from "../../../../server/admin/list-admin-scans";
 import { AdminScanActions } from "./admin-scan-actions";
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
@@ -27,6 +28,7 @@ function formatDateTime(value: string | null) {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
+    timeZone: "America/Los_Angeles",
     timeZoneName: "short"
   }).format(new Date(value));
 }
@@ -121,14 +123,14 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-[1200px] table-fixed divide-y divide-slate-200 text-sm">
+          <table className="min-w-[1400px] table-fixed divide-y divide-slate-200 text-sm">
             <colgroup>
+              <col className="w-[5%]" />
+              <col className="w-[13%]" />
+              <col className="w-[42%]" />
+              <col className="w-[24%]" />
               <col className="w-[10%]" />
-              <col className="w-[14%]" />
-              <col className="w-[28%]" />
-              <col className="w-[28%]" />
-              <col className="w-[12%]" />
-              <col className="w-[8%]" />
+              <col className="w-[6%]" />
             </colgroup>
             <thead>
               <tr className="text-left text-slate-500">
@@ -141,85 +143,92 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {scans.map((scan) => (
-                <tr key={scan.activityId}>
-                  <td className="py-4 pr-4 text-slate-700">
-                    <p className="truncate" title={scan.organizationName ?? "Unknown workspace"}>{scan.organizationName ?? "Unknown workspace"}</p>
-                    <p className="text-xs text-slate-500">Requester IP {scan.requesterIp ?? "Not recorded"}</p>
-                  </td>
-                  <td className="py-4 pr-4 text-slate-700">{scan.domainHostname ?? "Unknown domain"}</td>
-                  <td className="py-4 pr-4 text-slate-700">
-                    <p className="font-mono text-xs text-slate-500">scan_id {scan.linkedScanId ?? scan.scanId}</p>
-                    <p className="text-xs text-slate-500">First generated {formatDateTime(scan.firstGeneratedAt)}</p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p>{scan.status}</p>
-                      {(() => {
-                        const badge = getScanFreshnessBadge(scan);
-                        return (
-                          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${badge.className}`}>
-                            {badge.label}
+              {scans.map((scan) => {
+                const provenance = classifyAdminRequestProvenance({
+                  organizationName: scan.organizationName,
+                  requestChannel: scan.requestChannel,
+                  requesterIp: scan.requesterIp,
+                  source: scan.source
+                });
+                return (
+                  <tr key={scan.activityId}>
+                    <td className="py-4 pr-4 text-slate-700">
+                      <p className="truncate" title={scan.organizationName ?? "Unknown workspace"}>{scan.organizationName ?? "Unknown workspace"}</p>
+                      <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${provenance.className}`}>
+                        {provenance.label}
+                      </span>
+                      <p className="mt-1 text-xs text-slate-500">Requester IP {scan.requesterIp ?? "Not recorded"}</p>
+                    </td>
+                    <td className="py-4 pr-4 text-slate-700">{scan.domainHostname ?? "Unknown domain"}</td>
+                    <td className="py-4 pr-4 text-slate-700">
+                      <p className="font-mono text-xs text-slate-500">scan_id {scan.linkedScanId ?? scan.scanId}</p>
+                      <p className="text-xs text-slate-500">First generated {formatDateTime(scan.firstGeneratedAt)}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p>{scan.status}</p>
+                        {(() => {
+                          const badge = getScanFreshnessBadge(scan);
+                          return (
+                            <span className={`rounded-full px-2 py-1 text-xs font-semibold ${badge.className}`}>
+                              {badge.label}
+                            </span>
+                          );
+                        })()}
+                        {scan.rowKind === "request" ? (
+                          <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                            Submitted request
                           </span>
-                        );
-                      })()}
+                        ) : (
+                          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                            Scanner run
+                          </span>
+                        )}
+                      </div>
                       {scan.rowKind === "request" ? (
-                        <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
-                          Submitted request
-                        </span>
+                        <>
+                          <p className="text-xs text-slate-500">{formatResolutionMode(scan.requestResolutionMode)}</p>
+                          {scan.requestPublicId ? <p className="text-xs text-slate-400">{scan.requestPublicId}</p> : null}
+                        </>
                       ) : (
-                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
-                          Scanner run
-                        </span>
+                        <>
+                          <p>{scan.pagesScanned} pages</p>
+                          {scan.requestPublicId ? <p className="text-xs text-slate-400">Request {scan.requestPublicId}</p> : null}
+                        </>
                       )}
-                    </div>
-                    {scan.rowKind === "request" ? (
-                      <>
-                        <p className="text-xs text-slate-500">{formatResolutionMode(scan.requestResolutionMode)}</p>
-                        {scan.requestPublicId ? <p className="text-xs text-slate-400">{scan.requestPublicId}</p> : null}
-                      </>
-                    ) : (
-                      <p>{scan.pagesScanned} pages</p>
-                    )}
-                    {scan.source === "pulse_api" ? (
-                      <p className="mt-1 inline-flex rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">Pulse API</p>
-                    ) : null}
-                    {scan.requestChannel === "gpt_action" ? (
-                      <p className="mt-1 inline-flex rounded-full bg-violet-50 px-2 py-1 text-xs font-semibold text-violet-700">
-                        GPT Action
-                      </p>
-                    ) : null}
-                  </td>
-                  <td className="py-4 pr-4 text-slate-700">
-                    {scan.rowKind === "request" ? (
-                      <>
-                        <p>
-                          {scan.linkedScanId
-                            ? scan.requestResolutionMode === "reused_existing_scan"
-                              ? "Fulfilled by recent scan"
-                              : "Fulfilled by scan"
-                            : "No scan linked"}
-                        </p>
-                        {scan.linkedScanId ? <p className="text-xs text-slate-500">{scan.linkedScanId}</p> : null}
-                        {scan.reuseWindowHours ? (
-                          <p className="text-xs text-slate-500">Reuse window {scan.reuseWindowHours}h</p>
-                        ) : null}
-                      </>
-                    ) : (
-                      <>
-                        <p>Signals {scan.totalSignals ?? 0}</p>
-                        <p>Findings {scan.findingCount ?? 0}</p>
-                      </>
-                    )}
-                  </td>
-                  <td className="py-4 pr-4 text-slate-700">{formatDateTime(scan.activityAt)}</td>
-                  <td className="py-4">
-                    {scan.linkedScanId && scan.scanViewHref ? (
-                      <AdminScanActions scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} />
-                    ) : (
-                      <span className="text-xs text-slate-400">No report</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="py-4 pr-4 text-slate-700">
+                      {scan.rowKind === "request" ? (
+                        <>
+                          <p>
+                            {scan.linkedScanId
+                              ? scan.requestResolutionMode === "reused_existing_scan"
+                                ? "Fulfilled by recent scan"
+                                : "Fulfilled by scan"
+                              : "No scan linked"}
+                          </p>
+                          {scan.linkedScanId ? <p className="text-xs text-slate-500">{scan.linkedScanId}</p> : null}
+                          {scan.reuseWindowHours ? (
+                            <p className="text-xs text-slate-500">Reuse window {scan.reuseWindowHours}h</p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <>
+                          <p>Signals {scan.totalSignals ?? 0}</p>
+                          <p>Findings {scan.findingCount ?? 0}</p>
+                          <p>Top findings {scan.topFindingCount ?? 0}</p>
+                        </>
+                      )}
+                    </td>
+                    <td className="py-4 pr-4 text-slate-700">{formatDateTime(scan.activityAt)}</td>
+                    <td className="py-4">
+                      {scan.linkedScanId && scan.scanViewHref ? (
+                        <AdminScanActions scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} />
+                      ) : (
+                        <span className="text-xs text-slate-400">No report</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

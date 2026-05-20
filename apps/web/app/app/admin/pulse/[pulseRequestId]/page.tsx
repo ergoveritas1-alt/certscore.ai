@@ -24,6 +24,7 @@ function formatDateTime(value: string | null) {
     minute: "2-digit",
     second: "2-digit",
     hour12: true,
+    timeZone: "America/Los_Angeles",
     timeZoneName: "short"
   }).format(new Date(value));
 }

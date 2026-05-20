@@ -2,7 +2,7 @@ name: Production Ops Monitor
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       synthetic_scan:
@@ -42,8 +42,9 @@ jobs:
       OPS_REQUIRE_SCANNER_HEARTBEAT: ${{ vars.OPS_REQUIRE_SCANNER_HEARTBEAT || 'true' }}
       OPS_REQUIRE_VALIDATION_HEARTBEAT: ${{ vars.OPS_REQUIRE_VALIDATION_HEARTBEAT || 'true' }}
       OPS_SCAN_QUEUE_STALE_MINUTES: ${{ vars.OPS_SCAN_QUEUE_STALE_MINUTES || '10' }}
+      OPS_SCHEDULED_MONITORING_CANARY_DOMAIN: ${{ vars.OPS_SCHEDULED_MONITORING_CANARY_DOMAIN || vars.OPS_SYNTHETIC_SCAN_DOMAIN || 'example.com' }}
       OPS_SCHEDULED_MONITORING_SWEEP_ENABLED: ${{ vars.OPS_SCHEDULED_MONITORING_SWEEP_ENABLED || 'false' }}
-      OPS_SCHEDULED_MONITORING_SWEEP_LIMIT: ${{ vars.OPS_SCHEDULED_MONITORING_SWEEP_LIMIT || '50' }}
+      OPS_SCHEDULED_MONITORING_SWEEP_LIMIT: ${{ vars.OPS_SCHEDULED_MONITORING_SWEEP_LIMIT || '1' }}
       OPS_SYNTHETIC_SCAN_DOMAIN: ${{ vars.OPS_SYNTHETIC_SCAN_DOMAIN || 'example.com' }}
       OPS_SYNTHETIC_SCAN_ENABLED: ${{ inputs.synthetic_scan || vars.OPS_SYNTHETIC_SCAN_ENABLED || 'false' }}
       OPS_SYNTHETIC_SCAN_TIMEOUT_MINUTES: ${{ vars.OPS_SYNTHETIC_SCAN_TIMEOUT_MINUTES || '15' }}
@@ -108,7 +109,7 @@ jobs:
       - name: Run scheduled monitoring sweep
         if: ${{ env.OPS_SCHEDULED_MONITORING_SWEEP_ENABLED == 'true' }}
         env:
-          OPS_AWS_DB_PROBE_COMMAND: pnpm --filter @website-signal-risk-scanner/web monitoring:sweep -- --limit=${{ env.OPS_SCHEDULED_MONITORING_SWEEP_LIMIT }}
+          OPS_AWS_DB_PROBE_COMMAND: pnpm --filter @website-signal-risk-scanner/web monitoring:sweep -- --limit=${{ env.OPS_SCHEDULED_MONITORING_SWEEP_LIMIT }} --canary-domain=${{ env.OPS_SCHEDULED_MONITORING_CANARY_DOMAIN }}
         run: pnpm ops:monitor:prod:aws
 
       - name: Run AWS-side database and worker probe

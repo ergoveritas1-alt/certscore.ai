@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
 import {
   getAdminPulseOverviewCounts,
   listAdminPulseRequests,
@@ -43,6 +44,7 @@ function formatDateTime(value: string | null) {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
+    timeZone: "America/Los_Angeles",
     timeZoneName: "short"
   }).format(new Date(value));
 }
@@ -212,46 +214,57 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {requests.map((request) => (
-                  <tr key={request.publicId}>
-                    <td className="py-4 pr-4 text-slate-700">
-                      <p className="font-medium text-slate-900">{request.publicId}</p>
-                      <p className="text-xs text-slate-500">Source IP {sourceIpLabel(request)}</p>
-                      <p className="mt-1 text-xs text-slate-500">{formatDateTime(request.requestedAt)}</p>
-                    </td>
-                    <td className="py-4 pr-4 text-slate-700">
-                      <p>{request.normalizedDomain ?? "Unknown domain"}</p>
-                      <p className="max-w-xs truncate text-xs text-slate-500">{request.requestedUrl ?? "No requested URL"}</p>
-                    </td>
-                    <td className="py-4 pr-4 text-slate-700">
-                      <p>
-                        {formatLabel(request.detail)} · {formatLabel(request.format)}
-                      </p>
-                      <p className="text-xs text-slate-500">{formatLabel(request.freshness)}</p>
-                      <p className="text-xs text-slate-500">{formatLabel(request.resolutionMode)}</p>
-                    </td>
-                    <td className="py-4 pr-4 text-slate-700">
-                      <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusClass(request.status)}`}>
-                        {formatLabel(request.status)}
-                      </span>
-                      <p className="mt-2 text-xs text-slate-500">Scan {request.scanId ?? "Not linked"}</p>
-                      {request.scanId ? (
-                        <p className="mt-1 text-xs text-slate-500">
-                          Snapshot: Signals {request.snapshotTotalSignals ?? 0}, Findings {request.snapshotFindingCount ?? 0}
+                {requests.map((request) => {
+                  const provenance = classifyAdminRequestProvenance({
+                    requestChannel: request.requestChannel,
+                    requestedByAnonymous: request.requestedByAnonymous,
+                    requesterIp: request.sourceIp ?? request.sourceIpHash
+                  });
+                  return (
+                    <tr key={request.publicId}>
+                      <td className="py-4 pr-4 text-slate-700">
+                        <p className="font-medium text-slate-900">{request.publicId}</p>
+                        <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${provenance.className}`}>
+                          {provenance.label}
+                        </span>
+                        <p className="mt-1 text-xs text-slate-500">Source IP {sourceIpLabel(request)}</p>
+                        <p className="mt-1 text-xs text-slate-500">{formatDateTime(request.requestedAt)}</p>
+                      </td>
+                      <td className="py-4 pr-4 text-slate-700">
+                        <p>{request.normalizedDomain ?? "Unknown domain"}</p>
+                        <p className="max-w-xs truncate text-xs text-slate-500">{request.requestedUrl ?? "No requested URL"}</p>
+                      </td>
+                      <td className="py-4 pr-4 text-slate-700">
+                        <p>
+                          {formatLabel(request.detail)} · {formatLabel(request.format)}
                         </p>
-                      ) : null}
-                      {request.topFindingIds.length > 0 ? (
-                        <p className="mt-1 max-w-xs truncate text-xs text-slate-500">{request.topFindingIds.join(", ")}</p>
-                      ) : null}
-                    </td>
-                    <td className="py-4 pr-4 text-slate-700">{request.feedbackCount}</td>
-                    <td className="py-4">
-                      <Link className="text-sm font-semibold text-sky-700" href={`/app/admin/pulse/${request.publicId}`}>
-                        Details
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                        <p className="text-xs text-slate-500">{formatLabel(request.freshness)}</p>
+                        <p className="text-xs text-slate-500">{formatLabel(request.resolutionMode)}</p>
+                      </td>
+                      <td className="py-4 pr-4 text-slate-700">
+                        <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusClass(request.status)}`}>
+                          {formatLabel(request.status)}
+                        </span>
+                        <p className="mt-2 text-xs text-slate-500">Scan {request.scanId ?? "Not linked"}</p>
+                        {request.scanId ? (
+                          <p className="mt-1 text-xs text-slate-500">
+                            Snapshot: Signals {request.snapshotTotalSignals ?? 0}, Findings {request.snapshotFindingCount ?? 0}, Top findings{" "}
+                            {request.topFindingIds.length}
+                          </p>
+                        ) : null}
+                        {request.topFindingIds.length > 0 ? (
+                          <p className="mt-1 max-w-xs truncate text-xs text-slate-500">{request.topFindingIds.join(", ")}</p>
+                        ) : null}
+                      </td>
+                      <td className="py-4 pr-4 text-slate-700">{request.feedbackCount}</td>
+                      <td className="py-4">
+                        <Link className="text-sm font-semibold text-sky-700" href={`/app/admin/pulse/${request.publicId}`}>
+                          Details
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

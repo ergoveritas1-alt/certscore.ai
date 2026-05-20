@@ -10,7 +10,11 @@ import {
   type ScheduledMonitoringDomainRow
 } from "./repository";
 
-const DEFAULT_SCHEDULED_MONITORING_LIMIT = 50;
+const DEFAULT_SCHEDULED_MONITORING_LIMIT = 1;
+const DEFAULT_EXCLUDED_SCHEDULED_MONITORING_ORG_SLUGS = [
+  "certscore-corpus-import",
+  "validation-ops-internal"
+];
 
 export type ScheduledMonitoringDomainCandidate = {
   activeScanExists: boolean;
@@ -26,8 +30,10 @@ export type ScheduledMonitoringDomainCandidate = {
 };
 
 export type ScheduledMonitoringSweepResult = {
+  canaryDomain: string | null;
   checked: number;
   enqueued: number;
+  excludedOrganizationSlugs: string[];
   failed: number;
   skippedActive: number;
   skippedManual: number;
@@ -50,14 +56,19 @@ function toCandidate(row: ScheduledMonitoringDomainRow): ScheduledMonitoringDoma
 }
 
 export async function runScheduledMonitoringSweep(input: {
+  canaryDomain?: string | null;
+  excludedOrganizationSlugs?: string[];
   limit?: number;
   now?: Date;
 } = {}): Promise<ScheduledMonitoringSweepResult> {
   const limit = input.limit ?? DEFAULT_SCHEDULED_MONITORING_LIMIT;
   const now = input.now ?? new Date();
+  const excludedOrganizationSlugs = input.excludedOrganizationSlugs ?? DEFAULT_EXCLUDED_SCHEDULED_MONITORING_ORG_SLUGS;
   const result: ScheduledMonitoringSweepResult = {
+    canaryDomain: input.canaryDomain ?? null,
     checked: 0,
     enqueued: 0,
+    excludedOrganizationSlugs,
     failed: 0,
     skippedActive: 0,
     skippedManual: 0,
@@ -68,12 +79,18 @@ export async function runScheduledMonitoringSweep(input: {
     eventType: SCAN_EVENT_TYPES.scheduleSweepStarted,
     message: "Scheduled monitoring sweep started.",
     metadataJson: {
+      canaryDomain: input.canaryDomain ?? null,
+      excludedOrganizationSlugs,
       limit,
       startedAt: now.toISOString()
     }
   });
 
-  const candidates = (await loadScheduledMonitoringDomainCandidates(limit)).map(toCandidate);
+  const candidates = (await loadScheduledMonitoringDomainCandidates({
+    canaryDomain: input.canaryDomain,
+    excludedOrganizationSlugs,
+    limit
+  })).map(toCandidate);
 
   for (const candidate of candidates) {
     result.checked += 1;

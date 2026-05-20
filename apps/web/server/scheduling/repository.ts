@@ -28,6 +28,12 @@ export type ScheduledMonitoringDomainRow = {
   settings_frequency: string | null;
 };
 
+export type ScheduledMonitoringCandidateFilter = {
+  canaryDomain?: string | null;
+  excludedOrganizationSlugs?: string[];
+  limit?: number;
+};
+
 export async function loadSchedulingOrganization(organizationId: string): Promise<SchedulingOrganizationRow | null> {
   try {
     return await queryOne<SchedulingOrganizationRow>(
@@ -66,8 +72,10 @@ export async function loadDomainMonitoringScans(input: {
   }
 }
 
-export async function loadScheduledMonitoringDomainCandidates(limit = 50): Promise<ScheduledMonitoringDomainRow[]> {
-  const normalizedLimit = Math.min(Math.max(limit, 1), 250);
+export async function loadScheduledMonitoringDomainCandidates(input: ScheduledMonitoringCandidateFilter = {}): Promise<ScheduledMonitoringDomainRow[]> {
+  const normalizedLimit = Math.min(Math.max(input.limit ?? 50, 1), 250);
+  const canaryDomain = normalizeOptionalHostname(input.canaryDomain);
+  const excludedOrganizationSlugs = uniqueStrings(input.excludedOrganizationSlugs ?? []);
 
   try {
     const result = await query<ScheduledMonitoringDomainRow>(
@@ -97,10 +105,21 @@ export async function loadScheduledMonitoringDomainCandidates(limit = 50): Promi
         left join organization_settings on organization_settings.organization_id = domains.organization_id
         left join scan_state on scan_state.domain_id = domains.id
         where coalesce(domains.scan_frequency, organization_settings.default_scan_frequency, '') <> 'manual'
+          and (
+            cardinality($2::text[]) = 0
+            or organizations.slug <> all($2::text[])
+          )
+          and (
+            $3::text is null
+            or lower(domains.hostname) = $3
+            or lower(regexp_replace(domains.hostname, '^www\\.', '')) = $3
+            or lower(regexp_replace(domains.normalized_url, '^https?://', '')) = $3
+            or lower(regexp_replace(domains.normalized_url, '^https?://www\\.', '')) = $3
+          )
         order by coalesce(scan_state.last_completed_at, domains.created_at) asc
         limit $1
       `,
-      [normalizedLimit],
+      [normalizedLimit, excludedOrganizationSlugs, canaryDomain],
       { readOnly: true }
     );
 
@@ -109,6 +128,21 @@ export async function loadScheduledMonitoringDomainCandidates(limit = 50): Promi
     const message = error instanceof Error ? error.message : "Unknown database error.";
     throw new Error(`Failed to load scheduled monitoring candidates: ${message}`);
   }
+}
+
+function normalizeOptionalHostname(value: string | null | undefined) {
+  const normalized = value
+    ?.trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/\/.*$/, "");
+
+  return normalized && normalized.length > 0 ? normalized : null;
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
 export async function insertScheduleWorkflowEvent(input: {

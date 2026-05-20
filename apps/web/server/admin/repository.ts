@@ -1047,9 +1047,17 @@ export async function updateAdminOrganizationPlan(input: {
 
 export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCounts> {
   await ensureScanRequestLogTable();
-  const [totalScansResult, totalScanRequestsResult, http403Result, http429Result, blockedOrCaptchaResult] = await Promise.all([
+  const [totalScansResult, totalScanRequestsResult, unlinkedScanRequestsResult, http403Result, http429Result, blockedOrCaptchaResult] = await Promise.all([
     query<{ count: string }>(`select count(*)::text as count from scans`, [], { readOnly: true }),
     query<{ count: string }>(`select count(*)::text as count from scan_requests`, [], { readOnly: true }),
+    query<{ count: string }>(
+      `select count(*)::text as count
+         from scan_requests
+        where coalesce(fulfilled_by_scan_id, scan_id) is null
+           or resolution_mode = 'reused_existing_scan'`,
+      [],
+      { readOnly: true }
+    ),
     query<{ count: string }>(
       `select count(*)::text as count
          from scan_snapshots
@@ -1079,9 +1087,10 @@ export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCo
 
   const totalPhysicalScans = Number(totalScansResult.rows[0]?.count ?? "0");
   const totalScanRequests = Number(totalScanRequestsResult.rows[0]?.count ?? "0");
+  const totalUnlinkedScanRequests = Number(unlinkedScanRequestsResult.rows[0]?.count ?? "0");
 
   return {
-    totalScans: totalPhysicalScans + totalScanRequests,
+    totalScans: totalPhysicalScans + totalUnlinkedScanRequests,
     totalPhysicalScans,
     totalScanRequests,
     http403Count: Number(http403Result.rows[0]?.count ?? "0"),
