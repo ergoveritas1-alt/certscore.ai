@@ -1,4 +1,5 @@
 import { PULSE_PURPOSE_STATEMENT, PULSE_STANDARD_DISCLAIMER } from "./constants";
+import { getRegulatoryLensAnchor } from "../scans/regulatory-lens-anchor";
 
 type PulseMarkdownInput = Record<string, any>;
 const CANONICAL_FINDINGS_REFERENCE_URL = "https://certscore.ai/findings";
@@ -16,6 +17,16 @@ function line(value: unknown) {
     return value.toISOString();
   }
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : "Not available";
+}
+
+function metricValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+  return line(value);
 }
 
 function countHighPriorityFindings(findings: any[]) {
@@ -92,13 +103,28 @@ function compactFindings(findings: any[], options: { gptAction?: boolean } = {})
             `   - Criticality: ${formatLabel(finding.criticality)}`,
             `   - Confidence: ${formatLabel(finding.confidence)}`,
             `   - Evidence: ${line(finding.evidence?.summary)}`,
-            `   - Review context: ${(finding.reviewLenses ?? []).join(", ") || "Review context not classified"}`,
+            `   - Review context: ${formatReviewLensLinks(finding)}`,
             `   - Next step: ${line(finding.nextStep)}`,
             `   - Evidence link: ${line(finding.evidence?.fullEvidenceUrl ?? finding.anchorUrl)}`
           ].join("\n")
         )
         .join("\n\n")
     : `${NO_TOP_FINDINGS_COPY} ${ABSENCE_OF_FINDINGS_CAVEAT}`;
+}
+
+function formatReviewLensLinks(finding: any) {
+  if (Array.isArray(finding.reviewLensLinks) && finding.reviewLensLinks.length > 0) {
+    return finding.reviewLensLinks
+      .map((lens: any) => {
+        const name = line(lens?.name);
+        const url = line(lens?.url);
+        return name && url ? `[${name}](${url})` : name;
+      })
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  return (finding.reviewLenses ?? []).join(", ") || "Review context not classified";
 }
 
 function isLimitedCoverage(status: unknown) {
@@ -116,11 +142,38 @@ function gptFooter(pulse: PulseMarkdownInput) {
   ].join("\n");
 }
 
+function appendHash(url: unknown, hash: string) {
+  const base = line(url);
+  if (base === "Not available") {
+    return "";
+  }
+  return `${base.split("#")[0]}#${hash}`;
+}
+
+function markdownLink(label: string, url: unknown) {
+  const href = line(url);
+  return href === "Not available" || href.length === 0 ? label : `[${label}](${href})`;
+}
+
+function lensUrl(lensName: unknown, fullReportUrl: unknown) {
+  const name = line(lensName);
+  if (name === "Not available") {
+    return "";
+  }
+  return appendHash(fullReportUrl, getRegulatoryLensAnchor(name));
+}
+
 export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAction?: boolean } = {}) {
   const findings = Array.isArray(pulse.topFindings) ? pulse.topFindings : [];
   const lenses = Array.isArray(pulse.reviewContext?.lenses) ? pulse.reviewContext.lenses : [];
   const highlights = pulse.evidenceHighlights ?? {};
   const links = pulse.links ?? {};
+  const fullReportUrl = links.fullReportUrl;
+  const trackerFootprintUrl = highlights.trackerFootprint?.detailsUrl ?? appendHash(fullReportUrl, "tracker-footprint");
+  const vendorMixUrl = highlights.vendorMix?.detailsUrl ?? appendHash(fullReportUrl, "vendor-mix");
+  const consentFindingsUrl = appendHash(fullReportUrl, "coverage-section-consent_controls_enforcement");
+  const policySurfacesUrl = highlights.policySurfaces?.detailsUrl ?? appendHash(fullReportUrl, "policy-surfaces");
+  const fingerprintingUrl = highlights.fingerprinting?.detailsUrl ?? appendHash(fullReportUrl, "fingerprinting");
   const titleDomain = line(pulse.domain);
   const completedAt = line(pulse.scan?.completedAt ?? pulse.timestamps?.completedAt ?? pulse.completedAt);
   const highPriorityCount = countHighPriorityFindings(findings);
@@ -168,20 +221,24 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
       ? lenses
           .map(
             (lens: any) =>
-              `- ${line(lens.name)}: ${safeLensStatus(lens.status, { hasSurfacedFinding: lensHasSurfacedFinding(lens, findings) })} - ${line(lens.summary)}`
+              `- ${markdownLink(
+                `${line(lens.name)} review context: ${line(lens.summary)}`,
+                lens.detailsUrl ?? lens.url ?? lensUrl(lens.name, fullReportUrl)
+              )} - ${safeLensStatus(lens.status, { hasSurfacedFinding: lensHasSurfacedFinding(lens, findings) })}`
           )
           .join("\n")
       : "- Review lenses were not evaluated for this Pulse.",
     "",
     "## Privacy and consent signals",
     "",
-    `- Tracker footprint: ${line(highlights.trackerFootprint?.summary)}`,
-    `- Consent-related findings: ${findings.filter((finding) => /consent|tracking|cookie|vendor/i.test(`${finding.id ?? ""} ${finding.label ?? ""}`)).length}`,
+    `- ${markdownLink(`Tracker footprint: ${metricValue(highlights.trackerFootprint?.thirdPartyDomainsObserved)} third-party domains observed`, trackerFootprintUrl)}`,
+    `- ${markdownLink(`Classified tracker vendors: ${metricValue(highlights.trackerFootprint?.classifiedTrackerVendors)}`, trackerFootprintUrl)}`,
+    `- ${markdownLink(`Consent-related findings: ${findings.filter((finding) => /consent|tracking|cookie|vendor/i.test(`${finding.id ?? ""} ${finding.label ?? ""}`)).length}`, consentFindingsUrl)}`,
     "",
     "## Cookie and third-party request activity",
     "",
-    `- Tracker footprint: ${line(highlights.trackerFootprint?.summary)}`,
-    `- Vendor mix: ${line(highlights.vendorMix?.summary)}`,
+    `- ${markdownLink(`Tracker footprint: ${line(highlights.trackerFootprint?.summary)}`, trackerFootprintUrl)}`,
+    `- ${markdownLink(`Vendor mix: ${line(highlights.vendorMix?.summary)}`, vendorMixUrl)}`,
     "",
     "## Accessibility signals",
     "",
@@ -189,8 +246,8 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
     "",
     "## Disclosure and trust signals",
     "",
-    `- Policy surfaces: ${line(highlights.policySurfaces?.summary)}`,
-    `- Fingerprinting: ${line(highlights.fingerprinting?.summary)}`,
+    `- ${markdownLink(`Policy URLs covered: ${metricValue(highlights.policySurfaces?.policyUrlCount)}`, policySurfacesUrl)}`,
+    `- ${markdownLink(`Probable fingerprinting: ${highlights.fingerprinting?.probableFingerprintingDetected === true ? "Probable fingerprinting detected" : "No probable fingerprinting detected"}`, fingerprintingUrl)}`,
     "",
     "## Coverage and limitations",
     "",

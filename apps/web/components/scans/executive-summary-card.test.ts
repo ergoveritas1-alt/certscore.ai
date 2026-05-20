@@ -2009,7 +2009,7 @@ test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-f
   );
 
   assert.match(html, /data-testid="executive-top-findings-list"/);
-  assert.match(html, /max-h-\[31\.5rem\]/);
+  assert.match(html, /max-h-\[35\.25rem\]/);
   assert.match(html, /Tracking started before consent/);
   assert.match(html, /Non-essential tracking continued after reject/);
   assert.match(html, /Session replay service signal observed/);

@@ -1,6 +1,7 @@
 import { projectExecutiveFindingsFromUnifiedPackets } from "../scans/executive-findings-projection";
 import { getPublicReportFindingDisplay } from "../scans/public-report-finding-display";
 import type { CertScoreFinding } from "../scans/finding-registry";
+import { getRegulatoryLensAnchor } from "../scans/regulatory-lens-anchor";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { buildScanReportUnifiedFindings } from "../../components/scans/shared-scan-detail-view";
 import { absoluteUrl } from "../seo";
@@ -217,6 +218,13 @@ function getFindingReviewLenses(finding: CertScoreFinding) {
   return [...lenses].slice(0, 4);
 }
 
+function getFindingReviewLensLinks(finding: CertScoreFinding, scanId: string) {
+  return getFindingReviewLenses(finding).map((name) => ({
+    name,
+    url: absoluteUrl(`/scan/${scanId}#${getRegulatoryLensAnchor(name)}`)
+  }));
+}
+
 function buildEvidence(finding: CertScoreFinding, scanId: string) {
   const details = finding.evidenceDetails ?? {};
   const representativeRequests = Array.isArray(details.representativeRequests) ? details.representativeRequests : [];
@@ -331,6 +339,7 @@ function toPulseFinding(finding: CertScoreFinding, scanId: string) {
     },
     evidenceDigest: evidence.evidenceDigest,
     reviewLenses: getFindingReviewLenses(finding),
+    reviewLensLinks: getFindingReviewLensLinks(finding, scanId),
     anchorUrl: evidence.anchorUrl,
     nextStep: display.remediation || "Review the retained evidence and confirm expected site behavior."
   };
@@ -372,20 +381,23 @@ function buildEvidenceHighlights(scanRecord: ScanDetailResponse) {
     policySurfaces: {
       policyUrlCount: policyRows.length,
       covered: policyTypes,
-      summary: `${policyRows.length} policy URL${policyRows.length === 1 ? "" : "s"} covered.`
+      summary: `${policyRows.length} policy URL${policyRows.length === 1 ? "" : "s"} covered.`,
+      detailsUrl: absoluteUrl(`/scan/${scanRecord.scan.id}#policy-surfaces`)
     },
     fingerprinting: {
       probableFingerprintingDetected,
       indicatorCount: fingerprintIndicators,
       summary: probableFingerprintingDetected
         ? "Probable fingerprinting-related review signals were surfaced."
-        : "No probable fingerprinting detected. Related indicators, if present, are retained for review."
+        : "No probable fingerprinting detected. Related indicators, if present, are retained for review.",
+      detailsUrl: absoluteUrl(`/scan/${scanRecord.scan.id}#fingerprinting`)
     },
     vendorMix: {
       categories,
       namedEntityCount: classifiedTrackerVendors,
       categoryCount: Object.keys(categories).length,
-      summary: categorySummary || "No classified tracker vendor categories were available."
+      summary: categorySummary || "No classified tracker vendor categories were available.",
+      detailsUrl: absoluteUrl(`/scan/${scanRecord.scan.id}#vendor-mix`)
     }
   };
 }

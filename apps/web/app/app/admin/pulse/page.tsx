@@ -235,6 +235,11 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                         {formatLabel(request.status)}
                       </span>
                       <p className="mt-2 text-xs text-slate-500">Scan {request.scanId ?? "Not linked"}</p>
+                      {request.scanId ? (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Snapshot: Signals {request.snapshotTotalSignals ?? 0}, Findings {request.snapshotFindingCount ?? 0}
+                        </p>
+                      ) : null}
                       {request.topFindingIds.length > 0 ? (
                         <p className="mt-1 max-w-xs truncate text-xs text-slate-500">{request.topFindingIds.join(", ")}</p>
                       ) : null}

@@ -15,6 +15,7 @@ import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/exec
 import type { FindingCriticalityBadge } from "../../lib/scans/finding-criticality-badges";
 import { getFindingDensityBenchmark } from "../../lib/scans/finding-density-benchmarks";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
+import { getRegulatoryLensAnchor } from "../../lib/scans/regulatory-lens-anchor";
 import {
   getPublicReportConfidenceDefinition,
   getPublicReportFindingDisplayForCertFinding
@@ -26,6 +27,7 @@ import {
   getFindingReviewContextChips
 } from "../../lib/marketing/finding-regulatory-context";
 import { CopyJsonButton } from "./copy-json-button";
+import { FindingHashFocus } from "./finding-hash-focus";
 import { InfoTip } from "./info-tip";
 type DomainBenchmarkCardData = {
   confidence: "low" | "medium" | "high";
@@ -3811,11 +3813,12 @@ export function ExecutiveSummaryCard(input: {
           <div
             className={
               hasScrollableTopFindings
-                ? "grid max-h-[31.5rem] gap-3 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]"
+                ? "grid max-h-[35.25rem] gap-3 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]"
                 : "grid gap-3"
             }
             data-testid="executive-top-findings-list"
           >
+            <FindingHashFocus />
             {filteredTopFindings.length > 0 ? (
               filteredTopFindings.map((finding, index) => {
                 const iconKey = topFindingIconKeys.get(finding.id) ?? getFindingTitleIconKey(finding.id);
@@ -3905,7 +3908,7 @@ export function ExecutiveSummaryCard(input: {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
               </div>
               <div className="space-y-3">
-                <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                <div id="tracker-footprint" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Review lenses</p>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
                     Findings organized by privacy, consumer protection, and accessibility review context. Automated signals for review, not a legal determination.
@@ -3917,7 +3920,11 @@ export function ExecutiveSummaryCard(input: {
                   ) : null}
                   <div className="mt-3 space-y-3">
                     {regulatoryLenses.map((lens) => (
-                      <details key={lens.acronym} className="group rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3">
+                      <details
+                        key={lens.acronym}
+                        id={getRegulatoryLensAnchor(lens.acronym)}
+                        className="group scroll-mt-24 rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3"
+                      >
                         <summary className="relative grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2">
                           <span className="min-w-0 self-start">
                             <span className="flex flex-wrap items-center gap-2">
@@ -3983,7 +3990,7 @@ export function ExecutiveSummaryCard(input: {
                   />
                 </div>
                 {policySurfaces.length > 0 ? (
-                  <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                  <div id="policy-surfaces" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Policy Surfaces</p>
                     <p className="mt-2 text-sm text-slate-800">{policySurfaceSummary}</p>
                     <div className="mt-3 space-y-2">
@@ -4016,7 +4023,7 @@ export function ExecutiveSummaryCard(input: {
                   </div>
                 ) : null}
                 {scanInterruptions.length > 0 ? (
-                  <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                  <div id="fingerprinting" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Scan Interruption</p>
                     <p className="mt-2 text-sm text-slate-800">
                       {scanInterruptions.length} interruption event{scanInterruptions.length === 1 ? "" : "s"} retained
@@ -4065,7 +4072,7 @@ export function ExecutiveSummaryCard(input: {
                 ) : null}
               </div>
               {categorySummary ? (
-                <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                <div id="vendor-mix" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Vendor mix</p>
                   <p className="mt-2 text-sm text-slate-800">{categorySummary}</p>
                   <DetailDisclosure

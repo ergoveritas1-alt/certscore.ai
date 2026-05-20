@@ -47,6 +47,27 @@ function formatResolutionMode(value: string | null) {
     .join(" ");
 }
 
+function getScanFreshnessBadge(scan: { requestResolutionMode: string | null; rowKind: "scan" | "request" }) {
+  if (scan.requestResolutionMode === "reused_existing_scan") {
+    return {
+      className: "bg-sky-50 text-sky-700 ring-1 ring-sky-100",
+      label: "Reused <24h"
+    };
+  }
+
+  if (scan.rowKind === "request") {
+    return {
+      className: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+      label: "Fresh request"
+    };
+  }
+
+  return {
+    className: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+    label: "Fresh scan"
+  };
+}
+
 export default async function AdminScansPage({ searchParams }: AdminScansPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const requestedPage = Number.parseInt(resolvedSearchParams.page ?? "1", 10);
@@ -100,7 +121,15 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <table className="min-w-[1200px] table-fixed divide-y divide-slate-200 text-sm">
+            <colgroup>
+              <col className="w-[10%]" />
+              <col className="w-[14%]" />
+              <col className="w-[28%]" />
+              <col className="w-[28%]" />
+              <col className="w-[12%]" />
+              <col className="w-[8%]" />
+            </colgroup>
             <thead>
               <tr className="text-left text-slate-500">
                 <th className="pb-3 pr-4 font-medium">Workspace</th>
@@ -115,13 +144,23 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
               {scans.map((scan) => (
                 <tr key={scan.activityId}>
                   <td className="py-4 pr-4 text-slate-700">
-                    <p>{scan.organizationName ?? "Unknown workspace"}</p>
+                    <p className="truncate" title={scan.organizationName ?? "Unknown workspace"}>{scan.organizationName ?? "Unknown workspace"}</p>
                     <p className="text-xs text-slate-500">Requester IP {scan.requesterIp ?? "Not recorded"}</p>
                   </td>
                   <td className="py-4 pr-4 text-slate-700">{scan.domainHostname ?? "Unknown domain"}</td>
                   <td className="py-4 pr-4 text-slate-700">
+                    <p className="font-mono text-xs text-slate-500">scan_id {scan.linkedScanId ?? scan.scanId}</p>
+                    <p className="text-xs text-slate-500">First generated {formatDateTime(scan.firstGeneratedAt)}</p>
                     <div className="flex flex-wrap items-center gap-2">
                       <p>{scan.status}</p>
+                      {(() => {
+                        const badge = getScanFreshnessBadge(scan);
+                        return (
+                          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                        );
+                      })()}
                       {scan.rowKind === "request" ? (
                         <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
                           Submitted request

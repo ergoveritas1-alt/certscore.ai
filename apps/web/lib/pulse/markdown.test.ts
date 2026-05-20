@@ -82,7 +82,7 @@ test("Pulse markdown uses available top-level completedAt before showing unavail
     completedAt: "2026-05-18T23:15:31Z",
     summary: { score: 88, riskLevel: "monitor", humanSummary: "No major automated review signals were surfaced in this scan." },
     topFindings: [],
-    links: {},
+    links: { fullReportUrl: "https://certscore.ai/scan/scan_123" },
     feedback: {}
   });
 
@@ -100,7 +100,7 @@ test("Pulse markdown formats Date completedAt values before JSON serialization",
     },
     summary: { score: 88, riskLevel: "monitor", humanSummary: "No major automated review signals were surfaced in this scan." },
     topFindings: [],
-    links: {},
+    links: { fullReportUrl: "https://certscore.ai/scan/scan_123" },
     feedback: {}
   });
 
@@ -158,15 +158,15 @@ test("Pulse markdown uses review-signal lens status labels", () => {
       ]
     },
     coverage: { status: "partial", summary: "Automated public-web scan completed with partial coverage." },
-    links: {},
+    links: { fullReportUrl: "https://certscore.ai/scan/scan_123" },
     feedback: {},
     disclaimer: PULSE_STANDARD_DISCLAIMER
   });
 
-  assert.match(markdown, /CCPA \/ CPRA \/ CIPA: Review context retained/);
-  assert.match(markdown, /GDPR \/ ePrivacy: No top automated findings surfaced/);
-  assert.match(markdown, /FTC: No top automated findings surfaced/);
-  assert.match(markdown, /DOJ \/ ADA accessibility: Review recommended/);
+  assert.match(markdown, /CCPA \/ CPRA \/ CIPA review context: Third-party collection, privacy-choice, and disclosure posture may warrant review\.[^\n]+Review context retained/);
+  assert.match(markdown, /GDPR \/ ePrivacy review context: Consent timing, consent surface, and tracker behavior were reviewed within scan coverage\.[^\n]+No top automated findings surfaced/);
+  assert.match(markdown, /FTC review context: Consumer-facing claims, tracking posture, and disclosure signals were reviewed within scan coverage\.[^\n]+No top automated findings surfaced/);
+  assert.match(markdown, /DOJ \/ ADA accessibility review context: Automated accessibility checks surfaced items for review\.[^\n]+Review recommended/);
   assert.doesNotMatch(markdown, /Needs Work|: Clear/);
 });
 
@@ -195,14 +195,16 @@ test("Pulse markdown keeps lens labels cautious when surfaced findings reference
       ]
     },
     coverage: { status: "partial", summary: "Automated public-web scan completed with partial coverage." },
-    links: {},
+    links: { fullReportUrl: "https://certscore.ai/scan/scan_123" },
     feedback: {},
     disclaimer: PULSE_STANDARD_DISCLAIMER
   });
 
-  assert.match(markdown, /CCPA \/ CPRA \/ CIPA: Review context retained/);
-  assert.match(markdown, /GDPR \/ ePrivacy: Review context retained/);
-  assert.match(markdown, /FTC: Review context retained/);
-  assert.match(markdown, /DOJ \/ ADA accessibility: No top automated findings surfaced/);
+  assert.match(markdown, /CCPA \/ CPRA \/ CIPA review context: Third-party collection, privacy-choice, and disclosure posture drive this review context\.[^\n]+Review context retained/);
+  assert.match(markdown, /\[GDPR \/ ePrivacy review context: Consent timing, consent surface, and tracker behavior drive this review context\.\]\(https:\/\/certscore\.ai\/scan\/scan_123#review-lens-gdpr-eprivacy\)/);
+  assert.match(markdown, /\[FTC review context: Consumer-facing claims, tracking posture, and disclosure signals should be reviewed together\.\]\(https:\/\/certscore\.ai\/scan\/scan_123#review-lens-ftc\)/);
+  assert.match(markdown, /GDPR \/ ePrivacy review context: Consent timing, consent surface, and tracker behavior drive this review context\.[^\n]+Review context retained/);
+  assert.match(markdown, /FTC review context: Consumer-facing claims, tracking posture, and disclosure signals should be reviewed together\.[^\n]+Review context retained/);
+  assert.match(markdown, /DOJ \/ ADA accessibility review context: Automated accessibility signals are the main review area for this lens\.[^\n]+No top automated findings surfaced/);
   assert.doesNotMatch(markdown, /Needs Work|: Clear/);
 });

@@ -39,6 +39,7 @@ export type AdminScanListItem = {
   domainHostname: string | null;
   domainId: string | null;
   findingCount: number | null;
+  firstGeneratedAt: string | null;
   highestSuccessfulTier: ScanExecutionTier | null;
   homepageFetchHttpStatus: number | null;
   interruptionLabel: string | null;
@@ -264,6 +265,7 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       source: typeof scan.scan_config_json?.source === "string" ? scan.scan_config_json.source : null,
       status: scan.status,
       createdAt: displayCreatedAt,
+      firstGeneratedAt: scan.created_at,
       completedAt: scan.completed_at,
       pagesScanned: scan.pages_scanned,
       totalSignals: snapshot?.total_signals ?? null,
@@ -322,6 +324,7 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
     domainHostname: request.scan_domain_hostname ?? request.normalized_domain,
     domainId: null,
     findingCount: null,
+    firstGeneratedAt: request.scan_created_at ?? request.reused_completed_at ?? null,
     highestSuccessfulTier: null,
     homepageFetchHttpStatus: null,
     interruptionLabel: null,

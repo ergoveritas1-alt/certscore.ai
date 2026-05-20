@@ -38,6 +38,7 @@ export type AdminScanRequestRow = {
   reused_completed_at: string | null;
   reuse_window_hours: number | null;
   scan_domain_hostname: string | null;
+  scan_created_at: string | null;
   scan_id: string | null;
   scan_organization_id: string | null;
   scan_status: string | null;
@@ -528,6 +529,7 @@ export async function loadAdminScanRequestRows(limit: number): Promise<AdminScan
             sr.requested_at,
             sr.created_at,
             scan.status as scan_status,
+            scan.created_at as scan_created_at,
             scan.organization_id as scan_organization_id,
             domain.hostname as scan_domain_hostname
        from public.scan_requests sr

@@ -34,6 +34,8 @@ export type AdminPulseRequestListItem = {
   sourceIp: string | null;
   sourceIpHash: string | null;
   status: string;
+  snapshotFindingCount: number | null;
+  snapshotTotalSignals: number | null;
   topFindingIds: string[];
 };
 
@@ -113,6 +115,8 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     sourceIp: getRequestContextString(requestContext, "sourceIp"),
     sourceIpHash: getRequestContextString(requestContext, "ipHash"),
     status: String(row.status),
+    snapshotFindingCount: typeof row.snapshot_finding_count === "number" ? row.snapshot_finding_count : null,
+    snapshotTotalSignals: typeof row.snapshot_total_signals === "number" ? row.snapshot_total_signals : null,
     topFindingIds: asStringArray(responseSummary.topFindingIds)
   };
 }
@@ -174,8 +178,11 @@ export async function listAdminPulseRequests(input: {
             pr.completed_at,
             pr.elapsed_seconds,
             pr.created_at,
+            ss.total_signals::int as snapshot_total_signals,
+            ss.report_finding_count::int as snapshot_finding_count,
             coalesce(pf.feedback_count, 0)::int as feedback_count
        from pulse_requests pr
+       left join scan_snapshots ss on ss.scan_id = pr.scan_id
        left join lateral (
          select count(*)::int as feedback_count
            from pulse_feedback
