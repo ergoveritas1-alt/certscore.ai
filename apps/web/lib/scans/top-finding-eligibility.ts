@@ -103,6 +103,25 @@ function hasSameSurfaceReplayMaskingEvidence(inputSurfaceEvidence: unknown) {
   });
 }
 
+function hasSamePageOrFlowReplayLinkage(inputSurfaceEvidence: unknown) {
+  const inputSurface = asRecord(inputSurfaceEvidence);
+  const rows = [
+    ...asRows(inputSurface?.sensitivePayloadViolations),
+    ...asRows(inputSurface?.sensitiveSessionReplayCooccurrenceEvidence)
+  ];
+  return rows.some((row) => {
+    const linkage = asRecord(row.sameFlowLinkage) ?? asRecord(row.same_flow_linkage);
+    return (
+      getBoolean(row, "samePage") === true ||
+      getBoolean(row, "same_page") === true ||
+      getBoolean(row, "sameFlow") === true ||
+      getBoolean(row, "same_flow") === true ||
+      getBoolean(linkage, "samePageOrFlow") === true ||
+      getBoolean(linkage, "same_page_or_flow") === true
+    );
+  });
+}
+
 const REJECT_TRACKING_CONFIRMATION_MIN_MS = 250;
 
 function hasPromotionGradePostRejectRequest(details: Record<string, unknown>) {
@@ -304,12 +323,18 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         const collectionEndpointObserved = getBoolean(replaySummary, "collectionEndpointObserved");
         const maskingOrExclusionObserved = getBoolean(replaySummary, "maskingOrExclusionObserved");
         const sameSurfaceMaskingOrExclusionObserved = hasSameSurfaceReplayMaskingEvidence(details.inputSurfaceEvidence);
+        const samePageOrFlowReplayLinkage = hasSamePageOrFlowReplayLinkage(details.inputSurfaceEvidence);
         const sameScopeSensitiveEvidence =
           hasMeaningfulValue(details.inputSurfaceEvidence) ||
           hasMeaningfulValue(details.sensitiveDataEvidence) ||
           hasMeaningfulValue(details.sensitiveFieldContexts);
         if (sameScopeSensitiveEvidence) {
           pushUnique(matchedCriteria, "same_scope_sensitive_surface");
+        }
+        if (samePageOrFlowReplayLinkage) {
+          pushUnique(matchedCriteria, "same_page_or_same_flow_replay_linkage");
+        } else {
+          pushUnique(missingCorroborators, "same_page_or_same_flow_replay_linkage");
         }
         if (sameSurfaceMaskingOrExclusionObserved) {
           pushUnique(matchedCriteria, "same_surface_replay_masking_or_exclusion_observed");
@@ -318,6 +343,7 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         if (
           collectionEndpointObserved === true &&
           sameScopeSensitiveEvidence &&
+          samePageOrFlowReplayLinkage &&
           maskingOrExclusionObserved !== true &&
           !sameSurfaceMaskingOrExclusionObserved
         ) {

@@ -8,7 +8,7 @@ import {
   type CertScoreFindingSection,
   type CertScoreFindingSeverity
 } from "./finding-registry";
-import { getFindingSurfaceScore, rankFindings } from "./rank-findings";
+import { getFindingSurfaceScore, isExecutiveSummaryTopFindingId, rankFindings } from "./rank-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import { evaluatePolicyBehaviorContradictionEvidence, getContradictionEvidenceBundle } from "./contradiction-evidence-contract";
 import { isFindingProjectionEligible } from "./finding-evidence-contracts";
@@ -2668,7 +2668,13 @@ function buildPolicyRuntimeConflictDetails(packet: UnifiedFindingDisplayPacket) 
   );
   const runtimeArtifacts = getPolicyRuntimeArtifacts(packet);
   const firstRuntimeArtifact = runtimeArtifacts[0] ?? null;
-  const phase = bundle?.runtimeAnchor.phase ?? packet.details.runtimePhase ?? null;
+  const artifactPreConsentValues = runtimeArtifacts
+    .map((artifact) => getRecordBoolean(artifact, ["preConsent", "pre_consent"]))
+    .filter((value): value is boolean => value !== null);
+  const allArtifactsExplicitlyNotPreConsent =
+    artifactPreConsentValues.length > 0 && artifactPreConsentValues.every((value) => value === false);
+  const rawPhase = bundle?.runtimeAnchor.phase ?? packet.details.runtimePhase ?? null;
+  const phase = rawPhase === "pre_consent" && allArtifactsExplicitlyNotPreConsent ? "unknown" : rawPhase;
   const firstSeenMs = firstRuntimeArtifact
     ? getNumberFromRecord(firstRuntimeArtifact, ["timestampMs", "timestamp_ms", "firstSeenMs", "first_seen_ms"])
     : null;
@@ -3397,6 +3403,9 @@ export function projectExecutiveFindingsFromUnifiedPackets(
     findings.map((finding) => [finding.id, evaluateTopFindingEligibility(finding)])
   );
   const topFindings = rankFindings(findings).filter((finding) => {
+    if (!isExecutiveSummaryTopFindingId(finding.id)) {
+      return false;
+    }
     const eligibility = topFindingEligibility[finding.id]?.eligibility;
     return eligibility !== "suppress" && eligibility !== "audit_only";
   });

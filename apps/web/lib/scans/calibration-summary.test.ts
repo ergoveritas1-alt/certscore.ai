@@ -104,6 +104,38 @@ test("uses accessibility headline for accessibility-only retained top findings",
   assert.doesNotMatch(presentation.headline, /privacy|consent/i);
 });
 
+test("keeps coverage status cards separate from canonical top findings", () => {
+  const summary = buildScanCalibrationSummary({
+    domain: "example.com",
+    finalHost: "example.com",
+    pagesScanned: 0,
+    posture: "Watch",
+    requestedHost: "example.com",
+    scanId: "scan-1",
+    status: "completed",
+    topFindings: [],
+    coverageStatusCards: [
+      {
+        confidence: "strong",
+        defaultSurfacePriority: 110,
+        directVsInferred: "direct",
+        evidencePreview: ["Access was limited."],
+        evidenceRefs: [],
+        id: "access_limited_no_reliable_findings",
+        label: "Public site access was limited",
+        remediation: "Retry the scan.",
+        section: "Runtime & Diagnostics",
+        severity: "medium",
+        shortSummary: "Access was limited.",
+        whyItMatters: "Coverage limits finding reliability."
+      }
+    ]
+  });
+
+  assert.deepEqual(summary.topFindings, []);
+  assert.deepEqual(summary.coverageStatusCards.map((card) => card.id), ["access_limited_no_reliable_findings"]);
+});
+
 test("keeps privacy headline for privacy consent retained top findings", () => {
   const presentation = deriveExecutiveNarrativePresentation({
     executiveHeadline: "Tracking started before consent",

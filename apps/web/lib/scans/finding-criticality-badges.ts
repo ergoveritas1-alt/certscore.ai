@@ -61,6 +61,10 @@ const FINDING_CRITICALITY_BADGES = {
     badge: "high",
     rationale: "Material concern, but not proof of sensitive data capture."
   },
+  session_replay_present_with_sensitive_surfaces_observed: {
+    badge: "high",
+    rationale: "Replay observed in the same scan as sensitive surfaces is a material review signal, but same-page or same-flow linkage remains a stronger finding."
+  },
   possible_session_replay_on_sensitive_input_surface: {
     badge: "critical",
     rationale: "High potential harm where replay risk intersects with sensitive input surfaces."
@@ -71,7 +75,7 @@ const FINDING_CRITICALITY_BADGES = {
   },
   policy_behavior_contradiction_detected: {
     badge: "high",
-    rationale: "Concrete policy/runtime mismatch evidence can require review, but still needs implementation context."
+    rationale: "Concrete policy/runtime mismatch evidence can require review, while still needing implementation context."
   },
   consent_dark_patterns_detected: {
     badge: "high",

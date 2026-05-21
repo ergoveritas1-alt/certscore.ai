@@ -439,6 +439,7 @@ const RUNTIME_ARTIFACT_FINDING_IDS = new Set([
   "cross_domain_identifier_sharing_observed",
   "session_recording_services_detected",
   "possible_session_replay_on_sensitive_input_surface",
+  "session_replay_present_with_sensitive_surfaces_observed",
   "sensitive_data_collection_with_third_party_tracking_present",
   "policy_behavior_contradiction_detected",
   "fingerprinting_related_signals_observed",
@@ -524,6 +525,7 @@ const FINDING_REGISTRY_GROUPS: Array<{
     findingIds: [
       "session_recording_services_detected",
       "possible_session_replay_on_sensitive_input_surface",
+      "session_replay_present_with_sensitive_surfaces_observed",
       "sensitive_data_collection_with_third_party_tracking_present",
       "rtb_cookie_sync_observed",
       "cross_domain_identifier_sharing_observed"

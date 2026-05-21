@@ -340,6 +340,38 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY: Record<string, HomepageFindingCarouselCopy
     },
     reviewPrompts: ["Which replay runtime artifact and sensitive surface were retained together?"]
   },
+  session_replay_present_with_sensitive_surfaces_observed: {
+    overview:
+      "Replay-related runtime evidence and sensitive input-surface evidence were retained in the same scan, without claiming same-page replay linkage or field-value capture.",
+    regulatoryLabel: "Replay plus sensitive-surface review",
+    regulatoryCopy:
+      "Useful for reviewing replay vendor configuration, masking, sampling, page exclusions, consent posture, and whether sensitive flows inherit behavior analytics.",
+    evidence: {
+      title: "Replay and sensitive-surface sample",
+      lines: [
+        "{\"artifact\":\"replay_sensitive_scan_001\",\"scope\":\"same_scan\"}",
+        "{\"replayOrigin\":\"https://replay.example\",\"collectionEndpointObserved\":true}",
+        "{\"sensitiveContext\":\"account_or_application_form\",\"values\":\"not_retained\"}"
+      ]
+    },
+    reviewPrompts: ["Were replay tooling and sensitive input surfaces retained in the same scan, and what coverage limits apply?"]
+  },
+  policy_behavior_contradiction_detected: {
+    overview:
+      "A retained public policy or disclosure anchor is compared with concrete runtime behavior and an explicit bridge rationale.",
+    regulatoryLabel: "Policy/runtime alignment review",
+    regulatoryCopy:
+      "Useful for reviewing whether implementation behavior, consent flow, vendor activity, and public disclosures appear aligned within the observed scan scope.",
+    evidence: {
+      title: "Policy/runtime bridge sample",
+      lines: [
+        "{\"artifact\":\"policy_runtime_001\",\"policyAnchor\":\"privacy_notice\"}",
+        "{\"runtimeAnchor\":\"classified_request_or_storage\",\"values\":\"redacted\"}",
+        "{\"bridge\":\"specific_disclosure_compared_to_runtime_behavior\"}"
+      ]
+    },
+    reviewPrompts: ["Which policy text, runtime anchor, and bridge rationale support the alignment review?"]
+  },
   probable_fingerprinting: {
     overview:
       "Runtime evidence shows a clustered set of high-entropy browser or device signals that may warrant probable fingerprinting review.",

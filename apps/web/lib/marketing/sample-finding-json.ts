@@ -21,6 +21,10 @@ const SAMPLE_EVIDENCE_PROFILE: Record<string, { evidenceConfidence: EvidenceConf
   forced_consent_interaction: { evidenceConfidence: "good", directVsInferred: "direct_observation" },
   keyboard_navigation_accessibility_issue: { evidenceConfidence: "good", directVsInferred: "direct_observation" },
   possible_session_replay_on_sensitive_input_surface: { evidenceConfidence: "review_signal", directVsInferred: "correlated_observation" },
+  session_replay_present_with_sensitive_surfaces_observed: {
+    evidenceConfidence: "review_signal",
+    directVsInferred: "correlated_observation"
+  },
   pre_consent_tracking_detected: { evidenceConfidence: "strong", directVsInferred: "direct_observation" },
   probable_fingerprinting: { evidenceConfidence: "review_signal", directVsInferred: "clustered_inference" },
   reject_option_missing_or_hidden: { evidenceConfidence: "good", directVsInferred: "absence_observation" },
@@ -149,6 +153,12 @@ const SAMPLE_TOP_FINDING_CALIBRATION: Record<string, Record<string, string[]>> =
     highConfidenceRequires: ["Replay collection endpoint or strong replay runtime signal plus sensitive field/page context."],
     criticalOrTopRankingRequires: ["Collection endpoint plus sensitive form plus no masking/exclusion observed or consent concern."],
     demoteOrSuppressWhen: ["Replay library only.", "Global script only.", "Sensitive field not same page/flow.", "Masking/page exclusion observed."]
+  },
+  session_replay_present_with_sensitive_surfaces_observed: {
+    minimumToSurface: ["Replay runtime evidence plus sensitive input surface evidence retained in the same scan."],
+    highConfidenceRequires: ["Replay collection endpoint or strong replay runtime signal plus sensitive field/page context."],
+    criticalOrTopRankingRequires: ["Replay collection endpoint and sensitive-surface evidence with no retained masking or page-exclusion signal."],
+    demoteOrSuppressWhen: ["Replay library only.", "Sensitive surface not retained.", "Material coverage block.", "Same-page or same-flow linkage is required for the stronger possible sensitive replay finding."]
   },
   probable_fingerprinting: {
     minimumToSurface: ["Multi-signal high-entropy cluster."],
@@ -1528,6 +1538,25 @@ const POSSIBLE_SESSION_REPLAY_SENSITIVE_SURFACE_SAMPLE: SampleFindingJson = {
   payload: illustrativePossibleSessionReplaySensitiveSurface
 };
 
+const SESSION_REPLAY_WITH_SENSITIVE_SURFACES_SAMPLE: SampleFindingJson = {
+  findingId: "session_replay_present_with_sensitive_surfaces_observed",
+  label: "Session replay observed with sensitive input surfaces",
+  sourceLabel: "Illustrative public evidence sample",
+  payload: {
+    ...illustrativePossibleSessionReplaySensitiveSurface,
+    finding_id: "session_replay_present_with_sensitive_surfaces_observed",
+    finding_label: "Session replay observed with sensitive input surfaces",
+    label: "Session replay observed with sensitive input surfaces",
+    title: "Session replay observed with sensitive input surfaces",
+    criticality: "high",
+    observed:
+      "Retained runtime and page-surface evidence showed session-replay-related signals and sensitive input surfaces in the same observed scan scope, without retained same-page or same-flow replay linkage.",
+    top_finding_calibration: SAMPLE_TOP_FINDING_CALIBRATION.session_replay_present_with_sensitive_surfaces_observed,
+    summary:
+      "Replay runtime evidence and sensitive-surface evidence were observed in the same scan. This sample does not claim field-value transmission or same-flow replay linkage."
+  }
+};
+
 const SENSITIVE_TRACKING_SURFACE_SAMPLE: SampleFindingJson = {
   findingId: "sensitive_data_collection_with_third_party_tracking_present",
   label: "Sensitive input surface with third-party tracking context",
@@ -1607,6 +1636,7 @@ const SAMPLE_FINDINGS_BY_ID: Record<string, SampleFindingJson> = {
   fingerprinting_or_device_signals_detected: FINGERPRINTING_SAMPLE,
   fingerprinting_related_signals_observed: FINGERPRINTING_RELATED_SAMPLE,
   possible_session_replay_on_sensitive_input_surface: POSSIBLE_SESSION_REPLAY_SENSITIVE_SURFACE_SAMPLE,
+  session_replay_present_with_sensitive_surfaces_observed: SESSION_REPLAY_WITH_SENSITIVE_SURFACES_SAMPLE,
   pre_consent_tracking_detected: PRE_CONSENT_TRACKING_SAMPLE,
   probable_fingerprinting: PROBABLE_FINGERPRINTING_SAMPLE,
   privacy_policy_thin_coverage: PRIVACY_POLICY_SAMPLE,

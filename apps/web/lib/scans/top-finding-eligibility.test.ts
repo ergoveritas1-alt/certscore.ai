@@ -22,12 +22,20 @@ function finding(overrides: Partial<CertScoreFinding> = {}): CertScoreFinding {
   };
 }
 
-test("top-finding evaluator top-ranks sensitive replay only with endpoint and same-scope sensitive evidence", () => {
+test("top-finding evaluator top-ranks sensitive replay only with endpoint and same-flow sensitive evidence", () => {
   const decision = evaluateTopFindingEligibility(finding({
     id: "possible_session_replay_on_sensitive_input_surface",
     directVsInferred: "mixed",
     evidenceDetails: {
-      inputSurfaceEvidence: { sameScope: true },
+      inputSurfaceEvidence: {
+        sensitivePayloadViolations: [
+          {
+            sameFlowLinkage: {
+              samePageOrFlow: true
+            }
+          }
+        ]
+      },
       sessionReplayEvidence: {
         observed: true,
         runtimeSummary: {
@@ -41,9 +49,32 @@ test("top-finding evaluator top-ranks sensitive replay only with endpoint and sa
 
   assert.equal(decision.eligibility, "top_candidate");
   assert.ok(decision.matchedCriteria.includes("replay_collection_endpoint_on_sensitive_surface"));
+  assert.ok(decision.matchedCriteria.includes("same_page_or_same_flow_replay_linkage"));
 });
 
-test("top-finding evaluator top-ranks scan-level sensitive replay while retaining same-flow caveat", () => {
+test("top-finding evaluator does not top-rank sensitive replay without same-page or same-flow linkage", () => {
+  const decision = evaluateTopFindingEligibility(finding({
+    id: "possible_session_replay_on_sensitive_input_surface",
+    directVsInferred: "mixed",
+    evidenceDetails: {
+      inputSurfaceEvidence: { sensitiveFieldContexts: ["field:email"] },
+      sessionReplayEvidence: {
+        observed: true,
+        runtimeSummary: {
+          collectionEndpointObserved: true,
+          libraryOnly: false,
+          maskingOrExclusionObserved: false
+        }
+      }
+    }
+  }));
+
+  assert.equal(decision.eligibility, "surface_only");
+  assert.ok(decision.missingCorroborators.includes("same_page_or_same_flow_replay_linkage"));
+  assert.equal(decision.matchedCriteria.includes("replay_collection_endpoint_on_sensitive_surface"), false);
+});
+
+test("top-finding evaluator top-ranks scan-level replay with retained sensitive-surface context", () => {
   const decision = evaluateTopFindingEligibility(finding({
     id: "session_replay_present_with_sensitive_surfaces_observed",
     directVsInferred: "mixed",

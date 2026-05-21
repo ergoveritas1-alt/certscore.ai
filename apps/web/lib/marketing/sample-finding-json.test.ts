@@ -126,6 +126,7 @@ test("illustrative public samples remain sanitized for client exposure", () => {
     getSampleFindingById("cross_domain_identifier_sharing_observed"),
     getSampleFindingById("session_recording_services_detected"),
     getSampleFindingById("possible_session_replay_on_sensitive_input_surface"),
+    getSampleFindingById("session_replay_present_with_sensitive_surfaces_observed"),
     getSampleFindingById("sensitive_data_collection_with_third_party_tracking_present"),
     getSampleFindingById("fingerprinting_related_signals_observed"),
     getSampleFindingById("probable_fingerprinting")
@@ -142,6 +143,11 @@ test("illustrative public samples remain sanitized for client exposure", () => {
   assert.equal(getSampleFindingById("cross_domain_identifier_sharing_observed")?.payload.criticality, "high");
   assert.equal(getSampleFindingById("third_party_cookie_pre_consent")?.label, "Third-party cookie or storage observed before consent");
   assert.equal(getSampleFindingById("session_recording_services_detected")?.label, "Session replay service signal observed");
+  assert.equal(
+    getSampleFindingById("session_replay_present_with_sensitive_surfaces_observed")?.label,
+    "Session replay observed with sensitive input surfaces"
+  );
+  assert.equal(getSampleFindingById("session_replay_present_with_sensitive_surfaces_observed")?.payload.criticality, "high");
   assert.equal(
     getSampleFindingById("possible_session_replay_on_sensitive_input_surface")?.payload.criticality,
     "critical"

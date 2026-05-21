@@ -974,6 +974,48 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
     ],
     displayCaution: "This finding does not determine legal status, GDPR Article 9 status, consent validity, keystroke capture, screenshot capture, sensitive-value capture, recording retention, interception, or compliance status. Financial, identity, contact, location, employment, children, protected-class, or other high-risk context signals require manual review and are not automatically GDPR Article 9 special-category data. Review retained replay anchors, sensitive-surface context, masking, sampling, payload evidence, consent state, and vendor configuration."
   },
+  session_replay_present_with_sensitive_surfaces_observed: {
+    findingId: "session_replay_present_with_sensitive_surfaces_observed",
+    label: "Session replay observed with sensitive input surfaces",
+    category: "Third-party tracking",
+    regulatoryConcernGroup: "session_replay_and_sensitive_data",
+    primaryConcern: {
+      id: "scan_level_sensitive_surface_session_replay_review",
+      label: "Session replay plus sensitive-surface review",
+      displayCopy:
+        "Retained runtime and page-surface evidence showed session-replay-related signals and sensitive-input or sensitive-context surfaces in the same scan. This may be relevant to masking, consent, special-category or high-risk context, security, and vendor-governance review, but browser-visible evidence does not determine capture, retention, interception, same-flow linkage, or legal status."
+    },
+    technicalStandards: [
+      {
+        id: "gdpr_special_category_or_high_risk_context_review",
+        label: "GDPR special-category or high-risk context review",
+        appliesWhen: "The retained surface context may involve Article 9 special-category data or otherwise sensitive/high-risk fields that require manual review.",
+        sourceRefs: ["gdpr_article_9", "gdpr_article_5", "gdpr_article_6", "gdpr_article_32"]
+      },
+      {
+        id: "gdpr_minimization_security_and_transparency_review",
+        label: "GDPR minimization, security, and transparency review",
+        appliesWhen: "Replay telemetry, identifiers, form context, or user behavior signals may involve personal data or sensitive inferences depending on implementation and manual review.",
+        sourceRefs: ["gdpr_article_4", "gdpr_article_5", "gdpr_article_6", "gdpr_article_13", "gdpr_article_25", "gdpr_article_32"]
+      },
+      {
+        id: "wiretap_eavesdropping_manual_review",
+        label: "Wiretap, eavesdropping, or recording-law manual review",
+        appliesWhen: "Replay or recording signals may require jurisdiction-specific manual legal review where interaction capture, communications, consent-to-record, or similar theories may be relevant. Browser-visible evidence does not determine capture, retention, interception, or legal status.",
+        sourceRefs: ["ecpa_18_usc_2511"]
+      }
+    ],
+    jurisdictionalContexts: [
+      ...HEALTH_CONTEXTS.slice(0, 3),
+      {
+        id: "jurisdiction_specific_wiretap_or_session_replay_review",
+        label: "Jurisdiction-specific wiretap/eavesdropping or session-replay review",
+        appliesWhen: "Replay or recording signals may require jurisdiction-specific manual legal review where interaction capture, communications, consent-to-record, or similar theories may be relevant. Browser-visible evidence does not determine capture, retention, interception, or legal status.",
+        sourceRefs: ["ecpa_18_usc_2511"]
+      }
+    ],
+    displayCaution: "This finding does not determine legal status, GDPR Article 9 status, consent validity, same-flow linkage, keystroke capture, screenshot capture, sensitive-value capture, recording retention, interception, or compliance status. Review retained replay anchors, sensitive-surface context, masking, sampling, payload evidence, consent state, and vendor configuration."
+  },
   probable_fingerprinting: {
     findingId: "probable_fingerprinting",
     label: "Probable browser/device fingerprinting review signal",

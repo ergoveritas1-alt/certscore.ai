@@ -73,7 +73,9 @@ These canonical finding pages describe CertScore review items, observed evidence
 - Keyboard navigation accessibility issue: https://certscore.ai/findings/keyboard_navigation_accessibility_issue
 - Identifier-like values observed across domains: https://certscore.ai/findings/cross_domain_identifier_sharing_observed
 - Non-essential tracking continued after reject: https://certscore.ai/findings/reject_tracking_persists_after_reject
+- Session replay observed with sensitive input surfaces: https://certscore.ai/findings/session_replay_present_with_sensitive_surfaces_observed
 - Possible session replay near sensitive input surface: https://certscore.ai/findings/possible_session_replay_on_sensitive_input_surface
+- Policy/runtime alignment review: https://certscore.ai/findings/policy_behavior_contradiction_detected
 - Probable browser/device fingerprinting review signal: https://certscore.ai/findings/probable_fingerprinting
 
 ## CertScore Pulse

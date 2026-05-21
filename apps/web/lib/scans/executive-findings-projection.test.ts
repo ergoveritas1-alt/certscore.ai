@@ -574,8 +574,8 @@ test("projects structured third-party cookie pre-consent without request urls bu
   assert.equal(booleanOnlyProjection.findings.some((finding) => finding.id === "third_party_cookie_pre_consent"), false);
 });
 
-test("includes every executive finding in top findings while preserving consent dark-pattern umbrella", () => {
-  const formerlyExcludedExecutiveFindingIds = [
+test("keeps official executive findings in top findings while preserving consent dark-pattern umbrella", () => {
+  const expectedExecutiveFindingIds = [
     "asymmetric_consent_ui",
     "content_obstructed_by_overlay",
     "forced_consent_interaction",
@@ -642,9 +642,24 @@ test("includes every executive finding in top findings while preserving consent 
     })
   ]);
 
-  for (const findingId of formerlyExcludedExecutiveFindingIds) {
+  for (const findingId of expectedExecutiveFindingIds) {
     assert.ok(projection.findings.some((finding) => finding.id === findingId));
+  }
+  for (const findingId of [
+    "asymmetric_consent_ui",
+    "forced_consent_interaction",
+    "reject_option_missing_or_hidden"
+  ]) {
     assert.ok(projection.topFindings.some((finding) => finding.id === findingId));
+  }
+  for (const findingId of [
+    "content_obstructed_by_overlay",
+    "identifier_transmission_detected",
+    "multi_vendor_tracking_detected",
+    "non_cookie_tracking_detected",
+    "telemetry_rich_identification_observed"
+  ]) {
+    assert.equal(projection.topFindings.some((finding) => finding.id === findingId), false);
   }
   assert.ok(projection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
   assert.ok(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
@@ -1648,8 +1663,8 @@ test("projects active financial companion findings into executive findings", () 
     ]
   );
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
-  assert.ok(projection.topFindings.some((finding) => finding.id === "guaranteed_or_high_return_claims_present"));
-  assert.equal(projection.topFindings.filter((finding) => finding.section === "Financial & Claims").length, 3);
+  assert.equal(projection.topFindings.some((finding) => finding.id === "guaranteed_or_high_return_claims_present"), false);
+  assert.equal(projection.topFindings.filter((finding) => finding.section === "Financial & Claims").length, 0);
 });
 
 test("keeps runtime-backed session recording in top findings when consent issues also surface", () => {
@@ -2419,6 +2434,64 @@ test("projects sensitive replay packets into sensitive third-party tracking comp
         packet.unifiedFindingId === "possible_session_replay_on_sensitive_input_surface" &&
         packet.executiveFindingId === "sensitive_data_collection_with_third_party_tracking_present"
     )
+  );
+});
+
+test("projects scan-level replay and sensitive-surface co-presence as an official executive top finding", () => {
+  const findingId = "session_replay_present_with_sensitive_surfaces_observed";
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket(findingId, {
+      confidenceBand: "high",
+      details: {
+        dataTypes: ["email"],
+        family: "sensitive_data",
+        kind: findingId
+      },
+      evidence: {
+        counts: {},
+        entities: {
+          sensitiveFieldEvidence: [
+            JSON.stringify({
+              dataType: "email",
+              signalKey: "commerce.email_input_present",
+              sourceField: "email"
+            })
+          ],
+          session_replay_runtime_detected: ["true"],
+          session_replay_runtime_vendors: ["Microsoft Clarity"]
+        },
+        fetchQuality: null,
+        flags: [findingId],
+        pageUrls: [],
+        snippets: ["Microsoft Clarity observed in the same scan as an email input."],
+        sourceUrls: []
+      },
+      severity: "medium",
+      summary: "Session replay was observed in the same scan as a sensitive surface, without same-page or same-flow linkage."
+    })
+  ]);
+
+  assert.equal(
+    projection.findings.some((finding) => finding.id === findingId),
+    true
+  );
+  assert.equal(
+    projection.topFindings.some((finding) => finding.id === findingId),
+    true
+  );
+  assert.ok(projection.trace.projectedFindingIds.includes(findingId));
+  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
+});
+
+test("projects policy behavior contradictions as official executive top findings", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePolicyRuntimeConflictPacket()
+  ]);
+
+  assert.ok(projection.findings.some((finding) => finding.id === "policy_behavior_contradiction_detected"));
+  assert.equal(
+    projection.topFindings.some((finding) => finding.id === "policy_behavior_contradiction_detected"),
+    true
   );
 });
 

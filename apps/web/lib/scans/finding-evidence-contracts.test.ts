@@ -207,7 +207,7 @@ test("upstream policy/runtime bridge candidate packets normalize into a passing 
     makeUpstreamContradictionCandidatePackets()
   );
 
-  assert.equal(decision?.status, "pass_good");
+  assert.equal(decision?.status, "pass_strong");
   assert.equal(decision?.promotionEligibility, "eligible");
 });
 
@@ -1332,6 +1332,20 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
   );
 
   assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("sensitive_data_collection_with_third_party_tracking_present", {
+      sensitivePayloadViolations: [
+        {
+          evidenceSource: "sensitive_field_third_party_tracking_correlation",
+          evidenceStrength: "form_field_signal",
+          requestUrl: "https://analytics.example.net/collect",
+          vendorHost: "analytics.example.net"
+        }
+      ]
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
     evaluateFindingEvidenceContractForRawEvidence("session_replay_present_with_sensitive_surfaces_observed", {
       sensitiveFieldEvidence: [
         {
@@ -1342,20 +1356,6 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
       ],
       session_replay_runtime_detected: true,
       session_replay_runtime_vendors: ["Microsoft Clarity"]
-    })?.status,
-    "pass_strong"
-  );
-
-  assert.equal(
-    evaluateFindingEvidenceContractForRawEvidence("sensitive_data_collection_with_third_party_tracking_present", {
-      sensitivePayloadViolations: [
-        {
-          evidenceSource: "sensitive_field_third_party_tracking_correlation",
-          evidenceStrength: "form_field_signal",
-          requestUrl: "https://analytics.example.net/collect",
-          vendorHost: "analytics.example.net"
-        }
-      ]
     })?.status,
     "pass_strong"
   );

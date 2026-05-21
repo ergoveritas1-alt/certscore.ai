@@ -67,6 +67,7 @@ const RUNTIME_TRACKING_BATCH_FINDING_IDS = [
 const SESSION_REPLAY_BATCH_FINDING_IDS = [
   "session_recording_services_detected",
   "possible_session_replay_on_sensitive_input_surface",
+  "session_replay_present_with_sensitive_surfaces_observed",
   "sensitive_data_collection_with_third_party_tracking_present"
 ] as const;
 
@@ -782,6 +783,10 @@ test("session replay and sensitive-surface batch uses sanitized evidence-first c
   assert.equal(
     findings.get("possible_session_replay_on_sensitive_input_surface")?.title,
     "Possible session replay near sensitive input surface"
+  );
+  assert.equal(
+    findings.get("session_replay_present_with_sensitive_surfaces_observed")?.title,
+    "Session replay observed with sensitive input surfaces"
   );
   assert.equal(
     findings.get("sensitive_data_collection_with_third_party_tracking_present")?.title,

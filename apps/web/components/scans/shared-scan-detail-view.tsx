@@ -105,6 +105,7 @@ import {
   getPublicReportFindingDisplay,
   getPublicReportFindingFallbackNote
 } from "../../lib/scans/public-report-finding-display";
+import { filterReportFacingDemotionReasons } from "../../lib/scans/report-facing-demotion-reasons";
 import {
   evaluateFindingEvidenceContractForPacket,
   getFindingEvidenceContractForUnifiedFinding
@@ -4084,7 +4085,7 @@ function buildReviewPacketProjectionDiagnostics(finding: UnifiedFindingDisplayPa
   const candidateProjectionIds = getFindingCandidateProjectionIds(finding.unifiedFindingId);
   const projected = finding.sourceRefs.some((sourceRef) => sourceRef.kind === "signal" && candidateProjectionIds.includes(sourceRef.key));
   const missingCorroborators = decision?.missingRequirements ?? [];
-  const demotionReasons = uniqueStrings([
+  const rawDemotionReasons = uniqueStrings([
     ...missingCorroborators.map((requirement) => `missing:${requirement}`),
     ...(decision?.negativeEvidenceFlags ?? []),
     ...finding.presentationDecision.downgradeReasons,
@@ -4096,8 +4097,9 @@ function buildReviewPacketProjectionDiagnostics(finding: UnifiedFindingDisplayPa
       : projected
         ? "projected"
         : decision?.promotionEligibility === "eligible" && decision.allowedNarrativeTier === "strong"
-          ? "eligible_not_projected"
-          : "not_projected";
+        ? "eligible_not_projected"
+        : "not_projected";
+  const demotionReasons = filterReportFacingDemotionReasons({ eligibility, reasons: rawDemotionReasons });
   const suppressionReason = eligibility === "projected" ? null : demotionReasons[0] ?? null;
 
   return {
@@ -5569,7 +5571,8 @@ export function SharedScanDetailView({
     status: scanRecord.scan.status,
     thirdPartyDomains: executiveThirdPartyDomains,
     thirdPartyRequestCount: executiveThirdPartyRequestCount,
-    topFindings: publicTopExecutiveFindings,
+    topFindings: executiveFindingsProjection.topFindings,
+    coverageStatusCards: executiveAccessLimitationNotice ? [executiveAccessLimitationNotice.finding] : [],
     vendorCount: executiveResolvedVendorNames.length + executiveUnresolvedVendorHosts.length,
     verifiedPublicSurfacesCount: getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)
   });

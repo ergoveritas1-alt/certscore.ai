@@ -38,6 +38,7 @@ export const EXECUTIVE_SUMMARY_TOP_FINDING_IDS = [
   "third_party_cookie_pre_consent",
   "cookie_disclosure_gap",
   "sensitive_data_collection_with_third_party_tracking_present",
+  "session_replay_present_with_sensitive_surfaces_observed",
   "possible_session_replay_on_sensitive_input_surface",
   "rtb_cookie_sync_observed",
   "policy_behavior_contradiction_detected",
@@ -52,6 +53,10 @@ export const EXECUTIVE_SUMMARY_TOP_FINDING_IDS = [
 const EXECUTIVE_SUMMARY_TOP_FINDING_ID_SET = new Set<string>([
   ...EXECUTIVE_SUMMARY_TOP_FINDING_IDS
 ]);
+
+export function isExecutiveSummaryTopFindingId(findingId: string) {
+  return EXECUTIVE_SUMMARY_TOP_FINDING_ID_SET.has(findingId);
+}
 
 export function getFindingSurfaceScore(finding: CertScoreFinding) {
   return (

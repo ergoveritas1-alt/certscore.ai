@@ -107,6 +107,7 @@ const TOP_FINDING_IDS = [
   "focus_management_issue",
   "cross_domain_identifier_sharing_observed",
   "reject_tracking_persists_after_reject",
+  "session_replay_present_with_sensitive_surfaces_observed",
   "possible_session_replay_on_sensitive_input_surface",
   "policy_behavior_contradiction_detected",
   "probable_fingerprinting"
@@ -129,6 +130,7 @@ const ILLUSTRATIVE_PUBLIC_SAMPLE_FINDING_IDS = new Set<string>([
   "rtb_cookie_sync_observed",
   "cross_domain_identifier_sharing_observed",
   "session_recording_services_detected",
+  "session_replay_present_with_sensitive_surfaces_observed",
   "possible_session_replay_on_sensitive_input_surface",
   "policy_behavior_contradiction_detected",
   "sensitive_data_collection_with_third_party_tracking_present",
@@ -148,6 +150,7 @@ const SAMPLE_EVIDENCE_CONFIDENCE: Record<string, "strong" | "good" | "review_sig
   forced_consent_interaction: "good",
   keyboard_navigation_accessibility_issue: "good",
   possible_session_replay_on_sensitive_input_surface: "review_signal",
+  session_replay_present_with_sensitive_surfaces_observed: "review_signal",
   policy_behavior_contradiction_detected: "review_signal",
   pre_consent_tracking_detected: "strong",
   probable_fingerprinting: "review_signal",
@@ -176,6 +179,7 @@ const SAMPLE_DIRECTNESS: Record<
   forced_consent_interaction: "direct_observation",
   keyboard_navigation_accessibility_issue: "direct_observation",
   possible_session_replay_on_sensitive_input_surface: "correlated_observation",
+  session_replay_present_with_sensitive_surfaces_observed: "correlated_observation",
   policy_behavior_contradiction_detected: "correlated_observation",
   pre_consent_tracking_detected: "direct_observation",
   probable_fingerprinting: "clustered_inference",
@@ -205,6 +209,7 @@ const SEVERITY_BY_SECTION: Record<CertScoreFindingDefinition["section"], CertSco
 const SEVERITY_OVERRIDES: Record<string, CertScoreFindingSeverity> = {
   policy_behavior_contradiction_detected: "high",
   possible_session_replay_on_sensitive_input_surface: "critical",
+  session_replay_present_with_sensitive_surfaces_observed: "high",
   probable_fingerprinting: "critical",
   reject_tracking_persists_after_reject: "high",
   pre_consent_tracking_detected: "high",
@@ -222,6 +227,7 @@ const CATEGORY_BY_FINDING_ID: Record<string, FindingReferenceCategory> = {
   forced_consent_interaction: "Consent",
   keyboard_navigation_accessibility_issue: "Accessibility",
   possible_session_replay_on_sensitive_input_surface: "Third-party tracking",
+  session_replay_present_with_sensitive_surfaces_observed: "Third-party tracking",
   policy_behavior_contradiction_detected: "Consumer protection",
   pre_consent_tracking_detected: "Consent",
   probable_fingerprinting: "Fingerprinting",
@@ -242,6 +248,7 @@ const PUBLIC_TITLE_OVERRIDES: Record<string, string> = {
   cookie_disclosure_gap: "Cookie disclosure gap",
   fingerprinting_related_signals_observed: "Fingerprinting-related browser/device signals observed",
   possible_session_replay_on_sensitive_input_surface: "Possible session replay near sensitive input surface",
+  session_replay_present_with_sensitive_surfaces_observed: "Session replay observed with sensitive input surfaces",
   policy_behavior_contradiction_detected: "Policy/runtime alignment review",
   probable_fingerprinting: "Probable browser/device fingerprinting review signal",
   sensitive_data_collection_with_third_party_tracking_present: "Sensitive input surface with third-party tracking context",
@@ -263,6 +270,12 @@ const RELATED_FINDINGS: Record<string, string[]> = {
   forced_consent_interaction: ["reject_option_missing_or_hidden", "asymmetric_consent_ui", "consent_dark_patterns_detected"],
   keyboard_navigation_accessibility_issue: ["semantic_labeling_accessibility_issue", "visual_contrast_accessibility_issue"],
   possible_session_replay_on_sensitive_input_surface: [
+    "session_replay_present_with_sensitive_surfaces_observed",
+    "session_recording_services_detected",
+    "sensitive_data_collection_with_third_party_tracking_present"
+  ],
+  session_replay_present_with_sensitive_surfaces_observed: [
+    "possible_session_replay_on_sensitive_input_surface",
     "session_recording_services_detected",
     "sensitive_data_collection_with_third_party_tracking_present"
   ],
@@ -278,11 +291,13 @@ const RELATED_FINDINGS: Record<string, string[]> = {
   rtb_cookie_sync_observed: ["cross_domain_identifier_sharing_observed", "pre_consent_tracking_detected", "cpra_cba_opt_out_missing"],
   semantic_labeling_accessibility_issue: ["keyboard_navigation_accessibility_issue", "text_alternative_accessibility_issue"],
   sensitive_data_collection_with_third_party_tracking_present: [
+    "session_replay_present_with_sensitive_surfaces_observed",
     "possible_session_replay_on_sensitive_input_surface",
     "session_recording_services_detected",
     "pre_consent_tracking_detected"
   ],
   session_recording_services_detected: [
+    "session_replay_present_with_sensitive_surfaces_observed",
     "possible_session_replay_on_sensitive_input_surface",
     "sensitive_data_collection_with_third_party_tracking_present",
     "pre_consent_tracking_detected"
@@ -479,6 +494,8 @@ const OBSERVED: Record<string, string> = {
     "Retained runtime evidence showed a reject-style consent interaction followed by classified non-essential request or storage activity in the observed scan scope.",
   possible_session_replay_on_sensitive_input_surface:
     "Retained runtime and page-surface evidence showed session-replay-related signals on or near a form, flow, or page surface that may collect sensitive information.",
+  session_replay_present_with_sensitive_surfaces_observed:
+    "Retained runtime and page-surface evidence showed session-replay-related signals and sensitive input surfaces in the same observed scan scope, without retained same-page or same-flow replay linkage.",
   policy_behavior_contradiction_detected:
     "Retained report evidence connected a public policy or disclosure claim to concrete runtime behavior that appeared to require policy/runtime alignment review.",
   probable_fingerprinting:
@@ -514,6 +531,8 @@ const METHODOLOGY: Record<string, string> = {
     "CertScore retains representative consent-surface evidence for visible controls, button labels, link text, consent-layer structure, first-layer availability, preference or settings paths, and scan coverage context where available. The finding is surfaced when retained evidence indicates that an accept path was observed but a reject, decline, or equivalent refusal control was not observed on the same layer, was nested behind additional steps, or was materially less direct in the observed scan scope. CertScore treats refusal-path availability signals as review signals. The scanner does not determine that a reject option does not exist in every region or layer, legal status, deception, unfairness, consent validity, or compliance status. Reviewers should consider region, CMP configuration, prior consent state, localization, viewport, accessibility, whether an equivalent refusal path exists, and whether the retained evidence reflects the relevant user-facing consent surface.",
   sensitive_data_collection_with_third_party_tracking_present:
     "CertScore compares retained page-surface evidence for sensitive input fields, form context, page purpose, and semantic cues with retained runtime evidence for third-party tracking, analytics, advertising, replay, measurement, or vendor requests observed in the same scan scope. The finding is surfaced when a sensitive-input or sensitive-context surface appears alongside third-party tracking context. CertScore treats this co-occurrence as a review signal. The scanner does not determine that sensitive field values were transmitted, captured, read, linked to a third party, or that GDPR Article 9 applies. Financial, identity, contact, location, employment, children, protected-class, or other high-risk context signals require manual review and are not automatically GDPR Article 9 special-category data. Reviewers should consider field purpose, form state, masking, event listeners, payload evidence, vendor category, consent state, page template reuse, and whether the retained evidence reflects the affected user-facing flow.",
+  session_replay_present_with_sensitive_surfaces_observed:
+    "CertScore compares retained replay-related runtime evidence with retained page-surface evidence for sensitive input fields, form context, page purpose, and semantic cues in the same scan. The finding is surfaced when replay-related runtime context and sensitive-surface context are both retained, but the retained evidence does not need to show same-page or same-flow replay linkage. CertScore treats this co-presence as a review signal. The scanner does not determine that sensitive field values, keystrokes, screenshots, recordings, or user communications were captured. Reviewers should consider vendor configuration, masking, sampling, page exclusions, consent state, payload evidence, field purpose, and whether the retained evidence reflects the affected user-facing flow.",
   asymmetric_consent_ui:
     "CertScore retains representative consent-surface evidence for button labels, visible controls, first-layer availability, hierarchy cues, step counts, preference paths, and scan coverage context where available. The finding is surfaced when retained evidence indicates that accepting may be materially easier, more visually prominent, or more direct than refusing within the observed consent interface. CertScore treats asymmetric consent UI signals as review signals. The scanner does not determine legal status, deception, unfairness, consent validity, compliance status, or dark-pattern status. Reviewers should consider equivalent choice paths, visual hierarchy, copy, localization, accessibility, viewport, region, CMP configuration, prior consent state, and whether the retained evidence reflects the relevant user-facing consent surface.",
   keyboard_navigation_accessibility_issue:
@@ -664,6 +683,13 @@ const COMMON_CAUSES: Record<string, string[]> = {
     "Replay vendor settings are managed separately from CMP or tag-manager consent state.",
     "Page-level replay exclusions do not cover dynamic routes, multi-step forms, or responsive variants.",
     "Sensitive forms inherit global replay scripts from a shared template or tag container."
+  ],
+  session_replay_present_with_sensitive_surfaces_observed: [
+    "Replay or behavior-analytics tooling is loaded globally through a shared tag manager or layout.",
+    "Sensitive forms inherit sitewide replay scripts from general marketing, support, or product analytics templates.",
+    "Replay vendor settings are managed separately from CMP or tag-manager consent state.",
+    "Page-level replay exclusions do not cover all account, application, intake, payment, health, financial, or identity flows.",
+    "Sensitive-surface routing or multi-step forms make same-page or same-flow linkage harder to retain in an automated public scan."
   ],
   probable_fingerprinting: [
     "Security or fraud SDKs collect multiple high-entropy attributes in the same page-load context.",
@@ -874,6 +900,18 @@ const REVIEW_QUESTIONS: Record<string, string[]> = {
     "Which replay-related runtime artifact and which sensitive surface were retained?",
     "Is the affected surface a form, multi-step flow, account page, checkout, application, portal, health, financial, identity, or support page?",
     "Was replay collection active on the surface, or was the evidence limited to replay library or vendor presence?",
+    "Could sensitive values, field labels, error states, helper text, screenshots, DOM mutations, or typed events be exposed under current vendor settings?",
+    "Are sensitive fields, page sections, and dynamic states masked or excluded before collection?",
+    "Did the replay signal occur before consent, after consent, after reject, or outside known consent context?",
+    "Do page-level exclusions cover responsive variants, localized pages, authenticated states, and multi-step forms?",
+    "Are payloads, identifiers, screenshots, raw DOM, and user-entered values excluded or redacted from public evidence?",
+    "Should manual privacy, security, legal, and accessibility review confirm masking, consent posture, user impact, and remediation quality?"
+  ],
+  session_replay_present_with_sensitive_surfaces_observed: [
+    "Which replay-related runtime artifact and which sensitive surface were retained in the same scan?",
+    "Is the sensitive surface a form, multi-step flow, account page, checkout, application, portal, health, financial, identity, or support page?",
+    "Was replay collection active, or was the evidence limited to replay library or vendor presence?",
+    "Does retained evidence show same-page or same-flow linkage, or only scan-level co-presence?",
     "Could sensitive values, field labels, error states, helper text, screenshots, DOM mutations, or typed events be exposed under current vendor settings?",
     "Are sensitive fields, page sections, and dynamic states masked or excluded before collection?",
     "Did the replay signal occur before consent, after consent, after reject, or outside known consent context?",
@@ -1421,6 +1459,31 @@ const EVIDENCE_STANDARDS: Record<string, FindingEvidenceStandard> = {
       "Claims that sensitive values, keystrokes, screenshots, form contents, or recordings were captured based only on automated co-occurrence evidence."
     ]
   },
+  session_replay_present_with_sensitive_surfaces_observed: {
+    strong: [
+      "Retained runtime evidence includes replay-related script, request, endpoint, or vendor context in the scan.",
+      "Retained page-surface evidence identifies a sensitive form, field context, or page purpose without exposing user-entered values.",
+      "Evidence includes replay-related runtime anchor, representative field or surface context where safe, consent timing where available, and redaction of payloads and identifiers.",
+      "Evidence distinguishes scan-level co-presence from same-page or same-flow replay linkage.",
+      "Coverage context indicates the runtime and page-surface observations were not materially blocked or unreliable."
+    ],
+    good: [
+      "Retained evidence shows replay-related runtime context and a sensitive-input or sensitive-context surface in the same scan, while same-page linkage, active capture, masking, or payload contents require manual review.",
+      "The retained example is enough for a reviewer to inspect vendor configuration, page exclusions, masking, and consent state manually.",
+      "The evidence is a replay-plus-sensitive-surface review signal, but keystroke capture, screenshots, recordings, masking, and user impact require manual review."
+    ],
+    auditOnly: [
+      "Replay-related tooling appears somewhere on the site, but sensitive-surface evidence is incomplete or materially blocked.",
+      "Sensitive surface evidence exists, but replay-related runtime evidence is incomplete or too weak.",
+      "Vendor documentation, policy text, or template name suggests replay risk, but no retained scan-level co-presence artifact supports the observed state."
+    ],
+    insufficient: [
+      "Replay vendor name alone without retained runtime evidence.",
+      "Sensitive field label alone without replay-related runtime evidence.",
+      "Raw DOM, screenshots, user-entered values, full payloads, or session recordings as public evidence.",
+      "Claims that sensitive values, keystrokes, screenshots, form contents, or recordings were captured based only on automated co-presence evidence."
+    ]
+  },
   pre_consent_tracking_detected: {
     strong: [
       "Consent timeline sequence with page start, consent-surface or consent-state observation, and no observed consent action before the classified runtime signal.",
@@ -1530,6 +1593,15 @@ const LIMITATIONS: Record<string, string[]> = {
   possible_session_replay_on_sensitive_input_surface: [
     "This finding is an automated replay-on-sensitive-surface review signal, not a legal conclusion, certification, compliance determination, or determination of consent validity.",
     "Co-occurrence of replay-related runtime evidence and a sensitive surface does not determine that sensitive field values, keystrokes, screenshots, form contents, or recordings were captured.",
+    "The evidence may reflect a shared template, global script, library availability, or vendor tag presence rather than active replay collection on a submitted form.",
+    "Automated evidence may not fully determine masking quality, sampling, page exclusions, payload contents, authenticated states, user-triggered form states, or vendor-side retention.",
+    "Manual review is needed to confirm sensitive context, replay configuration, masking, consent state, payload contents, page exclusions, user impact, and remediation quality.",
+    "CertScore redacts or avoids retaining full query strings, payloads, identifiers, screenshots, raw DOM, and user-entered values while preserving stable anchors needed for review."
+  ],
+  session_replay_present_with_sensitive_surfaces_observed: [
+    "This finding is an automated replay-plus-sensitive-surface review signal, not a legal conclusion, certification, compliance determination, or determination of consent validity.",
+    "Scan-level co-presence of replay-related runtime evidence and a sensitive surface does not determine that sensitive field values, keystrokes, screenshots, form contents, or recordings were captured.",
+    "This finding is distinct from same-page or same-flow replay linkage, which requires stronger retained evidence.",
     "The evidence may reflect a shared template, global script, library availability, or vendor tag presence rather than active replay collection on a submitted form.",
     "Automated evidence may not fully determine masking quality, sampling, page exclusions, payload contents, authenticated states, user-triggered form states, or vendor-side retention.",
     "Manual review is needed to confirm sensitive context, replay configuration, masking, consent state, payload contents, page exclusions, user impact, and remediation quality.",
@@ -1739,6 +1811,10 @@ function confidenceSemanticsFor(id: string, benchmark: FindingDensityBenchmark) 
 
   if (id === "possible_session_replay_on_sensitive_input_surface") {
     return "Good when retained replay-related runtime evidence co-occurs with retained sensitive-input or sensitive-context page evidence; stronger when retained evidence includes replay endpoint context, field or surface context, consent timing, masking or exclusion context, repeated examples, and usable coverage. Manual review is still needed for active capture, masking, payload contents, consent state, sensitive context, and remediation quality.";
+  }
+
+  if (id === "session_replay_present_with_sensitive_surfaces_observed") {
+    return "Good when retained replay-related runtime evidence and sensitive-input or sensitive-context page evidence appear in the same scan; stronger when retained evidence includes replay endpoint context, field or surface context, consent timing, masking or exclusion context, repeated examples, and usable coverage. Manual review is still needed for same-page linkage, active capture, masking, payload contents, consent state, sensitive context, and remediation quality.";
   }
 
   if (id === "probable_fingerprinting") {
@@ -2134,6 +2210,23 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
       {
         title: "Consent UI observation",
         code: "accept_visible=true\nreject_visible=false\nsettings_visible=true\nsteps_to_accept=1\nsteps_to_reject=3\nbanner_blocks_content=true"
+      }
+    ];
+  }
+
+  if (id === "session_replay_present_with_sensitive_surfaces_observed") {
+    return [
+      {
+        title: "Replay plus sensitive surface scan context",
+        code: "artifact=replay_sensitive_scan_001\nrole=finding_supporting_artifact\nurl=https://example.com/\nreplay_request_origin=https://replay.example\nreplay_request_path=/collect [query_redacted=true]\nsensitive_surface_context=account_or_application_form [values_not_retained]\nobserved_scope=same_scan\nsame_page_or_same_flow_linkage=false_or_not_retained\nreview_caveat=manual review should confirm active collection, masking, visual-capture settings, payload contents, consent state, and page exclusions"
+      },
+      {
+        title: "Review context",
+        code: "possible_source=shared_template_or_tag_manager\ncontexts_to_review=replay_vendor_config, masking, sampling, page_exclusions, consent_gating, field_purpose\npayload_values_retained=false\nscreenshots_retained=false\nmanual_review_needed=true"
+      },
+      {
+        title: "What should not count by itself",
+        code: "replay_vendor_present=true [insufficient_without_sensitive_surface_context]\nsensitive_field_label=income [insufficient_without_runtime_replay_anchor]\nsame_scan_context [does_not_show_field_value_capture]\nraw_dom_or_field_value [must_not_be_public_sample_evidence]"
       }
     ];
   }

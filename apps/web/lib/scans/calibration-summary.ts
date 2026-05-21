@@ -66,6 +66,7 @@ export type ScanCalibrationSummary = {
   scanId: string | null;
   status: string | null;
   topFindings: CalibrationFindingSummary[];
+  coverageStatusCards: CalibrationFindingSummary[];
 };
 
 function deriveHostname(value: string | null | undefined) {
@@ -597,6 +598,7 @@ export function buildScanCalibrationSummary(input: {
   thirdPartyDomains?: string[] | null;
   thirdPartyRequestCount?: number | null;
   topFindings: CertScoreFinding[];
+  coverageStatusCards?: CertScoreFinding[];
   vendorCount?: number | null;
   verifiedPublicSurfacesCount?: number | null;
 }) {
@@ -669,6 +671,13 @@ export function buildScanCalibrationSummary(input: {
     scanId: input.scanId,
     status: input.status,
     topFindings: input.topFindings.slice(0, 5).map((finding) => ({
+      confidence: finding.confidence,
+      id: finding.id,
+      label: finding.label,
+      severity: finding.severity,
+      shortSummary: finding.shortSummary
+    })),
+    coverageStatusCards: (input.coverageStatusCards ?? []).map((finding) => ({
       confidence: finding.confidence,
       id: finding.id,
       label: finding.label,
