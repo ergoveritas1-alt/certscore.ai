@@ -5,6 +5,7 @@ export const RECENT_SCAN_REUSE_WINDOW_HOURS = 24;
 type CompletedScanCandidate = {
   completedAt: string | null;
   id: string;
+  organizationId?: string | null;
 };
 
 type ScanHistoryCandidate = {
@@ -43,24 +44,36 @@ export function findRecentCompletedScanInHistory(scans: ScanHistoryCandidate[], 
 }
 
 export async function findRecentCompletedScanForDomain(input: {
+  allowCrossWorkspace?: boolean;
   normalizedDomain: string;
   normalizedUrl: string;
   organizationId: string | null;
   windowHours?: number;
 }) {
+  const parameters = input.allowCrossWorkspace
+    ? [input.windowHours ?? RECENT_SCAN_REUSE_WINDOW_HOURS, input.normalizedDomain, input.normalizedUrl]
+    : [input.organizationId, input.windowHours ?? RECENT_SCAN_REUSE_WINDOW_HOURS, input.normalizedDomain, input.normalizedUrl];
+  const organizationFilter = input.allowCrossWorkspace
+    ? ""
+    : `and s.organization_id is not distinct from $1
+        and d.organization_id is not distinct from $1`;
+  const windowParameter = input.allowCrossWorkspace ? "$1" : "$2";
+  const domainParameter = input.allowCrossWorkspace ? "$2" : "$3";
+  const urlParameter = input.allowCrossWorkspace ? "$3" : "$4";
+
   return queryOne<CompletedScanCandidate>(
-    `select s.id, s.completed_at as "completedAt"
+    `select s.id, s.organization_id as "organizationId", s.completed_at as "completedAt"
        from scans s
        join domains d on d.id = s.domain_id
-      where s.organization_id is not distinct from $1
-        and d.organization_id is not distinct from $1
+      where 1 = 1
+        ${organizationFilter}
         and s.status = 'completed'
         and s.completed_at is not null
-        and s.completed_at >= timezone('utc', now()) - ($2::int * interval '1 hour')
-        and (lower(d.hostname) = lower($3) or lower(d.normalized_url) = lower($4))
+        and s.completed_at >= timezone('utc', now()) - (${windowParameter}::int * interval '1 hour')
+        and (lower(d.hostname) = lower(${domainParameter}) or lower(d.normalized_url) = lower(${urlParameter}))
       order by s.completed_at desc, s.created_at desc
       limit 1`,
-    [input.organizationId, input.windowHours ?? RECENT_SCAN_REUSE_WINDOW_HOURS, input.normalizedDomain, input.normalizedUrl],
+    parameters,
     { readOnly: true }
   );
 }

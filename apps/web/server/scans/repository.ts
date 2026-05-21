@@ -523,12 +523,46 @@ export async function loadScanCoreRecord(input: {
       { readOnly: true }
     );
   };
+  const loadScanWithoutOrganizationScope = async () => {
+    return await queryOne<ScanDetailQueryRow>(
+      `select id, organization_id, domain_id, scan_type, status, pages_requested, pages_scanned,
+              scan_config_json, created_at, started_at, completed_at, error_message
+         from scans
+        where id = $1`,
+      [input.scanId],
+      { readOnly: true }
+    );
+  };
+  const hasCrossWorkspaceReuseAccess = async () => {
+    if (!input.organizationId || input.anonymousOnly) {
+      return false;
+    }
+
+    const request = await queryOne<{ id: string }>(
+      `select id
+         from scan_requests
+        where organization_id = $1
+          and fulfilled_by_scan_id = $2
+          and status = 'reused_recent_scan'
+          and resolution_mode = 'reused_existing_scan'
+        order by requested_at desc
+        limit 1`,
+      [input.organizationId, input.scanId],
+      { readOnly: true }
+    );
+
+    return Boolean(request);
+  };
 
   const primaryOrganizationId = input.anonymousOnly ? null : input.organizationId;
   let scan = await loadScan(primaryOrganizationId);
 
   if (!scan && !input.anonymousOnly && allowAnonymousAccess) {
     scan = await loadScan(null);
+  }
+
+  if (!scan && (await hasCrossWorkspaceReuseAccess())) {
+    scan = await loadScanWithoutOrganizationScope();
   }
 
   if (!scan) {
@@ -551,7 +585,7 @@ export async function loadScanCoreRecord(input: {
           }`,
       scanOrganizationId === null
         ? [scanRow.domain_id]
-        : [scanRow.domain_id, input.organizationId],
+        : [scanRow.domain_id, scanOrganizationId],
       { readOnly: true }
     );
     domainHostname = domain?.hostname ?? null;

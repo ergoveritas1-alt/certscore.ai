@@ -113,12 +113,13 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     errorCode?: string | null;
     errorMessage?: string | null;
     fulfilledByScanId?: string | null;
+    requireSuccess?: boolean;
     resolutionMode?: string | null;
     reusedCompletedAt?: string | null;
     scanId?: string | null;
     status: ScanRequestStatus;
-  }) =>
-    recordScanRequest({
+  }) => {
+    const request = recordScanRequest({
       errorCode: details.errorCode ?? null,
       errorMessage: details.errorMessage ?? null,
       fulfilledByScanId: details.fulfilledByScanId ?? details.scanId ?? null,
@@ -146,12 +147,20 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         details.resolutionMode === "reused_existing_scan" ? RECENT_SCAN_REUSE_WINDOW_HOURS : null,
       scanId: details.scanId ?? null,
       status: details.status
-    }).catch((error) => logScanRequestFailure("workspace_full_scan_request", error));
+    });
+
+    if (details.requireSuccess) {
+      return request;
+    }
+
+    return request.catch((error) => logScanRequestFailure("workspace_full_scan_request", error));
+  };
 
   if (!input.bypassRecentScanReuse) {
     const recentScan =
       findRecentCompletedScanInHistory(domainRecord.scans) ??
       (await findRecentCompletedScanForDomain({
+        allowCrossWorkspace: true,
         normalizedDomain: domainRecord.domain.hostname,
         normalizedUrl: domainRecord.domain.normalizedUrl,
         organizationId: input.organizationId
@@ -164,19 +173,31 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       }));
 
     if (recentScan) {
-      await logRequest({
-        fulfilledByScanId: recentScan.id,
-        resolutionMode: "reused_existing_scan",
-        reusedCompletedAt: recentScan.completedAt,
-        scanId: recentScan.id,
-        status: "reused_recent_scan"
-      });
+      try {
+        await logRequest({
+          fulfilledByScanId: recentScan.id,
+          requireSuccess:
+            typeof recentScan.organizationId === "string" || recentScan.organizationId === null
+              ? recentScan.organizationId !== input.organizationId
+              : false,
+          resolutionMode: "reused_existing_scan",
+          reusedCompletedAt: recentScan.completedAt,
+          scanId: recentScan.id,
+          status: "reused_recent_scan"
+        });
 
-      return {
-        error: null,
-        reusedExistingScan: true,
-        scanId: recentScan.id
-      };
+        return {
+          error: null,
+          reusedExistingScan: true,
+          scanId: recentScan.id
+        };
+      } catch (error) {
+        console.error("[web] cross-workspace recent scan reuse access logging failed; queueing new scan instead", {
+          domainId: domainRecord.domain.id,
+          error: error instanceof Error ? error.message : String(error),
+          sourceScanId: recentScan.id
+        });
+      }
     }
   }
 
