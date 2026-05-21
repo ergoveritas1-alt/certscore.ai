@@ -577,7 +577,6 @@ test("projects structured third-party cookie pre-consent without request urls bu
 test("includes every executive finding in top findings while preserving consent dark-pattern umbrella", () => {
   const formerlyExcludedExecutiveFindingIds = [
     "asymmetric_consent_ui",
-    "blocking_overlay_observed",
     "content_obstructed_by_overlay",
     "forced_consent_interaction",
     "identifier_transmission_detected",
@@ -613,10 +612,6 @@ test("includes every executive finding in top findings while preserving consent 
       severity: "high"
     }),
     makePacket("accept_only_banner", {
-      confidenceBand: "high",
-      severity: "high"
-    }),
-    makePacket("blocking_overlay_observed", {
       confidenceBand: "high",
       severity: "high"
     }),
@@ -715,9 +710,11 @@ test("projects reject path evidence from packet entities and records reject subt
               acceptClickDepth: 1,
               bannerLayerInspected: true,
               choiceAsymmetry: "material",
+              evidenceRefs: ["consent-ui-screenshot.png"],
               preferencesRequiredBeforeReject: true,
               rejectAvailableOnFirstLayer: false,
-              rejectClickDepth: 2
+              rejectClickDepth: 2,
+              scrollRequired: false
             })
           ]
         },
@@ -735,6 +732,18 @@ test("projects reject path evidence from packet entities and records reject subt
   const finding = projection.findings.find((entry) => entry.id === "reject_option_missing_or_hidden");
   assert.ok(finding);
   assert.equal(finding.evidenceDetails?.consentUiEvidence?.rejectOptionSubtype, "reject_requires_preferences_path");
+  assert.deepEqual(finding.evidenceDetails?.consentUiEvidence?.runtimePath, {
+    acceptClickDepth: 1,
+    choiceAsymmetry: "material",
+    domDigestAvailable: false,
+    evidenceRefs: ["consent-ui-screenshot.png"],
+    pathDepthDelta: 1,
+    preferencesRequiredBeforeReject: true,
+    rejectAvailableOnFirstLayer: false,
+    rejectClickDepth: 2,
+    screenshotArtifactAvailable: true,
+    scrollRequired: false
+  });
   assert.match(
     String(finding.evidenceDetails?.consentUiEvidence?.userChoiceImpact),
     /preferences or manage-choices path/
@@ -1413,7 +1422,7 @@ test("keeps confirmed reject-path tracking in top findings alongside pre-consent
   assert.ok(projection.topFindings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
 });
 
-test("downgrades reject-path tracking projection when post-reject timing is missing", () => {
+test("suppresses reject-path tracking projection when post-reject timing is missing", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("reject_did_not_reduce_tracking", {
       confidenceBand: "moderate",
@@ -1478,14 +1487,9 @@ test("downgrades reject-path tracking projection when post-reject timing is miss
     })
   ]);
 
-  const finding = projection.findings.find((entry) => entry.id === "reject_tracking_persists_after_reject");
-
-  assert.ok(finding);
-  assert.equal(finding?.severity, "medium");
-  assert.equal(finding?.confidence, "moderate");
-  assert.equal(finding?.shortSummary, "Tracking requests were observed during the consent flow, but post-reject timing was not retained.");
-  assert.equal(finding?.evidenceDetails?.promotionDecision?.promoted, false);
-  assert.equal(finding?.evidenceDetails?.suppressionChecks?.post_reject_window_available, false);
+  assert.ok(!projection.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
+  assert.equal(projection.trace.packets[0]?.executiveFindingId, null);
+  assert.equal(projection.trace.packets[0]?.inTopFindings, false);
 });
 
 test("does not project retired scanner-level financial promotion into executive findings", () => {
@@ -2172,6 +2176,17 @@ test("projects blocking overlay context without violation framing", () => {
       evidence: {
         counts: {},
         entities: {
+          blockingOverlayEvidence: [
+            JSON.stringify({
+              acceptPresent: true,
+              interactionBlocked: true,
+              managePresent: true,
+              overlayType: "cookie_wall",
+              pageAccessBlockedUntilChoice: true,
+              rejectDepthClass: "second_layer",
+              rejectPresent: false
+            })
+          ],
           blockingOverlayType: ["cookie_wall"],
           overlayBehavior: ["interaction_blocked", "page_access_blocked_until_choice"],
           overlayControls: ["accept:present", "reject:absent", "manage:present", "close:absent"],
@@ -2210,13 +2225,15 @@ test("projects blocking overlay context without violation framing", () => {
     makePacket("privacy_rights_path_present", { severity: "medium" })
   ]);
 
-  const finding = projection.findings.find((entry) => entry.id === "blocking_overlay_observed");
-  assert.equal(finding?.label, "Blocking consent overlay observed");
-  assert.equal(finding?.section, "Consent Experience");
-  assert.equal(finding?.severity, "medium");
-  assert.ok(finding?.whyItMatters.includes("common"));
-  assert.ok(!/violation/i.test(`${finding?.label} ${finding?.whyItMatters}`));
-  assert.ok(projection.topFindings.some((entry) => entry.id === "blocking_overlay_observed"));
+  assert.equal(projection.findings.some((entry) => entry.id === "blocking_overlay_observed"), false);
+  assert.equal(projection.topFindings.some((entry) => entry.id === "blocking_overlay_observed"), false);
+  assert.ok(projection.findings.some((entry) => entry.id === "forced_consent_interaction"));
+  assert.ok(projection.findings.some((entry) => entry.id === "consent_dark_patterns_detected"));
+  assert.ok(projection.findings.some((entry) => entry.id === "reject_option_missing_or_hidden"));
+  const forcedConsent = projection.findings.find((entry) => entry.id === "forced_consent_interaction");
+  assert.equal(forcedConsent?.section, "Consent Experience");
+  assert.ok(!/violation/i.test(`${forcedConsent?.label} ${forcedConsent?.whyItMatters}`));
+  assert.ok(projection.topFindings.some((entry) => entry.id === "forced_consent_interaction"));
 });
 
 test("projects video content tracking exposure into executive findings", () => {
@@ -2300,6 +2317,14 @@ test("projects concrete session replay vendor evidence into executive finding js
       evidence: {
         counts: {},
         entities: {
+          sessionReplayEvidenceSummary: [
+            JSON.stringify({
+              collectionEndpointObserved: true,
+              libraryOnly: false,
+              maskingOrExclusionObserved: false,
+              sensitiveSurfaceOverlap: false
+            })
+          ],
           runtimeVendors: ["Qualtrics SiteIntercept"]
         },
         fetchQuality: null,
@@ -2334,6 +2359,10 @@ test("projects concrete session replay vendor evidence into executive finding js
   assert.deepEqual(finding?.evidenceDetails?.runtimeVendors, ["Qualtrics SiteIntercept"]);
   assert.equal(finding?.evidenceVersion, "1.1");
   assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.observed, true);
+  assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.collectionEndpointObserved, true);
+  assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.libraryOnly, false);
+  assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.maskingOrExclusionObserved, false);
+  assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.sensitiveSurfaceOverlap, false);
   assert.equal(finding?.evidenceDetails?.inputSurfaceEvidence?.evaluated, false);
   assert.deepEqual(finding?.evidenceDetails?.policyEvidence, { evaluated: false });
   assert.deepEqual(finding?.evidenceDetails?.runtimeRequestUrls, [
@@ -2625,7 +2654,20 @@ test("projects remaining top finding families with canonical evidence details", 
       details: { family: "consent_tracking", kind: "third_party_cookie_pre_consent" },
       evidence: {
         counts: { preconsentCookieCount: 2 },
-        entities: { runtimeVendors: ["Google Analytics"] },
+        entities: {
+          preconsent_cookie_evidence: [
+            JSON.stringify({
+              category: "analytics",
+              cookieName: "_ga",
+              domain: ".google-analytics.com",
+              nonEssential: true,
+              party: "third_party",
+              timingEvidence: "before_consent_cookie_write",
+              vendor: "Google Analytics"
+            })
+          ],
+          runtimeVendors: ["Google Analytics"]
+        },
         fetchQuality: null,
         flags: ["privacy.third_party_cookie_pre_consent"],
         pageUrls: ["https://example.com/"],
@@ -2667,7 +2709,19 @@ test("projects remaining top finding families with canonical evidence details", 
       details: { family: "accessibility", kind: "visual_contrast_accessibility_issue" },
       evidence: {
         counts: { seriousAxeViolationCount: 1 },
-        entities: {},
+        entities: {
+          accessibilityAxeEvidence: [
+            JSON.stringify({
+              description: "Elements must meet minimum color contrast ratio thresholds",
+              helpUrl: "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+              impact: "serious",
+              nodeCount: 2,
+              pageUrl: "https://example.com/",
+              representativeSelectors: [".hero-title"],
+              ruleId: "color-contrast"
+            })
+          ]
+        },
         fetchQuality: null,
         flags: ["accessibility.representative_barrier"],
         pageUrls: ["https://example.com/"],
@@ -2713,6 +2767,17 @@ test("projects remaining top finding families with canonical evidence details", 
   assert.equal(byId.get("identifier_transmission_detected")?.evidenceDetails?.telemetryEvidence?.identifierLikeRequestCount, 1);
   assert.equal(byId.get("visual_contrast_accessibility_issue")?.evidenceVersion, "1.1");
   assert.equal(byId.get("visual_contrast_accessibility_issue")?.evidenceDetails?.accessibilityEvidence?.observed, true);
+  assert.deepEqual(byId.get("visual_contrast_accessibility_issue")?.evidenceDetails?.accessibilityEvidence?.axeEvidence, [
+    {
+      ruleId: "color-contrast",
+      impact: "serious",
+      nodeCount: 2,
+      description: "Elements must meet minimum color contrast ratio thresholds",
+      helpUrl: "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+      pageUrl: "https://example.com/",
+      representativeSelectors: [".hero-title"]
+    }
+  ]);
   assert.equal(byId.get("policy_clarity_risk")?.evidenceVersion, "1.1");
   assert.equal(byId.get("policy_clarity_risk")?.evidenceDetails?.policyEvidenceDetails?.clarityRiskObserved, true);
   assert.equal(byId.get("high_risk_product_risk_disclosure_missing")?.evidenceVersion, "1.1");
@@ -2730,10 +2795,29 @@ test("keeps scanned page URL separate from representative third-party request UR
       evidence: {
         counts: { firstThirdPartyTrackingRequestMs: 120 },
         entities: {
+          consentTimeline: [
+            JSON.stringify({
+              firstCmpVisibleMs: 600,
+              firstConsentActionMs: null,
+              firstCookieSetMs: 140,
+              firstNonEssentialRequestMs: 120,
+              navigationStartMs: 0
+            })
+          ],
           preconsent_tracker_evidence_urls: [
             "https://www.clarity.ms/tag/abc123",
             "https://www.googletagmanager.com/gtm.js?id=GTM-ABC",
             "https://bat.bing.com/bat.js"
+          ],
+          requestPurposeClassificationConfidence: [
+            JSON.stringify({
+              confidence: "high",
+              essentiality: "non_essential",
+              requestUrl: "https://www.clarity.ms/tag/abc123",
+              vendor: "Microsoft Clarity",
+              category: "session_replay",
+              firstObservedMs: 120
+            })
           ],
           preconsent_tracker_vendor_evidence: [
             JSON.stringify({
@@ -2768,6 +2852,18 @@ test("keeps scanned page URL separate from representative third-party request UR
   const finding = projection.findings.find((candidate) => candidate.id === "pre_consent_tracking_detected");
 
   assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://www.kbdlab.io/");
+  assert.equal(finding?.evidenceDetails?.timing?.firstNonEssentialRequestMs, 120);
+  assert.equal(finding?.evidenceDetails?.timing?.firstCmpVisibleMs, 600);
+  assert.deepEqual(finding?.evidenceDetails?.requestClassificationAnchors, [
+    {
+      hostname: "clarity.ms",
+      vendor: "Microsoft Clarity",
+      category: "session_replay",
+      essentiality: "non_essential",
+      confidence: "high",
+      firstObservedMs: 120
+    }
+  ]);
   assert.deepEqual(
     finding?.evidenceDetails?.representativeRequests?.map((request) => [request.vendor, request.category]),
     [
@@ -2885,7 +2981,10 @@ test("keeps related runtime requests out of direct pre-consent cookie evidence r
               cookieName: "_clck",
               cookieInitiatorVendor: "Microsoft Clarity",
               category: "session_replay",
-              initiatorUrl: "https://www.clarity.ms/tag/abc123"
+              initiatorUrl: "https://www.clarity.ms/tag/abc123",
+              nonEssential: true,
+              party: "third_party",
+              timingEvidence: "before_consent_cookie_write"
             })
           ],
           runtimeRequestUrls: ["https://www.clarity.ms/tag/abc123"],
@@ -2932,7 +3031,10 @@ test("labels Bing and Clarity sync-style related runtime requests with endpoint 
               cookieName: "_clsk",
               cookieInitiatorVendor: "Microsoft Clarity",
               category: "session_replay",
-              initiatorUrl: "https://c.clarity.ms/c.gif"
+              initiatorUrl: "https://c.clarity.ms/c.gif",
+              nonEssential: true,
+              party: "third_party",
+              timingEvidence: "before_consent_cookie_write"
             })
           ],
           runtimeRequestUrls: ["https://c.bing.com/c.gif?ctsa=mr&CtsSyncId=abc", "https://c.clarity.ms/c.gif"],
@@ -2958,6 +3060,41 @@ test("labels Bing and Clarity sync-style related runtime requests with endpoint 
   assert.equal(bingRequest?.evidenceRole, "related_vendor_request");
   assert.equal(clarityRequest?.endpointVendor, "Microsoft Clarity");
   assert.equal(clarityRequest?.category, "session_replay_sync");
+});
+
+test("suppresses third-party cookie pre-consent when retained packet has no concrete pre-consent cookie write", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("third_party_cookie_pre_consent", {
+      details: { family: "consent_tracking", kind: "third_party_cookie_pre_consent" },
+      evidence: {
+        counts: {
+          preconsent_cookie_before_consent_count: 0,
+          total_cookie_count: 56
+        },
+        entities: {
+          preconsent_cookie_evidence: [
+            JSON.stringify({
+              category: "advertising",
+              cookieName: "test_cookie",
+              cookieInitiatorVendor: "DoubleClick",
+              timingStatus: "pre_consent"
+            })
+          ],
+          runtimeRequestUrls: ["https://securepubads.g.doubleclick.net/pagead/managed/js/gpt.js"],
+          runtimeVendors: ["DoubleClick"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: ["https://www.wowhead.com/"],
+        snippets: ["Tracking activity was retained before consent."],
+        sourceUrls: []
+      },
+      severity: "high"
+    })
+  ]);
+
+  assert.equal(projection.findings.some((finding) => finding.id === "third_party_cookie_pre_consent"), false);
+  assert.equal(projection.topFindings.some((finding) => finding.id === "third_party_cookie_pre_consent"), false);
 });
 
 test("records surfaced packets that are not yet mapped into executive findings", () => {
@@ -3157,4 +3294,61 @@ test("keeps public reference evidence schema separate from runtime report eviden
   );
   assert.equal("evidenceConfidence" in (finding?.evidenceDetails ?? {}), false);
   assert.equal("topFindingCalibration" in (finding?.evidenceDetails ?? {}), false);
+});
+
+test("projects pre-consent tracking when tracker requests have timeline and non-essential classification evidence", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      concernContext: {
+        assertionLevels: ["strong"],
+        evidenceStrengthFlags: ["direct_runtime"],
+        externalSurfacingEligibilities: ["eligible"],
+        negativeEvidenceFlags: [],
+        originTypes: ["snapshot_signal"],
+        promotionEligibilities: ["eligible"]
+      },
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      evidence: {
+        counts: {
+          total_tracker_count: 4,
+          total_vendor_count: 4,
+          third_party_request_count: 37
+        },
+        entities: {
+          consentSurfaceObserved: ["true"],
+          consentActionableChoiceObserved: ["true"],
+          consentTimeline: [
+            JSON.stringify({
+              firstCmpVisibleMs: 1200,
+              firstConsentActionMs: null,
+              firstNonEssentialRequestMs: 350,
+              firstUserActionMs: null
+            })
+          ],
+          preconsent_tracker_vendors: ["Google Analytics", "Google Tag Manager", "Scorecard Research", "VWO"],
+          requestPurposeClassificationConfidence: [
+            JSON.stringify({
+              category: "analytics",
+              classificationBasis: "vendor_signature",
+              confidence: 0.92,
+              essentiality: "non_essential",
+              requestUrl: "https://www.googletagmanager.com/gtm.js?id=GTM-TEST",
+              runtimePhase: "pre_consent",
+              vendor: "Google Tag Manager"
+            })
+          ],
+          runtimeRequestUrls: ["https://www.googletagmanager.com/gtm.js?id=GTM-TEST"],
+          runtimeVendors: ["Google Analytics", "Google Tag Manager", "Scorecard Research", "VWO"]
+        },
+        flags: ["privacy.preconsent_tracking_detected", "privacy.tracking_before_consent_detected", "cmp_detected"],
+        sourceUrls: ["https://www.googletagmanager.com/gtm.js?id=GTM-TEST"]
+      },
+      severity: "high",
+      summary: "Tracker vendors fired before consent interaction."
+    })
+  ]);
+
+  assert.ok(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
 });

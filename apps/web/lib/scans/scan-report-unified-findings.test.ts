@@ -1205,6 +1205,66 @@ test("promotion-grade preconsent timing and vendor anchors surface as executive 
   assert.equal(projection.posture, "Action Needed");
 });
 
+test("state-zero tracker observations with consent timing surface as pre-consent top findings", () => {
+  const state = buildPreconsentRuntimeState({
+    hybrid_runtime_evidence: {
+      consentSummary: {
+        acceptPresent: true,
+        bannerPresent: true,
+        firstVisibleMs: 1200,
+        managePresent: true,
+        rejectPresent: true
+      },
+      preconsentState0RequestObservations: [
+        {
+          category: "analytics",
+          classification: "known_tracker",
+          confidence: "high",
+          evidenceSource: "state0_request_capture",
+          hostname: "www.googletagmanager.com",
+          requestUrl: "https://www.googletagmanager.com/gtm.js?id=GTM-TEST",
+          resourceType: "script",
+          runtimePhase: "pre_consent",
+          thirdParty: true,
+          tsMs: 350,
+          vendor: "Google Tag Manager"
+        },
+        {
+          category: "analytics",
+          classification: "known_tracker",
+          confidence: "high",
+          evidenceSource: "state0_request_capture",
+          hostname: "dev.visualwebsiteoptimizer.com",
+          requestUrl: "https://dev.visualwebsiteoptimizer.com/j.php",
+          resourceType: "script",
+          runtimePhase: "pre_consent",
+          thirdParty: true,
+          tsMs: 360,
+          vendor: "VWO"
+        }
+      ],
+      requestObservations: [],
+      requestToVendorObservations: [],
+      timelineMarkers: {
+        consentBannerDetectedMs: 1200,
+        firstRequestMs: 350,
+        firstThirdPartyRequestMs: 350,
+        navigationStartMs: 0
+      }
+    }
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.equal(packet?.evidence?.entities?.consentTimeline?.length, 1);
+  assert.equal(packet?.evidence?.entities?.requestPurposeClassificationConfidence?.length, 2);
+  assert.deepEqual(packet?.evidence?.entities?.preconsent_tracker_vendors, ["Google Tag Manager", "VWO"]);
+  assert.ok(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+});
+
 test("service-only state-zero requests stay audit-only and out of tracker promotion", () => {
   const serviceRows = [
     ["cdn.optimizely.com", "https://cdn.optimizely.com/public/123/s/project.js", "Optimizely Web Experimentation", "experimentation", "personalization"],
@@ -1255,6 +1315,9 @@ test("service-only state-zero requests stay audit-only and out of tracker promot
 
   assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.equal(packet?.surfacingDecision.decisionState, "material_incomplete");
+  assert.equal(packet?.topFindingEligibility?.eligibility, "not_projected");
+  assert.ok(packet?.topFindingEligibility?.candidateTopFindingIds.includes("pre_consent_tracking_detected"));
+  assert.ok(packet?.topFindingEligibility?.suppressionReason);
   assert.deepEqual(packet?.evidence?.entities?.preconsent_tracker_vendors ?? [], []);
   assert.deepEqual(packet?.evidence?.entities?.preconsent_tracker_evidence_urls ?? [], []);
   assert.equal(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"), false);
@@ -1533,11 +1596,59 @@ test("runtime reject path depth promotes concrete dark-pattern reject-missing ev
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.ok(projection.findings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
   assert.ok(projection.findings.some((finding) => finding.id === "asymmetric_consent_ui"));
-  assert.ok(projection.findings.some((finding) => finding.id === "forced_consent_interaction"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "forced_consent_interaction"));
   assert.ok(projection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
   assert.ok(!weakState.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "reject_button_missing"));
   assert.ok(!weakState.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "accept_more_prominent_than_reject"));
   assert.ok(!weakState.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "forced_consent_wall"));
+});
+
+test("runtime reject path depth promotes forced consent only with retained blocking evidence", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [],
+    primaryPolicyEnrichment: null,
+    runtimeArtifacts: {
+      consent_actionable_choice_observed: true,
+      consent_surface_observed: true,
+      hybridConsentSummary: {
+        pageInteractionBlocked: true
+      },
+      reject_path_depth_and_availability: {
+        acceptClickDepth: 1,
+        choiceAsymmetry: "material",
+        preferencesRequiredBeforeReject: true,
+        rejectAvailableOnFirstLayer: false,
+        rejectClickDepth: 2
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.ok(projection.findings.some((finding) => finding.id === "forced_consent_interaction"));
 });
 
 test("high-risk gambling section review retains concrete offer and disclosure adjacency evidence", () => {

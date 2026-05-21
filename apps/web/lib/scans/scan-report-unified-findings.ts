@@ -1090,14 +1090,23 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   const consentSurfaceDiagnostics =
     getRuntimeObject(input.runtimeArtifacts, ["consentSurfaceDiagnostics", "consent_surface_diagnostics"]) ??
     getRuntimeObject(rejectPath, ["consentSurfaceDiagnostics", "consent_surface_diagnostics"]);
+  const hybridConsentSummary = getRuntimeObject(input.runtimeArtifacts, ["hybridConsentSummary", "hybrid_consent_summary"]);
+  const hybridUiSummary = getRuntimeObject(input.runtimeArtifacts, ["hybridUiSummary", "hybrid_ui_summary"]);
+  const pageAccessBlockedUntilChoice =
+    rejectPath?.pageAccessBlockedUntilChoice === true ||
+    rejectPath?.page_access_blocked_until_choice === true ||
+    hybridConsentSummary?.pageInteractionBlocked === true ||
+    hybridConsentSummary?.page_interaction_blocked === true ||
+    hybridUiSummary?.forcedActionRequired === true ||
+    hybridUiSummary?.forced_action_required === true;
   const consentSurfaceGateEvidence = {
     consentActionableChoiceObserved,
     consentSurfaceDiagnostics,
     consentSurfaceObserved,
     rejectPathDepthAndAvailability: rejectPath,
-    hybridConsentSummary: getRuntimeObject(input.runtimeArtifacts, ["hybridConsentSummary", "hybrid_consent_summary"]),
+    hybridConsentSummary,
     hybridConsentVisual: getRuntimeObject(input.runtimeArtifacts, ["hybridConsentVisual", "hybrid_consent_visual"]),
-    hybridUiSummary: getRuntimeObject(input.runtimeArtifacts, ["hybridUiSummary", "hybrid_ui_summary"])
+    hybridUiSummary
   };
   const consentSurfaceGate = evaluateConsentSurfaceGate(consentSurfaceGateEvidence);
   if (
@@ -1176,11 +1185,14 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     });
 
     if (
-      preferencesRequiredBeforeReject ||
+      pageAccessBlockedUntilChoice &&
       (
-        acceptClickDepth !== null &&
-        rejectClickDepth !== null &&
-        rejectClickDepth > acceptClickDepth
+        preferencesRequiredBeforeReject ||
+        (
+          acceptClickDepth !== null &&
+          rejectClickDepth !== null &&
+          rejectClickDepth > acceptClickDepth
+        )
       )
     ) {
       candidates.push({
@@ -1193,16 +1205,13 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
           consentSurfaceObserved,
           forced_consent_wall: true,
           hybridConsentSummary: {
-            ...(getRuntimeObject(input.runtimeArtifacts, ["hybridConsentSummary", "hybrid_consent_summary"]) ?? {}),
-            bannerPresent: true,
-            pageInteractionBlocked: true
+            ...(hybridConsentSummary ?? {})
           },
           hybridUiSummary: {
-            ...(getRuntimeObject(input.runtimeArtifacts, ["hybridUiSummary", "hybrid_ui_summary"]) ?? {}),
-            forcedActionRequired: true
+            ...(hybridUiSummary ?? {})
           },
           overlayKind: "consent_modal",
-          pageAccessBlockedUntilChoice: true,
+          pageAccessBlockedUntilChoice,
           rejectPathDepthAndAvailability: rejectPath,
           runtimeEvidenceArtifacts: ["scan_runtime_artifacts.reject_path_depth_and_availability"],
           signalKey: "privacy.dark_pattern_forced_consent_wall",

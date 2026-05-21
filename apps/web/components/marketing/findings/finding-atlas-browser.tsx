@@ -510,6 +510,7 @@ const FINDING_REGISTRY_GROUPS: Array<{
       "pre_consent_tracking_detected",
       "reject_tracking_persists_after_reject",
       "third_party_cookie_pre_consent",
+      "cookie_disclosure_gap",
       "forced_consent_interaction",
       "reject_option_missing_or_hidden",
       "asymmetric_consent_ui",
@@ -536,7 +537,8 @@ const FINDING_REGISTRY_GROUPS: Array<{
       "visual_contrast_accessibility_issue",
       "semantic_labeling_accessibility_issue",
       "text_alternative_accessibility_issue",
-      "keyboard_navigation_accessibility_issue"
+      "keyboard_navigation_accessibility_issue",
+      "focus_management_issue"
     ]
   },
   {

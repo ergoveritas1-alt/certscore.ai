@@ -94,6 +94,7 @@ const TOP_FINDING_IDS = [
   "fingerprinting_related_signals_observed",
   "session_recording_services_detected",
   "third_party_cookie_pre_consent",
+  "cookie_disclosure_gap",
   "rtb_cookie_sync_observed",
   "text_alternative_accessibility_issue",
   "consent_dark_patterns_detected",
@@ -103,6 +104,7 @@ const TOP_FINDING_IDS = [
   "sensitive_data_collection_with_third_party_tracking_present",
   "asymmetric_consent_ui",
   "keyboard_navigation_accessibility_issue",
+  "focus_management_issue",
   "cross_domain_identifier_sharing_observed",
   "reject_tracking_persists_after_reject",
   "possible_session_replay_on_sensitive_input_surface",
@@ -121,12 +123,14 @@ const ILLUSTRATIVE_PUBLIC_SAMPLE_FINDING_IDS = new Set<string>([
   "asymmetric_consent_ui",
   "consent_dark_patterns_detected",
   "third_party_cookie_pre_consent",
+  "cookie_disclosure_gap",
   "reject_tracking_persists_after_reject",
   "rtb_cookie_sync_observed",
   "cross_domain_identifier_sharing_observed",
   "session_recording_services_detected",
   "possible_session_replay_on_sensitive_input_surface",
   "sensitive_data_collection_with_third_party_tracking_present",
+  "focus_management_issue",
   "fingerprinting_related_signals_observed",
   "probable_fingerprinting"
 ]);
@@ -134,9 +138,11 @@ const ILLUSTRATIVE_PUBLIC_SAMPLE_FINDING_IDS = new Set<string>([
 const SAMPLE_EVIDENCE_CONFIDENCE: Record<string, "strong" | "good" | "review_signal"> = {
   asymmetric_consent_ui: "good",
   consent_dark_patterns_detected: "good",
+  cookie_disclosure_gap: "review_signal",
   cpra_cba_opt_out_missing: "review_signal",
   cross_domain_identifier_sharing_observed: "review_signal",
   fingerprinting_related_signals_observed: "review_signal",
+  focus_management_issue: "good",
   forced_consent_interaction: "good",
   keyboard_navigation_accessibility_issue: "good",
   possible_session_replay_on_sensitive_input_surface: "review_signal",
@@ -159,9 +165,11 @@ const SAMPLE_DIRECTNESS: Record<
 > = {
   asymmetric_consent_ui: "correlated_observation",
   consent_dark_patterns_detected: "correlated_observation",
+  cookie_disclosure_gap: "correlated_observation",
   cpra_cba_opt_out_missing: "absence_observation",
   cross_domain_identifier_sharing_observed: "direct_observation",
   fingerprinting_related_signals_observed: "direct_observation",
+  focus_management_issue: "direct_observation",
   forced_consent_interaction: "direct_observation",
   keyboard_navigation_accessibility_issue: "direct_observation",
   possible_session_replay_on_sensitive_input_surface: "correlated_observation",
@@ -201,9 +209,11 @@ const SEVERITY_OVERRIDES: Record<string, CertScoreFindingSeverity> = {
 const CATEGORY_BY_FINDING_ID: Record<string, FindingReferenceCategory> = {
   asymmetric_consent_ui: "Consent",
   consent_dark_patterns_detected: "Consumer protection",
+  cookie_disclosure_gap: "Disclosure gaps",
   cpra_cba_opt_out_missing: "Disclosure gaps",
   cross_domain_identifier_sharing_observed: "Third-party tracking",
   fingerprinting_related_signals_observed: "Fingerprinting",
+  focus_management_issue: "Accessibility",
   forced_consent_interaction: "Consent",
   keyboard_navigation_accessibility_issue: "Accessibility",
   possible_session_replay_on_sensitive_input_surface: "Third-party tracking",
@@ -223,6 +233,7 @@ const CATEGORY_BY_FINDING_ID: Record<string, FindingReferenceCategory> = {
 const PUBLIC_TITLE_OVERRIDES: Record<string, string> = {
   cpra_cba_opt_out_missing: "CPRA / privacy choice opt-out review signal",
   cross_domain_identifier_sharing_observed: "Identifier-like values observed across domains",
+  cookie_disclosure_gap: "Cookie disclosure gap",
   fingerprinting_related_signals_observed: "Fingerprinting-related browser/device signals observed",
   possible_session_replay_on_sensitive_input_surface: "Possible session replay near sensitive input surface",
   probable_fingerprinting: "Probable browser/device fingerprinting review signal",
@@ -237,16 +248,18 @@ const PUBLIC_TITLE_OVERRIDES: Record<string, string> = {
 const RELATED_FINDINGS: Record<string, string[]> = {
   asymmetric_consent_ui: ["reject_option_missing_or_hidden", "forced_consent_interaction", "consent_dark_patterns_detected"],
   consent_dark_patterns_detected: ["asymmetric_consent_ui", "reject_option_missing_or_hidden", "forced_consent_interaction"],
-  cpra_cba_opt_out_missing: ["cross_domain_identifier_sharing_observed", "rtb_cookie_sync_observed", "pre_consent_tracking_detected"],
+  cookie_disclosure_gap: ["third_party_cookie_pre_consent", "pre_consent_tracking_detected", "cpra_cba_opt_out_missing"],
+  cpra_cba_opt_out_missing: ["cookie_disclosure_gap", "cross_domain_identifier_sharing_observed", "rtb_cookie_sync_observed"],
   cross_domain_identifier_sharing_observed: ["rtb_cookie_sync_observed", "pre_consent_tracking_detected", "cpra_cba_opt_out_missing"],
   fingerprinting_related_signals_observed: ["probable_fingerprinting", "pre_consent_tracking_detected", "cross_domain_identifier_sharing_observed"],
+  focus_management_issue: ["keyboard_navigation_accessibility_issue", "semantic_labeling_accessibility_issue", "forced_consent_interaction"],
   forced_consent_interaction: ["reject_option_missing_or_hidden", "asymmetric_consent_ui", "consent_dark_patterns_detected"],
   keyboard_navigation_accessibility_issue: ["semantic_labeling_accessibility_issue", "visual_contrast_accessibility_issue"],
   possible_session_replay_on_sensitive_input_surface: [
     "session_recording_services_detected",
     "sensitive_data_collection_with_third_party_tracking_present"
   ],
-  pre_consent_tracking_detected: ["third_party_cookie_pre_consent", "rtb_cookie_sync_observed", "reject_tracking_persists_after_reject"],
+  pre_consent_tracking_detected: ["third_party_cookie_pre_consent", "cookie_disclosure_gap", "rtb_cookie_sync_observed"],
   probable_fingerprinting: ["fingerprinting_related_signals_observed", "cross_domain_identifier_sharing_observed", "rtb_cookie_sync_observed"],
   reject_option_missing_or_hidden: ["asymmetric_consent_ui", "forced_consent_interaction", "consent_dark_patterns_detected"],
   reject_tracking_persists_after_reject: ["pre_consent_tracking_detected", "third_party_cookie_pre_consent", "reject_option_missing_or_hidden"],
@@ -263,7 +276,7 @@ const RELATED_FINDINGS: Record<string, string[]> = {
     "pre_consent_tracking_detected"
   ],
   text_alternative_accessibility_issue: ["semantic_labeling_accessibility_issue", "visual_contrast_accessibility_issue"],
-  third_party_cookie_pre_consent: ["pre_consent_tracking_detected", "rtb_cookie_sync_observed", "reject_tracking_persists_after_reject"],
+  third_party_cookie_pre_consent: ["pre_consent_tracking_detected", "cookie_disclosure_gap", "rtb_cookie_sync_observed"],
   visual_contrast_accessibility_issue: ["text_alternative_accessibility_issue", "semantic_labeling_accessibility_issue"]
 };
 
@@ -303,6 +316,12 @@ export const FINDING_TOP_FINDING_RULES: Record<string, FindingTopFindingRule> = 
     highConfidenceRequires: ["Domain or scope.", "Timing.", "Purpose or vendor classification."],
     criticalOrTopRankingRequires: ["Advertising, identity, sync, or persistent storage.", "Repeated pages."],
     demoteOrSuppressWhen: ["Request only.", "Cookie name only.", "Unknown timing.", "Blocked scan."]
+  },
+  cookie_disclosure_gap: {
+    minimumToSurface: ["Runtime cookie activity plus retained cookie-policy or disclosure evidence that does not cover the observed cookie behavior."],
+    highConfidenceRequires: ["Cookie/domain/category evidence.", "Policy or cookie-disclosure page coverage.", "Clear mismatch rationale."],
+    criticalOrTopRankingRequires: ["Advertising, analytics, identity, sync, or persistent cookies with missing provider/purpose disclosure."],
+    demoteOrSuppressWhen: ["Cookie count only.", "Policy page not reached.", "Blocked scan.", "Mismatch not tied to a retained runtime cookie artifact."]
   },
   rtb_cookie_sync_observed: {
     minimumToSurface: ["Sync, match, adtech identity-like request, or redirect."],
@@ -362,6 +381,12 @@ export const FINDING_TOP_FINDING_RULES: Record<string, FindingTopFindingRule> = 
     criticalOrTopRankingRequires: ["Trap.", "Primary navigation blocked.", "Form submit blocked.", "Repeated component."],
     demoteOrSuppressWhen: ["Selector only.", "Inactive, hidden, or decorative element."]
   },
+  focus_management_issue: {
+    minimumToSurface: ["Automated focus-management or keyboard-focus evidence with selector, page, and interaction context."],
+    highConfidenceRequires: ["Open/close or dynamic-state context.", "Focus target or trap context.", "Affected component role."],
+    criticalOrTopRankingRequires: ["Modal, overlay, consent prompt, checkout, login, or primary navigation flow impact."],
+    demoteOrSuppressWhen: ["Generic focus style issue.", "Selector only.", "No dynamic interaction state.", "Decorative or hidden element."]
+  },
   cross_domain_identifier_sharing_observed: {
     minimumToSurface: ["Identifier-like key/value pattern in outbound cross-domain request."],
     highConfidenceRequires: ["Source/destination plus redacted key and vendor/category."],
@@ -408,6 +433,8 @@ const OBSERVED: Record<string, string> = {
     "Retained runtime evidence showed a script, request, or vendor pattern associated with session replay, heatmaps, recording, or behavior analytics in the observed public-page scope.",
   third_party_cookie_pre_consent:
     "Retained runtime evidence showed a third-party cookie or storage artifact observed before CertScore recorded a consent action or a prior consent state associated with that purpose.",
+  cookie_disclosure_gap:
+    "Retained runtime and public-surface evidence showed observed cookie activity that was not clearly covered by the retained cookie-policy or cookie-disclosure evidence in the scanned scope.",
   rtb_cookie_sync_observed:
     "Retained network evidence showed adtech, RTB, sync, match, redirect, or identifier-like request patterns that may be relevant to cookie/tracker, advertising, consent, transparency, sale/share, and vendor-governance review.",
   text_alternative_accessibility_issue:
@@ -426,6 +453,8 @@ const OBSERVED: Record<string, string> = {
     "Retained consent-surface evidence showed accept and refusal choices that appeared visually, procedurally, or structurally imbalanced within the observed scan scope.",
   keyboard_navigation_accessibility_issue:
     "Retained automated accessibility evidence showed interactive elements, focus behavior, or keyboard-related signals that may require keyboard accessibility review.",
+  focus_management_issue:
+    "Retained automated accessibility evidence showed focus movement, modal, overlay, dynamic-view, or keyboard-focus signals that may require focus-management review.",
   cross_domain_identifier_sharing_observed:
     "Retained outbound request evidence showed identifier-like keys or values moving to a different domain or third-party context within the observed scan scope.",
   reject_tracking_persists_after_reject:
@@ -449,6 +478,8 @@ const METHODOLOGY: Record<string, string> = {
     "CertScore inspects retained network, script-host, request, vendor, and category evidence for session replay, heatmap, recording, and behavior-analytics patterns. The finding is surfaced when retained runtime evidence includes a script, request, endpoint, or vendor pattern associated with replay-style tooling in the observed public-page scope. CertScore treats session-replay service evidence as a review signal. The scanner does not determine that keystrokes, sensitive values, full recordings, or user communications were captured or retained. Reviewers should consider vendor configuration, masking, sampling, consent state, page-level exclusions, sensitive surfaces, payload evidence, and whether the retained artifact reflects active replay collection or only library availability.",
   third_party_cookie_pre_consent:
     "CertScore records timestamped page-load, consent-state, cookie, storage, request, vendor, and coverage observations where available. This finding is surfaced when retained runtime evidence shows a third-party cookie or storage artifact before CertScore observed a consent action or a prior consent state associated with that purpose. CertScore treats third-party cookie-before-consent evidence as a review signal. The scanner does not determine legal status, consent validity, necessity, exemption status, or compliance status. Reviewers should consider cookie domain and scope, first-seen timestamp, purpose classification, whether the storage is strictly necessary or exempt, consent state, region, returning-user state, CMP configuration, and scan coverage reliability.",
+  cookie_disclosure_gap:
+    "CertScore compares retained runtime cookie/storage observations with retained public cookie-policy, privacy-policy, and disclosure evidence where available. This finding is surfaced when observed cookie activity is not clearly covered by the retained disclosure evidence, such as missing provider, purpose, category, or cookie-family coverage. CertScore treats cookie-disclosure gaps as review signals. The scanner does not determine legal adequacy, completeness, applicability, or compliance status. Reviewers should consider cookie purpose, provider ownership, retention, policy version, regional disclosure variants, CMP cookie tables, and whether coverage limitations prevented CertScore from reaching the relevant disclosure surface.",
   rtb_cookie_sync_observed:
     "CertScore inspects retained network evidence for adtech, exchange, sync, match, redirect, and identifier-like request patterns, including request origin/path, classified vendor/category, redirect or sync context where available, identifier-like query keys with values redacted, and scan coverage context. This finding is surfaced when retained evidence shows a request or redirect pattern consistent with RTB, adtech sync, user match, or identity sync-like behavior in the observed scan scope. CertScore treats adtech identity sync-like evidence as a review signal. The scanner does not infer confirmed cookie syncing, a complete identity graph, personal identity, legal status, consent validity, or compliance status. Reviewers should consider endpoint purpose, vendor role, identifier scope, consent timing, redirects, jurisdiction, server-side behavior not visible to the browser, and whether the retained request pattern is sufficient for the intended review.",
   text_alternative_accessibility_issue:
@@ -467,6 +498,8 @@ const METHODOLOGY: Record<string, string> = {
     "CertScore retains representative consent-surface evidence for button labels, visible controls, first-layer availability, hierarchy cues, step counts, preference paths, and scan coverage context where available. The finding is surfaced when retained evidence indicates that accepting may be materially easier, more visually prominent, or more direct than refusing within the observed consent interface. CertScore treats asymmetric consent UI signals as review signals. The scanner does not determine legal status, deception, unfairness, consent validity, compliance status, or dark-pattern status. Reviewers should consider equivalent choice paths, visual hierarchy, copy, localization, accessibility, viewport, region, CMP configuration, prior consent state, and whether the retained evidence reflects the relevant user-facing consent surface.",
   keyboard_navigation_accessibility_issue:
     "CertScore retains representative automated accessibility evidence for keyboard-related checks, including the rule identifier, affected selector or element reference, page URL, impact label when available, and WCAG-oriented references. The finding is surfaced when retained evidence indicates that an interactive element, focus behavior, focus visibility, focus order, or custom control may require keyboard accessibility review. CertScore treats automated keyboard-navigation results as review signals. The scanner does not infer full WCAG conformance or non-conformance from a single automated rule result. Reviewers should consider whether the element can receive focus, whether it can be operated by keyboard, whether focus is visible and ordered logically, whether custom controls expose expected semantics, and whether user-triggered states, modals, menus, carousels, or overlays were included in the scan scope.",
+  focus_management_issue:
+    "CertScore retains representative automated accessibility evidence for focus movement, focus containment, focus restoration, dynamic views, modals, overlays, menus, consent prompts, and keyboard-focus behavior where available. The finding is surfaced when retained evidence indicates focus may move unpredictably, become trapped, fail to enter or leave an active region, or be obscured during an interaction state. CertScore treats automated focus-management evidence as a review signal. The scanner does not infer full WCAG conformance or non-conformance from a single automated result. Reviewers should confirm keyboard-only operation, screen-reader context, modal lifecycle, focus restoration, visible focus, background inertness, and user-triggered states.",
   cross_domain_identifier_sharing_observed:
     "CertScore inspects retained outbound request evidence for identifier-like keys, redacted values, destination domains, request origin/path, third-party context, vendor/category classification, timing, and consent context where available. This finding is surfaced when retained evidence shows identifier-like data in an outbound request to a different domain or third-party context within the observed scan scope. CertScore treats cross-domain identifier-sharing evidence as a review signal. The scanner does not determine personal identity, identity resolution, legal status, consent validity, sale/share status, or compliance status. Reviewers should consider whether the value is pseudonymous, hashed, scoped, session-only, security-related, analytics-related, advertising-related, or otherwise necessary, and whether the retained evidence is sufficient for the intended review.",
   reject_tracking_persists_after_reject:
@@ -513,6 +546,13 @@ const COMMON_CAUSES: Record<string, string[]> = {
     "Consent mode or tag-manager sequencing is configured after vendor scripts run.",
     "Server-side tags or redirects still cause browser storage before a choice is recorded.",
     "Returning-user or regional CMP state changes which cookies appear during the scan."
+  ],
+  cookie_disclosure_gap: [
+    "Cookie policy tables are maintained separately from live tag-manager or CMP configuration.",
+    "New analytics, advertising, replay, or measurement vendors were added without updating cookie disclosures.",
+    "Cookie categories, providers, or retention periods differ between runtime behavior and policy copy.",
+    "Regional cookie banners and global policy pages expose different provider lists.",
+    "Runtime cookies are set by embedded third parties whose provider names are not reflected in the disclosure surface."
   ],
   rtb_cookie_sync_observed: [
     "Programmatic advertising tags initialize on page load.",
@@ -576,6 +616,13 @@ const COMMON_CAUSES: Record<string, string[]> = {
     "Menus, modals, overlays, carousels, or accordions do not manage focus predictably.",
     "Keyboard handlers support mouse clicks but not Enter, Space, Escape, or arrow-key behavior where expected.",
     "Responsive navigation or user-triggered states are not tested with keyboard-only workflows."
+  ],
+  focus_management_issue: [
+    "Modal, menu, drawer, or consent-prompt components do not move focus into the active surface when opened.",
+    "Focus is not restored to the triggering control when a dynamic view closes.",
+    "Background page content remains reachable while an overlay is active.",
+    "Keyboard focus is hidden, clipped, or obscured by sticky headers, dialogs, or transitions.",
+    "Dynamic route changes, validation errors, or multi-step forms do not announce or focus the new context."
   ],
   cross_domain_identifier_sharing_observed: [
     "Analytics or advertising requests include client, session, campaign, or device identifiers.",
@@ -769,6 +816,17 @@ const REVIEW_QUESTIONS: Record<string, string[]> = {
     "Could there be a keyboard trap or unreachable control in user-triggered states not covered by the automated scan?",
     "Is the issue isolated, or repeated across components, templates, responsive navigation, menus, or modals?",
     "Should manual keyboard and assistive-technology review confirm operability, focus order, user impact, and remediation quality?"
+  ],
+  focus_management_issue: [
+    "Which selector, component, page, and interaction state triggered the focus-management evidence?",
+    "Is the affected surface a modal, overlay, menu, drawer, consent prompt, dynamic route change, validation message, or multi-step form?",
+    "Where should focus move when the surface opens, updates, or closes?",
+    "Is focus visible, logical, and not obscured across default, open, close, error, expanded, collapsed, and responsive states?",
+    "Can keyboard users enter the active region, operate controls, and return to the triggering context?",
+    "Is background page content removed from the tab order while modal or blocking content is active?",
+    "Could focus become trapped, lost, skipped, or moved to an unexpected location?",
+    "Is the issue isolated, or repeated across components, templates, dialogs, menus, consent surfaces, or responsive navigation?",
+    "Should manual keyboard and assistive-technology review confirm focus lifecycle, announcements, user impact, and remediation quality?"
   ],
   cross_domain_identifier_sharing_observed: [
     "Which outbound request carried the identifier-like key or value?",
@@ -999,6 +1057,32 @@ const EVIDENCE_STANDARDS: Record<string, FindingEvidenceStandard> = {
       "Claims about WCAG status or legal status based only on automated evidence without manual context review."
     ]
   },
+  focus_management_issue: {
+    strong: [
+      "Representative automated focus-management evidence includes rule ID, affected selector or element reference, page URL, impact label, and interaction-state context.",
+      "Retained evidence gives enough context to review focus movement, containment, restoration, visibility, background inertness, or active surface behavior.",
+      "Evidence indicates the affected element or component is meaningful and user-operable, such as a modal, menu, overlay, consent prompt, form step, or dynamic route change.",
+      "Repeated examples across components, templates, modals, menus, consent prompts, or responsive states may strengthen confidence when retained.",
+      "Strong evidence does not replace manual keyboard and assistive-technology review for user impact and remediation quality."
+    ],
+    good: [
+      "Representative focus-management evidence includes selector or element reference, page URL, impact label, and enough interaction detail for reviewer inspection.",
+      "The retained example is enough for a reviewer to replay the focus behavior manually.",
+      "The evidence is likely a focus-management issue, but focus lifecycle, screen-reader context, dynamic states, and user impact may require manual review."
+    ],
+    auditOnly: [
+      "Contextual focus signals exist, but retained evidence lacks enough detail to confirm the affected component, state, or focus path.",
+      "A modal, menu, overlay, or consent prompt pattern appears suspicious, but no retained automated artifact identifies the focus behavior.",
+      "The issue may involve user-triggered states, authenticated flows, dynamic content, shadow DOM, canvas, iframes, or responsive navigation where automated evidence is incomplete."
+    ],
+    insufficient: [
+      "Selector alone without rule ID, page context, or focus-related evidence.",
+      "Generic custom component signal without retained affected element and interaction state.",
+      "Visual impression, screenshot, or user report without retained automated evidence or manual keyboard verification.",
+      "Treating decorative, inactive, hidden, or unreachable elements as finding-supporting evidence without context review.",
+      "Claims about WCAG status or legal status based only on automated evidence without manual context review."
+    ]
+  },
   reject_option_missing_or_hidden: {
     strong: [
       "Retained consent-surface evidence includes page URL, consent layer or banner observation, visible accept control, and no visible reject, decline, or equivalent refusal control on the same observed layer.",
@@ -1128,6 +1212,32 @@ const EVIDENCE_STANDARDS: Record<string, FindingEvidenceStandard> = {
       "Cookie count without retained timing and consent-state context.",
       "Policy text, CMP name, or static source reference without runtime storage evidence.",
       "Claims about legal status, compliance status, consent validity, or tracking lawfulness based only on automated evidence."
+    ]
+  },
+  cookie_disclosure_gap: {
+    strong: [
+      "Retained runtime evidence includes concrete cookie or storage artifacts with name or family, domain or provider context, category where available, and values redacted or omitted.",
+      "Retained public-surface evidence includes cookie-policy, privacy-policy, CMP, or disclosure coverage that was inspected during the scan.",
+      "Evidence identifies the mismatch between observed cookie behavior and retained disclosure coverage without relying on cookie counts alone.",
+      "Coverage context indicates the relevant public disclosure surface was not materially blocked, missing, or unreliable.",
+      "The finding does not claim legal adequacy or compliance status without manual review."
+    ],
+    good: [
+      "Retained evidence shows runtime cookie activity and a plausible disclosure mismatch, but provider naming, category mapping, regional policy variants, or coverage completeness requires manual review.",
+      "The retained example is enough for a reviewer to compare runtime cookies with policy or CMP disclosure text manually.",
+      "The evidence is likely relevant to transparency and disclosure review, but legal adequacy, policy completeness, and applicability require manual review."
+    ],
+    auditOnly: [
+      "Cookie activity exists, but retained policy or disclosure coverage is incomplete.",
+      "A policy page exists, but the scan did not retain enough cookie-table or provider context to compare it with runtime cookies.",
+      "Provider or category names differ, but no retained runtime cookie artifact supports the mismatch."
+    ],
+    insufficient: [
+      "Cookie count alone.",
+      "Cookie name alone without domain, provider, timing, or disclosure comparison.",
+      "Policy text alone without retained runtime cookie evidence.",
+      "Blocked or degraded scans where disclosure coverage cannot be trusted.",
+      "Claims about legal status, compliance status, or disclosure sufficiency based only on automated evidence."
     ]
   },
   reject_tracking_persists_after_reject: {
@@ -1353,6 +1463,15 @@ const LIMITATIONS: Record<string, string[]> = {
     "CertScore retains representative evidence for review and may not list every repeated instance across a template or component library.",
     "Findings should be evaluated with implementation context and applicable accessibility requirements before operational or legal reliance."
   ],
+  focus_management_issue: [
+    "This finding is an automated accessibility review signal, not a legal conclusion, certification, or determination of WCAG conformance or non-conformance.",
+    "Automated focus checks can identify many focus-management risks, but they may not fully test every keyboard path, assistive-technology announcement, modal lifecycle, or user-triggered state.",
+    "Automated evidence may miss or misread dynamic content, shadow DOM, iframes, responsive navigation, animation timing, and authenticated flows.",
+    "Manual review is needed to confirm focus order, focus restoration, background inertness, keyboard trapping, visible focus, user impact, and remediation quality.",
+    "Remediation should be verified across open, close, escape, tab, shift-tab, route-change, validation-error, and responsive states where relevant.",
+    "CertScore retains representative evidence for review and may not list every repeated instance across a component library or template.",
+    "Findings should be evaluated with implementation context and applicable accessibility requirements before operational or legal reliance."
+  ],
   pre_consent_tracking_detected: [
     "This finding is an automated runtime risk signal for review, not a legal conclusion, certification, or compliance determination.",
     "A consent banner, CMP script, tag manager, vendor name, policy disclosure, or cookie name is not enough by itself.",
@@ -1453,6 +1572,14 @@ const LIMITATIONS: Record<string, string[]> = {
     "Manual review is needed to confirm purpose, necessity, consent state, exemption status, vendor ownership, and remediation quality.",
     "CertScore redacts or avoids retaining full cookie values, query strings, and sensitive payloads while preserving stable anchors needed for review."
   ],
+  cookie_disclosure_gap: [
+    "This finding is an automated cookie-disclosure review signal, not a legal conclusion, certification, compliance determination, or determination that a policy is legally insufficient.",
+    "Automated evidence can compare retained runtime cookie activity with retained disclosure coverage, but it may miss regional cookie tables, CMP preference-center details, or policy content loaded after interaction.",
+    "Provider names, cookie families, purposes, and categories may differ across vendor documentation, CMP labels, policy pages, and browser-visible cookies.",
+    "Manual review is needed to confirm policy scope, provider ownership, purpose mapping, retention, regional variants, and remediation quality.",
+    "Blocked, interrupted, or content-degraded scans may limit disclosure coverage and should not be treated as clean or complete.",
+    "CertScore redacts or avoids retaining cookie values, query strings, and sensitive payloads while preserving stable anchors needed for review."
+  ],
   reject_tracking_persists_after_reject: [
     "This finding is an automated reject-enforcement review signal, not a legal conclusion, certification, compliance determination, or determination of consent validity.",
     "Automated evidence may not fully determine whether the reject interaction succeeded, whether a beacon was queued before reject, or whether a vendor was responsible for post-reject activity.",
@@ -1490,7 +1617,9 @@ const USER_IMPACT: Record<string, string> = {
   text_alternative_accessibility_issue:
     "Text alternatives help screen reader, voice control, low-bandwidth, image-blocking, and cognitive-accessibility users understand meaningful non-text content.",
   keyboard_navigation_accessibility_issue:
-    "Keyboard access is essential for people who use keyboards, switch devices, voice input, screen readers, or other assistive technologies to navigate and operate web interfaces."
+    "Keyboard access is essential for people who use keyboards, switch devices, voice input, screen readers, or other assistive technologies to navigate and operate web interfaces.",
+  focus_management_issue:
+    "Predictable focus movement helps keyboard, screen-reader, voice-control, and cognitive-accessibility users understand where interaction moved and recover from dialogs, menus, overlays, and dynamic views."
 };
 
 const DEFAULT_LIMITATIONS = [
@@ -1536,6 +1665,10 @@ function confidenceSemanticsFor(id: string, benchmark: FindingDensityBenchmark) 
     return "Good when representative automated keyboard-related evidence includes rule ID, selector or element reference, page context, impact label, and WCAG-oriented references; stronger when retained evidence also includes focus-state context, interaction-state context, repeated examples across components, or enough detail for manual keyboard-path verification. Manual review is still needed for keyboard operability, focus order, focus visibility, keyboard traps, and remediation quality.";
   }
 
+  if (id === "focus_management_issue") {
+    return "Good when representative automated focus-management evidence includes rule ID or signal type, selector or element reference, page context, and interaction-state detail; stronger when retained evidence includes modal lifecycle, focus restoration, focus containment, background inertness, repeated components, or enough detail for manual keyboard replay. Manual review is still needed for assistive-technology behavior, user impact, and remediation quality.";
+  }
+
   if (id === "reject_option_missing_or_hidden") {
     return "Good when retained consent-surface evidence includes the observed consent layer, accept control, visible button or link labels, refusal-path availability, page context, and scan coverage; stronger when retained evidence also includes step count, preference-path context, repeated examples across regions or viewports, and enough detail for manual UI review. Manual review is still needed for legal interpretation, equivalent choice paths, accessibility, localization, and remediation quality.";
   }
@@ -1558,6 +1691,10 @@ function confidenceSemanticsFor(id: string, benchmark: FindingDensityBenchmark) 
 
   if (id === "third_party_cookie_pre_consent") {
     return "Good when retained runtime evidence includes a third-party cookie or storage artifact, first-seen timing, domain or scope, consent-state context, and enough page or request context for reviewer inspection; stronger when retained evidence also includes non-essential purpose classification, vendor attribution, related request context, repeated observations, and usable coverage. Manual review is still needed for purpose, necessity, exemption status, consent state, and remediation quality.";
+  }
+
+  if (id === "cookie_disclosure_gap") {
+    return "Good when retained runtime cookie/storage evidence is compared against retained cookie-policy, CMP, or disclosure evidence and the mismatch is explicit; stronger when retained evidence includes cookie name or family, domain or provider, purpose/category, disclosure surface URL, and coverage context. Manual review is still needed for policy scope, regional variants, provider ownership, legal review, and remediation quality.";
   }
 
   if (id === "reject_tracking_persists_after_reject") {
@@ -1636,6 +1773,23 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
       {
         title: "What should not count by itself",
         code: "cookie_name=example_id [insufficient_without_timing_and_domain]\nthird_party_request_present=true [audit_only_without_cookie_artifact]\nvendor=Example Ads [insufficient_without_runtime_storage_anchor]\npolicy_mentions_cookies [insufficient_without_runtime_evidence]"
+      }
+    ];
+  }
+
+  if (id === "cookie_disclosure_gap") {
+    return [
+      {
+        title: "Cookie disclosure mismatch example",
+        code: "artifact=cookie_disclosure_001\nrole=finding_supporting_artifact\nurl=https://example.com/\nruntime_cookie_name=example_id\nruntime_cookie_domain=.ads.example\nruntime_cookie_value_retained=false\npossible_provider=Example Ads\npossible_category=advertising_or_measurement\ncookie_policy_url=https://example.com/cookie-policy\nobserved_policy_coverage=provider_or_cookie_family_not_found\nreview_caveat=manual review should confirm provider ownership, purpose, retention, regional disclosure variants, and legal review"
+      },
+      {
+        title: "Review context",
+        code: "runtime_cookie_artifact_present=true\ndisclosure_surface_scanned=true\ncmp_cookie_table_observed=manual_review_recommended\nvalues_redacted=true\ncoverage_status=usable\nmanual_review_needed=true"
+      },
+      {
+        title: "What should not count by itself",
+        code: "cookie_count=12 [insufficient_without_named_runtime_artifact]\npolicy_page_missing [audit_only_without_runtime_cookie_context]\ncookie_name=example_id [insufficient_without_disclosure_comparison]\nlegal_review_claim [not_determined_by_automated_scan]"
       }
     ];
   }
@@ -1827,6 +1981,23 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
     ];
   }
 
+  if (id === "focus_management_issue") {
+    return [
+      {
+        title: "Focus management example",
+        code: "rule=focus-management\nartifact=focus_001\nrole=finding_supporting_artifact\nurl=https://example.com/app\nselector=[data-example-component=\"dialog\"]\nimpact=serious\nwcag_refs=2.4.3 Focus Order; 2.4.7 Focus Visible; 4.1.2 Name, Role, Value\nelement_type=modal_or_overlay\ninteraction_state=open [manual_review_recommended]\ndetected_signal=focus_not_moved_or_restored\nreview_caveat=manual review should confirm focus lifecycle, background inertness, keyboard trap risk, and screen-reader context"
+      },
+      {
+        title: "Review context",
+        code: "component=dialog_or_drawer\nstates_to_review=open, close, escape, tab, shift_tab, route_change, validation_error\npossible_source=component_focus_lifecycle\nmanual_keyboard_review_needed=true"
+      },
+      {
+        title: "What should not count by itself",
+        code: "selector=.modal [insufficient_without_interaction_state]\nfocus_outline_removed [audit_only_without_user_path_context]\ncomponent_name=Dialog [audit_only_without_focus_artifact]\nvisual_claim [requires_keyboard_review]"
+      }
+    ];
+  }
+
   if (id.includes("accessibility")) {
     return [
       {
@@ -1961,6 +2132,7 @@ function makeFallbackEvidenceBlocks(findingId: string): Record<string, unknown> 
   if (
     findingId === "pre_consent_tracking_detected" ||
     findingId === "third_party_cookie_pre_consent" ||
+    findingId === "cookie_disclosure_gap" ||
     findingId === "reject_tracking_persists_after_reject"
   ) {
     blocks.consentTimeline = {
@@ -2003,7 +2175,8 @@ function makeFallbackEvidenceBlocks(findingId: string): Record<string, unknown> 
     findingId === "visual_contrast_accessibility_issue" ||
     findingId === "semantic_labeling_accessibility_issue" ||
     findingId === "text_alternative_accessibility_issue" ||
-    findingId === "keyboard_navigation_accessibility_issue"
+    findingId === "keyboard_navigation_accessibility_issue" ||
+    findingId === "focus_management_issue"
   ) {
     blocks.accessibilityEvidence = {
       ruleId: "representative_automated_rule",

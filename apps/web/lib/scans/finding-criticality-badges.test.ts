@@ -19,6 +19,7 @@ const EXPECTED_BADGES = {
   reject_tracking_persists_after_reject: "critical",
   session_recording_services_detected: "medium",
   third_party_cookie_pre_consent: "critical",
+  cookie_disclosure_gap: "medium",
   sensitive_data_collection_with_third_party_tracking_present: "high",
   possible_session_replay_on_sensitive_input_surface: "critical",
   rtb_cookie_sync_observed: "high",
@@ -31,7 +32,7 @@ const EXPECTED_BADGES = {
 } satisfies Record<(typeof EXECUTIVE_SUMMARY_TOP_FINDING_IDS)[number], FindingCriticalityBadge>;
 
 test("finding criticality badges cover every executive top finding", () => {
-  assert.equal(EXECUTIVE_SUMMARY_TOP_FINDING_IDS.length, 20);
+  assert.equal(EXECUTIVE_SUMMARY_TOP_FINDING_IDS.length, 21);
 
   for (const findingId of EXECUTIVE_SUMMARY_TOP_FINDING_IDS) {
     assert.equal(getFindingCriticalityBadge(findingId), EXPECTED_BADGES[findingId]);

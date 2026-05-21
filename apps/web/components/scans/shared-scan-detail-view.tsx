@@ -105,6 +105,10 @@ import {
   getPublicReportFindingDisplay,
   getPublicReportFindingFallbackNote
 } from "../../lib/scans/public-report-finding-display";
+import {
+  evaluateFindingEvidenceContractForPacket,
+  getFindingEvidenceContractForUnifiedFinding
+} from "../../lib/scans/finding-evidence-contracts";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import {
@@ -3779,7 +3783,327 @@ function buildEntitySamples(
   );
 }
 
-function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPacket) {
+function parseEntityObjectSamples(values: string[] | undefined, limit = 3) {
+  const rows: Array<Record<string, unknown>> = [];
+  for (const value of values ?? []) {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        rows.push(parsed as Record<string, unknown>);
+      }
+    } catch {
+      // Existing report entities are mixed strings and JSON snippets; non-JSON values stay in the compact entity sample.
+    }
+    if (rows.length >= limit) {
+      break;
+    }
+  }
+  return rows;
+}
+
+function getFirstEntityObject(
+  entities: NonNullable<UnifiedFindingDisplayPacket["evidence"]>["entities"] | undefined,
+  keys: string[]
+) {
+  for (const key of keys) {
+    const [row] = parseEntityObjectSamples(entities?.[key], 1);
+    if (row) {
+      return row;
+    }
+  }
+  return null;
+}
+
+function getFirstEntityString(
+  entities: NonNullable<UnifiedFindingDisplayPacket["evidence"]>["entities"] | undefined,
+  keys: string[]
+) {
+  for (const key of keys) {
+    const value = entities?.[key]?.find((entry) => entry.trim().length > 0);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getFindingCandidateProjectionIds(findingId: string) {
+  const directMap: Record<string, string[]> = {
+    accept_more_prominent_than_reject: ["asymmetric_consent_ui", "consent_dark_patterns_detected"],
+    forced_consent_wall: ["forced_consent_interaction"],
+    fingerprinting_observed: ["fingerprinting_related_signals_observed", "probable_fingerprinting"],
+    preconsent_tracking: ["pre_consent_tracking_detected"],
+    reject_button_missing: ["reject_option_missing_or_hidden", "consent_dark_patterns_detected"],
+    reject_did_not_reduce_tracking: ["reject_tracking_persists_after_reject"],
+    rtb_cookie_sync_observed: ["rtb_cookie_sync_observed"],
+    session_replay_observed: ["session_recording_services_detected"],
+    weak_cookie_security_attributes: []
+  };
+  return directMap[findingId] ?? [];
+}
+
+function buildTrackingEvidenceExport(finding: UnifiedFindingDisplayPacket) {
+  const entities = finding.evidence?.entities;
+  const consentTimeline = getFirstEntityObject(entities, ["consentTimeline", "consent_timeline"]);
+  const requestRows = [
+    ...parseEntityObjectSamples(entities?.requestPurposeClassificationConfidence, 5),
+    ...parseEntityObjectSamples(entities?.request_purpose_classification_confidence, 5)
+  ];
+  const representativePreConsentRequests = requestRows.length > 0
+    ? requestRows.map((row) => ({
+        category: row.category ?? row.classification ?? null,
+        classificationBasis: row.classificationBasis ?? row.classification_basis ?? row.evidenceSource ?? null,
+        runtimePhase: row.runtimePhase ?? row.runtime_phase ?? null,
+        url: row.requestUrl ?? row.request_url ?? row.url ?? null,
+        vendor: row.vendor ?? null
+      }))
+    : [
+        ...(entities?.preconsent_tracker_evidence_urls ?? []),
+        ...(entities?.runtimeRequestUrls ?? []),
+        ...(entities?.urls ?? []),
+        ...(finding.evidence?.sourceUrls ?? [])
+      ].slice(0, 5).map((url, index) => ({
+        category: finding.evidence?.entities?.runtimeVendorCategories?.[index] ?? null,
+        classificationBasis: null,
+        runtimePhase: null,
+        url,
+        vendor: [
+          ...(entities?.preconsent_tracker_vendors ?? []),
+          ...(entities?.runtimeVendors ?? [])
+        ][index] ?? null
+      }));
+
+  return {
+    consentTimeline,
+    firstThirdPartyTrackingRequestMs:
+      finding.evidence?.counts?.firstThirdPartyTrackingRequestMs ??
+      finding.evidence?.counts?.first_third_party_tracking_request_ms ??
+      consentTimeline?.firstThirdPartyRequestMs ??
+      consentTimeline?.first_third_party_request_ms ??
+      null,
+    firstNonEssentialRequestMs:
+      consentTimeline?.firstNonEssentialRequestMs ??
+      consentTimeline?.first_non_essential_request_ms ??
+      null,
+    firstUserActionMs:
+      consentTimeline?.firstUserActionMs ??
+      consentTimeline?.first_user_action_ms ??
+      null,
+    representativePreConsentRequests
+  };
+}
+
+function buildCookieOrStorageEvidenceExport(finding: UnifiedFindingDisplayPacket) {
+  const entities = finding.evidence?.entities;
+  const rows = [
+    ...parseEntityObjectSamples(entities?.preconsent_cookie_evidence, 8),
+    ...parseEntityObjectSamples(entities?.preconsentCookieEvidence, 8)
+  ];
+
+  return {
+    preConsentCookieWriteCount:
+      finding.evidence?.counts?.preconsent_cookie_before_consent_count ??
+      finding.evidence?.counts?.trackingCookieWritesBeforeConsent ??
+      finding.evidence?.counts?.beforeConsentCookieCount ??
+      null,
+    rows: rows.map((row) => ({
+      category: row.category ?? row.cookieCategory ?? row.cookie_category ?? row.vendorCategory ?? row.vendor_category ?? null,
+      consentPhase: row.consentPhase ?? row.consent_phase ?? row.timingStatus ?? row.timing_status ?? null,
+      cookieName: row.cookieName ?? row.cookie_name ?? row.name ?? null,
+      domain: row.domain ?? row.cookieDomain ?? row.cookie_domain ?? row.hostname ?? null,
+      firstObservedMs: row.firstObservedMs ?? row.first_observed_ms ?? row.firstSeenMs ?? row.first_seen_ms ?? null,
+      party: row.party ?? row.cookiePartyType ?? row.cookie_party_type ?? null,
+      vendor: row.vendor ?? row.vendorName ?? row.vendor_name ?? null,
+      writeSource: row.writeSource ?? row.write_source ?? row.source ?? row.evidenceSource ?? row.evidence_source ?? null
+    }))
+  };
+}
+
+function buildFingerprintingEvidenceExport(finding: UnifiedFindingDisplayPacket) {
+  const entities = finding.evidence?.entities;
+  const runtimeEvidence = parseEntityObjectSamples(
+    entities?.fingerprintingRuntimeEvidence ?? entities?.fingerprinting_runtime_evidence,
+    3
+  );
+  const firstRuntimeEvidence = runtimeEvidence[0] ?? null;
+  return {
+    mappedTopFinding: getFindingCandidateProjectionIds(finding.unifiedFindingId),
+    fingerprintTier: finding.evidence?.counts?.fingerprintTier ?? null,
+    vendor: firstRuntimeEvidence?.vendor ?? getFirstEntityString(entities, ["fingerprintingVendors", "fingerprintVendors"]),
+    scriptUrl: firstRuntimeEvidence?.requestUrl ?? firstRuntimeEvidence?.scriptUrl ?? null,
+    apiSignals: entities?.fingerprintingSignals ?? entities?.fingerprintAttributeCategories ?? [],
+    readbackObserved: firstRuntimeEvidence?.readbackObserved ?? firstRuntimeEvidence?.readback_observed ?? null,
+    outboundRequestAfterCollection: (entities?.fingerprintingSummaryReasons ?? []).some((reason) =>
+      /outbound third-party requests after collection/i.test(reason)
+    ),
+    retainedRuntimeEvidence: runtimeEvidence
+  };
+}
+
+function buildConsentUiEvidenceExport(finding: UnifiedFindingDisplayPacket) {
+  const entities = finding.evidence?.entities;
+  const runtimePath = getFirstEntityObject(entities, ["consentUiPathEvidence", "consent_ui_path_evidence"]);
+  const rejectPath = getFirstEntityObject(entities, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]);
+  const diagnostics = getFirstEntityObject(entities, ["consentSurfaceDiagnostics", "consent_surface_diagnostics"]);
+  return {
+    labels: {
+      accept: runtimePath?.acceptLabel ?? diagnostics?.acceptLabel ?? null,
+      reject: runtimePath?.rejectLabel ?? diagnostics?.rejectLabel ?? null,
+      manage: runtimePath?.manageChoicesLabel ?? diagnostics?.manageChoicesLabel ?? null
+    },
+    pathDepth: {
+      accept: runtimePath?.acceptPathDepth ?? rejectPath?.acceptPathDepth ?? null,
+      reject: runtimePath?.rejectPathDepth ?? rejectPath?.rejectPathDepth ?? null
+    },
+    hierarchy: runtimePath?.visualHierarchyScore ?? runtimePath?.visual_hierarchy_score ?? null,
+    postRejectObservationStatus: rejectPath?.postRejectObservationStatus ?? rejectPath?.post_reject_observation_status ?? null,
+    rejectPathStatus: rejectPath?.status ?? runtimePath?.rejectPathStatus ?? null,
+    surfaceType: runtimePath?.surfaceType ?? diagnostics?.surfaceType ?? null
+  };
+}
+
+function buildDisclosureEvidenceExport(finding: UnifiedFindingDisplayPacket) {
+  return {
+    confidenceBasis: finding.presentationDecision.confidenceRationale,
+    contactChannelType: getFirstEntityString(finding.evidence?.entities, [
+      "privacyContactChannelType",
+      "contactChannelType",
+      "privacy_contact_channel_type"
+    ]),
+    matchedSnippet: finding.evidence?.snippets?.[0] ?? null,
+    pageUrl: finding.primaryPageUrl ?? finding.evidence?.pageUrls?.[0] ?? null
+  };
+}
+
+function buildRejectPersistenceEligibilityExport(finding: UnifiedFindingDisplayPacket) {
+  if (finding.unifiedFindingId !== "reject_did_not_reduce_tracking") {
+    return null;
+  }
+  const promotionDecision = getFirstEntityObject(finding.evidence?.entities, ["promotionDecision", "promotion_decision"]);
+  const suppressionChecks = getFirstEntityObject(finding.evidence?.entities, ["suppressionChecks", "suppression_checks"]);
+  const postRejectRequests = [
+    ...parseEntityObjectSamples(finding.evidence?.entities?.postRejectNonEssentialRequests, 8),
+    ...parseEntityObjectSamples(finding.evidence?.entities?.post_reject_non_essential_requests, 8)
+  ];
+  const demotionReasons = uniqueStrings([
+    promotionDecision?.promoted === false ? `promotionDecision:${promotionDecision.reason ?? "not_promoted"}` : null,
+    suppressionChecks?.post_reject_window_available === false ? "missing:post_reject_observation_window" : null,
+    suppressionChecks?.navigation_or_reload_ambiguous === true ? "ambiguous:navigation_or_reload" : null,
+    suppressionChecks?.redirect_or_auth_wall_ambiguous === true ? "ambiguous:redirect_or_auth_wall" : null,
+    suppressionChecks?.reject_click_confirmed === false ? "missing:confirmed_reject_interaction" : null,
+    suppressionChecks?.non_essential_vendor_after_reject === false ? "missing:post_reject_nonessential_activity" : null,
+    postRejectRequests.length === 0 ? "missing:post_reject_nonessential_requests" : null
+  ].filter((value): value is string => typeof value === "string" && value.length > 0));
+
+  return {
+    eligibility: demotionReasons.length === 0 ? "eligible_for_projection_review" : "not_projected",
+    demotionReasons,
+    promotionDecision,
+    suppressionChecks,
+    postRejectNonEssentialRequests: postRejectRequests,
+    requiredEvidence: {
+      rejectInteractionSucceeded: true,
+      sameFlowRejectAttribution: true,
+      postRejectObservationWindow: true,
+      postRejectNonEssentialActivity: true
+    }
+  };
+}
+
+function buildSensitiveSurfaceEvidenceExport(finding: UnifiedFindingDisplayPacket) {
+  if (
+    finding.unifiedFindingId !== "possible_session_replay_on_sensitive_input_surface" &&
+    finding.unifiedFindingId !== "sensitive_data_collection_with_third_party_tracking_present"
+  ) {
+    return null;
+  }
+  const entities = finding.evidence?.entities;
+  const sensitivePayloadRows = [
+    ...parseEntityObjectSamples(entities?.sensitivePayloadViolations, 8),
+    ...parseEntityObjectSamples(entities?.sensitive_payload_violations, 8)
+  ];
+  const sessionReplayRows = [
+    ...parseEntityObjectSamples(entities?.sensitiveSessionReplayCooccurrenceEvidence, 8),
+    ...parseEntityObjectSamples(entities?.sensitive_session_replay_cooccurrence_evidence, 8)
+  ];
+  const thirdPartyRows = [
+    ...parseEntityObjectSamples(entities?.sensitiveThirdPartyTrackingEvidence, 8),
+    ...parseEntityObjectSamples(entities?.sensitive_third_party_tracking_evidence, 8)
+  ];
+
+  return {
+    samePageOrFlowLinkage:
+      sessionReplayRows.some((row) => row.samePage === true || row.same_page === true || row.sameFlow === true || row.same_flow === true) ||
+      thirdPartyRows.some((row) => row.samePage === true || row.same_page === true || row.sameFlow === true || row.same_flow === true),
+    fieldTypes: uniqueStrings([
+      ...(entities?.sensitive_data_types ?? []),
+      ...(entities?.sensitiveDataTypes ?? []),
+      ...sensitivePayloadRows.flatMap((row) => typeof row.detectedType === "string" ? [row.detectedType] : typeof row.detected_type === "string" ? [row.detected_type] : [])
+    ]),
+    maskingOrExclusionObserved:
+      sessionReplayRows.some((row) => row.maskingObserved === true || row.masking_observed === true || row.exclusionObserved === true || row.exclusion_observed === true) ||
+      thirdPartyRows.some((row) => row.maskingObserved === true || row.masking_observed === true || row.exclusionObserved === true || row.exclusion_observed === true),
+    rawValuesRetained: false,
+    sensitivePayloadViolations: sensitivePayloadRows,
+    sensitiveSessionReplayCooccurrenceEvidence: sessionReplayRows,
+    sensitiveThirdPartyTrackingEvidence: thirdPartyRows
+  };
+}
+
+function buildReviewPacketProjectionDiagnostics(finding: UnifiedFindingDisplayPacket) {
+  const contract = getFindingEvidenceContractForUnifiedFinding(finding.unifiedFindingId);
+  const decision = evaluateFindingEvidenceContractForPacket(finding);
+  const candidateProjectionIds = getFindingCandidateProjectionIds(finding.unifiedFindingId);
+  const projected = finding.sourceRefs.some((sourceRef) => sourceRef.kind === "signal" && candidateProjectionIds.includes(sourceRef.key));
+  const missingCorroborators = decision?.missingRequirements ?? [];
+  const demotionReasons = uniqueStrings([
+    ...missingCorroborators.map((requirement) => `missing:${requirement}`),
+    ...(decision?.negativeEvidenceFlags ?? []),
+    ...finding.presentationDecision.downgradeReasons,
+    ...finding.surfacingDecision.decisionReasons
+  ]);
+  const eligibility =
+    candidateProjectionIds.length === 0
+      ? "no_top_finding_mapping"
+      : projected
+        ? "projected"
+        : decision?.promotionEligibility === "eligible" && decision.allowedNarrativeTier === "strong"
+          ? "eligible_not_projected"
+          : "not_projected";
+  const suppressionReason = eligibility === "projected" ? null : demotionReasons[0] ?? null;
+
+  return {
+    topFindingEligibility: {
+      eligibility,
+      candidateTopFindingIds: candidateProjectionIds,
+      matchedCriteria: decision?.satisfiedRequirements ?? [],
+      missingCorroborators,
+      demotionReasons,
+      suppressionReason
+    },
+    canonicalPipelineRefs: {
+      runtimeEvidenceIds: uniqueStrings(finding.sourceRefs.map((sourceRef) =>
+        sourceRef.kind === "signal"
+          ? `${sourceRef.source}:${sourceRef.key}`
+          : sourceRef.kind === "validation"
+            ? `validation:${sourceRef.ruleKey}`
+            : `issue:${sourceRef.title}`
+      )),
+      normalizedConcernIds: finding.concernContext?.originTypes ?? [],
+      concernPolicyId: contract?.findingId ?? null,
+      unifiedFindingId: finding.unifiedFindingId,
+      executiveProjectionStatus: projected ? "projected" : "not_projected"
+    },
+    coverageLimitations: {
+      negativeEvidenceFlags: finding.concernContext?.negativeEvidenceFlags ?? [],
+      fetchQuality: finding.evidence?.fetchQuality ?? null,
+      fallbackOnly: finding.confidenceInputs.isFallbackOnly,
+      presentationDowngradeReasons: finding.presentationDecision.downgradeReasons
+    }
+  };
+}
+
+export function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPacket) {
   const display = getPublicReportFindingDisplay({
     confidence: finding.confidenceBand,
     findingId: finding.unifiedFindingId,
@@ -3788,6 +4112,8 @@ function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPacket) {
     severity: finding.severity,
     title: finding.title
   });
+
+  const diagnostics = buildReviewPacketProjectionDiagnostics(finding);
 
   return {
     evidenceScope: "detailed_review_summary",
@@ -3811,8 +4137,18 @@ function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPacket) {
       flags: (finding.evidence?.flags ?? []).slice(0, 6),
       pageUrls: (finding.evidence?.pageUrls ?? []).slice(0, 3),
       snippets: (finding.evidence?.snippets ?? []).slice(0, 2).map((snippet) => truncateJsonSample(snippet, 220)),
-      entities: buildEntitySamples(finding.evidence?.entities, { maxKeys: 4, maxValues: 3, maxLength: 140 })
+      entities: buildEntitySamples(finding.evidence?.entities, { maxKeys: 4, maxValues: 3, maxLength: 140 }),
+      consentUi: buildConsentUiEvidenceExport(finding),
+      disclosureOrContact: buildDisclosureEvidenceExport(finding),
+      fingerprinting: buildFingerprintingEvidenceExport(finding),
+      cookieOrStorage: buildCookieOrStorageEvidenceExport(finding),
+      rejectPersistenceEligibility: buildRejectPersistenceEligibilityExport(finding),
+      sensitiveSurface: buildSensitiveSurfaceEvidenceExport(finding),
+      tracking: buildTrackingEvidenceExport(finding)
     },
+    topFindingEligibility: diagnostics.topFindingEligibility,
+    canonicalPipelineRefs: diagnostics.canonicalPipelineRefs,
+    coverageLimitations: diagnostics.coverageLimitations,
     reviewContext: {
       sourceCounts: {
         issueCount: finding.confidenceInputs.issueCount,

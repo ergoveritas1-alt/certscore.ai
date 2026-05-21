@@ -882,12 +882,20 @@ export type RequestPurposeClassificationConfidence = Array<{
   requestUrl: string;
   hostname: string;
   vendor: string | null;
+  category?: string | null;
   purpose: string;
   essentiality: "essential" | "non_essential" | "unknown";
   confidence: number;
   reason: string;
+  classificationBasis?: string;
   firstObservedMs: number | null;
+  runtimePhase?: "pre_consent" | "post_consent" | "unknown";
+  timestampMs?: number | null;
+  timingStatus?: "pre_consent" | "post_consent" | "unknown";
+  tsMs?: number | null;
   evidenceRefs?: string[];
+  evidenceSource?: "observed_request";
+  pageUrl?: string | null;
 }>;
 
 export type RejectPathDepthAndAvailabilityEvidence = {

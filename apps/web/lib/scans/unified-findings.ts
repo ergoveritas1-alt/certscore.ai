@@ -42,6 +42,10 @@ import {
   hasConcretePreconsentArtifact
 } from "./promotion-evidence-contracts";
 import {
+  evaluateFindingEvidenceContractForPacket,
+  getFindingEvidenceContractForUnifiedFinding
+} from "./finding-evidence-contracts";
+import {
   isMeaningfulPolicyText,
   normalizePolicySnippet,
   normalizePolicySnippetList
@@ -751,7 +755,95 @@ export type UnifiedFindingDisplayPacket = UnifiedFindingPacket & {
   sourceLabel?: string;
   sourceUrl?: string;
   surfacingDecision: UnifiedFindingSurfacingDecision;
+  topFindingEligibility?: UnifiedFindingTopFindingEligibility;
 };
+
+export type UnifiedFindingTopFindingEligibility = {
+  candidateTopFindingIds: string[];
+  demotionReasons: string[];
+  eligibility: "projected" | "eligible_not_projected" | "not_projected" | "no_top_finding_mapping";
+  groupedUnder: string | null;
+  matchedCriteria: string[];
+  missingCorroborators: string[];
+  suppressionReason: string | null;
+};
+
+const UNIFIED_FINDING_TOP_FINDING_IDS: Record<string, string[]> = {
+  accept_more_prominent_than_reject: ["asymmetric_consent_ui"],
+  accept_only_banner: ["consent_dark_patterns_detected"],
+  cookie_disclosure_gap: ["cookie_disclosure_gap"],
+  cpra_cba_opt_out_missing: ["cpra_cba_opt_out_missing"],
+  cross_domain_identifier_sharing_observed: ["cross_domain_identifier_sharing_observed"],
+  dismiss_without_reject: ["consent_dark_patterns_detected"],
+  fingerprinting_observed: ["fingerprinting_related_signals_observed", "probable_fingerprinting"],
+  focus_management_issue: ["focus_management_issue"],
+  forced_consent_wall: ["forced_consent_interaction"],
+  preconsent_tracking: ["pre_consent_tracking_detected"],
+  reject_button_missing: ["reject_option_missing_or_hidden", "consent_dark_patterns_detected"],
+  reject_did_not_reduce_tracking: ["reject_tracking_persists_after_reject"],
+  rtb_cookie_sync_observed: ["rtb_cookie_sync_observed"],
+  session_replay_observed: ["session_recording_services_detected"],
+  session_replay_undisclosed: ["session_recording_services_detected"],
+  possible_session_replay_on_sensitive_input_surface: ["possible_session_replay_on_sensitive_input_surface"],
+  sensitive_data_collection_with_third_party_tracking_present: [
+    "sensitive_data_collection_with_third_party_tracking_present"
+  ],
+  text_alternative_accessibility_issue: ["text_alternative_accessibility_issue"],
+  semantic_labeling_accessibility_issue: ["semantic_labeling_accessibility_issue"],
+  visual_contrast_accessibility_issue: ["visual_contrast_accessibility_issue"]
+};
+
+function getCandidateTopFindingIds(packet: UnifiedFindingPacket) {
+  return uniqueStrings([
+    ...(UNIFIED_FINDING_TOP_FINDING_IDS[packet.unifiedFindingId] ?? []),
+    getFindingEvidenceContractForUnifiedFinding(packet.unifiedFindingId)?.findingId ?? null
+  ]);
+}
+
+function buildTopFindingEligibilityForDisplayPacket(input: {
+  packet: UnifiedFindingPacket;
+  presentationDecision: UnifiedFindingPresentationDecision;
+  surfacingDecision: UnifiedFindingSurfacingDecision;
+}): UnifiedFindingTopFindingEligibility {
+  const { packet, presentationDecision, surfacingDecision } = input;
+  const candidateTopFindingIds = getCandidateTopFindingIds(packet);
+  const contractDecision = evaluateFindingEvidenceContractForPacket(packet);
+  const matchedCriteria = contractDecision?.satisfiedRequirements ?? [];
+  const missingCorroborators = contractDecision?.missingRequirements ?? [];
+  const demotionReasons = uniqueStrings([
+    ...missingCorroborators.map((requirement) => `missing:${requirement}`),
+    ...(contractDecision?.negativeEvidenceFlags ?? []),
+    ...presentationDecision.downgradeReasons,
+    ...surfacingDecision.decisionReasons,
+    ...(surfacingDecision.suppressedBy ? [`suppressed_by:${surfacingDecision.suppressedBy}`] : [])
+  ]);
+  const contractEligible =
+    contractDecision?.promotionEligibility === "eligible" &&
+    (contractDecision.allowedNarrativeTier === "strong" || contractDecision.allowedNarrativeTier === "moderate");
+  const projected =
+    candidateTopFindingIds.length > 0 &&
+    contractEligible &&
+    presentationDecision.status === "surface" &&
+    surfacingDecision.reportLane === "main";
+  const eligibility =
+    candidateTopFindingIds.length === 0
+      ? "no_top_finding_mapping"
+      : projected
+        ? "projected"
+        : contractEligible
+          ? "eligible_not_projected"
+          : "not_projected";
+
+  return {
+    candidateTopFindingIds,
+    demotionReasons,
+    eligibility,
+    groupedUnder: surfacingDecision.supportTargetId ?? surfacingDecision.supportedBy ?? null,
+    matchedCriteria,
+    missingCorroborators,
+    suppressionReason: eligibility === "projected" ? null : demotionReasons[0] ?? null
+  };
+}
 
 const COVERAGE_FINDING_IDS = new Set([
   "privacy_policy_missing_surface",
@@ -2263,6 +2355,12 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   );
   if (focusManagementRows.length > 0) {
     entities.focusManagementEvidence = focusManagementRows.slice(0, 12);
+  }
+  const accessibilityAxeRows = stringifyEvidenceRows(
+    normalizedFallbackEvidence.accessibilityAxeEvidence ?? normalizedFallbackEvidence.accessibility_axe_evidence
+  );
+  if (accessibilityAxeRows.length > 0) {
+    entities.accessibilityAxeEvidence = accessibilityAxeRows.slice(0, 12);
   }
   const sensitivePayloadRows = stringifyEvidenceRows(sensitivePayloadViolations);
   if (sensitivePayloadRows.length > 0) {
@@ -6309,6 +6407,11 @@ export function buildUnifiedFindingDisplayPackets(input: {
       packet,
       surfacingDecision
     });
+    const topFindingEligibility = buildTopFindingEligibilityForDisplayPacket({
+      packet,
+      presentationDecision,
+      surfacingDecision
+    });
     const resolvedPresentation = buildPresentationCopy(packet, presentation);
     const observedValue = selectObservedValue(packet);
 
@@ -6325,7 +6428,8 @@ export function buildUnifiedFindingDisplayPackets(input: {
       referenceUrl: resolvedPresentation.suggestedBestPractice?.url,
       sourceLabel: getSourceLabel(packet),
       sourceUrl: getSourceUrl(packet),
-      surfacingDecision
+      surfacingDecision,
+      topFindingEligibility
     };
   });
 

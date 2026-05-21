@@ -158,6 +158,53 @@ test("top-finding evaluator suppresses consent findings behind unrelated overlay
   assert.ok(decision.demotionReasons.includes("unrelated_overlay_login_wall"));
 });
 
+test("top-finding evaluator requires promotion-grade post-reject requests for reject persistence", () => {
+  const ambiguous = evaluateTopFindingEligibility(finding({
+    id: "reject_tracking_persists_after_reject",
+    confidence: "good",
+    evidenceDetails: {
+      consentInteraction: {
+        rejectInteractionSucceeded: true
+      },
+      postRejectNonEssentialRequests: [
+        {
+          category: "analytics",
+          requestUrl: "https://analytics.example/pixel",
+          vendor: "Example Analytics"
+        }
+      ]
+    },
+    severity: "high"
+  }));
+
+  assert.equal(ambiguous.eligibility, "surface_only");
+  assert.ok(ambiguous.missingCorroborators.includes("post_reject_non_essential_artifact"));
+  assert.ok(!ambiguous.matchedCriteria.includes("reject_click_plus_post_reject_non_essential_request"));
+
+  const confirmed = evaluateTopFindingEligibility(finding({
+    id: "reject_tracking_persists_after_reject",
+    confidence: "good",
+    evidenceDetails: {
+      consentInteraction: {
+        rejectInteractionSucceeded: true
+      },
+      postRejectNonEssentialRequests: [
+        {
+          category: "analytics",
+          ms_after_reject: 1200,
+          requestUrl: "https://analytics.example/pixel",
+          ts_ms: 2500,
+          vendor: "Example Analytics"
+        }
+      ]
+    },
+    severity: "high"
+  }));
+
+  assert.equal(confirmed.eligibility, "top_candidate");
+  assert.ok(confirmed.matchedCriteria.includes("reject_click_plus_post_reject_non_essential_request"));
+});
+
 test("top-finding evaluator top-ranks strong fingerprint clusters with identifier linkage", () => {
   const decision = evaluateTopFindingEligibility(finding({
     id: "probable_fingerprinting",
@@ -199,4 +246,56 @@ test("top-finding evaluator top-ranks keyboard findings with reproduced traversa
 
   assert.equal(decision.eligibility, "top_candidate");
   assert.ok(decision.matchedCriteria.includes("keyboard_focus_escape_or_trap_evidence"));
+});
+
+test("top-finding evaluator top-ranks focus management only with WS01 behavior-reproduced evidence", () => {
+  const decision = evaluateTopFindingEligibility(finding({
+    id: "focus_management_issue",
+    section: "Accessibility",
+    evidenceDetails: {
+      accessibilityEvidence: {
+        focusManagementEvidence: [
+          {
+            dialogContext: {
+              ariaModal: "true",
+              backgroundTabbableCount: 2,
+              closeControl: { selector: "button[aria-label='Close']" },
+              focusableCount: 3,
+              opener: null,
+              role: "dialog",
+              selector: "[role='dialog']"
+            },
+            evidenceStrength: "behavior_reproduced",
+            expected: "Tab navigation should remain contained within an open modal/dialog until it is dismissed.",
+            focusTrace: [
+              {
+                action: "snapshot",
+                activeElement: { selector: "button[aria-label='Close']", tagName: "button" },
+                activeInsideDialog: true,
+                step: 0
+              },
+              {
+                action: "press_tab",
+                activeElement: { selector: "a:text(\"Home\")", tagName: "a" },
+                activeInsideDialog: false,
+                step: 1
+              }
+            ],
+            issueType: "focus_trap_missing",
+            keyboardTraversalEvidence: {
+              backgroundFocusEscaped: true,
+              reproducedWithKeyboard: true,
+              tabStepCount: 1
+            },
+            observed: "Focus left the dialog while it was still open during keyboard-only tab navigation.",
+            pageUrl: "https://example.com/",
+            source: "ws01_playwright_focus_probe"
+          }
+        ]
+      }
+    }
+  }));
+
+  assert.equal(decision.eligibility, "top_candidate");
+  assert.ok(decision.matchedCriteria.includes("behavior_reproduced_focus_management_evidence"));
 });

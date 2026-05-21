@@ -38,6 +38,10 @@ export type PreConsentTrackingEvidenceDetails = {
     firstThirdPartyTrackingRequestMs: number | null;
     firstCookieSeenMs: number | null;
     firstTrackingCookieSeenMs: number | null;
+    firstCmpVisibleMs?: number | null;
+    firstConsentActionMs?: number | null;
+    firstCookieSetMs?: number | null;
+    firstNonEssentialRequestMs?: number | null;
   };
   counts: {
     totalPreConsentThirdPartyTrackingRequests: number;
@@ -47,6 +51,7 @@ export type PreConsentTrackingEvidenceDetails = {
     identifierLikeRequests: number;
   };
   requestSelectionNote: string;
+  requestClassificationAnchors?: Array<Record<string, unknown>>;
   vendors: Array<{
     name: string;
     category: string | null;
@@ -169,6 +174,7 @@ export type CertScoreFindingEvidenceDetails = {
   sourceUrls?: string[];
   timing?: Record<string, number | null> | PreConsentTrackingEvidenceDetails["timing"];
   requestSelectionNote?: string;
+  requestClassificationAnchors?: PreConsentTrackingEvidenceDetails["requestClassificationAnchors"];
   vendors?: PreConsentTrackingEvidenceDetails["vendors"];
   representativeRequests?: PreConsentTrackingEvidenceDetails["representativeRequests"];
   identifierEvidence?: PreConsentTrackingEvidenceDetails["identifierEvidence"];

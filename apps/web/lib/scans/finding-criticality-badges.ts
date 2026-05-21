@@ -53,6 +53,10 @@ const FINDING_CRITICALITY_BADGES = {
     badge: "critical",
     rationale: "Concrete evidence of tracking cookies before consent."
   },
+  cookie_disclosure_gap: {
+    badge: "medium",
+    rationale: "Disclosure mismatch is important review context, but it depends on policy and runtime scope."
+  },
   sensitive_data_collection_with_third_party_tracking_present: {
     badge: "high",
     rationale: "Material concern, but not proof of sensitive data capture."

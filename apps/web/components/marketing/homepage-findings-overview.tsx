@@ -116,6 +116,22 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY: Record<string, HomepageFindingCarouselCopy
     },
     reviewPrompts: ["Which cookie or storage key appeared, and what domain or scope set it?"]
   },
+  cookie_disclosure_gap: {
+    overview:
+      "Runtime cookie evidence is compared against retained cookie-policy, CMP, or disclosure surfaces to flag observed cookie activity that was not clearly covered.",
+    regulatoryLabel: "Cookie transparency review",
+    regulatoryCopy:
+      "Useful for reviewing whether live cookie behavior, providers, categories, and purposes match what users can see in policy or preference-center disclosures.",
+    evidence: {
+      title: "Cookie disclosure sample",
+      lines: [
+        "{\"artifact\":\"cookie_disclosure_001\",\"runtimeCookie\":\"example_id\"}",
+        "{\"cookieDomain\":\".ads.example\",\"value\":\"not_retained\"}",
+        "{\"policyCoverage\":\"provider_or_cookie_family_not_found\"}"
+      ]
+    },
+    reviewPrompts: ["Which runtime cookie artifact is missing from the retained disclosure surface?"]
+  },
   rtb_cookie_sync_observed: {
     overview:
       "Network evidence shows adtech sync, match, redirect, or identifier-like request patterns that may indicate RTB or identity matching.",
@@ -259,6 +275,22 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY: Record<string, HomepageFindingCarouselCopy
       ]
     },
     reviewPrompts: ["Which selector, component, page, and interaction state triggered the keyboard evidence?"]
+  },
+  focus_management_issue: {
+    overview:
+      "Automated accessibility evidence flags focus movement, containment, restoration, or visibility issues in modals, overlays, dynamic views, or keyboard paths.",
+    regulatoryLabel: "Focus management review",
+    regulatoryCopy:
+      "Useful for reviewing whether keyboard and assistive-technology users can predictably enter, operate, and leave active UI surfaces.",
+    evidence: {
+      title: "Focus evidence sample",
+      lines: [
+        "{\"artifact\":\"focus_001\",\"rule\":\"focus-management\"}",
+        "{\"surface\":\"dialog\",\"state\":\"open\"}",
+        "{\"signal\":\"focus_not_moved_or_restored\",\"wcag\":\"2.4.3/2.4.7\"}"
+      ]
+    },
+    reviewPrompts: ["Which interaction state produced the focus-management evidence?"]
   },
   cross_domain_identifier_sharing_observed: {
     overview:

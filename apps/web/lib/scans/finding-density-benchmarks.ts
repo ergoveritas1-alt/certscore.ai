@@ -35,6 +35,8 @@ export const FINDING_DENSITY_CALIBRATION_NOTE =
 
 const FINDING_DENSITY_INPUTS: Partial<Record<CertScoreFinding["id"], { count: number; densityPct: number; label: string }>> = {
   visual_contrast_accessibility_issue: { count: 581, densityPct: 23, label: "Seen on ~23% of scanned top sites" },
+  cookie_disclosure_gap: { count: 0, densityPct: 0, label: "Formal top-finding density pending calibration" },
+  focus_management_issue: { count: 0, densityPct: 0, label: "Formal top-finding density pending calibration" },
   pre_consent_tracking_detected: { count: 458, densityPct: 18, label: "Seen on ~18% of scanned top sites" },
   semantic_labeling_accessibility_issue: { count: 437, densityPct: 17, label: "Seen on ~17% of scanned top sites" },
   fingerprinting_related_signals_observed: { count: 396, densityPct: 16, label: "Seen on ~16% of scanned top sites" },
@@ -89,6 +91,7 @@ export const FINDING_DENSITY_BENCHMARKS: Record<string, FindingDensityBenchmark>
   focus_management_issue: makeDensityBenchmark("focus_management_issue"),
   forced_consent_interaction: makeDensityBenchmark("forced_consent_interaction"),
   keyboard_navigation_accessibility_issue: makeDensityBenchmark("keyboard_navigation_accessibility_issue"),
+  cookie_disclosure_gap: makeDensityBenchmark("cookie_disclosure_gap"),
   possible_session_replay_on_sensitive_input_surface: makeDensityBenchmark("possible_session_replay_on_sensitive_input_surface"),
   pre_consent_tracking_detected: makeDensityBenchmark("pre_consent_tracking_detected"),
   probable_fingerprinting: makeDensityBenchmark("probable_fingerprinting"),

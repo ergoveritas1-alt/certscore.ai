@@ -36,6 +36,7 @@ export const EXECUTIVE_SUMMARY_TOP_FINDING_IDS = [
   "reject_tracking_persists_after_reject",
   "session_recording_services_detected",
   "third_party_cookie_pre_consent",
+  "cookie_disclosure_gap",
   "sensitive_data_collection_with_third_party_tracking_present",
   "possible_session_replay_on_sensitive_input_surface",
   "rtb_cookie_sync_observed",

@@ -46,7 +46,8 @@ const REAL_PRE_CONSENT_SAMPLE_DOMAIN_PATTERN =
 const ACCESSIBILITY_BATCH_FINDING_IDS = [
   "semantic_labeling_accessibility_issue",
   "text_alternative_accessibility_issue",
-  "keyboard_navigation_accessibility_issue"
+  "keyboard_navigation_accessibility_issue",
+  "focus_management_issue"
 ] as const;
 
 const CONSENT_UI_BATCH_FINDING_IDS = [
@@ -82,6 +83,7 @@ const REVIEWED_FINDING_REFERENCE_IDS = [
   ...RUNTIME_TRACKING_BATCH_FINDING_IDS,
   ...SESSION_REPLAY_BATCH_FINDING_IDS,
   ...FINGERPRINTING_BATCH_FINDING_IDS,
+  "cookie_disclosure_gap",
   "cpra_cba_opt_out_missing"
 ] as const;
 
@@ -119,7 +121,9 @@ test("homepage finding examples align with each finding subtype", () => {
   assert.match(findings.get("semantic_labeling_accessibility_issue")?.exampleEvidence[0]?.code ?? "", /rule=label/);
   assert.match(findings.get("text_alternative_accessibility_issue")?.exampleEvidence[0]?.code ?? "", /rule=image-alt/);
   assert.match(findings.get("keyboard_navigation_accessibility_issue")?.exampleEvidence[0]?.code ?? "", /rule=keyboard/);
+  assert.match(findings.get("focus_management_issue")?.exampleEvidence[0]?.code ?? "", /rule=focus-management/);
   assert.match(findings.get("third_party_cookie_pre_consent")?.exampleEvidence[0]?.code ?? "", /artifact=storage_001/);
+  assert.match(findings.get("cookie_disclosure_gap")?.exampleEvidence[0]?.code ?? "", /artifact=cookie_disclosure_001/);
   assert.match(findings.get("reject_tracking_persists_after_reject")?.exampleEvidence[0]?.code ?? "", /artifact=req_002/);
   assert.match(findings.get("rtb_cookie_sync_observed")?.exampleEvidence[0]?.code ?? "", /artifact=req_003/);
   assert.match(findings.get("cross_domain_identifier_sharing_observed")?.exampleEvidence[0]?.code ?? "", /artifact=req_004/);

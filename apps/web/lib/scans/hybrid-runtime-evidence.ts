@@ -1578,6 +1578,8 @@ export function getHybridSignalFallbackEvidence(input: {
   const fingerprintSummary = getFingerprintSummary(hybrid);
   const mediaSummary = getMediaSummary(hybrid);
   const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, input.runtimeArtifacts);
+  const consentUiPathEvidence = getNestedObject(hybrid, ["consentUiPathEvidence", "consent_ui_path_evidence"]);
+  const sessionReplayEvidenceSummary = getNestedObject(hybrid, ["sessionReplayEvidenceSummary", "session_replay_evidence_summary"]);
 
   switch (input.signalKey) {
     case "privacy.preconsent_tracking_detected":
@@ -1656,6 +1658,7 @@ export function getHybridSignalFallbackEvidence(input: {
         ...(consentPageUrl ? { pageUrl: consentPageUrl } : {}),
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
         consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
+        ...(consentUiPathEvidence ? { consentUiPathEvidence } : {}),
         hybridConsentSummary: consentSummary,
         hybridConsentVisual: consentVisual
       };
@@ -1671,6 +1674,7 @@ export function getHybridSignalFallbackEvidence(input: {
         ...(consentPageUrl ? { pageUrl: consentPageUrl } : {}),
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
         consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
+        ...(consentUiPathEvidence ? { consentUiPathEvidence } : {}),
         hybridConsentSummary: consentSummary,
         hybridConsentVisual: consentVisual
       };
@@ -1687,6 +1691,7 @@ export function getHybridSignalFallbackEvidence(input: {
         ...(consentPageUrl ? { pageUrl: consentPageUrl } : {}),
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
         consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
+        ...(consentUiPathEvidence ? { consentUiPathEvidence } : {}),
         hybridConsentSummary: consentSummary,
         hybridUiSummary: uiSummary
       };
@@ -1703,6 +1708,7 @@ export function getHybridSignalFallbackEvidence(input: {
         ...(consentPageUrl ? { pageUrl: consentPageUrl } : {}),
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
         consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
+        ...(consentUiPathEvidence ? { consentUiPathEvidence } : {}),
         hybridConsentSummary: consentSummary,
         hybridConsentVisual: consentVisual
       };
@@ -1719,6 +1725,7 @@ export function getHybridSignalFallbackEvidence(input: {
         ...(consentPageUrl ? { pageUrl: consentPageUrl } : {}),
         runtimeEvidenceArtifacts: ["hybrid_runtime_evidence"],
         consentUiArtifactRefs: getHybridArtifactRefs(hybrid, ["consentArtifactRefs", "consent_artifact_refs", "bannerScreenshotRefs", "banner_screenshot_refs"]),
+        ...(consentUiPathEvidence ? { consentUiPathEvidence } : {}),
         hybridConsentSummary: consentSummary
       };
     case "commerce.session_replay_tool_detected":
@@ -1729,6 +1736,7 @@ export function getHybridSignalFallbackEvidence(input: {
       return {
         session_replay_runtime_detected: runtimeVendors.length > 0 || requestUrls.length > 0,
         session_replay_request_urls: requestUrls,
+        ...(sessionReplayEvidenceSummary ? { sessionReplayEvidenceSummary } : {}),
         session_replay_runtime_vendors: runtimeVendors,
         session_replay_vendor_artifact_present: runtimeVendors.length > 0 || requestUrls.length > 0,
         signalKey: input.signalKey,

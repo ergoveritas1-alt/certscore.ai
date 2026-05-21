@@ -29,6 +29,15 @@ test("derives pre-consent tracking and consent dark-pattern signals from hybrid 
         ctaImbalanceDetected: true,
         rejectProminence: "none"
       },
+      consentUiPathEvidence: {
+        acceptClickDepth: 1,
+        acceptLabel: "Accept all",
+        availability: "second_layer",
+        choiceAsymmetry: "material",
+        preferencesRequiredBeforeReject: true,
+        rejectClickDepth: 2,
+        rejectLabel: "Reject all"
+      },
       networkSummary: {
         preConsentThirdPartyRequestCount: 2
       },
@@ -46,6 +55,23 @@ test("derives pre-consent tracking and consent dark-pattern signals from hybrid 
   assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.dark_pattern_accept_button_prominence"), true);
   assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.dark_pattern_forced_consent_wall"), true);
   assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.dark_pattern_accept_only_banner"), true);
+  assert.deepEqual(
+    getHybridSignalFallbackEvidence({
+      runtimeArtifacts,
+      signalKey: "privacy.dark_pattern_accept_button_prominence",
+      signalLabel: "Accept button more prominent than reject",
+      signalValue: true
+    })?.consentUiPathEvidence,
+    {
+      acceptClickDepth: 1,
+      acceptLabel: "Accept all",
+      availability: "second_layer",
+      choiceAsymmetry: "material",
+      preferencesRequiredBeforeReject: true,
+      rejectClickDepth: 2,
+      rejectLabel: "Reject all"
+    }
+  );
 
   const dismissRuntimeArtifacts = {
     hybrid_runtime_evidence: {
@@ -71,12 +97,30 @@ test("derives session replay vendors from hybrid request-to-vendor observations"
         { category: "session_replay", vendor: "Microsoft Clarity" },
         { category: "session_replay", vendor: "Microsoft Clarity" },
         { category: "analytics", vendor: "Google Analytics" }
-      ]
+      ],
+      sessionReplayEvidenceSummary: {
+        collectionEndpointObserved: true,
+        libraryOnly: false,
+        maskingOrExclusionObserved: false
+      }
     }
   } satisfies Record<string, unknown>;
 
   assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "commerce.session_replay_tool_detected"), true);
   assert.deepEqual(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.session_replay_runtime_vendors"), ["Microsoft Clarity"]);
+  assert.deepEqual(
+    getHybridSignalFallbackEvidence({
+      runtimeArtifacts,
+      signalKey: "privacy.session_replay_runtime_detected",
+      signalLabel: "Session replay runtime detected",
+      signalValue: true
+    })?.sessionReplayEvidenceSummary,
+    {
+      collectionEndpointObserved: true,
+      libraryOnly: false,
+      maskingOrExclusionObserved: false
+    }
+  );
 });
 
 test("derives video content tracking exposure from same-page Meta Pixel evidence", () => {

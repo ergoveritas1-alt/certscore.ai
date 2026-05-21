@@ -66,6 +66,26 @@ function getString(record: Record<string, unknown> | null | undefined, key: stri
   return typeof record?.[key] === "string" && record[key].trim().length > 0 ? record[key] : null;
 }
 
+function getStringFromKeys(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = getString(record, key);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getNumberFromKeys(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = getNumber(record, key);
+    if (value !== null) {
+      return value;
+    }
+  }
+  return null;
+}
+
 function includesAny(values: unknown, pattern: RegExp) {
   if (Array.isArray(values)) {
     return values.some((value) => typeof value === "string" && pattern.test(value));
@@ -80,6 +100,28 @@ function hasSameSurfaceReplayMaskingEvidence(inputSurfaceEvidence: unknown) {
     const linkage = asRecord(row.sameFlowLinkage);
     const masking = asRecord(linkage?.replayMaskingEvidence);
     return getBoolean(masking, "maskingOrExclusionObserved") === true;
+  });
+}
+
+const REJECT_TRACKING_CONFIRMATION_MIN_MS = 250;
+
+function hasPromotionGradePostRejectRequest(details: Record<string, unknown>) {
+  const rows = asRows(details.postRejectNonEssentialRequests);
+  return rows.some((row) => {
+    const category = getString(row, "category") ?? "";
+    const url = getStringFromKeys(row, ["url", "requestUrl", "request_url"]) ?? "";
+    const vendor = getString(row, "vendor") ?? "";
+    const msAfterReject = getNumberFromKeys(row, ["ms_after_reject", "msAfterReject"]);
+    const tsMs = getNumberFromKeys(row, ["ts_ms", "tsMs"]);
+
+    return (
+      tsMs !== null &&
+      msAfterReject !== null &&
+      msAfterReject >= REJECT_TRACKING_CONFIRMATION_MIN_MS &&
+      /^(advertising|analytics|session_replay|marketing_automation|tag_manager)$/i.test(category) &&
+      vendor.trim().length > 0 &&
+      /^https?:\/\//i.test(url)
+    );
   });
 }
 
@@ -298,18 +340,20 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
     case "semantic_labeling_accessibility_issue":
     case "text_alternative_accessibility_issue":
     case "keyboard_navigation_accessibility_issue":
+    case "focus_management_issue":
       if (!hasMeaningfulValue(details.accessibilityEvidence)) {
         missingCorroborators.push("representative_accessibility_evidence");
       }
       if (
-        finding.id === "keyboard_navigation_accessibility_issue" &&
+        (finding.id === "keyboard_navigation_accessibility_issue" || finding.id === "focus_management_issue") &&
         !hasMeaningfulValue(details.accessibilityEvidence?.focusManagementEvidence)
       ) {
         missingCorroborators.push("keyboard_traversal_trace");
       }
-      if (finding.id === "keyboard_navigation_accessibility_issue") {
+      if (finding.id === "keyboard_navigation_accessibility_issue" || finding.id === "focus_management_issue") {
         const focusRows = asRows(details.accessibilityEvidence?.focusManagementEvidence);
         const hasTraversal = focusRows.some((row) => hasMeaningfulValue(row.keyboardTraversalEvidence));
+        const hasBehaviorReproduced = focusRows.some((row) => getString(row, "evidenceStrength") === "behavior_reproduced");
         const hasFocusEscape = focusRows.some((row) => {
           const traversal = asRecord(row.keyboardTraversalEvidence);
           return getBoolean(traversal, "backgroundFocusEscaped") === true;
@@ -320,6 +364,10 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         if (hasFocusEscape) {
           forceEligibility = "top_candidate";
           pushUnique(matchedCriteria, "keyboard_focus_escape_or_trap_evidence");
+        }
+        if (finding.id === "focus_management_issue" && hasBehaviorReproduced && hasTraversal) {
+          forceEligibility = "top_candidate";
+          pushUnique(matchedCriteria, "behavior_reproduced_focus_management_evidence");
         }
       }
       break;
@@ -427,10 +475,10 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
       if (!hasMeaningfulValue(details.consentInteraction)) {
         missingCorroborators.push("reject_interaction_click");
       }
-      if (!hasMeaningfulValue(details.postRejectNonEssentialRequests) && !hasMeaningfulValue(details.postRejectEvidence)) {
+      if (!hasPromotionGradePostRejectRequest(details)) {
         missingCorroborators.push("post_reject_non_essential_artifact");
       }
-      if (hasMeaningfulValue(details.consentInteraction) && hasMeaningfulValue(details.postRejectNonEssentialRequests)) {
+      if (hasMeaningfulValue(details.consentInteraction) && hasPromotionGradePostRejectRequest(details)) {
         forceEligibility = "top_candidate";
         pushUnique(matchedCriteria, "reject_click_plus_post_reject_non_essential_request");
       }

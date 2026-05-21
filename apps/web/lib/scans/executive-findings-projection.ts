@@ -290,6 +290,24 @@ function getRecordNumber(row: Record<string, unknown>, keys: string[]) {
   return null;
 }
 
+function getRecordBoolean(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "boolean") {
+      return value;
+    }
+    if (typeof value === "string") {
+      if (/^true$/i.test(value.trim())) {
+        return true;
+      }
+      if (/^false$/i.test(value.trim())) {
+        return false;
+      }
+    }
+  }
+  return null;
+}
+
 function getCountValue(packet: UnifiedFindingDisplayPacket, keys: string[]) {
   for (const key of keys) {
     const value = packet.evidence?.counts?.[key];
@@ -392,6 +410,9 @@ function getMappedFindingId(
     return tier >= 3 && !hasFingerprintingProbableAccessLimitation(packet)
       ? "probable_fingerprinting"
       : "fingerprinting_related_signals_observed";
+  }
+  if (packet.unifiedFindingId === "blocking_overlay_observed") {
+    return null;
   }
   if (packet.unifiedFindingId in CERT_SCORE_FINDING_REGISTRY) {
     return packet.unifiedFindingId as keyof typeof CERT_SCORE_FINDING_REGISTRY;
@@ -507,7 +528,7 @@ function getRawFingerprintTier(rawEvidence: Record<string, unknown> | null | und
 }
 
 function deriveRejectOptionSubtype(packet: UnifiedFindingDisplayPacket) {
-  const rejectPath = getFirstEntityJsonObject(packet, "rejectPathDepthAndAvailability");
+  const rejectPath = getConsentUiPathEvidence(packet);
   const rejectDepthClass = getEntityValues(packet, /^rejectDepthClass$/i)[0] ?? null;
   const availability =
     getRecordString(rejectPath ?? {}, ["availability", "status", "outcome"]) ??
@@ -544,6 +565,137 @@ function deriveRejectOptionSubtype(packet: UnifiedFindingDisplayPacket) {
     return "reject_absent_first_layer";
   }
   return "reject_path_ambiguous";
+}
+
+function getConsentUiPathEvidence(packet: UnifiedFindingDisplayPacket) {
+  return getFirstEntityJsonObject(packet, "consentUiPathEvidence") ??
+    getFirstEntityJsonObject(packet, "rejectPathDepthAndAvailability") ??
+    getFirstEntityJsonObject(packet, "reject_path_depth_and_availability");
+}
+
+function getBlockingOverlayPathEvidence(packet: UnifiedFindingDisplayPacket) {
+  const evidence = getFirstEntityJsonObject(packet, "blockingOverlayEvidence");
+  if (!evidence) {
+    return null;
+  }
+
+  const rejectDepthClass = getRecordString(evidence, ["rejectDepthClass", "reject_depth_class"]);
+  const acceptPresent = getRecordBoolean(evidence, ["acceptPresent", "accept_present"]);
+  const rejectPresent = getRecordBoolean(evidence, ["rejectPresent", "reject_present"]);
+  const managePresent = getRecordBoolean(evidence, ["managePresent", "manage_present"]);
+  const interactionBlocked = getRecordBoolean(evidence, ["interactionBlocked", "interaction_blocked"]);
+  const pageAccessBlockedUntilChoice = getRecordBoolean(evidence, [
+    "pageAccessBlockedUntilChoice",
+    "page_access_blocked_until_choice"
+  ]);
+  const rejectClickDepth = rejectDepthClass === "second_layer"
+    ? 2
+    : rejectDepthClass === "missing" || rejectPresent === false
+      ? null
+      : rejectPresent === true
+        ? 1
+        : null;
+  const result: Record<string, unknown> = {
+    availability: rejectPresent === false ? "absent" : rejectDepthClass ?? null,
+    surfaceType: getRecordString(evidence, ["overlayType", "overlay_type"]),
+    acceptLabel: acceptPresent === true ? "Accept" : null,
+    rejectLabel: rejectPresent === true ? "Reject" : null,
+    manageChoicesLabel: managePresent === true ? "Manage choices" : null,
+    rejectAvailableOnFirstLayer: rejectPresent === true && rejectDepthClass === "same_layer",
+    preferencesRequiredBeforeReject: rejectDepthClass === "second_layer" || (managePresent === true && rejectPresent !== true),
+    acceptClickDepth: acceptPresent === true ? 1 : null,
+    rejectClickDepth,
+    choiceAsymmetry:
+      acceptPresent === true && (rejectPresent === false || rejectDepthClass === "second_layer")
+        ? "material"
+        : null,
+    blockedPageInteraction: interactionBlocked === true || pageAccessBlockedUntilChoice === true,
+    pageAccessBlockedUntilChoice,
+    visualHierarchyBasis: "blocking_overlay_runtime_evidence"
+  };
+
+  return Object.fromEntries(
+    Object.entries(result).filter(([, value]) => value !== null && value !== undefined)
+  );
+}
+
+function buildConsentUiRuntimePathEvidence(row: Record<string, unknown>) {
+  const acceptClickDepth = getRecordNumber(row, ["acceptClickDepth", "accept_click_depth"]);
+  const rejectClickDepth = getRecordNumber(row, ["rejectClickDepth", "reject_click_depth", "depth"]);
+  const evidenceRefs = getRecordStringArray(row, ["evidenceRefs", "evidence_refs", "artifactRefs", "artifact_refs"]);
+  const result: Record<string, unknown> = {
+    availability: getRecordString(row, ["availability", "status", "outcome"]),
+    surfaceType: getRecordString(row, ["surfaceType", "surface_type", "overlayKind", "overlay_kind"]),
+    acceptLabel: getRecordString(row, ["acceptLabel", "accept_label"]),
+    rejectLabel: getRecordString(row, ["rejectLabel", "reject_label"]),
+    manageChoicesLabel: getRecordString(row, ["manageChoicesLabel", "manage_choices_label", "preferencesLabel", "preferences_label"]),
+    rejectAvailableOnFirstLayer: getRecordBoolean(row, ["rejectAvailableOnFirstLayer", "reject_available_on_first_layer"]),
+    preferencesRequiredBeforeReject: getRecordBoolean(row, ["preferencesRequiredBeforeReject", "preferences_required_before_reject"]),
+    acceptClickDepth,
+    rejectClickDepth,
+    choiceAsymmetry: getRecordString(row, ["choiceAsymmetry", "choice_asymmetry"]),
+    scrollRequired: getRecordBoolean(row, ["scrollRequired", "scroll_required"]),
+    visualHierarchyBasis: getRecordString(row, ["visualHierarchyBasis", "visual_hierarchy_basis"]),
+    screenshotArtifactAvailable: evidenceRefs.some((ref) => /screen|image|png|jpeg|jpg/i.test(ref)),
+    domDigestAvailable: Boolean(getRecordString(row, ["domDigest", "dom_digest", "domEvidenceDigest", "dom_evidence_digest"])),
+    evidenceRefs
+  };
+
+  if (acceptClickDepth !== null && rejectClickDepth !== null) {
+    result.pathDepthDelta = rejectClickDepth - acceptClickDepth;
+  }
+
+  return Object.fromEntries(
+    Object.entries(result).filter(([, value]) =>
+      Array.isArray(value) ? value.length > 0 : value !== null && value !== undefined
+    )
+  );
+}
+
+function sanitizeRequestClassificationAnchor(row: Record<string, unknown>) {
+  const url =
+    getRecordString(row, ["url", "requestUrl", "request_url", "redactedUrl", "redacted_url", "urlSample", "url_sample"]) ??
+    null;
+  const hostname =
+    getRecordString(row, ["hostname", "host", "domain"]) ??
+    getUrlHostname(url);
+  const result: Record<string, unknown> = {
+    hostname,
+    vendor: getRecordString(row, ["vendor", "vendorName", "vendor_name", "matchedVendorName", "matched_vendor_name"]),
+    category: getRecordString(row, ["category", "vendorCategory", "vendor_category", "classification", "purpose"]),
+    essentiality: getRecordString(row, ["essentiality", "classificationEssentiality", "classification_essentiality"]),
+    confidence: getRecordString(row, ["confidence", "classificationConfidence", "classification_confidence"]),
+    phase: getRecordString(row, ["phase", "runtimePhase", "runtime_phase", "timingStatus", "timing_status"]),
+    firstObservedMs: getRecordNumber(row, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms", "timestampMs", "timestamp_ms"]),
+    evidenceSource: getRecordString(row, ["evidenceSource", "evidence_source", "source"])
+  };
+
+  return Object.fromEntries(
+    Object.entries(result).filter(([, value]) => value !== null && value !== undefined)
+  );
+}
+
+function sanitizeAccessibilityAxeEvidence(row: Record<string, unknown>) {
+  const representativeSelectors = uniqueStrings([
+    ...getRecordStringArray(row, ["representativeSelectors", "representative_selectors", "selectors"]),
+    getRecordString(row, ["selector", "target"])
+  ]);
+  const result: Record<string, unknown> = {
+    ruleId: getRecordString(row, ["ruleId", "rule_id", "id"]),
+    impact: getRecordString(row, ["impact", "severity"]),
+    nodeCount: getRecordNumber(row, ["nodeCount", "node_count", "affectedNodeCount", "affected_node_count", "count"]),
+    description: getRecordString(row, ["description", "help"]),
+    helpUrl: getRecordString(row, ["helpUrl", "help_url"]),
+    pageUrl: getRecordString(row, ["pageUrl", "page_url", "url"]),
+    componentOrTemplate: getRecordString(row, ["componentOrTemplate", "component_or_template", "template", "component"]),
+    representativeSelectors: representativeSelectors.slice(0, 8)
+  };
+
+  return Object.fromEntries(
+    Object.entries(result).filter(([, value]) =>
+      Array.isArray(value) ? value.length > 0 : value !== null && value !== undefined
+    )
+  );
 }
 
 function getFingerprintPromotionAnnotation(
@@ -635,14 +787,9 @@ function hasConcreteConsentDarkPatternEvidence(packet: UnifiedFindingDisplayPack
   });
 }
 
-function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPacket) {
-  if (packet.unifiedFindingId !== "preconsent_tracking") {
-    return false;
-  }
-
-  const details = buildPreConsentTrackingEvidenceDetails(packet);
+function getThirdPartyCookiePreConsentRows(packet: UnifiedFindingDisplayPacket) {
   const cookieRows = getEntityJsonObjects(packet, "preconsent_cookie_evidence");
-  const thirdPartyTrackingCookieRows = cookieRows.filter((row) => {
+  return cookieRows.filter((row) => {
     const timingEvidence = getRecordString(row, ["timingEvidence", "timing_evidence"]);
     const party = getRecordString(row, ["party", "cookiePartyType", "cookie_party_type"]);
     const category = getRecordString(row, ["category", "cookieCategory", "cookie_category", "vendorCategory", "vendor_category"]);
@@ -670,6 +817,13 @@ function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPack
       Boolean(cookieName && vendorOrHost)
     );
   });
+}
+
+function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPacket) {
+  const details = packet.unifiedFindingId === "preconsent_tracking"
+    ? buildPreConsentTrackingEvidenceDetails(packet)
+    : null;
+  const thirdPartyTrackingCookieRows = getThirdPartyCookiePreConsentRows(packet);
   const preconsentCookieNames = getEntityValues(packet, /^preconsent_(?:nonessential_)?cookie_names$/i);
   const preconsentCookieCategories = getEntityValues(packet, /^preconsent_cookie_categories$/i);
   const preconsentCookieTimingEvidence = getEntityValues(packet, /^preconsent_cookie_timing_evidence$/i);
@@ -699,9 +853,88 @@ function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPack
   );
 }
 
+function getRecordValueAsBoolean(row: Record<string, unknown> | null | undefined, keys: string[]) {
+  return getRecordBoolean(row ?? {}, keys);
+}
+
+function hasRejectPersistencePromotionEvidence(packet: UnifiedFindingDisplayPacket) {
+  if (packet.unifiedFindingId !== "reject_did_not_reduce_tracking") {
+    return true;
+  }
+
+  const promotionDecision = getFirstEntityJsonObject(packet, "promotionDecision");
+  if (getRecordValueAsBoolean(promotionDecision, ["promoted"]) === false) {
+    return false;
+  }
+
+  const suppressionChecks = getFirstEntityJsonObject(packet, "suppressionChecks");
+  const navigationOrReloadAmbiguous = getRecordValueAsBoolean(suppressionChecks, [
+    "navigation_or_reload_ambiguous",
+    "navigationOrReloadAmbiguous",
+    "redirect_or_auth_wall_ambiguous",
+    "redirectOrAuthWallAmbiguous"
+  ]);
+  const postRejectWindowAvailable = getRecordValueAsBoolean(suppressionChecks, [
+    "post_reject_window_available",
+    "postRejectWindowAvailable"
+  ]);
+  const rejectClickConfirmed = getRecordValueAsBoolean(suppressionChecks, [
+    "reject_click_confirmed",
+    "rejectClickConfirmed"
+  ]);
+  const nonEssentialVendorAfterReject = getRecordValueAsBoolean(suppressionChecks, [
+    "non_essential_vendor_after_reject",
+    "nonEssentialVendorAfterReject"
+  ]);
+  if (navigationOrReloadAmbiguous === true || postRejectWindowAvailable === false) {
+    return false;
+  }
+  if (rejectClickConfirmed === false || nonEssentialVendorAfterReject === false) {
+    return false;
+  }
+
+  const postRejectRequests = getEntityJsonObjects(packet, "postRejectNonEssentialRequests");
+  const hasTimedPostRejectRequest = postRejectRequests.some((row) =>
+    getRecordNumber(row, ["ms_after_reject", "msAfterReject"]) !== null ||
+    getRecordNumber(row, ["ts_ms", "timestampMs", "firstSeenMs"]) !== null
+  );
+  const hasConfirmedFlag = packet.evidence?.flags?.includes("reject_evidence_confirmed") === true;
+
+  return hasConfirmedFlag && hasTimedPostRejectRequest;
+}
+
 function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof typeof CERT_SCORE_FINDING_REGISTRY> {
   const primary = getMappedFindingId(packet);
   const ids = primary ? [primary] : [];
+
+  if (primary === "reject_tracking_persists_after_reject" && !hasRejectPersistencePromotionEvidence(packet)) {
+    return [];
+  }
+
+  if (packet.unifiedFindingId === "blocking_overlay_observed") {
+    const overlayEvidence = getFirstEntityJsonObject(packet, "blockingOverlayEvidence");
+    const overlayType = getRecordString(overlayEvidence ?? {}, ["overlayType", "overlay_type"]);
+    const rejectPresent = getRecordBoolean(overlayEvidence ?? {}, ["rejectPresent", "reject_present"]);
+    const pageAccessBlockedUntilChoice = getRecordBoolean(overlayEvidence ?? {}, [
+      "pageAccessBlockedUntilChoice",
+      "page_access_blocked_until_choice"
+    ]);
+    const interactionBlocked = getRecordBoolean(overlayEvidence ?? {}, ["interactionBlocked", "interaction_blocked"]);
+    if ((overlayType === "cookie_wall" || pageAccessBlockedUntilChoice === true) && (interactionBlocked === true || pageAccessBlockedUntilChoice === true)) {
+      ids.push("forced_consent_interaction");
+    }
+    if (rejectPresent === false) {
+      ids.push("reject_option_missing_or_hidden");
+      ids.push("consent_dark_patterns_detected");
+    }
+  }
+
+  if (
+    primary === "third_party_cookie_pre_consent" &&
+    !hasThirdPartyCookiePreConsentEvidence(packet)
+  ) {
+    return [];
+  }
 
   if (
     primary === "consent_dark_patterns_detected" &&
@@ -1186,6 +1419,11 @@ function buildPreConsentTrackingEvidenceDetails(
 ): CertScoreFindingEvidenceDetails | undefined {
   const vendorRows = getEntityJsonObjects(packet, "preconsent_tracker_vendor_evidence");
   const cookieRows = getEntityJsonObjects(packet, "preconsent_cookie_evidence");
+  const consentTimeline = getFirstEntityJsonObject(packet, "consentTimeline");
+  const requestClassificationAnchors = getEntityJsonObjects(packet, "requestPurposeClassificationConfidence")
+    .map(sanitizeRequestClassificationAnchor)
+    .filter((row) => Object.keys(row).length > 0)
+    .slice(0, 12);
   const scannedPageUrl = getScannedPageUrl(packet);
   const requestUrls = uniqueCaseInsensitiveStrings([
     ...getEntityUrlValues(packet, /^(?:preconsent_tracker_evidence_urls|runtimeRequestUrls|requestUrls|runtimeEvidenceUrls)$/i),
@@ -1200,9 +1438,15 @@ function buildPreConsentTrackingEvidenceDetails(
   ]).filter(isDisplayVendorName);
 
   const firstRequestMs = getCountValue(packet, ["firstRequestMs"]);
-  const firstThirdPartyRequestMs = getCountValue(packet, ["firstThirdPartyTrackingRequestMs", "firstThirdPartyRequestMs"]);
-  const cmpVisibleMs = getCountValue(packet, ["cmpVisibleMs", "consentBannerDetectedMs"]);
-  const consentChoiceAtMs = getCountValue(packet, ["consentChoiceAtMs", "consentAcceptedAtMs", "consentRejectedAtMs"]);
+  const firstThirdPartyRequestMs =
+    getCountValue(packet, ["firstThirdPartyTrackingRequestMs", "firstThirdPartyRequestMs"]) ??
+    getRecordNumber(consentTimeline ?? {}, ["firstNonEssentialRequestMs", "first_non_essential_request_ms"]);
+  const cmpVisibleMs =
+    getCountValue(packet, ["cmpVisibleMs", "consentBannerDetectedMs"]) ??
+    getRecordNumber(consentTimeline ?? {}, ["firstCmpVisibleMs", "first_cmp_visible_ms"]);
+  const consentChoiceAtMs =
+    getCountValue(packet, ["consentChoiceAtMs", "consentAcceptedAtMs", "consentRejectedAtMs"]) ??
+    getRecordNumber(consentTimeline ?? {}, ["firstConsentActionMs", "first_consent_action_ms"]);
   const userConsentActionObserved = consentChoiceAtMs !== null;
   const consentActionType =
     getEntityValues(packet, /consentActionType|consent_action_type/i)[0] ??
@@ -1264,6 +1508,10 @@ function buildPreConsentTrackingEvidenceDetails(
     .map((request) => request.firstSeenMs)
     .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
     .sort((left, right) => left - right)[0] ?? firstThirdPartyRequestMs;
+  const firstCmpVisibleMs = getRecordNumber(consentTimeline ?? {}, ["firstCmpVisibleMs", "first_cmp_visible_ms"]);
+  const firstConsentActionMs = getRecordNumber(consentTimeline ?? {}, ["firstConsentActionMs", "first_consent_action_ms"]);
+  const firstCookieSetMs = getRecordNumber(consentTimeline ?? {}, ["firstCookieSetMs", "first_cookie_set_ms"]);
+  const firstNonEssentialRequestMs = getRecordNumber(consentTimeline ?? {}, ["firstNonEssentialRequestMs", "first_non_essential_request_ms"]);
 
   const details: CertScoreFindingEvidenceDetails = {
     scanContext: {
@@ -1289,12 +1537,16 @@ function buildPreConsentTrackingEvidenceDetails(
       consentChoiceAtMs
     }),
     timing: {
-      pageStartMs: 0,
+      pageStartMs: getRecordNumber(consentTimeline ?? {}, ["navigationStartMs", "navigation_start_ms"]) ?? 0,
       firstRequestMs,
       firstThirdPartyRequestMs,
       firstThirdPartyTrackingRequestMs,
       firstCookieSeenMs: getCountValue(packet, ["firstCookieSeenMs"]),
-      firstTrackingCookieSeenMs: getCountValue(packet, ["firstTrackingCookieSeenMs", "firstPreConsentTrackingCookieSeenMs"])
+      firstTrackingCookieSeenMs: getCountValue(packet, ["firstTrackingCookieSeenMs", "firstPreConsentTrackingCookieSeenMs"]),
+      ...(firstCmpVisibleMs !== null ? { firstCmpVisibleMs } : {}),
+      ...(firstConsentActionMs !== null ? { firstConsentActionMs } : {}),
+      ...(firstCookieSetMs !== null ? { firstCookieSetMs } : {}),
+      ...(firstNonEssentialRequestMs !== null ? { firstNonEssentialRequestMs } : {})
     },
     counts: {
       totalPreConsentThirdPartyTrackingRequests:
@@ -1311,6 +1563,7 @@ function buildPreConsentTrackingEvidenceDetails(
       identifierLikeRequests: identifierLikeRequestCount
     },
     requestSelectionNote: "Representative requests are capped examples and are not exhaustive.",
+    ...(requestClassificationAnchors.length > 0 ? { requestClassificationAnchors } : {}),
     vendors: vendorDetails,
     representativeRequests,
     identifierEvidence: {
@@ -1448,6 +1701,18 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
   }));
   const firstPartyProxyObserved = hasFirstPartyProxySessionReplayEvidence(packet, requestUrls);
   const sessionReplaySummary = getFirstEntityJsonObject(packet, "sessionReplayEvidenceSummary");
+  const collectionEndpointObserved = sessionReplaySummary
+    ? getRecordBoolean(sessionReplaySummary, ["collectionEndpointObserved", "collection_endpoint_observed"])
+    : null;
+  const libraryOnly = sessionReplaySummary
+    ? getRecordBoolean(sessionReplaySummary, ["libraryOnly", "library_only"])
+    : null;
+  const maskingOrExclusionObserved = sessionReplaySummary
+    ? getRecordBoolean(sessionReplaySummary, ["maskingOrExclusionObserved", "masking_or_exclusion_observed"])
+    : null;
+  const sensitiveSurfaceOverlap = sessionReplaySummary
+    ? getRecordBoolean(sessionReplaySummary, ["sensitiveSurfaceOverlap", "sensitive_surface_overlap"])
+    : null;
 
   return {
     scanContext: {
@@ -1463,7 +1728,15 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     sessionReplayEvidence: {
       observed: true,
       firstPartyProxyObserved,
-      ...(sessionReplaySummary ? { runtimeSummary: sessionReplaySummary } : {}),
+      ...(sessionReplaySummary
+        ? {
+            runtimeSummary: sessionReplaySummary,
+            ...(collectionEndpointObserved !== null ? { collectionEndpointObserved } : {}),
+            ...(libraryOnly !== null ? { libraryOnly } : {}),
+            ...(maskingOrExclusionObserved !== null ? { maskingOrExclusionObserved } : {}),
+            ...(sensitiveSurfaceOverlap !== null ? { sensitiveSurfaceOverlap } : {})
+          }
+        : {}),
       basis: firstPartyProxyObserved
         ? "Session recording collection appears proxied through the scanned first-party host."
         : "Session recording vendor or request evidence was retained during runtime collection."
@@ -1897,12 +2170,15 @@ function buildGenericCanonicalEvidenceDetails(
       : null;
     const consentSurfaceDecisionStates = getEntityValues(packet, /^consentSurfaceDecisionStates$/i);
     const consentSurfaceDiagnostics = getFirstEntityJsonObject(packet, "consentSurfaceDiagnostics");
+    const consentUiRuntimePath = getConsentUiPathEvidence(packet);
+    const runtimePath = consentUiRuntimePath ? buildConsentUiRuntimePathEvidence(consentUiRuntimePath) : null;
     details.consentUiEvidence = {
       observed: true,
       pattern: findingId,
       ...(rejectOptionSubtype ? { rejectOptionSubtype } : {}),
       ...(consentSurfaceDecisionStates.length > 0 ? { consentSurfaceDecisionStates } : {}),
       ...(consentSurfaceDiagnostics ? { consentSurfaceDiagnostics } : {}),
+      ...(runtimePath && Object.keys(runtimePath).length > 0 ? { runtimePath } : {}),
       basis: evidenceSnippets[0] ?? packet.summary,
       userChoiceImpact: findingId === "reject_option_missing_or_hidden"
         ? rejectOptionSubtype === "reject_requires_preferences_path"
@@ -2103,6 +2379,10 @@ function buildGenericCanonicalEvidenceDetails(
       ...getEntityValues(packet, /maxAxeImpact/i)
     ]);
     const accessibilitySeverities = uniqueStrings(getEntityValues(packet, /accessibilitySeverities|severity/i));
+    const axeEvidence = getEntityJsonObjects(packet, "accessibilityAxeEvidence")
+      .map(sanitizeAccessibilityAxeEvidence)
+      .filter((row) => Object.keys(row).length > 0)
+      .slice(0, 8);
     details.accessibilityEvidence = {
       observed: true,
       basis: evidenceSnippets[0] ?? packet.summary,
@@ -2111,7 +2391,8 @@ function buildGenericCanonicalEvidenceDetails(
       pageCount: getCountValue(packet, ["representativeAxePageCount"]),
       ...(accessibilityRuleCodes[0] ? { axeRuleId: accessibilityRuleCodes[0], ruleCodes: accessibilityRuleCodes.slice(0, 8) } : {}),
       ...(accessibilityImpacts[0] ? { impact: accessibilityImpacts[0], impacts: accessibilityImpacts.slice(0, 8) } : {}),
-      ...(accessibilitySeverities[0] ? { severity: accessibilitySeverities[0] } : {})
+      ...(accessibilitySeverities[0] ? { severity: accessibilitySeverities[0] } : {}),
+      ...(axeEvidence.length > 0 ? { axeEvidence } : {})
     };
   }
 
@@ -2698,7 +2979,8 @@ function buildExecutiveEvidenceDetails(
     }
   }
 
-  const consentUiPathEvidence = getFirstEntityJsonObject(packet, "consentUiPathEvidence");
+  const consentUiPathEvidence = getFirstEntityJsonObject(packet, "consentUiPathEvidence") ??
+    (packet.unifiedFindingId === "blocking_overlay_observed" ? getBlockingOverlayPathEvidence(packet) : null);
   if (
     consentUiPathEvidence &&
     (
@@ -2731,6 +3013,24 @@ function buildExecutiveEvidenceDetails(
       ...(details.accessibilityEvidence ?? {}),
       focusManagementEvidence: focusManagementEvidence.slice(0, 12)
     };
+  }
+
+  if (
+    findingId === "keyboard_navigation_accessibility_issue" ||
+    findingId === "semantic_labeling_accessibility_issue" ||
+    findingId === "text_alternative_accessibility_issue" ||
+    findingId === "visual_contrast_accessibility_issue"
+  ) {
+    const axeEvidence = getEntityJsonObjects(packet, "accessibilityAxeEvidence")
+      .map(sanitizeAccessibilityAxeEvidence)
+      .filter((row) => Object.keys(row).length > 0)
+      .slice(0, 8);
+    if (axeEvidence.length > 0) {
+      details.accessibilityEvidence = {
+        ...(details.accessibilityEvidence ?? {}),
+        axeEvidence
+      };
+    }
   }
 
   if (findingId === "rtb_cookie_sync_observed") {

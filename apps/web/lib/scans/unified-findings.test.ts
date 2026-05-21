@@ -3624,6 +3624,17 @@ test("surfaces visual contrast finding with complete representative axe evidence
     severity: "high",
     title: "Contrast failures",
     evidence: {
+      accessibilityAxeEvidence: [
+        {
+          description: "Elements must meet minimum color contrast ratio thresholds",
+          helpUrl: "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+          impact: "serious",
+          nodeCount: 2,
+          pageUrl: "https://example.com/",
+          representativeSelectors: [".hero-title"],
+          ruleId: "color-contrast"
+        }
+      ],
       accessibilityRuleExamples: [
         {
           description: "Detected 2 elements with insufficient color contrast.",
@@ -3652,6 +3663,20 @@ test("surfaces visual contrast finding with complete representative axe evidence
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), true);
   assert.equal(packet?.evidence?.counts?.representativeAxeExampleCount, 1);
+  assert.deepEqual(
+    packet?.evidence?.entities?.accessibilityAxeEvidence?.map((value) => JSON.parse(value)),
+    [
+      {
+        description: "Elements must meet minimum color contrast ratio thresholds",
+        helpUrl: "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+        impact: "serious",
+        nodeCount: 2,
+        pageUrl: "https://example.com/",
+        representativeSelectors: [".hero-title"],
+        ruleId: "color-contrast"
+      }
+    ]
+  );
   assert.ok(
     packet?.evidence?.snippets?.some((snippet) =>
       /Axe example: color-contrast\/wcag2aa on https:\/\/example\.com\/; selector \.hero-title; nodes 2; impact serious; severity high; help: Elements must meet minimum color contrast ratio thresholds\./.test(

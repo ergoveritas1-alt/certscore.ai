@@ -782,6 +782,50 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
     jurisdictionalContexts: ACCESSIBILITY_JURISDICTIONAL_CONTEXTS,
     displayCaution: `${ACCESSIBILITY_LEGAL_VERSION_CAUTION} Review the retained selector, element role, keyboard operability, focus visibility, focus order, interaction state, component behavior, page context, organization type, jurisdiction, and manual accessibility findings.`
   },
+  focus_management_issue: {
+    findingId: "focus_management_issue",
+    label: "Focus management issue",
+    category: "Accessibility",
+    regulatoryConcernGroup: "accessibility",
+    primaryConcern: {
+      id: "focus_management_and_keyboard_context_review",
+      label: "Accessibility: focus management and keyboard context",
+      displayCopy:
+        "Retained automated accessibility evidence showed focus movement, focus containment, focus restoration, dynamic-view, modal, overlay, or keyboard-focus signals that may be relevant to WCAG-oriented accessibility review. Applicability depends on the affected component, interaction state, keyboard path, focus behavior, organization type, jurisdiction, and manual accessibility review."
+    },
+    technicalStandards: [
+      {
+        id: "wcag_2_1_2_no_keyboard_trap",
+        label: "WCAG 2.1.2 No Keyboard Trap",
+        level: "A",
+        appliesWhen: "Keyboard focus can enter a component but cannot leave it using keyboard controls.",
+        sourceRefs: ["wcag_2_2"]
+      },
+      {
+        id: "wcag_2_4_3_focus_order",
+        label: "WCAG 2.4.3 Focus Order",
+        level: "A",
+        appliesWhen: "Focus movement does not preserve meaning or operability when dialogs, overlays, dynamic content, or route changes occur.",
+        sourceRefs: ["wcag_2_2"]
+      },
+      {
+        id: "wcag_2_4_7_focus_visible",
+        label: "WCAG 2.4.7 Focus Visible",
+        level: "AA",
+        appliesWhen: "Keyboard focus indicator is not visible or is visually suppressed.",
+        sourceRefs: ["wcag_2_2"]
+      },
+      {
+        id: "wcag_2_4_11_focus_not_obscured",
+        label: "WCAG 2.4.11 Focus Not Obscured",
+        level: "AA",
+        appliesWhen: "Focused components are hidden or obscured by sticky headers, overlays, cookie banners, or modals.",
+        sourceRefs: ["wcag_2_2"]
+      }
+    ],
+    jurisdictionalContexts: ACCESSIBILITY_JURISDICTIONAL_CONTEXTS,
+    displayCaution: `${ACCESSIBILITY_LEGAL_VERSION_CAUTION} Review the retained selector, component role, focus lifecycle, focus visibility, focus order, keyboard trap risk, interaction state, page context, organization type, jurisdiction, and manual accessibility findings.`
+  },
   cross_domain_identifier_sharing_observed: {
     findingId: "cross_domain_identifier_sharing_observed",
     label: "Identifier-like values observed across domains",
