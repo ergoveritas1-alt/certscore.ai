@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { getFindingReferenceItems } from "./finding-atlas";
 import { CERT_SCORE_FINDING_REGISTRY } from "../scans/finding-registry";
+import { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../scans/rank-findings";
 import {
   getFindingReferencePageCopy,
   getFindingReferencePath,
@@ -89,6 +90,15 @@ const REVIEWED_FINDING_REFERENCE_IDS = [
   "policy_behavior_contradiction_detected"
 ] as const;
 
+function parseHomepageCarouselCopyIds() {
+  const source = readFileSync("apps/web/components/marketing/homepage-findings-overview.tsx", "utf8");
+  const match = source.match(/const HOMEPAGE_FINDING_CAROUSEL_COPY = \{([\s\S]*?)\n\} satisfies Record/);
+
+  assert.ok(match, "homepage carousel copy map should be statically parseable");
+
+  return [...(match[1] ?? "").matchAll(/^  ([a-z0-9_]+): \{/gm)].map((entry) => entry[1]);
+}
+
 function makePublicHiddenSampleJson(finding: ReturnType<typeof getFindingReferenceItems>[number]) {
   const payload = finding.sample.payload as Record<string, unknown>;
   const confidence =
@@ -138,6 +148,22 @@ test("homepage finding examples align with each finding subtype", () => {
   assert.match(findings.get("forced_consent_interaction")?.exampleEvidence[0]?.code ?? "", /artifact=consent_ui_002/);
   assert.match(findings.get("asymmetric_consent_ui")?.exampleEvidence[0]?.code ?? "", /artifact=consent_ui_003/);
   assert.match(findings.get("consent_dark_patterns_detected")?.exampleEvidence[0]?.code ?? "", /artifact=consent_ui_004/);
+});
+
+test("finding reference index is exactly the official executive top findings", () => {
+  assert.deepEqual(
+    getFindingReferenceItems().map((finding) => finding.id),
+    [...EXECUTIVE_SUMMARY_TOP_FINDING_IDS]
+  );
+});
+
+test("homepage mini findings carousel copy covers only official executive top findings", () => {
+  const homepageSource = readFileSync("apps/web/app/(marketing)/page.tsx", "utf8");
+  const expectedIds = [...EXECUTIVE_SUMMARY_TOP_FINDING_IDS].sort();
+
+  assert.match(homepageSource, /const findings = getFindingReferenceItems\(\);/);
+  assert.match(homepageSource, /<HomepageFindingsOverview findings=\{findings\} \/>/);
+  assert.deepEqual(parseHomepageCarouselCopyIds().sort(), expectedIds);
 });
 
 test("homepage finding samples use the active finding id and label", () => {

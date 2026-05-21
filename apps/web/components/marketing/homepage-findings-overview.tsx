@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { FindingReferenceItem } from "../../lib/marketing/finding-atlas";
+import type { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../../lib/scans/rank-findings";
 
 type HomepageFindingsOverviewProps = {
   findings: FindingReferenceItem[];
@@ -19,7 +20,7 @@ type HomepageFindingCarouselCopy = {
   reviewPrompts: string[];
 };
 
-const HOMEPAGE_FINDING_CAROUSEL_COPY: Record<string, HomepageFindingCarouselCopy> = {
+const HOMEPAGE_FINDING_CAROUSEL_COPY = {
   pre_consent_tracking_detected: {
     overview:
       "Runtime evidence ties a classified non-essential request or storage event to the page-load timeline before a recorded consent action or prior consent state.",
@@ -388,7 +389,7 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY: Record<string, HomepageFindingCarouselCopy
     },
     reviewPrompts: ["Which high-entropy browser or device signal categories co-occurred?"]
   }
-};
+} satisfies Record<(typeof EXECUTIVE_SUMMARY_TOP_FINDING_IDS)[number], HomepageFindingCarouselCopy>;
 
 function getFindingHref(findingId: string) {
   return `/findings/${findingId}`;
@@ -464,7 +465,8 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
     return null;
   }
 
-  const carouselCopy = HOMEPAGE_FINDING_CAROUSEL_COPY[activeFinding.id];
+  const carouselCopy: HomepageFindingCarouselCopy | undefined =
+    HOMEPAGE_FINDING_CAROUSEL_COPY[activeFinding.id as keyof typeof HOMEPAGE_FINDING_CAROUSEL_COPY];
   const findingOverview = carouselCopy?.overview ?? activeFinding.observed;
   const regulatoryLabel = carouselCopy?.regulatoryLabel ?? activeFinding.regulatoryContext?.primaryConcern.label;
   const regulatoryCopy = carouselCopy?.regulatoryCopy ?? activeFinding.regulatoryContext?.primaryConcern.displayCopy;

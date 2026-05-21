@@ -7,6 +7,7 @@ import {
   FINDING_DENSITY_BENCHMARKS,
   type FindingDensityBenchmark
 } from "../scans/finding-density-benchmarks";
+import { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../scans/rank-findings";
 import {
   getSampleFindingById,
   type SampleFindingJson
@@ -87,31 +88,7 @@ export type DetectionMethodologySection = {
   evidenceExamples: FindingReferenceExample[];
 };
 
-const TOP_FINDING_IDS = [
-  "pre_consent_tracking_detected",
-  "visual_contrast_accessibility_issue",
-  "semantic_labeling_accessibility_issue",
-  "fingerprinting_related_signals_observed",
-  "session_recording_services_detected",
-  "third_party_cookie_pre_consent",
-  "cookie_disclosure_gap",
-  "rtb_cookie_sync_observed",
-  "text_alternative_accessibility_issue",
-  "consent_dark_patterns_detected",
-  "cpra_cba_opt_out_missing",
-  "forced_consent_interaction",
-  "reject_option_missing_or_hidden",
-  "sensitive_data_collection_with_third_party_tracking_present",
-  "asymmetric_consent_ui",
-  "keyboard_navigation_accessibility_issue",
-  "focus_management_issue",
-  "cross_domain_identifier_sharing_observed",
-  "reject_tracking_persists_after_reject",
-  "session_replay_present_with_sensitive_surfaces_observed",
-  "possible_session_replay_on_sensitive_input_surface",
-  "policy_behavior_contradiction_detected",
-  "probable_fingerprinting"
-] as const;
+const TOP_FINDING_IDS = EXECUTIVE_SUMMARY_TOP_FINDING_IDS;
 
 const ILLUSTRATIVE_PUBLIC_SAMPLE_FINDING_IDS = new Set<string>([
   "pre_consent_tracking_detected",
