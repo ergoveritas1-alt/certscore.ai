@@ -63,6 +63,7 @@ const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SC
   rtb_cookie_sync_observed: "rtb_cookie_sync_observed",
   session_replay_observed: "session_recording_services_detected",
   session_replay_undisclosed: "session_recording_services_detected",
+  session_replay_present_with_sensitive_surfaces_observed: "session_replay_present_with_sensitive_surfaces_observed",
   video_content_tracking_exposure: "video_content_tracking_exposure"
 };
 
@@ -124,6 +125,7 @@ const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
   "multi_vendor_tracking_detected",
   "session_recording_services_detected",
   "possible_session_replay_on_sensitive_input_surface",
+  "session_replay_present_with_sensitive_surfaces_observed",
   "sensitive_data_collection_with_third_party_tracking_present",
   "sensitive_collection_surface_observed",
   "video_content_tracking_exposure",
@@ -173,6 +175,7 @@ const CONSENT_UI_EVIDENCE_FINDING_IDS = new Set([
 
 const SENSITIVE_EVIDENCE_FINDING_IDS = new Set([
   "possible_session_replay_on_sensitive_input_surface",
+  "session_replay_present_with_sensitive_surfaces_observed",
   "sensitive_data_collection_with_third_party_tracking_present",
   "sensitive_collection_surface_observed",
   "video_content_tracking_exposure",
@@ -412,6 +415,9 @@ function getMappedFindingId(
       : "fingerprinting_related_signals_observed";
   }
   if (packet.unifiedFindingId === "blocking_overlay_observed") {
+    return null;
+  }
+  if (packet.unifiedFindingId === "policy_clarity_risk") {
     return null;
   }
   if (packet.unifiedFindingId in CERT_SCORE_FINDING_REGISTRY) {
@@ -946,6 +952,13 @@ function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof t
 
   if (
     primary === "possible_session_replay_on_sensitive_input_surface" &&
+    !ids.includes("sensitive_data_collection_with_third_party_tracking_present")
+  ) {
+    ids.push("sensitive_data_collection_with_third_party_tracking_present");
+  }
+
+  if (
+    primary === "session_replay_present_with_sensitive_surfaces_observed" &&
     !ids.includes("sensitive_data_collection_with_third_party_tracking_present")
   ) {
     ids.push("sensitive_data_collection_with_third_party_tracking_present");
@@ -1902,7 +1915,13 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       evaluatedSignal: "cross_context_behavioral_advertising_opt_out",
       policyCbaLanguage,
       policyEvidenceEvaluated: policyCbaLanguage !== null,
-      policyUiCongruent
+      policyUiCongruent,
+      gpcScanStateSent: gpcScanStateSent === true,
+      gpcHandlingObserved: gpcHandlingObserved ?? "not_determined",
+      gpcHandlingBasis:
+        gpcScanStateSent === true
+          ? "gpc_specific_scan_state"
+          : "not_tested_or_not_retained"
     },
     optOutControlEvidence: {
       evaluated: true,
@@ -2907,6 +2926,7 @@ function buildExecutiveEvidenceDetails(
   }
   if (
     findingId === "sensitive_data_collection_with_third_party_tracking_present" ||
+    findingId === "session_replay_present_with_sensitive_surfaces_observed" ||
     findingId === "possible_session_replay_on_sensitive_input_surface"
   ) {
     const packetDataTypes =
@@ -2939,7 +2959,11 @@ function buildExecutiveEvidenceDetails(
       };
     }
     const sessionReplaySummary = getFirstEntityJsonObject(packet, "sessionReplayEvidenceSummary");
-    if (findingId === "possible_session_replay_on_sensitive_input_surface" && sessionReplaySummary) {
+    if (
+      (findingId === "possible_session_replay_on_sensitive_input_surface" ||
+        findingId === "session_replay_present_with_sensitive_surfaces_observed") &&
+      sessionReplaySummary
+    ) {
       details.sessionReplayEvidence = {
         ...(details.sessionReplayEvidence ?? {}),
         observed: true,
@@ -3110,6 +3134,12 @@ function buildExecutiveShortSummary(
     const vendors = getSessionReplayVendors(packet);
     const vendorText = vendors.length > 0 ? `${formatVendorList(vendors)} session replay` : "Session replay";
     return `${vendorText} may be present alongside a sensitive input surface in the same runtime session; this does not by itself show field-value transmission.`;
+  }
+
+  if (findingId === "session_replay_present_with_sensitive_surfaces_observed") {
+    const vendors = getSessionReplayVendors(packet);
+    const vendorText = vendors.length > 0 ? `${formatVendorList(vendors)} session replay` : "Session replay";
+    return `${vendorText} was observed in the same scan as sensitive input surfaces; retained evidence does not show same-page or same-flow replay linkage.`;
   }
 
   if (findingId === "sensitive_data_collection_with_third_party_tracking_present") {

@@ -9,6 +9,7 @@ test("mapAxeRuleIdToFindingId maps known axe rules to CertScore IDs", () => {
   assert.equal(mapAxeRuleIdToFindingId("button-name"), "button_accessible_name_missing");
   assert.equal(mapAxeRuleIdToFindingId("link-name"), "link_accessible_name_missing");
   assert.equal(mapAxeRuleIdToFindingId("html-has-lang"), "document_language_missing");
+  assert.equal(mapAxeRuleIdToFindingId("document-title"), "document_title_missing");
   assert.equal(mapAxeRuleIdToFindingId("aria-valid-attr-value"), "invalid_aria_attribute_value");
   assert.equal(mapAxeRuleIdToFindingId("aria-required-children"), "invalid_aria_structure");
   assert.equal(mapAxeRuleIdToFindingId("landmark-one-main"), "missing_or_invalid_main_landmark");

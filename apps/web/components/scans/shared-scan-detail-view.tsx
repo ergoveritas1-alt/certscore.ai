@@ -4030,9 +4030,37 @@ function buildSensitiveSurfaceEvidenceExport(finding: UnifiedFindingDisplayPacke
     ...parseEntityObjectSamples(entities?.sensitiveThirdPartyTrackingEvidence, 8),
     ...parseEntityObjectSamples(entities?.sensitive_third_party_tracking_evidence, 8)
   ];
+  const payloadSameFlowLinked = sensitivePayloadRows.some((row) => {
+    const linkage =
+      row.sameFlowLinkage && typeof row.sameFlowLinkage === "object" && !Array.isArray(row.sameFlowLinkage)
+        ? row.sameFlowLinkage as Record<string, unknown>
+        : row.same_flow_linkage && typeof row.same_flow_linkage === "object" && !Array.isArray(row.same_flow_linkage)
+          ? row.same_flow_linkage as Record<string, unknown>
+          : null;
+    return linkage?.samePageOrFlow === true || linkage?.same_page_or_flow === true;
+  });
+  const payloadExposureObserved = sensitivePayloadRows.some((row) => {
+    const linkage =
+      row.sameFlowLinkage && typeof row.sameFlowLinkage === "object" && !Array.isArray(row.sameFlowLinkage)
+        ? row.sameFlowLinkage as Record<string, unknown>
+        : row.same_flow_linkage && typeof row.same_flow_linkage === "object" && !Array.isArray(row.same_flow_linkage)
+          ? row.same_flow_linkage as Record<string, unknown>
+          : null;
+    return linkage?.userValueObserved === true || linkage?.user_value_observed === true || row.payloadExposureObserved === true;
+  });
+  const thirdPartyDomains = uniqueStrings([
+    ...(entities?.third_party_domains ?? []),
+    ...(entities?.thirdPartyDomains ?? []),
+    ...sensitivePayloadRows.flatMap((row) =>
+      typeof row.vendorHost === "string" ? [row.vendorHost] : typeof row.vendor_host === "string" ? [row.vendor_host] : []
+    )
+  ]);
 
   return {
+    payloadExposureObserved,
+    rawValuesRetained: false,
     samePageOrFlowLinkage:
+      payloadSameFlowLinked ||
       sessionReplayRows.some((row) => row.samePage === true || row.same_page === true || row.sameFlow === true || row.same_flow === true) ||
       thirdPartyRows.some((row) => row.samePage === true || row.same_page === true || row.sameFlow === true || row.same_flow === true),
     fieldTypes: uniqueStrings([
@@ -4043,10 +4071,10 @@ function buildSensitiveSurfaceEvidenceExport(finding: UnifiedFindingDisplayPacke
     maskingOrExclusionObserved:
       sessionReplayRows.some((row) => row.maskingObserved === true || row.masking_observed === true || row.exclusionObserved === true || row.exclusion_observed === true) ||
       thirdPartyRows.some((row) => row.maskingObserved === true || row.masking_observed === true || row.exclusionObserved === true || row.exclusion_observed === true),
-    rawValuesRetained: false,
     sensitivePayloadViolations: sensitivePayloadRows,
     sensitiveSessionReplayCooccurrenceEvidence: sessionReplayRows,
-    sensitiveThirdPartyTrackingEvidence: thirdPartyRows
+    sensitiveThirdPartyTrackingEvidence: thirdPartyRows,
+    thirdPartyDomains
   };
 }
 

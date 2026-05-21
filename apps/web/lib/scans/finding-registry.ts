@@ -376,6 +376,16 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     remediation:
       "Disable session replay on sensitive forms unless it is clearly necessary, confirm that sensitive fields are fully masked, and gate collection behind the appropriate consent and disclosure controls."
   },
+  session_replay_present_with_sensitive_surfaces_observed: {
+    id: "session_replay_present_with_sensitive_surfaces_observed",
+    label: "Session replay observed with sensitive input surfaces",
+    section: "Privacy & Tracking",
+    defaultSurfacePriority: 97,
+    whyItMatters:
+      "Session replay observed in the same scan as sensitive input surfaces can increase privacy review risk even when same-page or same-flow replay linkage has not been retained.",
+    remediation:
+      "Review session replay deployment on sensitive account, login, application, intake, and payment flows; confirm masking and page exclusions before replay collection remains enabled."
+  },
   sensitive_data_collection_with_third_party_tracking_present: {
     id: "sensitive_data_collection_with_third_party_tracking_present",
     label: "Sensitive input surfaces detected alongside third-party tracking",

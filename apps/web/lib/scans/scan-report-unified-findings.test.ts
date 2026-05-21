@@ -240,7 +240,7 @@ test("consent audit reject-tracking finding retains post-reject runtime evidence
           vendor: "Google Ads",
           hostname: "googleadservices.com",
           category: "advertising",
-          url: "https://example.com/post-reject.js",
+          requestUrl: "https://example.com/post-reject.js",
           ts_ms: 1842,
           ms_after_reject: 842,
           resource_type: "script",
@@ -263,6 +263,9 @@ test("consent audit reject-tracking finding retains post-reject runtime evidence
         navigation_or_reload_ambiguous: false,
         baseline_contradiction_detected: false
       },
+      consent_reject_confidence_risks: [
+        "No classified non-essential request fired at least 250ms after reject."
+      ],
       consent_opt_out_evidence_log: [
         {
           action: "reject",
@@ -295,7 +298,7 @@ test("consent audit reject-tracking finding retains post-reject runtime evidence
           vendor: "Google Ads",
           hostname: "googleadservices.com",
           category: "advertising",
-          url: "https://example.com/post-reject.js",
+          requestUrl: "https://example.com/post-reject.js",
           ts_ms: 1842,
           ms_after_reject: 842,
           resource_type: "script",
@@ -318,6 +321,9 @@ test("consent audit reject-tracking finding retains post-reject runtime evidence
         navigation_or_reload_ambiguous: false,
         baseline_contradiction_detected: false
       },
+      consent_reject_confidence_risks: [
+        "No classified non-essential request fired at least 250ms after reject."
+      ],
       consent_opt_out_evidence_log: [
         {
           action: "reject",
@@ -359,6 +365,12 @@ test("consent audit reject-tracking finding retains post-reject runtime evidence
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
   assert.ok(packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
+  assert.equal(
+    packet?.evidence?.entities?.confidenceRisks?.some((risk) =>
+      /No classified non-essential request fired at least/i.test(risk)
+    ) ?? false,
+    false
+  );
   assert.equal(packet?.details?.family, "consent_tracking");
 });
 
@@ -1075,7 +1087,11 @@ test("observed baseline tracker URL fallback creates canonical preconsent packet
   ]);
 });
 
-function buildPreconsentRuntimeState(runtimeArtifacts: Record<string, unknown>, snapshot: Record<string, unknown> = {}) {
+function buildPreconsentRuntimeState(
+  runtimeArtifacts: Record<string, unknown>,
+  snapshot: Record<string, unknown> = {},
+  validationFindings: unknown[] = []
+) {
   return buildScanReportUnifiedFindingState({
     accessibilityRuleCounts: [],
     accessibilityRuleExamples: [],
@@ -1095,7 +1111,7 @@ function buildPreconsentRuntimeState(runtimeArtifacts: Record<string, unknown>, 
       ...snapshot
     },
     trackerVendors: [],
-    validationFindings: []
+    validationFindings
   } as never, {
     deriveAccessibilityIssueRows: () => [],
     deriveAccessibilityRuleEvidenceRows: () => [],
@@ -1203,6 +1219,82 @@ test("promotion-grade preconsent timing and vendor anchors surface as executive 
   assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
   assert.ok(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
   assert.equal(projection.posture, "Action Needed");
+});
+
+test("validation preconsent packet absorbs runtime timing and classification evidence before projection", () => {
+  const state = buildPreconsentRuntimeState(
+    {
+      consent_timeline: {
+        firstCmpVisibleMs: 1000,
+        firstConsentActionMs: null,
+        firstNonEssentialRequestMs: 250,
+        timelineConfidence: "high"
+      },
+      hybrid_runtime_evidence: {
+        consentSummary: {
+          acceptPresent: true,
+          bannerPresent: true,
+          managePresent: true,
+          rejectPresent: true
+        },
+        requestPurposeClassificationConfidence: [
+          {
+            category: "analytics",
+            confidence: 0.9,
+            essentiality: "non_essential",
+            hostname: "analytics.example.com",
+            requestUrl: "https://analytics.example.com/collect",
+            runtimePhase: "pre_consent",
+            tsMs: 250,
+            vendor: "Example Analytics"
+          }
+        ],
+        requestObservations: [
+          {
+            classification: "known_tracker",
+            domain: "analytics.example.com",
+            requestUrl: "https://analytics.example.com/collect",
+            runtimePhase: "pre_consent",
+            thirdParty: true,
+            tsMs: 250,
+            vendor: "Example Analytics"
+          }
+        ],
+        timelineMarkers: {
+          consentBannerDetectedMs: 1000,
+          firstRequestMs: 250,
+          firstThirdPartyRequestMs: 250
+        }
+      }
+    },
+    {},
+    [
+      {
+        id: "validation-preconsent-thin",
+        rule_key: "runtime_privacy.preconsent_tracking_observed",
+        title: "Tracking observed before consent",
+        description: "Runtime evidence retained pre-consent tracking.",
+        evidence_json: {
+          preconsent_tracking_detected: true,
+          preconsent_tracker_evidence_urls: ["https://analytics.example.com/collect"],
+          runtimeVendors: ["Example Analytics"]
+        },
+        finding_source: "runtime_privacy",
+        severity: "high"
+      }
+    ]
+  );
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"), false);
+  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_concrete_preconsent_artifact"), false);
+  assert.equal(packet?.evidence?.entities?.consentTimeline?.length, 1);
+  assert.equal(packet?.evidence?.entities?.requestPurposeClassificationConfidence?.length, 1);
+  assert.ok(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
 });
 
 test("state-zero tracker observations with consent timing surface as pre-consent top findings", () => {

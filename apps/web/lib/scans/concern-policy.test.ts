@@ -1720,6 +1720,46 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "document metadata accessibility rules stay support-only",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "accessibility_review.semantic_labeling_accessibility_issue",
+        suggestedUnifiedFindingId: "semantic_labeling_accessibility_issue",
+        title: "Semantic labeling accessibility issue"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: {
+        accessibilityRuleExamples: [
+          {
+            help: "Documents must have a title element to aid in navigation",
+            impact: "serious",
+            nodeCount: 1,
+            pageUrl: "https://example.com/",
+            representativeSelectors: ["html"],
+            ruleCode: "document-title",
+            ruleGroup: "wcag2a",
+            severity: "high"
+          },
+          {
+            help: "The html element must have a lang attribute",
+            impact: "serious",
+            nodeCount: 1,
+            pageUrl: "https://example.com/",
+            representativeSelectors: ["html"],
+            ruleCode: "html-has-lang",
+            ruleGroup: "wcag2a",
+            severity: "high"
+          }
+        ]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["document_metadata_rule_not_top_finding_eligible"]
+      }
+    },
+    {
       name: "semantic labeling issue promotes concrete name and label examples",
       concern: makeConcern({
         originType: "validation_rule",
@@ -3390,6 +3430,35 @@ test("deriveConcernPolicy keeps single sync-path-only RTB evidence audit-only", 
           hostname: "sync.example-adtech.test",
           pathSample: "/sync",
           reason: "sync_path"
+        }
+      ]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_specific_runtime_anchor"));
+});
+
+test("deriveConcernPolicy keeps callback-only generic data-sync RTB evidence audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "runtime_privacy.rtb_cookie_sync_observed",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "rtb_cookie_sync_observed",
+      title: "Adtech identity sync-like request observed"
+    }),
+    evidenceStrengthFlags: ["structured_validation"],
+    rawEvidence: {
+      rtb_cookie_sync_evidence: [
+        {
+          category: "identity_sync",
+          hostname: "www-api.ibm.com",
+          pathSample: "/data-sync/dbdm-data",
+          queryKeysSample: ["callback"],
+          reason: "sync_path",
+          statusCode: 200
         }
       ]
     }

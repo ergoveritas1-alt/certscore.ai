@@ -117,6 +117,121 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function mergeEvidenceRecords(
+  base: Record<string, unknown> | undefined,
+  supplement: Record<string, unknown> | undefined
+) {
+  if (!base && !supplement) {
+    return undefined;
+  }
+  if (!base) {
+    return supplement;
+  }
+  if (!supplement) {
+    return base;
+  }
+
+  const merged: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(supplement)) {
+    const existing = merged[key];
+    if (Array.isArray(existing) || Array.isArray(value)) {
+      merged[key] = uniqueStrings([
+        ...(Array.isArray(existing) ? existing.map((entry) => JSON.stringify(entry)) : existing === undefined ? [] : [JSON.stringify(existing)]),
+        ...(Array.isArray(value) ? value.map((entry) => JSON.stringify(entry)) : value === undefined ? [] : [JSON.stringify(value)])
+      ]).map((entry) => {
+        try {
+          return JSON.parse(entry) as unknown;
+        } catch {
+          return entry;
+        }
+      });
+      continue;
+    }
+    if (
+      existing &&
+      typeof existing === "object" &&
+      !Array.isArray(existing) &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      merged[key] = { ...(existing as Record<string, unknown>), ...(value as Record<string, unknown>) };
+      continue;
+    }
+    if (existing === undefined || existing === null || existing === "" || (typeof existing === "number" && !Number.isFinite(existing))) {
+      merged[key] = value;
+    }
+  }
+
+  return merged;
+}
+
+function mergeRuntimeCandidateIntoExisting(
+  existing: CanonicalReviewFinding,
+  runtimeCandidate: CanonicalReviewFinding
+): CanonicalReviewFinding {
+  return {
+    ...existing,
+    evidence: uniqueStrings([...(existing.evidence ?? []), ...(runtimeCandidate.evidence ?? [])]),
+    fallbackEvidence: mergeEvidenceRecords(existing.fallbackEvidence, runtimeCandidate.fallbackEvidence),
+    observedValue: existing.observedValue ?? runtimeCandidate.observedValue,
+    severity:
+      existing.severity === "high" || runtimeCandidate.severity === "high"
+        ? "high"
+        : existing.severity === "medium" || runtimeCandidate.severity === "medium"
+          ? "medium"
+          : existing.severity,
+    signalLabel: existing.signalLabel ?? runtimeCandidate.signalLabel,
+    signalSource: existing.signalSource ?? runtimeCandidate.signalSource,
+    title: existing.title || runtimeCandidate.title
+  };
+}
+
+function mergeRuntimeDerivedCandidates(
+  candidates: CanonicalReviewFinding[],
+  runtimeCandidates: CanonicalReviewFinding[]
+) {
+  const merged = [...candidates];
+  for (const runtimeCandidate of runtimeCandidates) {
+    const runtimeSignalKey = runtimeCandidate.signalKey ?? runtimeCandidate.fallbackEvidence?.signalKey;
+    const existingIndex = merged.findIndex((candidate) => {
+      const candidateSignalKey = candidate.signalKey ?? candidate.fallbackEvidence?.signalKey;
+      return typeof runtimeSignalKey === "string" && candidateSignalKey === runtimeSignalKey;
+    });
+    if (existingIndex >= 0) {
+      merged[existingIndex] = mergeRuntimeCandidateIntoExisting(merged[existingIndex]!, runtimeCandidate);
+    } else {
+      merged.push(runtimeCandidate);
+    }
+  }
+  return merged;
+}
+
+function getLinkedValidationFindingIds(candidates: CanonicalReviewFinding[]) {
+  return new Set(
+    candidates
+      .map((candidate) => candidate.linkedValidationFinding?.id)
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+  );
+}
+
+function getValidationFindingRuleKey(finding: Record<string, unknown>) {
+  const ruleKey = finding.ruleKey ?? finding.rule_key;
+  return typeof ruleKey === "string" ? ruleKey : null;
+}
+
+function candidateCoversValidationFinding(candidate: CanonicalReviewFinding, finding: Record<string, unknown>) {
+  const candidateSignalKey = candidate.signalKey ?? candidate.fallbackEvidence?.signalKey;
+  const ruleKey = getValidationFindingRuleKey(finding);
+  return (
+    candidate.linkedValidationFinding?.id === finding.id ||
+    (
+      candidateSignalKey === "privacy.preconsent_tracking_detected" &&
+      ruleKey === "runtime_privacy.preconsent_tracking_observed"
+    )
+  );
+}
+
 function getFiniteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -1520,13 +1635,16 @@ export function buildScanReportUnifiedFindingState(
   );
   const runtimeDerivedReviewFindingCandidates = buildRuntimeDerivedReviewFindingCandidates({
     runtimeArtifacts
-  }).filter(
-    (candidate) =>
-      !allReviewFindingCandidates.some(
-        (existing) =>
-          existing.signalKey === candidate.signalKey ||
-          existing.fallbackEvidence?.signalKey === candidate.signalKey
-      )
+  });
+  const reviewFindingCandidates = mergeRuntimeDerivedCandidates(
+    allReviewFindingCandidates,
+    runtimeDerivedReviewFindingCandidates
+  );
+  const linkedValidationFindingIds = getLinkedValidationFindingIds(reviewFindingCandidates);
+  const unlinkedValidationFindings = scanRecord.validationFindings.filter(
+    (finding) =>
+      !linkedValidationFindingIds.has(String(finding.id ?? "")) &&
+      !reviewFindingCandidates.some((candidate) => candidateCoversValidationFinding(candidate, finding as Record<string, unknown>))
   );
   const globalUnifiedFindings = dependencies.filterContradictoryPositiveSurfaceFindings(buildUnifiedFindingDisplayPackets({
     coverageSummary: {
@@ -1538,14 +1656,14 @@ export function buildScanReportUnifiedFindingState(
     macroEnrichment: scanRecord.macroEnrichment,
     mergedSignals: scanRecord.mergedSignals,
     policyEnrichment: scanRecord.policyEnrichment,
-    reviewFindingCandidates: [...allReviewFindingCandidates, ...runtimeDerivedReviewFindingCandidates],
+    reviewFindingCandidates,
     scanEvents: scanRecord.events,
-    validationFindings: scanRecord.validationFindings,
+    validationFindings: unlinkedValidationFindings,
     validationFindingLookup
   }).filter((finding) => finding.presentationDecision.status !== "suppress"));
 
   return {
-    allReviewFindingCandidates,
+    allReviewFindingCandidates: reviewFindingCandidates,
     derivedContext: {
       accessibilityIssueRows,
       accessibilityRuleEvidenceRows,

@@ -40,6 +40,7 @@ export const EXECUTIVE_SUMMARY_TOP_FINDING_IDS = [
   "sensitive_data_collection_with_third_party_tracking_present",
   "possible_session_replay_on_sensitive_input_surface",
   "rtb_cookie_sync_observed",
+  "policy_behavior_contradiction_detected",
   "consent_dark_patterns_detected",
   "reject_option_missing_or_hidden",
   "asymmetric_consent_ui",

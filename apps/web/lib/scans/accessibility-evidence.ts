@@ -79,6 +79,11 @@ export const KEYBOARD_NAVIGATION_ACCESSIBILITY_RULE_IDS = new Set([
   "tabindex"
 ]);
 
+export const DOCUMENT_METADATA_ACCESSIBILITY_RULE_IDS = new Set([
+  "document-title",
+  "html-has-lang"
+]);
+
 export const SPLIT_ACCESSIBILITY_FINDING_IDS = new Set([
   "focus_management_issue",
   "keyboard_navigation_accessibility_issue",
@@ -331,6 +336,24 @@ export function inferSplitAccessibilityFindingIdFromEvidence(rawEvidence: Record
   }
 
   return null;
+}
+
+export function hasDocumentMetadataAccessibilityExamples(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getCompleteRepresentativeAccessibilityExamples(rawEvidence).some((example) => {
+    const ruleCode = getAccessibilityStringValue(example, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
+    return Boolean(ruleCode && DOCUMENT_METADATA_ACCESSIBILITY_RULE_IDS.has(ruleCode));
+  });
+}
+
+export function hasOnlyDocumentMetadataAccessibilityExamples(rawEvidence: Record<string, unknown> | null | undefined) {
+  const examples = getCompleteRepresentativeAccessibilityExamples(rawEvidence);
+  return (
+    examples.length > 0 &&
+    examples.every((example) => {
+      const ruleCode = getAccessibilityStringValue(example, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
+      return Boolean(ruleCode && DOCUMENT_METADATA_ACCESSIBILITY_RULE_IDS.has(ruleCode));
+    })
+  );
 }
 
 export function hasCompleteExamplesForAccessibilityFinding(

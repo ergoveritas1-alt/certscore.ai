@@ -10,6 +10,7 @@ const AXE_RULE_TO_FINDING_ID: Record<string, string> = {
   "button-name": "button_accessible_name_missing",
   "link-name": "link_accessible_name_missing",
   "html-has-lang": "document_language_missing",
+  "document-title": "document_title_missing",
   "aria-valid-attr-value": "invalid_aria_attribute_value",
   "aria-required-children": "invalid_aria_structure",
   "landmark-one-main": "missing_or_invalid_main_landmark",

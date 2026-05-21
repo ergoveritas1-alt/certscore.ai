@@ -38,6 +38,7 @@ const FINGERPRINTING_FINDING_IDS = new Set([
 const SESSION_REPLAY_FINDING_IDS = new Set([
   "session_recording_services_detected",
   "possible_session_replay_on_sensitive_input_surface",
+  "session_replay_present_with_sensitive_surfaces_observed",
   "sensitive_data_collection_with_third_party_tracking_present"
 ]);
 
@@ -56,10 +57,14 @@ const REPORT_REMEDIATION_COPY: Record<string, string> = {
     "Teams commonly review the owning script or SDK, purpose, consent state, vendor role, and whether high-entropy browser or device signal collection can be minimized or limited to the stated purpose.",
   rtb_cookie_sync_observed:
     "Teams commonly review which adtech, header-bidding, audience-management, or identity-match integrations trigger sync-style requests, and whether those endpoints are suppressed until the relevant consent or opt-out state has been evaluated.",
+  policy_behavior_contradiction_detected:
+    "Teams commonly compare the retained policy claim, runtime anchor, and bridge rationale, then confirm whether implementation behavior, consent flow, and public disclosures need to be brought back into alignment.",
   probable_fingerprinting:
     "Teams commonly identify which script, SDK, or vendor owns the high-entropy signal cluster, then review purpose, necessity, consent state, and whether collection can be minimized or limited to the stated purpose.",
   sensitive_data_collection_with_third_party_tracking_present:
     "Teams commonly review page-level tag exclusions, masking, event suppression, and vendor configuration for sensitive form pages, account flows, application flows, and other high-review surfaces.",
+  session_replay_present_with_sensitive_surfaces_observed:
+    "Teams commonly review replay vendor configuration, masking, sampling, consent gating, and page-level exclusions for sensitive account, login, intake, payment, and application flows.",
   visual_contrast_accessibility_issue:
     "Teams commonly review the affected selector, color pair, component state, and applicable contrast threshold before adjusting design tokens or component styles."
 };

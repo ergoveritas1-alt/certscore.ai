@@ -108,6 +108,7 @@ const TOP_FINDING_IDS = [
   "cross_domain_identifier_sharing_observed",
   "reject_tracking_persists_after_reject",
   "possible_session_replay_on_sensitive_input_surface",
+  "policy_behavior_contradiction_detected",
   "probable_fingerprinting"
 ] as const;
 
@@ -129,6 +130,7 @@ const ILLUSTRATIVE_PUBLIC_SAMPLE_FINDING_IDS = new Set<string>([
   "cross_domain_identifier_sharing_observed",
   "session_recording_services_detected",
   "possible_session_replay_on_sensitive_input_surface",
+  "policy_behavior_contradiction_detected",
   "sensitive_data_collection_with_third_party_tracking_present",
   "focus_management_issue",
   "fingerprinting_related_signals_observed",
@@ -146,6 +148,7 @@ const SAMPLE_EVIDENCE_CONFIDENCE: Record<string, "strong" | "good" | "review_sig
   forced_consent_interaction: "good",
   keyboard_navigation_accessibility_issue: "good",
   possible_session_replay_on_sensitive_input_surface: "review_signal",
+  policy_behavior_contradiction_detected: "review_signal",
   pre_consent_tracking_detected: "strong",
   probable_fingerprinting: "review_signal",
   reject_option_missing_or_hidden: "good",
@@ -173,6 +176,7 @@ const SAMPLE_DIRECTNESS: Record<
   forced_consent_interaction: "direct_observation",
   keyboard_navigation_accessibility_issue: "direct_observation",
   possible_session_replay_on_sensitive_input_surface: "correlated_observation",
+  policy_behavior_contradiction_detected: "correlated_observation",
   pre_consent_tracking_detected: "direct_observation",
   probable_fingerprinting: "clustered_inference",
   reject_option_missing_or_hidden: "absence_observation",
@@ -199,6 +203,7 @@ const SEVERITY_BY_SECTION: Record<CertScoreFindingDefinition["section"], CertSco
 };
 
 const SEVERITY_OVERRIDES: Record<string, CertScoreFindingSeverity> = {
+  policy_behavior_contradiction_detected: "high",
   possible_session_replay_on_sensitive_input_surface: "critical",
   probable_fingerprinting: "critical",
   reject_tracking_persists_after_reject: "high",
@@ -217,6 +222,7 @@ const CATEGORY_BY_FINDING_ID: Record<string, FindingReferenceCategory> = {
   forced_consent_interaction: "Consent",
   keyboard_navigation_accessibility_issue: "Accessibility",
   possible_session_replay_on_sensitive_input_surface: "Third-party tracking",
+  policy_behavior_contradiction_detected: "Consumer protection",
   pre_consent_tracking_detected: "Consent",
   probable_fingerprinting: "Fingerprinting",
   reject_option_missing_or_hidden: "Consent",
@@ -236,6 +242,7 @@ const PUBLIC_TITLE_OVERRIDES: Record<string, string> = {
   cookie_disclosure_gap: "Cookie disclosure gap",
   fingerprinting_related_signals_observed: "Fingerprinting-related browser/device signals observed",
   possible_session_replay_on_sensitive_input_surface: "Possible session replay near sensitive input surface",
+  policy_behavior_contradiction_detected: "Policy/runtime alignment review",
   probable_fingerprinting: "Probable browser/device fingerprinting review signal",
   sensitive_data_collection_with_third_party_tracking_present: "Sensitive input surface with third-party tracking context",
   session_recording_services_detected: "Session replay service signal observed",
@@ -258,6 +265,11 @@ const RELATED_FINDINGS: Record<string, string[]> = {
   possible_session_replay_on_sensitive_input_surface: [
     "session_recording_services_detected",
     "sensitive_data_collection_with_third_party_tracking_present"
+  ],
+  policy_behavior_contradiction_detected: [
+    "pre_consent_tracking_detected",
+    "third_party_cookie_pre_consent",
+    "cookie_disclosure_gap"
   ],
   pre_consent_tracking_detected: ["third_party_cookie_pre_consent", "cookie_disclosure_gap", "rtb_cookie_sync_observed"],
   probable_fingerprinting: ["fingerprinting_related_signals_observed", "cross_domain_identifier_sharing_observed", "rtb_cookie_sync_observed"],
@@ -405,6 +417,12 @@ export const FINDING_TOP_FINDING_RULES: Record<string, FindingTopFindingRule> = 
     criticalOrTopRankingRequires: ["Collection endpoint plus sensitive form plus no masking/exclusion observed or consent concern."],
     demoteOrSuppressWhen: ["Replay library only.", "Global script only.", "Sensitive field not same page/flow.", "Masking or page exclusion observed."]
   },
+  policy_behavior_contradiction_detected: {
+    minimumToSurface: ["A retained policy/disclosure anchor plus concrete runtime behavior anchor and explicit bridge provenance."],
+    highConfidenceRequires: ["Policy source URL, policy snippet, runtime request or storage anchor, and deterministic bridge rationale."],
+    criticalOrTopRankingRequires: ["Pre-consent, post-reject, cookie, sharing, or sensitive-surface runtime behavior directly conflicts with the retained disclosure claim."],
+    demoteOrSuppressWhen: ["Policy claim only.", "Runtime behavior only.", "Missing bridge provenance.", "Generic contradiction copy without concrete anchors."]
+  },
   probable_fingerprinting: {
     minimumToSurface: ["Multi-signal high-entropy cluster."],
     highConfidenceRequires: ["Cluster plus script/request and tier/context."],
@@ -461,6 +479,8 @@ const OBSERVED: Record<string, string> = {
     "Retained runtime evidence showed a reject-style consent interaction followed by classified non-essential request or storage activity in the observed scan scope.",
   possible_session_replay_on_sensitive_input_surface:
     "Retained runtime and page-surface evidence showed session-replay-related signals on or near a form, flow, or page surface that may collect sensitive information.",
+  policy_behavior_contradiction_detected:
+    "Retained report evidence connected a public policy or disclosure claim to concrete runtime behavior that appeared to require policy/runtime alignment review.",
   probable_fingerprinting:
     "Retained runtime evidence showed a clustered high-entropy browser/device signal pattern that may warrant probable fingerprinting review."
 };

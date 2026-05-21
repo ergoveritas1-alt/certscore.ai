@@ -440,6 +440,7 @@ const RUNTIME_ARTIFACT_FINDING_IDS = new Set([
   "session_recording_services_detected",
   "possible_session_replay_on_sensitive_input_surface",
   "sensitive_data_collection_with_third_party_tracking_present",
+  "policy_behavior_contradiction_detected",
   "fingerprinting_related_signals_observed",
   "probable_fingerprinting"
 ]);
@@ -511,6 +512,7 @@ const FINDING_REGISTRY_GROUPS: Array<{
       "reject_tracking_persists_after_reject",
       "third_party_cookie_pre_consent",
       "cookie_disclosure_gap",
+      "policy_behavior_contradiction_detected",
       "forced_consent_interaction",
       "reject_option_missing_or_hidden",
       "asymmetric_consent_ui",

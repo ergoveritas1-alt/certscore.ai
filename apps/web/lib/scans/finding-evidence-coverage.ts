@@ -114,6 +114,17 @@ export const FINDING_EVIDENCE_ID_COVERAGE: readonly FindingEvidenceCoverageEntry
     nonContractRationaleId: null
   },
   {
+    ws01FindingIds: [
+      "policy_behavior_contradiction_detected",
+      "policy_behavior_conflict",
+      "consent_gated_tracking_claim_conflict"
+    ],
+    unifiedFindingId: "policy_behavior_contradiction_detected",
+    reportFindingId: "policy_behavior_contradiction_detected",
+    contractFindingId: "policy_behavior_contradiction_detected",
+    nonContractRationaleId: null
+  },
+  {
     ws01FindingIds: ["cpra_cba_opt_out_missing"],
     unifiedFindingId: "cpra_cba_opt_out_missing",
     reportFindingId: "cpra_cba_opt_out_missing",
@@ -132,6 +143,13 @@ export const FINDING_EVIDENCE_ID_COVERAGE: readonly FindingEvidenceCoverageEntry
     unifiedFindingId: "possible_session_replay_on_sensitive_input_surface",
     reportFindingId: "possible_session_replay_on_sensitive_input_surface",
     contractFindingId: "possible_session_replay_on_sensitive_input_surface",
+    nonContractRationaleId: null
+  },
+  {
+    ws01FindingIds: ["session_replay_present_with_sensitive_surfaces_observed"],
+    unifiedFindingId: "session_replay_present_with_sensitive_surfaces_observed",
+    reportFindingId: "session_replay_present_with_sensitive_surfaces_observed",
+    contractFindingId: "session_replay_present_with_sensitive_surfaces_observed",
     nonContractRationaleId: null
   },
   {

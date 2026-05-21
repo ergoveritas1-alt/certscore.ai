@@ -451,7 +451,12 @@ function inferVendorCategory(vendor: string) {
 
 function normalizePostRejectNonEssentialRequestRows(rows: Array<Record<string, unknown>>) {
   return rows.map((row) => {
-    const url = typeof row.url === "string" ? row.url : "";
+    const url =
+      typeof row.url === "string"
+        ? row.url
+        : typeof row.requestUrl === "string"
+          ? row.requestUrl
+          : "";
     const classified = classifyPostRejectRequestUrl(url, typeof row.vendor === "string" ? row.vendor : null);
     return {
       ...row,
@@ -463,6 +468,38 @@ function normalizePostRejectNonEssentialRequestRows(rows: Array<Record<string, u
       vendor_attribution_confidence: classified.confidence
     };
   });
+}
+
+function getFiniteRuntimeNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function isPromotionGradePostRejectRequest(row: Record<string, unknown>) {
+  const vendor = typeof row.vendor === "string" ? row.vendor : "";
+  const url =
+    typeof row.url === "string"
+      ? row.url
+      : typeof row.requestUrl === "string"
+        ? row.requestUrl
+        : "";
+  const category = typeof row.category === "string" ? row.category : "";
+  const tsMs = getFiniteRuntimeNumber(row.ts_ms ?? row.tsMs);
+  const msAfterReject = getFiniteRuntimeNumber(row.ms_after_reject ?? row.msAfterReject);
+  return (
+    tsMs !== null &&
+    msAfterReject !== null &&
+    msAfterReject >= REJECT_TRACKING_CONFIRMATION_MIN_MS &&
+    vendor.trim().length > 0 &&
+    /^https?:\/\//i.test(url) &&
+    /^(advertising|analytics|session_replay|marketing_automation|tag_manager)$/i.test(category)
+  );
 }
 
 function buildRejectTrackingEvidenceFallback(input: {
@@ -585,24 +622,10 @@ function buildRejectTrackingEvidenceFallback(input: {
       /linkedin|reddit|clarity|marketo|munchkin|google ads|doubleclick|meta|facebook|tiktok|pinterest|analytics|adobe/i.test(vendor)
     );
   const hasRequestAfterConfirmationThreshold = postRejectNonEssentialRequests.some((row) => {
-    const value = row.ms_after_reject ?? row.msAfterReject;
-    return typeof value === "number" && value >= REJECT_TRACKING_CONFIRMATION_MIN_MS;
+    const value = getFiniteRuntimeNumber(row.ms_after_reject ?? row.msAfterReject);
+    return value !== null && value >= REJECT_TRACKING_CONFIRMATION_MIN_MS;
   });
-  const hasPromotionGradeRequest = postRejectNonEssentialRequests.some((row) => {
-    const vendor = typeof row.vendor === "string" ? row.vendor : "";
-    const url = typeof row.url === "string" ? row.url : "";
-    const category = typeof row.category === "string" ? row.category : "";
-    const tsMs = row.ts_ms ?? row.tsMs;
-    const msAfterReject = row.ms_after_reject ?? row.msAfterReject;
-    return (
-      typeof tsMs === "number" &&
-      typeof msAfterReject === "number" &&
-      msAfterReject >= REJECT_TRACKING_CONFIRMATION_MIN_MS &&
-      vendor.trim().length > 0 &&
-      /^https?:\/\//i.test(url) &&
-      /^(advertising|analytics|session_replay|marketing_automation|tag_manager)$/i.test(category)
-    );
-  });
+  const hasPromotionGradeRequest = postRejectNonEssentialRequests.some(isPromotionGradePostRejectRequest);
   const requiredVendorClassificationSatisfied = hasPromotionGradeRequest;
   const rejectClickConfirmed =
     suppressionChecks.reject_click_confirmed === true ||
@@ -667,12 +690,16 @@ function buildRejectTrackingEvidenceFallback(input: {
     !baselineContradictionDetected &&
     (!navigationOrReloadAmbiguous || strongTimestampedRuntimeEvidence);
   const firstPostRejectMs = postRejectNonEssentialRequests
-    .map((row) => row.ms_after_reject ?? row.msAfterReject)
-    .find((value): value is number => typeof value === "number" && Number.isFinite(value));
+    .map((row) => getFiniteRuntimeNumber(row.ms_after_reject ?? row.msAfterReject))
+    .find((value): value is number => value !== null);
 
   return {
     confidenceRisks: uniqueStrings([
-      ...confidenceRisks,
+      ...confidenceRisks.filter((risk) =>
+        hasRequestAfterConfirmationThreshold
+          ? !/No classified non-essential request fired at least/i.test(risk)
+          : true
+      ),
       baselineReconstructionIncomplete ? "Baseline vendor reconstruction incomplete; before/after comparison may be incomplete." : null,
       !hasRequestAfterConfirmationThreshold
         ? `No classified non-essential request fired at least ${REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL} after reject.`

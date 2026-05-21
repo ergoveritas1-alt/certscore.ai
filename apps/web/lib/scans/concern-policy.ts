@@ -25,6 +25,7 @@ import {
   hasConcreteRetargetingArtifact,
   hasConcreteSensitivePayloadArtifact,
   hasConcreteSensitiveThirdPartyTrackingArtifact,
+  hasScanLevelSensitiveSessionReplayCoPresenceArtifact,
   hasSensitiveSessionReplaySurfaceCooccurrenceArtifact,
   hasPreconsentSequenceEvidence,
   hasStrongAccessibilitySupportPathMissingEvidence,
@@ -49,6 +50,7 @@ import {
   hasCompleteExamplesForAccessibilityFinding,
   getRepresentativeAccessibilityExampleCoverage,
   hasExternallyPromotableAccessibilityExamples,
+  hasOnlyDocumentMetadataAccessibilityExamples,
   hasPromotableKeyboardAccessibilityEvidence,
   hasPromotableSemanticLabelingAccessibilityEvidence
 } from "./accessibility-evidence";
@@ -771,7 +773,7 @@ function isHighSensitivityConcern(
     .join(" ")
     .toLowerCase();
 
-  return /high_sensitivity_data_collection_detected|form_collects_(ssn|government_id|health_information|financial_information|geolocation)|possible_session_replay_on_sensitive_input_surface|sensitive_data_collection_with_third_party_tracking_present/.test(
+  return /high_sensitivity_data_collection_detected|form_collects_(ssn|government_id|health_information|financial_information|geolocation)|possible_session_replay_on_sensitive_input_surface|session_replay_present_with_sensitive_surfaces_observed|sensitive_data_collection_with_third_party_tracking_present/.test(
     haystack
   );
 }
@@ -780,6 +782,12 @@ function isSensitiveReplayConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
   return concern.suggestedUnifiedFindingId === "possible_session_replay_on_sensitive_input_surface";
+}
+
+function isScanLevelSensitiveReplayConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "session_replay_present_with_sensitive_surfaces_observed";
 }
 
 function isSensitiveThirdPartyTrackingConcern(
@@ -2165,10 +2173,14 @@ export function deriveConcernPolicy(input: {
     const hasSensitiveReplayCooccurrenceRuntime =
       isSensitiveReplayConcern(input.concern) &&
       hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(input.rawEvidence);
+    const hasScanLevelSensitiveReplayRuntime =
+      isScanLevelSensitiveReplayConcern(input.concern) &&
+      hasScanLevelSensitiveSessionReplayCoPresenceArtifact(input.rawEvidence);
     const contractDecision = evaluateConcreteRuntimeContract({
       hasConcreteArtifact:
         hasConcreteSessionReplayEvidence(input.rawEvidence) ||
         hasSensitiveReplayCooccurrenceRuntime ||
+        hasScanLevelSensitiveReplayRuntime ||
         hasDirectRuntime,
       missingFlag: "no_direct_runtime_replay_artifact_observed",
       originType: input.concern.originType,
@@ -2299,6 +2311,7 @@ export function deriveConcernPolicy(input: {
   if (
     isHighSensitivityConcern(input.concern) &&
     !isSensitiveReplayConcern(input.concern) &&
+    !isScanLevelSensitiveReplayConcern(input.concern) &&
     !isSensitiveThirdPartyTrackingConcern(input.concern) &&
     input.concern.originType !== "validation_rule"
   ) {
@@ -2320,6 +2333,18 @@ export function deriveConcernPolicy(input: {
   if (
     isSensitiveReplayConcern(input.concern) &&
     !hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_concrete_sensitive_payload"],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (
+    isScanLevelSensitiveReplayConcern(input.concern) &&
+    !hasScanLevelSensitiveSessionReplayCoPresenceArtifact(input.rawEvidence)
   ) {
     return {
       allowedNarrativeTier: "weak",
@@ -2762,6 +2787,7 @@ export function deriveConcernPolicy(input: {
   if (isSplitAccessibilityIssueConcern(input.concern)) {
     const findingId = input.concern.suggestedUnifiedFindingId ?? "";
     const hasFindingExamples = hasCompleteExamplesForAccessibilityFinding(input.rawEvidence, findingId);
+    const hasOnlyDocumentMetadataExamples = hasOnlyDocumentMetadataAccessibilityExamples(input.rawEvidence);
     const keyboardPromotable =
       findingId !== "keyboard_navigation_accessibility_issue" ||
       hasPromotableKeyboardAccessibilityEvidence(input.rawEvidence);
@@ -2772,7 +2798,9 @@ export function deriveConcernPolicy(input: {
     if (!hasFindingExamples || !keyboardPromotable || !semanticPromotable) {
       const coverage = getRepresentativeAccessibilityExampleCoverage(input.rawEvidence);
       negativeEvidenceFlags.add(
-        coverage.representativeExampleCount > 0
+        hasOnlyDocumentMetadataExamples
+          ? "document_metadata_rule_not_top_finding_eligible"
+          : coverage.representativeExampleCount > 0
           ? "accessibility_examples_below_promotion_threshold"
           : "missing_representative_accessibility_examples"
       );

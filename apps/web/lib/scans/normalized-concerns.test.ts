@@ -598,7 +598,7 @@ test("high-sensitivity candidates with replay co-occurrence artifacts specialize
   assert.ok(concern.evidenceStrengthFlags.includes("direct_runtime"));
 });
 
-test("high-sensitivity candidates with independent replay artifacts stay general sensitive collection", () => {
+test("high-sensitivity candidates with scan-level replay and sensitive artifacts specialize into scan-level sensitive replay findings", () => {
   const concern = normalizeConcernFromReviewFindingCandidate({
     description: "Sensitive input and replay tooling were observed independently.",
     fallbackEvidence: {
@@ -623,10 +623,10 @@ test("high-sensitivity candidates with independent replay artifacts stay general
     title: "High-sensitivity data collection detected"
   });
 
-  assert.equal(concern.suggestedUnifiedFindingId, "sensitive_collection_surface_observed");
+  assert.equal(concern.suggestedUnifiedFindingId, "session_replay_present_with_sensitive_surfaces_observed");
 });
 
-test("high-sensitivity candidates with independent sensitive requests and replay runtime stay out of sensitive replay findings", () => {
+test("high-sensitivity candidates with independent sensitive requests and replay runtime use scan-level sensitive replay findings", () => {
   const concern = normalizeConcernFromReviewFindingCandidate({
     description: "Sensitive request and replay tooling were observed on the same scan surface.",
     fallbackEvidence: {
@@ -652,7 +652,7 @@ test("high-sensitivity candidates with independent sensitive requests and replay
     title: "High-sensitivity data collection detected"
   });
 
-  assert.equal(concern.suggestedUnifiedFindingId, "sensitive_collection_surface_observed");
+  assert.equal(concern.suggestedUnifiedFindingId, "session_replay_present_with_sensitive_surfaces_observed");
 });
 
 test("high-sensitivity candidates with replay-correlated sensitive artifacts specialize into sensitive replay findings", () => {

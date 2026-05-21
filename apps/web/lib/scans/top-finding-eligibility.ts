@@ -125,6 +125,15 @@ function hasPromotionGradePostRejectRequest(details: Record<string, unknown>) {
   });
 }
 
+function hasRuntimeRequestAnchor(details: Record<string, unknown>) {
+  if (hasMeaningfulValue(details.runtimeRequestUrls)) {
+    return true;
+  }
+  return asRows(details.representativeRequests).some((row) =>
+    Boolean(getStringFromKeys(row, ["requestUrl", "request_url", "url", "href"]))
+  );
+}
+
 function pushUnique(target: string[], value: string) {
   if (!target.includes(value)) {
     target.push(value);
@@ -176,7 +185,7 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
   if (hasMeaningfulValue(details.timing) || hasMeaningfulValue(details.timingAnalysis)) {
     matchedCriteria.push("runtime_timing");
   }
-  if (hasMeaningfulValue(details.representativeRequests) || hasMeaningfulValue(details.runtimeRequestUrls)) {
+  if (hasRuntimeRequestAnchor(details)) {
     matchedCriteria.push("runtime_request_anchor");
   }
   if (hasMeaningfulValue(details.consentUiEvidence) || hasMeaningfulValue(details.rejectInteraction)) {
@@ -242,11 +251,10 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
       ) {
         forceEligibility = "top_candidate";
         pushUnique(matchedCriteria, "gpc_ignored_with_advertising_or_sharing_context");
-      } else if (details.optOutControlEvidence?.gpcScanStateSent !== true) {
-        demotionReasons.push("gpc_specific_state_not_observed");
       }
       break;
     case "session_recording_services_detected":
+    case "session_replay_present_with_sensitive_surfaces_observed":
     case "possible_session_replay_on_sensitive_input_surface":
       if (!hasMeaningfulValue(details.sessionReplayEvidence)) {
         missingCorroborators.push("session_replay_runtime_artifact");
@@ -283,6 +291,14 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
       ) {
         missingCorroborators.push("same_scope_sensitive_surface");
       }
+      if (
+        finding.id === "session_replay_present_with_sensitive_surfaces_observed" &&
+        !hasMeaningfulValue(details.inputSurfaceEvidence) &&
+        !hasMeaningfulValue(details.sensitiveDataEvidence) &&
+        !hasMeaningfulValue(details.sensitiveFieldContexts)
+      ) {
+        missingCorroborators.push("scan_level_sensitive_surface");
+      }
       if (finding.id === "possible_session_replay_on_sensitive_input_surface") {
         const replaySummary = asRecord(details.sessionReplayEvidence?.runtimeSummary);
         const collectionEndpointObserved = getBoolean(replaySummary, "collectionEndpointObserved");
@@ -307,6 +323,22 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         ) {
           forceEligibility = "top_candidate";
           pushUnique(matchedCriteria, "replay_collection_endpoint_on_sensitive_surface");
+        }
+      }
+      if (finding.id === "session_replay_present_with_sensitive_surfaces_observed") {
+        const replaySummary = asRecord(details.sessionReplayEvidence?.runtimeSummary);
+        const collectionEndpointObserved = getBoolean(replaySummary, "collectionEndpointObserved");
+        const scanLevelSensitiveEvidence =
+          hasMeaningfulValue(details.inputSurfaceEvidence) ||
+          hasMeaningfulValue(details.sensitiveDataEvidence) ||
+          hasMeaningfulValue(details.sensitiveFieldContexts);
+        if (scanLevelSensitiveEvidence) {
+          pushUnique(matchedCriteria, "scan_level_sensitive_surface");
+        }
+        if (collectionEndpointObserved === true && scanLevelSensitiveEvidence) {
+          forceEligibility = "top_candidate";
+          pushUnique(matchedCriteria, "session_replay_collection_with_scan_level_sensitive_surface");
+          pushUnique(missingCorroborators, "same_page_or_same_flow_replay_linkage");
         }
       }
       break;
@@ -345,7 +377,7 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         missingCorroborators.push("representative_accessibility_evidence");
       }
       if (
-        (finding.id === "keyboard_navigation_accessibility_issue" || finding.id === "focus_management_issue") &&
+        finding.id === "focus_management_issue" &&
         !hasMeaningfulValue(details.accessibilityEvidence?.focusManagementEvidence)
       ) {
         missingCorroborators.push("keyboard_traversal_trace");
@@ -360,6 +392,8 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         });
         if (hasTraversal) {
           pushUnique(matchedCriteria, "keyboard_traversal_trace");
+        } else if (finding.id === "keyboard_navigation_accessibility_issue" && hasMeaningfulValue(details.accessibilityEvidence)) {
+          pushUnique(matchedCriteria, "automated_keyboard_accessibility_rule_evidence");
         }
         if (hasFocusEscape) {
           forceEligibility = "top_candidate";

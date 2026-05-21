@@ -1543,6 +1543,56 @@ test("specializes high-sensitivity third-party tracking evidence into a sensitiv
   assert.deepEqual(packet?.evidence?.entities?.request_urls, ["https://tracker.example.net/collect"]);
 });
 
+test("sensitive tracking packet uses structured surface metadata instead of repeated raw-looking text", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Sensitive input and third-party tracking were retained together.",
+        fallbackEvidence: {
+          sensitivePayloadViolations: [
+            {
+              detectedType: "email_detected",
+              evidenceSource: "sensitive_field_third_party_tracking_correlation",
+              evidenceStrength: "form_field_signal",
+              matchSnippet: "email email email email",
+              requestMethod: "GET",
+              sourceField: "email",
+              sourceLocation: "form_field",
+              sameFlowLinkage: {
+                samePageOrFlow: true,
+                userValueObserved: false
+              },
+              vendorHost: "js.hs-analytics.net",
+              vendorName: "HubSpot"
+            }
+          ],
+          runtimeEvidenceArtifacts: ["request:https://js.hs-analytics.net/analytics.js"],
+          signalKey: "commerce.high_sensitivity_data_collection_detected",
+          signalValue: true
+        },
+        observedValue: "Yes",
+        severity: "high",
+        signalKey: "commerce.high_sensitivity_data_collection_detected",
+        signalLabel: "High-sensitivity data collection detected",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "High-sensitivity data collection detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.unifiedFindingId, "sensitive_data_collection_with_third_party_tracking_present");
+  assert.equal(packet?.observedValue?.includes("email input surface observed with third-party tracking context: js.hs-analytics.net"), true);
+  assert.equal(packet?.observedValue?.includes("payload exposure not observed"), true);
+  assert.equal(packet?.evidence?.snippets?.includes("email email email email"), false);
+  assert.deepEqual(packet?.evidence?.entities?.sensitiveDataTypes, ["email"]);
+  assert.deepEqual(packet?.evidence?.entities?.samePageOrFlowLinked, ["true"]);
+  assert.deepEqual(packet?.evidence?.entities?.payloadExposureObserved, ["false"]);
+  assert.deepEqual(packet?.evidence?.entities?.rawValuesRetained, ["false"]);
+});
+
 const sensitiveCollectionPacketCases = [
   {
     detectedType: "ssn",
@@ -2240,6 +2290,72 @@ test("keeps RTB cookie sync suppressed without concrete sync request evidence", 
   assert.equal(packet?.unifiedFindingId, "rtb_cookie_sync_observed");
   assert.notEqual(packet?.presentationDecision.status, "surface");
   assert.ok(packet?.presentationDecision.downgradeReasons.some((reason) => /runtime anchor/i.test(reason)));
+});
+
+test("keeps callback-only generic data-sync RTB packet audit-only", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-rtb-generic-data-sync",
+    ruleKey: "runtime_privacy.rtb_cookie_sync_observed",
+    severity: "high",
+    title: "Adtech identity sync-like request observed",
+    evidence: {
+      rtb_cookie_sync_detected: true,
+      rtb_cookie_sync_evidence: [
+        {
+          category: "identity_sync",
+          hostname: "www-api.ibm.com",
+          pathSample: "/data-sync/dbdm-data",
+          queryKeysSample: ["callback"],
+          reason: "sync_path",
+          statusCode: 200
+        }
+      ]
+    }
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "rtb_cookie_sync_observed");
+  assert.notEqual(packet?.presentationDecision.status, "surface");
+  assert.ok(packet?.presentationDecision.downgradeReasons.some((reason) => /runtime anchor/i.test(reason)));
+  assert.ok(packet?.topFindingEligibility?.demotionReasons.some((reason) => /runtime anchor/i.test(reason)));
+});
+
+test("normalizes known TrafficJunky idsync endpoint as RTB identity-sync evidence", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-rtb-trafficjunky",
+    ruleKey: "runtime_privacy.rtb_cookie_sync_observed",
+    severity: "high",
+    title: "Adtech identity sync-like request observed",
+    evidence: {
+      rtb_cookie_sync_detected: true,
+      rtb_cookie_sync_evidence: [
+        {
+          hostname: "static.trafficjunky.com",
+          pathSample: "/invocation/idsync/production/idsync.min.js",
+          reason: "known_sync_endpoint",
+          statusCode: 200
+        }
+      ],
+      runtimeRequestUrls: ["https://static.trafficjunky.com/invocation/idsync/production/idsync.min.js"]
+    }
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "rtb_cookie_sync_observed");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  const row = JSON.parse(packet?.evidence?.entities?.rtbCookieSyncEvidence?.[0] ?? "{}");
+  assert.equal(row.vendor, "TrafficJunky");
+  assert.equal(row.vendorNormalizationBasis, "known_sync_endpoint_pattern");
 });
 
 test("retains pre-consent cookie timing evidence on unified finding packets", () => {
@@ -3615,6 +3731,58 @@ test("keeps contrast count-only evidence audit-only", () => {
   assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_representative_accessibility_examples"), true);
   assert.equal(packet?.evidence?.counts?.count, 1);
+});
+
+test("keeps document metadata accessibility rules support-only with top-finding demotion reason", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-document-metadata",
+    ruleKey: "accessibility.wcag_errors_detected",
+    severity: "medium",
+    title: "Automated accessibility issues detected",
+    evidence: {
+      accessibilityRuleExamples: [
+        {
+          description: "Documents must have a title element to aid in navigation",
+          help: "Documents must have a title element to aid in navigation",
+          helpUrl: "https://dequeuniversity.com/rules/axe/4.10/document-title",
+          impact: "serious",
+          nodeCount: 1,
+          pageUrl: "https://example.com/",
+          representativeSelectors: ["html"],
+          ruleCode: "document-title",
+          ruleGroup: "wcag2a",
+          severity: "high"
+        },
+        {
+          description: "The html element must have a lang attribute",
+          help: "The html element must have a lang attribute",
+          helpUrl: "https://dequeuniversity.com/rules/axe/4.10/html-has-lang",
+          impact: "serious",
+          nodeCount: 1,
+          pageUrl: "https://example.com/",
+          representativeSelectors: ["html"],
+          ruleCode: "html-has-lang",
+          ruleGroup: "wcag2a",
+          severity: "high"
+        }
+      ]
+    }
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "semantic_labeling_accessibility_issue");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.topFindingEligibility?.eligibility, "support_only");
+  assert.deepEqual(packet?.topFindingEligibility?.candidateTopFindingIds, ["semantic_labeling_accessibility_issue"]);
+  assert.equal(
+    packet?.topFindingEligibility?.demotionReasons.includes("document_metadata_rule_not_top_finding_eligible"),
+    true
+  );
 });
 
 test("surfaces visual contrast finding with complete representative axe evidence", () => {

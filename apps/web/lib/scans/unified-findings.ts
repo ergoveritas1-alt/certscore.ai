@@ -39,6 +39,7 @@ import {
   getContradictionEvidenceBundle
 } from "./contradiction-evidence-contract";
 import {
+  classifyRtbCookieSyncEvidenceRow,
   hasConcretePreconsentArtifact
 } from "./promotion-evidence-contracts";
 import {
@@ -83,6 +84,7 @@ import {
   getRepresentativeAccessibilityExampleCoverage,
   hasExternallyPromotableAccessibilityExamples
 } from "./accessibility-evidence";
+import { REJECT_TRACKING_CONFIRMATION_MIN_MS } from "./reject-tracking-policy";
 
 export type UnifiedFindingDetails =
   | {
@@ -468,8 +470,27 @@ function getNumberValue(record: Record<string, unknown> | null, keys: string[]) 
     if (typeof value === "number" && Number.isFinite(value)) {
       return value;
     }
+    if (typeof value === "string" && value.trim().length > 0) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
   }
   return null;
+}
+
+function hasPostRejectRequestAtConfirmationThreshold(rows: unknown) {
+  if (!Array.isArray(rows)) {
+    return false;
+  }
+  return rows.some((row) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      return false;
+    }
+    const msAfterReject = getNumberValue(row as Record<string, unknown>, ["ms_after_reject", "msAfterReject"]);
+    return msAfterReject !== null && msAfterReject >= REJECT_TRACKING_CONFIRMATION_MIN_MS;
+  });
 }
 
 function getStringValue(record: Record<string, unknown> | null, keys: string[]) {
@@ -761,7 +782,7 @@ export type UnifiedFindingDisplayPacket = UnifiedFindingPacket & {
 export type UnifiedFindingTopFindingEligibility = {
   candidateTopFindingIds: string[];
   demotionReasons: string[];
-  eligibility: "projected" | "eligible_not_projected" | "not_projected" | "no_top_finding_mapping";
+  eligibility: "projected" | "eligible_not_projected" | "support_only" | "not_projected" | "no_top_finding_mapping";
   groupedUnder: string | null;
   matchedCriteria: string[];
   missingCorroborators: string[];
@@ -785,6 +806,9 @@ const UNIFIED_FINDING_TOP_FINDING_IDS: Record<string, string[]> = {
   session_replay_observed: ["session_recording_services_detected"],
   session_replay_undisclosed: ["session_recording_services_detected"],
   possible_session_replay_on_sensitive_input_surface: ["possible_session_replay_on_sensitive_input_surface"],
+  session_replay_present_with_sensitive_surfaces_observed: [
+    "session_replay_present_with_sensitive_surfaces_observed"
+  ],
   sensitive_data_collection_with_third_party_tracking_present: [
     "sensitive_data_collection_with_third_party_tracking_present"
   ],
@@ -813,6 +837,7 @@ function buildTopFindingEligibilityForDisplayPacket(input: {
   const demotionReasons = uniqueStrings([
     ...missingCorroborators.map((requirement) => `missing:${requirement}`),
     ...(contractDecision?.negativeEvidenceFlags ?? []),
+    ...(packet.concernContext?.negativeEvidenceFlags ?? []),
     ...presentationDecision.downgradeReasons,
     ...surfacingDecision.decisionReasons,
     ...(surfacingDecision.suppressedBy ? [`suppressed_by:${surfacingDecision.suppressedBy}`] : [])
@@ -825,11 +850,16 @@ function buildTopFindingEligibilityForDisplayPacket(input: {
     contractEligible &&
     presentationDecision.status === "surface" &&
     surfacingDecision.reportLane === "main";
+  const supportOnly =
+    candidateTopFindingIds.length > 0 &&
+    demotionReasons.includes("document_metadata_rule_not_top_finding_eligible");
   const eligibility =
     candidateTopFindingIds.length === 0
       ? "no_top_finding_mapping"
       : projected
         ? "projected"
+        : supportOnly
+          ? "support_only"
         : contractEligible
           ? "eligible_not_projected"
           : "not_projected";
@@ -927,6 +957,7 @@ const CONSENT_TRACKING_FINDING_IDS = new Set([
 
 const SENSITIVE_DATA_FINDING_IDS = new Set([
   "possible_session_replay_on_sensitive_input_surface",
+  "session_replay_present_with_sensitive_surfaces_observed",
   "sensitive_data_collection_with_third_party_tracking_present",
   "sensitive_collection_surface_observed",
   "minors_or_age_gated_collection_context",
@@ -1971,27 +2002,11 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
         : null,
     ...sensitivePayloadViolations.map((row) => {
       const matchSnippet = typeof row.matchSnippet === "string" ? row.matchSnippet.trim() : null;
-      if (matchSnippet) {
+      if (matchSnippet && !isLowValueSensitiveMatchSnippet(matchSnippet)) {
         return matchSnippet;
       }
 
-      const detectedType =
-        typeof row.detectedType === "string" ? row.detectedType.replace(/_detected$/i, "").replace(/_/g, " ") : null;
-      const sourceField = typeof row.sourceField === "string" ? row.sourceField.trim() : null;
-      const requestMethod = typeof row.requestMethod === "string" ? row.requestMethod.trim().toUpperCase() : null;
-      const requestUrl = typeof row.requestUrl === "string" ? row.requestUrl.trim() : null;
-      const vendorHost = typeof row.vendorHost === "string" ? row.vendorHost.trim() : null;
-      const evidenceStrength = typeof row.evidenceStrength === "string" ? row.evidenceStrength.trim() : null;
-
-      const parts = uniqueStrings([
-        detectedType ? `${detectedType} data` : null,
-        sourceField ? `field ${sourceField}` : null,
-        requestMethod && requestUrl ? `${requestMethod} ${requestUrl}` : requestUrl,
-        vendorHost && vendorHost !== getHostnameFromUrl(requestUrl) ? `host ${vendorHost}` : null,
-        evidenceStrength ? `${evidenceStrength} evidence` : null
-      ]);
-
-      return parts.length > 0 ? parts.join(" | ") : null;
+      return summarizeSensitivePayloadRow(row);
     }),
     accessibilityCoverageSummary,
     ...accessibilityExampleSnippets
@@ -2268,22 +2283,50 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     entities.vendors = sensitivePayloadRequestDomains;
   }
   const sensitivePayloadDataTypes = uniqueStrings(
-    sensitivePayloadViolations.map((row) => (typeof row.detectedType === "string" ? row.detectedType.trim() : null))
+    sensitivePayloadViolations.map((row) =>
+      normalizeSensitiveFieldType(
+        typeof row.detectedType === "string" ? row.detectedType : typeof row.detected_type === "string" ? row.detected_type : null
+      )
+    )
   );
   if (sensitivePayloadDataTypes.length > 0) {
     entities.sensitive_data_types = sensitivePayloadDataTypes;
+    entities.sensitiveDataTypes = sensitivePayloadDataTypes;
   }
   const sensitivePayloadSourceFields = uniqueStrings(
     sensitivePayloadViolations.map((row) => (typeof row.sourceField === "string" ? row.sourceField.trim() : null))
   );
   if (sensitivePayloadSourceFields.length > 0) {
     entities.sensitive_source_fields = sensitivePayloadSourceFields;
+    entities.sensitiveSourceFields = sensitivePayloadSourceFields;
   }
   const sensitivePayloadSourceLocations = uniqueStrings(
     sensitivePayloadViolations.map((row) => (typeof row.sourceLocation === "string" ? row.sourceLocation.trim() : null))
   );
   if (sensitivePayloadSourceLocations.length > 0) {
     entities.sensitive_source_locations = sensitivePayloadSourceLocations;
+    entities.sensitiveSourceLocations = sensitivePayloadSourceLocations;
+  }
+  if (sensitivePayloadViolations.length > 0) {
+    const samePageOrFlowLinked = sensitivePayloadViolations.some((row) => {
+      const linkage = row.sameFlowLinkage && typeof row.sameFlowLinkage === "object" && !Array.isArray(row.sameFlowLinkage)
+        ? row.sameFlowLinkage as Record<string, unknown>
+        : row.same_flow_linkage && typeof row.same_flow_linkage === "object" && !Array.isArray(row.same_flow_linkage)
+          ? row.same_flow_linkage as Record<string, unknown>
+          : null;
+      return linkage?.samePageOrFlow === true || linkage?.same_page_or_flow === true;
+    });
+    const payloadExposureObserved = sensitivePayloadViolations.some((row) => {
+      const linkage = row.sameFlowLinkage && typeof row.sameFlowLinkage === "object" && !Array.isArray(row.sameFlowLinkage)
+        ? row.sameFlowLinkage as Record<string, unknown>
+        : row.same_flow_linkage && typeof row.same_flow_linkage === "object" && !Array.isArray(row.same_flow_linkage)
+          ? row.same_flow_linkage as Record<string, unknown>
+          : null;
+      return linkage?.userValueObserved === true || linkage?.user_value_observed === true || row.payloadExposureObserved === true;
+    });
+    entities.samePageOrFlowLinked = [String(samePageOrFlowLinked)];
+    entities.payloadExposureObserved = [String(payloadExposureObserved)];
+    entities.rawValuesRetained = ["false"];
   }
   const runtimeRequestUrls = uniqueStrings([
     ...(Array.isArray(normalizedFallbackEvidence.requestUrls) ? (normalizedFallbackEvidence.requestUrls as string[]) : []),
@@ -2321,7 +2364,29 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
               }
             })
         ).slice(0, 20)
-	      : [];
+      : [];
+  const objectArrayEvidenceRows = (rows: unknown): Array<Record<string, unknown>> => {
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+    return rows.flatMap((row) => {
+      if (row && typeof row === "object" && !Array.isArray(row)) {
+        return [row as Record<string, unknown>];
+      }
+      if (typeof row !== "string" || row.trim().length === 0) {
+        return [];
+      }
+      try {
+        const parsed = JSON.parse(row);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry));
+        }
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? [parsed as Record<string, unknown>] : [];
+      } catch {
+        return [];
+      }
+    });
+  };
   const stringifyEvidenceObject = (row: unknown) => {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       return [];
@@ -2400,9 +2465,28 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (requestPurposeClassificationRows.length > 0) {
     entities.requestPurposeClassificationConfidence = requestPurposeClassificationRows;
   }
-  const rtbCookieSyncRows = stringifyEvidenceRows(
-    normalizedFallbackEvidence.rtbCookieSyncObservations ?? normalizedFallbackEvidence.rtb_cookie_sync_observations ?? normalizedFallbackEvidence.rtb_cookie_sync_evidence
-  );
+  const rtbCookieSyncEvidenceRows = objectArrayEvidenceRows(
+    normalizedFallbackEvidence.rtbCookieSyncObservations ??
+      normalizedFallbackEvidence.rtb_cookie_sync_observations ??
+      normalizedFallbackEvidence.rtb_cookie_sync_evidence
+  ).map((row) => {
+    const classification = classifyRtbCookieSyncEvidenceRow(row);
+    if (!classification?.vendor) {
+      return row;
+    }
+    return {
+      ...row,
+      category: typeof row.category === "string" && row.category.trim().length > 0 ? row.category : "identity_sync",
+      vendor: typeof row.vendor === "string" && row.vendor.trim().length > 0 ? row.vendor : classification.vendor,
+      vendorName:
+        typeof row.vendorName === "string" && row.vendorName.trim().length > 0 ? row.vendorName : classification.vendor,
+      vendorNormalizationBasis:
+        typeof row.vendorNormalizationBasis === "string" && row.vendorNormalizationBasis.trim().length > 0
+          ? row.vendorNormalizationBasis
+          : "known_sync_endpoint_pattern"
+    };
+  });
+  const rtbCookieSyncRows = stringifyEvidenceRows(rtbCookieSyncEvidenceRows);
   if (rtbCookieSyncRows.length > 0) {
     entities.rtbCookieSyncEvidence = rtbCookieSyncRows;
   }
@@ -2497,8 +2581,16 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   const confidenceRisks = Array.isArray(normalizedFallbackEvidence.confidenceRisks)
     ? uniqueStrings(normalizedFallbackEvidence.confidenceRisks as string[])
     : [];
-  if (confidenceRisks.length > 0) {
-    entities.confidenceRisks = confidenceRisks;
+  const retainedPostRejectRequestAtThreshold = hasPostRejectRequestAtConfirmationThreshold(
+    normalizedFallbackEvidence.postRejectNonEssentialRequests
+  );
+  const consistentConfidenceRisks = confidenceRisks.filter((risk) =>
+    retainedPostRejectRequestAtThreshold
+      ? !/No classified non-essential request fired at least/i.test(risk)
+      : true
+  );
+  if (consistentConfidenceRisks.length > 0) {
+    entities.confidenceRisks = consistentConfidenceRisks;
   }
   const suppressionCheckRows = stringifyEvidenceRows(
     normalizedFallbackEvidence.suppressionChecks ? [normalizedFallbackEvidence.suppressionChecks] : []
@@ -3831,6 +3923,151 @@ function truncateToDisplayLength(value: string, maxLength = 240): string {
   return `${value.slice(0, endIndex).trimEnd()}...`;
 }
 
+function normalizeSensitiveFieldType(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  const normalized = value.trim().replace(/_detected$/i, "").replace(/_/g, " ").toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (/business email|email/.test(normalized)) {
+    return "email";
+  }
+  return normalized;
+}
+
+function isLowValueSensitiveMatchSnippet(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+  const words = value
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0) {
+    return false;
+  }
+  const uniqueWords = new Set(words);
+  return words.length >= 4 && uniqueWords.size <= Math.ceil(words.length / 2);
+}
+
+function parseObjectArrayValue(value: unknown) {
+  const rawValues = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
+  const objects: Record<string, unknown>[] = [];
+  for (const rawValue of rawValues) {
+    if (rawValue && typeof rawValue === "object" && !Array.isArray(rawValue)) {
+      objects.push(rawValue as Record<string, unknown>);
+      continue;
+    }
+    if (typeof rawValue !== "string" || rawValue.trim().length === 0) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(rawValue);
+      if (Array.isArray(parsed)) {
+        objects.push(...parsed.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry)));
+      } else if (parsed && typeof parsed === "object") {
+        objects.push(parsed as Record<string, unknown>);
+      }
+    } catch {
+      // Ignore compact evidence values that are plain strings rather than JSON objects.
+    }
+  }
+  return objects;
+}
+
+function summarizeSensitivePayloadRow(row: Record<string, unknown>) {
+  const fieldType = normalizeSensitiveFieldType(
+    typeof row.detectedType === "string" ? row.detectedType : typeof row.detected_type === "string" ? row.detected_type : null
+  );
+  const sourceField =
+    typeof row.sourceField === "string"
+      ? row.sourceField.trim()
+      : typeof row.source_field === "string"
+        ? row.source_field.trim()
+        : null;
+  const vendor =
+    typeof row.vendorName === "string"
+      ? row.vendorName.trim()
+      : typeof row.vendor_name === "string"
+        ? row.vendor_name.trim()
+        : typeof row.vendorHost === "string"
+          ? row.vendorHost.trim()
+          : typeof row.vendor_host === "string"
+            ? row.vendor_host.trim()
+            : null;
+  const location =
+    typeof row.sourceLocation === "string"
+      ? row.sourceLocation.trim().replace(/_/g, " ")
+      : typeof row.source_location === "string"
+        ? row.source_location.trim().replace(/_/g, " ")
+        : null;
+  const linkage = row.sameFlowLinkage && typeof row.sameFlowLinkage === "object" && !Array.isArray(row.sameFlowLinkage)
+    ? row.sameFlowLinkage as Record<string, unknown>
+    : row.same_flow_linkage && typeof row.same_flow_linkage === "object" && !Array.isArray(row.same_flow_linkage)
+      ? row.same_flow_linkage as Record<string, unknown>
+      : null;
+  const sameFlow = linkage?.samePageOrFlow === true || linkage?.same_page_or_flow === true;
+  const userValueObserved = linkage?.userValueObserved === true || linkage?.user_value_observed === true;
+  const parts = uniqueStrings([
+    fieldType ? `${fieldType} input surface` : "sensitive input surface",
+    sourceField ? `field:${sourceField}` : null,
+    vendor ? `third-party:${vendor}` : null,
+    location ? `surface:${location}` : null,
+    sameFlow ? "same-page-or-flow linked" : "same-page-or-flow not confirmed",
+    userValueObserved ? "payload exposure observed" : "payload exposure not observed"
+  ]);
+  return parts.join(" | ");
+}
+
+function getSensitivePayloadObservedValue(packet: UnifiedFindingPacket) {
+  const rows = parseObjectArrayValue(packet.evidence?.entities?.sensitivePayloadViolations);
+  if (rows.length === 0) {
+    return null;
+  }
+  const fieldTypes = uniqueStrings(
+    rows.map((row) =>
+      normalizeSensitiveFieldType(
+        typeof row.detectedType === "string" ? row.detectedType : typeof row.detected_type === "string" ? row.detected_type : null
+      )
+    )
+  );
+  const thirdPartyDomains = uniqueStrings(
+    rows.map((row) =>
+      typeof row.vendorHost === "string"
+        ? row.vendorHost.trim()
+        : typeof row.vendor_host === "string"
+          ? row.vendor_host.trim()
+          : typeof row.requestUrl === "string"
+            ? getHostnameFromUrl(row.requestUrl)
+            : typeof row.request_url === "string"
+              ? getHostnameFromUrl(row.request_url)
+              : null
+    )
+  );
+  const samePageOrFlowLinked = rows.some((row) => {
+    const linkage = row.sameFlowLinkage && typeof row.sameFlowLinkage === "object" && !Array.isArray(row.sameFlowLinkage)
+      ? row.sameFlowLinkage as Record<string, unknown>
+      : row.same_flow_linkage && typeof row.same_flow_linkage === "object" && !Array.isArray(row.same_flow_linkage)
+        ? row.same_flow_linkage as Record<string, unknown>
+        : null;
+    return linkage?.samePageOrFlow === true || linkage?.same_page_or_flow === true;
+  });
+  const payloadExposureObserved = rows.some((row) => {
+    const linkage = row.sameFlowLinkage && typeof row.sameFlowLinkage === "object" && !Array.isArray(row.sameFlowLinkage)
+      ? row.sameFlowLinkage as Record<string, unknown>
+      : row.same_flow_linkage && typeof row.same_flow_linkage === "object" && !Array.isArray(row.same_flow_linkage)
+        ? row.same_flow_linkage as Record<string, unknown>
+        : null;
+    return linkage?.userValueObserved === true || linkage?.user_value_observed === true || row.payloadExposureObserved === true;
+  });
+  const fieldText = fieldTypes.length > 0 ? `${fieldTypes.join(", ")} input surface` : "sensitive input surface";
+  const domainText = thirdPartyDomains.length > 0 ? `third-party tracking context: ${thirdPartyDomains.slice(0, 3).join(", ")}` : "third-party tracking context";
+  return `${fieldText} observed with ${domainText}; same-page/flow linkage ${samePageOrFlowLinked ? "retained" : "not confirmed"}; payload exposure ${payloadExposureObserved ? "observed" : "not observed"}.`;
+}
+
 function selectObservedValue(packet: UnifiedFindingPacket) {
   const rankedSnippets = rankSnippetsForFinding(packet.unifiedFindingId, packet.evidence?.snippets ?? []);
   const snippet = rankedSnippets[0] ?? null;
@@ -3863,6 +4100,13 @@ function selectObservedValue(packet: UnifiedFindingPacket) {
       : destinations.length === 1
         ? `Identifier-like values were observed in a retained request to an external identity, RTB, or adtech destination (${destinations[0]}), which may indicate cross-site tracking, attribution, or data-sharing behavior under the tested scan conditions.`
         : "Identifier-like values were observed in retained requests to external identity, RTB, or adtech destinations, which may indicate cross-site tracking, attribution, or data-sharing behavior under the tested scan conditions.";
+  }
+
+  if (packet.unifiedFindingId === "sensitive_data_collection_with_third_party_tracking_present") {
+    const observedValue = getSensitivePayloadObservedValue(packet);
+    if (observedValue) {
+      return observedValue;
+    }
   }
 
   if (packet.unifiedFindingId === "contact_support_path_present") {
@@ -4857,6 +5101,10 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   possible_session_replay_on_sensitive_input_surface: {
     suggestedFix: "Audit possible replay tooling in sensitive-input flows and add tighter field masking and monitoring controls before allowing replay to run there.",
     whyThisMatters: "Possible replay tooling on sensitive-input surfaces can increase exposure if typed or submitted data is captured more broadly than users expect."
+  },
+  session_replay_present_with_sensitive_surfaces_observed: {
+    suggestedFix: "Review replay deployment on sensitive-input flows and confirm masking, sampling, consent gating, and page-level exclusions before keeping replay enabled there.",
+    whyThisMatters: "Session replay observed in the same scan as sensitive input surfaces is meaningful review context even when same-page replay linkage has not been retained."
   },
   sensitive_data_collection_with_third_party_tracking_present: {
     suggestedFix: "Review the page or form where sensitive data is collected and suppress third-party advertising, replay, or analytics tooling unless it is clearly necessary and tightly controlled.",

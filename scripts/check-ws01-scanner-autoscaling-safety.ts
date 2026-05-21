@@ -16,14 +16,26 @@ const drainedAlarmName = process.env.WS01_SCANNER_QUEUE_DRAINED_ALARM ?? "ws01-s
 type ScalingPolicy = {
   Alarms?: Array<{ AlarmName?: string }>;
   PolicyName?: string;
+  StepScalingPolicyConfiguration?: {
+    Cooldown?: number;
+    StepAdjustments?: Array<{
+      MetricIntervalUpperBound?: number;
+      ScalingAdjustment?: number;
+    }>;
+  };
 };
 
 type MetricAlarm = {
   ActionsEnabled?: boolean;
   AlarmName?: string;
+  ComparisonOperator?: string;
+  EvaluationPeriods?: number;
   MetricName?: string;
   Namespace?: string;
+  Period?: number;
   StateValue?: string;
+  Threshold?: number;
+  TreatMissingData?: string;
 };
 
 function fail(message: string): never {
@@ -41,7 +53,7 @@ async function awsJson<T>(args: string[]): Promise<T> {
 
 async function main() {
   const [targets, policies, drainedPolicies, drainedAlarms] = await Promise.all([
-    awsJson<{ ScalableTargets?: Array<{ MinCapacity?: number; SuspendedState?: Record<string, boolean> }> }>([
+    awsJson<{ ScalableTargets?: Array<{ MaxCapacity?: number; MinCapacity?: number; SuspendedState?: Record<string, boolean> }> }>([
       "application-autoscaling",
       "describe-scalable-targets",
       "--service-namespace",
@@ -93,6 +105,10 @@ async function main() {
     fail(`MinCapacity is ${target.MinCapacity ?? "unset"}, expected >= 1`);
   }
 
+  if ((target.MaxCapacity ?? 0) > 5) {
+    fail(`MaxCapacity is ${target.MaxCapacity ?? "unset"}, expected <= 5`);
+  }
+
   if (target.SuspendedState?.DynamicScalingInSuspended === true) {
     fail("DynamicScalingInSuspended is true");
   }
@@ -101,12 +117,41 @@ async function main() {
     fail("DynamicScalingOutSuspended is not false");
   }
 
-  if ((drainedPolicies.ScalingPolicies ?? []).length > 0) {
-    fail(`${drainedPolicyName} scale-in policy exists`);
+  const drainedPolicy = drainedPolicies.ScalingPolicies?.[0];
+  const drainedAlarm = drainedAlarms.MetricAlarms?.[0];
+
+  if (!drainedPolicy) {
+    fail(`${drainedPolicyName} scale-in policy is missing`);
   }
 
-  if ((drainedAlarms.MetricAlarms ?? []).length > 0) {
-    fail(`${drainedAlarmName} alarm exists`);
+  const drainedStep = drainedPolicy.StepScalingPolicyConfiguration?.StepAdjustments?.[0];
+
+  if (drainedStep?.ScalingAdjustment !== -1 || drainedStep.MetricIntervalUpperBound !== 0) {
+    fail(`${drainedPolicyName} must scale in by exactly one task when the queue is drained`);
+  }
+
+  if ((drainedPolicy.StepScalingPolicyConfiguration?.Cooldown ?? 0) < 300) {
+    fail(`${drainedPolicyName} cooldown is too short`);
+  }
+
+  if (!drainedAlarm) {
+    fail(`${drainedAlarmName} alarm is missing`);
+  }
+
+  if (drainedAlarm.ActionsEnabled !== true) {
+    fail(`${drainedAlarmName} actions are disabled`);
+  }
+
+  if (
+    drainedAlarm.MetricName !== "ScannerQueuedCount" ||
+    drainedAlarm.Namespace !== "CertScore/Operations" ||
+    drainedAlarm.ComparisonOperator !== "LessThanThreshold" ||
+    drainedAlarm.Threshold !== 1 ||
+    (drainedAlarm.Period ?? 0) < 60 ||
+    (drainedAlarm.EvaluationPeriods ?? 0) < 15 ||
+    drainedAlarm.TreatMissingData !== "notBreaching"
+  ) {
+    fail(`${drainedAlarmName} must require a sustained empty scanner queue before scale-in`);
   }
 
   if (!queuePolicy) {
@@ -135,7 +180,18 @@ async function main() {
         status: "PASS",
         resourceId,
         minCapacity: target.MinCapacity,
+        maxCapacity: target.MaxCapacity,
         suspendedState: target.SuspendedState,
+        drainedPolicyName,
+        drainedAlarm: {
+          actionsEnabled: drainedAlarm.ActionsEnabled,
+          evaluationPeriods: drainedAlarm.EvaluationPeriods,
+          metricName: drainedAlarm.MetricName,
+          name: drainedAlarm.AlarmName,
+          namespace: drainedAlarm.Namespace,
+          period: drainedAlarm.Period,
+          state: drainedAlarm.StateValue
+        },
         queuePressurePolicyName,
         queueAlarmNames,
         queueAlarms: enabledQueueAlarms.map((alarm) => ({

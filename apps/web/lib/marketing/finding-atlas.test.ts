@@ -84,7 +84,8 @@ const REVIEWED_FINDING_REFERENCE_IDS = [
   ...SESSION_REPLAY_BATCH_FINDING_IDS,
   ...FINGERPRINTING_BATCH_FINDING_IDS,
   "cookie_disclosure_gap",
-  "cpra_cba_opt_out_missing"
+  "cpra_cba_opt_out_missing",
+  "policy_behavior_contradiction_detected"
 ] as const;
 
 function makePublicHiddenSampleJson(finding: ReturnType<typeof getFindingReferenceItems>[number]) {

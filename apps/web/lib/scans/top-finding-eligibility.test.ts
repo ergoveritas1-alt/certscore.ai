@@ -43,6 +43,28 @@ test("top-finding evaluator top-ranks sensitive replay only with endpoint and sa
   assert.ok(decision.matchedCriteria.includes("replay_collection_endpoint_on_sensitive_surface"));
 });
 
+test("top-finding evaluator top-ranks scan-level sensitive replay while retaining same-flow caveat", () => {
+  const decision = evaluateTopFindingEligibility(finding({
+    id: "session_replay_present_with_sensitive_surfaces_observed",
+    directVsInferred: "mixed",
+    evidenceDetails: {
+      sensitiveFieldContexts: ["field:email"],
+      sessionReplayEvidence: {
+        observed: true,
+        runtimeSummary: {
+          collectionEndpointObserved: true,
+          libraryOnly: false,
+          maskingOrExclusionObserved: false
+        }
+      }
+    }
+  }));
+
+  assert.equal(decision.eligibility, "top_candidate");
+  assert.ok(decision.matchedCriteria.includes("session_replay_collection_with_scan_level_sensitive_surface"));
+  assert.ok(decision.missingCorroborators.includes("same_page_or_same_flow_replay_linkage"));
+});
+
 test("top-finding evaluator demotes replay when only a library artifact is retained", () => {
   const decision = evaluateTopFindingEligibility(finding({
     id: "session_recording_services_detected",
@@ -116,6 +138,49 @@ test("top-finding evaluator uses GPC-specific ignored handling to top-rank CPRA 
 
   assert.equal(decision.eligibility, "top_candidate");
   assert.ok(decision.matchedCriteria.includes("gpc_ignored_with_advertising_or_sharing_context"));
+});
+
+test("top-finding evaluator treats untested GPC state as a CPRA limitation instead of a demotion", () => {
+  const decision = evaluateTopFindingEligibility(finding({
+    id: "cpra_cba_opt_out_missing",
+    directVsInferred: "inferred",
+    evidenceDetails: {
+      optOutControlEvidence: {
+        choiceControlsInspected: true,
+        gpcHandlingObserved: "not_determined",
+        gpcScanStateSent: false,
+        result: "absent"
+      },
+      trackingOrSharingContext: {
+        cbaVendorEvidenceObserved: true,
+        vendors: ["Example Adtech"]
+      }
+    }
+  }));
+
+  assert.equal(decision.eligibility, "top_candidate");
+  assert.equal(decision.demotionReasons.includes("gpc_specific_state_not_observed"), false);
+});
+
+test("top-finding evaluator does not treat policy-only representative hosts as runtime request anchors", () => {
+  const decision = evaluateTopFindingEligibility(finding({
+    id: "policy_clarity_risk",
+    directVsInferred: "inferred",
+    evidenceDetails: {
+      policyEvidenceDetails: {
+        evaluated: true,
+        clarityRiskObserved: true
+      },
+      representativeRequests: [
+        {
+          category: "policy",
+          hostname: "example.com"
+        }
+      ]
+    } as any
+  }));
+
+  assert.equal(decision.matchedCriteria.includes("runtime_request_anchor"), false);
 });
 
 test("top-finding evaluator top-ranks consent asymmetry only when path depth and visual hierarchy align", () => {
@@ -246,6 +311,39 @@ test("top-finding evaluator top-ranks keyboard findings with reproduced traversa
 
   assert.equal(decision.eligibility, "top_candidate");
   assert.ok(decision.matchedCriteria.includes("keyboard_focus_escape_or_trap_evidence"));
+});
+
+test("top-finding evaluator treats axe keyboard-rule evidence as automated, not traversal-reproduced", () => {
+  const decision = evaluateTopFindingEligibility(finding({
+    id: "keyboard_navigation_accessibility_issue",
+    section: "Accessibility",
+    evidenceDetails: {
+      accessibilityEvidence: {
+        observed: true,
+        basis: "Axe example: scrollable-region-focusable on https://example.com/; selector .menu; nodes 1; impact serious.",
+        ruleExamples: ["scrollable-region-focusable"]
+      }
+    }
+  }));
+
+  assert.equal(decision.eligibility, "top_candidate");
+  assert.ok(decision.matchedCriteria.includes("automated_keyboard_accessibility_rule_evidence"));
+  assert.equal(decision.missingCorroborators.includes("keyboard_traversal_trace"), false);
+});
+
+test("top-finding evaluator still requires traversal evidence for focus-management findings", () => {
+  const decision = evaluateTopFindingEligibility(finding({
+    id: "focus_management_issue",
+    section: "Accessibility",
+    evidenceDetails: {
+      accessibilityEvidence: {
+        observed: true,
+        basis: "Focus issue suspected from automated context."
+      }
+    }
+  }));
+
+  assert.ok(decision.missingCorroborators.includes("keyboard_traversal_trace"));
 });
 
 test("top-finding evaluator top-ranks focus management only with WS01 behavior-reproduced evidence", () => {

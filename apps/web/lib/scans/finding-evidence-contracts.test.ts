@@ -42,6 +42,7 @@ test("registry defines contracts for the high-risk finding set", () => {
       "reject_option_missing_or_hidden",
       "rtb_cookie_sync_observed",
       "sensitive_data_collection_with_third_party_tracking_present",
+      "session_replay_present_with_sensitive_surfaces_observed",
       "possible_session_replay_on_sensitive_input_surface",
       "session_replay_undisclosed",
       "third_party_tracking_before_consent",
@@ -206,7 +207,7 @@ test("upstream policy/runtime bridge candidate packets normalize into a passing 
     makeUpstreamContradictionCandidatePackets()
   );
 
-  assert.equal(decision?.status, "pass_strong");
+  assert.equal(decision?.status, "pass_good");
   assert.equal(decision?.promotionEligibility, "eligible");
 });
 
@@ -1092,6 +1093,39 @@ test("RTB sync-path evidence ignores generic asset and API path sync substrings"
   assert.ok(decision?.missingRequirements.includes("rtbOrIdentitySyncEndpointEvidence"));
 });
 
+test("RTB evidence treats callback-only generic data-sync API requests as audit-only", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("rtb_cookie_sync_observed", {
+    rtb_cookie_sync_evidence: [
+      {
+        category: "identity_sync",
+        hostname: "www-api.ibm.com",
+        pathSample: "/data-sync/dbdm-data",
+        queryKeysSample: ["callback"],
+        reason: "sync_path",
+        statusCode: 200
+      }
+    ]
+  });
+
+  assert.equal(decision?.status, "downgrade");
+  assert.ok(decision?.missingRequirements.includes("rtbOrIdentitySyncEndpointEvidence"));
+});
+
+test("RTB evidence accepts known TrafficJunky idsync endpoint pattern", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("rtb_cookie_sync_observed", {
+    rtb_cookie_sync_evidence: [
+      {
+        hostname: "static.trafficjunky.com",
+        pathSample: "/invocation/idsync/production/idsync.min.js",
+        reason: "known_sync_endpoint",
+        statusCode: 200
+      }
+    ]
+  });
+
+  assert.equal(decision?.status, "pass_good");
+});
+
 test("RTB redirect-chain evidence projects without identifier query keys", () => {
   const decision = evaluateFindingEvidenceContractForRawEvidence("rtb_cookie_sync_observed", {
     rtb_cookie_sync_evidence: [
@@ -1293,6 +1327,21 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
       ],
       session_replay_runtime_detected: true,
       session_replay_runtime_vendors: ["FullStory"]
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("session_replay_present_with_sensitive_surfaces_observed", {
+      sensitiveFieldEvidence: [
+        {
+          dataType: "email",
+          signalKey: "commerce.email_input_present",
+          sourceField: "email"
+        }
+      ],
+      session_replay_runtime_detected: true,
+      session_replay_runtime_vendors: ["Microsoft Clarity"]
     })?.status,
     "pass_strong"
   );

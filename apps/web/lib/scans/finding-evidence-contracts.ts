@@ -9,6 +9,7 @@ import {
   hasConcreteReplayArtifact,
   hasConcreteRtbCookieSyncEvidence,
   hasConcreteSensitiveThirdPartyTrackingArtifact,
+  hasScanLevelSensitiveSessionReplayCoPresenceArtifact,
   hasSensitiveSessionReplaySurfaceCooccurrenceArtifact,
   hasPreconsentSequenceEvidence,
   hasStrongFingerprintingEvidence,
@@ -47,6 +48,7 @@ export type EvidenceRequirementType =
   | "fingerprintingRuntimeEvidence"
   | "sensitiveInputSurfaceEvidence"
   | "sensitiveDataFieldEvidence"
+  | "scanLevelSensitiveSessionReplayCoPresenceEvidence"
   | "sensitiveSessionReplayCooccurrenceEvidence"
   | "sensitiveThirdPartyTrackingEvidence";
 
@@ -127,6 +129,7 @@ const REQUIREMENT_DESCRIPTIONS: Record<EvidenceRequirementType, string> = {
   fingerprintingRuntimeEvidence: "Runtime evidence identifies high-entropy or fingerprinting-style browser/device signals.",
   sensitiveInputSurfaceEvidence: "A sensitive input or collection surface was retained.",
   sensitiveDataFieldEvidence: "Evidence identifies sensitive field types, payloads, or field labels.",
+  scanLevelSensitiveSessionReplayCoPresenceEvidence: "Observed scan-level evidence includes both session replay runtime and a sensitive input surface.",
   sensitiveSessionReplayCooccurrenceEvidence: "Observed evidence ties session replay runtime to a sensitive input surface.",
   sensitiveThirdPartyTrackingEvidence: "Observed evidence ties third-party tracking runtime to a sensitive collection surface."
 };
@@ -462,6 +465,31 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
     notes: "Represents possible replay risk on a sensitive input surface; WC01 owns risk framing and requires retained co-occurrence evidence."
+  },
+  {
+    findingId: "session_replay_present_with_sensitive_surfaces_observed",
+    unifiedFindingIds: ["session_replay_present_with_sensitive_surfaces_observed"],
+    requiredForStrong: [
+      req("scanLevelSensitiveSessionReplayCoPresenceEvidence"),
+      req("sensitiveInputSurfaceEvidence"),
+      req("coverageNotMateriallyBlocked")
+    ],
+    requiredForGood: [req("scanLevelSensitiveSessionReplayCoPresenceEvidence")],
+    downgradeIf: [
+      {
+        ifMissing: "scanLevelSensitiveSessionReplayCoPresenceEvidence",
+        to: "audit_only",
+        reason: "Scan-level sensitive replay findings require retained evidence for both session replay runtime and a sensitive input surface."
+      }
+    ],
+    suppressIf: [],
+    projectionEligibility: {
+      executive: { requiresContractPass: true, minimumTier: "strong" },
+      gdprEprivacy: { requiresContractPass: true, minimumTier: "strong" },
+      ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
+      ftc: { requiresContractPass: true, minimumTier: "strong" }
+    },
+    notes: "Represents scan-level co-presence only; same-page or same-flow replay linkage remains reserved for possible_session_replay_on_sensitive_input_surface."
   },
   {
     findingId: "sensitive_data_collection_with_third_party_tracking_present",
@@ -1200,7 +1228,12 @@ function hasSensitiveInputSurfaceEvidence(rawEvidence: Record<string, unknown> |
   return (
     getBoolean(rawEvidence, ["sensitiveInputSurfaceObserved", "sensitive_input_surface_observed"]) === true ||
     getStringArrayValues(rawEvidence, ["sensitiveFieldContexts", "sensitive_field_contexts", "inputSurfaceUrls", "input_surface_urls"]).length > 0 ||
-    getObjectArrayValues(rawEvidence, ["sensitiveInputSurfaceEvidence", "sensitive_input_surface_evidence"]).length > 0 ||
+    getObjectArrayValues(rawEvidence, [
+      "sensitiveFieldEvidence",
+      "sensitive_field_evidence",
+      "sensitiveInputSurfaceEvidence",
+      "sensitive_input_surface_evidence"
+    ]).length > 0 ||
     getObjectArrayValues(rawEvidence, ["sensitivePayloadViolations", "sensitive_payload_violations"]).some((row) => row.evidenceStrength !== "detector_only")
   );
 }
@@ -1283,6 +1316,8 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
       return hasSensitiveInputSurfaceEvidence(rawEvidence);
     case "sensitiveDataFieldEvidence":
       return hasSensitiveDataFieldEvidence(rawEvidence);
+    case "scanLevelSensitiveSessionReplayCoPresenceEvidence":
+      return hasScanLevelSensitiveSessionReplayCoPresenceArtifact(rawEvidence);
     case "sensitiveSessionReplayCooccurrenceEvidence":
       return hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(rawEvidence);
     case "sensitiveThirdPartyTrackingEvidence":
@@ -1328,6 +1363,7 @@ function downgradeFlag(type: EvidenceRequirementType) {
       return "missing_specific_runtime_anchor";
     case "sensitiveInputSurfaceEvidence":
     case "sensitiveDataFieldEvidence":
+    case "scanLevelSensitiveSessionReplayCoPresenceEvidence":
     case "sensitiveSessionReplayCooccurrenceEvidence":
       return "missing_concrete_sensitive_payload";
     case "sensitiveThirdPartyTrackingEvidence":

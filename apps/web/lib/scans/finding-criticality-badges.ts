@@ -69,6 +69,10 @@ const FINDING_CRITICALITY_BADGES = {
     badge: "high",
     rationale: "Strong adtech data-sharing signal."
   },
+  policy_behavior_contradiction_detected: {
+    badge: "high",
+    rationale: "Concrete policy/runtime mismatch evidence can require review, but still needs implementation context."
+  },
   consent_dark_patterns_detected: {
     badge: "high",
     rationale: "Meaningful user-choice and enforcement risk."

@@ -735,7 +735,7 @@ export type RtbCookieSyncEvidenceClassification = {
 };
 
 const RTB_IDENTIFIER_QUERY_KEY_PATTERN =
-  /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|uid2|euid|id5id|tdid|dclid|li_fat_id|fbclid|gclid|msclkid|redir|redirect|callback)$/i;
+  /^(?:uid|uuid|guid|id|userid|user_id|partner|partnerid|uid2|euid|id5id|tdid|dclid|li_fat_id|fbclid|gclid|msclkid|redir|redirect)$/i;
 
 const RTB_WEAK_CONTEXT_QUERY_KEY_PATTERN = /^(?:gdpr|gdpr_consent|us_privacy|gpp|gpp_sid)$/i;
 
@@ -757,13 +757,23 @@ function getRoughRegistrableDomain(hostname: string) {
   return parts.slice(-2).join(".");
 }
 
+function getKnownRtbSyncVendor(hostname: string, pathSample: string, urlSample: string) {
+  const text = `${hostname} ${pathSample} ${urlSample}`.toLowerCase();
+  if (/trafficjunky\.com/.test(text) && /idsync/.test(text)) {
+    return "TrafficJunky";
+  }
+  return null;
+}
+
 export function classifyRtbCookieSyncEvidenceRow(row: Record<string, unknown>): RtbCookieSyncEvidenceClassification | null {
   const hostname = typeof row.hostname === "string" ? row.hostname.trim() : "";
   const pathSample = getRecordStringValue(row, ["pathSample", "path_sample"]);
   const urlSample = getRecordStringValue(row, ["urlSample", "url_sample", "requestUrl", "request_url"]);
   const reason = getRecordStringValue(row, ["reason"]);
   const category = getRecordStringValue(row, ["category", "destinationCategory", "destination_category"]);
-  const vendor = getRecordStringValue(row, ["vendor", "vendorName", "vendor_name"]) || null;
+  const vendor =
+    getRecordStringValue(row, ["vendor", "vendorName", "vendor_name"]) ||
+    getKnownRtbSyncVendor(hostname, pathSample, urlSample);
   const redirectTargetHost = getRecordStringValue(row, [
     "redirectTargetHost",
     "redirect_target_host",
@@ -800,7 +810,7 @@ export function classifyRtbCookieSyncEvidenceRow(row: Record<string, unknown>): 
     subtype = "identifier_query_sync";
   } else if (hasCrossDomainRedirect && /redirect|sync|match|idsync|tap|getuid/i.test(`${pathSample} ${reason}`)) {
     subtype = "redirect_chain_sync";
-  } else if (knownEndpointShape && (categorySupportsSync || /known_sync_host|identifier_query/i.test(reason))) {
+  } else if (knownEndpointShape && (categorySupportsSync || /known_sync_(?:host|endpoint)|identifier_query/i.test(reason))) {
     subtype = "known_sync_endpoint";
   } else if (syncEndpointPathShape || /redirect_sync/i.test(reason)) {
     subtype = "sync_path_only";
@@ -2012,6 +2022,29 @@ export function hasConcreteSensitiveSessionReplayArtifact(rawEvidence: Record<st
 
 export function hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
   return hasConcreteSensitiveSessionReplayArtifact(rawEvidence);
+}
+
+export function hasScanLevelSensitiveSessionReplayCoPresenceArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
+  const hasSensitiveSurface =
+    hasConcreteSensitivePayloadArtifact(rawEvidence) ||
+    getObjectArrayValues(rawEvidence, [
+      "sensitiveFieldEvidence",
+      "sensitive_field_evidence",
+      "sensitiveInputSurfaceEvidence",
+      "sensitive_input_surface_evidence",
+      "sensitivePayloadEvidence",
+      "sensitive_payload_evidence"
+    ]).length > 0 ||
+    getStringArrayValues(rawEvidence, [
+      "sensitiveDataTypes",
+      "sensitive_data_types",
+      "sensitiveFieldContexts",
+      "sensitive_field_contexts",
+      "sensitiveFieldLabels",
+      "sensitive_field_labels"
+    ]).length > 0;
+
+  return hasSensitiveSurface && hasRetainedSessionReplayRuntimeArtifact(rawEvidence);
 }
 
 export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Record<string, unknown> | null | undefined) {

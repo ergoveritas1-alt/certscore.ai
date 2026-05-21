@@ -44,12 +44,14 @@ const FINDING_DENSITY_INPUTS: Partial<Record<CertScoreFinding["id"], { count: nu
   text_alternative_accessibility_issue: { count: 248, densityPct: 10, label: "Seen on ~10% of scanned top sites" },
   session_recording_services_detected: { count: 228, densityPct: 9, label: "Seen on ~9% of scanned top sites" },
   rtb_cookie_sync_observed: { count: 220, densityPct: 9, label: "Seen on ~9% of scanned top sites" },
+  policy_behavior_contradiction_detected: { count: 0, densityPct: 0, label: "Formal top-finding density pending calibration" },
   consent_dark_patterns_detected: { count: 116, densityPct: 5, label: "Seen on ~5% of scanned top sites" },
   cpra_cba_opt_out_missing: { count: 105, densityPct: 4, label: "Seen on ~4% of scanned top sites" },
   reject_option_missing_or_hidden: { count: 98, densityPct: 4, label: "Seen on ~4% of scanned top sites" },
   asymmetric_consent_ui: { count: 91, densityPct: 4, label: "Seen on ~4% of scanned top sites" },
   forced_consent_interaction: { count: 78, densityPct: 3, label: "Seen on ~3% of scanned top sites" },
   sensitive_data_collection_with_third_party_tracking_present: { count: 69, densityPct: 3, label: "Seen on ~3% of scanned top sites" },
+  session_replay_present_with_sensitive_surfaces_observed: { count: 0, densityPct: 0, label: "Formal top-finding density pending calibration" },
   keyboard_navigation_accessibility_issue: { count: 64, densityPct: 3, label: "Seen on ~3% of scanned top sites" },
   cross_domain_identifier_sharing_observed: { count: 49, densityPct: 2, label: "Seen on ~2% of scanned top sites" },
   reject_tracking_persists_after_reject: { count: 34, densityPct: 1, label: "Seen on ~1% of scanned top sites" },
@@ -93,6 +95,7 @@ export const FINDING_DENSITY_BENCHMARKS: Record<string, FindingDensityBenchmark>
   keyboard_navigation_accessibility_issue: makeDensityBenchmark("keyboard_navigation_accessibility_issue"),
   cookie_disclosure_gap: makeDensityBenchmark("cookie_disclosure_gap"),
   possible_session_replay_on_sensitive_input_surface: makeDensityBenchmark("possible_session_replay_on_sensitive_input_surface"),
+  policy_behavior_contradiction_detected: makeDensityBenchmark("policy_behavior_contradiction_detected"),
   pre_consent_tracking_detected: makeDensityBenchmark("pre_consent_tracking_detected"),
   probable_fingerprinting: makeDensityBenchmark("probable_fingerprinting"),
   reject_option_missing_or_hidden: makeDensityBenchmark("reject_option_missing_or_hidden"),
@@ -101,6 +104,9 @@ export const FINDING_DENSITY_BENCHMARKS: Record<string, FindingDensityBenchmark>
   semantic_labeling_accessibility_issue: makeDensityBenchmark("semantic_labeling_accessibility_issue"),
   sensitive_data_collection_with_third_party_tracking_present: makeDensityBenchmark(
     "sensitive_data_collection_with_third_party_tracking_present"
+  ),
+  session_replay_present_with_sensitive_surfaces_observed: makeDensityBenchmark(
+    "session_replay_present_with_sensitive_surfaces_observed"
   ),
   session_recording_services_detected: makeDensityBenchmark("session_recording_services_detected"),
   text_alternative_accessibility_issue: makeDensityBenchmark("text_alternative_accessibility_issue"),

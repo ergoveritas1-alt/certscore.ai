@@ -87,6 +87,8 @@ export type SurfacingPolicyRuleId =
   | "precedence.specific_contradiction_supports_preconsent"
   | "precedence.present_surface_beats_weak_absence"
   | "precedence.sensitive_replay_beats_generic_replay"
+  | "precedence.scan_level_sensitive_replay_beats_generic_replay"
+  | "precedence.sensitive_replay_cooccurrence_beats_scan_level_copresence"
   | "precedence.task_blocking_beats_wcag_summary"
   | "precedence.blocking_overlay_supports_consent_risk"
   | "precedence.sensitive_tracking_combo_beats_generic_sensitivity"
@@ -288,6 +290,7 @@ const SUPPORT_ONLY_CONSENT_TRACKING_CONTEXT_IDS = [
 
 const SENSITIVE_DATA_IDS = [
   "possible_session_replay_on_sensitive_input_surface",
+  "session_replay_present_with_sensitive_surfaces_observed",
   "sensitive_data_collection_with_third_party_tracking_present",
   "sensitive_collection_surface_observed",
   "minors_or_age_gated_collection_context",
@@ -641,6 +644,13 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialTier: "headline",
     initialLane: "main"
   },
+  session_replay_present_with_sensitive_surfaces_observed: {
+    findingId: "session_replay_present_with_sensitive_surfaces_observed",
+    family: "sensitive_data",
+    initialState: "review",
+    initialTier: "headline",
+    initialLane: "main"
+  },
   privacy_policy_missing_surface: {
     findingId: "privacy_policy_missing_surface",
     family: "coverage_gap",
@@ -897,6 +907,18 @@ const EXPLICIT_PRECEDENCE_RULES: PrecedenceRule[] = [
     primaryFindingId: "possible_session_replay_on_sensitive_input_surface",
     reason: "The possible sensitive-input replay finding is more specific and should lead, while generic replay disclosure mismatch remains supporting context.",
     supportingFindingId: "session_replay_undisclosed"
+  },
+  {
+    appliedRule: "precedence.scan_level_sensitive_replay_beats_generic_replay",
+    primaryFindingId: "session_replay_present_with_sensitive_surfaces_observed",
+    reason: "Scan-level replay plus sensitive-surface evidence is more specific than generic replay context.",
+    supportingFindingId: "session_replay_undisclosed"
+  },
+  {
+    appliedRule: "precedence.sensitive_replay_cooccurrence_beats_scan_level_copresence",
+    primaryFindingId: "possible_session_replay_on_sensitive_input_surface",
+    reason: "Same-surface replay co-occurrence evidence is stronger than scan-level replay and sensitive-surface co-presence.",
+    supportingFindingId: "session_replay_present_with_sensitive_surfaces_observed"
   },
   {
     appliedRule: "precedence.task_blocking_beats_wcag_summary",

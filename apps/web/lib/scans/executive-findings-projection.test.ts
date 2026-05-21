@@ -2618,6 +2618,9 @@ test("projects CPRA CBA opt-out missing into executive findings and top findings
   assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.optOutSubtype, "opt_out_absent");
   assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.missingOrAbsent, true);
   assert.equal(finding?.evidenceDetails?.trackingOrSharingContext?.cbaVendorEvidenceObserved, true);
+  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcScanStateSent, false);
+  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcHandlingObserved, "not_determined");
+  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcHandlingBasis, "not_tested_or_not_retained");
   assert.deepEqual(finding?.evidenceDetails?.policyEvidence, { evaluated: false });
   assert.ok(projection.topFindings.some((candidate) => candidate.id === "cpra_cba_opt_out_missing"));
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
@@ -2778,10 +2781,50 @@ test("projects remaining top finding families with canonical evidence details", 
       representativeSelectors: [".hero-title"]
     }
   ]);
-  assert.equal(byId.get("policy_clarity_risk")?.evidenceVersion, "1.1");
-  assert.equal(byId.get("policy_clarity_risk")?.evidenceDetails?.policyEvidenceDetails?.clarityRiskObserved, true);
+  assert.equal(byId.has("policy_clarity_risk"), false);
   assert.equal(byId.get("high_risk_product_risk_disclosure_missing")?.evidenceVersion, "1.1");
   assert.equal(byId.get("high_risk_product_risk_disclosure_missing")?.evidenceDetails?.financialClaimsEvidence?.observed, true);
+});
+
+test("keeps policy clarity risk out of executive projection on transport-failure coverage", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("policy_clarity_risk", {
+      affectedPageCount: 0,
+      confidenceBand: "high",
+      confidenceInputs: {
+        ...makePacket("policy_clarity_risk").confidenceInputs,
+        hasDirectRuntimeEvidence: false,
+        hasKeyPageDiscoveryEvidence: false,
+        hasPolicyTextEvidence: true
+      },
+      details: {
+        family: "policy_extraction",
+        kind: "policy_clarity_risk",
+        ambiguityScore: 92
+      },
+      evidence: {
+        counts: { pagesScanned: 0 },
+        entities: { scanOutcome: ["transport_failure"], coverageLevel: ["limited_none"] },
+        fetchQuality: null,
+        flags: ["policy.clarity_risk"],
+        pageUrls: ["https://example.com/privacy"],
+        snippets: ["Policy language is broad and does not clearly describe choices."],
+        sourceUrls: ["https://example.com/privacy"]
+      },
+      primaryPageUrl: null,
+      severity: "medium",
+      surfacingDecision: {
+        ...makePacket("policy_clarity_risk").surfacingDecision,
+        family: "policy_extraction",
+        reportLane: "confidence_and_coverage",
+        surfaceTier: "section"
+      }
+    })
+  ]);
+
+  assert.equal(projection.findings.some((finding) => finding.id === "policy_clarity_risk"), false);
+  assert.equal(projection.topFindings.some((finding) => finding.id === "policy_clarity_risk"), false);
+  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, ["policy_clarity_risk"]);
 });
 
 test("keeps scanned page URL separate from representative third-party request URLs", () => {

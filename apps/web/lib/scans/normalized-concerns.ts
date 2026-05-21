@@ -9,6 +9,7 @@ import {
   hasConcreteRtbCookieSyncEvidence,
   hasConcreteSensitivePayloadArtifact,
   hasConcreteSensitiveThirdPartyTrackingArtifact,
+  hasScanLevelSensitiveSessionReplayCoPresenceArtifact,
   hasSensitiveSessionReplaySurfaceCooccurrenceArtifact
 } from "./promotion-evidence-contracts";
 import {
@@ -21,6 +22,7 @@ import {
 } from "./contradiction-evidence-contract";
 import {
   hasBehaviorReproducedFocusManagementEvidence,
+  hasDocumentMetadataAccessibilityExamples,
   inferSplitAccessibilityFindingIdFromEvidence
 } from "./accessibility-evidence";
 
@@ -126,6 +128,7 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "missing_cpra_relevant_opt_out_context"
   | "clear_pricing_terms_context_observed"
   | "missing_representative_accessibility_examples"
+  | "document_metadata_rule_not_top_finding_eligible"
   | "accessibility_examples_below_promotion_threshold";
 
 export type NormalizedConcernEvidenceBundle = {
@@ -486,6 +489,19 @@ export function inferSpecializedUnifiedFindingId(input: {
     return "focus_management_issue";
   }
 
+  if (
+    hasDocumentMetadataAccessibilityExamples(rawEvidence) &&
+    (currentId === "accessibility_risk_score" ||
+      currentId === "wcag_issue_summary" ||
+      currentId === "form_label_issues" ||
+      currentId === "link_name_issues" ||
+      currentId === "aria_issues" ||
+      input.signalKey?.startsWith("accessibility.") ||
+      /accessibility|axe|wcag|semantic|label|language|document title|document-title|html-has-lang/i.test(title))
+  ) {
+    return "semantic_labeling_accessibility_issue";
+  }
+
   const splitAccessibilityFindingId = inferSplitAccessibilityFindingIdFromEvidence(rawEvidence);
   if (
     splitAccessibilityFindingId &&
@@ -525,6 +541,10 @@ export function inferSpecializedUnifiedFindingId(input: {
   ) {
     if (hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(rawEvidence)) {
       return "possible_session_replay_on_sensitive_input_surface";
+    }
+
+    if (hasScanLevelSensitiveSessionReplayCoPresenceArtifact(rawEvidence)) {
+      return "session_replay_present_with_sensitive_surfaces_observed";
     }
 
     if (hasThirdPartyTrackingEvidence(rawEvidence)) {
