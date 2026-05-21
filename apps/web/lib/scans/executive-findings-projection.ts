@@ -1921,7 +1921,7 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       gpcHandlingBasis:
         gpcScanStateSent === true
           ? "gpc_specific_scan_state"
-          : "not_tested_or_not_retained"
+          : "not_tested"
     },
     optOutControlEvidence: {
       evaluated: true,
@@ -2226,10 +2226,37 @@ function buildGenericCanonicalEvidenceDetails(
       ...getEntityValues(packet, /sensitive.*source.*field/i).map((value) => `field:${value}`),
       ...getEntityValues(packet, /sensitive.*source.*location/i).map((value) => `location:${formatSensitiveSourceLocation(value)}`)
     ]);
+    const thirdPartyDomains = uniqueStrings([
+      ...getEntityValues(packet, /third.*party.*domains?|request.*domains?|vendor/i)
+    ]).slice(0, 12);
+    const samePageOrFlowLinked = parseBooleanEntity(getEntityValues(packet, /^samePageOrFlowLinked$|^same_page_or_flow_linked$/i)[0]) ?? false;
+    const payloadExposureObserved =
+      parseBooleanEntity(getEntityValues(packet, /^payloadExposureObserved$|^payload_exposure_observed$/i)[0]) ?? false;
+    const rawValuesRetained = parseBooleanEntity(getEntityValues(packet, /^rawValuesRetained$|^raw_values_retained$/i)[0]) ?? false;
+    const runtimeRequestUrlsForSensitiveEvidence = uniqueStrings([
+      ...getEntityValues(packet, /runtime.*request.*urls?|request.*urls?/i)
+    ]);
+    const sameFlowBasis = samePageOrFlowLinked
+      ? "same_page_or_navigation_flow"
+      : sensitiveFieldContexts.length > 0 && runtimeRequestUrlsForSensitiveEvidence.length > 0
+        ? "scan_level_only"
+        : "not_determined";
+    const evidenceBasisType = sensitiveFieldContexts.length > 0 && runtimeRequestUrlsForSensitiveEvidence.length > 0
+      ? "form_field_metadata_plus_runtime_request_context"
+      : thirdPartyDomains.length > 0
+        ? "tracker_vendor_context"
+        : "form_field_metadata";
     details.sensitiveDataEvidence = {
       observed: true,
+      evidenceBasisType,
       dataTypes: sensitiveDataTypes,
+      fieldTypes: sensitiveDataTypes,
       fieldContexts: sensitiveFieldContexts,
+      thirdPartyDomains,
+      samePageOrFlowLinked,
+      sameFlowBasis,
+      rawValuesRetained,
+      payloadExposureObserved,
       basis: evidenceSnippets[0] ?? packet.summary
     };
     if (sensitiveDataTypes.length > 0) {

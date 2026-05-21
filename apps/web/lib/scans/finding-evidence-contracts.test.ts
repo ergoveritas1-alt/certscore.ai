@@ -601,6 +601,10 @@ test("WS01-style reject action and post-reject tracking evidence satisfies stron
       availability: "available",
       banner_layer_inspected: true,
       reject_interaction_succeeded: true
+    },
+    reject_interaction_attribution: {
+      clicked_label: "Reject all",
+      final_url_host_changed: false
     }
   });
 
@@ -622,6 +626,10 @@ test("WS01-style post-reject tag-manager request evidence satisfies strong", () 
       availability: "available",
       banner_layer_inspected: true,
       reject_interaction_succeeded: true
+    },
+    reject_interaction_attribution: {
+      clicked_label: "Reject all",
+      final_url_host_changed: false
     },
     suppression_checks: {
       post_reject_window_available: true,
@@ -661,6 +669,12 @@ test("stringified reject requestUrl packet evidence satisfies strong", () => {
             post_reject_window_available: true,
             reject_click_confirmed: true
           })
+        ],
+        rejectInteractionAttribution: [
+          JSON.stringify({
+            clickedLabel: "Reject all",
+            finalUrlHostChanged: false
+          })
         ]
       },
       flags: ["reject_evidence_confirmed"]
@@ -687,6 +701,10 @@ test("WS01-style reject cookie diff provenance stays audit-only without post-rej
     rejectPathDepthAndAvailability: {
       rejectInteractionSucceeded: true
     },
+    rejectInteractionAttribution: {
+      clickedLabel: "Reject all",
+      finalUrlHostChanged: false
+    },
     suppressionChecks: {
       reject_click_confirmed: true
     }
@@ -696,6 +714,66 @@ test("WS01-style reject cookie diff provenance stays audit-only without post-rej
   assert.equal(decision?.allowedNarrativeTier, "weak");
   assert.equal(decision?.promotionEligibility, "internal_only");
   assert.ok(decision?.missingRequirements.includes("postRejectTimestampedRuntimeEvidence"));
+});
+
+test("article/content click labels do not satisfy successful reject interaction evidence", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("reject_did_not_reduce_tracking", {
+    postRejectNonEssentialRequests: [
+      {
+        category: "advertising",
+        ms_after_reject: 1200,
+        requestUrl: "https://ads.example.net/collect",
+        ts_ms: 4600,
+        vendor: "Example Ads"
+      }
+    ],
+    rejectInteractionAttribution: {
+      clickedLabel: "Even silent heart attacks could speed up cognitive decline",
+      finalUrlHostChanged: false
+    },
+    rejectPathDepthAndAvailability: {
+      rejectInteractionSucceeded: true
+    },
+    suppressionChecks: {
+      post_reject_window_available: true,
+      reject_click_confirmed: true
+    }
+  });
+
+  assert.equal(decision?.status, "downgrade");
+  assert.ok(decision?.missingRequirements.includes("successfulRejectInteraction"));
+});
+
+test("WS01 reject control attribution fields satisfy successful reject interaction evidence", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("reject_did_not_reduce_tracking", {
+    postRejectNonEssentialRequests: [
+      {
+        category: "advertising",
+        ms_after_reject: 1200,
+        requestUrl: "https://ads.example.net/collect",
+        ts_ms: 4600,
+        vendor: "Example Ads"
+      }
+    ],
+    rejectInteractionAttribution: {
+      consentSurfaceDetected: true,
+      controlRole: "reject",
+      controlSelector: "button#onetrust-reject-all-handler",
+      controlSource: "cmp_button",
+      controlText: "Reject all",
+      finalUrlHostChanged: false
+    },
+    rejectPathDepthAndAvailability: {
+      rejectInteractionSucceeded: true
+    },
+    suppressionChecks: {
+      post_reject_window_available: true,
+      reject_click_confirmed: true
+    }
+  });
+
+  assert.equal(decision?.status, "pass_strong");
+  assert.equal(decision?.promotionEligibility, "eligible");
 });
 
 test("reject hidden requires inspected banner and reject path evidence", () => {
@@ -1305,6 +1383,7 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
           evidenceSource: "sensitive_field_session_replay_correlation",
           evidenceStrength: "form_field_signal",
           requestUrl: "https://clarity.ms/collect",
+          sameFlowLinkage: { samePageOrFlow: true },
           vendorHost: "clarity.ms"
         }
       ]
@@ -1321,6 +1400,7 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
           evidenceStrength: "suspected",
           matchSnippet: "zipcode=64***18",
           requestUrl: "https://api.example.com/location?zipcode=64118",
+          sameFlowLinkage: { samePageOrFlow: true },
           sourceField: "zipcode",
           vendorHost: "api.example.com"
         }
@@ -1347,11 +1427,13 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
 
   assert.equal(
     evaluateFindingEvidenceContractForRawEvidence("session_replay_present_with_sensitive_surfaces_observed", {
-      sensitiveFieldEvidence: [
+      sensitivePayloadViolations: [
         {
-          dataType: "email",
-          signalKey: "commerce.email_input_present",
-          sourceField: "email"
+          evidenceSource: "sensitive_field_session_replay_correlation",
+          evidenceStrength: "form_field_signal",
+          requestUrl: "https://clarity.ms/collect",
+          sameFlowLinkage: { samePageOrFlow: true },
+          vendorHost: "clarity.ms"
         }
       ],
       session_replay_runtime_detected: true,
@@ -1366,6 +1448,39 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
       runtime_vendors: ["Example Analytics"],
       sensitive_data_types: ["health_information"],
       sensitive_input_surface_evidence: [{ fieldType: "health", pageUrl: "https://example.com/intake" }]
+    })?.status,
+    "downgrade"
+  );
+});
+
+test("sensitive replay contracts downgrade when same-page or same-flow linkage is absent", () => {
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("possible_session_replay_on_sensitive_input_surface", {
+      sensitivePayloadViolations: [
+        {
+          evidenceSource: "sensitive_field_session_replay_correlation",
+          evidenceStrength: "form_field_signal",
+          requestUrl: "https://clarity.ms/collect",
+          vendorHost: "clarity.ms"
+        }
+      ],
+      session_replay_runtime_detected: true,
+      session_replay_runtime_vendors: ["Microsoft Clarity"]
+    })?.status,
+    "downgrade"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("session_replay_present_with_sensitive_surfaces_observed", {
+      sensitiveFieldEvidence: [
+        {
+          dataType: "email",
+          signalKey: "commerce.email_input_present",
+          sourceField: "email"
+        }
+      ],
+      session_replay_runtime_detected: true,
+      session_replay_runtime_vendors: ["Microsoft Clarity"]
     })?.status,
     "downgrade"
   );

@@ -1208,7 +1208,7 @@ function getRejectInteractionAttribution(rawEvidence: Record<string, unknown> | 
 
 function getRejectInteractionLabel(rawEvidence: Record<string, unknown> | null | undefined) {
   const attribution = getRejectInteractionAttribution(rawEvidence);
-  return getFirstString(attribution, ["clickedLabel", "clicked_label", "clickedText", "clicked_text"]);
+  return getFirstString(attribution, ["clickedLabel", "clicked_label", "clickedText", "clicked_text", "controlText", "control_text"]);
 }
 
 function hasCredibleRejectInteractionAttribution(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -1222,15 +1222,31 @@ function hasCredibleRejectInteractionAttribution(rawEvidence: Record<string, unk
   }
 
   const label = getRejectInteractionLabel(rawEvidence);
+  const controlRole = getFirstString(attribution, ["controlRole", "control_role"]);
+  const controlSource = getFirstString(attribution, ["controlSource", "control_source"]);
+  const consentSurfaceDetected =
+    attribution.consentSurfaceDetected === true ||
+    attribution.consent_surface_detected === true ||
+    /cmp_|consent|cookie|privacy/i.test(controlSource ?? "");
   if (!label) {
-    return true;
+    return consentSurfaceDetected && controlRole
+      ? /^(reject|toggle|save)$/i.test(controlRole)
+      : true;
   }
 
   if (/stream|subscribe|sign\s*in|log\s*in|continue|accept|agree|allow/i.test(label)) {
     return false;
   }
 
-  return /reject|decline|deny|refuse|opt\s*out|save\s+settings|confirm\s+choices|manage\s+preferences/i.test(label);
+  if (label.length > 50 && !/cookie|privacy|consent|preference|choice|optional|necessary|essential/i.test(label)) {
+    return false;
+  }
+
+  if (/reject|decline\s+(?:all|optional|non[-\s]?essential|cookies)|deny|refuse|opt\s*out|save\s+settings|confirm\s+choices|manage\s+preferences|necessary only|essential only|only necessary/i.test(label)) {
+    return true;
+  }
+
+  return consentSurfaceDetected && /^(reject|toggle|save)$/i.test(controlRole ?? "");
 }
 
 function getThirdPartyAddedAfterRejectCookieCount(rawEvidence: Record<string, unknown> | null | undefined) {

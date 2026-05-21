@@ -11,8 +11,10 @@ const navLinks = [
 
 const resourceLinks = [
   { href: "/guides", label: "Guides" },
-  { href: "/methodology", label: "Methodology" },
   { href: "/benchmarks", label: "Benchmarks" },
+  { href: "/findings", label: "Findings" },
+  { href: "/gdpr", label: "GDPR privacy scanner" },
+  { href: "/methodology", label: "Methodology" },
   { href: "/compare", label: "Compare" }
 ];
 

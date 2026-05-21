@@ -105,7 +105,12 @@ import {
   getPublicReportFindingDisplay,
   getPublicReportFindingFallbackNote
 } from "../../lib/scans/public-report-finding-display";
-import { filterReportFacingDemotionReasons } from "../../lib/scans/report-facing-demotion-reasons";
+import {
+  buildReportFacingProjectionCopy,
+  filterReportFacingDemotionReasons,
+  getReportFacingReviewLane,
+  type ReportFacingProjectionEligibility
+} from "../../lib/scans/report-facing-demotion-reasons";
 import {
   evaluateFindingEvidenceContractForPacket,
   getFindingEvidenceContractForUnifiedFinding
@@ -3838,6 +3843,7 @@ function getFindingCandidateProjectionIds(findingId: string) {
     reject_did_not_reduce_tracking: ["reject_tracking_persists_after_reject"],
     rtb_cookie_sync_observed: ["rtb_cookie_sync_observed"],
     session_replay_observed: ["session_recording_services_detected"],
+    keyboard_navigation_accessibility_issue: ["keyboard_navigation_accessibility_issue"],
     weak_cookie_security_attributes: []
   };
   return directMap[findingId] ?? [];
@@ -4011,6 +4017,29 @@ function buildRejectPersistenceEligibilityExport(finding: UnifiedFindingDisplayP
   };
 }
 
+function buildRejectPersistenceObservedValue(input: {
+  finding: UnifiedFindingDisplayPacket;
+  rejectPersistenceEligibility: ReturnType<typeof buildRejectPersistenceEligibilityExport>;
+}) {
+  if (
+    input.finding.unifiedFindingId !== "reject_did_not_reduce_tracking" ||
+    !/No classified non-essential request fired at least/i.test(input.finding.observedValue ?? "") ||
+    !input.rejectPersistenceEligibility ||
+    input.rejectPersistenceEligibility.postRejectNonEssentialRequests.length === 0
+  ) {
+    return input.finding.observedValue ?? null;
+  }
+
+  const vendors = uniqueStrings(
+    input.rejectPersistenceEligibility.postRejectNonEssentialRequests.flatMap((row) =>
+      typeof row.vendor === "string" ? [row.vendor] : []
+    )
+  );
+  return vendors.length > 0
+    ? `Non-essential tracking requests fired after the reject interaction for ${vendors.slice(0, 4).join(", ")}.`
+    : "Non-essential tracking requests fired after the reject interaction.";
+}
+
 function buildSensitiveSurfaceEvidenceExport(finding: UnifiedFindingDisplayPacket) {
   if (
     finding.unifiedFindingId !== "possible_session_replay_on_sensitive_input_surface" &&
@@ -4056,14 +4085,22 @@ function buildSensitiveSurfaceEvidenceExport(finding: UnifiedFindingDisplayPacke
       typeof row.vendorHost === "string" ? [row.vendorHost] : typeof row.vendor_host === "string" ? [row.vendor_host] : []
     )
   ]);
+  const samePageOrFlowLinked =
+    payloadSameFlowLinked ||
+    sessionReplayRows.some((row) => row.samePage === true || row.same_page === true || row.sameFlow === true || row.same_flow === true) ||
+    thirdPartyRows.some((row) => row.samePage === true || row.same_page === true || row.sameFlow === true || row.same_flow === true);
 
   return {
+    evidenceBasisType: uniqueStrings([
+      sensitivePayloadRows.length > 0 ? "form_field_metadata" : null,
+      thirdPartyRows.length > 0 ? "tracker_vendor_context" : null,
+      sessionReplayRows.length > 0 ? "session_replay_vendor_context" : null,
+      samePageOrFlowLinked ? "same_page_runtime_link" : null
+    ]),
     payloadExposureObserved,
     rawValuesRetained: false,
-    samePageOrFlowLinkage:
-      payloadSameFlowLinked ||
-      sessionReplayRows.some((row) => row.samePage === true || row.same_page === true || row.sameFlow === true || row.same_flow === true) ||
-      thirdPartyRows.some((row) => row.samePage === true || row.same_page === true || row.sameFlow === true || row.same_flow === true),
+    samePageOrFlowLinked,
+    samePageOrFlowLinkage: samePageOrFlowLinked,
     fieldTypes: uniqueStrings([
       ...(entities?.sensitive_data_types ?? []),
       ...(entities?.sensitiveDataTypes ?? []),
@@ -4082,23 +4119,28 @@ function buildSensitiveSurfaceEvidenceExport(finding: UnifiedFindingDisplayPacke
 function buildReviewPacketProjectionDiagnostics(finding: UnifiedFindingDisplayPacket) {
   const contract = getFindingEvidenceContractForUnifiedFinding(finding.unifiedFindingId);
   const decision = evaluateFindingEvidenceContractForPacket(finding);
-  const candidateProjectionIds = getFindingCandidateProjectionIds(finding.unifiedFindingId);
-  const projected = finding.sourceRefs.some((sourceRef) => sourceRef.kind === "signal" && candidateProjectionIds.includes(sourceRef.key));
+  const candidateProjectionIds = finding.topFindingEligibility?.candidateTopFindingIds?.length
+    ? finding.topFindingEligibility.candidateTopFindingIds
+    : getFindingCandidateProjectionIds(finding.unifiedFindingId);
+  const projected = finding.topFindingEligibility?.eligibility === "projected" ||
+    finding.sourceRefs.some((sourceRef) => sourceRef.kind === "signal" && candidateProjectionIds.includes(sourceRef.key));
   const missingCorroborators = decision?.missingRequirements ?? [];
   const rawDemotionReasons = uniqueStrings([
-    ...missingCorroborators.map((requirement) => `missing:${requirement}`),
+    ...(finding.topFindingEligibility?.demotionReasons ?? []),
+    ...(finding.topFindingEligibility ? [] : missingCorroborators.map((requirement) => `missing:${requirement}`)),
     ...(decision?.negativeEvidenceFlags ?? []),
     ...finding.presentationDecision.downgradeReasons,
     ...finding.surfacingDecision.decisionReasons
   ]);
-  const eligibility =
-    candidateProjectionIds.length === 0
+  const eligibility: ReportFacingProjectionEligibility =
+    finding.topFindingEligibility?.eligibility ??
+    (candidateProjectionIds.length === 0
       ? "no_top_finding_mapping"
       : projected
         ? "projected"
         : decision?.promotionEligibility === "eligible" && decision.allowedNarrativeTier === "strong"
-        ? "eligible_not_projected"
-        : "not_projected";
+          ? "eligible_not_projected"
+          : "not_projected");
   const demotionReasons = filterReportFacingDemotionReasons({ eligibility, reasons: rawDemotionReasons });
   const suppressionReason = eligibility === "projected" ? null : demotionReasons[0] ?? null;
 
@@ -4106,8 +4148,8 @@ function buildReviewPacketProjectionDiagnostics(finding: UnifiedFindingDisplayPa
     topFindingEligibility: {
       eligibility,
       candidateTopFindingIds: candidateProjectionIds,
-      matchedCriteria: decision?.satisfiedRequirements ?? [],
-      missingCorroborators,
+      matchedCriteria: finding.topFindingEligibility?.matchedCriteria ?? decision?.satisfiedRequirements ?? [],
+      missingCorroborators: finding.topFindingEligibility?.missingCorroborators ?? missingCorroborators,
       demotionReasons,
       suppressionReason
     },
@@ -4144,6 +4186,15 @@ export function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPack
   });
 
   const diagnostics = buildReviewPacketProjectionDiagnostics(finding);
+  const rejectPersistenceEligibility = buildRejectPersistenceEligibilityExport(finding);
+  const observedValue = buildRejectPersistenceObservedValue({ finding, rejectPersistenceEligibility });
+  const projectionCopy = buildReportFacingProjectionCopy({
+    demotionReasons: diagnostics.topFindingEligibility.demotionReasons,
+    eligibility: diagnostics.topFindingEligibility.eligibility,
+    findingId: finding.unifiedFindingId,
+    summary: finding.summary
+  });
+  const reviewLane = getReportFacingReviewLane(finding.unifiedFindingId, diagnostics.topFindingEligibility.eligibility);
 
   return {
     evidenceScope: "detailed_review_summary",
@@ -4153,8 +4204,8 @@ export function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPack
     criticality: display.criticality,
     scanPriority: finding.severity,
     confidenceBand: finding.confidenceBand,
-    summary: finding.summary,
-    observedValue: finding.observedValue ?? null,
+    summary: projectionCopy.summary,
+    observedValue,
     primaryPageUrl: finding.primaryPageUrl ?? null,
     affectedPageCount: finding.affectedPageCount,
     presentation: {
@@ -4172,7 +4223,7 @@ export function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPack
       disclosureOrContact: buildDisclosureEvidenceExport(finding),
       fingerprinting: buildFingerprintingEvidenceExport(finding),
       cookieOrStorage: buildCookieOrStorageEvidenceExport(finding),
-      rejectPersistenceEligibility: buildRejectPersistenceEligibilityExport(finding),
+      rejectPersistenceEligibility,
       sensitiveSurface: buildSensitiveSurfaceEvidenceExport(finding),
       tracking: buildTrackingEvidenceExport(finding)
     },
@@ -4192,6 +4243,11 @@ export function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPack
         lane: finding.surfacingDecision.reportLane,
         reasons: finding.surfacingDecision.decisionReasons.slice(0, 2),
         appliedRules: finding.surfacingDecision.appliedRules.slice(0, 3)
+      },
+      projection: {
+        reviewLane,
+        summary: projectionCopy.projectionSummary,
+        canonicalTopFinding: diagnostics.topFindingEligibility.eligibility === "projected"
       }
     }
   };

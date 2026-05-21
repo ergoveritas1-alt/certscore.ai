@@ -11,6 +11,7 @@ const staticPaths = [
   "/pricing",
   "/monitor-site",
   "/guides",
+  "/gdpr",
   "/benchmarks",
   "/benchmarks/website-consent-tracking-2026",
   "/benchmarks/pre-consent-tracking-2026",

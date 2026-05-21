@@ -832,7 +832,7 @@ const ACCESSIBILITY_SPLIT_FINDING_METADATA: Record<string, {
   title: string;
 }> = {
   keyboard_navigation_accessibility_issue: {
-    description: "Keyboard-related WCAG rule examples were retained and warrant review for keyboard operability barriers.",
+    description: "Automated keyboard-related rule evidence was retained and warrants manual keyboard operability review.",
     ruleKey: "accessibility_review.navigation_issues",
     severity: "high",
     title: "Keyboard navigation accessibility issue"

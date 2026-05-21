@@ -129,8 +129,8 @@ const REQUIREMENT_DESCRIPTIONS: Record<EvidenceRequirementType, string> = {
   fingerprintingRuntimeEvidence: "Runtime evidence identifies high-entropy or fingerprinting-style browser/device signals.",
   sensitiveInputSurfaceEvidence: "A sensitive input or collection surface was retained.",
   sensitiveDataFieldEvidence: "Evidence identifies sensitive field types, payloads, or field labels.",
-  scanLevelSensitiveSessionReplayCoPresenceEvidence: "Observed scan-level evidence includes both session replay runtime and a sensitive input surface.",
-  sensitiveSessionReplayCooccurrenceEvidence: "Observed evidence ties session replay runtime to a sensitive input surface.",
+  scanLevelSensitiveSessionReplayCoPresenceEvidence: "Observed evidence includes session replay runtime and a same-page or same-flow linked sensitive input surface.",
+  sensitiveSessionReplayCooccurrenceEvidence: "Observed evidence ties session replay runtime to a same-page or same-flow linked sensitive input surface.",
   sensitiveThirdPartyTrackingEvidence: "Observed evidence ties third-party tracking runtime to a sensitive collection surface."
 };
 
@@ -455,7 +455,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
     requiredForStrong: [req("sensitiveSessionReplayCooccurrenceEvidence"), req("coverageNotMateriallyBlocked")],
     requiredForGood: [req("sensitiveSessionReplayCooccurrenceEvidence")],
     downgradeIf: [
-      { ifMissing: "sensitiveSessionReplayCooccurrenceEvidence", to: "audit_only", reason: "Possible sensitive replay findings require retained co-occurrence evidence between replay runtime and a sensitive input surface." }
+      { ifMissing: "sensitiveSessionReplayCooccurrenceEvidence", to: "audit_only", reason: "Possible sensitive replay findings require retained same-page or same-flow co-occurrence evidence between replay runtime and a sensitive input surface." }
     ],
     suppressIf: [],
     projectionEligibility: {
@@ -464,7 +464,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
-    notes: "Represents possible replay risk on a sensitive input surface; WC01 owns risk framing and requires retained co-occurrence evidence."
+    notes: "Represents possible replay risk on a sensitive input surface; WC01 owns risk framing and requires retained same-page or same-flow co-occurrence evidence."
   },
   {
     findingId: "session_replay_present_with_sensitive_surfaces_observed",
@@ -479,7 +479,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       {
         ifMissing: "scanLevelSensitiveSessionReplayCoPresenceEvidence",
         to: "audit_only",
-        reason: "Scan-level sensitive replay findings require retained evidence for both session replay runtime and a sensitive input surface."
+        reason: "Sensitive replay findings require retained same-page or same-flow evidence for both session replay runtime and a sensitive input surface."
       }
     ],
     suppressIf: [],
@@ -489,7 +489,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
-    notes: "Represents scan-level co-presence only; same-page or same-flow replay linkage remains reserved for possible_session_replay_on_sensitive_input_surface."
+    notes: "Requires retained same-page or same-flow replay linkage; scan-level co-presence without linkage remains support/context only."
   },
   {
     findingId: "sensitive_data_collection_with_third_party_tracking_present",
@@ -794,12 +794,71 @@ function hasCoverageNotMateriallyBlocked(rawEvidence: Record<string, unknown> | 
 function hasSuccessfulRejectInteraction(rawEvidence: Record<string, unknown> | null | undefined) {
   const rejectPath = getObjectValue(rawEvidence, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]);
   const suppressionChecks = getObjectValue(rawEvidence, ["suppressionChecks", "suppression_checks"]);
-  return (
+  return hasCredibleRejectInteractionAttribution(rawEvidence) && (
     rejectPath?.rejectInteractionSucceeded === true ||
     rejectPath?.reject_interaction_succeeded === true ||
     suppressionChecks?.reject_click_confirmed === true ||
     getBoolean(rawEvidence, ["consentRejectInteractionSucceeded", "consent_reject_interaction_succeeded"]) === true
   );
+}
+
+function getFirstStringValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function isCredibleRejectControlLabel(label: string | null) {
+  if (!label) {
+    return false;
+  }
+  if (/stream|subscribe|sign\s*in|log\s*in|continue|accept|agree|allow/i.test(label)) {
+    return false;
+  }
+  if (label.length > 50 && !/cookie|privacy|consent|preference|choice|optional|necessary|essential/i.test(label)) {
+    return false;
+  }
+  return /reject|decline\s+(?:all|optional|non[-\s]?essential|cookies)|deny|refuse|opt\s*out|save\s+settings|confirm\s+choices|manage\s+preferences|necessary only|essential only|only necessary/i.test(label);
+}
+
+function hasCredibleRejectInteractionAttribution(rawEvidence: Record<string, unknown> | null | undefined) {
+  const attribution = getObjectValue(rawEvidence, ["rejectInteractionAttribution", "reject_interaction_attribution"]);
+  const consentInteraction = getObjectValue(rawEvidence, ["consentInteraction", "consent_interaction", "consentRejectInteractionTrace", "consent_reject_interaction_trace"]);
+  const source = attribution ?? consentInteraction;
+  if (!source) {
+    return false;
+  }
+  if (source.finalUrlHostChanged === true || source.final_url_host_changed === true) {
+    return false;
+  }
+  const label = getFirstStringValue(source, [
+    "clickedLabel",
+    "clicked_label",
+    "clickedText",
+    "clicked_text",
+    "controlText",
+    "control_text",
+    "text",
+    "visibleText"
+  ]);
+  if (label) {
+    return isCredibleRejectControlLabel(label);
+  }
+  const controlRole = getFirstStringValue(source, ["controlRole", "control_role"]);
+  const controlSource = getFirstStringValue(source, ["controlSource", "control_source"]);
+  const consentSurfaceDetected =
+    source.consentSurfaceDetected === true ||
+    source.consent_surface_detected === true ||
+    /cmp_|consent|cookie|privacy/i.test(controlSource ?? "");
+  if (consentSurfaceDetected && /^(reject|toggle|save)$/i.test(controlRole ?? "")) {
+    return true;
+  }
+  const actionType = getFirstStringValue(source, ["actionType", "action_type", "consentActionType"]);
+  return /^(reject_all|opt_out|essential_only|save_preferences)$/i.test(actionType ?? "");
 }
 
 function getNumberValue(record: Record<string, unknown> | null | undefined, keys: string[]) {

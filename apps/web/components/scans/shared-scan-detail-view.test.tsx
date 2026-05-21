@@ -406,6 +406,30 @@ async function loadSelectExecutiveAccessLimitationNotice() {
   }).selectExecutiveAccessLimitationNotice;
 }
 
+async function loadBuildReviewFindingSummaryJson() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (sharedScanDetailViewImport as unknown as { buildReviewFindingSummaryJson?: unknown }).buildReviewFindingSummaryJson
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    buildReviewFindingSummaryJson: (finding: Record<string, unknown>) => Record<string, unknown>;
+  }).buildReviewFindingSummaryJson;
+}
+
 async function loadPreviewExecutiveAccessLimitationNotice() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule =
@@ -442,6 +466,161 @@ async function loadPreviewExecutiveAccessLimitationNotice() {
     };
   }).buildPreviewExecutiveAccessLimitationNotice;
 }
+
+function makeReviewPacket(overrides: Record<string, unknown>) {
+  return {
+    affectedPageCount: 1,
+    confidenceBand: "strong",
+    confidenceInputs: {
+      isFallbackOnly: false,
+      issueCount: 1,
+      signalCount: 1,
+      sourceCount: 1,
+      validationCount: 0
+    },
+    concernContext: {
+      evidenceStrengthFlags: [],
+      negativeEvidenceFlags: [],
+      originTypes: []
+    },
+    evidence: {
+      counts: {},
+      entities: {},
+      flags: [],
+      pageUrls: [],
+      snippets: [],
+      sourceUrls: []
+    },
+    observedValue: null,
+    presentation: {
+      findingName: "Review finding",
+      suggestedFix: "Review retained evidence.",
+      whyThisMatters: "Retained evidence may warrant review."
+    },
+    presentationDecision: {
+      confidenceRationale: "Direct runtime evidence was retained.",
+      downgradeReasons: []
+    },
+    primaryPageUrl: "https://example.com/",
+    severity: "high",
+    sourceRefs: [],
+    summary: "Review finding summary.",
+    surfacingDecision: {
+      appliedRules: [],
+      decisionReasons: [],
+      decisionState: "confirmed",
+      reportLane: "main"
+    },
+    title: "Review finding",
+    topFindingEligibility: {
+      candidateTopFindingIds: [],
+      demotionReasons: [],
+      eligibility: "projected",
+      matchedCriteria: [],
+      missingCorroborators: [],
+      suppressionReason: null
+    },
+    unifiedFindingId: "review_finding",
+    ...overrides
+  };
+}
+
+test("review evidence export uses canonical projected status for reject persistence packets and removes stale no-request observed values", async () => {
+  const buildReviewFindingSummaryJson = await loadBuildReviewFindingSummaryJson();
+  const summary = buildReviewFindingSummaryJson(makeReviewPacket({
+    evidence: {
+      counts: {},
+      entities: {
+        postRejectNonEssentialRequests: [
+          JSON.stringify({
+            category: "analytics",
+            ms_after_reject: 842,
+            ts_ms: 1842,
+            url: "https://analytics.example/collect",
+            vendor: "Example Analytics"
+          })
+        ],
+        promotionDecision: [
+          JSON.stringify({
+            promoted: true,
+            reason: "Reject click, post-reject timing, vendor classification, and retained request URL satisfied promotion requirements."
+          })
+        ],
+        suppressionChecks: [
+          JSON.stringify({
+            non_essential_vendor_after_reject: true,
+            post_reject_window_available: true,
+            reject_click_confirmed: true
+          })
+        ]
+      },
+      flags: ["reject_evidence_confirmed"],
+      pageUrls: [],
+      snippets: [],
+      sourceUrls: []
+    },
+    observedValue: "No classified non-essential request fired at least 250ms after reject.",
+    sourceRefs: [{ kind: "signal", key: "consent_reject_reduced_tracking", source: "runtime_artifact_signal" }],
+    summary: "The consent audit completed a reject interaction, but tracker vendors still remained after rejection.",
+    title: "Reject interaction did not reduce tracking",
+    topFindingEligibility: {
+      candidateTopFindingIds: ["reject_tracking_persists_after_reject"],
+      demotionReasons: [],
+      eligibility: "projected",
+      matchedCriteria: ["postRejectTimestampedRuntimeEvidence"],
+      missingCorroborators: [],
+      suppressionReason: null
+    },
+    unifiedFindingId: "reject_did_not_reduce_tracking"
+  }));
+
+  assert.equal((summary.topFindingEligibility as { eligibility: string }).eligibility, "projected");
+  assert.equal((summary.reviewContext as { projection: { canonicalTopFinding: boolean } }).projection.canonicalTopFinding, true);
+  assert.equal(summary.observedValue, "Non-essential tracking requests fired after the reject interaction for Example Analytics.");
+  assert.doesNotMatch(JSON.stringify(summary), /No classified non-essential request fired at least/i);
+  assert.doesNotMatch(JSON.stringify(summary), /Not projected as a canonical top finding/i);
+});
+
+test("review evidence export exposes sensitive-surface packet fields without implying payload exposure", async () => {
+  const buildReviewFindingSummaryJson = await loadBuildReviewFindingSummaryJson();
+  const summary = buildReviewFindingSummaryJson(makeReviewPacket({
+    evidence: {
+      counts: {},
+      entities: {
+        sensitivePayloadViolations: [
+          JSON.stringify({
+            detectedType: "email_detected",
+            sameFlowLinkage: { samePageOrFlow: true, userValueObserved: false },
+            vendorHost: "analytics.example"
+          })
+        ],
+        third_party_domains: ["analytics.example"]
+      },
+      flags: ["commerce.high_sensitivity_data_collection_detected"],
+      pageUrls: [],
+      snippets: ["email input surface"],
+      sourceUrls: []
+    },
+    title: "Sensitive input surfaces detected alongside third-party tracking",
+    topFindingEligibility: {
+      candidateTopFindingIds: ["sensitive_data_collection_with_third_party_tracking_present"],
+      demotionReasons: [],
+      eligibility: "projected",
+      matchedCriteria: ["sensitiveThirdPartyTrackingEvidence"],
+      missingCorroborators: [],
+      suppressionReason: null
+    },
+    unifiedFindingId: "sensitive_data_collection_with_third_party_tracking_present"
+  }));
+  const sensitiveSurface = (summary.evidence as { sensitiveSurface: Record<string, unknown> }).sensitiveSurface;
+
+  assert.equal(sensitiveSurface.samePageOrFlowLinked, true);
+  assert.deepEqual(sensitiveSurface.evidenceBasisType, ["form_field_metadata", "same_page_runtime_link"]);
+  assert.deepEqual(sensitiveSurface.fieldTypes, ["email_detected"]);
+  assert.deepEqual(sensitiveSurface.thirdPartyDomains, ["analytics.example"]);
+  assert.equal(sensitiveSurface.rawValuesRetained, false);
+  assert.equal(sensitiveSurface.payloadExposureObserved, false);
+});
 
 test("buildScanReportUnifiedFindings surfaces page-attributed privacy-rights paths as review evidence", async () => {
   const buildScanReportUnifiedFindings = await loadBuildScanReportUnifiedFindings();

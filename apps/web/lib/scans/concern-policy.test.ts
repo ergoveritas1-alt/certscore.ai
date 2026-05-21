@@ -1492,6 +1492,7 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
             evidenceSource: "sensitive_field_session_replay_correlation",
             evidenceStrength: "form_field_signal",
             requestUrl: "https://clarity.ms/collect",
+            sameFlowLinkage: { samePageOrFlow: true },
             vendorHost: "clarity.ms"
           }
         ]
@@ -2104,6 +2105,10 @@ test("reject persistence policy requires a successful reject path and post-rejec
       rejectPathDepthAndAvailability: {
         rejectInteractionSucceeded: true
       },
+      rejectInteractionAttribution: {
+        clickedLabel: "Reject all",
+        finalUrlHostChanged: false
+      },
       suppressionChecks: {
         post_reject_window_available: true
       }
@@ -2135,6 +2140,10 @@ test("reject persistence policy requires a successful reject path and post-rejec
       rejectPathDepthAndAvailability: {
         rejectInteractionSucceeded: true
       },
+      rejectInteractionAttribution: {
+        clickedLabel: "Reject all",
+        finalUrlHostChanged: false
+      },
       suppressionChecks: {
         post_reject_window_available: true
       }
@@ -2160,6 +2169,10 @@ test("reject persistence policy requires a successful reject path and post-rejec
       rejectPathDepthAndAvailability: {
         rejectInteractionSucceeded: true
       },
+      rejectInteractionAttribution: {
+        clickedLabel: "Reject all",
+        finalUrlHostChanged: false
+      },
       suppressionChecks: {
         post_reject_window_available: true
       }
@@ -2167,6 +2180,38 @@ test("reject persistence policy requires a successful reject path and post-rejec
   });
 
   assert.equal(eligibleTagManagerRequest.promotionEligibility, "eligible");
+
+  const eligibleWs01ControlAttribution = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      postRejectNonEssentialRequests: [
+        {
+          category: "analytics",
+          ms_after_reject: 3500,
+          requestUrl: "https://analytics.example/pixel",
+          ts_ms: 5000,
+          vendor: "Example Analytics"
+        }
+      ],
+      rejectPathDepthAndAvailability: {
+        rejectInteractionSucceeded: true
+      },
+      rejectInteractionAttribution: {
+        consentSurfaceDetected: true,
+        controlRole: "reject",
+        controlSelector: "button#onetrust-reject-all-handler",
+        controlSource: "cmp_button",
+        controlText: "Reject all",
+        finalUrlHostChanged: false
+      },
+      suppressionChecks: {
+        post_reject_window_available: true
+      }
+    }
+  });
+
+  assert.equal(eligibleWs01ControlAttribution.promotionEligibility, "eligible");
 
   const failedReject = deriveConcernPolicy({
     concern,

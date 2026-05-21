@@ -88,6 +88,47 @@ function makePacket(
   } satisfies UnifiedFindingDisplayPacket;
 }
 
+test("access-limited coverage packet does not project into canonical top findings", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("access_limited_no_reliable_findings", {
+      presentationDecision: {
+        confidenceRationale: "Access was blocked before reliable public-page evidence was retained.",
+        downgradeReasons: [],
+        rationale: "coverage status only",
+        status: "surface",
+        verificationLabel: "Limited",
+        verificationState: "blocked"
+      },
+      severity: "medium",
+      sourceRefs: [{ kind: "signal", key: "access_limited_no_reliable_findings", source: "runtime_artifact_signal" }],
+      surfacingDecision: {
+        decisionState: "confirmed",
+        policyVersion: "test",
+        reportLane: "confidence_and_coverage",
+        reportable: true,
+        supports: [],
+        unifiedFindingId: "access_limited_no_reliable_findings",
+        usedFamilyDefault: true,
+        usedFindingOverride: false,
+        appliedRules: ["family.coverage_gap.default"],
+        decisionReasons: ["coverage status card only"],
+        family: "coverage_gap",
+        surfaceTier: "section"
+      }
+    })
+  ]);
+
+  assert.equal(
+    projection.findings.some((finding) => finding.id === "access_limited_no_reliable_findings"),
+    false
+  );
+  assert.equal(
+    projection.topFindings.some((finding) => finding.id === "access_limited_no_reliable_findings"),
+    false
+  );
+  assert.deepEqual(projection.trace.projectedFindingIds, []);
+});
+
 function makePolicyRuntimeConflictPacket(
   overrides: Partial<UnifiedFindingDisplayPacket> = {},
   detailOverrides: Record<string, unknown> = {},
@@ -592,6 +633,15 @@ test("keeps official executive findings in top findings while preserving consent
       evidence: {
         counts: {},
         entities: {
+          consentUiPathEvidence: [
+            JSON.stringify({
+              acceptClickDepth: 1,
+              availability: "hidden",
+              preferencesRequiredBeforeReject: true,
+              rejectAvailableOnFirstLayer: false,
+              rejectClickDepth: 2
+            })
+          ],
           rejectDepthClass: ["absent"]
         },
         fetchQuality: null,
@@ -609,14 +659,68 @@ test("keeps official executive findings in top findings while preserving consent
     }),
     makePacket("accept_more_prominent_than_reject", {
       confidenceBand: "high",
+      evidence: {
+        counts: {},
+        entities: {
+          consentUiPathEvidence: [
+            JSON.stringify({
+              acceptClickDepth: 1,
+              choiceAsymmetry: "material",
+              rejectClickDepth: 2,
+              visualHierarchyScore: 2
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: []
+      },
       severity: "high"
     }),
     makePacket("accept_only_banner", {
       confidenceBand: "high",
+      evidence: {
+        counts: {},
+        entities: {
+          consentUiPathEvidence: [
+            JSON.stringify({
+              acceptClickDepth: 1,
+              availability: "not_found",
+              rejectAvailableOnFirstLayer: false
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: []
+      },
       severity: "high"
     }),
     makePacket("forced_consent_wall", {
       confidenceBand: "high",
+      evidence: {
+        counts: {},
+        entities: {
+          consentUiPathEvidence: [
+            JSON.stringify({
+              acceptClickDepth: 1,
+              availability: "hidden",
+              preferencesRequiredBeforeReject: true,
+              rejectAvailableOnFirstLayer: false,
+              rejectClickDepth: 2
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: []
+      },
       severity: "high"
     }),
     makePacket("identifier_transmission_detected", {
@@ -672,7 +776,15 @@ test("projects concrete reject-missing dark-pattern evidence into the umbrella e
       details: { family: "consent_tracking", kind: "reject_button_missing" },
       evidence: {
         counts: {},
-        entities: {},
+        entities: {
+          consentUiPathEvidence: [
+            JSON.stringify({
+              acceptClickDepth: 1,
+              availability: "not_found",
+              rejectAvailableOnFirstLayer: false
+            })
+          ]
+        },
         fetchQuality: null,
         flags: ["privacy.dark_pattern_reject_button_missing"],
         pageUrls: ["https://example.com/"],
@@ -787,6 +899,13 @@ test("does not project generic accept-only consent signals into the dark-pattern
         entities: {
           acceptActionLabels: ["accept all"],
           bannerTextSnippet: ["We use cookies to improve your experience. Accept all"],
+          consentUiPathEvidence: [
+            JSON.stringify({
+              acceptClickDepth: 1,
+              availability: "not_found",
+              rejectAvailableOnFirstLayer: false
+            })
+          ],
           rejectActionLabels: []
         },
         fetchQuality: null,
@@ -1706,6 +1825,24 @@ test("keeps runtime-backed session recording in top findings when consent issues
     }),
     makePacket("accept_more_prominent_than_reject", {
       details: { family: "consent_tracking", kind: "accept_more_prominent_than_reject" },
+      evidence: {
+        counts: {},
+        entities: {
+          consentUiPathEvidence: [
+            JSON.stringify({
+              acceptClickDepth: 1,
+              choiceAsymmetry: "material",
+              rejectClickDepth: 2,
+              visualHierarchyScore: 2
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: [],
+        snippets: [],
+        sourceUrls: []
+      },
       summary: "Consent choices appear imbalanced."
     }),
     makePacket("session_replay_observed", {
@@ -2248,7 +2385,7 @@ test("projects blocking overlay context without violation framing", () => {
   const forcedConsent = projection.findings.find((entry) => entry.id === "forced_consent_interaction");
   assert.equal(forcedConsent?.section, "Consent Experience");
   assert.ok(!/violation/i.test(`${forcedConsent?.label} ${forcedConsent?.whyItMatters}`));
-  assert.ok(projection.topFindings.some((entry) => entry.id === "forced_consent_interaction"));
+  assert.equal(projection.topFindings.some((entry) => entry.id === "forced_consent_interaction"), false);
 });
 
 test("projects video content tracking exposure into executive findings", () => {
@@ -2693,7 +2830,7 @@ test("projects CPRA CBA opt-out missing into executive findings and top findings
   assert.equal(finding?.evidenceDetails?.trackingOrSharingContext?.cbaVendorEvidenceObserved, true);
   assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcScanStateSent, false);
   assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcHandlingObserved, "not_determined");
-  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcHandlingBasis, "not_tested_or_not_retained");
+  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcHandlingBasis, "not_tested");
   assert.deepEqual(finding?.evidenceDetails?.policyEvidence, { evaluated: false });
   assert.ok(projection.topFindings.some((candidate) => candidate.id === "cpra_cba_opt_out_missing"));
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
@@ -3243,6 +3380,9 @@ test("projects sensitive data with third-party tracking into executive findings 
           sensitive_source_fields: ["intellimizeClientIp"],
           sensitive_source_locations: ["request_body"],
           third_party_domains: ["log.intellimize.co"],
+          samePageOrFlowLinked: ["true"],
+          payloadExposureObserved: ["false"],
+          rawValuesRetained: ["false"],
           vendors: ["log.intellimize.co"]
         },
         fetchQuality: "thin_content",
@@ -3295,6 +3435,16 @@ test("projects sensitive data with third-party tracking into executive findings 
     "field:intellimizeClientIp",
     "location:request body"
   ]);
+  assert.deepEqual(finding?.evidenceDetails?.sensitiveDataEvidence?.fieldTypes, ["phone"]);
+  assert.deepEqual(finding?.evidenceDetails?.sensitiveDataEvidence?.thirdPartyDomains, ["log.intellimize.co"]);
+  assert.equal(finding?.evidenceDetails?.sensitiveDataEvidence?.samePageOrFlowLinked, true);
+  assert.equal(finding?.evidenceDetails?.sensitiveDataEvidence?.sameFlowBasis, "same_page_or_navigation_flow");
+  assert.equal(finding?.evidenceDetails?.sensitiveDataEvidence?.rawValuesRetained, false);
+  assert.equal(finding?.evidenceDetails?.sensitiveDataEvidence?.payloadExposureObserved, false);
+  assert.equal(
+    finding?.evidenceDetails?.sensitiveDataEvidence?.evidenceBasisType,
+    "form_field_metadata_plus_runtime_request_context"
+  );
   assert.ok(
     projection.topFindings.some(
       (candidate) => candidate.id === "sensitive_data_collection_with_third_party_tracking_present"

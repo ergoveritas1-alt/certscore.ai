@@ -86,11 +86,136 @@ function getNumberFromKeys(record: Record<string, unknown> | null | undefined, k
   return null;
 }
 
+function hasBooleanKey(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  return keys.some((key) => typeof record?.[key] === "boolean");
+}
+
 function includesAny(values: unknown, pattern: RegExp) {
   if (Array.isArray(values)) {
     return values.some((value) => typeof value === "string" && pattern.test(value));
   }
   return typeof values === "string" && pattern.test(values);
+}
+
+function isCredibleRejectLabel(label: string | null) {
+  if (!label) {
+    return false;
+  }
+  if (/stream|subscribe|sign\s*in|log\s*in|continue|accept|agree|allow/i.test(label)) {
+    return false;
+  }
+  if (label.length > 50 && !/cookie|privacy|consent|preference|choice|optional|necessary|essential/i.test(label)) {
+    return false;
+  }
+  return /reject|decline\s+(?:all|optional|non[-\s]?essential|cookies)|deny|refuse|opt\s*out|save\s+settings|confirm\s+choices|manage\s+preferences|necessary only|essential only|only necessary/i.test(label);
+}
+
+function isGenericPreferenceSaveLabel(label: string | null) {
+  return Boolean(label && /^(save\s+settings|save\s+preferences|confirm\s+choices|submit\s+preferences)$/i.test(label.trim()));
+}
+
+function hasRejectPreferenceStateEvidence(...records: Array<Record<string, unknown> | null | undefined>) {
+  return records.some((record) => {
+    if (!record) {
+      return false;
+    }
+    if (
+      [
+        "advertisingDisabled",
+        "advertising_disabled",
+        "analyticsDisabled",
+        "analytics_disabled",
+        "marketingDisabled",
+        "marketing_disabled",
+        "nonEssentialCategoriesDisabled",
+        "non_essential_categories_disabled",
+        "optionalCategoriesDisabled",
+        "optional_categories_disabled",
+        "preferenceStateChanged",
+        "preference_state_changed",
+        "rejectPreferenceStateObserved",
+        "reject_preference_state_observed"
+      ].some((key) => record[key] === true)
+    ) {
+      return true;
+    }
+
+    const rows = [
+      ...asRows(record.categoryStates),
+      ...asRows(record.category_states),
+      ...asRows(record.preferenceCategoryStates),
+      ...asRows(record.preference_category_states),
+      ...asRows(record.preferenceStateEvidence),
+      ...asRows(record.preference_state_evidence)
+    ];
+    return rows.some((row) => {
+      const category = getStringFromKeys(row, ["category", "purpose", "name", "label"]) ?? "";
+      const enabled = getBoolean(row, "enabled");
+      const active = getBoolean(row, "active");
+      const checked = getBoolean(row, "checked");
+      const selected = getBoolean(row, "selected");
+      const state = getStringFromKeys(row, ["state", "value", "choice", "action"]) ?? "";
+      return (
+        /advertising|ads|analytics|marketing|target|sale|sharing|non[-\s]?essential|optional/i.test(category) &&
+        (enabled === false ||
+          active === false ||
+          checked === false ||
+          selected === false ||
+          /off|disabled|rejected|denied|opt(?:ed)?[-\s]?out|essential_only/i.test(state))
+      );
+    });
+  });
+}
+
+function hasCredibleRejectInteraction(details: Record<string, unknown>) {
+  const consentInteraction = asRecord(details.consentInteraction);
+  const rejectInteraction = asRecord(details.rejectInteraction);
+  const attribution = asRecord(details.rejectInteractionAttribution);
+  const source = attribution ?? consentInteraction ?? rejectInteraction;
+  const actionType = getStringFromKeys(source, ["action_type", "actionType", "consentActionType"]);
+  const label = getStringFromKeys(source, ["clicked_label", "clickedLabel", "clickedText", "controlText", "control_text", "text", "visibleText"]);
+  if (getBoolean(source, "finalUrlHostChanged") === true || getBoolean(source, "final_url_host_changed") === true) {
+    return false;
+  }
+  if (label) {
+    return isGenericPreferenceSaveLabel(label)
+      ? hasRejectPreferenceStateEvidence(source, attribution, consentInteraction, rejectInteraction, details)
+      : isCredibleRejectLabel(label);
+  }
+  const controlRole = getStringFromKeys(source, ["controlRole", "control_role"]);
+  const controlSource = getStringFromKeys(source, ["controlSource", "control_source"]);
+  const consentSurfaceDetected =
+    getBoolean(source, "consentSurfaceDetected") === true ||
+    getBoolean(source, "consent_surface_detected") === true ||
+    /cmp_|consent|cookie|privacy/i.test(controlSource ?? "");
+  if (consentSurfaceDetected && /^(reject|toggle|save)$/i.test(controlRole ?? "")) {
+    return true;
+  }
+  return /^(reject_all|opt_out|essential_only|save_preferences)$/i.test(actionType ?? "");
+}
+
+function hasConsentChoicePathEvidence(runtimePath: Record<string, unknown> | null) {
+  const acceptDepth = getNumberFromKeys(runtimePath, ["observedAcceptPathDepth", "acceptClickDepth", "accept_click_depth"]);
+  const rejectDepth = getNumberFromKeys(runtimePath, ["observedRejectPathDepth", "rejectClickDepth", "reject_click_depth"]);
+  const preferenceLayers = getNumberFromKeys(runtimePath, ["observedPreferenceLayerCount", "preferenceLayerCount", "preference_layer_count"]);
+  const visualHierarchyScore = getNumberFromKeys(runtimePath, ["visualHierarchyScore", "visual_hierarchy_score"]);
+  const availability = getStringFromKeys(runtimePath, ["availability", "rejectAvailability", "reject_availability", "status", "outcome"]);
+  const hasRejectAvailabilityFact = hasBooleanKey(runtimePath, [
+    "rejectAvailableOnFirstLayer",
+    "reject_available_on_first_layer",
+    "preferencesRequiredBeforeReject",
+    "preferences_required_before_reject"
+  ]);
+  const hasChoiceAsymmetry = getStringFromKeys(runtimePath, ["choiceAsymmetry", "choice_asymmetry"]) !== null;
+  return (
+    acceptDepth !== null ||
+    rejectDepth !== null ||
+    preferenceLayers !== null ||
+    (visualHierarchyScore !== null && visualHierarchyScore > 0) ||
+    hasRejectAvailabilityFact ||
+    hasChoiceAsymmetry ||
+    Boolean(availability && ["available", "hidden", "not_found", "unavailable", "failed", "untested"].includes(availability))
+  );
 }
 
 function hasSameSurfaceReplayMaskingEvidence(inputSurfaceEvidence: unknown) {
@@ -118,6 +243,33 @@ function hasSamePageOrFlowReplayLinkage(inputSurfaceEvidence: unknown) {
       getBoolean(row, "same_flow") === true ||
       getBoolean(linkage, "samePageOrFlow") === true ||
       getBoolean(linkage, "same_page_or_flow") === true
+    );
+  });
+}
+
+function hasExplicitReplayMaskingState(details: Record<string, unknown>) {
+  const sessionReplayEvidence = asRecord(details.sessionReplayEvidence);
+  const replaySummary = asRecord(sessionReplayEvidence?.runtimeSummary);
+  if (typeof replaySummary?.maskingOrExclusionObserved === "boolean" || replaySummary?.maskingOrExclusionObserved === null) {
+    return true;
+  }
+  if (typeof replaySummary?.masking_or_exclusion_observed === "boolean" || replaySummary?.masking_or_exclusion_observed === null) {
+    return true;
+  }
+
+  const inputSurface = asRecord(details.inputSurfaceEvidence);
+  const rows = [
+    ...asRows(inputSurface?.sensitivePayloadViolations),
+    ...asRows(inputSurface?.sensitiveSessionReplayCooccurrenceEvidence)
+  ];
+  return rows.some((row) => {
+    const linkage = asRecord(row.sameFlowLinkage) ?? asRecord(row.same_flow_linkage);
+    const masking = asRecord(linkage?.replayMaskingEvidence) ?? asRecord(linkage?.replay_masking_evidence);
+    return (
+      typeof row.maskingOrExclusionObserved === "boolean" ||
+      typeof row.masking_or_exclusion_observed === "boolean" ||
+      typeof masking?.maskingOrExclusionObserved === "boolean" ||
+      typeof masking?.masking_or_exclusion_observed === "boolean"
     );
   });
 }
@@ -324,6 +476,7 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         const maskingOrExclusionObserved = getBoolean(replaySummary, "maskingOrExclusionObserved");
         const sameSurfaceMaskingOrExclusionObserved = hasSameSurfaceReplayMaskingEvidence(details.inputSurfaceEvidence);
         const samePageOrFlowReplayLinkage = hasSamePageOrFlowReplayLinkage(details.inputSurfaceEvidence);
+        const explicitMaskingState = hasExplicitReplayMaskingState(details);
         const sameScopeSensitiveEvidence =
           hasMeaningfulValue(details.inputSurfaceEvidence) ||
           hasMeaningfulValue(details.sensitiveDataEvidence) ||
@@ -335,6 +488,11 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
           pushUnique(matchedCriteria, "same_page_or_same_flow_replay_linkage");
         } else {
           pushUnique(missingCorroborators, "same_page_or_same_flow_replay_linkage");
+          pushUnique(demotionReasons, "missing_same_page_or_same_flow_replay_linkage");
+        }
+        if (!explicitMaskingState) {
+          pushUnique(missingCorroborators, "session_replay_masking_state");
+          pushUnique(demotionReasons, "missing_session_replay_masking_state");
         }
         if (sameSurfaceMaskingOrExclusionObserved) {
           pushUnique(matchedCriteria, "same_surface_replay_masking_or_exclusion_observed");
@@ -344,6 +502,7 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
           collectionEndpointObserved === true &&
           sameScopeSensitiveEvidence &&
           samePageOrFlowReplayLinkage &&
+          explicitMaskingState &&
           maskingOrExclusionObserved !== true &&
           !sameSurfaceMaskingOrExclusionObserved
         ) {
@@ -354,6 +513,8 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
       if (finding.id === "session_replay_present_with_sensitive_surfaces_observed") {
         const replaySummary = asRecord(details.sessionReplayEvidence?.runtimeSummary);
         const collectionEndpointObserved = getBoolean(replaySummary, "collectionEndpointObserved");
+        const samePageOrFlowReplayLinkage = hasSamePageOrFlowReplayLinkage(details.inputSurfaceEvidence);
+        const explicitMaskingState = hasExplicitReplayMaskingState(details);
         const scanLevelSensitiveEvidence =
           hasMeaningfulValue(details.inputSurfaceEvidence) ||
           hasMeaningfulValue(details.sensitiveDataEvidence) ||
@@ -361,10 +522,19 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         if (scanLevelSensitiveEvidence) {
           pushUnique(matchedCriteria, "scan_level_sensitive_surface");
         }
-        if (collectionEndpointObserved === true && scanLevelSensitiveEvidence) {
-          forceEligibility = "top_candidate";
-          pushUnique(matchedCriteria, "session_replay_collection_with_scan_level_sensitive_surface");
+        if (samePageOrFlowReplayLinkage) {
+          pushUnique(matchedCriteria, "same_page_or_same_flow_replay_linkage");
+        } else {
           pushUnique(missingCorroborators, "same_page_or_same_flow_replay_linkage");
+          pushUnique(demotionReasons, "missing_same_page_or_same_flow_replay_linkage");
+        }
+        if (!explicitMaskingState) {
+          pushUnique(missingCorroborators, "session_replay_masking_state");
+          pushUnique(demotionReasons, "missing_session_replay_masking_state");
+        }
+        if (collectionEndpointObserved === true && scanLevelSensitiveEvidence && samePageOrFlowReplayLinkage && explicitMaskingState) {
+          forceEligibility = "top_candidate";
+          pushUnique(matchedCriteria, "session_replay_collection_with_sensitive_surface_linkage");
         }
       }
       break;
@@ -407,13 +577,22 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         !hasMeaningfulValue(details.accessibilityEvidence?.focusManagementEvidence)
       ) {
         missingCorroborators.push("keyboard_traversal_trace");
+        demotionReasons.push("missing_keyboard_traversal_trace");
       }
       if (finding.id === "keyboard_navigation_accessibility_issue" || finding.id === "focus_management_issue") {
         const focusRows = asRows(details.accessibilityEvidence?.focusManagementEvidence);
-        const hasTraversal = focusRows.some((row) => hasMeaningfulValue(row.keyboardTraversalEvidence));
+        const hasTraversal = focusRows.some((row) =>
+          hasMeaningfulValue(row.keyboardTraversalEvidence) ||
+          hasMeaningfulValue(row.keyboardTraversalTrace) ||
+          hasMeaningfulValue(row.focusPathEvidence) ||
+          hasMeaningfulValue(row.focusTrace)
+        );
         const hasBehaviorReproduced = focusRows.some((row) => getString(row, "evidenceStrength") === "behavior_reproduced");
         const hasFocusEscape = focusRows.some((row) => {
-          const traversal = asRecord(row.keyboardTraversalEvidence);
+          const traversal =
+            asRecord(row.keyboardTraversalEvidence) ??
+            asRecord(row.keyboardTraversalTrace) ??
+            asRecord(row.focusPathEvidence);
           return getBoolean(traversal, "backgroundFocusEscaped") === true;
         });
         if (hasTraversal) {
@@ -428,6 +607,16 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         if (finding.id === "focus_management_issue" && hasBehaviorReproduced && hasTraversal) {
           forceEligibility = "top_candidate";
           pushUnique(matchedCriteria, "behavior_reproduced_focus_management_evidence");
+        } else if (finding.id === "focus_management_issue") {
+          forceEligibility = "surface_only";
+          if (!hasTraversal) {
+            pushUnique(missingCorroborators, "keyboard_traversal_trace");
+            pushUnique(demotionReasons, "missing_keyboard_traversal_trace");
+          }
+          if (!hasBehaviorReproduced) {
+            pushUnique(missingCorroborators, "behavior_reproduced_focus_management_evidence");
+            pushUnique(demotionReasons, "missing_behavior_reproduced_focus_management_evidence");
+          }
         }
       }
       break;
@@ -441,10 +630,16 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
       const rejectDepth = getNumber(runtimePath, "observedRejectPathDepth") ?? getNumber(runtimePath, "rejectClickDepth");
       const preferenceLayers = getNumber(runtimePath, "observedPreferenceLayerCount");
       const visualHierarchyScore = getNumber(runtimePath, "visualHierarchyScore");
+      const hasChoicePathEvidence = hasConsentChoicePathEvidence(runtimePath);
 
       if (overlayClassifier && /paywall|bot_challenge|age_gate|login_wall/.test(overlayClassifier)) {
         forceEligibility = "suppress";
         demotionReasons.push(`unrelated_overlay_${overlayClassifier}`);
+      }
+      if (!hasChoicePathEvidence && forceEligibility !== "suppress") {
+        forceEligibility = "audit_only";
+        pushUnique(missingCorroborators, "consent_path_depth_or_choice_structure_evidence");
+        pushUnique(demotionReasons, "overlay_only_without_consent_path_evidence");
       }
       if (acceptDepth !== null || rejectDepth !== null || preferenceLayers !== null) {
         pushUnique(matchedCriteria, "consent_path_depth_observed");
@@ -535,10 +730,14 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
       if (!hasMeaningfulValue(details.consentInteraction)) {
         missingCorroborators.push("reject_interaction_click");
       }
+      if (!hasCredibleRejectInteraction(details)) {
+        missingCorroborators.push("credible_reject_control_attribution");
+        demotionReasons.push("missing_credible_reject_control_attribution");
+      }
       if (!hasPromotionGradePostRejectRequest(details)) {
         missingCorroborators.push("post_reject_non_essential_artifact");
       }
-      if (hasMeaningfulValue(details.consentInteraction) && hasPromotionGradePostRejectRequest(details)) {
+      if (hasMeaningfulValue(details.consentInteraction) && hasCredibleRejectInteraction(details) && hasPromotionGradePostRejectRequest(details)) {
         forceEligibility = "top_candidate";
         pushUnique(matchedCriteria, "reject_click_plus_post_reject_non_essential_request");
       }

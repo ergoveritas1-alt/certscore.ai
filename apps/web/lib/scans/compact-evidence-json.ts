@@ -259,6 +259,15 @@ function compactEvidenceJsonForDisplayInternal(value: unknown, context: CompactE
         : key === "relatedRuntimeRequests"
           ? withEvidenceRole(entry, "related_context_only")
           : entry;
+    if (key === "demotionReasons" && Array.isArray(roleAnnotatedEntry)) {
+      const compactedReasons = roleAnnotatedEntry
+        .filter((reason): reason is string => typeof reason === "string" && reason.trim().length > 0)
+        .map((reason) => compactLongString(sanitizePublicReportEvidenceText(reason)));
+      if (compactedReasons.length > 0) {
+        entries.push([key, compactedReasons]);
+      }
+      continue;
+    }
     const compacted = compactEvidenceJsonForDisplayInternal(roleAnnotatedEntry, context);
     if (compacted !== undefined) {
       entries.push([key, compacted]);

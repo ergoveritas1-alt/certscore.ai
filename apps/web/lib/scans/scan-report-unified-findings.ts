@@ -864,6 +864,65 @@ function getRuntimeBoolean(input: Record<string, unknown> | null, keys: string[]
   return null;
 }
 
+function getRuntimeString(input: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    const value = input?.[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function isCredibleRejectControlLabel(label: string | null) {
+  if (!label) {
+    return false;
+  }
+  if (/stream|subscribe|sign\s*in|log\s*in|continue|accept|agree|allow/i.test(label)) {
+    return false;
+  }
+  if (label.length > 50 && !/cookie|privacy|consent|preference|choice|optional|necessary|essential/i.test(label)) {
+    return false;
+  }
+  return /reject|decline\s+(?:all|optional|non[-\s]?essential|cookies)|deny|refuse|opt\s*out|save\s+settings|confirm\s+choices|manage\s+preferences|necessary only|essential only|only necessary/i.test(label);
+}
+
+function hasCredibleRejectInteractionAttribution(
+  attribution: Record<string, unknown> | null,
+  consentInteraction: Record<string, unknown> | null = null
+) {
+  const source = attribution ?? consentInteraction;
+  if (!source) {
+    return false;
+  }
+  if (getRuntimeBoolean(source, ["finalUrlHostChanged", "final_url_host_changed"]) === true) {
+    return false;
+  }
+  const label = getRuntimeString(source, [
+    "clickedLabel",
+    "clicked_label",
+    "clickedText",
+    "clicked_text",
+    "controlText",
+    "control_text",
+    "text",
+    "visibleText"
+  ]);
+  if (label) {
+    return isCredibleRejectControlLabel(label);
+  }
+  const controlRole = getRuntimeString(source, ["controlRole", "control_role"]);
+  const controlSource = getRuntimeString(source, ["controlSource", "control_source"]);
+  const consentSurfaceDetected =
+    getRuntimeBoolean(source, ["consentSurfaceDetected", "consent_surface_detected"]) === true ||
+    /cmp_|consent|cookie|privacy/i.test(controlSource ?? "");
+  if (consentSurfaceDetected && /^(reject|toggle|save)$/i.test(controlRole ?? "")) {
+    return true;
+  }
+  const actionType = getRuntimeString(source, ["actionType", "action_type", "consentActionType"]);
+  return /^(reject_all|opt_out|essential_only|save_preferences)$/i.test(actionType ?? "");
+}
+
 function buildRuntimeDerivedReviewFindingCandidates(input: {
   runtimeArtifacts: Record<string, unknown> | null;
 }): CanonicalReviewFinding[] {
@@ -1059,6 +1118,12 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       "consentRejectInteractionAttribution",
       "consent_reject_interaction_attribution"
     ]);
+    const consentInteraction = getRuntimeObject(input.runtimeArtifacts, [
+      "consentRejectInteractionTrace",
+      "consent_reject_interaction_trace",
+      "consentInteraction",
+      "consent_interaction"
+    ]);
     const promotionGradeRows = postRejectRows.filter((row) => {
       const category = typeof row.category === "string" ? row.category : "";
       const url = typeof row.url === "string" ? row.url : typeof row.requestUrl === "string" ? row.requestUrl : "";
@@ -1101,7 +1166,9 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       );
     const navigationOrReloadAmbiguous =
       suppressionChecks?.navigation_or_reload_ambiguous === true && !attributionClearsNavigationAmbiguity;
+    const credibleRejectAttribution = hasCredibleRejectInteractionAttribution(rejectInteractionAttribution, consentInteraction);
     const confirmed = promotionGradeRows.length > 0 &&
+      credibleRejectAttribution &&
       suppressionChecks?.cmp_initialization_only !== true &&
       !navigationOrReloadAmbiguous &&
       suppressionChecks?.baseline_contradiction_detected !== true;
@@ -1122,13 +1189,14 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         ]),
         consentPostRejectTrackerEvidenceUrls: postRejectTrackerEvidenceUrls,
         consentRejectInteractionSucceeded: true,
+        consentInteraction,
         persisted_tracker_vendors: [...new Set([...persistedTrackerVendors, ...postRejectTrackerVendors])],
         post_reject_tracker_vendors: postRejectTrackerVendors,
         promotionDecision: {
           promoted: confirmed,
           reason: confirmed
             ? "Reject click, post-reject timing, vendor classification, and retained request URL satisfied promotion requirements."
-            : "Retained post-reject request rows did not satisfy promotion-grade timing, attribution, or classification checks."
+            : "Retained post-reject request rows did not satisfy promotion-grade timing, consent-control attribution, or classification checks."
         },
         reject_did_not_reduce_tracking: true,
         rejectEvidenceConfidence: confirmed ? "confirmed" : "review",

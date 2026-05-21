@@ -35,6 +35,34 @@ test("compacts long evidence arrays into a sampled summary", () => {
   ]);
 });
 
+test("keeps report-facing demotion reasons complete", () => {
+  const compacted = compactEvidenceJsonForDisplay({
+    topFindingEligibility: {
+      demotionReasons: [
+        "no_consent_surface_observed",
+        "no_consent_actionable_choice_observed",
+        "missing_concrete_preconsent_artifact",
+        "missing_preconsent_sequence_evidence",
+        "Concrete request or vendor artifacts were not retained for the pre-consent tracking claim.",
+        "The retained evidence does not yet fully support the request sequence before a clear consent choice."
+      ]
+    }
+  }) as {
+    topFindingEligibility: {
+      demotionReasons: string[];
+    };
+  };
+
+  assert.deepEqual(compacted.topFindingEligibility.demotionReasons, [
+    "no_consent_surface_observed",
+    "no_consent_actionable_choice_observed",
+    "missing_concrete_preconsent_artifact",
+    "missing_preconsent_sequence_evidence",
+    "Concrete request or vendor artifacts were not retained for the pre-consent tracking claim.",
+    "The retained evidence does not yet fully support the request sequence before a clear consent choice."
+  ]);
+});
+
 test("compacts long strings for readability", () => {
   const compacted = compactEvidenceJsonForDisplay({
     runtimeEvidence: ["x".repeat(260)]

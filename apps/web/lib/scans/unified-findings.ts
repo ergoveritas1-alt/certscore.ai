@@ -812,6 +812,7 @@ const UNIFIED_FINDING_TOP_FINDING_IDS: Record<string, string[]> = {
   sensitive_data_collection_with_third_party_tracking_present: [
     "sensitive_data_collection_with_third_party_tracking_present"
   ],
+  keyboard_navigation_accessibility_issue: ["keyboard_navigation_accessibility_issue"],
   text_alternative_accessibility_issue: ["text_alternative_accessibility_issue"],
   semantic_labeling_accessibility_issue: ["semantic_labeling_accessibility_issue"],
   visual_contrast_accessibility_issue: ["visual_contrast_accessibility_issue"]

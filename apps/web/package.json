@@ -34,6 +34,7 @@
     "report:production-findings": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/report-production-finding-frequency.ts",
     "status:tranco-session": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/tranco-calibration-status.ts",
     "watch:tranco-status": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/watch-tranco-status.ts",
+    "validate:tranco-review-export": "node --enable-source-maps --import tsx ./scripts/validate-tranco-review-export.ts",
     "eval:build-finding-corpus": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/eval/build-finding-corpus.ts",
     "eval:inspect-coverage-edge-corpus": "node ./scripts/eval/inspect-coverage-edge-corpus.mjs",
     "dev": "NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=2048} next dev --turbo --port 3000",

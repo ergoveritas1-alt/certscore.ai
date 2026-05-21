@@ -2020,8 +2020,27 @@ export function hasConcreteSensitiveSessionReplayArtifact(rawEvidence: Record<st
   });
 }
 
+function getSamePageOrFlowReplayLinkage(row: Record<string, unknown>) {
+  const sameFlowLinkage = getObjectValue(row, ["sameFlowLinkage", "same_flow_linkage"]);
+  return (
+    row.samePage === true ||
+    row.same_page === true ||
+    row.sameFlow === true ||
+    row.same_flow === true ||
+    sameFlowLinkage?.samePageOrFlow === true ||
+    sameFlowLinkage?.same_page_or_flow === true
+  );
+}
+
+function hasSensitiveReplaySamePageOrFlowLinkage(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getSensitivePayloadRows(rawEvidence).some((row) =>
+    hasConcreteSensitiveSessionReplayArtifact({ sensitivePayloadViolations: [row] }) &&
+    getSamePageOrFlowReplayLinkage(row)
+  );
+}
+
 export function hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
-  return hasConcreteSensitiveSessionReplayArtifact(rawEvidence);
+  return hasSensitiveReplaySamePageOrFlowLinkage(rawEvidence);
 }
 
 export function hasScanLevelSensitiveSessionReplayCoPresenceArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -2044,7 +2063,7 @@ export function hasScanLevelSensitiveSessionReplayCoPresenceArtifact(rawEvidence
       "sensitive_field_labels"
     ]).length > 0;
 
-  return hasSensitiveSurface && hasRetainedSessionReplayRuntimeArtifact(rawEvidence);
+  return hasSensitiveSurface && hasRetainedSessionReplayRuntimeArtifact(rawEvidence) && hasSensitiveReplaySamePageOrFlowLinkage(rawEvidence);
 }
 
 export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
