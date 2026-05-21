@@ -44,7 +44,9 @@ OpenAPI / GPT Action beta quick start:
    wait: 60
 3. Use detail=tiny for quick checks.
 4. Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans.
-5. If API fetch fails before headers/body/status are visible, do not infer CertScore returned an error. Read /api-pulse/agent and /api-pulse-agent-guide.txt.
+5. If API fetch fails before headers/body/status are visible, call checkPulseConnectivity once.
+6. If checkPulseConnectivity succeeds, treat the scan failure as a transient client/action transport error and retry or use the markdown endpoint.
+7. If checkPulseConnectivity also fails without CertScore diagnostic headers, do not infer CertScore returned an error. Report it as a client/network fetch limitation and read /api-pulse/agent and /api-pulse-agent-guide.txt.
 
 GPT Action beta endpoint:
 https://certscore.ai/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60

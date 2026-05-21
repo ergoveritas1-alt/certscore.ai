@@ -7,6 +7,7 @@ import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import {
   PULSE_COVERAGE_LIMITATION_COPY,
   PULSE_FEEDBACK_EMAIL,
+  PULSE_PURPOSE_STATEMENT,
   PULSE_SHORT_DISCLAIMER,
   PULSE_STANDARD_DISCLAIMER
 } from "../../lib/pulse/constants";
@@ -444,6 +445,7 @@ export default function ApiPulsePage() {
               Retrieve a quick, evidence-backed CertScore summary for a public URL. Pulse API beta is designed for AI agents, developer tools,
               CLIs, and humans that need a compact scan summary with links to the durable full report.
             </p>
+            <p className="text-sm leading-6 text-slate-600">{PULSE_PURPOSE_STATEMENT}</p>
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
               {PULSE_STANDARD_DISCLAIMER}
             </p>
@@ -507,7 +509,9 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
    wait: 60
 3. Use detail=tiny for quick checks.
 4. Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans.
-5. If API fetch fails before headers/body/status are visible, do not infer CertScore returned an error. Read /api-pulse/agent and /api-pulse-agent-guide.txt.`}</CodeBlock>
+5. If API fetch fails before headers/body/status are visible, call checkPulseConnectivity once.
+6. If checkPulseConnectivity succeeds, treat the scan failure as a transient client/action transport error and retry or use the markdown endpoint.
+7. If checkPulseConnectivity also fails without CertScore diagnostic headers, do not infer CertScore returned an error. Report it as a client/network fetch limitation and read /api-pulse/agent and /api-pulse-agent-guide.txt.`}</CodeBlock>
             <p>
               Agent fetch limitations: Some agent environments may fail before receiving an HTTP response because of DNS, sandbox,
               TLS, proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or

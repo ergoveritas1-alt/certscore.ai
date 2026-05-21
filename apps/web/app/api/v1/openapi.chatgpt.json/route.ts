@@ -315,6 +315,47 @@ const chatGptOpenApiDocument = {
           }
         }
       }
+    },
+    "/api/v1/pulse-self-test": {
+      get: {
+        operationId: "checkPulseConnectivity",
+        summary: "Check CertScore Pulse action connectivity.",
+        description:
+          "Dependency-free connectivity canary. Use once when a scan action fails before HTTP status, body, or x-certscore diagnostic headers are visible; success indicates a transient client/action transport error.",
+        responses: {
+          "200": {
+            description: "Pulse support route is reachable.",
+            headers: diagnosticHeaders,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/PulseSelfTest" },
+                examples: {
+                  ok: {
+                    value: {
+                      ok: true,
+                      type: "certscore_pulse_self_test",
+                      service: "certscore_pulse",
+                      version: "v1",
+                      betaVersion: "0.5.1",
+                      routes: {
+                        pulseMarkdown: "/api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard",
+                        chatgptOpenapi: "/api/v1/openapi.chatgpt.json"
+                      },
+                      capabilities: pulseCapabilities,
+                      disclaimer: standardDisclaimer
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            description: "Unexpected public-safe canary error.",
+            headers: diagnosticHeaders,
+            content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
+          }
+        }
+      }
     }
   },
   components: {
@@ -386,6 +427,22 @@ const chatGptOpenApiDocument = {
           },
           feedback: { $ref: "#/components/schemas/PulseFeedback" },
           agentInterpretation: { $ref: "#/components/schemas/PulseAgentInterpretation" },
+          disclaimer: { type: "string" }
+        }
+      },
+      PulseSelfTest: {
+        type: "object",
+        additionalProperties: true,
+        required: ["ok", "type", "service", "version", "betaVersion", "routes", "capabilities", "disclaimer"],
+        properties: {
+          ok: { type: "boolean" },
+          type: { type: "string", const: "certscore_pulse_self_test" },
+          service: { type: "string", const: "certscore_pulse" },
+          version: { type: "string" },
+          betaVersion: { type: "string" },
+          timestamp: { type: "string" },
+          routes: { type: "object", additionalProperties: { type: "string" } },
+          capabilities: { $ref: "#/components/schemas/PulseCapabilities" },
           disclaimer: { type: "string" }
         }
       },
