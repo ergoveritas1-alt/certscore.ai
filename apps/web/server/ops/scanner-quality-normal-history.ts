@@ -266,15 +266,20 @@ export function buildScannerQualityTrendSummary(input: {
 }
 
 export function buildScannerQualityTrendSeries(input: { windows: ScannerQualityWindow[] }) {
+  let cumulativeCompletedCount = 0;
   return [...input.windows]
     .sort((a, b) => (a.windowEndCompletedAt ?? a.createdAt ?? "").localeCompare(b.windowEndCompletedAt ?? b.createdAt ?? ""))
-    .map((window) => ({
-      completedAt: window.windowEndCompletedAt ?? window.createdAt ?? null,
-      completedCount: window.completedCount,
-      findingsPerCompleted: window.findingsPerCompleted,
-      pagesScanned: window.pagesScanned,
-      zeroFindingRate: window.zeroFindingRate
-    }));
+    .map((window) => {
+      cumulativeCompletedCount += window.completedCount;
+      return {
+        completedAt: window.windowEndCompletedAt ?? window.createdAt ?? null,
+        completedCount: window.completedCount,
+        cumulativeCompletedCount,
+        findingsPerCompleted: window.findingsPerCompleted,
+        pagesScanned: window.pagesScanned,
+        zeroFindingRate: window.zeroFindingRate
+      };
+    });
 }
 
 export function buildAccumulatedScannerQualityWindow(input: {

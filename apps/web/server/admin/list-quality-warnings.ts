@@ -32,6 +32,7 @@ export type AdminScannerQualityTrend = {
   latestWindowAt: string | null;
   points: AdminScannerQualityTrendPoint[];
   series: Array<{
+    cumulativeCompletedCount: number;
     completedAt: string | null;
     completedCount: number;
     findingsPerCompleted: number;
