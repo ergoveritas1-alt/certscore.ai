@@ -21,7 +21,11 @@ export type ScannerQualityWindow = {
   rejectedCount: number;
   scannerSlotCounts: Record<string, number>;
   scannerTaskCounts: Record<string, number>;
+  sourceType?: "load_test" | "calibration" | "normal_scan";
+  sourceWindowId?: string | null;
   startRow: number | null;
+  windowEndCompletedAt?: string | null;
+  windowStartCompletedAt?: string | null;
   zeroFindingCount: number;
   zeroFindingRate: number;
 };
@@ -30,8 +34,12 @@ export type PersistQualityRunInput = {
   batchId: string;
   entries: LoadTestSummaryEntry[];
   rejectedCount?: number;
+  sourceType?: ScannerQualityWindow["sourceType"];
+  sourceWindowId?: string | null;
   startRow?: number | null;
   endRow?: number | null;
+  windowEndCompletedAt?: string | null;
+  windowStartCompletedAt?: string | null;
 };
 
 export type WarningNotificationDecision = {
@@ -110,7 +118,11 @@ export function buildScannerQualityWindows(input: PersistQualityRunInput): Scann
       rejectedCount: input.rejectedCount ?? 0,
       scannerSlotCounts,
       scannerTaskCounts,
+      sourceType: input.sourceType ?? "load_test",
+      sourceWindowId: input.sourceWindowId ?? null,
       startRow: input.startRow ?? null,
+      windowEndCompletedAt: input.windowEndCompletedAt ?? null,
+      windowStartCompletedAt: input.windowStartCompletedAt ?? null,
       zeroFindingCount,
       zeroFindingRate: zeroFindingCount / Math.max(1, completedCount)
     };
@@ -181,7 +193,11 @@ type ScannerQualityWindowRow = {
   rejected_count: number;
   scanner_slot_counts: unknown;
   scanner_task_counts: unknown;
+  source_type?: string | null;
+  source_window_id?: string | null;
   start_row: number | null;
+  window_end_completed_at?: string | null;
+  window_start_completed_at?: string | null;
   zero_finding_count: number;
   zero_finding_rate: string | number | null;
 };
@@ -202,7 +218,11 @@ function rowToWindow(row: ScannerQualityWindowRow): ScannerQualityWindow {
     rejectedCount: row.rejected_count,
     scannerSlotCounts: parseRecord(row.scanner_slot_counts),
     scannerTaskCounts: parseRecord(row.scanner_task_counts),
+    sourceType: row.source_type === "calibration" || row.source_type === "normal_scan" ? row.source_type : "load_test",
+    sourceWindowId: row.source_window_id ?? null,
     startRow: row.start_row,
+    windowEndCompletedAt: row.window_end_completed_at ?? null,
+    windowStartCompletedAt: row.window_start_completed_at ?? null,
     zeroFindingCount: row.zero_finding_count,
     zeroFindingRate: Number(row.zero_finding_rate ?? 0)
   };
@@ -218,9 +238,9 @@ export async function persistScannerQualityWindows(input: PersistQualityRunInput
           completed_count, failed_count, rejected_count, findings_per_completed,
           zero_finding_count, zero_finding_rate, pages_scanned,
           access_posture_counts, label_counts, scanner_task_counts, scanner_slot_counts,
-          metrics_json
+          metrics_json, source_type, source_window_id, window_start_completed_at, window_end_completed_at
         )
-        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17::jsonb)
+        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17::jsonb,$18,$19,$20::timestamptz,$21::timestamptz)
         on conflict (batch_id, egress_id) do update set
           start_row = excluded.start_row,
           end_row = excluded.end_row,
@@ -236,7 +256,11 @@ export async function persistScannerQualityWindows(input: PersistQualityRunInput
           label_counts = excluded.label_counts,
           scanner_task_counts = excluded.scanner_task_counts,
           scanner_slot_counts = excluded.scanner_slot_counts,
-          metrics_json = excluded.metrics_json
+          metrics_json = excluded.metrics_json,
+          source_type = excluded.source_type,
+          source_window_id = excluded.source_window_id,
+          window_start_completed_at = excluded.window_start_completed_at,
+          window_end_completed_at = excluded.window_end_completed_at
       `,
       [
         window.batchId,
@@ -255,7 +279,11 @@ export async function persistScannerQualityWindows(input: PersistQualityRunInput
         JSON.stringify(window.labelCounts),
         JSON.stringify(window.scannerTaskCounts),
         JSON.stringify(window.scannerSlotCounts),
-        JSON.stringify(windowToMetricValues(window))
+        JSON.stringify(windowToMetricValues(window)),
+        window.sourceType ?? "load_test",
+        window.sourceWindowId ?? null,
+        window.windowStartCompletedAt ?? null,
+        window.windowEndCompletedAt ?? null
       ]
     );
   }
@@ -266,6 +294,7 @@ export async function loadRecentScannerQualityWindows(input: {
   egressId: string;
   excludeBatchId?: string;
   limit?: number;
+  sourceType?: ScannerQualityWindow["sourceType"];
 }) {
   const result = await query<ScannerQualityWindowRow>(
     `
@@ -274,14 +303,17 @@ export async function loadRecentScannerQualityWindows(input: {
         completed_count, failed_count, rejected_count, findings_per_completed,
         zero_finding_count, zero_finding_rate, pages_scanned,
         access_posture_counts, label_counts, scanner_task_counts, scanner_slot_counts,
+        source_type, source_window_id, window_start_completed_at::text as window_start_completed_at,
+        window_end_completed_at::text as window_end_completed_at,
         created_at::text as created_at
       from scanner_quality_windows
       where egress_id = $1
         and ($2::text is null or batch_id <> $2)
+        and ($4::text is null or source_type = $4)
       order by created_at desc
       limit $3
     `,
-    [input.egressId, input.excludeBatchId ?? null, input.limit ?? 5],
+    [input.egressId, input.excludeBatchId ?? null, input.limit ?? 5, input.sourceType ?? null],
     { readOnly: true }
   );
   return result.rows.map(rowToWindow);

@@ -11,6 +11,7 @@
     "check-runtime": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-runtime.ts",
     "check-runtime:build": "node --enable-source-maps --import tsx ./scripts/check-runtime.ts --allow-missing-env",
     "monitoring:sweep": "node --env-file-if-exists=.env.local --enable-source-maps --import tsx ./scripts/run-scheduled-monitoring.ts",
+    "scanner-quality:aggregate": "node --env-file-if-exists=.env.local --enable-source-maps --import tsx ./scripts/aggregate-scanner-quality-history.ts",
     "check:production-finding-calibration": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-production-finding-calibration.ts",
     "audit:production-finding-demotions": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-finding-demotions.ts",
     "audit:production-finding-evidence": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-finding-demotions.ts",

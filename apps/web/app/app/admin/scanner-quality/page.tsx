@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
-import { listRecentQualityWarningRuns } from "../../../../server/admin/list-quality-warnings";
+import { listRecentQualityWarningRuns, listScannerQualityTrends } from "../../../../server/admin/list-quality-warnings";
 
 function formatRate(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) {
@@ -16,7 +16,7 @@ function formatNumber(value: number | null | undefined) {
 }
 
 export default async function AdminScannerQualityPage() {
-  const runs = await listRecentQualityWarningRuns();
+  const [runs, trends] = await Promise.all([listRecentQualityWarningRuns(), listScannerQualityTrends()]);
   const warnings = runs.flatMap((run) =>
     run.warnings.map((warning) => ({
       ...warning,
@@ -33,6 +33,72 @@ export default async function AdminScannerQualityPage() {
         <CardContent className="space-y-2 text-sm text-slate-600">
           <p>WARN-only Phase 1B egress quality signals from durable warning history, with local artifacts as a development fallback.</p>
           <p>Control-plane gate failures remain hard stops and are not downgraded into quality warnings.</p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 bg-white">
+        <CardHeader>
+          <CardTitle>Normal Scan Trends</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {trends.length === 0 ? (
+            <p className="text-sm text-slate-600">No durable normal-scan quality windows found yet.</p>
+          ) : (
+            <div className="space-y-5">
+              {trends.map((trend) => {
+                const maxFindings = Math.max(1, ...trend.points.map((point) => point.findingsPerCompleted ?? 0));
+                return (
+                  <div key={trend.egressId} className="rounded-lg border border-slate-200 p-4">
+                    <div className="flex flex-wrap items-baseline justify-between gap-3">
+                      <div>
+                        <h3 className="font-medium text-slate-950">
+                          {trend.egressId} / {trend.egressProvider ?? "unknown"}
+                        </h3>
+                        <p className="text-sm text-slate-500">Latest durable window: {trend.latestWindowAt ?? "unknown"}</p>
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">normal traffic</span>
+                    </div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-4">
+                      {trend.points.map((point) => (
+                        <div key={point.targetScanCount} className="rounded-md border border-slate-100 bg-slate-50 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium uppercase text-slate-500">Last {point.targetScanCount}</span>
+                            <span className="text-xs text-slate-500">{point.completedCount} scans</span>
+                          </div>
+                          <dl className="mt-3 space-y-2 text-sm">
+                            <div>
+                              <dt className="text-slate-500">Findings/completed</dt>
+                              <dd className="font-medium text-slate-900">{formatNumber(point.findingsPerCompleted)}</dd>
+                              <div className="mt-1 h-1.5 rounded-full bg-white">
+                                <div
+                                  className="h-1.5 rounded-full bg-emerald-500"
+                                  style={{ width: `${Math.min(100, ((point.findingsPerCompleted ?? 0) / maxFindings) * 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <dt className="text-slate-500">Zero-finding</dt>
+                              <dd className="font-medium text-slate-900">{formatRate(point.zeroFindingRate)}</dd>
+                              <div className="mt-1 h-1.5 rounded-full bg-white">
+                                <div
+                                  className="h-1.5 rounded-full bg-amber-500"
+                                  style={{ width: `${Math.min(100, (point.zeroFindingRate ?? 0) * 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div className="flex justify-between text-xs text-slate-500">
+                              <span>{point.windowCount} windows</span>
+                              <span>{point.pagesScanned} pages</span>
+                            </div>
+                          </dl>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
