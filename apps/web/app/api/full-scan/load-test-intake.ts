@@ -1,3 +1,5 @@
+import { isProductionLoadTestBatchId } from "@website-signal-risk-scanner/shared";
+
 export type FullScanRequestProvenance = {
   githubActor?: string | null;
   githubRunId?: string | null;
@@ -8,8 +10,6 @@ export type FullScanRequestProvenance = {
   source?: string | null;
   userAgent?: string | null;
 };
-
-const PRODUCTION_LOAD_TEST_BATCH_ID_PATTERN = /^prod-manifest-\d+-\d+-load-test-\d{8}-\d{4}$/;
 
 function sourceHasManifestMetadata(source: string, batchId: string) {
   return (
@@ -34,7 +34,7 @@ export function shouldBypassDnsValidationForProductionLoadTest(provenance: FullS
     provenance.githubWorkflow === "production-load-test" &&
     provenance.githubActor === "codex-ops" &&
     provenance.githubSha === "manual" &&
-    PRODUCTION_LOAD_TEST_BATCH_ID_PATTERN.test(batchId) &&
+    isProductionLoadTestBatchId(batchId) &&
     sourceHasManifestMetadata(source, batchId)
   );
 }

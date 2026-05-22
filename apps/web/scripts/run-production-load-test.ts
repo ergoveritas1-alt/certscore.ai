@@ -1,5 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import { query } from "@website-signal-risk-scanner/db";
+import { buildProductionLoadTestBatchId, isProductionLoadTestBatchId } from "@website-signal-risk-scanner/shared";
+import { assertProductionLoadTestClassifierProof, summarizeLoadTestQuality } from "./load-test-safety";
 
 const POLL_INTERVAL_MS = 30_000;
 const BASE_URL = "https://certscore.ai";
@@ -37,6 +40,7 @@ type PollEntry = {
   manifest_row: string;
   tranco_rank: string;
   domain: string;
+  pagesScanned: number | null;
   scanId: string;
   enqueuedAt: string;
   status: ScanStatus;
@@ -54,6 +58,20 @@ type PollEntry = {
     mergedSignalsReady: boolean | null;
     status: string | null;
   } | null;
+  scannerRuntime: {
+    awsRegion: string | null;
+    egressId: string | null;
+    egressProvider: string | null;
+    scannerSlot: number | null;
+    scannerTaskArn: string | null;
+    scannerTaskDefinitionArn: string | null;
+    scannerTaskRevision: string | null;
+  } | null;
+  scanTimes: {
+    completedAt: string | null;
+    createdAt: string | null;
+    startedAt: string | null;
+  };
 };
 
 type OperatorEvent = {
@@ -82,14 +100,6 @@ function getArgValue(flag: string) {
   const index = process.argv.indexOf(flag);
   if (index === -1) return null;
   return process.argv[index + 1] ?? null;
-}
-
-function formatTimestamp() {
-  return new Date()
-    .toISOString()
-    .replace(/[-:]/g, "")
-    .replace(/\..+/, "")
-    .replace("T", "-");
 }
 
 function parseCsv(input: string): ManifestRow[] {
@@ -142,14 +152,14 @@ async function enqueueScan(
   row: ManifestRow,
   batchId: string
 ): Promise<EnqueueResult> {
-  const source = [
-    `${batchId}`,
-    `manifest_row=${row.manifest_row}`,
-    `tranco_rank=${row.tranco_rank}`,
-    `tranco_list=${row.source_list_id}`,
-    `tranco_generated=${row.source_snapshot_date}`,
-    `domain=${row.domain}`,
-  ].join(";");
+  const source = assertProductionLoadTestClassifierProof({
+    batchId,
+    domain: row.domain,
+    manifestRow: row.manifest_row,
+    trancoGenerated: row.source_snapshot_date,
+    trancoList: row.source_list_id,
+    trancoRank: row.tranco_rank
+  });
 
   const response = await fetch(new URL("/api/full-scan", BASE_URL), {
     method: "POST",
@@ -195,6 +205,7 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
       manifest_row: entry.manifest_row,
       tranco_rank: entry.tranco_rank,
       domain: entry.domain,
+      pagesScanned: null,
       scanId: "n/a",
       enqueuedAt: entry.enqueuedAt,
       status: "error",
@@ -203,6 +214,12 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
       loaded: false,
       error: entry.error ?? "Enqueue failed",
       reportReadiness: null,
+      scannerRuntime: null,
+      scanTimes: {
+        completedAt: null,
+        createdAt: null,
+        startedAt: null
+      }
     };
   }
 
@@ -222,7 +239,12 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
       findingCounts?: Record<string, number>;
       interruptionSummary?: PollEntry["interruptionSummary"];
       reportReadiness?: PollEntry["reportReadiness"];
+      scannerRuntime?: PollEntry["scannerRuntime"];
       scan?: {
+        completedAt?: string | null;
+        createdAt?: string | null;
+        pagesScanned?: number | null;
+        startedAt?: string | null;
         status?: string;
       };
     };
@@ -235,6 +257,7 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
       manifest_row: entry.manifest_row,
       tranco_rank: entry.tranco_rank,
       domain: entry.domain,
+      pagesScanned: body.scan?.pagesScanned ?? null,
       scanId: entry.scanId ?? "unknown",
       enqueuedAt: entry.enqueuedAt,
       status,
@@ -243,6 +266,12 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
       loaded,
       error: null,
       reportReadiness: body.reportReadiness ?? null,
+      scannerRuntime: body.scannerRuntime ?? null,
+      scanTimes: {
+        completedAt: body.scan?.completedAt ?? null,
+        createdAt: body.scan?.createdAt ?? null,
+        startedAt: body.scan?.startedAt ?? null
+      }
     };
   } catch (error) {
     return {
@@ -251,6 +280,7 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
       manifest_row: entry.manifest_row,
       tranco_rank: entry.tranco_rank,
       domain: entry.domain,
+      pagesScanned: null,
       scanId: entry.scanId ?? "unknown",
       enqueuedAt: entry.enqueuedAt,
       status: "error",
@@ -259,8 +289,44 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
       loaded: false,
       error: error instanceof Error ? error.message : String(error),
       reportReadiness: null,
+      scannerRuntime: null,
+      scanTimes: {
+        completedAt: null,
+        createdAt: null,
+        startedAt: null
+      }
     };
   }
+}
+
+async function verifyPostEnqueueCanary(scanIds: string[]) {
+  if (scanIds.length === 0) {
+    throw new Error("Post-enqueue canary cannot run without scan ids.");
+  }
+
+  const result = await query<{ id: string; queue_origin: string; queue_priority: number }>(
+    `select id, queue_origin, queue_priority
+       from scans
+      where id = any($1::uuid[])`,
+    [scanIds],
+    { readOnly: true }
+  );
+
+  const badRows = result.rows.filter((row) => row.queue_origin !== "production_load_test" || row.queue_priority !== 90);
+  if (badRows.length > 0 || result.rows.length !== scanIds.length) {
+    throw new Error(
+      `Post-enqueue canary failed: expected all accepted scans to have queue_origin=production_load_test and queue_priority=90. Checked=${result.rows.length}/${scanIds.length}, bad=${badRows.length}`
+    );
+  }
+}
+
+function durationMs(start: string | null, end: string | null) {
+  if (!start || !end) {
+    return null;
+  }
+  const startMs = Date.parse(start);
+  const endMs = Date.parse(end);
+  return Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.max(0, endMs - startMs) : null;
 }
 
 function normalizeScanStatus(status: string | null | undefined): ScanStatus {
@@ -377,7 +443,7 @@ async function main() {
   const outputDir =
     getArgValue("--out") ??
     path.resolve(
-      `apps/web/tmp/tranco-load-tests/runs/prod-manifest-${start}-${end}-load-test-${formatTimestamp()}`
+      `apps/web/tmp/tranco-load-tests/runs/${buildProductionLoadTestBatchId({ start, end })}`
     );
 
   const batchId = path.basename(outputDir);
@@ -387,6 +453,7 @@ async function main() {
   const findingsPath = path.join(outputDir, "findings-table.json");
   const interruptionsPath = path.join(outputDir, "interruptions.json");
   const reportPath = path.join(outputDir, "consolidated-report.md");
+  const qualitySummaryPath = path.join(outputDir, "egress-quality-summary.json");
 
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -394,6 +461,13 @@ async function main() {
     `Load test: manifest=${manifestPath} range=${start}-${end} output=${outputDir}`
   );
   console.log("");
+  if (!isProductionLoadTestBatchId(batchId)) {
+    throw new Error(`Output directory basename must be a canonical production load-test batch id.`);
+  }
+
+  if (!batchId.startsWith(`prod-manifest-${start}-${end}-load-test-`)) {
+    throw new Error(`Output directory basename must be the canonical batch id for range ${start}-${end}.`);
+  }
 
   // safety checks
   logEvent(eventsPath, "safety_check", "DNS bypass check", {
@@ -422,6 +496,17 @@ async function main() {
   });
 
   logEvent(eventsPath, "manifest_loaded", `Loaded ${targetRows.length} domains from manifest rows ${start}-${end}`);
+  if (targetRows[0]) {
+    assertProductionLoadTestClassifierProof({
+      batchId,
+      domain: targetRows[0].domain,
+      manifestRow: targetRows[0].manifest_row,
+      trancoGenerated: targetRows[0].source_snapshot_date,
+      trancoList: targetRows[0].source_list_id,
+      trancoRank: targetRows[0].tranco_rank
+    });
+    logEvent(eventsPath, "classifier_proof", "Generated load-test headers/source classify as trusted production load-test traffic.");
+  }
 
   // enqueue all domains
   logEvent(eventsPath, "enqueue_start", `Enqueuing ${targetRows.length} domains`);
@@ -457,6 +542,9 @@ async function main() {
     console.error("No domains were successfully enqueued.");
     process.exit(1);
   }
+
+  await verifyPostEnqueueCanary(successful.map((entry) => entry.scanId).filter((scanId): scanId is string => Boolean(scanId)));
+  logEvent(eventsPath, "post_enqueue_canary", "Accepted scans have queue_origin=production_load_test and queue_priority=90.");
 
   // monitoring loop
   logEvent(eventsPath, "monitor_start", "Starting monitoring loop");
@@ -506,9 +594,25 @@ async function main() {
   const allPolls = terminal.map((t) => [t]);
   const findings = aggregateFindings(allPolls);
   const interruptions = aggregateInterruptions(allPolls);
+  const qualitySummary = summarizeLoadTestQuality(
+    terminal.map((entry) => ({
+      accessPostureClass: entry.accessPostureClass,
+      completedAt: entry.scanTimes.completedAt,
+      egressId: entry.scannerRuntime?.egressId ?? null,
+      findingCounts: entry.findingCounts,
+      interruptionLabels: entry.interruptionSummary?.categories ?? [],
+      pagesScanned: entry.pagesScanned,
+      queueWaitMs: durationMs(entry.scanTimes.createdAt, entry.scanTimes.startedAt),
+      runDurationMs: durationMs(entry.scanTimes.startedAt, entry.scanTimes.completedAt),
+      scannerSlot: entry.scannerRuntime?.scannerSlot ?? null,
+      scannerTaskArn: entry.scannerRuntime?.scannerTaskArn ?? null,
+      status: entry.status
+    }))
+  );
 
   writeJson(findingsPath, findings);
   writeJson(interruptionsPath, interruptions);
+  writeJson(qualitySummaryPath, qualitySummary);
 
   // findings table
   console.log("");

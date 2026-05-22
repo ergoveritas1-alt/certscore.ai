@@ -12,10 +12,17 @@ type OpsScanStatusRow = {
   completed_at: string | null;
   created_at: string;
   domain_hostname: string | null;
+  egress_id: string | null;
+  egress_provider: string | null;
   error_message: string | null;
   id: string;
   pages_requested: number;
   pages_scanned: number;
+  scanner_region: string | null;
+  scanner_slot: number | null;
+  scanner_task_arn: string | null;
+  scanner_task_definition_arn: string | null;
+  scanner_task_revision: string | null;
   scan_type: string;
   started_at: string | null;
   status: string;
@@ -36,6 +43,8 @@ type OpsSnapshotRow = {
   block_page_classification?: string | null;
   captcha_flag?: boolean | null;
   challenge_suspected?: boolean | null;
+  egress_id?: string | null;
+  egress_type?: string | null;
   fingerprint_block_suspected?: boolean | null;
   geo_block_suspected?: boolean | null;
   homepage_fetch_http_status?: number | null;
@@ -94,6 +103,13 @@ async function loadOpsScanStatusCore(scanId: string) {
               s.created_at,
               s.started_at,
               s.completed_at,
+              s.scanner_task_arn,
+              s.scanner_task_definition_arn,
+              s.scanner_task_revision,
+              s.scanner_slot,
+              s.scanner_region,
+              s.egress_id,
+              s.egress_provider,
               s.error_message,
               d.hostname as domain_hostname
          from scans s
@@ -120,6 +136,8 @@ async function loadOpsScanStatusCore(scanId: string) {
               block_page_classification,
               captcha_flag,
               challenge_suspected,
+              egress_id,
+              egress_type,
               fingerprint_block_suspected,
               geo_block_suspected,
               homepage_fetch_http_status,
@@ -182,6 +200,15 @@ async function loadOpsScanStatusCore(scanId: string) {
       startedAt: toIsoTimestamp(scan.started_at),
       status: scan.status
     },
+    scannerRuntime: {
+      awsRegion: scan.scanner_region ?? null,
+      egressId: scan.egress_id ?? snapshot?.egress_id ?? null,
+      egressProvider: scan.egress_provider ?? snapshot?.egress_type ?? null,
+      scannerSlot: scan.scanner_slot ?? null,
+      scannerTaskArn: scan.scanner_task_arn ?? null,
+      scannerTaskDefinitionArn: scan.scanner_task_definition_arn ?? null,
+      scannerTaskRevision: scan.scanner_task_revision ?? null
+    },
     snapshot: {
       accessPostureClass: snapshot?.access_posture_class ?? null,
       authWallDetected: snapshot?.auth_wall_detected ?? null,
@@ -190,6 +217,8 @@ async function loadOpsScanStatusCore(scanId: string) {
       blockPageClassification: snapshot?.block_page_classification ?? null,
       captchaFlag: snapshot?.captcha_flag ?? null,
       challengeSuspected: snapshot?.challenge_suspected ?? null,
+      egressId: snapshot?.egress_id ?? null,
+      egressType: snapshot?.egress_type ?? null,
       fingerprintBlockSuspected: snapshot?.fingerprint_block_suspected ?? null,
       geoBlockSuspected: snapshot?.geo_block_suspected ?? null,
       homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
@@ -222,8 +251,9 @@ export async function getAnonymousOpsScanStatus(input: { includeFindings?: boole
   }
 
   if (!input.includeFindings) {
+    const { scannerRuntime: _scannerRuntime, ...publicCore } = core;
     return {
-      ...core,
+      ...publicCore,
       findingCounts: buildEmptyFindingCounts(),
       reportReadiness: buildUnknownReportReadiness(),
       topFindings: []

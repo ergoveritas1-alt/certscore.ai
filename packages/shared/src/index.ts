@@ -29,6 +29,7 @@ export * from "./utils/finding-comparison";
 export * from "./utils/scan-signal-workflow";
 export * from "./utils/url";
 export * from "./utils/scheduling";
+export * from "./load-test-control";
 export * from "./snapshots/project-snapshot-signals";
 export * from "./scoring/agency-mapping";
 export * from "./scoring/regulatory-risk";
