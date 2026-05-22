@@ -21,6 +21,30 @@ export type LoadTestSummaryEntry = {
   status: string;
 };
 
+export type ProductionLoadTestEnqueueCommand = {
+  body: {
+    domain: string;
+    forceNewScan: true;
+  };
+  headers: {
+    "Content-Type": "application/json";
+    "x-certscore-scan-source": string;
+    "x-github-workflow": "production-load-test";
+    "x-github-actor": "codex-ops";
+    "x-github-sha": "manual";
+    "x-github-run-id": string;
+  };
+  manifestRow: string;
+  method: "POST";
+  url: "https://certscore.ai/api/full-scan";
+};
+
+export type QueueMetadataCanaryRow = {
+  id: string;
+  queue_origin: string | null;
+  queue_priority: number | null;
+};
+
 export function assertProductionLoadTestClassifierProof(input: {
   batchId: string;
   domain: string;
@@ -57,6 +81,63 @@ export function assertProductionLoadTestClassifierProof(input: {
   }
 
   return source;
+}
+
+export function buildProductionLoadTestEnqueueCommand(input: {
+  batchId: string;
+  domain: string;
+  manifestRow: string | number;
+  trancoGenerated: string;
+  trancoList: string;
+  trancoRank: string | number;
+}): ProductionLoadTestEnqueueCommand {
+  const source = assertProductionLoadTestClassifierProof(input);
+  return {
+    body: {
+      domain: input.domain,
+      forceNewScan: true
+    },
+    headers: {
+      "Content-Type": "application/json",
+      "x-certscore-scan-source": source,
+      "x-github-workflow": "production-load-test",
+      "x-github-actor": "codex-ops",
+      "x-github-sha": "manual",
+      "x-github-run-id": input.batchId
+    },
+    manifestRow: String(input.manifestRow),
+    method: "POST",
+    url: "https://certscore.ai/api/full-scan"
+  };
+}
+
+export function assertDbBackedQueueMetadataCanary(input: {
+  expectedScanIds: string[];
+  rows: QueueMetadataCanaryRow[];
+}) {
+  if (input.expectedScanIds.length === 0) {
+    throw new Error("DB-backed queue metadata canary cannot run without accepted scan ids.");
+  }
+
+  const expected = new Set(input.expectedScanIds);
+  const seen = new Set(input.rows.map((row) => row.id));
+  const missing = Array.from(expected).filter((scanId) => !seen.has(scanId));
+  const unexpected = input.rows.filter((row) => !expected.has(row.id));
+  const badRows = input.rows.filter(
+    (row) => row.queue_origin !== "production_load_test" || row.queue_priority !== 90
+  );
+
+  if (missing.length > 0 || unexpected.length > 0 || badRows.length > 0) {
+    throw new Error(
+      `DB-backed queue metadata canary failed: checked=${input.rows.length}/${input.expectedScanIds.length}, missing=${missing.length}, unexpected=${unexpected.length}, bad=${badRows.length}`
+    );
+  }
+}
+
+export function assertQueueMetadataEvidenceIsDbBacked(input: { source: "db" | "scan-status" }) {
+  if (input.source !== "db") {
+    throw new Error("Queue metadata canary must use DB-backed evidence; scan-status does not expose queue_origin/queue_priority.");
+  }
 }
 
 function timeBucket(value: string | null) {

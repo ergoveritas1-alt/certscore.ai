@@ -2,7 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { query } from "@website-signal-risk-scanner/db";
 import { buildProductionLoadTestBatchId, isProductionLoadTestBatchId } from "@website-signal-risk-scanner/shared";
-import { assertProductionLoadTestClassifierProof, evaluatePhase1BQualityWarnings, summarizeLoadTestQuality } from "./load-test-safety";
+import {
+  assertDbBackedQueueMetadataCanary,
+  assertProductionLoadTestClassifierProof,
+  assertQueueMetadataEvidenceIsDbBacked,
+  buildProductionLoadTestEnqueueCommand,
+  evaluatePhase1BQualityWarnings,
+  type ProductionLoadTestEnqueueCommand,
+  summarizeLoadTestQuality
+} from "./load-test-safety";
 
 const POLL_INTERVAL_MS = 30_000;
 const BASE_URL = "https://certscore.ai";
@@ -24,6 +32,15 @@ type EnqueueResult = {
   enqueuedAt: string;
   ok: boolean;
   error: string | null;
+};
+
+type EnqueueCommandsArtifact = {
+  batchId: string;
+  commands: ProductionLoadTestEnqueueCommand[];
+  end: number;
+  generatedAt: string;
+  manifestPath: string;
+  start: number;
 };
 
 type ScanStatus =
@@ -151,8 +168,8 @@ function logEvent(
 async function enqueueScan(
   row: ManifestRow,
   batchId: string
-): Promise<EnqueueResult> {
-  const source = assertProductionLoadTestClassifierProof({
+): Promise<{ command: ProductionLoadTestEnqueueCommand; result: EnqueueResult }> {
+  const command = buildProductionLoadTestEnqueueCommand({
     batchId,
     domain: row.domain,
     manifestRow: row.manifest_row,
@@ -162,16 +179,9 @@ async function enqueueScan(
   });
 
   const response = await fetch(new URL("/api/full-scan", BASE_URL), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-certscore-scan-source": source,
-      "x-github-workflow": "production-load-test",
-      "x-github-actor": "codex-ops",
-      "x-github-sha": "manual",
-      "x-github-run-id": batchId,
-    },
-    body: JSON.stringify({ domain: row.domain }),
+    method: command.method,
+    headers: command.headers,
+    body: JSON.stringify(command.body),
   });
 
   const body = await response.text();
@@ -186,14 +196,17 @@ async function enqueueScan(
   const scanId = typeof parsed.scanId === "string" ? parsed.scanId : null;
 
   return {
-    manifest_row: row.manifest_row,
-    tranco_rank: row.tranco_rank,
-    domain: row.domain,
-    scanId,
-    scanUrl: scanId ? `/scan/${scanId}` : null,
-    enqueuedAt: new Date().toISOString(),
-    ok,
-    error: ok ? null : body.slice(0, 500),
+    command,
+    result: {
+      manifest_row: row.manifest_row,
+      tranco_rank: row.tranco_rank,
+      domain: row.domain,
+      scanId,
+      scanUrl: scanId ? `/scan/${scanId}` : null,
+      enqueuedAt: new Date().toISOString(),
+      ok,
+      error: ok ? null : body.slice(0, 500),
+    }
   };
 }
 
@@ -300,9 +313,7 @@ async function pollScan(entry: EnqueueResult): Promise<PollEntry | null> {
 }
 
 async function verifyPostEnqueueCanary(scanIds: string[]) {
-  if (scanIds.length === 0) {
-    throw new Error("Post-enqueue canary cannot run without scan ids.");
-  }
+  assertQueueMetadataEvidenceIsDbBacked({ source: "db" });
 
   const result = await query<{ id: string; queue_origin: string; queue_priority: number }>(
     `select id, queue_origin, queue_priority
@@ -312,12 +323,12 @@ async function verifyPostEnqueueCanary(scanIds: string[]) {
     { readOnly: true }
   );
 
-  const badRows = result.rows.filter((row) => row.queue_origin !== "production_load_test" || row.queue_priority !== 90);
-  if (badRows.length > 0 || result.rows.length !== scanIds.length) {
-    throw new Error(
-      `Post-enqueue canary failed: expected all accepted scans to have queue_origin=production_load_test and queue_priority=90. Checked=${result.rows.length}/${scanIds.length}, bad=${badRows.length}`
-    );
-  }
+  assertDbBackedQueueMetadataCanary({
+    expectedScanIds: scanIds,
+    rows: result.rows
+  });
+
+  return result.rows;
 }
 
 function durationMs(start: string | null, end: string | null) {
@@ -449,7 +460,9 @@ async function main() {
   const batchId = path.basename(outputDir);
   const eventsPath = path.join(outputDir, "operator-events.jsonl");
   const monitorPath = path.join(outputDir, "live-monitor.jsonl");
+  const enqueueCommandsPath = path.join(outputDir, "enqueue-commands.json");
   const enqueuePath = path.join(outputDir, "enqueue-results.json");
+  const canaryPath = path.join(outputDir, "canary-queue-metadata-db-check.json");
   const findingsPath = path.join(outputDir, "findings-table.json");
   const interruptionsPath = path.join(outputDir, "interruptions.json");
   const reportPath = path.join(outputDir, "consolidated-report.md");
@@ -509,27 +522,89 @@ async function main() {
     logEvent(eventsPath, "classifier_proof", "Generated load-test headers/source classify as trusted production load-test traffic.");
   }
 
-  // enqueue all domains
+  // enqueue the first row as the post-enqueue canary before continuing the batch
   logEvent(eventsPath, "enqueue_start", `Enqueuing ${targetRows.length} domains`);
   const enqueueResults: EnqueueResult[] = [];
+  const enqueueCommands: ProductionLoadTestEnqueueCommand[] = [];
+  const enqueueCommandsArtifact = (): EnqueueCommandsArtifact => ({
+    batchId,
+    commands: enqueueCommands,
+    end,
+    generatedAt: new Date().toISOString(),
+    manifestPath,
+    start
+  });
+  const writeEnqueueArtifacts = () => {
+    writeJson(enqueueCommandsPath, enqueueCommandsArtifact());
+    writeJson(enqueuePath, {
+      batchId,
+      manifestPath,
+      start,
+      end,
+      results: enqueueResults,
+    });
+  };
 
-  for (const row of targetRows) {
-    const result = await enqueueScan(row, batchId);
+  const [canaryRow, ...remainingRows] = targetRows;
+  if (!canaryRow) {
+    throw new Error("No manifest rows selected for enqueue.");
+  }
+
+  const canary = await enqueueScan(canaryRow, batchId);
+  enqueueCommands.push(canary.command);
+  enqueueResults.push(canary.result);
+  console.log(
+    `[ENQUEUE] ${(canary.result.ok ? "OK" : "FAIL").padEnd(4)} | row=${canary.result.manifest_row.padStart(4)} | ${canary.result.domain.padEnd(30)} | scanId=${canary.result.scanId ?? "n/a"} | canary`
+  );
+  writeEnqueueArtifacts();
+
+  if (!canary.result.ok || !canary.result.scanId) {
+    throw new Error("Post-enqueue canary request was not accepted; stopping before remaining rows.");
+  }
+
+  let canaryRows: Array<{ id: string; queue_origin: string; queue_priority: number }>;
+  try {
+    canaryRows = await verifyPostEnqueueCanary([canary.result.scanId]);
+  } catch (error) {
+    writeJson(canaryPath, {
+      batchId,
+      checkedAt: new Date().toISOString(),
+      evidence: "db",
+      error: error instanceof Error ? error.message : String(error),
+      result: "FAIL",
+      scanIds: [canary.result.scanId]
+    });
+    throw error;
+  }
+  writeJson(canaryPath, {
+    batchId,
+    checkedAt: new Date().toISOString(),
+    evidence: "db",
+    result: "PASS",
+    scanIds: [canary.result.scanId],
+    rows: canaryRows.map((row) => ({
+      id: row.id,
+      queue_origin: row.queue_origin,
+      queue_priority: row.queue_priority
+    }))
+  });
+  logEvent(eventsPath, "post_enqueue_canary", "DB-backed canary confirmed queue_origin=production_load_test and queue_priority=90 for the first accepted scan.");
+
+  await sleep(2000);
+
+  for (const row of remainingRows) {
+    const { command, result } = await enqueueScan(row, batchId);
+    enqueueCommands.push(command);
     enqueueResults.push(result);
     const status = result.ok ? "OK" : "FAIL";
     console.log(
       `[ENQUEUE] ${status.padEnd(4)} | row=${result.manifest_row.padStart(4)} | ${result.domain.padEnd(30)} | scanId=${result.scanId ?? "n/a"}`
     );
-    await sleep(500); // rate limit
+    writeEnqueueArtifacts();
+    await sleep(2000);
   }
 
-  writeJson(enqueuePath, {
-    batchId,
-    manifestPath,
-    start,
-    end,
-    results: enqueueResults,
-  });
+  writeEnqueueArtifacts();
 
   const successful = enqueueResults.filter((e) => e.ok);
   const failed = enqueueResults.filter((e) => !e.ok);
@@ -545,7 +620,7 @@ async function main() {
   }
 
   await verifyPostEnqueueCanary(successful.map((entry) => entry.scanId).filter((scanId): scanId is string => Boolean(scanId)));
-  logEvent(eventsPath, "post_enqueue_canary", "Accepted scans have queue_origin=production_load_test and queue_priority=90.");
+  logEvent(eventsPath, "post_enqueue_canary_all", "Accepted scans have queue_origin=production_load_test and queue_priority=90.");
 
   // monitoring loop
   logEvent(eventsPath, "monitor_start", "Starting monitoring loop");
