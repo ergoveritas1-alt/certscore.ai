@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { query } from "@website-signal-risk-scanner/db";
 import { buildProductionLoadTestBatchId, isProductionLoadTestBatchId } from "@website-signal-risk-scanner/shared";
-import { assertProductionLoadTestClassifierProof, summarizeLoadTestQuality } from "./load-test-safety";
+import { assertProductionLoadTestClassifierProof, evaluatePhase1BQualityWarnings, summarizeLoadTestQuality } from "./load-test-safety";
 
 const POLL_INTERVAL_MS = 30_000;
 const BASE_URL = "https://certscore.ai";
@@ -454,6 +454,7 @@ async function main() {
   const interruptionsPath = path.join(outputDir, "interruptions.json");
   const reportPath = path.join(outputDir, "consolidated-report.md");
   const qualitySummaryPath = path.join(outputDir, "egress-quality-summary.json");
+  const qualityWarningsPath = path.join(outputDir, "quality-warnings.json");
 
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -599,6 +600,7 @@ async function main() {
       accessPostureClass: entry.accessPostureClass,
       completedAt: entry.scanTimes.completedAt,
       egressId: entry.scannerRuntime?.egressId ?? null,
+      egressProvider: entry.scannerRuntime?.egressProvider ?? null,
       findingCounts: entry.findingCounts,
       interruptionLabels: entry.interruptionSummary?.categories ?? [],
       pagesScanned: entry.pagesScanned,
@@ -609,10 +611,39 @@ async function main() {
       status: entry.status
     }))
   );
+  const qualityWarningEntries = terminal.map((entry) => ({
+    accessPostureClass: entry.accessPostureClass,
+    completedAt: entry.scanTimes.completedAt,
+    egressId: entry.scannerRuntime?.egressId ?? null,
+    egressProvider: entry.scannerRuntime?.egressProvider ?? null,
+    findingCounts: entry.findingCounts,
+    interruptionLabels: entry.interruptionSummary?.categories ?? [],
+    pagesScanned: entry.pagesScanned,
+    queueWaitMs: durationMs(entry.scanTimes.createdAt, entry.scanTimes.startedAt),
+    runDurationMs: durationMs(entry.scanTimes.startedAt, entry.scanTimes.completedAt),
+    scannerSlot: entry.scannerRuntime?.scannerSlot ?? null,
+    scannerTaskArn: entry.scannerRuntime?.scannerTaskArn ?? null,
+    status: entry.status
+  }));
+  const qualityWarnings = evaluatePhase1BQualityWarnings({
+    batchId,
+    entries: qualityWarningEntries
+  });
+  const qualityArtifactsGeneratedAt = new Date().toISOString();
 
   writeJson(findingsPath, findings);
   writeJson(interruptionsPath, interruptions);
-  writeJson(qualitySummaryPath, qualitySummary);
+  writeJson(qualitySummaryPath, {
+    generatedAt: qualityArtifactsGeneratedAt,
+    qualityWarnings,
+    summary: qualitySummary
+  });
+  writeJson(qualityWarningsPath, {
+    batchId,
+    generatedAt: qualityArtifactsGeneratedAt,
+    warningCount: qualityWarnings.length,
+    warnings: qualityWarnings
+  });
 
   // findings table
   console.log("");
@@ -664,6 +695,19 @@ async function main() {
     reportLines.push(`- **${i.category}**: ${i.count} domains (${i.examples.join(", ")})`);
   }
   reportLines.push("");
+  reportLines.push("## Phase 1B Quality Warnings");
+  reportLines.push("");
+  reportLines.push(`- **Warnings:** ${qualityWarnings.length}`);
+  reportLines.push(`- **Artifact:** ${qualityWarningsPath}`);
+  for (const warning of qualityWarnings) {
+    reportLines.push(
+      `- **${warning.severity.toUpperCase()} ${warning.code}** (${warning.egress_id}/${warning.egressProvider}): ${warning.explanation}`
+    );
+  }
+  if (qualityWarnings.length === 0) {
+    reportLines.push("- No WARN-only quality warnings were generated.");
+  }
+  reportLines.push("");
   reportLines.push("## Recommendations");
   reportLines.push("");
   reportLines.push(
@@ -676,7 +720,7 @@ async function main() {
     "- Verify autoscaling kicked in as expected."
   );
 
-  writeJson(reportPath, reportLines.join("\n"));
+  fs.writeFileSync(reportPath, `${reportLines.join("\n")}\n`);
 
   console.log("");
   console.log(reportLines.join("\n"));

@@ -1,5 +1,6 @@
 import {
   buildProductionLoadTestSource,
+  evaluateLoadTestQualityWarnings,
   isProductionLoadTestBatchId
 } from "@website-signal-risk-scanner/shared";
 import { shouldBypassDnsValidationForProductionLoadTest } from "../app/api/full-scan/load-test-intake";
@@ -8,6 +9,7 @@ export type LoadTestSummaryEntry = {
   accessPostureClass: string | null;
   completedAt: string | null;
   egressId: string | null;
+  egressProvider?: string | null;
   errorCounters?: Record<string, number>;
   findingCounts: Record<string, number>;
   interruptionLabels: string[];
@@ -184,4 +186,85 @@ export function summarizeLoadTestQuality(entries: LoadTestSummaryEntry[]) {
       zeroFindingRate: group.zeroFindingCount / Math.max(1, group.completedCount)
     };
   });
+}
+
+export function evaluatePhase1BQualityWarnings(input: {
+  baseline?: {
+    blockerLabelRate?: number;
+    completedCount?: number;
+    findingsPerCompleted?: number;
+    label?: string;
+    runtimeErrorRate?: number;
+    zeroFindingRate?: number;
+  };
+  batchId: string;
+  entries: LoadTestSummaryEntry[];
+  generatedAt?: string;
+}) {
+  const byEgress = new Map<string, LoadTestSummaryEntry[]>();
+  for (const entry of input.entries) {
+    const key = entry.egressId ?? "unknown-egress";
+    byEgress.set(key, [...(byEgress.get(key) ?? []), entry]);
+  }
+
+  const windows = Array.from(byEgress.entries()).map(([egressId, entries]) => {
+    const completedEntries = entries.filter((entry) => entry.status === "completed");
+    const findingTotal = completedEntries.reduce(
+      (sum, entry) => sum + Object.values(entry.findingCounts).reduce((inner, value) => inner + Math.max(0, value), 0),
+      0
+    );
+    const zeroFindingCount = completedEntries.filter(
+      (entry) => Object.values(entry.findingCounts).reduce((sum, value) => sum + Math.max(0, value), 0) === 0
+    ).length;
+    const labelCounts: Record<string, number> = {};
+    const errorCounters: Record<string, number> = {};
+    let pagesScanned = 0;
+    let egressProvider = "unknown";
+
+    for (const entry of completedEntries) {
+      pagesScanned += Math.max(0, entry.pagesScanned ?? 0);
+      for (const label of entry.interruptionLabels.length > 0 ? entry.interruptionLabels : ["none"]) {
+        labelCounts[label] = (labelCounts[label] ?? 0) + 1;
+      }
+      for (const [key, value] of Object.entries(entry.errorCounters ?? {})) {
+        errorCounters[key] = (errorCounters[key] ?? 0) + value;
+      }
+      if (entry.egressId === egressId && egressProvider === "unknown" && entry.egressProvider) {
+        egressProvider = entry.egressProvider;
+      }
+    }
+
+    return {
+      egressProvider,
+      egress_id: egressId,
+      labelCounts,
+      metrics: {
+        completedCount: completedEntries.length,
+        findingsPerCompleted: findingTotal / Math.max(1, completedEntries.length),
+        pagesScanned,
+        zeroFindingRate: zeroFindingCount / Math.max(1, completedEntries.length)
+      },
+      runtimeErrorCounters: errorCounters
+    };
+  });
+
+  return windows.flatMap((window) =>
+    evaluateLoadTestQualityWarnings({
+      baseline: input.baseline,
+      batchId: input.batchId,
+      egressProvider: window.egressProvider,
+      egress_id: window.egress_id,
+      generatedAt: input.generatedAt,
+      labelCounts: window.labelCounts,
+      metrics: window.metrics,
+      peerWindows: windows
+        .filter((peer) => peer.egress_id !== window.egress_id)
+        .map((peer) => ({
+          egressProvider: peer.egressProvider,
+          egress_id: peer.egress_id,
+          metrics: peer.metrics
+        })),
+      runtimeErrorCounters: window.runtimeErrorCounters
+    })
+  );
 }
