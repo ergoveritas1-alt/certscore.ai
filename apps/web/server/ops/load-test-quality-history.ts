@@ -142,9 +142,9 @@ export function windowToMetricValues(window: ScannerQualityWindow): LoadTestQual
 }
 
 export function buildRollingBaseline(windows: ScannerQualityWindow[]): LoadTestQualityBaselineValues | null {
-  const eligible = windows.filter((window) => window.completedCount >= 25);
+  const eligible = windows.filter((window) => window.completedCount > 0);
   const completedCount = eligible.reduce((sum, window) => sum + window.completedCount, 0);
-  if (eligible.length === 0 || completedCount === 0) {
+  if (eligible.length === 0 || completedCount < 25) {
     return null;
   }
 

@@ -81,6 +81,8 @@ export type NormalScannerQualityAggregationResult = {
 };
 
 const NORMAL_SOURCE_TYPE = "normal_scan" as const;
+const NORMAL_SCAN_GRAPH_WINDOW_SIZE = 10;
+const NORMAL_SCAN_WARNING_MIN_COMPLETED = 25;
 
 function countRecordValue(record: Record<string, number>, key: string, increment = 1) {
   record[key] = (record[key] ?? 0) + increment;
@@ -88,6 +90,12 @@ function countRecordValue(record: Record<string, number>, key: string, increment
 
 function sanitizeWindowToken(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "window";
+}
+
+function addCounts(target: Record<string, number>, source: Record<string, number>) {
+  for (const [key, value] of Object.entries(source)) {
+    target[key] = (target[key] ?? 0) + Math.max(0, value);
+  }
 }
 
 function dbRowToNormalScanQualityRow(row: NormalScanQualityDbRow): NormalScanQualityRow {
@@ -129,7 +137,7 @@ export function buildNormalScannerQualityWindow(input: {
   rows: NormalScanQualityRow[];
   windowSize?: number;
 }): ScannerQualityWindow | null {
-  const windowSize = input.windowSize ?? 25;
+  const windowSize = input.windowSize ?? NORMAL_SCAN_GRAPH_WINDOW_SIZE;
   const rows = input.rows.slice(0, windowSize);
   if (rows.length < windowSize) {
     return null;
@@ -257,6 +265,75 @@ export function buildScannerQualityTrendSummary(input: {
   });
 }
 
+export function buildScannerQualityTrendSeries(input: { windows: ScannerQualityWindow[] }) {
+  return [...input.windows]
+    .sort((a, b) => (a.windowEndCompletedAt ?? a.createdAt ?? "").localeCompare(b.windowEndCompletedAt ?? b.createdAt ?? ""))
+    .map((window) => ({
+      completedAt: window.windowEndCompletedAt ?? window.createdAt ?? null,
+      completedCount: window.completedCount,
+      findingsPerCompleted: window.findingsPerCompleted,
+      pagesScanned: window.pagesScanned,
+      zeroFindingRate: window.zeroFindingRate
+    }));
+}
+
+export function buildAccumulatedScannerQualityWindow(input: {
+  batchId: string;
+  egressId: string;
+  minCompleted?: number;
+  windows: ScannerQualityWindow[];
+}): ScannerQualityWindow | null {
+  const minCompleted = input.minCompleted ?? NORMAL_SCAN_WARNING_MIN_COMPLETED;
+  const selected: ScannerQualityWindow[] = [];
+  let completedCount = 0;
+  for (const window of [...input.windows].sort((a, b) => (b.windowEndCompletedAt ?? b.createdAt ?? "").localeCompare(a.windowEndCompletedAt ?? a.createdAt ?? ""))) {
+    selected.push(window);
+    completedCount += window.completedCount;
+    if (completedCount >= minCompleted) {
+      break;
+    }
+  }
+  if (completedCount < minCompleted) {
+    return null;
+  }
+
+  const accessPostureCounts: Record<string, number> = {};
+  const labelCounts: Record<string, number> = {};
+  const scannerSlotCounts: Record<string, number> = {};
+  const scannerTaskCounts: Record<string, number> = {};
+  for (const window of selected) {
+    addCounts(accessPostureCounts, window.accessPostureCounts);
+    addCounts(labelCounts, window.labelCounts);
+    addCounts(scannerSlotCounts, window.scannerSlotCounts);
+    addCounts(scannerTaskCounts, window.scannerTaskCounts);
+  }
+  const findings = selected.reduce((sum, window) => sum + window.findingsPerCompleted * window.completedCount, 0);
+  const zeroFindingCount = selected.reduce((sum, window) => sum + window.zeroFindingCount, 0);
+
+  return {
+    accessPostureCounts,
+    batchId: input.batchId,
+    completedCount,
+    egressProvider: selected[0]?.egressProvider ?? null,
+    egress_id: input.egressId,
+    endRow: null,
+    failedCount: selected.reduce((sum, window) => sum + window.failedCount, 0),
+    findingsPerCompleted: findings / Math.max(1, completedCount),
+    labelCounts,
+    pagesScanned: selected.reduce((sum, window) => sum + window.pagesScanned, 0),
+    rejectedCount: 0,
+    scannerSlotCounts,
+    scannerTaskCounts,
+    sourceType: NORMAL_SOURCE_TYPE,
+    sourceWindowId: selected.map((window) => window.sourceWindowId ?? window.batchId).join(","),
+    startRow: null,
+    windowEndCompletedAt: selected[0]?.windowEndCompletedAt ?? null,
+    windowStartCompletedAt: selected.at(-1)?.windowStartCompletedAt ?? null,
+    zeroFindingCount,
+    zeroFindingRate: zeroFindingCount / Math.max(1, completedCount)
+  };
+}
+
 async function loadPendingNormalScanRows(input: {
   egressId: string;
   lastCompletedAt?: string | null;
@@ -315,7 +392,8 @@ async function loadPendingNormalScanRows(input: {
 }
 
 export async function persistPendingNormalScannerQualityWindows(input: { egressIds?: string[]; windowSize?: number } = {}): Promise<NormalScannerQualityAggregationResult> {
-  const windowSize = input.windowSize ?? 25;
+  const windowSize = input.windowSize ?? NORMAL_SCAN_GRAPH_WINDOW_SIZE;
+  const maxWindowsPerEgress = 20;
   const egressIds =
     input.egressIds ??
     (
@@ -339,7 +417,7 @@ export async function persistPendingNormalScannerQualityWindows(input: { egressI
   const skippedEgressIds: string[] = [];
 
   for (const egressId of egressIds) {
-    const cursor = await queryOne<{ last_completed_at: string | null; last_scan_id: string | null }>(
+    let cursor = await queryOne<{ last_completed_at: string | null; last_scan_id: string | null }>(
       `
         select last_completed_at::text as last_completed_at, last_scan_id::text as last_scan_id
         from scanner_quality_aggregation_cursors
@@ -348,50 +426,66 @@ export async function persistPendingNormalScannerQualityWindows(input: { egressI
       [NORMAL_SOURCE_TYPE, egressId],
       { readOnly: true }
     );
-    const rows = await loadPendingNormalScanRows({
-      egressId,
-      lastCompletedAt: cursor?.last_completed_at ?? null,
-      lastScanId: cursor?.last_scan_id ?? null,
-      limit: windowSize
-    });
-    const window = buildNormalScannerQualityWindow({ egressId, rows, windowSize });
-    if (!window) {
-      skippedEgressIds.push(egressId);
-      continue;
+    let windowsForEgress = 0;
+    for (let index = 0; index < maxWindowsPerEgress; index += 1) {
+      const rows = await loadPendingNormalScanRows({
+        egressId,
+        lastCompletedAt: cursor?.last_completed_at ?? null,
+        lastScanId: cursor?.last_scan_id ?? null,
+        limit: windowSize
+      });
+      const window = buildNormalScannerQualityWindow({ egressId, rows, windowSize });
+      if (!window) {
+        break;
+      }
+
+      await persistScannerQualityWindow(window);
+      const previous = await loadRecentScannerQualityWindows({
+        egressId,
+        excludeBatchId: window.batchId,
+        limit: 10,
+        sourceType: NORMAL_SOURCE_TYPE
+      });
+      const evaluationWindow = buildAccumulatedScannerQualityWindow({
+        batchId: window.batchId,
+        egressId,
+        windows: [window, ...previous]
+      });
+      const warnings = evaluateLoadTestQualityWarnings({
+        baseline: buildRollingBaseline(previous) ?? undefined,
+        batchId: evaluationWindow?.batchId ?? window.batchId,
+        egressProvider: evaluationWindow?.egressProvider ?? window.egressProvider,
+        egress_id: evaluationWindow?.egress_id ?? window.egress_id,
+        generatedAt: new Date().toISOString(),
+        labelCounts: evaluationWindow?.labelCounts ?? window.labelCounts,
+        metrics: evaluationWindow ? windowToMetricValues(evaluationWindow) : windowToMetricValues(window)
+      });
+      await persistQualityWarningEvents(warnings);
+      persistedEvents += warnings.length;
+      persistedWindows.push(window);
+      processedScanCount += window.completedCount;
+      windowsForEgress += 1;
+
+      const lastRow = rows[window.completedCount - 1];
+      await query(
+        `
+          insert into scanner_quality_aggregation_cursors (source_type, egress_id, last_completed_at, last_scan_id, updated_at)
+          values ($1, $2, $3::timestamptz, $4::uuid, now())
+          on conflict (source_type, egress_id) do update set
+            last_completed_at = excluded.last_completed_at,
+            last_scan_id = excluded.last_scan_id,
+            updated_at = now()
+        `,
+        [NORMAL_SOURCE_TYPE, egressId, window.windowEndCompletedAt, lastRow?.scanId]
+      );
+      cursor = {
+        last_completed_at: window.windowEndCompletedAt ?? null,
+        last_scan_id: lastRow?.scanId ?? null
+      };
     }
-
-    await persistScannerQualityWindow(window);
-    const previous = await loadRecentScannerQualityWindows({
-      egressId,
-      excludeBatchId: window.batchId,
-      limit: 10,
-      sourceType: NORMAL_SOURCE_TYPE
-    });
-    const warnings = evaluateLoadTestQualityWarnings({
-      baseline: buildRollingBaseline(previous) ?? undefined,
-      batchId: window.batchId,
-      egressProvider: window.egressProvider,
-      egress_id: window.egress_id,
-      generatedAt: new Date().toISOString(),
-      labelCounts: window.labelCounts,
-      metrics: windowToMetricValues(window)
-    });
-    await persistQualityWarningEvents(warnings);
-    persistedEvents += warnings.length;
-    persistedWindows.push(window);
-    processedScanCount += window.completedCount;
-
-    await query(
-      `
-        insert into scanner_quality_aggregation_cursors (source_type, egress_id, last_completed_at, last_scan_id, updated_at)
-        values ($1, $2, $3::timestamptz, $4::uuid, now())
-        on conflict (source_type, egress_id) do update set
-          last_completed_at = excluded.last_completed_at,
-          last_scan_id = excluded.last_scan_id,
-          updated_at = now()
-      `,
-      [NORMAL_SOURCE_TYPE, egressId, window.windowEndCompletedAt, rows[window.completedCount - 1]?.scanId]
-    );
+    if (windowsForEgress === 0) {
+      skippedEgressIds.push(egressId);
+    }
   }
 
   return { persistedEvents, persistedWindows, processedScanCount, skippedEgressIds };

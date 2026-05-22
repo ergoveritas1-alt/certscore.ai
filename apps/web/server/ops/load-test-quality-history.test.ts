@@ -107,6 +107,24 @@ test("builds rolling same-egress baseline from persisted windows", () => {
   assert.ok((baseline?.findingsPerCompleted ?? 0) > 1);
 });
 
+test("builds rolling baseline from smaller normal-scan windows once they total 25 scans", () => {
+  const windows = Array.from({ length: 3 }, (_, windowIndex) =>
+    buildScannerQualityWindows({
+      batchId: `normal-${windowIndex}`,
+      entries: Array.from({ length: 10 }, (_, index) =>
+        entry({
+          findingCounts: windowIndex === 0 && index < 5 ? {} : { a: 1 }
+        })
+      )
+    })[0]!
+  );
+
+  const baseline = buildRollingBaseline(windows);
+
+  assert.equal(baseline?.completedCount, 30);
+  assert.equal(baseline?.zeroFindingRate, 5 / 30);
+});
+
 test("converts persisted window to evaluator metric values", () => {
   const window = buildScannerQualityWindows({
     batchId: "a",

@@ -15,6 +15,22 @@ function formatNumber(value: number | null | undefined) {
   return value.toFixed(2);
 }
 
+function buildPolyline(values: number[], width = 360, height = 96) {
+  if (values.length < 2) {
+    return "";
+  }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  return values
+    .map((value, index) => {
+      const x = (index / Math.max(1, values.length - 1)) * width;
+      const y = height - ((value - min) / range) * (height - 10) - 5;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+}
+
 export default async function AdminScannerQualityPage() {
   const [runs, trends] = await Promise.all([listRecentQualityWarningRuns(), listScannerQualityTrends()]);
   const warnings = runs.flatMap((run) =>
@@ -47,6 +63,9 @@ export default async function AdminScannerQualityPage() {
             <div className="space-y-5">
               {trends.map((trend) => {
                 const maxFindings = Math.max(1, ...trend.points.map((point) => point.findingsPerCompleted ?? 0));
+                const findingLine = buildPolyline(trend.series.map((point) => point.findingsPerCompleted));
+                const zeroLine = buildPolyline(trend.series.map((point) => point.zeroFindingRate));
+                const latestPoint = trend.series.at(-1);
                 return (
                   <div key={trend.egressId} className="rounded-lg border border-slate-200 p-4">
                     <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -57,6 +76,28 @@ export default async function AdminScannerQualityPage() {
                         <p className="text-sm text-slate-500">Latest durable window: {trend.latestWindowAt ?? "unknown"}</p>
                       </div>
                       <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">normal traffic</span>
+                    </div>
+                    <div className="mt-4 rounded-md border border-slate-100 bg-slate-50 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <span className="font-medium text-slate-900">Window trend</span>
+                        <span className="text-xs text-slate-500">
+                          {trend.series.length} window{trend.series.length === 1 ? "" : "s"} · latest {latestPoint ? `${formatNumber(latestPoint.findingsPerCompleted)} findings/completed, ${formatRate(latestPoint.zeroFindingRate)} zero-finding` : "unknown"}
+                        </span>
+                      </div>
+                      {trend.series.length < 2 ? (
+                        <p className="mt-3 text-sm text-slate-600">Need at least 2 durable windows before a trend line can move.</p>
+                      ) : (
+                        <svg className="mt-3 h-28 w-full" viewBox="0 0 360 96" role="img" aria-label={`${trend.egressId} scanner quality trend`}>
+                          <line x1="0" y1="91" x2="360" y2="91" stroke="#e2e8f0" strokeWidth="1" />
+                          <line x1="0" y1="5" x2="360" y2="5" stroke="#e2e8f0" strokeWidth="1" />
+                          <polyline points={findingLine} fill="none" stroke="#10b981" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+                          <polyline points={zeroLine} fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+                        </svg>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
+                        <span className="inline-flex items-center gap-1"><span className="h-2 w-4 rounded-full bg-emerald-500" /> findings/completed</span>
+                        <span className="inline-flex items-center gap-1"><span className="h-2 w-4 rounded-full bg-amber-500" /> zero-finding rate</span>
+                      </div>
                     </div>
                     <div className="mt-4 grid gap-3 md:grid-cols-4">
                       {trend.points.map((point) => (

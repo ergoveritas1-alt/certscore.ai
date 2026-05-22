@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { query } from "@website-signal-risk-scanner/db";
 import type { LoadTestQualityWarning } from "@website-signal-risk-scanner/shared";
-import { buildScannerQualityTrendSummary } from "../ops/scanner-quality-normal-history";
+import { buildScannerQualityTrendSeries, buildScannerQualityTrendSummary } from "../ops/scanner-quality-normal-history";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminQualityWarningRun = {
@@ -30,6 +30,13 @@ export type AdminScannerQualityTrend = {
   egressProvider: string | null;
   latestWindowAt: string | null;
   points: AdminScannerQualityTrendPoint[];
+  series: Array<{
+    completedAt: string | null;
+    completedCount: number;
+    findingsPerCompleted: number;
+    pagesScanned: number;
+    zeroFindingRate: number;
+  }>;
   source: "db";
 };
 
@@ -250,6 +257,7 @@ export async function listScannerQualityTrends(input: { egressLimit?: number; wi
           egressProvider: latest?.egressProvider ?? null,
           latestWindowAt: latest?.windowEndCompletedAt ?? latest?.createdAt ?? null,
           points: buildScannerQualityTrendSummary({ windows }),
+          series: buildScannerQualityTrendSeries({ windows }),
           source: "db" as const
         };
       });
