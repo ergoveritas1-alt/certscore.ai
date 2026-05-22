@@ -5,6 +5,8 @@ import {
   assertProductionLoadTestClassifierProof,
   assertQueueMetadataEvidenceIsDbBacked,
   buildProductionLoadTestEnqueueCommand,
+  evaluatePhase1BQualityWarnings,
+  type LoadTestSummaryEntry,
   summarizeLoadTestQuality
 } from "./load-test-safety";
 
@@ -180,4 +182,40 @@ test("summarizes load-test quality by egress, time bucket, task, and slot", () =
   assert.equal(summary[0]?.queueWaitMsAverage, 8000 / 3);
   assert.deepEqual(summary[0]?.interruptionLabels, { none: 1, captcha: 1, runtime_error: 1 });
   assert.deepEqual(summary[0]?.errorCounters, { cdp_timeout: 1 });
+});
+
+test("uses persisted rolling same-egress baseline as Tier 2 input", () => {
+  const entries: LoadTestSummaryEntry[] = Array.from({ length: 25 }, (_, index): LoadTestSummaryEntry => ({
+    accessPostureClass: index < 10 ? "early_loss" : "tolerant",
+    completedAt: "2026-05-22T05:03:00.000Z",
+    egressId: "aws-default",
+    egressProvider: "aws-default",
+    findingCounts: index < 18 ? {} : { semantic_labeling_accessibility_issue: 1 },
+    interruptionLabels: index < 10 ? ["early_loss"] : [],
+    pagesScanned: 2,
+    queueWaitMs: 1000,
+    runDurationMs: 9000,
+    scannerSlot: 1,
+    scannerTaskArn: "task-a",
+    status: "completed"
+  }));
+
+  const warnings = evaluatePhase1BQualityWarnings({
+    batchId: "prod-manifest-1-25-load-test-20260522-1300",
+    entries,
+    rollingBaselinesByEgress: {
+      "aws-default": {
+        blockerLabelRate: 0.08,
+        completedCount: 75,
+        findingsPerCompleted: 2,
+        label: "rolling:previous-windows",
+        pagesScanned: 150,
+        tier: "rolling",
+        zeroFindingRate: 0.2
+      }
+    }
+  });
+
+  assert.ok(warnings.some((warning) => warning.code === "quality_regression_vs_baseline"));
+  assert.ok(warnings.every((warning) => warning.comparisonTier === "rolling" || warning.comparisonTier === "no_baseline"));
 });

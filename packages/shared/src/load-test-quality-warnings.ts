@@ -29,6 +29,7 @@ export type LoadTestQualityWarning = {
   baseline?: LoadTestQualityBaselineValues;
   batchId: string;
   code: LoadTestQualityWarningCode;
+  comparisonTier?: "no_baseline" | "same_row" | "rolling" | "peer";
   completionWindow: {
     completedCount: number;
     label?: string;
@@ -91,6 +92,7 @@ function buildWarning(input: {
   baseline?: LoadTestQualityBaselineValues;
   batchId: string;
   code: LoadTestQualityWarningCode;
+  comparisonTier?: LoadTestQualityWarning["comparisonTier"];
   completedCount: number;
   egressProvider: string;
   egressId: string;
@@ -104,6 +106,7 @@ function buildWarning(input: {
     baseline: input.baseline,
     batchId: input.batchId,
     code: input.code,
+    comparisonTier: input.comparisonTier ?? input.baseline?.tier ?? "no_baseline",
     completionWindow: {
       completedCount: input.completedCount,
       label: input.windowLabel
@@ -199,6 +202,7 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
       buildWarning({
         batchId: input.batchId,
         code: "zero_finding_extreme",
+        comparisonTier: "no_baseline",
         completedCount,
         egressId,
         egressProvider,
@@ -216,6 +220,7 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
       buildWarning({
         batchId: input.batchId,
         code: "findings_per_completed_extreme_low",
+        comparisonTier: "no_baseline",
         completedCount,
         egressId,
         egressProvider,
@@ -233,6 +238,7 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
       buildWarning({
         batchId: input.batchId,
         code: "pages_scanned_extreme_low",
+        comparisonTier: "no_baseline",
         completedCount,
         egressId,
         egressProvider,
@@ -251,6 +257,7 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
       buildWarning({
         batchId: input.batchId,
         code: "early_loss_extreme",
+        comparisonTier: "no_baseline",
         completedCount,
         egressId,
         egressProvider,
@@ -268,6 +275,7 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
       buildWarning({
         batchId: input.batchId,
         code: "runtime_error_counter_spike",
+        comparisonTier: "no_baseline",
         completedCount,
         egressId,
         egressProvider,
@@ -290,6 +298,7 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
         baseline: input.baseline,
         batchId: input.batchId,
         code: "quality_regression_vs_baseline",
+        comparisonTier: input.baseline.tier ?? "same_row",
         completedCount,
         egressId,
         egressProvider,
@@ -315,6 +324,7 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
         baseline: input.baseline,
         batchId: input.batchId,
         code: "quality_regression_vs_baseline",
+        comparisonTier: input.baseline.tier ?? "same_row",
         completedCount,
         egressId,
         egressProvider,
@@ -340,6 +350,7 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
         baseline: input.baseline,
         batchId: input.batchId,
         code: "pages_regression_vs_baseline",
+        comparisonTier: input.baseline.tier ?? "same_row",
         completedCount,
         egressId,
         egressProvider,
@@ -367,6 +378,7 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
         baseline: input.baseline,
         batchId: input.batchId,
         code: "access_blocker_label_spike",
+        comparisonTier: input.baseline?.tier ?? "same_row",
         completedCount,
         egressId,
         egressProvider,
@@ -391,6 +403,7 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
         baseline: input.baseline,
         batchId: input.batchId,
         code: "runtime_error_counter_spike",
+        comparisonTier: input.baseline?.tier ?? "same_row",
         completedCount,
         egressId,
         egressProvider,
@@ -431,6 +444,7 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
           },
           batchId: input.batchId,
           code: "egress_underperforms_peer",
+          comparisonTier: "peer",
           completedCount,
           egressId,
           egressProvider,

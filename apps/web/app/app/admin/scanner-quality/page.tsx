@@ -31,7 +31,7 @@ export default async function AdminScannerQualityPage() {
           <CardTitle>Scanner Quality Warnings</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-slate-600">
-          <p>WARN-only Phase 1B egress quality signals from generated calibration and load-test artifacts.</p>
+          <p>WARN-only Phase 1B egress quality signals from durable warning history, with local artifacts as a development fallback.</p>
           <p>Control-plane gate failures remain hard stops and are not downgraded into quality warnings.</p>
         </CardContent>
       </Card>
@@ -51,7 +51,7 @@ export default async function AdminScannerQualityPage() {
                     <th className="py-2 pr-4 font-medium">Batch</th>
                     <th className="py-2 pr-4 font-medium">Generated</th>
                     <th className="py-2 pr-4 font-medium">Warnings</th>
-                    <th className="py-2 pr-4 font-medium">Artifact</th>
+                    <th className="py-2 pr-4 font-medium">Source</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -60,7 +60,7 @@ export default async function AdminScannerQualityPage() {
                       <td className="py-3 pr-4 font-medium text-slate-900">{run.batchId}</td>
                       <td className="py-3 pr-4 text-slate-600">{run.generatedAt ?? "unknown"}</td>
                       <td className="py-3 pr-4 text-slate-600">{run.warningCount}</td>
-                      <td className="py-3 pr-4 font-mono text-xs text-slate-500">{run.runDir}</td>
+                      <td className="py-3 pr-4 font-mono text-xs text-slate-500">{run.source === "db" ? "durable-db" : run.runDir}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -121,6 +121,10 @@ export default async function AdminScannerQualityPage() {
                     <div>
                       <dt className="text-slate-500">Window</dt>
                       <dd className="font-medium text-slate-900">{warning.completionWindow.label ?? "completed scans"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Comparison</dt>
+                      <dd className="font-medium text-slate-900">{warning.comparisonTier ?? warning.baseline?.tier ?? "no_baseline"}</dd>
                     </div>
                   </dl>
                 </div>

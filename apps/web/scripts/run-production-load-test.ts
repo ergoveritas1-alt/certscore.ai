@@ -3,6 +3,13 @@ import path from "node:path";
 import { query } from "@website-signal-risk-scanner/db";
 import { buildProductionLoadTestBatchId, isProductionLoadTestBatchId } from "@website-signal-risk-scanner/shared";
 import {
+  buildRollingBaseline,
+  buildScannerQualityWindows,
+  loadRecentScannerQualityWindows,
+  persistQualityWarningEvents,
+  persistScannerQualityWindows
+} from "../server/ops/load-test-quality-history";
+import {
   assertDbBackedQueueMetadataCanary,
   assertProductionLoadTestClassifierProof,
   assertQueueMetadataEvidenceIsDbBacked,
@@ -700,9 +707,29 @@ async function main() {
     scannerTaskArn: entry.scannerRuntime?.scannerTaskArn ?? null,
     status: entry.status
   }));
+  const currentQualityWindows = buildScannerQualityWindows({
+    batchId,
+    entries: qualityWarningEntries,
+    endRow: end,
+    rejectedCount: failed.length,
+    startRow: start
+  });
+  const rollingBaselinesByEgress: Record<string, NonNullable<Parameters<typeof evaluatePhase1BQualityWarnings>[0]["baseline"]>> = {};
+  for (const window of currentQualityWindows) {
+    const recentWindows = await loadRecentScannerQualityWindows({
+      egressId: window.egress_id,
+      excludeBatchId: batchId,
+      limit: 5
+    });
+    const baseline = buildRollingBaseline(recentWindows);
+    if (baseline) {
+      rollingBaselinesByEgress[window.egress_id] = baseline;
+    }
+  }
   const qualityWarnings = evaluatePhase1BQualityWarnings({
     batchId,
-    entries: qualityWarningEntries
+    entries: qualityWarningEntries,
+    rollingBaselinesByEgress
   });
   const qualityArtifactsGeneratedAt = new Date().toISOString();
 
@@ -716,9 +743,25 @@ async function main() {
   writeJson(qualityWarningsPath, {
     batchId,
     generatedAt: qualityArtifactsGeneratedAt,
+    rollingBaselinesByEgress,
     warningCount: qualityWarnings.length,
     warnings: qualityWarnings
   });
+  try {
+    await persistScannerQualityWindows({
+      batchId,
+      entries: qualityWarningEntries,
+      endRow: end,
+      rejectedCount: failed.length,
+      startRow: start
+    });
+    await persistQualityWarningEvents(qualityWarnings);
+    logEvent(eventsPath, "quality_history_persisted", "Persisted scanner quality windows and WARN-only warning events.");
+  } catch (error) {
+    logEvent(eventsPath, "quality_history_persist_failed", "Could not persist scanner quality history; local artifacts were still written.", {
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
 
   // findings table
   console.log("");

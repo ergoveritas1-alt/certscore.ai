@@ -1,9 +1,11 @@
 import {
   buildProductionLoadTestSource,
-  evaluateLoadTestQualityWarnings,
   isProductionLoadTestBatchId
 } from "@website-signal-risk-scanner/shared";
+import * as qualityWarningsModule from "../../../packages/shared/src/load-test-quality-warnings";
 import { shouldBypassDnsValidationForProductionLoadTest } from "../app/api/full-scan/load-test-intake";
+
+const { evaluateLoadTestQualityWarnings } = qualityWarningsModule;
 
 export type LoadTestSummaryEntry = {
   accessPostureClass: string | null;
@@ -271,16 +273,19 @@ export function summarizeLoadTestQuality(entries: LoadTestSummaryEntry[]) {
 
 export function evaluatePhase1BQualityWarnings(input: {
   baseline?: {
-    blockerLabelRate?: number;
+    blockerLabelRate?: number | null;
     completedCount?: number;
     findingsPerCompleted?: number;
     label?: string;
-    runtimeErrorRate?: number;
+    pagesScanned?: number;
+    runtimeErrorRate?: number | null;
+    tier?: "same_row" | "rolling";
     zeroFindingRate?: number;
   };
   batchId: string;
   entries: LoadTestSummaryEntry[];
   generatedAt?: string;
+  rollingBaselinesByEgress?: Record<string, NonNullable<Parameters<typeof evaluateLoadTestQualityWarnings>[0]["baseline"]>>;
 }) {
   const byEgress = new Map<string, LoadTestSummaryEntry[]>();
   for (const entry of input.entries) {
@@ -331,7 +336,7 @@ export function evaluatePhase1BQualityWarnings(input: {
 
   return windows.flatMap((window) =>
     evaluateLoadTestQualityWarnings({
-      baseline: input.baseline,
+      baseline: input.rollingBaselinesByEgress?.[window.egress_id] ?? input.baseline,
       batchId: input.batchId,
       egressProvider: window.egressProvider,
       egress_id: window.egress_id,
