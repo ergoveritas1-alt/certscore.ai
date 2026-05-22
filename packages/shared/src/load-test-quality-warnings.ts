@@ -2,7 +2,11 @@ export type LoadTestQualityWarningSeverity = "info" | "warn" | "critical";
 
 export type LoadTestQualityWarningCode =
   | "zero_finding_extreme"
+  | "findings_per_completed_extreme_low"
+  | "pages_scanned_extreme_low"
+  | "early_loss_extreme"
   | "quality_regression_vs_baseline"
+  | "pages_regression_vs_baseline"
   | "access_blocker_label_spike"
   | "runtime_error_counter_spike"
   | "egress_underperforms_peer";
@@ -18,6 +22,7 @@ export type LoadTestQualityMetricValues = {
 
 export type LoadTestQualityBaselineValues = Partial<LoadTestQualityMetricValues> & {
   label?: string;
+  tier?: "same_row" | "rolling";
 };
 
 export type LoadTestQualityWarning = {
@@ -67,6 +72,8 @@ const DEFAULT_BLOCKER_LABELS = [
   "robots_or_policy_block",
   "timeout_or_navigation_failure"
 ];
+
+const MIN_COMPLETED_WARNING_WINDOW = 25;
 
 function round(value: number) {
   return Number(value.toFixed(4));
@@ -129,6 +136,33 @@ function runtimeErrorTotal(counters: Record<string, number> | undefined) {
   }, 0);
 }
 
+function median(values: number[]) {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const midpoint = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) {
+    return sorted[midpoint] ?? null;
+  }
+  const left = sorted[midpoint - 1];
+  const right = sorted[midpoint];
+  return left === undefined || right === undefined ? null : (left + right) / 2;
+}
+
+function averagePagesPerCompleted(metrics: LoadTestQualityMetricValues) {
+  return metrics.pagesScanned / Math.max(1, metrics.completedCount);
+}
+
+function relativeDrop(current: number, baseline: number | undefined | null) {
+  if (baseline === undefined || baseline === null || baseline <= 0) return null;
+  return (baseline - current) / baseline;
+}
+
+/**
+ * Phase 1B quality warnings are WARN-only and baseline-optional:
+ * same-row/same-cohort and rolling baselines use material regression checks,
+ * peer checks only compare multiple egresses in the same completed batch, and
+ * no-baseline windows only warn on conservative absolute extremes.
+ */
 export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInput): LoadTestQualityWarning[] {
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const egressId = input.egress_id ?? "unknown-egress";
@@ -136,7 +170,7 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
   const completedCount = input.metrics.completedCount;
   const warnings: LoadTestQualityWarning[] = [];
 
-  if (completedCount < 25) {
+  if (completedCount < MIN_COMPLETED_WARNING_WINDOW) {
     return warnings;
   }
 
@@ -151,6 +185,14 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
   };
   const baselineBlockerLabelRate = input.baseline?.blockerLabelRate;
   const baselineRuntimeErrorRate = input.baseline?.runtimeErrorRate;
+  const baselineFindingsDrop = relativeDrop(metrics.findingsPerCompleted, input.baseline?.findingsPerCompleted);
+  const baselinePagesDrop = relativeDrop(metrics.pagesScanned, input.baseline?.pagesScanned);
+  const baselineZeroFindingRise =
+    input.baseline?.zeroFindingRate === undefined ? null : metrics.zeroFindingRate - input.baseline.zeroFindingRate;
+  const baselineBlockerRise =
+    baselineBlockerLabelRate === undefined || baselineBlockerLabelRate === null || metrics.blockerLabelRate === null || metrics.blockerLabelRate === undefined
+      ? null
+      : metrics.blockerLabelRate - baselineBlockerLabelRate;
 
   if (metrics.zeroFindingRate > 0.8) {
     warnings.push(
@@ -169,11 +211,104 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
     );
   }
 
+  if (metrics.findingsPerCompleted < 0.5) {
+    warnings.push(
+      buildWarning({
+        batchId: input.batchId,
+        code: "findings_per_completed_extreme_low",
+        completedCount,
+        egressId,
+        egressProvider,
+        explanation: `Findings/completed ${metrics.findingsPerCompleted.toFixed(2)} is below the conservative no-baseline floor of 0.5 over ${completedCount} completed scans.`,
+        generatedAt,
+        metrics,
+        severity: "warn",
+        windowLabel: input.completionWindowLabel
+      })
+    );
+  }
+
+  if (averagePagesPerCompleted(metrics) < 1.1) {
+    warnings.push(
+      buildWarning({
+        batchId: input.batchId,
+        code: "pages_scanned_extreme_low",
+        completedCount,
+        egressId,
+        egressProvider,
+        explanation: `Average pages scanned ${averagePagesPerCompleted(metrics).toFixed(2)} is below the conservative no-baseline floor of 1.1 over ${completedCount} completed scans.`,
+        generatedAt,
+        metrics,
+        severity: "warn",
+        windowLabel: input.completionWindowLabel
+      })
+    );
+  }
+
+  const earlyLossRate = (input.labelCounts?.early_loss ?? 0) / Math.max(1, completedCount);
+  if (earlyLossRate > 0.4) {
+    warnings.push(
+      buildWarning({
+        batchId: input.batchId,
+        code: "early_loss_extreme",
+        completedCount,
+        egressId,
+        egressProvider,
+        explanation: `Early-loss rate ${Math.round(earlyLossRate * 100)}% exceeds the conservative no-baseline threshold over ${completedCount} completed scans.`,
+        generatedAt,
+        metrics,
+        severity: "warn",
+        windowLabel: input.completionWindowLabel
+      })
+    );
+  }
+
+  if ((metrics.runtimeErrorRate ?? 0) >= 0.25) {
+    warnings.push(
+      buildWarning({
+        batchId: input.batchId,
+        code: "runtime_error_counter_spike",
+        completedCount,
+        egressId,
+        egressProvider,
+        explanation: "Runtime/browser/CDP error counters exceeded the conservative no-baseline threshold.",
+        generatedAt,
+        metrics,
+        severity: "warn",
+        windowLabel: input.completionWindowLabel
+      })
+    );
+  }
+
+  if (
+    input.baseline?.findingsPerCompleted !== undefined &&
+    baselineFindingsDrop !== null &&
+    baselineFindingsDrop >= 0.7
+  ) {
+    warnings.push(
+      buildWarning({
+        baseline: input.baseline,
+        batchId: input.batchId,
+        code: "quality_regression_vs_baseline",
+        completedCount,
+        egressId,
+        egressProvider,
+        explanation: "Findings/completed dropped by at least 70% versus baseline.",
+        generatedAt,
+        metrics,
+        severity: "critical",
+        windowLabel: input.completionWindowLabel
+      })
+    );
+  }
+
   if (
     input.baseline?.zeroFindingRate !== undefined &&
     input.baseline.findingsPerCompleted !== undefined &&
-    metrics.zeroFindingRate >= input.baseline.zeroFindingRate + 0.2 &&
-    metrics.findingsPerCompleted <= input.baseline.findingsPerCompleted * 0.7
+    baselineZeroFindingRise !== null &&
+    baselineFindingsDrop !== null &&
+    baselineZeroFindingRise >= 0.2 &&
+    baselineFindingsDrop >= 0.4
   ) {
     warnings.push(
       buildWarning({
@@ -193,11 +328,39 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
   }
 
   if (
+    input.baseline?.pagesScanned !== undefined &&
+    input.baseline.findingsPerCompleted !== undefined &&
+    baselinePagesDrop !== null &&
+    baselineFindingsDrop !== null &&
+    baselinePagesDrop >= 0.35 &&
+    baselineFindingsDrop >= 0.3
+  ) {
+    warnings.push(
+      buildWarning({
+        baseline: input.baseline,
+        batchId: input.batchId,
+        code: "pages_regression_vs_baseline",
+        completedCount,
+        egressId,
+        egressProvider,
+        explanation: "Pages scanned dropped materially while findings/completed also dropped versus baseline.",
+        generatedAt,
+        metrics,
+        severity: "warn",
+        windowLabel: input.completionWindowLabel
+      })
+    );
+  }
+
+  if (
     baselineBlockerLabelRate !== undefined &&
     baselineBlockerLabelRate !== null &&
     metrics.blockerLabelRate !== null &&
     metrics.blockerLabelRate !== undefined &&
-    metrics.blockerLabelRate >= Math.max(0.5, baselineBlockerLabelRate + 0.25)
+    baselineBlockerRise !== null &&
+    baselineBlockerRise >= 0.25 &&
+    baselineFindingsDrop !== null &&
+    baselineFindingsDrop >= 0.3
   ) {
     warnings.push(
       buildWarning({
@@ -240,36 +403,52 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
     );
   }
 
-  for (const peer of input.peerWindows ?? []) {
-    if (peer.metrics.completedCount < 25) continue;
+  const comparablePeers = (input.peerWindows ?? []).filter((peer) => {
     const peerId = peer.egress_id ?? "unknown-egress";
-    if (peerId === egressId) continue;
-    const zeroDelta = metrics.zeroFindingRate - peer.metrics.zeroFindingRate;
-    const findingRatio = metrics.findingsPerCompleted / Math.max(0.01, peer.metrics.findingsPerCompleted);
-    if (zeroDelta >= 0.25 && findingRatio <= 0.7) {
+    return peerId !== egressId && peer.metrics.completedCount >= MIN_COMPLETED_WARNING_WINDOW;
+  });
+  const peerFindingsMedian = median(comparablePeers.map((peer) => peer.metrics.findingsPerCompleted));
+  const peerZeroFindingMedian = median(comparablePeers.map((peer) => peer.metrics.zeroFindingRate));
+  const peerPagesMedian = median(comparablePeers.map((peer) => averagePagesPerCompleted(peer.metrics)));
+  const currentPagesAverage = averagePagesPerCompleted(metrics);
+  if (
+    peerFindingsMedian !== null &&
+    peerZeroFindingMedian !== null &&
+    peerPagesMedian !== null &&
+    metrics.findingsPerCompleted <= peerFindingsMedian * 0.5 &&
+    metrics.zeroFindingRate >= peerZeroFindingMedian + 0.2 &&
+    currentPagesAverage >= peerPagesMedian * 0.8 &&
+    currentPagesAverage <= peerPagesMedian * 1.25
+  ) {
+    const peerId = `peer-median:${comparablePeers.map((peer) => peer.egress_id ?? "unknown-egress").sort().join(",")}`;
       warnings.push(
         buildWarning({
           baseline: {
-            findingsPerCompleted: peer.metrics.findingsPerCompleted,
-            label: `peer:${peerId}`,
-            zeroFindingRate: peer.metrics.zeroFindingRate
+            findingsPerCompleted: peerFindingsMedian,
+            label: peerId,
+            pagesScanned: peerPagesMedian * completedCount,
+            zeroFindingRate: peerZeroFindingMedian
           },
           batchId: input.batchId,
           code: "egress_underperforms_peer",
           completedCount,
           egressId,
           egressProvider,
-          explanation: `Egress ${egressId} materially underperformed comparable peer ${peerId}.`,
+          explanation: `Egress ${egressId} materially underperformed comparable peer median.`,
           generatedAt,
           metrics,
           severity: "warn",
           windowLabel: input.completionWindowLabel
         })
       );
-    }
   }
 
-  return warnings.sort((a, b) => a.warningId.localeCompare(b.warningId));
+  const deduped = new Map<string, LoadTestQualityWarning>();
+  for (const warning of warnings) {
+    const key = [warning.warningId, warning.severity, warning.explanation].join("|");
+    deduped.set(key, warning);
+  }
+  return Array.from(deduped.values()).sort((a, b) => a.warningId.localeCompare(b.warningId));
 }
 
 export function assertControlPlaneGate(result: ControlPlaneGateResult) {
