@@ -15,17 +15,17 @@ function formatNumber(value: number | null | undefined) {
   return value.toFixed(2);
 }
 
-function buildPolyline(values: number[], width = 360, height = 96) {
+function buildPolyline(values: number[], width = 360, height = 96, min?: number, max?: number) {
   if (values.length < 2) {
     return "";
   }
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
+  const floor = min ?? Math.min(...values);
+  const ceiling = max ?? Math.max(...values);
+  const range = ceiling - floor || 1;
   return values
     .map((value, index) => {
       const x = (index / Math.max(1, values.length - 1)) * width;
-      const y = height - ((value - min) / range) * (height - 10) - 5;
+      const y = height - ((value - floor) / range) * (height - 10) - 5;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(" ");
@@ -63,9 +63,13 @@ export default async function AdminScannerQualityPage() {
             <div className="space-y-5">
               {trends.map((trend) => {
                 const maxFindings = Math.max(1, ...trend.points.map((point) => point.findingsPerCompleted ?? 0));
-                const findingLine = buildPolyline(trend.series.map((point) => point.findingsPerCompleted));
-                const zeroLine = buildPolyline(trend.series.map((point) => point.zeroFindingRate));
+                const findingValues = trend.series.map((point) => point.findingsPerCompleted);
+                const zeroValues = trend.series.map((point) => point.zeroFindingRate);
+                const findingMax = Math.max(1, ...findingValues);
+                const findingLine = buildPolyline(findingValues, 360, 96, 0, findingMax);
+                const zeroLine = buildPolyline(zeroValues, 360, 96, 0, 1);
                 const latestPoint = trend.series.at(-1);
+                const firstPoint = trend.series[0];
                 return (
                   <div key={trend.egressId} className="rounded-lg border border-slate-200 p-4">
                     <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -87,12 +91,40 @@ export default async function AdminScannerQualityPage() {
                       {trend.series.length < 2 ? (
                         <p className="mt-3 text-sm text-slate-600">Need at least 2 durable windows before a trend line can move.</p>
                       ) : (
-                        <svg className="mt-3 h-28 w-full" viewBox="0 0 360 96" role="img" aria-label={`${trend.egressId} scanner quality trend`}>
-                          <line x1="0" y1="91" x2="360" y2="91" stroke="#e2e8f0" strokeWidth="1" />
-                          <line x1="0" y1="5" x2="360" y2="5" stroke="#e2e8f0" strokeWidth="1" />
-                          <polyline points={findingLine} fill="none" stroke="#10b981" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-                          <polyline points={zeroLine} fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-                        </svg>
+                        <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                          <div>
+                            <div className="mb-1 flex justify-between text-xs text-slate-500">
+                              <span>{formatNumber(findingMax)}</span>
+                              <span>findings/completed</span>
+                            </div>
+                            <svg className="h-28 w-full" viewBox="0 0 360 96" role="img" aria-label={`${trend.egressId} findings per completed trend`}>
+                              <line x1="0" y1="91" x2="360" y2="91" stroke="#e2e8f0" strokeWidth="1" />
+                              <line x1="0" y1="48" x2="360" y2="48" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="4 4" />
+                              <line x1="0" y1="5" x2="360" y2="5" stroke="#e2e8f0" strokeWidth="1" />
+                              <text x="0" y="95" fill="#64748b" fontSize="9">0.00</text>
+                              <text x="330" y="95" fill="#64748b" fontSize="9">{formatNumber(latestPoint?.findingsPerCompleted)}</text>
+                              <polyline points={findingLine} fill="none" stroke="#10b981" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+                            </svg>
+                          </div>
+                          <div>
+                            <div className="mb-1 flex justify-between text-xs text-slate-500">
+                              <span>100%</span>
+                              <span>zero-finding rate</span>
+                            </div>
+                            <svg className="h-28 w-full" viewBox="0 0 360 96" role="img" aria-label={`${trend.egressId} zero-finding trend`}>
+                              <line x1="0" y1="91" x2="360" y2="91" stroke="#e2e8f0" strokeWidth="1" />
+                              <line x1="0" y1="48" x2="360" y2="48" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="4 4" />
+                              <line x1="0" y1="5" x2="360" y2="5" stroke="#e2e8f0" strokeWidth="1" />
+                              <text x="0" y="95" fill="#64748b" fontSize="9">0%</text>
+                              <text x="332" y="95" fill="#64748b" fontSize="9">{formatRate(latestPoint?.zeroFindingRate)}</text>
+                              <polyline points={zeroLine} fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+                            </svg>
+                          </div>
+                          <div className="flex justify-between text-xs text-slate-500 lg:col-span-2">
+                            <span>{firstPoint?.completedAt ?? "oldest"}</span>
+                            <span>{latestPoint?.completedAt ?? "latest"}</span>
+                          </div>
+                        </div>
                       )}
                       <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
                         <span className="inline-flex items-center gap-1"><span className="h-2 w-4 rounded-full bg-emerald-500" /> findings/completed</span>

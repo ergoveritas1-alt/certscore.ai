@@ -81,7 +81,7 @@ export type NormalScannerQualityAggregationResult = {
 };
 
 const NORMAL_SOURCE_TYPE = "normal_scan" as const;
-const NORMAL_SCAN_GRAPH_WINDOW_SIZE = 10;
+const NORMAL_SCAN_GRAPH_WINDOW_SIZE = 5;
 const NORMAL_SCAN_WARNING_MIN_COMPLETED = 25;
 
 function countRecordValue(record: Record<string, number>, key: string, increment = 1) {
@@ -238,7 +238,7 @@ export function buildScannerQualityTrendSummary(input: {
   scanTargets?: number[];
   windows: ScannerQualityWindow[];
 }) {
-  const scanTargets = input.scanTargets ?? [20, 50, 100, 500];
+  const scanTargets = input.scanTargets ?? [20, 50, 100, 500, 2000];
   const windows = [...input.windows].sort((a, b) => (b.windowEndCompletedAt ?? b.createdAt ?? "").localeCompare(a.windowEndCompletedAt ?? a.createdAt ?? ""));
 
   return scanTargets.map((target) => {
@@ -393,7 +393,7 @@ async function loadPendingNormalScanRows(input: {
 
 export async function persistPendingNormalScannerQualityWindows(input: { egressIds?: string[]; windowSize?: number } = {}): Promise<NormalScannerQualityAggregationResult> {
   const windowSize = input.windowSize ?? NORMAL_SCAN_GRAPH_WINDOW_SIZE;
-  const maxWindowsPerEgress = 20;
+  const maxWindowsPerEgress = 200;
   const egressIds =
     input.egressIds ??
     (

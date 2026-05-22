@@ -36,28 +36,28 @@ test("builds durable normal-scan windows from completed production scans", () =>
   const window = buildNormalScannerQualityWindow({ egressId: "aws-default", rows });
 
   assert.equal(window?.sourceType, "normal_scan");
-  assert.equal(window?.completedCount, 10);
-  assert.equal(window?.zeroFindingCount, 10);
+  assert.equal(window?.completedCount, 5);
+  assert.equal(window?.zeroFindingCount, 5);
   assert.equal(window?.findingsPerCompleted, 0);
   assert.equal(window?.accessPostureCounts.early_loss, 3);
   assert.equal(window?.labelCounts.bot_block_or_forbidden, 4);
   assert.equal(window?.windowStartCompletedAt, "2026-05-22T20:00:00.000Z");
-  assert.equal(window?.windowEndCompletedAt, "2026-05-22T20:09:00.000Z");
+  assert.equal(window?.windowEndCompletedAt, "2026-05-22T20:04:00.000Z");
 });
 
 test("does not build a normal-scan quality window until the completed-scan threshold is met", () => {
   const window = buildNormalScannerQualityWindow({
     egressId: "aws-default",
-    rows: Array.from({ length: 9 }, () => row())
+    rows: Array.from({ length: 4 }, () => row())
   });
 
   assert.equal(window, null);
 });
 
-test("defaults normal scan graph windows to 10 scans", () => {
+test("defaults normal scan graph windows to 5 scans", () => {
   const window = buildNormalScannerQualityWindow({
     egressId: "aws-default",
-    rows: Array.from({ length: 10 }, (_, index) =>
+    rows: Array.from({ length: 5 }, (_, index) =>
       row({
         completedAt: `2026-05-22T20:${String(index).padStart(2, "0")}:00.000Z`,
         scanId: `00000000-0000-0000-0000-${String(index + 1).padStart(12, "0")}`
@@ -65,18 +65,18 @@ test("defaults normal scan graph windows to 10 scans", () => {
     )
   });
 
-  assert.equal(window?.completedCount, 10);
+  assert.equal(window?.completedCount, 5);
 });
 
-test("accumulates 10-scan graph windows into conservative warning windows", () => {
-  const windows = Array.from({ length: 3 }, (_, windowIndex) =>
+test("accumulates 5-scan graph windows into conservative warning windows", () => {
+  const windows = Array.from({ length: 5 }, (_, windowIndex) =>
     buildNormalScannerQualityWindow({
       egressId: "aws-default",
-      rows: Array.from({ length: 10 }, (_, index) =>
+      rows: Array.from({ length: 5 }, (_, index) =>
         row({
           completedAt: `2026-05-22T2${windowIndex}:${String(index).padStart(2, "0")}:00.000Z`,
           findingCount: windowIndex === 0 ? 0 : 2,
-          scanId: `00000000-0000-0000-0000-${String(windowIndex * 10 + index + 1).padStart(12, "0")}`
+          scanId: `00000000-0000-0000-0000-${String(windowIndex * 5 + index + 1).padStart(12, "0")}`
         })
       )
     })!
@@ -88,9 +88,9 @@ test("accumulates 10-scan graph windows into conservative warning windows", () =
     windows
   });
 
-  assert.equal(accumulated?.completedCount, 30);
-  assert.equal(accumulated?.zeroFindingCount, 10);
-  assert.equal(accumulated?.findingsPerCompleted, 40 / 30);
+  assert.equal(accumulated?.completedCount, 25);
+  assert.equal(accumulated?.zeroFindingCount, 5);
+  assert.equal(accumulated?.findingsPerCompleted, 40 / 25);
 });
 
 test("summarizes rolling trend selectors from durable windows without reading raw scans", () => {
@@ -125,9 +125,9 @@ test("summarizes rolling trend selectors from durable windows without reading ra
 
   const summary = buildScannerQualityTrendSummary({ scanTargets: [20, 50], windows });
 
-  assert.equal(summary[0]?.completedCount, 20);
-  assert.equal(summary[0]?.zeroFindingRate, 0.75);
-  assert.equal(summary[1]?.completedCount, 20);
-  assert.equal(summary[1]?.zeroFindingRate, 0.75);
+  assert.equal(summary[0]?.completedCount, 10);
+  assert.equal(summary[0]?.zeroFindingRate, 1);
+  assert.equal(summary[1]?.completedCount, 10);
+  assert.equal(summary[1]?.zeroFindingRate, 1);
   assert.equal(summary[1]?.windowCount, 2);
 });

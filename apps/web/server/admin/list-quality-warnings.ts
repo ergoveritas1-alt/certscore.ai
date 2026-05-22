@@ -218,7 +218,7 @@ export async function listScannerQualityTrends(input: { egressLimit?: number; wi
         order by created_at desc
         limit $1
       `,
-      [input.windowLimit ?? 200],
+      [input.windowLimit ?? 1200],
       { readOnly: true }
     );
     const byEgress = new Map<string, typeof rows.rows>();
