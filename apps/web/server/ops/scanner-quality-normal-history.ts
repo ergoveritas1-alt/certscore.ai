@@ -393,7 +393,7 @@ async function loadPendingNormalScanRows(input: {
 
 export async function persistPendingNormalScannerQualityWindows(input: { egressIds?: string[]; windowSize?: number } = {}): Promise<NormalScannerQualityAggregationResult> {
   const windowSize = input.windowSize ?? NORMAL_SCAN_GRAPH_WINDOW_SIZE;
-  const maxWindowsPerEgress = 200;
+  const maxWindowsPerEgress = 400;
   const egressIds =
     input.egressIds ??
     (

@@ -5,6 +5,7 @@ import path from "node:path";
 import { query } from "@website-signal-risk-scanner/db";
 import type { LoadTestQualityWarning } from "@website-signal-risk-scanner/shared";
 import { buildScannerQualityTrendSeries, buildScannerQualityTrendSummary } from "../ops/scanner-quality-normal-history";
+import type { ScannerQualityWindow } from "../ops/load-test-quality-history";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminQualityWarningRun = {
@@ -37,6 +38,7 @@ export type AdminScannerQualityTrend = {
     pagesScanned: number;
     zeroFindingRate: number;
   }>;
+  scopeLabel: string;
   source: "db";
 };
 
@@ -214,53 +216,59 @@ export async function listScannerQualityTrends(input: { egressLimit?: number; wi
           window_end_completed_at::text as window_end_completed_at,
           created_at::text as created_at
         from scanner_quality_windows
-        where source_type = 'normal_scan'
         order by created_at desc
         limit $1
       `,
-      [input.windowLimit ?? 1200],
+      [input.windowLimit ?? 2400],
       { readOnly: true }
     );
     const byEgress = new Map<string, typeof rows.rows>();
-    for (const row of rows.rows) {
+    const normalRows = rows.rows.filter((row) => row.source_type === "normal_scan");
+    for (const row of normalRows) {
       byEgress.set(row.egress_id, [...(byEgress.get(row.egress_id) ?? []), row]);
     }
-    return Array.from(byEgress.entries())
+    const buildTrend = (egressId: string, items: typeof rows.rows, egressProvider: string | null, scopeLabel: string) => {
+      const windows = items.map((row) => ({
+        accessPostureCounts: parseRecord(row.access_posture_counts),
+        batchId: row.batch_id,
+        completedCount: row.completed_count,
+        createdAt: row.created_at,
+        egressProvider,
+        egress_id: egressId,
+        endRow: null,
+        failedCount: 0,
+        findingsPerCompleted: parseNumber(row.findings_per_completed),
+        labelCounts: parseRecord(row.label_counts),
+        pagesScanned: row.pages_scanned,
+        rejectedCount: 0,
+        scannerSlotCounts: {},
+        scannerTaskCounts: {},
+        sourceType: row.source_type as ScannerQualityWindow["sourceType"],
+        sourceWindowId: null,
+        startRow: null,
+        windowEndCompletedAt: row.window_end_completed_at,
+        windowStartCompletedAt: row.window_start_completed_at,
+        zeroFindingCount: row.zero_finding_count,
+        zeroFindingRate: parseNumber(row.zero_finding_rate)
+      }));
+      const latest = windows[0] ?? null;
+      return {
+        egressId,
+        egressProvider: latest?.egressProvider ?? egressProvider,
+        latestWindowAt: latest?.windowEndCompletedAt ?? latest?.createdAt ?? null,
+        points: buildScannerQualityTrendSummary({ windows }),
+        scopeLabel,
+        series: buildScannerQualityTrendSeries({ windows }),
+        source: "db" as const
+      };
+    };
+    const globalTrend = rows.rows.length > 0 ? [buildTrend("global", rows.rows, "all egresses", "all sources")] : [];
+    const egressTrends = Array.from(byEgress.entries())
       .slice(0, input.egressLimit ?? 6)
       .map(([egressId, items]) => {
-        const windows = items.map((row) => ({
-          accessPostureCounts: parseRecord(row.access_posture_counts),
-          batchId: row.batch_id,
-          completedCount: row.completed_count,
-          createdAt: row.created_at,
-          egressProvider: row.egress_provider,
-          egress_id: row.egress_id,
-          endRow: null,
-          failedCount: 0,
-          findingsPerCompleted: parseNumber(row.findings_per_completed),
-          labelCounts: parseRecord(row.label_counts),
-          pagesScanned: row.pages_scanned,
-          rejectedCount: 0,
-          scannerSlotCounts: {},
-          scannerTaskCounts: {},
-          sourceType: "normal_scan" as const,
-          sourceWindowId: null,
-          startRow: null,
-          windowEndCompletedAt: row.window_end_completed_at,
-          windowStartCompletedAt: row.window_start_completed_at,
-          zeroFindingCount: row.zero_finding_count,
-          zeroFindingRate: parseNumber(row.zero_finding_rate)
-        }));
-        const latest = windows[0] ?? null;
-        return {
-          egressId,
-          egressProvider: latest?.egressProvider ?? null,
-          latestWindowAt: latest?.windowEndCompletedAt ?? latest?.createdAt ?? null,
-          points: buildScannerQualityTrendSummary({ windows }),
-          series: buildScannerQualityTrendSeries({ windows }),
-          source: "db" as const
-        };
+        return buildTrend(egressId, items, items[0]?.egress_provider ?? null, "normal traffic");
       });
+    return [...globalTrend, ...egressTrends];
   } catch {
     return [];
   }
