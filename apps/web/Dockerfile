@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS builder
 
 ARG BUILD_GIT_REF=""
 ARG BUILD_GIT_SHA=""
@@ -40,7 +40,7 @@ RUN pnpm --filter @website-signal-risk-scanner/db build
 RUN pnpm --filter @website-signal-risk-scanner/validation-shared build
 RUN pnpm --filter @website-signal-risk-scanner/web build
 
-FROM node:20-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS runner
 
 ARG BUILD_GIT_REF=""
 ARG BUILD_GIT_SHA=""
