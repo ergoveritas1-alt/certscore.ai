@@ -3,9 +3,12 @@ import test from "node:test";
 import {
   assertDbBackedQueueMetadataCanary,
   assertProductionLoadTestClassifierProof,
+  assertProductionLoadTestEgressBudgetAllowsEnqueue,
   assertQueueMetadataEvidenceIsDbBacked,
+  buildEgressBudgetEvidenceFromScanCounts,
   buildProductionLoadTestEnqueueCommand,
   evaluatePhase1BQualityWarnings,
+  evaluateProductionLoadTestEgressBudget,
   type LoadTestSummaryEntry,
   summarizeLoadTestQuality
 } from "./load-test-safety";
@@ -127,6 +130,35 @@ test("scan-status is rejected as queue metadata canary evidence", () => {
     () => assertQueueMetadataEvidenceIsDbBacked({ source: "scan-status" }),
     /scan-status does not expose queue_origin\/queue_priority/
   );
+});
+
+test("egress budget scan count rows are normalized for artifact evaluation", () => {
+  const evidence = buildEgressBudgetEvidenceFromScanCounts({
+    current_non_terminal_count: "24",
+    current_scanner_queue_count: "3",
+    recent_completed_count: "30",
+    recent_started_count: "49"
+  });
+  const check = evaluateProductionLoadTestEgressBudget({
+    batchId: "prod-manifest-2501-2525-load-test-20260522-0457",
+    evidence
+  });
+
+  assert.equal(check.decision, "pass");
+  assert.equal(check.currentNonTerminalCount, 24);
+  assert.equal(check.currentScannerQueueCount, 3);
+  assert.equal(check.recentCompletedCount, 30);
+  assert.equal(check.recentStartedCount, 49);
+});
+
+test("runner refuses to proceed when egress budget check blocks", () => {
+  const check = evaluateProductionLoadTestEgressBudget({
+    batchId: "prod-manifest-2501-2525-load-test-20260522-0457",
+    evidence: buildEgressBudgetEvidenceFromScanCounts(null)
+  });
+
+  assert.equal(check.decision, "block");
+  assert.throws(() => assertProductionLoadTestEgressBudgetAllowsEnqueue(check), /Egress budget check block/);
 });
 
 test("summarizes load-test quality by egress, time bucket, task, and slot", () => {

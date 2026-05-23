@@ -9,15 +9,21 @@ import {
   persistQualityWarningEvents,
   persistScannerQualityWindows
 } from "../server/ops/load-test-quality-history";
+import { normalizeLoadTestEgressBudgetPolicy } from "../../../packages/shared/src/load-test-egress-budget";
 import {
+  assertProductionLoadTestEgressBudgetAllowsEnqueue,
   assertDbBackedQueueMetadataCanary,
   assertProductionLoadTestClassifierProof,
   assertQueueMetadataEvidenceIsDbBacked,
+  buildEgressBudgetEvidenceFromScanCounts,
   buildProductionLoadTestEnqueueCommand,
   evaluatePhase1BQualityWarnings,
+  evaluateProductionLoadTestEgressBudget,
+  type EgressBudgetScanCountsRow,
   type ProductionLoadTestEnqueueCommand,
   summarizeLoadTestQuality
 } from "./load-test-safety";
+import type { LoadTestEgressBudgetPolicy } from "@website-signal-risk-scanner/shared";
 
 const POLL_INTERVAL_MS = 30_000;
 const BASE_URL = "https://certscore.ai";
@@ -154,6 +160,13 @@ function appendJsonl(filePath: string, value: unknown) {
 function writeJson(filePath: string, value: unknown) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function readJsonIfExists<T>(filePath: string): T | null {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+  return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
 }
 
 function logEvent(
@@ -338,6 +351,32 @@ async function verifyPostEnqueueCanary(scanIds: string[]) {
   return result.rows;
 }
 
+async function loadEgressBudgetEvidence(policy: Pick<LoadTestEgressBudgetPolicy, "egress_id">) {
+  const result = await query<EgressBudgetScanCountsRow>(
+    `select
+        count(*) filter (
+          where egress_id = $1
+            and status not in ('completed', 'failed', 'canceled')
+        )::text as current_non_terminal_count,
+        count(*) filter (
+          where status = 'queued'
+        )::text as current_scanner_queue_count,
+        count(*) filter (
+          where egress_id = $1
+            and started_at >= now() - interval '1 hour'
+        )::text as recent_started_count,
+        count(*) filter (
+          where egress_id = $1
+            and completed_at >= now() - interval '1 hour'
+        )::text as recent_completed_count
+       from scans`,
+    [policy.egress_id],
+    { readOnly: true }
+  );
+
+  return buildEgressBudgetEvidenceFromScanCounts(result.rows[0] ?? null);
+}
+
 function durationMs(start: string | null, end: string | null) {
   if (!start || !end) {
     return null;
@@ -463,10 +502,14 @@ async function main() {
     path.resolve(
       `apps/web/tmp/tranco-load-tests/runs/${buildProductionLoadTestBatchId({ start, end })}`
     );
+  const egressBudgetPolicyPath = path.resolve(
+    getArgValue("--egress-budget-policy") ?? "apps/web/tmp/tranco-load-tests/egress-budget-policy.json"
+  );
 
   const batchId = path.basename(outputDir);
   const eventsPath = path.join(outputDir, "operator-events.jsonl");
   const monitorPath = path.join(outputDir, "live-monitor.jsonl");
+  const egressBudgetPath = path.join(outputDir, "egress-budget-check.json");
   const enqueueCommandsPath = path.join(outputDir, "enqueue-commands.json");
   const enqueuePath = path.join(outputDir, "enqueue-results.json");
   const canaryPath = path.join(outputDir, "canary-queue-metadata-db-check.json");
@@ -528,6 +571,41 @@ async function main() {
     });
     logEvent(eventsPath, "classifier_proof", "Generated load-test headers/source classify as trusted production load-test traffic.");
   }
+
+  const configuredEgressBudgetPolicy = readJsonIfExists<Partial<LoadTestEgressBudgetPolicy>>(egressBudgetPolicyPath);
+  const egressBudgetPolicy = normalizeLoadTestEgressBudgetPolicy(configuredEgressBudgetPolicy);
+  let egressBudgetCaveats =
+    configuredEgressBudgetPolicy === null
+      ? [`No egress budget policy file found at ${egressBudgetPolicyPath}; using built-in conservative defaults.`]
+      : [`Loaded egress budget policy from ${egressBudgetPolicyPath}.`];
+  let egressBudgetEvidence;
+  try {
+    egressBudgetEvidence = await loadEgressBudgetEvidence(egressBudgetPolicy);
+  } catch (error) {
+    egressBudgetEvidence = buildEgressBudgetEvidenceFromScanCounts(null);
+    egressBudgetCaveats = [
+      ...egressBudgetCaveats,
+      `Database evidence query failed: ${error instanceof Error ? error.message : String(error)}`
+    ];
+  }
+  const egressBudgetCheck = evaluateProductionLoadTestEgressBudget({
+    batchId,
+    caveats: egressBudgetCaveats,
+    evidence: egressBudgetEvidence,
+    policy: egressBudgetPolicy
+  });
+  writeJson(egressBudgetPath, egressBudgetCheck);
+  logEvent(
+    eventsPath,
+    "egress_budget_check",
+    `Egress budget decision=${egressBudgetCheck.decision} for ${egressBudgetCheck.egress_id}.`,
+    {
+      artifact: egressBudgetPath,
+      reasons: egressBudgetCheck.reasons,
+      recommendedResumeAt: egressBudgetCheck.recommendedResumeAt
+    }
+  );
+  assertProductionLoadTestEgressBudgetAllowsEnqueue(egressBudgetCheck);
 
   // enqueue the first row as the post-enqueue canary before continuing the batch
   logEvent(eventsPath, "enqueue_start", `Enqueuing ${targetRows.length} domains`);
@@ -796,6 +874,16 @@ async function main() {
   reportLines.push(`- **Completed:** ${terminal.filter((e) => e.status === "completed").length}`);
   reportLines.push(`- **Failed/Error:** ${terminal.filter((e) => e.status !== "completed").length}`);
   reportLines.push(`- **Polls:** ${pollCount}`);
+  reportLines.push("");
+  reportLines.push("## Phase 1C Egress Budget");
+  reportLines.push("");
+  reportLines.push(`- **Decision:** ${egressBudgetCheck.decision}`);
+  reportLines.push(`- **Egress:** ${egressBudgetCheck.egress_id} / ${egressBudgetCheck.egress_provider}`);
+  reportLines.push(`- **Artifact:** ${egressBudgetPath}`);
+  reportLines.push(`- **Reasons:** ${egressBudgetCheck.reasons.join(" ")}`);
+  if (egressBudgetCheck.recommendedResumeAt) {
+    reportLines.push(`- **Recommended resume:** ${egressBudgetCheck.recommendedResumeAt}`);
+  }
   reportLines.push("");
   reportLines.push("## Findings");
   reportLines.push("");

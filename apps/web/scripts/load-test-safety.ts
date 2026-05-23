@@ -2,10 +2,21 @@ import {
   buildProductionLoadTestSource,
   isProductionLoadTestBatchId
 } from "@website-signal-risk-scanner/shared";
+import type {
+  LoadTestEgressBudgetCheck,
+  LoadTestEgressBudgetEvidence,
+  LoadTestEgressBudgetPolicy
+} from "@website-signal-risk-scanner/shared";
+import * as egressBudgetModule from "../../../packages/shared/src/load-test-egress-budget";
 import * as qualityWarningsModule from "../../../packages/shared/src/load-test-quality-warnings";
 import { shouldBypassDnsValidationForProductionLoadTest } from "../app/api/full-scan/load-test-intake";
 
 const { evaluateLoadTestQualityWarnings } = qualityWarningsModule;
+const {
+  assertLoadTestEgressBudgetAllowsEnqueue,
+  DEFAULT_LOAD_TEST_EGRESS_BUDGET_POLICY,
+  evaluateLoadTestEgressBudget
+} = egressBudgetModule;
 
 export type LoadTestSummaryEntry = {
   accessPostureClass: string | null;
@@ -46,6 +57,57 @@ export type QueueMetadataCanaryRow = {
   queue_origin: string | null;
   queue_priority: number | null;
 };
+
+export type EgressBudgetScanCountsRow = {
+  current_non_terminal_count: string | number | null;
+  current_scanner_queue_count: string | number | null;
+  recent_completed_count: string | number | null;
+  recent_started_count: string | number | null;
+};
+
+function toNullableCount(value: string | number | null | undefined) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function buildEgressBudgetEvidenceFromScanCounts(row: EgressBudgetScanCountsRow | null): LoadTestEgressBudgetEvidence {
+  if (!row) {
+    return {
+      currentNonTerminalCount: null,
+      currentScannerQueueCount: null,
+      recentCompletedCount: null,
+      recentStartedCount: null
+    };
+  }
+
+  return {
+    currentNonTerminalCount: toNullableCount(row.current_non_terminal_count),
+    currentScannerQueueCount: toNullableCount(row.current_scanner_queue_count),
+    recentCompletedCount: toNullableCount(row.recent_completed_count),
+    recentStartedCount: toNullableCount(row.recent_started_count)
+  };
+}
+
+export function evaluateProductionLoadTestEgressBudget(input: {
+  batchId: string;
+  caveats?: string[];
+  evidence: LoadTestEgressBudgetEvidence;
+  policy?: Partial<LoadTestEgressBudgetPolicy> | null;
+}): LoadTestEgressBudgetCheck {
+  return evaluateLoadTestEgressBudget({
+    batchId: input.batchId,
+    caveats: input.caveats,
+    evidence: input.evidence,
+    policy: input.policy ?? DEFAULT_LOAD_TEST_EGRESS_BUDGET_POLICY
+  });
+}
+
+export function assertProductionLoadTestEgressBudgetAllowsEnqueue(check: LoadTestEgressBudgetCheck) {
+  assertLoadTestEgressBudgetAllowsEnqueue(check);
+}
 
 export function assertProductionLoadTestClassifierProof(input: {
   batchId: string;
