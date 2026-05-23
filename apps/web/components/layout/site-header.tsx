@@ -10,21 +10,21 @@ const navLinks = [
 ];
 
 const resourceLinks = [
-  { href: "/guides", label: "Guides" },
-  { href: "/benchmarks", label: "Benchmarks" },
-  { href: "/findings", label: "Findings" },
-  { href: "/regulatory", label: "Regulatory pages" },
   { href: "/gdpr", label: "GDPR privacy" },
   { href: "/ccpa", label: "CCPA privacy" },
   { href: "/ftc", label: "FTC disclosure" },
   { href: "/accessibility", label: "ADA accessibility" },
+  { href: "/guides", label: "Guides" },
+  { href: "/benchmarks", label: "Benchmarks" },
+  { href: "/findings", label: "Findings" },
+  { href: "/regulatory", label: "Regulatory pages" },
   { href: "/methodology", label: "Methodology" },
   { href: "/compare", label: "Compare" }
 ];
 
 export function SiteHeader() {
   return (
-    <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
+    <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <div className="min-w-0 flex items-center overflow-visible">
           <CertScoreLogo compact showText className="shrink-0" />
