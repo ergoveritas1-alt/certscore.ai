@@ -19,7 +19,11 @@ const footerSections = [
       { href: "/guides", label: "Guides" },
       { href: "/benchmarks", label: "Benchmarks" },
       { href: "/findings", label: "Findings" },
+      { href: "/regulatory", label: "Regulatory pages" },
       { href: "/gdpr", label: "GDPR privacy scanner" },
+      { href: "/ccpa", label: "CCPA privacy scanner" },
+      { href: "/ftc", label: "FTC disclosure scanner" },
+      { href: "/accessibility", label: "ADA accessibility scanner" },
       { href: "/methodology", label: "Methodology" },
       { href: "/compare", label: "Compare" }
     ]

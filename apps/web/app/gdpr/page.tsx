@@ -54,7 +54,7 @@ const gdprSignalBenchmarks = [
     label: "Tracking before recorded consent",
     count: 458,
     denominatorApprox: 2500,
-    displayPercent: "~18%",
+    displayPercent: "18%",
     caveat: "Observed signals across approximately 2,500 scanned rank slots.",
     gdprRelevance: "Consent timing and ePrivacy storage/access review"
   },
@@ -63,7 +63,7 @@ const gdprSignalBenchmarks = [
     label: "Session recording services detected",
     count: 228,
     denominatorApprox: 2500,
-    displayPercent: "~9%",
+    displayPercent: "9%",
     caveat: "Requires review of masking, consent gating, and sensitive-page exclusions.",
     gdprRelevance: "Data minimization, transparency, and security review"
   },
@@ -72,7 +72,7 @@ const gdprSignalBenchmarks = [
     label: "Third-party tracking cookies before consent",
     count: null,
     denominatorApprox: null,
-    displayPercent: "~10% in completed cookie-timing buckets",
+    displayPercent: "10% in completed cookie-timing buckets",
     caveat: "Final all-bucket denominator pending; do not overstate.",
     gdprRelevance: "Cookie consent and terminal-equipment access review"
   },
@@ -81,7 +81,7 @@ const gdprSignalBenchmarks = [
     label: "Cross-domain identifier sharing observed",
     count: 49,
     denominatorApprox: 2500,
-    displayPercent: "~2%",
+    displayPercent: "2%",
     caveat: "Identifier-like data movement observed across domain contexts.",
     gdprRelevance: "Transparency, online identifiers, and third-party disclosure review"
   },
@@ -90,7 +90,7 @@ const gdprSignalBenchmarks = [
     label: "Tracking appeared to continue after reject",
     count: 34,
     denominatorApprox: 2500,
-    displayPercent: "~1-2%",
+    displayPercent: "1-2%",
     caveat: "Reject-path persistence signals require careful manual review.",
     gdprRelevance: "Consent withdrawal and enforcement review"
   }
@@ -114,22 +114,35 @@ const runtimeCards = [
   }
 ];
 
+const productionEvidenceRows = [
+  ["domain", "www.draftkings.com"],
+  ["scan_id", "c432334e-83e9-4799-843e-cb1574b6f540"],
+  ["scanned_at", "2026-04-27T18:51:57.369Z"],
+  ["finding_id", "pre_consent_tracking_detected"],
+  ["cmp_vendor", "TrustArc"],
+  ["first_request_ms", "1062"],
+  ["first_third_party_request_ms", "2662"],
+  ["third_party_requests", "117"],
+  ["third_party_cookies", "50"],
+  ["preconsent_violation_count", "26"],
+  ["vendor_samples", "Google Tag Manager, Meta Pixel, Reddit Pixel, TikTok Pixel, Google Ads"]
+] as const;
+
 const findingClusters = [
   {
     title: "Consent timing/enforcement",
-    ids: ["pre_consent_tracking_detected", "third_party_cookie_pre_consent", "reject_tracking_persists_after_reject"]
+    ids: ["pre_consent_tracking_detected", "reject_tracking_persists_after_reject"]
   },
   {
     title: "Consent UX",
-    ids: ["reject_option_missing_or_hidden", "asymmetric_consent_ui", "consent_dark_patterns_detected", "forced_consent_interaction"]
+    ids: ["reject_option_missing_or_hidden", "asymmetric_consent_ui", "consent_dark_patterns_detected"]
   },
   {
     title: "Tracking/identifiers/adtech",
     ids: [
       "cross_domain_identifier_sharing_observed",
       "rtb_cookie_sync_observed",
-      "fingerprinting_related_signals_observed",
-      "probable_fingerprinting"
+      "fingerprinting_related_signals_observed"
     ]
   },
   {
@@ -208,29 +221,6 @@ const guardrails = [
   "Region, prior consent, A/B tests, CMP configuration, bot protections, and blocked scans can affect results."
 ];
 
-const useCases = [
-  {
-    title: "Privacy teams",
-    body: "Prioritize consent, cookie, tracker, replay, fingerprinting, and disclosure review using retained runtime evidence."
-  },
-  {
-    title: "Developers / tag-manager owners",
-    body: "Find timing and reject-path signals that may point to CMP rules, tag sequencing, or vendor-trigger configuration."
-  },
-  {
-    title: "Agencies / auditors",
-    body: "Use repeatable public-web observations as an evidence pack for client review without treating automation as a final answer."
-  },
-  {
-    title: "Legal reviewers",
-    body: "Start from concrete browser behavior and decide what requires jurisdiction-specific manual analysis."
-  },
-  {
-    title: "GRC / vendor diligence teams",
-    body: "Review public vendor surfaces for observable privacy and data-protection signals before deeper diligence."
-  }
-];
-
 const faqs = [
   {
     question: "What is a GDPR website privacy scanner?",
@@ -277,17 +267,6 @@ const faqs = [
     answer:
       "\"Not detected\" means the signal was not observed in the scan scope. It is not proof of absence, and results can vary by region, prior consent, A/B tests, CMP configuration, browser state, timing, and coverage."
   }
-];
-
-const relatedResources = [
-  { href: "/findings", label: "Findings registry" },
-  { href: "/how-it-works", label: "How it works" },
-  { href: "/guides", label: "Guides" },
-  { href: "/benchmarks/website-consent-tracking-2026", label: "Website consent tracking benchmark" },
-  { href: "/compare/privacy-scanner-vs-cookie-scanner", label: "Privacy scanner vs cookie scanner" },
-  { href: "/guides/pre-consent-tracking", label: "Pre-consent tracking guide" },
-  { href: "/guides/website-consent-audit", label: "Website consent audit guide" },
-  { href: "/llms.txt", label: "LLM reference" }
 ];
 
 function Bar({ percentLabel, widthClass }: { percentLabel: string; widthClass: string }) {
@@ -399,22 +378,16 @@ export default function GdprPage() {
             </div>
           </div>
 
-          <Card className="border-slate-200 bg-white shadow-none">
+          <Card className="border-slate-800 bg-slate-950 text-slate-100 shadow-[0_22px_60px_rgba(2,6,23,0.28)]">
             <CardHeader>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Illustrative sample, not a live scan</p>
-              <CardTitle className="text-xl text-slate-950">Runtime evidence card</CardTitle>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Production example, sanitized</p>
+              <CardTitle className="text-xl text-white">Runtime evidence card</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              {[
-                ["event", "page_start"],
-                ["consent_surface", "consent_banner_visible"],
-                ["consent_state_observed", "no_choice_observed"],
-                ["request_classification", "classified non-essential request"],
-                ["query_redacted", "true"]
-              ].map(([label, value]) => (
-                <div key={label} className="grid grid-cols-[10rem_1fr] gap-3 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
+              {productionEvidenceRows.map(([label, value]) => (
+                <div key={label} className="grid grid-cols-[10rem_1fr] gap-3 border-b border-slate-800 pb-3 last:border-b-0 last:pb-0">
                   <span className="font-mono text-xs text-slate-500">{label}</span>
-                  <span className="font-medium text-slate-800">{value}</span>
+                  <span className="min-w-0 break-words font-medium text-slate-100">{value}</span>
                 </div>
               ))}
             </CardContent>
@@ -426,7 +399,7 @@ export default function GdprPage() {
         <div className="border border-slate-200 bg-white p-5 text-base leading-7 text-slate-700">
           <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Direct answer</h2>
           <p className="mt-3">
-            CertScore is a GDPR website privacy scanner that surfaces automated public-web observations about consent timing, cookies, tracking, and privacy disclosures. It does not provide legal advice, certification, or a GDPR compliance determination.
+            CertScore provides GDPR website privacy scanning that surfaces automated public-web observations about consent timing, cookies, tracking, and privacy disclosures. It does not provide legal advice, certification, or a GDPR compliance determination.
           </p>
         </div>
       </section>
@@ -454,12 +427,12 @@ export default function GdprPage() {
       <section className="border-y border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-14">
           <div className="max-w-3xl space-y-3">
-            <Badge tone="neutral">Tranco production scan context</Badge>
+            <Badge tone="neutral">Production scan context</Badge>
             <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
-              GDPR/ePrivacy signals observed in recent Tranco production scans
+              GDPR/ePrivacy signals observed in recent production scans
             </h2>
             <p className="text-base leading-7 text-slate-600">
-              Across recent CertScore production scan batches covering Tranco-ranked public websites, the most common GDPR/ePrivacy-relevant review signal was tracking before a recorded consent choice. These are automated public-web observations for review, not legal conclusions, certification, or compliance determinations.
+              Across recent CertScore production scan batches covering public websites, the most common GDPR/ePrivacy-relevant review signal was tracking before a recorded consent choice. These are automated public-web observations for review, not legal conclusions, certification, or compliance determinations.
             </p>
           </div>
           <div className="mt-8 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
@@ -492,7 +465,7 @@ export default function GdprPage() {
                       <p className="shrink-0 text-sm font-semibold text-slate-950">{metric.displayPercent}</p>
                     </div>
                     <Bar
-                      percentLabel={metric.count && metric.denominatorApprox ? `${metric.count} / ~${metric.denominatorApprox}` : metric.caveat}
+                      percentLabel={metric.count && metric.denominatorApprox ? `${metric.count} / ${metric.denominatorApprox}` : metric.caveat}
                       widthClass={index === 0 ? "w-[72%]" : index === 1 ? "w-[44%]" : index === 2 ? "w-[50%]" : index === 3 ? "w-[20%]" : "w-[14%]"}
                     />
                   </div>
@@ -501,7 +474,7 @@ export default function GdprPage() {
             </Card>
           </div>
           <p className="mt-5 text-sm leading-6 text-slate-500">
-            Recent Tranco production scan batches may include incomplete coverage, protected routes, regional variance, and overlapping rank windows. Percentages are directional context for prioritizing review, not a legal or statistical conclusion.
+            Recent production scan batches may include incomplete coverage, protected routes, regional variance, and overlapping windows. Percentages are directional context for prioritizing review, not a legal or statistical conclusion.
           </p>
         </div>
       </section>
@@ -615,25 +588,6 @@ export default function GdprPage() {
         </div>
       </section>
 
-      <section className="border-y border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-14">
-          <div className="max-w-3xl space-y-3">
-            <Badge tone="neutral">Use cases</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Who uses GDPR-relevant runtime evidence</h2>
-          </div>
-          <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {useCases.map((useCase) => (
-              <Card key={useCase.title} className="border-slate-200 bg-slate-50 shadow-none">
-                <CardHeader>
-                  <CardTitle className="text-lg text-slate-950">{useCase.title}</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm leading-6 text-slate-600">{useCase.body}</CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
       <section className="mx-auto max-w-6xl px-6 py-14">
         <div className="max-w-3xl space-y-3">
           <Badge tone="neutral">FAQ</Badge>
@@ -649,42 +603,15 @@ export default function GdprPage() {
         </div>
       </section>
 
-      <section className="border-y border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-14">
-          <div className="max-w-3xl space-y-3">
-            <Badge tone="neutral">Related resources</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Continue the review</h2>
-          </div>
-          <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {relatedResources.map((resource) => (
-              <Link key={resource.href} href={resource.href} className="border border-slate-200 bg-slate-50 p-4 text-sm font-medium text-slate-700 hover:border-sky-200 hover:text-sky-700">
-                {resource.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
       <section id="scan" className="mx-auto max-w-6xl px-6 py-16">
-        <div className="grid gap-8 border border-slate-200 bg-white p-6 lg:grid-cols-[1fr_0.9fr] lg:items-center">
-          <div className="space-y-4">
-            <Badge tone="neutral">Start with evidence</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Start with observable GDPR-relevant evidence</h2>
-            <p className="text-base leading-7 text-slate-600">
-              Scan a public website for consent, cookie, tracking, and privacy review signals. Use the retained evidence to decide what deserves manual review.
-            </p>
-            <p className="text-sm leading-6 text-slate-500">{disclaimer}</p>
-            <CtaButtons location="gdpr_final" />
-          </div>
-          <div>
-            <DomainScanForm
-              buttonLabel="Run a free scan"
-              helperText="Public website scans surface automated observations for review."
-              inputLabel="Website domain"
-              mode="preview"
-              scanSource="unknown"
-            />
-          </div>
+        <div className="border border-slate-200 bg-white p-6">
+          <DomainScanForm
+            buttonLabel="Run a free scan"
+            helperText="Public website scans surface automated observations for review."
+            inputLabel="Website domain"
+            mode="preview"
+            scanSource="unknown"
+          />
         </div>
       </section>
 

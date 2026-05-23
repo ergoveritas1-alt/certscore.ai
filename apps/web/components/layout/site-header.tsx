@@ -13,7 +13,11 @@ const resourceLinks = [
   { href: "/guides", label: "Guides" },
   { href: "/benchmarks", label: "Benchmarks" },
   { href: "/findings", label: "Findings" },
+  { href: "/regulatory", label: "Regulatory pages" },
   { href: "/gdpr", label: "GDPR privacy scanner" },
+  { href: "/ccpa", label: "CCPA privacy scanner" },
+  { href: "/ftc", label: "FTC disclosure scanner" },
+  { href: "/accessibility", label: "ADA accessibility scanner" },
   { href: "/methodology", label: "Methodology" },
   { href: "/compare", label: "Compare" }
 ];
@@ -42,7 +46,7 @@ export function SiteHeader() {
                 <path d="M5.5 7.5 10 12l4.5-4.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </summary>
-            <div className="absolute left-0 top-[calc(100%+0.6rem)] z-50 w-48 border border-slate-200 bg-white p-2 shadow-[0_18px_44px_rgba(15,23,42,0.14)]">
+            <div className="absolute left-0 top-[calc(100%+0.6rem)] z-50 w-64 border border-slate-200 bg-white p-2 shadow-[0_18px_44px_rgba(15,23,42,0.14)]">
               <nav aria-label="Resources" className="flex flex-col">
                 {resourceLinks.map((link) => (
                   <Link
