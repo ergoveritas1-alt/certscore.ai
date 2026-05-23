@@ -129,7 +129,7 @@ export default async function MarketingHomePage() {
                 backgroundImage: "linear-gradient(180deg, #020617 0%, #0f172a 24%, #334155 62%, #94a3b8 100%)"
               }}
             >
-              See how websites actually handle privacy and accessibility.
+              See how websites handle consent, privacy and accessibility.
             </h1>
             <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
               Automated runtime analysis surfacing pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity,
