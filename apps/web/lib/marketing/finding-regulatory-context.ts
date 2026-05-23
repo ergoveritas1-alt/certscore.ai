@@ -399,6 +399,59 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
     ],
     displayCaution: "This finding does not determine legal status, consent validity, necessity, exemption status, or compliance status. Review the retained cookie/storage anchor, domain/scope, timing, vendor purpose, consent state, regional configuration, and applicable exemptions."
   },
+  cookie_disclosure_gap: {
+    findingId: "cookie_disclosure_gap",
+    label: "Cookie disclosure gap",
+    category: "Disclosure gaps",
+    regulatoryConcernGroup: "cookie_transparency_and_vendor_disclosure",
+    primaryConcern: {
+      id: "cookie_provider_purpose_and_retention_transparency_review",
+      label: "Cookie transparency and disclosure alignment review",
+      displayCopy:
+        "Retained runtime cookie, storage, vendor, or domain evidence was compared with retained cookie-policy, CMP, preference-center, or privacy disclosure surfaces. This may be relevant to transparency, consent, purpose, retention, sale/share, opt-out, and vendor-governance review depending on jurisdiction, purpose, user region, and manual review."
+    },
+    technicalStandards: [
+      {
+        id: "eprivacy_cookie_information_and_consent_review",
+        label: "ePrivacy cookie information and consent review",
+        appliesWhen: "Cookies, local storage, or similar technologies are observed and public cookie information or consent surfaces may need disclosure-alignment review.",
+        sourceRefs: ["eprivacy_directive_article_5_3", "edpb_cookie_banner_taskforce", "ico_cookies"]
+      },
+      {
+        id: "gdpr_transparency_purpose_retention_review",
+        label: "GDPR transparency, purpose, and retention review",
+        appliesWhen: "Cookie identifiers, online identifiers, analytics, advertising, or vendor disclosures may involve personal data or profiling depending on purpose and linkage.",
+        sourceRefs: ["gdpr_article_4", "gdpr_article_5", "gdpr_article_13", "gdpr_article_25"]
+      },
+      {
+        id: "ccpa_cpra_cookie_vendor_disclosure_review",
+        label: "CCPA/CPRA cookie, vendor, and retention disclosure review",
+        appliesWhen: "California users, persistent identifiers, advertising/analytics cookies, or cross-context behavioral advertising context may be relevant to categories, purposes, retention, sale/share, or opt-out disclosure review.",
+        sourceRefs: ["california_oag_ccpa", "cppa_faq"]
+      }
+    ],
+    jurisdictionalContexts: [
+      {
+        id: "eu_gdpr_eprivacy_cookie_disclosure_review",
+        label: "EU GDPR/ePrivacy cookie disclosure review",
+        appliesWhen: "EU/EEA users and cookies, storage, analytics, advertising, or vendor disclosure surfaces may be in scope depending on purpose, consent state, and manual review.",
+        sourceRefs: ["gdpr_article_13", "eprivacy_directive_article_5_3", "edpb_cookie_banner_taskforce"]
+      },
+      {
+        id: "uk_pecr_cookie_transparency_review",
+        label: "UK PECR / ICO cookie transparency review",
+        appliesWhen: "UK users and cookie or similar-technology disclosures may be in scope depending on purpose, consent state, and manual review.",
+        sourceRefs: ["ico_cookies"]
+      },
+      {
+        id: "ccpa_cpra_cookie_disclosure_context",
+        label: "CCPA/CPRA cookie disclosure and sale/share review",
+        appliesWhen: "California users and observed advertising, analytics, persistent identifiers, or vendor activity may be relevant to disclosure, retention, sale/share, or opt-out review.",
+        sourceRefs: ["california_oag_ccpa", "cppa_faq"]
+      }
+    ],
+    displayCaution: "This finding does not determine legal status, disclosure adequacy, consent validity, sale/share status, or compliance status. Review retained runtime cookie/storage evidence, provider ownership, purpose, retention, policy versions, regional variants, CMP tables, and coverage limitations."
+  },
   rtb_cookie_sync_observed: {
     findingId: "rtb_cookie_sync_observed",
     label: "Adtech identity sync-like request observed",
@@ -1015,6 +1068,59 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       }
     ],
     displayCaution: "This finding does not determine legal status, GDPR Article 9 status, consent validity, same-flow linkage, keystroke capture, screenshot capture, sensitive-value capture, recording retention, interception, or compliance status. Review retained replay anchors, sensitive-surface context, masking, sampling, payload evidence, consent state, and vendor configuration."
+  },
+  policy_behavior_contradiction_detected: {
+    findingId: "policy_behavior_contradiction_detected",
+    label: "Policy/runtime alignment review",
+    category: "Consumer protection",
+    regulatoryConcernGroup: "policy_runtime_disclosure_alignment",
+    primaryConcern: {
+      id: "policy_runtime_alignment_and_disclosure_review",
+      label: "Policy/runtime transparency and alignment review",
+      displayCopy:
+        "Retained public policy, cookie, privacy, or downstream-sharing disclosure evidence was compared with concrete runtime behavior, vendor activity, consent flow, or disclosure-search evidence. This may be relevant to transparency, privacy claims, consent, sale/share, opt-out, retention, and vendor-governance review depending on jurisdiction, policy scope, user region, and manual review."
+    },
+    technicalStandards: [
+      {
+        id: "gdpr_transparency_fairness_alignment_review",
+        label: "GDPR transparency, fairness, and purpose-limitation review",
+        appliesWhen: "Public privacy disclosures, runtime vendors, cookies, identifiers, profiling, or downstream sharing may involve personal data depending on purpose, linkage, and user region.",
+        sourceRefs: ["gdpr_article_4", "gdpr_article_5", "gdpr_article_13", "gdpr_article_25"]
+      },
+      {
+        id: "eprivacy_cookie_tracker_disclosure_alignment_review",
+        label: "ePrivacy cookie/tracker disclosure alignment review",
+        appliesWhen: "Runtime cookies, storage, or terminal-equipment access are compared with cookie or consent disclosures.",
+        sourceRefs: ["eprivacy_directive_article_5_3", "edpb_eprivacy_art_5_3_scope", "ico_cookies"]
+      },
+      {
+        id: "ftc_privacy_claim_alignment_review",
+        label: "FTC privacy claim and material disclosure review",
+        appliesWhen: "Runtime behavior, consent flow, vendor activity, or disclosure-search evidence may need comparison against public privacy representations or material consumer-facing statements.",
+        sourceRefs: ["ftc_dark_patterns"]
+      }
+    ],
+    jurisdictionalContexts: [
+      {
+        id: "ccpa_cpra_disclosure_sale_share_alignment_review",
+        label: "CCPA/CPRA disclosure, sale/share, and opt-out alignment review",
+        appliesWhen: "California users and runtime advertising, analytics, identifiers, vendor activity, or privacy-choice context may be relevant to disclosure, sale/share, opt-out, or retention review.",
+        sourceRefs: ["california_oag_ccpa", "cppa_faq"]
+      },
+      {
+        id: "eu_gdpr_eprivacy_policy_runtime_alignment_review",
+        label: "EU GDPR/ePrivacy policy/runtime alignment review",
+        appliesWhen: "EU/EEA users and runtime cookies, tracking, identifiers, consent claims, or vendor disclosures may be in scope depending on purpose, consent state, and manual review.",
+        sourceRefs: ["gdpr_article_13", "gdpr_article_5", "eprivacy_directive_article_5_3"]
+      },
+      {
+        id: "us_consumer_protection_privacy_claim_review",
+        label: "U.S. consumer protection and privacy-claim review",
+        appliesWhen: "Public privacy statements, consent representations, or consumer-facing disclosures may need alignment review against observed implementation behavior.",
+        sourceRefs: ["ftc_dark_patterns"]
+      }
+    ],
+    displayCaution: "This finding does not determine deception, unfairness, legal status, disclosure adequacy, sale/share status, or compliance status. Review retained policy anchors, runtime anchors, bridge rationale, provider ownership, policy versions, regional variants, and scan coverage limitations."
   },
   long_lived_cookie_retention_review: {
     findingId: "long_lived_cookie_retention_review",

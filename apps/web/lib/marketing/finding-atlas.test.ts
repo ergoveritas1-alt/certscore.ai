@@ -183,6 +183,32 @@ test("homepage finding samples use the active finding id and label", () => {
   }
 });
 
+test("disclosure and policy alignment findings expose regulatory lens badges", () => {
+  const findings = new Map(getFindingReferenceItems().map((finding) => [finding.id, finding]));
+  const cookieDisclosure = findings.get("cookie_disclosure_gap");
+  const policyAlignment = findings.get("policy_behavior_contradiction_detected");
+
+  assert.ok(cookieDisclosure?.regulatoryContext, "cookie disclosure gap should expose regulatory context for homepage badges");
+  assert.ok(policyAlignment?.regulatoryContext, "policy/runtime alignment should expose regulatory context for homepage badges");
+
+  const cookieLabels = [
+    cookieDisclosure.regulatoryContext.primaryConcern.label,
+    ...cookieDisclosure.regulatoryContext.technicalStandards.map((item) => item.label),
+    ...cookieDisclosure.regulatoryContext.jurisdictionalContexts.map((item) => item.label)
+  ].join(" ");
+  const policyLabels = [
+    policyAlignment.regulatoryContext.primaryConcern.label,
+    ...policyAlignment.regulatoryContext.technicalStandards.map((item) => item.label),
+    ...policyAlignment.regulatoryContext.jurisdictionalContexts.map((item) => item.label)
+  ].join(" ");
+
+  assert.match(cookieLabels, /GDPR|ePrivacy|PECR/i);
+  assert.match(cookieLabels, /CCPA|CPRA/i);
+  assert.match(policyLabels, /GDPR|ePrivacy|PECR/i);
+  assert.match(policyLabels, /CCPA|CPRA/i);
+  assert.match(policyLabels, /FTC|consumer protection|privacy claim/i);
+});
+
 test("finding atlas related ids resolve to registry entries", () => {
   const registryIds = new Set(Object.values(CERT_SCORE_FINDING_REGISTRY).map((definition) => definition.id));
 
