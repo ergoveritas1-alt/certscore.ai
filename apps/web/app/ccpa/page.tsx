@@ -88,7 +88,7 @@ export default function CcpaPage() {
               "Not detected means the signal was not observed in the scan scope. It is not proof of absence, and results can vary by region, page coverage, A/B tests, prior browser state, CMP configuration, blocked scans, and timing."
           }
         ],
-        heroChips: ["Public-web evidence", "Opt-out + disclosure review", "Cookie and tracker signals", "Not legal advice"],
+        heroChips: ["Public-web evidence", "Opt-out + disclosure review", "Cookie and tracker signals"],
         path: pagePath,
         primaryCtaLocation: "ccpa_hero",
         reviewContexts: [

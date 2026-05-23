@@ -88,7 +88,7 @@ export default function FtcPage() {
               "Not detected means the signal was not observed in the scan scope. It is not proof of absence, and results can vary by page coverage, geolocation, device, A/B tests, personalization, blocked scans, and timing."
           }
         ],
-        heroChips: ["Disclosure review", "Claims + reviews", "Dark-pattern signals", "Not legal advice"],
+        heroChips: ["Disclosure review", "Claims + reviews", "Dark-pattern signals"],
         path: pagePath,
         primaryCtaLocation: "ftc_hero",
         reviewContexts: [

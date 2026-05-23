@@ -88,7 +88,7 @@ export default function AccessibilityPage() {
               "Not detected means the signal was not observed in the scan scope. It is not proof of absence, and results can vary by page coverage, responsive state, dynamic content, personalization, blocked scans, and timing."
           }
         ],
-        heroChips: ["ADA context", "WCAG-oriented signals", "Public pages", "Not legal advice"],
+        heroChips: ["ADA context", "WCAG-oriented signals", "Public pages"],
         path: pagePath,
         primaryCtaLocation: "accessibility_hero",
         reviewContexts: [

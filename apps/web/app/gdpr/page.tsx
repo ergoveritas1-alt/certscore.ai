@@ -46,7 +46,7 @@ export const metadata: Metadata = {
   }
 };
 
-const heroChips = ["Runtime evidence", "Consent + cookie timing", "23 findings", "Not legal advice"];
+const heroChips = ["Runtime evidence", "Consent + cookie timing", "23 findings"];
 
 const gdprSignalBenchmarks = [
   {
