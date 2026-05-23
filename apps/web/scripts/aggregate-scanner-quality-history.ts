@@ -35,12 +35,24 @@ function getStringListArg(argv: string[], name: string) {
     .filter(Boolean);
 }
 
+function hasFlag(argv: string[], name: string) {
+  return argv.includes(`--${name}`);
+}
+
 async function main() {
   const argv = process.argv.slice(2);
-  const { persistPendingNormalScannerQualityWindows } = await import("../server/ops/scanner-quality-normal-history");
+  const { persistPendingNormalScannerQualityWindows, resetDerivedNormalScannerQualityHistory } = await import("../server/ops/scanner-quality-normal-history");
+  const resetDerivedNormal = hasFlag(argv, "reset-derived-normal");
+  const applyReset = hasFlag(argv, "apply");
+  const resetOnly = hasFlag(argv, "reset-only");
+  const resetResult = resetDerivedNormal ? await resetDerivedNormalScannerQualityHistory({ dryRun: !applyReset }) : null;
+  if (resetOnly) {
+    console.info(JSON.stringify({ reset: resetResult }));
+    return;
+  }
   const result = await persistPendingNormalScannerQualityWindows({
     egressIds: getStringListArg(argv, "egress-ids"),
-    windowSize: getNumberArg(argv, "window-size", 25)
+    windowSize: getNumberArg(argv, "window-size", 5)
   });
 
   console.info(
@@ -48,6 +60,7 @@ async function main() {
       persistedEvents: result.persistedEvents,
       persistedWindows: result.persistedWindows.length,
       processedScanCount: result.processedScanCount,
+      reset: resetResult,
       skippedEgressIds: result.skippedEgressIds
     })
   );

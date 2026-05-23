@@ -1,5 +1,6 @@
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { evaluateLoadTestQualityWarnings } from "@website-signal-risk-scanner/shared";
+import { OPS_SCAN_STATUS_FINDING_IDS } from "../scans/ops-status-finding-ids";
 import { buildOpsInterruptionSummary } from "../scans/ops-interruption-summary";
 import {
   buildRollingBaseline,
@@ -8,6 +9,8 @@ import {
   type ScannerQualityWindow,
   windowToMetricValues
 } from "./load-test-quality-history";
+
+type OpsScanStatusFindingId = (typeof OPS_SCAN_STATUS_FINDING_IDS)[number];
 
 export type NormalScanQualityRow = {
   accessPostureClass: string | null;
@@ -22,6 +25,7 @@ export type NormalScanQualityRow = {
   egressProvider: string | null;
   errorMessage?: string | null;
   findingCount: number | null;
+  findingCounts?: Record<string, number>;
   fingerprintBlockSuspected?: boolean | null;
   geoBlockSuspected?: boolean | null;
   homepageFetchHttpStatus?: number | null;
@@ -80,12 +84,24 @@ export type NormalScannerQualityAggregationResult = {
   skippedEgressIds: string[];
 };
 
+export type NormalScannerQualityResetResult = {
+  deletedCursors: number;
+  deletedWarningEvents: number;
+  deletedWindows: number;
+  dryRun: boolean;
+};
+
 const NORMAL_SOURCE_TYPE = "normal_scan" as const;
 const NORMAL_SCAN_GRAPH_WINDOW_SIZE = 5;
 const NORMAL_SCAN_WARNING_MIN_COMPLETED = 25;
 
 function countRecordValue(record: Record<string, number>, key: string, increment = 1) {
   record[key] = (record[key] ?? 0) + increment;
+}
+
+function parseCount(value: string | number | null | undefined) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function sanitizeWindowToken(value: string) {
@@ -132,6 +148,32 @@ function dbRowToNormalScanQualityRow(row: NormalScanQualityDbRow): NormalScanQua
   };
 }
 
+function buildEmptyFindingCounts() {
+  return Object.fromEntries(OPS_SCAN_STATUS_FINDING_IDS.map((findingId) => [findingId, 0])) as Record<OpsScanStatusFindingId, number>;
+}
+
+async function loadNormalScanFindingCounts(scanId: string) {
+  const [{ buildScanReportUnifiedFindings }, { projectExecutiveFindingsFromUnifiedPackets }, { getAnonymousScanById }] = await Promise.all([
+    import("../../components/scans/shared-scan-detail-view"),
+    import("../../lib/scans/executive-findings-projection"),
+    import("../scans/get-scan-by-id")
+  ]);
+  const scanRecord = await getAnonymousScanById(scanId);
+  if (!scanRecord) {
+    return undefined;
+  }
+
+  const reportPackets = buildScanReportUnifiedFindings(scanRecord);
+  const executiveProjection = projectExecutiveFindingsFromUnifiedPackets(reportPackets);
+  const findingCounts = buildEmptyFindingCounts();
+  for (const finding of executiveProjection.findings) {
+    if (OPS_SCAN_STATUS_FINDING_IDS.includes(finding.id as OpsScanStatusFindingId)) {
+      findingCounts[finding.id as OpsScanStatusFindingId] += 1;
+    }
+  }
+  return findingCounts;
+}
+
 export function buildNormalScannerQualityWindow(input: {
   egressId: string;
   rows: NormalScanQualityRow[];
@@ -156,12 +198,26 @@ export function buildNormalScannerQualityWindow(input: {
   const scannerSlotCounts: Record<string, number> = {};
   let egressProvider: string | null = null;
   let findings = 0;
+  const findingCounts: Record<string, number> = {};
+  const findingScanCounts: Record<string, number> = {};
   let pagesScanned = 0;
   let zeroFindingCount = 0;
 
   for (const row of completed) {
     const findingCount = Math.max(0, row.findingCount ?? 0);
     findings += findingCount;
+    const seenInScan = new Set<string>();
+    for (const [findingId, count] of Object.entries(row.findingCounts ?? {})) {
+      const normalizedCount = Math.max(0, count);
+      if (normalizedCount <= 0) {
+        continue;
+      }
+      findingCounts[findingId] = (findingCounts[findingId] ?? 0) + normalizedCount;
+      seenInScan.add(findingId);
+    }
+    for (const findingId of seenInScan) {
+      findingScanCounts[findingId] = (findingScanCounts[findingId] ?? 0) + 1;
+    }
     pagesScanned += Math.max(0, row.pagesScanned);
     if (findingCount === 0) {
       zeroFindingCount += 1;
@@ -218,6 +274,9 @@ export function buildNormalScannerQualityWindow(input: {
     egress_id: input.egressId,
     endRow: null,
     failedCount: 0,
+    findingCountsAvailable: Boolean(rows.some((row) => row.findingCounts !== undefined)),
+    findingCounts,
+    findingScanCounts,
     findingsPerCompleted: findings / Math.max(1, completed.length),
     labelCounts,
     pagesScanned,
@@ -275,6 +334,9 @@ export function buildScannerQualityTrendSeries(input: { windows: ScannerQualityW
         completedAt: window.windowEndCompletedAt ?? window.createdAt ?? null,
         completedCount: window.completedCount,
         cumulativeCompletedCount,
+        findingCountsAvailable: window.findingCountsAvailable === true,
+        findingCounts: window.findingCounts ?? {},
+        findingScanCounts: window.findingScanCounts ?? {},
         findingsPerCompleted: window.findingsPerCompleted,
         pagesScanned: window.pagesScanned,
         zeroFindingRate: window.zeroFindingRate
@@ -393,7 +455,13 @@ async function loadPendingNormalScanRows(input: {
     [input.egressId, input.lastCompletedAt ?? null, input.lastScanId ?? "00000000-0000-0000-0000-000000000000", input.limit],
     { readOnly: true }
   );
-  return result.rows.map(dbRowToNormalScanQualityRow);
+  const rows = result.rows.map(dbRowToNormalScanQualityRow);
+  return await Promise.all(
+    rows.map(async (row) => ({
+      ...row,
+      findingCounts: await loadNormalScanFindingCounts(row.scanId)
+    }))
+  );
 }
 
 export async function persistPendingNormalScannerQualityWindows(input: { egressIds?: string[]; windowSize?: number } = {}): Promise<NormalScannerQualityAggregationResult> {
@@ -496,6 +564,61 @@ export async function persistPendingNormalScannerQualityWindows(input: { egressI
   return { persistedEvents, persistedWindows, processedScanCount, skippedEgressIds };
 }
 
+export async function resetDerivedNormalScannerQualityHistory(input: { dryRun?: boolean } = {}): Promise<NormalScannerQualityResetResult> {
+  const dryRun = input.dryRun ?? true;
+  const counts = await queryOne<{
+    cursor_count: string | number;
+    warning_event_count: string | number;
+    window_count: string | number;
+  }>(
+    `
+      select
+        (select count(*) from scanner_quality_windows where source_type = $1) as window_count,
+        (
+          select count(*)
+          from scanner_quality_warning_events event
+          where exists (
+            select 1
+            from scanner_quality_windows window
+            where window.source_type = $1
+              and window.batch_id = event.batch_id
+          )
+        ) as warning_event_count,
+        (select count(*) from scanner_quality_aggregation_cursors where source_type = $1) as cursor_count
+    `,
+    [NORMAL_SOURCE_TYPE],
+    { readOnly: true }
+  );
+
+  const result = {
+    deletedCursors: parseCount(counts?.cursor_count),
+    deletedWarningEvents: parseCount(counts?.warning_event_count),
+    deletedWindows: parseCount(counts?.window_count),
+    dryRun
+  };
+
+  if (dryRun) {
+    return result;
+  }
+
+  await query(
+    `
+      delete from scanner_quality_warning_events event
+      where exists (
+        select 1
+        from scanner_quality_windows window
+        where window.source_type = $1
+          and window.batch_id = event.batch_id
+      )
+    `,
+    [NORMAL_SOURCE_TYPE]
+  );
+  await query("delete from scanner_quality_aggregation_cursors where source_type = $1", [NORMAL_SOURCE_TYPE]);
+  await query("delete from scanner_quality_windows where source_type = $1", [NORMAL_SOURCE_TYPE]);
+
+  return result;
+}
+
 async function persistScannerQualityWindow(window: ScannerQualityWindow) {
   await query(
     `
@@ -504,7 +627,7 @@ async function persistScannerQualityWindow(window: ScannerQualityWindow) {
         completed_count, failed_count, rejected_count, findings_per_completed,
         zero_finding_count, zero_finding_rate, pages_scanned,
         access_posture_counts, label_counts, scanner_task_counts, scanner_slot_counts,
-        metrics_json, source_type, source_window_id, window_start_completed_at, window_end_completed_at
+      metrics_json, source_type, source_window_id, window_start_completed_at, window_end_completed_at
       )
       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17::jsonb,$18,$19,$20::timestamptz,$21::timestamptz)
       on conflict (batch_id, egress_id) do update set
@@ -543,7 +666,12 @@ async function persistScannerQualityWindow(window: ScannerQualityWindow) {
       JSON.stringify(window.labelCounts),
       JSON.stringify(window.scannerTaskCounts),
       JSON.stringify(window.scannerSlotCounts),
-      JSON.stringify(windowToMetricValues(window)),
+      JSON.stringify({
+        ...windowToMetricValues(window),
+        findingCountsAvailable: window.findingCountsAvailable === true,
+        findingCounts: window.findingCounts ?? {},
+        findingScanCounts: window.findingScanCounts ?? {}
+      }),
       window.sourceType ?? NORMAL_SOURCE_TYPE,
       window.sourceWindowId ?? null,
       window.windowStartCompletedAt ?? null,

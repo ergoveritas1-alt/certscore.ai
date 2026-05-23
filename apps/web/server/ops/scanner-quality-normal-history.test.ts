@@ -39,6 +39,7 @@ test("builds durable normal-scan windows from completed production scans", () =>
   assert.equal(window?.completedCount, 5);
   assert.equal(window?.zeroFindingCount, 5);
   assert.equal(window?.findingsPerCompleted, 0);
+  assert.equal(window?.findingCountsAvailable, false);
   assert.equal(window?.accessPostureCounts.early_loss, 3);
   assert.equal(window?.labelCounts.bot_block_or_forbidden, 4);
   assert.equal(window?.windowStartCompletedAt, "2026-05-22T20:00:00.000Z");
@@ -66,6 +67,24 @@ test("defaults normal scan graph windows to 5 scans", () => {
   });
 
   assert.equal(window?.completedCount, 5);
+});
+
+test("normal scan windows retain per-finding metrics when provided", () => {
+  const window = buildNormalScannerQualityWindow({
+    egressId: "aws-default",
+    rows: Array.from({ length: 5 }, (_, index) =>
+      row({
+        completedAt: `2026-05-22T20:${String(index).padStart(2, "0")}:00.000Z`,
+        findingCount: index < 2 ? 0 : 1,
+        findingCounts: index < 2 ? {} : { pre_consent_tracking_detected: 1 },
+        scanId: `00000000-0000-0000-0000-${String(index + 1).padStart(12, "0")}`
+      })
+    )
+  });
+
+  assert.equal(window?.findingCountsAvailable, true);
+  assert.deepEqual(window?.findingCounts, { pre_consent_tracking_detected: 3 });
+  assert.deepEqual(window?.findingScanCounts, { pre_consent_tracking_detected: 3 });
 });
 
 test("accumulates 5-scan graph windows into conservative warning windows", () => {

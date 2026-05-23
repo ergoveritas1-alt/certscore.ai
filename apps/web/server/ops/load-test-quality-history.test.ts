@@ -78,6 +78,9 @@ test("serializes run entries into per-egress scanner quality windows", () => {
   assert.equal(windows[0]?.rejectedCount, 1);
   assert.equal(windows[0]?.findingsPerCompleted, 0.5);
   assert.equal(windows[0]?.zeroFindingCount, 1);
+  assert.equal(windows[0]?.findingCountsAvailable, true);
+  assert.deepEqual(windows[0]?.findingCounts, { semantic_labeling_accessibility_issue: 1 });
+  assert.deepEqual(windows[0]?.findingScanCounts, { semantic_labeling_accessibility_issue: 1 });
   assert.deepEqual(windows[0]?.accessPostureCounts, { early_loss: 1, tolerant: 1 });
   assert.deepEqual(windows[0]?.labelCounts, { authentication_wall: 1, early_loss: 1, none: 1 });
   assert.deepEqual(windows[0]?.scannerSlotCounts, { "1": 1, "2": 1 });

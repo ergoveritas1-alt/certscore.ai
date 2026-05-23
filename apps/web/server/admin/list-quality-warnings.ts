@@ -4,6 +4,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { query } from "@website-signal-risk-scanner/db";
 import type { LoadTestQualityWarning } from "@website-signal-risk-scanner/shared";
+import { CERT_SCORE_FINDING_REGISTRY } from "../../lib/scans/finding-registry";
+import { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../../lib/scans/rank-findings";
 import { buildScannerQualityTrendSeries, buildScannerQualityTrendSummary } from "../ops/scanner-quality-normal-history";
 import type { ScannerQualityWindow } from "../ops/load-test-quality-history";
 import { requirePlatformAdminContext } from "./platform-admin";
@@ -35,6 +37,9 @@ export type AdminScannerQualityTrend = {
     cumulativeCompletedCount: number;
     completedAt: string | null;
     completedCount: number;
+    findingCountsAvailable?: boolean;
+    findingCounts?: Record<string, number>;
+    findingScanCounts?: Record<string, number>;
     findingsPerCompleted: number;
     pagesScanned: number;
     zeroFindingRate: number;
@@ -42,6 +47,11 @@ export type AdminScannerQualityTrend = {
   scopeLabel: string;
   source: "db";
 };
+
+export const ADMIN_SCANNER_QUALITY_FINDING_OPTIONS = EXECUTIVE_SUMMARY_TOP_FINDING_IDS.map((findingId) => ({
+  id: findingId,
+  label: CERT_SCORE_FINDING_REGISTRY[findingId]?.label ?? findingId
+}));
 
 function getRunsRoot() {
   return path.resolve(process.cwd(), "tmp/tranco-load-tests/runs");
@@ -193,6 +203,7 @@ export async function listScannerQualityTrends(input: { egressLimit?: number; wi
       egress_provider: string | null;
       findings_per_completed: string | number | null;
       label_counts: unknown;
+      metrics_json: unknown;
       pages_scanned: number;
       source_type: string;
       window_end_completed_at: string | null;
@@ -212,6 +223,7 @@ export async function listScannerQualityTrends(input: { egressLimit?: number; wi
           pages_scanned,
           access_posture_counts,
           label_counts,
+          metrics_json,
           source_type,
           window_start_completed_at::text as window_start_completed_at,
           window_end_completed_at::text as window_end_completed_at,
@@ -240,6 +252,22 @@ export async function listScannerQualityTrends(input: { egressLimit?: number; wi
         failedCount: 0,
         findingsPerCompleted: parseNumber(row.findings_per_completed),
         labelCounts: parseRecord(row.label_counts),
+        findingCounts: parseRecord(
+          row.metrics_json && typeof row.metrics_json === "object" && !Array.isArray(row.metrics_json)
+            ? (row.metrics_json as Record<string, unknown>).findingCounts
+            : undefined
+        ),
+        findingCountsAvailable: Boolean(
+          row.metrics_json &&
+          typeof row.metrics_json === "object" &&
+          !Array.isArray(row.metrics_json) &&
+          (row.metrics_json as Record<string, unknown>).findingCountsAvailable === true
+        ),
+        findingScanCounts: parseRecord(
+          row.metrics_json && typeof row.metrics_json === "object" && !Array.isArray(row.metrics_json)
+            ? (row.metrics_json as Record<string, unknown>).findingScanCounts
+            : undefined
+        ),
         pagesScanned: row.pages_scanned,
         rejectedCount: 0,
         scannerSlotCounts: {},
@@ -263,7 +291,7 @@ export async function listScannerQualityTrends(input: { egressLimit?: number; wi
         source: "db" as const
       };
     };
-    const globalTrend = rows.rows.length > 0 ? [buildTrend("global", rows.rows, "all egresses", "all sources")] : [];
+    const globalTrend = normalRows.length > 0 ? [buildTrend("global", normalRows, "all egresses", "normal traffic")] : [];
     const egressTrends = Array.from(byEgress.entries())
       .slice(0, input.egressLimit ?? 6)
       .map(([egressId, items]) => {

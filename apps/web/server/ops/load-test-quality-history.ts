@@ -15,6 +15,9 @@ export type ScannerQualityWindow = {
   egress_id: string;
   endRow: number | null;
   failedCount: number;
+  findingCountsAvailable?: boolean;
+  findingCounts?: Record<string, number>;
+  findingScanCounts?: Record<string, number>;
   findingsPerCompleted: number;
   labelCounts: Record<string, number>;
   pagesScanned: number;
@@ -67,6 +70,28 @@ function findingTotal(entry: LoadTestSummaryEntry) {
   return Object.values(entry.findingCounts).reduce((sum, value) => sum + Math.max(0, value), 0);
 }
 
+function buildFindingCountMetrics(entries: LoadTestSummaryEntry[]) {
+  const findingCounts: Record<string, number> = {};
+  const findingScanCounts: Record<string, number> = {};
+
+  for (const entry of entries) {
+    const seenInScan = new Set<string>();
+    for (const [findingId, count] of Object.entries(entry.findingCounts)) {
+      const normalizedCount = Math.max(0, count);
+      if (normalizedCount <= 0) {
+        continue;
+      }
+      findingCounts[findingId] = (findingCounts[findingId] ?? 0) + normalizedCount;
+      seenInScan.add(findingId);
+    }
+    for (const findingId of seenInScan) {
+      findingScanCounts[findingId] = (findingScanCounts[findingId] ?? 0) + 1;
+    }
+  }
+
+  return { findingCounts, findingScanCounts };
+}
+
 export function buildScannerQualityWindows(input: PersistQualityRunInput): ScannerQualityWindow[] {
   const byEgress = new Map<string, LoadTestSummaryEntry[]>();
   for (const entry of input.entries) {
@@ -78,6 +103,7 @@ export function buildScannerQualityWindows(input: PersistQualityRunInput): Scann
     const completed = entries.filter((entry) => entry.status === "completed");
     const failedCount = entries.filter((entry) => entry.status !== "completed").length;
     const findings = completed.reduce((sum, entry) => sum + findingTotal(entry), 0);
+    const findingMetrics = buildFindingCountMetrics(completed);
     const zeroFindingCount = completed.filter((entry) => findingTotal(entry) === 0).length;
     const accessPostureCounts: Record<string, number> = {};
     const labelCounts: Record<string, number> = {};
@@ -112,6 +138,9 @@ export function buildScannerQualityWindows(input: PersistQualityRunInput): Scann
       egress_id: egressId,
       endRow: input.endRow ?? null,
       failedCount,
+      findingCountsAvailable: true,
+      findingCounts: findingMetrics.findingCounts,
+      findingScanCounts: findingMetrics.findingScanCounts,
       findingsPerCompleted: findings / Math.max(1, completedCount),
       labelCounts,
       pagesScanned,
@@ -189,6 +218,7 @@ type ScannerQualityWindowRow = {
   failed_count: number;
   findings_per_completed: string | number | null;
   label_counts: unknown;
+  metrics_json?: unknown;
   pages_scanned: number;
   rejected_count: number;
   scanner_slot_counts: unknown;
@@ -203,6 +233,7 @@ type ScannerQualityWindowRow = {
 };
 
 function rowToWindow(row: ScannerQualityWindowRow): ScannerQualityWindow {
+  const metricsJson = !row.metrics_json || typeof row.metrics_json !== "object" || Array.isArray(row.metrics_json) ? {} : row.metrics_json as Record<string, unknown>;
   return {
     accessPostureCounts: parseRecord(row.access_posture_counts),
     batchId: row.batch_id,
@@ -212,6 +243,9 @@ function rowToWindow(row: ScannerQualityWindowRow): ScannerQualityWindow {
     egress_id: row.egress_id,
     endRow: row.end_row,
     failedCount: row.failed_count,
+    findingCounts: parseRecord(metricsJson.findingCounts),
+    findingCountsAvailable: metricsJson.findingCountsAvailable === true,
+    findingScanCounts: parseRecord(metricsJson.findingScanCounts),
     findingsPerCompleted: Number(row.findings_per_completed ?? 0),
     labelCounts: parseRecord(row.label_counts),
     pagesScanned: row.pages_scanned,
@@ -279,7 +313,12 @@ export async function persistScannerQualityWindows(input: PersistQualityRunInput
         JSON.stringify(window.labelCounts),
         JSON.stringify(window.scannerTaskCounts),
         JSON.stringify(window.scannerSlotCounts),
-        JSON.stringify(windowToMetricValues(window)),
+        JSON.stringify({
+          ...windowToMetricValues(window),
+          findingCountsAvailable: window.findingCountsAvailable === true,
+          findingCounts: window.findingCounts ?? {},
+          findingScanCounts: window.findingScanCounts ?? {}
+        }),
         window.sourceType ?? "load_test",
         window.sourceWindowId ?? null,
         window.windowStartCompletedAt ?? null,
@@ -303,6 +342,7 @@ export async function loadRecentScannerQualityWindows(input: {
         completed_count, failed_count, rejected_count, findings_per_completed,
         zero_finding_count, zero_finding_rate, pages_scanned,
         access_posture_counts, label_counts, scanner_task_counts, scanner_slot_counts,
+        metrics_json,
         source_type, source_window_id, window_start_completed_at::text as window_start_completed_at,
         window_end_completed_at::text as window_end_completed_at,
         created_at::text as created_at

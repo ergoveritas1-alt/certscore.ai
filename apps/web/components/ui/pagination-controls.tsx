@@ -20,7 +20,9 @@ type PaginationControlsProps = {
   itemLabel: string;
   page: number;
   pageCount?: number;
+  pageParamName?: string;
   pageSize: number;
+  perPageParamName?: string;
   searchParams?: Record<string, string | null | undefined>;
   totalCount?: number;
   visibleCount: number;
@@ -29,21 +31,25 @@ type PaginationControlsProps = {
 function buildHref(input: {
   basePath: string;
   page: number;
+  pageParamName?: string;
   pageSize: number;
+  perPageParamName?: string;
   searchParams?: Record<string, string | null | undefined>;
 }) {
+  const pageParamName = input.pageParamName ?? "page";
+  const perPageParamName = input.perPageParamName ?? "perPage";
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(input.searchParams ?? {})) {
-    if (key === "page" || key === "perPage" || value === null || value === undefined || value === "") {
+    if (key === pageParamName || key === perPageParamName || value === null || value === undefined || value === "") {
       continue;
     }
     params.set(key, value);
   }
   if (input.page > 1) {
-    params.set("page", String(input.page));
+    params.set(pageParamName, String(input.page));
   }
   if (input.pageSize !== DEFAULT_PAGE_SIZE) {
-    params.set("perPage", String(input.pageSize));
+    params.set(perPageParamName, String(input.pageSize));
   }
   const query = params.toString();
   return query ? `${input.basePath}?${query}` : input.basePath;
@@ -55,7 +61,9 @@ export function PaginationControls({
   itemLabel,
   page,
   pageCount,
+  pageParamName = "page",
   pageSize,
+  perPageParamName = "perPage",
   searchParams,
   totalCount,
   visibleCount
@@ -76,14 +84,14 @@ export function PaginationControls({
       <div className="flex flex-wrap items-center gap-2">
         <form action={basePath} className="flex items-center gap-2">
           {Object.entries(searchParams ?? {}).map(([key, value]) =>
-            key === "page" || key === "perPage" || value === null || value === undefined || value === "" ? null : (
+            key === pageParamName || key === perPageParamName || value === null || value === undefined || value === "" ? null : (
               <input key={key} name={key} type="hidden" value={value} />
             )
           )}
           <select
             className="h-9 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700"
             defaultValue={pageSize}
-            name="perPage"
+            name={perPageParamName}
           >
             {PAGE_SIZE_OPTIONS.map((option) => (
               <option key={option} value={option}>
@@ -99,14 +107,14 @@ export function PaginationControls({
           {page <= 1 ? (
             <span className="cursor-not-allowed text-slate-400">Previous</span>
           ) : (
-            <Link href={buildHref({ basePath, page: page - 1, pageSize, searchParams })}>Previous</Link>
+            <Link href={buildHref({ basePath, page: page - 1, pageParamName, pageSize, perPageParamName, searchParams })}>Previous</Link>
           )}
         </Button>
         <Button asChild disabled={!resolvedHasNext} size="sm" variant="secondary">
           {!resolvedHasNext ? (
             <span className="cursor-not-allowed text-slate-400">Next</span>
           ) : (
-            <Link href={buildHref({ basePath, page: page + 1, pageSize, searchParams })}>Next</Link>
+            <Link href={buildHref({ basePath, page: page + 1, pageParamName, pageSize, perPageParamName, searchParams })}>Next</Link>
           )}
         </Button>
       </div>

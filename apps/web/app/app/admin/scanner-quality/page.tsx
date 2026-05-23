@@ -1,6 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
-import { listRecentQualityWarningRuns, listScannerQualityTrends } from "../../../../server/admin/list-quality-warnings";
+import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
+import { ADMIN_SCANNER_QUALITY_FINDING_OPTIONS, listRecentQualityWarningRuns, listScannerQualityTrends } from "../../../../server/admin/list-quality-warnings";
 import { ScannerQualityTrendPanel } from "./scanner-quality-trend-card";
+
+type AdminScannerQualityPageProps = {
+  searchParams?: Promise<{
+    runPage?: string;
+    runPerPage?: string;
+    warningPage?: string;
+    warningPerPage?: string;
+  }>;
+};
 
 function formatRate(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) {
@@ -16,14 +26,29 @@ function formatNumber(value: number | null | undefined) {
   return value.toFixed(2);
 }
 
-export default async function AdminScannerQualityPage() {
-  const [runs, trends] = await Promise.all([listRecentQualityWarningRuns(), listScannerQualityTrends()]);
-  const warnings = runs.flatMap((run) =>
+export default async function AdminScannerQualityPage({ searchParams }: AdminScannerQualityPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const runPageSize = normalizePageSize(resolvedSearchParams.runPerPage);
+  const warningPageSize = normalizePageSize(resolvedSearchParams.warningPerPage);
+  const [allRuns, trends] = await Promise.all([listRecentQualityWarningRuns(500), listScannerQualityTrends()]);
+  const allWarnings = allRuns.flatMap((run) =>
     run.warnings.map((warning) => ({
       ...warning,
       runDir: run.runDir
     }))
   );
+  const runPageCount = Math.max(1, Math.ceil(allRuns.length / runPageSize));
+  const warningPageCount = Math.max(1, Math.ceil(allWarnings.length / warningPageSize));
+  const runPage = Math.min(normalizePage(resolvedSearchParams.runPage), runPageCount);
+  const warningPage = Math.min(normalizePage(resolvedSearchParams.warningPage), warningPageCount);
+  const runs = allRuns.slice((runPage - 1) * runPageSize, runPage * runPageSize);
+  const warnings = allWarnings.slice((warningPage - 1) * warningPageSize, warningPage * warningPageSize);
+  const paginationSearchParams = {
+    runPage: resolvedSearchParams.runPage,
+    runPerPage: resolvedSearchParams.runPerPage,
+    warningPage: resolvedSearchParams.warningPage,
+    warningPerPage: resolvedSearchParams.warningPerPage
+  };
 
   return (
     <div className="space-y-6">
@@ -45,7 +70,7 @@ export default async function AdminScannerQualityPage() {
           {trends.length === 0 ? (
             <p className="text-sm text-slate-600">No durable scanner-quality windows found yet.</p>
           ) : (
-            <ScannerQualityTrendPanel trends={trends} />
+            <ScannerQualityTrendPanel findingOptions={ADMIN_SCANNER_QUALITY_FINDING_OPTIONS} trends={trends} />
           )}
         </CardContent>
       </Card>
@@ -58,27 +83,41 @@ export default async function AdminScannerQualityPage() {
           {runs.length === 0 ? (
             <p className="text-sm text-slate-600">No quality warning artifacts found.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-slate-200 text-slate-500">
-                  <tr>
-                    <th className="py-2 pr-4 font-medium">Batch</th>
-                    <th className="py-2 pr-4 font-medium">Generated</th>
-                    <th className="py-2 pr-4 font-medium">Warnings</th>
-                    <th className="py-2 pr-4 font-medium">Source</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {runs.map((run) => (
-                    <tr key={run.runDir}>
-                      <td className="py-3 pr-4 font-medium text-slate-900">{run.batchId}</td>
-                      <td className="py-3 pr-4 text-slate-600">{run.generatedAt ?? "unknown"}</td>
-                      <td className="py-3 pr-4 text-slate-600">{run.warningCount}</td>
-                      <td className="py-3 pr-4 font-mono text-xs text-slate-500">{run.source === "db" ? "durable-db" : run.runDir}</td>
+            <div className="space-y-3">
+              <PaginationControls
+                basePath="/app/admin/scanner-quality"
+                itemLabel="warning runs"
+                page={runPage}
+                pageCount={runPageCount}
+                pageParamName="runPage"
+                pageSize={runPageSize}
+                perPageParamName="runPerPage"
+                searchParams={paginationSearchParams}
+                totalCount={allRuns.length}
+                visibleCount={runs.length}
+              />
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="border-b border-slate-200 text-slate-500">
+                    <tr>
+                      <th className="py-2 pr-4 font-medium">Batch</th>
+                      <th className="py-2 pr-4 font-medium">Generated</th>
+                      <th className="py-2 pr-4 font-medium">Warnings</th>
+                      <th className="py-2 pr-4 font-medium">Source</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {runs.map((run) => (
+                      <tr key={run.runDir}>
+                        <td className="py-3 pr-4 font-medium text-slate-900">{run.batchId}</td>
+                        <td className="py-3 pr-4 text-slate-600">{run.generatedAt ?? "unknown"}</td>
+                        <td className="py-3 pr-4 text-slate-600">{run.warningCount}</td>
+                        <td className="py-3 pr-4 font-mono text-xs text-slate-500">{run.source === "db" ? "durable-db" : run.runDir}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </CardContent>
@@ -93,6 +132,18 @@ export default async function AdminScannerQualityPage() {
             <p className="text-sm text-slate-600">No active or recent quality warnings in available artifacts.</p>
           ) : (
             <div className="space-y-4">
+              <PaginationControls
+                basePath="/app/admin/scanner-quality"
+                itemLabel="quality warnings"
+                page={warningPage}
+                pageCount={warningPageCount}
+                pageParamName="warningPage"
+                pageSize={warningPageSize}
+                perPageParamName="warningPerPage"
+                searchParams={paginationSearchParams}
+                totalCount={allWarnings.length}
+                visibleCount={warnings.length}
+              />
               {warnings.map((warning) => (
                 <div key={warning.warningId} className="rounded-lg border border-amber-200 bg-amber-50 p-4">
                   <div className="flex flex-wrap items-center gap-2">

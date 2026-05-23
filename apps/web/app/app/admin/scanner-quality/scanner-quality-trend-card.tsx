@@ -15,12 +15,16 @@ type TrendSeriesPoint = {
   cumulativeCompletedCount: number;
   completedAt: string | null;
   completedCount: number;
+  findingCounts?: Record<string, number>;
+  findingCountsAvailable?: boolean;
+  findingScanCounts?: Record<string, number>;
   findingsPerCompleted: number;
   pagesScanned: number;
   zeroFindingRate: number;
 };
 
 type ScannerQualityTrendCardProps = {
+  findingScope: FindingScopeOption;
   trend: {
     egressId: string;
     egressProvider: string | null;
@@ -32,12 +36,27 @@ type ScannerQualityTrendCardProps = {
 };
 
 type ScannerQualityTrendPanelProps = {
+  findingOptions: Array<{
+    id: string;
+    label: string;
+  }>;
   trends: ScannerQualityTrendCardProps["trend"][];
 };
 
 const RANGE_OPTIONS = [20, 50, 100, 500, 2000, "all-time"] as const;
 
 type RangeOption = (typeof RANGE_OPTIONS)[number];
+type FindingScopeOption = {
+  id: string;
+  label: string;
+  type: "all" | "finding";
+};
+
+const ALL_FINDINGS_SCOPE: FindingScopeOption = {
+  id: "all",
+  label: "All findings",
+  type: "all"
+};
 
 function formatRate(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) {
@@ -89,20 +108,34 @@ function sliceSeriesByRange(series: TrendSeriesPoint[], range: RangeOption) {
     return [];
   }
   const minCumulativeScan = Math.max(0, latest.cumulativeCompletedCount - range);
-  const sliced = series.filter((point) => point.cumulativeCompletedCount > minCumulativeScan);
-  if (sliced.length >= 2) {
-    return sliced;
+  return series.filter((point) => point.cumulativeCompletedCount > minCumulativeScan);
+}
+
+function scopeSeries(series: TrendSeriesPoint[], findingScope: FindingScopeOption): TrendSeriesPoint[] {
+  if (findingScope.type === "all") {
+    return series;
   }
-  return series.slice(-2);
+
+  return series
+    .filter((point) => point.findingCountsAvailable === true)
+    .map((point) => {
+      const findingCount = Math.max(0, point.findingCounts?.[findingScope.id] ?? 0);
+      const findingScanCount = Math.max(0, point.findingScanCounts?.[findingScope.id] ?? 0);
+      return {
+        ...point,
+        findingsPerCompleted: findingCount / Math.max(1, point.completedCount),
+        zeroFindingRate: (point.completedCount - findingScanCount) / Math.max(1, point.completedCount)
+      };
+    });
 }
 
 function getTrendLabel(trend: ScannerQualityTrendCardProps["trend"]) {
   return `${trend.egressId} / ${trend.egressProvider ?? "unknown"}`;
 }
 
-function ScannerQualityTrendCard({ trend }: ScannerQualityTrendCardProps) {
+function ScannerQualityTrendCard({ findingScope, trend }: ScannerQualityTrendCardProps) {
   const [range, setRange] = useState<RangeOption>("all-time");
-  const series = useMemo(() => sliceSeriesByRange(trend.series, range), [range, trend.series]);
+  const series = useMemo(() => sliceSeriesByRange(scopeSeries(trend.series, findingScope), range), [findingScope, range, trend.series]);
   const findingValues = series.map((point) => point.findingsPerCompleted);
   const findingMax = Math.max(1, ...findingValues);
   const latestPoint = series.at(-1);
@@ -146,6 +179,9 @@ function ScannerQualityTrendCard({ trend }: ScannerQualityTrendCardProps) {
             {latestPoint ? `${formatNumber(latestPoint.findingsPerCompleted)} findings/completed, ${formatRate(latestPoint.zeroFindingRate)} zero-finding` : "unknown"}
           </span>
         </div>
+        <p className="mt-1 text-xs text-slate-500">
+          Scope: {findingScope.label}
+        </p>
         <div className="mt-3 flex flex-wrap gap-2" aria-label="Trend scan range">
           {RANGE_OPTIONS.map((option) => (
             <button
@@ -162,7 +198,9 @@ function ScannerQualityTrendCard({ trend }: ScannerQualityTrendCardProps) {
           ))}
         </div>
         {series.length < 2 ? (
-          <p className="mt-3 text-sm text-slate-600">Need at least 2 durable windows before a trend line can move.</p>
+          <p className="mt-3 text-sm text-slate-600">
+            This range only has {series.length} durable window{series.length === 1 ? "" : "s"} for this trend and finding scope, so there is not enough granularity to draw a line. Try a larger range, all-time, or all findings.
+          </p>
         ) : (
           <div className="mt-3">
             <svg className="h-56 w-full" viewBox="0 0 620 210" role="img" aria-label={`${trend.egressId} combined scanner quality trend`}>
@@ -207,10 +245,19 @@ function ScannerQualityTrendCard({ trend }: ScannerQualityTrendCardProps) {
   );
 }
 
-export function ScannerQualityTrendPanel({ trends }: ScannerQualityTrendPanelProps) {
+export function ScannerQualityTrendPanel({ findingOptions, trends }: ScannerQualityTrendPanelProps) {
   const defaultTrend = trends.find((trend) => trend.egressId === "global") ?? trends[0] ?? null;
   const [selectedKey, setSelectedKey] = useState(defaultTrend ? getTrendLabel(defaultTrend) : "");
+  const [selectedFindingId, setSelectedFindingId] = useState(ALL_FINDINGS_SCOPE.id);
   const selectedTrend = trends.find((trend) => getTrendLabel(trend) === selectedKey) ?? defaultTrend;
+  const findingScope =
+    selectedFindingId === ALL_FINDINGS_SCOPE.id
+      ? ALL_FINDINGS_SCOPE
+      : {
+          id: selectedFindingId,
+          label: findingOptions.find((option) => option.id === selectedFindingId)?.label ?? selectedFindingId,
+          type: "finding" as const
+        };
 
   if (!selectedTrend) {
     return <p className="text-sm text-slate-600">No durable scanner-quality windows found yet.</p>;
@@ -219,23 +266,38 @@ export function ScannerQualityTrendPanel({ trends }: ScannerQualityTrendPanelPro
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <label className="text-sm font-medium text-slate-700" htmlFor="scanner-quality-egress-select">
+        <label className="text-sm font-medium text-slate-700" htmlFor="scanner-quality-finding-select">
           Trend
         </label>
-        <select
-          id="scanner-quality-egress-select"
-          className="min-w-72 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm"
-          value={getTrendLabel(selectedTrend)}
-          onChange={(event) => setSelectedKey(event.target.value)}
-        >
-          {trends.map((trend) => (
-            <option key={getTrendLabel(trend)} value={getTrendLabel(trend)}>
-              {getTrendLabel(trend)}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap gap-2">
+          <select
+            id="scanner-quality-finding-select"
+            className="min-w-72 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm"
+            value={selectedFindingId}
+            onChange={(event) => setSelectedFindingId(event.target.value)}
+          >
+            <option value={ALL_FINDINGS_SCOPE.id}>{ALL_FINDINGS_SCOPE.label}</option>
+            {findingOptions.map((finding) => (
+              <option key={finding.id} value={finding.id}>
+                {finding.label}
+              </option>
+            ))}
+          </select>
+          <select
+            id="scanner-quality-egress-select"
+            className="min-w-72 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm"
+            value={getTrendLabel(selectedTrend)}
+            onChange={(event) => setSelectedKey(event.target.value)}
+          >
+            {trends.map((trend) => (
+              <option key={getTrendLabel(trend)} value={getTrendLabel(trend)}>
+                {getTrendLabel(trend)}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
-      <ScannerQualityTrendCard trend={selectedTrend} />
+      <ScannerQualityTrendCard findingScope={findingScope} trend={selectedTrend} />
     </div>
   );
 }
