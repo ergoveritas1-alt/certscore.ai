@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   buildAccumulatedScannerQualityWindow,
   buildNormalScannerQualityWindow,
+  buildScannerQualityTrendSeries,
   buildScannerQualityTrendSummary,
+  selectNonOverlappingScannerQualityWindows,
   type NormalScanQualityRow
 } from "./scanner-quality-normal-history";
 
@@ -110,6 +112,58 @@ test("accumulates 5-scan graph windows into conservative warning windows", () =>
   assert.equal(accumulated?.completedCount, 25);
   assert.equal(accumulated?.zeroFindingCount, 5);
   assert.equal(accumulated?.findingsPerCompleted, 40 / 25);
+});
+
+test("selects non-overlapping windows for conservative warning evaluation", () => {
+  const rows = Array.from({ length: 10 }, (_, index) =>
+    row({
+      completedAt: `2026-05-22T20:${String(index).padStart(2, "0")}:00.000Z`,
+      findingCount: index % 2,
+      scanId: `00000000-0000-0000-0000-${String(index + 1).padStart(12, "0")}`
+    })
+  );
+  const rollingWindows = Array.from({ length: 6 }, (_, index) =>
+    buildNormalScannerQualityWindow({
+      egressId: "aws-default",
+      rows: rows.slice(index, index + 5)
+    })!
+  );
+
+  const selected = selectNonOverlappingScannerQualityWindows({
+    minCompleted: 10,
+    windows: rollingWindows
+  });
+
+  assert.deepEqual(
+    selected.map((window) => [window.windowStartCompletedAt, window.windowEndCompletedAt]),
+    [
+      ["2026-05-22T20:05:00.000Z", "2026-05-22T20:09:00.000Z"],
+      ["2026-05-22T20:00:00.000Z", "2026-05-22T20:04:00.000Z"]
+    ]
+  );
+});
+
+test("graphs rolling normal windows at single-scan resolution", () => {
+  const rows = Array.from({ length: 7 }, (_, index) =>
+    row({
+      completedAt: `2026-05-22T20:${String(index).padStart(2, "0")}:00.000Z`,
+      findingCount: index % 2,
+      scanId: `00000000-0000-0000-0000-${String(index + 1).padStart(12, "0")}`
+    })
+  );
+  const rollingWindows = Array.from({ length: 3 }, (_, index) =>
+    buildNormalScannerQualityWindow({
+      egressId: "aws-default",
+      rows: rows.slice(index, index + 5)
+    })!
+  );
+
+  const series = buildScannerQualityTrendSeries({ windows: rollingWindows });
+
+  assert.deepEqual(
+    series.map((point) => point.cumulativeCompletedCount),
+    [5, 6, 7]
+  );
 });
 
 test("summarizes rolling trend selectors from durable windows without reading raw scans", () => {

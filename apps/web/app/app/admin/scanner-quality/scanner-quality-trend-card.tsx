@@ -141,8 +141,6 @@ function ScannerQualityTrendCard({ findingScope, trend }: ScannerQualityTrendCar
   const findingMax = Math.max(1, ...findingValues);
   const latestPoint = series.at(-1);
   const firstPoint = series[0];
-  const completedInView = series.reduce((sum, point) => sum + point.completedCount, 0);
-  const pagesInView = series.reduce((sum, point) => sum + point.pagesScanned, 0);
   const findingLine = buildTrendPath(
     series.map((point) => ({ xValue: point.cumulativeCompletedCount, yValue: point.findingsPerCompleted })),
     520,
@@ -160,6 +158,7 @@ function ScannerQualityTrendCard({ findingScope, trend }: ScannerQualityTrendCar
   const firstScanCount = firstPoint?.cumulativeCompletedCount ?? 0;
   const latestScanCount = latestPoint?.cumulativeCompletedCount ?? 0;
   const midScanCount = Math.round((firstScanCount + latestScanCount) / 2);
+  const scanEndpointsInView = latestPoint && firstPoint ? latestScanCount - firstScanCount + 1 : 0;
 
   return (
     <div className="rounded-lg border border-slate-200 p-4">
@@ -174,9 +173,9 @@ function ScannerQualityTrendCard({ findingScope, trend }: ScannerQualityTrendCar
       </div>
       <div className="mt-4 rounded-md border border-slate-100 bg-slate-50 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-          <span className="font-medium text-slate-900">Window trend</span>
+          <span className="font-medium text-slate-900">5-scan rolling trend</span>
           <span className="text-xs text-slate-500">
-            {completedInView} scans · {series.length} window{series.length === 1 ? "" : "s"} · {pagesInView} pages · latest{" "}
+            {scanEndpointsInView} scan endpoints · {series.length} rolling window{series.length === 1 ? "" : "s"} · latest{" "}
             {latestPoint ? `${formatNumber(latestPoint.findingsPerCompleted)} findings/completed, ${formatRate(latestPoint.zeroFindingRate)} zero-finding` : "unknown"}
           </span>
         </div>

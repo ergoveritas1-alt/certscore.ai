@@ -94,6 +94,7 @@ export type NormalScannerQualityResetResult = {
 const NORMAL_SOURCE_TYPE = "normal_scan" as const;
 const NORMAL_SCAN_GRAPH_WINDOW_SIZE = 5;
 const NORMAL_SCAN_WARNING_MIN_COMPLETED = 25;
+const NORMAL_SCAN_ROLLING_WINDOW_STRIDE = 1;
 
 function countRecordValue(record: Record<string, number>, key: string, increment = 1) {
   record[key] = (record[key] ?? 0) + increment;
@@ -328,8 +329,8 @@ export function buildScannerQualityTrendSeries(input: { windows: ScannerQualityW
   let cumulativeCompletedCount = 0;
   return [...input.windows]
     .sort((a, b) => (a.windowEndCompletedAt ?? a.createdAt ?? "").localeCompare(b.windowEndCompletedAt ?? b.createdAt ?? ""))
-    .map((window) => {
-      cumulativeCompletedCount += window.completedCount;
+    .map((window, index) => {
+      cumulativeCompletedCount = index === 0 ? window.completedCount : cumulativeCompletedCount + NORMAL_SCAN_ROLLING_WINDOW_STRIDE;
       return {
         completedAt: window.windowEndCompletedAt ?? window.createdAt ?? null,
         completedCount: window.completedCount,
@@ -401,6 +402,41 @@ export function buildAccumulatedScannerQualityWindow(input: {
   };
 }
 
+function windowsOverlap(left: ScannerQualityWindow, right: ScannerQualityWindow) {
+  const leftStart = left.windowStartCompletedAt ?? left.createdAt ?? "";
+  const leftEnd = left.windowEndCompletedAt ?? left.createdAt ?? "";
+  const rightStart = right.windowStartCompletedAt ?? right.createdAt ?? "";
+  const rightEnd = right.windowEndCompletedAt ?? right.createdAt ?? "";
+
+  if (!leftStart || !leftEnd || !rightStart || !rightEnd) {
+    return left.sourceWindowId === right.sourceWindowId || left.batchId === right.batchId;
+  }
+
+  return leftStart <= rightEnd && rightStart <= leftEnd;
+}
+
+export function selectNonOverlappingScannerQualityWindows(input: {
+  minCompleted?: number;
+  windows: ScannerQualityWindow[];
+}) {
+  const minCompleted = input.minCompleted ?? NORMAL_SCAN_WARNING_MIN_COMPLETED;
+  const selected: ScannerQualityWindow[] = [];
+  let completedCount = 0;
+
+  for (const window of [...input.windows].sort((a, b) => (b.windowEndCompletedAt ?? b.createdAt ?? "").localeCompare(a.windowEndCompletedAt ?? a.createdAt ?? ""))) {
+    if (selected.some((selectedWindow) => windowsOverlap(window, selectedWindow))) {
+      continue;
+    }
+    selected.push(window);
+    completedCount += window.completedCount;
+    if (completedCount >= minCompleted) {
+      break;
+    }
+  }
+
+  return selected;
+}
+
 async function loadPendingNormalScanRows(input: {
   egressId: string;
   lastCompletedAt?: string | null;
@@ -466,7 +502,7 @@ async function loadPendingNormalScanRows(input: {
 
 export async function persistPendingNormalScannerQualityWindows(input: { egressIds?: string[]; windowSize?: number } = {}): Promise<NormalScannerQualityAggregationResult> {
   const windowSize = input.windowSize ?? NORMAL_SCAN_GRAPH_WINDOW_SIZE;
-  const maxWindowsPerEgress = 400;
+  const maxWindowsPerEgress = 5000;
   const egressIds =
     input.egressIds ??
     (
@@ -516,16 +552,22 @@ export async function persistPendingNormalScannerQualityWindows(input: { egressI
       const previous = await loadRecentScannerQualityWindows({
         egressId,
         excludeBatchId: window.batchId,
-        limit: 10,
+        limit: 250,
         sourceType: NORMAL_SOURCE_TYPE
+      });
+      const nonOverlappingEvaluationWindows = selectNonOverlappingScannerQualityWindows({
+        windows: [window, ...previous]
+      });
+      const nonOverlappingBaselineWindows = selectNonOverlappingScannerQualityWindows({
+        windows: previous
       });
       const evaluationWindow = buildAccumulatedScannerQualityWindow({
         batchId: window.batchId,
         egressId,
-        windows: [window, ...previous]
+        windows: nonOverlappingEvaluationWindows
       });
       const warnings = evaluateLoadTestQualityWarnings({
-        baseline: buildRollingBaseline(previous) ?? undefined,
+        baseline: buildRollingBaseline(nonOverlappingBaselineWindows) ?? undefined,
         batchId: evaluationWindow?.batchId ?? window.batchId,
         egressProvider: evaluationWindow?.egressProvider ?? window.egressProvider,
         egress_id: evaluationWindow?.egress_id ?? window.egress_id,
@@ -536,10 +578,10 @@ export async function persistPendingNormalScannerQualityWindows(input: { egressI
       await persistQualityWarningEvents(warnings);
       persistedEvents += warnings.length;
       persistedWindows.push(window);
-      processedScanCount += window.completedCount;
+      processedScanCount += NORMAL_SCAN_ROLLING_WINDOW_STRIDE;
       windowsForEgress += 1;
 
-      const lastRow = rows[window.completedCount - 1];
+      const lastRow = rows[NORMAL_SCAN_ROLLING_WINDOW_STRIDE - 1];
       await query(
         `
           insert into scanner_quality_aggregation_cursors (source_type, egress_id, last_completed_at, last_scan_id, updated_at)
@@ -549,10 +591,10 @@ export async function persistPendingNormalScannerQualityWindows(input: { egressI
             last_scan_id = excluded.last_scan_id,
             updated_at = now()
         `,
-        [NORMAL_SOURCE_TYPE, egressId, window.windowEndCompletedAt, lastRow?.scanId]
+        [NORMAL_SOURCE_TYPE, egressId, lastRow?.completedAt, lastRow?.scanId]
       );
       cursor = {
-        last_completed_at: window.windowEndCompletedAt ?? null,
+        last_completed_at: lastRow?.completedAt ?? null,
         last_scan_id: lastRow?.scanId ?? null
       };
     }
