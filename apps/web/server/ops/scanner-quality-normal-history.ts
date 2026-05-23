@@ -153,8 +153,8 @@ function buildEmptyFindingCounts() {
 }
 
 async function loadNormalScanFindingCounts(scanId: string) {
-  const [{ buildScanReportUnifiedFindings }, { projectExecutiveFindingsFromUnifiedPackets }, { getAnonymousScanById }] = await Promise.all([
-    import("../../components/scans/shared-scan-detail-view"),
+  const [{ buildScanReportUnifiedFindingsForScan }, { projectExecutiveFindingsFromUnifiedPackets }, { getAnonymousScanById }] = await Promise.all([
+    import("../../lib/scans/scan-report-unified-findings"),
     import("../../lib/scans/executive-findings-projection"),
     import("../scans/get-scan-by-id")
   ]);
@@ -163,7 +163,7 @@ async function loadNormalScanFindingCounts(scanId: string) {
     return undefined;
   }
 
-  const reportPackets = buildScanReportUnifiedFindings(scanRecord);
+  const reportPackets = buildScanReportUnifiedFindingsForScan(scanRecord);
   const executiveProjection = projectExecutiveFindingsFromUnifiedPackets(reportPackets);
   const findingCounts = buildEmptyFindingCounts();
   for (const finding of executiveProjection.findings) {
