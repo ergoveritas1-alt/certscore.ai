@@ -579,9 +579,9 @@ export async function resetDerivedNormalScannerQualityHistory(input: { dryRun?: 
           from scanner_quality_warning_events warning_event
           where exists (
             select 1
-            from scanner_quality_windows window
-            where window.source_type = $1
-              and window.batch_id = warning_event.batch_id
+            from scanner_quality_windows quality_window
+            where quality_window.source_type = $1
+              and quality_window.batch_id = warning_event.batch_id
           )
         ) as warning_event_count,
         (select count(*) from scanner_quality_aggregation_cursors where source_type = $1) as cursor_count
@@ -606,9 +606,9 @@ export async function resetDerivedNormalScannerQualityHistory(input: { dryRun?: 
       delete from scanner_quality_warning_events warning_event
       where exists (
         select 1
-        from scanner_quality_windows window
-        where window.source_type = $1
-          and window.batch_id = warning_event.batch_id
+        from scanner_quality_windows quality_window
+        where quality_window.source_type = $1
+          and quality_window.batch_id = warning_event.batch_id
       )
     `,
     [NORMAL_SOURCE_TYPE]
