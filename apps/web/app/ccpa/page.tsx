@@ -48,6 +48,19 @@ export default function CcpaPage() {
         badge: "CCPA privacy scanner",
         description: pageDescription,
         disclaimer,
+        evidenceRows: [
+          ["domain", "www.kbdlab.io"],
+          ["scan_id", "31d3fd46-3583-4011-88eb-63ac3643e0b0"],
+          ["scanned_at", "2026-03-15T08:58:57.721Z"],
+          ["finding_id", "policy_clarity_risk"],
+          ["regulatory_lane", "CCPA/CPRA"],
+          ["confidence", "strong"],
+          ["directness", "direct"],
+          ["policy_signal", "CCPA Privacy Rights (Do Not Sell My Personal Information)"],
+          ["consent_summary", "preconsent_tracking_detected=false; banner_present=false"],
+          ["finding_label", "Disclosure clarity remains weak"]
+        ],
+        evidenceTitle: "Policy evidence card",
         faqs: [
           {
             question: "What is a CCPA website privacy scanner?",

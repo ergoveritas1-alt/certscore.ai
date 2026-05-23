@@ -48,6 +48,19 @@ export default function FtcPage() {
         badge: "FTC disclosure scanner",
         description: pageDescription,
         disclaimer,
+        evidenceRows: [
+          ["domain", "www.betterment.com"],
+          ["scan_id", "da63668a-1474-4d13-ac60-fbb87e38b32b"],
+          ["scanned_at", "2026-04-01T01:25:25.753Z"],
+          ["finding_id", "affiliate_disclosure_scope_limited"],
+          ["finding_label", "Affiliate disclosure scope limited"],
+          ["confidence", "limited"],
+          ["directness", "inferred"],
+          ["surface_text", "Special Offer: Welcome to Betterment"],
+          ["runtime_context", "preconsent_tracking_detected=true; banner_present=false"],
+          ["review_scope", "offer, disclosure, and material-connection review"]
+        ],
+        evidenceTitle: "Disclosure evidence card",
         faqs: [
           {
             question: "What is an FTC website disclosure scanner?",

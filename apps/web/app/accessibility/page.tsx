@@ -48,6 +48,19 @@ export default function AccessibilityPage() {
         badge: "ADA accessibility scanner",
         description: pageDescription,
         disclaimer,
+        evidenceRows: [
+          ["domain", "www.kbdlab.io"],
+          ["scan_id", "16e3c2b0-547a-4636-b4b1-db54a0c9d97e"],
+          ["scanned_at", "2026-04-28T20:07:17.557Z"],
+          ["finding_id", "contrast_failures"],
+          ["finding_label", "Contrast failures"],
+          ["observed_status", "downgraded"],
+          ["confidence", "strong"],
+          ["directness", "inferred"],
+          ["evidence_count", "1"],
+          ["coverage_flag", "partial_scan"]
+        ],
+        evidenceTitle: "Accessibility evidence card",
         faqs: [
           {
             question: "What is an ADA website accessibility scanner?",

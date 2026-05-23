@@ -24,6 +24,8 @@ type RegulatoryPageConfig = {
   badge: string;
   description: string;
   disclaimer: string;
+  evidenceRows: ReadonlyArray<readonly [string, string]>;
+  evidenceTitle?: string;
   faqs: Array<{
     answer: string;
     question: string;
@@ -140,22 +142,16 @@ export function RegulatoryPage({ config }: { config: RegulatoryPageConfig }) {
             </div>
           </div>
 
-          <Card className="border-slate-200 bg-white shadow-none">
+          <Card className="border-slate-800 bg-slate-950 text-slate-100 shadow-[0_22px_60px_rgba(2,6,23,0.28)]">
             <CardHeader>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Illustrative sample, not a live scan</p>
-              <CardTitle className="text-xl text-slate-950">Public-web review evidence</CardTitle>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Production example, sanitized</p>
+              <CardTitle className="text-xl text-white">{config.evidenceTitle ?? "Review evidence card"}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              {[
-                ["surface", "public website"],
-                ["consent_state", "no_choice_observed"],
-                ["runtime_signal", "classified tracking request"],
-                ["policy_signal", "disclosure coverage reviewed"],
-                ["result_type", "observation for review"]
-              ].map(([label, value]) => (
-                <div key={label} className="grid grid-cols-[8.5rem_1fr] gap-3 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
+              {config.evidenceRows.map(([label, value]) => (
+                <div key={label} className="grid grid-cols-[8.5rem_1fr] gap-3 border-b border-slate-800 pb-3 last:border-b-0 last:pb-0">
                   <span className="font-mono text-xs text-slate-500">{label}</span>
-                  <span className="font-medium text-slate-800">{value}</span>
+                  <span className="min-w-0 break-words font-medium text-slate-100">{value}</span>
                 </div>
               ))}
             </CardContent>
