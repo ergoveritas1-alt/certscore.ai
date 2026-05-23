@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { listRecentQualityWarningRuns, listScannerQualityTrends } from "../../../../server/admin/list-quality-warnings";
-import { ScannerQualityTrendCard } from "./scanner-quality-trend-card";
+import { ScannerQualityTrendPanel } from "./scanner-quality-trend-card";
 
 function formatRate(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) {
@@ -45,11 +45,7 @@ export default async function AdminScannerQualityPage() {
           {trends.length === 0 ? (
             <p className="text-sm text-slate-600">No durable scanner-quality windows found yet.</p>
           ) : (
-            <div className="space-y-5">
-              {trends.map((trend) => (
-                <ScannerQualityTrendCard key={trend.egressId} trend={trend} />
-              ))}
-            </div>
+            <ScannerQualityTrendPanel trends={trends} />
           )}
         </CardContent>
       </Card>

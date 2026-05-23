@@ -31,6 +31,10 @@ type ScannerQualityTrendCardProps = {
   };
 };
 
+type ScannerQualityTrendPanelProps = {
+  trends: ScannerQualityTrendCardProps["trend"][];
+};
+
 const RANGE_OPTIONS = [20, 50, 100, 500, 2000, "all-time"] as const;
 
 type RangeOption = (typeof RANGE_OPTIONS)[number];
@@ -92,7 +96,11 @@ function sliceSeriesByRange(series: TrendSeriesPoint[], range: RangeOption) {
   return series.slice(-2);
 }
 
-export function ScannerQualityTrendCard({ trend }: ScannerQualityTrendCardProps) {
+function getTrendLabel(trend: ScannerQualityTrendCardProps["trend"]) {
+  return `${trend.egressId} / ${trend.egressProvider ?? "unknown"}`;
+}
+
+function ScannerQualityTrendCard({ trend }: ScannerQualityTrendCardProps) {
   const [range, setRange] = useState<RangeOption>("all-time");
   const series = useMemo(() => sliceSeriesByRange(trend.series, range), [range, trend.series]);
   const findingValues = series.map((point) => point.findingsPerCompleted);
@@ -195,6 +203,39 @@ export function ScannerQualityTrendCard({ trend }: ScannerQualityTrendCardProps)
           <span className="inline-flex items-center gap-1"><span className="h-2 w-4 rounded-full bg-amber-500" /> zero-finding rate</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+export function ScannerQualityTrendPanel({ trends }: ScannerQualityTrendPanelProps) {
+  const defaultTrend = trends.find((trend) => trend.egressId === "global") ?? trends[0] ?? null;
+  const [selectedKey, setSelectedKey] = useState(defaultTrend ? getTrendLabel(defaultTrend) : "");
+  const selectedTrend = trends.find((trend) => getTrendLabel(trend) === selectedKey) ?? defaultTrend;
+
+  if (!selectedTrend) {
+    return <p className="text-sm text-slate-600">No durable scanner-quality windows found yet.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="text-sm font-medium text-slate-700" htmlFor="scanner-quality-egress-select">
+          Trend
+        </label>
+        <select
+          id="scanner-quality-egress-select"
+          className="min-w-72 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm"
+          value={getTrendLabel(selectedTrend)}
+          onChange={(event) => setSelectedKey(event.target.value)}
+        >
+          {trends.map((trend) => (
+            <option key={getTrendLabel(trend)} value={getTrendLabel(trend)}>
+              {getTrendLabel(trend)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <ScannerQualityTrendCard trend={selectedTrend} />
     </div>
   );
 }
