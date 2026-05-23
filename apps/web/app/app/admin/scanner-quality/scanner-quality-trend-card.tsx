@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 
 type TrendPoint = {
   completedCount: number;
@@ -167,7 +168,7 @@ function ScannerQualityTrendCard({ findingScope, trend }: ScannerQualityTrendCar
           <h3 className="font-medium text-slate-950">
             {trend.egressId} / {trend.egressProvider ?? "unknown"}
           </h3>
-          <p className="text-sm text-slate-500">Latest durable window: {trend.latestWindowAt ?? "unknown"}</p>
+          <p className="text-sm text-slate-500">Latest durable window: {formatAdminDateTime(trend.latestWindowAt, { fallback: "unknown" })}</p>
         </div>
         <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">{trend.scopeLabel}</span>
       </div>
@@ -227,7 +228,7 @@ function ScannerQualityTrendCard({ findingScope, trend }: ScannerQualityTrendCar
               <text x="302" y="184" textAnchor="middle" fill="#64748b" fontSize="10">{midScanCount} scans</text>
               <text x="562" y="184" textAnchor="middle" fill="#64748b" fontSize="10">{latestScanCount} scans</text>
               <text x="302" y="204" textAnchor="middle" fill="#64748b" fontSize="10">
-                {firstPoint?.completedAt ?? "oldest"} to {latestPoint?.completedAt ?? "latest"}
+                {formatAdminDateTime(firstPoint?.completedAt, { fallback: "oldest" })} to {formatAdminDateTime(latestPoint?.completedAt, { fallback: "latest" })}
               </text>
             </svg>
             <div className="mt-1 flex flex-wrap justify-between gap-2 text-xs text-slate-500">

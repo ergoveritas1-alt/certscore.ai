@@ -21,6 +21,7 @@ import {
 } from "../../../../server/admin/send-monitor-site-activation-email";
 import { updateMonitorSiteRequestStatusFormAction } from "../../../../server/admin/update-monitor-site-request-status";
 import { PendingSubmitButton } from "../../../../components/ui/pending-submit-button";
+import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -78,23 +79,6 @@ function statusTone(status: AdminMonitorSiteRequestStatus) {
   }
 
   return "neutral";
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Not available";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "America/Los_Angeles",
-    timeZoneName: "short"
-  }).format(new Date(value));
 }
 
 function formatFrequency(value: string | null) {
@@ -384,7 +368,7 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                       <td className="py-4 pr-4">
                         <p className="font-medium text-slate-900">{request.website}</p>
                         <p className="text-xs text-slate-500">{request.normalizedHostname}</p>
-                        <p className="mt-2 text-xs text-slate-500">Created {formatDateTime(request.createdAt)}</p>
+                        <p className="mt-2 text-xs text-slate-500">Created {formatAdminDateTime(request.createdAt)}</p>
                       </td>
                       <td className="py-4 pr-4">
                         <p className="font-medium text-slate-900">{request.workEmail}</p>
@@ -456,17 +440,17 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                                 <li>
                                   <p className="font-medium text-slate-700">Prepared</p>
                                   <p>By {shortId(request.monitorSetup.linkedByUserId)}</p>
-                                  <p>{formatDateTime(request.monitorSetup.linkedAt)}</p>
+                                  <p>{formatAdminDateTime(request.monitorSetup.linkedAt)}</p>
                                 </li>
                                 {request.monitorSetup.setupStatus === "activated" ? (
                                   <li>
                                     <p className="font-medium text-slate-700">Activated</p>
                                     <p>By {shortId(request.monitorSetup.activatedByUserId)}</p>
-                                    <p>{formatDateTime(request.monitorSetup.activatedAt)}</p>
+                                    <p>{formatAdminDateTime(request.monitorSetup.activatedAt)}</p>
                                     {request.monitorSetup.activationConfirmedAt ? (
                                       <p>
                                         Setup confirmed by {shortId(request.monitorSetup.activationConfirmedByUserId)} at{" "}
-                                        {formatDateTime(request.monitorSetup.activationConfirmedAt)}
+                                        {formatAdminDateTime(request.monitorSetup.activationConfirmedAt)}
                                       </p>
                                     ) : null}
                                     {request.monitorSetup.activationNote ? (
@@ -480,7 +464,7 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                                   <li>
                                     <p className="font-medium text-slate-700">Confirmation email sent</p>
                                     <p>By {shortId(request.monitorSetup.confirmationEmailSentByUserId)}</p>
-                                    <p>{formatDateTime(request.monitorSetup.confirmationEmailSentAt)}</p>
+                                    <p>{formatAdminDateTime(request.monitorSetup.confirmationEmailSentAt)}</p>
                                   </li>
                                 ) : null}
                               </ol>
@@ -676,7 +660,7 @@ export default async function MonitorRequestsPage({ searchParams }: MonitorReque
                       </td>
                       <td className="py-4 pr-4">
                         <Badge tone={statusTone(request.status)}>{statusLabel(request.status)}</Badge>
-                        <p className="mt-2 text-xs text-slate-500">Updated {formatDateTime(request.updatedAt)}</p>
+                        <p className="mt-2 text-xs text-slate-500">Updated {formatAdminDateTime(request.updatedAt)}</p>
                       </td>
                       <td className="py-4">
                         <form action={updateMonitorSiteRequestStatusFormAction} className="flex min-w-48 flex-col gap-2">

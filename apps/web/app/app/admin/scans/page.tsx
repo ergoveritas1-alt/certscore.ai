@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
+import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
 import { getAdminScanOverviewMetrics, listAdminScans } from "../../../../server/admin/list-admin-scans";
 import { AdminScanActions } from "./admin-scan-actions";
@@ -14,23 +15,6 @@ type AdminScansPageProps = {
     perPage?: string;
   }>;
 };
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Not available";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "America/Los_Angeles",
-    timeZoneName: "short"
-  }).format(new Date(value));
-}
 
 function formatResolutionMode(value: string | null) {
   if (!value) {
@@ -149,7 +133,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                       <p className="truncate font-mono text-xs text-slate-500" title={scan.linkedScanId ?? scan.scanId}>
                         scan_id {scan.linkedScanId ?? scan.scanId}
                       </p>
-                      <p className="text-xs text-slate-500">First generated {formatDateTime(scan.firstGeneratedAt)}</p>
+                      <p className="text-xs text-slate-500">First generated {formatAdminDateTime(scan.firstGeneratedAt)}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <span className="font-medium text-slate-900">{scan.status}</span>
                         {(() => {
@@ -200,7 +184,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                         </>
                       )}
                     </td>
-                    <td className="py-3 pr-4 align-top text-xs text-slate-600">{formatDateTime(scan.activityAt)}</td>
+                    <td className="py-3 pr-4 align-top text-xs text-slate-600">{formatAdminDateTime(scan.activityAt)}</td>
                     <td className="py-3 align-top">
                       {scan.linkedScanId && scan.scanViewHref ? (
                         <AdminScanActions scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} />

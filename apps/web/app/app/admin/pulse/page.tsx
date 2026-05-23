@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
+import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
 import {
   getAdminPulseOverviewCounts,
@@ -29,23 +30,6 @@ function normalizeStatus(value: string | undefined): AdminPulseRequestStatus | n
 function normalizeQuery(value: string | undefined) {
   const query = value?.trim().slice(0, 160) ?? "";
   return query.length > 0 ? query : null;
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Not available";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "America/Los_Angeles",
-    timeZoneName: "short"
-  }).format(new Date(value));
 }
 
 function formatLabel(value: string | null) {
@@ -234,7 +218,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                         ) : null}
                         <p className="mt-1 text-xs text-slate-500">Feedback {request.feedbackCount}</p>
                       </td>
-                      <td className="py-3 pr-4 align-top text-xs text-slate-600">{formatDateTime(request.requestedAt)}</td>
+                      <td className="py-3 pr-4 align-top text-xs text-slate-600">{formatAdminDateTime(request.requestedAt)}</td>
                       <td className="py-3 align-top">
                         <Link className="text-sm font-semibold text-sky-700" href={`/app/admin/pulse/${request.publicId}`}>
                           Details

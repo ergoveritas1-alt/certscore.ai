@@ -1,3 +1,5 @@
+import { formatAdminDateTime } from "../../lib/admin/date-time";
+
 type MonitorSetupTimelineProps = {
   activatedAt?: string | null;
   activationConfirmedAt?: string | null;
@@ -6,23 +8,6 @@ type MonitorSetupTimelineProps = {
   linkedAt?: string | null;
   setupStatus?: "activated" | "pending_setup" | null;
 };
-
-function formatDateTime(value: string | null | undefined) {
-  if (!value) {
-    return "Pending";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "America/Los_Angeles",
-    timeZoneName: "short"
-  }).format(new Date(value));
-}
 
 export function MonitorSetupTimeline({
   activatedAt,
@@ -81,7 +66,7 @@ export function MonitorSetupTimeline({
             <div className="space-y-1">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <p className="text-sm font-medium text-slate-900">{item.label}</p>
-                <p className="text-xs text-slate-500">{formatDateTime(item.timestamp)}</p>
+                <p className="text-xs text-slate-500">{formatAdminDateTime(item.timestamp, { fallback: "Pending" })}</p>
               </div>
               <p className="text-xs leading-5 text-slate-600">{item.description}</p>
             </div>

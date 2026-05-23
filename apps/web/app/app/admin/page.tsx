@@ -1,26 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
+import { formatAdminDateTime } from "../../../lib/admin/date-time";
 import { getAdminScanOverviewMetrics, listAdminScans } from "../../../server/admin/list-admin-scans";
 import { listAdminUsers } from "../../../server/admin/list-admin-users";
 import { getMonitorSiteRequestCounts } from "../../../server/admin/list-monitor-site-requests";
 import { getAdminPulseOverviewCounts, listAdminPulseRequests } from "../../../server/admin/list-pulse-requests";
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Not available";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "America/Los_Angeles",
-    timeZoneName: "short"
-  }).format(new Date(value));
-}
 
 export default async function AdminOverviewPage() {
   const [users, scans, scanMetrics, monitorRequestCounts, pulseCounts, pulseRequests] = await Promise.all([
@@ -116,7 +100,7 @@ export default async function AdminOverviewPage() {
                   {user.organizationName ?? "No workspace"} · {user.plan ?? "No plan"} · {user.membershipRole ?? "No role"}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Domains {user.domainCount} · Scans {user.totalScans} · Last completed {formatDateTime(user.lastCompletedScanAt)}
+                  Domains {user.domainCount} · Scans {user.totalScans} · Last completed {formatAdminDateTime(user.lastCompletedScanAt)}
                 </p>
               </div>
             ))}
@@ -136,7 +120,7 @@ export default async function AdminOverviewPage() {
                   {scan.organizationName ?? "Unknown workspace"} · {scan.scanType} · {scan.status}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Signals {scan.totalSignals ?? 0} · CertScore.ai {scan.certscoreOverall ?? "n/a"} · Completed {formatDateTime(scan.completedAt)}
+                  Signals {scan.totalSignals ?? 0} · CertScore.ai {scan.certscoreOverall ?? "n/a"} · Completed {formatAdminDateTime(scan.completedAt)}
                 </p>
                 <div className="mt-3">
                   <PendingButtonLink href={`/app/admin/scans/${scan.scanId}`} idleContent="Inspect snapshot" pendingContent="Opening..." size="sm" variant="secondary" />
@@ -185,7 +169,7 @@ export default async function AdminOverviewPage() {
                   {request.status} · {request.detail ?? "standard"} · {request.format ?? "json"}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Feedback {request.feedbackCount} · Requested {formatDateTime(request.requestedAt)}
+                  Feedback {request.feedbackCount} · Requested {formatAdminDateTime(request.requestedAt)}
                 </p>
                 <div className="mt-3">
                   <PendingButtonLink href={`/app/admin/pulse/${request.publicId}`} idleContent="Inspect Pulse" pendingContent="Opening..." size="sm" variant="secondary" />

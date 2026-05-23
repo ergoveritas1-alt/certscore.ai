@@ -1,25 +1,9 @@
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { RegulatoryRelevanceSection } from "../../../../../components/scans/regulatory-relevance-section";
+import { formatAdminDateTime } from "../../../../../lib/admin/date-time";
 import { getAdminScanDetail } from "../../../../../server/admin/get-admin-scan-detail";
 import { listAdminPulseRequestsForScan } from "../../../../../server/admin/list-pulse-requests";
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Not available";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "America/Los_Angeles",
-    timeZoneName: "short"
-  }).format(new Date(value));
-}
 
 function formatValue(value: unknown) {
   if (value === null || value === undefined) {
@@ -358,8 +342,8 @@ export default async function AdminScanDetailPage({ params }: AdminScanDetailPag
             <CardTitle>Timestamps</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-slate-600">
-            <p>Created: {formatDateTime(record.scan.createdAt)}</p>
-            <p>Completed: {formatDateTime(record.scan.completedAt)}</p>
+            <p>Created: {formatAdminDateTime(record.scan.createdAt)}</p>
+            <p>Completed: {formatAdminDateTime(record.scan.completedAt)}</p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 bg-white">
@@ -617,7 +601,7 @@ export default async function AdminScanDetailPage({ params }: AdminScanDetailPag
                 <div key={`${change.eventType}-${index}`} className="rounded-2xl border border-slate-200 p-4 text-sm text-slate-600">
                   <p className="font-medium text-slate-900">{change.eventType}</p>
                   <p>
-                    {change.eventGroup} · {change.severity} · {formatDateTime(change.eventTimestamp)}
+                    {change.eventGroup} · {change.severity} · {formatAdminDateTime(change.eventTimestamp)}
                   </p>
                   <p>Field {change.fieldName ?? "n/a"}</p>
                   <p>Old {change.oldValueText ?? "null"}</p>

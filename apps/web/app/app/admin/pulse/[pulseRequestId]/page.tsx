@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { formatAdminDateTime } from "../../../../../lib/admin/date-time";
 import { PULSE_STANDARD_DISCLAIMER } from "../../../../../lib/pulse/constants";
 import { getAdminPulseRequestDetail } from "../../../../../server/admin/list-pulse-requests";
 
@@ -10,24 +11,6 @@ export const revalidate = 0;
 type AdminPulseDetailPageProps = {
   params: Promise<{ pulseRequestId: string }>;
 };
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Not available";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-    timeZone: "America/Los_Angeles",
-    timeZoneName: "short"
-  }).format(new Date(value));
-}
 
 function formatLabel(value: string | null) {
   if (!value) {
@@ -80,10 +63,10 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
             <Field label="Resolution" value={formatLabel(request.resolutionMode)} />
             <Field label="Detail / format" value={`${formatLabel(detail)} / ${formatLabel(format)}`} />
             <Field label="Freshness / wait" value={`${formatLabel(freshness)} / ${typeof waitSeconds === "number" ? waitSeconds : 0}s`} />
-            <Field label="Requested" value={formatDateTime(request.requestedAt)} />
-            <Field label="Completed" value={formatDateTime(request.completedAt)} />
+            <Field label="Requested" value={formatAdminDateTime(request.requestedAt, { includeSeconds: true })} />
+            <Field label="Completed" value={formatAdminDateTime(request.completedAt, { includeSeconds: true })} />
             <Field label="Elapsed" value={request.elapsedSeconds === null ? "Not recorded" : `${request.elapsedSeconds}s`} />
-            <Field label="Updated" value={formatDateTime(request.updatedAt)} />
+            <Field label="Updated" value={formatAdminDateTime(request.updatedAt, { includeSeconds: true })} />
           </CardContent>
         </Card>
 
@@ -165,7 +148,7 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
                   {feedback.reason ? (
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{formatLabel(feedback.reason)}</span>
                   ) : null}
-                  <span className="text-xs text-slate-500">{formatDateTime(feedback.createdAt)}</span>
+                  <span className="text-xs text-slate-500">{formatAdminDateTime(feedback.createdAt, { includeSeconds: true })}</span>
                 </div>
                 {feedback.comment ? <p className="mt-3 whitespace-pre-wrap leading-6">{feedback.comment}</p> : null}
                 <div className="mt-3 grid gap-2 text-xs text-slate-500 md:grid-cols-3">

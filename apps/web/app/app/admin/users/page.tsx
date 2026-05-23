@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-s
 import { MembershipRoleForm } from "../../../../components/admin/membership-role-form";
 import { OrganizationPlanForm } from "../../../../components/admin/organization-plan-form";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
+import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { listAdminUsers } from "../../../../server/admin/list-admin-users";
 import { updateMembershipRoleFormAction } from "../../../../server/admin/update-membership-role";
 import { updateOrganizationPlanFormAction } from "../../../../server/admin/update-organization-plan";
@@ -14,23 +15,6 @@ function InfoIcon() {
       <circle cx="12" cy="7.5" r="0.8" fill="currentColor" stroke="none" />
     </svg>
   );
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Not available";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "America/Los_Angeles",
-    timeZoneName: "short"
-  }).format(new Date(value));
 }
 
 type AdminUsersPageProps = {
@@ -93,14 +77,14 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                         <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-64 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-lg group-hover:block">
                           <p>Name: {user.fullName ?? "No full name"}</p>
                           <p>Provider: {user.authProvider}</p>
-                          <p>Created: {formatDateTime(user.createdAt)}</p>
+                          <p>Created: {formatAdminDateTime(user.createdAt)}</p>
                         </div>
                       </div>
                     </div>
                   </td>
                   <td className="py-4 pr-4 align-top text-slate-600">{user.domainCount}</td>
                   <td className="py-4 pr-4 align-top text-slate-600">{user.totalScans}</td>
-                  <td className="whitespace-nowrap py-4 pr-4 align-top text-slate-600">{formatDateTime(user.updatedAt)}</td>
+                  <td className="whitespace-nowrap py-4 pr-4 align-top text-slate-600">{formatAdminDateTime(user.updatedAt)}</td>
                   <td className="py-4 pr-4 align-top text-slate-600">
                     {user.organizationId ? (
                       <MembershipRoleForm

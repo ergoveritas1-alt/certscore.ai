@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
+import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { ADMIN_SCANNER_QUALITY_FINDING_OPTIONS, listRecentQualityWarningRuns, listScannerQualityTrends } from "../../../../server/admin/list-quality-warnings";
 import { ScannerQualityTrendPanel } from "./scanner-quality-trend-card";
 
@@ -110,7 +111,7 @@ export default async function AdminScannerQualityPage({ searchParams }: AdminSca
                     {runs.map((run) => (
                       <tr key={run.runDir}>
                         <td className="py-3 pr-4 font-medium text-slate-900">{run.batchId}</td>
-                        <td className="py-3 pr-4 text-slate-600">{run.generatedAt ?? "unknown"}</td>
+                        <td className="py-3 pr-4 text-slate-600">{formatAdminDateTime(run.generatedAt, { fallback: "unknown" })}</td>
                         <td className="py-3 pr-4 text-slate-600">{run.warningCount}</td>
                         <td className="py-3 pr-4 font-mono text-xs text-slate-500">{run.source === "db" ? "durable-db" : run.runDir}</td>
                       </tr>
@@ -149,7 +150,7 @@ export default async function AdminScannerQualityPage({ searchParams }: AdminSca
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold uppercase text-amber-800">{warning.severity}</span>
                     <span className="font-medium text-slate-950">{warning.code}</span>
-                    <span className="text-sm text-slate-600">{warning.generatedAt}</span>
+                    <span className="text-sm text-slate-600">{formatAdminDateTime(warning.generatedAt, { fallback: "unknown" })}</span>
                   </div>
                   <p className="mt-2 text-sm text-slate-700">{warning.explanation}</p>
                   <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
