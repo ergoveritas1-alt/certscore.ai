@@ -1483,6 +1483,64 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     });
   }
 
+  const consentControlSignalKey = "privacy.consent_control_not_reopenable";
+  const consentControlSignalLabel = "Consent controls may be hard to revisit";
+  const consentControlSignalValue = getHybridDerivedSignalValue(input.runtimeArtifacts, consentControlSignalKey);
+  if (consentControlSignalValue === true) {
+    const fallbackEvidence = getHybridSignalFallbackEvidence({
+      runtimeArtifacts: input.runtimeArtifacts,
+      signalKey: consentControlSignalKey,
+      signalLabel: consentControlSignalLabel,
+      signalValue: consentControlSignalValue
+    });
+    if (fallbackEvidence) {
+      candidates.push({
+        categoryId: "choice_symmetry_dark_pattern_indicators",
+        description:
+          "No obvious cookie preferences, privacy settings, or consent-preference reopen control was observed on the scanned public pages.",
+        fallbackEvidence,
+        id: `runtime-derived-signal-${consentControlSignalKey}`,
+        linkedValidationFinding: null,
+        observedValue: "not_observed",
+        severity: "medium",
+        signalKey: consentControlSignalKey,
+        signalLabel: consentControlSignalLabel,
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: consentControlSignalLabel
+      });
+    }
+  }
+
+  const consentGovernanceSignalKey = "privacy.consent_governance_disclosure_gap";
+  const consentGovernanceSignalLabel = "Consent preferences and withdrawal process not clearly explained";
+  const consentGovernanceSignalValue = getHybridDerivedSignalValue(input.runtimeArtifacts, consentGovernanceSignalKey);
+  if (consentGovernanceSignalValue === true) {
+    const fallbackEvidence = getHybridSignalFallbackEvidence({
+      runtimeArtifacts: input.runtimeArtifacts,
+      signalKey: consentGovernanceSignalKey,
+      signalLabel: consentGovernanceSignalLabel,
+      signalValue: consentGovernanceSignalValue
+    });
+    if (fallbackEvidence) {
+      candidates.push({
+        categoryId: "data_handling_disclosures",
+        description:
+          "Public consent or cookie materials did not clearly explain how consent choices can be changed, withdrawn, retained, refreshed, or managed, despite retained consent-relevant runtime evidence.",
+        fallbackEvidence,
+        id: `runtime-derived-signal-${consentGovernanceSignalKey}`,
+        linkedValidationFinding: null,
+        observedValue: "supporting_disclosure_context",
+        severity: "medium",
+        signalKey: consentGovernanceSignalKey,
+        signalLabel: consentGovernanceSignalLabel,
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: consentGovernanceSignalLabel
+      });
+    }
+  }
+
   const signalKey = "privacy.cross_domain_identifier_sharing_observed";
   const signalLabel = "Identifiers shared across domains";
   const signalValue = getHybridDerivedSignalValue(input.runtimeArtifacts, signalKey);

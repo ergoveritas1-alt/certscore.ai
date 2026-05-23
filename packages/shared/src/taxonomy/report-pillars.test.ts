@@ -65,7 +65,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 136);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 139);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
@@ -639,6 +639,7 @@ test("returns category-, section-, and pillar-scoped unified findings from deriv
       "forced_consent_wall",
       "accept_only_banner",
       "dismiss_without_reject",
+      "consent_control_not_reopenable",
       "popup_behavior_observed",
       "blocking_overlay_observed",
       "autoplay_media_observed"

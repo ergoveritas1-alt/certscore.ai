@@ -161,6 +161,19 @@ export type CertScoreFindingEvidenceDetails = {
       validationRuleKeys: string[];
     };
   };
+  runtimeVendorDisclosure?: {
+    subtype: "runtime_vendor_not_disclosed";
+    summary?: string;
+    unmatchedVendors?: string[];
+    unmatchedDomains?: string[];
+    observedRuntimeDomains?: string[];
+    policySurfacesSearched?: Array<Record<string, unknown>>;
+    mismatchRationale?: string | null;
+    coverageStatus?: "usable" | "partial" | "blocked" | "unknown" | string;
+    evidenceConfidence?: "strong" | "moderate" | "limited" | string;
+    directVsInferred?: "direct" | "inferred" | "mixed" | string;
+  };
+  consentGovernanceDisclosure?: Record<string, unknown>;
   disclosureFindings?: string[];
   evidenceSnippets?: string[];
   offerSnippets?: string[];
@@ -265,8 +278,10 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     label: "Cookie disclosure gap",
     section: "Privacy & Tracking",
     defaultSurfacePriority: 91,
-    whyItMatters: "When observed cookie activity is not covered by retained cookie-policy evidence, users cannot reliably understand what tracking is happening or why.",
-    remediation: "Reconcile runtime cookie behavior with the cookie policy so observed cookies, providers, and purposes are disclosed accurately."
+    whyItMatters:
+      "When observed cookie activity or consent-dependent tracking context is not covered by retained cookie-policy evidence, users cannot reliably understand what tracking is happening, why, or how related choices can be revisited.",
+    remediation:
+      "Reconcile runtime cookie behavior with cookie and preference-center materials so observed cookies, providers, purposes, retention context, and consent-management paths are explained accurately."
   },
   third_party_cookie_pre_consent: {
     id: "third_party_cookie_pre_consent",
@@ -275,6 +290,16 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     defaultSurfacePriority: 92,
     whyItMatters: "Third-party cookie or storage timing before a recorded choice is a concrete implementation review signal for consent and storage/access controls.",
     remediation: "Prevent non-essential tracking cookie or storage writes before consent or remove the vendor."
+  },
+  long_lived_cookie_retention_review: {
+    id: "long_lived_cookie_retention_review",
+    label: "Long-lived cookie retention review",
+    section: "Cookies & Storage",
+    defaultSurfacePriority: 88,
+    whyItMatters:
+      "Persistent tracking, analytics, identity, or unclassified cookies with retained runtime expiry evidence may warrant retention, minimization, consent, opt-out, and disclosure review.",
+    remediation:
+      "Review cookie purposes and vendors, shorten unnecessary expiration periods, classify unknown cookies, and update cookie or privacy disclosures to explain retention periods or criteria."
   },
   analytics_cookie_pre_consent: {
     id: "analytics_cookie_pre_consent",
@@ -492,9 +517,9 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     section: "Consent Experience",
     defaultSurfacePriority: 95,
     whyItMatters:
-      "Retained consent interaction structure can show that refusal or settings were less available than acceptance, which warrants consent UX review.",
+      "Retained consent interaction structure can show that refusal, settings, later preference-revisit controls, or explanations of ongoing consent management were less available than acceptance, which warrants consent UX review.",
     remediation:
-      "Expose reject and settings at the first layer, remove accept-only or forced paths, and keep button prominence and interaction cost comparable across consent choices."
+      "Expose reject and settings at the first layer, keep button prominence and interaction cost comparable, and provide a clear cookie preferences, privacy settings, or consent-preference reopen path with supporting withdrawal or preference-management explanation where appropriate."
   },
   policy_behavior_contradiction_detected: {
     id: "policy_behavior_contradiction_detected",
@@ -502,9 +527,9 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     section: "Privacy & Tracking",
     defaultSurfacePriority: 97,
     whyItMatters:
-      "Runtime behavior and public disclosures should be reviewed together so teams can confirm the consent flow, implementation, and policy language are aligned.",
+      "Runtime behavior and public disclosures should be reviewed together so teams can confirm the consent flow, implementation, public policy language, and preference-management explanations are aligned.",
     remediation:
-      "Compare the retained disclosure language against the observed runtime behavior, then confirm whether the implementation, consent flow, and public disclosures align."
+      "Compare the retained disclosure language against the observed runtime behavior, then confirm whether the implementation, consent flow, public disclosures, and consent preference-management materials align."
   },
   policy_clarity_risk: {
     id: "policy_clarity_risk",

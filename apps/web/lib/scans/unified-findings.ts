@@ -792,6 +792,7 @@ export type UnifiedFindingTopFindingEligibility = {
 const UNIFIED_FINDING_TOP_FINDING_IDS: Record<string, string[]> = {
   accept_more_prominent_than_reject: ["asymmetric_consent_ui"],
   accept_only_banner: ["consent_dark_patterns_detected"],
+  consent_control_not_reopenable: ["consent_dark_patterns_detected"],
   cookie_disclosure_gap: ["cookie_disclosure_gap"],
   cpra_cba_opt_out_missing: ["cpra_cba_opt_out_missing"],
   cross_domain_identifier_sharing_observed: ["cross_domain_identifier_sharing_observed"],

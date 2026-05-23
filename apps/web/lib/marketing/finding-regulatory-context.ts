@@ -1016,6 +1016,60 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
     ],
     displayCaution: "This finding does not determine legal status, GDPR Article 9 status, consent validity, same-flow linkage, keystroke capture, screenshot capture, sensitive-value capture, recording retention, interception, or compliance status. Review retained replay anchors, sensitive-surface context, masking, sampling, payload evidence, consent state, and vendor configuration."
   },
+  long_lived_cookie_retention_review: {
+    findingId: "long_lived_cookie_retention_review",
+    label: "Long-lived cookie retention review",
+    category: "Cookies & Storage",
+    regulatoryConcernGroup: "cookie_retention_minimization_disclosure",
+    primaryConcern: {
+      id: "cookie_retention_lifetime_review",
+      label: "Cookie retention and minimization review",
+      displayCopy:
+        "Retained runtime cookie evidence showed persistent tracking, advertising, analytics, identity, or unclassified cookies with expiry or duration evidence that met a CertScore retention review threshold. This may be relevant to retention, minimization, consent, opt-out, and disclosure review depending on purpose, configuration, user region, and manual review."
+    },
+    technicalStandards: [
+      {
+        id: "gdpr_storage_limitation_minimization_review",
+        label: "GDPR storage limitation and minimization review",
+        appliesWhen: "Persistent cookies or identifiers may involve personal data, online identifiers, profiling, or retention practices depending on purpose and linkage.",
+        sourceRefs: ["gdpr_article_4", "gdpr_article_5", "gdpr_article_13", "gdpr_article_25"]
+      },
+      {
+        id: "eprivacy_cookie_storage_access_review",
+        label: "ePrivacy cookie storage/access review",
+        appliesWhen: "Cookies or similar technologies store information on, or access information from, terminal equipment.",
+        sourceRefs: ["eprivacy_directive_article_5_3", "edpb_eprivacy_art_5_3_scope"]
+      },
+      {
+        id: "ccpa_cpra_retention_and_purpose_review",
+        label: "CCPA/CPRA retention and purpose review",
+        appliesWhen: "Persistent identifiers, advertising cookies, or cross-context behavioral advertising context may be relevant for retention disclosure, purpose limitation, deletion, sale/share, or opt-out review.",
+        sourceRefs: ["california_oag_ccpa", "cppa_faq"]
+      }
+    ],
+    jurisdictionalContexts: [
+      {
+        id: "eu_gdpr_eprivacy_cookie_retention_review",
+        label: "EU GDPR/ePrivacy cookie-retention review",
+        appliesWhen: "EU/EEA users and persistent non-essential cookies or online identifiers may be in scope depending on purpose, consent state, retention disclosure, and manual review.",
+        sourceRefs: ["gdpr_article_5", "gdpr_article_13", "eprivacy_directive_article_5_3"]
+      },
+      {
+        id: "uk_pecr_cookie_retention_review",
+        label: "UK PECR / ICO cookie-retention review",
+        appliesWhen: "UK users and persistent cookies or similar technologies may be in scope depending on purpose, consent state, and manual review.",
+        sourceRefs: ["ico_cookies"]
+      },
+      {
+        id: "ccpa_cpra_persistent_identifier_review",
+        label: "CCPA/CPRA persistent identifier and retention review",
+        appliesWhen: "California users and persistent identifiers may be relevant to retention disclosure, deletion, sale/share, opt-out, or cross-context behavioral advertising review depending on purpose and manual review.",
+        sourceRefs: ["california_oag_ccpa", "cppa_faq"]
+      }
+    ],
+    displayCaution:
+      "This finding does not determine legal status, consent validity, sale/share status, GDPR compliance, or cookie-law compliance. The 365-day threshold is a CertScore product review threshold, not a statutory threshold, and GDPR does not set a universal numeric cookie-lifetime threshold. Review retained cookie name, domain, page attribution, classification, duration, threshold basis, vendor/source context, consent state, opt-out behavior, retention disclosure, and minimization."
+  },
   probable_fingerprinting: {
     findingId: "probable_fingerprinting",
     label: "Probable browser/device fingerprinting review signal",

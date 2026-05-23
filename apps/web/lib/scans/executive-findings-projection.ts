@@ -18,6 +18,10 @@ import {
   hasStrongFingerprintingEvidence
 } from "./promotion-evidence-contracts";
 import { evaluateTopFindingEligibility, type TopFindingEligibilityDecision } from "./top-finding-eligibility";
+import { evaluateCookieRetentionReview, COOKIE_RETENTION_THRESHOLDS } from "./cookie-retention-review";
+import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
+import { getConsentControlLifecycleEvidence } from "./consent-control-lifecycle";
+import { getConsentGovernanceDisclosureEvidence } from "./consent-governance-disclosure";
 
 const MAX_DISPLAY_SNIPPET_LENGTH = 240;
 
@@ -50,6 +54,7 @@ const SECTION_ORDER: CertScoreFindingSection[] = [
 const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SCORE_FINDING_REGISTRY> = {
   accept_more_prominent_than_reject: "asymmetric_consent_ui",
   accept_only_banner: "consent_dark_patterns_detected",
+  consent_control_not_reopenable: "consent_dark_patterns_detected",
   dismiss_without_reject: "consent_dark_patterns_detected",
   fingerprinting_observed: "probable_fingerprinting",
   forced_consent_wall: "forced_consent_interaction",
@@ -58,6 +63,7 @@ const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SC
   policy_behavior_conflict: "policy_behavior_contradiction_detected",
   policy_clarity_risk: "policy_clarity_risk",
   preconsent_tracking: "pre_consent_tracking_detected",
+  cookie_retention_lifetime_review_signal: "long_lived_cookie_retention_review",
   reject_did_not_reduce_tracking: "reject_tracking_persists_after_reject",
   reject_button_missing: "reject_option_missing_or_hidden",
   rtb_cookie_sync_observed: "rtb_cookie_sync_observed",
@@ -113,6 +119,8 @@ const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
   "cross_domain_identifier_sharing_observed",
   "cookie_disclosure_gap",
   "third_party_cookie_pre_consent",
+  "long_lived_cookie_retention_review",
+  "consent_dark_patterns_detected",
   "analytics_cookie_pre_consent",
   "adtech_cookie_pre_consent",
   "telemetry_rich_identification_observed",
@@ -157,6 +165,7 @@ const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
 
 const COOKIE_EVIDENCE_FINDING_IDS = new Set([
   "third_party_cookie_pre_consent",
+  "long_lived_cookie_retention_review",
   "analytics_cookie_pre_consent",
   "adtech_cookie_pre_consent",
   "non_cookie_tracking_detected",
@@ -341,6 +350,12 @@ function mapExecutiveConfidence(
   packet: UnifiedFindingDisplayPacket,
   findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
 ): CertScoreFindingConfidence {
+  if (findingId === "long_lived_cookie_retention_review") {
+    const review = evaluateCookieRetentionReview({
+      cookieRetentionEvidence: getEntityJsonObjects(packet, "cookieRetentionEvidence")
+    });
+    return review.confidence === "strong" ? "strong" : review.confidence === "good" ? "good" : "moderate";
+  }
   if (findingId === "reject_tracking_persists_after_reject" && !packet.evidence?.flags?.includes("reject_evidence_confirmed")) {
     return "moderate";
   }
@@ -366,6 +381,11 @@ function mapSeverity(
   packet: UnifiedFindingDisplayPacket,
   findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
 ): CertScoreFindingSeverity {
+  if (findingId === "long_lived_cookie_retention_review") {
+    return evaluateCookieRetentionReview({
+      cookieRetentionEvidence: getEntityJsonObjects(packet, "cookieRetentionEvidence")
+    }).severity;
+  }
   if (findingId === "pre_consent_tracking_detected" && packet.severity === "high") {
     return "critical";
   }
@@ -989,6 +1009,50 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
     ]).slice(0, 4);
   }
 
+  if ((findingId === "cookie_disclosure_gap" || findingId === "policy_behavior_contradiction_detected") && evidenceDetails?.runtimeVendorDisclosure) {
+    const disclosure = evidenceDetails.runtimeVendorDisclosure as Record<string, unknown>;
+    const unmatchedVendors = Array.isArray(disclosure.unmatchedVendors) ? disclosure.unmatchedVendors.filter((value): value is string => typeof value === "string") : [];
+    const unmatchedDomains = Array.isArray(disclosure.unmatchedDomains) ? disclosure.unmatchedDomains.filter((value): value is string => typeof value === "string") : [];
+    const policySurfaces = Array.isArray(disclosure.policySurfacesSearched)
+      ? disclosure.policySurfacesSearched.filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === "object")
+      : [];
+    return uniqueStrings([
+      unmatchedVendors.length > 0
+        ? `${unmatchedVendors.length} observed runtime vendor${unmatchedVendors.length === 1 ? "" : "s"} did not clearly match retained disclosure evidence.`
+        : unmatchedDomains.length > 0
+          ? `${unmatchedDomains.length} observed runtime domain${unmatchedDomains.length === 1 ? "" : "s"} did not clearly match retained disclosure evidence.`
+          : null,
+      unmatchedVendors[0] ? `Example vendor: ${unmatchedVendors[0]}.` : unmatchedDomains[0] ? `Example domain: ${unmatchedDomains[0]}.` : null,
+      policySurfaces.length > 0
+        ? `Disclosure surfaces searched: ${policySurfaces.map((surface) => String(surface.type ?? "policy")).slice(0, 3).join(", ")}.`
+        : null,
+      typeof disclosure.coverageStatus === "string" ? `Coverage status: ${disclosure.coverageStatus}.` : null
+    ]).slice(0, 4);
+  }
+
+  if (
+    (findingId === "cookie_disclosure_gap" ||
+      findingId === "policy_behavior_contradiction_detected" ||
+      findingId === "consent_dark_patterns_detected") &&
+    evidenceDetails?.consentGovernanceDisclosure
+  ) {
+    const governance = evidenceDetails.consentGovernanceDisclosure as Record<string, unknown>;
+    const missingSignals = Array.isArray(governance.missingSignals)
+      ? governance.missingSignals.filter((value): value is string => typeof value === "string")
+      : [];
+    const policyUrls = [
+      ...(Array.isArray(governance.policyUrls) ? governance.policyUrls : []),
+      ...(Array.isArray(governance.cookiePolicyUrls) ? governance.cookiePolicyUrls : []),
+      ...(Array.isArray(governance.preferenceCenterUrls) ? governance.preferenceCenterUrls : [])
+    ].filter((value): value is string => typeof value === "string");
+    return uniqueStrings([
+      "Consent preferences and withdrawal process were not clearly explained in retained public materials.",
+      missingSignals.length > 0 ? `Gap signals: ${missingSignals.slice(0, 3).join(", ")}.` : null,
+      policyUrls.length > 0 ? `Reviewed surface: ${policyUrls[0]}.` : null,
+      "Automated public-web observation; manual review should confirm current policy, cookie, and preference-center materials."
+    ]).slice(0, 4);
+  }
+
   if (findingId === "pre_consent_tracking_detected" && evidenceDetails) {
     const vendorNames = (evidenceDetails.vendors ?? []).map((vendor) => vendor.name).slice(0, 5);
     const firstRequest = evidenceDetails.representativeRequests?.[0];
@@ -1005,6 +1069,29 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
         ? `First classified third-party tracking request was observed at ${evidenceDetails.timing.firstThirdPartyTrackingRequestMs}ms.`
         : null,
       firstRequest ? `Representative pre-consent tracking request: ${firstRequest.url}` : null
+    ]).slice(0, 4);
+  }
+
+  if (findingId === "long_lived_cookie_retention_review" && evidenceDetails?.cookieEvidence) {
+    const cookieEvidence = evidenceDetails.cookieEvidence as Record<string, unknown>;
+    const retainedCookies = Array.isArray(cookieEvidence.retainedRuntimeCookies)
+      ? cookieEvidence.retainedRuntimeCookies.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
+      : [];
+    const longest = cookieEvidence.longestObservedCookie && typeof cookieEvidence.longestObservedCookie === "object"
+      ? cookieEvidence.longestObservedCookie as Record<string, unknown>
+      : retainedCookies[0];
+    const trackingCount = evidenceDetails.counts?.longLivedTrackingCookieCount ?? 0;
+    const unknownCount = evidenceDetails.counts?.longLivedUnclassifiedCookieCount ?? 0;
+    return uniqueStrings([
+      trackingCount > 0
+        ? `${trackingCount} long-lived tracking cookies exceeded the ${COOKIE_RETENTION_THRESHOLDS.mainReviewDays}-day review threshold.`
+        : null,
+      unknownCount > 0
+        ? `${unknownCount} unclassified cookies exceeded the ${COOKIE_RETENTION_THRESHOLDS.mainReviewDays}-day review threshold and may need classification.`
+        : null,
+      longest
+        ? `Longest observed cookie: ${String(longest.name ?? "unknown")} on ${String(longest.domain ?? "unknown domain")}, ${Math.round(Number(longest.durationDays ?? 0))} days, ${String(longest.classification ?? longest.category ?? "unclassified")}.`
+        : null
     ]).slice(0, 4);
   }
 
@@ -1604,6 +1691,38 @@ function buildPreConsentTrackingEvidenceDetails(
   };
 
   return Object.keys(details).length > 0 ? details : undefined;
+}
+
+function buildCookieRetentionReviewEvidenceDetails(packet: UnifiedFindingDisplayPacket): CertScoreFindingEvidenceDetails | undefined {
+  const review = evaluateCookieRetentionReview({
+    cookieRetentionEvidence: getEntityJsonObjects(packet, "cookieRetentionEvidence")
+  });
+  if (review.evidence.length === 0) {
+    return undefined;
+  }
+
+  const longestCookie = [...review.evidence].sort((left, right) => (right.durationDays ?? 0) - (left.durationDays ?? 0))[0];
+  return {
+    counts: {
+      longLivedCookieCount: review.evidence.length,
+      longLivedTrackingCookieCount: review.evidence.filter((cookie) => cookie.category === "tracking" || cookie.category === "analytics").length,
+      longLivedUnclassifiedCookieCount: review.evidence.filter((cookie) => cookie.category === "unknown" || cookie.category === "other").length,
+      longestCookieDurationDays: Math.round(longestCookie?.durationDays ?? 0),
+      cookieRetentionReviewThresholdDays: COOKIE_RETENTION_THRESHOLDS.mainReviewDays
+    },
+    cookieEvidence: {
+      observed: true,
+      reviewThresholdDays: COOKIE_RETENTION_THRESHOLDS.mainReviewDays,
+      thresholdBasis:
+        "365 days is a CertScore product review threshold for automated public-web observations, not a statutory cookie-lifetime limit.",
+      retainedRuntimeCookies: review.evidence.slice(0, 12),
+      longestObservedCookie: longestCookie ?? null
+    },
+    pageUrls: uniqueStrings(review.evidence.map((cookie) => cookie.pageUrl)),
+    runtimeRequestUrls: uniqueStrings(review.evidence.flatMap((cookie) => cookie.sourceRequestUrl ? [cookie.sourceRequestUrl] : [])),
+    runtimeVendors: uniqueStrings(review.evidence.flatMap((cookie) => cookie.vendor ? [cookie.vendor] : [])),
+    evidenceFlags: ["automated_observation", "review_signal", "not_legal_advice", "not_compliance_determination"]
+  };
 }
 
 function buildRejectTrackingEvidenceDetails(packet: UnifiedFindingDisplayPacket): CertScoreFindingEvidenceDetails {
@@ -2211,6 +2330,20 @@ function buildGenericCanonicalEvidenceDetails(
                 : "Reject path evidence was retained, but the exact reject availability subtype is ambiguous."
         : "Consent UI evidence may affect how easily users can exercise a choice."
     };
+    const lifecycleEvidence = getConsentControlLifecycleEvidence({
+      consentControlLifecycleEvidence: getFirstEntityJsonObject(packet, "consentControlLifecycleEvidence")
+    });
+    if (lifecycleEvidence) {
+      details.consentUiEvidence.lifecycleReview = {
+        subtype: "privacy_settings_control_not_observed",
+        coverageStatus: lifecycleEvidence.coverageStatus,
+        pagesChecked: lifecycleEvidence.pagesChecked,
+        controlsSearched: lifecycleEvidence.controlsSearched,
+        footerLinksInspected: lifecycleEvidence.footerLinksInspected.slice(0, 5),
+        evidenceLine:
+          "No obvious cookie preferences, privacy settings, or consent-preference reopen control was observed on the scanned public pages."
+      };
+    }
   }
 
   if (SENSITIVE_EVIDENCE_FINDING_IDS.has(findingId)) {
@@ -2876,6 +3009,95 @@ function formatSensitiveSourceLocation(value: string) {
   return value.replace(/_/g, " ").trim();
 }
 
+function attachRuntimeVendorDisclosureDetails(
+  details: CertScoreFindingEvidenceDetails,
+  packet: UnifiedFindingDisplayPacket,
+  findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
+) {
+  if (findingId !== "cookie_disclosure_gap" && findingId !== "policy_behavior_contradiction_detected") {
+    return;
+  }
+
+  const runtimeVendorDisclosureEvidence = getRuntimeVendorDisclosureEvidence({
+    runtimeVendorDisclosureEvidence: getEntityJsonObjects(packet, "runtimeVendorDisclosureEvidence")
+  });
+  if (runtimeVendorDisclosureEvidence.length === 0) {
+    return;
+  }
+
+  const unmatchedVendors = uniqueStrings(runtimeVendorDisclosureEvidence.flatMap((row) => row.unmatchedRuntimeVendors)).slice(0, 8);
+  const unmatchedDomains = uniqueStrings(runtimeVendorDisclosureEvidence.flatMap((row) => row.unmatchedRuntimeDomains)).slice(0, 8);
+  const policySurfaces = runtimeVendorDisclosureEvidence.flatMap((row) => row.policySurfacesSearched).slice(0, 8);
+  details.runtimeVendorDisclosure = {
+    subtype: "runtime_vendor_not_disclosed",
+    summary:
+      "Disclosure alignment note: observed runtime vendors/domains in this evidence cluster were not clearly reflected in retained disclosure surfaces.",
+    unmatchedVendors,
+    unmatchedDomains,
+    observedRuntimeDomains: uniqueStrings(runtimeVendorDisclosureEvidence.flatMap((row) => row.observedRuntimeDomains)).slice(0, 12),
+    policySurfacesSearched: policySurfaces,
+    mismatchRationale: runtimeVendorDisclosureEvidence[0]?.mismatchRationale ?? null,
+    coverageStatus: runtimeVendorDisclosureEvidence[0]?.coverageStatus ?? "unknown",
+    evidenceConfidence: runtimeVendorDisclosureEvidence[0]?.evidenceConfidence ?? "limited",
+    directVsInferred: runtimeVendorDisclosureEvidence[0]?.directVsInferred ?? "mixed"
+  };
+}
+
+function attachConsentGovernanceDisclosureDetails(
+  details: CertScoreFindingEvidenceDetails,
+  packet: UnifiedFindingDisplayPacket,
+  findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
+) {
+  if (
+    findingId !== "cookie_disclosure_gap" &&
+    findingId !== "policy_behavior_contradiction_detected" &&
+    findingId !== "consent_dark_patterns_detected"
+  ) {
+    return;
+  }
+
+  const evidence = getConsentGovernanceDisclosureEvidence({
+    consentGovernanceDisclosureEvidence: getFirstEntityJsonObject(packet, "consentGovernanceDisclosureEvidence")
+  });
+  if (!evidence) {
+    return;
+  }
+
+  const missingSignals = Object.entries(evidence.missingOrWeakDisclosureSignals)
+    .filter(([, value]) => value === true)
+    .map(([key]) => key);
+  const relevanceTriggers = Object.entries(evidence.relevanceTriggers)
+    .filter(([, value]) => value === true)
+    .map(([key]) => key);
+  const governanceDetails = {
+    subtype: "consent_governance_disclosure_gap",
+    summary:
+      "Consent governance disclosure note: retained public materials did not clearly explain how users can revisit, change, withdraw, retain, renew, expire, or understand consent choices.",
+    relevanceTriggers,
+    missingSignals,
+    policyUrls: evidence.supportingAnchors.policyUrls ?? [],
+    cookiePolicyUrls: evidence.supportingAnchors.cookiePolicyUrls ?? [],
+    preferenceCenterUrls: evidence.supportingAnchors.preferenceCenterUrls ?? [],
+    observedConsentVendors: evidence.supportingAnchors.observedConsentVendors ?? [],
+    observedTrackingVendors: evidence.supportingAnchors.observedTrackingVendors ?? [],
+    coverage: evidence.coverage,
+    evidenceLine:
+      "Reviewed public privacy, cookie, or preference materials did not clearly explain how users can revisit or withdraw consent choices."
+  };
+  details.consentGovernanceDisclosure = governanceDetails;
+  if (findingId === "consent_dark_patterns_detected") {
+    details.consentUiEvidence = {
+      ...(details.consentUiEvidence ?? {}),
+      consentGovernanceDisclosure: governanceDetails
+    };
+  } else {
+    details.disclosureEvidence = {
+      ...(details.disclosureEvidence ?? {}),
+      consentGovernanceDisclosure: governanceDetails
+    };
+  }
+}
+
 function buildExecutiveEvidenceDetails(
   packet: UnifiedFindingDisplayPacket,
   findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
@@ -2885,6 +3107,9 @@ function buildExecutiveEvidenceDetails(
   }
   if (findingId === "reject_tracking_persists_after_reject") {
     return buildRejectTrackingEvidenceDetails(packet);
+  }
+  if (findingId === "long_lived_cookie_retention_review") {
+    return buildCookieRetentionReviewEvidenceDetails(packet);
   }
   if (findingId === "session_recording_services_detected") {
     return buildSessionReplayEvidenceDetails(packet);
@@ -2896,7 +3121,10 @@ function buildExecutiveEvidenceDetails(
     return buildCpraCbaOptOutEvidenceDetails(packet);
   }
   if (CANONICAL_EVIDENCE_FINDING_IDS.has(findingId)) {
-    return buildGenericCanonicalEvidenceDetails(packet, findingId);
+    const details = buildGenericCanonicalEvidenceDetails(packet, findingId);
+    attachConsentGovernanceDisclosureDetails(details, packet, findingId);
+    attachRuntimeVendorDisclosureDetails(details, packet, findingId);
+    return details;
   }
 
   const runtimeVendors = uniqueStrings([
@@ -2945,6 +3173,7 @@ function buildExecutiveEvidenceDetails(
       details.policyRuntimeConflict = policyRuntimeConflict;
     }
   }
+  attachRuntimeVendorDisclosureDetails(details, packet, findingId);
   if (evidenceSnippets.length > 0) {
     details.evidenceSnippets = evidenceSnippets;
   }
@@ -3194,6 +3423,25 @@ function buildExecutiveShortSummary(
     return `Sensitive ${dataTypeText}input evidence was retained${domainText}; review whether any field values are transmitted before treating this as payload exposure.`;
   }
 
+  if (findingId === "long_lived_cookie_retention_review") {
+    const details = buildCookieRetentionReviewEvidenceDetails(packet);
+    const longest = details?.cookieEvidence?.longestObservedCookie as Record<string, unknown> | null | undefined;
+    const count = details?.counts?.longLivedCookieCount ?? 0;
+    const longestText = longest
+      ? ` Longest observed cookie: ${String(longest.name ?? "unknown")} on ${String(longest.domain ?? "unknown domain")} for about ${Math.round(Number(longest.durationDays ?? 0))} days.`
+      : "";
+    return `CertScore observed ${count} persistent tracking or unclassified cookie${count === 1 ? "" : "s"} with retained expiry evidence. Review whether these lifetimes match stated retention, minimization, consent, and opt-out practices.${longestText}`;
+  }
+
+  if (findingId === "consent_dark_patterns_detected") {
+    const lifecycleEvidence = getConsentControlLifecycleEvidence({
+      consentControlLifecycleEvidence: getFirstEntityJsonObject(packet, "consentControlLifecycleEvidence")
+    });
+    if (lifecycleEvidence) {
+      return "CertScore observed consent or tracking context and did not observe an obvious cookie preferences, privacy settings, or consent-preference reopen control in retained public-page evidence.";
+    }
+  }
+
   if (findingId === "session_recording_services_detected") {
     const vendors = getSessionReplayVendors(packet);
     const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);
@@ -3261,6 +3509,12 @@ function buildExecutiveShortSummary(
   }
 
   if (findingId === "consent_dark_patterns_detected") {
+    const lifecycleEvidence = getConsentControlLifecycleEvidence({
+      consentControlLifecycleEvidence: getFirstEntityJsonObject(packet, "consentControlLifecycleEvidence")
+    });
+    if (lifecycleEvidence) {
+      return "No obvious cookie preferences, privacy settings, or consent-preference reopen control was observed on the scanned public pages.";
+    }
     return "The retained consent interaction structure shows reject was not available on the first layer.";
   }
 
@@ -3273,12 +3527,40 @@ function buildExecutiveShortSummary(
 
   if (findingId === "policy_behavior_contradiction_detected") {
     const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);
+    const runtimeVendorDisclosure = evidenceDetails?.runtimeVendorDisclosure as Record<string, unknown> | undefined;
+    if (runtimeVendorDisclosure) {
+      const unmatchedVendors = Array.isArray(runtimeVendorDisclosure.unmatchedVendors)
+        ? runtimeVendorDisclosure.unmatchedVendors.filter((value): value is string => typeof value === "string")
+        : [];
+      const unmatchedDomains = Array.isArray(runtimeVendorDisclosure.unmatchedDomains)
+        ? runtimeVendorDisclosure.unmatchedDomains.filter((value): value is string => typeof value === "string")
+        : [];
+      const examples = unmatchedVendors.length > 0 ? unmatchedVendors : unmatchedDomains;
+      const exampleText = examples[0] ? ` including ${examples.slice(0, 2).join(", ")}` : "";
+      return `Runtime third-party vendors or domains${exampleText} were not clearly reflected in retained public disclosure evidence. Review policy, cookie, CMP, and downstream-sharing disclosures against the retained runtime evidence.`;
+    }
     const conflict = evidenceDetails?.policyRuntimeConflict;
     const runtimeEvent = conflict ? getPolicyRuntimeRepresentativeEvent(conflict) : null;
     if (conflict?.policyAnchor.snippet && runtimeEvent && evaluatePolicyRuntimeConflictPresentation(packet).complete) {
       return `${trimTrailingSentencePunctuation(
         `Public disclosures describe cookie, device, or third-party data collection, while runtime evidence observed ${runtimeEvent}`
       )}. Review whether the implementation, consent flow, and disclosures align.`;
+    }
+  }
+
+  if (findingId === "cookie_disclosure_gap") {
+    const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);
+    const runtimeVendorDisclosure = evidenceDetails?.runtimeVendorDisclosure as Record<string, unknown> | undefined;
+    if (runtimeVendorDisclosure) {
+      const unmatchedVendors = Array.isArray(runtimeVendorDisclosure.unmatchedVendors)
+        ? runtimeVendorDisclosure.unmatchedVendors.filter((value): value is string => typeof value === "string")
+        : [];
+      const unmatchedDomains = Array.isArray(runtimeVendorDisclosure.unmatchedDomains)
+        ? runtimeVendorDisclosure.unmatchedDomains.filter((value): value is string => typeof value === "string")
+        : [];
+      const examples = unmatchedVendors.length > 0 ? unmatchedVendors : unmatchedDomains;
+      const exampleText = examples[0] ? ` including ${examples.slice(0, 2).join(", ")}` : "";
+      return `Runtime cookie or storage vendors/domains${exampleText} were not clearly reflected in retained cookie, CMP, or privacy disclosure evidence. This may warrant disclosure alignment review.`;
     }
   }
 
@@ -3309,6 +3591,11 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
     label:
       findingId === "policy_behavior_contradiction_detected" && isSpecificPolicyRuntimeContradiction(packet)
         ? "Policy/runtime behavior conflict"
+        : findingId === "consent_dark_patterns_detected" &&
+            packet.unifiedFindingId === "consent_control_not_reopenable"
+          ? "Consent controls may be hard to revisit"
+        : findingId === "long_lived_cookie_retention_review"
+          ? evaluateCookieRetentionReview({ cookieRetentionEvidence: getEntityJsonObjects(packet, "cookieRetentionEvidence") }).label
         : definition.label,
     section: definition.section,
     defaultSurfacePriority: definition.defaultSurfacePriority,
@@ -3317,7 +3604,9 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
     confidence: findingId === "fingerprinting_related_signals_observed"
       ? "moderate"
       : mapExecutiveConfidence(packet, findingId),
-    directVsInferred: mapVerificationStateToDirectness(packet.presentationDecision.verificationState),
+    directVsInferred: findingId === "long_lived_cookie_retention_review"
+      ? "direct"
+      : mapVerificationStateToDirectness(packet.presentationDecision.verificationState),
     ...(evidenceDetails ? { evidenceDetails } : {}),
     evidencePreview: buildEvidencePreview(packet, findingId),
     evidenceRefs: buildEvidenceRefs(packet),

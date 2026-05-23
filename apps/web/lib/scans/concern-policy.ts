@@ -7,6 +7,10 @@ import type {
   NormalizedConcernPolicyPageType,
   NormalizedConcernPromotionEligibility
 } from "./normalized-concerns";
+import { evaluateCookieRetentionReview } from "./cookie-retention-review";
+import { evaluateRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
+import { evaluateConsentControlLifecycleEvidence } from "./consent-control-lifecycle";
+import { evaluateConsentGovernanceDisclosureEvidence } from "./consent-governance-disclosure";
 import {
   evaluateFinancialJudgeInput,
   getFinancialValidationEvidenceBundle,
@@ -1462,7 +1466,39 @@ function isConsentDarkPatternConcern(
     .join(" ")
     .toLowerCase();
 
-  return /consent_dark_patterns_detected|asymmetric_consent_ui|accept_more_prominent_than_reject|accept_button_prominence|accept action more prominent/.test(haystack);
+  return /consent_dark_patterns_detected|consent_control_not_reopenable|privacy_settings_control_not_observed|asymmetric_consent_ui|accept_more_prominent_than_reject|accept_button_prominence|accept action more prominent/.test(haystack);
+}
+
+function isConsentControlLifecycleConcern(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "originKey" | "suggestedUnifiedFindingId" | "title">
+) {
+  const haystack = [
+    concern.canonicalConcernKey,
+    concern.originKey,
+    concern.suggestedUnifiedFindingId,
+    concern.title
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /consent_control_not_reopenable|privacy_settings_control_not_observed|cookie_preferences_link_not_observed|withdrawal_control_not_observed|cmp_reopen_control_not_observed/.test(haystack);
+}
+
+function isConsentGovernanceDisclosureConcern(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "originKey" | "suggestedUnifiedFindingId" | "title">
+) {
+  const haystack = [
+    concern.canonicalConcernKey,
+    concern.originKey,
+    concern.suggestedUnifiedFindingId,
+    concern.title
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /consent_governance_disclosure_gap|consent preferences and withdrawal process not clearly explained/.test(haystack);
 }
 
 function isForcedConsentInteractionConcern(
@@ -2134,6 +2170,45 @@ export function deriveConcernPolicy(input: {
   const negativeEvidenceFlags = new Set<NormalizedConcernNegativeEvidenceFlag>();
 
   const suggestedUnifiedFindingId = input.concern.suggestedUnifiedFindingId;
+  if (suggestedUnifiedFindingId === "cookie_retention_lifetime_review_signal") {
+    const review = evaluateCookieRetentionReview(input.rawEvidence);
+    return {
+      allowedNarrativeTier:
+        review.disposition === "eligible" && review.confidence === "strong"
+          ? "strong"
+          : review.disposition === "suppress"
+            ? "weak"
+            : "moderate",
+      externalSurfacingEligibility: review.disposition === "eligible" ? "eligible" : review.disposition,
+      negativeEvidenceFlags: review.negativeEvidenceFlags as NormalizedConcernNegativeEvidenceFlag[],
+      promotionEligibility:
+        review.disposition === "eligible" ? "eligible" : review.disposition === "audit_only" ? "internal_only" : "blocked"
+    };
+  }
+  if (suggestedUnifiedFindingId === "cookie_disclosure_gap") {
+    const review = evaluateRuntimeVendorDisclosureEvidence(input.rawEvidence, "cookie_disclosure_gap");
+    if (review.evidence.length > 0) {
+      return {
+        allowedNarrativeTier: review.disposition === "eligible" && review.confidence === "strong" ? "strong" : "moderate",
+        externalSurfacingEligibility: review.disposition === "eligible" ? "eligible" : review.disposition,
+        negativeEvidenceFlags: review.negativeEvidenceFlags as NormalizedConcernNegativeEvidenceFlag[],
+        promotionEligibility:
+          review.disposition === "eligible" ? "eligible" : review.disposition === "audit_only" ? "internal_only" : "blocked"
+      };
+    }
+  }
+  if (suggestedUnifiedFindingId === "policy_behavior_conflict") {
+    const review = evaluateRuntimeVendorDisclosureEvidence(input.rawEvidence, "policy_behavior_conflict");
+    if (review.evidence.length > 0) {
+      return {
+        allowedNarrativeTier: review.disposition === "eligible" && review.confidence === "strong" ? "strong" : "moderate",
+        externalSurfacingEligibility: review.disposition === "eligible" ? "eligible" : review.disposition,
+        negativeEvidenceFlags: review.negativeEvidenceFlags as NormalizedConcernNegativeEvidenceFlag[],
+        promotionEligibility:
+          review.disposition === "eligible" ? "eligible" : review.disposition === "audit_only" ? "internal_only" : "blocked"
+      };
+    }
+  }
   if (suggestedUnifiedFindingId === "accessibility_risk_score") {
     return {
       allowedNarrativeTier: "weak",
@@ -2288,6 +2363,41 @@ export function deriveConcernPolicy(input: {
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags] as NormalizedConcernNegativeEvidenceFlag[],
       promotionEligibility: "eligible"
+    };
+  }
+
+  if (isConsentControlLifecycleConcern(input.concern)) {
+    const review = evaluateConsentControlLifecycleEvidence(input.rawEvidence);
+    return {
+      allowedNarrativeTier:
+        review.disposition === "eligible" && review.confidence === "strong"
+          ? "strong"
+          : review.disposition === "eligible"
+            ? "moderate"
+            : "weak",
+      externalSurfacingEligibility: review.disposition === "eligible" ? "eligible" : review.disposition,
+      negativeEvidenceFlags: [
+        ...negativeEvidenceFlags,
+        ...review.negativeEvidenceFlags
+      ] as NormalizedConcernNegativeEvidenceFlag[],
+      promotionEligibility:
+        review.disposition === "eligible" ? "eligible" : review.disposition === "audit_only" ? "internal_only" : "blocked"
+    };
+  }
+
+  if (isConsentGovernanceDisclosureConcern(input.concern)) {
+    const review = evaluateConsentGovernanceDisclosureEvidence(input.rawEvidence);
+    return {
+      allowedNarrativeTier:
+        review.disposition === "eligible" && (review.confidence === "strong" || review.confidence === "good")
+          ? "moderate"
+          : "weak",
+      externalSurfacingEligibility: review.disposition === "eligible" ? "audit_only" : review.disposition,
+      negativeEvidenceFlags: [
+        ...negativeEvidenceFlags,
+        ...review.negativeEvidenceFlags
+      ] as NormalizedConcernNegativeEvidenceFlag[],
+      promotionEligibility: review.disposition === "suppress" ? "blocked" : "internal_only"
     };
   }
 

@@ -2578,8 +2578,17 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "third_party_network_cookie_surface",
     mirrors: ["data_handling_disclosures"],
     overlays: ["tracking_profiling_sensitive_data_risk", "consent_lawful_basis_user_choice", "sale_sharing_targeted_advertising_controls"],
-    signalMappings: [{ source: "document_semantic_signal", key: "privacy.cookie_runtime_disclosure_gap_detected" }],
-    validationRuleKeys: ["cookie_runtime.disclosure_gap"]
+    signalMappings: [
+      { source: "document_semantic_signal", key: "privacy.cookie_runtime_disclosure_gap_detected" },
+      { source: "document_semantic_signal", key: "privacy.runtime_vendor_not_disclosed" }
+    ],
+    validationRuleKeys: ["cookie_runtime.disclosure_gap"],
+    aliases: [
+      "unlisted_third_party_domains",
+      "undisclosed_third_party_domains",
+      "runtime_vendor_not_disclosed",
+      "third_party_domain_disclosure_gap"
+    ]
   }),
   defineReportUnifiedFinding({
     id: "missing_transfer_disclosure",
@@ -2597,13 +2606,22 @@ export const REPORT_UNIFIED_FINDINGS = [
     signalMappings: [
       { source: "snapshot_signal", key: "context.policy_behavior_conflict_detected" },
       { source: "document_semantic_signal", key: "policyBehaviorConflictCandidate" },
-      { source: "document_semantic_signal", key: "disclosure.policy_runtime_missing_technical_disclosure_detected" }
+      { source: "document_semantic_signal", key: "disclosure.policy_runtime_missing_technical_disclosure_detected" },
+      { source: "document_semantic_signal", key: "disclosure.runtime_vendor_not_disclosed" }
     ],
     validationRuleKeys: [
       "scan_report_review.policy_behavior_conflict_candidate",
       "policy_runtime.missing_technical_disclosure"
     ],
-    aliases: ["Policy/behavior conflict detected", "Possible policy-to-behavior conflict", "Missing technical disclosure"]
+    aliases: [
+      "Policy/behavior conflict detected",
+      "Possible policy-to-behavior conflict",
+      "Missing technical disclosure",
+      "unlisted_third_party_domains",
+      "undisclosed_third_party_domains",
+      "runtime_vendor_not_disclosed",
+      "third_party_domain_disclosure_gap"
+    ]
   }),
   defineReportUnifiedFinding({
     id: "consent_gated_tracking_claim_conflict",
@@ -2797,6 +2815,31 @@ export const REPORT_UNIFIED_FINDINGS = [
     aliases: ["Weak cookie security posture", "Cookie security attributes need review"]
   }),
   defineReportUnifiedFinding({
+    id: "cookie_retention_lifetime_review_signal",
+    label: "Long-lived cookie retention review",
+    owner: "third_party_network_cookie_surface",
+    overlays: ["tracking_profiling_sensitive_data_risk", "consent_lawful_basis_user_choice", "sale_sharing_targeted_advertising_controls"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.cookie_retention_lifetime_review_signal" }],
+    validationRuleKeys: ["runtime_privacy.cookie_retention_lifetime_review_signal"],
+    aliases: [
+      "Long-lived cookie retention review",
+      "Long-lived tracking cookies observed",
+      "Long-lived unclassified cookies observed",
+      "Long-lived tracking and unclassified cookies observed",
+      "long_lived_cookie_retention_review",
+      "long_lived_tracking_or_unknown_cookies_observed",
+      "excessive_cookie_lifetime",
+      "cookie_lifetime_non_compliant",
+      "unknown_cookie_lifetime_review",
+      "unknown_cookies_detected",
+      "persistent_tracking_cookies_observed",
+      "long_lived_tracking_cookie_observed",
+      "long_lived_unknown_cookie_observed",
+      "persistent_cookie_review",
+      "persistent_identifier_cookie_review"
+    ]
+  }),
+  defineReportUnifiedFinding({
     id: "consent_surface_required_deeper_sweep",
     label: "Consent surface required deeper sweep",
     owner: "consent_interface_control_availability",
@@ -2848,6 +2891,41 @@ export const REPORT_UNIFIED_FINDINGS = [
     owner: "choice_symmetry_dark_pattern_indicators",
     overlays: ["choice_architecture_dark_patterns", "opt_out_choice_design_dark_pattern_risk"],
     signalMappings: [{ source: "snapshot_signal", key: "privacy.dark_pattern_dismiss_without_reject" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "consent_control_not_reopenable",
+    label: "Consent controls may be hard to revisit",
+    owner: "choice_symmetry_dark_pattern_indicators",
+    overlays: ["choice_architecture_dark_patterns", "opt_out_choice_design_dark_pattern_risk", "consent_lawful_basis_user_choice"],
+    signalMappings: [
+      { source: "snapshot_signal", key: "privacy.consent_control_not_reopenable" },
+      { source: "runtime_artifact_signal", key: "privacy.consent_control_not_reopenable" }
+    ],
+    aliases: [
+      "privacy_settings_or_withdrawal_control_not_observed",
+      "privacy_settings_control_not_observed",
+      "cookie_preferences_link_not_observed",
+      "withdrawal_control_not_observed",
+      "footer_preference_link_not_observed",
+      "cmp_reopen_control_not_observed"
+    ]
+  }),
+  defineReportUnifiedFinding({
+    id: "consent_governance_disclosure_gap",
+    label: "Consent preferences and withdrawal process not clearly explained",
+    owner: "data_handling_disclosures",
+    mirrors: ["choice_symmetry_dark_pattern_indicators"],
+    overlays: ["consent_lawful_basis_user_choice", "transparency_notice_data_subject_rights"],
+    signalMappings: [
+      { source: "document_semantic_signal", key: "privacy.consent_governance_disclosure_gap" },
+      { source: "snapshot_signal", key: "privacy.consent_governance_disclosure_gap" },
+      { source: "runtime_artifact_signal", key: "privacy.consent_governance_disclosure_gap" }
+    ],
+    aliases: [
+      "consent_governance_disclosure_gap",
+      "Consent governance disclosure gap",
+      "Consent preferences and withdrawal process not clearly explained"
+    ]
   }),
   defineReportUnifiedFinding({
     id: "session_replay_observed",

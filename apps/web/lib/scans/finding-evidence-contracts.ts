@@ -18,6 +18,8 @@ import {
   evaluateConsentSurfaceGate
 } from "./promotion-evidence-contracts";
 import type { UnifiedFindingPacket } from "./unified-findings";
+import { hasConcreteCookieRetentionReviewEvidence } from "./cookie-retention-review";
+import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 
 export type EvidenceRequirementType =
   | "consentTimelineSequence"
@@ -50,7 +52,8 @@ export type EvidenceRequirementType =
   | "sensitiveDataFieldEvidence"
   | "scanLevelSensitiveSessionReplayCoPresenceEvidence"
   | "sensitiveSessionReplayCooccurrenceEvidence"
-  | "sensitiveThirdPartyTrackingEvidence";
+  | "sensitiveThirdPartyTrackingEvidence"
+  | "concreteCookieRetentionEvidence";
 
 export type EvidenceRequirement = {
   type: EvidenceRequirementType;
@@ -131,7 +134,8 @@ const REQUIREMENT_DESCRIPTIONS: Record<EvidenceRequirementType, string> = {
   sensitiveDataFieldEvidence: "Evidence identifies sensitive field types, payloads, or field labels.",
   scanLevelSensitiveSessionReplayCoPresenceEvidence: "Observed evidence includes session replay runtime and a same-page or same-flow linked sensitive input surface.",
   sensitiveSessionReplayCooccurrenceEvidence: "Observed evidence ties session replay runtime to a same-page or same-flow linked sensitive input surface.",
-  sensitiveThirdPartyTrackingEvidence: "Observed evidence ties third-party tracking runtime to a sensitive collection surface."
+  sensitiveThirdPartyTrackingEvidence: "Observed evidence ties third-party tracking runtime to a sensitive collection surface.",
+  concreteCookieRetentionEvidence: "Runtime cookie evidence includes name, domain, page attribution, classification, duration, and threshold basis."
 };
 
 function req(type: EvidenceRequirementType): EvidenceRequirement {
@@ -152,8 +156,49 @@ const PRECONSENT_COOKIE_STRONG = [
 
 export const FINDING_EVIDENCE_CONTRACTS = [
   {
+    findingId: "long_lived_cookie_retention_review",
+    unifiedFindingIds: [
+      "cookie_retention_lifetime_review_signal",
+      "long_lived_tracking_or_unknown_cookies_observed",
+      "excessive_cookie_lifetime",
+      "cookie_lifetime_non_compliant",
+      "unknown_cookie_lifetime_review",
+      "unknown_cookies_detected",
+      "persistent_tracking_cookies_observed",
+      "long_lived_tracking_cookie_observed",
+      "long_lived_unknown_cookie_observed",
+      "persistent_cookie_review",
+      "persistent_identifier_cookie_review"
+    ],
+    requiredForStrong: [req("concreteCookieRetentionEvidence")],
+    requiredForGood: [req("concreteCookieRetentionEvidence")],
+    downgradeIf: [
+      {
+        ifMissing: "concreteCookieRetentionEvidence",
+        to: "audit_only",
+        reason: "Cookie retention review requires concrete runtime cookie name, domain, page attribution, classification, and duration evidence."
+      }
+    ],
+    suppressIf: [],
+    projectionEligibility: {
+      executive: { requiresContractPass: true, minimumTier: "moderate" },
+      gdprEprivacy: { requiresContractPass: true, minimumTier: "moderate" },
+      ccpaCpra: { requiresContractPass: true, minimumTier: "moderate" },
+      ftc: false
+    },
+    notes: "365 days is a CertScore review threshold, not a statutory cookie-lifetime threshold."
+  },
+  {
     findingId: "policy_behavior_contradiction_detected",
-    unifiedFindingIds: ["policy_behavior_contradiction_detected", "policy_behavior_conflict", "consent_gated_tracking_claim_conflict"],
+    unifiedFindingIds: [
+      "policy_behavior_contradiction_detected",
+      "policy_behavior_conflict",
+      "consent_gated_tracking_claim_conflict",
+      "runtime_vendor_not_disclosed",
+      "third_party_domain_disclosure_gap",
+      "unlisted_third_party_domains",
+      "undisclosed_third_party_domains"
+    ],
     requiredForStrong: [req("policyBehaviorContradictionEvidence")],
     requiredForGood: [req("policyBehaviorContradictionEvidence")],
     downgradeIf: [
@@ -313,7 +358,13 @@ export const FINDING_EVIDENCE_CONTRACTS = [
   },
   {
     findingId: "cookie_disclosure_gap",
-    unifiedFindingIds: ["cookie_disclosure_gap"],
+    unifiedFindingIds: [
+      "cookie_disclosure_gap",
+      "runtime_vendor_not_disclosed",
+      "third_party_domain_disclosure_gap",
+      "unlisted_third_party_domains",
+      "undisclosed_third_party_domains"
+    ],
     requiredForStrong: [req("runtimeAnchor"), req("policyAnchor"), req("negativeEvidenceSearchScope"), req("conflictBridge")],
     requiredForGood: [req("runtimeAnchor"), req("policyAnchor"), req("negativeEvidenceSearchScope"), req("conflictBridge")],
     downgradeIf: [
@@ -1042,6 +1093,9 @@ function hasMaterialChoiceAsymmetryEvidence(rawEvidence: Record<string, unknown>
 }
 
 function hasPolicyAnchor(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (getRuntimeVendorDisclosureEvidence(rawEvidence).some((row) => row.policySurfacesSearched.some((surface) => surface.reached))) {
+    return true;
+  }
   return (
     getStringArrayValues(rawEvidence, ["policySourceUrl", "policy_source_url", "policyUrls", "policy_urls", "sourceUrls"]).some((url) =>
       /^https?:\/\//i.test(url) && /cookie|privacy|legal|policy|notice/i.test(url)
@@ -1053,6 +1107,9 @@ function hasPolicyAnchor(rawEvidence: Record<string, unknown> | null | undefined
 }
 
 function hasRuntimeAnchor(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (getRuntimeVendorDisclosureEvidence(rawEvidence).some((row) => row.observedRuntimeDomains.length > 0)) {
+    return true;
+  }
   return (
     hasConcretePreconsentArtifact(rawEvidence) ||
     hasConcreteReplayArtifact(rawEvidence) ||
@@ -1066,6 +1123,9 @@ function hasRuntimeAnchor(rawEvidence: Record<string, unknown> | null | undefine
 }
 
 function hasConflictBridge(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (getRuntimeVendorDisclosureEvidence(rawEvidence).some((row) => row.mismatchRationale.trim().length > 0)) {
+    return true;
+  }
   return (
     getBoolean(rawEvidence, ["disclosureMismatchExplained", "disclosure_mismatch_explained"]) === true ||
     getStringArrayValues(rawEvidence, [
@@ -1080,6 +1140,9 @@ function hasConflictBridge(rawEvidence: Record<string, unknown> | null | undefin
 }
 
 function hasNegativeEvidenceSearchScope(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (getRuntimeVendorDisclosureEvidence(rawEvidence).some((row) => row.policySurfacesSearched.some((surface) => surface.reached))) {
+    return true;
+  }
   return (
     getBoolean(rawEvidence, ["negativeDisclosureSearchPerformed", "negative_disclosure_search_performed"]) === true ||
     getBoolean(rawEvidence, ["disclosureSearchScopeRetained", "disclosure_search_scope_retained"]) === true ||
@@ -1346,7 +1409,19 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
     case "conflictBridge":
       return hasConflictBridge(rawEvidence);
     case "policyBehaviorContradictionEvidence":
-      return evaluatePolicyBehaviorContradictionEvidence(rawEvidence).eligible;
+      return (
+        evaluatePolicyBehaviorContradictionEvidence(rawEvidence).eligible ||
+        getRuntimeVendorDisclosureEvidence(rawEvidence).some(
+          (row) =>
+            (row.parentFindingId === "policy_behavior_conflict" ||
+              row.parentFindingId === "policy_behavior_contradiction_detected") &&
+            row.coverageStatus !== "blocked" &&
+            row.observedRuntimeDomains.length > 0 &&
+            (row.unmatchedRuntimeVendors.length > 0 || row.unmatchedRuntimeDomains.length > 0) &&
+            row.policySurfacesSearched.some((surface) => surface.reached) &&
+            row.mismatchRationale.trim().length > 0
+        )
+      );
     case "negativeEvidenceSearchScope":
       return hasNegativeEvidenceSearchScope(rawEvidence);
     case "sessionReplayVendorEvidence":
@@ -1381,6 +1456,8 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
       return hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(rawEvidence);
     case "sensitiveThirdPartyTrackingEvidence":
       return hasSensitiveThirdPartyTrackingEvidence(rawEvidence);
+    case "concreteCookieRetentionEvidence":
+      return hasConcreteCookieRetentionReviewEvidence(rawEvidence);
   }
 }
 
@@ -1391,6 +1468,8 @@ function downgradeFlag(type: EvidenceRequirementType) {
     case "nonEssentialRequestClassification":
       return "missing_concrete_preconsent_artifact";
     case "trackingCookieClassification":
+    case "concreteCookieRetentionEvidence":
+      return "missing_cookie_duration";
     case "sessionReplayVendorEvidence":
       return "missing_third_party_tracking_artifact";
     case "postRejectRuntimeEvidence":
@@ -1668,6 +1747,7 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
     metaPixelRequestUrls: entities.metaPixelRequestUrls ?? entities.meta_pixel_request_urls,
     disclosureMismatchExplained: packet.evidence?.flags?.includes("disclosureMismatchExplained") || packet.evidence?.flags?.includes("disclosure_mismatch_explained") || undefined,
     mismatchExplanation: entities.mismatchExplanation ?? entities.mismatch_explanation,
+    mismatchRationale: entities.mismatchRationale ?? entities.mismatch_rationale,
     negativeDisclosureSearchPerformed:
       packet.evidence?.flags?.includes("negativeDisclosureSearchPerformed") ||
       packet.evidence?.flags?.includes("negative_disclosure_search_performed") ||
@@ -1698,6 +1778,8 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
     preconsentCookieCategories: entities.preconsentCookieCategories ?? entities.preconsent_cookie_categories,
     preconsentCookieEvidence: parseObjectArrayValue(entities.preconsentCookieEvidence ?? entities.preconsent_cookie_evidence),
     preconsent_cookie_evidence: parseObjectArrayValue(entities.preconsentCookieEvidence ?? entities.preconsent_cookie_evidence),
+    cookieRetentionEvidence: parseObjectArrayValue(entities.cookieRetentionEvidence ?? entities.cookie_retention_evidence),
+    cookie_retention_evidence: parseObjectArrayValue(entities.cookieRetentionEvidence ?? entities.cookie_retention_evidence),
     preconsentCookieTimingEvidence: entities.preconsentCookieTimingEvidence ?? entities.preconsent_cookie_timing_evidence,
     preconsentNonessentialCookieNames: entities.preconsentNonessentialCookieNames ?? entities.preconsent_nonessential_cookie_names,
     preconsentCookieNames: entities.preconsentCookieNames ?? entities.preconsent_cookie_names,
@@ -1710,6 +1792,14 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
       }
     }),
     runtimeRequestUrls: entities.runtimeRequestUrls ?? consentTrackingDetails?.requestUrls ?? allEvidenceUrls.filter((url) => /^https?:\/\//i.test(url)),
+    runtimeVendorDisclosureEvidence: parseObjectArrayValue(
+      entities.runtimeVendorDisclosureEvidence ?? entities.runtime_vendor_disclosure_evidence
+    ),
+    observedRuntimeVendors: entities.observedRuntimeVendors ?? entities.observed_runtime_vendors,
+    observedRuntimeDomains: entities.observedRuntimeDomains ?? entities.observed_runtime_domains,
+    unmatchedRuntimeVendors: entities.unmatchedRuntimeVendors ?? entities.unmatched_runtime_vendors,
+    unmatchedRuntimeDomains: entities.unmatchedRuntimeDomains ?? entities.unmatched_runtime_domains,
+    policySurfacesSearched: parseObjectArrayValue(entities.policySurfacesSearched ?? entities.policy_surfaces_searched),
     runtimeVendorCategories: entities.runtimeVendorCategories ?? entities.runtime_vendor_categories,
     runtimeVendors: entities.runtimeVendors ?? consentTrackingDetails?.vendors,
     sensitiveDataTypes: entities.sensitiveDataTypes ?? entities.sensitive_data_types,

@@ -3,6 +3,16 @@ import {
   buildRuntimeCookieInventory,
   isFunctionalCookieExcludedFromTrackingEvidence
 } from "./runtime-cookie-evidence";
+import {
+  CONSENT_CONTROL_LIFECYCLE_SUBTYPE,
+  evaluateConsentControlLifecycleEvidence,
+  getConsentControlLifecycleEvidence
+} from "./consent-control-lifecycle";
+import {
+  CONSENT_GOVERNANCE_DISCLOSURE_CONCERN_ID,
+  evaluateConsentGovernanceDisclosureEvidence,
+  getConsentGovernanceDisclosureEvidence
+} from "./consent-governance-disclosure";
 
 function getRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -1444,6 +1454,8 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
   const fingerprintSummary = getFingerprintSummary(hybrid);
   const mediaSummary = getMediaSummary(hybrid);
   const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, runtimeArtifacts);
+  const consentControlLifecycleEvidence = getConsentControlLifecycleEvidence({ hybridRuntimeEvidence: hybrid });
+  const consentGovernanceDisclosureEvidence = getConsentGovernanceDisclosureEvidence({ hybridRuntimeEvidence: hybrid });
 
   switch (signalKey) {
     case "privacy.preconsent_tracking_detected":
@@ -1514,6 +1526,14 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
         consentSummary?.rejectPresent === false &&
         (consentSummary?.acceptPresent === true || consentSummary?.bannerDisappearedWithoutChoice === true)
       );
+    case "privacy.consent_control_not_reopenable":
+      return consentControlLifecycleEvidence
+        ? evaluateConsentControlLifecycleEvidence({ consentControlLifecycleEvidence }).disposition === "eligible"
+        : undefined;
+    case "privacy.consent_governance_disclosure_gap":
+      return consentGovernanceDisclosureEvidence
+        ? evaluateConsentGovernanceDisclosureEvidence({ consentGovernanceDisclosureEvidence }).disposition === "eligible"
+        : undefined;
     case "commerce.session_replay_tool_detected":
     case "privacy.session_replay_runtime_detected":
       return hasSessionReplayObserved(hybrid);
@@ -1579,6 +1599,8 @@ export function getHybridSignalFallbackEvidence(input: {
   const mediaSummary = getMediaSummary(hybrid);
   const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, input.runtimeArtifacts);
   const consentUiPathEvidence = getNestedObject(hybrid, ["consentUiPathEvidence", "consent_ui_path_evidence"]);
+  const consentControlLifecycleEvidence = getConsentControlLifecycleEvidence({ hybridRuntimeEvidence: hybrid });
+  const consentGovernanceDisclosureEvidence = getConsentGovernanceDisclosureEvidence({ hybridRuntimeEvidence: hybrid });
   const sessionReplayEvidenceSummary = getNestedObject(hybrid, ["sessionReplayEvidenceSummary", "session_replay_evidence_summary"]);
 
   switch (input.signalKey) {
@@ -1728,6 +1750,49 @@ export function getHybridSignalFallbackEvidence(input: {
         ...(consentUiPathEvidence ? { consentUiPathEvidence } : {}),
         hybridConsentSummary: consentSummary
       };
+    case "privacy.consent_control_not_reopenable": {
+      const review = evaluateConsentControlLifecycleEvidence({ consentControlLifecycleEvidence });
+      if (!consentControlLifecycleEvidence || review.disposition !== "eligible") {
+        return null;
+      }
+      return {
+        consent_control_not_reopenable: true,
+        consentControlLifecycleEvidence,
+        consent_control_lifecycle_evidence: consentControlLifecycleEvidence,
+        consentControlLifecycleReview: review,
+        consentSurfaceObserved: consentControlLifecycleEvidence.initialConsentLayerObserved,
+        findingSubtype: CONSENT_CONTROL_LIFECYCLE_SUBTYPE,
+        pageUrl: consentControlLifecycleEvidence.pagesChecked[0],
+        runtimeEvidenceArtifacts: ["hybrid_runtime_evidence.consent_control_lifecycle_evidence"],
+        signalKey: input.signalKey,
+        signalLabel: input.signalLabel,
+        signalValue: input.signalValue,
+        snippets: [
+          "No obvious cookie preferences, privacy settings, or consent-preference reopen control was observed on the scanned public pages."
+        ],
+        unifiedFindingId: "consent_control_not_reopenable"
+      };
+    }
+    case "privacy.consent_governance_disclosure_gap": {
+      const review = evaluateConsentGovernanceDisclosureEvidence({ consentGovernanceDisclosureEvidence });
+      if (!consentGovernanceDisclosureEvidence || review.disposition === "suppress") {
+        return null;
+      }
+      return {
+        consentGovernanceDisclosureEvidence,
+        consent_governance_disclosure_evidence: consentGovernanceDisclosureEvidence,
+        consentGovernanceDisclosureReview: review,
+        findingSubtype: CONSENT_GOVERNANCE_DISCLOSURE_CONCERN_ID,
+        runtimeEvidenceArtifacts: ["hybrid_runtime_evidence.consent_governance_disclosure_evidence"],
+        signalKey: input.signalKey,
+        signalLabel: input.signalLabel,
+        signalValue: input.signalValue,
+        snippets: [
+          "Reviewed public privacy, cookie, or preference materials did not clearly explain how users can revisit or withdraw consent choices."
+        ],
+        unifiedFindingId: "consent_governance_disclosure_gap"
+      };
+    }
     case "commerce.session_replay_tool_detected":
     case "privacy.session_replay_runtime_detected":
     case "privacy.session_replay_runtime_vendors": {

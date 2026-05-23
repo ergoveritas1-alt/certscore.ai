@@ -25,6 +25,22 @@ import {
   hasDocumentMetadataAccessibilityExamples,
   inferSplitAccessibilityFindingIdFromEvidence
 } from "./accessibility-evidence";
+import {
+  evaluateCookieRetentionReview,
+  getCookieRetentionEvidence
+} from "./cookie-retention-review";
+import {
+  getRuntimeVendorDisclosureEvidence,
+  RUNTIME_VENDOR_DISCLOSURE_SUBTYPE
+} from "./runtime-vendor-disclosure";
+import {
+  CONSENT_CONTROL_LIFECYCLE_SUBTYPE,
+  getConsentControlLifecycleEvidence
+} from "./consent-control-lifecycle";
+import {
+  CONSENT_GOVERNANCE_DISCLOSURE_CONCERN_ID,
+  getConsentGovernanceDisclosureEvidence
+} from "./consent-governance-disclosure";
 
 import type { ReviewFindingSeverity } from "./canonical-review-finding";
 import { deriveConcernPolicy } from "./concern-policy";
@@ -111,6 +127,22 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "missing_specific_runtime_artifact"
   | "missing_concrete_preconsent_artifact"
   | "missing_preconsent_sequence_evidence"
+  | "missing_cookie_duration"
+  | "missing_runtime_vendor_disclosure_evidence"
+  | "missing_unmatched_runtime_vendor"
+  | "missing_consent_control_lifecycle_evidence"
+  | "missing_consent_governance_disclosure_evidence"
+  | "missing_consent_governance_relevance_trigger"
+  | "missing_consent_governance_gap_signal"
+  | "missing_consent_governance_coverage_anchor"
+  | "consent_governance_absence_only"
+  | "strictly_necessary_storage_only"
+  | "tag_manager_only_without_consent_context"
+  | "consent_revisit_control_observed"
+  | "incomplete_consent_control_lifecycle_coverage"
+  | "missing_consent_tracking_context"
+  | "prior_consent_state_may_hide_control"
+  | "shallow_consent_control_search_scope"
   | "missing_post_reject_timing_evidence"
   | "missing_concrete_sensitive_payload"
   | "missing_third_party_tracking_artifact"
@@ -659,6 +691,117 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
   const sourceUrls = new Set<string>();
   const policySnippets = new Set<string>();
   const runtimeArtifacts = new Set<string>();
+  const cookieRetentionEvidence = getCookieRetentionEvidence(rawEvidence);
+  const runtimeVendorDisclosureEvidence = getRuntimeVendorDisclosureEvidence(rawEvidence);
+  const consentControlLifecycleEvidence = getConsentControlLifecycleEvidence(rawEvidence);
+  const consentGovernanceDisclosureEvidence = getConsentGovernanceDisclosureEvidence(rawEvidence);
+
+  for (const cookie of cookieRetentionEvidence) {
+    pageUrls.add(cookie.pageUrl);
+    addEntity(entities, "cookieRetentionEvidence", [JSON.stringify(cookie)]);
+    addEntity(entities, "runtime_cookie_names", [cookie.name]);
+    addEntity(entities, "runtime_cookie_categories", [cookie.classification ?? cookie.category]);
+    addEntity(entities, "runtimeCookieDomains", [cookie.domain]);
+    if (cookie.vendor) {
+      addEntity(entities, "runtimeVendors", [cookie.vendor]);
+    }
+    if (cookie.sourceRequestUrl) {
+      sourceUrls.add(cookie.sourceRequestUrl);
+      addEntity(entities, "runtimeRequestUrls", [cookie.sourceRequestUrl]);
+    }
+    runtimeArtifacts.add(
+      `${cookie.name} on ${cookie.domain} was observed on ${cookie.pageUrl} with an expiry around ${Math.round(cookie.durationDays ?? 0)} days (${cookie.classification ?? cookie.category}).`
+    );
+  }
+  if (cookieRetentionEvidence.length > 0) {
+    counts.cookieRetentionEvidenceCount = cookieRetentionEvidence.length;
+  }
+  for (const evidence of runtimeVendorDisclosureEvidence) {
+    addEntity(entities, "findingSubtype", [RUNTIME_VENDOR_DISCLOSURE_SUBTYPE]);
+    addEntity(entities, "runtimeVendorDisclosureEvidence", [JSON.stringify(evidence)]);
+    addEntity(entities, "observedRuntimeVendors", evidence.observedRuntimeVendors);
+    addEntity(entities, "observedRuntimeDomains", evidence.observedRuntimeDomains);
+    addEntity(entities, "runtimeVendors", evidence.observedRuntimeVendors);
+    addEntity(entities, "runtimeDomains", evidence.observedRuntimeDomains);
+    addEntity(entities, "unmatchedRuntimeVendors", evidence.unmatchedRuntimeVendors);
+    addEntity(entities, "unmatchedRuntimeDomains", evidence.unmatchedRuntimeDomains);
+    addEntity(entities, "policySurfacesSearched", evidence.policySurfacesSearched.map((surface) => JSON.stringify(surface)));
+    addEntity(entities, "mismatchRationale", [evidence.mismatchRationale]);
+    addEntity(entities, "runtimeVendorCategories", evidence.categories ?? []);
+    if (evidence.cookiePolicyUrl) {
+      sourceUrls.add(evidence.cookiePolicyUrl);
+      addEntity(entities, "policySourceUrl", [evidence.cookiePolicyUrl]);
+    }
+    if (evidence.privacyPolicyUrl) {
+      sourceUrls.add(evidence.privacyPolicyUrl);
+      addEntity(entities, "policySourceUrl", [evidence.privacyPolicyUrl]);
+    }
+    for (const surface of evidence.policySurfacesSearched) {
+      if (surface.url) {
+        sourceUrls.add(surface.url);
+      }
+    }
+    if (evidence.mismatchRationale) {
+      policySnippets.add(truncatePolicySnippet(evidence.mismatchRationale));
+    }
+    runtimeArtifacts.add(
+      `Disclosure alignment note: ${Math.max(evidence.unmatchedRuntimeVendors.length, evidence.unmatchedRuntimeDomains.length)} observed runtime vendor/domain entr${Math.max(evidence.unmatchedRuntimeVendors.length, evidence.unmatchedRuntimeDomains.length) === 1 ? "y was" : "ies were"} not clearly reflected in retained disclosure evidence.`
+    );
+    counts.matchedVendorDisclosureCount = (counts.matchedVendorDisclosureCount ?? 0) + evidence.matchedVendorDisclosureCount;
+    counts.unmatchedVendorDisclosureCount = (counts.unmatchedVendorDisclosureCount ?? 0) + evidence.unmatchedVendorDisclosureCount;
+  }
+  if (runtimeVendorDisclosureEvidence.length > 0) {
+    counts.runtimeVendorDisclosureEvidenceCount = runtimeVendorDisclosureEvidence.length;
+    flags.add(RUNTIME_VENDOR_DISCLOSURE_SUBTYPE);
+  }
+
+  if (consentControlLifecycleEvidence) {
+    addEntity(entities, "findingSubtype", [CONSENT_CONTROL_LIFECYCLE_SUBTYPE, "consent_control_not_reopenable"]);
+    addEntity(entities, "consentControlLifecycleEvidence", [JSON.stringify(consentControlLifecycleEvidence)]);
+    addEntity(entities, "consentControlPagesChecked", consentControlLifecycleEvidence.pagesChecked);
+    addEntity(entities, "consentControlsSearched", consentControlLifecycleEvidence.controlsSearched);
+    addEntity(entities, "consentFooterLinksInspected", consentControlLifecycleEvidence.footerLinksInspected);
+    addEntity(entities, "consentControlCoverageStatus", [consentControlLifecycleEvidence.coverageStatus]);
+    counts.consentControlPagesChecked = consentControlLifecycleEvidence.pagesChecked.length;
+    counts.consentControlsSearched = consentControlLifecycleEvidence.controlsSearched.length;
+    counts.consentFooterLinksInspected = consentControlLifecycleEvidence.footerLinksInspected.length;
+    flags.add(CONSENT_CONTROL_LIFECYCLE_SUBTYPE);
+    runtimeArtifacts.add(
+      "No obvious cookie preferences, privacy settings, or consent-preference reopen control was observed on the scanned public pages."
+    );
+  }
+
+  if (consentGovernanceDisclosureEvidence) {
+    addEntity(entities, "findingSubtype", [CONSENT_GOVERNANCE_DISCLOSURE_CONCERN_ID]);
+    addEntity(entities, "consentGovernanceDisclosureEvidence", [JSON.stringify(consentGovernanceDisclosureEvidence)]);
+    addEntity(entities, "observedConsentVendors", consentGovernanceDisclosureEvidence.supportingAnchors.observedConsentVendors ?? []);
+    addEntity(entities, "observedTrackingVendors", consentGovernanceDisclosureEvidence.supportingAnchors.observedTrackingVendors ?? []);
+    addEntity(entities, "consentGovernancePolicyUrls", consentGovernanceDisclosureEvidence.supportingAnchors.policyUrls ?? []);
+    addEntity(entities, "consentGovernanceCookiePolicyUrls", consentGovernanceDisclosureEvidence.supportingAnchors.cookiePolicyUrls ?? []);
+    addEntity(entities, "consentGovernancePreferenceCenterUrls", consentGovernanceDisclosureEvidence.supportingAnchors.preferenceCenterUrls ?? []);
+    for (const url of [
+      ...(consentGovernanceDisclosureEvidence.supportingAnchors.policyUrls ?? []),
+      ...(consentGovernanceDisclosureEvidence.supportingAnchors.cookiePolicyUrls ?? []),
+      ...(consentGovernanceDisclosureEvidence.supportingAnchors.preferenceCenterUrls ?? [])
+    ]) {
+      sourceUrls.add(url);
+    }
+    for (const anchor of consentGovernanceDisclosureEvidence.supportingAnchors.textAnchors ?? []) {
+      sourceUrls.add(anchor.url);
+      if (anchor.snippet) {
+        policySnippets.add(truncatePolicySnippet(anchor.snippet));
+      }
+    }
+    counts.consentGovernancePolicySurfaceCount = [
+      ...(consentGovernanceDisclosureEvidence.supportingAnchors.policyUrls ?? []),
+      ...(consentGovernanceDisclosureEvidence.supportingAnchors.cookiePolicyUrls ?? []),
+      ...(consentGovernanceDisclosureEvidence.supportingAnchors.preferenceCenterUrls ?? [])
+    ].length;
+    flags.add(CONSENT_GOVERNANCE_DISCLOSURE_CONCERN_ID);
+    runtimeArtifacts.add(
+      "Consent governance disclosure note: retained public materials did not clearly explain how users can revisit, change, withdraw, retain, renew, expire, or understand consent choices."
+    );
+  }
 
   const preSubmitTextCaptureRows = [
     ...(
@@ -1282,6 +1425,9 @@ function deriveEvidenceStrengthFlags(input: {
     flags.add("direct_runtime");
   }
   if (hasConcreteRtbCookieSyncEvidence(input.rawEvidence)) {
+    flags.add("direct_runtime");
+  }
+  if (evaluateCookieRetentionReview(input.rawEvidence).evidence.length > 0) {
     flags.add("direct_runtime");
   }
   if (hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(input.rawEvidence)) {

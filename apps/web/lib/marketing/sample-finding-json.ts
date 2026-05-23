@@ -20,6 +20,7 @@ const SAMPLE_EVIDENCE_PROFILE: Record<string, { evidenceConfidence: EvidenceConf
   fingerprinting_related_signals_observed: { evidenceConfidence: "review_signal", directVsInferred: "direct_observation" },
   forced_consent_interaction: { evidenceConfidence: "good", directVsInferred: "direct_observation" },
   keyboard_navigation_accessibility_issue: { evidenceConfidence: "good", directVsInferred: "direct_observation" },
+  long_lived_cookie_retention_review: { evidenceConfidence: "strong", directVsInferred: "direct_observation" },
   possible_session_replay_on_sensitive_input_surface: { evidenceConfidence: "review_signal", directVsInferred: "correlated_observation" },
   session_replay_present_with_sensitive_surfaces_observed: {
     evidenceConfidence: "review_signal",
@@ -78,6 +79,12 @@ const SAMPLE_TOP_FINDING_CALIBRATION: Record<string, Record<string, string[]>> =
     criticalOrTopRankingRequires: ["Advertising/identity/sync persistent storage or repeated pages."],
     demoteOrSuppressWhen: ["Request only.", "Cookie name only.", "Unknown timing.", "Blocked scan."]
   },
+  long_lived_cookie_retention_review: {
+    minimumToSurface: ["Runtime cookie name/domain/page/classification plus retained expiry, Max-Age, or computed duration."],
+    highConfidenceRequires: ["Known tracking, advertising, marketing, or identity classification.", "365-day CertScore review threshold met.", "Vendor or source URL context."],
+    criticalOrTopRankingRequires: ["Long-lived adtech/marketing/identity cookie evidence.", "Multiple long-lived adtech cookies.", "730-day severe review threshold."],
+    demoteOrSuppressWhen: ["Policy text only.", "Cookie count only.", "Missing duration/page attribution.", "Essential/session cookies only.", "Same cookie evidence already supports a stronger consent-timing finding."]
+  },
   rtb_cookie_sync_observed: {
     minimumToSurface: ["Sync/match/adtech identity-like request or redirect."],
     highConfidenceRequires: ["Origin/path.", "Vendor/category.", "Identifier-like keys.", "Redaction."],
@@ -91,10 +98,10 @@ const SAMPLE_TOP_FINDING_CALIBRATION: Record<string, Record<string, string[]>> =
     demoteOrSuppressWhen: ["Decorative/redundant/logo context without manual review."]
   },
   consent_dark_patterns_detected: {
-    minimumToSurface: ["Concrete consent-surface choice architecture signal."],
-    highConfidenceRequires: ["Two or more signals retained."],
+    minimumToSurface: ["Concrete consent-surface choice architecture signal or retained consent-control lifecycle absence evidence with consent/tracking context."],
+    highConfidenceRequires: ["Two or more signals retained, or usable pages/controls/footer search evidence for the preference-revisitability subtype."],
     criticalOrTopRankingRequires: ["Forced interaction plus missing/nested reject or repeated prompt."],
-    demoteOrSuppressWhen: ["CMP name only.", "Banner presence only.", "Unrelated modal."]
+    demoteOrSuppressWhen: ["CMP name only.", "Banner presence only.", "Unrelated modal.", "Prior consent state or blocked/shallow lifecycle coverage."]
   },
   cpra_cba_opt_out_missing: {
     minimumToSurface: [
@@ -288,6 +295,7 @@ function buildCategoryEvidenceBlocks(findingId: string, payload: Record<string, 
   if (
     findingId === "pre_consent_tracking_detected" ||
     findingId === "third_party_cookie_pre_consent" ||
+    findingId === "long_lived_cookie_retention_review" ||
     findingId === "rtb_cookie_sync_observed" ||
     findingId === "cross_domain_identifier_sharing_observed" ||
     findingId === "reject_tracking_persists_after_reject"
@@ -302,6 +310,32 @@ function buildCategoryEvidenceBlocks(findingId: string, payload: Record<string, 
     };
   }
 
+  if (findingId === "long_lived_cookie_retention_review") {
+    blocks.cookieRetentionEvidence = {
+      retainedRuntimeCookies: [
+        {
+          name: "_fbp",
+          domain: ".example.com",
+          pageUrl: "https://example.com/",
+          classification: "advertising_marketing",
+          vendor: "Meta",
+          durationDays: 540,
+          thresholdBasis: "duration_days >= 365 CertScore product review threshold",
+          valueRetained: false
+        }
+      ],
+      longestObservedCookie: {
+        name: "_fbp",
+        domain: ".example.com",
+        durationDays: 540,
+        classification: "advertising_marketing"
+      },
+      reviewThresholdDays: 365,
+      statutoryThreshold: false,
+      manualReviewNeeded: true
+    };
+  }
+
   if (
     findingId === "forced_consent_interaction" ||
     findingId === "reject_option_missing_or_hidden" ||
@@ -310,10 +344,15 @@ function buildCategoryEvidenceBlocks(findingId: string, payload: Record<string, 
     findingId === "cpra_cba_opt_out_missing"
   ) {
     blocks.uiEvidence = {
-      observedSurface: findingId === "cpra_cba_opt_out_missing" ? "footer_policy_cmp_preference_center_scope" : "consent_surface",
+      observedSurface: findingId === "cpra_cba_opt_out_missing" || findingId === "consent_dark_patterns_detected"
+        ? "footer_policy_cmp_preference_center_scope"
+        : "consent_surface",
       retainedControlContext: true,
       labelsOrPathsRetained: true,
-      absenceObservationRequiresCoverage: findingId === "reject_option_missing_or_hidden" || findingId === "cpra_cba_opt_out_missing",
+      absenceObservationRequiresCoverage:
+        findingId === "reject_option_missing_or_hidden" ||
+        findingId === "cpra_cba_opt_out_missing" ||
+        findingId === "consent_dark_patterns_detected",
       manualReviewNeeded: true
     };
   }
@@ -1164,6 +1203,68 @@ const illustrativeThirdPartyCookiePreConsent = {
   }
 } satisfies Record<string, unknown>;
 
+const illustrativeLongLivedCookieRetentionReview = {
+  finding_id: "long_lived_cookie_retention_review",
+  finding_label: "Long-lived cookie retention review",
+  category: "Cookies",
+  criticality: "high",
+  evidenceConfidence: "strong",
+  directVsInferred: "direct_observation",
+  observed:
+    "Retained runtime cookie evidence showed persistent tracking or unclassified cookies whose observed expiry or computed duration met a CertScore retention review threshold.",
+  evidence: {
+    summary:
+      "Retained runtime cookie evidence showed persistent tracking or unclassified cookies whose observed expiry or computed duration met a CertScore retention review threshold.",
+    examples: [
+      {
+        title: "Long-lived runtime cookie evidence",
+        lines: [
+          "artifact=cookie_retention_001",
+          "role=finding_supporting_artifact",
+          "url=https://example.com/",
+          "cookie_name=_fbp",
+          "cookie_domain=.example.com",
+          "value_retained=false",
+          "classification=advertising_marketing",
+          "vendor=Meta",
+          "source_request_url=https://connect.example/fbevents.js [query_redacted=true]",
+          "duration_days=540",
+          "threshold_basis=duration_days >= 365 CertScore product review threshold",
+          "review_caveat=manual review should confirm purpose, vendor ownership, consent state, opt-out behavior, retention disclosure, and minimization"
+        ]
+      },
+      {
+        title: "Unclassified cookie review context",
+        lines: [
+          "artifact=cookie_retention_002",
+          "role=finding_supporting_artifact",
+          "url=https://example.com/",
+          "cookie_name=xbc",
+          "cookie_domain=.example.com",
+          "value_retained=false",
+          "classification=unknown_unclassified",
+          "duration_days=399",
+          "threshold_basis=duration_days >= 365 CertScore product review threshold",
+          "classification_review_needed=true"
+        ]
+      }
+    ],
+    automationLimits: [
+      "Automated public-web observations do not determine legal status, consent validity, necessity, or compliance status. The 365-day threshold is a CertScore product review threshold, not a statutory threshold.",
+      "Manual review is needed to confirm cookie purpose, vendor ownership, classification, consent state, opt-out behavior, retention disclosures, and remediation quality."
+    ],
+    cookie_samples: [
+      "cookie_name=_fbp; cookie_domain=.example.com; classification=advertising_marketing; duration_days=540; value_retained=false",
+      "cookie_name=xbc; cookie_domain=.example.com; classification=unknown_unclassified; duration_days=399; value_retained=false"
+    ],
+    request_samples: ["https://connect.example/fbevents.js [query_redacted=true]"],
+    runtime_anchors: [
+      "privacy.cookie_retention_lifetime_review_signal",
+      "cookie_retention_001 duration_days=540 threshold_basis=CertScore product review threshold"
+    ]
+  }
+} satisfies Record<string, unknown>;
+
 const illustrativeRejectTrackingPersistsAfterReject = {
   finding_id: "reject_tracking_persists_after_reject",
   finding_label: "Non-essential tracking continued after reject",
@@ -1452,6 +1553,126 @@ const illustrativeProbableFingerprinting = {
   }
 } satisfies Record<string, unknown>;
 
+const illustrativeCookieDisclosureGap = {
+  finding_id: "cookie_disclosure_gap",
+  finding_label: "Cookie disclosure gap",
+  category: "Disclosure gaps",
+  criticality: "high",
+  evidenceConfidence: "review_signal",
+  directVsInferred: "correlated_observation",
+  observed:
+    "Retained runtime cookie/storage evidence showed an observed vendor or domain that was not clearly reflected in retained cookie, CMP, or disclosure evidence.",
+  evidence: {
+    summary:
+      "Runtime cookie/storage vendors or domains observed during the scan were not clearly reflected in retained cookie, CMP, or privacy disclosure evidence.",
+    runtimeVendorDisclosure: {
+      subtype: "runtime_vendor_not_disclosed",
+      observedRuntimeVendors: ["Example Ads"],
+      observedRuntimeDomains: ["ads.example"],
+      unmatchedRuntimeVendors: ["Example Ads"],
+      unmatchedRuntimeDomains: ["ads.example"],
+      policySurfacesSearched: [
+        {
+          type: "cookie_policy",
+          url: "https://example.com/cookie-policy",
+          reached: true,
+          retainedEvidenceRef: "policy_enrichment_cookie_001",
+          searchedTerms: ["Example Ads", "ads.example", "example_id"],
+          matchedVendorNames: ["Example Analytics"],
+          unmatchedVendorNames: ["Example Ads"]
+        }
+      ],
+      cookiePolicyUrl: "https://example.com/cookie-policy",
+      matchedVendorDisclosureCount: 1,
+      unmatchedVendorDisclosureCount: 1,
+      mismatchRationale:
+        "Observed runtime cookie/storage vendor or domain did not clearly match retained cookie disclosure evidence.",
+      coverageStatus: "usable",
+      evidenceConfidence: "moderate",
+      directVsInferred: "direct"
+    },
+    consentGovernanceDisclosure: {
+      role: "supporting_disclosure_context",
+      subtype: "consent_governance_disclosure_gap",
+      relevanceTriggers: ["cmpObserved", "consentDependentTrackingObserved"],
+      missingSignals: ["withdrawalProcessNotClearlyExplained", "consentRetentionOrExpiryNotClearlyExplained"],
+      reviewedSurfaces: ["cookie_policy", "footer_links"],
+      evidenceLine:
+        "Reviewed public privacy, cookie, or preference materials did not clearly explain how users can revisit or withdraw consent choices."
+    },
+    examples: [
+      {
+        title: "Runtime vendor disclosure alignment",
+        lines: [
+          "artifact=cookie_disclosure_001",
+          "subtype=runtime_vendor_not_disclosed",
+          "runtime_cookie_name=example_id",
+          "runtime_cookie_domain=.ads.example",
+          "observed_runtime_vendor=Example Ads",
+          "policy_surface_type=cookie_policy",
+          "policy_surface_reached=true",
+          "mismatch_rationale=not clearly reflected in retained disclosure evidence",
+          "supporting_consent_governance_context=preferences_and_withdrawal_process_not_clearly_explained"
+        ]
+      }
+    ],
+    automationLimits: [
+      "Automated evidence does not determine legal adequacy, compliance status, provider ownership, or policy completeness.",
+      "Manual review is needed to confirm purpose, vendor ownership, regional variants, disclosure scope, and remediation quality."
+    ]
+  }
+} satisfies Record<string, unknown>;
+
+const illustrativePolicyRuntimeAlignmentReview = {
+  finding_id: "policy_behavior_contradiction_detected",
+  finding_label: "Policy/runtime alignment review",
+  category: "Consumer protection",
+  criticality: "high",
+  evidenceConfidence: "review_signal",
+  directVsInferred: "correlated_observation",
+  observed:
+    "Retained runtime evidence showed a third-party vendor or domain that was not clearly reflected in retained public privacy or downstream-sharing disclosure evidence.",
+  evidence: {
+    summary:
+      "Runtime third-party vendors or domains observed during the scan were not clearly reflected in retained public disclosure evidence.",
+    runtimeVendorDisclosure: {
+      subtype: "runtime_vendor_not_disclosed",
+      observedRuntimeVendors: ["Example Ads"],
+      observedRuntimeDomains: ["ads.example"],
+      unmatchedRuntimeVendors: ["Example Ads"],
+      unmatchedRuntimeDomains: ["ads.example"],
+      policySurfacesSearched: [
+        {
+          type: "privacy_policy",
+          url: "https://example.com/privacy",
+          reached: true,
+          retainedEvidenceRef: "policy_enrichment_privacy_001",
+          searchedTerms: ["Example Ads", "ads.example"],
+          matchedVendorNames: ["Example Analytics"],
+          unmatchedVendorNames: ["Example Ads"]
+        }
+      ],
+      privacyPolicyUrl: "https://example.com/privacy",
+      matchedVendorDisclosureCount: 1,
+      unmatchedVendorDisclosureCount: 1,
+      mismatchRationale:
+        "Observed runtime vendor/domain did not clearly match retained privacy or downstream-sharing disclosure evidence.",
+      coverageStatus: "usable",
+      evidenceConfidence: "moderate",
+      directVsInferred: "direct"
+    },
+    strongerFindingHandling: {
+      sameVendorOrDomainStrongerFinding: "rtb_cookie_sync_observed",
+      topCardBehavior: "demote_runtime_vendor_not_disclosed_to_supporting_detail",
+      supportingDetailPreserved: true
+    },
+    automationLimits: [
+      "Automated evidence is a disclosure-alignment review signal, not a legal conclusion or compliance determination.",
+      "Manual review is needed to confirm disclosure scope, provider ownership, applicability, and remediation quality."
+    ]
+  }
+} satisfies Record<string, unknown>;
+
 const illustrativeCpraPrivacyChoiceOptOut = {
   finding_id: "cpra_cba_opt_out_missing",
   finding_label: "CPRA / privacy choice opt-out review signal",
@@ -1501,6 +1722,20 @@ const THIRD_PARTY_COOKIE_SAMPLE: SampleFindingJson = {
   label: "Third-party cookie or storage observed before consent",
   sourceLabel: "Illustrative public evidence sample",
   payload: illustrativeThirdPartyCookiePreConsent
+};
+
+const COOKIE_DISCLOSURE_GAP_SAMPLE: SampleFindingJson = {
+  findingId: "cookie_disclosure_gap",
+  label: "Cookie disclosure gap",
+  sourceLabel: "Illustrative public evidence sample",
+  payload: illustrativeCookieDisclosureGap
+};
+
+const LONG_LIVED_COOKIE_RETENTION_SAMPLE: SampleFindingJson = {
+  findingId: "long_lived_cookie_retention_review",
+  label: "Long-lived cookie retention review",
+  sourceLabel: "Illustrative public evidence sample",
+  payload: illustrativeLongLivedCookieRetentionReview
 };
 
 const REJECT_TRACKING_SAMPLE: SampleFindingJson = {
@@ -1562,6 +1797,13 @@ const SENSITIVE_TRACKING_SURFACE_SAMPLE: SampleFindingJson = {
   label: "Sensitive input surface with third-party tracking context",
   sourceLabel: "Illustrative public evidence sample",
   payload: illustrativeSensitiveTrackingSurface
+};
+
+const POLICY_RUNTIME_ALIGNMENT_SAMPLE: SampleFindingJson = {
+  findingId: "policy_behavior_contradiction_detected",
+  label: "Policy/runtime alignment review",
+  sourceLabel: "Illustrative public evidence sample",
+  payload: illustrativePolicyRuntimeAlignmentReview
 };
 
 const ACCESSIBILITY_SAMPLE: SampleFindingJson = {
@@ -1630,12 +1872,15 @@ const WEBSITE_SCAN_SAMPLE: SampleFindingJson = {
 const SAMPLE_FINDINGS_BY_ID: Record<string, SampleFindingJson> = {
   accessibility_risk_score: ACCESSIBILITY_SAMPLE,
   cookie_banner_control_gap: COOKIE_BANNER_SAMPLE,
+  cookie_disclosure_gap: COOKIE_DISCLOSURE_GAP_SAMPLE,
   cpra_cba_opt_out_missing: CPRA_PRIVACY_CHOICE_SAMPLE,
   cross_domain_identifier_sharing_observed: CROSS_DOMAIN_IDENTIFIER_SAMPLE,
   endorsement_disclosure_gap: DISCLOSURE_SAMPLE,
   fingerprinting_or_device_signals_detected: FINGERPRINTING_SAMPLE,
   fingerprinting_related_signals_observed: FINGERPRINTING_RELATED_SAMPLE,
+  long_lived_cookie_retention_review: LONG_LIVED_COOKIE_RETENTION_SAMPLE,
   possible_session_replay_on_sensitive_input_surface: POSSIBLE_SESSION_REPLAY_SENSITIVE_SURFACE_SAMPLE,
+  policy_behavior_contradiction_detected: POLICY_RUNTIME_ALIGNMENT_SAMPLE,
   session_replay_present_with_sensitive_surfaces_observed: SESSION_REPLAY_WITH_SENSITIVE_SURFACES_SAMPLE,
   pre_consent_tracking_detected: PRE_CONSENT_TRACKING_SAMPLE,
   probable_fingerprinting: PROBABLE_FINGERPRINTING_SAMPLE,

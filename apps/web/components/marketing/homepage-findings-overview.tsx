@@ -117,21 +117,37 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
     },
     reviewPrompts: ["Which cookie or storage key appeared, and what domain or scope set it?"]
   },
+  long_lived_cookie_retention_review: {
+    overview:
+      "Runtime cookie evidence includes a retained name, domain, page attribution, classification, and expiry duration that crosses CertScore's retention review threshold.",
+    regulatoryLabel: "Cookie retention review",
+    regulatoryCopy:
+      "Useful for reviewing whether observed cookie lifetimes match stated retention, minimization, consent, opt-out, and disclosure practices without treating the threshold as a legal conclusion.",
+    evidence: {
+      title: "Cookie retention sample",
+      lines: [
+        "{\"artifact\":\"cookie_retention_001\",\"cookie\":\"_fbp\"}",
+        "{\"domain\":\".example.com\",\"durationDays\":540}",
+        "{\"classification\":\"advertising/marketing\",\"threshold\":\"product_review\"}"
+      ]
+    },
+    reviewPrompts: ["Which retained cookie expiry, classification, and page attribution support the review signal?"]
+  },
   cookie_disclosure_gap: {
     overview:
-      "Runtime cookie evidence is compared against retained cookie-policy, CMP, or disclosure surfaces to flag observed cookie activity that was not clearly covered.",
+      "Runtime cookie and storage evidence is compared against retained cookie-policy, CMP, or disclosure surfaces, including observed vendors or domains that were not clearly reflected.",
     regulatoryLabel: "Cookie transparency review",
     regulatoryCopy:
       "Useful for reviewing whether live cookie behavior, providers, categories, and purposes match what users can see in policy or preference-center disclosures.",
     evidence: {
       title: "Cookie disclosure sample",
       lines: [
-        "{\"artifact\":\"cookie_disclosure_001\",\"runtimeCookie\":\"example_id\"}",
-        "{\"cookieDomain\":\".ads.example\",\"value\":\"not_retained\"}",
-        "{\"policyCoverage\":\"provider_or_cookie_family_not_found\"}"
+        "{\"artifact\":\"cookie_disclosure_001\",\"subtype\":\"runtime_vendor_not_disclosed\"}",
+        "{\"unmatchedRuntimeDomains\":[\"connect.example\"],\"value\":\"not_retained\"}",
+        "{\"policySurfacesSearched\":[{\"type\":\"cookie_policy\",\"reached\":true}]}"
       ]
     },
-    reviewPrompts: ["Which runtime cookie artifact is missing from the retained disclosure surface?"]
+    reviewPrompts: ["Which runtime cookie, vendor, or domain did not clearly match the retained disclosure surface?"]
   },
   rtb_cookie_sync_observed: {
     overview:
@@ -167,16 +183,16 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
   },
   consent_dark_patterns_detected: {
     overview:
-      "Consent-surface evidence shows a cluster of choice-architecture signals such as nested refusal, forced interaction, hierarchy, or repeated prompts.",
+      "Consent-surface evidence shows a cluster of choice-architecture signals such as nested refusal, forced interaction, hierarchy, repeated prompts, or hard-to-revisit preferences.",
     regulatoryLabel: "Consent choice-architecture review",
     regulatoryCopy:
-      "Useful for reviewing whether consent controls, labels, visual hierarchy, path depth, accessibility, and repetition affect user choice.",
+      "Useful for reviewing whether consent controls, labels, visual hierarchy, path depth, accessibility, repetition, and preference-revisit controls affect user choice.",
     evidence: {
       title: "Choice architecture sample",
       lines: [
         "{\"artifact\":\"consent_ui_004\",\"component\":\"cookie_banner\"}",
-        "{\"signals\":[\"reject_path_nested\",\"accept_primary\",\"repeated_prompt\"]}",
-        "{\"accept\":\"Accept all\",\"rejectLocation\":\"preferences_layer\"}"
+        "{\"signals\":[\"reject_path_nested\",\"accept_primary\",\"preference_revisit_control_not_observed\"]}",
+        "{\"accept\":\"Accept all\",\"preferenceReopen\":\"not_observed_in_retained_public_pages\"}"
       ]
     },
     reviewPrompts: ["Which consent-surface signals were retained, and how do they affect the choice path?"]
@@ -359,7 +375,7 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
   },
   policy_behavior_contradiction_detected: {
     overview:
-      "A retained public policy or disclosure anchor is compared with concrete runtime behavior and an explicit bridge rationale.",
+      "A retained public policy or disclosure anchor is compared with concrete runtime behavior and an explicit bridge rationale, including disclosure-alignment notes for observed vendors or domains.",
     regulatoryLabel: "Policy/runtime alignment review",
     regulatoryCopy:
       "Useful for reviewing whether implementation behavior, consent flow, vendor activity, and public disclosures appear aligned within the observed scan scope.",
@@ -368,10 +384,10 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
       lines: [
         "{\"artifact\":\"policy_runtime_001\",\"policyAnchor\":\"privacy_notice\"}",
         "{\"runtimeAnchor\":\"classified_request_or_storage\",\"values\":\"redacted\"}",
-        "{\"bridge\":\"specific_disclosure_compared_to_runtime_behavior\"}"
+        "{\"subtype\":\"runtime_vendor_not_disclosed\",\"coverageStatus\":\"usable\"}"
       ]
     },
-    reviewPrompts: ["Which policy text, runtime anchor, and bridge rationale support the alignment review?"]
+    reviewPrompts: ["Which policy text, runtime anchor, disclosure surface, and bridge rationale support the alignment review?"]
   },
   probable_fingerprinting: {
     overview:

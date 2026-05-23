@@ -53,6 +53,10 @@ const FINDING_CRITICALITY_BADGES = {
     badge: "critical",
     rationale: "Concrete evidence of tracking cookies before consent."
   },
+  long_lived_cookie_retention_review: {
+    badge: "high",
+    rationale: "Concrete runtime expiry evidence can warrant retention and disclosure review without asserting a legal violation."
+  },
   cookie_disclosure_gap: {
     badge: "medium",
     rationale: "Disclosure mismatch is important review context, but it depends on policy and runtime scope."

@@ -103,6 +103,7 @@ const ILLUSTRATIVE_PUBLIC_SAMPLE_FINDING_IDS = new Set<string>([
   "consent_dark_patterns_detected",
   "third_party_cookie_pre_consent",
   "cookie_disclosure_gap",
+  "long_lived_cookie_retention_review",
   "reject_tracking_persists_after_reject",
   "rtb_cookie_sync_observed",
   "cross_domain_identifier_sharing_observed",
@@ -126,6 +127,7 @@ const SAMPLE_EVIDENCE_CONFIDENCE: Record<string, "strong" | "good" | "review_sig
   focus_management_issue: "good",
   forced_consent_interaction: "good",
   keyboard_navigation_accessibility_issue: "good",
+  long_lived_cookie_retention_review: "strong",
   possible_session_replay_on_sensitive_input_surface: "review_signal",
   session_replay_present_with_sensitive_surfaces_observed: "review_signal",
   policy_behavior_contradiction_detected: "review_signal",
@@ -155,6 +157,7 @@ const SAMPLE_DIRECTNESS: Record<
   focus_management_issue: "direct_observation",
   forced_consent_interaction: "direct_observation",
   keyboard_navigation_accessibility_issue: "direct_observation",
+  long_lived_cookie_retention_review: "direct_observation",
   possible_session_replay_on_sensitive_input_surface: "correlated_observation",
   session_replay_present_with_sensitive_surfaces_observed: "correlated_observation",
   policy_behavior_contradiction_detected: "correlated_observation",
@@ -185,6 +188,7 @@ const SEVERITY_BY_SECTION: Record<CertScoreFindingDefinition["section"], CertSco
 
 const SEVERITY_OVERRIDES: Record<string, CertScoreFindingSeverity> = {
   policy_behavior_contradiction_detected: "high",
+  long_lived_cookie_retention_review: "high",
   possible_session_replay_on_sensitive_input_surface: "critical",
   session_replay_present_with_sensitive_surfaces_observed: "high",
   probable_fingerprinting: "critical",
@@ -203,6 +207,7 @@ const CATEGORY_BY_FINDING_ID: Record<string, FindingReferenceCategory> = {
   focus_management_issue: "Accessibility",
   forced_consent_interaction: "Consent",
   keyboard_navigation_accessibility_issue: "Accessibility",
+  long_lived_cookie_retention_review: "Cookies",
   possible_session_replay_on_sensitive_input_surface: "Third-party tracking",
   session_replay_present_with_sensitive_surfaces_observed: "Third-party tracking",
   policy_behavior_contradiction_detected: "Consumer protection",
@@ -224,6 +229,7 @@ const PUBLIC_TITLE_OVERRIDES: Record<string, string> = {
   cross_domain_identifier_sharing_observed: "Identifier-like values observed across domains",
   cookie_disclosure_gap: "Cookie disclosure gap",
   fingerprinting_related_signals_observed: "Fingerprinting-related browser/device signals observed",
+  long_lived_cookie_retention_review: "Long-lived cookie retention review",
   possible_session_replay_on_sensitive_input_surface: "Possible session replay near sensitive input surface",
   session_replay_present_with_sensitive_surfaces_observed: "Session replay observed with sensitive input surfaces",
   policy_behavior_contradiction_detected: "Policy/runtime alignment review",
@@ -246,6 +252,7 @@ const RELATED_FINDINGS: Record<string, string[]> = {
   focus_management_issue: ["keyboard_navigation_accessibility_issue", "semantic_labeling_accessibility_issue", "forced_consent_interaction"],
   forced_consent_interaction: ["reject_option_missing_or_hidden", "asymmetric_consent_ui", "consent_dark_patterns_detected"],
   keyboard_navigation_accessibility_issue: ["semantic_labeling_accessibility_issue", "visual_contrast_accessibility_issue"],
+  long_lived_cookie_retention_review: ["cookie_disclosure_gap", "third_party_cookie_pre_consent", "pre_consent_tracking_detected"],
   possible_session_replay_on_sensitive_input_surface: [
     "session_replay_present_with_sensitive_surfaces_observed",
     "session_recording_services_detected",
@@ -322,10 +329,16 @@ export const FINDING_TOP_FINDING_RULES: Record<string, FindingTopFindingRule> = 
     demoteOrSuppressWhen: ["Request only.", "Cookie name only.", "Unknown timing.", "Blocked scan."]
   },
   cookie_disclosure_gap: {
-    minimumToSurface: ["Runtime cookie activity plus retained cookie-policy or disclosure evidence that does not cover the observed cookie behavior."],
-    highConfidenceRequires: ["Cookie/domain/category evidence.", "Policy or cookie-disclosure page coverage.", "Clear mismatch rationale."],
-    criticalOrTopRankingRequires: ["Advertising, analytics, identity, sync, or persistent cookies with missing provider/purpose disclosure."],
+    minimumToSurface: ["Runtime cookie/storage activity plus retained cookie-policy, CMP, or disclosure evidence that does not clearly reflect the observed cookie, vendor, or domain."],
+    highConfidenceRequires: ["Cookie/domain/category evidence.", "Reached policy or cookie-disclosure surface.", "Clear mismatch rationale.", "Retained runtime-vendor disclosure evidence where the subtype is used.", "Consent-governance gaps remain supporting context unless corroborated by runtime consent evidence."],
+    criticalOrTopRankingRequires: ["Advertising, analytics, identity, sync, persistent storage, or other promotion-grade runtime vendor/domain evidence with a disclosure alignment mismatch."],
     demoteOrSuppressWhen: ["Cookie count only.", "Policy page not reached.", "Blocked scan.", "Mismatch not tied to a retained runtime cookie artifact."]
+  },
+  long_lived_cookie_retention_review: {
+    minimumToSurface: ["Concrete runtime cookie evidence with name, domain or host, page URL, classification, expiry or duration, and threshold basis."],
+    highConfidenceRequires: ["Known tracking, advertising, marketing, or identity classification.", "Duration at or above the 365-day CertScore review threshold.", "Vendor or source URL context."],
+    criticalOrTopRankingRequires: ["Long-lived advertising, marketing, tracking, or identity cookie evidence, repeated long-lived adtech cookies, or a 730-day severe review threshold."],
+    demoteOrSuppressWhen: ["Policy text only.", "Cookie count only.", "Missing duration or page attribution.", "Essential/session cookies only.", "Same cookie evidence already supports a stronger consent-timing finding."]
   },
   rtb_cookie_sync_observed: {
     minimumToSurface: ["Sync, match, adtech identity-like request, or redirect."],
@@ -340,10 +353,10 @@ export const FINDING_TOP_FINDING_RULES: Record<string, FindingTopFindingRule> = 
     demoteOrSuppressWhen: ["Decorative, redundant, or logo context without manual review."]
   },
   consent_dark_patterns_detected: {
-    minimumToSurface: ["Concrete consent-surface choice architecture signal."],
-    highConfidenceRequires: ["Two or more retained choice-architecture signals."],
-    criticalOrTopRankingRequires: ["Forced interaction plus missing/nested reject or repeated prompt."],
-    demoteOrSuppressWhen: ["CMP name only.", "Banner presence only.", "Unrelated modal."]
+    minimumToSurface: ["Concrete consent-surface choice architecture signal, or retained consent-control lifecycle evidence showing no obvious preference-revisit control in sufficient scan coverage."],
+    highConfidenceRequires: ["Two or more retained choice-architecture signals, or retained pages checked, footer/preferences surfaces inspected, and consent/tracking context for the revisit-control subtype.", "Consent preference-management explanation gaps are supporting disclosure context, not standalone top-card evidence."],
+    criticalOrTopRankingRequires: ["Forced interaction plus missing/nested reject or repeated prompt. The revisit-control subtype remains Medium by default unless existing severity calibration supports escalation."],
+    demoteOrSuppressWhen: ["CMP name only.", "Banner presence only.", "Unrelated modal.", "Prior consent state may have hidden controls.", "Blocked or shallow preference-control coverage."]
   },
   cpra_cba_opt_out_missing: {
     minimumToSurface: [
@@ -410,10 +423,10 @@ export const FINDING_TOP_FINDING_RULES: Record<string, FindingTopFindingRule> = 
     demoteOrSuppressWhen: ["Replay library only.", "Global script only.", "Sensitive field not same page/flow.", "Masking or page exclusion observed."]
   },
   policy_behavior_contradiction_detected: {
-    minimumToSurface: ["A retained policy/disclosure anchor plus concrete runtime behavior anchor and explicit bridge provenance."],
-    highConfidenceRequires: ["Policy source URL, policy snippet, runtime request or storage anchor, and deterministic bridge rationale."],
-    criticalOrTopRankingRequires: ["Pre-consent, post-reject, cookie, sharing, or sensitive-surface runtime behavior directly conflicts with the retained disclosure claim."],
-    demoteOrSuppressWhen: ["Policy claim only.", "Runtime behavior only.", "Missing bridge provenance.", "Generic contradiction copy without concrete anchors."]
+    minimumToSurface: ["A retained policy/disclosure anchor plus concrete runtime behavior anchor and explicit bridge provenance, or retained runtime-vendor disclosure mismatch evidence under the alignment subtype."],
+    highConfidenceRequires: ["Policy source URL, policy snippet or reached disclosure surface, runtime request/storage/vendor anchor, and deterministic bridge rationale.", "Consent governance disclosure gaps are supporting alignment context unless an existing policy/runtime finding passes its normal gates."],
+    criticalOrTopRankingRequires: ["Pre-consent, post-reject, cookie, sharing, sensitive-surface, or promotion-grade runtime vendor/domain behavior with retained disclosure alignment evidence."],
+    demoteOrSuppressWhen: ["Policy claim only.", "Runtime behavior only.", "Missing bridge provenance.", "Generic contradiction copy without concrete anchors.", "Same vendor/domain evidence already supports a stronger direct runtime finding."]
   },
   probable_fingerprinting: {
     minimumToSurface: ["Multi-signal high-entropy cluster."],
@@ -444,7 +457,9 @@ const OBSERVED: Record<string, string> = {
   third_party_cookie_pre_consent:
     "Retained runtime evidence showed a third-party cookie or storage artifact observed before CertScore recorded a consent action or a prior consent state associated with that purpose.",
   cookie_disclosure_gap:
-    "Retained runtime and public-surface evidence showed observed cookie activity that was not clearly covered by the retained cookie-policy or cookie-disclosure evidence in the scanned scope.",
+    "Retained runtime and public-surface evidence showed observed cookie, storage, vendor, or domain activity that was not clearly reflected in retained cookie-policy, CMP, or cookie-disclosure evidence in the scanned scope.",
+  long_lived_cookie_retention_review:
+    "Retained runtime cookie evidence showed persistent tracking, advertising, analytics, identity, or unclassified cookies whose observed expiry or computed duration met a CertScore retention review threshold.",
   rtb_cookie_sync_observed:
     "Retained network evidence showed adtech, RTB, sync, match, redirect, or identifier-like request patterns that may be relevant to cookie/tracker, advertising, consent, transparency, sale/share, and vendor-governance review.",
   text_alternative_accessibility_issue:
@@ -474,7 +489,7 @@ const OBSERVED: Record<string, string> = {
   session_replay_present_with_sensitive_surfaces_observed:
     "Retained runtime and page-surface evidence showed session-replay-related signals and sensitive input surfaces in the same observed scan scope, without retained same-page or same-flow replay linkage.",
   policy_behavior_contradiction_detected:
-    "Retained report evidence connected a public policy or disclosure claim to concrete runtime behavior that appeared to require policy/runtime alignment review.",
+    "Retained report evidence connected a public policy or disclosure claim to concrete runtime behavior, showed runtime third-party vendors/domains not clearly reflected in retained disclosure evidence, or retained consent-governance disclosure context as a supporting alignment review signal.",
   probable_fingerprinting:
     "Retained runtime evidence showed a clustered high-entropy browser/device signal pattern that may warrant probable fingerprinting review."
 };
@@ -493,13 +508,15 @@ const METHODOLOGY: Record<string, string> = {
   third_party_cookie_pre_consent:
     "CertScore records timestamped page-load, consent-state, cookie, storage, request, vendor, and coverage observations where available. This finding is surfaced when retained runtime evidence shows a third-party cookie or storage artifact before CertScore observed a consent action or a prior consent state associated with that purpose. CertScore treats third-party cookie-before-consent evidence as a review signal. The scanner does not determine legal status, consent validity, necessity, exemption status, or compliance status. Reviewers should consider cookie domain and scope, first-seen timestamp, purpose classification, whether the storage is strictly necessary or exempt, consent state, region, returning-user state, CMP configuration, and scan coverage reliability.",
   cookie_disclosure_gap:
-    "CertScore compares retained runtime cookie/storage observations with retained public cookie-policy, privacy-policy, and disclosure evidence where available. This finding is surfaced when observed cookie activity is not clearly covered by the retained disclosure evidence, such as missing provider, purpose, category, or cookie-family coverage. CertScore treats cookie-disclosure gaps as review signals. The scanner does not determine legal adequacy, completeness, applicability, or compliance status. Reviewers should consider cookie purpose, provider ownership, retention, policy version, regional disclosure variants, CMP cookie tables, and whether coverage limitations prevented CertScore from reaching the relevant disclosure surface.",
+    "CertScore compares retained runtime cookie/storage observations with retained public cookie-policy, privacy-policy, CMP, preference-center, and disclosure evidence where available. This finding is surfaced when observed cookie activity is not clearly covered by the retained disclosure evidence, such as missing provider, purpose, category, or cookie-family coverage. Supporting consent-governance disclosure context may note whether retained public materials clearly explain how consent choices can be changed, withdrawn, retained, renewed, or managed when runtime consent relevance is present. CertScore treats cookie-disclosure gaps as review signals. The scanner does not determine legal adequacy, completeness, applicability, or compliance status. Reviewers should consider cookie purpose, provider ownership, retention, policy version, regional disclosure variants, CMP cookie tables, and whether coverage limitations prevented CertScore from reaching the relevant disclosure surface.",
+  long_lived_cookie_retention_review:
+    "CertScore consumes retained runtime cookie evidence from the canonical scan pipeline, including cookie name, domain or host, page URL, classification, expiry timestamp, Max-Age, or computed duration, and a threshold basis. This finding is surfaced when concrete runtime evidence shows tracking, advertising, marketing, analytics, identity, or unknown/unclassified cookies meeting CertScore retention review thresholds. The 365-day threshold is a CertScore product review threshold, not a statutory threshold, and GDPR does not set a universal numeric cookie-lifetime limit. CertScore treats this as a retention, minimization, consent, opt-out, and disclosure review signal, not legal advice, certification, or a compliance determination. Reviewers should confirm purpose, vendor, necessity, consent phase, retention disclosures, opt-out behavior, and whether unknown cookies should be classified.",
   rtb_cookie_sync_observed:
     "CertScore inspects retained network evidence for adtech, exchange, sync, match, redirect, and identifier-like request patterns, including request origin/path, classified vendor/category, redirect or sync context where available, identifier-like query keys with values redacted, and scan coverage context. This finding is surfaced when retained evidence shows a request or redirect pattern consistent with RTB, adtech sync, user match, or identity sync-like behavior in the observed scan scope. CertScore treats adtech identity sync-like evidence as a review signal. The scanner does not infer confirmed cookie syncing, a complete identity graph, personal identity, legal status, consent validity, or compliance status. Reviewers should consider endpoint purpose, vendor role, identifier scope, consent timing, redirects, jurisdiction, server-side behavior not visible to the browser, and whether the retained request pattern is sufficient for the intended review.",
   text_alternative_accessibility_issue:
     "CertScore retains representative automated accessibility evidence for text-alternative checks, including the rule identifier, affected selector or element reference, page URL, impact label when available, and WCAG-oriented references. The finding is surfaced when retained evidence indicates that non-text content, images, SVGs, icons, controls, or media-related elements may lack an appropriate text alternative or may require review to determine whether the content is informative, functional, decorative, redundant, or exempt. CertScore treats automated text-alternative results as review signals. The scanner does not infer full WCAG conformance or non-conformance from a single automated rule result. Reviewers should consider the element purpose, surrounding text, whether the content is decorative or informative, whether an icon acts as a control, whether an image contains text, and whether the retained evidence reflects the user-visible and assistive-technology-relevant context.",
   consent_dark_patterns_detected:
-    "CertScore retains representative consent-surface evidence for visible controls, button labels, path depth, first-layer availability, hierarchy cues, overlays, repeated prompts, preference paths, and scan coverage context where available. The finding is surfaced when retained evidence indicates a cluster of consent choice-architecture signals that may affect how users encounter, compare, accept, reject, or revisit privacy choices in the observed scan scope. CertScore treats consent choice-architecture results as review signals. The scanner does not determine that dark-pattern status, deception, unfairness, consent validity, legal status, or compliance status occurred. Reviewers should consider jurisdiction, region, CMP configuration, prior consent state, user intent, accessibility, localization, repeated prompts, equivalent choice paths, public claims, and whether the retained evidence reflects the relevant user-facing consent surface.",
+    "CertScore retains representative consent-surface evidence for visible controls, button labels, path depth, first-layer availability, hierarchy cues, overlays, repeated prompts, preference paths, public preference-management explanation, and scan coverage context where available. The finding is surfaced when retained evidence indicates a cluster of consent choice-architecture signals that may affect how users encounter, compare, accept, reject, or revisit privacy choices in the observed scan scope. Supporting consent-governance disclosure context may note whether retained public materials clearly explain how choices can be changed, withdrawn, retained, renewed, or managed when runtime consent relevance is present. CertScore treats consent choice-architecture results as review signals. The scanner does not determine that dark-pattern status, deception, unfairness, consent validity, legal status, or compliance status occurred. Reviewers should consider jurisdiction, region, CMP configuration, prior consent state, user intent, accessibility, localization, repeated prompts, equivalent choice paths, public claims, and whether the retained evidence reflects the relevant user-facing consent surface.",
   cpra_cba_opt_out_missing:
     "CertScore compares retained public-surface evidence for privacy links, footer links, policy language, state-specific rights references, Do Not Sell or Share wording, opt-out links, preference centers, and privacy-choice controls with retained runtime or page-surface signals that may be relevant to advertising, cross-context behavioral advertising, sale/share, tracking, or vendor-governance review. The finding is surfaced when retained evidence indicates relevant advertising or privacy-choice context, but a clear California privacy choice, Do Not Sell or Share, opt-out, or comparable choice path was not observed in the scanned public-page scope. CertScore treats CPRA opt-out availability results as review signals. The scanner does not determine legal status, CPRA applicability, sale/share status, cross-context behavioral advertising status, opt-out failure, GPC handling, or compliance status. GPC handling is not determined unless a GPC-specific request state was sent and retained. Reviewers should consider organization scope, user region, purpose, vendor role, policy text, footer links, preference-center behavior, GPC-specific scan state, CMP configuration, exemptions, and whether the retained evidence reflects the relevant public user journey.",
   forced_consent_interaction:
@@ -569,6 +586,13 @@ const COMMON_CAUSES: Record<string, string[]> = {
     "Cookie categories, providers, or retention periods differ between runtime behavior and policy copy.",
     "Regional cookie banners and global policy pages expose different provider lists.",
     "Runtime cookies are set by embedded third parties whose provider names are not reflected in the disclosure surface."
+  ],
+  long_lived_cookie_retention_review: [
+    "Advertising, marketing, analytics, identity, or retargeting tags set default cookie expirations longer than the site team expects.",
+    "Tag-manager templates preserve vendor defaults even after retention or minimization practices change.",
+    "First-party analytics or identity cookies are not classified in the cookie inventory, making retention review harder.",
+    "Cookie disclosures are updated separately from runtime vendor configuration, causing retention periods or criteria to drift.",
+    "Legacy cookies remain configured with multi-year expirations after a vendor migration, consent-mode rollout, or CMP update."
   ],
   rtb_cookie_sync_observed: [
     "Programmatic advertising tags initialize on page load.",
@@ -806,6 +830,17 @@ const REVIEW_QUESTIONS: Record<string, string[]> = {
     "Could a prior consent state, geotargeting, A/B test, localization, or returning-user state have changed the observed controls?",
     "Is the issue isolated to one template/page, or repeated across pages and viewports?",
     "Should privacy and legal review confirm whether the observed choice path is acceptable for the relevant jurisdiction and purpose?"
+  ],
+  long_lived_cookie_retention_review: [
+    "Which cookie name, domain or host, page URL, classification, and retained expiry or duration support the review signal?",
+    "Is the cookie advertising, marketing, tracking, analytics, identity, personalization, unknown, unclassified, essential, or session-only?",
+    "What is the threshold basis, and does the evidence meet the 365-day CertScore review threshold or the 730-day severe review threshold?",
+    "Is the cookie first-party or third-party, and which vendor, source request URL, tag, or integration appears responsible?",
+    "Does the public cookie or privacy disclosure explain the purpose, retention period, or retention criteria for the cookie family or vendor?",
+    "Is the observed lifetime necessary for the stated purpose, or can expiration be shortened without affecting essential functionality?",
+    "Does consent, reject, opt-out, or GPC behavior affect whether this cookie is set, retained, refreshed, or removed?",
+    "Are unknown or unclassified cookies documented, classified, and owned by an implementation team?",
+    "Does materially different long-lived cookie evidence remain after stronger pre-consent or post-reject findings use their own evidence?"
   ],
   sensitive_data_collection_with_third_party_tracking_present: [
     "Which page, form, field, or flow produced the sensitive-input or sensitive-context evidence?",
@@ -1275,6 +1310,34 @@ const EVIDENCE_STANDARDS: Record<string, FindingEvidenceStandard> = {
       "Claims about legal status, compliance status, or disclosure sufficiency based only on automated evidence."
     ]
   },
+  long_lived_cookie_retention_review: {
+    strong: [
+      "Retained runtime cookie evidence includes cookie name, domain or host, page URL, classification, expiry timestamp, Max-Age, or computed duration, and threshold basis.",
+      "The cookie is classified as advertising, tracking, marketing, identity, retargeting, or similar, with duration at or above the 365-day CertScore review threshold.",
+      "Evidence includes vendor or source request URL context, values redacted or omitted, and enough page attribution for reviewer inspection.",
+      "Repeated long-lived adtech or marketing cookies, or a 730-day severe review threshold, may strengthen top-ranking relevance.",
+      "The evidence frames 365 days as a CertScore product review threshold, not a statutory threshold or legal conclusion."
+    ],
+    good: [
+      "Retained runtime cookie evidence includes complete cookie identity, page attribution, classification, duration or expiry, and threshold basis.",
+      "The retained example is enough for a reviewer to inspect purpose, vendor, retention, consent, opt-out, and disclosure alignment manually.",
+      "Unknown or unclassified cookies at or above the 365-day threshold are eligible for review when concrete runtime duration evidence is retained."
+    ],
+    auditOnly: [
+      "Unknown first-party cookie evidence is between 180 and 364 days without vendor, adtech, or stronger purpose context.",
+      "Cookie volume is high, but expiry, duration, classification, or page attribution is incomplete.",
+      "Policy or cookie-table retention text exists, but runtime cookie duration evidence is absent."
+    ],
+    insufficient: [
+      "Policy text alone.",
+      "Cookie count alone.",
+      "Cookie name or domain without expiry, Max-Age, computed duration, or page attribution.",
+      "Session cookies only.",
+      "Essential cookies only.",
+      "Fallback suspicion, model-only inference, static source reference, or missing threshold basis.",
+      "Claims that a cookie lifetime violates GDPR or decides compliance status."
+    ]
+  },
   reject_tracking_persists_after_reject: {
     strong: [
       "Retained evidence includes a reject-style interaction event with timestamp or interaction-state context.",
@@ -1649,6 +1712,14 @@ const LIMITATIONS: Record<string, string[]> = {
     "Blocked, interrupted, or content-degraded scans may limit disclosure coverage and should not be treated as clean or complete.",
     "CertScore redacts or avoids retaining cookie values, query strings, and sensitive payloads while preserving stable anchors needed for review."
   ],
+  long_lived_cookie_retention_review: [
+    "This finding is an automated cookie-retention review signal, not a legal conclusion, certification, compliance determination, or determination of consent validity.",
+    "The 365-day threshold is a CertScore product review threshold, not a statutory threshold, and GDPR does not set a universal numeric cookie-lifetime threshold.",
+    "Automated runtime evidence can identify cookie names, domains, page attribution, classifications, and retained expiry or duration evidence, but it may not determine purpose, necessity, legal basis, vendor role, or downstream use.",
+    "Some persistent cookies may support session continuity, fraud prevention, security, preferences, or other context-dependent purposes, while others may support advertising, analytics, identity, or retargeting.",
+    "Manual review is needed to confirm purpose, vendor ownership, classification, consent state, opt-out behavior, minimization, retention disclosures, and remediation quality.",
+    "CertScore redacts or avoids retaining cookie values, full query strings, identifiers, and sensitive payloads while preserving stable anchors needed for review."
+  ],
   reject_tracking_persists_after_reject: [
     "This finding is an automated reject-enforcement review signal, not a legal conclusion, certification, compliance determination, or determination of consent validity.",
     "Automated evidence may not fully determine whether the reject interaction succeeded, whether a beacon was queued before reject, or whether a vendor was responsible for post-reject activity.",
@@ -1688,7 +1759,9 @@ const USER_IMPACT: Record<string, string> = {
   keyboard_navigation_accessibility_issue:
     "Keyboard access is essential for people who use keyboards, switch devices, voice input, screen readers, or other assistive technologies to navigate and operate web interfaces.",
   focus_management_issue:
-    "Predictable focus movement helps keyboard, screen-reader, voice-control, and cognitive-accessibility users understand where interaction moved and recover from dialogs, menus, overlays, and dynamic views."
+    "Predictable focus movement helps keyboard, screen-reader, voice-control, and cognitive-accessibility users understand where interaction moved and recover from dialogs, menus, overlays, and dynamic views.",
+  long_lived_cookie_retention_review:
+    "Long-lived tracking or unclassified cookies can affect user expectations about persistence, opt-out behavior, disclosure clarity, and data minimization, especially when cookie purpose or retention criteria are unclear."
 };
 
 const DEFAULT_LIMITATIONS = [
@@ -1763,7 +1836,11 @@ function confidenceSemanticsFor(id: string, benchmark: FindingDensityBenchmark) 
   }
 
   if (id === "cookie_disclosure_gap") {
-    return "Good when retained runtime cookie/storage evidence is compared against retained cookie-policy, CMP, or disclosure evidence and the mismatch is explicit; stronger when retained evidence includes cookie name or family, domain or provider, purpose/category, disclosure surface URL, and coverage context. Manual review is still needed for policy scope, regional variants, provider ownership, legal review, and remediation quality.";
+    return "Good when retained runtime cookie/storage evidence is compared against retained cookie-policy, CMP, or disclosure evidence and the mismatch is explicit; stronger when retained evidence includes cookie name or family, domain or provider, purpose/category, disclosure surface URL, reached-surface evidence, and coverage context. The runtime_vendor_not_disclosed subtype may support this parent when observed cookie/storage vendors or domains are not clearly reflected in retained disclosure evidence. Manual review is still needed for policy scope, regional variants, provider ownership, legal review, and remediation quality.";
+  }
+
+  if (id === "long_lived_cookie_retention_review") {
+    return "Strong when retained runtime cookie evidence includes name, domain or host, page URL, known tracking/advertising/marketing/identity classification, duration at or above the 365-day CertScore review threshold, and vendor or source URL context; good when concrete runtime evidence is complete but classification or vendor context is less specific. Unknown or unclassified cookies can surface at moderate confidence when duration and page attribution are retained. Manual review is still needed for purpose, necessity, consent state, opt-out behavior, disclosure alignment, and remediation quality.";
   }
 
   if (id === "reject_tracking_persists_after_reject") {
@@ -1772,6 +1849,10 @@ function confidenceSemanticsFor(id: string, benchmark: FindingDensityBenchmark) 
 
   if (id === "rtb_cookie_sync_observed") {
     return "Good when retained network evidence includes request origin and path, adtech or sync-category classification, timing, redacted identifier-like keys or redirect context, and enough context for reviewer inspection; stronger when retained evidence includes multi-hop redirect or sync-chain context, repeated sync endpoints, vendor attribution, consent timing, and usable coverage. Manual review is still needed for endpoint purpose, identifier scope, consent state, server-side behavior, and remediation quality.";
+  }
+
+  if (id === "policy_behavior_contradiction_detected") {
+    return "Good when retained policy/runtime evidence includes a policy or disclosure anchor, runtime anchor, and explicit bridge rationale; the runtime_vendor_not_disclosed subtype may support this parent when observed runtime third-party vendors or domains did not clearly match retained privacy, downstream-sharing, cookie, CMP, or privacy-choice disclosure surfaces. Stronger direct runtime findings should remain primary when they use the same vendor or domain evidence. Manual review is still needed for disclosure scope, vendor ownership, applicability, and remediation quality.";
   }
 
   if (id === "cross_domain_identifier_sharing_observed") {
@@ -1854,15 +1935,49 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
     return [
       {
         title: "Cookie disclosure mismatch example",
-        code: "artifact=cookie_disclosure_001\nrole=finding_supporting_artifact\nurl=https://example.com/\nruntime_cookie_name=example_id\nruntime_cookie_domain=.ads.example\nruntime_cookie_value_retained=false\npossible_provider=Example Ads\npossible_category=advertising_or_measurement\ncookie_policy_url=https://example.com/cookie-policy\nobserved_policy_coverage=provider_or_cookie_family_not_found\nreview_caveat=manual review should confirm provider ownership, purpose, retention, regional disclosure variants, and legal review"
+        code: "artifact=cookie_disclosure_001\nrole=finding_supporting_artifact\nsubtype=runtime_vendor_not_disclosed\nurl=https://example.com/\nruntime_cookie_name=example_id\nruntime_cookie_domain=.ads.example\nruntime_cookie_value_retained=false\npossible_provider=Example Ads\npossible_category=advertising_or_measurement\nobserved_runtime_domains=ads.example\nunmatched_runtime_domains=ads.example\npolicy_surface_type=cookie_policy\npolicy_surface_reached=true\ncookie_policy_url=https://example.com/cookie-policy\nobserved_policy_coverage=provider_or_cookie_family_not_found\nmismatch_rationale=observed runtime vendor/domain did not clearly match retained cookie disclosure evidence\nreview_caveat=manual review should confirm provider ownership, purpose, retention, regional disclosure variants, and legal review"
       },
       {
         title: "Review context",
-        code: "runtime_cookie_artifact_present=true\ndisclosure_surface_scanned=true\ncmp_cookie_table_observed=manual_review_recommended\nvalues_redacted=true\ncoverage_status=usable\nmanual_review_needed=true"
+        code: "runtime_cookie_artifact_present=true\ndisclosure_surface_scanned=true\npolicy_surfaces_searched=[cookie_policy]\ncmp_cookie_table_observed=manual_review_recommended\nvalues_redacted=true\ncoverage_status=usable\nevidence_confidence=moderate_or_strong\nmanual_review_needed=true"
       },
       {
         title: "What should not count by itself",
         code: "cookie_count=12 [insufficient_without_named_runtime_artifact]\npolicy_page_missing [audit_only_without_runtime_cookie_context]\ncookie_name=example_id [insufficient_without_disclosure_comparison]\nlegal_review_claim [not_determined_by_automated_scan]"
+      }
+    ];
+  }
+
+  if (id === "policy_behavior_contradiction_detected") {
+    return [
+      {
+        title: "Runtime vendor disclosure alignment example",
+        code: "artifact=policy_runtime_001\nrole=finding_supporting_artifact\nsubtype=runtime_vendor_not_disclosed\nurl=https://example.com/\nruntime_anchor=third_party_request\nobserved_runtime_vendor=Example Ads\nobserved_runtime_domain=ads.example\nunmatched_runtime_domain=ads.example\npolicy_surface_type=privacy_policy\npolicy_surface_reached=true\nprivacy_policy_url=https://example.com/privacy\nmismatch_rationale=observed runtime vendor/domain did not clearly match retained privacy disclosure evidence\ncoverage_status=usable\nreview_caveat=manual review should confirm disclosure scope, provider ownership, policy variants, applicability, and legal review"
+      },
+      {
+        title: "Disclosure surfaces searched",
+        code: "policy_surfaces_searched=[privacy_policy,cookie_policy,cmp_preference_center]\nmatched_vendor_disclosure_count=1\nunmatched_vendor_disclosure_count=1\nretained_evidence_ref=policy_enrichment_001\ndirect_vs_inferred=direct\nmanual_review_needed=true"
+      },
+      {
+        title: "When stronger runtime findings stay primary",
+        code: "same_vendor_domain_cluster=true\nstronger_finding=rtb_cookie_sync_observed\nruntime_vendor_not_disclosed=related_disclosure_review_signal\nseparate_top_card=false\nsupporting_detail_preserved=true"
+      }
+    ];
+  }
+
+  if (id === "long_lived_cookie_retention_review") {
+    return [
+      {
+        title: "Long-lived runtime cookie evidence",
+        code: "artifact=cookie_retention_001\nrole=finding_supporting_artifact\nurl=https://example.com/\ncookie_name=_fbp\ncookie_domain=.example.com\nvalue_retained=false\nclassification=advertising_marketing\nvendor=Meta\nsource_request_url=https://connect.example/fbevents.js [query_redacted=true]\nduration_days=540\nthreshold_basis=duration_days >= 365 CertScore product review threshold\nreview_caveat=manual review should confirm purpose, vendor ownership, consent state, opt-out behavior, retention disclosure, and minimization"
+      },
+      {
+        title: "Unclassified cookie review context",
+        code: "artifact=cookie_retention_002\nrole=finding_supporting_artifact\nurl=https://example.com/\ncookie_name=xbc\ncookie_domain=.example.com\nvalue_retained=false\nclassification=unknown_unclassified\nduration_days=399\nthreshold_basis=duration_days >= 365 CertScore product review threshold\nclassification_review_needed=true\nreview_caveat=365 days is a CertScore review threshold, not a universal statutory threshold"
+      },
+      {
+        title: "What should not count by itself",
+        code: "policy_mentions_analytics_cookies=true [insufficient_without_runtime_cookie_evidence]\ncookie_count=75 [audit_only_without_expiry_and_classification]\ncookie_name=session_id [suppressed_when_session_or_essential_only]\ncookie_domain=.example.com [insufficient_without_duration_and_page_url]\nmodel_suspicion=true [not_external_without_concrete_runtime_evidence]"
       }
     ];
   }
@@ -2121,8 +2236,12 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
         code: "artifact=consent_ui_004\nrole=finding_supporting_artifact\nurl=https://example.com/\ncomponent=cookie_banner\nsignals=reject_path_nested, accept_primary, repeated_prompt_after_dismiss\naccept_control_text=Accept all\npreferences_control_text=Manage choices\nreject_control_location=preferences_layer [manual_review_recommended]\nprompt_reappeared_after_dismiss=true [manual_review_recommended]\nreview_caveat=manual review should confirm choice equivalence, repetition, accessibility, region, CMP configuration, user impact, and legal interpretation"
       },
       {
+        title: "Preference revisitability review signal",
+        code: "artifact=consent_control_lifecycle_001\nrole=finding_supporting_artifact\nurl=https://example.com/\nsubtype=privacy_settings_control_not_observed\ninitial_consent_layer_observed=true\nconsent_dependent_tracking_observed=true\ncoverage_status=usable\npages_checked=[https://example.com/]\ncontrols_searched=[cookie preferences, privacy settings, manage consent]\nfooter_links_inspected=retained_bounded_labels_and_hrefs\nprivacy_settings_control_observed=false\ncookie_preferences_link_observed=false\ncmp_reopen_control_observed=false\nwithdrawal_text_observed=false\nreview_caveat=automated public-page observation; manual review should confirm regional variants, returning-user state, CMP configuration, and legal interpretation"
+      },
+      {
         title: "Review context",
-        code: "possible_source=cmp_choice_architecture\ncontexts_to_review=first_layer_controls, preference_path, visual_hierarchy, repeated_prompting, keyboard_access, screen_reader_access\njurisdictional_review_needed=true\nmanual_review_needed=true"
+        code: "possible_source=cmp_choice_architecture\ncontexts_to_review=first_layer_controls, preference_path, visual_hierarchy, repeated_prompting, preference_revisitability, keyboard_access, screen_reader_access\njurisdictional_review_needed=true\nmanual_review_needed=true"
       },
       {
         title: "What should not count by itself",

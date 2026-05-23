@@ -141,7 +141,8 @@ export const SNAPSHOT_FIELD_TAXONOMY = buildSnapshotFieldMap([
       "prechecked_consent_boxes",
       "dark_pattern_forced_consent_wall",
       "dark_pattern_accept_only_banner",
-      "dark_pattern_dismiss_without_reject"
+      "dark_pattern_dismiss_without_reject",
+      "consent_control_not_reopenable"
     ]
   },
   {
@@ -173,6 +174,7 @@ export const SNAPSHOT_FIELD_TAXONOMY = buildSnapshotFieldMap([
       "data_deletion_request_present",
       "privacy_contact_channel_type",
       "consent_withdrawal_mechanism_present",
+      "consent_governance_disclosure_gap",
       "user_rights_friction_score"
     ]
   },
@@ -802,6 +804,10 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
       subcategory: "Consent Manipulation Signals"
     },
     "privacy.dark_pattern_dismiss_without_reject": {
+      primaryCategory: "privacy_consent_user_choice",
+      subcategory: "Consent Manipulation Signals"
+    },
+    "privacy.consent_control_not_reopenable": {
       primaryCategory: "privacy_consent_user_choice",
       subcategory: "Consent Manipulation Signals"
     },

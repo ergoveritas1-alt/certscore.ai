@@ -12,6 +12,10 @@ import {
 import {
   deriveFingerprintEvidenceTier
 } from "./promotion-evidence-contracts";
+import {
+  evaluateRuntimeVendorDisclosureEvidence,
+  runtimeVendorDisclosureHasPromotionCategory
+} from "./runtime-vendor-disclosure";
 
 export const REPORT_SURFACING_POLICY_VERSION = "v1";
 
@@ -249,6 +253,7 @@ const CONSENT_TRACKING_IDS = [
   "reject_did_not_reduce_third_party_cookies",
   "gpc_signal_not_honored",
   "weak_cookie_security_attributes",
+  "cookie_retention_lifetime_review_signal",
   "consent_surface_required_deeper_sweep",
   "accept_flow_unavailable_after_reject",
   "reject_button_missing",
@@ -1639,6 +1644,16 @@ function hasCookieDisclosureGapBacking(packet: UnifiedFindingPacket) {
     packet.concernContext?.negativeEvidenceFlags.includes("blocked_or_interstitial_evidence_observed")
   ) {
     return false;
+  }
+
+  const vendorDisclosureReview = evaluateRuntimeVendorDisclosureEvidence({
+    runtimeVendorDisclosureEvidence: getEvidenceEntityValuesForKeys(packet, ["runtimeVendorDisclosureEvidence"])
+  });
+  if (
+    vendorDisclosureReview.disposition === "eligible" &&
+    runtimeVendorDisclosureHasPromotionCategory(vendorDisclosureReview.evidence)
+  ) {
+    return true;
   }
 
   const urls = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])];

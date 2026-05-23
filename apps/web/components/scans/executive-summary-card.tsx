@@ -400,6 +400,7 @@ const GDPR_EPRIVACY_REGULATORY_FINDING_IDS = new Set([
   "third_party_cookie_pre_consent",
   "analytics_cookie_pre_consent",
   "adtech_cookie_pre_consent",
+  "long_lived_cookie_retention_review",
   "rtb_cookie_sync_observed",
   "identifier_transmission_detected",
   "device_data_collection_detected",
@@ -425,6 +426,7 @@ const GDPR_EPRIVACY_REGULATORY_FINDING_IDS = new Set([
 
 const CCPA_CPRA_CIPA_REGULATORY_FINDING_IDS = new Set([
   "cpra_cba_opt_out_missing",
+  "long_lived_cookie_retention_review",
   "third_party_tracking_pre_consent",
   "cross_domain_identifier_sharing_observed",
   "identifier_transmission_detected",
@@ -1172,6 +1174,7 @@ export function buildRegulatoryLenses(
     (findingIds.has("pre_consent_tracking_detected") ||
       findingIds.has("rtb_cookie_sync_observed") ||
       findingIds.has("cookie_disclosure_gap") ||
+      findingIds.has("long_lived_cookie_retention_review") ||
       findingIds.has("reject_tracking_persists_after_reject") ||
       findingIds.has("third_party_tracking_pre_consent") ||
       findingIds.has("third_party_cookie_pre_consent") ||

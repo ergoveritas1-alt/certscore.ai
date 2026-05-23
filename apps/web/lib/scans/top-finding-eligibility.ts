@@ -424,6 +424,19 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         pushUnique(matchedCriteria, "gpc_ignored_with_advertising_or_sharing_context");
       }
       break;
+    case "long_lived_cookie_retention_review":
+      if (hasMeaningfulValue(details.cookieEvidence?.retainedRuntimeCookies)) {
+        pushUnique(matchedCriteria, "runtime_cookie_expiry_evidence");
+        pushUnique(matchedCriteria, "cookie_retention_review_threshold");
+      } else {
+        pushUnique(missingCorroborators, "runtime_cookie_expiry_evidence");
+        pushUnique(demotionReasons, "missing_cookie_duration");
+        forceEligibility = "audit_only";
+      }
+      if (finding.confidence === "moderate" && finding.severity !== "high") {
+        forceEligibility = "surface_only";
+      }
+      break;
     case "session_recording_services_detected":
     case "session_replay_present_with_sensitive_surfaces_observed":
     case "possible_session_replay_on_sensitive_input_surface":
@@ -624,6 +637,18 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
     case "reject_option_missing_or_hidden":
     case "asymmetric_consent_ui":
     case "consent_dark_patterns_detected": {
+      const lifecycleReview = asRecord(details.consentUiEvidence?.lifecycleReview);
+      if (lifecycleReview) {
+        const coverageStatus = getString(lifecycleReview, "coverageStatus");
+        if (coverageStatus === "usable") {
+          forceEligibility = "top_candidate";
+          pushUnique(matchedCriteria, "consent_revisit_control_absence_evidence");
+        } else {
+          forceEligibility = "audit_only";
+          pushUnique(demotionReasons, "limited_consent_revisit_control_coverage");
+        }
+        break;
+      }
       const runtimePath = asRecord(details.consentUiEvidence?.runtimePath);
       const overlayClassifier = getString(runtimePath, "unrelatedOverlayClassifier");
       const acceptDepth = getNumber(runtimePath, "observedAcceptPathDepth") ?? getNumber(runtimePath, "acceptClickDepth");

@@ -36,6 +36,7 @@ test("registry defines contracts for the high-risk finding set", () => {
       "cross_domain_identifier_sharing_observed",
 	      "dark_pattern_consent_signals_detected",
 	      "fingerprinting_observed",
+      "long_lived_cookie_retention_review",
 	      "non_essential_tracking_continued_after_reject",
 	      "policy_behavior_contradiction_detected",
 	      "pre_consent_tracking_detected",
@@ -1087,6 +1088,39 @@ test("session replay undisclosed without negative disclosure search is downgrade
 
   assert.equal(decision?.status, "downgrade");
   assert.ok(decision?.missingRequirements.includes("negativeEvidenceSearchScope"));
+});
+
+test("long-lived cookie retention review requires concrete runtime cookie duration evidence", () => {
+  const positive = evaluateFindingEvidenceContractForRawEvidence("cookie_retention_lifetime_review_signal", {
+    cookieRetentionEvidence: [
+      {
+        classification: "advertising/marketing",
+        cookieName: "_fbp",
+        domain: ".example.com",
+        durationDays: 540,
+        pageUrl: "https://example.com/",
+        sourceRequestUrl: "https://connect.facebook.net/en_US/fbevents.js",
+        thresholdBasis: "540 days observed against CertScore's 365-day cookie retention review threshold.",
+        vendor: "Meta"
+      }
+    ]
+  });
+  assert.equal(positive?.externalSurfacingEligibility, "eligible");
+  assert.equal(positive?.allowedNarrativeTier, "strong");
+
+  const missingDuration = evaluateFindingEvidenceContractForRawEvidence("cookie_retention_lifetime_review_signal", {
+    cookieRetentionEvidence: [
+      {
+        classification: "advertising/marketing",
+        cookieName: "_fbp",
+        domain: ".example.com",
+        pageUrl: "https://example.com/",
+        thresholdBasis: "Cookie name and domain retained without duration."
+      }
+    ]
+  });
+  assert.equal(missingDuration?.externalSurfacingEligibility, "audit_only");
+  assert.ok(missingDuration?.negativeEvidenceFlags.includes("missing_cookie_duration"));
 });
 
 test("RTB observed can surface as runtime RTB but not strong pre-consent RTB without timeline", () => {

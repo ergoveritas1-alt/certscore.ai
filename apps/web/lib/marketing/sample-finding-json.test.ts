@@ -124,6 +124,9 @@ test("illustrative public samples remain sanitized for client exposure", () => {
     getSampleFindingById("reject_tracking_persists_after_reject"),
     getSampleFindingById("rtb_cookie_sync_observed"),
     getSampleFindingById("cross_domain_identifier_sharing_observed"),
+    getSampleFindingById("cookie_disclosure_gap"),
+    getSampleFindingById("long_lived_cookie_retention_review"),
+    getSampleFindingById("policy_behavior_contradiction_detected"),
     getSampleFindingById("session_recording_services_detected"),
     getSampleFindingById("possible_session_replay_on_sensitive_input_surface"),
     getSampleFindingById("session_replay_present_with_sensitive_surfaces_observed"),
@@ -141,6 +144,13 @@ test("illustrative public samples remain sanitized for client exposure", () => {
 
   assert.equal(getSampleFindingById("rtb_cookie_sync_observed")?.payload.criticality, "high");
   assert.equal(getSampleFindingById("cross_domain_identifier_sharing_observed")?.payload.criticality, "high");
+  assert.match(JSON.stringify(getSampleFindingById("cookie_disclosure_gap")?.payload), /runtime_vendor_not_disclosed/);
+  assert.match(JSON.stringify(getSampleFindingById("cookie_disclosure_gap")?.payload), /policySurfacesSearched/);
+  assert.match(JSON.stringify(getSampleFindingById("policy_behavior_contradiction_detected")?.payload), /runtime_vendor_not_disclosed/);
+  assert.match(JSON.stringify(getSampleFindingById("policy_behavior_contradiction_detected")?.payload), /strongerFindingHandling/);
+  assert.equal(getSampleFindingById("long_lived_cookie_retention_review")?.label, "Long-lived cookie retention review");
+  assert.match(JSON.stringify(getSampleFindingById("long_lived_cookie_retention_review")?.payload), /cookieRetentionEvidence/);
+  assert.match(JSON.stringify(getSampleFindingById("long_lived_cookie_retention_review")?.payload), /CertScore product review threshold/);
   assert.equal(getSampleFindingById("third_party_cookie_pre_consent")?.label, "Third-party cookie or storage observed before consent");
   assert.equal(getSampleFindingById("session_recording_services_detected")?.label, "Session replay service signal observed");
   assert.equal(

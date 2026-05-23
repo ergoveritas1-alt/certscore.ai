@@ -136,6 +136,9 @@ test("homepage finding examples align with each finding subtype", () => {
   assert.match(findings.get("focus_management_issue")?.exampleEvidence[0]?.code ?? "", /rule=focus-management/);
   assert.match(findings.get("third_party_cookie_pre_consent")?.exampleEvidence[0]?.code ?? "", /artifact=storage_001/);
   assert.match(findings.get("cookie_disclosure_gap")?.exampleEvidence[0]?.code ?? "", /artifact=cookie_disclosure_001/);
+  assert.match(findings.get("cookie_disclosure_gap")?.exampleEvidence[0]?.code ?? "", /runtime_vendor_not_disclosed/);
+  assert.match(findings.get("long_lived_cookie_retention_review")?.exampleEvidence[0]?.code ?? "", /artifact=cookie_retention_001/);
+  assert.match(findings.get("long_lived_cookie_retention_review")?.exampleEvidence[0]?.code ?? "", /CertScore product review threshold/);
   assert.match(findings.get("reject_tracking_persists_after_reject")?.exampleEvidence[0]?.code ?? "", /artifact=req_002/);
   assert.match(findings.get("rtb_cookie_sync_observed")?.exampleEvidence[0]?.code ?? "", /artifact=req_003/);
   assert.match(findings.get("cross_domain_identifier_sharing_observed")?.exampleEvidence[0]?.code ?? "", /artifact=req_004/);
@@ -148,6 +151,7 @@ test("homepage finding examples align with each finding subtype", () => {
   assert.match(findings.get("forced_consent_interaction")?.exampleEvidence[0]?.code ?? "", /artifact=consent_ui_002/);
   assert.match(findings.get("asymmetric_consent_ui")?.exampleEvidence[0]?.code ?? "", /artifact=consent_ui_003/);
   assert.match(findings.get("consent_dark_patterns_detected")?.exampleEvidence[0]?.code ?? "", /artifact=consent_ui_004/);
+  assert.match(findings.get("policy_behavior_contradiction_detected")?.exampleEvidence[0]?.code ?? "", /runtime_vendor_not_disclosed/);
 });
 
 test("finding reference index is exactly the official executive top findings", () => {
