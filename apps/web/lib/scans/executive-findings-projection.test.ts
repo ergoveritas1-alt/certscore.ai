@@ -3207,7 +3207,7 @@ test("uses promotion-grade request classifications for pre-consent representativ
         snippets: [],
         sourceUrls: ["https://dpm.demdex.net/id?d_visid_ver=5"]
       },
-      primaryPageUrl: "https://dpm.demdex.net/id?d_visid_ver=5",
+      primaryPageUrl: "https://maps.googleapis.com/maps/api/js?key=abc&callback=initMap",
       sourceUrl: "https://dpm.demdex.net/id?d_visid_ver=5",
       severity: "high"
     })
@@ -3215,6 +3215,8 @@ test("uses promotion-grade request classifications for pre-consent representativ
 
   const finding = projection.findings.find((candidate) => candidate.id === "pre_consent_tracking_detected");
   assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://www.fandango.com/");
+  assert.match(finding?.shortSummary ?? "", /Adobe Analytics and LiveRamp/);
+  assert.doesNotMatch(finding?.shortSummary ?? "", /DoubleVerify|Google Ads|Magnite/);
   assert.deepEqual(
     finding?.evidenceDetails?.representativeRequests?.map((request) => ({
       url: request.url,

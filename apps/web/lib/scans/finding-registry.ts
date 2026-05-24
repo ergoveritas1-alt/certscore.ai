@@ -63,7 +63,18 @@ export type PreConsentTrackingEvidenceDetails = {
     url: string;
     hostname: string;
     vendor: string | null;
+    vendorName?: string | null;
     category: string | null;
+    vendorCategory?: string | null;
+    scannedPageUrl?: string | null;
+    registrableDomain?: string | null;
+    vendorAttributionBasis?: string | null;
+    consentActionMs?: number | null;
+    noConsentActionObserved?: boolean;
+    consentSurfaceObserved?: boolean | null;
+    consentInteractionRecorded?: boolean;
+    confidence?: number | string | null;
+    runtimePhase?: string | null;
     resourceType: string | null;
     firstSeenMs: number | null;
     thirdParty: boolean;

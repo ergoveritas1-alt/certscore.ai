@@ -1068,7 +1068,7 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
   }
 
   if (findingId === "pre_consent_tracking_detected" && evidenceDetails) {
-    const vendorNames = (evidenceDetails.vendors ?? []).map((vendor) => vendor.name).slice(0, 5);
+    const vendorNames = getPreconsentRepresentativeVendorNames(evidenceDetails).slice(0, 5);
     const firstRequest = evidenceDetails.representativeRequests?.[0];
     return uniqueStrings([
       vendorNames.length > 0
@@ -1240,7 +1240,7 @@ function getUrlHostname(value: string | null | undefined) {
 }
 
 const KNOWN_TRACKING_REQUEST_HOST_PATTERN =
-  /amazon-adsystem\.com|clarity\.ms|googletagmanager\.com|google-analytics\.com|googleadservices\.com|doubleclick\.net|demdex\.net|rlcdn\.com|quantummetric\.com|bat\.bing\.com|connect\.facebook\.net|licdn\.com|hotjar\.com|fullstory\.com|hs-scripts\.com/i;
+  /amazon-adsystem\.com|clarity\.ms|googletagmanager\.com|google-analytics\.com|googleadservices\.com|doubleclick\.net|demdex\.net|rlcdn\.com|quantummetric\.com|maps\.googleapis\.com|ajax\.googleapis\.com|cookielaw\.org|adobedtm\.com|jwplayer\.com|bat\.bing\.com|connect\.facebook\.net|licdn\.com|hotjar\.com|fullstory\.com|hs-scripts\.com/i;
 
 function isLikelyRuntimeRequestUrl(value: string | null | undefined) {
   if (!value || !/^https?:\/\//i.test(value)) {
@@ -1254,7 +1254,7 @@ function isLikelyRuntimeRequestUrl(value: string | null | undefined) {
       KNOWN_TRACKING_REQUEST_HOST_PATTERN.test(host) ||
       /\/(?:configs?|config|cdn-cgi\/trace)(?:$|[/?#])/i.test(path) ||
       /\.(?:js|mjs|json|gif|png|jpe?g|webp|svg|css|woff2?)(?:$|[?#])/i.test(path) ||
-      /\/(?:gtm\.js|collect|tag\/|pixel|tr|uet|bat\.js|fbevents|analytics\.js|clarity|events?)(?:$|[/?#])/i.test(path)
+      /\/(?:api\/js|gtm\.js|collect|tag\/|pixel|tr|uet|bat\.js|fbevents|analytics\.js|clarity|events?)(?:$|[/?#])/i.test(path)
     );
   } catch {
     return /(?:amazon-adsystem|clarity\.ms|googletagmanager|gtm\.js|collect|pixel|bat\.bing|fbevents|analytics\.js)/i.test(value);
@@ -1269,8 +1269,8 @@ function isSameAuditHost(value: string, auditedUrl: string | null) {
 
 function getAuditPageUrlCandidates(packet: UnifiedFindingDisplayPacket) {
   const initialCandidates = uniqueCaseInsensitiveStrings([
-    packet.primaryPageUrl,
     ...(packet.evidence?.pageUrls ?? []),
+    packet.primaryPageUrl,
     packet.sourceUrl
   ]).filter((url) => /^https?:\/\//i.test(url) && !isLikelyRuntimeRequestUrl(url));
   const auditedUrl = initialCandidates.find((url) => url === packet.primaryPageUrl) ?? initialCandidates[0] ?? null;
@@ -1526,6 +1526,19 @@ function buildPreConsentTimingAnalysis(input: {
     trackingBeforeConsentWindow,
     basis: `First third-party tracking request (${input.firstThirdPartyTrackingRequestMs}ms) occurred after CMP became visible (${input.cmpVisibleMs}ms) and before any recorded consent interaction.`
   };
+}
+
+function getPreconsentRepresentativeVendorNames(evidenceDetails: CertScoreFindingEvidenceDetails | undefined) {
+  const representativeVendors = uniqueStrings(
+    (evidenceDetails?.representativeRequests ?? []).flatMap((request) => [
+      request.vendor,
+      typeof request.vendorName === "string" ? request.vendorName : null
+    ])
+  ).filter(isDisplayVendorName);
+
+  return representativeVendors.length > 0
+    ? representativeVendors
+    : uniqueStrings((evidenceDetails?.vendors ?? []).map((vendor) => vendor.name)).filter(isDisplayVendorName);
 }
 
 function buildPreConsentTrackingEvidenceDetails(
@@ -3428,7 +3441,7 @@ function buildExecutiveShortSummary(
 ) {
   if (findingId === "pre_consent_tracking_detected") {
     const evidenceDetails = buildPreConsentTrackingEvidenceDetails(packet);
-    const vendors = (evidenceDetails?.vendors ?? []).map((vendor) => vendor.name).slice(0, 3);
+    const vendors = getPreconsentRepresentativeVendorNames(evidenceDetails).slice(0, 3);
     const timing = evidenceDetails?.timing?.firstThirdPartyTrackingRequestMs;
     const timingText = typeof timing === "number"
       ? ` The first classified tracking request occurred at ${timing}ms`
