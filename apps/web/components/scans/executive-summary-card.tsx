@@ -453,6 +453,14 @@ function DetailDisclosure(input: {
   );
 }
 
+function DisclosureChevronIcon(input?: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={input?.className ?? "h-4 w-4"} viewBox="0 0 20 20" fill="none">
+      <path d="M7 4L13 10L7 16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.25" />
+    </svg>
+  );
+}
+
 type RegulatoryLens = {
   acronym: string;
   detailTitle: string;
@@ -2204,22 +2212,9 @@ function RegulatoryLensFindingCard(input: {
               </span>
             ) : null}
           </span>
-          <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-400 hover:text-slate-700">
+          <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-500 shadow-sm transition-transform duration-150 group-open/json:rotate-90 group-hover/json:border-slate-400 group-hover/json:text-slate-700">
             <span className="sr-only">Show evidence JSON</span>
-            <svg
-              viewBox="0 0 24 24"
-              className="h-3.5 w-3.5"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              aria-hidden="true"
-            >
-              <path d="M8 4 4 12l4 8" />
-              <path d="M16 4l4 8-4 8" />
-              <path d="M14 3 10 21" />
-            </svg>
+            <DisclosureChevronIcon className="h-4 w-4" />
           </span>
         </summary>
         <div className="mt-3 space-y-3">

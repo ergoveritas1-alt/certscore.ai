@@ -2039,6 +2039,9 @@ test("ExecutiveSummaryCard links mapped findings to registry interpretation cont
 
   assert.match(html, /Regulatory review context/);
   assert.match(html, /Consent timing: tracking before recorded choice/);
+  assert.match(html, /Show evidence JSON/);
+  assert.match(html, /M7 4L13 10L7 16/);
+  assert.doesNotMatch(html, /M8 4 4 12l4 8/);
   assert.match(html, /Learn how this finding is interpreted/);
   assert.match(html, /Learn how CertScore interprets this finding/);
   assert.match(html, /href="\/findings\/pre_consent_tracking_detected"/);
