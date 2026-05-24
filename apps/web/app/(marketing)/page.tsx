@@ -185,18 +185,11 @@ export default async function MarketingHomePage() {
                 <DomainScanForm
                   buttonLabel="Scan a website"
                   emptySubmitDomain="kbdlab.io"
-                  helperText="CertScore will queue the domain, run a browser-based scan, and open the saved scan record when it is accepted."
                   inputLabel="Website to analyze"
                   inputPlaceholder="kbdlab.io"
                   mode="full"
                   scanSource="homepage"
                 />
-                <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
-                  <p className="font-semibold text-slate-950">Example finding</p>
-                  <p className="mt-2 font-medium">Tracking detected before consent on example.com</p>
-                  <p className="mt-1 text-slate-600">-&gt; 14 third-party requests fired before banner interaction</p>
-                  <p className="text-slate-600">-&gt; Vendors: Google Tag Manager, Meta</p>
-                </div>
               </CardContent>
             </Card>
 
