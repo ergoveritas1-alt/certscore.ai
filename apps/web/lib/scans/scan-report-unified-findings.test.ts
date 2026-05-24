@@ -176,7 +176,7 @@ test("contrast snapshot signal surfaces from persisted axe count and representat
     validationFindings: [],
     validationFindingLookup: new Map()
   });
-  const packet = packets.find((finding) => finding.unifiedFindingId === "contrast_failures");
+  const packet = packets.find((finding) => finding.unifiedFindingId === "visual_contrast_accessibility_issue");
 
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.evidence?.counts?.count, 2);

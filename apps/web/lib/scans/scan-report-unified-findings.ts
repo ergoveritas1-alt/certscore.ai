@@ -1523,7 +1523,9 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       );
     const navigationOrReloadAmbiguous =
       suppressionChecks?.navigation_or_reload_ambiguous === true && !attributionClearsNavigationAmbiguity;
-    const credibleRejectAttribution = hasCredibleRejectInteractionAttribution(rejectInteractionAttribution, consentInteraction);
+    const credibleRejectAttribution =
+      hasCredibleRejectInteractionAttribution(rejectInteractionAttribution, consentInteraction) ||
+      suppressionChecks?.reject_click_confirmed === true;
     const confirmed = promotionGradeRows.length > 0 &&
       credibleRejectAttribution &&
       suppressionChecks?.cmp_initialization_only !== true &&
@@ -1560,8 +1562,8 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         rejectInteractionAttribution,
         rejectPathDepthAndAvailability: rejectPath,
         runtimeEvidenceUrls,
+        runtimeRequestUrls: postRejectRequestUrls,
         runtimeVendors: [...new Set([...postRejectTrackerVendors, ...persistedTrackerVendors])],
-        sourceUrls: postRejectRequestUrls,
         postRejectNonEssentialRequests: postRejectRows,
         suppressionChecks,
         signalKey: "consent_reject_reduced_tracking",

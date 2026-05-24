@@ -79,6 +79,12 @@ import { buildCookiePolicyFallbackEvidence, type FetchQuality } from "./signal-f
 import { buildReviewFindingCandidatesFromMergedSignals } from "./merged-signals";
 import { buildScanDomainContext, type ScanDomainContext } from "./scan-domain-context";
 import {
+  getReportFacingScannedPageUrl,
+  getReportFacingScannedPageUrls,
+  isRuntimeRequestEvidenceUrl,
+  stripReportUrlAnnotation
+} from "./report-facing-page-url";
+import {
   formatRepresentativeAccessibilityCoverage,
   formatRepresentativeAccessibilityExampleSnippets,
   getRepresentativeAccessibilityExampleCoverage,
@@ -320,6 +326,8 @@ function normalizeUnifiedFindingEvidenceRecord(
   assignCanonicalField("consentSurfaceDiagnostics", ["consent_surface_diagnostics"]);
   assignCanonicalField("consentTimeline", ["consent_timeline"]);
   assignCanonicalField("requestPurposeClassificationConfidence", ["request_purpose_classification_confidence"]);
+  assignCanonicalField("runtimeRequestUrls", ["runtime_request_urls"]);
+  assignCanonicalField("sensitivePayloadViolations", ["sensitive_payload_violations"]);
   assignCanonicalField("blockingOverlayType", ["blocking_overlay_type"]);
   assignCanonicalField("overlayConfidence", ["overlay_confidence"]);
   assignCanonicalField("rejectDepthClass", ["reject_depth_class"]);
@@ -335,6 +343,7 @@ function normalizeUnifiedFindingEvidenceRecord(
     "consent_reject_post_reject_non_essential_requests"
   ]);
   assignCanonicalField("promotionDecision", ["promotion_decision"]);
+  assignCanonicalField("rejectEvidenceConfidence", ["reject_evidence_confidence"]);
   assignCanonicalField("rejectEvidenceDiff", ["reject_evidence_diff", "consent_reject_evidence_diff"]);
   assignCanonicalField("requestTimingBuckets", ["request_timing_buckets", "consent_reject_request_timing_buckets"]);
   assignCanonicalField("suppressionChecks", ["suppression_checks", "consent_reject_suppression_checks"]);
@@ -1956,19 +1965,28 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       ((contradictionEvidence?.runtimeAnchor.requests.length ?? 0) > 0) ||
       ((contradictionEvidence?.runtimeAnchor.cookies.length ?? 0) > 0) ||
       ((contradictionEvidence?.runtimeAnchor.storageArtifacts.length ?? 0) > 0));
-  const pageUrls = uniqueStrings([
+  const pageUrlCandidates = uniqueStrings([
     ...(Array.isArray(normalizedFallbackEvidence.pageUrls) ? (normalizedFallbackEvidence.pageUrls as string[]) : []),
     ...(contradictionEvidence?.policySourceUrl ? [contradictionEvidence.policySourceUrl] : []),
     typeof normalizedFallbackEvidence.pageUrl === "string" ? normalizedFallbackEvidence.pageUrl : null,
     typeof normalizedFallbackEvidence.consentBlockerUrl === "string" ? normalizedFallbackEvidence.consentBlockerUrl : null
   ]);
 
-  const sourceUrls = uniqueStrings([
+  const sourceUrlCandidates = uniqueStrings([
     ...(Array.isArray(normalizedFallbackEvidence.sourceUrls) ? (normalizedFallbackEvidence.sourceUrls as string[]) : []),
     ...(contradictionEvidence?.sourceUrls ?? []),
     typeof normalizedFallbackEvidence.sourceUrl === "string" ? normalizedFallbackEvidence.sourceUrl : null,
     typeof normalizedFallbackEvidence.pageUrl === "string" ? normalizedFallbackEvidence.pageUrl : null
   ]);
+  const pageUrls = pageUrlCandidates
+    .map(stripReportUrlAnnotation)
+    .filter((url) => /^https?:\/\//i.test(url) && !isRuntimeRequestEvidenceUrl(url));
+  const sourceUrls = sourceUrlCandidates
+    .map(stripReportUrlAnnotation)
+    .filter((url) => /^https?:\/\//i.test(url) && !isRuntimeRequestEvidenceUrl(url));
+  const sourceRuntimeRequestUrls = sourceUrlCandidates
+    .map(stripReportUrlAnnotation)
+    .filter((url) => /^https?:\/\//i.test(url) && isRuntimeRequestEvidenceUrl(url));
   const sensitivePayloadViolations = Array.isArray(normalizedFallbackEvidence.sensitivePayloadViolations)
     ? (normalizedFallbackEvidence.sensitivePayloadViolations as Array<Record<string, unknown>>)
     : [];
@@ -2348,6 +2366,7 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     ...(isPreconsentRuntimeSignal && Array.isArray(normalizedFallbackEvidence.sourceUrls)
       ? (normalizedFallbackEvidence.sourceUrls as string[])
       : []),
+    ...sourceRuntimeRequestUrls,
     ...(contradictionEvidence?.runtimeAnchor.requests ?? [])
   ]).filter(isConcreteHttpEvidenceUrl);
   if (runtimeRequestUrls.length > 0) {
@@ -2928,16 +2947,39 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
     }
     entities[key] = uniqueStrings([...(entities[key] ?? []), ...cleaned]);
   };
+  const addPageUrl = (value: string | null | undefined) => {
+    if (!value) {
+      return;
+    }
+    const normalizedValue = stripReportUrlAnnotation(value);
+    if (/^https?:\/\//i.test(normalizedValue) && !isRuntimeRequestEvidenceUrl(normalizedValue)) {
+      pageUrls.add(normalizedValue);
+    }
+  };
+  const addSourceUrl = (value: string | null | undefined) => {
+    if (!value) {
+      return;
+    }
+    const normalizedValue = stripReportUrlAnnotation(value);
+    if (!/^https?:\/\//i.test(normalizedValue)) {
+      return;
+    }
+    if (isRuntimeRequestEvidenceUrl(normalizedValue)) {
+      addEntity("runtimeRequestUrls", [normalizedValue]);
+      return;
+    }
+    sourceUrls.add(normalizedValue);
+  };
 
   for (const [key, value] of Object.entries(evidence)) {
     if (typeof value === "string") {
       if (/^https?:\/\//i.test(value.trim())) {
         if (key === "pageUrl") {
-          pageUrls.add(value);
+          addPageUrl(value);
         } else if (key === "sourceUrl") {
-          sourceUrls.add(value);
+          addSourceUrl(value);
         } else {
-          sourceUrls.add(value);
+          addSourceUrl(value);
         }
       } else if (key === "policyDsarMechanism" || key === "policy_dsar_mechanism") {
         addEntity("policyDsarMechanism", [value]);
@@ -2979,11 +3021,11 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
     if (stringValues.some((entry) => /^https?:\/\//i.test(entry.trim()))) {
       for (const entry of stringValues) {
         if (key === "pageUrls") {
-          pageUrls.add(entry);
+          addPageUrl(entry);
         } else if (key === "sourceUrls") {
-          sourceUrls.add(entry);
+          addSourceUrl(entry);
         } else {
-          sourceUrls.add(entry);
+          addSourceUrl(entry);
         }
       }
     } else if (key === "policyRightsSignals" || key === "policy_rights_signals") {
@@ -3029,7 +3071,7 @@ function mergeEvidence(
     .filter((entry) => !/^https?:\/\//i.test(entry.trim()))
     .filter(isReviewerFacingSnippet)
     .slice(0, 2);
-  const pageUrls = uniqueStrings([
+  const pageUrlCandidates = uniqueStrings([
     ...(current?.pageUrls ?? []),
     ...(next.pageUrls ?? []),
     ...(validationEvidence.pageUrls ?? []),
@@ -3037,11 +3079,26 @@ function mergeEvidence(
     linkedValidationFinding?.pageUrl ?? null
   ]);
 
-  const sourceUrls = uniqueStrings([
+  const sourceUrlCandidates = uniqueStrings([
     ...(current?.sourceUrls ?? []),
     ...(next.sourceUrls ?? []),
     ...(validationEvidence.sourceUrls ?? [])
   ]);
+  const pageUrls = pageUrlCandidates
+    .map(stripReportUrlAnnotation)
+    .filter((url) => /^https?:\/\//i.test(url) && !isRuntimeRequestEvidenceUrl(url));
+  const sourceUrls = sourceUrlCandidates
+    .map(stripReportUrlAnnotation)
+    .filter((url) => /^https?:\/\//i.test(url) && !isRuntimeRequestEvidenceUrl(url));
+  const runtimeRequestUrls = uniqueStrings([
+    ...(current?.entities?.runtimeRequestUrls ?? []),
+    ...(next.entities?.runtimeRequestUrls ?? []),
+    ...(validationEvidence.entities?.runtimeRequestUrls ?? []),
+    ...pageUrlCandidates,
+    ...sourceUrlCandidates
+  ])
+    .map(stripReportUrlAnnotation)
+    .filter((url) => /^https?:\/\//i.test(url) && isRuntimeRequestEvidenceUrl(url));
 
   const snippets = uniqueStrings([
     ...(current?.snippets ?? []),
@@ -3056,7 +3113,8 @@ function mergeEvidence(
     entities: {
       ...(current?.entities ?? {}),
       ...(next.entities ?? {}),
-      ...(validationEvidence.entities ?? {})
+      ...(validationEvidence.entities ?? {}),
+      ...(runtimeRequestUrls.length > 0 ? { runtimeRequestUrls } : {})
     },
     fetchQuality: current?.fetchQuality ?? next.fetchQuality ?? validationEvidence.fetchQuality ?? null,
     flags,
@@ -3476,6 +3534,22 @@ function sanitizeEvidenceForFinding(
       .filter((snippet): snippet is string => Boolean(snippet)),
     sourceUrls: [...(evidence.sourceUrls ?? [])]
   };
+  const runtimeRequestUrls = uniqueStrings([
+    ...(next.entities.runtimeRequestUrls ?? []),
+    ...next.pageUrls,
+    ...next.sourceUrls
+  ])
+    .map(stripReportUrlAnnotation)
+    .filter((url) => /^https?:\/\//i.test(url) && isRuntimeRequestEvidenceUrl(url));
+  next.pageUrls = uniqueStrings(next.pageUrls)
+    .map(stripReportUrlAnnotation)
+    .filter((url) => /^https?:\/\//i.test(url) && !isRuntimeRequestEvidenceUrl(url));
+  next.sourceUrls = uniqueStrings(next.sourceUrls)
+    .map(stripReportUrlAnnotation)
+    .filter((url) => /^https?:\/\//i.test(url) && !isRuntimeRequestEvidenceUrl(url));
+  if (runtimeRequestUrls.length > 0) {
+    next.entities.runtimeRequestUrls = runtimeRequestUrls;
+  }
 
   if (POSITIVE_SURFACE_FINDING_IDS.has(findingId)) {
     next.snippets = next.snippets.filter(
@@ -3941,11 +4015,12 @@ function normalizeSensitiveFieldType(value: string | null | undefined) {
   if (!value) {
     return null;
   }
-  const normalized = value.trim().replace(/_detected$/i, "").replace(/_/g, " ").toLowerCase();
+  const normalized = value.trim().replace(/_detected$/i, "").toLowerCase();
   if (!normalized) {
     return null;
   }
-  if (/business email|email/.test(normalized)) {
+  const readable = normalized.replace(/_/g, " ");
+  if (/business email|email/.test(readable)) {
     return "email";
   }
   return normalized;
@@ -6268,13 +6343,14 @@ function finalizeUnifiedFindingPacket(input: {
   });
   input.packet.evidence = sanitizeEvidenceForFinding(input.findingId, input.packet.evidence);
 
-  const attributedUrls = uniqueStrings([
-    ...(input.packet.evidence?.pageUrls ?? []),
-    ...(input.packet.evidence?.sourceUrls ?? []),
-    input.linkedValidationFinding?.pageUrl ?? null
-  ]);
+  const attributedPageUrls = getReportFacingScannedPageUrls(input.packet);
+  const linkedValidationPageUrl =
+    input.linkedValidationFinding?.pageUrl && !isRuntimeRequestEvidenceUrl(input.linkedValidationFinding.pageUrl)
+      ? stripReportUrlAnnotation(input.linkedValidationFinding.pageUrl)
+      : null;
+  const attributedUrls = uniqueStrings([...attributedPageUrls, linkedValidationPageUrl]);
 
-  input.packet.primaryPageUrl = attributedUrls[0] ?? null;
+  input.packet.primaryPageUrl = getReportFacingScannedPageUrl(input.packet) ?? attributedUrls[0] ?? null;
   input.packet.affectedPageCount = attributedUrls.length;
   input.packet.details = mergeUnifiedFindingDetails(
     input.packet.details,

@@ -43,7 +43,8 @@ export const TEXT_ALTERNATIVE_ACCESSIBILITY_RULE_IDS = new Set([
 ]);
 
 export const VISUAL_CONTRAST_ACCESSIBILITY_RULE_IDS = new Set([
-  "color-contrast"
+  "color-contrast",
+  "color-contrast-enhanced"
 ]);
 
 export const SEMANTIC_LABELING_ACCESSIBILITY_RULE_IDS = new Set([

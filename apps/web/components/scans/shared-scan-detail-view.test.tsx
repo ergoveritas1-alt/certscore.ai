@@ -581,6 +581,65 @@ test("review evidence export uses canonical projected status for reject persiste
   assert.doesNotMatch(JSON.stringify(summary), /Not projected as a canonical top finding/i);
 });
 
+test("review evidence export does not use runtime request URLs as scanned page URLs", async () => {
+  const buildReviewFindingSummaryJson = await loadBuildReviewFindingSummaryJson();
+  const summary = buildReviewFindingSummaryJson(makeReviewPacket({
+    evidence: {
+      counts: {},
+      entities: {
+        consentTimeline: [
+          JSON.stringify({
+            firstConsentActionMs: 6141,
+            firstCmpVisibleMs: 902
+          })
+        ],
+        requestPurposeClassificationConfidence: [
+          JSON.stringify({
+            classification: "non_essential",
+            confidence: 0.92,
+            firstSeenMs: 2936,
+            hostname: "dpm.demdex.net",
+            requestUrl: "https://dpm.demdex.net/id?d_orgid=abc&ts=123",
+            runtimePhase: "pre_consent",
+            vendorAttributionBasis: "consent_audit_tracker_evidence_url",
+            vendorCategory: "analytics",
+            vendorName: "Adobe Analytics"
+          })
+        ]
+      },
+      flags: ["privacy.preconsent_tracking_detected"],
+      pageUrls: [
+        "https://www.fandango.com/",
+        "https://cms.quantserve.com/pixel/p-vj4AYjBqd6VJ2.gif [query_redacted=true query_keys=idmatch,gdpr,gdpr_consent]"
+      ],
+      snippets: [],
+      sourceUrls: ["https://dpm.demdex.net/id [query_redacted=true query_keys=d_orgid,ts]"]
+    },
+    primaryPageUrl: "https://cms.quantserve.com/pixel/p-vj4AYjBqd6VJ2.gif [query_redacted=true query_keys=idmatch,gdpr,gdpr_consent]",
+    sourceRefs: [{ kind: "signal", key: "privacy.preconsent_tracking_detected", source: "runtime_artifact_signal" }],
+    summary: "Pre-consent tracking review candidate.",
+    title: "Third-party tracking observed before recorded consent",
+    topFindingEligibility: {
+      candidateTopFindingIds: ["pre_consent_tracking_detected"],
+      demotionReasons: ["no_consent_surface_observed"],
+      eligibility: "not_projected",
+      matchedCriteria: [],
+      missingCorroborators: ["runtime_request_anchor"],
+      suppressionReason: "no_consent_surface_observed"
+    },
+    unifiedFindingId: "preconsent_tracking"
+  }));
+
+  assert.equal(summary.primaryPageUrl, "https://www.fandango.com/");
+  assert.deepEqual((summary.evidence as { pageUrls: string[] }).pageUrls, ["https://www.fandango.com/"]);
+  assert.equal(
+    ((summary.evidence as { tracking: { representativePreConsentRequests: Array<{ scannedPageUrl: string | null }> } })
+      .tracking.representativePreConsentRequests[0]?.scannedPageUrl),
+    "https://www.fandango.com/"
+  );
+  assert.doesNotMatch(JSON.stringify(summary), /cms\.quantserve\.com\/pixel\/p-vj4AYjBqd6VJ2\.gif.*primaryPageUrl/);
+});
+
 test("review evidence export exposes sensitive-surface packet fields without implying payload exposure", async () => {
   const buildReviewFindingSummaryJson = await loadBuildReviewFindingSummaryJson();
   const summary = buildReviewFindingSummaryJson(makeReviewPacket({

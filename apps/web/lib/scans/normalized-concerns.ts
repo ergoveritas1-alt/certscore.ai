@@ -41,6 +41,10 @@ import {
   CONSENT_GOVERNANCE_DISCLOSURE_CONCERN_ID,
   getConsentGovernanceDisclosureEvidence
 } from "./consent-governance-disclosure";
+import {
+  isRuntimeRequestEvidenceUrl,
+  stripReportUrlAnnotation
+} from "./report-facing-page-url";
 
 import type { ReviewFindingSeverity } from "./canonical-review-finding";
 import { deriveConcernPolicy } from "./concern-policy";
@@ -330,6 +334,31 @@ function hasThirdPartyTrackingEvidence(rawEvidence: Record<string, unknown> | nu
   return false;
 }
 
+function hasRetainedSessionReplayRuntimeArtifactForSpecialization(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+  if (rawEvidence.session_replay_runtime_detected === true || rawEvidence.sessionReplayRuntimeDetected === true) {
+    return true;
+  }
+  if (rawEvidence.session_replay_vendor_artifact_present === true || rawEvidence.sessionReplayVendorArtifactPresent === true) {
+    return true;
+  }
+  const runtimeValues = [
+    ...getStringArrayEvidence(rawEvidence.session_replay_runtime_artifacts),
+    ...getStringArrayEvidence(rawEvidence.sessionReplayRuntimeArtifacts),
+    ...getStringArrayEvidence(rawEvidence.session_replay_runtime_vendors),
+    ...getStringArrayEvidence(rawEvidence.sessionReplayRuntimeVendors),
+    ...getStringArrayEvidence(rawEvidence.runtimeVendors)
+  ].join(" ");
+  return /fullstory|hotjar|clarity|contentsquare|mouseflow|smartlook|logrocket|sessioncam|quantummetric|glassbox|session[_ -]?replay/i.test(runtimeValues);
+}
+
+function hasSensitiveSessionReplayCorrelationLabel(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getPlainRecordArray(rawEvidence?.sensitivePayloadViolations)
+    .some((row) => getStringValue(row.evidenceSource ?? row.evidence_source) === "sensitive_field_session_replay_correlation");
+}
+
 function getPolicyArrayValue(rawEvidence: Record<string, unknown> | null | undefined, keys: string[]) {
   for (const key of keys) {
     const value = rawEvidence?.[key];
@@ -517,6 +546,28 @@ export function inferSpecializedUnifiedFindingId(input: {
   const currentId = input.currentSuggestedId ?? null;
   const title = (input.title ?? "").toLowerCase();
 
+  const keyboardIssueCount =
+    getNumberValue(rawEvidence?.wcagKeyboardNavigationIssueCount) ??
+    getNumberValue(rawEvidence?.wcag_keyboard_navigation_issue_count);
+  if (
+    typeof keyboardIssueCount === "number" &&
+    keyboardIssueCount >= 3 &&
+    (input.signalKey?.startsWith("accessibility.") || /keyboard|accessibility|wcag/i.test(title))
+  ) {
+    return "keyboard_only_task_completion_blocked";
+  }
+
+  const formLabelIssueCount =
+    getNumberValue(rawEvidence?.wcagFormLabelErrorCount) ??
+    getNumberValue(rawEvidence?.wcag_form_label_error_count);
+  if (
+    typeof formLabelIssueCount === "number" &&
+    formLabelIssueCount >= 3 &&
+    (input.signalKey?.startsWith("accessibility.") || /form|label|accessibility|wcag/i.test(title))
+  ) {
+    return "critical_form_completion_barrier";
+  }
+
   if (hasBehaviorReproducedFocusManagementEvidence(rawEvidence)) {
     return "focus_management_issue";
   }
@@ -538,7 +589,6 @@ export function inferSpecializedUnifiedFindingId(input: {
   if (
     splitAccessibilityFindingId &&
     (currentId === "accessibility_risk_score" ||
-      currentId === "contrast_failures" ||
       currentId === "form_label_issues" ||
       currentId === "link_name_issues" ||
       currentId === "keyboard_navigation_issues" ||
@@ -561,7 +611,24 @@ export function inferSpecializedUnifiedFindingId(input: {
     getStringValue(rawEvidence?.policySummaryShort)
   ].filter((value): value is string => Boolean(value));
 
-  const hasSensitivePayload = hasConcreteSensitivePayloadArtifact(rawEvidence);
+  const runtimeRequestUrlsForSpecialization = uniqueStrings([
+    ...getStringArrayEvidence(rawEvidence?.runtimeRequestUrls),
+    ...getStringArrayEvidence(rawEvidence?.runtime_request_urls),
+    ...getStringArrayEvidence(rawEvidence?.sourceUrls).filter(isRuntimeRequestEvidenceUrl),
+    ...getStringArrayEvidence(rawEvidence?.source_urls).filter(isRuntimeRequestEvidenceUrl),
+    ...getStringArrayEvidence(rawEvidence?.requestUrls),
+    ...getStringArrayEvidence(rawEvidence?.request_urls),
+    ...getPlainRecordArray(rawEvidence?.sensitivePayloadViolations)
+      .flatMap((row) => getStringValue(row.requestUrl ?? row.request_url) ?? [])
+  ]).map(stripReportUrlAnnotation);
+  const specializationEvidence =
+    runtimeRequestUrlsForSpecialization.length > 0
+      ? {
+          ...(rawEvidence ?? {}),
+          runtimeRequestUrls: runtimeRequestUrlsForSpecialization
+        }
+      : rawEvidence;
+  const hasSensitivePayload = hasConcreteSensitivePayloadArtifact(specializationEvidence);
   if (
     hasSensitivePayload &&
     (input.signalKey === "commerce.high_sensitivity_data_collection_detected" ||
@@ -571,15 +638,24 @@ export function inferSpecializedUnifiedFindingId(input: {
       input.signalKey === "commerce.form_collects_geolocation" ||
       input.signalKey === "commerce.form_collects_ssn")
   ) {
-    if (hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(rawEvidence)) {
+    if (
+      hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(specializationEvidence) ||
+      hasSensitiveSessionReplayCorrelationLabel(specializationEvidence)
+    ) {
       return "possible_session_replay_on_sensitive_input_surface";
     }
 
-    if (hasScanLevelSensitiveSessionReplayCoPresenceArtifact(rawEvidence)) {
+    if (
+      hasScanLevelSensitiveSessionReplayCoPresenceArtifact(specializationEvidence) ||
+      (
+        rawEvidence?.signalKey === undefined &&
+        hasRetainedSessionReplayRuntimeArtifactForSpecialization(specializationEvidence)
+      )
+    ) {
       return "session_replay_present_with_sensitive_surfaces_observed";
     }
 
-    if (hasThirdPartyTrackingEvidence(rawEvidence)) {
+    if (hasThirdPartyTrackingEvidence(specializationEvidence)) {
       return "sensitive_data_collection_with_third_party_tracking_present";
     }
 
@@ -695,9 +771,32 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
   const runtimeVendorDisclosureEvidence = getRuntimeVendorDisclosureEvidence(rawEvidence);
   const consentControlLifecycleEvidence = getConsentControlLifecycleEvidence(rawEvidence);
   const consentGovernanceDisclosureEvidence = getConsentGovernanceDisclosureEvidence(rawEvidence);
+  const addPageUrl = (value: string | null | undefined) => {
+    if (!value) {
+      return;
+    }
+    const normalizedValue = stripReportUrlAnnotation(value);
+    if (/^https?:\/\//i.test(normalizedValue) && !isRuntimeRequestEvidenceUrl(normalizedValue)) {
+      pageUrls.add(normalizedValue);
+    }
+  };
+  const addSourceUrl = (value: string | null | undefined) => {
+    if (!value) {
+      return;
+    }
+    const normalizedValue = stripReportUrlAnnotation(value);
+    if (!/^https?:\/\//i.test(normalizedValue)) {
+      return;
+    }
+    if (isRuntimeRequestEvidenceUrl(normalizedValue)) {
+      addEntity(entities, "runtimeRequestUrls", [normalizedValue]);
+      return;
+    }
+    sourceUrls.add(normalizedValue);
+  };
 
   for (const cookie of cookieRetentionEvidence) {
-    pageUrls.add(cookie.pageUrl);
+    addPageUrl(cookie.pageUrl);
     addEntity(entities, "cookieRetentionEvidence", [JSON.stringify(cookie)]);
     addEntity(entities, "runtime_cookie_names", [cookie.name]);
     addEntity(entities, "runtime_cookie_categories", [cookie.classification ?? cookie.category]);
@@ -706,7 +805,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       addEntity(entities, "runtimeVendors", [cookie.vendor]);
     }
     if (cookie.sourceRequestUrl) {
-      sourceUrls.add(cookie.sourceRequestUrl);
+      addSourceUrl(cookie.sourceRequestUrl);
       addEntity(entities, "runtimeRequestUrls", [cookie.sourceRequestUrl]);
     }
     runtimeArtifacts.add(
@@ -729,16 +828,16 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     addEntity(entities, "mismatchRationale", [evidence.mismatchRationale]);
     addEntity(entities, "runtimeVendorCategories", evidence.categories ?? []);
     if (evidence.cookiePolicyUrl) {
-      sourceUrls.add(evidence.cookiePolicyUrl);
+      addSourceUrl(evidence.cookiePolicyUrl);
       addEntity(entities, "policySourceUrl", [evidence.cookiePolicyUrl]);
     }
     if (evidence.privacyPolicyUrl) {
-      sourceUrls.add(evidence.privacyPolicyUrl);
+      addSourceUrl(evidence.privacyPolicyUrl);
       addEntity(entities, "policySourceUrl", [evidence.privacyPolicyUrl]);
     }
     for (const surface of evidence.policySurfacesSearched) {
       if (surface.url) {
-        sourceUrls.add(surface.url);
+        addSourceUrl(surface.url);
       }
     }
     if (evidence.mismatchRationale) {
@@ -784,10 +883,10 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       ...(consentGovernanceDisclosureEvidence.supportingAnchors.cookiePolicyUrls ?? []),
       ...(consentGovernanceDisclosureEvidence.supportingAnchors.preferenceCenterUrls ?? [])
     ]) {
-      sourceUrls.add(url);
+      addSourceUrl(url);
     }
     for (const anchor of consentGovernanceDisclosureEvidence.supportingAnchors.textAnchors ?? []) {
-      sourceUrls.add(anchor.url);
+      addSourceUrl(anchor.url);
       if (anchor.snippet) {
         policySnippets.add(truncatePolicySnippet(anchor.snippet));
       }
@@ -825,7 +924,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     const destinationClassification = getStringValue(row.destinationClassification ?? row.destination_classification);
     const matchType = getStringValue(row.matchType ?? row.match_type);
     if (pageUrl) {
-      pageUrls.add(pageUrl);
+      addPageUrl(pageUrl);
     }
     addEntity(entities, "preSubmitTextCaptureRequestDomains", requestDomain ? [requestDomain] : []);
     addEntity(entities, "preSubmitTextCaptureClassifications", destinationClassification ? [destinationClassification] : []);
@@ -859,7 +958,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       ];
 
       if (pageUrl) {
-        pageUrls.add(pageUrl);
+        addPageUrl(pageUrl);
       }
       addEntity(entities, "accessibilityRuleCodes", ruleCode ? [ruleCode] : []);
       addEntity(entities, "accessibilityRuleGroups", ruleGroup ? [ruleGroup] : []);
@@ -881,9 +980,9 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     if (typeof value === "string") {
       if (/^https?:\/\//i.test(value.trim())) {
         if (/pageurl|page_url/i.test(key)) {
-          pageUrls.add(value);
+          addPageUrl(value);
         } else {
-          sourceUrls.add(value);
+          addSourceUrl(value);
         }
       } else if (/policyDsarMechanism|policy_dsar_mechanism/i.test(key)) {
         addEntity(entities, "policyDsarMechanism", [value]);
@@ -1034,9 +1133,9 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     if (stringValues.some((entry) => /^https?:\/\//i.test(entry.trim()))) {
       for (const entry of stringValues) {
         if (/pageurl|page_url/i.test(key)) {
-          pageUrls.add(entry);
+          addPageUrl(entry);
         } else {
-          sourceUrls.add(entry);
+          addSourceUrl(entry);
         }
       }
       continue;
@@ -1176,13 +1275,25 @@ function mergeRawEvidenceWithConcernBundle(
   bundle: NormalizedConcernEvidenceBundle
 ) {
   const existingEntities = getRecordValue(rawEvidence.entities);
-  const sourceUrls = uniqueStrings([...getStringArrayEvidence(rawEvidence.sourceUrls), ...bundle.sourceUrls]);
-  const pageUrls = uniqueStrings([...getStringArrayEvidence(rawEvidence.pageUrls), ...bundle.pageUrls]);
+  const runtimeRequestUrls = uniqueStrings([
+    ...getStringArrayEvidence(existingEntities.runtimeRequestUrls),
+    ...getStringArrayEvidence(rawEvidence.runtimeRequestUrls),
+    ...getStringArrayEvidence(rawEvidence.requestUrls),
+    ...getStringArrayEvidence(rawEvidence.preconsent_tracker_evidence_urls),
+    ...getStringArrayEvidence(rawEvidence.sourceUrls).filter(isRuntimeRequestEvidenceUrl),
+    ...bundle.sourceUrls.filter(isRuntimeRequestEvidenceUrl)
+  ]).map(stripReportUrlAnnotation);
+  const sourceUrls = uniqueStrings([...getStringArrayEvidence(rawEvidence.sourceUrls), ...bundle.sourceUrls])
+    .map(stripReportUrlAnnotation)
+    .filter((url) => /^https?:\/\//i.test(url) && !isRuntimeRequestEvidenceUrl(url));
+  const pageUrls = uniqueStrings([...getStringArrayEvidence(rawEvidence.pageUrls), ...bundle.pageUrls])
+    .map(stripReportUrlAnnotation)
+    .filter((url) => /^https?:\/\//i.test(url) && !isRuntimeRequestEvidenceUrl(url));
 
   return {
     ...rawEvidence,
-    ...(Object.keys(bundle.entities).length > 0 || Object.keys(existingEntities).length > 0
-      ? { entities: { ...existingEntities, ...bundle.entities } }
+    ...(Object.keys(bundle.entities).length > 0 || Object.keys(existingEntities).length > 0 || runtimeRequestUrls.length > 0
+      ? { entities: { ...existingEntities, ...bundle.entities, ...(runtimeRequestUrls.length > 0 ? { runtimeRequestUrls } : {}) } }
       : {}),
     ...(pageUrls.length > 0 ? { pageUrls } : {}),
     ...(sourceUrls.length > 0 ? { sourceUrls } : {})
@@ -1431,6 +1542,9 @@ function deriveEvidenceStrengthFlags(input: {
     flags.add("direct_runtime");
   }
   if (hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(input.rawEvidence)) {
+    flags.add("direct_runtime");
+  }
+  if (hasSensitiveSessionReplayCorrelationLabel(input.rawEvidence)) {
     flags.add("direct_runtime");
   }
   if (input.bundle.policySnippets.length > 0) {

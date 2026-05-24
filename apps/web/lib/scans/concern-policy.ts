@@ -16,6 +16,7 @@ import {
   getFinancialValidationEvidenceBundle,
   isFinancialValidationFindingId
 } from "./financial-validation-contract";
+import { isRuntimeRequestEvidenceUrl } from "./report-facing-page-url";
 import { getStoredFinancialJudgeOutput } from "./financial-judge-contract";
 import {
   evaluateConcreteRuntimeContract,
@@ -64,6 +65,10 @@ import {
 import {
   evaluateFindingEvidenceContractForRawEvidence
 } from "./finding-evidence-contracts";
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
+}
 
 const ACCESSIBILITY_PAGE_ATTRIBUTION_IDS = new Set([
   "wcag_issue_summary",
@@ -251,15 +256,23 @@ function getEvidenceTextCandidates(rawEvidence: Record<string, unknown> | null |
 function getEvidenceUrlCandidates(rawEvidence: Record<string, unknown> | null | undefined) {
   return getStringArrayValues(rawEvidence, [
     "attemptedUrls",
+    "cookiePolicyUrl",
+    "cookie_policy_url",
     "evidenceUrls",
     "pageUrl",
     "pageUrls",
+    "policySourceUrl",
+    "policy_source_url",
+    "policyUrl",
+    "policy_url",
     "preconsent_tracker_evidence_urls",
+    "privacyPolicyUrl",
+    "privacy_policy_url",
     "requestUrls",
     "runtimeEvidenceUrls",
     "sourceUrl",
     "sourceUrls"
-  ]).filter((value) => /^https?:\/\//i.test(value));
+  ]).filter((value) => /^https?:\/\//i.test(value) && !isRuntimeRequestEvidenceUrl(value));
 }
 
 function hasBlockedOrInterstitialEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -1141,7 +1154,7 @@ function hasConfirmedRejectTimingEvidence(rawEvidence: Record<string, unknown> |
     "rejectPathDepthAndAvailability",
     "reject_path_depth_and_availability"
   ]);
-  if (!hasCredibleRejectInteractionAttribution(rawEvidence)) {
+  if (!hasCredibleRejectInteractionAttribution(rawEvidence) && suppressionChecks?.reject_click_confirmed !== true) {
     return false;
   }
   const rejectSucceeded =
@@ -1281,7 +1294,7 @@ function hasStrongPostRejectTrackerVendorEvidence(rawEvidence: Record<string, un
     "rejectPathDepthAndAvailability",
     "reject_path_depth_and_availability"
   ]);
-  if (!hasCredibleRejectInteractionAttribution(rawEvidence)) {
+  if (!hasCredibleRejectInteractionAttribution(rawEvidence) && suppressionChecks?.reject_click_confirmed !== true) {
     return false;
   }
   const rejectSucceeded =
@@ -1304,9 +1317,23 @@ function hasStrongPostRejectTrackerVendorEvidence(rawEvidence: Record<string, un
   const postRejectEvidenceUrls = getStringArrayValues(rawEvidence, [
     "consentPostRejectTrackerEvidenceUrls",
     "consent_post_reject_tracker_evidence_urls",
+    "runtimeRequestUrls",
+    "runtime_request_urls",
     "runtimeEvidenceUrls",
     "runtime_evidence_urls"
-  ]).filter((url) => /^https?:\/\//i.test(url));
+  ]);
+  const postRejectRowEvidenceUrls = getObjectArrayEvidence(rawEvidence, [
+    "postRejectNonEssentialRequests",
+    "post_reject_non_essential_requests",
+    "consentRejectPostRejectNonEssentialRequests",
+    "consent_reject_post_reject_non_essential_requests"
+  ]).flatMap((row) =>
+    getFirstString(row, ["url", "requestUrl", "request_url", "urlSample", "url_sample"]) ?? []
+  );
+  const postRejectEvidenceUrlCount = uniqueStrings([
+    ...postRejectEvidenceUrls,
+    ...postRejectRowEvidenceUrls
+  ]).filter((url) => /^https?:\/\//i.test(url)).length;
   const thirdPartyCookiesAddedAfterReject = getThirdPartyAddedAfterRejectCookieCount(rawEvidence);
   const namedTrackerVendors = getStringArrayValues(rawEvidence, [
     "persisted_tracker_vendors",
@@ -1319,7 +1346,13 @@ function hasStrongPostRejectTrackerVendorEvidence(rawEvidence: Record<string, un
 
   return (
     namedTrackerVendors.length > 0 &&
-    (postRejectEvidenceUrls.length >= 5 || (postRejectEvidenceUrls.length >= 3 && thirdPartyCookiesAddedAfterReject >= 3))
+    (postRejectEvidenceUrlCount >= 5 || (postRejectEvidenceUrlCount >= 3 && thirdPartyCookiesAddedAfterReject >= 3))
+  );
+}
+
+function hasSensitiveSessionReplayCorrelationLabel(rawEvidence: Record<string, unknown> | null | undefined) {
+  return getObjectArrayEvidence(rawEvidence, ["sensitivePayloadViolations", "sensitive_payload_violations"]).some((row) =>
+    getFirstString(row, ["evidenceSource", "evidence_source"]) === "sensitive_field_session_replay_correlation"
   );
 }
 
@@ -2025,7 +2058,7 @@ function hasStrongCoverageGapSurfaceMissingEvidence(
   const hasConcreteReviewerEvidence =
     input.evidenceStrengthFlags.includes("page_attributed") ||
     attemptedUrls.length > 0 ||
-    (Array.isArray(input.rawEvidence?.sourceUrls) && input.rawEvidence.sourceUrls.length > 0) ||
+    getEvidenceUrlCandidates(input.rawEvidence).length > 0 ||
     (Array.isArray(input.rawEvidence?.policySnippets) && input.rawEvidence.policySnippets.length > 0);
 
   if (presenceValue !== false && !explicitAbsenceConfirmation) {
@@ -2188,12 +2221,35 @@ export function deriveConcernPolicy(input: {
   if (suggestedUnifiedFindingId === "cookie_disclosure_gap") {
     const review = evaluateRuntimeVendorDisclosureEvidence(input.rawEvidence, "cookie_disclosure_gap");
     if (review.evidence.length > 0) {
+      const hasSubstantiveCookieGap =
+        getBooleanEvidence(input.rawEvidence, ["disclosureMismatchExplained", "disclosure_mismatch_explained"]) === true &&
+        getEvidenceUrlCandidates(input.rawEvidence).length > 0 &&
+        getStringArrayValues(input.rawEvidence, [
+          "unmatched_cookie_names",
+          "unmatchedCookieNames",
+          "runtime_cookie_names",
+          "runtimeCookieNames"
+        ]).some((name) => !/^(awsalbcors?|optanon|onetrust|cookieconsent)/i.test(name));
       return {
-        allowedNarrativeTier: review.disposition === "eligible" && review.confidence === "strong" ? "strong" : "moderate",
-        externalSurfacingEligibility: review.disposition === "eligible" ? "eligible" : review.disposition,
-        negativeEvidenceFlags: review.negativeEvidenceFlags as NormalizedConcernNegativeEvidenceFlag[],
-        promotionEligibility:
-          review.disposition === "eligible" ? "eligible" : review.disposition === "audit_only" ? "internal_only" : "blocked"
+        allowedNarrativeTier:
+          (review.disposition === "eligible" && review.confidence === "strong") || hasSubstantiveCookieGap
+            ? "strong"
+            : "moderate",
+        externalSurfacingEligibility: hasSubstantiveCookieGap
+          ? "eligible"
+          : review.disposition === "eligible"
+            ? "eligible"
+            : review.disposition,
+        negativeEvidenceFlags: hasSubstantiveCookieGap
+          ? []
+          : review.negativeEvidenceFlags as NormalizedConcernNegativeEvidenceFlag[],
+        promotionEligibility: hasSubstantiveCookieGap
+          ? "eligible"
+          : review.disposition === "eligible"
+            ? "eligible"
+            : review.disposition === "audit_only"
+              ? "internal_only"
+              : "blocked"
       };
     }
   }
@@ -2260,10 +2316,33 @@ export function deriveConcernPolicy(input: {
     }
   }
 
-  if (concernRequiresDirectRuntime(input.concern)) {
+  if (isRejectTrackingPersistenceConcern(input.concern)) {
+    const hasConfirmedTiming = hasConfirmedRejectTimingEvidence(input.rawEvidence);
+
+    if (!hasConfirmedTiming) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_post_reject_timing_evidence"],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: "strong",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
+  if (concernRequiresDirectRuntime(input.concern) && !isRejectTrackingPersistenceConcern(input.concern)) {
     const hasSensitiveReplayCooccurrenceRuntime =
       isSensitiveReplayConcern(input.concern) &&
-      hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(input.rawEvidence);
+      (
+        hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(input.rawEvidence) ||
+        hasSensitiveSessionReplayCorrelationLabel(input.rawEvidence)
+      );
     const hasScanLevelSensitiveReplayRuntime =
       isScanLevelSensitiveReplayConcern(input.concern) &&
       hasScanLevelSensitiveSessionReplayCoPresenceArtifact(input.rawEvidence);
@@ -2305,6 +2384,13 @@ export function deriveConcernPolicy(input: {
     !(
       (isConsentDarkPatternConcern(input.concern) || isForcedConsentInteractionConcern(input.concern)) &&
       hasConcreteDarkPatternChildEvidence(input.rawEvidence)
+    ) &&
+    !(
+      isSensitiveReplayConcern(input.concern) &&
+      (
+        hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(input.rawEvidence) ||
+        hasSensitiveSessionReplayCorrelationLabel(input.rawEvidence)
+      )
     )
   ) {
     return {
@@ -2458,7 +2544,20 @@ export function deriveConcernPolicy(input: {
 
   if (
     isSensitiveReplayConcern(input.concern) &&
-    !hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(input.rawEvidence)
+    hasSensitiveSessionReplayCorrelationLabel(input.rawEvidence)
+  ) {
+    return {
+      allowedNarrativeTier: "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
+  if (
+    isSensitiveReplayConcern(input.concern) &&
+    !hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(input.rawEvidence) &&
+    !hasSensitiveSessionReplayCorrelationLabel(input.rawEvidence)
   ) {
     return {
       allowedNarrativeTier: "weak",

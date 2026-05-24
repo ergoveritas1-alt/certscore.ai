@@ -1077,7 +1077,8 @@ test("surfaces GPC failures from runtime privacy family packets", () => {
   assert.equal(packet?.unifiedFindingId, "gpc_signal_not_honored");
   assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
   assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.deepEqual(packet?.evidence?.sourceUrls, ["https://example.com/collect"]);
+  assert.deepEqual(packet?.evidence?.sourceUrls, []);
+  assert.deepEqual(packet?.evidence?.entities?.runtimeRequestUrls, ["https://example.com/collect"]);
   assert.equal(packet?.evidence?.counts?.gpcTrackerCount, 3);
 });
 
@@ -2224,6 +2225,44 @@ test("keeps pre-consent tracking audit-only when concrete runtime vendors and UR
     )
   );
   assert.equal(packet?.presentation.confidenceScore, "0.45");
+});
+
+test("keeps runtime request URLs out of unified finding page attribution", () => {
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "A retained state-0 pre-consent request artifact exists.",
+        evidence: ["https://cms.quantserve.com/pixel/p-vj4AYjBqd6VJ2.gif?idmatch=0&gdpr=0"],
+        fallbackEvidence: {
+          pageUrls: [
+            "https://www.fandango.com/",
+            "https://cms.quantserve.com/pixel/p-vj4AYjBqd6VJ2.gif [query_redacted=true query_keys=idmatch,gdpr]"
+          ],
+          preconsent_tracker_evidence_urls: ["https://dpm.demdex.net/id [query_redacted=true query_keys=d_orgid,ts]"],
+          signalKey: "privacy.preconsent_tracking_detected",
+          signalValue: true,
+          sourceUrls: ["https://maps.googleapis.com/maps/api/js [query_redacted=true query_keys=key,callback]"]
+        },
+        observedValue: "Request observed before consent.",
+        severity: "medium",
+        signalKey: "privacy.preconsent_tracking_detected",
+        signalLabel: "Pre-consent tracking detected",
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: "Pre-consent tracking detected"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  assert.equal(packet?.primaryPageUrl, "https://www.fandango.com/");
+  assert.deepEqual(packet?.evidence?.pageUrls, ["https://www.fandango.com/"]);
+  assert.deepEqual(packet?.evidence?.sourceUrls, []);
+  assert.ok(packet?.evidence?.entities?.runtimeRequestUrls?.includes("https://dpm.demdex.net/id"));
+  assert.ok(
+    packet?.evidence?.entities?.runtimeRequestUrls?.includes("https://cms.quantserve.com/pixel/p-vj4AYjBqd6VJ2.gif?idmatch=0&gdpr=0")
+  );
 });
 
 test("surfaces RTB cookie sync with compact request-level evidence", () => {

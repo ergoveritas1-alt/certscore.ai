@@ -51,6 +51,12 @@ import {
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { getHybridRuntimeEvidence } from "../../lib/scans/hybrid-runtime-evidence";
 import { buildPromotionGradePreconsentRequests } from "../../lib/scans/preconsent-public-evidence";
+import {
+  getReportFacingScannedPageUrl,
+  getReportFacingScannedPageUrls,
+  isRuntimeRequestEvidenceUrl,
+  stripReportUrlAnnotation
+} from "../../lib/scans/report-facing-page-url";
 import { buildSupplementalRuntimeUnifiedFindingPackets } from "../../lib/scans/supplemental-runtime-unified-findings";
 import {
   findMergedSignalValue,
@@ -1348,11 +1354,14 @@ function renderCanonicalTaxonomyReviewSafely(input: CanonicalTaxonomyReviewProps
 function ReviewFindingLinks(input: { finding: UnifiedFindingDisplayPacket }) {
   const findingReferenceHref = getFindingReferenceHrefForReportFindingId(input.finding.unifiedFindingId);
   const fallbackNote = getPublicReportFindingFallbackNote(input.finding.unifiedFindingId);
+  const sourceHref = input.finding.sourceUrl && !isRuntimeRequestEvidenceUrl(input.finding.sourceUrl)
+    ? stripReportUrlAnnotation(input.finding.sourceUrl)
+    : null;
   const shouldShowReferenceLink =
     input.finding.referenceUrl &&
     input.finding.referenceUrl !== input.finding.presentation.suggestedBestPractice?.url;
 
-  if (!input.finding.sourceUrl && !shouldShowReferenceLink && !findingReferenceHref && !fallbackNote) {
+  if (!sourceHref && !shouldShowReferenceLink && !findingReferenceHref && !fallbackNote) {
     return null;
   }
 
@@ -1374,9 +1383,9 @@ function ReviewFindingLinks(input: { finding: UnifiedFindingDisplayPacket }) {
           {fallbackNote}
         </span>
       ) : null}
-      {input.finding.sourceUrl ? (
+      {sourceHref ? (
         <Link
-          href={input.finding.sourceUrl}
+          href={sourceHref}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-700"
@@ -1417,11 +1426,13 @@ function formatValidationSupport(finding: UnifiedFindingDisplayPacket) {
 }
 
 function formatFindingPageLabel(pageUrl: string) {
+  const normalizedPageUrl = stripReportUrlAnnotation(pageUrl);
   try {
-    const parsed = new URL(pageUrl);
+    const parsed = new URL(normalizedPageUrl);
     const host = parsed.hostname.toLowerCase();
     const pathname = parsed.pathname.trim();
     const looksLikeTrackingRequest =
+      isRuntimeRequestEvidenceUrl(normalizedPageUrl) ||
       parsed.search.length > 80 ||
       pathname.includes("/collect") ||
       pathname.includes("/g/collect") ||
@@ -1443,8 +1454,9 @@ function formatFindingPageLabel(pageUrl: string) {
 }
 
 function getFindingPageAttributionSummary(finding: UnifiedFindingDisplayPacket) {
-  if (finding.primaryPageUrl) {
-    const pageLabel = formatFindingPageLabel(finding.primaryPageUrl);
+  const reportFacingPageUrl = getReportFacingScannedPageUrl(finding);
+  if (reportFacingPageUrl) {
+    const pageLabel = formatFindingPageLabel(reportFacingPageUrl);
     if (pageLabel && finding.affectedPageCount > 1) {
       return `Seen on ${finding.affectedPageCount} pages including ${pageLabel}.`;
     }
@@ -1841,7 +1853,8 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
 }
 
 function summarizeEvidence(packet: UnifiedFindingDisplayPacket) {
-  const primaryPageLabel = packet.primaryPageUrl ? formatFindingPageLabel(packet.primaryPageUrl) : null;
+  const reportFacingPageUrl = getReportFacingScannedPageUrl(packet);
+  const primaryPageLabel = reportFacingPageUrl ? formatFindingPageLabel(reportFacingPageUrl) : null;
   const parts = [
     primaryPageLabel
       ? packet.affectedPageCount > 1
@@ -3873,9 +3886,10 @@ function buildTrackingEvidenceExport(finding: UnifiedFindingDisplayPacket) {
     ...parseEntityObjectSamples(entities?.requestPurposeClassificationConfidence, 5),
     ...parseEntityObjectSamples(entities?.request_purpose_classification_confidence, 5)
   ];
+  const reportFacingPageUrl = getReportFacingScannedPageUrl(finding);
   const promotionGradeRows = buildPromotionGradePreconsentRequests({
     rows: requestRows,
-    scannedPageUrl: finding.evidence?.pageUrls?.[0] ?? finding.primaryPageUrl ?? null,
+    scannedPageUrl: reportFacingPageUrl,
     consentTimeline,
     maxItems: 5
   });
@@ -4007,7 +4021,7 @@ function buildDisclosureEvidenceExport(finding: UnifiedFindingDisplayPacket) {
       "privacy_contact_channel_type"
     ]),
     matchedSnippet: finding.evidence?.snippets?.[0] ?? null,
-    pageUrl: finding.primaryPageUrl ?? finding.evidence?.pageUrls?.[0] ?? null
+    pageUrl: getReportFacingScannedPageUrl(finding)
   };
 }
 
@@ -4205,6 +4219,8 @@ function buildReviewPacketProjectionDiagnostics(finding: UnifiedFindingDisplayPa
 }
 
 export function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPacket) {
+  const reportFacingPageUrl = getReportFacingScannedPageUrl(finding);
+  const reportFacingPageUrls = getReportFacingScannedPageUrls(finding).slice(0, 3);
   const display = getPublicReportFindingDisplay({
     confidence: finding.confidenceBand,
     findingId: finding.unifiedFindingId,
@@ -4235,7 +4251,7 @@ export function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPack
     confidenceBand: finding.confidenceBand,
     summary: projectionCopy.summary,
     observedValue,
-    primaryPageUrl: finding.primaryPageUrl ?? null,
+    primaryPageUrl: reportFacingPageUrl,
     affectedPageCount: finding.affectedPageCount,
     presentation: {
       findingName: display.title,
@@ -4245,7 +4261,7 @@ export function buildReviewFindingSummaryJson(finding: UnifiedFindingDisplayPack
     evidence: {
       counts: finding.evidence?.counts ?? {},
       flags: (finding.evidence?.flags ?? []).slice(0, 6),
-      pageUrls: (finding.evidence?.pageUrls ?? []).slice(0, 3),
+      pageUrls: reportFacingPageUrls,
       snippets: (finding.evidence?.snippets ?? []).slice(0, 2).map((snippet) => truncateJsonSample(snippet, 220)),
       entities: buildEntitySamples(finding.evidence?.entities, { maxKeys: 4, maxValues: 3, maxLength: 140 }),
       consentUi: buildConsentUiEvidenceExport(finding),
