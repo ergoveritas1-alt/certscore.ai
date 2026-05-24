@@ -14,7 +14,6 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { ScanCompletedEvent } from "../analytics/data-layer-events";
-import { CopyJsonButton } from "./copy-json-button";
 import { CookieStoragePanel } from "./cookie-storage-panel";
 import { DiagnosticsPanel } from "./diagnostics-panel";
 import { EvidenceJsonBlock } from "./evidence-json-block";
@@ -1817,34 +1816,18 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
               </ul>
             </div>
           ) : null}
-          <details className="group/json">
-            <summary className="flex cursor-pointer list-none items-center gap-2 marker:hidden [&::-webkit-details-marker]:hidden">
-              <span
-                aria-hidden="true"
-                className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-slate-500"
-                title="Show technical JSON"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M8 4 4 12l4 8" />
-                  <path d="M16 4l4 8-4 8" />
-                  <path d="M14 3 10 21" />
-                </svg>
+          <details className="group/json rounded-lg border border-slate-200/80 bg-white/70 px-3 py-2">
+            <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
+              <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/json:rotate-90">
+                <DisclosureChevron />
               </span>
+              <span>Technical JSON</span>
             </summary>
-            <div className="relative mt-2">
-              <CopyJsonButton payload={findingJsonPayload} label="Copy evidence JSON" />
-              <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-white p-3 pr-12 text-[11px] leading-5 text-slate-600">
-                {findingJsonPayload}
-              </pre>
-            </div>
+            <EvidenceJsonBlock
+              payload={findingJsonPayload}
+              className="relative mt-2 max-w-full overflow-hidden rounded-lg bg-slate-950"
+              preClassName="max-w-full overflow-x-auto whitespace-pre-wrap break-words p-3 pr-12 text-[11px] leading-5 text-slate-100"
+            />
           </details>
         </div>
       </details>

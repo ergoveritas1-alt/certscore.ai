@@ -4135,8 +4135,8 @@ export function ExecutiveSummaryCard(input: {
                 const criticalityBadge = display.criticality;
                 const cardTone = getFindingCardTone(finding, index === 0, criticalityBadge);
                 return (
-                <div key={finding.id} className={`overflow-hidden rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${cardTone.card}`}>
-                  <div className={`h-1 w-full ${cardTone.band}`} />
+                <div key={finding.id} className={`overflow-visible rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${cardTone.card}`}>
+                  <div className={`h-1 w-full rounded-t-[1.4rem] ${cardTone.band}`} />
                   <div className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
