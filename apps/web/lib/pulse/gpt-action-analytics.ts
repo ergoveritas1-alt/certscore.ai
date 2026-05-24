@@ -99,7 +99,7 @@ export function logPulseGptActionEvent(event: string, fields: GptActionEventFiel
     wasCached: fields.wasCached,
     freshness: fields.freshness,
     coverageStatus: fields.coverageStatus,
-    topFindingIds: Array.isArray(fields.topFindingIds) ? fields.topFindingIds.slice(0, 10) : undefined,
+    topFindingIds: Array.isArray(fields.topFindingIds) ? fields.topFindingIds : undefined,
     highPriorityFindingCount: fields.highPriorityFindingCount,
     totalObservationCount: fields.totalObservationCount,
     errorCode: fields.errorCode,

@@ -48,7 +48,7 @@ const copyPasteExamples = [
     command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&forceNewScan=true"`
   },
   {
-    command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&wait=60"`
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&wait=35"`
   },
   {
     command: `curl "https://certscore.ai/api/v1/pulse/status/<jobId>"`
@@ -506,7 +506,7 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
    url: <public URL>
    format: markdown
    detail: standard
-   wait: 60
+   wait: 35
 3. Use detail=tiny for quick checks.
 4. Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans.
 5. If API fetch fails before headers/body/status are visible, call checkPulseConnectivity once.
@@ -527,7 +527,7 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
               </Link>
               <Link
                 className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
-                href="/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60"
+                href="/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=35"
               >
                 Open GPT Action beta example
               </Link>

@@ -476,7 +476,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const packets = buildScanReportUnifiedFindings(input.scanRecord);
   const executive = projectExecutiveFindingsFromUnifiedPackets(packets);
   const allFindings = executive.findings;
-  const topFindings = executive.topFindings.slice(0, input.detail === "tiny" ? 3 : 5).map((finding) => toPulseFinding(finding, scan.id));
+  const topFindings = executive.topFindings.map((finding) => toPulseFinding(finding, scan.id));
   const benchmark = input.scanRecord.domainBenchmark
     ? `${input.scanRecord.domainBenchmark.industry} / ${input.scanRecord.domainBenchmark.estimatedRankLabel}`
     : null;

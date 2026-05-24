@@ -1440,33 +1440,7 @@ export async function loadOrganizationScanPageData(
     ? query<OrganizationScanSnapshotRow>(
         `
           select
-            scan_id,
-            total_signals,
-            certscore_overall,
-            regulatory_exposure_score,
-            privacy_score,
-            consent_score,
-            accessibility_score,
-            cookie_banner_present,
-            cmp_vendor_name,
-            homepage_fetch_http_status,
-            homepage_fetch_status,
-            robots_allowed,
-            robots_fetch_http_status,
-            robots_fetch_status,
-            blocked_flag,
-            captcha_flag,
-            auth_wall_detected,
-            scan_outcome,
-            stop_reason_code,
-            stop_reason_label,
-            stop_reason_detail,
-            stop_reason_http_status,
-            report_finding_count,
-            access_posture_class,
-            highest_successful_tier,
-            stop_tier,
-            recoverable_finding_classes
+            *
           from scan_snapshots
           where scan_id = any($1::uuid[])
         `,
@@ -1483,29 +1457,7 @@ export async function loadOrganizationScanPageData(
     ? query<OrganizationScanSnapshotRow>(
         `
           select
-            scan_id,
-            total_signals,
-            certscore_overall,
-            regulatory_exposure_score,
-            privacy_score,
-            consent_score,
-            accessibility_score,
-            cookie_banner_present,
-            cmp_vendor_name,
-            homepage_fetch_http_status,
-            homepage_fetch_status,
-            robots_allowed,
-            robots_fetch_http_status,
-            robots_fetch_status,
-            blocked_flag,
-            captcha_flag,
-            auth_wall_detected,
-            scan_outcome,
-            stop_reason_code,
-            stop_reason_label,
-            stop_reason_detail,
-            stop_reason_http_status,
-            report_finding_count
+            *
           from scan_snapshots
           where scan_id = any($1::uuid[])
         `,
@@ -1522,12 +1474,7 @@ export async function loadOrganizationScanPageData(
     ? query<OrganizationRuntimeArtifactRow>(
         `
           select
-            scan_id,
-            consent_audit_completed,
-            consent_reject_interaction_succeeded,
-            consent_reject_reduced_tracking,
-            consent_reject_reduced_third_party_cookies,
-            hybrid_runtime_evidence
+            *
           from scan_runtime_artifacts
           where scan_id = any($1::uuid[])
         `,

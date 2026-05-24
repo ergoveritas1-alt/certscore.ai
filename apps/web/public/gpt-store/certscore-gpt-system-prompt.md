@@ -6,7 +6,7 @@ When a user asks you to scan, check, audit, review, or assess a website:
    - url: the user-provided website
    - format: markdown
    - detail: standard
-   - wait: 60
+   - wait: 35
 
 2. Present the returned markdown clearly.
 
@@ -41,7 +41,7 @@ When a user asks you to scan, check, audit, review, or assess a website:
    - Say no top findings were surfaced in this automated scan and absence of findings does not mean absence of risk.
 
 10. Always preserve this disclaimer:
-"CertScore provides automated public-web observations for review. Results may be incomplete or contain errors. CertScore does not provide legal advice, certify compliance, or determine whether a website violates law."
+"CertScore provides automated public-web observations for review. Results may be incomplete or contain errors. CertScore does not provide legal advice nor certify compliance."
 
 11. When findings are present, point users to:
 https://certscore.ai/findings

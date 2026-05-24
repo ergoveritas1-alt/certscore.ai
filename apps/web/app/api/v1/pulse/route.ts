@@ -40,6 +40,7 @@ export const revalidate = 0;
 const SCAN_ID_PATTERN = /^[0-9a-f-]{32,36}$/i;
 const GPT_ACTION_HOURLY_LIMIT = 5;
 const GPT_ACTION_DAILY_LIMIT = 20;
+const GPT_ACTION_MAX_WAIT_SECONDS = 35;
 
 type PulseRouteOptions = {
   gptAction?: boolean;
@@ -152,7 +153,7 @@ async function buildAndLogCompletedPulse(input: {
     responseSummary: {
       score: pulse.summary?.score ?? null,
       riskLevel: pulse.summary?.riskLevel ?? null,
-      topFindingIds: Array.isArray(pulse.topFindings) ? pulse.topFindings.map((finding: any) => finding.id).slice(0, 10) : [],
+      topFindingIds: Array.isArray(pulse.topFindings) ? pulse.topFindings.map((finding: any) => finding.id) : [],
       coverageStatus: pulse.coverage?.status ?? null
     }
   }).catch((error) => console.error("[pulse] request completion update failed", error));
@@ -195,13 +196,13 @@ function parseGptPulseFormat(url: URL) {
 function parseGptPulseWaitSeconds(url: URL) {
   const value = url.searchParams.get("wait");
   if (!value) {
-    return 60;
+    return GPT_ACTION_MAX_WAIT_SECONDS;
   }
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) {
-    return 60;
+    return GPT_ACTION_MAX_WAIT_SECONDS;
   }
-  return Math.max(0, Math.min(60, parsed));
+  return Math.max(0, Math.min(GPT_ACTION_MAX_WAIT_SECONDS, parsed));
 }
 
 async function checkGptActionLimit(ipHash: string | null) {

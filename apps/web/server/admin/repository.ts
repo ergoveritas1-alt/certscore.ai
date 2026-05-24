@@ -80,6 +80,11 @@ export type AdminScanSnapshotRow = {
   verified_public_surfaces_count?: number | null;
 };
 
+export type AdminRuntimeArtifactRow = {
+  scan_id: string;
+  [key: string]: unknown;
+};
+
 export type AdminValidationRunSummaryRow = {
   created_at: string;
   finding_count: number;
@@ -316,6 +321,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
   organizations: AdminScanOrganizationRow[];
   policyEnrichmentRows: AdminPolicyEnrichmentRow[];
   resolvedSnapshots: AdminScanSnapshotRow[];
+  runtimeArtifacts: AdminRuntimeArtifactRow[];
   scanRows: AdminScanQueryRow[];
   validationFindingRows: AdminValidationFindingSummaryRow[];
   validationRuns: AdminValidationRunSummaryRow[];
@@ -360,9 +366,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
   if (scanIds.length) {
     try {
       const snapshotsResult = await query<AdminScanSnapshotRow>(
-        `select scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status,
-                robots_fetch_http_status, blocked_flag, captcha_flag, access_posture_class,
-                highest_successful_tier, stop_tier, recoverable_finding_classes, egress_id, egress_type
+        `select *
            from scan_snapshots
           where scan_id = any($1::uuid[])`,
         [scanIds],
@@ -372,8 +376,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
     } catch (error) {
       if (isMissingTieredSnapshotColumn({ message: getErrorMessage(error) })) {
         const fallback = await query<AdminScanSnapshotRow>(
-          `select scan_id, total_signals, certscore_overall, report_finding_count, homepage_fetch_http_status,
-                  robots_fetch_http_status, blocked_flag, captcha_flag, egress_id, egress_type
+          `select *
              from scan_snapshots
             where scan_id = any($1::uuid[])`,
           [scanIds],
@@ -389,6 +392,20 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
       } else {
         throw new Error(`Failed to load scans: ${getErrorMessage(error)}`);
       }
+    }
+  }
+
+  const runtimeArtifacts: AdminRuntimeArtifactRow[] = [];
+  if (scanIds.length) {
+    for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
+      const result = await query<AdminRuntimeArtifactRow>(
+        `select *
+           from scan_runtime_artifacts
+          where scan_id = any($1::uuid[])`,
+        [scanIdBatch],
+        { readOnly: true }
+      );
+      runtimeArtifacts.push(...result.rows);
     }
   }
 
@@ -498,6 +515,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
     organizations: organizationsResult.rows,
     policyEnrichmentRows,
     resolvedSnapshots,
+    runtimeArtifacts,
     scanRows,
     validationFindingRows,
     validationRuns,

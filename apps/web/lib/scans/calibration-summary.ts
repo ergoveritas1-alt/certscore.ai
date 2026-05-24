@@ -670,7 +670,7 @@ export function buildScanCalibrationSummary(input: {
     requestedHost: input.requestedHost,
     scanId: input.scanId,
     status: input.status,
-    topFindings: input.topFindings.slice(0, 5).map((finding) => ({
+    topFindings: input.topFindings.map((finding) => ({
       confidence: finding.confidence,
       id: finding.id,
       label: finding.label,

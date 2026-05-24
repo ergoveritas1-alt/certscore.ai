@@ -1,6 +1,9 @@
 "use server";
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
+import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
+import { getAnonymousScanById } from "../scans/get-scan-by-id";
 import { ensurePulseTables } from "../pulse/schema";
 import { requirePlatformAdminContext } from "./platform-admin";
 
@@ -95,10 +98,12 @@ function getRequestContextString(value: unknown, key: string) {
   return typeof nested === "string" && nested.trim().length > 0 ? nested.trim() : null;
 }
 
-function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestListItem {
+function mapPulseRequestRow(row: Record<string, unknown>, topFindingIdsByScanId: Map<string, string[]> = new Map()): AdminPulseRequestListItem {
   const requestContext = asRecord(row.request_context);
   const requestedBy = asRecord(row.requested_by);
   const responseSummary = asRecord(row.response_summary);
+  const scanId = typeof row.scan_id === "string" ? row.scan_id : null;
+  const storedTopFindingIds = asStringArray(responseSummary.topFindingIds);
   return {
     completedAt: typeof row.completed_at === "string" ? row.completed_at : null,
     createdAt: String(row.created_at),
@@ -115,7 +120,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     resolutionMode: typeof row.resolution_mode === "string" ? row.resolution_mode : null,
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
-    scanId: typeof row.scan_id === "string" ? row.scan_id : null,
+    scanId,
     requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
     requestedByAnonymous: typeof requestedBy.anonymous === "boolean" ? requestedBy.anonymous : null,
     sourceIp: getRequestContextString(requestContext, "sourceIp"),
@@ -123,7 +128,52 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     status: String(row.status),
     snapshotFindingCount: typeof row.snapshot_finding_count === "number" ? row.snapshot_finding_count : null,
     snapshotTotalSignals: typeof row.snapshot_total_signals === "number" ? row.snapshot_total_signals : null,
-    topFindingIds: asStringArray(responseSummary.topFindingIds)
+    topFindingIds: storedTopFindingIds.length > 0 || !scanId ? storedTopFindingIds : (topFindingIdsByScanId.get(scanId) ?? [])
+  };
+}
+
+async function loadTopFindingIdsByScanId(rows: Record<string, unknown>[]) {
+  const scanIds = [
+    ...new Set(
+      rows.flatMap((row) => {
+        const responseSummary = asRecord(row.response_summary);
+        if (asStringArray(responseSummary.topFindingIds).length > 0) {
+          return [];
+        }
+        return typeof row.scan_id === "string" && row.scan_id.trim().length > 0 ? [row.scan_id] : [];
+      })
+    )
+  ];
+  const topFindingIdsByScanId = new Map<string, string[]>();
+  await Promise.all(
+    scanIds.map(async (scanId) => {
+      const scanRecord = await getAnonymousScanById(scanId).catch(() => null);
+      if (!scanRecord) {
+        return;
+      }
+      const packets = buildScanReportUnifiedFindingsForScan(scanRecord);
+      topFindingIdsByScanId.set(scanId, projectExecutiveFindingsFromUnifiedPackets(packets).topFindings.map((finding) => finding.id));
+    })
+  );
+  return topFindingIdsByScanId;
+}
+
+function buildDisplayResponseSummary(input: {
+  base: AdminPulseRequestListItem;
+  raw: unknown;
+}) {
+  const responseSummary = input.raw ? asRecord(input.raw) : null;
+  if (!responseSummary) {
+    return null;
+  }
+
+  return {
+    ...responseSummary,
+    topFindingIds: input.base.topFindingIds,
+    topFindingCount: input.base.topFindingIds.length,
+    findingCount: input.base.snapshotFindingCount,
+    scanId: input.base.scanId,
+    totalSignals: input.base.snapshotTotalSignals
   };
 }
 
@@ -211,7 +261,8 @@ export async function listAdminPulseRequests(input: {
     { readOnly: true }
   );
 
-  return rows.rows.map(mapPulseRequestRow);
+  const topFindingIdsByScanId = await loadTopFindingIdsByScanId(rows.rows);
+  return rows.rows.map((row) => mapPulseRequestRow(row, topFindingIdsByScanId));
 }
 
 export async function getAdminPulseRequestDetail(pulseRequestId: string): Promise<AdminPulseRequestDetail | null> {
@@ -282,7 +333,8 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
     return null;
   }
 
-  const base = mapPulseRequestRow(request);
+  const topFindingIdsByScanId = await loadTopFindingIdsByScanId([request]);
+  const base = mapPulseRequestRow(request, topFindingIdsByScanId);
   return {
     ...base,
     apiVersion: String(request.api_version),
@@ -297,7 +349,7 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
     requestedByAnonymous: typeof asRecord(request.requested_by).anonymous === "boolean" ? (asRecord(request.requested_by).anonymous as boolean) : null,
     requestedBy: asRecord(request.requested_by),
     requestType: String(request.request_type),
-    responseSummary: request.response_summary ? asRecord(request.response_summary) : null,
+    responseSummary: buildDisplayResponseSummary({ base, raw: request.response_summary }),
     retryAfterSeconds: typeof request.retry_after_seconds === "number" ? request.retry_after_seconds : null,
     schemaVersion: String(request.schema_version),
     throttleReason: typeof request.throttle_reason === "string" ? request.throttle_reason : null,
@@ -348,5 +400,6 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
     { readOnly: true }
   );
 
-  return rows.rows.map(mapPulseRequestRow);
+  const topFindingIdsByScanId = await loadTopFindingIdsByScanId(rows.rows);
+  return rows.rows.map((row) => mapPulseRequestRow(row, topFindingIdsByScanId));
 }

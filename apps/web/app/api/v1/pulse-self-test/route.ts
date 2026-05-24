@@ -1,5 +1,5 @@
 const standardDisclaimer =
-  "CertScore provides automated public-web observations for review. Results may be incomplete or contain errors. CertScore does not provide legal advice, certify compliance, or determine whether a website violates law. Always review the underlying evidence and consult qualified counsel or subject-matter experts where appropriate.";
+  "CertScore provides automated public-web observations for review. Results may be incomplete or contain errors. CertScore does not provide legal advice nor certify compliance. Always review the underlying evidence and consult qualified experts where appropriate.";
 
 const capabilities = {
   method: "automated_runtime_analysis",

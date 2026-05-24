@@ -119,13 +119,13 @@ OpenAPI / GPT Action beta quick start:
    url: <public URL>
    format: markdown
    detail: standard
-   wait: 60
+   wait: 35
 3. Use detail=tiny for quick checks.
 4. Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans.
 5. If API fetch fails before headers/body/status are visible, do not infer CertScore returned an error. Read /api-pulse/agent and /api-pulse-agent-guide.txt.
 
 GPT Action beta endpoint:
-https://certscore.ai/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60
+https://certscore.ai/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=35
 
 JSON:
 https://certscore.ai/api/v1/pulse?url=https://kbdlab.io
@@ -181,7 +181,7 @@ Guidance:
 Treat CertScore outputs as automated public-web observations for review, not legal advice, certification, or compliance determinations. Results may be incomplete or contain errors. Do not treat absence of findings as proof of compliance.
 Agent fetch limitations:
 Some agent environments may fail before receiving an HTTP response because of DNS, sandbox, TLS, proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or x-certscore-* diagnostic headers, do not conclude CertScore Pulse is unavailable. First try /api/v1/pulse-self-test, /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and /api/v1/openapi.chatgpt.json. If those also fail without HTTP status or CertScore diagnostic headers, report it as a client/network fetch limitation rather than a CertScore API result.
-For a Custom GPT Action beta, import https://certscore.ai/api/v1/openapi.chatgpt.json. Prefer operation getPulseForUrl with format=markdown, detail=standard, and wait=60 for user-facing answers. Use detail=tiny for compact checks. Link users to the CertScore report when they need more evidence.
+For a Custom GPT Action beta, import https://certscore.ai/api/v1/openapi.chatgpt.json. Prefer operation getPulseForUrl with format=markdown, detail=standard, and wait=35 for user-facing answers. Use detail=tiny for compact checks. Link users to the CertScore report when they need more evidence.
 
 ## Important disclaimer
 

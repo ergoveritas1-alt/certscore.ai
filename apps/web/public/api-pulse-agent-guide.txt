@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-19
 
-CertScore Pulse provides automated public-web observations for review. CertScore does not provide legal advice, certify compliance, or determine whether a website violates law.
+CertScore Pulse provides automated public-web observations for review. CertScore does not provide legal advice nor certify compliance.
 
 This is beta software. The current Pulse API beta version is 0.5.1.
 
@@ -41,7 +41,7 @@ OpenAPI / GPT Action beta quick start:
    url: <public URL>
    format: markdown
    detail: standard
-   wait: 60
+   wait: 35
 3. Use detail=tiny for quick checks.
 4. Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans.
 5. If API fetch fails before headers/body/status are visible, call checkPulseConnectivity once.
@@ -49,7 +49,7 @@ OpenAPI / GPT Action beta quick start:
 7. If checkPulseConnectivity also fails without CertScore diagnostic headers, do not infer CertScore returned an error. Report it as a client/network fetch limitation and read /api-pulse/agent and /api-pulse-agent-guide.txt.
 
 GPT Action beta endpoint:
-https://certscore.ai/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60
+https://certscore.ai/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=35
 
 Canonical documentation:
 https://certscore.ai/api-pulse
@@ -124,10 +124,10 @@ Use guidance:
 - Use detail=standard for default agent summaries.
 - Use detail=full when structured finding, evidence, review lens, coverage, and benchmark context are needed.
 - Use format=markdown when a tool handles readable text better than JSON.
-- For a Custom GPT Action beta, import https://certscore.ai/api/v1/openapi.chatgpt.json and use getPulseForUrl with format=markdown, detail=standard, wait=60.
+- For a Custom GPT Action beta, import https://certscore.ai/api/v1/openapi.chatgpt.json and use getPulseForUrl with format=markdown, detail=standard, wait=35.
 - Treat the response as automated public-web observations for review.
 - Do not treat absence of findings as proof of compliance.
-- Review the linked evidence and consult qualified counsel or subject-matter experts where appropriate.
+- Review the linked evidence and consult qualified experts where appropriate.
 
 Support:
 support@certscore.ai

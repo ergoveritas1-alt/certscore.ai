@@ -7,7 +7,7 @@ export const PULSE_FEEDBACK_EMAIL = "support@certscore.ai";
 export const PULSE_MAX_RECOMMENDED_AGE_HOURS = 168;
 
 export const PULSE_STANDARD_DISCLAIMER =
-  "CertScore provides automated public-web observations for review. Results may be incomplete or contain errors. CertScore does not provide legal advice, certify compliance, or determine whether a website violates law. Always review the underlying evidence and consult qualified counsel or subject-matter experts where appropriate.";
+  "CertScore provides automated public-web observations for review. Results may be incomplete or contain errors. CertScore does not provide legal advice nor certify compliance. Always review the underlying evidence and consult qualified experts where appropriate.";
 
 export const PULSE_SHORT_DISCLAIMER =
   "Automated public-web observations for review. Not legal advice, certification, or a compliance determination.";

@@ -10,6 +10,7 @@ import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary
 import { deriveUnverifiedHomepageReason } from "../../lib/scans/unverified-homepage-reason";
 import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
+import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import {
@@ -498,7 +499,28 @@ async function loadOrganizationScans(
       scan.id,
       displayPackets.filter((finding) => finding.presentationDecision.status !== "suppress").length
     );
-    topFindingCountMap.set(scan.id, projectExecutiveFindingsFromUnifiedPackets(displayPackets).topFindings.length);
+    const fullReportPackets = buildScanReportUnifiedFindingsForScan({
+      accessibilityRuleCounts: [],
+      accessibilityRuleExamples: [],
+      events: repairedEvents,
+      macroEnrichment: null,
+      mergedSignals: mergedSignalsByScanId.get(scan.id) ?? [],
+      pageEvidence: [],
+      policyEnrichment: policyEnrichmentMap.get(scan.id) ?? [],
+      policyReviewQueue: [],
+      preconsentViolations: [],
+      primaryPolicyEnrichment: null,
+      runtimeArtifacts: runtimeArtifactMap.get(scan.id) ?? null,
+      signalHits: [],
+      signals: [],
+      snapshot: snapshotMap.get(scan.id) ?? null,
+      trackerVendors: [],
+      validationFindings
+    });
+    topFindingCountMap.set(
+      scan.id,
+      projectExecutiveFindingsFromUnifiedPackets(fullReportPackets.length > 0 ? fullReportPackets : displayPackets).topFindings.length
+    );
   }
   const changeMap = new Map<
     string,

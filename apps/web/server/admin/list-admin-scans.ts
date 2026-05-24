@@ -4,7 +4,9 @@ import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } f
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
+import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
+import { withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { deriveDisplayCreatedAt } from "../scans/display-state";
 import { loadMergedSignalsByScanId } from "../scans/merged-signal-summary";
@@ -22,6 +24,7 @@ import {
   type AdminScanQueryRow as ScanRow,
   type AdminScanRequestRow as ScanRequestRow,
   type AdminScanSnapshotRow as SnapshotRow,
+  type AdminRuntimeArtifactRow as RuntimeArtifactRow,
   type AdminValidationFindingSummaryRow as ValidationFindingSummaryRow,
   type AdminValidationRunSummaryRow as ValidationRunSummaryRow,
   type AdminValidationVerdictRow as ValidationVerdictRow
@@ -100,6 +103,7 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
     organizations,
     policyEnrichmentRows,
     resolvedSnapshots,
+    runtimeArtifacts,
     scanRows,
     validationFindingRows,
     validationRuns,
@@ -110,6 +114,12 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
   const organizationMap = new Map(organizations.flatMap((organization) => (organization.id ? [[organization.id, organization] as const] : [])));
   const snapshotMap = new Map(
     resolvedSnapshots.flatMap((snapshot) => (snapshot.scan_id ? [[snapshot.scan_id, snapshot] as const] : []))
+  );
+  const runtimeArtifactMap = new Map(
+    runtimeArtifacts.map((artifact) => [
+      artifact.scan_id,
+      withHybridRuntimeArtifactFallbacks(artifact as Record<string, unknown>) as RuntimeArtifactRow
+    ])
   );
   const findingCountMap = new Map<string, number>();
   for (const validationRun of validationRuns) {
@@ -218,7 +228,28 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       scan.id,
       displayPackets.filter((finding) => finding.presentationDecision.status !== "suppress").length
     );
-    topFindingCountMap.set(scan.id, projectExecutiveFindingsFromUnifiedPackets(displayPackets).topFindings.length);
+    const fullReportPackets = buildScanReportUnifiedFindingsForScan({
+      accessibilityRuleCounts: [],
+      accessibilityRuleExamples: [],
+      events: repairedEvents,
+      macroEnrichment: null,
+      mergedSignals: mergedSignalsByScanId.get(scan.id) ?? [],
+      pageEvidence: [],
+      policyEnrichment: policyEnrichmentMap.get(scan.id) ?? [],
+      policyReviewQueue: [],
+      preconsentViolations: [],
+      primaryPolicyEnrichment: null,
+      runtimeArtifacts: runtimeArtifactMap.get(scan.id) ?? null,
+      signalHits: [],
+      signals: [],
+      snapshot: snapshotMap.get(scan.id) ?? null,
+      trackerVendors: [],
+      validationFindings
+    });
+    topFindingCountMap.set(
+      scan.id,
+      projectExecutiveFindingsFromUnifiedPackets(fullReportPackets.length > 0 ? fullReportPackets : displayPackets).topFindings.length
+    );
   }
 
   const requestByLinkedScanId = new Map<string, ScanRequestRow>();

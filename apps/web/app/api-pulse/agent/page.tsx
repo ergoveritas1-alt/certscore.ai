@@ -36,7 +36,7 @@ const expectedHeaders = [
 ];
 
 const recommendedCalls = [
-  ["GPT Action beta summary", "GET /api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=60"],
+  ["GPT Action beta summary", "GET /api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=35"],
   ["User-facing summary", "GET /api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard"],
   ["Quick machine triage", "GET /api/v1/pulse?url=https://kbdlab.io&detail=tiny"],
   ["Evidence/deeper review", "GET /api/v1/pulse?url=https://kbdlab.io&detail=full"],
@@ -119,7 +119,7 @@ export default function PulseAgentFallbackPage() {
             <li>
               Call <code className="rounded bg-white px-1">getPulseForUrl</code> with <code className="rounded bg-white px-1">url</code>,{" "}
               <code className="rounded bg-white px-1">format=markdown</code>, and{" "}
-              <code className="rounded bg-white px-1">detail=standard</code>, and <code className="rounded bg-white px-1">wait=60</code>.
+              <code className="rounded bg-white px-1">detail=standard</code>, and <code className="rounded bg-white px-1">wait=35</code>.
             </li>
             <li>
               Use <code className="rounded bg-white px-1">detail=tiny</code> for quick checks.

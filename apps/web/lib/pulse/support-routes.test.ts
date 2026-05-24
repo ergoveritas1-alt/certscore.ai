@@ -80,7 +80,7 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.description.length < 300, true);
   assert.equal(body.paths["/api/v1/pulse-self-test"].get.description.length < 300, true);
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; required?: boolean }) => parameter.name === "url" && parameter.required === true));
-  assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { maximum?: number } }) => parameter.name === "wait" && parameter.schema.maximum === 60));
+  assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { maximum?: number } }) => parameter.name === "wait" && parameter.schema.maximum === 35));
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["200"].content["text/markdown"]);
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["500"].content["application/json"]);
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.responses["429"].content["application/json"].schema.$ref, "#/components/schemas/PulseError");
@@ -361,8 +361,7 @@ test("Pulse public text surfaces keep cautious language outside explicit avoid g
     .join("\n")
     .split("\n")
     .filter((line) => !/Do not say|Avoid claims|avoidClaims/i.test(line))
-    .join("\n")
-    .replaceAll("does not determine whether a website violates law", "canonical disclaimer");
+    .join("\n");
 
   assert.doesNotMatch(text, /\billegal\b/i);
   assert.doesNotMatch(text, /\bviolation\b/i);
