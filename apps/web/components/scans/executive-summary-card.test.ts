@@ -1244,6 +1244,55 @@ test("ExecutiveSummaryCard renders real vendor logo lookups in vendor badges", (
   assert.match(html, /cmp · 2 req/);
 });
 
+test("ExecutiveSummaryCard renders logo badges for observed tracker vendors and domains", () => {
+  const html = renderToStaticMarkup(createElement(ExecutiveSummaryCard, {
+    accessLimitationNotice: null,
+    beforeConsentCookieCount: 0,
+    domainBenchmark: null,
+    finalHost: "fandango.com",
+    fingerprintReasons: [],
+    fingerprintLabel: "None detected",
+    fingerprintNarrative: "No fingerprinting evidence detected.",
+    landedOnDifferentHost: false,
+    lastScannedAt: "2026-05-24T17:07:47.000Z",
+    posture: "Watch",
+    preConsentVendorNames: [],
+    requestedHost: "fandango.com",
+    resolvedVendorNames: ["DoubleVerify", "Google Ads", "Magnite", "Magnite / Rubicon", "Meta Pixel", "OneTrust"],
+    score: 54,
+    sessionReplayVendorNames: [],
+    thirdPartyRequestCount: 54,
+    thirdPartyDomains: [
+      "ajax.googleapis.com",
+      "assets.adobedtm.com",
+      "cdn.jwplayer.com",
+      "images2.vudu.com",
+      "maps.googleapis.com",
+      "app.mps.vsnt.net",
+      "securepubads.g.doubleclick.net",
+      "pub.doubleverify.com",
+      "vtrk.dv.tech",
+      "micro.rubiconproject.com"
+    ],
+    topFindings: [],
+    topObservedEntities: [],
+    trackerSummary: "6 vendors across 10 third-party domains",
+    unifiedFindings: [],
+    unresolvedVendorHosts: [],
+    vendorCategoryCounts: {}
+  }));
+
+  assert.match(html, /Observed vendors and domains/);
+  assert.match(html, /\/vendor-logos\/doubleverify\.png/);
+  assert.match(html, /\/vendor-logos\/google\.png/);
+  assert.match(html, /\/vendor-logos\/magnite\.png/);
+  assert.match(html, /\/vendor-logos\/facebook\.png/);
+  assert.match(html, /\/vendor-logos\/onetrust\.png/);
+  assert.match(html, /\/vendor-logos\/adobe\.png/);
+  assert.match(html, /\/vendor-logos\/jwplayer\.png/);
+  assert.match(html, /\/vendor-logos\/vudu\.png/);
+});
+
 test("ExecutiveSummaryCard treats protected routes outside the homepage as a soft diagnostic", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {

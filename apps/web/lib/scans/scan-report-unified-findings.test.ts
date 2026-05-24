@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildScanReportUnifiedFindingState,
   buildScanReportUnifiedFindings,
+  debugBuildScanReportUnifiedFindingStateForScan,
   selectOwnerUnifiedFindingsForSection,
   type ScanReportUnifiedFindingState
 } from "./scan-report-unified-findings";
@@ -1294,6 +1295,78 @@ test("validation preconsent packet absorbs runtime timing and classification evi
   assert.equal(packet?.evidence?.entities?.consentTimeline?.length, 1);
   assert.equal(packet?.evidence?.entities?.requestPurposeClassificationConfidence?.length, 1);
   assert.ok(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+});
+
+test("persisted preconsent rows absorb retained runtime evidence URLs before projection", () => {
+  const state = debugBuildScanReportUnifiedFindingStateForScan({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [
+      {
+        collectionEndpointType: "direct_third_party",
+        confidence: 0.9,
+        detectionSource: "request",
+        evidenceUrls: [],
+        firstPartyOrThirdParty: "third_party",
+        matchedSignatureId: "google_ads",
+        scriptHost: "securepubads.g.doubleclick.net",
+        vendorCategory: "advertising",
+        vendorName: "Google Ads"
+      }
+    ],
+    runtimeArtifacts: {
+      consent_timeline: {
+        firstCmpVisibleMs: 1000,
+        firstConsentActionMs: null,
+        firstNonEssentialRequestMs: 250,
+        timelineConfidence: "high"
+      },
+      hybrid_runtime_evidence: {
+        requestPurposeClassificationConfidence: [
+          {
+            category: "advertising",
+            classificationBasis: "tracker_signature",
+            confidence: 0.9,
+            essentiality: "non_essential",
+            hostname: "securepubads.g.doubleclick.net",
+            requestUrl: "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+            runtimePhase: "pre_consent",
+            tsMs: 250,
+            vendor: "Google Ads"
+          }
+        ],
+        timelineMarkers: {
+          consentBannerDetectedMs: 1000,
+          firstRequestMs: 250,
+          firstThirdPartyRequestMs: 250
+        }
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.deepEqual(state.derivedContext.preconsentViolationRows[0]?.evidenceUrls, [
+    "https://securepubads.g.doubleclick.net/tag/js/gpt.js"
+  ]);
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
   assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
 });
 

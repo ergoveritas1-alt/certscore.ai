@@ -246,6 +246,71 @@ function getRecordStringArray(record: Record<string, unknown> | null | undefined
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
 
+function getRecordArray(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return Array.isArray(value) ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry)) : [];
+}
+
+function getNestedRecord(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function getRecordString(row: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function isConcreteHttpEvidenceUrl(value: unknown) {
+  if (typeof value !== "string") {
+    return false;
+  }
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function hostFromUrl(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function confidenceToNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.min(1, value));
+  }
+  if (typeof value === "string") {
+    if (/^high$/i.test(value)) {
+      return 0.9;
+    }
+    if (/^medium$/i.test(value)) {
+      return 0.75;
+    }
+    if (/^low$/i.test(value)) {
+      return 0.45;
+    }
+  }
+  return null;
+}
+
+function isPromotionGradeTrackerCategory(value: string | null | undefined) {
+  return Boolean(value && /analytics|advertising|marketing|retargeting|session_replay|personalization|tag_manager|tag_management|tracking/i.test(value));
+}
+
 function compactPreconsentCookieEvidenceRow(row: RuntimeCookieEvidenceRow) {
   return {
     cookieName: row.cookieName,
@@ -582,10 +647,20 @@ function derivePreconsentViolationRows(input: {
   runtimeArtifacts: Record<string, unknown> | null;
   trackerVendors: ScanDetailResponse["trackerVendors"];
 }): PreconsentViolationRow[] {
-  if (input.persistedViolations.length > 0) {
-    return input.persistedViolations;
+  const runtimeRows = deriveRuntimePreconsentViolationRows(input);
+  if (input.persistedViolations.length === 0) {
+    return runtimeRows;
   }
 
+  const mergedRows = mergePreconsentViolationRows(input.persistedViolations, runtimeRows);
+  return mergedRows;
+}
+
+function deriveRuntimePreconsentViolationRows(input: {
+  runtimeArtifacts: Record<string, unknown> | null;
+  trackerVendors: ScanDetailResponse["trackerVendors"];
+}): PreconsentViolationRow[] {
+  const runtimeArtifactRows = deriveRuntimeArtifactPreconsentViolationRows(input.runtimeArtifacts);
   const baselineTrackerVendors = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_vendor_names");
   const baselineEvidenceUrls = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_evidence_urls");
   const baselineScriptHosts = getRecordStringArray(input.runtimeArtifacts, "consent_baseline_tracker_script_hosts");
@@ -601,7 +676,7 @@ function derivePreconsentViolationRows(input: {
     ...synthesizedHighRiskVendors.map((vendor) => vendor.name)
   ]);
 
-  return vendorNames.map((vendorName) => {
+  const baselineRows = vendorNames.map((vendorName) => {
     const tracker = input.trackerVendors.find((candidate) => candidate.vendorName === vendorName);
     const highRiskVendor = synthesizedHighRiskVendors.find((candidate) => candidate.name === vendorName);
     const vendorEvidenceUrls = baselineEvidenceUrls.filter((url) => {
@@ -648,6 +723,134 @@ function derivePreconsentViolationRows(input: {
       vendorName
     };
   });
+
+  return mergePreconsentViolationRows(runtimeArtifactRows, baselineRows);
+}
+
+function deriveRuntimeArtifactPreconsentViolationRows(runtimeArtifacts: Record<string, unknown> | null): PreconsentViolationRow[] {
+  const hybridRuntimeEvidence =
+    getNestedRecord(runtimeArtifacts, "hybridRuntimeEvidence") ??
+    getNestedRecord(runtimeArtifacts, "hybrid_runtime_evidence");
+  const fallback = buildPreconsentEvidenceQualityFallback(runtimeArtifacts);
+  const requestPurposeRows = [
+    ...getRecordArray(runtimeArtifacts, "requestPurposeClassificationConfidence"),
+    ...getRecordArray(runtimeArtifacts, "request_purpose_classification_confidence"),
+    ...getRecordArray(hybridRuntimeEvidence, "requestPurposeClassificationConfidence"),
+    ...getRecordArray(hybridRuntimeEvidence, "request_purpose_classification_confidence"),
+    ...getRecordArray(fallback, "requestPurposeClassificationConfidence")
+  ];
+  const state0Rows = [
+    ...getRecordArray(hybridRuntimeEvidence, "preconsentState0RequestObservations"),
+    ...getRecordArray(hybridRuntimeEvidence, "preconsent_state0_request_observations")
+  ];
+
+  const requestViolationRows = requestPurposeRows.flatMap((row) => {
+    const requestUrl = getRecordString(row, ["requestUrl", "request_url", "url"]);
+    const vendorName = getRecordString(row, ["vendor", "vendorName", "vendor_name"]);
+    const vendorCategory = getRecordString(row, ["category", "vendorCategory", "vendor_category"]) ?? "unknown";
+    const confidence = confidenceToNumber(row.confidence ?? row.score) ?? 0;
+    const essentiality = getRecordString(row, ["essentiality"]);
+    const runtimePhase = getRecordString(row, ["runtimePhase", "runtime_phase", "timingStatus", "timing_status"]);
+
+    if (
+      !requestUrl ||
+      !isConcreteHttpEvidenceUrl(requestUrl) ||
+      !vendorName ||
+      (essentiality !== null && essentiality !== "non_essential") ||
+      confidence < 0.7 ||
+      runtimePhase !== "pre_consent" ||
+      !isPromotionGradeTrackerCategory(vendorCategory)
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        collectionEndpointType: "direct_third_party",
+        confidence,
+        detectionSource: getRecordString(row, ["classificationBasis", "classification_basis", "evidenceSource", "evidence_source"]) ?? "request_purpose_classification",
+        evidenceUrls: [requestUrl],
+        firstPartyOrThirdParty: "third_party",
+        matchedSignatureId: getRecordString(row, ["matchedSignatureId", "matched_signature_id"]),
+        scriptHost: getRecordString(row, ["hostname", "host"]) ?? hostFromUrl(requestUrl),
+        vendorCategory,
+        vendorName
+      }
+    ];
+  });
+  const state0ViolationRows = state0Rows.flatMap((row) => {
+    const requestUrl = getRecordString(row, ["requestUrl", "request_url", "url"]);
+    const vendorName = getRecordString(row, ["vendor", "vendorName", "vendor_name"]);
+    const vendorCategory = getRecordString(row, ["category", "vendorCategory", "vendor_category"]) ?? "unknown";
+    const confidence = confidenceToNumber(row.confidence ?? row.score) ?? 0;
+    const classification = getRecordString(row, ["classification"]);
+    const runtimePhase = getRecordString(row, ["runtimePhase", "runtime_phase"]);
+
+    if (
+      !requestUrl ||
+      !isConcreteHttpEvidenceUrl(requestUrl) ||
+      !vendorName ||
+      classification === "service_classified" ||
+      confidence < 0.7 ||
+      runtimePhase !== "pre_consent" ||
+      !isPromotionGradeTrackerCategory(vendorCategory)
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        collectionEndpointType: "direct_third_party",
+        confidence,
+        detectionSource: getRecordString(row, ["evidenceSource", "evidence_source"]) ?? "state0_request_capture",
+        evidenceUrls: [requestUrl],
+        firstPartyOrThirdParty: "third_party",
+        matchedSignatureId: getRecordString(row, ["matchedSignatureId", "matched_signature_id"]),
+        scriptHost: getRecordString(row, ["hostname", "host"]) ?? hostFromUrl(requestUrl),
+        vendorCategory,
+        vendorName
+      }
+    ];
+  });
+  return mergePreconsentViolationRows(requestViolationRows, state0ViolationRows);
+}
+
+function mergePreconsentViolationRows(...rowSets: PreconsentViolationRow[][]) {
+  const rows = new Map<string, PreconsentViolationRow>();
+  for (const row of rowSets.flat()) {
+    const key = row.vendorName.toLowerCase();
+    const existing = rows.get(key);
+    if (!existing) {
+      rows.set(key, {
+        ...row,
+        evidenceUrls: uniqueStrings(row.evidenceUrls)
+      });
+      continue;
+    }
+
+    rows.set(key, {
+      ...existing,
+      collectionEndpointType:
+        existing.collectionEndpointType && existing.collectionEndpointType !== "unknown"
+          ? existing.collectionEndpointType
+          : row.collectionEndpointType,
+      confidence: Math.max(existing.confidence ?? 0, row.confidence ?? 0),
+      detectionSource:
+        existing.detectionSource && existing.detectionSource !== "runtime_audit"
+          ? existing.detectionSource
+          : row.detectionSource,
+      evidenceUrls: uniqueStrings([...existing.evidenceUrls, ...row.evidenceUrls]),
+      firstPartyOrThirdParty:
+        existing.firstPartyOrThirdParty && existing.firstPartyOrThirdParty !== "unknown"
+          ? existing.firstPartyOrThirdParty
+          : row.firstPartyOrThirdParty,
+      matchedSignatureId: existing.matchedSignatureId ?? row.matchedSignatureId,
+      scriptHost: existing.scriptHost ?? row.scriptHost,
+      vendorCategory: existing.vendorCategory !== "unknown" ? existing.vendorCategory : row.vendorCategory
+    });
+  }
+
+  return [...rows.values()];
 }
 
 function deriveAccessibilityIssueRows(snapshot: Record<string, unknown>): AccessibilityIssueRow[] {

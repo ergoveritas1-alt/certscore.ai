@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { VendorBrandChip } from "../../../components/scans/vendor-brand-chip";
 import { getDashboardContext } from "../../../server/auth";
 import { getOrganizationTrackerInventory } from "../../../server/trackers/get-organization-tracker-inventory";
 import {
@@ -64,7 +65,7 @@ export default async function TrackersPage() {
             <div key={`${vendor.vendorName}-${vendor.vendorCategory}-preconsent`} className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-950">{vendor.vendorName}</p>
+                  <VendorBrandChip category={vendor.vendorCategory} label={vendor.vendorName} suffix={vendor.vendorCategory} />
                   <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{vendor.vendorCategory}</p>
                 </div>
                 <div className="text-right">
@@ -113,7 +114,7 @@ export default async function TrackersPage() {
             <div key={`${vendor.vendorName}-${vendor.vendorCategory}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-950">{vendor.vendorName}</p>
+                  <VendorBrandChip category={vendor.vendorCategory} label={vendor.vendorName} suffix={vendor.vendorCategory} />
                   <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{vendor.vendorCategory}</p>
                 </div>
                 <p className="text-xs text-slate-500">Seen {vendor.domainCount} domains</p>
@@ -173,7 +174,7 @@ export default async function TrackersPage() {
                     key={`${domain.scanId}-${tracker.vendorName}-${tracker.scriptHost ?? "none"}-${tracker.vendorCategory}`}
                     className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
                   >
-                    <p className="text-sm font-medium text-slate-950">{tracker.vendorName}</p>
+                    <VendorBrandChip category={tracker.vendorCategory} label={tracker.vendorName} suffix={tracker.vendorCategory} />
                     <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
                       {tracker.vendorCategory} · {tracker.firstPartyOrThirdParty}
                     </p>

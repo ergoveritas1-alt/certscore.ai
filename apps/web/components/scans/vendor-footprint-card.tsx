@@ -1,3 +1,5 @@
+import { VendorBrandChip } from "./vendor-brand-chip";
+
 type VendorFootprintCardProps = {
   adtechHosts: string[];
   domains: string[];
@@ -63,9 +65,7 @@ export function VendorFootprintCard(input: VendorFootprintCardProps) {
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-fuchsia-700">Session recording services</p>
           <div className="flex flex-wrap gap-2">
             {input.sessionReplayVendors.slice(0, 10).map((vendor) => (
-              <span key={vendor} className="rounded-full border border-fuchsia-200 bg-white px-2.5 py-1 text-xs font-medium text-fuchsia-800">
-                {vendor}
-              </span>
+              <VendorBrandChip key={vendor} category="session_replay" label={vendor} suffix="session replay" />
             ))}
           </div>
         </div>
@@ -75,9 +75,7 @@ export function VendorFootprintCard(input: VendorFootprintCardProps) {
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Resolved vendors</p>
           <div className="flex flex-wrap gap-2">
             {input.vendors.slice(0, 20).map((vendor) => (
-              <span key={vendor} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
-                {vendor}
-              </span>
+              <VendorBrandChip key={vendor} category="vendor" label={vendor} suffix="vendor" />
             ))}
           </div>
         </div>
@@ -87,9 +85,7 @@ export function VendorFootprintCard(input: VendorFootprintCardProps) {
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700">Observed before consent</p>
           <div className="flex flex-wrap gap-2">
             {input.preConsentVendors.slice(0, 16).map((vendor) => (
-              <span key={vendor} className="rounded-full border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium text-rose-700">
-                {vendor}
-              </span>
+              <VendorBrandChip key={vendor} category="pre_consent" label={vendor} suffix="pre-consent" />
             ))}
           </div>
         </div>
@@ -97,9 +93,9 @@ export function VendorFootprintCard(input: VendorFootprintCardProps) {
       {input.adtechHosts.length > 0 ? (
         <div className="space-y-2 rounded-[1.2rem] border border-amber-200/80 bg-amber-50/70 px-4 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">Observed adtech / analytics hosts</p>
-          <div className="space-y-1.5 text-sm text-amber-950">
+          <div className="flex flex-wrap gap-2">
             {input.adtechHosts.slice(0, 10).map((host) => (
-              <p key={host}>{host}</p>
+              <VendorBrandChip key={host} category="host" label={host} suffix="host" />
             ))}
           </div>
         </div>
@@ -107,9 +103,9 @@ export function VendorFootprintCard(input: VendorFootprintCardProps) {
       {input.unresolvedHosts.length > 0 ? (
         <div className="space-y-2 rounded-[1.2rem] border border-violet-200/80 bg-violet-50/70 px-4 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-700">Unresolved hosts for enrichment</p>
-          <div className="space-y-1.5 text-sm text-violet-950">
+          <div className="flex flex-wrap gap-2">
             {input.unresolvedHosts.slice(0, 12).map((host) => (
-              <p key={host}>{host}</p>
+              <VendorBrandChip key={host} category="host" label={host} suffix="host" />
             ))}
           </div>
         </div>
@@ -121,7 +117,7 @@ export function VendorFootprintCard(input: VendorFootprintCardProps) {
             {input.topObservedEntities.slice(0, 8).map((entity) => (
               <div key={entity.label} className="flex items-center justify-between gap-3 text-sm">
                 <div className="min-w-0">
-                  <p className="truncate font-medium text-slate-900">{entity.label}</p>
+                  <VendorBrandChip category={entity.category} label={entity.label} requestCount={entity.requestCount} />
                   <p className="text-xs uppercase tracking-[0.12em] text-slate-500">{entity.category}</p>
                 </div>
                 <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
@@ -135,9 +131,9 @@ export function VendorFootprintCard(input: VendorFootprintCardProps) {
       {input.domains.length > 0 ? (
         <div className="space-y-2 rounded-[1.2rem] border border-slate-200/80 bg-slate-50/70 px-4 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Sample domains</p>
-          <div className="space-y-1.5 text-sm text-slate-700">
+          <div className="flex flex-wrap gap-2">
             {input.domains.slice(0, 5).map((domain) => (
-              <p key={domain}>{domain}</p>
+              <VendorBrandChip key={domain} category="domain" label={domain} suffix="domain" />
             ))}
           </div>
         </div>

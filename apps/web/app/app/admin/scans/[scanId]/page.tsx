@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { RegulatoryRelevanceSection } from "../../../../../components/scans/regulatory-relevance-section";
+import { VendorBrandChip } from "../../../../../components/scans/vendor-brand-chip";
 import { formatAdminDateTime } from "../../../../../lib/admin/date-time";
 import { getAdminScanDetail } from "../../../../../server/admin/get-admin-scan-detail";
 import { listAdminPulseRequestsForScan } from "../../../../../server/admin/list-pulse-requests";
@@ -529,7 +530,7 @@ export default async function AdminScanDetailPage({ params }: AdminScanDetailPag
             ) : (
               record.trackerVendors.map((tracker) => (
                 <div key={`${tracker.vendorName}-${tracker.scriptHost ?? "none"}-${tracker.detectionSource}`} className="rounded-2xl border border-slate-200 p-4 text-sm text-slate-600">
-                  <p className="font-medium text-slate-900">{tracker.vendorName}</p>
+                  <VendorBrandChip category={tracker.vendorCategory} label={tracker.vendorName} suffix={tracker.vendorCategory} />
                   <p>
                     {tracker.vendorCategory} · {tracker.detectionSource} · {tracker.firstPartyOrThirdParty}
                   </p>
