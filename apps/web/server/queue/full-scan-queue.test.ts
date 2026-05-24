@@ -106,3 +106,20 @@ test("prefers the event heartbeat when both sources are present", () => {
     lastHeartbeatAt: "2026-03-21T11:59:55.000Z"
   });
 });
+
+test("uses the table host when the newer event heartbeat has no host metadata", () => {
+  const heartbeat = resolveScannerServiceHeartbeatSnapshot({
+    heartbeatErrorMessage: null,
+    eventErrorMessage: null,
+    eventHeartbeatAt: "2026-03-21T11:59:55.000Z",
+    eventHost: null,
+    tableHeartbeatAt: "2026-03-21T11:59:50.000Z",
+    tableHost: "table-worker"
+  });
+
+  assert.deepEqual(heartbeat, {
+    errorMessage: null,
+    host: "table-worker",
+    lastHeartbeatAt: "2026-03-21T11:59:55.000Z"
+  });
+});

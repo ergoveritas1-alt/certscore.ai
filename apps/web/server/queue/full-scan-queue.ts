@@ -114,10 +114,10 @@ export function resolveScannerServiceHeartbeatSnapshot(input: {
   const lastHeartbeatAt = getNewestHeartbeat(input.eventHeartbeatAt, input.tableHeartbeatAt);
   const host =
     eventHeartbeatMs >= tableHeartbeatMs
-      ? input.eventHost
+      ? input.eventHost ?? input.tableHost
       : tableHeartbeatMs > Number.NEGATIVE_INFINITY
-        ? input.tableHost
-        : input.eventHost;
+        ? input.tableHost ?? input.eventHost
+        : input.eventHost ?? input.tableHost;
 
   if (lastHeartbeatAt) {
     return {
@@ -146,18 +146,6 @@ export async function getLastScannerServiceHeartbeat(): Promise<ScannerServiceHe
   const { eventErrorMessage, eventRow, heartbeatErrorMessage, heartbeatRows } = await loadScannerHeartbeatSources();
   const eventHeartbeatAt = normalizeHeartbeatValue(eventRow?.created_at);
   const eventHost = getLegacyHeartbeatHost(eventRow?.metadata_json);
-
-  if (eventHeartbeatAt) {
-    return resolveScannerServiceHeartbeatSnapshot({
-      heartbeatErrorMessage: null,
-      eventErrorMessage,
-      eventHeartbeatAt,
-      eventHost,
-      tableHeartbeatAt: null,
-      tableHost: null
-    });
-  }
-
   const newestHeartbeatRow = [...(heartbeatRows as WorkerHeartbeatRow[])]
     .filter((row) => normalizeHeartbeatValue(row.last_heartbeat_at))
     .sort((left, right) => getHeartbeatTimestamp(right.last_heartbeat_at) - getHeartbeatTimestamp(left.last_heartbeat_at))[0];
