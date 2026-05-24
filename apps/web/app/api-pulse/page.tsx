@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
+import { EvidenceJsonBlock } from "../../components/scans/evidence-json-block";
 import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import {
   PULSE_COVERAGE_LIMITATION_COPY,
@@ -425,9 +426,10 @@ function stringifyExample(value: unknown) {
 
 function CodeBlock({ children }: { children: string }) {
   return (
-    <pre className="overflow-x-auto rounded-lg bg-slate-950 p-4 text-xs leading-5 text-slate-100">
-      <code>{children}</code>
-    </pre>
+    <EvidenceJsonBlock
+      payload={children}
+      preClassName="overflow-x-auto whitespace-pre-wrap break-words p-4 pr-12 text-xs leading-5 text-slate-100"
+    />
   );
 }
 

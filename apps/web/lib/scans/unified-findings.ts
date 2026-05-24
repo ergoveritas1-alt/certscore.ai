@@ -2674,6 +2674,18 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (preconsentCookieEvidence.length > 0) {
     entities.preconsent_cookie_evidence = preconsentCookieEvidence;
   }
+  const preconsentViolationEvidenceRows = [
+    ...(Array.isArray(normalizedFallbackEvidence.preconsent_violation_evidence)
+      ? (normalizedFallbackEvidence.preconsent_violation_evidence as Array<Record<string, unknown>>)
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.preconsentViolationEvidence)
+      ? (normalizedFallbackEvidence.preconsentViolationEvidence as Array<Record<string, unknown>>)
+      : [])
+  ];
+  const preconsentViolationEvidence = stringifyEvidenceRows(preconsentViolationEvidenceRows);
+  if (preconsentViolationEvidence.length > 0) {
+    entities.preconsent_violation_evidence = preconsentViolationEvidence;
+  }
   const preconsentCookieInitiatorVendors = uniqueStrings([
     ...(Array.isArray(normalizedFallbackEvidence.preconsent_cookie_initiator_vendors)
       ? (normalizedFallbackEvidence.preconsent_cookie_initiator_vendors as string[])

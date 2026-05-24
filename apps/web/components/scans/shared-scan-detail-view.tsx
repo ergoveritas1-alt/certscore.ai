@@ -17,6 +17,7 @@ import { ScanCompletedEvent } from "../analytics/data-layer-events";
 import { CopyJsonButton } from "./copy-json-button";
 import { CookieStoragePanel } from "./cookie-storage-panel";
 import { DiagnosticsPanel } from "./diagnostics-panel";
+import { EvidenceJsonBlock } from "./evidence-json-block";
 import { ExecutiveSummaryCard, type ExecutivePolicySurface, type ExecutiveScanInterruption } from "./executive-summary-card";
 import { FindingsSection } from "./findings-section";
 import { FullScanProgressCard } from "./full-scan-progress-card";
@@ -205,10 +206,11 @@ function SnapshotValue({ value }: { value: unknown }) {
   if (jsonPayload) {
     return (
       <div className="relative w-full max-w-full text-left">
-        <CopyJsonButton payload={jsonPayload} label="Copy evidence JSON" />
-        <pre className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 pr-12 font-mono text-[11px] leading-5 text-slate-100">
-          {jsonPayload}
-        </pre>
+        <EvidenceJsonBlock
+          payload={jsonPayload}
+          className="relative w-full max-w-full rounded-lg bg-slate-950"
+          preClassName="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-lg p-3 pr-12 font-mono text-[11px] leading-5 text-slate-100"
+        />
       </div>
     );
   }

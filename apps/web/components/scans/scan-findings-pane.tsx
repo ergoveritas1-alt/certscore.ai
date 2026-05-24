@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CopyJsonButton } from "./copy-json-button";
+import { EvidenceJsonBlock } from "./evidence-json-block";
 
 type FindingRow = {
   evidenceJson: string;
@@ -92,12 +92,11 @@ export function ScanFindingsPane({
                 <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-3 text-xs text-slate-600">
                   {finding.summaryJson}
                 </pre>
-                <div className="relative">
-                  <CopyJsonButton payload={finding.evidenceJson} label="Copy evidence JSON" />
-                  <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-3 pr-12 text-xs text-slate-600">
-                    {finding.evidenceJson}
-                  </pre>
-                </div>
+                <EvidenceJsonBlock
+                  payload={finding.evidenceJson}
+                  className="relative max-w-full overflow-hidden rounded-2xl bg-slate-950"
+                  preClassName="max-w-full overflow-x-auto whitespace-pre-wrap break-words p-3 pr-12 text-xs leading-5 text-slate-100"
+                />
               </div>
             </div>
           ))}

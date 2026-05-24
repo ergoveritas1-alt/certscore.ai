@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { EvidenceJsonBlock } from "../../../../../components/scans/evidence-json-block";
 import { formatAdminDateTime } from "../../../../../lib/admin/date-time";
 import { PULSE_STANDARD_DISCLAIMER } from "../../../../../lib/pulse/constants";
 import { getAdminPulseRequestDetail } from "../../../../../server/admin/list-pulse-requests";
@@ -131,7 +132,10 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
           <CardTitle>Response Summary</CardTitle>
         </CardHeader>
         <CardContent>
-          <pre className="overflow-x-auto rounded-lg bg-slate-950 p-4 text-xs leading-5 text-slate-100">{formatJson(request.responseSummary)}</pre>
+          <EvidenceJsonBlock
+            payload={formatJson(request.responseSummary)}
+            preClassName="overflow-x-auto whitespace-pre-wrap break-words p-4 pr-12 text-xs leading-5 text-slate-100"
+          />
         </CardContent>
       </Card>
 
@@ -169,10 +173,13 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
           <CardTitle>Raw Request Context</CardTitle>
         </CardHeader>
         <CardContent>
-          <pre className="overflow-x-auto rounded-lg bg-slate-950 p-4 text-xs leading-5 text-slate-100">{formatJson({
+          <EvidenceJsonBlock
+            payload={formatJson({
             requestedBy: request.requestedBy,
             requestContext: request.requestContext
-          })}</pre>
+          })}
+            preClassName="overflow-x-auto whitespace-pre-wrap break-words p-4 pr-12 text-xs leading-5 text-slate-100"
+          />
         </CardContent>
       </Card>
     </div>

@@ -28,6 +28,7 @@ import {
   getFindingReviewContextChips
 } from "../../lib/marketing/finding-regulatory-context";
 import { CopyJsonButton } from "./copy-json-button";
+import { EvidenceJsonBlock } from "./evidence-json-block";
 import { FindingHashFocus } from "./finding-hash-focus";
 import { InfoTip } from "./info-tip";
 import { TopFindingsHeightSync } from "./top-findings-height-sync";
@@ -49,6 +50,32 @@ type UnifiedRegulatoryContext = {
   hasSensitiveHealthTrackingRisk?: boolean;
   hasTrackingConcern?: boolean;
   thirdPartyRequestCount?: number;
+};
+
+type BeforeConsentCookieEvidenceDetail = {
+  category?: string | null;
+  cookieName?: string | null;
+  domain?: string | null;
+  initiatorDomain?: string | null;
+  initiatorUrl?: string | null;
+  initiatorVendor?: string | null;
+  party?: string | null;
+  setAtMs?: number | null;
+  setMethod?: string | null;
+  timingEvidence?: string | null;
+};
+
+type PreconsentRequestEvidenceDetail = {
+  collectionEndpointType?: string | null;
+  confidence?: number | null;
+  detectionSource?: string | null;
+  evidenceUrls?: string[];
+  firstPartyOrThirdParty?: string | null;
+  matchedSignatureId?: string | null;
+  scriptHost?: string | null;
+  timingEvidence?: string | null;
+  vendorCategory?: string | null;
+  vendorName?: string | null;
 };
 
 export type ExecutivePolicySurface = {
@@ -81,6 +108,52 @@ function formatCategoryLabel(value: string) {
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
+function parsePacketEvidenceRows(values: string[]) {
+  return values.flatMap((value) => {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? [parsed as Record<string, unknown>]
+        : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function compactCookieEvidenceRow(row: Record<string, unknown>): BeforeConsentCookieEvidenceDetail {
+  return {
+    cookieName: typeof row.cookieName === "string" ? row.cookieName : null,
+    domain: typeof row.domain === "string" ? row.domain : null,
+    party: typeof row.party === "string" ? row.party : null,
+    category: typeof row.category === "string" ? row.category : null,
+    initiatorDomain: typeof row.initiatorDomain === "string" ? row.initiatorDomain : null,
+    initiatorVendor: typeof row.initiatorVendor === "string" ? row.initiatorVendor : null,
+    initiatorUrl: typeof row.initiatorUrl === "string" ? row.initiatorUrl : null,
+    setAtMs: typeof row.setAtMs === "number" && Number.isFinite(row.setAtMs) ? row.setAtMs : null,
+    setMethod: typeof row.setMethod === "string" ? row.setMethod : null,
+    timingEvidence: typeof row.timingEvidence === "string" ? row.timingEvidence : null
+  };
+}
+
+function compactPreconsentRequestEvidenceRow(row: Record<string, unknown>): PreconsentRequestEvidenceDetail {
+  const evidenceUrls = Array.isArray(row.evidenceUrls)
+    ? row.evidenceUrls.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+  return {
+    vendorName: typeof row.vendorName === "string" ? row.vendorName : null,
+    vendorCategory: typeof row.vendorCategory === "string" ? row.vendorCategory : null,
+    scriptHost: typeof row.scriptHost === "string" ? row.scriptHost : null,
+    detectionSource: typeof row.detectionSource === "string" ? row.detectionSource : null,
+    confidence: typeof row.confidence === "number" && Number.isFinite(row.confidence) ? row.confidence : null,
+    firstPartyOrThirdParty: typeof row.firstPartyOrThirdParty === "string" ? row.firstPartyOrThirdParty : null,
+    collectionEndpointType: typeof row.collectionEndpointType === "string" ? row.collectionEndpointType : null,
+    matchedSignatureId: typeof row.matchedSignatureId === "string" ? row.matchedSignatureId : null,
+    timingEvidence: typeof row.timingEvidence === "string" ? row.timingEvidence : null,
+    evidenceUrls
+  };
 }
 
 function formatInlineList(values: string[]) {
@@ -560,13 +633,10 @@ function buildRuntimeEvidenceMetadata(finding: CertScoreFinding) {
       missingCorroborators: eligibility.missingCorroborators,
       demotionReasons: eligibility.demotionReasons
     },
-    redaction: {
-      queryStrings: "redacted",
-      cookieValues: "not_retained_or_redacted",
-      payloadBodies: "not_retained_or_redacted",
-      screenshots: "not_included",
-      rawDom: "not_included",
-      userInputValues: "not_retained"
+    publicReportEvidenceHandling: {
+      queryStrings: "redacted_when_urls_are_included",
+      cookieValues: "not_retained_in_public_report",
+      retainedArtifacts: "only fields present in this evidence packet are included"
     },
     automationLimits: [
       "Automated public-web observation for review, not a legal conclusion.",
@@ -796,19 +866,33 @@ function hasNonEmptyArrayEvidence(value: Record<string, unknown> | null | undefi
 }
 
 function hasBeforeConsentCookieAttribution(evidence: Record<string, unknown> | null | undefined) {
-  return hasNonEmptyArrayEvidence(evidence, [
-    "cookieNames",
+  const preconsentRequestRows = evidence?.preconsentRequestRows;
+  return (
+    (Array.isArray(preconsentRequestRows) && preconsentRequestRows.length > 0) ||
+    hasNonEmptyArrayEvidence(evidence, [
     "cookieCategories",
     "cookieVendors",
-    "initiatorDomains",
-    "initiatorUrls"
-  ]);
+      "initiatorUrls"
+    ])
+  );
+}
+
+function hasBeforeConsentCookieDetailRows(evidence: Record<string, unknown> | null | undefined) {
+  const cookieTimingRows = evidence?.cookieTimingRows;
+  return (
+    (Array.isArray(cookieTimingRows) && cookieTimingRows.length > 0) ||
+    hasNonEmptyArrayEvidence(evidence, ["cookieNames", "cookieTimingEvidence", "initiatorDomains"])
+  );
 }
 
 function formatBeforeConsentCookieCountLabel(count: number, evidence: Record<string, unknown> | null | undefined) {
-  return hasBeforeConsentCookieAttribution(evidence)
-    ? `${count} classified cookie records were observed before consent.`
-    : `${count} cookie timing records were retained before consent; vendor/category attribution was not retained.`;
+  if (hasBeforeConsentCookieAttribution(evidence)) {
+    return `${count} classified cookie records were observed before consent.`;
+  }
+  if (hasBeforeConsentCookieDetailRows(evidence)) {
+    return `${count} cookie timing records were retained before consent with cookie-level timing details.`;
+  }
+  return `${count} cookie timing records were retained before consent; vendor/category attribution was not retained.`;
 }
 
 function buildRegulatoryLensScoreDriver(input: {
@@ -1845,7 +1929,15 @@ export function buildRegulatoryLensesFromUnifiedPackets(
       return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
     }));
   };
-  const consentTrackingPackets = surfacedPackets.filter((packet) => packet.unifiedFindingId === "preconsent_tracking");
+  const consentTrackingPackets = packets.filter((packet) => packet.unifiedFindingId === "preconsent_tracking");
+  const beforeConsentCookieTimingRows = consentTrackingPackets.flatMap((packet) =>
+    parsePacketEvidenceRows(getPacketEntityStrings(packet, ["preconsent_cookie_evidence", "preconsentCookieEvidence"]))
+      .map(compactCookieEvidenceRow)
+  );
+  const preconsentRequestRows = consentTrackingPackets.flatMap((packet) =>
+    parsePacketEvidenceRows(getPacketEntityStrings(packet, ["preconsent_violation_evidence", "preconsentViolationEvidence"]))
+      .map(compactPreconsentRequestEvidenceRow)
+  );
   const beforeConsentCookieEvidence = {
     cookieNames: uniqueStrings(consentTrackingPackets.flatMap((packet) =>
       getPacketEntityStrings(packet, [
@@ -1878,6 +1970,8 @@ export function buildRegulatoryLensesFromUnifiedPackets(
     initiatorUrls: uniqueStrings(consentTrackingPackets.flatMap((packet) =>
       getPacketEntityStrings(packet, ["preconsent_cookie_initiator_urls", "preconsentCookieInitiatorUrls"])
     )),
+    cookieTimingRows: beforeConsentCookieTimingRows,
+    preconsentRequestRows,
     sourceFindingIds: uniqueStrings(consentTrackingPackets.map((packet) => packet.unifiedFindingId)),
     rawObservationCount: packetDerivedBeforeConsentCookieObservationCount
   };
@@ -2093,11 +2187,7 @@ function RegulatoryLensFindingCard(input: {
               Learn how this finding is interpreted
             </a>
           ) : null}
-          <div className="relative w-full rounded-lg bg-slate-950">
-          <pre className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words px-3 py-3 text-[11px] leading-5 text-slate-100">
-            {evidencePayload}
-          </pre>
-          </div>
+          <EvidenceJsonBlock payload={evidencePayload} />
         </div>
       </details>
     </div>
@@ -3229,14 +3319,11 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
               <span>Evidence details</span>
               <span className="text-slate-400 transition-transform group-open/json:rotate-180">⌄</span>
             </summary>
-            <div className="relative mt-3 min-w-0 max-w-full overflow-hidden rounded-lg bg-slate-950" suppressHydrationWarning>
-              <CopyJsonButton
-                payload={jsonPayload}
-                label="Copy evidence JSON"
-                className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-200 shadow-sm transition-colors hover:border-slate-500 hover:text-white"
-              />
-              <pre className="max-w-full whitespace-pre-wrap break-words px-3 py-3 pr-12 text-xs leading-5 text-slate-100">{jsonPayload}</pre>
-            </div>
+            <EvidenceJsonBlock
+              payload={jsonPayload}
+              className="relative mt-3 min-w-0 max-w-full overflow-hidden rounded-lg bg-slate-950"
+              preClassName="max-w-full whitespace-pre-wrap break-words px-3 py-3 pr-12 text-xs leading-5 text-slate-100"
+            />
           </details>
         ) : null}
       </div>

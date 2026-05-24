@@ -53,6 +53,7 @@ import {
   type ScanReportReviewIssueRow
 } from "./scan-report-review-findings";
 import { groupSnapshotFieldsByPrimaryCategory } from "./signal-taxonomy";
+import { buildRuntimeCookieInventory, type RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
 
 export type ScanReportUnifiedFindingSectionDraft = {
   categories?: Array<{
@@ -243,6 +244,36 @@ function getSnapshotNumber(snapshot: Record<string, unknown>, key: string) {
 function getRecordStringArray(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+function compactPreconsentCookieEvidenceRow(row: RuntimeCookieEvidenceRow) {
+  return {
+    cookieName: row.cookieName,
+    domain: row.domain,
+    party: row.party,
+    category: row.category,
+    initiatorDomain: row.initiatorDomain,
+    initiatorVendor: row.initiatorVendor,
+    initiatorUrl: row.initiatorUrl,
+    setAtMs: row.setAtMs,
+    setMethod: row.setMethod,
+    timingEvidence: row.timingEvidence
+  };
+}
+
+function compactPreconsentViolationEvidenceRow(row: PreconsentViolationRow) {
+  return {
+    vendorName: row.vendorName,
+    vendorCategory: row.vendorCategory,
+    scriptHost: row.scriptHost,
+    detectionSource: row.detectionSource,
+    confidence: row.confidence,
+    firstPartyOrThirdParty: row.firstPartyOrThirdParty,
+    collectionEndpointType: row.collectionEndpointType,
+    matchedSignatureId: row.matchedSignatureId,
+    timingEvidence: "before_consent_request",
+    evidenceUrls: row.evidenceUrls
+  };
 }
 
 function getPolicySnippetValues(row: Record<string, unknown> | null) {
@@ -924,6 +955,7 @@ function hasCredibleRejectInteractionAttribution(
 }
 
 function buildRuntimeDerivedReviewFindingCandidates(input: {
+  preconsentViolations: PreconsentViolationRow[];
   runtimeArtifacts: Record<string, unknown> | null;
 }): CanonicalReviewFinding[] {
   const candidates: CanonicalReviewFinding[] = [];
@@ -977,6 +1009,12 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
 
   const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
   const preconsentEvidenceRecord = preconsentEvidenceQuality as Record<string, unknown> | null;
+  const runtimeCookieInventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: getRuntimeObject(input.runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]),
+    runtimeArtifacts: input.runtimeArtifacts
+  });
+  const preconsentCookieEvidenceRows = runtimeCookieInventory.beforeConsentRows.map(compactPreconsentCookieEvidenceRow);
+  const preconsentViolationEvidenceRows = input.preconsentViolations.map(compactPreconsentViolationEvidenceRow);
   const consentTimeline =
     getRuntimeObject(input.runtimeArtifacts, ["consentTimeline", "consent_timeline"]) ??
     getRuntimeObject(preconsentEvidenceRecord, ["consentTimeline", "consent_timeline"]);
@@ -1055,7 +1093,12 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         firstUserActionMs === null
       ));
 
-  if ((nonEssentialRequestRows.length > 0 && firstNonEssentialRequestMs !== null) || retainedState0RequestRows.length > 0) {
+  if (
+    (nonEssentialRequestRows.length > 0 && firstNonEssentialRequestMs !== null) ||
+    retainedState0RequestRows.length > 0 ||
+    preconsentCookieEvidenceRows.length > 0 ||
+    preconsentViolationEvidenceRows.length > 0
+  ) {
     const hasPromotionReadyRequestEvidence = nonEssentialRequestRows.length > 0 && firstNonEssentialRequestMs !== null;
     candidates.push({
       categoryId: "preconsent_tracking_incidents",
@@ -1063,7 +1106,9 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         ? "A retained consent timeline places a non-essential request before the CMP was visible or before a consent action."
         : hasPromotionReadyRequestEvidence
           ? "A retained non-essential request classification exists, but the timing sequence is incomplete or ambiguous."
-          : "A retained state-0 pre-consent request artifact exists, but request purpose, vendor attribution, or timing sequence evidence is incomplete.",
+          : preconsentCookieEvidenceRows.length > 0 || preconsentViolationEvidenceRows.length > 0
+            ? "Retained pre-consent runtime evidence exists, but the complete promotion sequence is incomplete or ambiguous."
+            : "A retained state-0 pre-consent request artifact exists, but request purpose, vendor attribution, or timing sequence evidence is incomplete.",
       fallbackEvidence: {
         consentTimeline,
         consentActionableChoiceObserved,
@@ -1077,7 +1122,16 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         ],
         preconsent_tracker_vendors: nonEssentialRequestRows
           .map((row) => (typeof row.vendor === "string" ? row.vendor : null))
-          .filter((value): value is string => Boolean(value)),
+          .filter((value): value is string => Boolean(value))
+          .concat(preconsentViolationEvidenceRows.flatMap((row) => row.vendorName ?? [])),
+        preconsent_cookie_evidence: preconsentCookieEvidenceRows,
+        preconsent_cookie_names: uniqueStrings(preconsentCookieEvidenceRows.map((row) => row.cookieName)),
+        preconsent_cookie_categories: uniqueStrings(preconsentCookieEvidenceRows.map((row) => row.category)),
+        preconsent_cookie_initiator_domains: uniqueStrings(preconsentCookieEvidenceRows.map((row) => row.initiatorDomain)),
+        preconsent_cookie_initiator_urls: uniqueStrings(preconsentCookieEvidenceRows.map((row) => row.initiatorUrl)),
+        preconsent_cookie_initiator_vendors: uniqueStrings(preconsentCookieEvidenceRows.map((row) => row.initiatorVendor)),
+        preconsent_cookie_timing_evidence: uniqueStrings(preconsentCookieEvidenceRows.map((row) => row.timingEvidence)),
+        preconsent_violation_evidence: preconsentViolationEvidenceRows,
         signalKey: "privacy.preconsent_tracking_detected",
         signalLabel: "Pre-consent tracking detected",
         signalValue: true,
@@ -1088,7 +1142,11 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       linkedValidationFinding: null,
       observedValue: hasPromotionReadyRequestEvidence
         ? `${nonEssentialRequestRows.length} classified non-essential request(s)`
-        : `${retainedState0RequestRows.length} state-0 pre-consent request artifact(s) with incomplete classification`,
+        : preconsentViolationEvidenceRows.length > 0
+          ? `${preconsentViolationEvidenceRows.length} classified pre-consent request artifact(s)`
+          : preconsentCookieEvidenceRows.length > 0
+            ? `${preconsentCookieEvidenceRows.length} before-consent cookie timing artifact(s)`
+            : `${retainedState0RequestRows.length} state-0 pre-consent request artifact(s) with incomplete classification`,
       severity: hasPromotionReadyRequestEvidence && hasPreconsentSequence ? "high" : "medium",
       signalKey: "privacy.preconsent_tracking_detected",
       signalLabel: "Pre-consent tracking detected",
@@ -1760,6 +1818,7 @@ export function buildScanReportUnifiedFindingState(
     ])
   );
   const runtimeDerivedReviewFindingCandidates = buildRuntimeDerivedReviewFindingCandidates({
+    preconsentViolations: preconsentViolationRows,
     runtimeArtifacts
   });
   const reviewFindingCandidates = mergeRuntimeDerivedCandidates(

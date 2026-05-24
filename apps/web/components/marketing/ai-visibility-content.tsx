@@ -6,6 +6,7 @@ import {
   getGuideSampleFindings,
   type SampleFindingJson
 } from "../../lib/marketing/sample-finding-json";
+import { EvidenceJsonBlock } from "../scans/evidence-json-block";
 
 export const STANDARD_AUTOMATED_FINDINGS_DISCLAIMER =
   "CertScore.ai automated findings may contain errors. Always review the underlying evidence. CertScore.ai does not provide legal advice, certification, or compliance determinations.";
@@ -151,9 +152,11 @@ export function AiVisibilityContent({
                     </div>
                   </summary>
                   <div className="mt-4">
-                    <pre className="max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-2xl bg-white p-3 text-xs text-slate-600">
-                      {JSON.stringify(sample.payload, null, 2)}
-                    </pre>
+                    <EvidenceJsonBlock
+                      payload={JSON.stringify(sample.payload, null, 2)}
+                      className="relative max-w-full overflow-hidden rounded-2xl bg-slate-950"
+                      preClassName="max-w-full overflow-x-auto whitespace-pre-wrap break-words p-3 pr-12 text-xs leading-5 text-slate-100"
+                    />
                   </div>
                 </details>
               ))}

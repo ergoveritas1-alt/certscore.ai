@@ -6,6 +6,7 @@ import {
   type FindingEvidenceStandard,
   type FindingReferenceItem
 } from "../../../lib/marketing/finding-atlas";
+import { EvidenceJsonBlock } from "../../scans/evidence-json-block";
 
 type FindingAtlasBrowserProps = {
   findings: FindingReferenceItem[];
@@ -23,9 +24,11 @@ function EvidenceBlock({ title, code }: { title: string; code: string }) {
       <div className="border-b border-slate-800 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
         {title}
       </div>
-      <pre className="overflow-x-auto whitespace-pre-wrap break-words p-3 font-mono text-xs leading-5 text-slate-100">
-        {code}
-      </pre>
+      <EvidenceJsonBlock
+        payload={code}
+        className="relative bg-slate-950"
+        preClassName="overflow-x-auto whitespace-pre-wrap break-words p-3 pr-12 font-mono text-xs leading-5 text-slate-100"
+      />
     </div>
   );
 }
