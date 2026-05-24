@@ -1,6 +1,7 @@
 import type { AgencyMapping } from "@website-signal-risk-scanner/shared";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { InfoTip } from "./info-tip";
+import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 
 function getMappedFlagsLabel(count: number) {
   return `${count} mapped ${count === 1 ? "flag" : "flags"}`;
@@ -27,14 +28,6 @@ type RegulatoryRelevanceSectionProps = {
   embedded?: boolean;
 };
 
-function ChevronIcon() {
-  return (
-    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 16 16" fill="none">
-      <path d="M6 3.5L10.5 8L6 12.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" />
-    </svg>
-  );
-}
-
 function RegulatoryRelevanceContent({ mappings }: { mappings: AgencyMapping[] }) {
   if (mappings.length === 0) {
     return (
@@ -58,9 +51,7 @@ function RegulatoryRelevanceContent({ mappings }: { mappings: AgencyMapping[] })
         {mappings.map((mapping) => (
           <details key={mapping.agencyKey} className="group/agency rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
             <summary className="flex cursor-pointer list-none items-start gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
-              <span className="mt-0.5 inline-flex text-slate-400 transition-transform duration-150 group-open/agency:rotate-90">
-                <ChevronIcon />
-              </span>
+              <ScanReportDisclosureIcon className="mt-0.5 group-open/agency:rotate-90" />
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-slate-900">{mapping.agencyLabel}</p>
                 <p className="mt-1 text-sm text-slate-500">

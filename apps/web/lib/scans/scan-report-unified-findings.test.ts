@@ -1370,6 +1370,85 @@ test("persisted preconsent rows absorb retained runtime evidence URLs before pro
   assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
 });
 
+test("prod-shaped preconsent rows merge with runtime URLs and derived consent timing", () => {
+  const state = debugBuildScanReportUnifiedFindingStateForScan({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [
+      {
+        collection_endpoint_type: "direct_third_party",
+        confidence: 0.9,
+        detection_source: "request",
+        evidence_urls: [],
+        first_party_or_third_party: "third_party",
+        matched_signature_id: "google_ads",
+        script_host: "googleads.g.doubleclick.net",
+        vendor_category: "advertising",
+        vendor_name: "Google Ads"
+      }
+    ] as never,
+    runtimeArtifacts: {
+      consent_timeline: {
+        firstCmpVisibleMs: null,
+        firstConsentActionMs: null,
+        firstNonEssentialRequestMs: 736,
+        timelineConfidence: "low"
+      },
+      hybrid_runtime_evidence: {
+        consentSummary: {
+          acceptPresent: true,
+          bannerPresent: true,
+          managePresent: true,
+          rejectPresent: true
+        },
+        requestPurposeClassificationConfidence: [
+          {
+            category: "advertising",
+            classificationBasis: "tracker_signature",
+            confidence: 0.9,
+            essentiality: "non_essential",
+            hostname: "googleads.g.doubleclick.net",
+            requestUrl: "https://googleads.g.doubleclick.net/pagead/id",
+            runtimePhase: "pre_consent",
+            tsMs: 736,
+            vendor: "Google Ads"
+          }
+        ],
+        timelineMarkers: {
+          consentBannerDetectedMs: 1200,
+          firstRequestMs: 736,
+          firstThirdPartyRequestMs: 736
+        }
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.fandango.com/",
+      registered_domain: "fandango.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.deepEqual(state.derivedContext.preconsentViolationRows[0]?.evidenceUrls, [
+    "https://googleads.g.doubleclick.net/pagead/id"
+  ]);
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"), false);
+  assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+});
+
 test("state-zero tracker observations with consent timing surface as pre-consent top findings", () => {
   const state = buildPreconsentRuntimeState({
     hybrid_runtime_evidence: {

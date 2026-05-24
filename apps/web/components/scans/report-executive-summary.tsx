@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { InfoTip } from "./info-tip";
 import { METRIC_GRID_CLASS, SummaryMetricTile } from "./report-primitives";
+import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 
 type SummaryMetric = {
   label: string;
@@ -59,14 +60,6 @@ function getBadgeClassName(tone: "neutral" | "warning" = "neutral") {
   return "flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-700";
 }
 
-function DisclosureChevron() {
-  return (
-    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 20 20" fill="none">
-      <path d="M7 4L13 10L7 16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.25" />
-    </svg>
-  );
-}
-
 export function ReportExecutiveSummary({
   title = "Executive summary",
   titleTooltip,
@@ -80,9 +73,7 @@ export function ReportExecutiveSummary({
       {statusCallout ? (
         <details className={`${getCalloutClassName(statusCallout.tone)} group/callout`}>
           <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold marker:hidden [&::-webkit-details-marker]:hidden">
-            <span aria-hidden="true" className="inline-flex shrink-0 opacity-70 transition-transform group-open/callout:rotate-90">
-              <DisclosureChevron />
-            </span>
+            <ScanReportDisclosureIcon className="group-open/callout:rotate-90 opacity-70" />
             <span>{statusCallout.title}</span>
           </summary>
           <ul className={getCalloutListClassName(statusCallout.tone)}>

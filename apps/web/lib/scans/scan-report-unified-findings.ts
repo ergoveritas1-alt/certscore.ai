@@ -118,6 +118,15 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function firstPresent<T>(...values: Array<T | null | undefined>): T | null {
+  for (const value of values) {
+    if (value !== null && value !== undefined) {
+      return value;
+    }
+  }
+  return null;
+}
+
 function mergeEvidenceRecords(
   base: Record<string, unknown> | undefined,
   supplement: Record<string, unknown> | undefined
@@ -648,12 +657,39 @@ function derivePreconsentViolationRows(input: {
   trackerVendors: ScanDetailResponse["trackerVendors"];
 }): PreconsentViolationRow[] {
   const runtimeRows = deriveRuntimePreconsentViolationRows(input);
-  if (input.persistedViolations.length === 0) {
+  const persistedRows = input.persistedViolations.map(normalizePreconsentViolationRow).filter(
+    (row): row is PreconsentViolationRow => row !== null
+  );
+  if (persistedRows.length === 0) {
     return runtimeRows;
   }
 
-  const mergedRows = mergePreconsentViolationRows(input.persistedViolations, runtimeRows);
+  const mergedRows = mergePreconsentViolationRows(persistedRows, runtimeRows);
   return mergedRows;
+}
+
+function normalizePreconsentViolationRow(value: unknown): PreconsentViolationRow | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  const vendorName = getRecordString(row, ["vendorName", "vendor_name"]);
+  const vendorCategory = getRecordString(row, ["vendorCategory", "vendor_category"]) ?? "unknown";
+  if (!vendorName) {
+    return null;
+  }
+
+  return {
+    collectionEndpointType: getRecordString(row, ["collectionEndpointType", "collection_endpoint_type"]),
+    confidence: confidenceToNumber(row.confidence),
+    detectionSource: getRecordString(row, ["detectionSource", "detection_source"]),
+    evidenceUrls: uniqueStrings(getRecordStringArray(row, "evidenceUrls").concat(getRecordStringArray(row, "evidence_urls"))),
+    firstPartyOrThirdParty: getRecordString(row, ["firstPartyOrThirdParty", "first_party_or_third_party"]),
+    matchedSignatureId: getRecordString(row, ["matchedSignatureId", "matched_signature_id"]),
+    scriptHost: getRecordString(row, ["scriptHost", "script_host"]),
+    vendorCategory,
+    vendorName
+  };
 }
 
 function deriveRuntimePreconsentViolationRows(input: {
@@ -818,12 +854,17 @@ function deriveRuntimeArtifactPreconsentViolationRows(runtimeArtifacts: Record<s
 function mergePreconsentViolationRows(...rowSets: PreconsentViolationRow[][]) {
   const rows = new Map<string, PreconsentViolationRow>();
   for (const row of rowSets.flat()) {
-    const key = row.vendorName.toLowerCase();
+    const vendorName = typeof row.vendorName === "string" ? row.vendorName.trim() : "";
+    if (!vendorName) {
+      continue;
+    }
+    const key = vendorName.toLowerCase();
     const existing = rows.get(key);
     if (!existing) {
       rows.set(key, {
         ...row,
-        evidenceUrls: uniqueStrings(row.evidenceUrls)
+        evidenceUrls: uniqueStrings(row.evidenceUrls),
+        vendorName
       });
       continue;
     }
@@ -846,7 +887,8 @@ function mergePreconsentViolationRows(...rowSets: PreconsentViolationRow[][]) {
           : row.firstPartyOrThirdParty,
       matchedSignatureId: existing.matchedSignatureId ?? row.matchedSignatureId,
       scriptHost: existing.scriptHost ?? row.scriptHost,
-      vendorCategory: existing.vendorCategory !== "unknown" ? existing.vendorCategory : row.vendorCategory
+      vendorCategory: existing.vendorCategory !== "unknown" ? existing.vendorCategory : row.vendorCategory,
+      vendorName: existing.vendorName || vendorName
     });
   }
 
@@ -1219,9 +1261,62 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   });
   const preconsentCookieEvidenceRows = runtimeCookieInventory.beforeConsentRows.map(compactPreconsentCookieEvidenceRow);
   const preconsentViolationEvidenceRows = input.preconsentViolations.map(compactPreconsentViolationEvidenceRow);
-  const consentTimeline =
-    getRuntimeObject(input.runtimeArtifacts, ["consentTimeline", "consent_timeline"]) ??
-    getRuntimeObject(preconsentEvidenceRecord, ["consentTimeline", "consent_timeline"]);
+  const directConsentTimeline = getRuntimeObject(input.runtimeArtifacts, ["consentTimeline", "consent_timeline"]);
+  const derivedConsentTimeline = getRuntimeObject(preconsentEvidenceRecord, ["consentTimeline", "consent_timeline"]);
+  const consentTimeline: Record<string, unknown> | null = directConsentTimeline || derivedConsentTimeline
+    ? {
+        ...derivedConsentTimeline,
+        ...directConsentTimeline,
+        firstAcceptActionMs: firstPresent(
+          directConsentTimeline?.firstAcceptActionMs,
+          directConsentTimeline?.first_accept_action_ms,
+          derivedConsentTimeline?.firstAcceptActionMs,
+          derivedConsentTimeline?.first_accept_action_ms
+        ),
+        firstCmpVisibleMs: firstPresent(
+          directConsentTimeline?.firstCmpVisibleMs,
+          directConsentTimeline?.first_cmp_visible_ms,
+          derivedConsentTimeline?.firstCmpVisibleMs,
+          derivedConsentTimeline?.first_cmp_visible_ms
+        ),
+        firstConsentActionMs: firstPresent(
+          directConsentTimeline?.firstConsentActionMs,
+          directConsentTimeline?.first_consent_action_ms,
+          derivedConsentTimeline?.firstConsentActionMs,
+          derivedConsentTimeline?.first_consent_action_ms
+        ),
+        firstNonEssentialRequestMs: firstPresent(
+          directConsentTimeline?.firstNonEssentialRequestMs,
+          directConsentTimeline?.first_non_essential_request_ms,
+          derivedConsentTimeline?.firstNonEssentialRequestMs,
+          derivedConsentTimeline?.first_non_essential_request_ms
+        ),
+        firstRejectActionMs: firstPresent(
+          directConsentTimeline?.firstRejectActionMs,
+          directConsentTimeline?.first_reject_action_ms,
+          derivedConsentTimeline?.firstRejectActionMs,
+          derivedConsentTimeline?.first_reject_action_ms
+        ),
+        firstTrackingCookieSetMs: firstPresent(
+          directConsentTimeline?.firstTrackingCookieSetMs,
+          directConsentTimeline?.first_tracking_cookie_set_ms,
+          derivedConsentTimeline?.firstTrackingCookieSetMs,
+          derivedConsentTimeline?.first_tracking_cookie_set_ms
+        ),
+        firstUserActionMs: firstPresent(
+          directConsentTimeline?.firstUserActionMs,
+          directConsentTimeline?.first_user_action_ms,
+          derivedConsentTimeline?.firstUserActionMs,
+          derivedConsentTimeline?.first_user_action_ms
+        ),
+        timelineConfidence: firstPresent(
+          directConsentTimeline?.timelineConfidence,
+          directConsentTimeline?.timeline_confidence,
+          derivedConsentTimeline?.timelineConfidence,
+          derivedConsentTimeline?.timeline_confidence
+        )
+      }
+    : null;
   const directRequestClassifications = getRuntimeObjectArray(input.runtimeArtifacts, [
     "requestPurposeClassificationConfidence",
     "request_purpose_classification_confidence"

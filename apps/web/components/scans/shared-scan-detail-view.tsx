@@ -23,6 +23,7 @@ import { FullScanProgressCard } from "./full-scan-progress-card";
 import { FingerprintingPanel } from "./fingerprinting-panel";
 import { InfoTip } from "./info-tip";
 import { RedirectFlowPanel } from "./redirect-flow-panel";
+import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import { ScanPageHeader } from "./scan-page-header";
 import { VendorFootprintCard } from "./vendor-footprint-card";
 import {
@@ -1677,19 +1678,6 @@ function getCollapsedFindingSummary(finding: UnifiedFindingDisplayPacket) {
   return `${normalized.slice(0, 117).trimEnd()}...`;
 }
 
-function DisclosureChevron(input?: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={input?.className ?? "h-4 w-4"}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <path d="M7 4L13 10L7 16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.25" />
-    </svg>
-  );
-}
-
 function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
   const validationSupport = formatValidationSupport(input.finding);
   const pageAttribution = getFindingPageAttributionSummary(input.finding);
@@ -1713,9 +1701,7 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
       className={`group/finding scroll-mt-24 rounded-lg border px-3 py-3 ${getFindingToneClasses(input.finding)}`}
     >
       <summary className="flex cursor-pointer list-none items-center gap-2 marker:hidden [&::-webkit-details-marker]:hidden">
-        <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/finding:rotate-90">
-          <DisclosureChevron />
-        </span>
+        <ScanReportDisclosureIcon className="group-open/finding:rotate-90" />
         <p className="shrink-0 whitespace-nowrap text-sm font-semibold text-slate-950">
           {display.title}
         </p>
@@ -1790,9 +1776,7 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
       </div>
       <details className="group/evidence mt-3 rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
         <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
-          <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/evidence:rotate-90">
-            <DisclosureChevron />
-          </span>
+          <ScanReportDisclosureIcon className="group-open/evidence:rotate-90" />
           <span>Evidence</span>
         </summary>
         <div className="mt-2 space-y-2 text-xs text-slate-500">
@@ -1840,9 +1824,7 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
           ) : null}
           <details className="group/json rounded-lg border border-slate-200/80 bg-white/70 px-3 py-2">
             <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
-              <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/json:rotate-90">
-                <DisclosureChevron />
-              </span>
+              <ScanReportDisclosureIcon className="group-open/json:rotate-90" />
               <span>Technical JSON</span>
             </summary>
             <EvidenceJsonBlock
@@ -3291,9 +3273,7 @@ function AgencyAdvisorySummary(input: {
         {(infrastructureItems.length > 0 || audienceItems.length > 0 || input.vendorGroups.length > 0 || input.statusCallout) ? (
           <details className="group/context rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
               <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
-                <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/context:rotate-90">
-                  <DisclosureChevron />
-                </span>
+                <ScanReportDisclosureIcon className="group-open/context:rotate-90" />
                 <span>Operational context</span>
               </summary>
 
@@ -3306,9 +3286,7 @@ function AgencyAdvisorySummary(input: {
                   {input.vendorGroups.length > 0 ? (
                     <details className="group/context-card rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
                       <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
-                        <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/context-card:rotate-90">
-                          <DisclosureChevron />
-                        </span>
+                        <ScanReportDisclosureIcon className="group-open/context-card:rotate-90" />
                         <span>Vendors</span>
                       </summary>
                       <div className="mt-3 space-y-3">
@@ -3329,9 +3307,7 @@ function AgencyAdvisorySummary(input: {
                   ) : null}
                   <details className="group/context-card rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
                     <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
-                      <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/context-card:rotate-90">
-                        <DisclosureChevron />
-                      </span>
+                      <ScanReportDisclosureIcon className="group-open/context-card:rotate-90" />
                       <span>Infrastructure profile</span>
                     </summary>
                     {infrastructureItems.length > 0 ? (
@@ -3346,9 +3322,7 @@ function AgencyAdvisorySummary(input: {
                   </details>
                   <details className="group/context-card rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
                     <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
-                      <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/context-card:rotate-90">
-                        <DisclosureChevron />
-                      </span>
+                      <ScanReportDisclosureIcon className="group-open/context-card:rotate-90" />
                       <span>Audience & sensitive context</span>
                     </summary>
                     {audienceItems.length > 0 ? (
@@ -3396,9 +3370,7 @@ function ScanPassWarningCallout(input: {
   return (
     <details className={`${toneClasses} group/warning`}>
       <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] marker:hidden [&::-webkit-details-marker]:hidden">
-        <span aria-hidden="true" className="inline-flex shrink-0 opacity-70 transition-transform group-open/warning:rotate-90">
-          <DisclosureChevron />
-        </span>
+        <ScanReportDisclosureIcon className="group-open/warning:rotate-90 opacity-70" />
         <span>{input.statusCallout.title}</span>
       </summary>
       <ul className={detailClasses}>
@@ -3582,9 +3554,7 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
       <details className="group/noteworthy" open={true}>
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
           <span className="flex min-w-0 items-center gap-3">
-            <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/noteworthy:rotate-90">
-              <DisclosureChevron />
-            </span>
+            <ScanReportDisclosureIcon className="group-open/noteworthy:rotate-90" />
             <span className="min-w-0">
               <span className="flex flex-wrap items-center gap-2">
                 <span className="text-base font-semibold text-slate-900">Detailed review findings</span>
@@ -4443,9 +4413,7 @@ function CoverageMatrix(input: {
                           >
                             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
                               <div className="flex min-w-0 items-center gap-2">
-                                <span aria-hidden="true" className="inline-flex shrink-0 text-slate-400 transition-transform group-open/category:rotate-90">
-                                  <DisclosureChevron />
-                                </span>
+                                <ScanReportDisclosureIcon className="group-open/category:rotate-90" />
                                 <p className="text-sm text-slate-700">{category.label}</p>
                               </div>
                               <CategorySeverityCounts findings={categoryFindings} />

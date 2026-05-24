@@ -6,6 +6,7 @@ import {
 } from "../../lib/scans/public-report-finding-display";
 import { EvidencePreview } from "./evidence-preview";
 import { InfoTip } from "./info-tip";
+import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 
 function getSeverityClasses(severity: CertScoreFinding["severity"]) {
   switch (severity) {
@@ -71,9 +72,7 @@ export function FindingCard({ finding }: { finding: CertScoreFinding }) {
             <p className="max-w-3xl text-sm leading-6 text-slate-700">{finding.shortSummary}</p>
           </div>
         </div>
-        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-400 transition-transform group-open:rotate-45">
-          +
-        </span>
+        <ScanReportDisclosureIcon />
       </summary>
 
       <div className="mt-5 space-y-5 border-t border-slate-100 pt-4">

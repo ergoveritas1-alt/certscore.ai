@@ -1,5 +1,6 @@
 import { Card, cn } from "@website-signal-risk-scanner/ui";
 import React, { type ReactNode } from "react";
+import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 
 type CollapsibleSectionCardProps = {
   title: ReactNode;
@@ -11,14 +12,6 @@ type CollapsibleSectionCardProps = {
   contentClassName?: string;
   summaryClassName?: string;
 };
-
-function DisclosureChevron() {
-  return (
-    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 20 20" fill="none">
-      <path d="M7 4L13 10L7 16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.25" />
-    </svg>
-  );
-}
 
 export function CollapsibleSectionCard({
   title,
@@ -40,9 +33,7 @@ export function CollapsibleSectionCard({
           )}
         >
           {showChevron ? (
-            <span aria-hidden="true" className="mt-0.5 inline-flex shrink-0 text-slate-400 transition-transform duration-150 group-open/section:rotate-90">
-              <DisclosureChevron />
-            </span>
+            <ScanReportDisclosureIcon className="mt-0.5 group-open/section:rotate-90" />
           ) : null}
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-slate-900">{title}</p>

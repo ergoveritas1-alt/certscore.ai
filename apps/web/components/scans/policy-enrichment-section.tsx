@@ -1,5 +1,6 @@
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { InfoTip } from "./info-tip";
+import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 
 function getField(record: Record<string, unknown>, ...keys: string[]) {
   for (const key of keys) {
@@ -93,7 +94,7 @@ function renderPolicyRecord(
   const promptVersion = formatValue(getField(enrichment, "policyAiPromptVersion", "policy_ai_prompt_version"));
 
   return (
-    <details key={enrichmentKey} className="rounded-xl border border-slate-200 bg-white px-3 py-3" open>
+    <details key={enrichmentKey} className="group rounded-xl border border-slate-200 bg-white px-3 py-3" open>
       <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -117,6 +118,7 @@ function renderPolicyRecord(
           <p className="break-all text-sm text-slate-600">{pageUrl}</p>
           <p className="text-sm text-slate-700">{summary}</p>
         </div>
+        <ScanReportDisclosureIcon />
       </summary>
 
       <div className="mt-4 space-y-4 border-t border-slate-200 pt-4">

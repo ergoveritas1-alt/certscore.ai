@@ -31,6 +31,7 @@ import { CopyJsonButton } from "./copy-json-button";
 import { EvidenceJsonBlock } from "./evidence-json-block";
 import { FindingHashFocus } from "./finding-hash-focus";
 import { InfoTip } from "./info-tip";
+import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import { getVendorBrandMark, VendorBrandChip } from "./vendor-brand-chip";
 type DomainBenchmarkCardData = {
   confidence: "low" | "medium" | "high";
@@ -376,7 +377,7 @@ function DetailDisclosure(input: {
     <details className="group mt-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
         <span>{input.summary}</span>
-        <span className="text-slate-400 transition-transform group-open:rotate-180">⌄</span>
+        <ScanReportDisclosureIcon />
       </summary>
       <div className="mt-3 space-y-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{input.title}</p>
@@ -406,14 +407,6 @@ function DetailDisclosure(input: {
         </div>
       </div>
     </details>
-  );
-}
-
-function DisclosureChevronIcon(input?: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={input?.className ?? "h-4 w-4"} viewBox="0 0 20 20" fill="none">
-      <path d="M7 4L13 10L7 16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.25" />
-    </svg>
   );
 }
 
@@ -2168,10 +2161,7 @@ function RegulatoryLensFindingCard(input: {
               </span>
             ) : null}
           </span>
-          <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border border-slate-300 bg-white text-slate-500 shadow-sm transition-transform duration-150 group-open/json:rotate-90 group-hover/json:border-slate-400 group-hover/json:text-slate-700">
-            <span className="sr-only">Show evidence JSON</span>
-            <DisclosureChevronIcon className="h-2 w-2" />
-          </span>
+          <ScanReportDisclosureIcon className="h-5 w-5 group-open/json:rotate-90" />
         </summary>
         <div className="mt-3 space-y-3">
           {input.finding.reviewContextCopy ? (
@@ -2500,7 +2490,7 @@ function BenchmarkScoreNote({ message }: { message: string }) {
           <span className="font-semibold text-slate-950">Score note:</span>{" "}
           {message}
         </span>
-        <span className="shrink-0 text-slate-400 transition-transform group-open:rotate-180">⌄</span>
+        <ScanReportDisclosureIcon />
       </summary>
     </details>
   );
@@ -3246,7 +3236,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
     <details id={getFindingEvidenceAnchor(input.finding)} className={`group mt-3 scroll-mt-24 rounded-xl border px-3 py-2 ${tone.summary}`}>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-medium leading-5">
         <span className="line-clamp-2 min-w-0 group-open:line-clamp-none">{input.finding.shortSummary}</span>
-        <span className="text-slate-400 transition-transform group-open:rotate-180">⌄</span>
+        <ScanReportDisclosureIcon />
       </summary>
       <div className="mt-4 space-y-4">
         <div className="space-y-1.5">
@@ -3335,7 +3325,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
           >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
               <span>Evidence details</span>
-              <span className="text-slate-400 transition-transform group-open/json:rotate-180">⌄</span>
+              <ScanReportDisclosureIcon className="group-open/json:rotate-90" />
             </summary>
             <EvidenceJsonBlock
               payload={jsonPayload}
@@ -4285,7 +4275,7 @@ export function ExecutiveSummaryCard(input: {
                             ) : null}
                           </span>
                           <span className="col-span-2 min-w-0 pr-6 text-xs leading-5 text-slate-600">{lens.summary}</span>
-                          <span className="absolute bottom-0 right-0 text-right text-slate-400 transition-transform group-open:rotate-180">⌄</span>
+                          <ScanReportDisclosureIcon className="absolute bottom-0 right-0" />
                         </summary>
                         <div className="mt-3 border-t border-slate-200 pt-3">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
@@ -4344,7 +4334,7 @@ export function ExecutiveSummaryCard(input: {
                         <details key={`${surface.pageLabel}:${surface.pageUrl ?? "unknown"}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
                           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
                             <span>{surface.pageLabel}</span>
-                            <span className="text-slate-400 transition-transform group-open:rotate-180">⌄</span>
+                            <ScanReportDisclosureIcon />
                           </summary>
                           <div className="mt-3 space-y-2 text-xs leading-5 text-slate-600">
                             {surface.pageUrl ? <p className="break-words font-medium text-slate-800">{surface.pageUrl}</p> : null}
@@ -4384,7 +4374,7 @@ export function ExecutiveSummaryCard(input: {
                         <details key={`${event.label}:${event.details.join("|")}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
                           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
                             <span>{event.label}</span>
-                            <span className="text-slate-400 transition-transform group-open:rotate-180">⌄</span>
+                            <ScanReportDisclosureIcon />
                           </summary>
                           <div className="mt-3 space-y-1.5 text-xs leading-5 text-slate-600">
                             {event.details.length > 0 ? (
