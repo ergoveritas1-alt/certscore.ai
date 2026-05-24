@@ -177,6 +177,45 @@ function formatValue(value: unknown): string {
   return sanitizePublicReportEvidenceText(String(value));
 }
 
+function tryFormatJsonEvidencePacket(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || (typeof parsed !== "object" && !Array.isArray(parsed))) {
+      return null;
+    }
+
+    return JSON.stringify(compactEvidenceJsonForDisplay(parsed), null, 2);
+  } catch {
+    return null;
+  }
+}
+
+function SnapshotValue({ value }: { value: unknown }) {
+  const jsonPayload = tryFormatJsonEvidencePacket(value);
+
+  if (jsonPayload) {
+    return (
+      <div className="relative w-full max-w-full text-left">
+        <CopyJsonButton payload={jsonPayload} label="Copy evidence JSON" />
+        <pre className="max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 pr-12 font-mono text-[11px] leading-5 text-slate-100">
+          {jsonPayload}
+        </pre>
+      </div>
+    );
+  }
+
+  return <span>{formatValue(value)}</span>;
+}
+
 function formatCompactValue(value: unknown) {
   if (value === null || value === undefined || value === "") {
     return "Not observed";
@@ -6140,9 +6179,9 @@ export function SharedScanDetailView({
                 <div key={`${signal.key}:${index}`} className="rounded-2xl border border-slate-200 p-4">
                   <p className="font-medium text-slate-900">{signal.label}</p>
                   <p className="mt-1 text-sm text-slate-500">{signal.primaryCategoryLabel}{signal.subcategory ? ` · ${signal.subcategory}` : ""}</p>
-                  <p className="mt-3 text-sm text-slate-700">
-                    {formatValue(signal.value)}
-                  </p>
+                  <div className="mt-3 text-sm text-slate-700">
+                    <SnapshotValue value={signal.value} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -6165,7 +6204,9 @@ export function SharedScanDetailView({
                 {section.fields.map((field) => (
                   <div key={field} className="flex items-start justify-between gap-4 border-b border-slate-100 py-2 last:border-b-0">
                     <span className="font-medium text-slate-700">{field}</span>
-                    <span className="max-w-[60%] text-right text-slate-600">{formatValue(snapshot[field])}</span>
+                    <div className="max-w-[60%] text-right text-slate-600">
+                      <SnapshotValue value={snapshot[field]} />
+                    </div>
                   </div>
                 ))}
               </CollapsibleSectionCard>
@@ -6185,7 +6226,9 @@ export function SharedScanDetailView({
                 {section.fields.map((field) => (
                   <div key={field} className="flex items-start justify-between gap-4 border-b border-slate-100 py-2 last:border-b-0">
                     <span className="font-medium text-slate-700">{field}</span>
-                    <span className="max-w-[60%] text-right text-slate-600">{formatValue(snapshot[field])}</span>
+                    <div className="max-w-[60%] text-right text-slate-600">
+                      <SnapshotValue value={snapshot[field]} />
+                    </div>
                   </div>
                 ))}
               </CollapsibleSectionCard>

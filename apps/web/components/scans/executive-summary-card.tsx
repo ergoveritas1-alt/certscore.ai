@@ -754,7 +754,7 @@ function buildObservedCountLensFinding(input: {
   return buildRegulatoryLensFinding({
     evidence: {
       count: input.count,
-      ...(input.evidence ?? {}),
+      ...compactObservedCountEvidence(input.evidence),
       metric: input.metric,
       reason: input.label,
       source: input.source
@@ -764,6 +764,22 @@ function buildObservedCountLensFinding(input: {
     reviewContextCopy: input.reviewContextCopy,
     reviewContextLabel: input.reviewContextLabel
   });
+}
+
+function compactObservedCountEvidence(evidence: Record<string, unknown> | null | undefined) {
+  if (!evidence) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(evidence).filter(([, value]) => {
+      if (Array.isArray(value)) {
+        return value.length > 0;
+      }
+
+      return value !== undefined && value !== null;
+    })
+  );
 }
 
 const COOKIE_CONTEXT_NOT_TOP_LEVEL_COPY =
@@ -785,8 +801,7 @@ function hasBeforeConsentCookieAttribution(evidence: Record<string, unknown> | n
     "cookieCategories",
     "cookieVendors",
     "initiatorDomains",
-    "initiatorUrls",
-    "sourceFindingIds"
+    "initiatorUrls"
   ]);
 }
 

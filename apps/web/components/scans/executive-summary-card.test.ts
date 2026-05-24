@@ -549,6 +549,51 @@ test("buildRegulatoryLenses softens cookie timing copy when attribution arrays a
   assert.doesNotMatch(cookieFinding?.label ?? "", /classified cookies/i);
 });
 
+test("buildRegulatoryLenses omits empty cookie attribution arrays from count-only evidence", () => {
+  const lenses = buildRegulatoryLenses(
+    [],
+    {
+      beforeConsentCookieCount: 12,
+      thirdPartyRequestCount: 0
+    },
+    {
+      unifiedContext: {
+        beforeConsentCookieCount: 12,
+        beforeConsentCookieEvidence: {
+          cookieNames: [],
+          cookieCategories: [],
+          cookieTimingEvidence: [],
+          cookieVendors: [],
+          initiatorDomains: [],
+          initiatorUrls: [],
+          sourceFindingIds: ["preconsent_tracking"],
+          rawObservationCount: 0,
+          classifiedCookieCount: 12
+        },
+        hasTrackingConcern: true,
+        thirdPartyRequestCount: 0
+      }
+    }
+  );
+
+  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
+  const cookieFinding = gdprLens?.findings.find((finding) => finding.id === "before_consent_cookie_count");
+
+  assert.equal(
+    cookieFinding?.label,
+    "12 cookie timing records were retained before consent; vendor/category attribution was not retained."
+  );
+  assert.equal(cookieFinding?.evidence.count, 12);
+  assert.equal(cookieFinding?.evidence.classifiedCookieCount, 12);
+  assert.deepEqual(cookieFinding?.evidence.sourceFindingIds, ["preconsent_tracking"]);
+  assert.equal("cookieNames" in (cookieFinding?.evidence ?? {}), false);
+  assert.equal("cookieCategories" in (cookieFinding?.evidence ?? {}), false);
+  assert.equal("cookieTimingEvidence" in (cookieFinding?.evidence ?? {}), false);
+  assert.equal("cookieVendors" in (cookieFinding?.evidence ?? {}), false);
+  assert.equal("initiatorDomains" in (cookieFinding?.evidence ?? {}), false);
+  assert.equal("initiatorUrls" in (cookieFinding?.evidence ?? {}), false);
+});
+
 test("buildRegulatoryLenses caps count-only privacy lenses at Watch", () => {
   const lenses = buildRegulatoryLenses(
     [],
