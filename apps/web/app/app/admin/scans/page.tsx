@@ -90,8 +90,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
               <col style={{ width: "190px" }} />
               <col style={{ width: "170px" }} />
               <col style={{ width: "360px" }} />
-              <col style={{ width: "260px" }} />
-              <col style={{ width: "140px" }} />
+              <col style={{ width: "300px" }} />
               <col style={{ width: "60px" }} />
             </colgroup>
             <thead>
@@ -100,7 +99,6 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                 <th className="pb-3 pr-4 font-medium">Target</th>
                 <th className="pb-3 pr-4 font-medium">Scan</th>
                 <th className="pb-3 pr-4 font-medium">Result</th>
-                <th className="pb-3 pr-4 font-medium">Activity</th>
                 <th className="pb-3 font-medium">Open</th>
               </tr>
             </thead>
@@ -183,8 +181,8 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                           <p className="text-xs text-slate-500">Top findings {scan.topFindingCount ?? 0}</p>
                         </>
                       )}
+                      <p className="mt-1 text-xs text-slate-500">{formatAdminDateTime(scan.activityAt)}</p>
                     </td>
-                    <td className="py-3 pr-4 align-top text-xs text-slate-600">{formatAdminDateTime(scan.activityAt)}</td>
                     <td className="py-3 align-top">
                       {scan.linkedScanId && scan.scanViewHref ? (
                         <AdminScanActions scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} />

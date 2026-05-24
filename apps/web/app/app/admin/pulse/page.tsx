@@ -158,13 +158,12 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
           />
 
           <div className="overflow-x-auto">
-            <table className="min-w-[1180px] table-fixed divide-y divide-slate-200 text-sm">
+            <table className="min-w-[1060px] table-fixed divide-y divide-slate-200 text-sm">
               <colgroup>
                 <col style={{ width: "220px" }} />
                 <col style={{ width: "220px" }} />
                 <col style={{ width: "240px" }} />
-                <col style={{ width: "330px" }} />
-                <col style={{ width: "120px" }} />
+                <col style={{ width: "380px" }} />
                 <col style={{ width: "50px" }} />
               </colgroup>
               <thead>
@@ -173,7 +172,6 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                   <th className="pb-3 pr-4 font-medium">Target</th>
                   <th className="pb-3 pr-4 font-medium">Mode</th>
                   <th className="pb-3 pr-4 font-medium">Result</th>
-                  <th className="pb-3 pr-4 font-medium">Activity</th>
                   <th className="pb-3 font-medium">Open</th>
                 </tr>
               </thead>
@@ -217,8 +215,8 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                           </p>
                         ) : null}
                         <p className="mt-1 text-xs text-slate-500">Feedback {request.feedbackCount}</p>
+                        <p className="mt-1 text-xs text-slate-500">{formatAdminDateTime(request.requestedAt)}</p>
                       </td>
-                      <td className="py-3 pr-4 align-top text-xs text-slate-600">{formatAdminDateTime(request.requestedAt)}</td>
                       <td className="py-3 align-top">
                         <Link className="text-sm font-semibold text-sky-700" href={`/app/admin/pulse/${request.publicId}`}>
                           Details
