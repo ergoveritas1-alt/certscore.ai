@@ -140,8 +140,9 @@ test("deriveCertScoreFindings classifies retained CMP hosts for vendor mix conte
   });
 
   assert.ok(summary.resolvedVendorNames.includes("OneTrust"));
-  assert.ok(summary.topObservedEntities.some((entity) => entity.label === "cdn.cookielaw.org" && entity.category === "cmp"));
-  assert.ok(summary.topObservedEntities.some((entity) => entity.label === "fundingchoicesmessages.google.com" && entity.category === "cmp"));
+  assert.ok(summary.topObservedEntities.some((entity) => entity.label === "OneTrust" && entity.category === "cmp" && entity.requestCount === 2));
+  assert.ok(summary.topObservedEntities.some((entity) => entity.label === "Google Funding Choices" && entity.category === "cmp"));
+  assert.ok(!summary.topObservedEntities.some((entity) => entity.label === "cdn.cookielaw.org"));
 });
 
 test("deriveCertScoreFindings preserves landed-host attribution and host alias handling", () => {

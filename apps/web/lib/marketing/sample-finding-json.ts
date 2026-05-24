@@ -1211,10 +1211,10 @@ const illustrativeLongLivedCookieRetentionReview = {
   evidenceConfidence: "strong",
   directVsInferred: "direct_observation",
   observed:
-    "Retained runtime cookie evidence showed persistent tracking or unclassified cookies whose observed expiry or computed duration met a CertScore retention review threshold.",
+    "Retained runtime cookie evidence showed persistent tracking or unclassified cookies whose observed expiry or computed duration met CertScore retention review thresholds: 365 days or longer for main review, or 180-364 days for source-attributed or multiple tracking-cookie review context.",
   evidence: {
     summary:
-      "Retained runtime cookie evidence showed persistent tracking or unclassified cookies whose observed expiry or computed duration met a CertScore retention review threshold.",
+      "Retained runtime cookie evidence showed persistent tracking or unclassified cookies whose observed expiry or computed duration met CertScore retention review thresholds: 365 days or longer for main review, or 180-364 days for source-attributed or multiple tracking-cookie review context.",
     examples: [
       {
         title: "Long-lived runtime cookie evidence",

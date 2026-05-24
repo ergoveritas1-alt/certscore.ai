@@ -1131,7 +1131,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "cookie_retention_lifetime_review",
       label: "Cookie retention and minimization review",
       displayCopy:
-        "Retained runtime cookie evidence showed persistent tracking, advertising, analytics, identity, or unclassified cookies with expiry or duration evidence that met a CertScore retention review threshold. This may be relevant to retention, minimization, consent, opt-out, and disclosure review depending on purpose, configuration, user region, and manual review."
+        "Retained runtime cookie evidence showed persistent tracking, advertising, analytics, identity, or unclassified cookies with expiry or duration evidence meeting CertScore retention review thresholds: 365 days or longer for main review, or 180-364 days for source-attributed or multiple tracking-cookie review context. This may be relevant to retention, minimization, consent, opt-out, and disclosure review depending on purpose, configuration, user region, and manual review."
     },
     technicalStandards: [
       {

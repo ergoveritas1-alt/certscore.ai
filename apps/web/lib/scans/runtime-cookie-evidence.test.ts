@@ -56,6 +56,7 @@ test("builds cookie inventory with initiator provenance and before-consent timin
           cookieName: "_fbp",
           cookieSetMethod: "document_cookie",
           domain: ".example.com",
+          responseUrl: "https://connect.facebook.net/fbevents.js",
           setAtMs: 120
         },
         {
@@ -80,6 +81,29 @@ test("builds cookie inventory with initiator provenance and before-consent timin
   assert.deepEqual(inventory.nonEssentialCookieNames, ["_fbp", "_ga"]);
   assert.deepEqual(inventory.unmatchedCookieNames, ["_fbp"]);
   assert.equal(inventory.rows.find((row) => row.cookieName === "_fbp")?.initiatorUrl, "https://connect.facebook.net/fbevents.js");
+  assert.equal(inventory.rows.find((row) => row.cookieName === "_fbp")?.responseUrl, "https://connect.facebook.net/fbevents.js");
+});
+
+test("normalizes initial-cookie sentinel timestamps as unknown timing values", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        {
+          beforeConsent: true,
+          cookieName: "adEdition",
+          cookieSetMethod: "http_header",
+          domain: "app.mps.vsnt.net",
+          setAtMs: -1
+        }
+      ]
+    }
+  });
+
+  const row = inventory.beforeConsentRows.find((entry) => entry.cookieName === "adEdition");
+  assert.ok(row);
+  assert.equal(row.setAtMs, null);
+  assert.equal(row.firstObservedAtMs, null);
+  assert.equal(row.timingEvidence, "before_consent_cookie_write");
 });
 
 test("builds cookie disclosure gap evidence from runtime and policy inventory", () => {

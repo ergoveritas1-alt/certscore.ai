@@ -1203,7 +1203,7 @@ test("ExecutiveSummaryCard explains interruption-backed limited coverage only wh
   assert.doesNotMatch(withoutInterruption, /Coverage was limited by site protections/);
 });
 
-test("ExecutiveSummaryCard renders mini vendor marks in vendor mix detail", () => {
+test("ExecutiveSummaryCard renders real vendor logo lookups in vendor badges", () => {
   const html = renderToStaticMarkup(createElement(ExecutiveSummaryCard, {
     accessLimitationNotice: null,
     beforeConsentCookieCount: 0,
@@ -1217,11 +1217,11 @@ test("ExecutiveSummaryCard renders mini vendor marks in vendor mix detail", () =
     posture: "Watch",
     preConsentVendorNames: [],
     requestedHost: "example.com",
-    resolvedVendorNames: ["OneTrust", "Google Ads"],
+    resolvedVendorNames: ["OneTrust", "Google Ads", "DoubleVerify", "Magnite / Rubicon", "Hotjar"],
     score: 72,
     sessionReplayVendorNames: [],
     thirdPartyRequestCount: 12,
-    thirdPartyDomains: ["cdn.cookielaw.org", "securepubads.g.doubleclick.net"],
+    thirdPartyDomains: ["cdn.cookielaw.org", "securepubads.g.doubleclick.net", "vtrk.dv.tech", "micro.rubiconproject.com"],
     topFindings: [],
     topObservedEntities: [
       { label: "OneTrust", category: "cmp", requestCount: 2 },
@@ -1236,8 +1236,11 @@ test("ExecutiveSummaryCard renders mini vendor marks in vendor mix detail", () =
   assert.match(html, /Vendor mix/);
   assert.match(html, /OneTrust/);
   assert.match(html, /Google Ads/);
-  assert.match(html, />OT</);
-  assert.match(html, />G</);
+  assert.match(html, /\/vendor-logos\/onetrust\.png/);
+  assert.match(html, /\/vendor-logos\/google\.png/);
+  assert.match(html, /\/vendor-logos\/doubleverify\.png/);
+  assert.match(html, /\/vendor-logos\/magnite\.png/);
+  assert.match(html, /\/vendor-logos\/hotjar\.png/);
   assert.match(html, /cmp · 2 req/);
 });
 
@@ -2051,7 +2054,7 @@ test("ExecutiveSummaryCard links mapped findings to registry interpretation cont
   );
 });
 
-test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-findings list", () => {
+test("ExecutiveSummaryCard keeps four or more top findings in an expandable top-findings list", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
@@ -2099,6 +2102,7 @@ test("ExecutiveSummaryCard keeps four or more top findings in a scrollable top-f
   assert.match(html, /data-executive-top-findings-list="true"/);
   assert.match(html, /data-executive-snapshot-pane="true"/);
   assert.doesNotMatch(html, /max-h-\[38\.375rem\]/);
+  assert.doesNotMatch(html, /overflow-y-auto/);
   assert.match(html, /Tracking started before consent/);
   assert.match(html, /Non-essential tracking continued after reject/);
   assert.match(html, /Session replay service signal observed/);

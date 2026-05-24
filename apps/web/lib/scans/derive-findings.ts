@@ -239,6 +239,41 @@ function looksLikeSessionReplayObservation(category: string | null, vendor: stri
     /qualtrics|siteintercept|hotjar|fullstory|clarity|contentsquare|mouseflow/i.test(`${vendor ?? ""} ${hostname ?? ""}`);
 }
 
+function getKnownCmpVendorForHost(host: string) {
+  const normalized = host.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0]?.replace(/:\d+$/, "") ?? "";
+  if (/(^|\.)((cdn\.)?cookielaw\.org|onetrust\.(?:com|io)|geolocation\.onetrust\.com|optanon\.blob\.core\.windows\.net)$/i.test(normalized)) {
+    return "OneTrust";
+  }
+  if (/(^|\.)(trustarc\.com|truste\.com|consent\.trustarc\.com|form-renderer\.trustarc\.com|privacy-policy\.truste\.com|preferences\.trustarc\.com)$/i.test(normalized)) {
+    return "TrustArc";
+  }
+  if (/(^|\.)consent\.cookiebot\.com$/i.test(normalized)) {
+    return "Cookiebot";
+  }
+  if (/(^|\.)app\.cookieinformation\.com$/i.test(normalized)) {
+    return "Cookie Information";
+  }
+  if (/(^|\.)(sourcepoint\.mgr\.consensu\.org|mgr\.consensu\.org)$/i.test(normalized)) {
+    return "Sourcepoint";
+  }
+  if (/(^|\.)quantcast\.mgr\.consensu\.org$/i.test(normalized)) {
+    return "Quantcast Choice";
+  }
+  if (/(^|\.)fundingchoicesmessages\.google\.com$/i.test(normalized)) {
+    return "Google Funding Choices";
+  }
+  if (/(^|\.)usercentrics\.(?:eu|com)$/i.test(normalized)) {
+    return "Usercentrics";
+  }
+  if (/(^|\.)termly\.io$/i.test(normalized)) {
+    return "Termly";
+  }
+  if (/(^|\.)cdn\.privacy-mgmt\.com$/i.test(normalized)) {
+    return "Privacy Management CMP";
+  }
+  return null;
+}
+
 function isConsentMechanismCookieName(name: string) {
   return /^(optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|didomi_token)$/i.test(
     name
@@ -310,33 +345,37 @@ function deriveTopObservedEntities(input: {
   requestObservations: Record<string, unknown>[];
   vendorCategoryCounts: Record<string, number>;
 }) {
-  const hostCounts = new Map<string, number>();
+  const entityCounts = new Map<string, { label: string; category: string; requestCount: number }>();
   for (const row of input.requestObservations) {
     const domain = getString(row.domain);
     if (!domain) {
       continue;
     }
-    hostCounts.set(domain, (hostCounts.get(domain) ?? 0) + 1);
-  }
-
-  return [...hostCounts.entries()]
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 10)
-    .map(([label, requestCount]) => {
-      let category = "unknown";
-      if (/(cookielaw\.org|onetrust\.(?:com|io)|optanon|trustarc\.com|truste\.com|cookiebot\.com|cookieinformation\.com|privacy-mgmt\.com|consensu\.org|usercentrics|termly|fundingchoicesmessages\.google\.com)/i.test(label)) {
-        category = "cmp";
-      } else if (/cloudflare|fonts\.googleapis|fonts\.gstatic|google/.test(label)) {
+    const cmpVendor = getKnownCmpVendorForHost(domain);
+    let category = cmpVendor ? "cmp" : "unknown";
+    let label = cmpVendor ?? domain;
+    if (!cmpVendor) {
+      if (/cloudflare|fonts\.googleapis|fonts\.gstatic|google/.test(domain)) {
         category = "functional";
       }
-      if (/media\.net|adnxs|xandr/.test(label)) {
+      if (/media\.net|adnxs|xandr/.test(domain)) {
         category = "advertising";
       }
-      if (/plausible|analytics/.test(label)) {
+      if (/plausible|analytics/.test(domain)) {
         category = "analytics";
       }
-      return { category, label, requestCount };
-    });
+    }
+    const existing = entityCounts.get(label);
+    if (existing) {
+      existing.requestCount += 1;
+    } else {
+      entityCounts.set(label, { category, label, requestCount: 1 });
+    }
+  }
+
+  return [...entityCounts.values()]
+    .sort((left, right) => right.requestCount - left.requestCount || left.label.localeCompare(right.label))
+    .slice(0, 10);
 }
 
 function deriveSummaryPosture(score: number | null) {

@@ -255,6 +255,7 @@ function compactPreconsentCookieEvidenceRow(row: RuntimeCookieEvidenceRow) {
     initiatorDomain: row.initiatorDomain,
     initiatorVendor: row.initiatorVendor,
     initiatorUrl: row.initiatorUrl,
+    responseUrl: row.responseUrl,
     setAtMs: row.setAtMs,
     setMethod: row.setMethod,
     timingEvidence: row.timingEvidence

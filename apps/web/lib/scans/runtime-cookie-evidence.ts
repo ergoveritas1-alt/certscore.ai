@@ -8,6 +8,7 @@ export type RuntimeCookieEvidenceRow = {
   initiatorVendor: string | null;
   nonEssential: boolean;
   party: "first_party" | "third_party" | "unknown";
+  responseUrl: string | null;
   setAtMs: number | null;
   setMethod: string | null;
   timingEvidence: "before_consent_cookie_write" | "initial_cookie_snapshot" | "unknown";
@@ -314,8 +315,10 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
   const explicitCategory = getString(row.category ?? row.cookieCategory ?? row.cookie_category);
   const inferredCategory = classifyRuntimeCookieCategory(cookieName, domain);
   const category = explicitCategory && explicitCategory !== "unknown" ? explicitCategory : inferredCategory;
-  const setAtMs = getNumber(row.setAtMs ?? row.set_at_ms);
-  const firstObservedAtMs = getNumber(row.firstObservedAtMs ?? row.first_observed_at_ms) ?? setAtMs;
+  const rawSetAtMs = getNumber(row.setAtMs ?? row.set_at_ms);
+  const setAtMs = rawSetAtMs !== null && rawSetAtMs >= 0 ? rawSetAtMs : null;
+  const rawFirstObservedAtMs = getNumber(row.firstObservedAtMs ?? row.first_observed_at_ms);
+  const firstObservedAtMs = rawFirstObservedAtMs !== null && rawFirstObservedAtMs >= 0 ? rawFirstObservedAtMs : setAtMs;
   return {
     category,
     cookieName,
@@ -326,6 +329,7 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     initiatorVendor: getString(row.initiatorVendor ?? row.initiator_vendor ?? row.cookieInitiatorVendor ?? row.cookie_initiator_vendor),
     nonEssential: getBoolean(row.nonEssential ?? row.non_essential) ?? isNonEssentialCookieCategory(category),
     party: getCookiePartyType(row, domain, hybrid),
+    responseUrl: getString(row.responseUrl ?? row.response_url),
     setAtMs,
     setMethod: getString(row.cookieSetMethod ?? row.cookie_set_method ?? row.setMethod ?? row.set_method),
     timingEvidence: isPreconsentCookieWrite(row, hybrid) ? "before_consent_cookie_write" : "unknown"
@@ -344,6 +348,7 @@ function normalizeInitialCookieRow(cookieName: string, domain: string | null): R
     initiatorVendor: null,
     nonEssential: isNonEssentialCookieCategory(category),
     party: "unknown",
+    responseUrl: null,
     setAtMs: null,
     setMethod: "initial_cookie_snapshot",
     timingEvidence: "initial_cookie_snapshot"

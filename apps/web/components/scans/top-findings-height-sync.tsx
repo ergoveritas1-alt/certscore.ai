@@ -20,15 +20,18 @@ export function TopFindingsHeightSync() {
     const syncHeight = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
+        list.style.maxHeight = "";
+        list.style.overflowY = "";
+
         if (!window.matchMedia("(min-width: 1024px)").matches) {
-          list.style.maxHeight = "";
+          list.style.minHeight = "";
           return;
         }
 
         const listTop = list.getBoundingClientRect().top;
         const snapshotBottom = snapshot.getBoundingClientRect().bottom;
-        const maxHeight = Math.max(240, Math.floor(snapshotBottom - listTop));
-        list.style.maxHeight = `${maxHeight}px`;
+        const minHeight = Math.max(240, Math.floor(snapshotBottom - listTop));
+        list.style.minHeight = `${minHeight}px`;
       });
     };
 
@@ -44,6 +47,8 @@ export function TopFindingsHeightSync() {
       resizeObserver.disconnect();
       window.removeEventListener("resize", syncHeight);
       list.style.maxHeight = "";
+      list.style.minHeight = "";
+      list.style.overflowY = "";
     };
   }, []);
 
