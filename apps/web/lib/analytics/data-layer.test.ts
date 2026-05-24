@@ -157,7 +157,7 @@ test("GPT CTA events dispatch after analytics consent is granted", () => {
     event: "gpt_cta_clicked",
     location: "api_pulse",
     destination: "certscore_gpt",
-    url: "https://chatgpt.com/g/g-6a0cbbf2d9888191b9486207296a6c11-certscore-ai-website-privacy-scanner"
+    url: "https://chatgpt.com/g/g-6a123a39b0688191b41481fde1da54e3-gdpr-ccpa-consent-scanner-by-certscore-ai"
   });
 
   assert.deepEqual(mockWindow.dataLayer, [
@@ -165,7 +165,7 @@ test("GPT CTA events dispatch after analytics consent is granted", () => {
       event: "gpt_cta_clicked",
       location: "api_pulse",
       destination: "certscore_gpt",
-      url: "https://chatgpt.com/g/g-6a0cbbf2d9888191b9486207296a6c11-certscore-ai-website-privacy-scanner"
+      url: "https://chatgpt.com/g/g-6a123a39b0688191b41481fde1da54e3-gdpr-ccpa-consent-scanner-by-certscore-ai"
     }
   ]);
 });
