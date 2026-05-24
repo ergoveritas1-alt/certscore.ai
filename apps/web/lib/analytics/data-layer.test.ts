@@ -157,7 +157,7 @@ test("GPT CTA events dispatch after analytics consent is granted", () => {
     event: "gpt_cta_clicked",
     location: "api_pulse",
     destination: "certscore_gpt",
-    url: "https://chatgpt.com/g/g-6a124a5a7ba08191b6cbe6d3ca03616b-gdpr-ccpa-consent-scanner-by-certscore-ai/c/6a124c4d-7508-832d-878d-ed1bd8f4d956"
+    url: "https://chatgpt.com/g/g-6a124a5a7ba08191b6cbe6d3ca03616b-gdpr-ccpa-consent-scanner-by-certscore-ai"
   });
 
   assert.deepEqual(mockWindow.dataLayer, [
@@ -165,7 +165,7 @@ test("GPT CTA events dispatch after analytics consent is granted", () => {
       event: "gpt_cta_clicked",
       location: "api_pulse",
       destination: "certscore_gpt",
-      url: "https://chatgpt.com/g/g-6a124a5a7ba08191b6cbe6d3ca03616b-gdpr-ccpa-consent-scanner-by-certscore-ai/c/6a124c4d-7508-832d-878d-ed1bd8f4d956"
+      url: "https://chatgpt.com/g/g-6a124a5a7ba08191b6cbe6d3ca03616b-gdpr-ccpa-consent-scanner-by-certscore-ai"
     }
   ]);
 });
