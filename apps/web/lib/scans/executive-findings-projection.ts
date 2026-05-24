@@ -22,6 +22,7 @@ import { evaluateCookieRetentionReview, COOKIE_RETENTION_THRESHOLDS } from "./co
 import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import { getConsentControlLifecycleEvidence } from "./consent-control-lifecycle";
 import { getConsentGovernanceDisclosureEvidence } from "./consent-governance-disclosure";
+import { buildPromotionGradePreconsentRequests } from "./preconsent-public-evidence";
 
 const MAX_DISPLAY_SNIPPET_LENGTH = 240;
 
@@ -686,14 +687,27 @@ function sanitizeRequestClassificationAnchor(row: Record<string, unknown>) {
     getRecordString(row, ["hostname", "host", "domain"]) ??
     getUrlHostname(url);
   const result: Record<string, unknown> = {
+    ...(url ? { requestUrl: url } : {}),
     hostname,
+    ...(url ? { registrableDomain: getUrlHostname(url)?.split(".").slice(-2).join(".") ?? hostname } : {}),
     vendor: getRecordString(row, ["vendor", "vendorName", "vendor_name", "matchedVendorName", "matched_vendor_name"]),
     category: getRecordString(row, ["category", "vendorCategory", "vendor_category", "classification", "purpose"]),
     essentiality: getRecordString(row, ["essentiality", "classificationEssentiality", "classification_essentiality"]),
     confidence: getRecordString(row, ["confidence", "classificationConfidence", "classification_confidence"]),
     phase: getRecordString(row, ["phase", "runtimePhase", "runtime_phase", "timingStatus", "timing_status"]),
     firstObservedMs: getRecordNumber(row, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms", "timestampMs", "timestamp_ms"]),
-    evidenceSource: getRecordString(row, ["evidenceSource", "evidence_source", "source"])
+    evidenceSource: getRecordString(row, ["evidenceSource", "evidence_source", "source"]),
+    vendorAttributionBasis: getRecordString(row, [
+      "vendorAttributionBasis",
+      "vendor_attribution_basis",
+      "classificationBasis",
+      "classification_basis",
+      "matchedSignatureId",
+      "matched_signature_id",
+      "evidenceSource",
+      "evidence_source",
+      "source"
+    ])
   };
 
   return Object.fromEntries(
@@ -1226,7 +1240,7 @@ function getUrlHostname(value: string | null | undefined) {
 }
 
 const KNOWN_TRACKING_REQUEST_HOST_PATTERN =
-  /amazon-adsystem\.com|clarity\.ms|googletagmanager\.com|google-analytics\.com|googleadservices\.com|doubleclick\.net|bat\.bing\.com|connect\.facebook\.net|licdn\.com|hotjar\.com|fullstory\.com|hs-scripts\.com/i;
+  /amazon-adsystem\.com|clarity\.ms|googletagmanager\.com|google-analytics\.com|googleadservices\.com|doubleclick\.net|demdex\.net|rlcdn\.com|quantummetric\.com|bat\.bing\.com|connect\.facebook\.net|licdn\.com|hotjar\.com|fullstory\.com|hs-scripts\.com/i;
 
 function isLikelyRuntimeRequestUrl(value: string | null | undefined) {
   if (!value || !/^https?:\/\//i.test(value)) {
@@ -1525,7 +1539,17 @@ function buildPreConsentTrackingEvidenceDetails(
     .filter((row) => Object.keys(row).length > 0)
     .slice(0, 12);
   const scannedPageUrl = getScannedPageUrl(packet);
+  const promotionGradePreconsentRequests = buildPromotionGradePreconsentRequests({
+    rows: [
+      ...getEntityJsonObjects(packet, "requestPurposeClassificationConfidence"),
+      ...getEntityJsonObjects(packet, "request_purpose_classification_confidence")
+    ],
+    scannedPageUrl,
+    consentTimeline,
+    maxItems: 8
+  });
   const requestUrls = uniqueCaseInsensitiveStrings([
+    ...promotionGradePreconsentRequests.map((request) => request.requestUrl),
     ...getEntityUrlValues(packet, /^(?:preconsent_tracker_evidence_urls|runtimeRequestUrls|requestUrls|runtimeEvidenceUrls)$/i),
     ...(packet.details?.family === "consent_tracking" ? (packet.details.requestUrls ?? []) : []),
     ...(packet.evidence?.sourceUrls ?? []).filter((url) => /tag|pixel|collect|track|analytics|ads|clarity|hubspot|linkedin|facebook|reddit|tiktok|google/i.test(url))
@@ -1556,7 +1580,29 @@ function buildPreConsentTrackingEvidenceDetails(
         ? "accept"
         : null);
 
-  const allRepresentativeRequests = requestUrls.map((url, index) => {
+  const promotionGradeRepresentativeRequests = promotionGradePreconsentRequests.map((request) => ({
+    url: request.requestUrl,
+    hostname: request.hostname,
+    vendor: request.vendorName,
+    category: normalizeVendorCategory(request.vendorName, request.requestUrl, request.vendorCategory),
+    resourceType: /\.js(?:[?#]|$)|\/gtm\.js|script/i.test(request.requestUrl) ? "script" : null,
+    firstSeenMs: request.firstSeenMs ?? firstThirdPartyRequestMs,
+    thirdParty: true,
+    preConsent: true,
+    identifierLike: isLikelyIdentifierRequest(request.requestUrl),
+    deviceDataLike: isLikelyDeviceDataRequest(request.requestUrl),
+    queryKeysSample: getUrlQueryKeysSample(request.requestUrl),
+    scannedPageUrl: request.scannedPageUrl ?? scannedPageUrl,
+    registrableDomain: request.registrableDomain,
+    vendorAttributionBasis: request.vendorAttributionBasis,
+    consentActionMs: request.consentActionMs,
+    noConsentActionObserved: request.noConsentActionObserved,
+    consentSurfaceObserved: request.consentSurfaceObserved,
+    consentInteractionRecorded: request.consentInteractionRecorded,
+    confidence: request.confidence,
+    runtimePhase: request.runtimePhase
+  }));
+  const fallbackRepresentativeRequests = requestUrls.map((url, index) => {
     const hostname = getUrlHostname(url) ?? url;
     const matchedRow = vendorRows.find((row) => {
       const rowUrl = getRecordString(row, ["url", "requestUrl", "representativeUrl", "urlSample"]);
@@ -1587,6 +1633,9 @@ function buildPreConsentTrackingEvidenceDetails(
       queryKeysSample: getUrlQueryKeysSample(url)
     };
   });
+  const allRepresentativeRequests = promotionGradeRepresentativeRequests.length > 0
+    ? promotionGradeRepresentativeRequests
+    : fallbackRepresentativeRequests;
   const representativeRequests = sortRepresentativeRequestsByVendorCoverage(allRepresentativeRequests, vendors);
 
   const vendorDetails = vendors.slice(0, 8).map((name) => {

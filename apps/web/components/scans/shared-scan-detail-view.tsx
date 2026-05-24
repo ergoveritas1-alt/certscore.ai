@@ -50,6 +50,7 @@ import {
 } from "../../lib/scans/consent-audit-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { getHybridRuntimeEvidence } from "../../lib/scans/hybrid-runtime-evidence";
+import { buildPromotionGradePreconsentRequests } from "../../lib/scans/preconsent-public-evidence";
 import { buildSupplementalRuntimeUnifiedFindingPackets } from "../../lib/scans/supplemental-runtime-unified-findings";
 import {
   findMergedSignalValue,
@@ -3872,19 +3873,31 @@ function buildTrackingEvidenceExport(finding: UnifiedFindingDisplayPacket) {
     ...parseEntityObjectSamples(entities?.requestPurposeClassificationConfidence, 5),
     ...parseEntityObjectSamples(entities?.request_purpose_classification_confidence, 5)
   ];
-  const representativePreConsentRequests = requestRows.length > 0
-    ? requestRows.map((row) => ({
-        category: row.category ?? row.classification ?? null,
-        classificationBasis: row.classificationBasis ?? row.classification_basis ?? row.evidenceSource ?? null,
-        runtimePhase: row.runtimePhase ?? row.runtime_phase ?? null,
-        url: row.requestUrl ?? row.request_url ?? row.url ?? null,
-        vendor: row.vendor ?? null
+  const promotionGradeRows = buildPromotionGradePreconsentRequests({
+    rows: requestRows,
+    scannedPageUrl: finding.evidence?.pageUrls?.[0] ?? finding.primaryPageUrl ?? null,
+    consentTimeline,
+    maxItems: 5
+  });
+  const representativePreConsentRequests = promotionGradeRows.length > 0
+    ? promotionGradeRows.map((row) => ({
+        scannedPageUrl: row.scannedPageUrl ?? null,
+        requestUrl: row.requestUrl,
+        hostname: row.hostname,
+        registrableDomain: row.registrableDomain,
+        vendorName: row.vendorName,
+        vendorCategory: row.vendorCategory,
+        vendorAttributionBasis: row.vendorAttributionBasis,
+        firstSeenMs: row.firstSeenMs,
+        consentActionMs: row.consentActionMs,
+        noConsentActionObserved: row.noConsentActionObserved,
+        consentSurfaceObserved: row.consentSurfaceObserved,
+        consentInteractionRecorded: row.consentInteractionRecorded,
+        confidence: row.confidence,
+        runtimePhase: row.runtimePhase
       }))
     : [
-        ...(entities?.preconsent_tracker_evidence_urls ?? []),
-        ...(entities?.runtimeRequestUrls ?? []),
-        ...(entities?.urls ?? []),
-        ...(finding.evidence?.sourceUrls ?? [])
+        ...(entities?.preconsent_tracker_evidence_urls ?? [])
       ].slice(0, 5).map((url, index) => ({
         category: finding.evidence?.entities?.runtimeVendorCategories?.[index] ?? null,
         classificationBasis: null,

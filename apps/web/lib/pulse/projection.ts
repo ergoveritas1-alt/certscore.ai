@@ -2,6 +2,7 @@ import { projectExecutiveFindingsFromUnifiedPackets } from "../scans/executive-f
 import { getPublicReportFindingDisplay } from "../scans/public-report-finding-display";
 import type { CertScoreFinding } from "../scans/finding-registry";
 import { getRegulatoryLensAnchor } from "../scans/regulatory-lens-anchor";
+import { buildPromotionGradePreconsentRequests } from "../scans/preconsent-public-evidence";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { buildScanReportUnifiedFindings } from "../../components/scans/shared-scan-detail-view";
 import { absoluteUrl } from "../seo";
@@ -228,6 +229,17 @@ function getFindingReviewLensLinks(finding: CertScoreFinding, scanId: string) {
 function buildEvidence(finding: CertScoreFinding, scanId: string) {
   const details = finding.evidenceDetails ?? {};
   const representativeRequests = Array.isArray(details.representativeRequests) ? details.representativeRequests : [];
+  const promotionGradePreconsentRequests = finding.id === "pre_consent_tracking_detected"
+    ? buildPromotionGradePreconsentRequests({
+        rows: [
+          ...(Array.isArray(details.requestClassificationAnchors) ? details.requestClassificationAnchors : []),
+          ...representativeRequests
+        ],
+        scannedPageUrl: details.scanContext?.pageUrl ?? null,
+        consentTimeline: asRecord(details.timing),
+        maxItems: 3
+      })
+    : [];
   const vendors = Array.isArray(details.vendors) ? details.vendors : [];
   const firstRequest = representativeRequests[0];
   const firstVendor = vendors[0];
@@ -238,7 +250,24 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
     (asRecord(details.policyRuntimeConflict)?.runtimeAnchor as { phase?: string } | undefined)?.phase ??
     (typeof recordValue(details.trackingEvidence, "phase") === "string" ? String(recordValue(details.trackingEvidence, "phase")) : null);
   const observedPhase = runtimePhase === "pre_consent" ? "before_consent" : runtimePhase === "after_reject" ? "after_reject" : runtimePhase ?? null;
-  const examples = [
+  const examples = promotionGradePreconsentRequests.length > 0
+    ? promotionGradePreconsentRequests.map((request) => ({
+        type: "request",
+        scannedPageUrl: request.scannedPageUrl ?? null,
+        requestUrl: request.requestUrl,
+        vendor: request.vendorName,
+        vendorCategory: request.vendorCategory,
+        vendorAttributionBasis: request.vendorAttributionBasis,
+        urlHost: request.hostname,
+        registrableDomain: request.registrableDomain,
+        timestampMs: request.firstSeenMs,
+        consentActionMs: request.consentActionMs,
+        noConsentActionObserved: request.noConsentActionObserved,
+        consentSurfaceObserved: request.consentSurfaceObserved,
+        consentInteractionRecorded: request.consentInteractionRecorded,
+        confidence: request.confidence
+      }))
+    : [
     firstRequest
       ? {
           type: "request",

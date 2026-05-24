@@ -3109,7 +3109,9 @@ test("keeps scanned page URL separate from representative third-party request UR
   assert.equal(finding?.evidenceDetails?.timing?.firstCmpVisibleMs, 600);
   assert.deepEqual(finding?.evidenceDetails?.requestClassificationAnchors, [
     {
+      requestUrl: "https://www.clarity.ms/tag/abc123",
       hostname: "clarity.ms",
+      registrableDomain: "clarity.ms",
       vendor: "Microsoft Clarity",
       category: "session_replay",
       essentiality: "non_essential",
@@ -3120,9 +3122,7 @@ test("keeps scanned page URL separate from representative third-party request UR
   assert.deepEqual(
     finding?.evidenceDetails?.representativeRequests?.map((request) => [request.vendor, request.category]),
     [
-      ["Microsoft Clarity", "session_replay"],
-      ["Google Tag Manager", "tag_manager"],
-      ["Microsoft Advertising", "advertising_measurement"]
+      ["Microsoft Clarity", "session_replay"]
     ]
   );
   assert.deepEqual(
@@ -3132,6 +3132,114 @@ test("keeps scanned page URL separate from representative third-party request UR
       ["Google Tag Manager", "tag_manager"],
       ["Microsoft Advertising", "advertising_measurement"]
     ]
+  );
+});
+
+test("uses promotion-grade request classifications for pre-consent representative tracking anchors", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      details: {
+        family: "consent_tracking",
+        kind: "preconsent_tracking",
+        vendors: ["Adobe Analytics", "LiveRamp", "Quantum Metric"]
+      },
+      evidence: {
+        counts: { firstThirdPartyTrackingRequestMs: 229 },
+        entities: {
+          consentTimeline: [
+            JSON.stringify({
+              firstCmpVisibleMs: null,
+              firstConsentActionMs: 7081,
+              firstNonEssentialRequestMs: 229
+            })
+          ],
+          requestPurposeClassificationConfidence: [
+            JSON.stringify({
+              requestUrl: "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+              hostname: "cdn.cookielaw.org",
+              vendor: "OneTrust CMP asset",
+              vendorCategory: "cmp",
+              classification: "service_classified",
+              essentiality: "necessary",
+              confidence: 0.99,
+              runtimePhase: "pre_consent"
+            }),
+            JSON.stringify({
+              requestUrl: "https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js",
+              hostname: "ajax.googleapis.com",
+              vendor: "Google Hosted Libraries",
+              vendorCategory: "cdn",
+              classification: "service_classified",
+              essentiality: "necessary",
+              confidence: 0.99,
+              runtimePhase: "pre_consent"
+            }),
+            JSON.stringify({
+              requestUrl: "https://dpm.demdex.net/id?d_visid_ver=5",
+              hostname: "dpm.demdex.net",
+              vendor: "Adobe Analytics",
+              vendorCategory: "analytics",
+              classification: "non_essential",
+              essentiality: "non_essential",
+              confidence: 0.94,
+              runtimePhase: "pre_consent",
+              firstObservedMs: 229,
+              vendorAttributionBasis: "hostname_match"
+            }),
+            JSON.stringify({
+              requestUrl: "https://idsync.rlcdn.com/123.gif",
+              hostname: "idsync.rlcdn.com",
+              vendor: "LiveRamp",
+              vendorCategory: "advertising",
+              classification: "non_essential",
+              essentiality: "non_essential",
+              confidence: 0.92,
+              runtimePhase: "pre_consent",
+              firstObservedMs: 1167,
+              vendorAttributionBasis: "hostname_match"
+            })
+          ],
+          preconsent_tracker_vendors: ["Adobe Analytics", "LiveRamp", "Quantum Metric"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: ["https://www.fandango.com/"],
+        snippets: [],
+        sourceUrls: ["https://dpm.demdex.net/id?d_visid_ver=5"]
+      },
+      primaryPageUrl: "https://dpm.demdex.net/id?d_visid_ver=5",
+      sourceUrl: "https://dpm.demdex.net/id?d_visid_ver=5",
+      severity: "high"
+    })
+  ]);
+
+  const finding = projection.findings.find((candidate) => candidate.id === "pre_consent_tracking_detected");
+  assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://www.fandango.com/");
+  assert.deepEqual(
+    finding?.evidenceDetails?.representativeRequests?.map((request) => ({
+      url: request.url,
+      vendor: request.vendor,
+      category: request.category,
+      firstSeenMs: request.firstSeenMs
+    })),
+    [
+      {
+        url: "https://dpm.demdex.net/id?d_visid_ver=5",
+        vendor: "Adobe Analytics",
+        category: "analytics",
+        firstSeenMs: 229
+      },
+      {
+        url: "https://idsync.rlcdn.com/123.gif",
+        vendor: "LiveRamp",
+        category: "advertising",
+        firstSeenMs: 1167
+      }
+    ]
+  );
+  assert.doesNotMatch(
+    JSON.stringify(finding?.evidenceDetails?.representativeRequests ?? []),
+    /cookielaw|ajax\.googleapis|OneTrust CMP asset|Google Hosted Libraries/
   );
 });
 

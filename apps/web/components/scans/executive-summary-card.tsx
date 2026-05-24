@@ -23,6 +23,7 @@ import {
 import { rankFindings } from "../../lib/scans/rank-findings";
 import { evaluateTopFindingEligibility } from "../../lib/scans/top-finding-eligibility";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
+import { buildPromotionGradePreconsentRequests } from "../../lib/scans/preconsent-public-evidence";
 import {
   getFindingRegulatoryContext,
   getFindingReviewContextChips
@@ -601,10 +602,23 @@ function compactRepresentativeRequests(requests: unknown) {
     .slice(0, 3)
     .map((request) =>
       compactObject(request, [
+        "scannedPageUrl",
+        "requestUrl",
         "vendor",
+        "vendorName",
         "category",
+        "vendorCategory",
+        "vendorAttributionBasis",
         "hostname",
+        "registrableDomain",
         "firstSeenMs",
+        "firstObservedMs",
+        "consentActionMs",
+        "noConsentActionObserved",
+        "consentSurfaceObserved",
+        "consentInteractionRecorded",
+        "confidence",
+        "runtimePhase",
         "ms",
         "resourceType",
         "resource_type",
@@ -612,6 +626,24 @@ function compactRepresentativeRequests(requests: unknown) {
       ])
     );
   return items.length > 0 ? items : undefined;
+}
+
+function compactPreconsentRepresentativeRequests(details: CertScoreFinding["evidenceDetails"]) {
+  const promotionRows = buildPromotionGradePreconsentRequests({
+    rows: [
+      ...(Array.isArray(details?.requestClassificationAnchors) ? details.requestClassificationAnchors : []),
+      ...(Array.isArray(details?.representativeRequests) ? details.representativeRequests : [])
+    ],
+    scannedPageUrl: details?.scanContext?.pageUrl ?? null,
+    consentTimeline: isPlainObject(details?.timing) ? details.timing : null,
+    maxItems: 5
+  });
+
+  if (promotionRows.length > 0) {
+    return promotionRows;
+  }
+
+  return compactRepresentativeRequests(details?.representativeRequests) ?? [];
 }
 
 function getRuntimeEvidenceConfidence(finding: CertScoreFinding) {
@@ -3543,7 +3575,7 @@ function compactPreConsentTrackingEvidenceJsonPayload(finding: CertScoreFinding)
       vendors: (details.vendors ?? []).slice(0, 5).map((vendor) =>
         compactObject(vendor, ["name", "category", "preConsent", "firstSeenMs", "representativeUrl"])
       ),
-      representativeRequests: compactRepresentativeRequests(details.representativeRequests) ?? [],
+      representativeRequests: compactPreconsentRepresentativeRequests(details),
       identifierEvidence: compactEvidenceRecord(details.identifierEvidence, [
         "addressingOrSignalingTransmittedByRequest",
         "identifierLikeRequestCount",
