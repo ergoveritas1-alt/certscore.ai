@@ -1203,6 +1203,44 @@ test("ExecutiveSummaryCard explains interruption-backed limited coverage only wh
   assert.doesNotMatch(withoutInterruption, /Coverage was limited by site protections/);
 });
 
+test("ExecutiveSummaryCard renders mini vendor marks in vendor mix detail", () => {
+  const html = renderToStaticMarkup(createElement(ExecutiveSummaryCard, {
+    accessLimitationNotice: null,
+    beforeConsentCookieCount: 0,
+    domainBenchmark: null,
+    finalHost: "example.com",
+    fingerprintReasons: [],
+    fingerprintLabel: "None detected",
+    fingerprintNarrative: "No fingerprinting evidence detected.",
+    landedOnDifferentHost: false,
+    lastScannedAt: "2026-05-24T17:07:47.000Z",
+    posture: "Watch",
+    preConsentVendorNames: [],
+    requestedHost: "example.com",
+    resolvedVendorNames: ["OneTrust", "Google Ads"],
+    score: 72,
+    sessionReplayVendorNames: [],
+    thirdPartyRequestCount: 12,
+    thirdPartyDomains: ["cdn.cookielaw.org", "securepubads.g.doubleclick.net"],
+    topFindings: [],
+    topObservedEntities: [
+      { label: "OneTrust", category: "cmp", requestCount: 2 },
+      { label: "Google Ads", category: "ads", requestCount: 10 }
+    ],
+    trackerSummary: "2 vendors across 2 third-party domains",
+    unifiedFindings: [],
+    unresolvedVendorHosts: [],
+    vendorCategoryCounts: { ads: 1, cmp: 1 }
+  }));
+
+  assert.match(html, /Vendor mix/);
+  assert.match(html, /OneTrust/);
+  assert.match(html, /Google Ads/);
+  assert.match(html, />OT</);
+  assert.match(html, />G</);
+  assert.match(html, /cmp · 2 req/);
+});
+
 test("ExecutiveSummaryCard treats protected routes outside the homepage as a soft diagnostic", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {

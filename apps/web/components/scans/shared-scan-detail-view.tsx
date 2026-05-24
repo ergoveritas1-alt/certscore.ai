@@ -131,6 +131,8 @@ function uniqueStrings(values: Array<string | null | undefined>) {
 
 const CMP_OR_FUNCTIONAL_VENDOR_DOMAIN_PATTERN =
   /(?:^|\.)((?:cdn\.)?cookielaw\.org|onetrust\.(?:com|io)|geolocation\.onetrust\.com|optanon\.blob\.core\.windows\.net|trustarc\.com|truste\.com|consent\.trustarc\.com|form-renderer\.trustarc\.com|privacy-policy\.truste\.com|preferences\.trustarc\.com|consent\.cookiebot\.com|app\.cookieinformation\.com|cdn\.privacy-mgmt\.com|sourcepoint\.mgr\.consensu\.org|quantcast\.mgr\.consensu\.org|mgr\.consensu\.org)$/i;
+const CMP_VENDOR_DOMAIN_PATTERN =
+  /(?:^|\.)((?:cdn\.)?cookielaw\.org|onetrust\.(?:com|io)|geolocation\.onetrust\.com|optanon\.blob\.core\.windows\.net|trustarc\.com|truste\.com|consent\.trustarc\.com|form-renderer\.trustarc\.com|privacy-policy\.truste\.com|preferences\.trustarc\.com|consent\.cookiebot\.com|app\.cookieinformation\.com|cdn\.privacy-mgmt\.com|sourcepoint\.mgr\.consensu\.org|quantcast\.mgr\.consensu\.org|mgr\.consensu\.org|fundingchoicesmessages\.google\.com|usercentrics\.(?:eu|com)|termly\.io)$/i;
 
 function isCmpOrFunctionalVendorDomain(value: string | null | undefined) {
   if (!value) {
@@ -140,8 +142,28 @@ function isCmpOrFunctionalVendorDomain(value: string | null | undefined) {
   return CMP_OR_FUNCTIONAL_VENDOR_DOMAIN_PATTERN.test(normalized);
 }
 
+function isCmpVendorDomain(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+  const normalized = value.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0]?.replace(/:\d+$/, "") ?? "";
+  return CMP_VENDOR_DOMAIN_PATTERN.test(normalized);
+}
+
 function isCmpOrFunctionalVendorLabel(value: string | null | undefined) {
   return /^(onetrust|trustarc|cookiebot|sourcepoint|quantcast choice)$/i.test(value?.trim() ?? "");
+}
+
+function isCmpVendorLabel(value: string | null | undefined) {
+  return /^(onetrust|trustarc|cookiebot|sourcepoint|quantcast choice|usercentrics|termly|google funding choices)$/i.test(value?.trim() ?? "");
+}
+
+function isFunctionalButNotCmpVendorDomain(value: string | null | undefined) {
+  return isCmpOrFunctionalVendorDomain(value) && !isCmpVendorDomain(value);
+}
+
+function isFunctionalButNotCmpVendorLabel(value: string | null | undefined) {
+  return isCmpOrFunctionalVendorLabel(value) && !isCmpVendorLabel(value);
 }
 
 function formatDateTime(value: string | null) {
@@ -5429,7 +5451,7 @@ export function SharedScanDetailView({
   const fallbackObservedRequestCount = getFiniteNumber(fallbackEvidence?.metrics?.requestCount) ?? 0;
   const fallbackObservedDomainCount = getFiniteNumber(fallbackEvidence?.metrics?.domainCount) ?? 0;
   const fallbackObservedIpCount = getFiniteNumber(fallbackEvidence?.metrics?.ipCount) ?? 0;
-  const executiveResolvedVendorNames = certScoreSummary.resolvedVendorNames.filter((name) => !isCmpOrFunctionalVendorLabel(name));
+  const executiveResolvedVendorNames = certScoreSummary.resolvedVendorNames.filter((name) => !isFunctionalButNotCmpVendorLabel(name));
   const executiveThirdPartyDomains = uniqueStrings([
     ...getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains")
   ]).filter((domain) => !isCmpOrFunctionalVendorDomain(domain));
@@ -5437,11 +5459,23 @@ export function SharedScanDetailView({
   const executiveTopObservedEntities =
     certScoreSummary.topObservedEntities.length > 0
       ? certScoreSummary.topObservedEntities.filter((entity) => (
-          !isCmpOrFunctionalVendorLabel(entity.label) &&
-          !isCmpOrFunctionalVendorDomain(entity.label)
+          !isFunctionalButNotCmpVendorLabel(entity.label) &&
+          !isFunctionalButNotCmpVendorDomain(entity.label)
         ))
       : [];
-  const executiveVendorCategoryCounts = certScoreSummary.vendorCategoryCounts;
+  const executiveCmpCategoryCount = uniqueStrings([
+    ...executiveResolvedVendorNames.filter(isCmpVendorLabel),
+    ...executiveTopObservedEntities
+      .filter((entity) => entity.category === "cmp" || isCmpVendorDomain(entity.label) || isCmpVendorLabel(entity.label))
+      .map((entity) => entity.label)
+  ]).length;
+  const executiveVendorCategoryCounts =
+    executiveCmpCategoryCount > 0
+      ? {
+          ...certScoreSummary.vendorCategoryCounts,
+          cmp: Math.max(certScoreSummary.vendorCategoryCounts.cmp ?? 0, executiveCmpCategoryCount)
+        }
+      : certScoreSummary.vendorCategoryCounts;
   const executiveTrackerSummary = certScoreSummary.trackerSummary;
   const executiveUnresolvedVendorHosts = uniqueStrings([
     ...certScoreSummary.unresolvedVendorHosts

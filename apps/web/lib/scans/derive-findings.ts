@@ -324,7 +324,9 @@ function deriveTopObservedEntities(input: {
     .slice(0, 10)
     .map(([label, requestCount]) => {
       let category = "unknown";
-      if (/cloudflare|fonts\.googleapis|fonts\.gstatic|google/.test(label)) {
+      if (/(cookielaw\.org|onetrust\.(?:com|io)|optanon|trustarc\.com|truste\.com|cookiebot\.com|cookieinformation\.com|privacy-mgmt\.com|consensu\.org|usercentrics|termly|fundingchoicesmessages\.google\.com)/i.test(label)) {
+        category = "cmp";
+      } else if (/cloudflare|fonts\.googleapis|fonts\.gstatic|google/.test(label)) {
         category = "functional";
       }
       if (/media\.net|adnxs|xandr/.test(label)) {

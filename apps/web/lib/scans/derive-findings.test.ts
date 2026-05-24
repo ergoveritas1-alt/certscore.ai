@@ -109,6 +109,41 @@ test("deriveCertScoreFindings recognizes RTB and session intercept vendors in ru
   assert.deepEqual(summary.sessionReplayVendorNames, ["Qualtrics SiteIntercept"]);
 });
 
+test("deriveCertScoreFindings classifies retained CMP hosts for vendor mix context", () => {
+  const summary = deriveCertScoreFindings({
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        networkSummary: {
+          thirdPartyRequestCount: 20,
+          thirdPartyDomainCount: 4
+        },
+        vendorSummary: {
+          normalizedVendors: ["OneTrust"],
+          rawThirdPartyDomains: ["cdn.cookielaw.org", "cdn-ukwest.onetrust.com"]
+        },
+        requestObservations: [
+          { domain: "cdn.cookielaw.org", requestUrl: "https://cdn.cookielaw.org/consent/abc/otSDKStub.js", thirdParty: true },
+          { domain: "cdn-ukwest.onetrust.com", requestUrl: "https://cdn-ukwest.onetrust.com/scripttemplates/otSDKStub.js", thirdParty: true },
+          { domain: "fundingchoicesmessages.google.com", requestUrl: "https://fundingchoicesmessages.google.com/i/pub-123", thirdParty: true }
+        ]
+      }
+    },
+    snapshot: {
+      certscore_overall: 74,
+      final_url: "https://example.com/"
+    },
+    scan: {
+      completedAt: "2026-05-24T16:00:00.000Z",
+      createdAt: "2026-05-24T15:59:00.000Z",
+      domainHostname: "example.com"
+    }
+  });
+
+  assert.ok(summary.resolvedVendorNames.includes("OneTrust"));
+  assert.ok(summary.topObservedEntities.some((entity) => entity.label === "cdn.cookielaw.org" && entity.category === "cmp"));
+  assert.ok(summary.topObservedEntities.some((entity) => entity.label === "fundingchoicesmessages.google.com" && entity.category === "cmp"));
+});
+
 test("deriveCertScoreFindings preserves landed-host attribution and host alias handling", () => {
   const offOrigin = deriveCertScoreFindings({
     events: [

@@ -106,6 +106,62 @@ function formatCategoryLabel(value: string) {
   return value.replaceAll("_", " ");
 }
 
+type VendorBrandMark = {
+  initials: string;
+  tone: string;
+};
+
+const VENDOR_BRAND_MARKS: Array<{ pattern: RegExp; mark: VendorBrandMark }> = [
+  { pattern: /google|doubleclick|googletagmanager|googlesyndication|gstatic|googleapis|funding choices/i, mark: { initials: "G", tone: "border-blue-200 bg-blue-50 text-blue-700" } },
+  { pattern: /meta|facebook/i, mark: { initials: "M", tone: "border-blue-200 bg-blue-50 text-blue-800" } },
+  { pattern: /microsoft|bing|clarity/i, mark: { initials: "MS", tone: "border-sky-200 bg-sky-50 text-sky-800" } },
+  { pattern: /adobe|adobedtm|demdex|launch/i, mark: { initials: "A", tone: "border-red-200 bg-red-50 text-red-700" } },
+  { pattern: /amazon/i, mark: { initials: "a", tone: "border-amber-200 bg-amber-50 text-amber-800" } },
+  { pattern: /onetrust|cookielaw|optanon/i, mark: { initials: "OT", tone: "border-cyan-200 bg-cyan-50 text-cyan-800" } },
+  { pattern: /cookiebot/i, mark: { initials: "CB", tone: "border-indigo-200 bg-indigo-50 text-indigo-800" } },
+  { pattern: /trustarc|truste/i, mark: { initials: "TA", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" } },
+  { pattern: /usercentrics/i, mark: { initials: "UC", tone: "border-violet-200 bg-violet-50 text-violet-800" } },
+  { pattern: /termly/i, mark: { initials: "T", tone: "border-teal-200 bg-teal-50 text-teal-800" } },
+  { pattern: /cloudflare/i, mark: { initials: "CF", tone: "border-orange-200 bg-orange-50 text-orange-800" } },
+  { pattern: /trade desk|adsrvr/i, mark: { initials: "TD", tone: "border-slate-300 bg-slate-50 text-slate-800" } },
+  { pattern: /criteo/i, mark: { initials: "C", tone: "border-rose-200 bg-rose-50 text-rose-800" } },
+  { pattern: /xandr|adnxs|appnexus/i, mark: { initials: "X", tone: "border-purple-200 bg-purple-50 text-purple-800" } },
+  { pattern: /jwplayer/i, mark: { initials: "JW", tone: "border-slate-200 bg-slate-50 text-slate-700" } },
+  { pattern: /yandex/i, mark: { initials: "Y", tone: "border-red-200 bg-red-50 text-red-700" } },
+  { pattern: /tiktok/i, mark: { initials: "TT", tone: "border-zinc-300 bg-zinc-50 text-zinc-800" } },
+  { pattern: /linkedin|licdn/i, mark: { initials: "in", tone: "border-sky-200 bg-sky-50 text-sky-800" } },
+  { pattern: /pinterest/i, mark: { initials: "P", tone: "border-red-200 bg-red-50 text-red-800" } },
+  { pattern: /reddit/i, mark: { initials: "R", tone: "border-orange-200 bg-orange-50 text-orange-800" } }
+];
+
+function getVendorBrandMark(label: string): VendorBrandMark {
+  return VENDOR_BRAND_MARKS.find((entry) => entry.pattern.test(label))?.mark ??
+    { initials: label.trim().slice(0, 2).toUpperCase() || "?", tone: "border-slate-200 bg-slate-50 text-slate-700" };
+}
+
+function VendorBrandChip(input: {
+  category: string;
+  label: string;
+  requestCount?: number | null;
+  suffix?: string | null;
+}) {
+  const mark = getVendorBrandMark(input.label);
+  const meta = input.suffix ?? `${formatCategoryLabel(input.category)}${typeof input.requestCount === "number" ? ` · ${input.requestCount} req` : ""}`;
+
+  return (
+    <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
+      <span
+        aria-hidden="true"
+        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold leading-none ${mark.tone}`}
+      >
+        {mark.initials}
+      </span>
+      <span className="truncate font-medium text-slate-800">{input.label}</span>
+      {meta ? <span className="shrink-0 text-slate-500">· {meta}</span> : null}
+    </span>
+  );
+}
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
@@ -357,13 +413,15 @@ function getFindingEvidenceAnchor(finding: CertScoreFinding) {
 
 function DetailDisclosure(input: {
   items: string[];
+  richItems?: Array<{ key: string; node: React.ReactNode }>;
   summary: string;
   title: string;
   truncationNote?: string | null;
 }) {
   const uniqueItems = [...new Set(input.items.filter(Boolean))];
+  const richItems = input.richItems ?? [];
 
-  if (uniqueItems.length === 0) {
+  if (uniqueItems.length === 0 && richItems.length === 0) {
     return null;
   }
 
@@ -381,6 +439,9 @@ function DetailDisclosure(input: {
           </p>
         ) : null}
         <div className="flex flex-wrap gap-2">
+          {richItems.map((item) => (
+            <React.Fragment key={item.key}>{item.node}</React.Fragment>
+          ))}
           {uniqueItems.map((item) => (
             <span key={item} className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700">
               {item}
@@ -3871,9 +3932,18 @@ export function ExecutiveSummaryCard(input: {
   const hasScrollableTopFindings = filteredTopFindings.length > 3;
   const namedVendors = uniqueStrings(input.resolvedVendorNames).slice(0, 8);
   const thirdPartyDomains = input.thirdPartyDomains.slice(0, 10);
-  const vendorMixDetails = input.topObservedEntities
+  const vendorMixRichDetails = input.topObservedEntities
     .slice(0, 6)
-    .map((entity) => `${entity.label} · ${formatCategoryLabel(entity.category)} · ${entity.requestCount} req`);
+    .map((entity) => ({
+      key: `${entity.label}:${entity.category}:${entity.requestCount}`,
+      node: (
+        <VendorBrandChip
+          category={entity.category}
+          label={entity.label}
+          requestCount={entity.requestCount}
+        />
+      )
+    }));
   const fingerprintEvidence = input.fingerprintReasons.filter(Boolean);
   const hasProbableFingerprintingFinding = regulatoryFindingInput.some((finding) => finding.id === "probable_fingerprinting");
   const shouldShowFingerprintSnapshot =
@@ -4389,9 +4459,9 @@ export function ExecutiveSummaryCard(input: {
                   <DetailDisclosure
                     summary={`${input.topObservedEntities.length} named entities, ${Object.keys(input.vendorCategoryCounts).length} categories`}
                     title="Category and entity detail"
+                    richItems={vendorMixRichDetails}
                     items={[
                       ...Object.entries(input.vendorCategoryCounts).map(([key, count]) => `${formatCategoryLabel(key)} · ${count}`),
-                      ...vendorMixDetails,
                       ...input.preConsentVendorNames.slice(0, 3).map((vendor) => `${vendor} · pre-consent`),
                       ...input.sessionReplayVendorNames.slice(0, 3).map((vendor) => `${vendor} · session replay`)
                     ]}

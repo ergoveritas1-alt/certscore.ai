@@ -1415,6 +1415,82 @@ test("service-only state-zero requests stay audit-only and out of tracker promot
   assert.equal(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"), false);
 });
 
+test("service-only request purpose rows do not promote pre-consent tracker findings", () => {
+  const state = buildPreconsentRuntimeState({
+    consent_timeline: {
+      firstCmpVisibleMs: 1200,
+      firstConsentActionMs: null,
+      firstNonEssentialRequestMs: null,
+      timelineConfidence: "high"
+    },
+    hybrid_runtime_evidence: {
+      requestObservations: [
+        {
+          category: "fraud_security",
+          classification: "service_classified",
+          domain: "static.captcha-delivery.com",
+          requestUrl: "https://static.captcha-delivery.com/captcha/assets/tpl.js",
+          runtimePhase: "pre_consent",
+          serviceClass: "bot_protection",
+          thirdParty: true,
+          tsMs: 250,
+          vendor: "DataDome bot protection"
+        },
+        {
+          category: "unknown",
+          classification: "service_classified",
+          domain: "cdn-ukwest.onetrust.com",
+          requestUrl: "https://cdn-ukwest.onetrust.com/scripttemplates/otSDKStub.js",
+          runtimePhase: "pre_consent",
+          serviceClass: "cmp",
+          thirdParty: true,
+          tsMs: 300,
+          vendor: "OneTrust CMP asset"
+        }
+      ],
+      requestPurposeClassificationConfidence: [
+        {
+          category: "fraud_security",
+          classificationBasis: "runtime_service_signature",
+          confidence: 0.9,
+          essentiality: "essential",
+          hostname: "static.captcha-delivery.com",
+          purpose: "bot_protection",
+          requestUrl: "https://static.captcha-delivery.com/captcha/assets/tpl.js",
+          runtimePhase: "pre_consent",
+          serviceClass: "bot_protection",
+          tsMs: 250,
+          vendor: "DataDome bot protection"
+        },
+        {
+          category: "unknown",
+          classificationBasis: "runtime_service_signature",
+          confidence: 0.9,
+          essentiality: "unknown",
+          hostname: "cdn-ukwest.onetrust.com",
+          purpose: "cmp",
+          requestUrl: "https://cdn-ukwest.onetrust.com/scripttemplates/otSDKStub.js",
+          runtimePhase: "pre_consent",
+          serviceClass: "cmp",
+          tsMs: 300,
+          vendor: "OneTrust CMP asset"
+        }
+      ],
+      timelineMarkers: {
+        consentBannerDetectedMs: 1200,
+        firstRequestMs: 250,
+        firstThirdPartyRequestMs: 250
+      }
+    }
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.equal(packet, undefined);
+  assert.equal(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"), false);
+  assert.equal(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"), false);
+});
+
 test("runtime pre-submit text capture evidence creates canonical packet", () => {
   const state = buildScanReportUnifiedFindingState({
     accessibilityRuleCounts: [],
