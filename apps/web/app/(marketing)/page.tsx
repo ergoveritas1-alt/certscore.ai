@@ -164,16 +164,6 @@ export default async function MarketingHomePage() {
                 variant="secondary"
               />
             </div>
-            <p className="max-w-2xl text-sm leading-6 text-slate-500">
-              Evidence-based scanning for teams comparing live browser behavior with consent controls, cookie posture, and privacy disclosures.{" "}
-              <Link href="/findings" className="font-medium text-sky-700 hover:text-sky-800">
-                Browse the findings registry
-              </Link>
-              .
-            </p>
-            <p className="max-w-2xl text-xs leading-5 text-slate-500">
-              CertScore GPT beta lets you ask for a Pulse summary inside ChatGPT. Results are automated public-web observations for review, not legal advice or a compliance determination.
-            </p>
           </div>
 
           <div className="space-y-4">
@@ -193,6 +183,18 @@ export default async function MarketingHomePage() {
               </CardContent>
             </Card>
 
+            <div className="space-y-3 text-slate-500">
+              <p className="text-sm leading-6">
+                Evidence-based scanning for teams comparing live browser behavior with consent controls, cookie posture, and privacy disclosures.{" "}
+                <Link href="/findings" className="font-medium text-sky-700 hover:text-sky-800">
+                  Browse the findings registry
+                </Link>
+                .
+              </p>
+              <p className="text-xs leading-5">
+                CertScore GPT beta lets you ask for a Pulse summary inside ChatGPT. Results are automated public-web observations for review, not legal advice or a compliance determination.
+              </p>
+            </div>
           </div>
         </div>
       </section>
