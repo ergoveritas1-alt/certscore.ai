@@ -46,6 +46,20 @@ test("suppresses when a footer cookie preferences link exists", () => {
   assert.ok(review.negativeEvidenceFlags.includes("consent_revisit_control_observed"));
 });
 
+test("suppresses when retained footer links include privacy-choice paths", () => {
+  const review = evaluateConsentControlLifecycleEvidence(baseEvidence({
+    footerLinksInspected: [
+      "Ad Choices -> https://www.example.com/policies/cookies-and-tracking",
+      "Privacy Policy -> https://www.example.com/privacy",
+      "California Notice -> https://www.example.com/californianotice"
+    ],
+    observedControls: []
+  }));
+
+  assert.equal(review.disposition, "suppress");
+  assert.ok(review.negativeEvidenceFlags.includes("consent_revisit_control_observed"));
+});
+
 test("demotes blocked or shallow coverage", () => {
   const blocked = evaluateConsentControlLifecycleEvidence(baseEvidence({ coverageStatus: "blocked" }));
   assert.equal(blocked.disposition, "audit_only");

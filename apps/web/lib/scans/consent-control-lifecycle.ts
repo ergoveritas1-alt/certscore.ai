@@ -45,6 +45,14 @@ function getStringArray(value: unknown): string[] {
     : [];
 }
 
+function hasRetainedPreferencePath(values: string[]) {
+  return values.some((value) =>
+    /\b(?:ad\s+choices|your\s+privacy\s+choices|privacy\s+choices|privacy\s+rights|cookie\s+(?:settings|preferences|choices)|manage\s+(?:cookies|consent|choices|preferences|settings)|do\s+not\s+sell|do\s+not\s+share|opt[-\s]?out(?:\s+of\s+targeted\s+advertising)?)\b/i.test(
+      value
+    )
+  );
+}
+
 function normalizeCoverage(value: unknown): ConsentControlLifecycleEvidence["coverageStatus"] {
   return value === "usable" || value === "partial" || value === "blocked" || value === "insufficient"
     ? value
@@ -155,7 +163,9 @@ export function evaluateConsentControlLifecycleEvidence(
     evidence.withdrawalTextObserved ||
     evidence.footerPreferenceLinkObserved ||
     evidence.preferenceCenterReachableAfterInitialLayer === true ||
-    (evidence.observedControls?.length ?? 0) > 0
+    (evidence.observedControls?.length ?? 0) > 0 ||
+    hasRetainedPreferencePath(evidence.footerLinksInspected) ||
+    hasRetainedPreferencePath(evidence.policyLinksInspected ?? [])
   ) {
     negativeEvidenceFlags.push("consent_revisit_control_observed");
   }

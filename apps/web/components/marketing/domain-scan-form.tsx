@@ -96,6 +96,33 @@ function appendRecentScanReuseParam(destination: string, reusedExistingScan?: bo
   }
 }
 
+function getCurrentRelativeUrl() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
+
+function isCurrentPageDestination(destination: string) {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const destinationUrl = new URL(destination, window.location.origin);
+    const currentUrl = new URL(getCurrentRelativeUrl() ?? window.location.href, window.location.origin);
+
+    return (
+      destinationUrl.pathname === currentUrl.pathname &&
+      destinationUrl.search === currentUrl.search &&
+      destinationUrl.hash === currentUrl.hash
+    );
+  } catch {
+    return destination === getCurrentRelativeUrl();
+  }
+}
+
 export function DomainScanForm({
   buttonLabel = "Start full scan",
   compact = false,
@@ -185,7 +212,17 @@ export function DomainScanForm({
         scan_target_type: getScanTargetType(submittedDomain),
         scan_status: "queued"
       });
-      router.push(appendRecentScanReuseParam(destination, payload.reusedExistingScan));
+      const nextDestination = appendRecentScanReuseParam(destination, payload.reusedExistingScan);
+
+      if (isCurrentPageDestination(nextDestination)) {
+        router.refresh();
+        isSubmittingRef.current = false;
+        setIsSubmitting(false);
+        setErrorMessage(payload.reusedExistingScan ? "Showing the latest completed scan for this site." : null);
+        return;
+      }
+
+      router.push(nextDestination);
     } catch (error) {
       recordScanSubmitFailure({
         domain: submittedDomain,
