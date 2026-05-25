@@ -279,7 +279,7 @@ export async function loadScanRecord(input: {
       }))
     ),
     loadRows(
-      `select page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors
+      `select page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors, representative_nodes
          from scan_accessibility_rule_examples
         where scan_id = $1`,
       [input.scan.id]
@@ -291,6 +291,7 @@ export async function loadScanRecord(input: {
         impact: row.impact,
         nodeCount: Number(row.node_count ?? 0),
         pageUrl: row.page_url,
+        representativeNodes: Array.isArray(row.representative_nodes) ? row.representative_nodes : [],
         representativeSelectors: Array.isArray(row.representative_selectors) ? row.representative_selectors : [],
         ruleCode: row.rule_code,
         ruleGroup: row.rule_group,

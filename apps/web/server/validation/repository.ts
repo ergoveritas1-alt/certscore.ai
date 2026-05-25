@@ -1207,6 +1207,7 @@ async function loadSupplementalValidationFindings(input: {
             help_url,
             description,
             node_count,
+            representative_nodes,
             representative_selectors
           from scan_accessibility_rule_examples
           where scan_id = $1

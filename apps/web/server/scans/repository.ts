@@ -84,6 +84,7 @@ export type ScanAccessibilityRuleExampleRow = {
   help_url: string;
   impact: string | null;
   node_count: number;
+  representative_nodes?: Array<Record<string, unknown>> | null;
   page_url: string;
   representative_selectors: string[] | null;
   rule_code: string;
@@ -1104,7 +1105,7 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
       { readOnly: true }
     ).then((result) => result.rows),
     query<Record<string, unknown>>(
-      `select page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors
+      `select page_url, rule_code, rule_group, severity, impact, help, help_url, description, node_count, representative_selectors, representative_nodes
          from scan_accessibility_rule_examples
         where scan_id = $1
         order by node_count desc, rule_code asc`,

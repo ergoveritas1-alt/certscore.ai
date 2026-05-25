@@ -594,6 +594,7 @@ export type ScanAccessibilityRuleExample = {
   helpUrl: string;
   description: string;
   nodeCount: number;
+  representativeNodes?: Array<Record<string, unknown>>;
   representativeSelectors: string[];
 };
 

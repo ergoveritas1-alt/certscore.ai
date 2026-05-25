@@ -1410,14 +1410,14 @@ test("prod-shaped preconsent rows merge with runtime URLs and derived consent ti
         requestPurposeClassificationConfidence: [
           {
             category: "advertising",
-            classificationBasis: "tracker_signature",
+            classification_basis: "tracker_signature",
             confidence: 0.9,
             essentiality: "non_essential",
             hostname: "googleads.g.doubleclick.net",
-            requestUrl: "https://googleads.g.doubleclick.net/pagead/id",
-            runtimePhase: "pre_consent",
-            tsMs: 736,
-            vendor: "Google Ads"
+            request_url: "https://googleads.g.doubleclick.net/pagead/id",
+            runtime_phase: "pre_consent",
+            ts_ms: 736,
+            vendor_name: "Google Ads"
           }
         ],
         timelineMarkers: {

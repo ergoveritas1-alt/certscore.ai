@@ -1070,7 +1070,11 @@ function deriveAccessibilityRuleEvidenceRows(input: {
       const metadata = getAccessibilityRuleMetadata(example.ruleCode, example.ruleGroup);
       const weightedPriority =
         (example.severity === "high" ? 30 : example.severity === "medium" ? 20 : 10) + Math.min(example.nodeCount, 25);
-      const axeEvidence = axeEvidenceByRuleAndPage.get(`${example.ruleCode.toLowerCase()}|${example.pageUrl.toLowerCase()}`);
+      const ruleCode = typeof example.ruleCode === "string" ? example.ruleCode : "";
+      const pageUrl = typeof example.pageUrl === "string" ? example.pageUrl : "";
+      const axeEvidence = ruleCode && pageUrl
+        ? axeEvidenceByRuleAndPage.get(`${ruleCode.toLowerCase()}|${pageUrl.toLowerCase()}`)
+        : undefined;
       const representativeNodes = getRuntimeObjectArray(axeEvidence ?? null, [
         "representativeNodes",
         "representative_nodes"
@@ -1125,6 +1129,43 @@ function getRuntimeObjectArray(input: Record<string, unknown> | null, keys: stri
     }
   }
   return [];
+}
+
+function getRuntimeNumber(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeRequestPurposeClassificationRow(row: Record<string, unknown>) {
+  const requestUrl = getRuntimeString(row, ["requestUrl", "request_url", "url"]);
+  const confidence = getRuntimeNumber(row, ["confidence", "score"]);
+  const runtimePhase = getRuntimeString(row, ["runtimePhase", "runtime_phase", "timingStatus", "timing_status"]);
+  return {
+    ...row,
+    category: getRuntimeString(row, ["category", "vendorCategory", "vendor_category"]) ?? row.category,
+    classification: getRuntimeString(row, ["classification"]),
+    classificationBasis:
+      getRuntimeString(row, ["classificationBasis", "classification_basis", "evidenceSource", "evidence_source"]) ??
+      row.classificationBasis,
+    confidence,
+    essentiality: getRuntimeString(row, ["essentiality"]),
+    hostname: getRuntimeString(row, ["hostname", "host"]) ?? row.hostname,
+    requestUrl,
+    runtimePhase,
+    tsMs: getRuntimeNumber(row, ["tsMs", "ts_ms", "firstSeenMs", "first_seen_ms", "timestampMs", "timestamp_ms"]) ?? row.tsMs,
+    vendor: getRuntimeString(row, ["vendor", "vendorName", "vendor_name", "name"]) ?? row.vendor
+  };
 }
 
 function getNativeContradictionPacketSources(runtimeArtifacts: Record<string, unknown> | null) {
@@ -1347,7 +1388,8 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     "request_purpose_classification_confidence"
   ]);
   const requestClassifications =
-    directRequestClassifications.length > 0 ? directRequestClassifications : fallbackRequestClassifications;
+    (directRequestClassifications.length > 0 ? directRequestClassifications : fallbackRequestClassifications)
+      .map(normalizeRequestPurposeClassificationRow);
   const rejectPath = getRuntimeObject(input.runtimeArtifacts, [
     "rejectPathDepthAndAvailability",
     "reject_path_depth_and_availability"
