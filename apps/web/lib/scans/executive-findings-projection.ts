@@ -23,6 +23,7 @@ import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure"
 import { getConsentControlLifecycleEvidence } from "./consent-control-lifecycle";
 import { getConsentGovernanceDisclosureEvidence } from "./consent-governance-disclosure";
 import { buildPromotionGradePreconsentRequests } from "./preconsent-public-evidence";
+import { getReportFacingScannedPageUrl, getReportFacingScannedPageUrls } from "./report-facing-page-url";
 
 const MAX_DISPLAY_SNIPPET_LENGTH = 240;
 
@@ -253,6 +254,17 @@ function getEntityUrlValues(packet: UnifiedFindingDisplayPacket, pattern: RegExp
   return getEntityValues(packet, pattern).filter((value) => /^https?:\/\//i.test(value));
 }
 
+function getEntityBooleanValue(packet: UnifiedFindingDisplayPacket, pattern: RegExp) {
+  const value = getEntityValues(packet, pattern)[0];
+  if (/^true$/i.test(value ?? "")) {
+    return true;
+  }
+  if (/^false$/i.test(value ?? "")) {
+    return false;
+  }
+  return null;
+}
+
 function getEntityJsonObjects(packet: UnifiedFindingDisplayPacket, key: string): Array<Record<string, unknown>> {
   return (packet.evidence?.entities?.[key] ?? []).flatMap((value) => {
     try {
@@ -282,6 +294,21 @@ function getRecordStringArray(row: Record<string, unknown> | undefined, keys: st
     const value = row[key];
     if (Array.isArray(value)) {
       return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
+    }
+  }
+  return [];
+}
+
+function getRecordObjectArray(row: Record<string, unknown> | undefined, keys: string[]) {
+  if (!row) {
+    return [];
+  }
+  for (const key of keys) {
+    const value = row[key];
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is Record<string, unknown> =>
+        Boolean(entry) && typeof entry === "object" && !Array.isArray(entry)
+      );
     }
   }
   return [];
@@ -720,6 +747,41 @@ function sanitizeAccessibilityAxeEvidence(row: Record<string, unknown>) {
     ...getRecordStringArray(row, ["representativeSelectors", "representative_selectors", "selectors"]),
     getRecordString(row, ["selector", "target"])
   ]);
+  const representativeNodes = [
+    ...getRecordObjectArray(row, ["representativeNodes", "representative_nodes"])
+  ].map((node) => {
+    const selectors = uniqueStrings([
+      ...getRecordStringArray(node, ["selectors", "target", "targets"]),
+      getRecordString(node, ["selector"])
+    ]).slice(0, 5);
+    const colorContrast = getRecordObjectArray(node, ["colorContrast", "color_contrast"])[0] ??
+      (node.colorContrast && typeof node.colorContrast === "object" && !Array.isArray(node.colorContrast)
+        ? node.colorContrast as Record<string, unknown>
+        : node.color_contrast && typeof node.color_contrast === "object" && !Array.isArray(node.color_contrast)
+          ? node.color_contrast as Record<string, unknown>
+          : null);
+    const checks = getRecordObjectArray(node, ["checks"]).slice(0, 5).map((check) =>
+      Object.fromEntries(
+        Object.entries({
+          id: getRecordString(check, ["id"]),
+          message: getRecordString(check, ["message"]),
+          data: check.data && typeof check.data === "object" && !Array.isArray(check.data)
+            ? check.data as Record<string, unknown>
+            : null
+        }).filter(([, value]) => value !== null && value !== undefined)
+      )
+    ).filter((check) => Object.keys(check).length > 0);
+    return Object.fromEntries(
+      Object.entries({
+        selectors,
+        failureSummary: getRecordString(node, ["failureSummary", "failure_summary"]),
+        htmlSnippet: getRecordString(node, ["htmlSnippet", "html_snippet", "sanitizedHtmlSnippet", "sanitized_html_snippet"]),
+        textSnippet: getRecordString(node, ["textSnippet", "text_snippet"]),
+        ...(colorContrast ? { colorContrast } : {}),
+        ...(checks.length > 0 ? { checks } : {})
+      }).filter(([, value]) => Array.isArray(value) ? value.length > 0 : value !== null && value !== undefined)
+    );
+  }).filter((node) => Object.keys(node).length > 0);
   const result: Record<string, unknown> = {
     ruleId: getRecordString(row, ["ruleId", "rule_id", "id"]),
     impact: getRecordString(row, ["impact", "severity"]),
@@ -728,6 +790,7 @@ function sanitizeAccessibilityAxeEvidence(row: Record<string, unknown>) {
     helpUrl: getRecordString(row, ["helpUrl", "help_url"]),
     pageUrl: getRecordString(row, ["pageUrl", "page_url", "url"]),
     componentOrTemplate: getRecordString(row, ["componentOrTemplate", "component_or_template", "template", "component"]),
+    representativeNodes: representativeNodes.slice(0, 5),
     representativeSelectors: representativeSelectors.slice(0, 8)
   };
 
@@ -1239,28 +1302,6 @@ function getUrlHostname(value: string | null | undefined) {
   }
 }
 
-const KNOWN_TRACKING_REQUEST_HOST_PATTERN =
-  /amazon-adsystem\.com|clarity\.ms|googletagmanager\.com|google-analytics\.com|googleadservices\.com|doubleclick\.net|demdex\.net|rlcdn\.com|quantummetric\.com|maps\.googleapis\.com|ajax\.googleapis\.com|cookielaw\.org|adobedtm\.com|jwplayer\.com|bat\.bing\.com|connect\.facebook\.net|licdn\.com|hotjar\.com|fullstory\.com|hs-scripts\.com/i;
-
-function isLikelyRuntimeRequestUrl(value: string | null | undefined) {
-  if (!value || !/^https?:\/\//i.test(value)) {
-    return false;
-  }
-  try {
-    const url = new URL(value);
-    const path = `${url.pathname}${url.search}`.toLowerCase();
-    const host = url.hostname.toLowerCase();
-    return (
-      KNOWN_TRACKING_REQUEST_HOST_PATTERN.test(host) ||
-      /\/(?:configs?|config|cdn-cgi\/trace)(?:$|[/?#])/i.test(path) ||
-      /\.(?:js|mjs|json|gif|png|jpe?g|webp|svg|css|woff2?)(?:$|[?#])/i.test(path) ||
-      /\/(?:api\/js|gtm\.js|collect|tag\/|pixel|tr|uet|bat\.js|fbevents|analytics\.js|clarity|events?)(?:$|[/?#])/i.test(path)
-    );
-  } catch {
-    return /(?:amazon-adsystem|clarity\.ms|googletagmanager|gtm\.js|collect|pixel|bat\.bing|fbevents|analytics\.js)/i.test(value);
-  }
-}
-
 function isSameAuditHost(value: string, auditedUrl: string | null) {
   const valueHost = getUrlHostname(value);
   const auditedHost = getUrlHostname(auditedUrl);
@@ -1269,10 +1310,16 @@ function isSameAuditHost(value: string, auditedUrl: string | null) {
 
 function getAuditPageUrlCandidates(packet: UnifiedFindingDisplayPacket) {
   const initialCandidates = uniqueCaseInsensitiveStrings([
-    ...(packet.evidence?.pageUrls ?? []),
-    packet.primaryPageUrl,
-    packet.sourceUrl
-  ]).filter((url) => /^https?:\/\//i.test(url) && !isLikelyRuntimeRequestUrl(url));
+    ...getReportFacingScannedPageUrls(packet),
+    getReportFacingScannedPageUrl(packet),
+    packet.sourceUrl && getReportFacingScannedPageUrl({
+      evidence: {
+        pageUrls: [],
+        sourceUrls: [packet.sourceUrl]
+      },
+      primaryPageUrl: null
+    })
+  ]);
   const auditedUrl = initialCandidates.find((url) => url === packet.primaryPageUrl) ?? initialCandidates[0] ?? null;
   return initialCandidates.filter((url) => !auditedUrl || isSameAuditHost(url, auditedUrl));
 }
@@ -1552,21 +1599,6 @@ function buildPreConsentTrackingEvidenceDetails(
     .filter((row) => Object.keys(row).length > 0)
     .slice(0, 12);
   const scannedPageUrl = getScannedPageUrl(packet);
-  const promotionGradePreconsentRequests = buildPromotionGradePreconsentRequests({
-    rows: [
-      ...getEntityJsonObjects(packet, "requestPurposeClassificationConfidence"),
-      ...getEntityJsonObjects(packet, "request_purpose_classification_confidence")
-    ],
-    scannedPageUrl,
-    consentTimeline,
-    maxItems: 8
-  });
-  const requestUrls = uniqueCaseInsensitiveStrings([
-    ...promotionGradePreconsentRequests.map((request) => request.requestUrl),
-    ...getEntityUrlValues(packet, /^(?:preconsent_tracker_evidence_urls|runtimeRequestUrls|requestUrls|runtimeEvidenceUrls)$/i),
-    ...(packet.details?.family === "consent_tracking" ? (packet.details.requestUrls ?? []) : []),
-    ...(packet.evidence?.sourceUrls ?? []).filter((url) => /tag|pixel|collect|track|analytics|ads|clarity|hubspot|linkedin|facebook|reddit|tiktok|google/i.test(url))
-  ]).slice(0, 8);
   const vendors = uniqueStrings([
     ...getEntityValues(packet, /^(?:preconsent_tracker_vendors|runtimeVendors)$/i),
     ...(packet.details?.family === "consent_tracking" ? (packet.details.vendors ?? []) : []),
@@ -1581,6 +1613,10 @@ function buildPreConsentTrackingEvidenceDetails(
   const cmpVisibleMs =
     getCountValue(packet, ["cmpVisibleMs", "consentBannerDetectedMs"]) ??
     getRecordNumber(consentTimeline ?? {}, ["firstCmpVisibleMs", "first_cmp_visible_ms"]);
+  const consentSurfaceObserved =
+    getEntityBooleanValue(packet, /^(?:consentSurfaceObserved|consent_surface_observed)$/i) ??
+    getRecordBoolean(consentTimeline ?? {}, ["consentSurfaceObserved", "consent_surface_observed"]) ??
+    (cmpVisibleMs !== null ? true : null);
   const consentChoiceAtMs =
     getCountValue(packet, ["consentChoiceAtMs", "consentAcceptedAtMs", "consentRejectedAtMs"]) ??
     getRecordNumber(consentTimeline ?? {}, ["firstConsentActionMs", "first_consent_action_ms"]);
@@ -1592,6 +1628,22 @@ function buildPreConsentTrackingEvidenceDetails(
       : getCountValue(packet, ["consentAcceptedAtMs"]) !== null
         ? "accept"
         : null);
+  const promotionGradePreconsentRequests = buildPromotionGradePreconsentRequests({
+    rows: [
+      ...getEntityJsonObjects(packet, "requestPurposeClassificationConfidence"),
+      ...getEntityJsonObjects(packet, "request_purpose_classification_confidence")
+    ],
+    scannedPageUrl,
+    consentSurfaceObserved,
+    consentTimeline,
+    maxItems: 8
+  });
+  const requestUrls = uniqueCaseInsensitiveStrings([
+    ...promotionGradePreconsentRequests.map((request) => request.requestUrl),
+    ...getEntityUrlValues(packet, /^(?:preconsent_tracker_evidence_urls|runtimeRequestUrls|requestUrls|runtimeEvidenceUrls)$/i),
+    ...(packet.details?.family === "consent_tracking" ? (packet.details.requestUrls ?? []) : []),
+    ...(packet.evidence?.sourceUrls ?? []).filter((url) => /tag|pixel|collect|track|analytics|ads|clarity|hubspot|linkedin|facebook|reddit|tiktok|google/i.test(url))
+  ]).slice(0, 8);
 
   const promotionGradeRepresentativeRequests = promotionGradePreconsentRequests.map((request) => ({
     url: request.requestUrl,
@@ -3489,10 +3541,17 @@ function buildExecutiveShortSummary(
     const details = buildCookieRetentionReviewEvidenceDetails(packet);
     const longest = details?.cookieEvidence?.longestObservedCookie as Record<string, unknown> | null | undefined;
     const count = details?.counts?.longLivedCookieCount ?? 0;
+    const trackingCount = details?.counts?.longLivedTrackingCookieCount ?? 0;
+    const unknownCount = details?.counts?.longLivedUnclassifiedCookieCount ?? 0;
     const longestText = longest
       ? ` Longest observed cookie: ${String(longest.name ?? "unknown")} on ${String(longest.domain ?? "unknown domain")} for about ${Math.round(Number(longest.durationDays ?? 0))} days.`
       : "";
-    return `CertScore observed ${count} persistent tracking or unclassified cookie${count === 1 ? "" : "s"} with retained expiry evidence. Review whether these lifetimes match stated retention, minimization, consent, and opt-out practices.${longestText}`;
+    const subject = trackingCount > 0
+      ? `${trackingCount} persistent tracking or analytics cookie${trackingCount === 1 ? "" : "s"}`
+      : unknownCount > 0
+        ? `${unknownCount} persistent unclassified cookie${unknownCount === 1 ? "" : "s"}`
+        : `${count} persistent cookie${count === 1 ? "" : "s"}`;
+    return `CertScore observed ${subject} with retained expiry evidence above the ${COOKIE_RETENTION_THRESHOLDS.mainReviewDays}-day review threshold. Review whether these lifetimes match stated retention, minimization, consent, opt-out, and disclosure practices.${longestText}`;
   }
 
   if (findingId === "consent_dark_patterns_detected") {

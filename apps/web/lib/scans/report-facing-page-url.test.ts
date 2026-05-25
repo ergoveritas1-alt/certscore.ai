@@ -19,7 +19,9 @@ test("report-facing scanned page URL helpers reject runtime request evidence URL
     isRuntimeRequestEvidenceUrl("https://cms.quantserve.com/pixel/p-vj4AYjBqd6VJ2.gif [query_redacted=true query_keys=idmatch,gdpr]"),
     true
   );
+  assert.equal(isRuntimeRequestEvidenceUrl("https://geolocation.onetrust.com/cookieconsentpub/v1/geo/location/dnsfeed"), true);
   assert.equal(isRuntimeRequestEvidenceUrl("https://maps.googleapis.com/maps/api/js [query_redacted=true query_keys=key,callback]"), true);
+  assert.equal(isRuntimeRequestEvidenceUrl("https://pub.doubleverify.com/dvtag/123/pub.js"), true);
   assert.equal(isRuntimeRequestEvidenceUrl("https://www.fandango.com/"), false);
 });
 

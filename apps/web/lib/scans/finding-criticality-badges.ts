@@ -54,8 +54,8 @@ const FINDING_CRITICALITY_BADGES = {
     rationale: "Concrete evidence of tracking cookies before consent."
   },
   long_lived_cookie_retention_review: {
-    badge: "high",
-    rationale: "Concrete runtime expiry evidence can warrant retention and disclosure review without asserting a legal violation."
+    badge: "medium",
+    rationale: "Concrete runtime expiry evidence warrants retention and disclosure review, while unclassified cookies remain review signals unless corroborated by tracking, consent, opt-out, or disclosure evidence."
   },
   cookie_disclosure_gap: {
     badge: "medium",
@@ -96,10 +96,6 @@ const FINDING_CRITICALITY_BADGES = {
   forced_consent_interaction: {
     badge: "high",
     rationale: "Can materially impair user choice or access."
-  },
-  fingerprinting_related_signals_observed: {
-    badge: "medium",
-    rationale: "Useful review context, not enough for high urgency by itself."
   },
   probable_fingerprinting: {
     badge: "high",

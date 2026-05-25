@@ -69,22 +69,6 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
     },
     reviewPrompts: ["Which element and programmatic relationship triggered the semantic-labeling evidence?"]
   },
-  fingerprinting_related_signals_observed: {
-    overview:
-      "Runtime evidence shows one or more browser or device-signal observations relevant to fingerprinting review, but not enough for a probable cluster.",
-    regulatoryLabel: "Device/browser signal review",
-    regulatoryCopy:
-      "Useful for reviewing high-entropy collection, device access, minimization, purpose, disclosure, and whether signals are linked to identifiers.",
-    evidence: {
-      title: "Device-signal sample",
-      lines: [
-        "{\"artifact\":\"fp_related_001\",\"role\":\"supporting\"}",
-        "{\"signals\":[\"canvas_or_webgl\",\"storage\"],\"rawValues\":\"not_retained\"}",
-        "{\"clusterStrength\":\"related_not_probable\",\"purpose\":\"review\"}"
-      ]
-    },
-    reviewPrompts: ["Which browser or device signal categories were retained, and what script produced them?"]
-  },
   session_recording_services_detected: {
     overview:
       "Runtime evidence shows a script, endpoint, or vendor pattern associated with session replay, heatmaps, recording, or behavior analytics.",

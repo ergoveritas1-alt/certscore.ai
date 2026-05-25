@@ -2736,6 +2736,42 @@ test("projects surfaced visual contrast findings with representative axe evidenc
           accessibilitySelectors: ["p.low-contrast"],
           accessibilitySeverities: ["high"],
           accessibilityImpacts: ["serious"],
+          accessibilityAxeEvidence: [
+            JSON.stringify({
+              description: "Elements must meet minimum color contrast ratio thresholds",
+              helpUrl: "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
+              impact: "serious",
+              nodeCount: 1,
+              pageUrl: "https://example.com/",
+              representativeNodes: [
+                {
+                  checks: [
+                    {
+                      data: {
+                        bgColor: "#ffffff",
+                        contrastRatio: 2.1,
+                        expectedContrastRatio: 4.5,
+                        fgColor: "#aaaaaa"
+                      },
+                      id: "color-contrast",
+                      message: "Element has insufficient color contrast of 2.1:1 with expected contrast ratio of 4.5:1"
+                    }
+                  ],
+                  colorContrast: {
+                    backgroundColor: "#ffffff",
+                    contrastRatio: 2.1,
+                    foregroundColor: "#aaaaaa",
+                    requiredContrastRatio: 4.5
+                  },
+                  failureSummary: "Fix any of the following: Element has insufficient color contrast.",
+                  htmlSnippet: "<p class=\"low-contrast\">Show more</p>",
+                  selectors: ["p.low-contrast"]
+                }
+              ],
+              representativeSelectors: ["p.low-contrast"],
+              ruleId: "color-contrast"
+            })
+          ],
           maxAxeImpact: ["serious"]
         },
         fetchQuality: null,
@@ -2759,6 +2795,211 @@ test("projects surfaced visual contrast findings with representative axe evidenc
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
   assert.ok(finding?.evidencePreview.some((snippet) => /color-contrast\/wcag2aa/i.test(snippet)));
   assert.ok(finding?.evidenceDetails?.evidenceFlags?.includes("representative_accessibility_examples_retained"));
+  const axeEvidence = finding?.evidenceDetails?.accessibilityEvidence?.axeEvidence as
+    | Array<{ representativeNodes?: Array<Record<string, unknown>> }>
+    | undefined;
+  assert.deepEqual(axeEvidence?.[0]?.representativeNodes?.[0]?.colorContrast, {
+    backgroundColor: "#ffffff",
+    contrastRatio: 2.1,
+    foregroundColor: "#aaaaaa",
+    requiredContrastRatio: 4.5
+  });
+  assert.equal(
+    axeEvidence?.[0]?.representativeNodes?.[0]?.failureSummary,
+    "Fix any of the following: Element has insufficient color contrast."
+  );
+});
+
+test("keeps retention and accessibility findings in top findings when canonical evidence is retained", () => {
+  const accessibilityNode = {
+    failureSummary: "Fix any of the following: Element does not have inner text that is visible to screen readers.",
+    htmlSnippet: "<button class=\"icon-only\"></button>",
+    selectors: ["button.icon-only"]
+  };
+  const keyboardNode = {
+    failureSummary: "Element should be keyboard focusable.",
+    htmlSnippet: "<div class=\"carousel\">...</div>",
+    selectors: [".carousel"]
+  };
+  const contrastNode = {
+    colorContrast: {
+      backgroundColor: "#ffffff",
+      contrastRatio: 2.1,
+      foregroundColor: "#aaaaaa",
+      requiredContrastRatio: 4.5
+    },
+    failureSummary: "Fix any of the following: Element has insufficient color contrast.",
+    htmlSnippet: "<p class=\"low-contrast\">Show more</p>",
+    selectors: ["p.low-contrast"]
+  };
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("cookie_retention_lifetime_review_signal", {
+      details: { family: "consent_tracking", kind: "cookie_retention_lifetime_review_signal" },
+      evidence: {
+        counts: { cookieRetentionEvidenceCount: 1 },
+        entities: {
+          cookieRetentionEvidence: [
+            JSON.stringify({
+              classification: "advertising/marketing",
+              cookieName: "_fbp",
+              domain: ".example.com",
+              durationDays: 540,
+              pageUrl: "https://example.com/",
+              party: "third_party",
+              sourceRequestUrl: "https://connect.facebook.net/en_US/fbevents.js",
+              thresholdBasis: "540 days observed against CertScore cookie retention review thresholds.",
+              vendor: "Meta"
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: ["automated_observation"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["_fbp on .example.com was observed on https://example.com/ with an expiry around 540 days."],
+        sourceUrls: []
+      },
+      presentationDecision: {
+        confidenceRationale: "Concrete runtime cookie evidence retained.",
+        downgradeReasons: [],
+        rationale: "Runtime cookie retention evidence retained.",
+        status: "surface",
+        verificationLabel: "Runtime",
+        verificationState: "runtime"
+      },
+      severity: "medium",
+      summary: "Long-lived advertising cookie retention evidence was retained."
+    }),
+    makePacket("keyboard_navigation_accessibility_issue", {
+      details: {
+        family: "accessibility",
+        kind: "keyboard_navigation_accessibility_issue",
+        ruleExamples: ["scrollable-region-focusable"]
+      },
+      evidence: {
+        counts: { representativeAxeExampleCount: 1, representativeAxePageCount: 1, representativeAxeRuleCount: 1 },
+        entities: {
+          accessibilityAxeEvidence: [
+            JSON.stringify({
+              impact: "serious",
+              nodeCount: 1,
+              pageUrl: "https://example.com/",
+              representativeNodes: [keyboardNode],
+              representativeSelectors: [".carousel"],
+              ruleId: "scrollable-region-focusable"
+            })
+          ],
+          accessibilityRuleCodes: ["scrollable-region-focusable"],
+          accessibilitySelectors: [".carousel"],
+          accessibilityImpacts: ["serious"]
+        },
+        fetchQuality: null,
+        flags: ["representative_accessibility_examples_retained"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Axe example: scrollable-region-focusable on https://example.com/; selector .carousel; nodes 1; impact serious."],
+        sourceUrls: []
+      },
+      severity: "medium",
+      summary: "Concrete keyboard-related axe node evidence was retained."
+    }),
+    makePacket("semantic_labeling_accessibility_issue", {
+      details: {
+        family: "accessibility",
+        kind: "semantic_labeling_accessibility_issue",
+        ruleExamples: ["button-name"]
+      },
+      evidence: {
+        counts: { representativeAxeExampleCount: 1, representativeAxePageCount: 1, representativeAxeRuleCount: 1 },
+        entities: {
+          accessibilityAxeEvidence: [
+            JSON.stringify({
+              impact: "serious",
+              nodeCount: 2,
+              pageUrl: "https://example.com/",
+              representativeNodes: [accessibilityNode],
+              representativeSelectors: ["button.icon-only"],
+              ruleId: "button-name"
+            })
+          ],
+          accessibilityRuleCodes: ["button-name"],
+          accessibilitySelectors: ["button.icon-only"],
+          accessibilityImpacts: ["serious"]
+        },
+        fetchQuality: null,
+        flags: ["representative_accessibility_examples_retained"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Axe example: button-name on https://example.com/; selector button.icon-only; nodes 2; impact serious."],
+        sourceUrls: []
+      },
+      severity: "medium",
+      summary: "Concrete semantic labeling axe node evidence was retained."
+    }),
+    makePacket("visual_contrast_accessibility_issue", {
+      details: {
+        family: "accessibility",
+        kind: "visual_contrast_accessibility_issue",
+        ruleExamples: ["color-contrast"]
+      },
+      evidence: {
+        counts: { representativeAxeExampleCount: 1, representativeAxePageCount: 1, representativeAxeRuleCount: 1 },
+        entities: {
+          accessibilityAxeEvidence: [
+            JSON.stringify({
+              impact: "serious",
+              nodeCount: 1,
+              pageUrl: "https://example.com/",
+              representativeNodes: [contrastNode],
+              representativeSelectors: ["p.low-contrast"],
+              ruleId: "color-contrast"
+            })
+          ],
+          accessibilityRuleCodes: ["color-contrast"],
+          accessibilitySelectors: ["p.low-contrast"],
+          accessibilityImpacts: ["serious"]
+        },
+        fetchQuality: null,
+        flags: ["representative_accessibility_examples_retained"],
+        pageUrls: ["https://example.com/"],
+        snippets: ["Axe example: color-contrast on https://example.com/; selector p.low-contrast; nodes 1; impact serious."],
+        sourceUrls: []
+      },
+      severity: "medium",
+      summary: "Concrete color contrast axe node evidence was retained."
+    })
+  ]);
+
+  const topFindingIds = projection.topFindings.map((finding) => finding.id);
+  assert.ok(topFindingIds.includes("long_lived_cookie_retention_review"));
+  assert.ok(topFindingIds.includes("keyboard_navigation_accessibility_issue"));
+  assert.ok(topFindingIds.includes("semantic_labeling_accessibility_issue"));
+  assert.ok(topFindingIds.includes("visual_contrast_accessibility_issue"));
+
+  const byId = new Map(projection.topFindings.map((finding) => [finding.id, finding]));
+  assert.equal(byId.get("long_lived_cookie_retention_review")?.severity, "medium");
+  assert.equal(
+    byId.get("long_lived_cookie_retention_review")?.evidenceDetails?.counts?.longLivedTrackingCookieCount,
+    1
+  );
+  const keyboardAxeEvidence = byId.get("keyboard_navigation_accessibility_issue")?.evidenceDetails?.accessibilityEvidence?.axeEvidence as
+    | Array<{ representativeNodes?: Array<Record<string, unknown>> }>
+    | undefined;
+  const semanticAxeEvidence = byId.get("semantic_labeling_accessibility_issue")?.evidenceDetails?.accessibilityEvidence?.axeEvidence as
+    | Array<{ representativeNodes?: Array<Record<string, unknown>> }>
+    | undefined;
+  const contrastAxeEvidence = byId.get("visual_contrast_accessibility_issue")?.evidenceDetails?.accessibilityEvidence?.axeEvidence as
+    | Array<{ representativeNodes?: Array<Record<string, unknown>> }>
+    | undefined;
+  assert.equal(
+    keyboardAxeEvidence?.[0]?.representativeNodes?.[0]?.htmlSnippet,
+    keyboardNode.htmlSnippet
+  );
+  assert.equal(
+    semanticAxeEvidence?.[0]?.representativeNodes?.[0]?.failureSummary,
+    accessibilityNode.failureSummary
+  );
+  assert.deepEqual(
+    contrastAxeEvidence?.[0]?.representativeNodes?.[0]?.colorContrast,
+    contrastNode.colorContrast
+  );
 });
 
 test("projects CPRA CBA opt-out missing into executive findings and top findings", () => {
@@ -3718,8 +3959,10 @@ test("projects pre-consent tracking when tracker requests have timeline and non-
           runtimeVendors: ["Google Analytics", "Google Tag Manager", "Scorecard Research", "VWO"]
         },
         flags: ["privacy.preconsent_tracking_detected", "privacy.tracking_before_consent_detected", "cmp_detected"],
+        pageUrls: ["https://example.com/"],
         sourceUrls: ["https://www.googletagmanager.com/gtm.js?id=GTM-TEST"]
       },
+      primaryPageUrl: "https://geolocation.onetrust.com/cookieconsentpub/v1/geo/location/dnsfeed",
       severity: "high",
       summary: "Tracker vendors fired before consent interaction."
     })
@@ -3727,4 +3970,8 @@ test("projects pre-consent tracking when tracker requests have timeline and non-
 
   assert.ok(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
   assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  const finding = projection.findings.find((entry) => entry.id === "pre_consent_tracking_detected");
+  assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://example.com/");
+  assert.equal(finding?.evidenceDetails?.representativeRequests?.[0]?.scannedPageUrl, "https://example.com/");
+  assert.equal(finding?.evidenceDetails?.representativeRequests?.[0]?.consentSurfaceObserved, true);
 });

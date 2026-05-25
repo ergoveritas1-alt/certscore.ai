@@ -19,7 +19,7 @@ const EXPECTED_BADGES = {
   reject_tracking_persists_after_reject: "critical",
   session_recording_services_detected: "medium",
   third_party_cookie_pre_consent: "critical",
-  long_lived_cookie_retention_review: "high",
+  long_lived_cookie_retention_review: "medium",
   cookie_disclosure_gap: "medium",
   sensitive_data_collection_with_third_party_tracking_present: "high",
   session_replay_present_with_sensitive_surfaces_observed: "high",
@@ -30,12 +30,11 @@ const EXPECTED_BADGES = {
   reject_option_missing_or_hidden: "high",
   asymmetric_consent_ui: "medium",
   forced_consent_interaction: "high",
-  fingerprinting_related_signals_observed: "medium",
   probable_fingerprinting: "high"
 } satisfies Record<(typeof EXECUTIVE_SUMMARY_TOP_FINDING_IDS)[number], FindingCriticalityBadge>;
 
 test("finding criticality badges cover every executive top finding", () => {
-  assert.equal(EXECUTIVE_SUMMARY_TOP_FINDING_IDS.length, 24);
+  assert.equal(EXECUTIVE_SUMMARY_TOP_FINDING_IDS.length, 23);
 
   for (const findingId of EXECUTIVE_SUMMARY_TOP_FINDING_IDS) {
     assert.equal(getFindingCriticalityBadge(findingId), EXPECTED_BADGES[findingId]);

@@ -86,7 +86,7 @@ function displayPacketFromUnified(packet: ReturnType<typeof buildUnifiedFindingP
   };
 }
 
-test("promotes known advertising cookie retention evidence into a high strong direct top finding", () => {
+test("promotes known advertising cookie retention evidence into a medium strong direct top finding", () => {
   const packets = buildRetentionPackets([runtimeCookie()]);
   const packet = packets.find((entry) => entry.unifiedFindingId === "cookie_retention_lifetime_review_signal");
   assert.ok(packet);
@@ -94,7 +94,7 @@ test("promotes known advertising cookie retention evidence into a high strong di
 
   const projection = projectExecutiveFindingsFromUnifiedPackets([displayPacketFromUnified(packet)]);
   const finding = projection.findings.find((entry) => entry.id === "long_lived_cookie_retention_review");
-  assert.equal(finding?.severity, "high");
+  assert.equal(finding?.severity, "medium");
   assert.equal(finding?.confidence, "strong");
   assert.equal(finding?.directVsInferred, "direct");
   assert.ok(projection.topFindings.some((entry) => entry.id === "long_lived_cookie_retention_review"));
@@ -108,7 +108,7 @@ test("promotes known advertising cookie retention evidence into a high strong di
   assert.equal(lenses.find((lens) => lens.acronym === "FTC")?.findings.some((entry) => entry.id === "long_lived_cookie_retention_review"), false);
 });
 
-test("promotes unknown long-lived cookie evidence as externally eligible medium review signal", () => {
+test("keeps unknown long-lived cookie evidence audit-only medium review signal", () => {
   const review = evaluateCookieRetentionReview({
     cookieRetentionEvidence: [
       runtimeCookie({
@@ -121,9 +121,27 @@ test("promotes unknown long-lived cookie evidence as externally eligible medium 
     ]
   });
 
-  assert.equal(review.disposition, "eligible");
+  assert.equal(review.disposition, "audit_only");
   assert.equal(review.severity, "medium");
   assert.ok(review.confidence === "moderate" || review.confidence === "good");
+});
+
+test("promotes unknown very-long-lived cookie evidence when severe threshold is reached", () => {
+  const review = evaluateCookieRetentionReview({
+    cookieRetentionEvidence: [
+      runtimeCookie({
+        classification: "unknown",
+        cookieName: "xbc",
+        durationDays: 800,
+        sourceRequestUrl: null,
+        vendor: null
+      })
+    ]
+  });
+
+  assert.equal(review.disposition, "eligible");
+  assert.equal(review.severity, "high");
+  assert.equal(review.confidence, "moderate");
 });
 
 test("keeps unknown first-party 180-364 day cookie retention evidence audit-only", () => {

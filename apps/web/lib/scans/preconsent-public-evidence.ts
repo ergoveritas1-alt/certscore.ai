@@ -173,6 +173,7 @@ export function isPromotionGradePreconsentRequestRow(value: unknown) {
 export function buildPromotionGradePreconsentRequests(input: {
   rows: unknown[];
   scannedPageUrl?: string | null;
+  consentSurfaceObserved?: boolean | null;
   consentTimeline?: Record<string, unknown> | null;
   maxItems?: number;
 }) {
@@ -180,7 +181,9 @@ export function buildPromotionGradePreconsentRequests(input: {
   const consentActionMs =
     input.consentTimeline ? getNumber(input.consentTimeline, ["firstConsentActionMs", "first_consent_action_ms", "consentActionMs", "consent_action_ms"]) : null;
   const consentSurfaceObserved =
-    input.consentTimeline
+    typeof input.consentSurfaceObserved === "boolean"
+      ? input.consentSurfaceObserved
+      : input.consentTimeline
       ? (getNumber(input.consentTimeline, ["firstCmpVisibleMs", "first_cmp_visible_ms"]) !== null ||
           getBoolean(input.consentTimeline, ["consentSurfaceObserved", "consent_surface_observed"]))
       : null;

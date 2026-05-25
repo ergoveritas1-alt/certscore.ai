@@ -15,10 +15,17 @@ export type CookieRetentionEvidence = {
   classification: string | null;
   domain: string;
   durationDays: number | null;
+  expiresAt: string | null;
+  initiatorUrl: string | null;
   maxAgeSeconds: number | null;
   name: string;
   pageUrl: string;
   party: "first_party" | "third_party" | "unknown";
+  path: string | null;
+  responseUrl: string | null;
+  setAtMs: number | null;
+  setBeforeConsent: boolean | null;
+  setMethod: string | null;
   sourceRequestUrl: string | null;
   thresholdBasis: string;
   vendor: string | null;
@@ -178,7 +185,7 @@ export function getCookieRetentionEvidence(rawEvidence: Record<string, unknown> 
     const maxAgeSeconds = getMaxAgeSeconds(row);
     const classification = getString(row, ["classification", "category", "purpose", "vendorCategory", "vendor_category", "cookieCategory", "cookie_category"]);
     const vendor = getString(row, ["vendor", "vendorName", "vendor_name", "provider"]);
-    const sourceRequestUrl = getString(row, ["sourceRequestUrl", "source_request_url", "requestUrl", "request_url"]);
+    const sourceRequestUrl = getString(row, ["sourceRequestUrl", "source_request_url", "requestUrl", "request_url", "responseUrl", "response_url"]);
     const thresholdBasis = getString(row, ["thresholdBasis", "threshold_basis", "basis"]) ??
       (durationDays !== null ? `${Math.round(durationDays)} days observed against CertScore cookie-retention review thresholds.` : "");
     const category = normalizeCategory(classification, name ?? "");
@@ -193,15 +200,26 @@ export function getCookieRetentionEvidence(rawEvidence: Record<string, unknown> 
       classification,
       domain,
       durationDays,
+      expiresAt: getString(row, ["expiresAt", "expires_at", "cookieExpirationDate", "cookie_expiration_date"]),
+      initiatorUrl: getString(row, ["initiatorUrl", "initiator_url", "cookieInitiatorUrl", "cookie_initiator_url"]),
       maxAgeSeconds,
       name,
       pageUrl,
       party,
+      path: getString(row, ["path", "cookiePath", "cookie_path"]),
+      responseUrl: getString(row, ["responseUrl", "response_url"]),
+      setAtMs: getNumber(row, ["setAtMs", "set_at_ms"]),
+      setBeforeConsent: getBoolean(row, ["setBeforeConsent", "set_before_consent", "beforeConsent", "before_consent"]),
+      setMethod: getString(row, ["setMethod", "set_method", "cookieSetMethod", "cookie_set_method"]),
       sourceRequestUrl,
       thresholdBasis,
       vendor,
     }];
   });
+}
+
+function hasRetentionEscalationEvidence(cookie: CookieRetentionEvidence) {
+  return cookie.setBeforeConsent === true;
 }
 
 export function evaluateCookieRetentionReview(rawEvidence: Record<string, unknown> | null | undefined): CookieRetentionReviewEvaluation {
@@ -217,6 +235,14 @@ export function evaluateCookieRetentionReview(rawEvidence: Record<string, unknow
   const analyticsEvidence = eligibleEvidence.filter((cookie) => cookie.category === "analytics");
   const unknownEvidence = eligibleEvidence.filter((cookie) => cookie.category === "unknown" || cookie.category === "other");
   const severeTrackingEvidence = trackingEvidence.filter((cookie) => cookie.durationDays !== null && cookie.durationDays >= COOKIE_RETENTION_THRESHOLDS.severeReviewDays);
+  const mainThresholdClassifiedEvidence = eligibleEvidence.filter((cookie) =>
+    (cookie.category === "tracking" || cookie.category === "analytics") &&
+    (cookie.durationDays ?? 0) >= COOKIE_RETENTION_THRESHOLDS.mainReviewDays
+  );
+  const highEscalationEvidence = eligibleEvidence.filter((cookie) =>
+    (cookie.category === "tracking" || cookie.category === "analytics" || cookie.category === "unknown" || cookie.category === "other") &&
+    ((cookie.durationDays ?? 0) >= COOKIE_RETENTION_THRESHOLDS.severeReviewDays || hasRetentionEscalationEvidence(cookie))
+  );
   const moderateTrackingReviewEvidence = trackingEvidence.filter((cookie) =>
     (cookie.durationDays ?? 0) >= COOKIE_RETENTION_THRESHOLDS.moderateReviewDays &&
     (cookie.durationDays ?? 0) < COOKIE_RETENTION_THRESHOLDS.mainReviewDays
@@ -249,14 +275,19 @@ export function evaluateCookieRetentionReview(rawEvidence: Record<string, unknow
 
   const severity: CookieRetentionReviewSeverity =
     severeTrackingEvidence.length > 0 ||
-    trackingEvidence.some((cookie) => (cookie.durationDays ?? 0) >= COOKIE_RETENTION_THRESHOLDS.mainReviewDays) ||
-    trackingEvidence.filter((cookie) => (cookie.durationDays ?? 0) >= COOKIE_RETENTION_THRESHOLDS.mainReviewDays).length >= 2
+    highEscalationEvidence.length > 0
       ? "high"
-      : mainThresholdEvidence.length > 0 || moderateTrackingReviewQualifies
+      : mainThresholdClassifiedEvidence.length > 0 || moderateTrackingReviewQualifies || mainThresholdEvidence.length > 0
         ? "medium"
         : "low";
   const disposition: CookieRetentionReviewDisposition =
-    severity === "low" || (mainThresholdEvidence.length === 0 && !moderateTrackingReviewQualifies) ? "audit_only" : "eligible";
+    severity === "high"
+      ? "eligible"
+      : severity === "low" ||
+        (mainThresholdEvidence.length === 0 && !moderateTrackingReviewQualifies) ||
+        (mainThresholdClassifiedEvidence.length === 0 && moderateTrackingReviewEvidence.length === 0)
+      ? "audit_only"
+      : "eligible";
   const confidence: CookieRetentionReviewConfidence =
     trackingEvidence.some((cookie) => (cookie.durationDays ?? 0) >= COOKIE_RETENTION_THRESHOLDS.mainReviewDays && Boolean(cookie.vendor || cookie.sourceRequestUrl))
       ? "strong"

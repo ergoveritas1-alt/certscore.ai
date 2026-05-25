@@ -92,6 +92,7 @@ export type ScanReportUnifiedFindingStateDependencies = {
   deriveAccessibilityRuleEvidenceRows: (input: {
     examples: NonNullable<ScanDetailResponse["accessibilityRuleExamples"]>;
     ruleCounts: NonNullable<ScanDetailResponse["accessibilityRuleCounts"]>;
+    runtimeArtifacts?: Record<string, unknown> | null;
   }) => AccessibilityRuleEvidenceRow[];
   deriveConsentAuditFindings: (
     snapshot: Record<string, unknown> | null,
@@ -1049,17 +1050,37 @@ function getAccessibilityRuleMetadata(ruleCode: string, ruleGroup: string) {
 function deriveAccessibilityRuleEvidenceRows(input: {
   examples: NonNullable<ScanDetailResponse["accessibilityRuleExamples"]>;
   ruleCounts: NonNullable<ScanDetailResponse["accessibilityRuleCounts"]>;
+  runtimeArtifacts?: Record<string, unknown> | null;
 }): AccessibilityRuleEvidenceRow[] {
+  const axeEvidenceRows = getRuntimeObjectArray(input.runtimeArtifacts ?? null, [
+    "accessibilityAxeEvidence",
+    "accessibility_axe_evidence"
+  ]);
+  const axeEvidenceByRuleAndPage = new Map<string, Record<string, unknown>>();
+  for (const row of axeEvidenceRows) {
+    const ruleId = getRuntimeString(row, ["ruleId", "rule_id", "ruleCode", "rule_code"]);
+    const pageUrl = getRuntimeString(row, ["pageUrl", "page_url"]);
+    if (ruleId && pageUrl) {
+      axeEvidenceByRuleAndPage.set(`${ruleId.toLowerCase()}|${pageUrl.toLowerCase()}`, row);
+    }
+  }
+
   if (input.examples.length > 0) {
     return input.examples.map((example) => {
       const metadata = getAccessibilityRuleMetadata(example.ruleCode, example.ruleGroup);
       const weightedPriority =
         (example.severity === "high" ? 30 : example.severity === "medium" ? 20 : 10) + Math.min(example.nodeCount, 25);
+      const axeEvidence = axeEvidenceByRuleAndPage.get(`${example.ruleCode.toLowerCase()}|${example.pageUrl.toLowerCase()}`);
+      const representativeNodes = getRuntimeObjectArray(axeEvidence ?? null, [
+        "representativeNodes",
+        "representative_nodes"
+      ]);
 
       return {
         ...example,
         ...metadata,
         instanceCount: example.nodeCount,
+        ...(representativeNodes.length > 0 ? { representativeNodes } : {}),
         weightedPriority
       };
     });
@@ -2011,7 +2032,8 @@ export function buildScanReportUnifiedFindingState(
   const accessibilityIssueRows = dependencies.deriveAccessibilityIssueRows(snapshot);
   const accessibilityRuleEvidenceRows = dependencies.deriveAccessibilityRuleEvidenceRows({
     examples: scanRecord.accessibilityRuleExamples ?? [],
-    ruleCounts: scanRecord.accessibilityRuleCounts ?? []
+    ruleCounts: scanRecord.accessibilityRuleCounts ?? [],
+    runtimeArtifacts
   });
   const prioritizedAccessibilityRuleRows = [...accessibilityRuleEvidenceRows]
     .sort((left, right) => right.weightedPriority - left.weightedPriority)

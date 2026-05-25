@@ -308,7 +308,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     section: "Cookies & Storage",
     defaultSurfacePriority: 88,
     whyItMatters:
-      "Persistent tracking, analytics, identity, or unclassified cookies with retained runtime expiry evidence may warrant retention, minimization, consent, opt-out, and disclosure review.",
+      "Persistent cookies with retained runtime expiry evidence above CertScore review thresholds may warrant retention, minimization, consent, opt-out, and disclosure review; unclassified cookies require classification before stronger conclusions.",
     remediation:
       "Review cookie purposes and vendors, shorten unnecessary expiration periods, classify unknown cookies, and update cookie or privacy disclosures to explain retention periods or criteria."
   },

@@ -3746,6 +3746,32 @@ test("surfaces split semantic labeling finding when representative axe examples 
   assert.equal(packet?.evidence?.counts?.representativeAxePageCount, 1);
   assert.equal(packet?.evidence?.counts?.representativeAxeRuleCount, 1);
   assert.deepEqual(packet?.evidence?.entities?.maxAxeImpact, ["serious"]);
+  assert.deepEqual(
+    packet?.evidence?.entities?.accessibilityAxeEvidence?.map((value) => JSON.parse(value)),
+    [
+      {
+        description: null,
+        failureSummaries: [
+          "Fix any of the following: Element does not have inner text that is visible to screen readers."
+        ],
+        help: "Buttons must have discernible text",
+        helpUrl: null,
+        impact: "serious",
+        nodeCount: 2,
+        pageUrl: "https://example.com/",
+        representativeNodes: [
+          {
+            failureSummary: "Fix any of the following: Element does not have inner text that is visible to screen readers.",
+            htmlSnippet: "<button aria-label=\"\" class=\"icon-only\"></button>",
+            selectors: ["button[aria-label='']"]
+          }
+        ],
+        representativeSelectors: ["button[aria-label='']"],
+        ruleId: "button-name",
+        severity: "high"
+      }
+    ]
+  );
   assert.ok(packet?.evidence?.snippets?.some((snippet) => /Representative axe examples: 1 rule across 1 page; max impact: serious\./.test(snippet)));
 });
 

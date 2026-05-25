@@ -1776,6 +1776,13 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
             impact: "critical",
             nodeCount: 1,
             pageUrl: "https://example.com/",
+            representativeNodes: [
+              {
+                failureSummary: "Fix any of the following: Element does not have inner text that is visible to screen readers.",
+                htmlSnippet: "<button class=\"icon-only\"></button>",
+                selectors: ["button.icon-only"]
+              }
+            ],
             representativeSelectors: ["button.icon-only"],
             ruleCode: "button-name",
             ruleGroup: "wcag2a",
@@ -1806,6 +1813,13 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
             impact: "serious",
             nodeCount: 2,
             pageUrl: "https://example.com/",
+            representativeNodes: [
+              {
+                failureSummary: "Fix all of the following: Element is in tab order and does not have accessible text.",
+                htmlSnippet: "<a class=\"social-link\" href=\"/social\"></a>",
+                selectors: ["a.social-link"]
+              }
+            ],
             representativeSelectors: ["a.social-link"],
             ruleCode: "link-name",
             ruleGroup: "wcag2a",
@@ -1818,6 +1832,36 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         promotionEligibility: "eligible",
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: []
+      }
+    },
+    {
+      name: "semantic labeling issue keeps strong rule summaries audit-only without concrete node evidence",
+      concern: makeConcern({
+        originType: "validation_rule",
+        originKey: "accessibility_review.semantic_labeling_accessibility_issue",
+        suggestedUnifiedFindingId: "semantic_labeling_accessibility_issue",
+        title: "Semantic labeling accessibility issue"
+      }),
+      evidenceStrengthFlags: ["structured_validation", "page_attributed"] as const,
+      rawEvidence: {
+        accessibilityRuleExamples: [
+          {
+            help: "Buttons must have discernible text",
+            impact: "critical",
+            nodeCount: 1,
+            pageUrl: "https://example.com/",
+            representativeSelectors: ["button.icon-only"],
+            ruleCode: "button-name",
+            ruleGroup: "wcag2a",
+            severity: "high"
+          }
+        ]
+      },
+      expected: {
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["accessibility_examples_below_promotion_threshold"]
       }
     },
     {
@@ -3536,4 +3580,63 @@ test("deriveConcernPolicy keeps uncorrelated video and Meta evidence audit-only"
   assert.equal(policy.promotionEligibility, "internal_only");
   assert.equal(policy.externalSurfacingEligibility, "audit_only");
   assert.ok(policy.negativeEvidenceFlags.includes("missing_specific_runtime_anchor"));
+});
+
+test("deriveConcernPolicy requires concrete node detail for keyboard accessibility promotion", () => {
+  const baseConcern = makeConcern({
+    originKey: "accessibility.wcag_keyboard_navigation_issue_count",
+    originType: "snapshot_signal",
+    suggestedUnifiedFindingId: "keyboard_navigation_accessibility_issue",
+    title: "Keyboard navigation accessibility issue"
+  });
+  const selectorOnlyPolicy = deriveConcernPolicy({
+    concern: baseConcern,
+    evidenceStrengthFlags: ["structured_validation", "page_attributed"],
+    rawEvidence: {
+      accessibilityRuleExamples: [
+        {
+          help: "Scrollable elements should be keyboard accessible",
+          impact: "serious",
+          nodeCount: 1,
+          pageUrl: "https://example.com/",
+          representativeSelectors: [".carousel"],
+          ruleCode: "scrollable-region-focusable",
+          ruleGroup: "keyboard",
+          severity: "high"
+        }
+      ]
+    }
+  });
+  const concretePolicy = deriveConcernPolicy({
+    concern: baseConcern,
+    evidenceStrengthFlags: ["structured_validation", "page_attributed"],
+    rawEvidence: {
+      accessibilityRuleExamples: [
+        {
+          help: "Scrollable elements should be keyboard accessible",
+          impact: "serious",
+          nodeCount: 1,
+          pageUrl: "https://example.com/",
+          representativeNodes: [
+            {
+              failureSummary: "Element should be keyboard focusable.",
+              htmlSnippet: "<div class=\"carousel\">...</div>",
+              selectors: [".carousel"]
+            }
+          ],
+          representativeSelectors: [".carousel"],
+          ruleCode: "scrollable-region-focusable",
+          ruleGroup: "keyboard",
+          severity: "high"
+        }
+      ]
+    }
+  });
+
+  assert.equal(selectorOnlyPolicy.promotionEligibility, "internal_only");
+  assert.equal(selectorOnlyPolicy.externalSurfacingEligibility, "audit_only");
+  assert.ok(selectorOnlyPolicy.negativeEvidenceFlags.includes("accessibility_examples_below_promotion_threshold"));
+  assert.equal(concretePolicy.promotionEligibility, "eligible");
+  assert.equal(concretePolicy.externalSurfacingEligibility, "eligible");
+  assert.equal(concretePolicy.allowedNarrativeTier, "strong");
 });

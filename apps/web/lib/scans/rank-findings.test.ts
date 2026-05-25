@@ -145,3 +145,15 @@ test("selectTopFindings suppresses fingerprinting-related signals when probable 
   assert.ok(selected.some((finding) => finding.id === "probable_fingerprinting"));
   assert.ok(!selected.some((finding) => finding.id === "fingerprinting_related_signals_observed"));
 });
+
+test("selectTopFindings does not headline fingerprinting-related review signals by themselves", () => {
+  const selected = selectTopFindings(
+    [
+      makeFingerprintingFinding("fingerprinting_related_signals_observed", 120),
+      makeFinding("asymmetric_consent_ui", 80)
+    ],
+    3
+  );
+
+  assert.ok(!selected.some((finding) => finding.id === "fingerprinting_related_signals_observed"));
+});

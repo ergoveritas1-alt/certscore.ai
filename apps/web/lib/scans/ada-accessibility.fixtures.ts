@@ -30,6 +30,13 @@ export const ADA_ACCESSIBILITY_FIXTURES = {
         impact: "serious",
         nodeCount: 2,
         pageUrl: "https://example.com/",
+        representativeNodes: [
+          {
+            failureSummary: "Fix any of the following: Element does not have inner text that is visible to screen readers.",
+            htmlSnippet: "<button aria-label=\"\" class=\"icon-only\"></button>",
+            selectors: ["button[aria-label='']"]
+          }
+        ],
         representativeSelectors: ["button[aria-label='']"],
         ruleCode: "button-name",
         ruleGroup: "wcag2a",

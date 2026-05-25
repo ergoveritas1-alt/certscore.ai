@@ -13,7 +13,9 @@ type ScanStatusRouteContext = {
 export async function GET(request: Request, context: ScanStatusRouteContext) {
   const { scanId } = await context.params;
   const url = new URL(request.url);
-  const includeFindings = url.searchParams.get("includeFindings") === "1";
+  const includeFindingsParam = url.searchParams.get("includeFindings");
+  const includeFindings =
+    includeFindingsParam === null ? true : /^(?:1|true)$/i.test(includeFindingsParam);
 
   if (!/^[0-9a-f-]{32,36}$/i.test(scanId)) {
     return NextResponse.json(

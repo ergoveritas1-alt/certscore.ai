@@ -28,6 +28,7 @@ export type NormalizedAccessibilityRuleExample = {
   impact: string | null;
   nodeCount: number;
   pageUrl: string;
+  representativeNodes?: Array<Record<string, unknown>>;
   representativeSelectors: string[];
   ruleCode: string;
   ruleGroup: string;
@@ -155,6 +156,27 @@ function getAccessibilityStringArrayValue(entry: AccessibilityRuleExampleLike, k
   return [];
 }
 
+function getAccessibilityObjectArrayValue(entry: AccessibilityRuleExampleLike, keys: string[]) {
+  for (const key of keys) {
+    const value = entry[key];
+    if (Array.isArray(value)) {
+      return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item));
+    }
+  }
+
+  return [];
+}
+
+function hasConcreteRepresentativeNodeEvidence(entry: AccessibilityRuleExampleLike) {
+  const nodes = getAccessibilityObjectArrayValue(entry, ["representativeNodes", "representative_nodes"]);
+  return nodes.some((node) => {
+    const selectors = getAccessibilityStringArrayValue(node, ["selectors", "target", "targets"]);
+    const htmlSnippet = getAccessibilityStringValue(node, ["htmlSnippet", "html_snippet", "sanitizedHtmlSnippet", "sanitized_html_snippet"]);
+    const failureSummary = getAccessibilityStringValue(node, ["failureSummary", "failure_summary"]);
+    return selectors.length > 0 && Boolean(htmlSnippet && failureSummary);
+  });
+}
+
 export function isCompleteRepresentativeAccessibilityExample(entry: AccessibilityRuleExampleLike) {
   const pageUrl = getAccessibilityStringValue(entry, ["pageUrl", "page_url"]);
   const ruleCode = getAccessibilityStringValue(entry, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
@@ -176,6 +198,24 @@ export function isCompleteRepresentativeAccessibilityExample(entry: Accessibilit
     impact &&
     severity &&
     help
+  );
+}
+
+export function isPromotionGradeKeyboardAccessibilityExample(entry: AccessibilityRuleExampleLike) {
+  const ruleCode = getAccessibilityStringValue(entry, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
+  return (
+    getAccessibilityFindingIdForRuleCode(ruleCode) === "keyboard_navigation_accessibility_issue" &&
+    isCompleteRepresentativeAccessibilityExample(entry) &&
+    hasConcreteRepresentativeNodeEvidence(entry)
+  );
+}
+
+export function isPromotionGradeSemanticLabelingAccessibilityExample(entry: AccessibilityRuleExampleLike) {
+  const ruleCode = getAccessibilityStringValue(entry, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
+  return (
+    getAccessibilityFindingIdForRuleCode(ruleCode) === "semantic_labeling_accessibility_issue" &&
+    isCompleteRepresentativeAccessibilityExample(entry) &&
+    hasConcreteRepresentativeNodeEvidence(entry)
   );
 }
 
@@ -391,7 +431,7 @@ export function hasPromotableKeyboardAccessibilityEvidence(rawEvidence: Record<s
     }
   }
 
-  return hasSevereExample || pages.size >= 2 || rules.size >= 2;
+  return examples.some(isPromotionGradeKeyboardAccessibilityExample) && (hasSevereExample || pages.size >= 2 || rules.size >= 2);
 }
 
 export function hasPromotableSemanticLabelingAccessibilityEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -399,12 +439,13 @@ export function hasPromotableSemanticLabelingAccessibilityEvidence(rawEvidence: 
     const ruleCode = getAccessibilityStringValue(example, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
     return getAccessibilityFindingIdForRuleCode(ruleCode) === "semantic_labeling_accessibility_issue";
   });
+  const promotionGradeExamples = examples.filter(isPromotionGradeSemanticLabelingAccessibilityExample);
   const linkNamePages = new Set<string>();
   let linkNameExampleCount = 0;
   let linkNameNodeCount = 0;
   let hasStrongNameOrLabelRule = false;
 
-  for (const example of examples) {
+  for (const example of promotionGradeExamples) {
     const ruleCode = getAccessibilityStringValue(example, ["ruleCode", "rule_code", "ruleId", "rule_id"]);
     const pageUrl = getAccessibilityStringValue(example, ["pageUrl", "page_url"]);
     if (ruleCode && STRONG_SEMANTIC_LABELING_RULE_IDS.has(ruleCode)) {
@@ -420,10 +461,11 @@ export function hasPromotableSemanticLabelingAccessibilityEvidence(rawEvidence: 
   }
 
   return (
-    hasStrongNameOrLabelRule ||
-    linkNameExampleCount >= 2 ||
-    linkNamePages.size >= 2 ||
-    linkNameNodeCount >= 2
+    promotionGradeExamples.length > 0 &&
+    (hasStrongNameOrLabelRule ||
+      linkNameExampleCount >= 2 ||
+      linkNamePages.size >= 2 ||
+      linkNameNodeCount >= 2)
   );
 }
 

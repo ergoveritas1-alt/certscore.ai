@@ -543,6 +543,25 @@ test("top-finding evaluator top-ranks strong fingerprint clusters with identifie
   assert.ok(decision.matchedCriteria.includes("fingerprint_identifier_or_network_linkage"));
 });
 
+test("top-finding evaluator keeps fingerprinting-related signals surface-only", () => {
+  const decision = evaluateTopFindingEligibility(finding({
+    id: "fingerprinting_related_signals_observed",
+    directVsInferred: "inferred",
+    evidenceDetails: {
+      telemetryEvidence: {
+        fingerprintClusterSummary: {
+          clusterSize: 3,
+          clusterStrength: "strong",
+          identifierLinkageContext: "network_after_collection"
+        }
+      }
+    }
+  }));
+
+  assert.equal(decision.eligibility, "surface_only");
+  assert.ok(decision.matchedCriteria.includes("fingerprint_multi_signal_cluster"));
+});
+
 test("top-finding evaluator top-ranks keyboard findings with reproduced traversal escape", () => {
   const decision = evaluateTopFindingEligibility(finding({
     id: "keyboard_navigation_accessibility_issue",
@@ -567,7 +586,7 @@ test("top-finding evaluator top-ranks keyboard findings with reproduced traversa
   assert.ok(decision.matchedCriteria.includes("keyboard_focus_escape_or_trap_evidence"));
 });
 
-test("top-finding evaluator treats axe keyboard-rule evidence as automated, not traversal-reproduced", () => {
+test("top-finding evaluator demotes axe keyboard-rule evidence without concrete node detail", () => {
   const decision = evaluateTopFindingEligibility(finding({
     id: "keyboard_navigation_accessibility_issue",
     section: "Accessibility",
@@ -580,9 +599,99 @@ test("top-finding evaluator treats axe keyboard-rule evidence as automated, not 
     }
   }));
 
+  assert.equal(decision.eligibility, "surface_only");
+  assert.ok(decision.missingCorroborators.includes("sanitized_html_snippet"));
+  assert.ok(decision.missingCorroborators.includes("failure_summary"));
+  assert.equal(decision.matchedCriteria.includes("automated_keyboard_accessibility_rule_evidence"), false);
+});
+
+test("top-finding evaluator treats concrete axe keyboard-node evidence as automated, not traversal-reproduced", () => {
+  const decision = evaluateTopFindingEligibility(finding({
+    id: "keyboard_navigation_accessibility_issue",
+    section: "Accessibility",
+    evidenceDetails: {
+      accessibilityEvidence: {
+        observed: true,
+        axeEvidence: [
+          {
+            impact: "serious",
+            nodeCount: 1,
+            representativeNodes: [
+              {
+                failureSummary: "Fix keyboard focusability for this scrollable region.",
+                htmlSnippet: "<div class=\"menu\" tabindex=\"-1\">...</div>",
+                selectors: [".menu"]
+              }
+            ],
+            representativeSelectors: [".menu"],
+            ruleId: "scrollable-region-focusable"
+          }
+        ],
+        basis: "Axe example: scrollable-region-focusable on https://example.com/; selector .menu; nodes 1; impact serious."
+      }
+    }
+  }));
+
   assert.equal(decision.eligibility, "top_candidate");
   assert.ok(decision.matchedCriteria.includes("automated_keyboard_accessibility_rule_evidence"));
   assert.equal(decision.missingCorroborators.includes("keyboard_traversal_trace"), false);
+});
+
+test("top-finding evaluator demotes semantic labeling without concrete axe node evidence", () => {
+  const decision = evaluateTopFindingEligibility(finding({
+    id: "semantic_labeling_accessibility_issue",
+    section: "Accessibility",
+    evidenceDetails: {
+      accessibilityEvidence: {
+        axeEvidence: [
+          {
+            impact: "serious",
+            nodeCount: 2,
+            representativeSelectors: ["button.icon-only"],
+            ruleId: "button-name"
+          }
+        ],
+        basis: "Representative accessibility examples were retained across 1 page."
+      }
+    }
+  }));
+
+  assert.equal(decision.eligibility, "surface_only");
+  assert.ok(decision.missingCorroborators.includes("axe_rule_ids"));
+  assert.ok(decision.missingCorroborators.includes("affected_node_selectors"));
+  assert.ok(decision.missingCorroborators.includes("sanitized_html_snippets"));
+  assert.ok(decision.missingCorroborators.includes("failure_summaries"));
+});
+
+test("top-finding evaluator keeps semantic labeling eligible with concrete axe node evidence", () => {
+  const decision = evaluateTopFindingEligibility(finding({
+    id: "semantic_labeling_accessibility_issue",
+    section: "Accessibility",
+    evidenceDetails: {
+      accessibilityEvidence: {
+        axeEvidence: [
+          {
+            impact: "serious",
+            nodeCount: 2,
+            representativeNodes: [
+              {
+                failureSummary: "Fix any of the following: Element does not have inner text that is visible to screen readers.",
+                htmlSnippet: "<button class=\"icon-only\"></button>",
+                selectors: ["button.icon-only"]
+              }
+            ],
+            representativeSelectors: ["button.icon-only"],
+            ruleId: "button-name"
+          }
+        ],
+        basis: "Axe example: button-name on https://example.com/; selector button.icon-only; nodes 2; impact serious."
+      }
+    }
+  }));
+
+  assert.equal(decision.eligibility, "top_candidate");
+  assert.ok(decision.matchedCriteria.includes("automated_semantic_accessibility_rule_evidence"));
+  assert.equal(decision.missingCorroborators.includes("sanitized_html_snippets"), false);
 });
 
 test("top-finding evaluator recognizes retained keyboardTraversalTrace aliases without requiring them for axe-only keyboard evidence", () => {

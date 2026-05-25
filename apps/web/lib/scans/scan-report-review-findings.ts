@@ -1132,6 +1132,7 @@ export type AccessibilityRuleEvidenceRow = {
   impact: string | null;
   nodeCount: number;
   pageUrl: string | null;
+  representativeNodes?: Array<Record<string, unknown>>;
   representativeSelectors: string[];
   ruleCode: string;
   ruleGroup: string;
@@ -2097,6 +2098,11 @@ function getRepresentativeAccessibilityExamplesForSignal(input: {
     if (/wcag_link_name_error_count/i.test(input.signalKey)) {
       return ruleCode === "link-name" || ruleGroup === "link";
     }
+    if (/wcag_keyboard_navigation_issue_count|wcag_focus_indicator_issue_count/i.test(input.signalKey)) {
+      return /^(?:nested-interactive|no-focusable-non-tabindex|scrollable-region-focusable|skip-link|tabindex)$/.test(ruleCode) ||
+        /keyboard|focus|tab/.test(ruleCode) ||
+        /keyboard|focus|tab/.test(ruleGroup);
+    }
 
     return false;
   });
@@ -2108,6 +2114,7 @@ function getRepresentativeAccessibilityExamplesForSignal(input: {
     impact: row.impact,
     nodeCount: row.nodeCount,
     pageUrl: row.pageUrl,
+    ...(row.representativeNodes ? { representativeNodes: row.representativeNodes.slice(0, 3) } : {}),
     representativeSelectors: row.representativeSelectors.slice(0, 3),
     ruleCode: row.ruleCode,
     ruleGroup: row.ruleGroup,

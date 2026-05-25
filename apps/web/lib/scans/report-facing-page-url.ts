@@ -26,8 +26,11 @@ export function isRuntimeRequestEvidenceUrl(value: string | null | undefined) {
       "cdn.quantummetric.com",
       "cms.quantserve.com",
       "dpm.demdex.net",
+      "geolocation.onetrust.com",
       "idsync.rlcdn.com",
       "maps.googleapis.com",
+      "pagead2.googlesyndication.com",
+      "pub.doubleverify.com",
       "securepubads.g.doubleclick.net"
     ];
     const runtimeHostSuffixes = [

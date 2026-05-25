@@ -956,6 +956,10 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
         ...getStringArrayEvidence(example.representativeSelectors),
         ...getStringArrayEvidence(example.representative_selectors)
       ];
+      const representativeNodes = [
+        ...getPlainRecordArray(example.representativeNodes),
+        ...getPlainRecordArray(example.representative_nodes)
+      ];
 
       if (pageUrl) {
         addPageUrl(pageUrl);
@@ -967,6 +971,25 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       addEntity(entities, "accessibilitySeverities", severity ? [severity] : []);
       if (typeof nodeCount === "number") {
         counts.accessibilityExampleNodeCount = (counts.accessibilityExampleNodeCount ?? 0) + nodeCount;
+      }
+      if (pageUrl && ruleCode) {
+        addEntity(entities, "accessibilityAxeEvidence", [
+          JSON.stringify({
+            description: getStringValue(example.description),
+            failureSummaries: representativeNodes
+              .flatMap((node) => getStringValue(node.failureSummary ?? node.failure_summary) ?? [])
+              .slice(0, 3),
+            help,
+            helpUrl: getStringValue(example.helpUrl ?? example.help_url),
+            impact,
+            nodeCount,
+            pageUrl,
+            representativeNodes: representativeNodes.slice(0, 3),
+            representativeSelectors: selectors.slice(0, 3),
+            ruleId: ruleCode,
+            severity
+          })
+        ]);
       }
       if (pageUrl && ruleCode && ruleGroup && selectors[0] && typeof nodeCount === "number" && impact && severity && help) {
         runtimeArtifacts.add(
@@ -1041,8 +1064,24 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     }
 
     if (/fingerprint(?:ing)?RuntimeEvidence|fingerprint(?:ing)?_runtime_evidence/i.test(key) && Array.isArray(value)) {
-      const compactRows = compactJsonRows(getPlainRecordArray(value));
+      const rows = getPlainRecordArray(value);
+      const compactRows = compactJsonRows(rows);
       addEntity(entities, "fingerprintingRuntimeEvidence", compactRows);
+      addEntity(
+        entities,
+        "fingerprintingCallSites",
+        rows.flatMap((row) => getStringArrayEvidence(row.callSites ?? row.call_sites))
+      );
+      addEntity(
+        entities,
+        "fingerprintingRequestHosts",
+        rows.flatMap((row) => getStringValue(row.host) ?? [])
+      );
+      addEntity(
+        entities,
+        "fingerprintingScriptUrls",
+        rows.flatMap((row) => getStringValue(row.initiatorUrl ?? row.initiator_url ?? row.scriptUrl ?? row.script_url) ?? [])
+      );
       if (compactRows.length > 0) {
         runtimeArtifacts.add(`${compactRows.length} fingerprinting runtime evidence artifact${compactRows.length === 1 ? "" : "s"} retained.`);
       }

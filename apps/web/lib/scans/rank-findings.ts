@@ -47,7 +47,6 @@ export const EXECUTIVE_SUMMARY_TOP_FINDING_IDS = [
   "reject_option_missing_or_hidden",
   "asymmetric_consent_ui",
   "forced_consent_interaction",
-  "fingerprinting_related_signals_observed",
   "probable_fingerprinting"
 ] as const;
 

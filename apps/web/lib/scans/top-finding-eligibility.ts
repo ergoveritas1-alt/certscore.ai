@@ -90,6 +90,73 @@ function hasBooleanKey(record: Record<string, unknown> | null | undefined, keys:
   return keys.some((key) => typeof record?.[key] === "boolean");
 }
 
+function hasConcreteAxeNodeEvidence(row: Record<string, unknown>) {
+  const nodes = [
+    ...asRows(row.representativeNodes),
+    ...asRows(row.representative_nodes)
+  ];
+  return nodes.some((node) => {
+    const selectors = [
+      ...asRows(node.selectors).flatMap((selectorRow) => Object.values(selectorRow).filter((value): value is string => typeof value === "string")),
+      ...(Array.isArray(node.selectors) ? node.selectors.filter((value): value is string => typeof value === "string") : []),
+      getString(node, "selector")
+    ].filter((value): value is string => Boolean(value));
+    const htmlSnippet =
+      getStringFromKeys(node, ["htmlSnippet", "html_snippet", "sanitizedHtmlSnippet", "sanitized_html_snippet"]);
+    const failureSummary = getStringFromKeys(node, ["failureSummary", "failure_summary"]);
+    return selectors.length > 0 && Boolean(htmlSnippet && failureSummary);
+  });
+}
+
+function hasPromotionGradeKeyboardAxeEvidence(accessibilityEvidence: Record<string, unknown> | null | undefined) {
+  const axeRows = [
+    ...asRows(accessibilityEvidence?.axeEvidence),
+    ...asRows(accessibilityEvidence?.accessibilityAxeEvidence)
+  ];
+  if (axeRows.some(hasConcreteAxeNodeEvidence)) {
+    return true;
+  }
+
+  const exampleRows = [
+    ...asRows(accessibilityEvidence?.ruleExamples),
+    ...asRows(accessibilityEvidence?.accessibilityRuleExamples)
+  ];
+  return exampleRows.some(hasConcreteAxeNodeEvidence);
+}
+
+function isSemanticLabelingRuleId(ruleId: string | null) {
+  return Boolean(
+    ruleId &&
+      /^(?:aria-command-name|aria-input-field-name|aria-toggle-field-name|aria-tooltip-name|aria-treeitem-name|button-name|input-button-name|label|link-name|select-name)$/i.test(
+        ruleId
+      )
+  );
+}
+
+function hasPromotionGradeSemanticAxeEvidence(accessibilityEvidence: Record<string, unknown> | null | undefined) {
+  const axeRows = [
+    ...asRows(accessibilityEvidence?.axeEvidence),
+    ...asRows(accessibilityEvidence?.accessibilityAxeEvidence)
+  ];
+  if (
+    axeRows.some((row) => {
+      const ruleId = getStringFromKeys(row, ["ruleId", "rule_id", "ruleCode", "rule_code"]);
+      return isSemanticLabelingRuleId(ruleId) && hasConcreteAxeNodeEvidence(row);
+    })
+  ) {
+    return true;
+  }
+
+  const exampleRows = [
+    ...asRows(accessibilityEvidence?.ruleExamples),
+    ...asRows(accessibilityEvidence?.accessibilityRuleExamples)
+  ];
+  return exampleRows.some((row) => {
+    const ruleId = getStringFromKeys(row, ["ruleId", "rule_id", "ruleCode", "rule_code"]);
+    return isSemanticLabelingRuleId(ruleId) && hasConcreteAxeNodeEvidence(row);
+  });
+}
+
 function includesAny(values: unknown, pattern: RegExp) {
   if (Array.isArray(values)) {
     return values.some((value) => typeof value === "string" && pattern.test(value));
@@ -551,8 +618,28 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         }
       }
       break;
-    case "probable_fingerprinting":
     case "fingerprinting_related_signals_observed":
+      forceEligibility = "surface_only";
+      {
+        const cluster = asRecord(details.telemetryEvidence?.fingerprintClusterSummary);
+        const clusterStrength = getString(cluster, "clusterStrength");
+        const identifierLinkageContext = getString(cluster, "identifierLinkageContext");
+        const clusterSize = getNumber(cluster, "clusterSize");
+        if (clusterStrength === "strong" || clusterStrength === "moderate" || (clusterSize ?? 0) >= 2) {
+          pushUnique(matchedCriteria, "fingerprint_multi_signal_cluster");
+        }
+        if (identifierLinkageContext && identifierLinkageContext !== "none") {
+          pushUnique(matchedCriteria, "fingerprint_identifier_or_network_linkage");
+        } else {
+          pushUnique(missingCorroborators, "fingerprint_identifier_or_network_linkage");
+          pushUnique(demotionReasons, "review_signal_without_identifier_or_network_linkage");
+        }
+      }
+      if (!hasMeaningfulValue(details.telemetryEvidence?.fingerprintClusterSummary) && !hasMeaningfulValue(details.telemetryEvidence)) {
+        missingCorroborators.push("fingerprint_or_device_telemetry_cluster");
+      }
+      break;
+    case "probable_fingerprinting":
       {
         const cluster = asRecord(details.telemetryEvidence?.fingerprintClusterSummary);
         const clusterStrength = getString(cluster, "clusterStrength");
@@ -593,6 +680,7 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         demotionReasons.push("missing_keyboard_traversal_trace");
       }
       if (finding.id === "keyboard_navigation_accessibility_issue" || finding.id === "focus_management_issue") {
+        const accessibilityEvidence = asRecord(details.accessibilityEvidence);
         const focusRows = asRows(details.accessibilityEvidence?.focusManagementEvidence);
         const hasTraversal = focusRows.some((row) =>
           hasMeaningfulValue(row.keyboardTraversalEvidence) ||
@@ -610,8 +698,18 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         });
         if (hasTraversal) {
           pushUnique(matchedCriteria, "keyboard_traversal_trace");
-        } else if (finding.id === "keyboard_navigation_accessibility_issue" && hasMeaningfulValue(details.accessibilityEvidence)) {
+        } else if (
+          finding.id === "keyboard_navigation_accessibility_issue" &&
+          hasPromotionGradeKeyboardAxeEvidence(accessibilityEvidence)
+        ) {
           pushUnique(matchedCriteria, "automated_keyboard_accessibility_rule_evidence");
+        } else if (finding.id === "keyboard_navigation_accessibility_issue") {
+          forceEligibility = "surface_only";
+          pushUnique(missingCorroborators, "axe_rule_id");
+          pushUnique(missingCorroborators, "affected_node_selector");
+          pushUnique(missingCorroborators, "sanitized_html_snippet");
+          pushUnique(missingCorroborators, "failure_summary");
+          pushUnique(demotionReasons, "missing_concrete_keyboard_axe_node_evidence");
         }
         if (hasFocusEscape) {
           forceEligibility = "top_candidate";
@@ -630,6 +728,19 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
             pushUnique(missingCorroborators, "behavior_reproduced_focus_management_evidence");
             pushUnique(demotionReasons, "missing_behavior_reproduced_focus_management_evidence");
           }
+        }
+      }
+      if (finding.id === "semantic_labeling_accessibility_issue") {
+        const accessibilityEvidence = asRecord(details.accessibilityEvidence);
+        if (hasPromotionGradeSemanticAxeEvidence(accessibilityEvidence)) {
+          pushUnique(matchedCriteria, "automated_semantic_accessibility_rule_evidence");
+        } else {
+          forceEligibility = "surface_only";
+          pushUnique(missingCorroborators, "axe_rule_ids");
+          pushUnique(missingCorroborators, "affected_node_selectors");
+          pushUnique(missingCorroborators, "sanitized_html_snippets");
+          pushUnique(missingCorroborators, "failure_summaries");
+          pushUnique(demotionReasons, "missing_concrete_semantic_axe_node_evidence");
         }
       }
       break;
