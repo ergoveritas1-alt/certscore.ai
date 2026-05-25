@@ -918,13 +918,14 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
     consentSurfaceObserved:
       getObservedConsentSurface(hybrid, runtimeArtifacts),
     requestPurposeClassificationConfidence: requestClassifications,
-    runtimeRequestUrls: state0RequestUrls,
-    preconsent_tracker_evidence_urls: uniqueStrings(
-      [
-        ...nonEssentialRequestRows.flatMap((row) => getRowString(row, ["requestUrl", "request_url", "url"])),
-        ...state0TrackerRequestUrls
-      ]
-    ),
+    runtimeRequestUrls: uniqueStrings([
+      ...nonEssentialRequestRows.flatMap((row) => getRowString(row, ["requestUrl", "request_url", "url"])),
+      ...state0RequestUrls
+    ]),
+    preconsent_tracker_evidence_urls: uniqueStrings([
+      ...nonEssentialRequestRows.flatMap((row) => getRowString(row, ["requestUrl", "request_url", "url"])),
+      ...state0TrackerRequestUrls
+    ]),
     preconsent_state0_request_observations: state0RequestRows,
     preconsent_tracker_vendors: uniqueStrings([
       ...nonEssentialRequestRows.flatMap((row) => getString(row.vendor)),

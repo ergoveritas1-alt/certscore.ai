@@ -42,6 +42,13 @@ test("ADA accessibility flow promotes persisted WS axe examples into the DOJ ADA
       impact: "critical",
       node_count: 1,
       page_url: "https://example.com/",
+      representative_nodes: [
+        {
+          selectors: ["button"],
+          htmlSnippet: "<button></button>",
+          failureSummary: "Button has no accessible name."
+        }
+      ],
       representative_selectors: ["button"],
       rule_code: "button-name",
       rule_group: "wcag2a",
@@ -54,6 +61,13 @@ test("ADA accessibility flow promotes persisted WS axe examples into the DOJ ADA
       impact: "serious",
       node_count: 1,
       page_url: "https://example.com/products",
+      representative_nodes: [
+        {
+          selectors: ["img"],
+          htmlSnippet: "<img src=\"/product.png\">",
+          failureSummary: "Image has no alternate text."
+        }
+      ],
       representative_selectors: ["img"],
       rule_code: "image-alt",
       rule_group: "wcag2a",

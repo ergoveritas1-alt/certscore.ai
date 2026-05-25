@@ -15,6 +15,7 @@ export type PersistedAccessibilityRuleExampleRow = {
   impact: string | null;
   node_count: number;
   page_url: string;
+  representative_nodes?: Array<Record<string, unknown>> | null;
   representative_selectors: string[] | null;
   rule_code: string;
   rule_group: string;
@@ -527,19 +528,27 @@ export function formatRepresentativeAccessibilityCoverage(coverage: Representati
 export function normalizePersistedAccessibilityRuleExamples(
   examples: PersistedAccessibilityRuleExampleRow[]
 ): NormalizedAccessibilityRuleExample[] {
-  return examples.map((example) => ({
-    description: example.description,
-    help: example.help,
-    helpUrl: example.help_url,
-    impact: example.impact,
-    nodeCount: example.node_count,
-    pageUrl: example.page_url,
-    representativeSelectors: getAccessibilityStringArrayValue(
+  return examples.map((example) => {
+    const representativeNodes = getAccessibilityObjectArrayValue(
       example as unknown as AccessibilityRuleExampleLike,
-      ["representative_selectors", "representativeSelectors"]
-    ),
-    ruleCode: example.rule_code,
-    ruleGroup: example.rule_group,
-    severity: example.severity
-  }));
+      ["representative_nodes", "representativeNodes"]
+    );
+
+    return {
+      description: example.description,
+      help: example.help,
+      helpUrl: example.help_url,
+      impact: example.impact,
+      nodeCount: example.node_count,
+      pageUrl: example.page_url,
+      ...(representativeNodes.length > 0 ? { representativeNodes } : {}),
+      representativeSelectors: getAccessibilityStringArrayValue(
+        example as unknown as AccessibilityRuleExampleLike,
+        ["representative_selectors", "representativeSelectors"]
+      ),
+      ruleCode: example.rule_code,
+      ruleGroup: example.rule_group,
+      severity: example.severity
+    };
+  });
 }

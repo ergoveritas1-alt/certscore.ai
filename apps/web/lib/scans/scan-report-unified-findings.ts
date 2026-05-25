@@ -1437,6 +1437,12 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         (value): value is string => typeof value === "string" && /^https?:\/\//i.test(value)
       )
     : [];
+  const concretePreconsentRuntimeUrls = [
+    ...new Set([
+      ...nonEssentialRequestRows.map((row) => String(row.requestUrl)),
+      ...retainedPreconsentEvidenceUrls
+    ])
+  ];
   const retainedState0RequestRows = Array.isArray(preconsentEvidenceRecord?.preconsent_state0_request_observations)
     ? (preconsentEvidenceRecord.preconsent_state0_request_observations as unknown[]).filter(
         (value): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value)
@@ -1476,12 +1482,8 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         consentActionableChoiceObserved,
         consentSurfaceObserved,
         requestPurposeClassificationConfidence: requestClassifications,
-        preconsent_tracker_evidence_urls: [
-          ...new Set([
-            ...nonEssentialRequestRows.map((row) => String(row.requestUrl)),
-            ...retainedPreconsentEvidenceUrls
-          ])
-        ],
+        runtimeRequestUrls: concretePreconsentRuntimeUrls,
+        preconsent_tracker_evidence_urls: concretePreconsentRuntimeUrls,
         preconsent_tracker_vendors: nonEssentialRequestRows
           .map((row) => (typeof row.vendor === "string" ? row.vendor : null))
           .filter((value): value is string => Boolean(value))

@@ -261,6 +261,8 @@ const CONSENT_TRACKING_IDS = [
   "forced_consent_wall",
   "accept_only_banner",
   "dismiss_without_reject",
+  "consent_control_not_reopenable",
+  "consent_governance_disclosure_gap",
   "session_replay_observed",
   "retargeting_pixel_observed",
   "video_content_tracking_exposure",
@@ -285,7 +287,9 @@ const REVIEW_ONLY_CONSENT_INTERFACE_IDS = [
   "accept_more_prominent_than_reject",
   "forced_consent_wall",
   "accept_only_banner",
-  "dismiss_without_reject"
+  "dismiss_without_reject",
+  "consent_control_not_reopenable",
+  "consent_governance_disclosure_gap"
 ] as const satisfies ReportUnifiedFindingId[];
 
 const SUPPORT_ONLY_CONSENT_TRACKING_CONTEXT_IDS = [
