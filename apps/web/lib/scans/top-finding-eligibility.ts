@@ -784,7 +784,7 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
     case "asymmetric_consent_ui":
     case "consent_dark_patterns_detected": {
       const lifecycleReview = asRecord(details.consentUiEvidence?.lifecycleReview);
-      if (lifecycleReview) {
+      if (lifecycleReview && finding.id === "consent_dark_patterns_detected") {
         const coverageStatus = getString(lifecycleReview, "coverageStatus");
         if (coverageStatus === "usable") {
           forceEligibility = "top_candidate";

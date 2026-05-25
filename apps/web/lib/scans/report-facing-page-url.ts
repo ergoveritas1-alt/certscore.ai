@@ -21,6 +21,7 @@ export function isRuntimeRequestEvidenceUrl(value: string | null | undefined) {
     const runtimeHosts = [
       "ajax.googleapis.com",
       "assets.adobedtm.com",
+      "ib.adnxs.com",
       "cdn.cookielaw.org",
       "cdn.jwplayer.com",
       "cdn.quantummetric.com",
@@ -28,24 +29,34 @@ export function isRuntimeRequestEvidenceUrl(value: string | null | undefined) {
       "dpm.demdex.net",
       "geolocation.onetrust.com",
       "idsync.rlcdn.com",
+      "live.rezync.com",
       "maps.googleapis.com",
       "pagead2.googlesyndication.com",
       "pub.doubleverify.com",
       "scripts.clarity.ms",
-      "securepubads.g.doubleclick.net"
+      "securepubads.g.doubleclick.net",
+      "x.bidswitch.net"
     ];
     const runtimeHostSuffixes = [
+      ".adnxs.com",
+      ".adsrvr.org",
+      ".bidswitch.net",
+      ".casalemedia.com",
+      ".criteo.com",
       ".doubleverify.com",
       ".doubleclick.net",
       ".googlesyndication.com",
       ".google-analytics.com",
       ".googletagmanager.com",
       ".clarity.ms",
+      ".liadm.com",
+      ".pippio.com",
       ".quantserve.com",
+      ".rezync.com",
       ".rubiconproject.com",
       ".rlcdn.com"
     ];
-    const runtimePathPattern = /\.(?:gif|js|mjs|css|png|jpg|jpeg|webp|svg|woff2?)$|\/(?:collect|g\/collect|id|pixel|sync|tag|track|tr)\b/i;
+    const runtimePathPattern = /\.(?:gif|js|mjs|css|png|jpg|jpeg|webp|svg|woff2?)$|\/(?:collect|g\/collect|getuidj?|id|pixel|syncd?|tag|track|tr)\b/i;
 
     return (
       runtimeHosts.includes(host) ||

@@ -352,6 +352,58 @@ function getRecordBoolean(row: Record<string, unknown>, keys: string[]) {
   return null;
 }
 
+function getRecordObject(row: Record<string, unknown> | undefined, keys: string[]) {
+  if (!row) {
+    return null;
+  }
+  for (const key of keys) {
+    const value = row[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function getFocusManagementEvidenceRows(packet: UnifiedFindingDisplayPacket) {
+  return getEntityJsonObjects(packet, "focusManagementEvidence");
+}
+
+function hasFocusTraversalEvidence(row: Record<string, unknown>) {
+  if (getRecordObject(row, [
+    "keyboardTraversalEvidence",
+    "keyboard_traversal_evidence",
+    "focusPathEvidence",
+    "focus_path_evidence"
+  ])) {
+    return true;
+  }
+  for (const key of ["keyboardTraversalTrace", "keyboard_traversal_trace", "focusTrace", "focus_trace"]) {
+    const value = row[key];
+    if (Array.isArray(value) && value.length > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasBehaviorReproducedFocusManagementEvidence(rows: Array<Record<string, unknown>>) {
+  return rows.some((row) =>
+    getRecordString(row, ["evidenceStrength", "evidence_strength"]) === "behavior_reproduced" &&
+    hasFocusTraversalEvidence(row)
+  );
+}
+
+function buildFocusManagementAccessibilityBasis(rows: Array<Record<string, unknown>>) {
+  if (hasBehaviorReproducedFocusManagementEvidence(rows)) {
+    return "WS01 reproduced the focus-management behavior with keyboard interaction tracing.";
+  }
+  if (rows.length > 0) {
+    return "Focus-management review evidence was retained, but this packet does not include behavior-reproduced keyboard traversal evidence.";
+  }
+  return "Focus-management review context was retained, but this packet does not include behavior-reproduced keyboard traversal evidence.";
+}
+
 function getCountValue(packet: UnifiedFindingDisplayPacket, keys: string[]) {
   for (const key of keys) {
     const value = packet.evidence?.counts?.[key];
@@ -393,6 +445,12 @@ function mapExecutiveConfidence(
   }
   if (findingId === "policy_behavior_contradiction_detected") {
     return evaluatePolicyRuntimeConflictPresentation(packet).complete ? mapConfidenceBandToExecutiveConfidence(packet.confidenceBand) : "moderate";
+  }
+  if (findingId === "focus_management_issue") {
+    const focusRows = getFocusManagementEvidenceRows(packet);
+    return hasBehaviorReproducedFocusManagementEvidence(focusRows)
+      ? mapConfidenceBandToExecutiveConfidence(packet.confidenceBand)
+      : "moderate";
   }
   return mapConfidenceBandToExecutiveConfidence(packet.confidenceBand);
 }
@@ -708,6 +766,141 @@ function buildConsentUiRuntimePathEvidence(row: Record<string, unknown>) {
       Array.isArray(value) ? value.length > 0 : value !== null && value !== undefined
     )
   );
+}
+
+function getConsentUiFirstLayerControls(diagnostics: Record<string, unknown> | null) {
+  return getRecordObjectArray(diagnostics ?? undefined, ["candidateButtons", "candidate_buttons", "firstLayerControls", "first_layer_controls"])
+    .map((row) => {
+      const label = getRecordString(row, ["label", "text", "visibleText", "visible_text", "name"]);
+      if (!label) {
+        return null;
+      }
+      return {
+        label,
+        visible: getRecordBoolean(row, ["visible", "isVisible", "is_visible"]),
+        interactable: getRecordBoolean(row, ["interactable", "isInteractable", "is_interactable"]),
+        role: getRecordString(row, ["role", "controlRole", "control_role"])
+      };
+    })
+    .filter((row): row is { label: string; visible: boolean | null; interactable: boolean | null; role: string | null } => row !== null)
+    .slice(0, 8);
+}
+
+function getConsentUiControlsFromRuntimePath(runtimePath: Record<string, unknown> | null) {
+  if (!runtimePath) {
+    return [];
+  }
+  return [
+    { label: getRecordString(runtimePath, ["acceptLabel", "accept_label"]), role: "button" },
+    { label: getRecordString(runtimePath, ["rejectLabel", "reject_label"]), role: "button" },
+    { label: getRecordString(runtimePath, ["manageChoicesLabel", "manage_choices_label"]), role: "button" }
+  ]
+    .filter((row): row is { label: string; role: string } => typeof row.label === "string" && row.label.trim().length > 0)
+    .map((row) => ({
+      label: row.label,
+      visible: true,
+      interactable: true,
+      role: row.role
+    }))
+    .slice(0, 8);
+}
+
+function buildRejectPathConsentUiBasis(input: {
+  runtimePath: Record<string, unknown> | null;
+  rejectOptionSubtype: string | null;
+}) {
+  const rejectAvailableOnFirstLayer = getRecordBoolean(input.runtimePath ?? {}, [
+    "rejectAvailableOnFirstLayer",
+    "reject_available_on_first_layer"
+  ]);
+  const preferencesRequiredBeforeReject = getRecordBoolean(input.runtimePath ?? {}, [
+    "preferencesRequiredBeforeReject",
+    "preferences_required_before_reject"
+  ]);
+  const acceptDepth = getRecordNumber(input.runtimePath ?? {}, ["acceptClickDepth", "accept_click_depth"]);
+  const rejectDepth = getRecordNumber(input.runtimePath ?? {}, ["rejectClickDepth", "reject_click_depth", "depth"]);
+
+  if (rejectAvailableOnFirstLayer === false && preferencesRequiredBeforeReject === true && rejectDepth !== null) {
+    return `Retained consent UI path evidence showed no first-layer reject/refusal action; reject required the preferences path and was observed at click depth ${rejectDepth}.`;
+  }
+  if (preferencesRequiredBeforeReject === true && rejectDepth !== null) {
+    return `Retained consent UI path evidence showed the reject/refusal path required opening preferences and was observed at click depth ${rejectDepth}.`;
+  }
+  if (rejectAvailableOnFirstLayer === false) {
+    return "Retained consent UI path evidence showed no visible or equivalent reject/refusal action on the first observed consent layer.";
+  }
+  if (acceptDepth !== null && rejectDepth !== null && rejectDepth > acceptDepth) {
+    return `Retained consent UI path evidence showed a materially deeper reject/refusal path than accept (${rejectDepth} steps vs ${acceptDepth}).`;
+  }
+  if (input.rejectOptionSubtype === "reject_present_but_visually_hidden") {
+    return "Retained consent UI path evidence showed the reject/refusal option was present but visually hidden or materially hard to perceive.";
+  }
+  return "Retained consent UI path evidence showed the reject/refusal choice was not visible or equivalent on the first observed consent layer.";
+}
+
+function buildAsymmetricConsentUiBasis(runtimePath: Record<string, unknown> | null) {
+  const preferencesRequiredBeforeReject = getRecordBoolean(runtimePath ?? {}, [
+    "preferencesRequiredBeforeReject",
+    "preferences_required_before_reject"
+  ]);
+  const acceptDepth = getRecordNumber(runtimePath ?? {}, ["acceptClickDepth", "accept_click_depth"]);
+  const rejectDepth = getRecordNumber(runtimePath ?? {}, ["rejectClickDepth", "reject_click_depth", "depth"]);
+  const choiceAsymmetry = getRecordString(runtimePath ?? {}, ["choiceAsymmetry", "choice_asymmetry"]);
+  const scrollRequired = getRecordBoolean(runtimePath ?? {}, ["scrollRequired", "scroll_required"]);
+
+  if (acceptDepth !== null && rejectDepth !== null && rejectDepth > acceptDepth) {
+    return `Retained consent UI path evidence showed acceptance was available with materially lower interaction cost than refusal; accept required ${acceptDepth} step(s), while reject required ${rejectDepth}.`;
+  }
+  if (preferencesRequiredBeforeReject === true && rejectDepth !== null) {
+    return `Retained consent UI path evidence showed acceptance was easier than refusal; reject required the preferences path and was observed at click depth ${rejectDepth}.`;
+  }
+  if (scrollRequired === true && choiceAsymmetry === "material") {
+    return "Retained consent UI path evidence showed materially imbalanced consent choices, including a reject/refusal path that required scrolling.";
+  }
+  if (choiceAsymmetry === "material" || choiceAsymmetry === "minor") {
+    return `Retained consent UI path evidence classified the accept and reject paths as ${choiceAsymmetry}ly imbalanced.`;
+  }
+  return "Retained consent UI path evidence showed accept and reject choices were not equivalent in visibility, prominence, or interaction cost.";
+}
+
+function buildConsentUiBasis(input: {
+  evidenceSnippets: string[];
+  findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY;
+  rejectOptionSubtype: string | null;
+  runtimePath: Record<string, unknown> | null;
+  summary: string;
+}) {
+  if (input.findingId === "reject_option_missing_or_hidden") {
+    return buildRejectPathConsentUiBasis({
+      runtimePath: input.runtimePath,
+      rejectOptionSubtype: input.rejectOptionSubtype
+    });
+  }
+  if (input.findingId === "asymmetric_consent_ui") {
+    return buildAsymmetricConsentUiBasis(input.runtimePath);
+  }
+  return input.evidenceSnippets[0] ?? input.summary;
+}
+
+function buildConsentUiUserChoiceImpact(input: {
+  findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY;
+  rejectOptionSubtype: string | null;
+}) {
+  if (input.findingId === "asymmetric_consent_ui") {
+    return "Accept and reject choices were retained with materially different visibility, emphasis, or interaction cost.";
+  }
+  if (input.findingId !== "reject_option_missing_or_hidden") {
+    return "Consent UI evidence may affect how easily users can exercise a choice.";
+  }
+  return input.rejectOptionSubtype === "reject_requires_preferences_path"
+    ? "Reject choice was retained behind an additional preferences or manage-choices path."
+    : input.rejectOptionSubtype === "reject_present_but_visually_hidden"
+      ? "Reject choice was retained but visually hidden or materially hard to perceive."
+      : input.rejectOptionSubtype === "reject_depth_asymmetry"
+        ? "Reject choice required materially more interaction than the accept path."
+        : input.rejectOptionSubtype === "reject_absent_first_layer"
+          ? "Reject choice was not retained as visible or equivalent on the first observed consent layer."
+          : "Reject path evidence was retained, but the exact reject availability subtype is ambiguous.";
 }
 
 function sanitizeRequestClassificationAnchor(row: Record<string, unknown>) {
@@ -2082,12 +2275,100 @@ function buildCookieRetentionReviewEvidenceDetails(packet: UnifiedFindingDisplay
   };
 }
 
+function getStringArrayFromRecord(row: Record<string, unknown> | null | undefined, keys: string[]) {
+  if (!row) {
+    return [];
+  }
+  for (const key of keys) {
+    const value = row[key];
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+    }
+  }
+  return [];
+}
+
+function buildRejectSuppressionOutcome(input: {
+  rejectEvidenceDiff: Record<string, unknown> | null;
+  postRejectNonEssentialRequests: Array<Record<string, unknown>>;
+  suppressionChecks: Record<string, unknown> | null;
+}) {
+  const baselineRequestCount = getRecordNumber(input.rejectEvidenceDiff ?? {}, ["baseline_request_count", "baselineRequestCount"]);
+  const postRejectRequestCount = getRecordNumber(input.rejectEvidenceDiff ?? {}, ["post_reject_request_count", "postRejectRequestCount"]);
+  const baselineVendors = getStringArrayFromRecord(input.rejectEvidenceDiff, ["baseline_vendors", "baselineVendors"]);
+  const postRejectVendors = getStringArrayFromRecord(input.rejectEvidenceDiff, ["post_reject_vendors", "postRejectVendors"]);
+  const persistingVendors = uniqueStrings([
+    ...getStringArrayFromRecord(input.rejectEvidenceDiff, [
+      "persisting_after_reject_vendors",
+      "persistingAfterRejectVendors",
+      "persisted_tracker_vendors",
+      "persistedTrackerVendors"
+    ]),
+    ...input.postRejectNonEssentialRequests.flatMap((row) => getRecordString(row, ["vendor", "vendorName", "name"]))
+  ]).filter(isDisplayVendorName);
+  const firstPostRejectNonEssentialRequestMs = input.postRejectNonEssentialRequests
+    .map((row) => getRecordNumber(row, ["ms_after_reject", "msAfterReject"]))
+    .filter((value): value is number => value !== null)
+    .sort((left, right) => left - right)[0] ?? null;
+  const overallTrackingReducedAfterReject =
+    baselineRequestCount !== null && postRejectRequestCount !== null
+      ? postRejectRequestCount < baselineRequestCount
+      : baselineVendors.length > 0 && postRejectVendors.length > 0
+        ? postRejectVendors.length < baselineVendors.length
+        : null;
+  const nonEssentialVendorsPersistedAfterReject =
+    getRecordBoolean(input.suppressionChecks ?? {}, [
+      "non_essential_vendor_after_reject",
+      "nonEssentialVendorAfterReject"
+    ]) ?? (persistingVendors.length > 0 || input.postRejectNonEssentialRequests.length > 0);
+
+  return {
+    overallTrackingReducedAfterReject,
+    nonEssentialVendorsPersistedAfterReject,
+    persistingNonEssentialVendors: persistingVendors,
+    postRejectNonEssentialRequestCount: input.postRejectNonEssentialRequests.length,
+    firstPostRejectNonEssentialRequestMs,
+    interpretation: overallTrackingReducedAfterReject === true && nonEssentialVendorsPersistedAfterReject
+      ? "Reject reduced some tracking overall, but at least one classified non-essential vendor still fired after reject."
+      : nonEssentialVendorsPersistedAfterReject
+        ? "At least one classified non-essential vendor still fired after reject."
+        : "Reject-path suppression outcome was retained, but no classified post-reject non-essential vendor persisted in this packet."
+  };
+}
+
+function normalizeRejectPersistenceEvidenceFlags(input: {
+  flags: string[];
+  rejectSuppressionOutcome: Record<string, unknown>;
+}) {
+  const conflictingLegacyFlags = new Set([
+    "reject_did_not_reduce_tracking",
+    "consent_reject_reduced_tracking",
+    "reject_path_tracking_not_reduced"
+  ]);
+  return uniqueStrings([
+    ...input.flags.filter((flag) => !conflictingLegacyFlags.has(flag)),
+    input.rejectSuppressionOutcome.overallTrackingReducedAfterReject === true &&
+      input.rejectSuppressionOutcome.nonEssentialVendorsPersistedAfterReject === true
+      ? "reject_reduced_some_tracking_but_nonessential_vendor_persisted"
+      : null,
+    input.rejectSuppressionOutcome.nonEssentialVendorsPersistedAfterReject === true
+      ? "nonessential_vendor_persisted_after_reject"
+      : null
+  ]);
+}
+
 function buildRejectTrackingEvidenceDetails(packet: UnifiedFindingDisplayPacket): CertScoreFindingEvidenceDetails {
   const consentInteraction = getFirstEntityJsonObject(packet, "consentInteraction");
   const promotionDecision = getFirstEntityJsonObject(packet, "promotionDecision");
   const rejectEvidenceDiff = getFirstEntityJsonObject(packet, "rejectEvidenceDiff");
   const postRejectNonEssentialRequests = getEntityJsonObjects(packet, "postRejectNonEssentialRequests");
   const suppressionChecks = getFirstEntityJsonObject(packet, "suppressionChecks");
+  const retainedRejectSuppressionOutcome = getFirstEntityJsonObject(packet, "rejectSuppressionOutcome");
+  const rejectSuppressionOutcome = retainedRejectSuppressionOutcome ?? buildRejectSuppressionOutcome({
+    rejectEvidenceDiff,
+    postRejectNonEssentialRequests,
+    suppressionChecks
+  });
   const confidenceRisks = getEntityValues(packet, /^confidenceRisks$/i);
   const requestUrls = uniqueCaseInsensitiveStrings([
     ...getEntityUrlValues(packet, /runtime.*request|request.*url/i),
@@ -2166,7 +2447,11 @@ function buildRejectTrackingEvidenceDetails(packet: UnifiedFindingDisplayPacket)
     ],
     runtimeRequestUrls: requestUrls,
     runtimeVendors,
-    evidenceFlags: uniqueStrings([...(packet.evidence?.flags ?? []), "reject_path_tracking_not_reduced"]),
+    evidenceFlags: normalizeRejectPersistenceEvidenceFlags({
+      flags: packet.evidence?.flags ?? [],
+      rejectSuppressionOutcome
+    }),
+    rejectSuppressionOutcome,
     ...(consentInteraction ? { consentInteraction } : {}),
     ...(promotionDecision ? { promotionDecision } : {}),
     ...(rejectEvidenceDiff ? { rejectEvidenceDiff } : {}),
@@ -2637,14 +2922,23 @@ function buildGenericCanonicalEvidenceDetails(
   const runtimeVendors = getPacketRuntimeVendors(packet);
   const requestPurposeRows = getRequestPurposeClassificationRows(packet);
   const representativeRequests = getRepresentativeRequestDetails(runtimeRequestUrls, runtimeVendors, requestPurposeRows);
-  const evidenceSnippets = getPacketEvidenceSnippets(packet).map((snippet) =>
-    findingId === "fingerprinting_related_signals_observed" ? sanitizeFingerprintReviewText(snippet) : snippet
-  );
+  const evidenceSnippets = getPacketEvidenceSnippets(packet)
+    .filter((snippet) =>
+      CONSENT_UI_EVIDENCE_FINDING_IDS.has(findingId)
+        ? !/Consent governance disclosure note/i.test(snippet)
+        : true
+    )
+    .map((snippet) =>
+      findingId === "fingerprinting_related_signals_observed" ? sanitizeFingerprintReviewText(snippet) : snippet
+    );
   const sourceSignals = getPacketSourceSignals(packet);
   const evidenceFlags = uniqueStrings(packet.evidence?.flags ?? []);
   const sourceUrls = uniqueStrings(packet.evidence?.sourceUrls ?? []);
   const pageUrls = getScannedPageUrls(packet);
   const counts = getPacketCounts(packet);
+  if (CONSENT_UI_EVIDENCE_FINDING_IDS.has(findingId)) {
+    delete counts.consentGovernancePolicySurfaceCount;
+  }
   const isCookieEvidenceFinding = COOKIE_EVIDENCE_FINDING_IDS.has(findingId);
   const details: CertScoreFindingEvidenceDetails = {
     ...(Object.keys(counts).length > 0 ? { counts } : {}),
@@ -2815,66 +3109,123 @@ function buildGenericCanonicalEvidenceDetails(
     const consentSurfaceDiagnostics = getFirstEntityJsonObject(packet, "consentSurfaceDiagnostics");
     const consentUiRuntimePath = getConsentUiPathEvidence(packet);
     const runtimePath = consentUiRuntimePath ? buildConsentUiRuntimePathEvidence(consentUiRuntimePath) : null;
+    const firstLayerControls = getConsentUiFirstLayerControls(consentSurfaceDiagnostics);
+    const pathControls = getConsentUiControlsFromRuntimePath(runtimePath);
+    const retainedFirstLayerControls = firstLayerControls.length > 0 ? firstLayerControls : pathControls;
     details.consentUiEvidence = {
       observed: true,
       pattern: findingId,
       ...(rejectOptionSubtype ? { rejectOptionSubtype } : {}),
       ...(consentSurfaceDecisionStates.length > 0 ? { consentSurfaceDecisionStates } : {}),
       ...(consentSurfaceDiagnostics ? { consentSurfaceDiagnostics } : {}),
+      ...(retainedFirstLayerControls.length > 0 ? { firstLayerControls: retainedFirstLayerControls } : {}),
       ...(runtimePath && Object.keys(runtimePath).length > 0 ? { runtimePath } : {}),
-      basis: evidenceSnippets[0] ?? packet.summary,
-      userChoiceImpact: findingId === "reject_option_missing_or_hidden"
-        ? rejectOptionSubtype === "reject_requires_preferences_path"
-          ? "Reject choice was retained behind an additional preferences or manage-choices path."
-          : rejectOptionSubtype === "reject_present_but_visually_hidden"
-            ? "Reject choice was retained but visually hidden or materially hard to perceive."
-            : rejectOptionSubtype === "reject_depth_asymmetry"
-              ? "Reject choice required materially more interaction than the accept path."
-              : rejectOptionSubtype === "reject_absent_first_layer"
-                ? "Reject choice was not retained as visible or equivalent on the first observed consent layer."
-                : "Reject path evidence was retained, but the exact reject availability subtype is ambiguous."
-        : "Consent UI evidence may affect how easily users can exercise a choice."
+      basis: buildConsentUiBasis({
+        evidenceSnippets,
+        findingId,
+        rejectOptionSubtype,
+        runtimePath,
+        summary: packet.summary
+      }),
+      userChoiceImpact: buildConsentUiUserChoiceImpact({ findingId, rejectOptionSubtype })
     };
     const lifecycleEvidence = getConsentControlLifecycleEvidence({
       consentControlLifecycleEvidence: getFirstEntityJsonObject(packet, "consentControlLifecycleEvidence")
     });
     if (lifecycleEvidence) {
+      const hasObservedReopenControl =
+        lifecycleEvidence.privacySettingsControlObserved ||
+        lifecycleEvidence.cookiePreferencesLinkObserved ||
+        lifecycleEvidence.cmpReopenControlObserved ||
+        lifecycleEvidence.footerPreferenceLinkObserved;
       details.consentUiEvidence.lifecycleReview = {
-        subtype: "privacy_settings_control_not_observed",
+        subtype: hasObservedReopenControl
+          ? "privacy_settings_control_observed"
+          : "privacy_settings_control_not_observed",
         coverageStatus: lifecycleEvidence.coverageStatus,
         pagesChecked: lifecycleEvidence.pagesChecked,
         controlsSearched: lifecycleEvidence.controlsSearched,
         footerLinksInspected: lifecycleEvidence.footerLinksInspected.slice(0, 5),
-        evidenceLine:
-          "No obvious cookie preferences, privacy settings, or consent-preference reopen control was observed on the scanned public pages."
+        observedControls: (lifecycleEvidence.observedControls ?? []).slice(0, 5),
+        evidenceLine: hasObservedReopenControl
+          ? "A cookie preferences, privacy settings, or consent-preference reopen control was observed separately from the first-layer reject-path evidence."
+          : "No obvious cookie preferences, privacy settings, or consent-preference reopen control was observed on the scanned public pages."
       };
     }
   }
 
   if (SENSITIVE_EVIDENCE_FINDING_IDS.has(findingId)) {
+    const sensitivePayloadRows = getEntityJsonObjects(packet, "sensitivePayloadViolations").slice(0, 10);
+    const sensitiveInputSamples = sensitivePayloadRows
+      .map((row) => {
+        const linkage = getRecordObject(row, ["sameFlowLinkage", "same_flow_linkage"]);
+        const fieldPageUrl = getRecordString(linkage ?? row, ["fieldPageUrl", "field_page_url", "pageUrl", "page_url"]);
+        const requestPageUrl = getRecordString(linkage ?? row, ["requestPageUrl", "request_page_url"]);
+        return {
+          detectedType: getRecordString(row, ["detectedType", "detected_type"]),
+          sourceField: getRecordString(row, ["sourceField", "source_field"]),
+          sourceLocation: getRecordString(row, ["sourceLocation", "source_location"]),
+          sourcePattern: getRecordString(row, ["sourcePattern", "source_pattern"]),
+          matchSnippet: getRecordString(row, ["matchSnippet", "match_snippet"]),
+          pageUrl: getRecordString(row, ["pageUrl", "page_url"]) ?? fieldPageUrl,
+          fieldPageUrl,
+          requestPageUrl,
+          samePageOrFlow: getRecordBoolean(linkage ?? row, ["samePageOrFlow", "same_page_or_flow", "samePage", "same_page", "sameFlow", "same_flow"]),
+          userValueObserved: getRecordBoolean(linkage ?? row, ["userValueObserved", "user_value_observed"])
+        };
+      })
+      .filter((row) =>
+        Object.values(row).some((value) => value !== null && value !== undefined && value !== false)
+      )
+      .slice(0, 5);
+    const sensitiveRequestSamples = sensitivePayloadRows
+      .map((row) => ({
+        requestUrl: getRecordString(row, ["requestUrl", "request_url"]),
+        requestMethod: getRecordString(row, ["requestMethod", "request_method"]),
+        vendorHost: getRecordString(row, ["vendorHost", "vendor_host"]),
+        vendorName: getRecordString(row, ["vendorName", "vendor_name"]),
+        evidenceSource: getRecordString(row, ["evidenceSource", "evidence_source"]),
+        evidenceStrength: getRecordString(row, ["evidenceStrength", "evidence_strength"]),
+        maskingOrExclusionObserved: getRecordBoolean(row, ["maskingOrExclusionObserved", "masking_or_exclusion_observed"]),
+        rawValuesRetained: getRecordBoolean(row, ["rawValuesRetained", "raw_values_retained"]),
+        payloadExposureObserved: getRecordBoolean(row, ["payloadExposureObserved", "payload_exposure_observed"])
+      }))
+      .filter((row) => row.requestUrl || row.vendorHost || row.vendorName)
+      .slice(0, 5);
     const packetDataTypes =
       packet.details?.family === "sensitive_data" && "dataTypes" in packet.details
         ? packet.details.dataTypes
         : [];
     const sensitiveDataTypes = uniqueStrings([
       ...getEntityValues(packet, /sensitive.*data.*type/i),
-      ...(Array.isArray(packetDataTypes) ? packetDataTypes : [])
+      ...(Array.isArray(packetDataTypes) ? packetDataTypes : []),
+      ...sensitiveInputSamples.map((row) => row.detectedType).filter((value): value is string => Boolean(value))
     ]).map(formatSensitiveDataType);
     const sensitiveFieldContexts = uniqueStrings([
       ...getEntityValues(packet, /sensitive.*source.*field/i).map((value) => `field:${value}`),
-      ...getEntityValues(packet, /sensitive.*source.*location/i).map((value) => `location:${formatSensitiveSourceLocation(value)}`)
+      ...getEntityValues(packet, /sensitive.*source.*location/i).map((value) => `location:${formatSensitiveSourceLocation(value)}`),
+      ...sensitiveInputSamples.flatMap((row) => [
+        row.sourceField ? `field:${row.sourceField}` : null,
+        row.sourceLocation ? `location:${formatSensitiveSourceLocation(row.sourceLocation)}` : null
+      ]).filter((value): value is string => Boolean(value))
     ]);
     const thirdPartyDomains = uniqueStrings([
-      ...getEntityValues(packet, /third.*party.*domains?|request.*domains?|vendor/i)
+      ...getEntityValues(packet, /third.*party.*domains?|request.*domains?|vendor/i),
+      ...sensitiveRequestSamples.map((row) => row.vendorHost).filter((value): value is string => Boolean(value))
     ]).slice(0, 12);
     const samePageOrFlowLinked = parseBooleanEntity(getEntityValues(packet, /^samePageOrFlowLinked$|^same_page_or_flow_linked$/i)[0]) ?? false;
     const payloadExposureObserved =
-      parseBooleanEntity(getEntityValues(packet, /^payloadExposureObserved$|^payload_exposure_observed$/i)[0]) ?? false;
-    const rawValuesRetained = parseBooleanEntity(getEntityValues(packet, /^rawValuesRetained$|^raw_values_retained$/i)[0]) ?? false;
+      parseBooleanEntity(getEntityValues(packet, /^payloadExposureObserved$|^payload_exposure_observed$/i)[0]) ??
+      sensitiveRequestSamples.some((row) => row.payloadExposureObserved === true);
+    const rawValuesRetained =
+      parseBooleanEntity(getEntityValues(packet, /^rawValuesRetained$|^raw_values_retained$/i)[0]) ??
+      sensitiveRequestSamples.some((row) => row.rawValuesRetained === true);
     const runtimeRequestUrlsForSensitiveEvidence = uniqueStrings([
-      ...getEntityValues(packet, /runtime.*request.*urls?|request.*urls?/i)
+      ...getEntityValues(packet, /runtime.*request.*urls?|request.*urls?/i),
+      ...sensitiveRequestSamples.map((row) => row.requestUrl).filter((value): value is string => Boolean(value))
     ]);
-    const sameFlowBasis = samePageOrFlowLinked
+    const retainedSamePageOrFlowLinkage = samePageOrFlowLinked || sensitiveInputSamples.some((row) => row.samePageOrFlow === true);
+    const sameFlowBasis = retainedSamePageOrFlowLinkage
       ? "same_page_or_navigation_flow"
       : sensitiveFieldContexts.length > 0 && runtimeRequestUrlsForSensitiveEvidence.length > 0
         ? "scan_level_only"
@@ -2891,11 +3242,20 @@ function buildGenericCanonicalEvidenceDetails(
       fieldTypes: sensitiveDataTypes,
       fieldContexts: sensitiveFieldContexts,
       thirdPartyDomains,
-      samePageOrFlowLinked,
+      samePageOrFlowLinked: retainedSamePageOrFlowLinkage,
       sameFlowBasis,
       rawValuesRetained,
       payloadExposureObserved,
-      basis: evidenceSnippets[0] ?? packet.summary
+      ...(sensitiveInputSamples.length > 0 ? { sensitiveInputs: sensitiveInputSamples } : {}),
+      ...(sensitiveRequestSamples.length > 0 ? { runtimeRequestEvidence: sensitiveRequestSamples } : {}),
+      maskingOrExclusionObserved: sensitiveRequestSamples.some((row) => row.maskingOrExclusionObserved === true)
+        ? true
+        : sensitiveRequestSamples.some((row) => row.maskingOrExclusionObserved === false)
+          ? false
+          : "unknown",
+      basis: sensitiveInputSamples.length > 0 && runtimeRequestUrlsForSensitiveEvidence.length > 0
+        ? "Retained sensitive input metadata was linked to third-party runtime request evidence on the same page or flow. Field values were not retained."
+        : evidenceSnippets.find((snippet) => /sensitive|input|field|form|tracking|request|session replay/i.test(snippet)) ?? packet.summary
     };
     if (sensitiveDataTypes.length > 0) {
       details.sensitiveDataTypes = sensitiveDataTypes;
@@ -3068,16 +3428,20 @@ function buildGenericCanonicalEvidenceDetails(
       .map(sanitizeAccessibilityAxeEvidence)
       .filter((row) => Object.keys(row).length > 0)
       .slice(0, 8);
+    const focusManagementEvidence = getFocusManagementEvidenceRows(packet);
     details.accessibilityEvidence = {
       observed: true,
-      basis: evidenceSnippets[0] ?? packet.summary,
+      basis: findingId === "focus_management_issue"
+        ? buildFocusManagementAccessibilityBasis(focusManagementEvidence)
+        : evidenceSnippets[0] ?? packet.summary,
       representativeExamplesRetained: evidenceSnippets.length,
       affectedNodes: getCountValue(packet, ["representativeAxeExampleCount", "wcagErrorCountTotal"]),
       pageCount: getCountValue(packet, ["representativeAxePageCount"]),
       ...(accessibilityRuleCodes[0] ? { axeRuleId: accessibilityRuleCodes[0], ruleCodes: accessibilityRuleCodes.slice(0, 8) } : {}),
       ...(accessibilityImpacts[0] ? { impact: accessibilityImpacts[0], impacts: accessibilityImpacts.slice(0, 8) } : {}),
       ...(accessibilitySeverities[0] ? { severity: accessibilitySeverities[0] } : {}),
-      ...(axeEvidence.length > 0 ? { axeEvidence } : {})
+      ...(axeEvidence.length > 0 ? { axeEvidence } : {}),
+      ...(focusManagementEvidence.length > 0 ? { focusManagementEvidence: focusManagementEvidence.slice(0, 12) } : {})
     };
   }
 
@@ -3670,6 +4034,9 @@ function buildExecutiveEvidenceDetails(
   );
   const details: CertScoreFindingEvidenceDetails = {};
 
+  if (findingId === "reject_option_missing_or_hidden") {
+    delete counts.consentGovernancePolicySurfaceCount;
+  }
   if (Object.keys(counts).length > 0) {
     details.counts = counts;
   }
@@ -3799,8 +4166,11 @@ function buildExecutiveEvidenceDetails(
     };
   }
 
-  const focusManagementEvidence = getEntityJsonObjects(packet, "focusManagementEvidence");
-  if (focusManagementEvidence.length > 0 && findingId === "keyboard_navigation_accessibility_issue") {
+  const focusManagementEvidence = getFocusManagementEvidenceRows(packet);
+  if (
+    focusManagementEvidence.length > 0 &&
+    (findingId === "keyboard_navigation_accessibility_issue" || findingId === "focus_management_issue")
+  ) {
     details.accessibilityEvidence = {
       ...(details.accessibilityEvidence ?? {}),
       focusManagementEvidence: focusManagementEvidence.slice(0, 12)
@@ -3848,9 +4218,15 @@ function buildExecutiveEvidenceDetails(
   if (findingId === "reject_tracking_persists_after_reject") {
     const consentInteraction = getFirstEntityJsonObject(packet, "consentInteraction");
     const promotionDecision = getFirstEntityJsonObject(packet, "promotionDecision");
-    const rejectEvidenceDiff = getFirstEntityJsonObject(packet, "rejectEvidenceDiff");
-    const postRejectNonEssentialRequests = getEntityJsonObjects(packet, "postRejectNonEssentialRequests");
-    const suppressionChecks = getFirstEntityJsonObject(packet, "suppressionChecks");
+  const rejectEvidenceDiff = getFirstEntityJsonObject(packet, "rejectEvidenceDiff");
+  const postRejectNonEssentialRequests = getEntityJsonObjects(packet, "postRejectNonEssentialRequests");
+  const suppressionChecks = getFirstEntityJsonObject(packet, "suppressionChecks");
+  const retainedRejectSuppressionOutcome = getFirstEntityJsonObject(packet, "rejectSuppressionOutcome");
+  const rejectSuppressionOutcome = retainedRejectSuppressionOutcome ?? buildRejectSuppressionOutcome({
+    rejectEvidenceDiff,
+    postRejectNonEssentialRequests,
+    suppressionChecks
+  });
     const confidenceRisks = getEntityValues(packet, /^confidenceRisks$/i);
     if (consentInteraction) {
       details.consentInteraction = consentInteraction;
@@ -3870,10 +4246,11 @@ function buildExecutiveEvidenceDetails(
     if (suppressionChecks) {
       details.suppressionChecks = suppressionChecks;
     }
-    details.evidenceFlags = uniqueStrings([
-      ...(details.evidenceFlags ?? []),
-      "reject_path_tracking_not_reduced"
-    ]);
+    details.rejectSuppressionOutcome = rejectSuppressionOutcome;
+    details.evidenceFlags = normalizeRejectPersistenceEvidenceFlags({
+      flags: details.evidenceFlags ?? [],
+      rejectSuppressionOutcome
+    });
   }
 
   return Object.keys(details).length > 0 ? details : undefined;
@@ -3927,6 +4304,13 @@ function buildExecutiveShortSummary(
     const dataTypeText = dataTypes.length > 0 ? `${formatVendorList(dataTypes)} ` : "";
     const domainText = requestDomains.length > 0 ? ` alongside requests to ${formatVendorList(requestDomains)}` : "";
     return `Sensitive ${dataTypeText}input evidence was retained${domainText}; review whether any field values are transmitted before treating this as payload exposure.`;
+  }
+
+  if (findingId === "focus_management_issue") {
+    const focusManagementEvidence = getFocusManagementEvidenceRows(packet);
+    return hasBehaviorReproducedFocusManagementEvidence(focusManagementEvidence)
+      ? "Behavior-reproduced focus-management evidence was retained from WS01 keyboard interaction tracing."
+      : "Focus-management review context was retained, but the packet does not include behavior-reproduced keyboard traversal evidence.";
   }
 
   if (findingId === "long_lived_cookie_retention_review") {
@@ -4236,6 +4620,9 @@ export function projectExecutiveFindingsFromUnifiedPackets(
       return false;
     }
     const eligibility = topFindingEligibility[finding.id]?.eligibility;
+    if (finding.id === "focus_management_issue" && eligibility === "surface_only") {
+      return false;
+    }
     return eligibility !== "suppress" && eligibility !== "audit_only";
   });
   const topFindingIds = new Set(topFindings.map((finding) => finding.id));

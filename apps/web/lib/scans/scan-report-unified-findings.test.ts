@@ -882,6 +882,12 @@ test("high-sensitivity snapshot signal specializes when merged tracking context 
           evidenceStrength: "confirmed",
           matchSnippet: "intellimizeClientIp=***-***-4248",
           requestUrl: "https://log.intellimize.co/logger",
+          sameFlowLinkage: {
+            requestPageUrl: "https://example.com/contact",
+            fieldPageUrl: "https://example.com/contact",
+            samePageOrFlow: true
+          },
+          pageUrl: "https://example.com/contact",
           vendorHost: "log.intellimize.co"
         }
       ]
@@ -1812,6 +1818,7 @@ test("runtime-derived reject persistence projects when retained post-reject rows
 
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.ok(packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
+  assert.ok(packet?.evidence?.flags?.includes("nonessential_vendor_persisted_after_reject"));
   assert.deepEqual(packet?.evidence?.entities?.postRejectNonEssentialRequests, [
     JSON.stringify({
       category: "analytics",
@@ -1820,6 +1827,16 @@ test("runtime-derived reject persistence projects when retained post-reject rows
       ts_ms: 3000,
       url: "https://www.google-analytics.com/g/collect?after=1",
       vendor: "Google Analytics"
+    })
+  ]);
+  assert.deepEqual(packet?.evidence?.entities?.rejectSuppressionOutcome, [
+    JSON.stringify({
+      overallTrackingReducedAfterReject: null,
+      nonEssentialVendorsPersistedAfterReject: true,
+      persistingNonEssentialVendors: ["Google Analytics"],
+      postRejectNonEssentialRequestCount: 1,
+      firstPostRejectNonEssentialRequestMs: 1000,
+      interpretation: "At least one classified non-essential vendor still fired after reject."
     })
   ]);
   assert.ok(projection.findings.some((finding) => finding.id === "reject_tracking_persists_after_reject"));
@@ -1922,6 +1939,16 @@ test("runtime reject path depth promotes concrete dark-pattern reject-missing ev
 
   const concreteState = makeState({
     consent_actionable_choice_observed: true,
+    consent_control_lifecycle_evidence: {
+      cookiePreferencesLinkObserved: true,
+      controlsSearched: ["Cookie Preferences"],
+      coverageStatus: "usable",
+      footerLinksInspected: ["Cookie Preferences"],
+      footerPreferenceLinkObserved: true,
+      initialConsentLayerObserved: true,
+      pagesChecked: ["https://www.example.com/"],
+      privacySettingsControlObserved: true
+    },
     consent_surface_observed: true,
     reject_path_depth_and_availability: {
       acceptClickDepth: 1,

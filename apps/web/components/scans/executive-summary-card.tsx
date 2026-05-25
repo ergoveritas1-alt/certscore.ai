@@ -3509,8 +3509,18 @@ function compactRejectEvidenceJsonPayload(finding: CertScoreFinding) {
         ])
       ),
       evidenceFlags: (details.evidenceFlags ?? []).filter((flag) =>
-        /reject|confirmed|not_reduced|contradiction/i.test(flag)
+        /reject|confirmed|persisted|nonessential|contradiction/i.test(flag)
       ),
+      rejectSuppressionOutcome: details.rejectSuppressionOutcome && isPlainObject(details.rejectSuppressionOutcome)
+        ? compactObject(details.rejectSuppressionOutcome, [
+            "overallTrackingReducedAfterReject",
+            "nonEssentialVendorsPersistedAfterReject",
+            "persistingNonEssentialVendors",
+            "postRejectNonEssentialRequestCount",
+            "firstPostRejectNonEssentialRequestMs",
+            "interpretation"
+          ])
+        : undefined,
       consentInteraction: details.consentInteraction && isPlainObject(details.consentInteraction)
         ? compactRejectConsentInteraction(details.consentInteraction)
         : undefined,

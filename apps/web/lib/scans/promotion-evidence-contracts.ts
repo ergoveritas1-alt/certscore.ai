@@ -2068,6 +2068,18 @@ export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Reco
       return false;
     }
 
+    const sameFlowLinkage = getObjectValue(row, ["sameFlowLinkage", "same_flow_linkage"]);
+    if (
+      row.samePage !== true &&
+      row.same_page !== true &&
+      row.sameFlow !== true &&
+      row.same_flow !== true &&
+      sameFlowLinkage?.samePageOrFlow !== true &&
+      sameFlowLinkage?.same_page_or_flow !== true
+    ) {
+      return false;
+    }
+
     const hostname = getRuntimeEvidenceHostname(typedRow);
     if (typedRow.evidenceSource !== "sensitive_field_third_party_tracking_correlation" && !isTrackingRuntimeHost(hostname)) {
       return false;

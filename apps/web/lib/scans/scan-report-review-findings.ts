@@ -692,6 +692,32 @@ function buildRejectTrackingEvidenceFallback(input: {
   const firstPostRejectMs = postRejectNonEssentialRequests
     .map((row) => getFiniteRuntimeNumber(row.ms_after_reject ?? row.msAfterReject))
     .find((value): value is number => value !== null);
+  const rejectEvidenceDiffRecord = rejectEvidenceDiff as Record<string, unknown>;
+  const overallTrackingReducedAfterReject =
+    typeof rejectEvidenceDiffRecord.baseline_request_count === "number" &&
+    typeof rejectEvidenceDiffRecord.post_reject_request_count === "number"
+      ? rejectEvidenceDiffRecord.post_reject_request_count < rejectEvidenceDiffRecord.baseline_request_count
+      : input.baselineTrackerVendors.length > 0 && input.postRejectTrackerVendors.length > 0
+        ? input.postRejectTrackerVendors.length < input.baselineTrackerVendors.length
+        : null;
+  const persistedNonEssentialVendors = uniqueStrings([
+    ...input.persistedTrackerVendors,
+    ...input.newTrackerVendors,
+    ...input.postRejectTrackerVendors,
+    ...postRejectNonEssentialRequests.map((row) => (typeof row.vendor === "string" ? row.vendor : null))
+  ]);
+  const rejectSuppressionOutcome = {
+    overallTrackingReducedAfterReject,
+    nonEssentialVendorsPersistedAfterReject: hasNonEssentialAfterReject,
+    persistingNonEssentialVendors: persistedNonEssentialVendors,
+    postRejectNonEssentialRequestCount: postRejectNonEssentialRequests.length,
+    firstPostRejectNonEssentialRequestMs: firstPostRejectMs,
+    interpretation: overallTrackingReducedAfterReject === true && hasNonEssentialAfterReject
+      ? "Reject reduced some tracking overall, but at least one classified non-essential vendor still fired after reject."
+      : hasNonEssentialAfterReject
+        ? "At least one classified non-essential vendor still fired after reject."
+        : "Reject-path suppression outcome was retained, but no classified post-reject non-essential vendor persisted in this packet."
+  };
 
   return {
     confidenceRisks: uniqueStrings([
@@ -732,15 +758,12 @@ function buildRejectTrackingEvidenceFallback(input: {
         ? input.runtimeArtifacts.consent_post_reject_third_party_cookie_count
         : null,
     consentPostRejectTrackerEvidenceUrls: input.postRejectTrackerEvidenceUrls,
-    consentRejectReducedTracking: false,
+    consentRejectReducedTracking: overallTrackingReducedAfterReject,
     firstPostRejectMs,
-    persisted_tracker_vendors: uniqueStrings([
-      ...input.persistedTrackerVendors,
-      ...input.newTrackerVendors,
-      ...input.postRejectTrackerVendors
-    ]),
+    persisted_tracker_vendors: persistedNonEssentialVendors,
     post_reject_tracker_vendors: input.postRejectTrackerVendors,
     postRejectNonEssentialRequests,
+    rejectSuppressionOutcome,
     reject_did_not_reduce_tracking: true,
     rejectCookieDiffProvenance,
     rejectEvidenceConfidence: confirmed ? "confirmed" : review ? "review" : "suppress",

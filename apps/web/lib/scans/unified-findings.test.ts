@@ -2397,6 +2397,45 @@ test("normalizes known TrafficJunky idsync endpoint as RTB identity-sync evidenc
   assert.equal(row.vendorNormalizationBasis, "known_sync_endpoint_pattern");
 });
 
+test("keeps RTB sync request URLs out of scanned page context", () => {
+  const validationFinding = makeValidationFinding({
+    id: "val-rtb-page-url",
+    pageUrl: "https://x.bidswitch.net/syncd",
+    ruleKey: "runtime_privacy.rtb_cookie_sync_observed",
+    severity: "high",
+    title: "Adtech identity sync-like request observed",
+    evidence: {
+      pageUrl: "https://x.bidswitch.net/syncd",
+      rtbCookieSyncObservations: [
+        {
+          hostname: "x.bidswitch.net",
+          pathSample: "/syncd",
+          queryKeysSample: ["user_id"],
+          reason: "identifier_query",
+          runtimePhase: "post_consent",
+          scannedPageUrl: "https://www.eonline.com/",
+          urlSample: "https://x.bidswitch.net/syncd",
+          vendor: "Bidswitch"
+        }
+      ],
+      runtimeRequestUrls: ["https://x.bidswitch.net/syncd"]
+    }
+  });
+
+  const [packet] = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    validationFindings: [validationFinding],
+    validationFindingLookup: new Map([[validationFinding.ruleKey, validationFinding]])
+  });
+
+  assert.equal(packet?.unifiedFindingId, "rtb_cookie_sync_observed");
+  assert.deepEqual(packet?.evidence?.pageUrls, ["https://www.eonline.com/"]);
+  assert.equal(packet?.primaryPageUrl, "https://www.eonline.com/");
+  assert.deepEqual(packet?.evidence?.sourceUrls, []);
+  assert.deepEqual(packet?.evidence?.entities?.runtimeRequestUrls, ["https://x.bidswitch.net/syncd"]);
+  assert.equal(JSON.parse(packet?.evidence?.entities?.rtbCookieSyncEvidence?.[0] ?? "{}").scannedPageUrl, "https://www.eonline.com/");
+});
+
 test("retains pre-consent cookie timing evidence on unified finding packets", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

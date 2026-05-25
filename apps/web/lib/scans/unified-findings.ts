@@ -324,6 +324,7 @@ function normalizeUnifiedFindingEvidenceRecord(
   assignCanonicalField("consentSurfaceObserved", ["consent_surface_observed"]);
   assignCanonicalField("consentSurfaceDecisionStates", ["consent_surface_decision_states"]);
   assignCanonicalField("consentSurfaceDiagnostics", ["consent_surface_diagnostics"]);
+  assignCanonicalField("consentControlLifecycleEvidence", ["consent_control_lifecycle_evidence"]);
   assignCanonicalField("consentTimeline", ["consent_timeline"]);
   assignCanonicalField("requestPurposeClassificationConfidence", ["request_purpose_classification_confidence"]);
   assignCanonicalField("runtimeRequestUrls", ["runtime_request_urls"]);
@@ -343,6 +344,7 @@ function normalizeUnifiedFindingEvidenceRecord(
     "consent_reject_post_reject_non_essential_requests"
   ]);
   assignCanonicalField("promotionDecision", ["promotion_decision"]);
+  assignCanonicalField("rejectSuppressionOutcome", ["reject_suppression_outcome"]);
   assignCanonicalField("rejectEvidenceConfidence", ["reject_evidence_confidence"]);
   assignCanonicalField("rejectEvidenceDiff", ["reject_evidence_diff", "consent_reject_evidence_diff"]);
   assignCanonicalField("requestTimingBuckets", ["request_timing_buckets", "consent_reject_request_timing_buckets"]);
@@ -1965,8 +1967,64 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       ((contradictionEvidence?.runtimeAnchor.requests.length ?? 0) > 0) ||
       ((contradictionEvidence?.runtimeAnchor.cookies.length ?? 0) > 0) ||
       ((contradictionEvidence?.runtimeAnchor.storageArtifacts.length ?? 0) > 0));
+  const consentControlLifecycleEvidence =
+    normalizedFallbackEvidence.consentControlLifecycleEvidence &&
+    typeof normalizedFallbackEvidence.consentControlLifecycleEvidence === "object" &&
+    !Array.isArray(normalizedFallbackEvidence.consentControlLifecycleEvidence)
+      ? normalizedFallbackEvidence.consentControlLifecycleEvidence as Record<string, unknown>
+      : null;
+  const rtbCookieSyncPageRows = Array.isArray(
+    normalizedFallbackEvidence.rtbCookieSyncObservations ??
+      normalizedFallbackEvidence.rtb_cookie_sync_observations ??
+      normalizedFallbackEvidence.rtb_cookie_sync_evidence
+  )
+    ? (normalizedFallbackEvidence.rtbCookieSyncObservations ??
+        normalizedFallbackEvidence.rtb_cookie_sync_observations ??
+        normalizedFallbackEvidence.rtb_cookie_sync_evidence) as unknown[]
+    : [];
+  const rtbCookieSyncPageUrlCandidates = rtbCookieSyncPageRows.flatMap((row) => {
+    let parsedRow: Record<string, unknown> | null = null;
+    if (row && typeof row === "object" && !Array.isArray(row)) {
+      parsedRow = row as Record<string, unknown>;
+    } else if (typeof row === "string" && row.trim().length > 0) {
+      try {
+        const parsed: unknown = JSON.parse(row);
+        parsedRow = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+      } catch {
+        parsedRow = null;
+      }
+    }
+
+    if (!parsedRow) {
+      return [];
+    }
+
+    return [
+      getStringValue(parsedRow, ["scannedPageUrl", "scanned_page_url"]),
+      getStringValue(parsedRow, ["sourcePageUrl", "source_page_url"]),
+      getStringValue(parsedRow, ["pageUrl", "page_url"])
+    ];
+  });
+  const retainedConsentUiPathEvidence =
+    normalizedFallbackEvidence.consentUiPathEvidence ??
+    normalizedFallbackEvidence.consent_ui_path_evidence ??
+    normalizedFallbackEvidence.rejectPathDepthAndAvailability ??
+    normalizedFallbackEvidence.reject_path_depth_and_availability;
+  const consentUiPathPageUrlCandidates =
+    retainedConsentUiPathEvidence && typeof retainedConsentUiPathEvidence === "object" && !Array.isArray(retainedConsentUiPathEvidence)
+      ? [
+          getStringValue(retainedConsentUiPathEvidence as Record<string, unknown>, ["scannedPageUrl", "scanned_page_url"]),
+          getStringValue(retainedConsentUiPathEvidence as Record<string, unknown>, ["sourcePageUrl", "source_page_url"]),
+          getStringValue(retainedConsentUiPathEvidence as Record<string, unknown>, ["pageUrl", "page_url"])
+        ]
+      : [];
   const pageUrlCandidates = uniqueStrings([
     ...(Array.isArray(normalizedFallbackEvidence.pageUrls) ? (normalizedFallbackEvidence.pageUrls as string[]) : []),
+    ...rtbCookieSyncPageUrlCandidates,
+    ...consentUiPathPageUrlCandidates,
+    ...(Array.isArray(consentControlLifecycleEvidence?.pagesChecked)
+      ? consentControlLifecycleEvidence.pagesChecked as string[]
+      : []),
     ...(contradictionEvidence?.policySourceUrl ? [contradictionEvidence.policySourceUrl] : []),
     typeof normalizedFallbackEvidence.pageUrl === "string" ? normalizedFallbackEvidence.pageUrl : null,
     typeof normalizedFallbackEvidence.consentBlockerUrl === "string" ? normalizedFallbackEvidence.consentBlockerUrl : null
@@ -2593,11 +2651,63 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   if (postRejectNonEssentialRows.length > 0) {
     entities.postRejectNonEssentialRequests = postRejectNonEssentialRows;
   }
+  const retainedPostRejectNonEssentialRows = Array.isArray(normalizedFallbackEvidence.postRejectNonEssentialRequests)
+    ? normalizedFallbackEvidence.postRejectNonEssentialRequests.filter(
+        (row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row)
+      )
+    : [];
+  const rejectEvidenceDiffForOutcome =
+    normalizedFallbackEvidence.rejectEvidenceDiff &&
+    typeof normalizedFallbackEvidence.rejectEvidenceDiff === "object" &&
+    !Array.isArray(normalizedFallbackEvidence.rejectEvidenceDiff)
+      ? normalizedFallbackEvidence.rejectEvidenceDiff as Record<string, unknown>
+      : null;
+  const derivedRejectOverallReduced =
+    rejectEvidenceDiffForOutcome &&
+    typeof rejectEvidenceDiffForOutcome.baseline_request_count === "number" &&
+    typeof rejectEvidenceDiffForOutcome.post_reject_request_count === "number"
+      ? rejectEvidenceDiffForOutcome.post_reject_request_count < rejectEvidenceDiffForOutcome.baseline_request_count
+      : null;
+  const derivedRejectPersistingVendors = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.persisted_tracker_vendors)
+      ? normalizedFallbackEvidence.persisted_tracker_vendors as string[]
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.post_reject_tracker_vendors)
+      ? normalizedFallbackEvidence.post_reject_tracker_vendors as string[]
+      : []),
+    ...retainedPostRejectNonEssentialRows.map((row) => (typeof row.vendor === "string" ? row.vendor : null))
+  ]);
+  const firstDerivedPostRejectMs = retainedPostRejectNonEssentialRows
+    .map((row) => row.ms_after_reject ?? row.msAfterReject)
+    .find((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const rejectSuppressionOutcomeEvidence =
+    normalizedFallbackEvidence.rejectSuppressionOutcome &&
+    typeof normalizedFallbackEvidence.rejectSuppressionOutcome === "object"
+      ? normalizedFallbackEvidence.rejectSuppressionOutcome
+      : normalizedFallbackEvidence.reject_did_not_reduce_tracking === true && retainedPostRejectNonEssentialRows.length > 0
+        ? {
+            overallTrackingReducedAfterReject: derivedRejectOverallReduced,
+            nonEssentialVendorsPersistedAfterReject: true,
+            persistingNonEssentialVendors: derivedRejectPersistingVendors,
+            postRejectNonEssentialRequestCount: retainedPostRejectNonEssentialRows.length,
+            firstPostRejectNonEssentialRequestMs: firstDerivedPostRejectMs ?? null,
+            interpretation:
+              derivedRejectOverallReduced === true
+                ? "Reject reduced some tracking overall, but at least one classified non-essential vendor still fired after reject."
+                : "At least one classified non-essential vendor still fired after reject."
+          }
+        : null;
   const promotionDecisionRows = stringifyEvidenceRows(
     normalizedFallbackEvidence.promotionDecision ? [normalizedFallbackEvidence.promotionDecision] : []
   );
   if (promotionDecisionRows.length > 0) {
     entities.promotionDecision = promotionDecisionRows;
+  }
+  const rejectSuppressionOutcomeRows = stringifyEvidenceRows(
+    rejectSuppressionOutcomeEvidence ? [rejectSuppressionOutcomeEvidence] : []
+  );
+  if (rejectSuppressionOutcomeRows.length > 0) {
+    entities.rejectSuppressionOutcome = rejectSuppressionOutcomeRows;
   }
   const confidenceRisks = Array.isArray(normalizedFallbackEvidence.confidenceRisks)
     ? uniqueStrings(normalizedFallbackEvidence.confidenceRisks as string[])
@@ -2804,6 +2914,19 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     entities.maxAxeImpact = [accessibilityExampleCoverage.maxImpact];
   }
 
+  const rejectSuppressionOutcomeForFlags = rejectSuppressionOutcomeEvidence &&
+    typeof rejectSuppressionOutcomeEvidence === "object"
+      ? rejectSuppressionOutcomeEvidence as Record<string, unknown>
+      : null;
+  const rejectPersistenceFindingForFlags = normalizedFallbackEvidence.reject_did_not_reduce_tracking === true;
+  const retainedPostRejectNonEssentialRequestsForFlags = Array.isArray(normalizedFallbackEvidence.postRejectNonEssentialRequests) &&
+    normalizedFallbackEvidence.postRejectNonEssentialRequests.length > 0;
+  const rejectNonEssentialPersistedForFlags = rejectPersistenceFindingForFlags && (
+    rejectSuppressionOutcomeForFlags?.nonEssentialVendorsPersistedAfterReject === true ||
+    retainedPostRejectNonEssentialRequestsForFlags
+  );
+  const rejectOverallReducedForFlags = rejectSuppressionOutcomeForFlags?.overallTrackingReducedAfterReject === true;
+
   const flags = uniqueStrings([
     typeof normalizedFallbackEvidence.familyPacketFamilyId === "string" ? "family_packet_backed" : null,
     typeof normalizedFallbackEvidence.familyPacketFamilyId === "string"
@@ -2818,6 +2941,12 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     normalizedFallbackEvidence.rejectEvidenceConfidence === "review" ? "reject_evidence_review" : null,
     normalizedFallbackEvidence.rejectEvidenceConfidence === "suppress" ? "reject_evidence_suppress" : null,
     normalizedFallbackEvidence.reject_did_not_reduce_tracking === true ? "reject_did_not_reduce_tracking" : null,
+    rejectOverallReducedForFlags && rejectNonEssentialPersistedForFlags
+      ? "reject_reduced_some_tracking_but_nonessential_vendor_persisted"
+      : null,
+    rejectNonEssentialPersistedForFlags
+      ? "nonessential_vendor_persisted_after_reject"
+      : null,
     overlayFacts ? "blocking_overlay_observed" : null,
     overlayFacts?.interactionBlocked ? "overlay_interaction_blocked" : null,
     overlayFacts?.pageAccessBlockedUntilChoice ? "overlay_page_access_blocked_until_choice" : null,

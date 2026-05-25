@@ -2051,7 +2051,22 @@ test("ExecutiveSummaryCard links mapped findings to registry interpretation cont
       allFindings: [
         makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
           severity: "critical",
-          shortSummary: "Third-party tracking began before any recorded consent choice."
+          shortSummary: "Third-party tracking began before any recorded consent choice.",
+          evidenceDetails: {
+            scanContext: {
+              pageUrl: "https://example.com/"
+            },
+            timing: {
+              firstThirdPartyTrackingRequestMs: 1234
+            },
+            representativeRequests: [
+              {
+                hostname: "googletagmanager.com",
+                vendorName: "Google Tag Manager",
+                runtimePhase: "pre_consent"
+              }
+            ]
+          } as CertScoreFinding["evidenceDetails"]
         })
       ],
       beforeConsentCookieCount: 0,
@@ -2073,7 +2088,22 @@ test("ExecutiveSummaryCard links mapped findings to registry interpretation cont
       topFindings: [
         makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
           severity: "critical",
-          shortSummary: "Third-party tracking began before any recorded consent choice."
+          shortSummary: "Third-party tracking began before any recorded consent choice.",
+          evidenceDetails: {
+            scanContext: {
+              pageUrl: "https://example.com/"
+            },
+            timing: {
+              firstThirdPartyTrackingRequestMs: 1234
+            },
+            representativeRequests: [
+              {
+                hostname: "googletagmanager.com",
+                vendorName: "Google Tag Manager",
+                runtimePhase: "pre_consent"
+              }
+            ]
+          } as CertScoreFinding["evidenceDetails"]
         })
       ],
       accessibilitySignals: {
@@ -2091,7 +2121,7 @@ test("ExecutiveSummaryCard links mapped findings to registry interpretation cont
 
   assert.match(html, /Regulatory review context/);
   assert.match(html, /Consent timing: tracking before recorded choice/);
-  assert.match(html, /Show evidence JSON/);
+  assert.match(html, /Evidence details/);
   assert.match(html, /M7 4L13 10L7 16/);
   assert.doesNotMatch(html, /M8 4 4 12l4 8/);
   assert.match(html, /Learn how this finding is interpreted/);
@@ -2408,7 +2438,8 @@ test("ExecutiveSummaryCard renders compact reject-path JSON evidence", () => {
             evidenceFlags: [
               "reject_evidence_confirmed",
               "explicit_policy_snippet_retained",
-              "reject_path_tracking_not_reduced"
+              "reject_reduced_some_tracking_but_nonessential_vendor_persisted",
+              "nonessential_vendor_persisted_after_reject"
             ],
             runtimeVendors: [
               "Google Ads",
@@ -2459,6 +2490,14 @@ test("ExecutiveSummaryCard renders compact reject-path JSON evidence", () => {
               trackingPersistedAfterReject: true,
               postRejectNonEssentialRequestCount: 1,
               basis: "A reject interaction and post-reject non-essential tracking evidence were retained."
+            },
+            rejectSuppressionOutcome: {
+              overallTrackingReducedAfterReject: true,
+              nonEssentialVendorsPersistedAfterReject: true,
+              persistingNonEssentialVendors: ["Google Ads"],
+              postRejectNonEssentialRequestCount: 1,
+              firstPostRejectNonEssentialRequestMs: 1226,
+              interpretation: "Reject reduced some tracking overall, but at least one classified non-essential vendor still fired after reject."
             },
             requestSelectionNote: "Representative post-reject requests are capped examples and are not exhaustive.",
             vendors: [
@@ -2515,9 +2554,10 @@ test("ExecutiveSummaryCard renders compact reject-path JSON evidence", () => {
   assert.match(html, /postRejectNonEssentialRequests/);
   assert.match(html, /evidenceVersion/);
   assert.match(html, /postRejectEvidence/);
+  assert.match(html, /rejectSuppressionOutcome/);
   assert.match(html, /policyEvidence/);
   assert.match(html, /ms_after_reject/);
-  assert.match(html, /reject_path_tracking_not_reduced/);
+  assert.match(html, /reject_reduced_some_tracking_but_nonessential_vendor_persisted/);
   assert.doesNotMatch(html, /why_non_essential/);
   assert.doesNotMatch(html, /sampleUrls/);
   assert.doesNotMatch(html, /baseline_reconstruction_status/);
@@ -3460,7 +3500,7 @@ test("ExecutiveSummaryCard assigns distinct preferred icons to executive top fin
   assert.equal(new Set(iconKeys).size, iconKeys.length);
   assert.doesNotMatch(iconKeys.join(" "), /default-circle/);
   assert.match(iconKeys.join(" "), /document-clarity/);
-  assert.match(iconKeys.join(" "), /browser-fingerprint/);
+  assert.match(iconKeys.join(" "), /fingerprint/);
 });
 
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {

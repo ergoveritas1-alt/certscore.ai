@@ -1452,6 +1452,7 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
           evidenceSource: "sensitive_field_third_party_tracking_correlation",
           evidenceStrength: "form_field_signal",
           requestUrl: "https://analytics.example.net/collect",
+          sameFlowLinkage: { samePageOrFlow: true },
           vendorHost: "analytics.example.net"
         }
       ]
@@ -1482,6 +1483,20 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
       runtime_vendors: ["Example Analytics"],
       sensitive_data_types: ["health_information"],
       sensitive_input_surface_evidence: [{ fieldType: "health", pageUrl: "https://example.com/intake" }]
+    })?.status,
+    "downgrade"
+  );
+
+  assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("sensitive_data_collection_with_third_party_tracking_present", {
+      sensitivePayloadViolations: [
+        {
+          evidenceSource: "sensitive_field_third_party_tracking_correlation",
+          evidenceStrength: "form_field_signal",
+          requestUrl: "https://analytics.example.net/collect",
+          vendorHost: "analytics.example.net"
+        }
+      ]
     })?.status,
     "downgrade"
   );

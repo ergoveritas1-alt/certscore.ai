@@ -243,6 +243,7 @@ export type CertScoreFindingEvidenceDetails = {
   consentInteraction?: Record<string, unknown>;
   promotionDecision?: Record<string, unknown>;
   rejectEvidenceDiff?: Record<string, unknown>;
+  rejectSuppressionOutcome?: Record<string, unknown>;
   postRejectNonEssentialRequests?: Array<Record<string, unknown>>;
   rtbCookieSyncEvidence?: Array<Record<string, unknown>>;
   rtbCookieSyncSubtypeCounts?: Record<string, number>;

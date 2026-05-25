@@ -838,8 +838,22 @@ test("projects reject path evidence from packet entities and records reject subt
       confidenceBand: "high",
       details: { family: "consent_tracking", kind: "reject_button_missing" },
       evidence: {
-        counts: {},
+        counts: {
+          consentGovernancePolicySurfaceCount: 0
+        },
         entities: {
+          consentControlLifecycleEvidence: [
+            JSON.stringify({
+              cookiePreferencesLinkObserved: true,
+              controlsSearched: ["Cookie Preferences"],
+              coverageStatus: "usable",
+              footerLinksInspected: ["Cookie Preferences"],
+              footerPreferenceLinkObserved: true,
+              initialConsentLayerObserved: true,
+              pagesChecked: ["https://example.com/"],
+              privacySettingsControlObserved: true
+            })
+          ],
           consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
           consentSurfaceDiagnostics: [
             JSON.stringify({
@@ -869,7 +883,9 @@ test("projects reject path evidence from packet entities and records reject subt
         fetchQuality: null,
         flags: ["privacy.dark_pattern_reject_button_missing"],
         pageUrls: ["https://example.com/"],
-        snippets: ["Reject required a deeper preferences path while accept was available on the first layer."],
+        snippets: [
+          "Consent governance disclosure note: retained public materials did not clearly explain how users can revisit, change, withdraw, retain, renew, expire, or understand consent choices."
+        ],
         sourceUrls: []
       },
       severity: "high",
@@ -880,6 +896,16 @@ test("projects reject path evidence from packet entities and records reject subt
   const finding = projection.findings.find((entry) => entry.id === "reject_option_missing_or_hidden");
   assert.ok(finding);
   assert.equal(finding.evidenceDetails?.consentUiEvidence?.rejectOptionSubtype, "reject_requires_preferences_path");
+  assert.equal(finding.evidenceDetails?.counts, undefined);
+  assert.equal(finding.evidenceDetails?.evidenceSnippets, undefined);
+  assert.equal(
+    finding.evidenceDetails?.consentUiEvidence?.basis,
+    "Retained consent UI path evidence showed no first-layer reject/refusal action; reject required the preferences path and was observed at click depth 2."
+  );
+  assert.deepEqual(finding.evidenceDetails?.consentUiEvidence?.firstLayerControls, [
+    { label: "Accept all", visible: true, interactable: true, role: null },
+    { label: "Manage choices", visible: true, interactable: true, role: null }
+  ]);
   assert.deepEqual(finding.evidenceDetails?.consentUiEvidence?.runtimePath, {
     acceptClickDepth: 1,
     choiceAsymmetry: "material",
@@ -895,6 +921,84 @@ test("projects reject path evidence from packet entities and records reject subt
   assert.match(
     String(finding.evidenceDetails?.consentUiEvidence?.userChoiceImpact),
     /preferences or manage-choices path/
+  );
+  assert.equal(
+    (finding.evidenceDetails?.consentUiEvidence?.lifecycleReview as Record<string, unknown> | undefined)?.subtype,
+    "privacy_settings_control_observed"
+  );
+});
+
+test("projects asymmetric consent UI with path-specific basis and without governance leakage", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("accept_more_prominent_than_reject", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "accept_more_prominent_than_reject" },
+      evidence: {
+        counts: {
+          consentGovernancePolicySurfaceCount: 0
+        },
+        entities: {
+          consentSurfaceDiagnostics: [
+            JSON.stringify({
+              candidateButtons: [
+                { label: "Accept all", visible: true, interactable: true },
+                { label: "Preferences", visible: true, interactable: true }
+              ]
+            })
+          ],
+          consentUiPathEvidence: [
+            JSON.stringify({
+              acceptClickDepth: 1,
+              choiceAsymmetry: "material",
+              pageUrl: "https://www.bol.com/nl/nl/",
+              preferencesRequiredBeforeReject: true,
+              rejectAvailableOnFirstLayer: false,
+              rejectClickDepth: 2,
+              scrollRequired: true
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: ["privacy.dark_pattern_accept_button_prominence"],
+        pageUrls: ["https://www.bol.com/nl/nl/"],
+        snippets: [
+          "Consent governance disclosure note: retained public materials did not clearly explain how users can revisit, change, withdraw, retain, renew, expire, or understand consent choices."
+        ],
+        sourceUrls: []
+      },
+      primaryPageUrl: "https://www.bol.com/nl/nl/",
+      severity: "high",
+      summary: "The retained consent interaction structure shows accept was materially easier than reject."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "asymmetric_consent_ui");
+  assert.ok(finding);
+  assert.equal(finding.evidenceDetails?.counts, undefined);
+  assert.equal(finding.evidenceDetails?.evidenceSnippets, undefined);
+  assert.equal(finding.evidenceDetails?.scanContext?.pageUrl, "https://www.bol.com/nl/nl/");
+  assert.match(
+    String(finding.evidenceDetails?.consentUiEvidence?.basis ?? ""),
+    /accept required 1 step\(s\), while reject required 2/
+  );
+  assert.deepEqual(finding.evidenceDetails?.consentUiEvidence?.firstLayerControls, [
+    { label: "Accept all", visible: true, interactable: true, role: null },
+    { label: "Preferences", visible: true, interactable: true, role: null }
+  ]);
+  assert.deepEqual(finding.evidenceDetails?.consentUiEvidence?.runtimePath, {
+    acceptClickDepth: 1,
+    choiceAsymmetry: "material",
+    domDigestAvailable: false,
+    pathDepthDelta: 1,
+    preferencesRequiredBeforeReject: true,
+    rejectAvailableOnFirstLayer: false,
+    rejectClickDepth: 2,
+    scrollRequired: true,
+    screenshotArtifactAvailable: false
+  });
+  assert.match(
+    String(finding.evidenceDetails?.consentUiEvidence?.userChoiceImpact ?? ""),
+    /materially different visibility/
   );
 });
 
@@ -1497,9 +1601,17 @@ test("projects reject-path tracking failure into executive findings with dedicat
     consentOptOutClicks: 1,
     consentPostRejectThirdPartyCookieCount: 3
   });
-  assert.ok(finding?.evidenceDetails?.evidenceFlags?.includes("reject_path_tracking_not_reduced"));
+  assert.ok(finding?.evidenceDetails?.evidenceFlags?.includes("nonessential_vendor_persisted_after_reject"));
   assert.equal(finding?.evidenceVersion, "1.1");
   assert.equal(finding?.evidenceDetails?.postRejectEvidence?.trackingPersistedAfterReject, true);
+  assert.deepEqual(finding?.evidenceDetails?.rejectSuppressionOutcome, {
+    firstPostRejectNonEssentialRequestMs: 842,
+    interpretation: "At least one classified non-essential vendor still fired after reject.",
+    nonEssentialVendorsPersistedAfterReject: true,
+    overallTrackingReducedAfterReject: false,
+    persistingNonEssentialVendors: ["Google Ads", "Adobe Analytics"],
+    postRejectNonEssentialRequestCount: 1
+  });
   assert.equal(finding?.evidenceDetails?.rejectInteraction?.action_type, "reject_all");
   assert.deepEqual(finding?.evidenceDetails?.policyEvidence, { evaluated: false });
   assert.equal(finding?.evidenceDetails?.consentInteraction?.action_type, "reject_all");
@@ -3156,6 +3268,109 @@ test("keeps retention and accessibility findings in top findings when canonical 
   );
 });
 
+test("focus-management projection does not claim reproduced behavior without retained WS01 trace", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("focus_management_issue", {
+      confidenceBand: "high",
+      details: {
+        family: "accessibility",
+        kind: "focus_management_issue"
+      },
+      evidence: {
+        counts: {},
+        entities: {},
+        fetchQuality: null,
+        flags: [],
+        pageUrls: ["https://www.wisc.edu/"],
+        snippets: ["Behavior-reproduced focus-management evidence was retained from WS01 keyboard interaction tracing."],
+        sourceUrls: []
+      },
+      primaryPageUrl: "https://www.wisc.edu/",
+      severity: "medium",
+      summary: "Behavior-reproduced focus-management evidence was retained from WS01 keyboard interaction tracing."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "focus_management_issue");
+  assert.ok(finding);
+  assert.equal(finding.confidence, "moderate");
+  assert.equal(projection.topFindingEligibility.focus_management_issue?.eligibility, "surface_only");
+  assert.match(finding.shortSummary, /does not include behavior-reproduced keyboard traversal evidence/);
+  assert.match(
+    String(finding.evidenceDetails?.accessibilityEvidence?.basis ?? ""),
+    /does not include behavior-reproduced keyboard traversal evidence/
+  );
+  assert.equal(projection.topFindings.some((entry) => entry.id === "focus_management_issue"), false);
+});
+
+test("focus-management projection keeps WS01 behavior-reproduced traversal evidence attached", () => {
+  const focusManagementEvidence = {
+    dialogContext: {
+      role: "dialog",
+      selector: "[role='dialog']"
+    },
+    evidenceStrength: "behavior_reproduced",
+    expected: "Tab navigation should remain contained within an open dialog.",
+    focusTrace: [
+      {
+        action: "snapshot",
+        activeElement: { selector: "button[aria-label='Close']", tagName: "button" },
+        activeInsideDialog: true,
+        step: 0
+      },
+      {
+        action: "press_tab",
+        activeElement: { selector: "a[href='/']", tagName: "a" },
+        activeInsideDialog: false,
+        step: 1
+      }
+    ],
+    issueType: "focus_trap_missing",
+    keyboardTraversalEvidence: {
+      backgroundFocusEscaped: true,
+      reproducedWithKeyboard: true,
+      tabStepCount: 1
+    },
+    observed: "Focus moved to background content while the dialog was still open.",
+    pageUrl: "https://www.wisc.edu/",
+    source: "ws01_playwright_focus_probe"
+  };
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("focus_management_issue", {
+      confidenceBand: "high",
+      details: {
+        family: "accessibility",
+        kind: "focus_management_issue"
+      },
+      evidence: {
+        counts: {},
+        entities: {
+          focusManagementEvidence: [JSON.stringify(focusManagementEvidence)]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: ["https://www.wisc.edu/"],
+        snippets: [],
+        sourceUrls: []
+      },
+      primaryPageUrl: "https://www.wisc.edu/",
+      severity: "medium",
+      summary: "Focus-management issue observed."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "focus_management_issue");
+  assert.ok(finding);
+  assert.equal(finding.confidence, "strong");
+  assert.equal(projection.topFindingEligibility.focus_management_issue?.eligibility, "top_candidate");
+  assert.match(finding.shortSummary, /Behavior-reproduced focus-management evidence/);
+  assert.match(String(finding.evidenceDetails?.accessibilityEvidence?.basis ?? ""), /WS01 reproduced/);
+  assert.deepEqual(
+    finding.evidenceDetails?.accessibilityEvidence?.focusManagementEvidence,
+    [focusManagementEvidence]
+  );
+});
+
 test("projects CPRA CBA opt-out missing into executive findings and top findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("preconsent_tracking", {
@@ -3977,6 +4192,30 @@ test("projects sensitive data with third-party tracking into executive findings 
           samePageOrFlowLinked: ["true"],
           payloadExposureObserved: ["false"],
           rawValuesRetained: ["false"],
+          sensitivePayloadViolations: [
+            JSON.stringify({
+              detectedType: "phone_detected",
+              evidenceSource: "sensitive_field_third_party_tracking_correlation",
+              evidenceStrength: "form_field_signal",
+              matchSnippet: "intellimizeClientIp=***-***-4248",
+              pageUrl: "https://example.com/contact",
+              payloadExposureObserved: false,
+              rawValuesRetained: false,
+              requestMethod: "GET",
+              requestUrl: "https://log.intellimize.co/logger",
+              sameFlowLinkage: {
+                fieldPageUrl: "https://example.com/contact",
+                requestPageUrl: "https://example.com/contact",
+                samePageOrFlow: true,
+                userValueObserved: false
+              },
+              sourceField: "intellimizeClientIp",
+              sourceLocation: "request_body",
+              sourcePattern: "sensitive_field_evidence",
+              vendorHost: "log.intellimize.co",
+              vendorName: "Intellimize"
+            })
+          ],
           vendors: ["log.intellimize.co"]
         },
         fetchQuality: "thin_content",
@@ -4035,6 +4274,37 @@ test("projects sensitive data with third-party tracking into executive findings 
   assert.equal(finding?.evidenceDetails?.sensitiveDataEvidence?.sameFlowBasis, "same_page_or_navigation_flow");
   assert.equal(finding?.evidenceDetails?.sensitiveDataEvidence?.rawValuesRetained, false);
   assert.equal(finding?.evidenceDetails?.sensitiveDataEvidence?.payloadExposureObserved, false);
+  assert.equal(
+    finding?.evidenceDetails?.sensitiveDataEvidence?.basis,
+    "Retained sensitive input metadata was linked to third-party runtime request evidence on the same page or flow. Field values were not retained."
+  );
+  assert.deepEqual(finding?.evidenceDetails?.sensitiveDataEvidence?.runtimeRequestEvidence, [
+    {
+      requestUrl: "https://log.intellimize.co/logger",
+      requestMethod: "GET",
+      vendorHost: "log.intellimize.co",
+      vendorName: "Intellimize",
+      evidenceSource: "sensitive_field_third_party_tracking_correlation",
+      evidenceStrength: "form_field_signal",
+      maskingOrExclusionObserved: null,
+      rawValuesRetained: false,
+      payloadExposureObserved: false
+    }
+  ]);
+  assert.deepEqual(finding?.evidenceDetails?.sensitiveDataEvidence?.sensitiveInputs, [
+    {
+      detectedType: "phone_detected",
+      sourceField: "intellimizeClientIp",
+      sourceLocation: "request_body",
+      sourcePattern: "sensitive_field_evidence",
+      matchSnippet: "intellimizeClientIp=***-***-4248",
+      pageUrl: "https://example.com/contact",
+      fieldPageUrl: "https://example.com/contact",
+      requestPageUrl: "https://example.com/contact",
+      samePageOrFlow: true,
+      userValueObserved: false
+    }
+  ]);
   assert.equal(
     finding?.evidenceDetails?.sensitiveDataEvidence?.evidenceBasisType,
     "form_field_metadata_plus_runtime_request_context"

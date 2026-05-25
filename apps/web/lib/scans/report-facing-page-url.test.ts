@@ -22,6 +22,9 @@ test("report-facing scanned page URL helpers reject runtime request evidence URL
   assert.equal(isRuntimeRequestEvidenceUrl("https://geolocation.onetrust.com/cookieconsentpub/v1/geo/location/dnsfeed"), true);
   assert.equal(isRuntimeRequestEvidenceUrl("https://maps.googleapis.com/maps/api/js [query_redacted=true query_keys=key,callback]"), true);
   assert.equal(isRuntimeRequestEvidenceUrl("https://pub.doubleverify.com/dvtag/123/pub.js"), true);
+  assert.equal(isRuntimeRequestEvidenceUrl("https://x.bidswitch.net/syncd"), true);
+  assert.equal(isRuntimeRequestEvidenceUrl("https://ib.adnxs.com/getuid [query_redacted=true query_keys=gdpr]"), true);
+  assert.equal(isRuntimeRequestEvidenceUrl("https://live.rezync.com/sync"), true);
   assert.equal(isRuntimeRequestEvidenceUrl("https://www.fandango.com/"), false);
 });
 
