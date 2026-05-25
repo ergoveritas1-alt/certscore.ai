@@ -11,7 +11,11 @@ import {
 import { redirect } from "next/navigation";
 import { getDashboardContext } from "../auth";
 import { getDomainById } from "../domains/get-domain-by-id";
-import { getPlanLimits } from "../plans/get-plan-limits";
+import {
+  applyManualRescanLimitOverride,
+  getOrganizationManualRescanLimitOverride,
+  getPlanLimits
+} from "../plans/get-plan-limits";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getFullScanQueueMetadata } from "../queue/scan-queue-priority";
 import { LAUNCH_ACCESS, getLaunchScanThrottleCopy } from "../../lib/launch-mode";
@@ -88,7 +92,15 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   reusedExistingScan?: boolean;
   scanId: string | null;
 }> {
-  const planLimits = input.planLimitsOverride ?? (await getPlanLimits(input.planCode));
+  const basePlanLimits = input.planLimitsOverride ?? (await getPlanLimits(input.planCode));
+  const manualRescanLimitOverride = await getOrganizationManualRescanLimitOverride(input.organizationId).catch((error) => {
+    console.error("[web] organization manual scan limit override lookup failed", {
+      error: error instanceof Error ? error.message : String(error),
+      organizationId: input.organizationId
+    });
+    return null;
+  });
+  const planLimits = applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
   const planDefinition = getPlanDefinition(planLimits.planCode);
   const domainRecord = input.domainContext
     ? {

@@ -1343,27 +1343,107 @@ function getUrlQueryKeysSample(value: string) {
 const IDENTIFIER_QUERY_KEY_PATTERN =
   /^(?:uid|uuid|user_id|userid|visitor|visitor_id|client_id|cid|fbp|fbc|gclid|msclkid|ttclid|rdt_uuid|email|hashed|hash|identity|id|partnerid|partner_uid|partner_id|uid2|euid|id5id|tdid)$/i;
 
-function getRepresentativeRequestDetails(urls: string[], vendors: string[]) {
-  return urls.slice(0, 8).map((url, index) => {
-    const hostname = getUrlHostname(url) ?? url;
-    const vendor = inferVendorNameFromUrl(url, vendors) ?? vendors[index] ?? null;
-    return {
-      url,
-      hostname,
-      vendor,
-      category: normalizeVendorCategory(vendor, url, classifyTrackingCategory(`${vendor ?? ""} ${hostname} ${url}`)),
-      resourceType: /\.js(?:[?#]|$)|\/gtm\.js|script/i.test(url) ? "script" : null,
-      firstSeenMs: null,
-      thirdParty: true,
-      preConsent: false,
-      identifierLike: isLikelyIdentifierRequest(url),
-      deviceDataLike: isLikelyDeviceDataRequest(url),
-      queryKeysSample: getUrlQueryKeysSample(url)
-    };
+type RuntimeRequestEvidenceRow = {
+  url: string;
+  hostname: string;
+  vendor: string | null;
+  category: string | null;
+  resourceType?: string | null;
+  firstSeenMs?: number | null;
+  thirdParty: boolean;
+  preConsent: boolean;
+  identifierLike: boolean;
+  deviceDataLike: boolean;
+  queryKeysSample: string[];
+  runtimePhase?: string | null;
+  confidence?: number | string | null;
+  vendorAttributionBasis?: string | null;
+  matchedSignatureId?: string | null;
+  scannedPageUrl?: string | null;
+};
+
+function getRequestPurposeClassificationRows(packet: UnifiedFindingDisplayPacket) {
+  return [
+    ...getEntityJsonObjects(packet, "requestPurposeClassificationConfidence"),
+    ...getEntityJsonObjects(packet, "request_purpose_classification_confidence")
+  ];
+}
+
+function urlsMatch(left: string | null | undefined, right: string | null | undefined) {
+  if (!left || !right) {
+    return false;
+  }
+  return left === right || stripUrlQuery(left) === stripUrlQuery(right);
+}
+
+function stripUrlQuery(value: string) {
+  const base = value.replace(/\s+\[(?:query_redacted|redacted|query_keys)=[^\]]+\]$/i, "").trim();
+  const queryIndex = base.indexOf("?");
+  return queryIndex >= 0 ? base.slice(0, queryIndex) : base;
+}
+
+function findRequestPurposeRow(url: string, rows: Record<string, unknown>[]) {
+  const hostname = getUrlHostname(url);
+  return rows.find((row) => {
+    const requestUrl = getRecordString(row, ["requestUrl", "request_url", "url"]);
+    if (urlsMatch(requestUrl, url)) {
+      return true;
+    }
+    const rowHost = getRecordString(row, ["hostname", "domain", "requestDomain", "request_domain"]);
+    return Boolean(hostname && rowHost === hostname);
   });
 }
 
-function getVendorDetails(vendors: string[], representativeRequests: Array<{ vendor: string | null; url: string; firstSeenMs: number | null; category: string | null }>) {
+function compactRequestEvidenceRow(row: RuntimeRequestEvidenceRow) {
+  return Object.fromEntries(
+    Object.entries(row).filter(([, value]) => value !== null && value !== undefined)
+  ) as RuntimeRequestEvidenceRow;
+}
+
+function compactEvidenceObject<T extends Record<string, unknown>>(row: T) {
+  return Object.fromEntries(
+    Object.entries(row).filter(([, value]) => value !== null && value !== undefined)
+  ) as Partial<T>;
+}
+
+function getRepresentativeRequestDetails(urls: string[], vendors: string[], requestPurposeRows: Record<string, unknown>[] = []) {
+  return urls.slice(0, 8).map((url, index) => {
+    const requestPurposeRow = findRequestPurposeRow(url, requestPurposeRows);
+    const hostname = getUrlHostname(url) ?? url;
+    const vendor =
+      getRecordString(requestPurposeRow ?? {}, ["vendor", "vendorName", "vendor_name"]) ??
+      inferVendorNameFromUrl(url, vendors) ??
+      vendors[index] ??
+      null;
+    const category =
+      getRecordString(requestPurposeRow ?? {}, ["category", "vendorCategory", "vendor_category"]) ??
+      normalizeVendorCategory(vendor, url, classifyTrackingCategory(`${vendor ?? ""} ${hostname} ${url}`));
+    const timingStatus = getRecordString(requestPurposeRow ?? {}, ["timingStatus", "timing_status", "runtimePhase", "runtime_phase"]);
+    const requestUrl = getRecordString(requestPurposeRow ?? {}, ["requestUrl", "request_url", "url"]) ?? url;
+    return compactRequestEvidenceRow({
+      url: requestUrl,
+      hostname,
+      vendor,
+      category,
+      resourceType:
+        getRecordString(requestPurposeRow ?? {}, ["resourceType", "resource_type", "type"]) ??
+        (/\.js(?:[?#]|$)|\/gtm\.js|script/i.test(url) ? "script" : null),
+      firstSeenMs: getRecordNumber(requestPurposeRow ?? {}, ["firstObservedMs", "first_observed_ms", "timestampMs", "timestamp_ms", "tsMs", "ts_ms"]),
+      thirdParty: true,
+      preConsent: timingStatus === "pre_consent",
+      identifierLike: isLikelyIdentifierRequest(requestUrl),
+      deviceDataLike: isLikelyDeviceDataRequest(requestUrl),
+      queryKeysSample: getUrlQueryKeysSample(requestUrl),
+      runtimePhase: timingStatus,
+      confidence: getRecordNumber(requestPurposeRow ?? {}, ["confidence"]),
+      vendorAttributionBasis: getRecordString(requestPurposeRow ?? {}, ["vendorAttributionBasis", "vendor_attribution_basis", "classificationBasis", "classification_basis"]),
+      matchedSignatureId: getRecordString(requestPurposeRow ?? {}, ["matchedSignatureId", "matched_signature_id"]),
+      scannedPageUrl: getRecordString(requestPurposeRow ?? {}, ["pageUrl", "page_url", "scannedPageUrl", "scanned_page_url"])
+    });
+  });
+}
+
+function getVendorDetails(vendors: string[], representativeRequests: Array<{ vendor: string | null; url: string; firstSeenMs?: number | null; category: string | null }>) {
   return vendors.slice(0, 8).map((name) => {
     const matchingRequest = representativeRequests.find((request) =>
       request.vendor === name || inferVendorNameFromUrl(request.url, [name]) === name
@@ -1466,13 +1546,15 @@ function inferEndpointVendorNameFromUrl(url: string | null | undefined) {
   return null;
 }
 
-function getPreconsentCookieExamples(cookieRows: Record<string, unknown>[]) {
+function getPreconsentCookieExamples(cookieRows: Record<string, unknown>[], consentTimeline?: Record<string, unknown> | null) {
+  const consentActionMs = getRecordNumber(consentTimeline ?? {}, ["firstConsentActionMs", "first_consent_action_ms", "consentActionMs", "consent_action_ms"]);
   return cookieRows
     .map((row) => {
       const cookieName = getRecordString(row, ["cookieName", "cookie_name", "name"]);
       const timingEvidence = getRecordString(row, ["timingEvidence", "timing_evidence"]);
       const setAtMs = getRecordNumber(row, ["setAtMs", "set_at_ms", "firstObservedAtMs", "first_observed_at_ms"]);
       const rawExpiresDays = getRecordNumber(row, ["expiresDays", "expires_days", "durationDays", "duration_days", "maxAgeDays", "max_age_days"]);
+      const sourceRequestUrl = getCookieEvidenceSourceRequestUrl(row);
       const setBeforeConsent =
         timingEvidence === "before_consent_cookie_write" ||
         row.beforeConsent === true ||
@@ -1498,13 +1580,53 @@ function getPreconsentCookieExamples(cookieRows: Record<string, unknown>[]) {
           "initiatorVendor",
           "initiator_vendor"
         ]),
+        ...(sourceRequestUrl ? { sourceRequestUrl } : {}),
         initiatorUrl: getRecordString(row, ["initiatorUrl", "initiator_url", "sourceUrl", "source_url", "responseUrl", "response_url"]),
+        consentActionMs,
+        noConsentActionObserved: consentActionMs === null,
         setBeforeConsent,
         timingEvidence
       };
     })
     .filter((row): row is NonNullable<typeof row> => row !== null)
     .slice(0, 8);
+}
+
+function getCookieEvidenceTimingStatus(row: Record<string, unknown>) {
+  const timingStatus = getRecordString(row, ["timingStatus", "timing_status"]);
+  const timingEvidence = getRecordString(row, ["timingEvidence", "timing_evidence"]);
+  if (
+    timingStatus === "pre_consent" ||
+    timingEvidence === "before_consent_cookie_write" ||
+    row.beforeConsent === true ||
+    row.before_consent === true
+  ) {
+    return "pre_consent";
+  }
+  if (timingStatus === "post_consent") {
+    return "post_consent";
+  }
+  return timingStatus ?? "unknown";
+}
+
+function getCookieEvidenceSourceRequestUrl(row: Record<string, unknown>) {
+  return getRecordString(row, [
+    "sourceRequestUrl",
+    "source_request_url",
+    "responseUrl",
+    "response_url",
+    "url",
+    "requestUrl",
+    "request_url",
+    "initiatorUrl",
+    "initiator_url",
+    "cookieInitiatorUrl",
+    "cookie_initiator_url"
+  ]);
+}
+
+function isPreconsentTimingStatus(value: string | null | undefined) {
+  return value === "pre_consent" || value === "before_consent_cookie_write";
 }
 
 function classifyEndpointCategory(url: string | null | undefined, fallback: string | null | undefined) {
@@ -1755,7 +1877,7 @@ function buildPreConsentTrackingEvidenceDetails(
     ? promotionGradeRepresentativeRequests
     : fallbackRepresentativeRequests;
   const representativeRequests = sortRepresentativeRequestsByVendorCoverage(allRepresentativeRequests, vendors);
-  const preConsentCookieExamples = getPreconsentCookieExamples(cookieRows);
+  const preConsentCookieExamples = getPreconsentCookieExamples(cookieRows, consentTimeline);
 
   const vendorDetails = vendors.slice(0, 8).map((name) => {
     const matchingRequest = representativeRequests.find((request) =>
@@ -1907,6 +2029,7 @@ function buildRejectTrackingEvidenceDetails(packet: UnifiedFindingDisplayPacket)
     ...postRejectNonEssentialRequests.flatMap((row) => getRecordString(row, ["url", "requestUrl", "urlSample"])),
     ...(packet.evidence?.sourceUrls ?? [])
   ]);
+  const requestPurposeRows = getRequestPurposeClassificationRows(packet);
   const runtimeVendors = uniqueStrings([
     ...getRejectTrackingVendors(packet),
     ...postRejectNonEssentialRequests.flatMap((row) => getRecordString(row, ["vendor", "vendorName", "name"]))
@@ -1930,7 +2053,7 @@ function buildRejectTrackingEvidenceDetails(packet: UnifiedFindingDisplayPacket)
           queryKeysSample: url ? getUrlQueryKeysSample(url) : []
         };
       })
-    : getRepresentativeRequestDetails(requestUrls, runtimeVendors).map((request) => ({ ...request, preConsent: false }));
+    : getRepresentativeRequestDetails(requestUrls, runtimeVendors, requestPurposeRows).map((request) => ({ ...request, preConsent: false }));
   const counts = Object.fromEntries(
     Object.entries(packet.evidence?.counts ?? {}).filter(([, value]) => Number.isFinite(value))
   );
@@ -1995,7 +2118,8 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     ...(packet.evidence?.sourceUrls ?? [])
   ]);
   const vendors = uniqueStrings(getSessionReplayVendors(packet)).filter(isDisplayVendorName);
-  const representativeRequests = getRepresentativeRequestDetails(requestUrls, vendors).map((request) => ({
+  const requestPurposeRows = getRequestPurposeClassificationRows(packet);
+  const representativeRequests = getRepresentativeRequestDetails(requestUrls, vendors, requestPurposeRows).map((request) => ({
     ...request,
     preConsent: false,
     category: "session_replay"
@@ -2164,7 +2288,8 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     ...getEntityValues(packet, /rtb.*domain|runtime.*vendor|vendor/i),
     ...detailVendors
   ]).filter(isDisplayVendorName);
-  const representativeRequests = getRepresentativeRequestDetails(requestUrls, vendors).map((request) => ({
+  const requestPurposeRows = getRequestPurposeClassificationRows(packet);
+  const representativeRequests = getRepresentativeRequestDetails(requestUrls, vendors, requestPurposeRows).map((request) => ({
     ...request,
     preConsent: packet.evidence?.flags?.some((flag) => /preconsent/i.test(flag)) === true
   })).map((request) => {
@@ -2420,7 +2545,8 @@ function buildGenericCanonicalEvidenceDetails(
 ): CertScoreFindingEvidenceDetails {
   const runtimeRequestUrls = getPacketRuntimeRequestUrls(packet);
   const runtimeVendors = getPacketRuntimeVendors(packet);
-  const representativeRequests = getRepresentativeRequestDetails(runtimeRequestUrls, runtimeVendors);
+  const requestPurposeRows = getRequestPurposeClassificationRows(packet);
+  const representativeRequests = getRepresentativeRequestDetails(runtimeRequestUrls, runtimeVendors, requestPurposeRows);
   const evidenceSnippets = getPacketEvidenceSnippets(packet).map((snippet) =>
     findingId === "fingerprinting_related_signals_observed" ? sanitizeFingerprintReviewText(snippet) : snippet
   );
@@ -2490,35 +2616,62 @@ function buildGenericCanonicalEvidenceDetails(
 
   if (isCookieEvidenceFinding) {
     const cookieRows = getEntityJsonObjects(packet, "preconsent_cookie_evidence");
+    const consentTimeline = getFirstEntityJsonObject(packet, "consentTimeline");
+    const consentActionMs = getRecordNumber(consentTimeline ?? {}, ["firstConsentActionMs", "first_consent_action_ms", "consentActionMs", "consent_action_ms"]);
     const cookieNames = uniqueStrings([
       ...getEntityValues(packet, /^preconsent_(?:nonessential_)?cookie_names$/i),
       ...cookieRows.flatMap((row) => getRecordString(row, ["cookieName", "cookie_name", "name"]))
     ]);
-    const cookieWriteEvidence = cookieRows.slice(0, 12).map((row) => ({
-      cookieName: getRecordString(row, ["cookieName", "cookie_name", "name"]),
-      vendor: getRecordString(row, ["vendor", "vendorName", "cookieInitiatorVendor", "cookie_initiator_vendor"]),
-      category: normalizeVendorCategory(
-        getRecordString(row, ["vendor", "vendorName", "cookieInitiatorVendor", "cookie_initiator_vendor"]),
-        getRecordString(row, ["url", "requestUrl", "initiatorUrl", "cookieInitiatorUrl"]),
-        getRecordString(row, ["category", "vendorCategory", "classification"])
-      ),
-      initiatorUrl: getRecordString(row, ["url", "requestUrl", "initiatorUrl", "cookieInitiatorUrl"]),
-      timingStatus: getRecordString(row, ["timingStatus", "timing_status"]) ?? "pre_consent"
-    }));
+    const cookieWriteEvidence = cookieRows.slice(0, 12).map((row) => {
+      const sourceRequestUrl = getCookieEvidenceSourceRequestUrl(row);
+      const timingStatus = getCookieEvidenceTimingStatus(row);
+      const vendor = getRecordString(row, ["vendor", "vendorName", "cookieInitiatorVendor", "cookie_initiator_vendor", "initiatorVendor", "initiator_vendor"]);
+      const setAtMs = getRecordNumber(row, ["setAtMs", "set_at_ms", "firstObservedAtMs", "first_observed_at_ms"]);
+      return compactEvidenceObject({
+        cookieName: getRecordString(row, ["cookieName", "cookie_name", "name"]),
+        domain: getRecordString(row, ["domain", "cookieDomain", "cookie_domain"]),
+        vendor,
+        category: normalizeVendorCategory(
+          vendor,
+          sourceRequestUrl,
+          getRecordString(row, ["category", "vendorCategory", "classification"])
+        ),
+        setAtMs,
+        consentActionMs,
+        noConsentActionObserved: consentActionMs === null,
+        initiatorDomain: getRecordString(row, ["initiatorDomain", "initiator_domain", "cookieInitiatorDomain", "cookie_initiator_domain"]),
+        initiatorUrl: getRecordString(row, ["initiatorUrl", "initiator_url", "cookieInitiatorUrl", "cookie_initiator_url"]),
+        sourceRequestUrl,
+        sourceRequestFirstSeenMs: getRecordNumber(row, ["sourceRequestFirstSeenMs", "source_request_first_seen_ms", "responseFirstSeenMs", "response_first_seen_ms", "firstRequestMs", "first_request_ms"]),
+        timingStatus,
+        setBeforeConsent: timingStatus === "pre_consent",
+        cookieValueRedacted: true
+      });
+    });
+    const preconsentCookieVendors = uniqueStrings(
+      cookieWriteEvidence.flatMap((row) => row.timingStatus === "pre_consent" && row.vendor ? [row.vendor] : [])
+    );
     const relatedRuntimeRequests = representativeRequests.map((request) => {
       const endpointVendor = inferEndpointVendorNameFromUrl(request.url);
       const initiatingVendor =
         endpointVendor && request.vendor && endpointVendor !== request.vendor ? request.vendor : null;
       const category = classifyEndpointCategory(request.url, request.category);
-      return {
+      const relatedTimingStatus = request.preConsent === true ? "pre_consent" : "unknown";
+      return compactRequestEvidenceRow({
         ...request,
         vendor: endpointVendor ?? request.vendor,
         endpointVendor,
         initiatingVendor,
         category,
         evidenceRole: "related_vendor_request",
-        timingStatus: "unknown"
-      };
+        timingStatus: relatedTimingStatus,
+        preConsent: relatedTimingStatus === "pre_consent" ? true : undefined
+      } as RuntimeRequestEvidenceRow & {
+        endpointVendor?: string | null;
+        initiatingVendor?: string | null;
+        evidenceRole: string;
+        timingStatus: string;
+      });
     });
     const representativePreConsentRequests = representativeRequests
       .filter((request) => request.preConsent === true)
@@ -2542,6 +2695,26 @@ function buildGenericCanonicalEvidenceDetails(
       ...(relatedRuntimeRequests.length > 0 ? { relatedRuntimeRequests } : {}),
       ...(representativePreConsentRequests.length > 0 ? { representativePreConsentRequests } : {})
     };
+    if (runtimeVendors.length > 0) {
+      details.vendors = runtimeVendors.slice(0, 8).map((name) => {
+        const matchingCookie = cookieWriteEvidence.find((row) => row.vendor === name);
+        const matchingRequest = representativeRequests.find((request) =>
+          request.vendor === name || inferVendorNameFromUrl(request.url, [name]) === name
+        );
+        const preConsent = preconsentCookieVendors.includes(name) || representativePreConsentRequests.some((request) => request.vendor === name);
+        return {
+          name,
+          category: normalizeVendorCategory(
+            name,
+            matchingCookie?.sourceRequestUrl ?? matchingRequest?.url ?? null,
+            matchingCookie?.category ?? matchingRequest?.category ?? classifyTrackingCategory(name)
+          ),
+          preConsent,
+          representativeUrl: matchingCookie?.sourceRequestUrl ?? matchingRequest?.url ?? null,
+          firstSeenMs: matchingCookie?.setAtMs ?? matchingRequest?.firstSeenMs ?? null
+        };
+      });
+    }
   }
 
   if (CONSENT_UI_EVIDENCE_FINDING_IDS.has(findingId)) {
@@ -2736,7 +2909,8 @@ function buildGenericCanonicalEvidenceDetails(
     const redactedRequestUrls = uniqueCaseInsensitiveStrings(
       rows.flatMap((row) => getRecordString(row, ["requestUrlRedacted", "request_url_redacted"]) ?? [])
     );
-    const representativeIdentifierRequests = getRepresentativeRequestDetails(redactedRequestUrls, destinations).map((request) => {
+    const requestPurposeRows = getRequestPurposeClassificationRows(packet);
+    const representativeIdentifierRequests = getRepresentativeRequestDetails(redactedRequestUrls, destinations, requestPurposeRows).map((request) => {
       const matchingRow = rows.find((row) => {
         const rowUrl = getRecordString(row, ["requestUrlRedacted", "request_url_redacted"]);
         const rowHost = getRecordString(row, ["destinationDomain", "destination_domain"]);

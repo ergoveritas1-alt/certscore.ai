@@ -5,7 +5,11 @@ import { getDashboardContext } from "../../../server/auth";
 import { getBetterAuthVerificationStatus } from "../../../server/better-auth/user";
 import { getDashboardScanUsage } from "../../../server/dashboard/get-dashboard-scan-usage";
 import { getSystemHealth } from "../../../server/health/get-system-health";
-import { getPlanLimits } from "../../../server/plans/get-plan-limits";
+import {
+  applyManualRescanLimitOverride,
+  getOrganizationManualRescanLimitOverride,
+  getPlanLimits
+} from "../../../server/plans/get-plan-limits";
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -51,11 +55,13 @@ function formatMissingTables(tables: string[]) {
 export default async function SettingsPage() {
   const { organization, profile, user } = await getDashboardContext();
   const userProviders = user.authProvider.split(",").map((provider) => provider.trim());
-  const [planLimits, systemHealth, verificationStatus] = await Promise.all([
+  const [basePlanLimits, manualRescanLimitOverride, systemHealth, verificationStatus] = await Promise.all([
     getPlanLimits(organization.plan),
+    getOrganizationManualRescanLimitOverride(organization.id),
     getSystemHealth(),
     userProviders.includes("password") ? getBetterAuthVerificationStatus(user.betterAuthUserId ?? user.id) : Promise.resolve(null)
   ]);
+  const planLimits = applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
   const scanUsage = await getDashboardScanUsage({
     accountCreatedAt: profile.created_at,
     monthlyLimit: planLimits.manualRescanLimitPerMonth,

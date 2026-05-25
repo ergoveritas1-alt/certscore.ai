@@ -621,8 +621,10 @@ function getPreconsentCookieEvidenceRows(
     initiatorVendor: row.initiatorVendor,
     nonEssential: row.nonEssential,
     party: row.party,
+    responseUrl: row.responseUrl,
     setAtMs: row.setAtMs,
     setMethod: row.setMethod,
+    sourceRequestUrl: row.sourceRequestUrl,
     timingEvidence: row.timingEvidence
   }));
 }

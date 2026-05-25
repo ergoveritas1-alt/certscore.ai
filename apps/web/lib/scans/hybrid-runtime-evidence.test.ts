@@ -437,8 +437,10 @@ test("builds calibrated pre-consent cookie evidence from hybrid cookie writes", 
       initiatorVendor: null,
       nonEssential: true,
       party: "third_party",
+      responseUrl: null,
       setAtMs: 120,
       setMethod: "http_header",
+      sourceRequestUrl: null,
       timingEvidence: "before_consent_cookie_write"
     },
     {
@@ -451,8 +453,10 @@ test("builds calibrated pre-consent cookie evidence from hybrid cookie writes", 
       initiatorVendor: null,
       nonEssential: true,
       party: "third_party",
+      responseUrl: null,
       setAtMs: 80,
       setMethod: "http_header",
+      sourceRequestUrl: null,
       timingEvidence: "before_consent_cookie_write"
     },
     {
@@ -465,8 +469,10 @@ test("builds calibrated pre-consent cookie evidence from hybrid cookie writes", 
       initiatorVendor: null,
       nonEssential: true,
       party: "first_party",
+      responseUrl: null,
       setAtMs: 90,
       setMethod: "document_cookie",
+      sourceRequestUrl: null,
       timingEvidence: "before_consent_cookie_write"
     }
   ]);
@@ -521,8 +527,10 @@ test("retains third-party pre-consent cookie writes when category is unknown", (
       initiatorVendor: null,
       nonEssential: false,
       party: "third_party",
+      responseUrl: null,
       setAtMs: 75,
       setMethod: "http_header",
+      sourceRequestUrl: null,
       timingEvidence: "before_consent_cookie_write"
     }
   ]);

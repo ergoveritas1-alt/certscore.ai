@@ -35,6 +35,7 @@ import {
 } from "./runtime-vendor-disclosure";
 import {
   CONSENT_CONTROL_LIFECYCLE_SUBTYPE,
+  evaluateConsentControlLifecycleEvidence,
   getConsentControlLifecycleEvidence
 } from "./consent-control-lifecycle";
 import {
@@ -770,6 +771,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
   const cookieRetentionEvidence = getCookieRetentionEvidence(rawEvidence);
   const runtimeVendorDisclosureEvidence = getRuntimeVendorDisclosureEvidence(rawEvidence);
   const consentControlLifecycleEvidence = getConsentControlLifecycleEvidence(rawEvidence);
+  const consentControlLifecycleReview = evaluateConsentControlLifecycleEvidence(rawEvidence);
   const consentGovernanceDisclosureEvidence = getConsentGovernanceDisclosureEvidence(rawEvidence);
   const addPageUrl = (value: string | null | undefined) => {
     if (!value) {
@@ -854,12 +856,19 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     flags.add(RUNTIME_VENDOR_DISCLOSURE_SUBTYPE);
   }
 
-  if (consentControlLifecycleEvidence) {
+  if (consentControlLifecycleEvidence && consentControlLifecycleReview.disposition === "eligible") {
     addEntity(entities, "findingSubtype", [CONSENT_CONTROL_LIFECYCLE_SUBTYPE, "consent_control_not_reopenable"]);
     addEntity(entities, "consentControlLifecycleEvidence", [JSON.stringify(consentControlLifecycleEvidence)]);
     addEntity(entities, "consentControlPagesChecked", consentControlLifecycleEvidence.pagesChecked);
     addEntity(entities, "consentControlsSearched", consentControlLifecycleEvidence.controlsSearched);
     addEntity(entities, "consentFooterLinksInspected", consentControlLifecycleEvidence.footerLinksInspected);
+    addEntity(
+      entities,
+      "consentObservedReopenControls",
+      (consentControlLifecycleEvidence.observedControls ?? [])
+        .map((control) => typeof control.text === "string" ? control.text : null)
+        .filter((value): value is string => Boolean(value))
+    );
     addEntity(entities, "consentControlCoverageStatus", [consentControlLifecycleEvidence.coverageStatus]);
     counts.consentControlPagesChecked = consentControlLifecycleEvidence.pagesChecked.length;
     counts.consentControlsSearched = consentControlLifecycleEvidence.controlsSearched.length;

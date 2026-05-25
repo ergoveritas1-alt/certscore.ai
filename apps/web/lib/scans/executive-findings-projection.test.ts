@@ -532,6 +532,8 @@ test("projects third-party cookie pre-consent when preconsent packet retains coo
         expiresDays: 90,
         sourceVendor: "Meta Pixel",
         initiatorUrl: null,
+        consentActionMs: null,
+        noConsentActionObserved: true,
         setBeforeConsent: true,
         timingEvidence: "before_consent_cookie_write"
       }
@@ -3768,12 +3770,16 @@ test("keeps related runtime requests out of direct pre-consent cookie evidence r
       cookieName: "_clck",
       vendor: "Microsoft Clarity",
       category: "session_replay",
+      noConsentActionObserved: true,
       initiatorUrl: "https://www.clarity.ms/tag/abc123",
-      timingStatus: "pre_consent"
+      sourceRequestUrl: "https://www.clarity.ms/tag/abc123",
+      timingStatus: "pre_consent",
+      setBeforeConsent: true,
+      cookieValueRedacted: true
     }
   ]);
   assert.deepEqual(cookieEvidence?.representativePreConsentRequests, undefined);
-  assert.equal((cookieEvidence?.relatedRuntimeRequests as Array<Record<string, unknown>> | undefined)?.[0]?.preConsent, false);
+  assert.equal((cookieEvidence?.relatedRuntimeRequests as Array<Record<string, unknown>> | undefined)?.[0]?.preConsent, undefined);
   assert.equal((cookieEvidence?.relatedRuntimeRequests as Array<Record<string, unknown>> | undefined)?.[0]?.timingStatus, "unknown");
   assert.equal((cookieEvidence?.relatedRuntimeRequests as Array<Record<string, unknown>> | undefined)?.[0]?.evidenceRole, "related_vendor_request");
 });
@@ -3794,6 +3800,18 @@ test("labels Bing and Clarity sync-style related runtime requests with endpoint 
               nonEssential: true,
               party: "third_party",
               timingEvidence: "before_consent_cookie_write"
+            })
+          ],
+          requestPurposeClassificationConfidence: [
+            JSON.stringify({
+              requestUrl: "https://c.clarity.ms/c.gif",
+              hostname: "c.clarity.ms",
+              vendor: "Microsoft Clarity",
+              category: "session_replay_sync",
+              resourceType: "image",
+              firstObservedMs: 3831,
+              timingStatus: "pre_consent",
+              runtimePhase: "pre_consent"
             })
           ],
           runtimeRequestUrls: ["https://c.bing.com/c.gif?ctsa=mr&CtsSyncId=abc", "https://c.clarity.ms/c.gif"],
@@ -3819,6 +3837,11 @@ test("labels Bing and Clarity sync-style related runtime requests with endpoint 
   assert.equal(bingRequest?.evidenceRole, "related_vendor_request");
   assert.equal(clarityRequest?.endpointVendor, "Microsoft Clarity");
   assert.equal(clarityRequest?.category, "session_replay_sync");
+  assert.equal(clarityRequest?.resourceType, "image");
+  assert.equal(clarityRequest?.firstSeenMs, 3831);
+  assert.equal(clarityRequest?.timingStatus, "pre_consent");
+  assert.equal(clarityRequest?.preConsent, true);
+  assert.equal(Object.values(clarityRequest ?? {}).some((value) => value === null), false);
 });
 
 test("suppresses third-party cookie pre-consent when retained packet has no concrete pre-consent cookie write", () => {

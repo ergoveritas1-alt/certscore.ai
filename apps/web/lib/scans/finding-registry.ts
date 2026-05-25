@@ -59,7 +59,10 @@ export type PreConsentTrackingEvidenceDetails = {
     setAtMs: number | null;
     expiresDays?: number | null;
     sourceVendor: string | null;
+    sourceRequestUrl?: string | null;
     initiatorUrl: string | null;
+    consentActionMs?: number | null;
+    noConsentActionObserved?: boolean;
     setBeforeConsent: boolean;
     timingEvidence: string | null;
   }>;
@@ -88,8 +91,8 @@ export type PreConsentTrackingEvidenceDetails = {
     consentInteractionRecorded?: boolean;
     confidence?: number | string | null;
     runtimePhase?: string | null;
-    resourceType: string | null;
-    firstSeenMs: number | null;
+    resourceType?: string | null;
+    firstSeenMs?: number | null;
     thirdParty: boolean;
     preConsent: boolean;
     identifierLike: boolean;

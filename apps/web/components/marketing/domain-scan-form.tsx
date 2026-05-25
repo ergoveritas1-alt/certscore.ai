@@ -42,16 +42,38 @@ const GENERIC_SCAN_ERROR_MESSAGES: Record<ScanMode, string> = {
 };
 
 const FULL_SCAN_ERROR_MESSAGES: Record<string, string> = {
+  active_scan_exists: "A scan is already queued or running for this site. Open scan history or try again shortly.",
+  domain_already_connected: "This site is already connected to your workspace. Sign in to open it from scan history.",
+  domain_limit:
+    "This account has reached its website limit. Review your plan after signing in, or email support@certscore.ai.",
   full_scan_server_error: "The scan service hit an unexpected error. Try again in a minute.",
   invalid_domain: "Enter a valid website domain, like example.com.",
-  scan_already_active: "A scan is already active for this domain. Open the latest scan from your history.",
-  scan_limit_reached: "This scan is blocked by your plan or recent scan limit.",
+  monthly_usage_limit:
+    "This account has reached its monthly scan limit. Review your plan after signing in, or email support@certscore.ai.",
+  rescan_cooldown:
+    "This site was scanned recently. Try again shortly, review your plan after signing in, or email support@certscore.ai if you need higher throughput.",
+  scan_already_active: "A scan is already queued or running for this site. Open scan history or try again shortly.",
+  scan_limit_reached:
+    "This scan could not be started because of an account or recent-scan limit. Review your plan after signing in, or email support@certscore.ai.",
   scan_queue_rejected: "The scan request was rejected before queueing. Try again in a minute.",
   scan_queue_unavailable: "The scan queue is unavailable. Try again in a minute."
 };
 
+const FULL_SCAN_ERROR_GUIDANCE: Record<string, string> = {
+  domain_limit: "Review your plan after signing in, or email support@certscore.ai.",
+  monthly_usage_limit: "Review your plan after signing in, or email support@certscore.ai.",
+  rescan_cooldown: "Email support@certscore.ai if you need higher-throughput scanning."
+};
+
 function getScanSubmitErrorMessage(mode: ScanMode, payload: ScanSubmitPayload): string {
-  const codedMessage = mode === "full" && payload.code ? FULL_SCAN_ERROR_MESSAGES[payload.code] : null;
+  const code = payload.code ?? null;
+  const guidance = mode === "full" && code ? FULL_SCAN_ERROR_GUIDANCE[code] : null;
+
+  if (guidance && payload.error) {
+    return `${payload.error} ${guidance}`;
+  }
+
+  const codedMessage = mode === "full" && code ? FULL_SCAN_ERROR_MESSAGES[code] : null;
 
   if (codedMessage) {
     return codedMessage;

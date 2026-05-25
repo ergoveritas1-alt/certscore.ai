@@ -3,7 +3,11 @@ import { OverviewScanHistoryCard } from "../../components/dashboard/overview-sca
 import { AddDomainForm } from "../../components/domains/add-domain-form";
 import { getDashboardContext } from "../../server/auth";
 import { getDashboardScanUsage } from "../../server/dashboard/get-dashboard-scan-usage";
-import { getPlanLimits } from "../../server/plans/get-plan-limits";
+import {
+  applyManualRescanLimitOverride,
+  getOrganizationManualRescanLimitOverride,
+  getPlanLimits
+} from "../../server/plans/get-plan-limits";
 import { getOrganizationScans } from "../../server/scans/get-organization-scans";
 
 function formatDate(value: string | null) {
@@ -22,10 +26,12 @@ function formatDate(value: string | null) {
 
 export default async function DashboardPage() {
   const { organization, profile } = await getDashboardContext();
-  const [planLimits, recentScans] = await Promise.all([
+  const [basePlanLimits, manualRescanLimitOverride, recentScans] = await Promise.all([
     getPlanLimits(organization.plan),
+    getOrganizationManualRescanLimitOverride(organization.id),
     getOrganizationScans(organization.id)
   ]);
+  const planLimits = applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
   const scanUsage = await getDashboardScanUsage({
     accountCreatedAt: profile.created_at,
     monthlyLimit: planLimits.manualRescanLimitPerMonth,

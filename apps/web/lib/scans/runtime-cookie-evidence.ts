@@ -9,6 +9,7 @@ export type RuntimeCookieEvidenceRow = {
   nonEssential: boolean;
   party: "first_party" | "third_party" | "unknown";
   responseUrl: string | null;
+  sourceRequestUrl: string | null;
   setAtMs: number | null;
   setMethod: string | null;
   timingEvidence: "before_consent_cookie_write" | "initial_cookie_snapshot" | "unknown";
@@ -330,6 +331,7 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     nonEssential: getBoolean(row.nonEssential ?? row.non_essential) ?? isNonEssentialCookieCategory(category),
     party: getCookiePartyType(row, domain, hybrid),
     responseUrl: getString(row.responseUrl ?? row.response_url),
+    sourceRequestUrl: getString(row.sourceRequestUrl ?? row.source_request_url ?? row.responseUrl ?? row.response_url ?? row.initiatorUrl ?? row.initiator_url),
     setAtMs,
     setMethod: getString(row.cookieSetMethod ?? row.cookie_set_method ?? row.setMethod ?? row.set_method),
     timingEvidence: isPreconsentCookieWrite(row, hybrid) ? "before_consent_cookie_write" : "unknown"
@@ -349,6 +351,7 @@ function normalizeInitialCookieRow(cookieName: string, domain: string | null): R
     nonEssential: isNonEssentialCookieCategory(category),
     party: "unknown",
     responseUrl: null,
+    sourceRequestUrl: null,
     setAtMs: null,
     setMethod: "initial_cookie_snapshot",
     timingEvidence: "initial_cookie_snapshot"

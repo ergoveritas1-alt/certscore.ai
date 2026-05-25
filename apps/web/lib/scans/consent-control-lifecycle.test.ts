@@ -60,6 +60,28 @@ test("suppresses when retained footer links include privacy-choice paths", () =>
   assert.ok(review.negativeEvidenceFlags.includes("consent_revisit_control_observed"));
 });
 
+test("suppresses when retained footer controls include Customize Cookies", () => {
+  const review = evaluateConsentControlLifecycleEvidence(baseEvidence({
+    cookiePreferencesLinkObserved: true,
+    footerPreferenceLinkObserved: true,
+    footerLinksInspected: [
+      "Privacy Policy -> https://www.sony.com/en/privacy-policy",
+      "Cookie Policy -> https://www.sony.com/en/cookie-policy"
+    ],
+    observedControls: [
+      {
+        href: null,
+        pageUrl: "https://www.sony.com/en/",
+        source: "footer_link",
+        text: "Customize Cookies"
+      }
+    ]
+  }));
+
+  assert.equal(review.disposition, "suppress");
+  assert.ok(review.negativeEvidenceFlags.includes("consent_revisit_control_observed"));
+});
+
 test("demotes blocked or shallow coverage", () => {
   const blocked = evaluateConsentControlLifecycleEvidence(baseEvidence({ coverageStatus: "blocked" }));
   assert.equal(blocked.disposition, "audit_only");

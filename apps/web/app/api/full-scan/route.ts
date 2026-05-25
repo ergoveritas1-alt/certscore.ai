@@ -6,34 +6,13 @@ import { checkDomainDns } from "../../../server/domains/domain-dns";
 import { createOrQueueDomainScan } from "../../../server/domains/create-domain";
 import { createAnonymousFullScan } from "../../../server/scans/create-anonymous-full-scan";
 import { createPreviewScan } from "../../../server/preview-scan/create-preview-scan";
+import { getFullScanQueueErrorCode } from "./full-scan-errors";
 import { shouldBypassDnsValidationForProductionLoadTest } from "./load-test-intake";
 
 function isPublicFullScanAvailabilityError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
 
   return /DATABASE_URL|Invalid environment configuration|Scanner health check failed/i.test(message);
-}
-
-function getFullScanQueueErrorCode(error: string | null | undefined) {
-  const message = error ?? "";
-
-  if (/already|active scan|queued|running|recently|re-scan/i.test(message)) {
-    return "scan_already_active";
-  }
-
-  if (/limit|Free plan|billing period|plan/i.test(message)) {
-    return "scan_limit_reached";
-  }
-
-  if (/queue|scanner|heartbeat|availability|unavailable/i.test(message)) {
-    return "scan_queue_unavailable";
-  }
-
-  if (/domain|hostname|website/i.test(message)) {
-    return "invalid_domain";
-  }
-
-  return "scan_queue_rejected";
 }
 
 function getFirstHeaderValue(value: string | null) {
