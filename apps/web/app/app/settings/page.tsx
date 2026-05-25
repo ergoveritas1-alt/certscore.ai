@@ -61,7 +61,7 @@ export default async function SettingsPage() {
     getSystemHealth(),
     userProviders.includes("password") ? getBetterAuthVerificationStatus(user.betterAuthUserId ?? user.id) : Promise.resolve(null)
   ]);
-  const planLimits = applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
+  const planLimits = await applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
   const scanUsage = await getDashboardScanUsage({
     accountCreatedAt: profile.created_at,
     monthlyLimit: planLimits.manualRescanLimitPerMonth,

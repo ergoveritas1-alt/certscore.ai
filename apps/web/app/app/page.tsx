@@ -31,7 +31,7 @@ export default async function DashboardPage() {
     getOrganizationManualRescanLimitOverride(organization.id),
     getOrganizationScans(organization.id)
   ]);
-  const planLimits = applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
+  const planLimits = await applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
   const scanUsage = await getDashboardScanUsage({
     accountCreatedAt: profile.created_at,
     monthlyLimit: planLimits.manualRescanLimitPerMonth,

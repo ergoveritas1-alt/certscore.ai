@@ -29,10 +29,10 @@ export async function getPlanLimits(planCode: PlanCode): Promise<PlanLimitRecord
   };
 }
 
-export function applyManualRescanLimitOverride(
+export async function applyManualRescanLimitOverride(
   limits: PlanLimitRecord,
   manualRescanLimitOverride: number | null | undefined
-): PlanLimitRecord {
+): Promise<PlanLimitRecord> {
   if (
     typeof manualRescanLimitOverride !== "number" ||
     !Number.isFinite(manualRescanLimitOverride) ||

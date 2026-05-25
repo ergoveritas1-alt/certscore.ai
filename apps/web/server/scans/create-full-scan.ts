@@ -100,7 +100,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     });
     return null;
   });
-  const planLimits = applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
+  const planLimits = await applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
   const planDefinition = getPlanDefinition(planLimits.planCode);
   const domainRecord = input.domainContext
     ? {
