@@ -31,6 +31,7 @@ export function isRuntimeRequestEvidenceUrl(value: string | null | undefined) {
       "maps.googleapis.com",
       "pagead2.googlesyndication.com",
       "pub.doubleverify.com",
+      "scripts.clarity.ms",
       "securepubads.g.doubleclick.net"
     ];
     const runtimeHostSuffixes = [
@@ -39,6 +40,7 @@ export function isRuntimeRequestEvidenceUrl(value: string | null | undefined) {
       ".googlesyndication.com",
       ".google-analytics.com",
       ".googletagmanager.com",
+      ".clarity.ms",
       ".quantserve.com",
       ".rubiconproject.com",
       ".rlcdn.com"

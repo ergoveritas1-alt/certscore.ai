@@ -496,10 +496,13 @@ test("projects third-party cookie pre-consent when preconsent packet retains coo
           preconsent_cookie_evidence: [
             JSON.stringify({
               category: "advertising",
+              cookieInitiatorVendor: "Meta Pixel",
               cookieName: "_fbp",
               domain: "facebook.com",
+              expiresDays: 90,
               nonEssential: true,
               party: "third_party",
+              setAtMs: 3831,
               timingEvidence: "before_consent_cookie_write"
             })
           ],
@@ -518,6 +521,22 @@ test("projects third-party cookie pre-consent when preconsent packet retains coo
   const projectedIds = projection.findings.map((finding) => finding.id);
   assert.ok(projectedIds.includes("pre_consent_tracking_detected"));
   assert.ok(projectedIds.includes("third_party_cookie_pre_consent"));
+  assert.deepEqual(
+    projection.findings.find((finding) => finding.id === "pre_consent_tracking_detected")?.evidenceDetails?.preConsentCookieExamples,
+    [
+      {
+        cookieName: "_fbp",
+        domain: "facebook.com",
+        category: "advertising",
+        setAtMs: 3831,
+        expiresDays: 90,
+        sourceVendor: "Meta Pixel",
+        initiatorUrl: null,
+        setBeforeConsent: true,
+        timingEvidence: "before_consent_cookie_write"
+      }
+    ]
+  );
   assert.equal(
     projection.findings.find((finding) => finding.id === "third_party_cookie_pre_consent")?.evidenceDetails?.cookieEvidence?.observed,
     true
@@ -2527,6 +2546,89 @@ test("projects concrete session replay vendor evidence into executive finding js
   );
 });
 
+test("keeps session replay scan context on audited page and reconciles same-scan preconsent vendor timing", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      details: {
+        family: "consent_tracking",
+        kind: "preconsent_tracking",
+        vendors: ["Microsoft Clarity"]
+      },
+      evidence: {
+        counts: { firstThirdPartyTrackingRequestMs: 3831 },
+        entities: {
+          requestPurposeClassificationConfidence: [
+            JSON.stringify({
+              requestUrl: "https://www.clarity.ms/tag/m97n86hou6",
+              hostname: "www.clarity.ms",
+              vendor: "Microsoft Clarity",
+              vendorCategory: "session_replay",
+              classification: "non_essential",
+              essentiality: "non_essential",
+              confidence: 0.95,
+              runtimePhase: "pre_consent",
+              firstObservedMs: 3831
+            })
+          ],
+          preconsent_tracker_vendors: ["Microsoft Clarity"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: ["https://www.kbdlab.io/"],
+        snippets: [],
+        sourceUrls: ["https://www.clarity.ms/tag/m97n86hou6"]
+      },
+      primaryPageUrl: "https://www.kbdlab.io/",
+      severity: "high"
+    }),
+    makePacket("session_replay_observed", {
+      confidenceBand: "moderate",
+      details: {
+        family: "consent_tracking",
+        kind: "session_replay_observed",
+        requestUrls: [
+          "https://www.clarity.ms/tag/m97n86hou6",
+          "https://scripts.clarity.ms/0.8.64/clarity.js",
+          "https://c.clarity.ms/c.gif"
+        ],
+        vendors: ["Microsoft Clarity"]
+      },
+      evidence: {
+        counts: { representativeSessionReplayRequests: 4 },
+        entities: {
+          sessionReplayEvidenceSummary: [
+            JSON.stringify({
+              artifactCount: 1,
+              collectionEndpointObserved: true,
+              libraryOnly: false,
+              maskingOrExclusionObserved: false,
+              sensitiveSurfaceOverlap: false
+            })
+          ],
+          runtimeVendors: ["Microsoft Clarity"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.session_replay_runtime_detected", "privacy.session_replay_runtime_vendors"],
+        pageUrls: ["https://www.kbdlab.io/", "https://www.clarity.ms/"],
+        snippets: [],
+        sourceUrls: ["https://www.clarity.ms/tag/m97n86hou6", "https://scripts.clarity.ms/0.8.64/clarity.js"]
+      },
+      primaryPageUrl: "https://www.clarity.ms/",
+      summary: "Session replay runtime detected."
+    })
+  ]);
+
+  const finding = projection.topFindings.find((candidate) => candidate.id === "session_recording_services_detected");
+  assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://www.kbdlab.io/");
+  assert.equal(finding?.evidenceDetails?.counts?.representativeSessionReplayRequests, 3);
+  assert.equal(finding?.evidenceDetails?.vendors?.[0]?.preConsent, true);
+  assert.equal(finding?.evidenceDetails?.representativeRequests?.[0]?.preConsent, true);
+  assert.deepEqual(finding?.evidenceDetails?.sessionReplayEvidence?.preConsentVendorContext, ["Microsoft Clarity"]);
+  assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.consentPhase, "pre_consent_observed_same_scan");
+  assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.maskingOrExclusionObserved, false);
+  assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.maskingOrExclusionEvidenceStatus, "not_retained_in_packet");
+});
+
 test("projects sensitive replay packets into sensitive third-party tracking companion finding", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("possible_session_replay_on_sensitive_input_surface", {
@@ -3484,6 +3586,59 @@ test("uses promotion-grade request classifications for pre-consent representativ
     JSON.stringify(finding?.evidenceDetails?.representativeRequests ?? []),
     /cookielaw|ajax\.googleapis|OneTrust CMP asset|Google Hosted Libraries/
   );
+});
+
+test("labels Bing sync endpoints by endpoint vendor while preserving initiating vendor context", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      details: {
+        family: "consent_tracking",
+        kind: "preconsent_tracking",
+        vendors: ["Microsoft Clarity", "Microsoft Advertising / Bing UET"]
+      },
+      evidence: {
+        counts: { firstThirdPartyTrackingRequestMs: 3831 },
+        entities: {
+          consentTimeline: [
+            JSON.stringify({
+              firstCmpVisibleMs: 1200,
+              firstConsentActionMs: null,
+              firstNonEssentialRequestMs: 3831
+            })
+          ],
+          requestPurposeClassificationConfidence: [
+            JSON.stringify({
+              requestUrl: "https://c.bing.com/c.gif?ctsa=mr&CtsSyncId=abc",
+              hostname: "c.bing.com",
+              vendor: "Microsoft Clarity",
+              vendorCategory: "session_replay",
+              classification: "non_essential",
+              essentiality: "non_essential",
+              confidence: 0.95,
+              runtimePhase: "pre_consent",
+              firstObservedMs: 3831,
+              vendorAttributionBasis: "initiator_chain"
+            })
+          ],
+          preconsent_tracker_vendors: ["Microsoft Clarity", "Microsoft Advertising / Bing UET"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: ["https://www.kbdlab.io/"],
+        snippets: [],
+        sourceUrls: ["https://c.bing.com/c.gif?ctsa=mr&CtsSyncId=abc"]
+      },
+      primaryPageUrl: "https://www.kbdlab.io/",
+      severity: "high"
+    })
+  ]);
+
+  const request = projection.findings.find((finding) => finding.id === "pre_consent_tracking_detected")?.evidenceDetails?.representativeRequests?.[0];
+  assert.equal(request?.vendor, "Microsoft Advertising / Bing UET");
+  assert.equal(request?.endpointVendor, "Microsoft Advertising / Bing UET");
+  assert.equal(request?.initiatingVendor, "Microsoft Clarity");
+  assert.equal(request?.category, "advertising_measurement");
+  assert.equal(request?.scannedPageUrl, "https://www.kbdlab.io/");
 });
 
 test("keeps scanned page URL separate from Amazon Ads config URLs", () => {

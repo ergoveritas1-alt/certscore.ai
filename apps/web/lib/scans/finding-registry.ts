@@ -52,6 +52,17 @@ export type PreConsentTrackingEvidenceDetails = {
   };
   requestSelectionNote: string;
   requestClassificationAnchors?: Array<Record<string, unknown>>;
+  preConsentCookieExamples?: Array<{
+    cookieName: string | null;
+    domain: string | null;
+    category: string | null;
+    setAtMs: number | null;
+    expiresDays?: number | null;
+    sourceVendor: string | null;
+    initiatorUrl: string | null;
+    setBeforeConsent: boolean;
+    timingEvidence: string | null;
+  }>;
   vendors: Array<{
     name: string;
     category: string | null;
@@ -63,6 +74,8 @@ export type PreConsentTrackingEvidenceDetails = {
     url: string;
     hostname: string;
     vendor: string | null;
+    endpointVendor?: string | null;
+    initiatingVendor?: string | null;
     vendorName?: string | null;
     category: string | null;
     vendorCategory?: string | null;
@@ -199,6 +212,7 @@ export type CertScoreFindingEvidenceDetails = {
   timing?: Record<string, number | null> | PreConsentTrackingEvidenceDetails["timing"];
   requestSelectionNote?: string;
   requestClassificationAnchors?: PreConsentTrackingEvidenceDetails["requestClassificationAnchors"];
+  preConsentCookieExamples?: PreConsentTrackingEvidenceDetails["preConsentCookieExamples"];
   vendors?: PreConsentTrackingEvidenceDetails["vendors"];
   representativeRequests?: PreConsentTrackingEvidenceDetails["representativeRequests"];
   identifierEvidence?: PreConsentTrackingEvidenceDetails["identifierEvidence"];

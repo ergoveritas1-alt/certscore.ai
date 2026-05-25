@@ -1466,6 +1466,47 @@ function inferEndpointVendorNameFromUrl(url: string | null | undefined) {
   return null;
 }
 
+function getPreconsentCookieExamples(cookieRows: Record<string, unknown>[]) {
+  return cookieRows
+    .map((row) => {
+      const cookieName = getRecordString(row, ["cookieName", "cookie_name", "name"]);
+      const timingEvidence = getRecordString(row, ["timingEvidence", "timing_evidence"]);
+      const setAtMs = getRecordNumber(row, ["setAtMs", "set_at_ms", "firstObservedAtMs", "first_observed_at_ms"]);
+      const rawExpiresDays = getRecordNumber(row, ["expiresDays", "expires_days", "durationDays", "duration_days", "maxAgeDays", "max_age_days"]);
+      const setBeforeConsent =
+        timingEvidence === "before_consent_cookie_write" ||
+        row.beforeConsent === true ||
+        row.before_consent === true;
+
+      if (!cookieName && !setBeforeConsent) {
+        return null;
+      }
+
+      return {
+        cookieName,
+        domain: getRecordString(row, ["domain", "cookieDomain", "cookie_domain"]),
+        category: getRecordString(row, ["category", "cookieCategory", "cookie_category", "vendorCategory", "vendor_category"]),
+        setAtMs,
+        ...(rawExpiresDays !== null ? { expiresDays: rawExpiresDays } : {}),
+        sourceVendor: getRecordString(row, [
+          "sourceVendor",
+          "source_vendor",
+          "vendor",
+          "vendorName",
+          "cookieInitiatorVendor",
+          "cookie_initiator_vendor",
+          "initiatorVendor",
+          "initiator_vendor"
+        ]),
+        initiatorUrl: getRecordString(row, ["initiatorUrl", "initiator_url", "sourceUrl", "source_url", "responseUrl", "response_url"]),
+        setBeforeConsent,
+        timingEvidence
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null)
+    .slice(0, 8);
+}
+
 function classifyEndpointCategory(url: string | null | undefined, fallback: string | null | undefined) {
   if (!url) {
     return fallback ?? "sync_or_measurement";
@@ -1476,7 +1517,7 @@ function classifyEndpointCategory(url: string | null | undefined, fallback: stri
   if (/c\.clarity\.ms/i.test(url)) {
     return "session_replay_sync";
   }
-  return fallback && fallback !== "session_replay" ? fallback : "sync_or_measurement";
+  return fallback ?? "sync_or_measurement";
 }
 
 function isLikelyIdentifierRequest(url: string) {
@@ -1645,28 +1686,36 @@ function buildPreConsentTrackingEvidenceDetails(
     ...(packet.evidence?.sourceUrls ?? []).filter((url) => /tag|pixel|collect|track|analytics|ads|clarity|hubspot|linkedin|facebook|reddit|tiktok|google/i.test(url))
   ]).slice(0, 8);
 
-  const promotionGradeRepresentativeRequests = promotionGradePreconsentRequests.map((request) => ({
-    url: request.requestUrl,
-    hostname: request.hostname,
-    vendor: request.vendorName,
-    category: normalizeVendorCategory(request.vendorName, request.requestUrl, request.vendorCategory),
-    resourceType: /\.js(?:[?#]|$)|\/gtm\.js|script/i.test(request.requestUrl) ? "script" : null,
-    firstSeenMs: request.firstSeenMs ?? firstThirdPartyRequestMs,
-    thirdParty: true,
-    preConsent: true,
-    identifierLike: isLikelyIdentifierRequest(request.requestUrl),
-    deviceDataLike: isLikelyDeviceDataRequest(request.requestUrl),
-    queryKeysSample: getUrlQueryKeysSample(request.requestUrl),
-    scannedPageUrl: request.scannedPageUrl ?? scannedPageUrl,
-    registrableDomain: request.registrableDomain,
-    vendorAttributionBasis: request.vendorAttributionBasis,
-    consentActionMs: request.consentActionMs,
-    noConsentActionObserved: request.noConsentActionObserved,
-    consentSurfaceObserved: request.consentSurfaceObserved,
-    consentInteractionRecorded: request.consentInteractionRecorded,
-    confidence: request.confidence,
-    runtimePhase: request.runtimePhase
-  }));
+  const promotionGradeRepresentativeRequests = promotionGradePreconsentRequests.map((request) => {
+    const endpointVendor = inferEndpointVendorNameFromUrl(request.requestUrl);
+    const displayVendor = endpointVendor ?? request.vendorName;
+    return {
+      url: request.requestUrl,
+      hostname: request.hostname,
+      vendor: displayVendor,
+      endpointVendor,
+      initiatingVendor: endpointVendor && request.vendorName && endpointVendor !== request.vendorName ? request.vendorName : null,
+      category: classifyEndpointCategory(request.requestUrl, normalizeVendorCategory(displayVendor, request.requestUrl, request.vendorCategory)),
+      resourceType: /\.js(?:[?#]|$)|\/gtm\.js|script/i.test(request.requestUrl) ? "script" : null,
+      firstSeenMs: request.firstSeenMs ?? firstThirdPartyRequestMs,
+      thirdParty: true,
+      preConsent: true,
+      identifierLike: isLikelyIdentifierRequest(request.requestUrl),
+      deviceDataLike: isLikelyDeviceDataRequest(request.requestUrl),
+      queryKeysSample: getUrlQueryKeysSample(request.requestUrl),
+      scannedPageUrl: request.scannedPageUrl ?? scannedPageUrl,
+      registrableDomain: request.registrableDomain,
+      vendorAttributionBasis: endpointVendor && endpointVendor !== request.vendorName
+        ? `${request.vendorAttributionBasis ?? "request_url"}:endpoint_vendor`
+        : request.vendorAttributionBasis,
+      consentActionMs: request.consentActionMs,
+      noConsentActionObserved: request.noConsentActionObserved,
+      consentSurfaceObserved: request.consentSurfaceObserved,
+      consentInteractionRecorded: request.consentInteractionRecorded,
+      confidence: request.confidence,
+      runtimePhase: request.runtimePhase
+    };
+  });
   const fallbackRepresentativeRequests = requestUrls.map((url, index) => {
     const hostname = getUrlHostname(url) ?? url;
     const matchedRow = vendorRows.find((row) => {
@@ -1674,10 +1723,12 @@ function buildPreConsentTrackingEvidenceDetails(
       const rowHost = getRecordString(row, ["hostname", "host", "domain"]);
       return rowUrl === url || (rowHost !== null && hostname.includes(rowHost.replace(/^www\./, "").toLowerCase()));
     });
-    const vendor = getRecordString(matchedRow ?? {}, ["vendor", "vendorName", "name", "label"]) ??
+    const rowVendor = getRecordString(matchedRow ?? {}, ["vendor", "vendorName", "name", "label"]) ??
       inferVendorNameFromUrl(url, vendors) ??
       vendors[index] ??
       null;
+    const endpointVendor = inferEndpointVendorNameFromUrl(url);
+    const vendor = endpointVendor ?? rowVendor;
     const category = normalizeVendorCategory(
       vendor,
       url,
@@ -1688,6 +1739,8 @@ function buildPreConsentTrackingEvidenceDetails(
       url,
       hostname,
       vendor,
+      endpointVendor,
+      initiatingVendor: endpointVendor && rowVendor && endpointVendor !== rowVendor ? rowVendor : null,
       category,
       resourceType: getRecordString(matchedRow ?? {}, ["resourceType", "type"]) ?? (/\.js(?:[?#]|$)|\/gtm\.js/i.test(url) ? "script" : null),
       firstSeenMs: getRecordNumber(matchedRow ?? {}, ["firstSeenMs", "first_seen_ms", "ms", "timestampMs"]) ?? firstThirdPartyRequestMs,
@@ -1702,6 +1755,7 @@ function buildPreConsentTrackingEvidenceDetails(
     ? promotionGradeRepresentativeRequests
     : fallbackRepresentativeRequests;
   const representativeRequests = sortRepresentativeRequestsByVendorCoverage(allRepresentativeRequests, vendors);
+  const preConsentCookieExamples = getPreconsentCookieExamples(cookieRows);
 
   const vendorDetails = vendors.slice(0, 8).map((name) => {
     const matchingRequest = representativeRequests.find((request) =>
@@ -1778,6 +1832,7 @@ function buildPreConsentTrackingEvidenceDetails(
     },
     requestSelectionNote: "Representative requests are capped examples and are not exhaustive.",
     ...(requestClassificationAnchors.length > 0 ? { requestClassificationAnchors } : {}),
+    ...(preConsentCookieExamples.length > 0 ? { preConsentCookieExamples } : {}),
     vendors: vendorDetails,
     representativeRequests,
     identifierEvidence: {
@@ -1979,7 +2034,15 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
             runtimeSummary: sessionReplaySummary,
             ...(collectionEndpointObserved !== null ? { collectionEndpointObserved } : {}),
             ...(libraryOnly !== null ? { libraryOnly } : {}),
-            ...(maskingOrExclusionObserved !== null ? { maskingOrExclusionObserved } : {}),
+            ...(maskingOrExclusionObserved !== null
+              ? {
+                  maskingOrExclusionObserved,
+                  maskingOrExclusionEvidenceRetained: maskingOrExclusionObserved,
+                  maskingOrExclusionEvidenceStatus: maskingOrExclusionObserved
+                    ? "retained"
+                    : "not_retained_in_packet"
+                }
+              : {}),
             ...(sensitiveSurfaceOverlap !== null ? { sensitiveSurfaceOverlap } : {})
           }
         : {}),
@@ -2013,6 +2076,71 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       ? { evidenceSnippets: ["FullStory collection appears proxied through the scanned first-party domain."] }
       : {})
   };
+}
+
+function normalizeVendorNameForComparison(value: string | null | undefined) {
+  return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function sameVendorName(left: string | null | undefined, right: string | null | undefined) {
+  const normalizedLeft = normalizeVendorNameForComparison(left);
+  const normalizedRight = normalizeVendorNameForComparison(right);
+  return normalizedLeft.length > 0 && normalizedRight.length > 0 && normalizedLeft === normalizedRight;
+}
+
+function enrichSessionReplayConsentContext(findings: CertScoreFinding[]) {
+  const preconsentFinding = findings.find((finding) => finding.id === "pre_consent_tracking_detected");
+  const preconsentVendorNames = uniqueStrings([
+    ...(preconsentFinding?.evidenceDetails?.vendors ?? []).flatMap((vendor) => vendor.preConsent ? [vendor.name] : []),
+    ...(preconsentFinding?.evidenceDetails?.representativeRequests ?? []).flatMap((request) => request.preConsent ? [request.vendor] : [])
+  ]);
+
+  if (preconsentVendorNames.length === 0) {
+    return findings;
+  }
+
+  return findings.map((finding) => {
+    if (finding.id !== "session_recording_services_detected" || !finding.evidenceDetails) {
+      return finding;
+    }
+
+    const replayVendorNames = uniqueStrings([
+      ...(finding.evidenceDetails.vendors ?? []).map((vendor) => vendor.name),
+      ...(finding.evidenceDetails.runtimeVendors ?? []),
+      ...(finding.evidenceDetails.representativeRequests ?? []).flatMap((request) => request.vendor)
+    ]);
+    const preconsentReplayVendors = replayVendorNames.filter((vendor) =>
+      preconsentVendorNames.some((preconsentVendor) => sameVendorName(preconsentVendor, vendor))
+    );
+
+    if (preconsentReplayVendors.length === 0) {
+      return finding;
+    }
+
+    const preconsentVendorMatches = (vendor: string | null | undefined) =>
+      preconsentReplayVendors.some((preconsentVendor) => sameVendorName(preconsentVendor, vendor));
+    const evidenceDetails: CertScoreFindingEvidenceDetails = {
+      ...finding.evidenceDetails,
+      sessionReplayEvidence: {
+        ...(finding.evidenceDetails.sessionReplayEvidence ?? {}),
+        consentPhase: "pre_consent_observed_same_scan",
+        preConsentVendorContext: preconsentReplayVendors
+      },
+      vendors: (finding.evidenceDetails.vendors ?? []).map((vendor) => ({
+        ...vendor,
+        preConsent: vendor.preConsent || preconsentVendorMatches(vendor.name)
+      })),
+      representativeRequests: (finding.evidenceDetails.representativeRequests ?? []).map((request) => ({
+        ...request,
+        preConsent: request.preConsent || preconsentVendorMatches(request.vendor)
+      }))
+    };
+
+    return {
+      ...finding,
+      evidenceDetails
+    };
+  });
 }
 
 function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket): CertScoreFindingEvidenceDetails {
@@ -3826,9 +3954,9 @@ export function projectExecutiveFindingsFromUnifiedPackets(
       mappedPacketRows.push({ packet, findingId: null });
     }
   }
-  const findings = dedupeExecutiveFindings(
+  const findings = enrichSessionReplayConsentContext(dedupeExecutiveFindings(
     mappedPacketRows.flatMap(({ packet, findingId }) => (findingId ? [buildExecutiveFinding(packet, findingId)] : []))
-  );
+  ));
   const findingIds = new Set(findings.map((finding) => finding.id));
   const groupedFindings = SECTION_ORDER.map((section) => ({
     section,
