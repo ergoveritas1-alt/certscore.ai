@@ -3975,7 +3975,7 @@ function buildExecutiveShortSummary(
   if (findingId === "rtb_cookie_sync_observed") {
     const hosts = uniqueStrings([
       ...getEntityValues(packet, /rtb.*domain|runtime.*vendor|vendor/i)
-    ]).slice(0, 3);
+    ]).filter(isDisplayVendorName).slice(0, 3);
     const subtypes = classifyRtbCookieSyncEvidenceRows(getEntityJsonObjects(packet, "rtbCookieSyncEvidence")).map(
       (classification) => classification.subtype
     );

@@ -1007,6 +1007,56 @@ test("projects RTB cookie sync into executive and privacy regulatory lenses", ()
   assert.equal(lenses.find((lens) => lens.acronym === "FTC")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"), false);
 });
 
+test("does not leak structured runtime disclosure rows into RTB summary vendor text", () => {
+  const disclosureRow = JSON.stringify({
+    subtype: "runtime_vendor_not_disclosed",
+    observedRuntimeDomains: [],
+    observedRuntimeVendors: ["Criteo", "DoubleClick", "DoubleVerify"]
+  });
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("rtb_cookie_sync_observed", {
+      confidenceBand: "high",
+      details: {
+        family: "consent_tracking",
+        kind: "rtb_cookie_sync_observed",
+        requestUrls: ["https://match.adsrvr.org/track/cmf/generic?ttd_pid=abc"],
+        vendors: ["The Trade Desk"]
+      },
+      evidence: {
+        counts: { rtb_cookie_sync_observation_count: 1 },
+        entities: {
+          rtbCookieSyncEvidence: [
+            JSON.stringify({
+              hostname: "match.adsrvr.org",
+              pathSample: "/track/cmf/generic",
+              queryKeysSample: ["ttd_pid"],
+              reason: "identifier_query",
+              runtimePhase: "pre_consent",
+              urlSample: "https://match.adsrvr.org/track/cmf/generic?ttd_pid=abc",
+              vendor: "The Trade Desk"
+            })
+          ],
+          runtimeVendorDisclosureEvidence: [disclosureRow],
+          runtimeVendors: [disclosureRow, "The Trade Desk"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.rtb_cookie_sync_observed"],
+        pageUrls: ["https://www.nbcnews.com/"],
+        snippets: [],
+        sourceUrls: []
+      },
+      primaryPageUrl: "https://www.nbcnews.com/",
+      severity: "high"
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "rtb_cookie_sync_observed");
+
+  assert.match(finding?.shortSummary ?? "", /The Trade Desk/);
+  assert.doesNotMatch(finding?.shortSummary ?? "", /runtime_vendor_not_disclosed|observedRuntimeVendors|\\{/);
+  assert.deepEqual(finding?.evidenceDetails?.vendors?.map((vendor) => vendor.name), ["The Trade Desk"]);
+});
+
 test("projects cross-domain identifier sharing rows into executive evidence details", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("cross_domain_identifier_sharing_observed", {
