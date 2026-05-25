@@ -330,6 +330,72 @@ test("pre-consent packet evidence can promote stale audit-only concern context",
   assert.ok(decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
 });
 
+test("pre-consent packet evidence recognizes canonical preconsent tracker vendor entities", () => {
+  const requestUrl = "https://cms.quantserve.com/pixel/example";
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: [
+      makePacket("preconsent_tracking", {
+        concernContext: {
+          assertionLevels: ["weak"],
+          evidenceStrengthFlags: ["direct_runtime"],
+          externalSurfacingEligibilities: ["audit_only"],
+          negativeEvidenceFlags: ["missing_concrete_preconsent_artifact"],
+          originTypes: ["snapshot_signal"],
+          promotionEligibilities: ["internal_only"]
+        },
+        confidenceInputs: {
+          ...makePacket("preconsent_tracking").confidenceInputs,
+          hasDirectRuntimeEvidence: true
+        },
+        details: {
+          family: "consent_tracking",
+          kind: "preconsent_tracking"
+        },
+        evidence: {
+          flags: ["privacy.preconsent_tracking_detected"],
+          pageUrls: ["https://www.fandango.com/"],
+          snippets: [],
+          sourceUrls: [],
+          entities: {
+            consentActionableChoiceObserved: ["true"],
+            consentSurfaceObserved: ["true"],
+            consentTimeline: [
+              JSON.stringify({
+                firstAcceptActionMs: null,
+                firstCmpVisibleMs: null,
+                firstConsentActionMs: null,
+                firstNonEssentialRequestMs: 2500,
+                firstRejectActionMs: null,
+                firstUserActionMs: null,
+                navigationStartMs: 0
+              })
+            ],
+            preconsent_tracker_vendors: ["Quantcast", "Meta Pixel"],
+            requestPurposeClassificationConfidence: [
+              JSON.stringify({
+                category: "advertising",
+                essentiality: "non_essential",
+                requestUrl,
+                runtimePhase: "pre_consent",
+                timingStatus: "pre_consent",
+                tsMs: 2500,
+                vendorName: "Quantcast"
+              })
+            ],
+            runtimeRequestUrls: [requestUrl]
+          }
+        },
+        severity: "high"
+      })
+    ]
+  });
+
+  const decision = evaluation.debugDecisions.find((entry) => entry.unifiedFindingId === "preconsent_tracking");
+  assert.equal(decision?.decisionState, "confirmed");
+  assert.equal(decision?.reportLane, "main");
+  assert.ok(decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
+});
+
 test("blocking overlay stays support-only and supports stronger consent findings", () => {
   const overlayPacket = makePacket("blocking_overlay_observed", {
     confidenceInputs: {

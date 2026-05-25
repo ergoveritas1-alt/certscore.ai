@@ -1370,10 +1370,22 @@ function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
           ))
       )
     );
+  const retainedRuntimeVendors = getEvidenceEntityValuesForKeys(packet, [
+    "runtimeVendors",
+    "runtime_vendors",
+    "preconsent_tracker_vendors",
+    "preconsentTrackerVendors"
+  ]);
+  const retainedRuntimeUrls = getEvidenceEntityValuesForKeys(packet, [
+    "runtimeRequestUrls",
+    "runtime_request_urls",
+    "preconsent_tracker_evidence_urls",
+    "preconsentTrackerEvidenceUrls"
+  ]);
   const hasVendors = (packet.details.vendors ?? []).some((value) => typeof value === "string" && value.trim().length > 0) ||
-    (packet.evidence?.entities?.runtimeVendors?.length ?? 0) > 0;
+    retainedRuntimeVendors.length > 0;
   const hasUrls = (packet.details.requestUrls ?? []).some(isConcreteHttpEvidenceUrl) ||
-    (packet.evidence?.entities?.runtimeRequestUrls?.some(isConcreteHttpEvidenceUrl) ?? false);
+    retainedRuntimeUrls.some(isConcreteHttpEvidenceUrl);
   const hasRuntimeOrValidationBacking =
     packet.confidenceInputs.hasDirectRuntimeEvidence || packet.confidenceInputs.hasStructuredValidationEvidence;
   const hasRetainedPreconsentSequence =
