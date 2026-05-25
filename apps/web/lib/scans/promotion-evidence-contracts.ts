@@ -6,6 +6,7 @@ import {
 import {
   hasConcreteSanitizedNetworkEvidence
 } from "./sanitized-network-evidence";
+import { isPromotionGradePreconsentRequestRow } from "./preconsent-public-evidence";
 
 type ContractDecision = {
   allowedNarrativeTier: "weak" | "moderate" | "strong";
@@ -1107,30 +1108,19 @@ function getPreconsentClassifiedNonEssentialRequests(rawEvidence: Record<string,
     "requestPurposeClassificationConfidence",
     "request_purpose_classification_confidence"
   ]).filter((row) => {
-    const essentiality =
-      typeof row.essentiality === "string"
-        ? row.essentiality
-        : typeof row.classification === "string"
-          ? row.classification
-          : null;
+    if (!isPromotionGradePreconsentRequestRow(row)) {
+      return false;
+    }
+    if (typeof input.minConfidence !== "number") {
+      return true;
+    }
     const confidence =
       typeof row.confidence === "number"
         ? row.confidence
         : typeof row.score === "number"
           ? row.score
           : null;
-    const url =
-      typeof row.requestUrl === "string"
-        ? row.requestUrl
-        : typeof row.request_url === "string"
-          ? row.request_url
-          : null;
-
-    return (
-      essentiality === "non_essential" &&
-      (typeof input.minConfidence !== "number" || (typeof confidence === "number" && confidence >= input.minConfidence)) &&
-      isConcreteHttpEvidenceUrl(url)
-    );
+    return confidence === null || confidence >= input.minConfidence;
   });
 }
 

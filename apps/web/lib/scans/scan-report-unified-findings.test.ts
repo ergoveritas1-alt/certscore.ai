@@ -1222,6 +1222,39 @@ test("promotion-grade preconsent timing and vendor anchors surface as executive 
   assert.equal(projection.posture, "Action Needed");
 });
 
+test("preconsent request-purpose anchors surface when retained signature rows omit numeric confidence", () => {
+  const state = buildPreconsentRuntimeState({
+    consent_actionable_choice_observed: true,
+    consent_surface_observed: true,
+    consent_timeline: {
+      firstCmpVisibleMs: null,
+      firstConsentActionMs: null,
+      firstNonEssentialRequestMs: 1610,
+      timelineConfidence: "low"
+    },
+    request_purpose_classification_confidence: [
+      {
+        category: "advertising",
+        classificationBasis: "consent_audit_tracker_evidence_url",
+        confidence: null,
+        essentiality: "non_essential",
+        hostname: "securepubads.g.doubleclick.net",
+        requestUrl: "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+        runtimePhase: "pre_consent",
+        timingStatus: "pre_consent",
+        vendor: "Google Ads"
+      }
+    ]
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.ok(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+});
+
 test("validation preconsent packet absorbs runtime timing and classification evidence before projection", () => {
   const state = buildPreconsentRuntimeState(
     {
@@ -1293,7 +1326,7 @@ test("validation preconsent packet absorbs runtime timing and classification evi
   assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"), false);
   assert.equal(packet?.concernContext?.negativeEvidenceFlags.includes("missing_concrete_preconsent_artifact"), false);
   assert.equal(packet?.evidence?.entities?.consentTimeline?.length, 1);
-  assert.equal(packet?.evidence?.entities?.requestPurposeClassificationConfidence?.length, 1);
+  assert.equal(packet?.evidence?.entities?.requestPurposeClassificationConfidence?.length, 2);
   assert.ok(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
   assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
 });
@@ -1503,7 +1536,7 @@ test("state-zero tracker observations with consent timing surface as pre-consent
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
   assert.equal(packet?.evidence?.entities?.consentTimeline?.length, 1);
-  assert.equal(packet?.evidence?.entities?.requestPurposeClassificationConfidence?.length, 2);
+  assert.equal(packet?.evidence?.entities?.requestPurposeClassificationConfidence?.length, 4);
   assert.deepEqual(packet?.evidence?.entities?.preconsent_tracker_vendors, ["Google Tag Manager", "VWO"]);
   assert.ok(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
   assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));

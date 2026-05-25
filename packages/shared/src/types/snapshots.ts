@@ -889,6 +889,8 @@ export type RequestPurposeClassificationConfidence = Array<{
   confidence: number;
   reason: string;
   classificationBasis?: string;
+  matchedSignatureId?: string | null;
+  vendorAttributionBasis?: string | null;
   firstObservedMs: number | null;
   runtimePhase?: "pre_consent" | "post_consent" | "unknown";
   timestampMs?: number | null;

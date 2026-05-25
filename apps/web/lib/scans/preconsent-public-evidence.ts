@@ -27,6 +27,7 @@ const PROMOTION_TRACKING_CATEGORIES = new Set([
   "sale_share",
   "session_replay",
   "tag_manager",
+  "tag_management",
   "tracking"
 ]);
 

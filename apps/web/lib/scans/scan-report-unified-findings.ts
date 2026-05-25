@@ -39,6 +39,7 @@ import {
   getPolicySummaryText
 } from "./policy-enrichment-row";
 import { normalizePolicySnippet } from "./policy-snippet-normalization";
+import { isPromotionGradePreconsentRequestRow } from "./preconsent-public-evidence";
 import { evaluateConsentSurfaceGate } from "./promotion-evidence-contracts";
 import {
   buildReviewFindings,
@@ -789,29 +790,32 @@ function deriveRuntimeArtifactPreconsentViolationRows(runtimeArtifacts: Record<s
     const essentiality = getRecordString(row, ["essentiality"]);
     const runtimePhase = getRecordString(row, ["runtimePhase", "runtime_phase", "timingStatus", "timing_status"]);
 
-    if (
-      !requestUrl ||
-      !isConcreteHttpEvidenceUrl(requestUrl) ||
-      !vendorName ||
-      (essentiality !== null && essentiality !== "non_essential") ||
-      confidence < 0.7 ||
-      runtimePhase !== "pre_consent" ||
-      !isPromotionGradeTrackerCategory(vendorCategory)
-    ) {
+    if (!isPromotionGradePreconsentRequestRow({
+      ...row,
+      category: vendorCategory,
+      confidence,
+      essentiality,
+      requestUrl,
+      runtimePhase,
+      vendor: vendorName
+    })) {
       return [];
     }
+    const concreteRequestUrl = requestUrl ?? "";
+    const concreteVendorName = vendorName ?? "";
+    const numericConfidence = confidence ?? 0.8;
 
     return [
       {
         collectionEndpointType: "direct_third_party",
-        confidence,
+        confidence: numericConfidence,
         detectionSource: getRecordString(row, ["classificationBasis", "classification_basis", "evidenceSource", "evidence_source"]) ?? "request_purpose_classification",
-        evidenceUrls: [requestUrl],
+        evidenceUrls: [concreteRequestUrl],
         firstPartyOrThirdParty: "third_party",
         matchedSignatureId: getRecordString(row, ["matchedSignatureId", "matched_signature_id"]),
-        scriptHost: getRecordString(row, ["hostname", "host"]) ?? hostFromUrl(requestUrl),
+        scriptHost: getRecordString(row, ["hostname", "host"]) ?? hostFromUrl(concreteRequestUrl),
         vendorCategory,
-        vendorName
+        vendorName: concreteVendorName
       }
     ];
   });
@@ -834,18 +838,20 @@ function deriveRuntimeArtifactPreconsentViolationRows(runtimeArtifacts: Record<s
     ) {
       return [];
     }
+    const concreteRequestUrl = requestUrl;
+    const concreteVendorName = vendorName;
 
     return [
       {
         collectionEndpointType: "direct_third_party",
         confidence,
         detectionSource: getRecordString(row, ["evidenceSource", "evidence_source"]) ?? "state0_request_capture",
-        evidenceUrls: [requestUrl],
+        evidenceUrls: [concreteRequestUrl],
         firstPartyOrThirdParty: "third_party",
         matchedSignatureId: getRecordString(row, ["matchedSignatureId", "matched_signature_id"]),
-        scriptHost: getRecordString(row, ["hostname", "host"]) ?? hostFromUrl(requestUrl),
+        scriptHost: getRecordString(row, ["hostname", "host"]) ?? hostFromUrl(concreteRequestUrl),
         vendorCategory,
-        vendorName
+        vendorName: concreteVendorName
       }
     ];
   });
@@ -1424,14 +1430,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       "consentActionableChoiceObserved",
       "consent_actionable_choice_observed"
     ]);
-  const nonEssentialRequestRows = requestClassifications.filter(
-    (row) =>
-      row.essentiality === "non_essential" &&
-      typeof row.requestUrl === "string" &&
-      /^https?:\/\//i.test(row.requestUrl) &&
-      typeof row.confidence === "number" &&
-      row.confidence >= 0.7
-  );
+  const nonEssentialRequestRows = requestClassifications.filter(isPromotionGradePreconsentRequestRow);
   const retainedPreconsentEvidenceUrls = Array.isArray(preconsentEvidenceRecord?.preconsent_tracker_evidence_urls)
     ? (preconsentEvidenceRecord.preconsent_tracker_evidence_urls as unknown[]).filter(
         (value): value is string => typeof value === "string" && /^https?:\/\//i.test(value)
@@ -1448,6 +1447,9 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         (value): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value)
       )
     : [];
+  const retainedState0RequestUrls = retainedState0RequestRows
+    .flatMap((row) => getRuntimeString(row, ["requestUrl", "request_url", "url"]))
+    .filter((value): value is string => Boolean(value && /^https?:\/\//i.test(value)));
   const hasPreconsentSequence =
     firstNonEssentialRequestMs !== null &&
     ((firstCmpVisibleMs !== null && firstNonEssentialRequestMs < firstCmpVisibleMs) ||
@@ -1478,11 +1480,12 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
             ? "Retained pre-consent runtime evidence exists, but the complete promotion sequence is incomplete or ambiguous."
             : "A retained state-0 pre-consent request artifact exists, but request purpose, vendor attribution, or timing sequence evidence is incomplete.",
       fallbackEvidence: {
+        ...(preconsentEvidenceQuality ?? {}),
         consentTimeline,
         consentActionableChoiceObserved,
         consentSurfaceObserved,
         requestPurposeClassificationConfidence: requestClassifications,
-        runtimeRequestUrls: concretePreconsentRuntimeUrls,
+        runtimeRequestUrls: uniqueStrings([...concretePreconsentRuntimeUrls, ...retainedState0RequestUrls]),
         preconsent_tracker_evidence_urls: concretePreconsentRuntimeUrls,
         preconsent_tracker_vendors: nonEssentialRequestRows
           .map((row) => (typeof row.vendor === "string" ? row.vendor : null))
@@ -1499,8 +1502,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         signalKey: "privacy.preconsent_tracking_detected",
         signalLabel: "Pre-consent tracking detected",
         signalValue: true,
-        unifiedFindingId: "preconsent_tracking",
-        ...(preconsentEvidenceQuality ?? {})
+        unifiedFindingId: "preconsent_tracking"
       },
       id: "runtime-derived-signal-privacy.preconsent_tracking_detected.evidence_quality",
       linkedValidationFinding: null,
