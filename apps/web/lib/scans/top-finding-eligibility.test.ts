@@ -223,6 +223,42 @@ test("top-finding evaluator treats untested GPC state as a CPRA limitation inste
 
   assert.equal(decision.eligibility, "top_candidate");
   assert.equal(decision.demotionReasons.includes("gpc_specific_state_not_observed"), false);
+  assert.ok(decision.matchedCriteria.includes("cba_vendor_runtime_context"));
+  assert.ok(decision.matchedCriteria.includes("privacy_choice_control_missing"));
+  assert.ok(decision.missingCorroborators.includes("gpc_handling_test"));
+  assert.equal(decision.demotionReasons.includes("missing_top_finding_corroborator"), false);
+});
+
+test("top-finding evaluator explains incomplete CPRA privacy-choice controls without demoting them", () => {
+  const decision = evaluateTopFindingEligibility(finding({
+    id: "cpra_cba_opt_out_missing",
+    confidence: "good",
+    directVsInferred: "direct",
+    evidenceDetails: {
+      optOutControlEvidence: {
+        choiceControlsInspected: true,
+        gpcHandlingObserved: "not_determined",
+        gpcScanStateSent: false,
+        incompleteOrUnconfirmed: true,
+        missingOrAbsent: false,
+        privacyChoiceCompletenessSubtype: "incomplete_or_unconfirmed",
+        result: "partial_no_icon"
+      },
+      trackingOrSharingContext: {
+        cbaVendorEvidenceObserved: true,
+        vendors: ["adnxs.com"]
+      }
+    },
+    severity: "high"
+  }));
+
+  assert.equal(decision.eligibility, "top_candidate");
+  assert.ok(decision.matchedCriteria.includes("privacy_choice_control_observed"));
+  assert.ok(decision.matchedCriteria.includes("cpra_completeness_not_confirmed"));
+  assert.ok(decision.missingCorroborators.includes("cpra_icon_or_privacy_choices_presentation_confirmation"));
+  assert.ok(decision.missingCorroborators.includes("opt_out_flow_completion_result"));
+  assert.ok(decision.missingCorroborators.includes("vendor_suppression_after_opt_out"));
+  assert.deepEqual(decision.demotionReasons, []);
 });
 
 test("top-finding evaluator does not treat policy-only representative hosts as runtime request anchors", () => {

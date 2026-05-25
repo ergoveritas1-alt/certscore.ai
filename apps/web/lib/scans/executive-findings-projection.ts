@@ -112,6 +112,10 @@ type CpraOptOutSubtype =
   | "generic_do_not_sell_only"
   | "control_present_but_cba_compliance_unclear";
 
+type CpraPrivacyChoiceCompletenessSubtype =
+  | "missing"
+  | "incomplete_or_unconfirmed";
+
 const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
   "pre_consent_tracking_detected",
   "reject_tracking_persists_after_reject",
@@ -1333,15 +1337,19 @@ function getScannedPageUrls(packet: UnifiedFindingDisplayPacket) {
 }
 
 function getUrlQueryKeysSample(value: string) {
+  const redactedQueryKeys = /\bquery_keys=([^\]\s]+)/i.exec(value)?.[1]
+    ?.split(",")
+    .map((key) => key.trim())
+    .filter(Boolean) ?? [];
   try {
-    return [...new URL(value).searchParams.keys()].slice(0, 8);
+    return uniqueStrings([...new URL(stripRedactionAnnotation(value)).searchParams.keys(), ...redactedQueryKeys]).slice(0, 8);
   } catch {
-    return [];
+    return uniqueStrings(redactedQueryKeys).slice(0, 8);
   }
 }
 
 const IDENTIFIER_QUERY_KEY_PATTERN =
-  /^(?:uid|uuid|user_id|userid|visitor|visitor_id|client_id|cid|fbp|fbc|gclid|msclkid|ttclid|rdt_uuid|email|hashed|hash|identity|id|partnerid|partner_uid|partner_id|uid2|euid|id5id|tdid)$/i;
+  /^(?:uid|uuid|user_id|userid|visitor|visitor_id|client_id|cid|fbp|fbc|gclid|msclkid|ttclid|rdt_uuid|email|hashed|hash|identity|id|partnerid|partner_uid|partner_id|uid2|euid|id5id|tdid|ttd_pid|ttd_tpi|ttd_puid)$/i;
 
 type RuntimeRequestEvidenceRow = {
   url: string;
@@ -1380,6 +1388,10 @@ function stripUrlQuery(value: string) {
   const base = value.replace(/\s+\[(?:query_redacted|redacted|query_keys)=[^\]]+\]$/i, "").trim();
   const queryIndex = base.indexOf("?");
   return queryIndex >= 0 ? base.slice(0, queryIndex) : base;
+}
+
+function stripRedactionAnnotation(value: string) {
+  return value.replace(/\s+\[(?:query_redacted|redacted|query_keys)=[^\]]+\]$/i, "").trim();
 }
 
 function findRequestPurposeRow(url: string, rows: Record<string, unknown>[]) {
@@ -1643,8 +1655,15 @@ function classifyEndpointCategory(url: string | null | undefined, fallback: stri
 }
 
 function isLikelyIdentifierRequest(url: string) {
+  const queryKeys = getUrlQueryKeysSample(url);
+  if (queryKeys.some((key) => IDENTIFIER_QUERY_KEY_PATTERN.test(key))) {
+    return true;
+  }
+  if (/\/(?:getuidj|track\/cmf|sync|idsync|match)(?:[/?#]|$)/i.test(stripUrlQuery(url))) {
+    return true;
+  }
   try {
-    return [...new URL(url).searchParams.keys()].some((key) => IDENTIFIER_QUERY_KEY_PATTERN.test(key));
+    return [...new URL(stripRedactionAnnotation(url)).searchParams.keys()].some((key) => IDENTIFIER_QUERY_KEY_PATTERN.test(key));
   } catch {
     return /[?&](?:uid|uuid|user_id|userid|visitor|visitor_id|client_id|cid|fbp|fbc|gclid|msclkid|ttclid|rdt_uuid|email|hashed|hash|identity|id|partnerid|partner_uid|partner_id|uid2|euid|id5id|tdid)=/i.test(url);
   }
@@ -1678,13 +1697,44 @@ function inferVendorNameFromUrl(url: string, vendors: string[]) {
 }
 
 function sortRepresentativeRequestsByVendorCoverage<
-  T extends { url: string; vendor: string | null; firstSeenMs: number | null }
+  T extends {
+    url: string;
+    vendor: string | null;
+    firstSeenMs: number | null;
+    category?: string | null;
+    collectionEndpointType?: string | null;
+    firstPartyOrThirdParty?: string | null;
+    hostname?: string | null;
+    scannedPageUrl?: string | null;
+  }
 >(requests: T[], vendors: string[]) {
+  const getRequestPriority = (request: T) => {
+    const directThirdParty =
+      request.collectionEndpointType === "direct_third_party" ||
+      request.firstPartyOrThirdParty === "third_party" ||
+      (request.firstPartyOrThirdParty !== "first_party" && getUrlHostname(stripUrlQuery(request.url)) !== getUrlHostname(request.scannedPageUrl));
+    const category = request.category ?? "";
+    const identifierLike = isLikelyIdentifierRequest(request.url);
+    if (directThirdParty && (identifierLike || /advertising|identity|sale_share|tracking/i.test(category))) {
+      return 0;
+    }
+    if (directThirdParty) {
+      return 1;
+    }
+    if (request.collectionEndpointType === "first_party_collection_proxy" || request.firstPartyOrThirdParty === "first_party") {
+      return 2;
+    }
+    return 3;
+  };
+  const sortedRequests = [...requests].sort((left, right) =>
+    getRequestPriority(left) - getRequestPriority(right) ||
+    (left.firstSeenMs ?? Number.MAX_SAFE_INTEGER) - (right.firstSeenMs ?? Number.MAX_SAFE_INTEGER)
+  );
   const selected: T[] = [];
   const usedUrls = new Set<string>();
 
   for (const vendor of vendors) {
-    const match = requests.find((request) => {
+    const match = sortedRequests.find((request) => {
       if (usedUrls.has(request.url)) {
         return false;
       }
@@ -1696,14 +1746,19 @@ function sortRepresentativeRequestsByVendorCoverage<
     }
   }
 
-  for (const request of requests) {
+  for (const request of sortedRequests) {
     if (!usedUrls.has(request.url)) {
       selected.push(request);
       usedUrls.add(request.url);
     }
   }
 
-  return selected.slice(0, 8);
+  return selected
+    .sort((left, right) =>
+      getRequestPriority(left) - getRequestPriority(right) ||
+      (left.firstSeenMs ?? Number.MAX_SAFE_INTEGER) - (right.firstSeenMs ?? Number.MAX_SAFE_INTEGER)
+    )
+    .slice(0, 8);
 }
 
 function buildPreConsentTimingAnalysis(input: {
@@ -1801,6 +1856,8 @@ function buildPreConsentTrackingEvidenceDetails(
     consentTimeline,
     maxItems: 8
   });
+  const promotionGradeScannedPageUrl =
+    promotionGradePreconsentRequests.find((request) => request.scannedPageUrl)?.scannedPageUrl ?? scannedPageUrl;
   const requestUrls = uniqueCaseInsensitiveStrings([
     ...promotionGradePreconsentRequests.map((request) => request.requestUrl),
     ...getEntityUrlValues(packet, /^(?:preconsent_tracker_evidence_urls|runtimeRequestUrls|requestUrls|runtimeEvidenceUrls)$/i),
@@ -1811,25 +1868,34 @@ function buildPreConsentTrackingEvidenceDetails(
   const promotionGradeRepresentativeRequests = promotionGradePreconsentRequests.map((request) => {
     const endpointVendor = inferEndpointVendorNameFromUrl(request.requestUrl);
     const displayVendor = endpointVendor ?? request.vendorName;
+    const isFirstPartyProxy = request.collectionEndpointType === "first_party_collection_proxy";
     return {
       url: request.requestUrl,
+      requestUrl: request.requestUrl,
       hostname: request.hostname,
       vendor: displayVendor,
+      vendorName: displayVendor,
       endpointVendor,
       initiatingVendor: endpointVendor && request.vendorName && endpointVendor !== request.vendorName ? request.vendorName : null,
       category: classifyEndpointCategory(request.requestUrl, normalizeVendorCategory(displayVendor, request.requestUrl, request.vendorCategory)),
+      vendorCategory: classifyEndpointCategory(request.requestUrl, normalizeVendorCategory(displayVendor, request.requestUrl, request.vendorCategory)),
       resourceType: /\.js(?:[?#]|$)|\/gtm\.js|script/i.test(request.requestUrl) ? "script" : null,
       firstSeenMs: request.firstSeenMs ?? firstThirdPartyRequestMs,
-      thirdParty: true,
+      thirdParty: request.firstPartyOrThirdParty === "third_party" || !isFirstPartyProxy,
+      firstPartyOrThirdParty: request.firstPartyOrThirdParty ?? (isFirstPartyProxy ? "first_party" : "third_party"),
+      collectionEndpointType: request.collectionEndpointType,
+      ...(isFirstPartyProxy ? { firstPartyProxyObserved: true, proxiedVendor: request.vendorName } : {}),
       preConsent: true,
       identifierLike: isLikelyIdentifierRequest(request.requestUrl),
       deviceDataLike: isLikelyDeviceDataRequest(request.requestUrl),
       queryKeysSample: getUrlQueryKeysSample(request.requestUrl),
-      scannedPageUrl: request.scannedPageUrl ?? scannedPageUrl,
+      scannedPageUrl: request.scannedPageUrl ?? promotionGradeScannedPageUrl,
       registrableDomain: request.registrableDomain,
       vendorAttributionBasis: endpointVendor && endpointVendor !== request.vendorName
         ? `${request.vendorAttributionBasis ?? "request_url"}:endpoint_vendor`
         : request.vendorAttributionBasis,
+      classificationBasis: request.classificationBasis,
+      matchedSignatureId: request.matchedSignatureId,
       consentActionMs: request.consentActionMs,
       noConsentActionObserved: request.noConsentActionObserved,
       consentSurfaceObserved: request.consentSurfaceObserved,
@@ -1905,7 +1971,7 @@ function buildPreConsentTrackingEvidenceDetails(
 
   const details: CertScoreFindingEvidenceDetails = {
     scanContext: {
-      pageUrl: scannedPageUrl,
+      pageUrl: promotionGradeScannedPageUrl,
       scanMode: "initial_page_load",
       interactionBeforeFinding: false
     },
@@ -2379,6 +2445,15 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
   const optOutSubtype = deriveCpraOptOutSubtype({ optOutControlFound, optOutUiResult });
   const snippets = uniqueStrings(packet.evidence?.snippets ?? []).map((snippet) => truncateDisplaySnippet(snippet)).slice(0, 3);
   const missingOrAbsent = optOutSubtype === "opt_out_absent";
+  const incompleteOrUnconfirmed = !missingOrAbsent;
+  const privacyChoiceCompletenessSubtype = deriveCpraPrivacyChoiceCompletenessSubtype({
+    missingOrAbsent
+  });
+  const policyEvidenceEvaluated = policyCbaLanguage !== null || policyUiCongruent !== null;
+  const gpcHandlingBasis =
+    gpcScanStateSent === true
+      ? "gpc_specific_scan_state"
+      : "not_tested";
   const basis = buildCpraOptOutBasis({
     fallbackSnippet: snippets[0],
     optOutSubtype,
@@ -2400,18 +2475,17 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       framework: "CPRA",
       evaluatedSignal: "cross_context_behavioral_advertising_opt_out",
       policyCbaLanguage,
-      policyEvidenceEvaluated: policyCbaLanguage !== null,
+      policyEvidenceEvaluated,
       policyUiCongruent,
       gpcScanStateSent: gpcScanStateSent === true,
       gpcHandlingObserved: gpcHandlingObserved ?? "not_determined",
-      gpcHandlingBasis:
-        gpcScanStateSent === true
-          ? "gpc_specific_scan_state"
-          : "not_tested"
+      gpcHandlingBasis,
+      privacyChoiceCompletenessSubtype
     },
     optOutControlEvidence: {
       evaluated: true,
       optOutSubtype,
+      privacyChoiceCompletenessSubtype,
       result: optOutUiResult,
       optOutControlFound,
       choiceControlsInspected,
@@ -2420,7 +2494,7 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       gpcRequestHeadersApplied,
       gpcScanStateSent,
       missingOrAbsent,
-      incompleteOrUnconfirmed: !missingOrAbsent,
+      incompleteOrUnconfirmed,
       basis
     },
     trackingOrSharingContext: {
@@ -2434,7 +2508,17 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       representativeUrl: null,
       firstSeenMs: null
     })),
-    policyEvidence: { evaluated: false },
+    policyEvidence: {
+      evaluated: policyEvidenceEvaluated,
+      framework: "CPRA",
+      evaluatedSignal: "cross_context_behavioral_advertising_opt_out",
+      policyCbaLanguage,
+      policyUiCongruent,
+      policyUiCongruentObserved: policyUiCongruent === true,
+      gpcScanStateSent: gpcScanStateSent === true,
+      gpcHandlingObserved: gpcHandlingObserved ?? "not_determined",
+      gpcHandlingBasis
+    },
     legalRelevance: {
       cipaPenRegisterTheorySupport: "not_evaluated",
       gdprEprivacyConsentSupport: "not_evaluated",
@@ -2448,6 +2532,12 @@ function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     evidenceSnippets: snippets,
     evidenceFlags: uniqueStrings(packet.evidence?.flags ?? [])
   };
+}
+
+function deriveCpraPrivacyChoiceCompletenessSubtype(input: {
+  missingOrAbsent: boolean;
+}): CpraPrivacyChoiceCompletenessSubtype {
+  return input.missingOrAbsent ? "missing" : "incomplete_or_unconfirmed";
 }
 
 function parseBooleanEntity(value: string | null | undefined) {

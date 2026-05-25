@@ -3176,8 +3176,14 @@ test("projects CPRA CBA opt-out missing into executive findings and top findings
   assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcScanStateSent, false);
   assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcHandlingObserved, "not_determined");
   assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcHandlingBasis, "not_tested");
-  assert.deepEqual(finding?.evidenceDetails?.policyEvidence, { evaluated: false });
+  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.privacyChoiceCompletenessSubtype, "missing");
+  const policyEvidence = finding?.evidenceDetails?.policyEvidence as Record<string, unknown> | undefined;
+  assert.equal(policyEvidence?.evaluated, false);
+  assert.equal(policyEvidence?.framework, "CPRA");
+  assert.equal(policyEvidence?.policyCbaLanguage, null);
   assert.ok(projection.topFindings.some((candidate) => candidate.id === "cpra_cba_opt_out_missing"));
+  assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.matchedCriteria.includes("privacy_choice_control_missing"));
+  assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.matchedCriteria.includes("cba_vendor_runtime_context"));
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
   assert.ok(finding?.shortSummary.includes("adsrvr.org"));
 });
@@ -3189,8 +3195,17 @@ test("projects CPRA CBA opt-out subtype for partial privacy choice treatment", (
   const finding = projection.findings.find((candidate) => candidate.id === "cpra_cba_opt_out_missing");
 
   assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.optOutSubtype, "partial_no_icon");
+  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.privacyChoiceCompletenessSubtype, "incomplete_or_unconfirmed");
+  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.privacyChoiceCompletenessSubtype, "incomplete_or_unconfirmed");
   assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.missingOrAbsent, false);
   assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.incompleteOrUnconfirmed, true);
+  const policyEvidence = finding?.evidenceDetails?.policyEvidence as Record<string, unknown> | undefined;
+  assert.equal(policyEvidence?.evaluated, true);
+  assert.equal(policyEvidence?.policyCbaLanguage, "full_cba_language");
+  assert.equal(projection.topFindingEligibility.cpra_cba_opt_out_missing?.eligibility, "top_candidate");
+  assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.matchedCriteria.includes("privacy_choice_control_observed"));
+  assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.matchedCriteria.includes("cpra_completeness_not_confirmed"));
+  assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.missingCorroborators.includes("gpc_handling_test"));
   assert.match(finding?.shortSummary ?? "", /incomplete|not confirmed as CPRA-complete/i);
   assert.doesNotMatch(finding?.evidenceDetails?.optOutControlEvidence?.basis as string, /missing/i);
 });
@@ -3560,7 +3575,7 @@ test("uses promotion-grade request classifications for pre-consent representativ
 
   const finding = projection.findings.find((candidate) => candidate.id === "pre_consent_tracking_detected");
   assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://www.fandango.com/");
-  assert.match(finding?.shortSummary ?? "", /Adobe Analytics and LiveRamp/);
+  assert.match(finding?.shortSummary ?? "", /LiveRamp and Adobe Analytics/);
   assert.doesNotMatch(finding?.shortSummary ?? "", /DoubleVerify|Google Ads|Magnite/);
   assert.deepEqual(
     finding?.evidenceDetails?.representativeRequests?.map((request) => ({
@@ -3571,16 +3586,16 @@ test("uses promotion-grade request classifications for pre-consent representativ
     })),
     [
       {
-        url: "https://dpm.demdex.net/id?d_visid_ver=5",
-        vendor: "Adobe Analytics",
-        category: "analytics",
-        firstSeenMs: 229
-      },
-      {
         url: "https://idsync.rlcdn.com/123.gif",
         vendor: "LiveRamp",
         category: "advertising",
         firstSeenMs: 1167
+      },
+      {
+        url: "https://dpm.demdex.net/id?d_visid_ver=5",
+        vendor: "Adobe Analytics",
+        category: "analytics",
+        firstSeenMs: 229
       }
     ]
   );
@@ -4152,4 +4167,201 @@ test("projects pre-consent tracking when tracker requests have timeline and non-
   assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://example.com/");
   assert.equal(finding?.evidenceDetails?.representativeRequests?.[0]?.scannedPageUrl, "https://example.com/");
   assert.equal(finding?.evidenceDetails?.representativeRequests?.[0]?.consentSurfaceObserved, true);
+});
+
+test("projects first-party proxy pre-consent tracker evidence without using request URL as scan context", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      concernContext: {
+        assertionLevels: ["strong"],
+        evidenceStrengthFlags: ["direct_runtime"],
+        externalSurfacingEligibilities: ["eligible"],
+        negativeEvidenceFlags: [],
+        originTypes: ["snapshot_signal"],
+        promotionEligibilities: ["eligible"]
+      },
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      evidence: {
+        counts: {
+          preconsentViolationCount: 1
+        },
+        entities: {
+          consentTimeline: [
+            JSON.stringify({
+              firstConsentActionMs: null,
+              firstNonEssentialRequestMs: 5936
+            })
+          ],
+          preconsent_tracker_vendors: ["TikTok Pixel", "Google Tag Manager"],
+          requestPurposeClassificationConfidence: [
+            JSON.stringify({
+              category: "advertising",
+              classificationBasis: "consent_audit_tracker_evidence_url",
+              collectionEndpointType: "first_party_collection_proxy",
+              confidence: 0.9,
+              essentiality: "non_essential",
+              firstPartyOrThirdParty: "first_party",
+              matchedSignatureId: "tiktok_pixel",
+              pageUrl: "https://www.sony.com/en/",
+              requestUrl: "https://www.sony.com/akam/13/pixel_18c7aede",
+              runtimePhase: "pre_consent",
+              timestampMs: 5936,
+              vendor: "TikTok Pixel",
+              vendorAttributionBasis: "tracker_signature"
+            })
+          ],
+          runtimeRequestUrls: ["https://www.sony.com/akam/13/pixel_18c7aede"],
+          runtimeVendors: ["TikTok Pixel", "Google Tag Manager"]
+        },
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: [],
+        sourceUrls: ["https://www.sony.com/akam/13/pixel_18c7aede"]
+      },
+      primaryPageUrl: "https://www.sony.com/akam/13/pixel_18c7aede",
+      severity: "high",
+      summary: "Tracker vendors fired before consent interaction."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "pre_consent_tracking_detected");
+  const representativeRequest = finding?.evidenceDetails?.representativeRequests?.[0];
+
+  assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://www.sony.com/en/");
+  assert.equal(representativeRequest?.requestUrl, "https://www.sony.com/akam/13/pixel_18c7aede");
+  assert.equal(representativeRequest?.collectionEndpointType, "first_party_collection_proxy");
+  assert.equal(representativeRequest?.firstPartyOrThirdParty, "first_party");
+  assert.equal(representativeRequest?.firstPartyProxyObserved, true);
+  assert.equal(representativeRequest?.proxiedVendor, "TikTok Pixel");
+  assert.equal(representativeRequest?.matchedSignatureId, "tiktok_pixel");
+  assert.deepEqual((finding?.evidenceDetails?.representativeRequests ?? []).map((request) => request.vendor), ["TikTok Pixel"]);
+});
+
+test("orders direct adtech anchors before first-party proxy anchors and reads redacted query keys", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      concernContext: {
+        assertionLevels: ["strong"],
+        evidenceStrengthFlags: ["direct_runtime"],
+        externalSurfacingEligibilities: ["eligible"],
+        negativeEvidenceFlags: [],
+        originTypes: ["snapshot_signal"],
+        promotionEligibilities: ["eligible"]
+      },
+      details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      evidence: {
+        counts: { preconsentViolationCount: 5 },
+        entities: {
+          consentTimeline: [
+            JSON.stringify({
+              firstConsentActionMs: null,
+              firstNonEssentialRequestMs: 1340
+            })
+          ],
+          preconsent_tracker_vendors: ["Meta Pixel", "Google Ads", "Segment", "AppNexus / Xandr", "The Trade Desk"],
+          requestPurposeClassificationConfidence: [
+            JSON.stringify({
+              category: "advertising",
+              collectionEndpointType: "first_party_collection_proxy",
+              confidence: 0.9,
+              essentiality: "non_essential",
+              firstPartyOrThirdParty: "first_party",
+              matchedSignatureId: "meta_pixel",
+              pageUrl: "https://www.latimes.com/",
+              requestUrl: "https://libs.platform.latimes.com/reg/tribune/latspot.min.js",
+              runtimePhase: "pre_consent",
+              timestampMs: 1340,
+              vendor: "Meta Pixel",
+              vendorAttributionBasis: "tracker_signature"
+            }),
+            JSON.stringify({
+              category: "advertising",
+              collectionEndpointType: "direct_third_party",
+              confidence: 0.9,
+              essentiality: "non_essential",
+              firstPartyOrThirdParty: "third_party",
+              matchedSignatureId: "google_ads",
+              pageUrl: "https://www.latimes.com/",
+              requestUrl: "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+              runtimePhase: "pre_consent",
+              timestampMs: 1342,
+              vendor: "Google Ads",
+              vendorAttributionBasis: "tracker_signature"
+            }),
+            JSON.stringify({
+              category: "analytics",
+              collectionEndpointType: "first_party_collection_proxy",
+              confidence: 0.9,
+              essentiality: "non_essential",
+              firstPartyOrThirdParty: "first_party",
+              matchedSignatureId: "segment",
+              pageUrl: "https://www.latimes.com/",
+              requestUrl: "https://edge.platform.latimes.com/v1/personalize [query_redacted=true query_keys=meterKey,productCode,contentType,paywallTier,pxlId,exp]",
+              runtimePhase: "pre_consent",
+              timestampMs: 1704,
+              vendor: "Segment",
+              vendorAttributionBasis: "tracker_signature"
+            }),
+            JSON.stringify({
+              category: "advertising",
+              collectionEndpointType: "direct_third_party",
+              confidence: 0.9,
+              essentiality: "non_essential",
+              firstPartyOrThirdParty: "third_party",
+              matchedSignatureId: "xandr",
+              pageUrl: "https://www.latimes.com/",
+              requestUrl: "https://ib.adnxs.com/getuidj [query_redacted=true query_keys=gdpr]",
+              runtimePhase: "pre_consent",
+              timestampMs: 2639,
+              vendor: "AppNexus / Xandr",
+              vendorAttributionBasis: "tracker_signature"
+            }),
+            JSON.stringify({
+              category: "advertising",
+              collectionEndpointType: "direct_third_party",
+              confidence: 0.9,
+              essentiality: "non_essential",
+              firstPartyOrThirdParty: "third_party",
+              matchedSignatureId: "the_trade_desk",
+              pageUrl: "https://www.latimes.com/",
+              requestUrl: "https://match.adsrvr.org/track/cmf/generic [query_redacted=true query_keys=ttd_pid,ttd_tpi,ttd_puid,gdpr]",
+              runtimePhase: "pre_consent",
+              timestampMs: 2734,
+              vendor: "The Trade Desk",
+              vendorAttributionBasis: "tracker_signature"
+            })
+          ],
+          runtimeRequestUrls: [
+            "https://libs.platform.latimes.com/reg/tribune/latspot.min.js",
+            "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+            "https://edge.platform.latimes.com/v1/personalize [query_redacted=true query_keys=meterKey,productCode,contentType,paywallTier,pxlId,exp]",
+            "https://ib.adnxs.com/getuidj [query_redacted=true query_keys=gdpr]",
+            "https://match.adsrvr.org/track/cmf/generic [query_redacted=true query_keys=ttd_pid,ttd_tpi,ttd_puid,gdpr]"
+          ],
+          runtimeVendors: ["Meta Pixel", "Google Ads", "Segment", "AppNexus / Xandr", "The Trade Desk"]
+        },
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: [],
+        sourceUrls: ["https://edge.platform.latimes.com/v1/personalize [query_redacted=true query_keys=meterKey,productCode,contentType,paywallTier,pxlId,exp]"]
+      },
+      primaryPageUrl: "https://edge.platform.latimes.com/v1/personalize [query_redacted=true query_keys=meterKey,productCode,contentType,paywallTier,pxlId,exp]",
+      severity: "high",
+      summary: "Tracker vendors fired before consent interaction."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "pre_consent_tracking_detected");
+  const representativeRequests = finding?.evidenceDetails?.representativeRequests ?? [];
+
+  assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://www.latimes.com/");
+  assert.deepEqual(representativeRequests.slice(0, 3).map((request) => request.vendor), [
+    "Google Ads",
+    "AppNexus / Xandr",
+    "The Trade Desk"
+  ]);
+  assert.deepEqual(representativeRequests[2]?.queryKeysSample, ["ttd_pid", "ttd_tpi", "ttd_puid", "gdpr"]);
+  assert.equal(representativeRequests[2]?.identifierLike, true);
+  assert.equal(finding?.evidenceDetails?.counts?.identifierLikeRequests, 2);
+  assert.ok((finding?.shortSummary ?? "").includes("Google Ads, AppNexus / Xandr, and The Trade Desk"));
 });

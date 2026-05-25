@@ -75,6 +75,7 @@ export type PreConsentTrackingEvidenceDetails = {
   }>;
   representativeRequests: Array<{
     url: string;
+    requestUrl?: string;
     hostname: string;
     vendor: string | null;
     endpointVendor?: string | null;
@@ -82,9 +83,15 @@ export type PreConsentTrackingEvidenceDetails = {
     vendorName?: string | null;
     category: string | null;
     vendorCategory?: string | null;
+    collectionEndpointType?: string | null;
+    firstPartyOrThirdParty?: string | null;
+    firstPartyProxyObserved?: boolean;
+    proxiedVendor?: string | null;
     scannedPageUrl?: string | null;
     registrableDomain?: string | null;
     vendorAttributionBasis?: string | null;
+    classificationBasis?: string | null;
+    matchedSignatureId?: string | null;
     consentActionMs?: number | null;
     noConsentActionObserved?: boolean;
     consentSurfaceObserved?: boolean | null;
@@ -117,6 +124,17 @@ export type PreConsentTrackingEvidenceDetails = {
         disclosureGapObserved: boolean;
         policyUrl: string | null;
         snippet: string | null;
+      }
+    | {
+        evaluated: boolean;
+        framework: string;
+        evaluatedSignal: string;
+        policyCbaLanguage: string | null;
+        policyUiCongruent: boolean | null;
+        policyUiCongruentObserved: boolean;
+        gpcScanStateSent: boolean;
+        gpcHandlingObserved: string;
+        gpcHandlingBasis: string;
       };
   legalRelevance: {
     cipaPenRegisterTheorySupport: "supportive_runtime_signal" | "possible" | "not_evaluated";

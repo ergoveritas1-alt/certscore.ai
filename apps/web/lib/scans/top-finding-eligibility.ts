@@ -470,8 +470,40 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
       }
       break;
     case "cpra_cba_opt_out_missing":
+      if (hasMeaningfulValue(details.trackingOrSharingContext)) {
+        pushUnique(matchedCriteria, "cba_vendor_runtime_context");
+      }
       if (!hasMeaningfulValue(details.optOutControlEvidence)) {
         missingCorroborators.push("privacy_choice_search_scope");
+      }
+      {
+        const optOut = asRecord(details.optOutControlEvidence);
+        const missingOrAbsent = getBoolean(optOut, "missingOrAbsent");
+        const incompleteOrUnconfirmed = getBoolean(optOut, "incompleteOrUnconfirmed");
+        const choiceControlsInspected = getBoolean(optOut, "choiceControlsInspected");
+        const gpcScanStateSent = getBoolean(optOut, "gpcScanStateSent");
+        const gpcHandlingObserved = getString(optOut, "gpcHandlingObserved");
+        const privacyChoiceCompletenessSubtype = getString(optOut, "privacyChoiceCompletenessSubtype");
+        const result = getString(optOut, "result");
+
+        if (choiceControlsInspected === true) {
+          pushUnique(matchedCriteria, "privacy_choice_control_search_scope");
+        }
+        if (missingOrAbsent === true || privacyChoiceCompletenessSubtype === "missing" || result === "absent") {
+          pushUnique(matchedCriteria, "privacy_choice_control_missing");
+        }
+        if (missingOrAbsent === false || incompleteOrUnconfirmed === true) {
+          pushUnique(matchedCriteria, "privacy_choice_control_observed");
+        }
+        if (incompleteOrUnconfirmed === true || privacyChoiceCompletenessSubtype === "incomplete_or_unconfirmed") {
+          pushUnique(matchedCriteria, "cpra_completeness_not_confirmed");
+          pushUnique(missingCorroborators, "cpra_icon_or_privacy_choices_presentation_confirmation");
+          pushUnique(missingCorroborators, "opt_out_flow_completion_result");
+          pushUnique(missingCorroborators, "vendor_suppression_after_opt_out");
+        }
+        if (gpcScanStateSent !== true || !gpcHandlingObserved || gpcHandlingObserved === "not_determined") {
+          pushUnique(missingCorroborators, "gpc_handling_test");
+        }
       }
       if (details.optOutControlEvidence?.gpcScanStateSent === true) {
         matchedCriteria.push("gpc_specific_scan_state_sent");
@@ -481,6 +513,9 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
       }
       if (!hasMeaningfulValue(details.trackingOrSharingContext)) {
         missingCorroborators.push("advertising_or_sharing_context");
+      }
+      if (hasMeaningfulValue(details.optOutControlEvidence) && hasMeaningfulValue(details.trackingOrSharingContext)) {
+        forceEligibility = "top_candidate";
       }
       if (
         details.optOutControlEvidence?.gpcScanStateSent === true &&
@@ -880,7 +915,7 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
       break;
   }
 
-  if (missingCorroborators.length > 0 && finding.confidence !== "strong") {
+  if (missingCorroborators.length > 0 && finding.confidence !== "strong" && finding.id !== "cpra_cba_opt_out_missing") {
     demotionReasons.push("missing_top_finding_corroborator");
   }
 

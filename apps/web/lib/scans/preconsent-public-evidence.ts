@@ -6,6 +6,10 @@ export type PromotionGradePreconsentRequest = {
   vendorName: string;
   vendorCategory: string;
   vendorAttributionBasis: string | null;
+  classificationBasis: string | null;
+  collectionEndpointType: string | null;
+  firstPartyOrThirdParty: string | null;
+  matchedSignatureId: string | null;
   firstSeenMs: number | null;
   consentActionMs: number | null;
   noConsentActionObserved: boolean;
@@ -207,7 +211,7 @@ export function buildPromotionGradePreconsentRequests(input: {
     }
     seen.add(key);
     requests.push({
-      scannedPageUrl: input.scannedPageUrl ?? null,
+      scannedPageUrl: getString(row, ["pageUrl", "page_url", "scannedPageUrl", "scanned_page_url"]) ?? input.scannedPageUrl ?? null,
       requestUrl,
       hostname,
       registrableDomain: getUrlRegistrableDomain(hostname) ?? hostname,
@@ -223,6 +227,10 @@ export function buildPromotionGradePreconsentRequests(input: {
         "matchedSignatureId",
         "matched_signature_id"
       ]),
+      classificationBasis: getString(row, ["classificationBasis", "classification_basis", "evidenceSource", "evidence_source"]),
+      collectionEndpointType: getString(row, ["collectionEndpointType", "collection_endpoint_type"]),
+      firstPartyOrThirdParty: getString(row, ["firstPartyOrThirdParty", "first_party_or_third_party", "party"]),
+      matchedSignatureId: getString(row, ["matchedSignatureId", "matched_signature_id"]),
       firstSeenMs: getNumber(row, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "timestampMs", "timestamp_ms", "ms"]),
       consentActionMs,
       noConsentActionObserved: consentActionMs === null,
