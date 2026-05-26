@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { PLAN_DEFINITIONS } from "@website-signal-risk-scanner/shared";
 import { Badge, Card, CardContent } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../../components/layout/site-footer";
@@ -17,6 +18,17 @@ const paidPlans = PLAN_DEFINITIONS.filter((plan) => plan.code === "individual" |
 const trialPlan = PLAN_DEFINITIONS.find((plan) => plan.code === "free");
 const customPlan = PLAN_DEFINITIONS.find((plan) => plan.code === "team");
 
+const planDescriptions: Record<string, string> = {
+  individual: "For checking your own site, key landing pages, and occasional re-scans.",
+  pro: "For recurring review across multiple pages, site sections, or client sites.",
+  team: "For portfolios, agencies, API access, custom retention, or higher-volume workflows."
+};
+
+const includedScanValue: Record<string, string> = {
+  individual: "50 page scans included · $0.80/page",
+  pro: "500 page scans included · $0.40/page"
+};
+
 export default function PricingPage() {
   return (
     <main className="min-h-screen bg-slate-50">
@@ -30,8 +42,7 @@ export default function PricingPage() {
               Pricing based on pages scanned
             </h1>
             <p className="text-base leading-7 text-slate-600">
-              Start with a one-week trial, then choose a monthly plan based on page scans. Scan requests are paced at one request every{" "}
-              {SCAN_ACCESS.scanThrottleMinutes} minutes to keep results reliable.
+              Start with a single site review, move to recurring scans, or contact us for portfolio and API workflows.
             </p>
           </div>
         </div>
@@ -130,7 +141,12 @@ export default function PricingPage() {
                     <p className="text-sm font-semibold text-slate-900">{plan.coverageLabel}</p>
                   </div>
 
-                  <p className="text-sm leading-6 text-slate-600">{plan.summary}</p>
+                  <div className="space-y-2">
+                    <p className="text-sm leading-6 text-slate-600">{planDescriptions[plan.code] ?? plan.summary}</p>
+                    {includedScanValue[plan.code] ? (
+                      <p className="text-xs font-medium text-slate-500">{includedScanValue[plan.code]}</p>
+                    ) : null}
+                  </div>
 
                   <div className="space-y-2">
                     {[
@@ -154,7 +170,7 @@ export default function PricingPage() {
                   href="/login?mode=create_account"
                   idleContent={
                     <span className="inline-flex items-center gap-2">
-                      Create account
+                      {plan.code === "pro" ? "Start Pro" : "Start Starter"}
                       <span aria-hidden="true">›</span>
                     </span>
                   }
@@ -177,7 +193,7 @@ export default function PricingPage() {
                 <div className="space-y-3">
                   <p className="text-sm font-semibold text-slate-900">Need higher scan volume or portfolio workflows?</p>
                   <p className="text-sm leading-6 text-slate-600">
-                    {customPlan.summary}
+                    {planDescriptions[customPlan.code] ?? customPlan.summary}
                   </p>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -218,8 +234,35 @@ export default function PricingPage() {
           </Card> : null}
         </div>
 
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
-          CertScore.ai surfaces automated public-web observations for review. It does not provide legal advice, certification, or compliance determinations.
+        <p className="mt-5 text-center text-sm text-slate-500">
+          Not sure yet?{" "}
+          <Link href="/#homepage-scan" className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800">
+            Run a free scan
+          </Link>
+          .
+        </p>
+
+        <p className="mx-auto mt-6 max-w-3xl rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center text-sm leading-6 text-slate-600">
+          A page scan means one reviewed public URL. Re-scans and additional URLs use additional scan credits.
+        </p>
+
+        <div className="mt-4 rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-none">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <p className="max-w-3xl text-sm leading-6 text-slate-600">
+              Every plan includes evidence-backed public-page scans for consent, cookies, trackers, privacy-choice, and accessibility review signals.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {["Runtime evidence", "Scan history", "Review-ready findings"].map((item) => (
+                <span key={item} className="rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-500">
+          CertScore provides automated public-web observations for review. It is not legal advice, certification, or a compliance determination.
         </p>
       </section>
 
