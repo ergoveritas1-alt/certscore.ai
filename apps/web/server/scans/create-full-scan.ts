@@ -197,6 +197,12 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
           scanId: recentScan.id,
           status: "reused_recent_scan"
         });
+        await updateDomainLatestScan({
+          completedAt: recentScan.completedAt,
+          domainId: domainRecord.domain.id,
+          organizationId: input.organizationId,
+          scanId: recentScan.id
+        });
 
         return {
           error: null,

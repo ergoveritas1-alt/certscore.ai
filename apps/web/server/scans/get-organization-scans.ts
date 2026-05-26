@@ -573,7 +573,8 @@ async function loadOrganizationScans(
 
   return {
     items: scanRows.map((scan) => {
-    const domain = scan.domain_id ? domainMap.get(scan.domain_id) ?? null : null;
+    const displayDomainId = scan.display_domain_id ?? scan.domain_id;
+    const domain = displayDomainId ? domainMap.get(displayDomainId) ?? null : null;
     const latestDomainScan =
       domain?.latest_scan_id ? latestDomainScanMap.get(domain.latest_scan_id) ?? null : null;
     const snapshot =
@@ -628,9 +629,11 @@ async function loadOrganizationScans(
     return {
         id: scan.id,
         domainActiveScanExists: latestDomainScan?.status === "queued" || latestDomainScan?.status === "running",
-        domainHostname: domain?.hostname ?? null,
-        domainId: scan.domain_id,
-        domainLastScannedAt: (domain?.last_scanned_at ?? (scan.domain_id ? domainLastCompletedAtMap.get(scan.domain_id) : null)) ?? null,
+        domainHostname: domain?.hostname ?? scan.display_hostname ?? null,
+        domainId: displayDomainId,
+        domainLastScannedAt:
+          (domain?.last_scanned_at ?? scan.display_last_scanned_at ?? (displayDomainId ? domainLastCompletedAtMap.get(displayDomainId) : null)) ??
+          null,
         certscoreOverall: snapshot?.certscore_overall ?? null,
         regulatoryScore: snapshot?.regulatory_exposure_score ?? null,
         privacyScore: snapshot?.privacy_score ?? null,

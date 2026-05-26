@@ -154,6 +154,10 @@ export type ScanValidationVerdictRow = {
 export type OrganizationScanQueryRow = {
   completed_at: string | null;
   created_at: string;
+  display_domain_id: string | null;
+  display_hostname: string | null;
+  display_last_scanned_at: string | null;
+  display_latest_scan_id: string | null;
   domain_id: string | null;
   id: string;
   pages_requested: number;
@@ -970,16 +974,18 @@ export async function insertQueuedFullScanEvent(input: {
 }
 
 export async function updateDomainLatestScan(input: {
+  completedAt?: string | null;
   domainId: string;
   organizationId: string;
   scanId: string;
 }) {
   await query(
     `update domains
-        set latest_scan_id = $3
+        set latest_scan_id = $3,
+            last_scanned_at = coalesce($4::timestamptz, last_scanned_at)
       where id = $1
         and organization_id = $2`,
-    [input.domainId, input.organizationId, input.scanId]
+    [input.domainId, input.organizationId, input.scanId, input.completedAt ?? null]
   );
 }
 
@@ -1357,18 +1363,41 @@ export async function loadOrganizationScanPageData(
 
   const scanRowsPromise = query<OrganizationScanQueryRow>(
     `
-      select
-        id,
-        domain_id,
-        scan_type,
-        status,
-        pages_requested,
-        pages_scanned,
-        created_at,
-        started_at,
-        completed_at
-      from scans
-      where organization_id = $1
+      with visible_scans as (
+        select distinct on (s.id)
+          s.id,
+          s.domain_id,
+          coalesce(workspace_domain.id, case when source_domain.organization_id = $1 then source_domain.id else null end) as display_domain_id,
+          coalesce(workspace_domain.hostname, case when source_domain.organization_id = $1 then source_domain.hostname else source_domain.hostname end) as display_hostname,
+          coalesce(workspace_domain.last_scanned_at, case when source_domain.organization_id = $1 then source_domain.last_scanned_at else null end) as display_last_scanned_at,
+          coalesce(workspace_domain.latest_scan_id, case when source_domain.organization_id = $1 then source_domain.latest_scan_id else null end) as display_latest_scan_id,
+          s.scan_type,
+          s.status,
+          s.pages_requested,
+          s.pages_scanned,
+          s.created_at,
+          s.started_at,
+          s.completed_at
+        from scans s
+        left join domains source_domain
+          on source_domain.id = s.domain_id
+        left join scan_requests scan_request
+          on scan_request.organization_id = $1
+         and coalesce(scan_request.fulfilled_by_scan_id, scan_request.scan_id) = s.id
+        left join domains workspace_domain
+          on workspace_domain.organization_id = $1
+         and (
+           workspace_domain.latest_scan_id = s.id
+           or lower(workspace_domain.hostname) = lower(coalesce(scan_request.normalized_domain, source_domain.hostname))
+           or lower(workspace_domain.normalized_url) = lower(coalesce(scan_request.normalized_url, source_domain.normalized_url))
+         )
+        where s.organization_id = $1
+           or scan_request.id is not null
+           or workspace_domain.latest_scan_id = s.id
+        order by s.id, workspace_domain.id nulls last, scan_request.requested_at desc nulls last
+      )
+      select *
+      from visible_scans
       order by created_at desc
       ${limitClauses.join(" ")}
     `,
@@ -1392,7 +1421,10 @@ export async function loadOrganizationScanPageData(
   }
 
   const scanIds = scanRows.map((scan) => scan.id);
-  const domainIds = [...new Set(scanRows.flatMap((scan) => (scan.domain_id ? [scan.domain_id] : [])))];
+  const domainIds = [...new Set(scanRows.flatMap((scan) => {
+    const domainId = scan.display_domain_id ?? scan.domain_id;
+    return domainId ? [domainId] : [];
+  }))];
   const summaryScanIds = Array.from(
     scanRows.reduce((ids, scan) => {
       const key = scan.domain_id ?? `scan:${scan.id}`;
