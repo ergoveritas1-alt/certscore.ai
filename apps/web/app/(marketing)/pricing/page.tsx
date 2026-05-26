@@ -21,7 +21,7 @@ const customPlan = PLAN_DEFINITIONS.find((plan) => plan.code === "team");
 const planDescriptions: Record<string, string> = {
   individual: "For checking your own site, key landing pages, and occasional re-scans.",
   pro: "For recurring review across multiple pages, site sections, or client sites.",
-  team: "For portfolios, agencies, API access, custom retention, or higher-volume workflows."
+  team: "For API access, portfolios, agencies, custom retention, or higher-volume workflows."
 };
 
 const includedScanValue: Record<string, string> = {
@@ -48,7 +48,7 @@ export default function PricingPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-6 py-14">
+      <section className="mx-auto max-w-7xl px-6 py-14">
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
           {trialPlan ? (
             <Card className="relative flex h-full flex-col overflow-hidden border-emerald-100 bg-[linear-gradient(180deg,rgba(248,253,250,1)_0%,rgba(255,255,255,0.98)_100%)] shadow-none">
@@ -191,19 +191,19 @@ export default function PricingPage() {
                   <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{customPlan.label}</h2>
                 </div>
                 <div className="space-y-3">
-                  <p className="text-sm font-semibold text-slate-900">Need higher scan volume or portfolio workflows?</p>
+                  <p className="text-sm font-semibold text-slate-900">Need API access or higher-volume workflows?</p>
                   <p className="text-sm leading-6 text-slate-600">
                     {planDescriptions[customPlan.code] ?? customPlan.summary}
                   </p>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-2xl bg-violet-50 px-3 py-3 ring-1 ring-violet-100">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">API access</p>
+                    <p className="mt-1 font-semibold text-violet-950">Included</p>
+                  </div>
                   <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-sky-100">
                     <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Scan volume</p>
                     <p className="mt-1 font-medium text-slate-900">{customPlan.monthlyPageScanLabel}</p>
-                  </div>
-                  <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-sky-100">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">API access</p>
-                    <p className="mt-1 font-medium text-slate-900">Custom access</p>
                   </div>
                   <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-sky-100">
                     <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Frequency</p>
@@ -240,29 +240,6 @@ export default function PricingPage() {
             Run a free scan
           </Link>
           .
-        </p>
-
-        <p className="mx-auto mt-6 max-w-3xl rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center text-sm leading-6 text-slate-600">
-          A page scan means one reviewed public URL. Re-scans and additional URLs use additional scan credits.
-        </p>
-
-        <div className="mt-4 rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-none">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              Every plan includes evidence-backed public-page scans for consent, cookies, trackers, privacy-choice, and accessibility review signals.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {["Runtime evidence", "Scan history", "Review-ready findings"].map((item) => (
-                <span key={item} className="rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
-                  {item}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-500">
-          CertScore provides automated public-web observations for review. It is not legal advice, certification, or a compliance determination.
         </p>
       </section>
 
