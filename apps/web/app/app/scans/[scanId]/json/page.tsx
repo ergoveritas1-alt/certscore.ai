@@ -6,7 +6,7 @@ import { ScanFindingsPane } from "../../../../../components/scans/scan-findings-
 import { ScanViewActions } from "../../../../../components/scans/scan-view-actions";
 import { ScanStatusAutoRefresh } from "../../../../../components/scans/scan-status-auto-refresh";
 import { hasPendingPostCompletionFindingWork } from "../../../../../lib/scans/scan-auto-refresh";
-import { getLaunchScanThrottleCopy } from "../../../../../lib/launch-mode";
+import { getScanThrottleCopy } from "../../../../../lib/scan-access";
 import { getRescanAvailability } from "../../../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../../../server/auth";
 import { getScanById } from "../../../../../server/scans/get-scan-by-id";
@@ -44,10 +44,10 @@ function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
   void planCode;
 
   if (!value) {
-    return getLaunchScanThrottleCopy();
+    return getScanThrottleCopy();
   }
 
-  return getLaunchScanThrottleCopy(formatDateTime(value));
+  return getScanThrottleCopy(formatDateTime(value));
 }
 
 export default async function ScanJsonPage({ params }: ScanJsonPageProps) {

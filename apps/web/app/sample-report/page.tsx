@@ -74,7 +74,7 @@ export default function SampleReportPage() {
               <PendingButtonLink
                 className="w-full border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04] sm:w-auto"
                 href="/#homepage-scan"
-                idleContent="Run a free scan"
+                idleContent="Start a trial scan"
                 pendingContent="Opening..."
               />
               <PendingButtonLink
@@ -147,7 +147,7 @@ export default function SampleReportPage() {
             <Badge tone="neutral">Monitoring value</Badge>
             <h2 className="text-3xl font-semibold tracking-tight text-slate-950">The same report becomes more useful over time.</h2>
             <p className="text-sm leading-6 text-slate-600">
-              One scan answers what happened during one run. Monitoring helps teams see whether the public behavior changed after tag updates, consent changes, vendor launches, or site releases.
+              One scan answers what happened during one run. Monitoring helps teams see whether the public behavior changed after tag updates, consent changes, vendor rollouts, or site releases.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -166,7 +166,7 @@ export default function SampleReportPage() {
             <div className="max-w-2xl space-y-2">
               <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Ready to see your own public-site signals?</h2>
               <p className="text-sm leading-6 text-slate-600">
-                Start with a free scan, then use pricing to choose a scoped review or monitoring path.
+                Start with a trial scan, then use pricing to choose a scoped review or monitoring path.
               </p>
             </div>
             <PendingButtonLink

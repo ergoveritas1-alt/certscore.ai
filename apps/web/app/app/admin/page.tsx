@@ -60,9 +60,10 @@ export default async function AdminOverviewPage() {
             <CardTitle>Plan Mix</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 text-sm text-slate-600">
-            <p>Free: {activePlans.free ?? 0}</p>
+            <p>Trial: {activePlans.free ?? 0}</p>
+            <p>Starter: {activePlans.individual ?? 0}</p>
             <p>Pro: {activePlans.pro ?? 0}</p>
-            <p>Ultra: {activePlans.team ?? 0}</p>
+            <p>Custom: {activePlans.team ?? 0}</p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 bg-white">

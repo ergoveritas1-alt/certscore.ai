@@ -23,7 +23,7 @@ export default function WebsiteScanningBasicsPage() {
         "Structured findings help route work to privacy, marketing, engineering, accessibility, or legal-review owners."
       ]}
       commonIssues={[
-        "Teams rely on a one-time launch review even though tag-manager and CMS changes continue after launch.",
+        "Teams rely on a one-time pre-release review even though tag-manager and CMS changes continue after release.",
         "Cookie, consent, accessibility, and disclosure findings are reviewed separately with no shared evidence trail.",
         "Manual checks miss page templates or vendor behavior that only appears in runtime evidence."
       ]}

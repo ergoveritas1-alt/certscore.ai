@@ -38,6 +38,9 @@ export default async function DashboardPage() {
     organizationId: organization.id
   });
   const monthlyLimitLabel = scanUsage.monthlyLimit === null ? "unlimited" : String(scanUsage.monthlyLimit);
+  const remainingScans =
+    scanUsage.monthlyLimit === null ? null : Math.max(0, scanUsage.monthlyLimit - scanUsage.monthlyScansUsed);
+  const remainingScansLabel = remainingScans === null ? "Unlimited page scans" : `${remainingScans} page scans`;
   const remainingPercentLabel = scanUsage.remainingPercent === null ? "unlimited" : `${scanUsage.remainingPercent}%`;
 
   return (
@@ -51,9 +54,11 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-0 pb-2.5 text-sm text-slate-600">
             <p className="text-2xl font-semibold text-slate-900">
-              {scanUsage.monthlyScansUsed}/{monthlyLimitLabel} ({remainingPercentLabel})
+              {remainingScansLabel} ({remainingPercentLabel})
             </p>
-            <p>scans this month. Month ends on {formatDate(scanUsage.monthlyPeriodEnd)}.</p>
+            <p>
+              out of {monthlyLimitLabel} available this month. Month ends on {formatDate(scanUsage.monthlyPeriodEnd)}.
+            </p>
           </CardContent>
         </Card>
         <Card className="border-slate-200 bg-white">

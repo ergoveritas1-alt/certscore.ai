@@ -50,7 +50,7 @@ export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
 
       {planCode === "free" ? (
         <p className="text-xs text-slate-500">
-          Free includes one domain and one homepage scan each month.
+          Trial accounts include a limited page-scan allowance for evaluating the workflow.
         </p>
       ) : null}
 

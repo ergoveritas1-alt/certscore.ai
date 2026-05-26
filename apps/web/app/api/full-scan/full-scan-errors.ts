@@ -9,16 +9,16 @@ export function getFullScanQueueErrorCode(error: string | null | undefined) {
     return "domain_already_connected";
   }
 
-  if (/website limit|domain limit|Free plan limit of \d+ website/i.test(message)) {
+  if (/website limit|domain limit|Trial plan website limit/i.test(message)) {
     return "domain_limit";
   }
 
-  if (/manual scan limit|billing period|used the Free plan scan for this month/i.test(message)) {
+  if (/manual scan limit|billing period|scan allowance/i.test(message)) {
     return "monthly_usage_limit";
   }
 
   if (
-    /Launch access allows|higher-throughput scanning|batch workflows|try again after|try again shortly|recent scan|recently|re-scan/i.test(
+    /Scan requests are limited|higher-throughput scanning|batch workflows|try again after|try again shortly|recent scan|recently|re-scan/i.test(
       message
     )
   ) {

@@ -12,10 +12,10 @@ type OrganizationPlanFormProps = {
 
 const PLAN_STATUSES = ["active", "trialing", "past_due", "paused"] as const;
 const PLAN_LABELS: Record<(typeof PLAN_CODES)[number], string> = {
-  free: "Free",
-  individual: "Individual",
+  free: "Trial",
+  individual: "Starter",
   pro: "Pro",
-  team: "Ultra",
+  team: "Custom",
 };
 
 function PlanControls(props: Pick<OrganizationPlanFormProps, "defaultPlan" | "defaultPlanStatus">) {

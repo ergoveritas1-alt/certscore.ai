@@ -18,7 +18,7 @@ import {
 } from "../plans/get-plan-limits";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getFullScanQueueMetadata } from "../queue/scan-queue-priority";
-import { LAUNCH_ACCESS, getLaunchScanThrottleCopy } from "../../lib/launch-mode";
+import { SCAN_ACCESS, getScanThrottleCopy } from "../../lib/scan-access";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import { ensureValidationRunForManualScan } from "../validation/repository";
 import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
@@ -259,17 +259,17 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         };
       }
 
-      const launchThrottleMessage = `${getLaunchScanThrottleCopy()} For higher-throughput scanning or batch workflows, contact ${LAUNCH_ACCESS.salesEmail}.`;
+      const throttleMessage = `${getScanThrottleCopy()} For higher-throughput scanning or batch workflows, contact ${SCAN_ACCESS.salesEmail}.`;
 
       await logRequest({
         errorCode: "rescan_cooldown",
-        errorMessage: launchThrottleMessage,
+        errorMessage: throttleMessage,
         resolutionMode: "rescan_cooldown",
         status: "rejected"
       });
 
       return {
-        error: launchThrottleMessage,
+        error: throttleMessage,
         scanId: null
       };
     }
@@ -308,8 +308,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     if (monthlyLimit !== null && currentUsage >= monthlyLimit) {
       const message =
         planLimits.planCode === "free"
-          ? "You’ve already used the Free plan scan for this month."
-          : `You’ve reached the ${planDefinition.label} manual scan limit of ${monthlyLimit} for this billing period.`;
+          ? "You’ve already used the Trial plan scan allowance for this month."
+          : `You’ve reached the ${planDefinition.label} page-scan limit of ${monthlyLimit} for this billing period.`;
       await logRequest({
         errorCode: "monthly_usage_limit",
         errorMessage: message,

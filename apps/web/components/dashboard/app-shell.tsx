@@ -155,7 +155,8 @@ export function AppShell({
   const pathname = usePathname() ?? "";
   const userInitial = userEmail.slice(0, 1).toUpperCase();
   const displayOrganizationName = organizationName.replace(/\s+workspace$/i, "");
-  const displayPlan = plan === "free" ? "FREE" : plan === "pro" ? "PRO" : "ULTRA";
+  const displayPlan =
+    plan === "free" ? "TRIAL" : plan === "individual" ? "STARTER" : plan === "pro" ? "PRO" : "CUSTOM";
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);

@@ -1,12 +1,12 @@
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
-import { LAUNCH_ACCESS } from "../launch-mode";
+import { SCAN_ACCESS } from "../scan-access";
 
 const ONE_MINUTE_MS = 60 * 1000;
 
 export function getRescanCooldownMs(planCode: PlanCode): number {
   void planCode;
 
-  return LAUNCH_ACCESS.scanThrottleMinutes * ONE_MINUTE_MS;
+  return SCAN_ACCESS.scanThrottleMinutes * ONE_MINUTE_MS;
 }
 
 export function getNextAllowedRescanAt(input: {

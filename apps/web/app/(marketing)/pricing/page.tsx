@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { PLAN_DEFINITIONS } from "@website-signal-risk-scanner/shared";
 import { Badge, Card, CardContent } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../../components/layout/site-footer";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
-import { LAUNCH_ACCESS } from "../../../lib/launch-mode";
+import { SCAN_ACCESS } from "../../../lib/scan-access";
 import { createPageMetadata } from "../../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
@@ -12,46 +13,9 @@ export const metadata: Metadata = createPageMetadata({
   path: "/pricing"
 });
 
-const standardPlans = [
-  {
-    code: "starter",
-    eyebrow: "Starter",
-    price: "$40",
-    priceNote: "per month",
-    summary: "For teams that need repeatable page-level checks without a large volume commitment.",
-    scanAllowance: "50 page scans / month",
-    ctaHref: "/login?mode=create_account",
-    ctaLabel: "Create account",
-    ctaType: "sign_in",
-    plan: "starter",
-    ctaClassName:
-      "w-fit rounded-full border-0 bg-[#0f8bd7] px-5 text-white shadow-[0_10px_22px_rgba(15,139,215,0.24)] hover:bg-[#0b78bf]",
-    highlights: [
-      "50 included page scans each month",
-      "Up to 1 scan request every 5 minutes",
-      "Show scan history for follow-up review"
-    ]
-  },
-  {
-    code: "pro",
-    eyebrow: "Pro",
-    price: "$200",
-    priceNote: "per month",
-    summary: "For ongoing review work, more page coverage, and recurring scan history.",
-    scanAllowance: "500 page scans / month",
-    ctaHref: "/login?mode=create_account",
-    ctaLabel: "Create account",
-    ctaType: "sign_in",
-    plan: "pro",
-    ctaClassName:
-      "w-fit rounded-full border-0 bg-[#0f8bd7] px-5 text-white shadow-[0_10px_22px_rgba(15,139,215,0.24)] hover:bg-[#0b78bf]",
-    highlights: [
-      "500 included page scans each month",
-      "Up to 1 scan request every 5 minutes",
-      "Show scan history for follow-up review"
-    ]
-  }
-] as const;
+const paidPlans = PLAN_DEFINITIONS.filter((plan) => plan.code === "individual" || plan.code === "pro");
+const trialPlan = PLAN_DEFINITIONS.find((plan) => plan.code === "free");
+const customPlan = PLAN_DEFINITIONS.find((plan) => plan.code === "team");
 
 export default function PricingPage() {
   return (
@@ -61,21 +25,72 @@ export default function PricingPage() {
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-16">
           <div className="max-w-2xl space-y-5">
-            <Badge tone="neutral">Free monthly subscription during launch</Badge>
+            <Badge tone="neutral">One-week free trial</Badge>
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
               Pricing based on pages scanned
             </h1>
             <p className="text-base leading-7 text-slate-600">
-              Sign up now, Starter and Pro plans are temporarily free during our launch period; launch access allows up to 1 scan request every{" "}
-              {LAUNCH_ACCESS.scanThrottleMinutes} minutes.
+              Start with a one-week trial, then choose a monthly plan based on page scans. Scan requests are paced at one request every{" "}
+              {SCAN_ACCESS.scanThrottleMinutes} minutes to keep results reliable.
             </p>
           </div>
         </div>
       </section>
 
       <section className="mx-auto max-w-6xl px-6 py-14">
-        <div className="grid gap-4 lg:grid-cols-3">
-          {standardPlans.map((plan) => (
+        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+          {trialPlan ? (
+            <Card className="relative flex h-full flex-col overflow-hidden border-emerald-100 bg-[linear-gradient(180deg,rgba(248,253,250,1)_0%,rgba(255,255,255,0.98)_100%)] shadow-none">
+              <div
+                aria-hidden="true"
+                className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,rgba(16,185,129,0.22)_0%,rgba(132,204,22,0.32)_100%)]"
+              />
+              <CardContent className="flex h-full flex-col justify-between gap-7 p-6">
+                <div className="space-y-5">
+                  <div className="space-y-1">
+                    <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{trialPlan.label}</h2>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">{trialPlan.trialLabel}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-end gap-2">
+                      <span className="text-5xl font-semibold tracking-tight text-slate-950">{trialPlan.priceLabel}</span>
+                      <span className="pb-1 text-sm text-slate-500">{trialPlan.priceNote}</span>
+                    </div>
+                    <p className="text-sm font-semibold text-slate-900">{trialPlan.coverageLabel}</p>
+                  </div>
+                  <p className="text-sm leading-6 text-slate-600">{trialPlan.summary}</p>
+                  <div className="space-y-2">
+                    {[
+                      trialPlan.monthlyPageScanLabel,
+                      `Up to 1 scan request every ${SCAN_ACCESS.scanThrottleMinutes} minutes`,
+                      "Review scan results before choosing a monthly plan"
+                    ].map((item) => (
+                      <div key={item} className="flex items-start gap-2 text-sm leading-6 text-slate-700">
+                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
+                        <p>{item}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <PendingButtonLink
+                  className="w-fit rounded-full border-0 bg-[#0f8bd7] px-5 text-white shadow-[0_10px_22px_rgba(15,139,215,0.24)] hover:bg-[#0b78bf]"
+                  data-analytics-cta-type="sign_in"
+                  data-analytics-event="pricing_cta_clicked"
+                  data-analytics-plan={trialPlan.code}
+                  href="/login?mode=create_account"
+                  idleContent={
+                    <span className="inline-flex items-center gap-2">
+                      Start trial
+                      <span aria-hidden="true">›</span>
+                    </span>
+                  }
+                  pendingContent="Opening..."
+                  size="sm"
+                />
+              </CardContent>
+            </Card>
+          ) : null}
+          {paidPlans.map((plan) => (
             <Card
               key={plan.code}
               className={
@@ -96,7 +111,7 @@ export default function PricingPage() {
                 <div className="space-y-5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
-                      <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{plan.eyebrow}</h2>
+                      <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{plan.label}</h2>
                     </div>
                     {plan.code === "pro" ? (
                       <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-sky-800 ring-1 ring-sky-200">
@@ -108,28 +123,21 @@ export default function PricingPage() {
                   <div className="space-y-2">
                     <div className="space-y-1">
                       <div className="flex items-end gap-2">
-                        <span className="relative inline-flex text-5xl font-semibold tracking-tight text-slate-400">
-                          {plan.price}
-                          <span
-                            aria-hidden="true"
-                            className="absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 rotate-[-8deg] rounded-full bg-rose-500/85"
-                          />
-                        </span>
+                        <span className="text-5xl font-semibold tracking-tight text-slate-950">{plan.priceLabel.replace("/mo", "")}</span>
                         <span className="pb-1 text-sm text-slate-500">{plan.priceNote}</span>
                       </div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-700">Temporary launch offer</p>
                     </div>
-                    <div className="flex items-end gap-2">
-                      <span className="text-4xl font-semibold tracking-tight text-emerald-700">{LAUNCH_ACCESS.amountDueLabel}</span>
-                      <span className="pb-1 text-sm font-semibold text-emerald-700">per month during launch</span>
-                    </div>
-                    <p className="text-sm font-semibold text-slate-900">{plan.scanAllowance}</p>
+                    <p className="text-sm font-semibold text-slate-900">{plan.coverageLabel}</p>
                   </div>
 
                   <p className="text-sm leading-6 text-slate-600">{plan.summary}</p>
 
                   <div className="space-y-2">
-                    {plan.highlights.map((item) => (
+                    {[
+                      plan.monthlyPageScanLabel,
+                      `Up to 1 scan request every ${SCAN_ACCESS.scanThrottleMinutes} minutes`,
+                      "Show scan history for follow-up review"
+                    ].map((item) => (
                       <div key={`${plan.code}-${item}`} className="flex items-start gap-2 text-sm leading-6 text-slate-700">
                         <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
                         <p>{item}</p>
@@ -139,14 +147,14 @@ export default function PricingPage() {
                 </div>
 
                 <PendingButtonLink
-                  className={plan.ctaClassName}
-                  data-analytics-cta-type={plan.ctaType}
+                  className="w-fit rounded-full border-0 bg-[#0f8bd7] px-5 text-white shadow-[0_10px_22px_rgba(15,139,215,0.24)] hover:bg-[#0b78bf]"
+                  data-analytics-cta-type="sign_in"
                   data-analytics-event="pricing_cta_clicked"
-                  data-analytics-plan={plan.plan}
-                  href={plan.ctaHref}
+                  data-analytics-plan={plan.code}
+                  href="/login?mode=create_account"
                   idleContent={
                     <span className="inline-flex items-center gap-2">
-                      {plan.ctaLabel}
+                      Create account
                       <span aria-hidden="true">›</span>
                     </span>
                   }
@@ -156,7 +164,7 @@ export default function PricingPage() {
               </CardContent>
             </Card>
           ))}
-          <Card className="relative overflow-hidden border-violet-100 bg-[linear-gradient(180deg,rgba(250,248,255,1)_0%,rgba(255,255,255,0.98)_100%)] shadow-none">
+          {customPlan ? <Card className="relative overflow-hidden border-violet-100 bg-[linear-gradient(180deg,rgba(250,248,255,1)_0%,rgba(255,255,255,0.98)_100%)] shadow-none">
             <div
               aria-hidden="true"
               className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,rgba(99,91,255,0.22)_0%,rgba(168,85,247,0.3)_100%)]"
@@ -164,19 +172,18 @@ export default function PricingPage() {
             <CardContent className="flex h-full flex-col justify-between gap-6 p-6">
               <div className="space-y-5">
                 <div className="space-y-1">
-                  <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Custom</h2>
+                  <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{customPlan.label}</h2>
                 </div>
                 <div className="space-y-3">
-                  <p className="text-sm font-semibold text-slate-900">Need faster scanning or portfolio workflows?</p>
+                  <p className="text-sm font-semibold text-slate-900">Need higher scan volume or portfolio workflows?</p>
                   <p className="text-sm leading-6 text-slate-600">
-                    Custom plans support higher-frequency scan schedules, batch scanning, API access, custom evidence retention needs, and
-                    larger portfolio workflows.
+                    {customPlan.summary}
                   </p>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-sky-100">
                     <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Scan volume</p>
-                    <p className="mt-1 font-medium text-slate-900">Custom credits</p>
+                    <p className="mt-1 font-medium text-slate-900">{customPlan.monthlyPageScanLabel}</p>
                   </div>
                   <div className="rounded-2xl bg-white px-3 py-3 ring-1 ring-sky-100">
                     <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">API access</p>
@@ -208,7 +215,7 @@ export default function PricingPage() {
                 size="sm"
               />
             </CardContent>
-          </Card>
+          </Card> : null}
         </div>
 
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">

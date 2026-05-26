@@ -122,8 +122,8 @@ export async function createOrQueueDomainScan(input: {
     return {
       error:
         planLimits.planCode === "free"
-          ? "You’ve reached the Free plan limit of 1 website."
-          : `You’ve reached the ${planDefinition.label} plan domain limit of ${planLimits.maxDomains} domain${
+          ? "You’ve reached the Trial plan website limit."
+          : `You’ve reached the ${planDefinition.label} plan workspace website limit of ${planLimits.maxDomains} site${
               planLimits.maxDomains === 1 ? "" : "s"
             }.`,
       scanId: null

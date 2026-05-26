@@ -9,7 +9,7 @@ import { requirePlatformAdminContext } from "./platform-admin";
 
 const schema = z.object({
   organizationId: z.string().uuid("Invalid organization."),
-  plan: z.enum(["free", "pro", "team"]),
+  plan: z.enum(["free", "individual", "pro", "team"]),
   planStatus: z.enum(["active", "trialing", "past_due", "paused"])
 });
 

@@ -24,12 +24,12 @@ export default function WebsiteLegalComplianceChecklistGuidePage() {
       ]}
       commonIssues={[
         "Missing policy pages, limited disclosure coverage, tracker-related consent gaps, and recurring accessibility findings often appear together.",
-        "Teams may check the site once after launch but fail to revisit it after content, plugin, analytics, or design changes.",
+        "Teams may check the site once after release but fail to revisit it after content, plugin, analytics, or design changes.",
         "Many organizations have no consistent record of what was checked, when it was checked, and what changed later."
       ]}
       examples={[
         "A site may have a privacy policy and terms page but still show accessibility issues and limited cookie-preference controls.",
-        "A team may launch a site with good QA, then lose visibility as plugins, tracking tags, or marketing content change later.",
+        "A team may release a site with good QA, then lose visibility as plugins, tracking tags, or marketing content change later.",
         "A business may fix one visible issue but miss related patterns across service pages, policy pages, and forms."
       ]}
       automatedScanningHelp={[

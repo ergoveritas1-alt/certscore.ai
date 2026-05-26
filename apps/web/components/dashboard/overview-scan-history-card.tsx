@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { PlanCode } from "@website-signal-risk-scanner/shared/types/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
-import { getLaunchScanThrottleCopy } from "../../lib/launch-mode";
+import { getScanThrottleCopy } from "../../lib/scan-access";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import type { OrganizationScanListItem } from "../../server/scans/get-organization-scans";
 import { RescanDomainForm } from "../scans/rescan-domain-form";
@@ -32,10 +32,10 @@ function formatRescanCooldownMessage(nextAllowedAt: string | null, planCode: Pla
   void planCode;
 
   if (!nextAllowedAt) {
-    return getLaunchScanThrottleCopy();
+    return getScanThrottleCopy();
   }
 
-  return getLaunchScanThrottleCopy(formatDateTime(nextAllowedAt));
+  return getScanThrottleCopy(formatDateTime(nextAllowedAt));
 }
 
 function ViewScanIcon() {

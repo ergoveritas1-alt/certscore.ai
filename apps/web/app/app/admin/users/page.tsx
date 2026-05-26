@@ -99,7 +99,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                     {user.organizationId ? (
                       <OrganizationPlanForm
                         action={updateOrganizationPlanFormAction}
-                        defaultPlan={(user.plan ?? "free") as "free" | "pro" | "team"}
+                        defaultPlan={(user.plan ?? "free") as "free" | "individual" | "pro" | "team"}
                         defaultPlanStatus={(user.planStatus ?? "active") as "active" | "trialing" | "past_due" | "paused"}
                         organizationId={user.organizationId}
                       />

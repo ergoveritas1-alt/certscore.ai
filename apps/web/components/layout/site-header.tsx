@@ -79,7 +79,7 @@ export function SiteHeader() {
             data-analytics-cta-location="header"
             data-analytics-event="guide_cta_clicked"
             href="/pricing"
-            idleContent="Free sign-up"
+            idleContent="Start trial"
             pendingContent="Opening..."
             size="sm"
           />
@@ -145,7 +145,7 @@ export function SiteHeader() {
                   data-analytics-cta-location="header"
                   data-analytics-event="guide_cta_clicked"
                   href="/pricing"
-                  idleContent="Free sign-up"
+                  idleContent="Start trial"
                   pendingContent="Opening..."
                   size="sm"
                 />

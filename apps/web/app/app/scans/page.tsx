@@ -5,7 +5,7 @@ import { RescanDomainForm } from "../../../components/scans/rescan-domain-form";
 import { ScanHistoryLiveRefresh } from "../../../components/scans/scan-history-live-refresh";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../components/ui/pagination-controls";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
-import { getLaunchScanThrottleCopy } from "../../../lib/launch-mode";
+import { getScanThrottleCopy } from "../../../lib/scan-access";
 import { getRescanAvailability } from "../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../server/auth";
 import { getOrganizationScansPage } from "../../../server/scans/get-organization-scans";
@@ -91,10 +91,10 @@ function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
   void planCode;
 
   if (!value) {
-    return getLaunchScanThrottleCopy();
+    return getScanThrottleCopy();
   }
 
-  return getLaunchScanThrottleCopy(formatDateTime(value));
+  return getScanThrottleCopy(formatDateTime(value));
 }
 
 type ScansPageProps = {

@@ -44,7 +44,7 @@ function getErrorMessage(error: string | undefined, fallback: string | null) {
     case "dns":
       return "We could not verify DNS for this site right now. Review the domain before connecting it to your workspace.";
     case "domain-limit":
-      return "Your current workspace plan has reached its domain limit. Review pricing before connecting another site.";
+      return "Your current workspace plan has reached its website limit. Review pricing before connecting another site.";
     case "email-mismatch":
       return "Sign in with the work email used on the monitoring request to connect it to this workspace.";
     case "invalid-domain":

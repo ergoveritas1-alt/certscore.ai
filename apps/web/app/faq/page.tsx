@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
-import { LAUNCH_ACCESS } from "../../lib/launch-mode";
+import { SCAN_ACCESS } from "../../lib/scan-access";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
@@ -40,9 +40,9 @@ const faqs = [
       "Homepage previews return quickly. Larger scans usually take a few minutes depending on site responsiveness, page count, and the selected scan scope."
   },
   {
-    question: "How many domains can I monitor?",
+    question: "How are plans measured?",
     answer:
-      "Free includes 1 domain. Pro includes 5 domains. Ultra includes 50 domains."
+      "Plans are based on page scans per month. Starter includes 50 page scans per month, Pro includes 500 page scans per month, and Custom plans support higher-volume workflows."
   },
   {
     question: "What do I get after the preview scan?",
@@ -57,7 +57,7 @@ const faqs = [
   {
     question: "How often can my site be rescanned?",
     answer:
-      `During launch access, scan requests are paced at one request every ${LAUNCH_ACCESS.scanThrottleMinutes} minutes. Manual re-scans and scheduled monitoring still consume scan credits; high-frequency monitoring and batch scanning are handled as custom higher-volume setups.`
+      `Scan requests are paced at one request every ${SCAN_ACCESS.scanThrottleMinutes} minutes. Manual re-scans and scheduled monitoring consume scan credits; high-frequency monitoring and batch scanning are handled as custom higher-volume setups.`
   },
   {
     question: "What happens if my site changes after the scan?",

@@ -296,7 +296,7 @@ function CtaButtons({ location }: { location: string }) {
         className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_10px_24px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
       >
         <Link href="#scan" data-analytics-cta-location={location} data-analytics-event="guide_cta_clicked">
-          Run a free scan &rarr;
+          Start a trial scan &rarr;
         </Link>
       </Button>
       <Button asChild variant="secondary">
@@ -606,7 +606,7 @@ export default function GdprPage() {
       <section id="scan" className="mx-auto max-w-6xl px-6 py-16">
         <div className="border border-slate-200 bg-white p-6">
           <DomainScanForm
-            buttonLabel="Run a free scan"
+            buttonLabel="Start a trial scan"
             helperText="Public website scans surface automated observations for review."
             inputLabel="Website domain"
             mode="preview"

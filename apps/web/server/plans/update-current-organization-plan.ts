@@ -8,7 +8,7 @@ import { getDashboardContext } from "../auth";
 import { updateOrganizationPlan } from "./repository";
 
 const schema = z.object({
-  plan: z.enum(["free", "pro", "team"])
+  plan: z.enum(["free", "individual", "pro", "team"])
 });
 
 export async function updateCurrentOrganizationPlanFormAction(formData: FormData): Promise<void> {

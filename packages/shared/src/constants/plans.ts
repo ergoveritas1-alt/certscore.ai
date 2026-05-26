@@ -6,8 +6,12 @@ export type PlanDefinition = {
   code: PlanCode;
   label: string;
   priceLabel: string;
+  priceNote: string;
   description: string;
   coverageLabel: string;
+  monthlyPageScanLabel: string;
+  summary: string;
+  trialLabel?: string;
   maxDomains: number;
   maxPagesPerScan: number;
   scanFrequency: ScanFrequency;
@@ -20,57 +24,70 @@ export type PlanDefinition = {
 export const PLAN_DEFINITIONS: PlanDefinition[] = [
   {
     code: "free",
-    label: "Free",
+    label: "Trial",
     priceLabel: "$0",
-    description: "Homepage-only preview",
-    coverageLabel: "Homepage-only preview",
+    priceNote: "for 7 days",
+    description: "One-week trial for trying CertScore with a small scan allowance.",
+    coverageLabel: "10 page scans / trial",
+    monthlyPageScanLabel: "10 page scans included during the trial",
+    summary: "Try the scan workflow before choosing a monthly plan.",
+    trialLabel: "One-week free trial",
     maxDomains: 1,
     maxPagesPerScan: 3,
     scanFrequency: "manual",
     scanProfile: "homepage",
-    manualRescanLimitPerMonth: 1,
+    manualRescanLimitPerMonth: 10,
     scanHistoryEnabled: false,
     apiAccess: false
   },
   {
     code: "individual",
-    label: "Individual",
-    priceLabel: "$29/mo",
-    description: "Expanded domain coverage",
-    coverageLabel: "Expanded domain coverage",
+    label: "Starter",
+    priceLabel: "$40/mo",
+    priceNote: "per month",
+    description: "For teams that need repeatable page-level checks without a large volume commitment.",
+    coverageLabel: "50 page scans / month",
+    monthlyPageScanLabel: "50 page scans / month",
+    summary: "For teams that need repeatable page-level checks without a large volume commitment.",
     maxDomains: 1,
     maxPagesPerScan: 5,
     scanFrequency: "hourly",
     scanProfile: "standard",
-    manualRescanLimitPerMonth: 90,
+    manualRescanLimitPerMonth: 50,
     scanHistoryEnabled: true,
     apiAccess: false
   },
   {
     code: "pro",
     label: "Pro",
-    priceLabel: "$129/mo",
-    description: "Expanded domain coverage",
-    coverageLabel: "Expanded domain coverage",
+    priceLabel: "$200/mo",
+    priceNote: "per month",
+    description: "For ongoing review work, more page coverage, and recurring scan history.",
+    coverageLabel: "500 page scans / month",
+    monthlyPageScanLabel: "500 page scans / month",
+    summary: "For ongoing review work, more page coverage, and recurring scan history.",
     maxDomains: 20,
     maxPagesPerScan: 5,
     scanFrequency: "hourly",
     scanProfile: "standard",
-    manualRescanLimitPerMonth: 90,
+    manualRescanLimitPerMonth: 500,
     scanHistoryEnabled: true,
     apiAccess: false
   },
   {
     code: "team",
-    label: "Ultra",
-    priceLabel: "$289/mo",
-    description: "Expanded domain coverage",
-    coverageLabel: "Expanded domain coverage",
+    label: "Custom",
+    priceLabel: "Custom",
+    priceNote: "custom monthly plan",
+    description: "For higher-volume page scanning, portfolio workflows, API access, and custom evidence needs.",
+    coverageLabel: "Custom page-scan volume",
+    monthlyPageScanLabel: "Custom page-scan volume",
+    summary: "For higher-volume page scanning, portfolio workflows, API access, and custom evidence needs.",
     maxDomains: 100,
     maxPagesPerScan: 5,
     scanFrequency: "hourly",
     scanProfile: "team",
-    manualRescanLimitPerMonth: 600,
+    manualRescanLimitPerMonth: 2000,
     scanHistoryEnabled: true,
     apiAccess: true
   }

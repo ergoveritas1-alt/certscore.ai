@@ -36,7 +36,7 @@ const config: GrowthContentPageConfig = {
     {
       title: "Operational use",
       paragraphs: [
-        "Run checks after tag-manager changes, CMP template updates, marketing launches, and site redesigns.",
+        "Run checks after tag-manager changes, CMP template updates, marketing rollouts, and site redesigns.",
         "Use repeated scans to watch for drift rather than relying on one point-in-time review."
       ]
     }
