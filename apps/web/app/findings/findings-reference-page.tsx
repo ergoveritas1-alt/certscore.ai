@@ -1,7 +1,13 @@
 import { Badge } from "@website-signal-risk-scanner/ui";
+import Link from "next/link";
 import { FindingAtlasBrowser } from "../../components/marketing/findings/finding-atlas-browser";
 import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
-import { getFindingReferenceItems, type FindingReferenceItem } from "../../lib/marketing/finding-atlas";
+import {
+  FINDING_REFERENCE_CATEGORIES,
+  getFindingReferenceItems,
+  type FindingReferenceCategory,
+  type FindingReferenceItem
+} from "../../lib/marketing/finding-atlas";
 import { FINDING_DENSITY_BENCHMARK_SCOPE } from "../../lib/scans/finding-density-benchmarks";
 import {
   createBreadcrumbSchema,
@@ -184,6 +190,77 @@ export function getFindingReferencePageCopy(activeFinding?: FindingReferenceItem
   };
 }
 
+function getFindingsByCategory(findings: FindingReferenceItem[]) {
+  return FINDING_REFERENCE_CATEGORIES.map((category) => ({
+    category,
+    findings: findings.filter((finding) => finding.category === category)
+  })).filter((group) => group.findings.length > 0);
+}
+
+function getCategoryIntro(category: FindingReferenceCategory) {
+  switch (category) {
+    case "Consent":
+      return "Consent timing and choice-surface findings, including pre-consent tracking, reject-path behavior, and consent UI review signals.";
+    case "Cookies":
+      return "Cookie and browser-storage findings for pre-consent activity, disclosure review, and retention-oriented review.";
+    case "Third-party tracking":
+      return "Third-party request, identifier sharing, adtech, session replay, and sensitive-surface tracking context.";
+    case "Accessibility":
+      return "Automated accessibility triage findings for keyboard, labels, text alternatives, contrast, and focus behavior.";
+    case "Fingerprinting":
+      return "Browser and device-signal findings that can support fingerprinting-oriented technical review.";
+    case "Disclosure gaps":
+      return "Public disclosure, privacy-choice, and policy-surface gaps that need manual business and legal review.";
+    case "Consumer protection":
+      return "Choice architecture and policy/runtime alignment findings for review of public claims and observed behavior.";
+  }
+}
+
+function FindingsRegistryDirectory({ findings }: { findings: FindingReferenceItem[] }) {
+  const groupedFindings = getFindingsByCategory(findings);
+
+  return (
+    <section className="mt-8 border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="findings-registry-directory">
+      <div className="max-w-3xl">
+        <h2 id="findings-registry-directory" className="text-xl font-semibold tracking-tight text-slate-950">
+          Finding reference directory
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Browse every public CertScore finding reference page in the registry. Each page documents observed signals, evidence expectations,
+          common causes, review questions, limitations, and related findings.
+        </p>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        {groupedFindings.map((group) => (
+          <section key={group.category} className="border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-sm font-semibold text-slate-950">{group.category}</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{getCategoryIntro(group.category)}</p>
+            <ul className="mt-3 space-y-2">
+              {group.findings.map((finding) => (
+                <li key={finding.id}>
+                  <Link
+                    href={getFindingPath(finding.id)}
+                    className="group block border border-slate-200 bg-white p-3 hover:border-sky-200 hover:bg-sky-50"
+                  >
+                    <span className="block text-sm font-semibold leading-5 text-sky-700 group-hover:text-sky-800">
+                      {finding.title}
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">
+                      {finding.criticality} priority · {finding.benchmark.contextLabel}
+                    </span>
+                    <span className="mt-2 block text-sm leading-6 text-slate-600">{finding.observed}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function FindingsReferencePage({ activeFinding }: FindingsReferencePageProps) {
   const findings = getFindingReferenceItems();
   const certscoreGptUrl = getCertScoreGptUrl();
@@ -242,6 +319,8 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
       <div className="mt-10">
         <FindingAtlasBrowser findings={findings} initialFindingId={initialFindingId} />
       </div>
+
+      {!activeFinding ? <FindingsRegistryDirectory findings={findings} /> : null}
 
       <section className="mt-8 border border-slate-200 bg-white p-5 sm:p-6">
         <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Reference notes</h2>

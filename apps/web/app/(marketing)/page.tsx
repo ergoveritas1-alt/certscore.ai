@@ -11,6 +11,12 @@ import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 const SAMPLE_REPORT_URL = "https://certscore.ai/scan/bc6e4dfa-8a25-43f8-822d-a10e89950799";
+const PRIORITY_FINDING_IDS = [
+  "pre_consent_tracking_detected",
+  "reject_tracking_persists_after_reject",
+  "cookie_disclosure_gap",
+  "policy_behavior_contradiction_detected"
+] as const;
 
 export const metadata: Metadata = {
   ...createPageMetadata({
@@ -90,6 +96,11 @@ function PersonaIcon({ index }: { index: number }) {
 
 export default async function MarketingHomePage() {
   const findings = getFindingReferenceItems();
+  const priorityFindings = PRIORITY_FINDING_IDS.flatMap((findingId) => {
+    const finding = findings.find((item) => item.id === findingId);
+
+    return finding ? [finding] : [];
+  });
   const certscoreGptUrl = getCertScoreGptUrl();
   const softwareApplicationSchema = {
     "@context": "https://schema.org",
@@ -200,6 +211,42 @@ export default async function MarketingHomePage() {
       </section>
 
       <HomepageFindingsOverview findings={findings} />
+
+      <section className="border-b border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-6 py-12">
+          <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
+            <div className="max-w-xl space-y-3">
+              <Badge tone="neutral">Finding references</Badge>
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Review the signals behind the score.</h2>
+              <p className="text-sm leading-6 text-slate-600">
+                CertScore findings are evidence-backed review prompts. The registry explains how each signal is observed, what evidence is needed,
+                common causes, limitations, and related review questions.
+              </p>
+              <Link href="/findings" className="inline-flex text-sm font-semibold text-sky-700 hover:text-sky-800">
+                Browse all {findings.length} finding references
+              </Link>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {priorityFindings.map((finding) => (
+                <Link
+                  key={finding.id}
+                  href={`/findings/${finding.id}`}
+                  className="group block border border-slate-200 bg-slate-50 p-4 hover:border-sky-200 hover:bg-sky-50"
+                >
+                  <span className="block text-sm font-semibold leading-5 text-slate-950 group-hover:text-sky-800">
+                    {finding.title}
+                  </span>
+                  <span className="mt-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    {finding.category} · {finding.criticality}
+                  </span>
+                  <span className="mt-3 block text-sm leading-6 text-slate-600">{finding.observed}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-16">
