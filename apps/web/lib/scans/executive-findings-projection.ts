@@ -4372,17 +4372,22 @@ function buildExecutiveShortSummary(
   }
 
   if (findingId === "rtb_cookie_sync_observed") {
-    const hosts = uniqueStrings([
+    const syncRows = getEntityJsonObjects(packet, "rtbCookieSyncEvidence");
+    const rowVendors = uniqueStrings(syncRows.flatMap((row) =>
+      [getRecordString(row, ["vendorName", "vendor"]), getRecordString(row, ["endpointVendor", "hostname"])]
+    )).filter(isDisplayVendorName);
+    const packetVendors = uniqueStrings([
       ...getEntityValues(packet, /rtb.*domain|runtime.*vendor|vendor/i)
-    ]).filter(isDisplayVendorName).slice(0, 3);
-    const subtypes = classifyRtbCookieSyncEvidenceRows(getEntityJsonObjects(packet, "rtbCookieSyncEvidence")).map(
+    ]).filter(isDisplayVendorName);
+    const hosts = (rowVendors.length > 0 ? rowVendors : packetVendors).slice(0, 3);
+    const subtypes = classifyRtbCookieSyncEvidenceRows(syncRows).map(
       (classification) => classification.subtype
     );
     const hostText = hosts.length > 0 ? ` involving ${formatVendorList(hosts)}` : "";
     if (subtypes.some((subtype) => subtype === "identifier_query_sync" || subtype === "redirect_chain_sync")) {
-      return `Request-level RTB or identity-sync evidence with retained identifier or redirect-chain support was retained${hostText}.`;
+      return `Request-level real-time bidding (RTB) or identity-sync evidence with retained identifier or redirect-chain support was retained${hostText}.`;
     }
-    return `Request-level RTB or identity-sync endpoint evidence was retained${hostText}.`;
+    return `Request-level real-time bidding (RTB) or identity-sync endpoint evidence was retained${hostText}.`;
   }
 
   if (findingId === "cpra_cba_opt_out_missing") {

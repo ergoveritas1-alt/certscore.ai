@@ -1069,6 +1069,7 @@ test("projects RTB cookie sync into executive and privacy regulatory lenses", ()
               query_keys_sample: ["partnerid"],
               reason: "identifier_query",
               runtimePhase: "pre_consent",
+              scannedPageUrl: "https://example.com/",
               url_sample: "https://api.liveramp.com/pixel"
             })
           ],
@@ -1082,7 +1083,7 @@ test("projects RTB cookie sync into executive and privacy regulatory lenses", ()
         sourceUrls: []
       },
       severity: "high",
-      summary: "Request-level RTB or identity-sync evidence was retained."
+      summary: "Request-level real-time bidding (RTB) or identity-sync evidence was retained."
     })
   ]);
 
@@ -1099,6 +1100,7 @@ test("projects RTB cookie sync into executive and privacy regulatory lenses", ()
   assert.equal(finding.evidenceDetails?.rtbCookieSyncSubtypeCounts?.identifier_query_sync, 1);
   assert.deepEqual(finding.evidenceDetails?.rtbCookieSyncIdentifierQueryKeys, ["partnerid"]);
   assert.deepEqual(finding.evidenceDetails?.representativeRequests?.[0]?.queryKeysSample, ["partnerid"]);
+  assert.match(finding.shortSummary, /real-time bidding \(RTB\) or identity-sync evidence/);
   assert.match(finding.shortSummary, /identifier or redirect-chain support/);
   assert.ok(projection.topFindings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
 

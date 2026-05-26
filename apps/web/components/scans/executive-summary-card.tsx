@@ -3278,6 +3278,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
         <div className="space-y-1.5">
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Review and remediation starting points</p>
           <p className="text-sm leading-6 text-slate-700">{getFindingFixText(input.finding)}</p>
+          <p className="text-sm leading-6 text-slate-700">{getRecommendedNextStep(input.finding)}</p>
           {registryGuideHref ? (
             <a
               href={registryGuideHref}
@@ -4248,7 +4249,6 @@ export function ExecutiveSummaryCard(input: {
                       {display.title}
                     </p>
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-slate-700">{getRecommendedNextStep(finding)}</p>
                   <FindingDetailDisclosure finding={finding} />
                 </div>
                 </div>
