@@ -51,6 +51,9 @@ applications:
               }
               EOF
             - pnpm --filter @website-signal-risk-scanner/web build
+        postBuild:
+          commands:
+            - pnpm --filter @website-signal-risk-scanner/web indexnow:submit || echo "[indexnow] submission failed; continuing build"
       artifacts:
         baseDirectory: apps/web/.next
         files:

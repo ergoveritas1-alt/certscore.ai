@@ -116,8 +116,3 @@ jobs:
       - name: Wait for ECS services to stabilize
         run: |
           aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_CERTSCORE_SERVICE_NAME}"
-
-      - name: Submit public URLs to IndexNow
-        run: |
-          curl --fail --silent --show-error "${CERTSCORE_BASE_URL}/d10d085020b84f5c8d101bd753d20857.txt" >/dev/null
-          pnpm --filter @website-signal-risk-scanner/web indexnow:submit
