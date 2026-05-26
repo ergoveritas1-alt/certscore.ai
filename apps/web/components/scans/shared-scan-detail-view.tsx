@@ -5375,6 +5375,7 @@ type SharedScanDetailViewProps = {
   analyticsScanSource?: "homepage" | "dashboard" | "unknown";
   autoRefresh?: ReactNode;
   createAccountHref?: string | null;
+  createdAtInfoTip?: string | null;
   executiveAccessLimitationOverride?: ExecutiveAccessLimitationNotice | null;
   headerActions?: ReactNode;
   headerActionsPlacement?: "end" | "belowTitle";
@@ -5388,6 +5389,7 @@ export function SharedScanDetailView({
   analyticsScanSource = "unknown",
   autoRefresh = null,
   createAccountHref = null,
+  createdAtInfoTip = null,
   executiveAccessLimitationOverride = null,
   headerActions = null,
   headerActionsPlacement = "end",
@@ -5712,6 +5714,7 @@ export function SharedScanDetailView({
         createdAtLabel={
           <>
             Created <ViewerTimestamp value={scanRecord.scan.createdAt} />
+            {createdAtInfoTip ? <InfoTip text={createdAtInfoTip} /> : null}
           </>
         }
         statusLabel={isIncompleteScanCoverage ? "Incomplete" : undefined}
