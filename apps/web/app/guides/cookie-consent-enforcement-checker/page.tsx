@@ -13,10 +13,11 @@ const config: GrowthContentPageConfig = {
     "A cookie consent enforcement checker helps teams review whether cookie and tracking behavior appears aligned with expected consent choices in the browser.",
   path: "/guides/cookie-consent-enforcement-checker",
   relatedLinks: [
+    { href: "/findings/reject_tracking_persists_after_reject", label: "Reject tracking persists finding" },
+    { href: "/findings/pre_consent_tracking_detected", label: "Tracking started before consent finding" },
     { href: "/guides/reject-consent-tracking-test", label: "Reject consent tracking test" },
     { href: "/guides/pre-consent-tracking-detection", label: "Pre-consent tracking detection" },
-    { href: "/compare/cmp-vs-runtime-consent-scanner", label: "CMP vs runtime scanner" },
-    { href: "/guides/website-consent-audit-checklist", label: "Consent audit checklist" }
+    { href: "/compare/cmp-vs-runtime-consent-scanner", label: "CMP vs runtime scanner" }
   ],
   sections: [
     {

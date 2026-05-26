@@ -261,6 +261,55 @@ function FindingsRegistryDirectory({ findings }: { findings: FindingReferenceIte
   );
 }
 
+function RelatedFindingsSection({
+  activeFinding,
+  findings
+}: {
+  activeFinding: FindingReferenceItem;
+  findings: FindingReferenceItem[];
+}) {
+  const findingsById = new Map(findings.map((finding) => [finding.id, finding]));
+  const relatedFindings = activeFinding.relatedFindingIds
+    .map((findingId) => findingsById.get(findingId))
+    .filter((finding): finding is FindingReferenceItem => Boolean(finding))
+    .slice(0, 6);
+
+  if (relatedFindings.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="mt-8 border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="related-findings">
+      <div className="max-w-3xl">
+        <h2 id="related-findings" className="text-xl font-semibold tracking-tight text-slate-950">
+          Related findings
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Review adjacent CertScore finding references that commonly help explain the same evidence cluster, consent path, cookie behavior, or disclosure context.
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {relatedFindings.map((finding) => (
+          <Link
+            key={finding.id}
+            href={getFindingPath(finding.id)}
+            className="group block border border-slate-200 bg-slate-50 p-4 hover:border-sky-200 hover:bg-sky-50"
+          >
+            <span className="block text-sm font-semibold leading-5 text-sky-700 group-hover:text-sky-800">
+              {finding.title}
+            </span>
+            <span className="mt-1 block text-xs leading-5 text-slate-500">
+              {finding.category} · {finding.criticality} priority
+            </span>
+            <span className="mt-2 block text-sm leading-6 text-slate-600">{finding.observed}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function FindingsReferencePage({ activeFinding }: FindingsReferencePageProps) {
   const findings = getFindingReferenceItems();
   const certscoreGptUrl = getCertScoreGptUrl();
@@ -321,6 +370,7 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
       </div>
 
       {!activeFinding ? <FindingsRegistryDirectory findings={findings} /> : null}
+      {activeFinding ? <RelatedFindingsSection activeFinding={activeFinding} findings={findings} /> : null}
 
       <section className="mt-8 border border-slate-200 bg-white p-5 sm:p-6">
         <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Reference notes</h2>

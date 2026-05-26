@@ -44,6 +44,8 @@ export default function WebsitePrivacyPolicyRequirementsGuidePage() {
       ]}
       certScoreFlagExample="The scan could flag a missing privacy policy link, thin policy-topic coverage, or tracking signals that outpace the site’s disclosures."
       relatedGuides={[
+        { href: "/findings/cookie_disclosure_gap", label: "Cookie disclosure gap finding" },
+        { href: "/findings/policy_behavior_contradiction_detected", label: "Policy/runtime alignment finding" },
         { href: "/guides/privacy-policy-examples", label: "Privacy policy examples" },
         { href: "/guides/cookie-consent-laws", label: "Cookie consent laws" },
         { href: "/guides/website-signal-check", label: "Website signal review checklist" }

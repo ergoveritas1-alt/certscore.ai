@@ -13,6 +13,7 @@ const config: GrowthContentPageConfig = {
     "CertScore.ai helps teams review whether a website appears to start third-party tracking before a visitor gives consent. It uses automated runtime observations, not policy text alone.",
   path: "/guides/pre-consent-tracking-detection",
   relatedLinks: [
+    { href: "/findings/pre_consent_tracking_detected", label: "Tracking started before consent finding" },
     { href: "/guides/detect-trackers-before-cookie-consent", label: "Detect trackers before cookie consent" },
     { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement checker" },
     { href: "/benchmarks/pre-consent-tracking-2026", label: "Pre-consent tracking benchmark" },

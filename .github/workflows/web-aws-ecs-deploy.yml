@@ -1,22 +1,6 @@
 name: Public Web AWS ECS Deploy
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/web-aws-ecs-deploy.yml"
-      - "apps/web/**"
-      - "infra/aws/web-ecs/**"
-      - "packages/db/**"
-      - "packages/shared/**"
-      - "packages/ui/**"
-      - "packages/validation-shared/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "tsconfig.base.json"
-      - "turbo.json"
   workflow_dispatch:
 
 concurrency:
