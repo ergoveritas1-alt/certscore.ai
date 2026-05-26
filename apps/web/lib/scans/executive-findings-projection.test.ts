@@ -1096,6 +1096,8 @@ test("projects RTB cookie sync into executive and privacy regulatory lenses", ()
   assert.equal(finding.evidenceDetails?.identifierEvidence?.identifierLikeRequestCount, 1);
   assert.deepEqual(finding.evidenceDetails?.policyEvidence, { evaluated: false });
   assert.equal(finding.evidenceDetails?.rtbCookieSyncEvidence?.[0]?.hostname, "api.liveramp.com");
+  assert.equal(finding.evidenceDetails?.rtbCookieSyncEvidence?.[0]?.pageUrl, "https://example.com/");
+  assert.equal(finding.evidenceDetails?.rtbCookieSyncEvidence?.[0]?.registrableDomain, "liveramp.com");
   assert.deepEqual(finding.evidenceDetails?.rtbCookieSyncEvidenceSubtypes, ["identifier_query_sync"]);
   assert.equal(finding.evidenceDetails?.rtbCookieSyncSubtypeCounts?.identifier_query_sync, 1);
   assert.deepEqual(finding.evidenceDetails?.rtbCookieSyncIdentifierQueryKeys, ["partnerid"]);

@@ -3769,7 +3769,22 @@ function deriveRuntimePrivacyFindings(input: {
     ...preconsentViolationVendors,
     ...(Array.isArray(vendorSummary?.normalizedVendors) ? vendorSummary.normalizedVendors : [])
   ]);
-  const rtbCookieSyncObservations = getRtbCookieSyncObservations(hybrid, rtbDomains);
+  const hybridNavigationSummary = getRecord(hybrid?.navigationSummary);
+  const runtimeFindingPageUrl =
+    getStringValue(hybridNavigationSummary, "finalUrl") ??
+    getStringValue(hybridNavigationSummary, "initialUrl") ??
+    getStringValue(snapshot, "final_url") ??
+    getStringValue(snapshot, "finalUrl") ??
+    getStringValue(snapshot, "page_url") ??
+    getStringValue(snapshot, "pageUrl") ??
+    getStringValue(snapshot, "homepage_url") ??
+    getStringValue(snapshot, "homepageUrl") ??
+    getStringValue(snapshot, "canonical_url") ??
+    getStringValue(snapshot, "canonicalUrl") ??
+    null;
+  const rtbCookieSyncObservations = getRtbCookieSyncObservations(hybrid, rtbDomains, {
+    scannedPageUrl: runtimeFindingPageUrl
+  });
   const rtbRequestUrls = getRuntimeRequestUrlsForDomains(hybrid, rtbDomains);
   const preconsentViolationEvidenceUrls = [
     ...new Set(
@@ -3875,7 +3890,7 @@ function deriveRuntimePrivacyFindings(input: {
           third_party_request_domain_count: rawThirdPartyDomains.length,
           third_party_request_domains: rawThirdPartyDomains
         },
-        pageUrl: null,
+        pageUrl: runtimeFindingPageUrl,
         ruleKey: "runtime_privacy.rtb_cookie_sync_observed",
         severity: rtbCookieSyncObservations.length >= 3 || rtbDomains.length >= 3 || rtbVendors.length >= 2 ? "high" : "medium",
         title: "RTB cookie sync observed"
@@ -3979,11 +3994,33 @@ function getRtbOrIdentitySyncVendors(vendors: unknown[]) {
   ].sort();
 }
 
-function getRtbCookieSyncObservations(hybrid: Record<string, unknown> | null, rtbDomains: string[]) {
+function getRtbCookieSyncObservations(
+  hybrid: Record<string, unknown> | null,
+  rtbDomains: string[],
+  options?: { scannedPageUrl?: string | null }
+) {
   if (!hybrid) {
     return [];
   }
 
+  const getString = (row: Record<string, unknown>, keys: string[]) => {
+    for (const key of keys) {
+      const value = row[key];
+      if (typeof value === "string" && value.trim().length > 0) {
+        return value.trim();
+      }
+    }
+    return null;
+  };
+  const roughRegistrableDomain = (hostname: string) => {
+    const parts = hostname.toLowerCase().replace(/^\./, "").split(".").filter(Boolean);
+    if (parts.length <= 2) {
+      return parts.join(".");
+    }
+    const lastTwo = parts.slice(-2).join(".");
+    const multiPartPublicSuffixes = new Set(["co.uk", "com.au", "com.br", "co.jp", "co.nz", "com.mx"]);
+    return multiPartPublicSuffixes.has(lastTwo) && parts.length >= 3 ? parts.slice(-3).join(".") : lastTwo;
+  };
   const domainSet = new Set(rtbDomains.map((value) => value.trim().replace(/^\.+/, "").toLowerCase()));
   const explicitRows = getRuntimeObjectArray(hybrid.rtbCookieSyncObservations ?? hybrid.rtb_cookie_sync_observations);
   const compactRows = explicitRows.flatMap((row) => {
@@ -4014,15 +4051,22 @@ function getRtbCookieSyncObservations(hybrid: Record<string, unknown> | null, rt
     if (!hasConcreteSyncEvidence) {
       return [];
     }
+    const pageUrl = getString(row, ["pageUrl", "page_url", "scannedPageUrl", "scanned_page_url"]) ?? options?.scannedPageUrl ?? null;
+    const scannedPageUrl = getString(row, ["scannedPageUrl", "scanned_page_url", "pageUrl", "page_url"]) ?? options?.scannedPageUrl ?? null;
+    const vendorName = getString(row, ["vendorName", "vendor_name"]);
+    const vendorNormalizationBasis = getString(row, ["vendorNormalizationBasis", "vendor_normalization_basis"]);
     return [{
       category: typeof row.category === "string" ? row.category : "rtb_exchange",
       hostname,
+      ...(pageUrl ? { pageUrl } : {}),
       pathSample,
       queryKeysSample,
       reason,
+      registrableDomain: getString(row, ["registrableDomain", "registrable_domain", "etldPlusOne", "etld_plus_one"]) ?? roughRegistrableDomain(hostname),
       redirectTargetHost,
       resourceType: typeof row.resourceType === "string" ? row.resourceType : typeof row.resource_type === "string" ? row.resource_type : null,
       runtimePhase: typeof row.runtimePhase === "string" ? row.runtimePhase : typeof row.runtime_phase === "string" ? row.runtime_phase : "unknown",
+      ...(scannedPageUrl ? { scannedPageUrl } : {}),
       statusCode:
         typeof row.statusCode === "number" && Number.isFinite(row.statusCode)
           ? row.statusCode
@@ -4031,7 +4075,9 @@ function getRtbCookieSyncObservations(hybrid: Record<string, unknown> | null, rt
             : null,
       tsMs: typeof row.tsMs === "number" && Number.isFinite(row.tsMs) ? row.tsMs : 0,
       urlSample: urlSample || `https://${hostname}${pathSample}`,
-      vendor: typeof row.vendor === "string" ? row.vendor : null
+      vendor: getString(row, ["vendor"]),
+      ...(vendorName ? { vendorName } : {}),
+      ...(vendorNormalizationBasis ? { vendorNormalizationBasis } : {})
     }];
   });
 

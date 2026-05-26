@@ -2635,6 +2635,21 @@ function enrichSessionReplayConsentContext(findings: CertScoreFinding[]) {
 
 function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket): CertScoreFindingEvidenceDetails {
   const syncRows = getEntityJsonObjects(packet, "rtbCookieSyncEvidence");
+  const scannedPageUrl = getScannedPageUrl(packet);
+  const publicSyncRows = syncRows.slice(0, 12).map((row) => {
+    const hostname = getRecordString(row, ["hostname", "host", "domain"]);
+    const rowPageUrl = getRecordString(row, ["pageUrl", "page_url"]) ?? scannedPageUrl;
+    const rowScannedPageUrl = getRecordString(row, ["scannedPageUrl", "scanned_page_url"]) ?? rowPageUrl;
+    const registrableDomain =
+      getRecordString(row, ["registrableDomain", "registrable_domain", "etldPlusOne", "etld_plus_one"]) ??
+      (hostname ? getUrlHostname(`https://${hostname}`)?.split(".").slice(-2).join(".") ?? null : null);
+    return {
+      ...row,
+      ...(rowPageUrl ? { pageUrl: rowPageUrl } : {}),
+      ...(rowScannedPageUrl ? { scannedPageUrl: rowScannedPageUrl } : {}),
+      ...(registrableDomain ? { registrableDomain } : {})
+    };
+  });
   const syncClassifications = classifyRtbCookieSyncEvidenceRows(syncRows);
   const subtypeCounts = syncClassifications.reduce<Record<string, number>>((counts, classification) => {
     counts[classification.subtype] = (counts[classification.subtype] ?? 0) + 1;
@@ -2694,7 +2709,7 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
         ? "Retained request evidence included identifier-query, cross-domain redirect, or known RTB/identity-sync endpoint patterns."
         : "Retained request evidence included multiple independent RTB/identity-sync endpoint patterns without retained identifier transfer.",
       subtypes: subtypeCounts,
-      examples: syncRows.slice(0, 8)
+      examples: publicSyncRows.slice(0, 8)
     },
     cookieEvidence: { evaluated: false },
     requestSelectionNote: "Representative sync requests are capped examples and are not exhaustive.",
@@ -2714,7 +2729,7 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     ],
     runtimeRequestUrls: requestUrls,
     runtimeVendors: vendors,
-    rtbCookieSyncEvidence: syncRows.slice(0, 12),
+    rtbCookieSyncEvidence: publicSyncRows,
     rtbCookieSyncSubtypeCounts: subtypeCounts,
     rtbCookieSyncEvidenceSubtypes: uniqueStrings(syncClassifications.map((classification) => classification.subtype)),
     rtbCookieSyncRedirectTargets: uniqueStrings(
@@ -4214,7 +4229,21 @@ function buildExecutiveEvidenceDetails(
     const rows = getEntityJsonObjects(packet, "rtbCookieSyncEvidence");
     if (rows.length > 0) {
       const classifications = classifyRtbCookieSyncEvidenceRows(rows);
-      details.rtbCookieSyncEvidence = rows.slice(0, 12);
+      const scannedPageUrl = getScannedPageUrl(packet);
+      details.rtbCookieSyncEvidence = rows.slice(0, 12).map((row) => {
+        const hostname = getRecordString(row, ["hostname", "host", "domain"]);
+        const rowPageUrl = getRecordString(row, ["pageUrl", "page_url"]) ?? scannedPageUrl;
+        const rowScannedPageUrl = getRecordString(row, ["scannedPageUrl", "scanned_page_url"]) ?? rowPageUrl;
+        const registrableDomain =
+          getRecordString(row, ["registrableDomain", "registrable_domain", "etldPlusOne", "etld_plus_one"]) ??
+          (hostname ? getUrlHostname(`https://${hostname}`)?.split(".").slice(-2).join(".") ?? null : null);
+        return {
+          ...row,
+          ...(rowPageUrl ? { pageUrl: rowPageUrl } : {}),
+          ...(rowScannedPageUrl ? { scannedPageUrl: rowScannedPageUrl } : {}),
+          ...(registrableDomain ? { registrableDomain } : {})
+        };
+      });
       details.rtbCookieSyncEvidenceSubtypes = uniqueStrings(classifications.map((classification) => classification.subtype));
       details.rtbCookieSyncSubtypeCounts = classifications.reduce<Record<string, number>>((counts, classification) => {
         counts[classification.subtype] = (counts[classification.subtype] ?? 0) + 1;

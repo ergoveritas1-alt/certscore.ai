@@ -5331,13 +5331,18 @@ test("promotes RTB cookie sync only with compact request-level sync evidence", (
           rtbCookieSyncObservations: [
             {
               hostname: "sync-t1.taboola.com",
+              pageUrl: "https://example.com/",
               pathSample: "/sg/pubmatic-network/1/rtb-h/",
               queryKeysSample: ["gdpr", "uid"],
               reason: "sync_path",
+              registrableDomain: "taboola.com",
               runtimePhase: "pre_consent",
+              scannedPageUrl: "https://example.com/",
               statusCode: 302,
               urlSample: "https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/",
-              vendor: "PubMatic"
+              vendor: "PubMatic",
+              vendorName: "PubMatic",
+              vendorNormalizationBasis: "known_sync_endpoint_pattern"
             }
           ],
           requestObservations: [
@@ -5387,16 +5392,21 @@ test("promotes RTB cookie sync only with compact request-level sync evidence", (
     {
       category: "rtb_exchange",
       hostname: "sync-t1.taboola.com",
+      pageUrl: "https://example.com/",
       pathSample: "/sg/pubmatic-network/1/rtb-h/",
       queryKeysSample: ["gdpr", "uid"],
       reason: "sync_path",
+      registrableDomain: "taboola.com",
       redirectTargetHost: null,
       resourceType: null,
       runtimePhase: "pre_consent",
+      scannedPageUrl: "https://example.com/",
       statusCode: 302,
       tsMs: 0,
       urlSample: "https://sync-t1.taboola.com/sg/pubmatic-network/1/rtb-h/",
-      vendor: "PubMatic"
+      vendor: "PubMatic",
+      vendorName: "PubMatic",
+      vendorNormalizationBasis: "known_sync_endpoint_pattern"
     }
   ]);
   assert.deepEqual(finding?.evidence.rtb_cookie_sync_domains, [
