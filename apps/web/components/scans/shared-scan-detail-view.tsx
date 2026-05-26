@@ -5714,7 +5714,14 @@ export function SharedScanDetailView({
         createdAtLabel={
           <>
             Created <ViewerTimestamp value={scanRecord.scan.createdAt} />
-            {createdAtInfoTip ? <InfoTip text={createdAtInfoTip} /> : null}
+            {createdAtInfoTip ? (
+              <InfoTip
+                align="end"
+                className="ml-1 -translate-y-1 align-middle"
+                placement="bottom"
+                text={createdAtInfoTip}
+              />
+            ) : null}
           </>
         }
         statusLabel={isIncompleteScanCoverage ? "Incomplete" : undefined}
