@@ -1323,8 +1323,9 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
 
   const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
   const preconsentEvidenceRecord = preconsentEvidenceQuality as Record<string, unknown> | null;
+  const hybridRuntimeEvidenceRecord = getRuntimeObject(input.runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]);
   const runtimeCookieInventory = buildRuntimeCookieInventory({
-    hybridRuntimeEvidence: getRuntimeObject(input.runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]),
+    hybridRuntimeEvidence: hybridRuntimeEvidenceRecord,
     runtimeArtifacts: input.runtimeArtifacts
   });
   const preconsentCookieEvidenceRows = runtimeCookieInventory.beforeConsentRows.map(compactPreconsentCookieEvidenceRow);
@@ -1396,10 +1397,15 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   const requestClassifications =
     (directRequestClassifications.length > 0 ? directRequestClassifications : fallbackRequestClassifications)
       .map(normalizeRequestPurposeClassificationRow);
-  const rejectPath = getRuntimeObject(input.runtimeArtifacts, [
-    "rejectPathDepthAndAvailability",
-    "reject_path_depth_and_availability"
+  const retainedConsentUiPathEvidence = getRuntimeObject(hybridRuntimeEvidenceRecord, [
+    "consentUiPathEvidence",
+    "consent_ui_path_evidence"
   ]);
+  const rejectPath =
+    getRuntimeObject(input.runtimeArtifacts, [
+      "rejectPathDepthAndAvailability",
+      "reject_path_depth_and_availability"
+    ]) ?? retainedConsentUiPathEvidence;
   const botBlockChallengeEvidence = getRuntimeObject(input.runtimeArtifacts, [
     "botBlockChallengeEvidence",
     "bot_block_challenge_evidence"
@@ -1430,6 +1436,26 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       "consentActionableChoiceObserved",
       "consent_actionable_choice_observed"
     ]);
+  const consentSurfaceObservedForPath =
+    consentSurfaceObserved === true ||
+    rejectPath?.unrelatedOverlayClassifier === "consent_surface" ||
+    rejectPath?.unrelated_overlay_classifier === "consent_surface" ||
+    (
+      typeof rejectPath?.blockingEvidenceSource === "string" &&
+      /consent/i.test(rejectPath.blockingEvidenceSource)
+    ) ||
+    (
+      typeof rejectPath?.blocking_evidence_source === "string" &&
+      /consent/i.test(rejectPath.blocking_evidence_source)
+    );
+  const consentActionableChoiceObservedForPath =
+    consentActionableChoiceObserved === true ||
+    Array.isArray(rejectPath?.acceptLabels) && rejectPath.acceptLabels.length > 0 ||
+    Array.isArray(rejectPath?.accept_labels) && rejectPath.accept_labels.length > 0 ||
+    Array.isArray(rejectPath?.rejectLabels) && rejectPath.rejectLabels.length > 0 ||
+    Array.isArray(rejectPath?.reject_labels) && rejectPath.reject_labels.length > 0 ||
+    rejectPath?.forcedActionRequired === true ||
+    rejectPath?.forced_action_required === true;
   const nonEssentialRequestRows = requestClassifications.filter(isPromotionGradePreconsentRequestRow);
   const retainedPreconsentEvidenceUrls = Array.isArray(preconsentEvidenceRecord?.preconsent_tracker_evidence_urls)
     ? (preconsentEvidenceRecord.preconsent_tracker_evidence_urls as unknown[]).filter(
@@ -1693,8 +1719,8 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   const preferencesRequiredBeforeReject =
     rejectPath?.preferencesRequiredBeforeReject === true || rejectPath?.preferences_required_before_reject === true;
   const concreteRejectPathObserved =
-    consentSurfaceObserved === true &&
-    consentActionableChoiceObserved === true &&
+    consentSurfaceObservedForPath &&
+    consentActionableChoiceObservedForPath &&
     (acceptClickDepth !== null || rejectClickDepth !== null || preferencesRequiredBeforeReject);
   const consentSurfaceDiagnostics =
     getRuntimeObject(input.runtimeArtifacts, ["consentSurfaceDiagnostics", "consent_surface_diagnostics"]) ??
@@ -1709,15 +1735,73 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     hybridUiSummary?.forcedActionRequired === true ||
     hybridUiSummary?.forced_action_required === true;
   const consentSurfaceGateEvidence = {
-    consentActionableChoiceObserved,
+    consentActionableChoiceObserved: consentActionableChoiceObservedForPath,
     consentSurfaceDiagnostics,
-    consentSurfaceObserved,
+    consentSurfaceObserved: consentSurfaceObservedForPath,
     rejectPathDepthAndAvailability: rejectPath,
     hybridConsentSummary,
     hybridConsentVisual: getRuntimeObject(input.runtimeArtifacts, ["hybridConsentVisual", "hybrid_consent_visual"]),
     hybridUiSummary
   };
   const consentSurfaceGate = evaluateConsentSurfaceGate(consentSurfaceGateEvidence);
+  const overlayClassifier = String(
+    rejectPath?.unrelatedOverlayClassifier ??
+    rejectPath?.unrelated_overlay_classifier ??
+    ""
+  );
+  const consentSpecificBlockingInteraction =
+    pageAccessBlockedUntilChoice &&
+    !/paywall|bot_challenge|age_gate|login_wall/.test(overlayClassifier) &&
+    (
+      rejectPath?.pageInteractionBlocked === true ||
+      rejectPath?.page_interaction_blocked === true ||
+      rejectPath?.blockedPageInteraction === true ||
+      rejectPath?.blocked_page_interaction === true ||
+      rejectPath?.forcedActionRequired === true ||
+      rejectPath?.forced_action_required === true ||
+      rejectPath?.contentObstructed === true ||
+      rejectPath?.content_obstructed === true ||
+      typeof rejectPath?.blockingEvidenceSource === "string" ||
+      typeof rejectPath?.blocking_evidence_source === "string"
+    );
+  if (rejectPath && consentSurfaceObservedForPath && consentSpecificBlockingInteraction) {
+    candidates.push({
+      categoryId: "choice_symmetry_dark_pattern_indicators",
+      description: "The retained consent prompt blocked page access or interaction until a consent choice was made.",
+      fallbackEvidence: {
+        consentActionableChoiceObserved: consentActionableChoiceObservedForPath,
+        consentSurfaceDecisionStates: consentSurfaceGate.states,
+        consentSurfaceDiagnostics,
+        consentSurfaceObserved: consentSurfaceObservedForPath,
+        consentUiPathEvidence: rejectPath,
+        forced_consent_wall: true,
+        hybridConsentSummary: {
+          ...(hybridConsentSummary ?? {})
+        },
+        hybridUiSummary: {
+          ...(hybridUiSummary ?? {})
+        },
+        overlayKind: "consent_modal",
+        pageAccessBlockedUntilChoice,
+        rejectPathDepthAndAvailability: rejectPath,
+        runtimeEvidenceArtifacts: ["scan_runtime_artifacts.hybrid_runtime_evidence.consentUiPathEvidence"],
+        signalKey: "privacy.dark_pattern_forced_consent_wall",
+        signalLabel: "Forced consent interaction",
+        signalValue: true,
+        snippets: ["The retained consent UI evidence showed page access or interaction was blocked until a consent choice."],
+        unifiedFindingId: "forced_consent_wall"
+      },
+      id: "runtime-derived-signal-privacy.dark_pattern_forced_consent_wall.blocking_evidence",
+      linkedValidationFinding: null,
+      observedValue: "page_access_blocked_until_choice",
+      severity: "high",
+      signalKey: "privacy.dark_pattern_forced_consent_wall",
+      signalLabel: "Forced consent interaction",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Forced consent interaction"
+    });
+  }
   if (
     rejectPath &&
     concreteRejectPathObserved &&

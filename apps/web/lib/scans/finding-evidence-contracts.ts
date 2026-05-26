@@ -29,6 +29,7 @@ export type EvidenceRequirementType =
   | "postRejectRuntimeEvidence"
   | "successfulRejectInteraction"
   | "consentSurfaceEvaluable"
+  | "consentSpecificBlockingInteraction"
   | "rejectAbsentFirstLayer"
   | "rejectPathDepthEvidence"
   | "materialChoiceAsymmetryEvidence"
@@ -111,6 +112,7 @@ const REQUIREMENT_DESCRIPTIONS: Record<EvidenceRequirementType, string> = {
   postRejectRuntimeEvidence: "Post-reject runtime activity or cookie-diff provenance shows non-essential tracking persisted.",
   successfulRejectInteraction: "Reject interaction succeeded before post-reject activity was evaluated.",
   consentSurfaceEvaluable: "A stable first-layer consent surface was observed in a pre-choice state and was visible or reachable.",
+  consentSpecificBlockingInteraction: "Retained consent UI path evidence shows page access or interaction was blocked until choice.",
   rejectAbsentFirstLayer: "The same evaluated first-layer consent surface had accept/control candidates but no first-layer reject candidate.",
   rejectPathDepthEvidence: "Reject path depth and availability were inspected with an explicit outcome.",
   materialChoiceAsymmetryEvidence: "Structured UI evidence shows a material consent choice asymmetry or dark pattern.",
@@ -337,6 +339,23 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
     notes: "Must distinguish untested, unavailable, hidden, failed, and not found paths."
+  },
+  {
+    findingId: "forced_consent_interaction",
+    unifiedFindingIds: ["forced_consent_wall"],
+    requiredForStrong: [req("consentSpecificBlockingInteraction"), req("coverageNotMateriallyBlocked")],
+    requiredForGood: [req("consentSpecificBlockingInteraction")],
+    downgradeIf: [
+      { ifMissing: "consentSpecificBlockingInteraction", to: "audit_only", reason: "Forced consent interaction requires retained consent-specific page blocking evidence." }
+    ],
+    suppressIf: [],
+    projectionEligibility: {
+      executive: { requiresContractPass: true, minimumTier: "strong" },
+      gdprEprivacy: { requiresContractPass: true, minimumTier: "strong" },
+      ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
+      ftc: { requiresContractPass: true, minimumTier: "strong" }
+    },
+    notes: "Requires WS01-retained consent UI path evidence showing page access or interaction was blocked until choice."
   },
   {
     findingId: "dark_pattern_consent_signals_detected",
@@ -1092,6 +1111,41 @@ function hasMaterialChoiceAsymmetryEvidence(rawEvidence: Record<string, unknown>
   );
 }
 
+function getConsentUiPathEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  return (
+    getObjectValue(rawEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]) ??
+    getObjectValue(rawEvidence, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]) ??
+    parseFirstObjectValue(rawEvidence?.consentUiPathEvidence ?? rawEvidence?.consent_ui_path_evidence) ??
+    parseFirstObjectValue(rawEvidence?.rejectPathDepthAndAvailability ?? rawEvidence?.reject_path_depth_and_availability)
+  );
+}
+
+function hasConsentSpecificBlockingInteraction(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (hasNonConsentOverlayWithoutIndependentConsentEvidence(rawEvidence)) {
+    return false;
+  }
+
+  const path = getConsentUiPathEvidence(rawEvidence);
+  const classifier = getStringValue(path, ["unrelatedOverlayClassifier", "unrelated_overlay_classifier"]);
+  const source = getStringValue(path, ["blockingEvidenceSource", "blocking_evidence_source"]);
+  const consentClassified =
+    classifier === "consent_surface" ||
+    Boolean(source && /consent/i.test(source)) ||
+    rawEvidence?.forced_consent_wall === true;
+
+  if (!consentClassified) {
+    return false;
+  }
+
+  return (
+    getBoolean(path, ["pageAccessBlockedUntilChoice", "page_access_blocked_until_choice"]) === true ||
+    getBoolean(path, ["pageInteractionBlocked", "page_interaction_blocked"]) === true ||
+    getBoolean(path, ["blockedPageInteraction", "blocked_page_interaction"]) === true ||
+    getBoolean(path, ["forcedActionRequired", "forced_action_required"]) === true ||
+    getBoolean(path, ["contentObstructed", "content_obstructed"]) === true
+  );
+}
+
 function hasPolicyAnchor(rawEvidence: Record<string, unknown> | null | undefined) {
   if (getRuntimeVendorDisclosureEvidence(rawEvidence).some((row) => row.policySurfacesSearched.some((surface) => surface.reached))) {
     return true;
@@ -1396,6 +1450,8 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
       return hasPostRejectRuntimeEvidence(rawEvidence);
     case "successfulRejectInteraction":
       return hasSuccessfulRejectInteraction(rawEvidence);
+    case "consentSpecificBlockingInteraction":
+      return hasConsentSpecificBlockingInteraction(rawEvidence);
     case "consentSurfaceEvaluable": {
       const gate = evaluateConsentSurfaceGate(rawEvidence);
       return consentSurfaceGateAllowsConsentUxPromotion(gate);
@@ -1480,6 +1536,8 @@ function downgradeFlag(type: EvidenceRequirementType) {
     case "postRejectTimestampedRuntimeEvidence":
     case "successfulRejectInteraction":
       return "missing_post_reject_timing_evidence";
+    case "consentSpecificBlockingInteraction":
+      return "missing_specific_runtime_anchor";
     case "policyAnchor":
     case "negativeEvidenceSearchScope":
       return "missing_policy_side_evidence";
