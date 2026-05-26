@@ -6,7 +6,7 @@ export const deploymentTopologySchema = z.object({
   acceptedAwsRuntime: z.enum(["amplify", "app-runner", "ecs-fargate"]),
   currentLiveGitRef: z.string().min(1),
   currentLiveWebRuntimeTarget: z.enum(["amplify", "app-runner", "ecs-fargate", "unknown"]),
-  preferredWebPlatform: z.enum(["amplify", "app-runner"]),
+  preferredWebPlatform: z.enum(["amplify", "app-runner", "ecs-fargate"]),
   primaryHost: z.string().url(),
   secondaryHost: z.string().url().optional()
 });

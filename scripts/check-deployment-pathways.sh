@@ -74,7 +74,10 @@ else
   warn "Working tree has uncommitted changes"
 fi
 
-if [[ "${expected_web_platform}" == "amplify" ]]; then
+if [[ "${expected_web_platform}" == "ecs-fargate" ]]; then
+  require_file ".github/workflows/web-aws-ecs-deploy.yml" "GitHub Actions public web ECS deploy workflow is present"
+  require_file "apps/web/Dockerfile" "Public web ECS image build file is present"
+elif [[ "${expected_web_platform}" == "amplify" ]]; then
   require_file ".npmrc" "pnpm monorepo config for Amplify is present"
   if [[ -f ".npmrc" ]] && grep -q '^node-linker=hoisted$' .npmrc; then
     pass ".npmrc config uses hoisted node linker for Amplify builds"

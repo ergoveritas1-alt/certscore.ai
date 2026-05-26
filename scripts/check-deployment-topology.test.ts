@@ -7,7 +7,7 @@ test("deployment topology config matches the expected schema", () => {
   assert.equal(result.success, true);
 });
 
-test("deployment topology schema accepts both supported preferred web platforms", () => {
+test("deployment topology schema accepts supported preferred web platforms", () => {
   const base = {
     acceptedAwsRuntime: "app-runner",
     currentLiveGitRef: "main",
@@ -18,13 +18,14 @@ test("deployment topology schema accepts both supported preferred web platforms"
 
   assert.equal(deploymentTopologySchema.safeParse({ ...base, preferredWebPlatform: "amplify" }).success, true);
   assert.equal(deploymentTopologySchema.safeParse({ ...base, preferredWebPlatform: "app-runner" }).success, true);
+  assert.equal(deploymentTopologySchema.safeParse({ ...base, preferredWebPlatform: "ecs-fargate" }).success, true);
 });
 
 test("deployment topology schema accepts both supported accepted AWS runtimes", () => {
   const base = {
     currentLiveGitRef: "main",
     currentLiveWebRuntimeTarget: "ecs-fargate",
-    preferredWebPlatform: "amplify",
+    preferredWebPlatform: "ecs-fargate",
     primaryHost: "https://certscore.ai",
     secondaryHost: "https://example.com"
   };

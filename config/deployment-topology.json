@@ -1,6 +1,6 @@
 {
   "acceptedAwsRuntime": "ecs-fargate",
-  "preferredWebPlatform": "amplify",
+  "preferredWebPlatform": "ecs-fargate",
   "currentLiveWebRuntimeTarget": "ecs-fargate",
   "currentLiveGitRef": "main",
   "primaryHost": "https://certscore.ai"
