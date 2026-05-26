@@ -444,6 +444,9 @@ function mapExecutiveConfidence(
     return "moderate";
   }
   if (findingId === "policy_behavior_contradiction_detected") {
+    if (!isSpecificPolicyRuntimeContradiction(packet)) {
+      return "good";
+    }
     return evaluatePolicyRuntimeConflictPresentation(packet).complete ? mapConfidenceBandToExecutiveConfidence(packet.confidenceBand) : "moderate";
   }
   if (findingId === "focus_management_issue") {
@@ -1521,9 +1524,19 @@ function isSameAuditHost(value: string, auditedUrl: string | null) {
 }
 
 function getAuditPageUrlCandidates(packet: UnifiedFindingDisplayPacket) {
+  const retainedRowPageUrls = [
+    ...getEntityJsonObjects(packet, "rtbCookieSyncEvidence"),
+    ...getEntityJsonObjects(packet, "crossDomainIdentifierSharingEvidence"),
+    ...getEntityJsonObjects(packet, "preconsent_cookie_evidence"),
+    ...getEntityJsonObjects(packet, "cookieRetentionEvidence")
+  ].flatMap((row) => [
+    getRecordString(row, ["scannedPageUrl", "scanned_page_url"]),
+    getRecordString(row, ["pageUrl", "page_url"])
+  ]);
   const initialCandidates = uniqueCaseInsensitiveStrings([
     ...getReportFacingScannedPageUrls(packet),
     getReportFacingScannedPageUrl(packet),
+    ...retainedRowPageUrls,
     packet.sourceUrl && getReportFacingScannedPageUrl({
       evidence: {
         pageUrls: [],

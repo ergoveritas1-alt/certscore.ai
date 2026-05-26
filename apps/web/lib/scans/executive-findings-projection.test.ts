@@ -1181,8 +1181,10 @@ test("projects cross-domain identifier sharing rows into executive evidence deta
               destinationEtldPlusOne: "liveramp.com",
               identifierClass: "durable_id",
               key: "partnerid",
+              pageUrl: "https://example.com/",
               repeatedAcrossEtlds: ["liveramp.com"],
               requestUrlRedacted: "https://api.liveramp.com/pixel?partnerid=%5Bredacted%5D",
+              scannedPageUrl: "https://example.com/",
               valueHash: "a".repeat(64)
             })
           ]
@@ -1200,6 +1202,7 @@ test("projects cross-domain identifier sharing rows into executive evidence deta
 
   const finding = projection.findings.find((entry) => entry.id === "cross_domain_identifier_sharing_observed");
   assert.ok(finding);
+  assert.equal(finding.evidenceDetails?.scanContext?.pageUrl, "https://example.com/");
   assert.equal(finding.evidenceDetails?.counts?.crossDomainIdentifierEvidenceRows, 1);
   assert.equal(finding.evidenceDetails?.counts?.crossDomainIdentifierDestinations, 2);
   assert.deepEqual(finding.evidenceDetails?.trackingEvidence?.identifierKeys, ["partnerid"]);
@@ -1342,7 +1345,7 @@ test("generic policy runtime alignment review projects as medium even with retai
 
   assert.equal(finding?.label, "Policy/runtime alignment review");
   assert.equal(finding?.severity, "medium");
-  assert.equal(finding?.confidence, "strong");
+  assert.equal(finding?.confidence, "good");
 });
 
 test("policy runtime contradiction missing policy snippet is not projected", () => {

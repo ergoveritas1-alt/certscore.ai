@@ -24,6 +24,7 @@ import {
 import { deriveHighRiskTrackingContext } from "./high-risk-tracking-context";
 import {
   evaluatePolicyBehaviorContradictionEvidence,
+  evaluatePolicyRuntimeAlignmentReviewEvidence,
   getAllowedConflictType,
   getContradictionEvidenceBundle,
   type PolicyBehaviorConflictClaimType,
@@ -1190,11 +1191,7 @@ function hasNativeContradictionPacketTriplet(source: Record<string, unknown>) {
 }
 
 function hasPolicyRuntimeAlignmentReviewBridge(source: Record<string, unknown>) {
-  return getRuntimeObjectArray(source, ["policyRuntimeBridgeCandidates", "policy_runtime_bridge_candidates"]).some((bridge) => {
-    const mappingType = getRuntimeString(bridge, ["mappingType", "mapping_type"]);
-    const supportsPromotionCandidate = getRuntimeBoolean(bridge, ["supportsPromotionCandidate", "supports_promotion_candidate"]);
-    return mappingType === "deterministic_policy_runtime_review_mapping" && supportsPromotionCandidate === true;
-  });
+  return evaluatePolicyRuntimeAlignmentReviewEvidence(source).eligible;
 }
 
 function hasConcreteRejectPathShape(path: Record<string, unknown> | null) {
