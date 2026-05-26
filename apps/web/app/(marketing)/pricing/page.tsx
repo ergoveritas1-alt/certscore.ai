@@ -48,16 +48,16 @@ export default function PricingPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 py-14">
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+      <section className="mx-auto max-w-6xl px-6 py-14">
+        <div className="grid gap-4 lg:grid-cols-4">
           {trialPlan ? (
             <Card className="relative flex h-full flex-col overflow-hidden border-emerald-100 bg-[linear-gradient(180deg,rgba(248,253,250,1)_0%,rgba(255,255,255,0.98)_100%)] shadow-none">
               <div
                 aria-hidden="true"
                 className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,rgba(16,185,129,0.22)_0%,rgba(132,204,22,0.32)_100%)]"
               />
-              <CardContent className="flex h-full flex-col justify-between gap-7 p-6">
-                <div className="space-y-5">
+              <CardContent className="flex h-full flex-col justify-between gap-6 p-5">
+                <div className="space-y-4">
                   <div className="space-y-1">
                     <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{trialPlan.label}</h2>
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">{trialPlan.trialLabel}</p>
@@ -67,13 +67,12 @@ export default function PricingPage() {
                       <span className="text-5xl font-semibold tracking-tight text-slate-950">{trialPlan.priceLabel}</span>
                       <span className="pb-1 text-sm text-slate-500">{trialPlan.priceNote}</span>
                     </div>
-                    <p className="text-sm font-semibold text-slate-900">{trialPlan.coverageLabel}</p>
+                    <p className="text-sm font-semibold text-slate-900">{trialPlan.coverageLabel}*</p>
                   </div>
                   <p className="text-sm leading-6 text-slate-600">{trialPlan.summary}</p>
                   <div className="space-y-2">
                     {[
-                      trialPlan.monthlyPageScanLabel,
-                      `Up to 1 scan request every ${SCAN_ACCESS.scanThrottleMinutes} minutes`,
+                      `${trialPlan.monthlyPageScanLabel}*`,
                       "Review scan results before choosing a monthly plan"
                     ].map((item) => (
                       <div key={item} className="flex items-start gap-2 text-sm leading-6 text-slate-700">
@@ -118,8 +117,8 @@ export default function PricingPage() {
                     : "absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,rgba(16,185,129,0.22)_0%,rgba(132,204,22,0.32)_100%)]"
                 }
               />
-              <CardContent className="flex h-full flex-col justify-between gap-7 p-6">
-                <div className="space-y-5">
+              <CardContent className="flex h-full flex-col justify-between gap-6 p-5">
+                <div className="space-y-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
                       <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{plan.label}</h2>
@@ -138,7 +137,7 @@ export default function PricingPage() {
                         <span className="pb-1 text-sm text-slate-500">{plan.priceNote}</span>
                       </div>
                     </div>
-                    <p className="text-sm font-semibold text-slate-900">{plan.coverageLabel}</p>
+                    <p className="text-sm font-semibold text-slate-900">{plan.coverageLabel}*</p>
                   </div>
 
                   <div className="space-y-2">
@@ -150,8 +149,7 @@ export default function PricingPage() {
 
                   <div className="space-y-2">
                     {[
-                      plan.monthlyPageScanLabel,
-                      `Up to 1 scan request every ${SCAN_ACCESS.scanThrottleMinutes} minutes`,
+                      `${plan.monthlyPageScanLabel}*`,
                       "Show scan history for follow-up review"
                     ].map((item) => (
                       <div key={`${plan.code}-${item}`} className="flex items-start gap-2 text-sm leading-6 text-slate-700">
@@ -185,8 +183,8 @@ export default function PricingPage() {
               aria-hidden="true"
               className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,rgba(99,91,255,0.22)_0%,rgba(168,85,247,0.3)_100%)]"
             />
-            <CardContent className="flex h-full flex-col justify-between gap-6 p-6">
-              <div className="space-y-5">
+            <CardContent className="flex h-full flex-col justify-between gap-6 p-5">
+              <div className="space-y-4">
                 <div className="space-y-1">
                   <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{customPlan.label}</h2>
                 </div>
@@ -235,6 +233,14 @@ export default function PricingPage() {
         </div>
 
         <p className="mt-5 text-center text-sm text-slate-500">
+          * Scan requests are limited to one request every {SCAN_ACCESS.scanThrottleMinutes} minutes. For batch scanning or higher throughput, contact{" "}
+          <a className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800" href={`mailto:${SCAN_ACCESS.salesEmail}`}>
+            {SCAN_ACCESS.salesEmail}
+          </a>
+          . Custom plans can support higher throttling rates.
+        </p>
+
+        <p className="mt-3 text-center text-sm text-slate-500">
           Not sure yet?{" "}
           <Link href="/#homepage-scan" className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800">
             Run a free scan

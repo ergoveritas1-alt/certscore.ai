@@ -25,7 +25,7 @@ export default async function ModifyPlanPage() {
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 lg:grid-cols-4">
         {PLAN_DEFINITIONS.map((plan) => {
           const isCurrent = plan.code === organization.plan;
 
@@ -37,25 +37,26 @@ export default async function ModifyPlanPage() {
                 isCurrent ? "border-slate-900 ring-1 ring-slate-900/10" : ""
               ].join(" ")}
             >
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
+              <CardHeader className="p-5 pb-3">
+                <CardTitle className="flex items-start justify-between gap-3">
                   <span>{plan.label}</span>
-                  <span className="text-base font-medium text-slate-700">{plan.priceLabel}</span>
+                  <span className="text-right text-sm font-medium text-slate-700">{plan.priceLabel}</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm text-slate-700">
+              <CardContent className="space-y-3 p-5 pt-0 text-sm text-slate-700">
                 <p>{planDescriptions[plan.code] ?? plan.description}</p>
-                <p className="font-medium text-slate-900">{plan.monthlyPageScanLabel}</p>
+                <p className="font-medium text-slate-900">{plan.monthlyPageScanLabel}*</p>
                 {plan.apiAccess ? (
-                  <p className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-xs font-semibold leading-5 text-violet-950">
-                    API access included for custom workflows.
-                  </p>
+                  <div className="space-y-2">
+                    <p className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-xs font-semibold leading-5 text-violet-950">
+                      API access included for custom workflows.
+                    </p>
+                    <p className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-xs font-semibold leading-5 text-violet-950">
+                      Higher throttling rates available.
+                    </p>
+                  </div>
                 ) : null}
                 <p>Scan history: {plan.code === "pro" || plan.scanHistoryEnabled ? "Included" : "Not included"}</p>
-                <p className="rounded-2xl border border-sky-100 bg-sky-50 px-3 py-2 text-xs leading-5 text-slate-600">
-                  Scan requests are limited to one request every {SCAN_ACCESS.scanThrottleMinutes} minutes. For batch scanning or higher
-                  throughput, contact {SCAN_ACCESS.salesEmail}.
-                </p>
                 <div className="pt-2">
                   <ModifyPlanSelectForm
                     action={updateCurrentOrganizationPlanFormAction}
@@ -68,6 +69,13 @@ export default async function ModifyPlanPage() {
           );
         })}
       </div>
+      <p className="max-w-3xl text-xs leading-5 text-slate-500">
+        * Scan requests are limited to one request every {SCAN_ACCESS.scanThrottleMinutes} minutes. For batch scanning or higher throughput, contact{" "}
+        <a className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800" href={`mailto:${SCAN_ACCESS.salesEmail}`}>
+          {SCAN_ACCESS.salesEmail}
+        </a>
+        . Custom plans can support higher throttling rates.
+      </p>
     </div>
   );
 }
