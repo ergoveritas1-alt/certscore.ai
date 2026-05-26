@@ -1,6 +1,8 @@
 # Amplify Web Runtime Validation
 
-Use this when validating an Amplify-hosted `apps/web` deployment before DNS cutover.
+Historical reference only. `certscore.ai` production now uses AWS ECS/Fargate, and the CertScore Amplify app has been retired.
+
+Use this only if an Amplify rehearsal is deliberately reintroduced for `apps/web`.
 
 ## Purpose
 
@@ -55,9 +57,9 @@ The check also attempts DNS resolution of the PostgreSQL hostname in `DATABASE_U
 
 That does not prove full network connectivity, but it catches a broken or private-only hostname before runtime traffic hits it.
 
-## Recommended cutover use
+## Historical cutover use
 
-Use this in order:
+If Amplify is ever reintroduced, use this in order:
 
 1. Verify Amplify app env and secret wiring.
 2. Run `pnpm --filter @website-signal-risk-scanner/web check-env:amplify-runtime`.

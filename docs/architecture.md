@@ -11,9 +11,9 @@
 - One Next.js web app for marketing, auth, dashboard, reports, and download routes
 - One TypeScript worker for queue processing, crawling, auditing, scoring, reporting, PDF generation, and scheduling
 - Better Auth for sessions and identity, PostgreSQL for data, and S3-compatible storage for artifacts
-- The target web topology is two AWS Amplify Hosting apps that both build from `apps/web`
-- If the web SSR workload still requires direct PostgreSQL access, the accepted AWS runtime path is ECS/Fargate in `us-west-1` until that dependency shape changes
-- `certscore.ai` and `consentcheck.site` stay separate public hosts with separate env and domain settings even though they share code
+- The public web topology is AWS ECS/Fargate for `certscore.ai`
+- `apps/web` remains the canonical app root for the CertScore public web host
+- `consentcheck.site` is not a WC01 web host and must not be claimed or deployed from this repo
 
 ## Execution model
 
@@ -32,9 +32,9 @@
 
 ## Deployment model
 
-- Web deploys should be promoted through the Git-connected production AWS path rather than ad hoc VM pushes
-- While direct PostgreSQL access remains part of the critical SSR contract, the practical AWS cutover path in the current account/region is an ECS/Fargate-style runtime rather than Amplify Hosting
-- Production verification should check each public host directly and confirm the expected runtime target and git revision before concluding a rollout path is healthy
+- Web deploys are promoted through the Git-connected AWS ECS/Fargate production workflow
+- Direct PostgreSQL access remains part of the critical SSR contract, so Amplify Hosting is not an active production lane
+- Production verification must check `certscore.ai` directly and confirm the expected runtime target and git revision before concluding a rollout path is healthy
 
 ## Data model highlights
 

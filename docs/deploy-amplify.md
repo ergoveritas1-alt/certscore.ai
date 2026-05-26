@@ -1,6 +1,6 @@
 # AWS Amplify Deployment Reference
 
-This document is historical reference material only. It is not the active WC01 production deployment path.
+This document is historical reference material only. It is not the active WC01 production deployment path, and the CertScore Amplify app has been deleted from AWS.
 
 Current production truth:
 

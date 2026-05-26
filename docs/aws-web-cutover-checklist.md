@@ -7,6 +7,7 @@ Current truth:
 - public web production is healthy on AWS ECS/Fargate
 - `certscore.ai` serves from the AWS web stack
 - Amplify is not the active production topology for the current SSR dependency shape
+- the CertScore Amplify app has been retired, and there is no checked-in Amplify buildspec for the active WC01 production lane
 
 The checked-in runtime truth for deployment audits lives in [config/deployment-topology.json](/Users/benmasek/WC01/config/deployment-topology.json).
 Keep that file aligned with reality whenever the authoritative live web lane changes.
@@ -32,7 +33,7 @@ The equivalent goal that was achieved was:
 
 Historical note: this section reflects the earlier Amplify proposal, not the final production outcome.
 
-Create a separate Amplify app that builds from `apps/web`:
+The retired proposal was to create a separate Amplify app that builds from `apps/web`:
 
 1. `certscore-ai-web`
 
@@ -121,9 +122,9 @@ That decision has now been resolved in favor of ECS/Fargate.
 
 ## Amplify secret wiring checkpoint
 
-The checked-in `amplify.yml` intentionally only writes non-secret values into `apps/web/.env.production`.
+The retired `amplify.yml` only wrote selected values into `apps/web/.env.production`.
 
-That means secrets must be handled as an explicit deployment concern. Before treating Amplify as production-ready, verify:
+If Amplify is reintroduced, secrets must be handled as an explicit deployment concern. Before treating Amplify as production-ready, verify:
 
 - Better Auth secret is available to server runtime
 - database connection strings are available to server runtime
