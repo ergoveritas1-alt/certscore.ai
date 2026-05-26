@@ -686,7 +686,8 @@ function deriveRejectOptionSubtype(packet: UnifiedFindingDisplayPacket) {
 function getConsentUiPathEvidence(packet: UnifiedFindingDisplayPacket) {
   return getFirstEntityJsonObject(packet, "consentUiPathEvidence") ??
     getFirstEntityJsonObject(packet, "rejectPathDepthAndAvailability") ??
-    getFirstEntityJsonObject(packet, "reject_path_depth_and_availability");
+    getFirstEntityJsonObject(packet, "reject_path_depth_and_availability") ??
+    (packet.unifiedFindingId === "blocking_overlay_observed" ? getBlockingOverlayPathEvidence(packet) : null);
 }
 
 function getBlockingOverlayPathEvidence(packet: UnifiedFindingDisplayPacket) {
@@ -751,6 +752,20 @@ function buildConsentUiRuntimePathEvidence(row: Record<string, unknown>) {
     rejectClickDepth,
     choiceAsymmetry: getRecordString(row, ["choiceAsymmetry", "choice_asymmetry"]),
     scrollRequired: getRecordBoolean(row, ["scrollRequired", "scroll_required"]),
+    blockedPageInteraction: getRecordBoolean(row, [
+      "blockedPageInteraction",
+      "blocked_page_interaction",
+      "pageInteractionBlocked",
+      "page_interaction_blocked"
+    ]),
+    pageAccessBlockedUntilChoice: getRecordBoolean(row, [
+      "pageAccessBlockedUntilChoice",
+      "page_access_blocked_until_choice"
+    ]),
+    forcedActionRequired: getRecordBoolean(row, ["forcedActionRequired", "forced_action_required"]),
+    scrollLocked: getRecordBoolean(row, ["scrollLocked", "scroll_locked"]),
+    contentObstructed: getRecordBoolean(row, ["contentObstructed", "content_obstructed"]),
+    blockingEvidenceSource: getRecordString(row, ["blockingEvidenceSource", "blocking_evidence_source"]),
     visualHierarchyBasis: getRecordString(row, ["visualHierarchyBasis", "visual_hierarchy_basis"]),
     screenshotArtifactAvailable: evidenceRefs.some((ref) => /screen|image|png|jpeg|jpg/i.test(ref)),
     domDigestAvailable: Boolean(getRecordString(row, ["domDigest", "dom_digest", "domEvidenceDigest", "dom_evidence_digest"])),

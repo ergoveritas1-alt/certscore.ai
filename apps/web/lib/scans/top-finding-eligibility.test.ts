@@ -352,6 +352,53 @@ test("top-finding evaluator allows consent UI promotion with retained choice pat
   assert.equal(decision.demotionReasons.includes("overlay_only_without_consent_path_evidence"), false);
 });
 
+test("top-finding evaluator promotes forced consent only with consent-specific blocking path evidence", () => {
+  const promoted = evaluateTopFindingEligibility(finding({
+    id: "forced_consent_interaction",
+    directVsInferred: "direct",
+    evidenceDetails: {
+      consentUiEvidence: {
+        observed: true,
+        basis: "scan_runtime_artifacts.consent_blocking_overlay",
+        runtimePath: {
+          blockedPageInteraction: true,
+          blockingEvidenceSource: "runtime_consent_ui_probe",
+          forcedActionRequired: true,
+          pageAccessBlockedUntilChoice: true,
+          pageInteractionBlocked: true,
+          surfaceType: "modal",
+          unrelatedOverlayClassifier: "consent_surface"
+        }
+      }
+    },
+    severity: "high"
+  }));
+
+  assert.equal(promoted.eligibility, "top_candidate");
+  assert.ok(promoted.matchedCriteria.includes("consent_specific_blocking_interaction"));
+
+  const ordinaryBanner = evaluateTopFindingEligibility(finding({
+    id: "forced_consent_interaction",
+    directVsInferred: "direct",
+    evidenceDetails: {
+      consentUiEvidence: {
+        observed: true,
+        runtimePath: {
+          acceptClickDepth: 1,
+          rejectAvailableOnFirstLayer: false,
+          rejectClickDepth: 2,
+          surfaceType: "cookie_banner"
+        }
+      }
+    },
+    severity: "high"
+  }));
+
+  assert.equal(ordinaryBanner.eligibility, "surface_only");
+  assert.equal(ordinaryBanner.matchedCriteria.includes("consent_specific_blocking_interaction"), false);
+  assert.ok(ordinaryBanner.demotionReasons.includes("missing_consent_specific_blocking_interaction"));
+});
+
 test("top-finding evaluator suppresses consent findings behind unrelated overlays", () => {
   const decision = evaluateTopFindingEligibility(finding({
     id: "forced_consent_interaction",

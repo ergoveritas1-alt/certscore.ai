@@ -4,7 +4,10 @@ export const RUNTIME_VENDOR_DISCLOSURE_ALIASES = [
   "unlisted_third_party_domains",
   "undisclosed_third_party_domains",
   "runtime_vendor_not_disclosed",
-  "third_party_domain_disclosure_gap"
+  "third_party_domain_disclosure_gap",
+  "privacy.runtime_vendor_not_disclosed",
+  "privacy.third_party_domain_disclosure_gap",
+  "privacy.cookie_runtime_disclosure_gap_detected"
 ] as const;
 
 export type RuntimeVendorPolicySurfaceType =
@@ -200,7 +203,7 @@ function parseEvidenceRow(row: Record<string, unknown>): RuntimeVendorDisclosure
   if (subtype && !aliases.has(subtype) && subtype !== RUNTIME_VENDOR_DISCLOSURE_SUBTYPE) {
     return null;
   }
-  if (!subtype && signalKey && !aliases.has(signalKey) && !/runtime_vendor_not_disclosed|third_party_domain_disclosure_gap/i.test(signalKey)) {
+  if (!subtype && signalKey && !aliases.has(signalKey) && !/runtime_vendor_not_disclosed|third_party_domain_disclosure_gap|cookie_runtime_disclosure_gap/i.test(signalKey)) {
     return null;
   }
   if (!subtype && !signalKey && title && !aliases.has(title)) {
@@ -321,7 +324,7 @@ export function evaluateRuntimeVendorDisclosureEvidence(
       negativeEvidenceFlags.add("blocked_or_interstitial_evidence_observed");
       return false;
     }
-    if (row.observedRuntimeDomains.length === 0) {
+    if (row.observedRuntimeDomains.length === 0 && row.observedRuntimeVendors.length === 0) {
       negativeEvidenceFlags.add("missing_runtime_anchor");
       return false;
     }

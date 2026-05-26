@@ -2568,7 +2568,7 @@ test("projects blocking overlay context without violation framing", () => {
   const forcedConsent = projection.findings.find((entry) => entry.id === "forced_consent_interaction");
   assert.equal(forcedConsent?.section, "Consent Experience");
   assert.ok(!/violation/i.test(`${forcedConsent?.label} ${forcedConsent?.whyItMatters}`));
-  assert.equal(projection.topFindings.some((entry) => entry.id === "forced_consent_interaction"), false);
+  assert.equal(projection.topFindings.some((entry) => entry.id === "forced_consent_interaction"), true);
 });
 
 test("projects video content tracking exposure into executive findings", () => {

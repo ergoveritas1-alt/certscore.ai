@@ -1107,7 +1107,11 @@ function hasPolicyAnchor(rawEvidence: Record<string, unknown> | null | undefined
 }
 
 function hasRuntimeAnchor(rawEvidence: Record<string, unknown> | null | undefined) {
-  if (getRuntimeVendorDisclosureEvidence(rawEvidence).some((row) => row.observedRuntimeDomains.length > 0)) {
+  if (
+    getRuntimeVendorDisclosureEvidence(rawEvidence).some(
+      (row) => row.observedRuntimeDomains.length > 0 || row.observedRuntimeVendors.length > 0
+    )
+  ) {
     return true;
   }
   return (
@@ -1416,7 +1420,7 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
             (row.parentFindingId === "policy_behavior_conflict" ||
               row.parentFindingId === "policy_behavior_contradiction_detected") &&
             row.coverageStatus !== "blocked" &&
-            row.observedRuntimeDomains.length > 0 &&
+            (row.observedRuntimeDomains.length > 0 || row.observedRuntimeVendors.length > 0) &&
             (row.unmatchedRuntimeVendors.length > 0 || row.unmatchedRuntimeDomains.length > 0) &&
             row.policySurfacesSearched.some((surface) => surface.reached) &&
             row.mismatchRationale.trim().length > 0

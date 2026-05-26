@@ -150,6 +150,31 @@ test("projects runtime vendor disclosure subtype through cookie disclosure gap p
   assert.ok(projection.topFindings.some((entry) => entry.id === "cookie_disclosure_gap"));
 });
 
+test("recognizes WS01 namespaced runtime vendor disclosure signal keys", () => {
+  const packets = buildPackets({
+    evidence: runtimeVendorEvidence({
+      signalKey: "privacy.runtime_vendor_not_disclosed",
+      observedRuntimeVendors: ["Meta Pixel"],
+      observedRuntimeDomains: [],
+      unmatchedRuntimeVendors: ["Meta Pixel"],
+      unmatchedRuntimeDomains: [],
+      matchedVendorDisclosureCount: 0,
+      unmatchedVendorDisclosureCount: 1,
+      mismatchRationale: "Runtime vendor Meta Pixel did not clearly match retained cookie disclosure evidence.",
+      categories: ["advertising"]
+    }),
+    signalKey: "privacy.runtime_vendor_not_disclosed"
+  });
+
+  const packet = packets.find((entry) => entry.unifiedFindingId === "cookie_disclosure_gap");
+  assert.ok(packet?.evidence);
+  const contract = evaluateFindingEvidenceContractForRawEvidence("cookie_disclosure_gap", packet.evidence.entities);
+  assert.equal(contract?.status, "pass_strong");
+
+  const projection = projectExecutiveFindingsFromUnifiedPackets(packets.map(displayPacketFromUnified));
+  assert.ok(projection.topFindings.some((entry) => entry.id === "cookie_disclosure_gap"));
+});
+
 test("projects runtime vendor disclosure subtype through policy runtime alignment parent", () => {
   const evidence = runtimeVendorEvidence({
     parentFindingId: "policy_behavior_conflict",

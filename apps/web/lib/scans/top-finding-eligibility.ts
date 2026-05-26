@@ -285,6 +285,46 @@ function hasConsentChoicePathEvidence(runtimePath: Record<string, unknown> | nul
   );
 }
 
+function hasConsentBlockingInteractionEvidence(runtimePath: Record<string, unknown> | null) {
+  if (!runtimePath) {
+    return false;
+  }
+
+  const surfaceType = getStringFromKeys(runtimePath, ["surfaceType", "surface_type", "overlayType", "overlay_type"]);
+  const unrelatedOverlayClassifier = getString(runtimePath, "unrelatedOverlayClassifier");
+  if (
+    (unrelatedOverlayClassifier && !/consent_surface|consent|cookie|cmp|privacy/i.test(unrelatedOverlayClassifier)) ||
+    (surfaceType && /age_gate|bot_challenge|login_wall|paywall/i.test(surfaceType))
+  ) {
+    return false;
+  }
+
+  const blockedPageInteraction =
+    getBoolean(runtimePath, "blockedPageInteraction") === true ||
+    getBoolean(runtimePath, "blocked_page_interaction") === true ||
+    getBoolean(runtimePath, "pageInteractionBlocked") === true ||
+    getBoolean(runtimePath, "page_interaction_blocked") === true ||
+    getBoolean(runtimePath, "pageAccessBlockedUntilChoice") === true ||
+    getBoolean(runtimePath, "page_access_blocked_until_choice") === true ||
+    getBoolean(runtimePath, "forcedActionRequired") === true ||
+    getBoolean(runtimePath, "forced_action_required") === true ||
+    getBoolean(runtimePath, "scrollLocked") === true ||
+    getBoolean(runtimePath, "scroll_locked") === true;
+
+  const hasConsentSurface =
+    !surfaceType ||
+    /consent|cookie|cmp|privacy/i.test(surfaceType) ||
+    /consent_surface|consent|cookie|cmp|privacy/i.test(unrelatedOverlayClassifier ?? "") ||
+    getStringFromKeys(runtimePath, ["blockingEvidenceSource", "blocking_evidence_source"]) === "runtime_consent_ui_probe" ||
+    getStringFromKeys(runtimePath, ["acceptLabel", "accept_label", "rejectLabel", "reject_label", "manageChoicesLabel", "manage_choices_label"]) !== null ||
+    getBoolean(runtimePath, "rejectAvailableOnFirstLayer") !== null ||
+    getBoolean(runtimePath, "reject_available_on_first_layer") !== null ||
+    getBoolean(runtimePath, "preferencesRequiredBeforeReject") !== null ||
+    getBoolean(runtimePath, "preferences_required_before_reject") !== null;
+
+  return blockedPageInteraction && hasConsentSurface;
+}
+
 function hasSameSurfaceReplayMaskingEvidence(inputSurfaceEvidence: unknown) {
   const inputSurface = asRecord(inputSurfaceEvidence);
   const rows = asRows(inputSurface?.sensitivePayloadViolations);
@@ -836,6 +876,18 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         (rejectDepth === null || rejectDepth > 1 || (preferenceLayers ?? 0) > 0)
       ) {
         forceEligibility = "top_candidate";
+      }
+      if (finding.id === "forced_consent_interaction" && hasConsentBlockingInteractionEvidence(runtimePath)) {
+        forceEligibility = "top_candidate";
+        pushUnique(matchedCriteria, "consent_specific_blocking_interaction");
+      } else if (
+        finding.id === "forced_consent_interaction" &&
+        forceEligibility !== "suppress" &&
+        forceEligibility !== "audit_only"
+      ) {
+        forceEligibility = "surface_only";
+        pushUnique(missingCorroborators, "consent_specific_blocking_interaction");
+        pushUnique(demotionReasons, "missing_consent_specific_blocking_interaction");
       }
       break;
     }
