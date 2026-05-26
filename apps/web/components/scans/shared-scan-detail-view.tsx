@@ -5727,7 +5727,17 @@ export function SharedScanDetailView({
         statusLabel={isIncompleteScanCoverage ? "Incomplete" : undefined}
         statusTone={isIncompleteScanCoverage ? "warning" : undefined}
         status={scanRecord.scan.status}
-        title={`Scan: ${scanRecord.scan.domainHostname ?? "Unknown website"}`}
+        title={
+          <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
+            <span className="break-words">Scan: {scanRecord.scan.domainHostname ?? "Unknown website"}</span>
+            <InfoTip
+              align="start"
+              className="translate-y-0.5 align-middle"
+              placement="bottom"
+              text={`scan_id: ${scanRecord.scan.id}`}
+            />
+          </span>
+        }
       />
       {isScanInFlight ? (
         <FullScanProgressCard

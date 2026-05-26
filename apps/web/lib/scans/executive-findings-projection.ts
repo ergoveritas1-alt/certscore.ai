@@ -19,7 +19,7 @@ import {
 } from "./promotion-evidence-contracts";
 import { evaluateTopFindingEligibility, type TopFindingEligibilityDecision } from "./top-finding-eligibility";
 import { evaluateCookieRetentionReview, COOKIE_RETENTION_THRESHOLDS } from "./cookie-retention-review";
-import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
+import { evaluateRuntimeVendorDisclosureEvidence, getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import { getConsentControlLifecycleEvidence } from "./consent-control-lifecycle";
 import { getConsentGovernanceDisclosureEvidence } from "./consent-governance-disclosure";
 import { buildPromotionGradePreconsentRequests } from "./preconsent-public-evidence";
@@ -1225,6 +1225,19 @@ function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof t
   const primary = getMappedFindingId(packet);
   const ids = primary ? [primary] : [];
 
+  if (
+    primary === "policy_behavior_contradiction_detected" &&
+    packet.unifiedFindingId === "policy_behavior_conflict" &&
+    !isSpecificPolicyRuntimeContradiction(packet) &&
+    !evaluatePolicyRuntimeConflictPresentation(packet).complete &&
+    evaluateRuntimeVendorDisclosureEvidence(
+      { runtimeVendorDisclosureEvidence: getEntityJsonObjects(packet, "runtimeVendorDisclosureEvidence") },
+      "policy_behavior_conflict"
+    ).disposition !== "eligible"
+  ) {
+    return [];
+  }
+
   if (primary === "reject_tracking_persists_after_reject" && !hasRejectPersistencePromotionEvidence(packet)) {
     return [];
   }
@@ -1534,9 +1547,9 @@ function getAuditPageUrlCandidates(packet: UnifiedFindingDisplayPacket) {
     getRecordString(row, ["pageUrl", "page_url"])
   ]);
   const initialCandidates = uniqueCaseInsensitiveStrings([
-    ...getReportFacingScannedPageUrls(packet),
-    getReportFacingScannedPageUrl(packet),
     ...retainedRowPageUrls,
+    getReportFacingScannedPageUrl(packet),
+    ...getReportFacingScannedPageUrls(packet),
     packet.sourceUrl && getReportFacingScannedPageUrl({
       evidence: {
         pageUrls: [],
@@ -2166,7 +2179,11 @@ function buildPreConsentTrackingEvidenceDetails(
   const representativeRequests = sortRepresentativeRequestsByVendorCoverage(allRepresentativeRequests, vendors);
   const preConsentCookieExamples = getPreconsentCookieExamples(cookieRows, consentTimeline);
 
-  const vendorDetails = vendors.slice(0, 8).map((name) => {
+  const representativeVendorNames = uniqueStrings([
+    ...representativeRequests.flatMap((request) => request.vendor ? [request.vendor] : []),
+    ...vendors
+  ]).filter(isDisplayVendorName);
+  const vendorDetails = representativeVendorNames.slice(0, 8).map((name) => {
     const matchingRequest = representativeRequests.find((request) =>
       request.vendor === name || inferVendorNameFromUrl(request.url, [name]) === name
     );
@@ -2679,11 +2696,40 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     ...(packet.evidence?.sourceUrls ?? [])
   ]);
   const vendors = uniqueStrings([
+    ...publicSyncRows.flatMap((row) => {
+      const vendor = getRecordString(row, ["vendorName", "vendor"]);
+      return [vendor ?? getRecordString(row, ["hostname", "host", "domain"])];
+    }),
     ...getEntityValues(packet, /rtb.*domain|runtime.*vendor|vendor/i),
     ...detailVendors
   ]).filter(isDisplayVendorName);
   const requestPurposeRows = getRequestPurposeClassificationRows(packet);
-  const representativeRequests = getRepresentativeRequestDetails(requestUrls, vendors, requestPurposeRows).map((request) => ({
+  const retainedRepresentativeRequests = publicSyncRows
+    .map((row) => {
+      const url = getRecordString(row, ["requestUrl", "url", "urlSample"]) ?? "";
+      const hostname = getRecordString(row, ["hostname", "host", "domain"]) ?? getUrlHostname(url) ?? "";
+      const vendor = getRecordString(row, ["vendorName", "vendor"]) ?? hostname;
+      const queryKeysSample = getRecordStringArray(row, ["queryKeysSample", "query_keys_sample"]).slice(0, 8);
+      return {
+        url,
+        hostname,
+        vendor,
+        category: normalizeVendorCategory(
+          vendor,
+          url,
+          getRecordString(row, ["category", "vendorCategory", "classification"])
+        ),
+        resourceType: getRecordString(row, ["resourceType", "resource_type"]),
+        firstSeenMs: getRecordNumber(row, ["tsMs", "ts_ms", "firstSeenMs", "timestampMs"]),
+        thirdParty: true,
+        preConsent: getRecordString(row, ["runtimePhase", "runtime_phase"]) === "pre_consent",
+        identifierLike: queryKeysSample.some((key) => IDENTIFIER_QUERY_KEY_PATTERN.test(key)) || isLikelyIdentifierRequest(url),
+        deviceDataLike: isLikelyDeviceDataRequest(url),
+        queryKeysSample
+      };
+    })
+    .filter((request) => request.hostname || request.url);
+  const fallbackRepresentativeRequests = getRepresentativeRequestDetails(requestUrls, vendors, requestPurposeRows).map((request) => ({
     ...request,
     preConsent: packet.evidence?.flags?.some((flag) => /preconsent/i.test(flag)) === true
   })).map((request) => {
@@ -2700,6 +2746,9 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       identifierLike: request.identifierLike || effectiveQueryKeysSample.some((key) => IDENTIFIER_QUERY_KEY_PATTERN.test(key))
     };
   });
+  const representativeRequests = retainedRepresentativeRequests.length > 0
+    ? retainedRepresentativeRequests.slice(0, 8)
+    : fallbackRepresentativeRequests;
 
   return {
     scanContext: {
@@ -3057,6 +3106,7 @@ function buildGenericCanonicalEvidenceDetails(
       return compactEvidenceObject({
         cookieName: getRecordString(row, ["cookieName", "cookie_name", "name"]),
         domain: getRecordString(row, ["domain", "cookieDomain", "cookie_domain"]),
+        pageUrl: getRecordString(row, ["scannedPageUrl", "scanned_page_url", "pageUrl", "page_url"]),
         vendor,
         category: normalizeVendorCategory(
           vendor,

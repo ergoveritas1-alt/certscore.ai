@@ -10,9 +10,9 @@ type EvidenceJsonBlockProps = {
 };
 
 export function EvidenceJsonBlock({
-  className = "relative w-full rounded-lg bg-slate-950",
+  className = "relative w-full max-w-full min-w-0 overflow-hidden rounded-lg bg-slate-950",
   payload,
-  preClassName = "max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words px-3 py-3 pr-12 text-[11px] leading-5 text-slate-100"
+  preClassName = "max-h-72 max-w-full min-w-0 overflow-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] px-3 py-3 pr-12 text-[11px] leading-5 text-slate-100"
 }: EvidenceJsonBlockProps) {
   return (
     <div className={className}>
