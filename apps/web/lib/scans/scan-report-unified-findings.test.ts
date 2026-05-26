@@ -1983,6 +1983,146 @@ test("runtime reject path depth promotes concrete dark-pattern reject-missing ev
   assert.ok(!weakState.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "forced_consent_wall"));
 });
 
+test("runtime reject path uses retained consent UI path when derived reject artifact is inconclusive", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [],
+    primaryPolicyEnrichment: null,
+    runtimeArtifacts: {
+      consent_actionable_choice_observed: true,
+      consent_surface_observed: true,
+      hybrid_runtime_evidence: {
+        consentUiPathEvidence: {
+          choiceAsymmetry: "material",
+          layerInspected: "deeper_layer",
+          preferencesRequiredBeforeReject: true,
+          rejectAvailableOnFirstLayer: false,
+          rejectClickDepth: 2,
+          unrelatedOverlayClassifier: "consent_surface"
+        }
+      },
+      reject_path_depth_and_availability: {
+        availability: "untested",
+        choiceAsymmetry: "unknown",
+        preferencesRequiredBeforeReject: false,
+        rejectAvailableOnFirstLayer: false,
+        rejectClickDepth: null
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+
+  assert.ok(state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "reject_button_missing"));
+  assert.ok(state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "accept_more_prominent_than_reject"));
+});
+
+test("runtime policy alignment bridges create canonical policy/runtime review candidates", () => {
+  const policyAnchor = {
+    id: "policy_claim:targeted_advertising:abc",
+    claimType: "targeted_advertising_disclosure",
+    sourceUrl: "https://www.example.com/privacy",
+    documentType: "privacy_policy",
+    extractionStatus: "fetched",
+    snippet: "We use targeted advertising cookies and similar tracking technologies for interest-based advertising and measurement.",
+    snippetHash: "abc",
+    sectionPath: null,
+    headingPath: null,
+    charStart: null,
+    charEnd: null,
+    confidence: 0.8,
+    extractedBy: "ws01.policy_claim_candidate_builder",
+    extractionVersion: "policy_claim_candidate:v1"
+  };
+  const runtimeAnchor = {
+    id: "runtime_artifact:request:post_consent:adnxs",
+    artifactType: "request",
+    phase: "post_consent",
+    url: "https://ib.adnxs.com/getuidj",
+    host: "ib.adnxs.com",
+    vendor: "AppNexus / Xandr",
+    cookieName: null,
+    storageKey: null,
+    timestampMs: 1200,
+    cmpVisibleMs: 0,
+    consentActionObserved: false,
+    confidence: 0.9,
+    sourceArtifactRef: "hybrid_request_to_vendor:ib.adnxs.com"
+  };
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [],
+    primaryPolicyEnrichment: null,
+    runtimeArtifacts: {
+      policy_claim_candidates: [policyAnchor],
+      runtime_behavior_artifacts: [runtimeAnchor],
+      policy_runtime_bridge_candidates: [
+        {
+          id: "policy_runtime_alignment:abc:adnxs:rule",
+          bridgeRuleId: "ws01.policy_runtime_alignment.targeted_advertising_runtime_context_v1",
+          mappingVersion: "policy_runtime_alignment_review_map:v1",
+          policyAnchorRef: policyAnchor.id,
+          runtimeAnchorRef: runtimeAnchor.id,
+          sourceEvidenceIds: [policyAnchor.id, runtimeAnchor.id],
+          mappingType: "deterministic_policy_runtime_review_mapping",
+          reasoning:
+            "Policy disclosure anchor and concrete runtime behavior indicate a policy/runtime alignment review area.",
+          generatedBy: "ws01.policy_runtime_alignment_review_builder",
+          confidence: 0.72,
+          supportsPromotionCandidate: true
+        }
+      ]
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "policy_behavior_conflict");
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+});
+
 test("runtime reject path depth promotes forced consent only with retained blocking evidence", () => {
   const state = buildScanReportUnifiedFindingState({
     accessibilityRuleCounts: [],

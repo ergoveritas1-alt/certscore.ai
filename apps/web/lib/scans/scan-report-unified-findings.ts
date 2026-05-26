@@ -1189,6 +1189,47 @@ function hasNativeContradictionPacketTriplet(source: Record<string, unknown>) {
   );
 }
 
+function hasPolicyRuntimeAlignmentReviewBridge(source: Record<string, unknown>) {
+  return getRuntimeObjectArray(source, ["policyRuntimeBridgeCandidates", "policy_runtime_bridge_candidates"]).some((bridge) => {
+    const mappingType = getRuntimeString(bridge, ["mappingType", "mapping_type"]);
+    const supportsPromotionCandidate = getRuntimeBoolean(bridge, ["supportsPromotionCandidate", "supports_promotion_candidate"]);
+    return mappingType === "deterministic_policy_runtime_review_mapping" && supportsPromotionCandidate === true;
+  });
+}
+
+function hasConcreteRejectPathShape(path: Record<string, unknown> | null) {
+  if (!path) {
+    return false;
+  }
+  const layerInspected = getRuntimeString(path, ["layerInspected", "layer_inspected"]);
+  const choiceAsymmetry = getRuntimeString(path, ["choiceAsymmetry", "choice_asymmetry"]);
+  const rejectClickDepth = getRuntimeNumber(path, ["rejectClickDepth", "reject_click_depth", "observedRejectPathDepth", "observed_reject_path_depth"]);
+  const preferencesRequiredBeforeReject = getRuntimeBoolean(path, [
+    "preferencesRequiredBeforeReject",
+    "preferences_required_before_reject"
+  ]);
+  return (
+    layerInspected === "deeper_layer" ||
+    choiceAsymmetry === "material" ||
+    choiceAsymmetry === "minor" ||
+    preferencesRequiredBeforeReject === true ||
+    rejectClickDepth !== null
+  );
+}
+
+function selectBestRejectPathEvidence(input: {
+  retainedConsentUiPathEvidence: Record<string, unknown> | null;
+  rejectPath: Record<string, unknown> | null;
+}) {
+  const rejectAvailability = getRuntimeString(input.rejectPath, ["availability"]);
+  const rejectConcrete = hasConcreteRejectPathShape(input.rejectPath);
+  const retainedConcrete = hasConcreteRejectPathShape(input.retainedConsentUiPathEvidence);
+  if (retainedConcrete && (!rejectConcrete || rejectAvailability === "untested")) {
+    return input.retainedConsentUiPathEvidence;
+  }
+  return input.rejectPath ?? input.retainedConsentUiPathEvidence;
+}
+
 function getRuntimeStringArray(input: Record<string, unknown> | null, keys: string[]) {
   const values: string[] = [];
   for (const key of keys) {
@@ -1321,6 +1362,36 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     });
   }
 
+  const nativeAlignmentPacketSource = getNativeContradictionPacketSources(input.runtimeArtifacts).find((source) => {
+    if (!hasNativeContradictionPacketTriplet(source)) {
+      return false;
+    }
+    return hasPolicyRuntimeAlignmentReviewBridge(source);
+  });
+  if (nativeAlignmentPacketSource) {
+    candidates.push({
+      categoryId: "policy_clarity_consistency_review",
+      description:
+        "WS01 retained policy disclosure anchors and concrete runtime behavior anchors for policy/runtime alignment review.",
+      fallbackEvidence: {
+        ...nativeAlignmentPacketSource,
+        signalKey: "context.policy_behavior_conflict_detected",
+        signalLabel: "Policy/runtime alignment review",
+        signalValue: true,
+        unifiedFindingId: "policy_behavior_conflict"
+      },
+      id: "runtime-derived-signal-context.policy_behavior_conflict_detected.policy_runtime_alignment",
+      linkedValidationFinding: null,
+      observedValue: "Policy/runtime alignment bridge retained",
+      severity: "medium",
+      signalKey: "context.policy_behavior_conflict_detected",
+      signalLabel: "Policy/runtime alignment review",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Policy/runtime alignment review"
+    });
+  }
+
   const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
   const preconsentEvidenceRecord = preconsentEvidenceQuality as Record<string, unknown> | null;
   const hybridRuntimeEvidenceRecord = getRuntimeObject(input.runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]);
@@ -1401,11 +1472,13 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     "consentUiPathEvidence",
     "consent_ui_path_evidence"
   ]);
-  const rejectPath =
-    getRuntimeObject(input.runtimeArtifacts, [
+  const rejectPath = selectBestRejectPathEvidence({
+    retainedConsentUiPathEvidence,
+    rejectPath: getRuntimeObject(input.runtimeArtifacts, [
       "rejectPathDepthAndAvailability",
       "reject_path_depth_and_availability"
-    ]) ?? retainedConsentUiPathEvidence;
+    ])
+  });
   const botBlockChallengeEvidence = getRuntimeObject(input.runtimeArtifacts, [
     "botBlockChallengeEvidence",
     "bot_block_challenge_evidence"
