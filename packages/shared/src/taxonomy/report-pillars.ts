@@ -2606,6 +2606,7 @@ export const REPORT_UNIFIED_FINDINGS = [
     signalMappings: [
       { source: "snapshot_signal", key: "context.policy_behavior_conflict_detected" },
       { source: "document_semantic_signal", key: "policyBehaviorConflictCandidate" },
+      { source: "document_semantic_signal", key: "disclosure.policy_runtime_alignment_review_detected" },
       { source: "document_semantic_signal", key: "disclosure.policy_runtime_missing_technical_disclosure_detected" },
       { source: "document_semantic_signal", key: "disclosure.runtime_vendor_not_disclosed" }
     ],

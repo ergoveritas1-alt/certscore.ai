@@ -111,6 +111,7 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "missing_behavior_side_evidence"
   | "missing_policy_side_evidence"
   | "missing_contradiction_mapping"
+  | "missing_policy_runtime_alignment_bridge"
   | "missing_explicit_contradiction_basis"
   | "missing_contradiction_bridge"
   | "missing_bridge_provenance"
@@ -126,6 +127,7 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "policy_semantic_review_incomplete"
   | "runtime_tracking_review_incomplete"
   | "possible_policy_runtime_mismatch"
+  | "policy_runtime_alignment_review_signal"
   | "insufficient_evidence_for_policy_behavior_conflict"
   | "model_suspicion_without_structured_support"
   | "producer_claim_failed_revalidation"
@@ -915,6 +917,91 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     runtimeArtifacts.add(
       "Consent governance disclosure note: retained public materials did not clearly explain how users can revisit, change, withdraw, retain, renew, expire, or understand consent choices."
     );
+  }
+
+  const policyClaimCandidates = getPlainRecordArray(rawEvidence.policyClaimCandidates ?? rawEvidence.policy_claim_candidates);
+  const runtimeBehaviorArtifacts = getPlainRecordArray(rawEvidence.runtimeBehaviorArtifacts ?? rawEvidence.runtime_behavior_artifacts);
+  const policyRuntimeBridgeCandidates = getPlainRecordArray(
+    rawEvidence.policyRuntimeBridgeCandidates ?? rawEvidence.policy_runtime_bridge_candidates
+  );
+
+  if (policyClaimCandidates.length > 0) {
+    addEntity(entities, "policyClaimCandidates", compactJsonRows(policyClaimCandidates, 12));
+    addEntity(
+      entities,
+      "policyClaimTypes",
+      policyClaimCandidates.flatMap((claim) => getStringValue(claim.claimType ?? claim.claim_type) ?? [])
+    );
+    for (const claim of policyClaimCandidates) {
+      const sourceUrl = getStringValue(claim.sourceUrl ?? claim.source_url);
+      const snippet = getStringValue(claim.snippet);
+      if (sourceUrl) {
+        addSourceUrl(sourceUrl);
+        addEntity(entities, "policySourceUrl", [sourceUrl]);
+      }
+      if (snippet) {
+        policySnippets.add(truncatePolicySnippet(snippet));
+      }
+    }
+    counts.policyClaimCandidateCount = policyClaimCandidates.length;
+  }
+
+  if (runtimeBehaviorArtifacts.length > 0) {
+    addEntity(entities, "runtimeBehaviorArtifacts", compactJsonRows(runtimeBehaviorArtifacts, 12));
+    addEntity(
+      entities,
+      "runtimeVendors",
+      runtimeBehaviorArtifacts.flatMap((artifact) => getStringValue(artifact.vendor) ?? [])
+    );
+    addEntity(
+      entities,
+      "runtimeDomains",
+      runtimeBehaviorArtifacts.flatMap((artifact) => getStringValue(artifact.host ?? artifact.hostname ?? artifact.domain) ?? [])
+    );
+    for (const artifact of runtimeBehaviorArtifacts) {
+      const url = getStringValue(artifact.url ?? artifact.requestUrl ?? artifact.request_url);
+      const host = getStringValue(artifact.host ?? artifact.hostname ?? artifact.domain);
+      const vendor = getStringValue(artifact.vendor);
+      const artifactType = getStringValue(artifact.artifactType ?? artifact.artifact_type);
+      const cookieName = getStringValue(artifact.cookieName ?? artifact.cookie_name);
+      const storageKey = getStringValue(artifact.storageKey ?? artifact.storage_key);
+      if (url) {
+        addSourceUrl(url);
+        addEntity(entities, "runtimeRequestUrls", [url]);
+      }
+      if (host || vendor || url || cookieName || storageKey) {
+        runtimeArtifacts.add(
+          [
+            artifactType ? `Runtime ${artifactType}` : "Runtime artifact",
+            vendor ? `for ${vendor}` : null,
+            host ? `on ${host}` : null,
+            cookieName ? `cookie ${cookieName}` : null,
+            storageKey ? `storage ${storageKey}` : null,
+            url ? `(${stripReportUrlAnnotation(url)})` : null
+          ].filter(Boolean).join(" ")
+        );
+      }
+    }
+    counts.runtimeBehaviorArtifactCount = runtimeBehaviorArtifacts.length;
+  }
+
+  if (policyRuntimeBridgeCandidates.length > 0) {
+    addEntity(entities, "policyRuntimeBridgeCandidates", compactJsonRows(policyRuntimeBridgeCandidates, 12));
+    addEntity(
+      entities,
+      "policyRuntimeBridgeRuleIds",
+      policyRuntimeBridgeCandidates.flatMap((bridge) => getStringValue(bridge.bridgeRuleId ?? bridge.bridge_rule_id) ?? [])
+    );
+    const hasAlignmentReviewBridge = policyRuntimeBridgeCandidates.some((bridge) => {
+      const mappingType = getStringValue(bridge.mappingType ?? bridge.mapping_type);
+      const supportsPromotionCandidate = getBooleanValue(bridge.supportsPromotionCandidate ?? bridge.supports_promotion_candidate);
+      return mappingType === "deterministic_policy_runtime_review_mapping" && supportsPromotionCandidate === true;
+    });
+    if (hasAlignmentReviewBridge) {
+      flags.add("policy_runtime_alignment_review_signal");
+      runtimeArtifacts.add("Policy/runtime alignment review bridge retained between policy disclosure text and concrete runtime behavior.");
+    }
+    counts.policyRuntimeBridgeCandidateCount = policyRuntimeBridgeCandidates.length;
   }
 
   const preSubmitTextCaptureRows = [

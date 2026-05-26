@@ -2080,6 +2080,80 @@ test("surfaces policy behavior conflicts only when the contradiction bundle is c
   assert.equal(packet?.details?.contradictionReviewStatus, "complete");
 });
 
+test("surfaces policy runtime alignment review from review-grade WS01 bridge without requiring contradiction mapping", () => {
+  const policyAnchor = {
+    id: "policy_claim:targeted_advertising_disclosure:abc",
+    claimType: "targeted_advertising_disclosure",
+    sourceUrl: "https://example.com/privacy",
+    documentType: "privacy_policy",
+    extractionStatus: "fetched",
+    snippet: "We and our advertising partners use cookies, pixels, and similar tracking technologies for targeted advertising and measurement.",
+    snippetHash: "abc",
+    sectionPath: null,
+    headingPath: null,
+    charStart: null,
+    charEnd: null,
+    confidence: 0.78,
+    extractedBy: "ws01.policy_claim_candidate_builder",
+    extractionVersion: "policy_claim_candidate:v1"
+  };
+  const runtimeAnchor = {
+    id: "runtime_artifact:request:post_consent:adnxs",
+    artifactType: "request",
+    phase: "post_consent",
+    url: "https://ib.adnxs.com/getuidj",
+    host: "ib.adnxs.com",
+    vendor: "AppNexus / Xandr",
+    cookieName: null,
+    storageKey: null,
+    timestampMs: 2400,
+    cmpVisibleMs: 0,
+    consentActionObserved: false,
+    confidence: 0.9,
+    sourceArtifactRef: "hybrid_request_to_vendor:ib.adnxs.com"
+  };
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [
+      {
+        description: "Policy/runtime alignment review evidence retained.",
+        fallbackEvidence: {
+          policyClaimCandidates: [policyAnchor],
+          runtimeBehaviorArtifacts: [runtimeAnchor],
+          policyRuntimeBridgeCandidates: [
+            {
+              id: "policy_runtime_alignment:abc:adnxs:rule",
+              bridgeRuleId: "ws01.policy_runtime_alignment.targeted_advertising_runtime_context_v1",
+              mappingVersion: "policy_runtime_alignment_review_map:v1",
+              policyAnchorRef: policyAnchor.id,
+              runtimeAnchorRef: runtimeAnchor.id,
+              sourceEvidenceIds: [policyAnchor.id, runtimeAnchor.id],
+              mappingType: "deterministic_policy_runtime_review_mapping",
+              reasoning:
+                "Policy disclosure anchor and concrete runtime behavior indicate a policy/runtime alignment review area; this is review evidence, not a contradiction conclusion.",
+              generatedBy: "ws01.policy_runtime_alignment_review_builder",
+              confidence: 0.72,
+              supportsPromotionCandidate: true
+            }
+          ]
+        },
+        observedValue: "Review retained",
+        severity: "high",
+        signalKey: "context.policy_behavior_conflict_detected",
+        signalLabel: "Policy/runtime alignment review",
+        signalSource: "snapshot_signal",
+        sourceType: "signal",
+        title: "Policy/runtime alignment review"
+      }
+    ],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const packet = packets.find((entry) => entry.unifiedFindingId === "policy_behavior_conflict");
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.verificationState, "runtime");
+});
+
 test("drops Schwab-like policy behavior conflicts from the report payload when no contradiction-grade pair is retained", () => {
   const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [

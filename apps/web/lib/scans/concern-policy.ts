@@ -2264,6 +2264,14 @@ export function deriveConcernPolicy(input: {
           review.disposition === "eligible" ? "eligible" : review.disposition === "audit_only" ? "internal_only" : "blocked"
       };
     }
+
+    const contractDecision = evaluatePolicyBehaviorConflictContract(input.rawEvidence);
+    if (contractDecision?.promotionEligibility === "eligible") {
+      return {
+        ...contractDecision,
+        negativeEvidenceFlags: contractDecision.negativeEvidenceFlags as NormalizedConcernNegativeEvidenceFlag[]
+      };
+    }
   }
   if (suggestedUnifiedFindingId === "accessibility_risk_score") {
     return {

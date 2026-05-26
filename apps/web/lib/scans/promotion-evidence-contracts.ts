@@ -1,5 +1,6 @@
 import {
   evaluatePolicyBehaviorContradictionEvidence,
+  evaluatePolicyRuntimeAlignmentReviewEvidence,
   getAllowedConflictType,
   getContradictionEvidenceBundle
 } from "./contradiction-evidence-contract";
@@ -122,6 +123,22 @@ function getObjectValue(record: Record<string, unknown> | null | undefined, keys
   return null;
 }
 
+function getNestedObjectValue(record: Record<string, unknown> | null | undefined, paths: string[][]) {
+  for (const path of paths) {
+    let current: Record<string, unknown> | null | undefined = record;
+    for (const key of path) {
+      current = getObjectValue(current, [key]);
+      if (!current) {
+        break;
+      }
+    }
+    if (current) {
+      return current;
+    }
+  }
+  return null;
+}
+
 function getBooleanFromSources(
   rawEvidence: Record<string, unknown> | null | undefined,
   sources: Array<Record<string, unknown> | null | undefined>,
@@ -205,7 +222,14 @@ export function evaluateConsentSurfaceGate(
   const uiSummary = getObjectValue(rawEvidence, ["hybridUiSummary", "hybrid_ui_summary"]);
   const diagnostics = getObjectValue(rawEvidence, ["consentSurfaceDiagnostics", "consent_surface_diagnostics"]);
   const rejectPath = getObjectValue(rawEvidence, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]);
-  const sources = [consentSummary, consentVisual, uiSummary, diagnostics, rejectPath];
+  const consentUiPath =
+    getObjectValue(rawEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]) ??
+    getNestedObjectValue(rawEvidence, [
+      ["hybridRuntimeEvidence", "consentUiPathEvidence"],
+      ["hybrid_runtime_evidence", "consentUiPathEvidence"],
+      ["hybrid_runtime_evidence", "consent_ui_path_evidence"]
+    ]);
+  const sources = [consentSummary, consentVisual, uiSummary, diagnostics, rejectPath, consentUiPath];
   const candidateButtons = [
     ...getObjectArrayValues(rawEvidence, ["candidateButtons", "candidate_buttons", "consentCandidateButtons", "consent_candidate_buttons"]),
     ...getObjectArrayValues(diagnostics, ["candidateButtons", "candidate_buttons", "buttons"]),
@@ -355,12 +379,19 @@ export function evaluateConsentSurfaceGate(
       "rejectAvailableOnFirstLayer",
       "reject_available_on_first_layer"
     ]);
+  const layerInspected = typeof consentUiPath?.layerInspected === "string"
+    ? consentUiPath.layerInspected
+    : typeof consentUiPath?.layer_inspected === "string"
+      ? consentUiPath.layer_inspected
+      : null;
   const retainedRejectPathEvidence =
     consentSurfaceObserved &&
     (
       acceptClickDepth !== null ||
       rejectClickDepth !== null ||
       preferencesRequiredBeforeReject ||
+      layerInspected === "first_layer" ||
+      layerInspected === "deeper_layer" ||
       rejectPath?.bannerLayerInspected === true ||
       rejectPath?.banner_layer_inspected === true ||
       rejectPath?.rejectPathTested === true ||
@@ -371,6 +402,7 @@ export function evaluateConsentSurfaceGate(
     (
       rejectAvailableOnFirstLayer === false ||
       preferencesRequiredBeforeReject ||
+      layerInspected === "deeper_layer" ||
       (acceptClickDepth !== null && rejectClickDepth !== null && rejectClickDepth > acceptClickDepth)
     );
   const sameSurfaceCandidates =
@@ -2105,6 +2137,16 @@ export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Reco
 export function evaluatePolicyBehaviorConflictContract(rawEvidence: Record<string, unknown> | null | undefined): ContractDecision | null {
   const recomputedDecision = evaluatePolicyBehaviorContradictionEvidence(rawEvidence);
   if (!recomputedDecision.eligible) {
+    const alignmentDecision = evaluatePolicyRuntimeAlignmentReviewEvidence(rawEvidence);
+    if (alignmentDecision.eligible) {
+      return {
+        allowedNarrativeTier: "moderate",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: ["policy_runtime_alignment_review_signal"],
+        promotionEligibility: "eligible"
+      };
+    }
+
     return {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "audit_only",

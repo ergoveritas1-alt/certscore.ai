@@ -155,6 +155,10 @@ function normalizeContradictionEvidenceRecord(
 export type PolicyBehaviorConflictClaimType =
   | "gpc_honored"
   | "cookie_preferences_available"
+  | "targeted_advertising_disclosure"
+  | "third_party_advertising_disclosure"
+  | "tracking_technologies_disclosure"
+  | "privacy_choice_or_opt_out_disclosure"
   | "no_sale_share_without_opt_out_or_consent"
   | "no_marketing_tracking_before_consent"
   | "only_necessary_cookies_before_choice"
@@ -324,6 +328,10 @@ const POLICY_BEHAVIOR_CONFLICT_MAP: Record<
     analytics_vendor_fired_pre_consent: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
     adtech_cookie_set_under_opt_out: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice"
   },
+  targeted_advertising_disclosure: {},
+  third_party_advertising_disclosure: {},
+  tracking_technologies_disclosure: {},
+  privacy_choice_or_opt_out_disclosure: {},
   no_sale_share_without_opt_out_or_consent: {
     sale_share_like_behavior_observed: "declared_no_sale_share_but_sale_share_like_behavior_observed"
   },
@@ -350,6 +358,10 @@ function normalizeClaimType(value: string | null): PolicyBehaviorConflictClaimTy
   switch (value) {
     case "gpc_honored":
     case "cookie_preferences_available":
+    case "targeted_advertising_disclosure":
+    case "third_party_advertising_disclosure":
+    case "tracking_technologies_disclosure":
+    case "privacy_choice_or_opt_out_disclosure":
     case "no_sale_share_without_opt_out_or_consent":
     case "no_marketing_tracking_before_consent":
     case "only_necessary_cookies_before_choice":
@@ -449,7 +461,7 @@ export function isSpecificPolicyBehaviorPolicySnippet(
 
   const lower = snippet.toLowerCase();
   const claimTerms =
-    /(cookie|tracking|analytics|advertis(?:e|ing)|marketing|sale|share|consent|opt[- ]?out|preferences?|personal information|personal data|third part(?:y|ies)|data collection|collect(?:ed|ion)?|data use|use of data)/i;
+    /(cookie|tracking|analytics|advertis(?:e|ing)|marketing|sale|share|consent|opt[- ]?out|preferences?|global privacy control|gpc|personal information|personal data|third part(?:y|ies)|data collection|collect(?:ed|ion)?|data use|use of data)/i;
   if (!claimTerms.test(lower)) {
     return false;
   }
@@ -463,8 +475,15 @@ export function isSpecificPolicyBehaviorPolicySnippet(
 
   switch (claimType) {
     case "cookie_preferences_available":
+    case "privacy_choice_or_opt_out_disclosure":
     case "only_necessary_cookies_before_choice":
       return /\b(?:consent|choice|choose|preferences?|control|manage|reject|decline|opt[- ]?in|opt[- ]?out|disable|strictly necessary|essential cookies?)\b/i.test(lower);
+    case "targeted_advertising_disclosure":
+      return /\b(?:targeted|personalized|interest[- ]?based|cross[- ]context behavioral)\b/i.test(lower) && /\b(?:advertis(?:e|ing)|ads?|marketing|tracking|cookies?)\b/i.test(lower);
+    case "third_party_advertising_disclosure":
+      return /\b(?:third part(?:y|ies)|partners?|advertis(?:ers?|ing)|ad networks?|marketing partners?)\b/i.test(lower) && /\b(?:cookies?|pixels?|tags?|tracking|share|disclos|collect|receive|use)\b/i.test(lower);
+    case "tracking_technologies_disclosure":
+      return /\b(?:cookies?|pixels?|tags?|web beacons?|sdk|tracking technolog(?:y|ies)|similar technolog(?:y|ies))\b/i.test(lower) && /\b(?:advertis(?:e|ing)|analytics|measurement|tracking|personaliz|target)\b/i.test(lower);
     case "no_marketing_tracking_before_consent":
       return /\b(?:marketing|advertis(?:e|ing)|tracking)\b/i.test(lower) && /\b(?:consent|permission|opt[- ]?in|before|until|without)\b/i.test(lower);
     case "tracking_disabled_after_reject":
@@ -503,6 +522,15 @@ function inferClaimType(source: Record<string, unknown> | null | undefined): Pol
 
   if (/gpc|global privacy control|opt-out preference signal/.test(haystack) && /honor|honoured|honored/.test(haystack)) {
     return "gpc_honored";
+  }
+  if (/\b(?:targeted|personalized|interest-?based|cross-?context behavioral)\b/.test(haystack) && /\b(?:advertis|ads?|marketing|tracking|cookies?)\b/.test(haystack)) {
+    return "targeted_advertising_disclosure";
+  }
+  if (/\b(?:third part(?:y|ies)|partners?|advertisers?|ad networks?|marketing partners?)\b/.test(haystack) && /\b(?:cookies?|pixels?|tags?|tracking|share|disclos|collect|receive|use)\b/.test(haystack)) {
+    return "third_party_advertising_disclosure";
+  }
+  if (/\b(?:cookies?|pixels?|tags?|web beacons?|sdk|tracking technolog(?:y|ies)|similar technolog(?:y|ies))\b/.test(haystack) && /\b(?:advertis|analytics|measurement|tracking|personaliz|target)\b/.test(haystack)) {
+    return "tracking_technologies_disclosure";
   }
   if (/only necessary|strictly necessary|essential cookies? only/.test(haystack) && /before consent|before choice|until consent/.test(haystack)) {
     return "only_necessary_cookies_before_choice";
@@ -966,6 +994,103 @@ export function evaluatePolicyBehaviorContradictionEvidence(
     }
   }
 
+  if (negativeEvidenceFlags.size > 0) {
+    negativeEvidenceFlags.add("insufficient_evidence_for_policy_behavior_conflict");
+  }
+
+  return {
+    eligible: negativeEvidenceFlags.size === 0,
+    negativeEvidenceFlags: [...negativeEvidenceFlags]
+  };
+}
+
+export function evaluatePolicyRuntimeAlignmentReviewEvidence(
+  record: Record<string, unknown> | null | undefined
+): PolicyBehaviorContradictionEvidenceDecision {
+  const normalizedRecord = normalizeContradictionEvidenceRecord(record);
+  const nested =
+    normalizedRecord.contradictionEvidence && typeof normalizedRecord.contradictionEvidence === "object"
+      ? normalizeContradictionEvidenceRecord(normalizedRecord.contradictionEvidence as Record<string, unknown>)
+      : null;
+  const source = nested ?? normalizedRecord;
+  const policyClaimCandidates = getRecordArray(source, ["policyClaimCandidates"]);
+  const runtimeBehaviorArtifacts = getRecordArray(source, ["runtimeBehaviorArtifacts"]);
+  const bridgeCandidates = getRecordArray(source, ["policyRuntimeBridgeCandidates"]);
+  const alignmentBridge = bridgeCandidates.find((candidate) => {
+    const normalized = normalizeContradictionEvidenceRecord(candidate);
+    return (
+      getFirstString(normalized, ["mappingType"]) === "deterministic_policy_runtime_review_mapping" &&
+      getFirstBoolean(normalized, ["supportsPromotionCandidate"]) === true
+    );
+  });
+  const negativeEvidenceFlags = new Set<string>();
+
+  if (!alignmentBridge) {
+    return {
+      eligible: false,
+      negativeEvidenceFlags: [
+        "missing_policy_runtime_alignment_bridge",
+        "insufficient_evidence_for_policy_behavior_conflict"
+      ]
+    };
+  }
+
+  const bridge = normalizeContradictionEvidenceRecord(alignmentBridge);
+  const policyAnchorRef = getFirstString(bridge, ["policyAnchorRef"]);
+  const runtimeAnchorRef = getFirstString(bridge, ["runtimeAnchorRef"]);
+  const policyAnchor = normalizeContradictionEvidenceRecord(
+    policyClaimCandidates.find((candidate) => getFirstString(candidate, ["id"]) === policyAnchorRef) ?? null
+  );
+  const runtimeAnchor = normalizeContradictionEvidenceRecord(
+    runtimeBehaviorArtifacts.find((candidate) => getFirstString(candidate, ["id"]) === runtimeAnchorRef) ?? null
+  );
+  const claimType = normalizeClaimType(getFirstString(policyAnchor, ["claimType"]));
+  const policyConfidence = getFirstNumber(policyAnchor, ["confidence"]);
+  const runtimeConfidence = getFirstNumber(runtimeAnchor, ["confidence"]);
+  const artifactType = getFirstString(runtimeAnchor, ["artifactType"]);
+  const concreteRuntimeAnchor = Boolean(
+    getFirstString(runtimeAnchor, ["url"]) ||
+      getFirstString(runtimeAnchor, ["cookieName"]) ||
+      getFirstString(runtimeAnchor, ["storageKey"]) ||
+      getFirstString(runtimeAnchor, ["host"])
+  );
+  const bridgeProvenancePresent = Boolean(
+    getFirstString(bridge, ["bridgeRuleId"]) &&
+      getFirstString(bridge, ["generatedBy"]) &&
+      getFirstString(bridge, ["mappingType"]) &&
+      getFirstString(bridge, ["mappingVersion"]) &&
+      policyAnchorRef &&
+      runtimeAnchorRef &&
+      getStringArray(bridge, ["sourceEvidenceIds"]).length >= 2
+  );
+  const policyAnchorPresent = Boolean(
+    claimType &&
+      getFirstString(policyAnchor, ["sourceUrl"]) &&
+      getFirstString(policyAnchor, ["snippet"]) &&
+      getFirstString(policyAnchor, ["extractionStatus"]) === "fetched" &&
+      typeof policyConfidence === "number" &&
+      policyConfidence >= 0.55 &&
+      isSpecificPolicyBehaviorPolicySnippet(getFirstString(policyAnchor, ["snippet"]), claimType)
+  );
+  const runtimeAnchorPresent = Boolean(
+    artifactType &&
+      artifactType !== "vendor" &&
+      concreteRuntimeAnchor &&
+      typeof runtimeConfidence === "number" &&
+      runtimeConfidence >= 0.55
+  );
+
+  if (!policyAnchorPresent) {
+    negativeEvidenceFlags.add("missing_policy_side_evidence");
+    negativeEvidenceFlags.add("missing_specific_policy_anchor");
+  }
+  if (!runtimeAnchorPresent) {
+    negativeEvidenceFlags.add("missing_behavior_side_evidence");
+    negativeEvidenceFlags.add("missing_specific_runtime_artifact");
+  }
+  if (!bridgeProvenancePresent) {
+    negativeEvidenceFlags.add("missing_bridge_provenance");
+  }
   if (negativeEvidenceFlags.size > 0) {
     negativeEvidenceFlags.add("insufficient_evidence_for_policy_behavior_conflict");
   }

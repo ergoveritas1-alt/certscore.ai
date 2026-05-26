@@ -631,6 +631,22 @@ function getObjectValue(record: Record<string, unknown> | null | undefined, keys
   return null;
 }
 
+function getNestedObjectValue(record: Record<string, unknown> | null | undefined, paths: string[][]) {
+  for (const path of paths) {
+    let current: Record<string, unknown> | null | undefined = record;
+    for (const key of path) {
+      current = getObjectValue(current, [key]);
+      if (!current) {
+        break;
+      }
+    }
+    if (current) {
+      return current;
+    }
+  }
+  return null;
+}
+
 function getOverlayKind(record: Record<string, unknown> | null | undefined) {
   const overlayEvidence = getObjectValue(record, ["overlayEvidence", "overlay_evidence"]);
   const consentSummary = getObjectValue(record, ["hybridConsentSummary", "hybrid_consent_summary"]);
@@ -862,7 +878,14 @@ function hasCoverageNotMateriallyBlocked(rawEvidence: Record<string, unknown> | 
 }
 
 function hasSuccessfulRejectInteraction(rawEvidence: Record<string, unknown> | null | undefined) {
-  const rejectPath = getObjectValue(rawEvidence, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]);
+  const rejectPath =
+    getObjectValue(rawEvidence, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]) ??
+    getObjectValue(rawEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]) ??
+    getNestedObjectValue(rawEvidence, [
+      ["hybridRuntimeEvidence", "consentUiPathEvidence"],
+      ["hybrid_runtime_evidence", "consentUiPathEvidence"],
+      ["hybrid_runtime_evidence", "consent_ui_path_evidence"]
+    ]);
   const suppressionChecks = getObjectValue(rawEvidence, ["suppressionChecks", "suppression_checks"]);
   return hasCredibleRejectInteractionAttribution(rawEvidence) && (
     rejectPath?.rejectInteractionSucceeded === true ||
@@ -1025,14 +1048,24 @@ function hasRejectPathDepthEvidence(rawEvidence: Record<string, unknown> | null 
         ? rejectPath.status
         : typeof rejectPath.outcome === "string"
           ? rejectPath.outcome
-          : null;
+          : typeof rejectPath.layerInspected === "string"
+            ? rejectPath.layerInspected
+            : typeof rejectPath.layer_inspected === "string"
+              ? rejectPath.layer_inspected
+              : null;
   const inspected =
     rejectPath.bannerLayerInspected === true ||
     rejectPath.banner_layer_inspected === true ||
     rejectPath.rejectPathTested === true ||
     rejectPath.reject_path_tested === true ||
+    rejectPath.layerInspected === "first_layer" ||
+    rejectPath.layerInspected === "deeper_layer" ||
+    rejectPath.layer_inspected === "first_layer" ||
+    rejectPath.layer_inspected === "deeper_layer" ||
     typeof rejectPath.rejectClickDepth === "number" ||
     typeof rejectPath.reject_click_depth === "number" ||
+    typeof rejectPath.observedRejectPathDepth === "number" ||
+    typeof rejectPath.observed_reject_path_depth === "number" ||
     typeof rejectPath.acceptClickDepth === "number" ||
     typeof rejectPath.accept_click_depth === "number";
   const hasChoiceAsymmetry =
@@ -1044,7 +1077,7 @@ function hasRejectPathDepthEvidence(rawEvidence: Record<string, unknown> | null 
     typeof rejectPath.rejectAvailableOnFirstLayer === "boolean" ||
     typeof rejectPath.reject_available_on_first_layer === "boolean";
   return (
-    (inspected && Boolean(status && ["available", "hidden", "not_found", "unavailable", "failed", "untested"].includes(status))) ||
+    (inspected && Boolean(status && ["available", "hidden", "not_found", "unavailable", "failed", "untested", "first_layer", "deeper_layer"].includes(status))) ||
     (inspected && hasChoiceAsymmetry && hasAvailabilityFact)
   );
 }
@@ -1114,6 +1147,11 @@ function hasMaterialChoiceAsymmetryEvidence(rawEvidence: Record<string, unknown>
 function getConsentUiPathEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   return (
     getObjectValue(rawEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]) ??
+    getNestedObjectValue(rawEvidence, [
+      ["hybridRuntimeEvidence", "consentUiPathEvidence"],
+      ["hybrid_runtime_evidence", "consentUiPathEvidence"],
+      ["hybrid_runtime_evidence", "consent_ui_path_evidence"]
+    ]) ??
     getObjectValue(rawEvidence, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]) ??
     parseFirstObjectValue(rawEvidence?.consentUiPathEvidence ?? rawEvidence?.consent_ui_path_evidence) ??
     parseFirstObjectValue(rawEvidence?.rejectPathDepthAndAvailability ?? rawEvidence?.reject_path_depth_and_availability)

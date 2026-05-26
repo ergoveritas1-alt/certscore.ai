@@ -64,6 +64,7 @@ export type SurfacingPolicyRuleId =
   | "evidence.rights_gap.review_structured_policy_gap"
   | "evidence.contradiction.confirmed_when_explicit_basis_and_runtime"
   | "evidence.contradiction.review_without_complete_anchor"
+  | "evidence.policy_runtime_alignment.review_bridge"
   | "evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"
   | "evidence.preconsent.review_without_runtime_artifacts"
   | "evidence.preconsent.material_incomplete"
@@ -1342,6 +1343,32 @@ function hasExplicitContradictionBasis(packet: UnifiedFindingPacket) {
   );
 }
 
+function hasPolicyRuntimeAlignmentReviewBridge(packet: UnifiedFindingPacket) {
+  return (
+    packet.details?.family === "contradiction" &&
+    packet.details.bridgeMappingType === "deterministic_policy_runtime_review_mapping" &&
+    packet.details.conflictSupportsPromotion === true &&
+    packet.confidenceInputs.hasPolicyTextEvidence &&
+    packet.confidenceInputs.hasDirectRuntimeEvidence
+  );
+}
+
+function policyRuntimeAlignmentReviewOverride(packet: UnifiedFindingPacket): {
+  reason: string;
+  ruleId: SurfacingPolicyRuleId;
+  state: SurfacingDecisionState;
+} | null {
+  if (!hasPolicyRuntimeAlignmentReviewBridge(packet)) {
+    return null;
+  }
+  return {
+    reason:
+      "A WS01 policy/runtime alignment review bridge was retained across policy disclosure text and concrete runtime evidence, so this can surface as a review signal without being treated as a contradiction.",
+    ruleId: "evidence.policy_runtime_alignment.review_bridge",
+    state: "review"
+  };
+}
+
 function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
   if (packet.unifiedFindingId !== "preconsent_tracking" || packet.details?.family !== "consent_tracking") {
     return false;
@@ -1826,6 +1853,18 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     contractDecision?.externalSurfacingEligibility === "audit_only" &&
     !hasSpecificPreconsentRuntimeEvidence
   ) {
+    const policyRuntimeAlignmentOverride = policyRuntimeAlignmentReviewOverride(packet);
+    if (policyRuntimeAlignmentOverride) {
+      overrideDecision(decision, {
+        state: policyRuntimeAlignmentOverride.state,
+        lane: "main",
+        tier: decision.surfaceTier,
+        reason: policyRuntimeAlignmentOverride.reason,
+        ruleId: policyRuntimeAlignmentOverride.ruleId
+      });
+      return;
+    }
+
     if (hasMaterialIncompletePreconsentRuntimeEvidence) {
       overrideDecision(decision, {
         state: "material_incomplete",
@@ -2223,6 +2262,18 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
           ruleId: "evidence.contradiction.confirmed_when_explicit_basis_and_runtime"
         });
       } else {
+        const policyRuntimeAlignmentOverride = policyRuntimeAlignmentReviewOverride(packet);
+        if (policyRuntimeAlignmentOverride) {
+          overrideDecision(decision, {
+            state: policyRuntimeAlignmentOverride.state,
+            lane: "main",
+            tier: decision.surfaceTier,
+            reason: policyRuntimeAlignmentOverride.reason,
+            ruleId: policyRuntimeAlignmentOverride.ruleId
+          });
+          return;
+        }
+
         overrideDecision(decision, {
           state: "review",
           lane: "main",
