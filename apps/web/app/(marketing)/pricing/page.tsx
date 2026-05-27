@@ -21,7 +21,7 @@ const customPlan = PLAN_DEFINITIONS.find((plan) => plan.code === "team");
 const planDescriptions: Record<string, string> = {
   individual: "For checking your own site, key landing pages, and occasional re-scans.",
   pro: "For recurring review across multiple pages, site sections, or client sites.",
-  team: "For API access, portfolios, agencies, custom retention, or higher-volume workflows."
+  team: "For API access, portfolios, agencies, custom retention, features, white-label or higher-volume workflows."
 };
 
 const includedScanValue: Record<string, string> = {
@@ -47,7 +47,7 @@ export default function PricingPage() {
               Pricing based on pages scanned
             </h1>
             <p className="text-base leading-7 text-slate-600">
-              Start with a single site review, move to recurring scans, or contact us for portfolio and API workflows.
+              Start with a single site review, move to recurring scans, or contact us for portfolio, enterprise and API workflows.
             </p>
           </div>
         </div>
@@ -180,9 +180,6 @@ export default function PricingPage() {
                   pendingContent="Opening..."
                   size="sm"
                 />
-                <p className="text-xs leading-5 text-slate-500">
-                  Secure checkout. Create an account first so scans, credits, and history stay attached to your workspace.
-                </p>
               </CardContent>
             </Card>
           ))}

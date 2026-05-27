@@ -16,7 +16,7 @@ import { getPlanBillingIntent, getStripeBillingMode } from "../../../server/bill
 const planDescriptions: Record<string, string> = {
   individual: "For repeatable page-level checks without a large volume commitment.",
   pro: "For recurring review across multiple pages, site sections, or client sites.",
-  team: "For API access, portfolios, agencies, custom retention, or higher-volume workflows."
+  team: "For API access, portfolios, agencies, custom retention, features, white-label or higher-volume workflows."
 };
 
 type ModifyPlanPageProps = {
