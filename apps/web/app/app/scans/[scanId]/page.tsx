@@ -6,6 +6,8 @@ import { buildScanReportUnifiedFindings } from "../../../../components/scans/sha
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { ShareReportActions } from "../../../../components/scans/share-report-actions";
 import { hasPendingPostCompletionFindingWork } from "../../../../lib/scans/scan-auto-refresh";
+import { getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidence";
+import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../server/auth";
 import { getScanById } from "../../../../server/scans/get-scan-by-id";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
@@ -48,6 +50,13 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   });
 
   const scanDomainLabel = scanRecord.scan.domainHostname?.trim() || "Scanned website";
+  const isPlatformAdmin = isPlatformAdminEmail(user.email);
+  const visualEvidenceArtifact = isPlatformAdmin
+    ? getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts).find((artifact) => artifact.status === "available" && artifact.key)
+    : null;
+  const visualEvidenceHref = visualEvidenceArtifact
+    ? `/api/scans/${scanRecord.scan.id}/visual-evidence/${encodeURIComponent(visualEvidenceArtifact.id)}`
+    : null;
 
   return (
     <>
@@ -67,6 +76,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
               <ShareReportActions
                 domainLabel={scanDomainLabel}
                 scanId={scanRecord.scan.id}
+                visualEvidenceHref={visualEvidenceHref}
               />
               <div className="w-full lg:ml-auto lg:max-w-[16rem]">
                 <DomainScanForm

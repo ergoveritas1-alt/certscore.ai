@@ -125,7 +125,6 @@ import {
 } from "../../lib/scans/finding-evidence-contracts";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
-import { getVisualEvidenceArtifacts } from "../../lib/scans/visual-evidence";
 import {
   formatCollectionEndpointType,
 } from "../../lib/scans/tracker-risk";
@@ -5429,8 +5428,6 @@ export function SharedScanDetailView({
     scanRecord.accessPostureSummary?.accessPostureClass === "early_loss" &&
     scanRecord.accessPostureSummary?.stopTier === "tier1_front_door";
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
-  const visualEvidenceArtifacts = getVisualEvidenceArtifacts(runtimeArtifacts);
-  const showPrivateVisualEvidence = analyticsScanSource === "dashboard";
   const hybridRuntimeSummaryRows = getHybridRuntimeSummaryRows(runtimeArtifacts);
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
   const hybridVendorSummary = getRecord(hybridRuntimeEvidence?.vendorSummary);
@@ -6324,52 +6321,6 @@ export function SharedScanDetailView({
                   <p>DOM structure hash: {formatValue(runtimeArtifacts.dom_structure_hash)}</p>
                 </>
               )}
-          </CollapsibleSectionCard>
-        ) : null}
-        {visualEvidenceArtifacts.length > 0 ? (
-          <CollapsibleSectionCard
-            title={
-              <span className="flex items-center gap-1.5">
-                <span>Visual evidence</span>
-                <InfoTip text="Private initial-load viewport screenshots captured before scan interactions. Missing screenshots are treated as degraded evidence, not scan failure." />
-              </span>
-            }
-            contentClassName="space-y-4 text-sm text-slate-600"
-          >
-            {visualEvidenceArtifacts.map((artifact) => {
-              const imageHref =
-                showPrivateVisualEvidence && artifact.status === "available" && artifact.key
-                  ? `/api/scans/${scanRecord.scan.id}/visual-evidence/${encodeURIComponent(artifact.id)}`
-                  : null;
-
-              return (
-                <div key={artifact.id} className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-                  <div className="space-y-2">
-                    <p className="font-semibold text-slate-900">Initial-load screenshot</p>
-                    <p>Capture status: {formatValue(artifact.status)}</p>
-                    <p>Captured URL: {formatValue(artifact.finalUrl ?? artifact.pageUrl)}</p>
-                    <p>Captured at: {formatValue(artifact.capturedAt)}</p>
-                    <p>Viewport: {formatValue(artifact.width)} x {formatValue(artifact.height)} at {formatValue(artifact.deviceScaleFactor ?? 1)}x</p>
-                    <p>File size: {artifact.byteSize == null ? "Unavailable" : `${Math.round(artifact.byteSize / 1024)} KB`}</p>
-                    <p>SHA-256: {artifact.sha256 ? `${artifact.sha256.slice(0, 16)}…` : "Unavailable"}</p>
-                  </div>
-                  {imageHref ? (
-                    <a href={imageHref} target="_blank" rel="noreferrer" className="group block overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                      <img
-                        alt="Initial-load screenshot evidence"
-                        className="aspect-[4/3] h-full w-full object-cover transition group-hover:scale-[1.01]"
-                        loading="lazy"
-                        src={imageHref}
-                      />
-                    </a>
-                  ) : (
-                    <div className="flex min-h-40 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 text-center text-xs text-slate-500">
-                      {artifact.status === "available" ? "Sign in to the owning workspace to view private screenshot evidence." : "Screenshot evidence was not retained for this scan."}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
           </CollapsibleSectionCard>
         ) : null}
         </CollapsibleSectionCard>

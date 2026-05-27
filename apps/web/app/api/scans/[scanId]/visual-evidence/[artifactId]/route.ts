@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getVisualEvidenceArtifacts } from "../../../../../../lib/scans/visual-evidence";
+import { isPlatformAdminEmail } from "../../../../../../server/admin/platform-admin";
 import { getCurrentUser } from "../../../../../../server/auth";
 import { bootstrapAppUserSession } from "../../../../../../server/bootstrap-user";
 import { getScanById } from "../../../../../../server/scans/get-scan-by-id";
@@ -19,6 +20,9 @@ export async function GET(_request: Request, context: RouteContext) {
   const [{ artifactId, scanId }, user] = await Promise.all([context.params, getCurrentUser()]);
   if (!user) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  }
+  if (!isPlatformAdminEmail(user.email)) {
+    return NextResponse.json({ error: "Admin access required." }, { status: 403 });
   }
 
   const { organization } = await bootstrapAppUserSession(user);

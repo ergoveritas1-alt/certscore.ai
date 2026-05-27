@@ -7,6 +7,7 @@ import { sendReportEmailAction, type SendReportEmailActionState } from "../../se
 type ShareReportActionsProps = {
   domainLabel: string;
   scanId: string;
+  visualEvidenceHref?: string | null;
 };
 
 const initialSendReportEmailActionState: SendReportEmailActionState = {
@@ -77,7 +78,16 @@ function MonitorIcon() {
   );
 }
 
-export function ShareReportActions({ domainLabel, scanId }: ShareReportActionsProps) {
+function VisualEvidenceIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24">
+      <path d="M3.5 12s3.2-5.5 8.5-5.5S20.5 12 20.5 12s-3.2 5.5-8.5 5.5S3.5 12 3.5 12Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+export function ShareReportActions({ domainLabel, scanId, visualEvidenceHref = null }: ShareReportActionsProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [currentUrl, setCurrentUrl] = useState("");
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
@@ -159,6 +169,21 @@ export function ShareReportActions({ domainLabel, scanId }: ShareReportActionsPr
           <MonitorIcon />
           <IconTooltip label="Monitor this site" />
         </Link>
+        {visualEvidenceHref ? (
+          <a
+            aria-label="View captured image"
+            className={iconActionClassName()}
+            data-analytics-cta-type="visual-evidence"
+            data-analytics-event="report_cta_clicked"
+            href={visualEvidenceHref}
+            rel="noreferrer"
+            target="_blank"
+            title="View captured image"
+          >
+            <VisualEvidenceIcon />
+            <IconTooltip label="View captured image" />
+          </a>
+        ) : null}
       </div>
       {copyState === "failed" ? (
         <p className="mt-1 text-xs leading-5 text-amber-700">
