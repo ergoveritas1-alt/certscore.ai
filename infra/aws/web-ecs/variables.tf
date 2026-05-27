@@ -208,6 +208,36 @@ variable "privacy_request_to_email_secret_arn" {
   default     = ""
 }
 
+variable "stripe_secret_key_secret_arn" {
+  description = "Optional Secrets Manager ARN containing STRIPE_SECRET_KEY."
+  type        = string
+  default     = ""
+}
+
+variable "stripe_webhook_secret_secret_arn" {
+  description = "Optional Secrets Manager ARN containing STRIPE_WEBHOOK_SECRET."
+  type        = string
+  default     = ""
+}
+
+variable "stripe_price_individual_monthly" {
+  description = "Stripe monthly price id for the CertScore Starter plan."
+  type        = string
+  default     = ""
+}
+
+variable "stripe_price_pro_monthly" {
+  description = "Stripe monthly price id for the CertScore Pro plan."
+  type        = string
+  default     = ""
+}
+
+variable "stripe_billing_portal_return_path" {
+  description = "Return path used after Stripe Billing Portal sessions."
+  type        = string
+  default     = "/app/modify-plan"
+}
+
 variable "web_cpu" {
   description = "CPU units for each public web task."
   type        = number

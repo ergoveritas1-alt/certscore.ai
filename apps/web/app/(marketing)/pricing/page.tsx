@@ -29,6 +29,10 @@ const includedScanValue: Record<string, string> = {
   pro: "500 page scans included · $0.40/page"
 };
 
+function getPlanSignupHref(plan: string) {
+  return `/login?mode=create_account&next=${encodeURIComponent(`/app/modify-plan?plan=${plan}`)}`;
+}
+
 export default function PricingPage() {
   return (
     <main className="min-h-screen bg-slate-50">
@@ -165,7 +169,7 @@ export default function PricingPage() {
                   data-analytics-cta-type="sign_in"
                   data-analytics-event="pricing_cta_clicked"
                   data-analytics-plan={plan.code}
-                  href="/login?mode=create_account"
+                  href={getPlanSignupHref(plan.code)}
                   idleContent={
                     <span className="inline-flex items-center gap-2">
                       {plan.code === "pro" ? "Start Pro" : "Start Starter"}

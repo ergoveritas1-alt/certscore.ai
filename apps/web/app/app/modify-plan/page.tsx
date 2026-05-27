@@ -1,9 +1,14 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { PLAN_DEFINITIONS } from "@website-signal-risk-scanner/shared";
+import Link from "next/link";
 import { ModifyPlanSelectForm } from "../../../components/plans/modify-plan-select-form";
 import { SCAN_ACCESS } from "../../../lib/scan-access";
 import { getDashboardContext } from "../../../server/auth";
-import { updateCurrentOrganizationPlanFormAction } from "../../../server/plans/update-current-organization-plan";
+import {
+  openStripeBillingPortalFormAction,
+  startStripeCheckoutFormAction
+} from "../../../server/billing/actions";
+import { getPlanBillingIntent, getStripeBillingMode } from "../../../server/billing/stripe-config";
 
 const planDescriptions: Record<string, string> = {
   individual: "For repeatable page-level checks without a large volume commitment.",
@@ -13,6 +18,7 @@ const planDescriptions: Record<string, string> = {
 
 export default async function ModifyPlanPage() {
   const { organization } = await getDashboardContext();
+  const billingMode = getStripeBillingMode();
 
   return (
     <div className="space-y-8">
@@ -25,9 +31,17 @@ export default async function ModifyPlanPage() {
         </p>
       </div>
 
+      {!billingMode.enabled ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
+          Stripe billing is not configured yet. Missing: {billingMode.missing.join(", ")}.
+        </div>
+      ) : null}
+
       <div className="grid gap-4 lg:grid-cols-4">
         {PLAN_DEFINITIONS.map((plan) => {
           const isCurrent = plan.code === organization.plan;
+          const billingIntent = getPlanBillingIntent(plan.code, organization.plan);
+          const formAction = billingIntent === "checkout" ? startStripeCheckoutFormAction : openStripeBillingPortalFormAction;
 
           return (
             <Card
@@ -58,11 +72,21 @@ export default async function ModifyPlanPage() {
                 ) : null}
                 <p>Scan history: {plan.code === "pro" || plan.scanHistoryEnabled ? "Included" : "Not included"}</p>
                 <div className="pt-2">
-                  <ModifyPlanSelectForm
-                    action={updateCurrentOrganizationPlanFormAction}
-                    isCurrent={isCurrent}
-                    plan={plan.code}
-                  />
+                  {billingIntent === "contact_sales" ? (
+                    <Link
+                      className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800"
+                      href="/contact-sales?source=modify-plan&plan=custom"
+                    >
+                      Contact sales
+                    </Link>
+                  ) : (
+                    <ModifyPlanSelectForm
+                      action={formAction}
+                      billingIntent={billingIntent}
+                      isCurrent={isCurrent}
+                      plan={plan.code}
+                    />
+                  )}
                 </div>
               </CardContent>
             </Card>

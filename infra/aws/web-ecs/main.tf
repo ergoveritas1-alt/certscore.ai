@@ -24,7 +24,9 @@ locals {
     var.gmail_smtp_user_secret_arn,
     var.gmail_smtp_app_password_secret_arn,
     var.feedback_to_email_secret_arn,
-    var.privacy_request_to_email_secret_arn
+    var.privacy_request_to_email_secret_arn,
+    var.stripe_secret_key_secret_arn,
+    var.stripe_webhook_secret_secret_arn
   ])
   base_environment = concat(
     [
@@ -58,6 +60,9 @@ locals {
     var.google_client_secret_secret_arn != "" ? [{ name = "GOOGLE_CLIENT_SECRET", valueFrom = var.google_client_secret_secret_arn }] : [],
     var.openai_api_key_secret_arn != "" ? [{ name = "OPENAI_API_KEY", valueFrom = var.openai_api_key_secret_arn }] : [],
     var.privacy_request_to_email_secret_arn != "" ? [{ name = "PRIVACY_REQUEST_TO_EMAIL", valueFrom = var.privacy_request_to_email_secret_arn }] : []
+    ,
+    var.stripe_secret_key_secret_arn != "" ? [{ name = "STRIPE_SECRET_KEY", valueFrom = var.stripe_secret_key_secret_arn }] : [],
+    var.stripe_webhook_secret_secret_arn != "" ? [{ name = "STRIPE_WEBHOOK_SECRET", valueFrom = var.stripe_webhook_secret_secret_arn }] : []
   )
   certscore_base_url = local.certificate_arn != null ? "https://${var.certscore_domain_name}" : "http://${aws_lb.web.dns_name}"
 }
@@ -458,8 +463,13 @@ resource "aws_ecs_task_definition" "certscore" {
           protocol      = "tcp"
         }
       ]
-      environment = concat(local.base_environment, [{ name = "NEXT_PUBLIC_APP_URL", value = local.certscore_base_url }])
-      secrets     = local.base_secrets
+      environment = concat(local.base_environment, [
+        { name = "NEXT_PUBLIC_APP_URL", value = local.certscore_base_url },
+        { name = "STRIPE_PRICE_INDIVIDUAL_MONTHLY", value = var.stripe_price_individual_monthly },
+        { name = "STRIPE_PRICE_PRO_MONTHLY", value = var.stripe_price_pro_monthly },
+        { name = "STRIPE_BILLING_PORTAL_RETURN_PATH", value = var.stripe_billing_portal_return_path }
+      ])
+      secrets = local.base_secrets
       logConfiguration = {
         logDriver = "awslogs"
         options = {

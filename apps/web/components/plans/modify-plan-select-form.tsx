@@ -6,11 +6,12 @@ import { useFormStatus } from "react-dom";
 
 type ModifyPlanSelectFormProps = {
   action: (formData: FormData) => Promise<void>;
+  billingIntent: "checkout" | "current" | "portal";
   isCurrent: boolean;
   plan: PlanCode;
 };
 
-function SubmitButton({ isCurrent }: { isCurrent: boolean }) {
+function SubmitButton({ billingIntent, isCurrent }: { billingIntent: ModifyPlanSelectFormProps["billingIntent"]; isCurrent: boolean }) {
   const { pending } = useFormStatus();
 
   if (isCurrent) {
@@ -21,18 +22,22 @@ function SubmitButton({ isCurrent }: { isCurrent: boolean }) {
     );
   }
 
+  const idleLabel = billingIntent === "portal" ? "Manage billing" : "Continue to checkout";
+  const pendingLabel = billingIntent === "portal" ? "Opening..." : "Opening checkout...";
+
   return (
     <Button disabled={pending} size="sm" type="submit" variant="secondary">
-      {pending ? "Updating..." : "Switch to this plan"}
+      {pending ? pendingLabel : idleLabel}
     </Button>
   );
 }
 
-export function ModifyPlanSelectForm({ action, isCurrent, plan }: ModifyPlanSelectFormProps) {
+export function ModifyPlanSelectForm({ action, billingIntent, isCurrent, plan }: ModifyPlanSelectFormProps) {
   return (
     <form action={action}>
+      {billingIntent === "portal" ? <input name="intent" type="hidden" value="manage_billing" /> : null}
       <input name="plan" type="hidden" value={plan} />
-      <SubmitButton isCurrent={isCurrent} />
+      <SubmitButton billingIntent={billingIntent} isCurrent={isCurrent} />
     </form>
   );
 }

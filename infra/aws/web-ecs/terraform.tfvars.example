@@ -40,6 +40,11 @@ gmail_smtp_user_secret_arn           = "arn:aws:secretsmanager:us-west-1:1995360
 gmail_smtp_app_password_secret_arn   = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/gmail-app-password-JfvuEX"
 feedback_to_email_secret_arn         = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/feedback-to-email-uleI50"
 privacy_request_to_email_secret_arn  = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/privacy-request-to-email-uleI50"
+stripe_secret_key_secret_arn         = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/stripe-secret-key"
+stripe_webhook_secret_secret_arn     = "arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/stripe-webhook-secret"
+stripe_price_individual_monthly      = "price_..."
+stripe_price_pro_monthly             = "price_..."
+stripe_billing_portal_return_path    = "/app/modify-plan"
 
 web_cpu           = 512
 web_memory        = 1024
