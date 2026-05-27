@@ -212,28 +212,25 @@ export function ShareReportActions({
             <button
               type="button"
               aria-expanded={isVisualEvidenceMenuOpen}
-              aria-haspopup={normalizedVisualEvidenceLinks.length > 1 ? "menu" : undefined}
+              aria-haspopup="menu"
               aria-label="View captured image"
               className={iconActionClassName()}
               data-analytics-cta-type="visual-evidence"
               data-analytics-event="report_cta_clicked"
-              onClick={() => {
-                if (normalizedVisualEvidenceLinks.length === 1) {
-                  window.open(normalizedVisualEvidenceLinks[0]?.href, "_blank", "noopener,noreferrer");
-                  return;
-                }
-                setIsVisualEvidenceMenuOpen((value) => !value);
-              }}
+              onClick={() => setIsVisualEvidenceMenuOpen((value) => !value)}
               title="View captured image"
             >
               <VisualEvidenceIcon />
               <IconTooltip label="View captured image" />
             </button>
-            {isVisualEvidenceMenuOpen && normalizedVisualEvidenceLinks.length > 1 ? (
+            {isVisualEvidenceMenuOpen ? (
               <div
                 className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-xl"
                 role="menu"
               >
+                <p className="px-3 pb-2 pt-1 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Captured images
+                </p>
                 {normalizedVisualEvidenceLinks.map((link) => (
                   <a
                     key={link.id}
