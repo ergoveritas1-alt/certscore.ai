@@ -3,6 +3,7 @@ import { PaginationControls, normalizePage, normalizePageSize } from "../../../.
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
 import { getAdminScanOverviewMetrics, listAdminScans } from "../../../../server/admin/list-admin-scans";
+import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminScanActions } from "./admin-scan-actions";
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
 
@@ -53,10 +54,10 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const currentPage = normalizePage(resolvedSearchParams.page);
   const pageSize = normalizePageSize(resolvedSearchParams.perPage);
-  const scanMetrics = await getAdminScanOverviewMetrics();
+  const scanMetrics = await withServerTiming("app.admin.scans.metrics", () => getAdminScanOverviewMetrics());
   const totalPages = Math.max(1, Math.ceil(scanMetrics.totalScans / pageSize));
   const normalizedPage = Math.min(currentPage, totalPages);
-  const scans = await listAdminScans(pageSize, (normalizedPage - 1) * pageSize);
+  const scans = await withServerTiming("app.admin.scans.list", () => listAdminScans(pageSize, (normalizedPage - 1) * pageSize));
   const hasActiveScans = scans.some((scan) => scan.status === "queued" || scan.status === "running");
 
   return (
@@ -178,7 +179,9 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                           <p className="font-medium text-slate-900">
                             Signals {scan.totalSignals ?? 0} · Findings {scan.findingCount ?? 0}
                           </p>
-                          <p className="text-xs text-slate-500">Top findings {scan.topFindingCount ?? 0}</p>
+                          {scan.topFindingCount !== null ? (
+                            <p className="text-xs text-slate-500">Top findings {scan.topFindingCount}</p>
+                          ) : null}
                         </>
                       )}
                       <p className="mt-1 text-xs text-slate-500">{formatAdminDateTime(scan.activityAt)}</p>

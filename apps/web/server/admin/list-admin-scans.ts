@@ -3,31 +3,15 @@
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
-import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
-import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
-import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
-import { withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
-import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { deriveDisplayCreatedAt } from "../scans/display-state";
-import { loadMergedSignalsByScanId } from "../scans/merged-signal-summary";
-import { repairFindingFamilyPacketEvents } from "../scans/family-packet-event-repair";
 import {
   loadAdminScanOverviewCounts,
   loadAdminScanListPageData,
   loadAdminScanRequestRows,
   loadBlockedRunTelemetryRows,
   type AdminBlockedRunTelemetryRow,
-  type AdminPolicyEnrichmentRow as PolicyEnrichmentRow,
   type AdminScanDiagnosticEventRow as ScanDiagnosticEventRow,
-  type AdminScanDomainRow as DomainRow,
-  type AdminScanOrganizationRow as OrganizationRow,
-  type AdminScanQueryRow as ScanRow,
-  type AdminScanRequestRow as ScanRequestRow,
-  type AdminScanSnapshotRow as SnapshotRow,
-  type AdminRuntimeArtifactRow as RuntimeArtifactRow,
-  type AdminValidationFindingSummaryRow as ValidationFindingSummaryRow,
-  type AdminValidationRunSummaryRow as ValidationRunSummaryRow,
-  type AdminValidationVerdictRow as ValidationVerdictRow
+  type AdminScanRequestRow as ScanRequestRow
 } from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
 
@@ -101,13 +85,8 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
     diagnosticEvents,
     domains,
     organizations,
-    policyEnrichmentRows,
     resolvedSnapshots,
-    runtimeArtifacts,
-    scanRows,
-    validationFindingRows,
-    validationRuns,
-    verdictByFindingId
+    scanRows
   } = scanPageData;
 
   const domainMap = new Map(domains.flatMap((domain) => (domain.id ? [[domain.id, domain] as const] : [])));
@@ -115,141 +94,11 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
   const snapshotMap = new Map(
     resolvedSnapshots.flatMap((snapshot) => (snapshot.scan_id ? [[snapshot.scan_id, snapshot] as const] : []))
   );
-  const runtimeArtifactMap = new Map(
-    runtimeArtifacts.map((artifact) => [
-      artifact.scan_id,
-      withHybridRuntimeArtifactFallbacks(artifact as Record<string, unknown>) as RuntimeArtifactRow
-    ])
-  );
-  const findingCountMap = new Map<string, number>();
-  for (const validationRun of validationRuns) {
-    if (!findingCountMap.has(validationRun.scan_id)) {
-      findingCountMap.set(validationRun.scan_id, validationRun.finding_count ?? 0);
-    }
-  }
-  const latestValidationRunByScanId = new Map<string, string>();
-  for (const validationRun of validationRuns) {
-    if (!latestValidationRunByScanId.has(validationRun.scan_id)) {
-      latestValidationRunByScanId.set(validationRun.scan_id, validationRun.id);
-    }
-  }
   const diagnosticEventMap = new Map<string, ScanDiagnosticEventRow[]>();
   for (const diagnosticEvent of diagnosticEvents) {
     const existing = diagnosticEventMap.get(diagnosticEvent.scan_id) ?? [];
     existing.push(diagnosticEvent);
     diagnosticEventMap.set(diagnosticEvent.scan_id, existing);
-  }
-  const policyEnrichmentMap = new Map<string, Array<Record<string, unknown>>>();
-  for (const row of policyEnrichmentRows) {
-    const scanId = typeof row.scan_id === "string" ? row.scan_id : null;
-    if (!scanId) {
-      continue;
-    }
-
-    const existing = policyEnrichmentMap.get(scanId) ?? [];
-    existing.push(row);
-    policyEnrichmentMap.set(scanId, existing);
-  }
-  const validationFindingsByRunId = new Map<string, ScanValidationFinding[]>();
-  for (const row of validationFindingRows) {
-    const latestVerdict = verdictByFindingId.get(row.id) ?? null;
-    const verdictRows = Array.isArray(row.validation_verdicts)
-      ? row.validation_verdicts
-      : latestVerdict
-        ? [latestVerdict]
-        : [];
-    const verdict = verdictRows[0];
-    const existing = validationFindingsByRunId.get(row.validation_run_id) ?? [];
-    existing.push({
-      agreementScore: verdict?.agreement_score ?? null,
-      category: row.category,
-      description: row.description,
-      evidence: row.evidence_json ?? null,
-      findingFamily: row.finding_family,
-      findingScope: row.finding_scope,
-      findingSource: row.finding_source,
-      findingSubject: row.finding_subject,
-      id: row.id,
-      model: verdict?.model ?? null,
-      modelConfidence: verdict?.confidence ?? null,
-      pageUrl: row.page_url,
-      promptVersion: verdict?.prompt_version ?? null,
-      rationale: verdict?.rationale ?? null,
-      ruleKey: row.rule_key,
-      severity: row.severity,
-      subtype: row.subtype,
-      systemConfidenceBand: verdict?.system_confidence_band ?? null,
-      systemConfidenceExplanation: verdict?.system_confidence_explanation ?? null,
-      systemConfidenceScore: verdict?.system_confidence_score ?? null,
-      title: row.title,
-      verdict: verdict?.verdict ?? null
-    });
-    validationFindingsByRunId.set(row.validation_run_id, existing);
-  }
-  const observedAtByScanId = new Map(
-    scanRows.map((scan) => [scan.id, scan.completed_at ?? scan.created_at] as const)
-  );
-  const mergedSignalsByScanId = await loadMergedSignalsByScanId({
-    observedAtByScanId,
-    scanIds: scanRows.map((scan) => scan.id)
-  });
-  const surfacedFindingCountMap = new Map<string, number>();
-  const topFindingCountMap = new Map<string, number>();
-  for (const scan of scanRows) {
-    const scanEvents = diagnosticEventMap.get(scan.id) ?? [];
-    const repairedEvents = repairFindingFamilyPacketEvents({
-      events: scanEvents.map((event) => ({
-        createdAt: event.created_at,
-        eventType: event.event_type,
-        id: `${scan.id}:${event.created_at}:${event.event_type}`,
-        message: event.message,
-        metadataJson: event.metadata_json
-      })),
-      policyEnrichment: policyEnrichmentMap.get(scan.id) ?? []
-    });
-    const validationRunId = latestValidationRunByScanId.get(scan.id) ?? null;
-    const validationFindings = validationRunId ? validationFindingsByRunId.get(validationRunId) ?? [] : [];
-    const validationFindingLookup = new Map(validationFindings.map((finding) => [finding.ruleKey, finding] as const));
-    const displayPackets = buildUnifiedFindingDisplayPackets({
-      coverageSummary: {
-        legalCoverageScore: snapshotMap.get(scan.id)?.legal_coverage_score ?? null,
-        pagesScanned: scan.pages_scanned,
-        policyEnrichmentCount: (policyEnrichmentMap.get(scan.id) ?? []).length,
-        verifiedPublicSurfacesCount: snapshotMap.get(scan.id)?.verified_public_surfaces_count ?? null
-      },
-      mergedSignals: mergedSignalsByScanId.get(scan.id) ?? [],
-      policyEnrichment: policyEnrichmentMap.get(scan.id) ?? [],
-      reviewFindingCandidates: [],
-      scanEvents: repairedEvents,
-      validationFindings,
-      validationFindingLookup
-    });
-    surfacedFindingCountMap.set(
-      scan.id,
-      displayPackets.filter((finding) => finding.presentationDecision.status !== "suppress").length
-    );
-    const fullReportPackets = buildScanReportUnifiedFindingsForScan({
-      accessibilityRuleCounts: [],
-      accessibilityRuleExamples: [],
-      events: repairedEvents,
-      macroEnrichment: null,
-      mergedSignals: mergedSignalsByScanId.get(scan.id) ?? [],
-      pageEvidence: [],
-      policyEnrichment: policyEnrichmentMap.get(scan.id) ?? [],
-      policyReviewQueue: [],
-      preconsentViolations: [],
-      primaryPolicyEnrichment: null,
-      runtimeArtifacts: runtimeArtifactMap.get(scan.id) ?? null,
-      signalHits: [],
-      signals: [],
-      snapshot: snapshotMap.get(scan.id) ?? null,
-      trackerVendors: [],
-      validationFindings
-    });
-    topFindingCountMap.set(
-      scan.id,
-      projectExecutiveFindingsFromUnifiedPackets(fullReportPackets.length > 0 ? fullReportPackets : displayPackets).topFindings.length
-    );
   }
 
   const requestByLinkedScanId = new Map<string, ScanRequestRow>();
@@ -313,12 +162,8 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       completedAt: scan.completed_at,
       pagesScanned: scan.pages_scanned,
       totalSignals: snapshot?.total_signals ?? null,
-      topFindingCount: topFindingCountMap.get(scan.id) ?? null,
-      findingCount: Math.max(
-        snapshot?.report_finding_count ?? 0,
-        findingCountMap.get(scan.id) ?? 0,
-        surfacedFindingCountMap.get(scan.id) ?? 0
-      ),
+      topFindingCount: null,
+      findingCount: snapshot?.report_finding_count ?? null,
       certscoreOverall: snapshot?.certscore_overall ?? null,
       homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
       robotsFetchHttpStatus: snapshot?.robots_fetch_http_status ?? null,

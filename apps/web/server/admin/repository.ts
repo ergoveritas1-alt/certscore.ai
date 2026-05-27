@@ -303,40 +303,6 @@ export type AdminBlockedRunTelemetryRow = {
   scan_timestamp?: string | null;
 };
 
-type QueryErrorLike = {
-  code?: string;
-  details?: string;
-  hint?: string;
-  message?: string;
-} | null;
-
-const CHANGE_EVENT_BATCH_SIZE = 50;
-
-function chunkValues<T>(values: T[], size: number) {
-  const chunks: T[][] = [];
-
-  for (let index = 0; index < values.length; index += size) {
-    chunks.push(values.slice(index, index + size));
-  }
-
-  return chunks;
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Unknown database error.";
-}
-
-function isMissingTieredSnapshotColumn(error: { message?: string; code?: string } | null) {
-  const message = `${error?.message ?? ""}`.toLowerCase();
-  return (
-    `${error?.code ?? ""}` === "42703" ||
-    message.includes("access_posture_class") ||
-    message.includes("highest_successful_tier") ||
-    message.includes("stop_tier") ||
-    message.includes("recoverable_finding_classes")
-  );
-}
-
 export async function loadAdminScanListPageData(limit: number, offset = 0): Promise<{
   diagnosticEvents: AdminScanDiagnosticEventRow[];
   domains: AdminScanDomainRow[];
@@ -363,7 +329,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
   const organizationIds = [...new Set(scanRows.flatMap((scan) => (scan.organization_id ? [scan.organization_id] : [])))];
   const scanIds = scanRows.map((scan) => scan.id);
 
-  const [domainsResult, organizationsResult] = await Promise.all([
+  const [domainsResult, organizationsResult, snapshotsResult, diagnosticEventsResult] = await Promise.all([
     domainIds.length
       ? query<AdminScanDomainRow>(
           `select id, hostname
@@ -381,167 +347,54 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
           [organizationIds],
           { readOnly: true }
         )
-      : Promise.resolve({ rows: [] as AdminScanOrganizationRow[] })
-  ]);
-
-  let resolvedSnapshots: AdminScanSnapshotRow[] = [];
-  if (scanIds.length) {
-    try {
-      const snapshotsResult = await query<AdminScanSnapshotRow>(
-        `select *
-           from scan_snapshots
-          where scan_id = any($1::uuid[])`,
-        [scanIds],
-        { readOnly: true }
-      );
-      resolvedSnapshots = snapshotsResult.rows;
-    } catch (error) {
-      if (isMissingTieredSnapshotColumn({ message: getErrorMessage(error) })) {
-        const fallback = await query<AdminScanSnapshotRow>(
-          `select *
+      : Promise.resolve({ rows: [] as AdminScanOrganizationRow[] }),
+    scanIds.length
+      ? query<AdminScanSnapshotRow>(
+          `select scan_id,
+                  certscore_overall,
+                  total_signals,
+                  report_finding_count,
+                  homepage_fetch_http_status,
+                  robots_fetch_http_status,
+                  blocked_flag,
+                  captcha_flag,
+                  access_posture_class,
+                  highest_successful_tier,
+                  stop_tier,
+                  recoverable_finding_classes,
+                  legal_coverage_score,
+                  verified_public_surfaces_count,
+                  scan_outcome
              from scan_snapshots
             where scan_id = any($1::uuid[])`,
           [scanIds],
           { readOnly: true }
-        );
-        resolvedSnapshots = fallback.rows.map((row) => ({
-          ...row,
-          access_posture_class: null,
-          highest_successful_tier: null,
-          stop_tier: null,
-          recoverable_finding_classes: []
-        }));
-      } else {
-        throw new Error(`Failed to load scans: ${getErrorMessage(error)}`);
-      }
-    }
-  }
-
-  const runtimeArtifacts: AdminRuntimeArtifactRow[] = [];
-  if (scanIds.length) {
-    for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const result = await query<AdminRuntimeArtifactRow>(
-        `select *
-           from scan_runtime_artifacts
-          where scan_id = any($1::uuid[])`,
-        [scanIdBatch],
-        { readOnly: true }
-      );
-      runtimeArtifacts.push(...result.rows);
-    }
-  }
-
-  const validationRuns: AdminValidationRunSummaryRow[] = [];
-  if (scanIds.length) {
-    for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const result = await query<AdminValidationRunSummaryRow>(
-        `select id, scan_id, finding_count, created_at
-           from validation_runs
-          where scan_id = any($1::uuid[])
-          order by created_at desc`,
-        [scanIdBatch],
-        { readOnly: true }
-      );
-      validationRuns.push(...result.rows);
-    }
-  }
-
-  const diagnosticEvents: AdminScanDiagnosticEventRow[] = [];
-  if (scanIds.length) {
-    for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const result = await query<AdminScanDiagnosticEventRow>(
-        `select scan_id, event_type, message, metadata_json, created_at
-           from scan_events
-          where scan_id = any($1::uuid[])
-          order by created_at asc`,
-        [scanIdBatch],
-        { readOnly: true }
-      );
-      diagnosticEvents.push(...result.rows);
-    }
-  }
-
-  const policyEnrichmentRows: AdminPolicyEnrichmentRow[] = [];
-  if (scanIds.length) {
-    for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const result = await query<AdminPolicyEnrichmentRow>(
-        `select *
-           from policy_enrichment
-          where scan_id = any($1::uuid[])
-          order by created_at asc`,
-        [scanIdBatch],
-        { readOnly: true }
-      );
-      policyEnrichmentRows.push(...result.rows);
-    }
-  }
-
-  const latestValidationRunByScanId = new Map<string, string>();
-  for (const validationRun of validationRuns) {
-    if (!latestValidationRunByScanId.has(validationRun.scan_id)) {
-      latestValidationRunByScanId.set(validationRun.scan_id, validationRun.id);
-    }
-  }
-
-  const latestValidationRunIds = [
-    ...new Set(
-      [...latestValidationRunByScanId.values()].filter(
-        (validationRunId): validationRunId is string =>
-          typeof validationRunId === "string" && validationRunId.trim().length > 0
-      )
-    )
-  ];
-
-  const validationFindingRows: AdminValidationFindingSummaryRow[] = [];
-  if (latestValidationRunIds.length) {
-    for (const validationRunIdBatch of chunkValues(latestValidationRunIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const result = await query<AdminValidationFindingSummaryRow>(
-        `select id, validation_run_id, category, subtype, finding_family, finding_source, finding_scope,
-                finding_subject, rule_key, title, description, severity, page_url, evidence_json
-           from validation_run_findings
-          where validation_run_id = any($1::uuid[])`,
-        [validationRunIdBatch],
-        { readOnly: true }
-      );
-      validationFindingRows.push(...result.rows);
-    }
-  }
-
-  const validationFindingIds = validationFindingRows.map((row) => row.id);
-  const verdictByFindingId = new Map<string, AdminValidationVerdictRow>();
-
-  if (validationFindingIds.length) {
-    for (const findingIdBatch of chunkValues(validationFindingIds, CHANGE_EVENT_BATCH_SIZE)) {
-      const result = await query<AdminValidationVerdictRow>(
-        `select validation_run_finding_id, verdict, confidence, rationale, agreement_score, model,
-                prompt_version, evidence_json, created_at, system_confidence_score,
-                system_confidence_band, system_confidence_explanation
-           from validation_verdicts
-          where validation_run_finding_id = any($1::uuid[])
-          order by created_at desc`,
-        [findingIdBatch],
-        { readOnly: true }
-      );
-
-      for (const row of result.rows) {
-        if (!verdictByFindingId.has(row.validation_run_finding_id)) {
-          verdictByFindingId.set(row.validation_run_finding_id, row);
-        }
-      }
-    }
-  }
+        )
+      : Promise.resolve({ rows: [] as AdminScanSnapshotRow[] }),
+    scanIds.length
+      ? query<AdminScanDiagnosticEventRow>(
+          `select scan_id, event_type, message, metadata_json, created_at
+             from scan_events
+            where scan_id = any($1::uuid[])
+              and event_type in ('scan.request', 'scan.request.received', 'request_context', 'scanner.request')
+            order by created_at asc`,
+          [scanIds],
+          { readOnly: true }
+        )
+      : Promise.resolve({ rows: [] as AdminScanDiagnosticEventRow[] })
+  ]);
 
   return {
-    diagnosticEvents,
+    diagnosticEvents: diagnosticEventsResult.rows,
     domains: domainsResult.rows,
     organizations: organizationsResult.rows,
-    policyEnrichmentRows,
-    resolvedSnapshots,
-    runtimeArtifacts,
+    policyEnrichmentRows: [],
+    resolvedSnapshots: snapshotsResult.rows,
+    runtimeArtifacts: [],
     scanRows,
-    validationFindingRows,
-    validationRuns,
-    verdictByFindingId
+    validationFindingRows: [],
+    validationRuns: [],
+    verdictByFindingId: new Map()
   };
 }
 
