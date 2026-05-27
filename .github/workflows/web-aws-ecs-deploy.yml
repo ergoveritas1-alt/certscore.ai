@@ -24,7 +24,7 @@ jobs:
       ECS_CLUSTER_NAME: ${{ vars.AWS_WEB_ECS_CLUSTER }}
       ECS_CERTSCORE_SERVICE_NAME: ${{ vars.AWS_WEB_CERTSCORE_SERVICE }}
       CERTSCORE_BASE_URL: ${{ vars.AWS_WEB_CERTSCORE_BASE_URL }}
-      DATABASE_URL_SECRET_ARN: ${{ secrets.AWS_DATABASE_URL_SECRET_ARN || secrets.PROD_DATABASE_URL_SECRET_ARN || vars.AWS_DATABASE_URL_SECRET_ARN }}
+      DATABASE_URL_SECRET_ARN: ${{ secrets.AWS_DATABASE_URL_SECRET_ARN || secrets.PROD_DATABASE_URL_SECRET_ARN || vars.AWS_DATABASE_URL_SECRET_ARN || 'arn:aws:secretsmanager:us-west-1:199536052647:secret:certscore/database-url-JGGsra' }}
 
     steps:
       - name: Checkout
