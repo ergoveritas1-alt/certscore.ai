@@ -240,6 +240,15 @@ export type CertScoreFindingEvidenceDetails = {
     evidenceConfidence?: "strong" | "moderate" | "limited" | string;
     directVsInferred?: "direct" | "inferred" | "mixed" | string;
   };
+  policyRuntimeAlignmentReview?: {
+    reviewTier: "disclosure_specificity_review";
+    summary: string;
+    policyEvidence?: Record<string, unknown>;
+    runtimeVendors?: string[];
+    runtimeDomains?: string[];
+    runtimeRequestUrls?: string[];
+    missingBridgeEvidence?: string[];
+  };
   consentGovernanceDisclosure?: Record<string, unknown>;
   disclosureFindings?: string[];
   evidenceSnippets?: string[];
@@ -592,6 +601,16 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
       "Retained consent interaction structure can show that refusal, settings, later preference-revisit controls, or explanations of ongoing consent management were less available than acceptance, which warrants consent UX review.",
     remediation:
       "Expose reject and settings at the first layer, keep button prominence and interaction cost comparable, and provide a clear cookie preferences, privacy settings, or consent-preference reopen path with supporting withdrawal or preference-management explanation where appropriate."
+  },
+  consent_preference_reopen_control_not_observed: {
+    id: "consent_preference_reopen_control_not_observed",
+    label: "Consent preference reopen control not observed",
+    section: "Consent Experience",
+    defaultSurfacePriority: 82,
+    whyItMatters:
+      "When consent or tracking context exists, teams commonly review whether users can revisit, change, or withdraw cookie/privacy choices after the initial banner is gone.",
+    remediation:
+      "Confirm that an accessible cookie preferences, privacy settings, CMP widget, footer link, or privacy-choice page lets users revisit or withdraw cookie/privacy choices."
   },
   policy_behavior_contradiction_detected: {
     id: "policy_behavior_contradiction_detected",

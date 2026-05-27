@@ -21,6 +21,7 @@ export type RuntimeVendorPolicySurfaceType =
 export type RuntimeVendorPolicySurface = {
   type: RuntimeVendorPolicySurfaceType;
   url?: string;
+  snippet?: string;
   reached: boolean;
   retainedEvidenceRef?: string;
   searchedTerms?: string[];
@@ -173,12 +174,16 @@ function parseSurface(row: Record<string, unknown>): RuntimeVendorPolicySurface 
     reached
   };
   const url = getString(row.url ?? row.surfaceUrl ?? row.surface_url);
+  const snippet = getString(row.snippet ?? row.policySnippet ?? row.policy_snippet ?? row.retainedSnippet ?? row.retained_snippet);
   const retainedEvidenceRef = getString(row.retainedEvidenceRef ?? row.retained_evidence_ref ?? row.evidenceRef ?? row.evidence_ref);
   const searchedTerms = getStringArray(row, ["searchedTerms", "searched_terms"]);
   const matchedVendorNames = getStringArray(row, ["matchedVendorNames", "matched_vendor_names"]);
   const unmatchedVendorNames = getStringArray(row, ["unmatchedVendorNames", "unmatched_vendor_names"]);
   if (url) {
     surface.url = url;
+  }
+  if (snippet) {
+    surface.snippet = snippet;
   }
   if (retainedEvidenceRef) {
     surface.retainedEvidenceRef = retainedEvidenceRef;
@@ -332,8 +337,26 @@ export function evaluateRuntimeVendorDisclosureEvidence(
       negativeEvidenceFlags.add("missing_unmatched_runtime_vendor");
       return false;
     }
-    if (!row.policySurfacesSearched.some((surface) => surface.reached)) {
+    const reachedReviewableSurfaces = row.policySurfacesSearched.filter((surface) => surface.reached && surface.url && surface.snippet);
+    if (reachedReviewableSurfaces.length === 0) {
       negativeEvidenceFlags.add("missing_policy_side_evidence");
+      return false;
+    }
+    const hasDisclosureSearchResult = reachedReviewableSurfaces.some(
+      (surface) =>
+        (surface.searchedTerms?.length ?? 0) > 0 &&
+        ((surface.matchedVendorNames?.length ?? 0) > 0 ||
+          (surface.unmatchedVendorNames?.length ?? 0) > 0 ||
+          row.matchedVendorDisclosureCount > 0 ||
+          row.unmatchedVendorDisclosureCount > 0)
+    );
+    if (!hasDisclosureSearchResult) {
+      negativeEvidenceFlags.add("missing_disclosure_match_search_result");
+      return false;
+    }
+    const hasSurfaceUnmatchedResult = reachedReviewableSurfaces.some((surface) => (surface.unmatchedVendorNames?.length ?? 0) > 0);
+    if (!hasSurfaceUnmatchedResult && row.unmatchedVendorDisclosureCount <= 0) {
+      negativeEvidenceFlags.add("missing_unmatched_runtime_vendor");
       return false;
     }
     if (!row.mismatchRationale.trim()) {

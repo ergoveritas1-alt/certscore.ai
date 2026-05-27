@@ -352,11 +352,12 @@ test("attaches eligible governance evidence to Consent Experience details", () =
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makeDisplayPacket({ evidence: governanceEvidence(), unifiedFindingId: "consent_control_not_reopenable" })
   ]);
-  const finding = projection.findings.find((entry) => entry.id === "consent_dark_patterns_detected");
+  const finding = projection.findings.find((entry) => entry.id === "consent_preference_reopen_control_not_observed");
   assert.ok(finding);
   assert.equal(
-    (finding.evidenceDetails?.consentUiEvidence?.consentGovernanceDisclosure as Record<string, unknown> | undefined)?.subtype,
+    (finding.evidenceDetails?.disclosureEvidence?.consentGovernanceDisclosure as Record<string, unknown> | undefined)?.subtype,
     "consent_governance_disclosure_gap"
   );
-  assert.equal(projection.findings.filter((entry) => entry.id === "consent_dark_patterns_detected").length, 1);
+  assert.equal(projection.findings.filter((entry) => entry.id === "consent_preference_reopen_control_not_observed").length, 1);
+  assert.equal(projection.findings.some((entry) => entry.id === "consent_dark_patterns_detected"), false);
 });

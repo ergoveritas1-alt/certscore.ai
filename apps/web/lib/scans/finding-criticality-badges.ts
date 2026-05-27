@@ -81,13 +81,17 @@ const FINDING_CRITICALITY_BADGES = {
     badge: "high",
     rationale: "Concrete policy/runtime mismatch evidence can require review, while still needing implementation context."
   },
+  consent_preference_reopen_control_not_observed: {
+    badge: "medium",
+    rationale: "Consent lifecycle review signal that depends on retained control-search coverage and tracking context."
+  },
   consent_dark_patterns_detected: {
     badge: "high",
     rationale: "Meaningful user-choice and enforcement risk."
   },
   reject_option_missing_or_hidden: {
-    badge: "high",
-    rationale: "Major consent UX concern, but less direct than tracking after reject."
+    badge: "medium",
+    rationale: "Consent choice-path review signal unless separately corroborated by tracking persistence or explicit blocking evidence."
   },
   asymmetric_consent_ui: {
     badge: "medium",

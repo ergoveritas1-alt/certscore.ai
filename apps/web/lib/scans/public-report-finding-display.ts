@@ -32,7 +32,8 @@ const CONSENT_UI_FINDING_IDS = new Set([
   "reject_option_missing_or_hidden",
   "forced_consent_interaction",
   "asymmetric_consent_ui",
-  "consent_dark_patterns_detected"
+  "consent_dark_patterns_detected",
+  "consent_preference_reopen_control_not_observed"
 ]);
 
 const FINGERPRINTING_FINDING_IDS = new Set([

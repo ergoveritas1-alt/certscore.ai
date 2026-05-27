@@ -463,7 +463,7 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
   if (hasMeaningfulValue(details.timing) || hasMeaningfulValue(details.timingAnalysis)) {
     matchedCriteria.push("runtime_timing");
   }
-  if (hasRuntimeRequestAnchor(details)) {
+  if (finding.id !== "consent_preference_reopen_control_not_observed" && hasRuntimeRequestAnchor(details)) {
     matchedCriteria.push("runtime_request_anchor");
   }
   if (hasMeaningfulValue(details.consentUiEvidence) || hasMeaningfulValue(details.rejectInteraction)) {
@@ -489,6 +489,18 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
   }
 
   switch (finding.id) {
+    case "policy_behavior_contradiction_detected":
+      if (
+        hasMeaningfulValue(details.policyRuntimeAlignmentReview) &&
+        !hasMeaningfulValue(details.runtimeVendorDisclosure) &&
+        !getBoolean(asRecord(details.policyRuntimeConflict?.evidenceSufficiency), "promotionEligible")
+      ) {
+        forceEligibility = "audit_only";
+        pushUnique(matchedCriteria, "policy_runtime_disclosure_specificity_review_context");
+        missingCorroborators.push("explicit_policy_runtime_mismatch_bridge");
+        demotionReasons.push("missing_specific_policy_runtime_contradiction_bridge");
+      }
+      break;
     case "pre_consent_tracking_detected":
       if (!hasMeaningfulValue(details.timing) && !hasMeaningfulValue(details.timingAnalysis)) {
         missingCorroborators.push("consent_timeline_sequence");
@@ -822,12 +834,19 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
     case "forced_consent_interaction":
     case "reject_option_missing_or_hidden":
     case "asymmetric_consent_ui":
+    case "consent_preference_reopen_control_not_observed":
     case "consent_dark_patterns_detected": {
       const lifecycleReview = asRecord(details.consentUiEvidence?.lifecycleReview);
-      if (lifecycleReview && finding.id === "consent_dark_patterns_detected") {
+      if (lifecycleReview && finding.id === "consent_preference_reopen_control_not_observed") {
         const coverageStatus = getString(lifecycleReview, "coverageStatus");
-        if (coverageStatus === "usable") {
-          forceEligibility = "top_candidate";
+        const hasConsentOrTrackingContext =
+          getBoolean(lifecycleReview, "initialConsentLayerObserved") === true ||
+          getBoolean(lifecycleReview, "consentDependentTrackingObserved") === true;
+        if (!hasConsentOrTrackingContext) {
+          forceEligibility = "audit_only";
+          pushUnique(demotionReasons, "missing_consent_tracking_context");
+        } else if (coverageStatus === "usable") {
+          forceEligibility = "high_confidence";
           pushUnique(matchedCriteria, "consent_revisit_control_absence_evidence");
         } else {
           forceEligibility = "audit_only";

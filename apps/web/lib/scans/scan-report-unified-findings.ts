@@ -1855,6 +1855,17 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       typeof rejectPath?.blocking_evidence_source === "string"
     );
   if (rejectPath && consentSurfaceObservedForPath && consentSpecificBlockingInteraction) {
+    const blockingConsentUiPathEvidence = {
+      ...rejectPath,
+      pageAccessBlockedUntilChoice,
+      forcedActionRequired: rejectPath.forcedActionRequired === true || rejectPath.forced_action_required === true || pageAccessBlockedUntilChoice,
+      blockingEvidenceSource:
+        typeof rejectPath.blockingEvidenceSource === "string"
+          ? rejectPath.blockingEvidenceSource
+          : typeof rejectPath.blocking_evidence_source === "string"
+            ? rejectPath.blocking_evidence_source
+            : "runtime_consent_ui_probe"
+    };
     candidates.push({
       categoryId: "choice_symmetry_dark_pattern_indicators",
       description: "The retained consent prompt blocked page access or interaction until a consent choice was made.",
@@ -1863,7 +1874,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         consentSurfaceDecisionStates: consentSurfaceGate.states,
         consentSurfaceDiagnostics,
         consentSurfaceObserved: consentSurfaceObservedForPath,
-        consentUiPathEvidence: rejectPath,
+        consentUiPathEvidence: blockingConsentUiPathEvidence,
         forced_consent_wall: true,
         hybridConsentSummary: {
           ...(hybridConsentSummary ?? {})
@@ -1873,7 +1884,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         },
         overlayKind: "consent_modal",
         pageAccessBlockedUntilChoice,
-        rejectPathDepthAndAvailability: rejectPath,
+        rejectPathDepthAndAvailability: blockingConsentUiPathEvidence,
         runtimeEvidenceArtifacts: ["scan_runtime_artifacts.hybrid_runtime_evidence.consentUiPathEvidence"],
         signalKey: "privacy.dark_pattern_forced_consent_wall",
         signalLabel: "Forced consent interaction",
@@ -1972,7 +1983,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     });
 
     if (
-      pageAccessBlockedUntilChoice &&
+      consentSpecificBlockingInteraction &&
       (
         preferencesRequiredBeforeReject ||
         (
@@ -1997,9 +2008,30 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
           hybridUiSummary: {
             ...(hybridUiSummary ?? {})
           },
+          consentUiPathEvidence: {
+            ...rejectPath,
+            pageAccessBlockedUntilChoice,
+            forcedActionRequired: rejectPath.forcedActionRequired === true || rejectPath.forced_action_required === true || pageAccessBlockedUntilChoice,
+            blockingEvidenceSource:
+              typeof rejectPath.blockingEvidenceSource === "string"
+                ? rejectPath.blockingEvidenceSource
+                : typeof rejectPath.blocking_evidence_source === "string"
+                  ? rejectPath.blocking_evidence_source
+                  : "runtime_consent_ui_probe"
+          },
           overlayKind: "consent_modal",
           pageAccessBlockedUntilChoice,
-          rejectPathDepthAndAvailability: rejectPath,
+          rejectPathDepthAndAvailability: {
+            ...rejectPath,
+            pageAccessBlockedUntilChoice,
+            forcedActionRequired: rejectPath.forcedActionRequired === true || rejectPath.forced_action_required === true || pageAccessBlockedUntilChoice,
+            blockingEvidenceSource:
+              typeof rejectPath.blockingEvidenceSource === "string"
+                ? rejectPath.blockingEvidenceSource
+                : typeof rejectPath.blocking_evidence_source === "string"
+                  ? rejectPath.blocking_evidence_source
+                  : "runtime_consent_ui_probe"
+          },
           runtimeEvidenceArtifacts: ["scan_runtime_artifacts.reject_path_depth_and_availability"],
           signalKey: "privacy.dark_pattern_forced_consent_wall",
           signalLabel: "Forced consent interaction",

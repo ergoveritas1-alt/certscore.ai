@@ -167,7 +167,7 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
   },
   consent_dark_patterns_detected: {
     overview:
-      "Consent-surface evidence shows a cluster of choice-architecture signals such as nested refusal, forced interaction, hierarchy, repeated prompts, or hard-to-revisit preferences.",
+      "Consent-surface evidence shows a cluster of choice-architecture signals such as nested refusal, forced interaction, hierarchy, repeated prompts, or misleading controls.",
     regulatoryLabel: "Consent choice-architecture review",
     regulatoryCopy:
       "Useful for reviewing whether consent controls, labels, visual hierarchy, path depth, accessibility, repetition, and preference-revisit controls affect user choice.",
@@ -175,11 +175,27 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
       title: "Choice architecture sample",
       lines: [
         "{\"artifact\":\"consent_ui_004\",\"component\":\"cookie_banner\"}",
-        "{\"signals\":[\"reject_path_nested\",\"accept_primary\",\"preference_revisit_control_not_observed\"]}",
-        "{\"accept\":\"Accept all\",\"preferenceReopen\":\"not_observed_in_retained_public_pages\"}"
+        "{\"signals\":[\"reject_path_nested\",\"accept_primary\",\"repeated_prompting\"]}",
+        "{\"accept\":\"Accept all\",\"rejectPath\":\"settings_layer\",\"buttonEvidence\":\"retained\"}"
       ]
     },
     reviewPrompts: ["Which consent-surface signals were retained, and how do they affect the choice path?"]
+  },
+  consent_preference_reopen_control_not_observed: {
+    overview:
+      "Retained public-page evidence showed consent or tracking context, but did not show an obvious cookie preferences, privacy settings, or consent-preference reopen control.",
+    regulatoryLabel: "Consent preference lifecycle review",
+    regulatoryCopy:
+      "Useful for reviewing whether users can revisit, change, or withdraw cookie and privacy choices through an accessible footer link, CMP widget, preference center, or privacy-choice page.",
+    evidence: {
+      title: "Preference reopen sample",
+      lines: [
+        "{\"artifact\":\"consent_lifecycle_001\",\"surface\":\"public_page\"}",
+        "{\"controlsSearched\":[\"cookie preferences\",\"privacy settings\",\"manage consent\"]}",
+        "{\"preferenceReopen\":\"not_observed_in_retained_public_pages\",\"coverageStatus\":\"usable\"}"
+      ]
+    },
+    reviewPrompts: ["Which page areas and preference-control labels were searched, and what consent or tracking context made the lifecycle review relevant?"]
   },
   cpra_cba_opt_out_missing: {
     overview:

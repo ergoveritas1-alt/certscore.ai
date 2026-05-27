@@ -19,7 +19,7 @@ import {
 } from "./promotion-evidence-contracts";
 import type { UnifiedFindingPacket } from "./unified-findings";
 import { hasConcreteCookieRetentionReviewEvidence } from "./cookie-retention-review";
-import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
+import { evaluateRuntimeVendorDisclosureEvidence, getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 
 export type EvidenceRequirementType =
   | "consentTimelineSequence"
@@ -212,10 +212,10 @@ export const FINDING_EVIDENCE_CONTRACTS = [
     ],
     suppressIf: [],
     projectionEligibility: {
-      executive: { requiresContractPass: true, minimumTier: "strong" },
-      gdprEprivacy: { requiresContractPass: true, minimumTier: "strong" },
-      ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
-      ftc: { requiresContractPass: true, minimumTier: "strong" }
+      executive: { requiresContractPass: true, minimumTier: "moderate" },
+      gdprEprivacy: { requiresContractPass: true, minimumTier: "moderate" },
+      ccpaCpra: { requiresContractPass: true, minimumTier: "moderate" },
+      ftc: { requiresContractPass: true, minimumTier: "moderate" }
     },
     notes: "Producer-provided complete/promotion fields are revalidated by WC01 before surfacing or executive projection."
   },
@@ -1509,16 +1509,7 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
     case "policyBehaviorContradictionEvidence":
       return (
         evaluatePolicyBehaviorContradictionEvidence(rawEvidence).eligible ||
-        getRuntimeVendorDisclosureEvidence(rawEvidence).some(
-          (row) =>
-            (row.parentFindingId === "policy_behavior_conflict" ||
-              row.parentFindingId === "policy_behavior_contradiction_detected") &&
-            row.coverageStatus !== "blocked" &&
-            (row.observedRuntimeDomains.length > 0 || row.observedRuntimeVendors.length > 0) &&
-            (row.unmatchedRuntimeVendors.length > 0 || row.unmatchedRuntimeDomains.length > 0) &&
-            row.policySurfacesSearched.some((surface) => surface.reached) &&
-            row.mismatchRationale.trim().length > 0
-        )
+        evaluateRuntimeVendorDisclosureEvidence(rawEvidence, "policy_behavior_conflict").disposition === "eligible"
       );
     case "negativeEvidenceSearchScope":
       return hasNegativeEvidenceSearchScope(rawEvidence);

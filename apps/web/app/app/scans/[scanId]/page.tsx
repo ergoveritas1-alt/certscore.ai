@@ -55,12 +55,20 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
 
   const scanDomainLabel = scanRecord.scan.domainHostname?.trim() || "Scanned website";
   const isPlatformAdmin = isPlatformAdminEmail(user.email);
-  const visualEvidenceArtifact = canViewCapturedImage({ isPlatformAdmin, role: membership.role })
-    ? getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts).find((artifact) => artifact.status === "available" && artifact.key)
-    : null;
-  const visualEvidenceHref = visualEvidenceArtifact
-    ? `/api/scans/${scanRecord.scan.id}/visual-evidence/${encodeURIComponent(visualEvidenceArtifact.id)}`
-    : null;
+  const visualEvidenceArtifacts = canViewCapturedImage({ isPlatformAdmin, role: membership.role })
+    ? getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts)
+        .filter((artifact) => artifact.status === "available" && artifact.key)
+        .sort((left, right) => {
+          const leftPriority = left.captureStep === "consent_surface_pre_interaction" ? 0 : 1;
+          const rightPriority = right.captureStep === "consent_surface_pre_interaction" ? 0 : 1;
+          return leftPriority - rightPriority;
+        })
+    : [];
+  const visualEvidenceLinks = visualEvidenceArtifacts.map((artifact) => ({
+    captureStep: artifact.captureStep,
+    href: `/api/scans/${scanRecord.scan.id}/visual-evidence/${encodeURIComponent(artifact.id)}`,
+    id: artifact.id
+  }));
 
   return (
     <>
@@ -80,7 +88,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
               <ShareReportActions
                 domainLabel={scanDomainLabel}
                 scanId={scanRecord.scan.id}
-                visualEvidenceHref={visualEvidenceHref}
+                visualEvidenceLinks={visualEvidenceLinks}
               />
               <div className="w-full lg:ml-auto lg:max-w-[16rem]">
                 <DomainScanForm

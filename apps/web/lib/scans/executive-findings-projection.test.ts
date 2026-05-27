@@ -835,6 +835,92 @@ test("projects concrete reject-missing dark-pattern evidence into the umbrella e
   assert.ok(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
 });
 
+test("missing consent preference reopen control projects as lifecycle review, not dark-pattern finding", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("consent_control_not_reopenable", {
+      confidenceBand: "moderate",
+      details: { family: "consent_tracking", kind: "consent_control_not_reopenable" },
+      evidence: {
+        counts: {},
+        entities: {
+          consentControlLifecycleEvidence: [
+            JSON.stringify({
+              cmpReopenControlObserved: false,
+              consentDependentTrackingObserved: true,
+              controlsSearched: ["footer links", "cookie settings", "privacy settings", "CMP widget"],
+              cookiePreferencesLinkObserved: false,
+              coverageStatus: "usable",
+              footerLinksInspected: ["Privacy Policy", "Terms of Use", "Contact"],
+              footerPreferenceLinkObserved: false,
+              initialConsentLayerObserved: true,
+              pagesChecked: ["https://example.com/"],
+              privacySettingsControlObserved: false,
+              withdrawalTextObserved: false
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: ["privacy_settings_control_not_observed"],
+        pageUrls: ["https://example.com/"],
+        snippets: [
+          "No obvious cookie preferences, privacy settings, or consent-preference reopen control was observed on the scanned public pages."
+        ],
+        sourceUrls: []
+      },
+      severity: "medium",
+      summary: "No obvious consent-preference reopen control was observed."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "consent_preference_reopen_control_not_observed");
+  assert.ok(finding);
+  assert.equal(finding.label, "Consent preference reopen control not observed");
+  assert.equal(finding.severity, "medium");
+  assert.equal(finding.confidence, "good");
+  assert.equal(finding.directVsInferred, "inferred");
+  assert.match(finding.shortSummary, /Manual review should confirm/i);
+  assert.doesNotMatch(finding.shortSummary, /dark pattern|reject was not available/i);
+  assert.equal(projection.findings.some((entry) => entry.id === "consent_dark_patterns_detected"), false);
+  assert.equal(
+    projection.topFindingEligibility.consent_preference_reopen_control_not_observed?.matchedCriteria.includes("runtime_request_anchor"),
+    false
+  );
+});
+
+test("missing consent preference reopen control without consent or tracking context is audit-only", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("consent_control_not_reopenable", {
+      details: { family: "consent_tracking", kind: "consent_control_not_reopenable" },
+      evidence: {
+        counts: {},
+        entities: {
+          consentControlLifecycleEvidence: [
+            JSON.stringify({
+              consentDependentTrackingObserved: false,
+              controlsSearched: ["footer links", "cookie settings"],
+              coverageStatus: "usable",
+              footerLinksInspected: ["Privacy Policy"],
+              initialConsentLayerObserved: false,
+              pagesChecked: ["https://example.com/"]
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: ["privacy_settings_control_not_observed"],
+        pageUrls: ["https://example.com/"],
+        snippets: [],
+        sourceUrls: []
+      },
+      severity: "medium"
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "consent_preference_reopen_control_not_observed");
+  assert.ok(finding);
+  assert.equal(projection.topFindingEligibility.consent_preference_reopen_control_not_observed?.eligibility, "audit_only");
+  assert.equal(projection.topFindings.some((entry) => entry.id === "consent_preference_reopen_control_not_observed"), false);
+});
+
 test("projects reject path evidence from packet entities and records reject subtype", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("reject_button_missing", {
@@ -920,7 +1006,8 @@ test("projects reject path evidence from packet entities and records reject subt
     rejectAvailableOnFirstLayer: false,
     rejectClickDepth: 2,
     screenshotArtifactAvailable: true,
-    scrollRequired: false
+    scrollRequired: false,
+    surfaceType: "cookie_banner_or_modal"
   });
   assert.match(
     String(finding.evidenceDetails?.consentUiEvidence?.userChoiceImpact),
@@ -930,6 +1017,113 @@ test("projects reject path evidence from packet entities and records reject subt
     (finding.evidenceDetails?.consentUiEvidence?.lifecycleReview as Record<string, unknown> | undefined)?.subtype,
     "privacy_settings_control_observed"
   );
+});
+
+test("geotrust-style reject path stays medium and does not infer cookie wall without explicit blocking evidence", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("reject_button_missing", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "reject_button_missing" },
+      evidence: {
+        counts: {},
+        entities: {
+          consentSurfaceDiagnostics: [
+            JSON.stringify({
+              bannerRendered: true,
+              candidateButtons: [
+                { label: "Accept all", visible: true, interactable: true },
+                { label: "More choices", visible: true, interactable: true }
+              ],
+              viewportStatus: "visible_in_viewport"
+            })
+          ],
+          consentSurfaceObserved: ["true"],
+          rejectPathDepthAndAvailability: [
+            JSON.stringify({
+              acceptClickDepth: 1,
+              acceptLabel: "Accept all",
+              blockedPageInteraction: true,
+              choiceAsymmetry: "material",
+              manageChoicesLabel: "More choices",
+              pageAccessBlockedUntilChoice: true,
+              preferencesRequiredBeforeReject: true,
+              rejectAvailableOnFirstLayer: false,
+              rejectClickDepth: 2,
+              surfaceType: "cookie_wall"
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: ["privacy.dark_pattern_reject_button_missing"],
+        pageUrls: ["https://www.geotrust.com/"],
+        snippets: [
+          "This site uses cookies for functional, analytics, and advertising purposes. Select More choices to manage settings."
+        ],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "Reject option required a preferences path."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "reject_option_missing_or_hidden");
+  assert.ok(finding);
+  const runtimePath = finding.evidenceDetails?.consentUiEvidence?.runtimePath as Record<string, unknown> | undefined;
+  assert.equal(finding.severity, "medium");
+  assert.equal(finding.evidenceDetails?.consentUiEvidence?.rejectOptionSubtype, "reject_requires_preferences_path");
+  assert.equal(runtimePath?.surfaceType, "cookie_banner_or_modal");
+  assert.equal(runtimePath?.blockedPageInteraction, undefined);
+  assert.equal(runtimePath?.pageAccessBlockedUntilChoice, undefined);
+  assert.match(
+    finding.shortSummary,
+    /first observed consent layer presented an 'Accept all' action and a 'More choices' path/i
+  );
+  assert.match(finding.shortSummary, /functional, analytics, and advertising cookie purposes/i);
+  assert.doesNotMatch(`${finding.shortSummary} ${finding.evidenceDetails?.consentUiEvidence?.basis ?? ""}`, /cookie wall|blocked page|page access/i);
+});
+
+test("explicit consent blocking evidence may retain cookie wall and page-blocked fields", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("reject_button_missing", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "reject_button_missing" },
+      evidence: {
+        counts: {},
+        entities: {
+          consentSurfaceObserved: ["true"],
+          rejectPathDepthAndAvailability: [
+            JSON.stringify({
+              acceptClickDepth: 1,
+              acceptLabel: "Accept all",
+              blockedPageInteraction: true,
+              blockingEvidenceSource: "runtime_consent_ui_probe",
+              choiceAsymmetry: "material",
+              manageChoicesLabel: "More choices",
+              pageAccessBlockedUntilChoice: true,
+              preferencesRequiredBeforeReject: true,
+              rejectAvailableOnFirstLayer: false,
+              rejectClickDepth: 2,
+              surfaceType: "cookie_wall"
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: ["privacy.dark_pattern_reject_button_missing"],
+        pageUrls: ["https://example.com/"],
+        snippets: [],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "Reject option required a preferences path."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "reject_option_missing_or_hidden");
+  assert.ok(finding);
+  const runtimePath = finding.evidenceDetails?.consentUiEvidence?.runtimePath as Record<string, unknown> | undefined;
+  assert.equal(runtimePath?.surfaceType, "cookie_wall");
+  assert.equal(runtimePath?.blockedPageInteraction, true);
+  assert.equal(runtimePath?.pageAccessBlockedUntilChoice, true);
 });
 
 test("projects asymmetric consent UI with path-specific basis and without governance leakage", () => {
@@ -998,7 +1192,8 @@ test("projects asymmetric consent UI with path-specific basis and without govern
     rejectAvailableOnFirstLayer: false,
     rejectClickDepth: 2,
     scrollRequired: true,
-    screenshotArtifactAvailable: false
+    screenshotArtifactAvailable: false,
+    surfaceType: "cookie_banner_or_modal"
   });
   assert.match(
     String(finding.evidenceDetails?.consentUiEvidence?.userChoiceImpact ?? ""),
@@ -1547,7 +1742,7 @@ test("generic policy runtime alignment review bridge remains audit-only in execu
   );
 });
 
-test("policy runtime alignment does not promote from third-party request volume alone", () => {
+test("policy runtime alignment from broad disclosure and request volume is not contradiction-promoted", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("policy_behavior_conflict", {
       confidenceBand: "high",
@@ -1614,7 +1809,7 @@ test("policy runtime alignment does not promote from third-party request volume 
   );
 });
 
-test("generic policy runtime alignment review is not projected when retained policy evidence found no disclosure gap", () => {
+test("generic policy runtime alignment review with no runtime anchor is not projected when retained policy evidence found no disclosure gap", () => {
   const retainedNoGapPolicyEvidence = JSON.stringify({
     evaluated: true,
     cookieOrPrivacyPolicyFound: true,
@@ -1630,9 +1825,12 @@ test("generic policy runtime alignment review is not projected when retained pol
         conflictSupportsPromotion: false,
         conflictType: null,
         contradictionPromotionEligible: false,
-        kind: "policy_behavior_conflict"
+        kind: "policy_behavior_conflict",
+        runtimeEvidenceArtifacts: [],
+        runtimeObservationType: null,
+        vendors: []
       },
-      { policyEvidence: [retainedNoGapPolicyEvidence] }
+      { policyEvidence: [retainedNoGapPolicyEvidence], runtimeRequestUrls: [], runtimeVendors: [] }
     )
   ]);
 
@@ -1681,7 +1879,7 @@ test("policy runtime disclosure mismatch promotes only with retained unmatched e
               evaluated: true,
               cookieOrPrivacyPolicyFound: true,
               relevantDisclosureFound: true,
-              disclosureGapObserved: false
+              disclosureGapObserved: true
             })
           ],
           runtimeVendorDisclosureEvidence: [
@@ -1695,8 +1893,11 @@ test("policy runtime disclosure mismatch promotes only with retained unmatched e
                 {
                   type: "privacy_policy",
                   url: "https://www.example.com/privacy",
+                  snippet: "We list advertising and analytics partners in our privacy policy.",
                   reached: true,
-                  searchedTerms: ["Criteo"]
+                  searchedTerms: ["Criteo"],
+                  matchedVendorNames: ["Amazon Ads"],
+                  unmatchedVendorNames: ["Criteo"]
                 }
               ],
               matchedVendorDisclosureCount: 1,
@@ -1724,9 +1925,92 @@ test("policy runtime disclosure mismatch promotes only with retained unmatched e
 
   assert.ok(finding);
   assert.equal(finding.label, "Policy/runtime alignment review");
+  assert.equal(finding.confidence, "good");
+  assert.equal(finding.severity, "medium");
   assert.match(finding.shortSummary, /Criteo/);
   assert.match(finding.shortSummary, /not clearly reflected/);
   assert.ok(projection.topFindings.some((item) => item.id === "policy_behavior_contradiction_detected"));
+});
+
+test("policy runtime disclosure mismatch downgrades when disclosureGapObserved is false", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("policy_behavior_conflict", {
+      confidenceBand: "high",
+      confidenceInputs: {
+        evidenceQualityFlags: [],
+        hasConcretePayloadEvidence: false,
+        hasCorroboratedPositiveSurfaceEvidence: true,
+        hasDirectRuntimeEvidence: true,
+        hasKeyPageDiscoveryEvidence: true,
+        hasMultipleHumanFacingUrls: false,
+        hasPageAttribution: true,
+        hasPacketBackedEvidence: true,
+        hasPolicyTextEvidence: true,
+        hasReadableSurfaceSnippetEvidence: true,
+        hasStructuredValidationEvidence: true,
+        isFallbackOnly: false,
+        issueCount: 0,
+        signalCount: 1,
+        sourceCount: 2,
+        sourceKinds: ["signal"],
+        validationCount: 0
+      },
+      details: { family: "contradiction", kind: "policy_behavior_conflict" },
+      evidence: {
+        counts: {},
+        entities: {
+          policyEvidence: [
+            JSON.stringify({
+              evaluated: true,
+              cookieOrPrivacyPolicyFound: true,
+              relevantDisclosureFound: true,
+              disclosureGapObserved: false
+            })
+          ],
+          runtimeVendorDisclosureEvidence: [
+            JSON.stringify({
+              subtype: "runtime_vendor_not_disclosed",
+              observedRuntimeVendors: ["Criteo"],
+              observedRuntimeDomains: ["gum.criteo.com"],
+              unmatchedRuntimeVendors: ["Criteo"],
+              unmatchedRuntimeDomains: ["gum.criteo.com"],
+              policySurfacesSearched: [
+                {
+                  type: "privacy_policy",
+                  url: "https://www.example.com/privacy",
+                  snippet: "We disclose advertising and analytics partners.",
+                  reached: true,
+                  searchedTerms: ["Criteo", "gum.criteo.com"],
+                  unmatchedVendorNames: ["Criteo"]
+                }
+              ],
+              unmatchedVendorDisclosureCount: 1,
+              mismatchRationale: "Criteo was searched against the retained policy surface.",
+              coverageStatus: "usable",
+              evidenceConfidence: "strong",
+              directVsInferred: "direct",
+              parentFindingId: "policy_behavior_conflict"
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: ["https://www.example.com/"],
+        snippets: ["We disclose advertising and analytics partners."],
+        sourceUrls: ["https://www.example.com/privacy", "https://gum.criteo.com/sync"]
+      },
+      primaryPageUrl: "https://www.example.com/",
+      severity: "high"
+    })
+  ]);
+
+  const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
+  assert.ok(finding);
+  assert.equal(finding.label, "Runtime vendor disclosure specificity review");
+  assert.equal(finding.confidence, "moderate");
+  assert.equal(finding.directVsInferred, "inferred");
+  assert.doesNotMatch(finding.shortSummary, /not clearly reflected/i);
+  assert.equal(projection.topFindings.some((item) => item.id === "policy_behavior_contradiction_detected"), false);
 });
 
 test("policy runtime summary does not overstate unmatched vendors without retained disclosure comparison evidence", () => {
@@ -1773,6 +2057,121 @@ test("policy runtime summary does not overstate unmatched vendors without retain
     projection.findings.some((item) => /not clearly reflected/i.test(item.shortSummary)),
     false
   );
+});
+
+test("policy runtime vendor mismatch does not promote without retained policy snippet and search match evidence", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("policy_behavior_conflict", {
+      confidenceBand: "high",
+      details: { family: "contradiction", kind: "policy_behavior_conflict" },
+      evidence: {
+        counts: {},
+        entities: {
+          runtimeVendorDisclosureEvidence: [
+            JSON.stringify({
+              subtype: "runtime_vendor_not_disclosed",
+              observedRuntimeVendors: ["Criteo"],
+              observedRuntimeDomains: ["gum.criteo.com"],
+              unmatchedRuntimeVendors: ["Criteo"],
+              unmatchedRuntimeDomains: ["gum.criteo.com"],
+              policySurfacesSearched: [
+                {
+                  type: "privacy_policy",
+                  url: "https://www.example.com/privacy",
+                  reached: true,
+                  searchedTerms: ["Criteo"]
+                }
+              ],
+              unmatchedVendorDisclosureCount: 1,
+              mismatchRationale: "Criteo was not found.",
+              coverageStatus: "usable",
+              evidenceConfidence: "strong",
+              directVsInferred: "direct",
+              parentFindingId: "policy_behavior_conflict"
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: ["https://www.example.com/"],
+        snippets: [],
+        sourceUrls: ["https://www.example.com/privacy"]
+      },
+      primaryPageUrl: "https://www.example.com/",
+      severity: "high"
+    })
+  ]);
+
+  const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
+  assert.equal(finding, undefined);
+});
+
+test("NBCUniversal-style broad relevant disclosures do not become contradiction top finding", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("policy_behavior_conflict", {
+      confidenceBand: "high",
+      confidenceInputs: {
+        evidenceQualityFlags: [],
+        hasConcretePayloadEvidence: false,
+        hasCorroboratedPositiveSurfaceEvidence: true,
+        hasDirectRuntimeEvidence: true,
+        hasKeyPageDiscoveryEvidence: true,
+        hasMultipleHumanFacingUrls: false,
+        hasPageAttribution: true,
+        hasPacketBackedEvidence: true,
+        hasPolicyTextEvidence: true,
+        hasReadableSurfaceSnippetEvidence: true,
+        hasStructuredValidationEvidence: true,
+        isFallbackOnly: false,
+        issueCount: 0,
+        signalCount: 1,
+        sourceCount: 3,
+        sourceKinds: ["signal"],
+        validationCount: 0
+      },
+      details: { family: "contradiction", kind: "policy_behavior_conflict" },
+      evidence: {
+        counts: {
+          thirdPartyCookieCount: 24,
+          thirdPartyRequestCount: 312,
+          thirdPartyRequestDomainCount: 87
+        },
+        entities: {
+          policyEvidence: [
+            JSON.stringify({
+              evaluated: true,
+              cookieOrPrivacyPolicyFound: true,
+              relevantDisclosureFound: true,
+              disclosureGapObserved: false,
+              policyUrl: "https://www.nbcuniversal.com/privacy/cookies",
+              snippet:
+                "We and our vendors, advertisers, analytics providers, and other partners use cookies and similar technologies for advertising, analytics, and targeted advertising."
+            })
+          ],
+          runtimeDomains: ["gum.criteo.com", "ib.adnxs.com", "aax-eu.amazon-adsystem.com"],
+          runtimeRequestUrls: [
+            "https://gum.criteo.com/sync",
+            "https://ib.adnxs.com/setuid",
+            "https://aax-eu.amazon-adsystem.com/s/dcm"
+          ],
+          runtimeVendors: ["Criteo", "AppNexus", "Amazon Ads"]
+        },
+        fetchQuality: null,
+        flags: ["policy_runtime_alignment_review_signal"],
+        pageUrls: ["https://www.nbcnews.com/"],
+        snippets: [
+          "We and our vendors, advertisers, analytics providers, and other partners use cookies and similar technologies for advertising, analytics, and targeted advertising."
+        ],
+        sourceUrls: ["https://www.nbcuniversal.com/privacy/cookies"]
+      },
+      primaryPageUrl: "https://www.nbcnews.com/",
+      severity: "high",
+      summary: "Runtime third-party vendors were observed with broad retained disclosure context."
+    })
+  ]);
+
+  assert.equal(projection.findings.some((item) => item.id === "policy_behavior_contradiction_detected"), false);
+  assert.equal(projection.topFindings.some((item) => item.id === "policy_behavior_contradiction_detected"), false);
 });
 
 test("specific policy runtime contradiction still projects when a retained no-gap disclosure review is present", () => {

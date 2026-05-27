@@ -61,7 +61,7 @@ const SECTION_ORDER: CertScoreFindingSection[] = [
 const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SCORE_FINDING_REGISTRY> = {
   accept_more_prominent_than_reject: "asymmetric_consent_ui",
   accept_only_banner: "consent_dark_patterns_detected",
-  consent_control_not_reopenable: "consent_dark_patterns_detected",
+  consent_control_not_reopenable: "consent_preference_reopen_control_not_observed",
   dismiss_without_reject: "consent_dark_patterns_detected",
   fingerprinting_observed: "probable_fingerprinting",
   forced_consent_wall: "forced_consent_interaction",
@@ -131,6 +131,7 @@ const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
   "cookie_disclosure_gap",
   "third_party_cookie_pre_consent",
   "long_lived_cookie_retention_review",
+  "consent_preference_reopen_control_not_observed",
   "consent_dark_patterns_detected",
   "analytics_cookie_pre_consent",
   "adtech_cookie_pre_consent",
@@ -190,7 +191,8 @@ const CONSENT_UI_EVIDENCE_FINDING_IDS = new Set([
   "blocking_overlay_observed",
   "content_obstructed_by_overlay",
   "repeated_consent_prompt",
-  "consent_dark_patterns_detected"
+  "consent_dark_patterns_detected",
+  "consent_preference_reopen_control_not_observed"
 ]);
 
 const SENSITIVE_EVIDENCE_FINDING_IDS = new Set([
@@ -448,7 +450,16 @@ function mapExecutiveConfidence(
   if (findingId === "reject_tracking_persists_after_reject" && !packet.evidence?.flags?.includes("reject_evidence_confirmed")) {
     return "moderate";
   }
+  if (findingId === "consent_preference_reopen_control_not_observed") {
+    const lifecycleEvidence = getConsentControlLifecycleEvidence({
+      consentControlLifecycleEvidence: getFirstEntityJsonObject(packet, "consentControlLifecycleEvidence")
+    });
+    return lifecycleEvidence?.coverageStatus === "usable" ? "good" : "moderate";
+  }
   if (findingId === "policy_behavior_contradiction_detected") {
+    if (hasPolicyRuntimeDisclosureSpecificityReviewContext(packet) && !hasPolicyBehaviorExecutivePromotionEvidence(packet)) {
+      return "moderate";
+    }
     if (!isSpecificPolicyRuntimeContradiction(packet)) {
       return "good";
     }
@@ -495,6 +506,12 @@ function mapSeverity(
     return "critical";
   }
   if (findingId === "reject_tracking_persists_after_reject" && !packet.evidence?.flags?.includes("reject_evidence_confirmed")) {
+    return "medium";
+  }
+  if (findingId === "reject_option_missing_or_hidden") {
+    return "medium";
+  }
+  if (findingId === "consent_preference_reopen_control_not_observed") {
     return "medium";
   }
   if (findingId === "policy_behavior_contradiction_detected" && !isSpecificPolicyRuntimeContradiction(packet)) {
@@ -752,13 +769,75 @@ function getBlockingOverlayPathEvidence(packet: UnifiedFindingDisplayPacket) {
   );
 }
 
+function hasExplicitConsentBlockingEvidence(row: Record<string, unknown>) {
+  const blockingEvidenceSource = getRecordString(row, [
+    "blockingEvidenceSource",
+    "blocking_evidence_source",
+    "interactionEvidenceSource",
+    "interaction_evidence_source",
+    "pageAccessEvidenceSource",
+    "page_access_evidence_source"
+  ]);
+  if (
+    blockingEvidenceSource &&
+    /runtime|interaction|probe|traversal|scroll|keyboard|pointer|page_access|blocking/i.test(blockingEvidenceSource)
+  ) {
+    return true;
+  }
+
+  if (
+    getRecordBoolean(row, ["blockingRuntimeProbeObserved", "blocking_runtime_probe_observed"]) === true ||
+    getRecordBoolean(row, ["pageInteractionProbeObserved", "page_interaction_probe_observed"]) === true ||
+    getRecordBoolean(row, ["explicitBlockingEvidence", "explicit_blocking_evidence"]) === true
+  ) {
+    return true;
+  }
+
+  const evidenceRefs = getRecordStringArray(row, ["evidenceRefs", "evidence_refs", "artifactRefs", "artifact_refs"]);
+  return evidenceRefs.some((ref) => /blocking|page[_-]?access|interaction[_-]?probe|scroll[_-]?lock/i.test(ref));
+}
+
+function normalizeConsentSurfaceType(row: Record<string, unknown>) {
+  const surfaceType = getRecordString(row, ["surfaceType", "surface_type", "overlayKind", "overlay_kind", "overlayType", "overlay_type"]);
+  const explicitBlocking = hasExplicitConsentBlockingEvidence(row);
+  if (surfaceType === "cookie_wall" && !explicitBlocking) {
+    return "cookie_banner_or_modal";
+  }
+  if (surfaceType) {
+    return surfaceType;
+  }
+  if (
+    getRecordString(row, ["acceptLabel", "accept_label"]) ||
+    getRecordString(row, ["manageChoicesLabel", "manage_choices_label", "preferencesLabel", "preferences_label"]) ||
+    getRecordBoolean(row, ["rejectAvailableOnFirstLayer", "reject_available_on_first_layer"]) !== null
+  ) {
+    return "cookie_banner_or_modal";
+  }
+  return null;
+}
+
 function buildConsentUiRuntimePathEvidence(row: Record<string, unknown>) {
   const acceptClickDepth = getRecordNumber(row, ["acceptClickDepth", "accept_click_depth"]);
   const rejectClickDepth = getRecordNumber(row, ["rejectClickDepth", "reject_click_depth", "depth"]);
   const evidenceRefs = getRecordStringArray(row, ["evidenceRefs", "evidence_refs", "artifactRefs", "artifact_refs"]);
+  const explicitBlocking = hasExplicitConsentBlockingEvidence(row);
+  const blockedPageInteraction = explicitBlocking
+    ? getRecordBoolean(row, [
+        "blockedPageInteraction",
+        "blocked_page_interaction",
+        "pageInteractionBlocked",
+        "page_interaction_blocked"
+      ])
+    : null;
+  const pageAccessBlockedUntilChoice = explicitBlocking
+    ? getRecordBoolean(row, [
+        "pageAccessBlockedUntilChoice",
+        "page_access_blocked_until_choice"
+      ])
+    : null;
   const result: Record<string, unknown> = {
     availability: getRecordString(row, ["availability", "status", "outcome"]),
-    surfaceType: getRecordString(row, ["surfaceType", "surface_type", "overlayKind", "overlay_kind"]),
+    surfaceType: normalizeConsentSurfaceType(row),
     acceptLabel: getRecordString(row, ["acceptLabel", "accept_label"]),
     rejectLabel: getRecordString(row, ["rejectLabel", "reject_label"]),
     manageChoicesLabel: getRecordString(row, ["manageChoicesLabel", "manage_choices_label", "preferencesLabel", "preferences_label"]),
@@ -768,19 +847,11 @@ function buildConsentUiRuntimePathEvidence(row: Record<string, unknown>) {
     rejectClickDepth,
     choiceAsymmetry: getRecordString(row, ["choiceAsymmetry", "choice_asymmetry"]),
     scrollRequired: getRecordBoolean(row, ["scrollRequired", "scroll_required"]),
-    blockedPageInteraction: getRecordBoolean(row, [
-      "blockedPageInteraction",
-      "blocked_page_interaction",
-      "pageInteractionBlocked",
-      "page_interaction_blocked"
-    ]),
-    pageAccessBlockedUntilChoice: getRecordBoolean(row, [
-      "pageAccessBlockedUntilChoice",
-      "page_access_blocked_until_choice"
-    ]),
-    forcedActionRequired: getRecordBoolean(row, ["forcedActionRequired", "forced_action_required"]),
-    scrollLocked: getRecordBoolean(row, ["scrollLocked", "scroll_locked"]),
-    contentObstructed: getRecordBoolean(row, ["contentObstructed", "content_obstructed"]),
+    blockedPageInteraction,
+    pageAccessBlockedUntilChoice,
+    forcedActionRequired: explicitBlocking ? getRecordBoolean(row, ["forcedActionRequired", "forced_action_required"]) : null,
+    scrollLocked: explicitBlocking ? getRecordBoolean(row, ["scrollLocked", "scroll_locked"]) : null,
+    contentObstructed: explicitBlocking ? getRecordBoolean(row, ["contentObstructed", "content_obstructed"]) : null,
     blockingEvidenceSource: getRecordString(row, ["blockingEvidenceSource", "blocking_evidence_source"]),
     visualHierarchyBasis: getRecordString(row, ["visualHierarchyBasis", "visual_hierarchy_basis"]),
     firstLayerConsentChoices: row.firstLayerConsentChoices ?? row.first_layer_consent_choices ?? null,
@@ -851,14 +922,26 @@ function buildRejectPathConsentUiBasis(input: {
   ]);
   const acceptDepth = getRecordNumber(input.runtimePath ?? {}, ["acceptClickDepth", "accept_click_depth"]);
   const rejectDepth = getRecordNumber(input.runtimePath ?? {}, ["rejectClickDepth", "reject_click_depth", "depth"]);
+  const acceptLabel = getRecordString(input.runtimePath ?? {}, ["acceptLabel", "accept_label"]);
+  const manageChoicesLabel = getRecordString(input.runtimePath ?? {}, ["manageChoicesLabel", "manage_choices_label"]);
+  const firstLayerControlText =
+    acceptLabel && manageChoicesLabel
+      ? `The first observed consent layer presented a '${acceptLabel}' action and a '${manageChoicesLabel}' path, but no equivalent reject/refusal action was visible on the same layer.`
+      : null;
 
   if (rejectAvailableOnFirstLayer === false && preferencesRequiredBeforeReject === true && rejectDepth !== null) {
+    if (firstLayerControlText) {
+      return `${firstLayerControlText} Retained consent UI path evidence showed refusal required the preferences path and was observed at click depth ${rejectDepth}.`;
+    }
     return `Retained consent UI path evidence showed no first-layer reject/refusal action; reject required the preferences path and was observed at click depth ${rejectDepth}.`;
   }
   if (preferencesRequiredBeforeReject === true && rejectDepth !== null) {
     return `Retained consent UI path evidence showed the reject/refusal path required opening preferences and was observed at click depth ${rejectDepth}.`;
   }
   if (rejectAvailableOnFirstLayer === false) {
+    if (firstLayerControlText) {
+      return firstLayerControlText;
+    }
     return "Retained consent UI path evidence showed no visible or equivalent reject/refusal action on the first observed consent layer.";
   }
   if (acceptDepth !== null && rejectDepth !== null && rejectDepth > acceptDepth) {
@@ -902,6 +985,9 @@ function buildConsentUiBasis(input: {
   runtimePath: Record<string, unknown> | null;
   summary: string;
 }) {
+  if (input.findingId === "consent_preference_reopen_control_not_observed") {
+    return "Retained public-page evidence did not show an obvious cookie preferences, privacy settings, or consent-preference reopen control after the initial consent surface.";
+  }
   if (input.findingId === "reject_option_missing_or_hidden") {
     return buildRejectPathConsentUiBasis({
       runtimePath: input.runtimePath,
@@ -1261,10 +1347,67 @@ function getRetainedPolicyDisclosureEvaluation(packet: UnifiedFindingDisplayPack
 }
 
 function hasEligiblePolicyRuntimeVendorDisclosureEvidence(packet: UnifiedFindingDisplayPacket) {
+  if (retainedPolicyDisclosureStatesNoGap(packet)) {
+    return false;
+  }
   return evaluateRuntimeVendorDisclosureEvidence(
     { runtimeVendorDisclosureEvidence: getEntityJsonObjects(packet, "runtimeVendorDisclosureEvidence") },
     "policy_behavior_conflict"
   ).disposition === "eligible";
+}
+
+function retainedPolicyDisclosureStatesNoGap(packet: UnifiedFindingDisplayPacket) {
+  const policyEvidence = getRetainedPolicyDisclosureEvaluation(packet);
+  if (!policyEvidence) {
+    return false;
+  }
+  const evaluated = getRecordBoolean(policyEvidence, ["evaluated"]) === true;
+  const relevantDisclosureFound = getRecordBoolean(policyEvidence, [
+    "relevantDisclosureFound",
+    "relevant_disclosure_found"
+  ]) === true;
+  const disclosureGapObserved = getRecordBoolean(policyEvidence, [
+    "disclosureGapObserved",
+    "disclosure_gap_observed"
+  ]);
+  return evaluated && relevantDisclosureFound && disclosureGapObserved === false;
+}
+
+function hasPolicyRuntimeDisclosureSpecificityReviewContext(packet: UnifiedFindingDisplayPacket) {
+  if (hasPolicyBehaviorExecutivePromotionEvidence(packet)) {
+    return false;
+  }
+  const policyEvidence = getRetainedPolicyDisclosureEvaluation(packet);
+  const policyEvidenceEvaluated = policyEvidence
+    ? getRecordBoolean(policyEvidence, ["evaluated"]) === true ||
+      getRecordBoolean(policyEvidence, ["relevantDisclosureFound", "relevant_disclosure_found"]) === true
+    : false;
+  const hasPolicyAnchor =
+    policyEvidenceEvaluated ||
+    packet.confidenceInputs.hasPolicyTextEvidence ||
+    getEntityUrlValues(packet, /policy.*url|privacy.*url|cookie.*url/i).length > 0 ||
+    (packet.evidence?.snippets ?? []).length > 0;
+  const runtimeDomains = uniqueStrings([
+    ...getEntityValues(packet, /runtimeDomains|runtime_domains|thirdPartyDomains|third_party_domains/i),
+    ...getPacketRuntimeRequestUrls(packet).flatMap((url) => {
+      try {
+        return [new URL(url).hostname];
+      } catch {
+        return [];
+      }
+    })
+  ]);
+  const runtimeVendors = uniqueStrings(getEntityValues(packet, /runtimeVendors|runtime_vendors|vendor/i));
+  const hasRuntimeAnchor =
+    packet.confidenceInputs.hasDirectRuntimeEvidence ||
+    getPacketRuntimeRequestUrls(packet).length > 0 ||
+    runtimeDomains.length > 0 ||
+    runtimeVendors.length > 0;
+  const hasRelevantBroadDisclosure =
+    !policyEvidence ||
+    getRecordBoolean(policyEvidence, ["relevantDisclosureFound", "relevant_disclosure_found"]) !== false;
+
+  return hasPolicyAnchor && hasRuntimeAnchor && hasRelevantBroadDisclosure;
 }
 
 function hasCompletePolicyRuntimeConflictEvidence(packet: UnifiedFindingDisplayPacket) {
@@ -1282,7 +1425,7 @@ function hasPolicyBehaviorExecutivePromotionEvidence(packet: UnifiedFindingDispl
 function shouldBlockGenericPolicyRuntimeAlignmentProjection(packet: UnifiedFindingDisplayPacket) {
   const policyEvidence = getRetainedPolicyDisclosureEvaluation(packet);
   if (!policyEvidence) {
-    return !hasPolicyBehaviorExecutivePromotionEvidence(packet);
+    return !hasPolicyBehaviorExecutivePromotionEvidence(packet) && !hasPolicyRuntimeDisclosureSpecificityReviewContext(packet);
   }
 
   const evaluated = getRecordBoolean(policyEvidence, ["evaluated"]) === true;
@@ -1296,10 +1439,10 @@ function shouldBlockGenericPolicyRuntimeAlignmentProjection(packet: UnifiedFindi
   ]);
 
   if (evaluated && relevantDisclosureFound && disclosureGapObserved === false) {
-    return !hasPolicyBehaviorExecutivePromotionEvidence(packet);
+    return !hasPolicyBehaviorExecutivePromotionEvidence(packet) && !hasPolicyRuntimeDisclosureSpecificityReviewContext(packet);
   }
 
-  return !hasPolicyBehaviorExecutivePromotionEvidence(packet);
+  return !hasPolicyBehaviorExecutivePromotionEvidence(packet) && !hasPolicyRuntimeDisclosureSpecificityReviewContext(packet);
 }
 
 function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof typeof CERT_SCORE_FINDING_REGISTRY> {
@@ -1315,6 +1458,7 @@ function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof t
     packet.unifiedFindingId === "policy_behavior_conflict" &&
     !isSpecificPolicyRuntimeContradiction(packet) &&
     !evaluatePolicyRuntimeConflictPresentation(packet).complete &&
+    !hasPolicyRuntimeDisclosureSpecificityReviewContext(packet) &&
     evaluateRuntimeVendorDisclosureEvidence(
       { runtimeVendorDisclosureEvidence: getEntityJsonObjects(packet, "runtimeVendorDisclosureEvidence") },
       "policy_behavior_conflict"
@@ -1388,7 +1532,11 @@ function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof t
 function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: keyof typeof CERT_SCORE_FINDING_REGISTRY) {
   const evidenceDetails = findingId ? buildExecutiveEvidenceDetails(packet, findingId) : null;
 
-  if (findingId === "policy_behavior_contradiction_detected" && evidenceDetails?.policyRuntimeConflict) {
+  if (
+    findingId === "policy_behavior_contradiction_detected" &&
+    evidenceDetails?.policyRuntimeConflict &&
+    hasCompletePolicyRuntimeConflictEvidence(packet)
+  ) {
     const conflict = evidenceDetails.policyRuntimeConflict;
     const runtimeEvent = getPolicyRuntimeRepresentativeEvent(conflict);
     return uniqueStrings([
@@ -1396,6 +1544,16 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
       conflict.policyAnchor.sourceUrl ? `Policy source: ${conflict.policyAnchor.sourceUrl}` : "Policy source: not retained.",
       runtimeEvent ? `Runtime event: ${runtimeEvent}` : "Runtime event: no concrete timed or consent-phased runtime event was retained.",
       conflict.conflictBridge.reasoning ? `Bridge: ${conflict.conflictBridge.reasoning}` : "Bridge: no explicit policy/runtime bridge was retained."
+    ]).slice(0, 4);
+  }
+
+  if (findingId === "policy_behavior_contradiction_detected" && evidenceDetails?.policyRuntimeAlignmentReview) {
+    const review = evidenceDetails.policyRuntimeAlignmentReview;
+    return uniqueStrings([
+      "Retained runtime evidence shows third-party vendor, domain, cookie, or request activity that warrants disclosure specificity review.",
+      "Retained public disclosure context appears relevant to cookies, vendors, advertisers, analytics, targeted advertising, or third-party tracking.",
+      "The packet does not retain a specific unmatched-vendor search bridge sufficient for contradiction-style promotion.",
+      review.runtimeVendors?.[0] ? `Example runtime vendor: ${review.runtimeVendors[0]}.` : review.runtimeDomains?.[0] ? `Example runtime domain: ${review.runtimeDomains[0]}.` : null
     ]).slice(0, 4);
   }
 
@@ -3391,6 +3549,8 @@ function buildGenericCanonicalEvidenceDetails(
           ? "privacy_settings_control_observed"
           : "privacy_settings_control_not_observed",
         coverageStatus: lifecycleEvidence.coverageStatus,
+        initialConsentLayerObserved: lifecycleEvidence.initialConsentLayerObserved,
+        consentDependentTrackingObserved: lifecycleEvidence.consentDependentTrackingObserved,
         pagesChecked: lifecycleEvidence.pagesChecked,
         controlsSearched: lifecycleEvidence.controlsSearched,
         footerLinksInspected: lifecycleEvidence.footerLinksInspected.slice(0, 5),
@@ -4135,6 +4295,9 @@ function attachRuntimeVendorDisclosureDetails(
   if (findingId !== "cookie_disclosure_gap" && findingId !== "policy_behavior_contradiction_detected") {
     return;
   }
+  if (findingId === "policy_behavior_contradiction_detected" && !hasEligiblePolicyRuntimeVendorDisclosureEvidence(packet)) {
+    return;
+  }
 
   const runtimeVendorDisclosureEvidence = getRuntimeVendorDisclosureEvidence({
     runtimeVendorDisclosureEvidence: getEntityJsonObjects(packet, "runtimeVendorDisclosureEvidence")
@@ -4161,6 +4324,50 @@ function attachRuntimeVendorDisclosureDetails(
   };
 }
 
+function attachPolicyRuntimeAlignmentReviewDetails(
+  details: CertScoreFindingEvidenceDetails,
+  packet: UnifiedFindingDisplayPacket,
+  findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
+) {
+  if (findingId !== "policy_behavior_contradiction_detected" || !hasPolicyRuntimeDisclosureSpecificityReviewContext(packet)) {
+    return;
+  }
+  if (hasCompletePolicyRuntimeConflictEvidence(packet) || hasEligiblePolicyRuntimeVendorDisclosureEvidence(packet)) {
+    return;
+  }
+
+  const runtimeRequestUrls = getPacketRuntimeRequestUrls(packet).slice(0, 8);
+  const runtimeDomains = uniqueStrings([
+    ...getEntityValues(packet, /runtimeDomains|runtime_domains|thirdPartyDomains|third_party_domains/i),
+    ...runtimeRequestUrls.flatMap((url) => {
+      try {
+        return [new URL(url).hostname];
+      } catch {
+        return [];
+      }
+    })
+  ]).slice(0, 12);
+  const runtimeVendors = uniqueStrings(getEntityValues(packet, /runtimeVendors|runtime_vendors|vendor/i)).slice(0, 12);
+  const missingBridgeEvidence = [
+    "explicit_vendor_or_domain_unmatched_search_result",
+    "specific_policy_claim_to_runtime_anchor_bridge"
+  ];
+  if (retainedPolicyDisclosureStatesNoGap(packet)) {
+    missingBridgeEvidence.push("packet_disclosure_gap_observed_false");
+  }
+
+  details.policyRuntimeAlignmentReview = {
+    reviewTier: "disclosure_specificity_review",
+    summary:
+      "Substantial third-party runtime activity and retained disclosure context were observed, but the packet does not retain a specific unmatched-vendor disclosure bridge.",
+    ...(getRetainedPolicyDisclosureEvaluation(packet) ? { policyEvidence: getRetainedPolicyDisclosureEvaluation(packet) ?? undefined } : {}),
+    ...(runtimeVendors.length > 0 ? { runtimeVendors } : {}),
+    ...(runtimeDomains.length > 0 ? { runtimeDomains } : {}),
+    ...(runtimeRequestUrls.length > 0 ? { runtimeRequestUrls } : {}),
+    missingBridgeEvidence
+  };
+}
+
 function attachConsentGovernanceDisclosureDetails(
   details: CertScoreFindingEvidenceDetails,
   packet: UnifiedFindingDisplayPacket,
@@ -4169,7 +4376,8 @@ function attachConsentGovernanceDisclosureDetails(
   if (
     findingId !== "cookie_disclosure_gap" &&
     findingId !== "policy_behavior_contradiction_detected" &&
-    findingId !== "consent_dark_patterns_detected"
+    findingId !== "consent_dark_patterns_detected" &&
+    findingId !== "consent_preference_reopen_control_not_observed"
   ) {
     return;
   }
@@ -4295,6 +4503,7 @@ function buildExecutiveEvidenceDetails(
     }
   }
   attachRuntimeVendorDisclosureDetails(details, packet, findingId);
+  attachPolicyRuntimeAlignmentReviewDetails(details, packet, findingId);
   if (evidenceSnippets.length > 0) {
     details.evidenceSnippets = evidenceSnippets;
   }
@@ -4601,6 +4810,21 @@ function buildExecutiveShortSummary(
     }
   }
 
+  if (findingId === "consent_preference_reopen_control_not_observed") {
+    return "CertScore observed consent or tracking-related context on the scanned page but did not observe an obvious cookie preferences, privacy settings, or consent-preference reopen control in retained public-page evidence. Manual review should confirm whether users can revisit, change, or withdraw cookie/privacy choices through an accessible control, footer link, CMP widget, or privacy-choice page.";
+  }
+
+  if (findingId === "reject_option_missing_or_hidden") {
+    const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);
+    const runtimePath = evidenceDetails?.consentUiEvidence?.runtimePath as Record<string, unknown> | undefined;
+    const acceptLabel = getRecordString(runtimePath ?? {}, ["acceptLabel", "accept_label"]) ?? "Accept all";
+    const manageLabel = getRecordString(runtimePath ?? {}, ["manageChoicesLabel", "manage_choices_label"]) ?? "More choices";
+    const cookiePurposeText = packet.evidence?.snippets?.some((snippet) => /functional|analytic|advertis/i.test(snippet))
+      ? " The banner disclosed functional, analytics, and advertising cookie purposes, making this a consent-choice path review signal."
+      : "";
+    return `The first observed consent layer presented an '${acceptLabel}' action and a '${manageLabel}' path, but no equivalent 'Reject all,' 'Decline,' or refusal action was visible on the same layer.${cookiePurposeText}`;
+  }
+
   if (findingId === "session_recording_services_detected") {
     const vendors = getSessionReplayVendors(packet);
     const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);
@@ -4682,6 +4906,10 @@ function buildExecutiveShortSummary(
     return "The retained consent interaction structure shows reject was not available on the first layer.";
   }
 
+  if (findingId === "consent_preference_reopen_control_not_observed") {
+    return "No obvious cookie preferences, privacy settings, or consent-preference reopen control was observed in retained public-page evidence.";
+  }
+
   if (findingId === "fingerprinting_related_signals_observed") {
     const tier = deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet)).tier;
     return tier >= 2
@@ -4691,6 +4919,9 @@ function buildExecutiveShortSummary(
 
   if (findingId === "policy_behavior_contradiction_detected") {
     const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);
+    if (evidenceDetails?.policyRuntimeAlignmentReview) {
+      return "CertScore observed substantial third-party advertising/tracking activity and retained public disclosure context covering cookies, vendors, advertisers, analytics, or targeted advertising. Manual review should confirm whether the full cookie, CMP, vendor, and privacy disclosures adequately cover the observed runtime vendor ecosystem.";
+    }
     const runtimeVendorDisclosure = evidenceDetails?.runtimeVendorDisclosure as Record<string, unknown> | undefined;
     if (runtimeVendorDisclosure) {
       const unmatchedVendors = Array.isArray(runtimeVendorDisclosure.unmatchedVendors)
@@ -4760,11 +4991,12 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
   return {
     id: definition.id,
     label:
-      findingId === "policy_behavior_contradiction_detected" && isSpecificPolicyRuntimeContradiction(packet)
-        ? "Policy/runtime behavior conflict"
-        : findingId === "consent_dark_patterns_detected" &&
-            packet.unifiedFindingId === "consent_control_not_reopenable"
-          ? "Consent controls may be hard to revisit"
+      findingId === "policy_behavior_contradiction_detected"
+        ? isSpecificPolicyRuntimeContradiction(packet)
+          ? "Policy/runtime behavior conflict"
+          : hasPolicyRuntimeDisclosureSpecificityReviewContext(packet) && !hasPolicyBehaviorExecutivePromotionEvidence(packet)
+            ? "Runtime vendor disclosure specificity review"
+            : definition.label
         : findingId === "long_lived_cookie_retention_review"
           ? evaluateCookieRetentionReview({ cookieRetentionEvidence: getEntityJsonObjects(packet, "cookieRetentionEvidence") }).label
         : definition.label,
@@ -4777,6 +5009,12 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
       : mapExecutiveConfidence(packet, findingId),
     directVsInferred: findingId === "long_lived_cookie_retention_review"
       ? "direct"
+      : findingId === "consent_preference_reopen_control_not_observed"
+        ? "inferred"
+      : findingId === "policy_behavior_contradiction_detected" &&
+          hasPolicyRuntimeDisclosureSpecificityReviewContext(packet) &&
+          !hasPolicyBehaviorExecutivePromotionEvidence(packet)
+        ? "inferred"
       : mapVerificationStateToDirectness(packet.presentationDecision.verificationState),
     ...(evidenceDetails ? { evidenceDetails } : {}),
     evidencePreview: buildEvidencePreview(packet, findingId),
@@ -4895,6 +5133,13 @@ export function projectExecutiveFindingsFromUnifiedPackets(
     }
     const eligibility = topFindingEligibility[finding.id]?.eligibility;
     if (finding.id === "focus_management_issue" && eligibility === "surface_only") {
+      return false;
+    }
+    if (
+      finding.id === "policy_behavior_contradiction_detected" &&
+      (finding.evidenceDetails?.policyRuntimeAlignmentReview ||
+        finding.label === "Runtime vendor disclosure specificity review")
+    ) {
       return false;
     }
     return eligibility !== "suppress" && eligibility !== "audit_only";

@@ -2719,9 +2719,33 @@ function buildEvidenceBasisItems(finding: CertScoreFinding): Array<{ label: stri
   if (
     finding.id === "consent_dark_patterns_detected" ||
     finding.id === "reject_option_missing_or_hidden" ||
-    finding.id === "asymmetric_consent_ui"
+    finding.id === "asymmetric_consent_ui" ||
+    finding.id === "consent_preference_reopen_control_not_observed"
   ) {
     const consentUiEvidence = details.consentUiEvidence;
+    const lifecycleReview =
+      consentUiEvidence?.lifecycleReview && typeof consentUiEvidence.lifecycleReview === "object"
+        ? (consentUiEvidence.lifecycleReview as Record<string, unknown>)
+        : null;
+    if (finding.id === "consent_preference_reopen_control_not_observed") {
+      return [
+        {
+          label: "Consent or tracking context",
+          status: consentUiEvidence?.observed === true ? "Available" : "Partial"
+        },
+        {
+          label: "Reopen-control search",
+          status: lifecycleReview?.coverageStatus === "usable" ? "Strong" : lifecycleReview ? "Partial" : "Not evaluated"
+        },
+        {
+          label: "Observed reopen control",
+          status: lifecycleReview?.subtype === "privacy_settings_control_observed" ? "Available" : "Not observed"
+        },
+        { label: "Runtime request evidence", status: "Not applicable" },
+        { label: "Cookie timing", status: "Not applicable" },
+        { label: "Policy context", status: policyContext }
+      ];
+    }
     const decisionStates = Array.isArray(consentUiEvidence?.consentSurfaceDecisionStates)
       ? consentUiEvidence.consentSurfaceDecisionStates
       : [];
@@ -2785,7 +2809,14 @@ function buildEvidenceBasisCopy(finding: CertScoreFinding) {
     finding.id === "reject_option_missing_or_hidden" ||
     finding.id === "asymmetric_consent_ui"
   ) {
-    return "Observed runtime behavior: The retained consent interaction structure shows reject was not available on the first layer. Retained evidence suggests consent UX review; it is not a legal determination.";
+    const basis = typeof details.consentUiEvidence?.basis === "string"
+      ? details.consentUiEvidence.basis
+      : "Retained consent interaction evidence suggests consent UX review.";
+    return `Observed runtime behavior: ${basis} Retained evidence suggests consent UX review; it is not a legal determination.`;
+  }
+
+  if (finding.id === "consent_preference_reopen_control_not_observed") {
+    return "Observed public-page evidence: CertScore did not observe an obvious cookie preferences, privacy settings, or consent-preference reopen control in retained control-search evidence. Manual review should confirm whether users can revisit, change, or withdraw cookie/privacy choices.";
   }
 
   if (
@@ -2863,6 +2894,7 @@ type FindingTitleIconKey =
   | "focus-target"
   | "warning-triangle"
   | "privacy-choice"
+  | "settings-gear"
   | "hidden-choice"
   | "split-choice"
   | "hand-stop"
@@ -2895,6 +2927,8 @@ function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKe
       return ["shield-network", "shield-video", "device-telemetry"];
     case "consent_dark_patterns_detected":
       return ["shield-balance", "circle-x"];
+    case "consent_preference_reopen_control_not_observed":
+      return ["settings-gear", "privacy-choice", "document-clarity"];
     case "asymmetric_consent_ui":
       return ["split-choice", "privacy-choice", "shield-balance"];
     case "reject_option_missing_or_hidden":
@@ -3055,6 +3089,16 @@ function FindingTitleIcon(input: { finding: CertScoreFinding; iconKey?: FindingT
         <path d="M12 3.5 18 6v5.5c0 3.7-2.3 6.7-6 8.8-3.7-2.1-6-5.1-6-8.8V6l6-2.5Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
         <path d="M9 12.2 11 14l4-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M7.7 6.8 16.3 18" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.55" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "settings-gear") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.7" />
+        <path d="M12 4.5v2M12 17.5v2M5.5 8.2l1.7 1M16.8 14.8l1.7 1M5.5 15.8l1.7-1M16.8 9.2l1.7-1" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        <path d="M9.4 5.2 8.6 7M15.4 17l-.8 1.8M18.8 10.4 17 9.6M7 14.4l-1.8-.8M5.2 10.4 7 9.6M17 14.4l1.8-.8M8.6 17l.8 1.8M14.6 5.2l.8 1.8" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.55" />
       </svg>
     );
   }

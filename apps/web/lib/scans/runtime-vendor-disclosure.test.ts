@@ -24,6 +24,7 @@ function runtimeVendorEvidence(overrides: Record<string, unknown> = {}) {
       {
         type: "cookie_policy",
         url: "https://example.com/cookie-policy",
+        snippet: "We disclose Google Analytics for analytics cookies.",
         reached: true,
         retainedEvidenceRef: "policy-enrichment-cookie-1",
         searchedTerms: ["Meta", "connect.facebook.net", "_fbp"],
@@ -184,6 +185,7 @@ test("projects runtime vendor disclosure subtype through policy runtime alignmen
       {
         type: "privacy_policy",
         url: "https://example.com/privacy",
+        snippet: "We work with analytics and advertising partners listed in this policy.",
         reached: true,
         retainedEvidenceRef: "policy-enrichment-privacy-1",
         searchedTerms: ["Meta", "connect.facebook.net"],

@@ -2017,7 +2017,12 @@ test("runtime reject path does not promote reject-missing when retained first la
       consent_surface_observed: true,
       reject_path_depth_and_availability: {
         acceptClickDepth: 1,
+        acceptLabels: ["I Accept"],
+        blockedPageInteraction: true,
+        blockingEvidenceSource: "runtime_consent_ui_probe",
         choiceAsymmetry: "material",
+        forcedActionRequired: true,
+        pageAccessBlockedUntilChoice: true,
         firstLayerConsentChoices: {
           acceptVisibleOnFirstLayer: true,
           capturedAtMs: 0,
@@ -2222,7 +2227,7 @@ test("runtime policy alignment bridges create canonical policy/runtime review ca
   assert.equal(packet?.presentationDecision.status, "surface");
 });
 
-test("runtime reject path depth promotes forced consent only with retained blocking evidence", () => {
+test("runtime reject path depth does not infer forced consent from reject-path evidence alone", () => {
   const state = buildScanReportUnifiedFindingState({
     accessibilityRuleCounts: [],
     accessibilityRuleExamples: [],
@@ -2284,7 +2289,8 @@ test("runtime reject path depth promotes forced consent only with retained block
   });
   const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
 
-  assert.ok(projection.findings.some((finding) => finding.id === "forced_consent_interaction"));
+  assert.equal(projection.findings.some((finding) => finding.id === "forced_consent_interaction"), false);
+  assert.ok(projection.findings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
 });
 
 test("high-risk gambling section review retains concrete offer and disclosure adjacency evidence", () => {
