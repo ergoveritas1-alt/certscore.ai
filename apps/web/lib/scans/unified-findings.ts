@@ -91,6 +91,7 @@ import {
   hasExternallyPromotableAccessibilityExamples
 } from "./accessibility-evidence";
 import { REJECT_TRACKING_CONFIRMATION_MIN_MS } from "./reject-tracking-policy";
+import { buildPromotionGradePreconsentRequests } from "./preconsent-public-evidence";
 
 export type UnifiedFindingDetails =
   | {
@@ -146,6 +147,13 @@ export type UnifiedFindingDetails =
       family: "consent_tracking";
       kind: string;
       vendors?: string[];
+      directlyObservedPreConsentVendors?: string[];
+      relatedOrInferredVendors?: string[];
+      vendorEvidenceCompleteness?: {
+        representativeRequestsCapped?: boolean;
+        someVendorAnchorsOmittedFromPublicPacket?: boolean;
+        vendorDisplayLimitedToAnchoredEvidence?: boolean;
+      };
       requestUrls?: string[];
     }
   | {
@@ -333,6 +341,7 @@ function normalizeUnifiedFindingEvidenceRecord(
   assignCanonicalField("overlayConfidence", ["overlay_confidence"]);
   assignCanonicalField("rejectDepthClass", ["reject_depth_class"]);
   assignCanonicalField("rejectPathDepthAndAvailability", ["reject_path_depth_and_availability"]);
+  assignCanonicalField("firstLayerConsentChoices", ["first_layer_consent_choices"]);
   assignCanonicalField("consentBaselineTrackerEvidenceUrls", ["consent_baseline_tracker_evidence_urls"]);
   assignCanonicalField("consentPostRejectTrackerEvidenceUrls", ["consent_post_reject_tracker_evidence_urls"]);
   assignCanonicalField("consentOptInEvidenceLog", ["consent_opt_in_evidence_log"]);
@@ -1674,6 +1683,12 @@ function getCoveragePageType(id: string) {
   return "unknown";
 }
 
+function getEvidenceObjectRows(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row))
+    : [];
+}
+
 function buildUnifiedFindingDetails(input: {
   fallbackEvidence?: Record<string, unknown> | null;
   findingId: string;
@@ -1823,11 +1838,34 @@ function buildUnifiedFindingDetails(input: {
         ? (input.fallbackEvidence?.rtb_cookie_sync_vendors as string[])
         : [])
     ]);
+    const directPreconsentVendorRows = buildPromotionGradePreconsentRequests({
+      rows: [
+        ...getEvidenceObjectRows(input.fallbackEvidence?.requestPurposeClassificationConfidence),
+        ...getEvidenceObjectRows(input.fallbackEvidence?.request_purpose_classification_confidence)
+      ],
+      maxItems: 8
+    });
+    const directlyObservedPreConsentVendors = uniqueStrings(directPreconsentVendorRows.map((row) => row.vendorName));
+    const relatedOrInferredVendors =
+      directlyObservedPreConsentVendors.length > 0
+        ? vendors.filter((vendor) => !directlyObservedPreConsentVendors.includes(vendor))
+        : [];
 
     return {
       family,
       kind: input.findingId,
       vendors,
+      ...(directlyObservedPreConsentVendors.length > 0 ? { directlyObservedPreConsentVendors } : {}),
+      ...(relatedOrInferredVendors.length > 0 ? { relatedOrInferredVendors } : {}),
+      ...(directlyObservedPreConsentVendors.length > 0
+        ? {
+            vendorEvidenceCompleteness: {
+              representativeRequestsCapped: false,
+              someVendorAnchorsOmittedFromPublicPacket: relatedOrInferredVendors.length > 0,
+              vendorDisplayLimitedToAnchoredEvidence: true
+            }
+          }
+        : {}),
       requestUrls: uniqueStrings([
         ...(Array.isArray(input.linkedValidationFinding?.evidence?.preconsent_tracker_evidence_urls)
           ? (input.linkedValidationFinding?.evidence?.preconsent_tracker_evidence_urls as string[])

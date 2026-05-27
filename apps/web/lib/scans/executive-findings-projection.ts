@@ -770,6 +770,7 @@ function buildConsentUiRuntimePathEvidence(row: Record<string, unknown>) {
     contentObstructed: getRecordBoolean(row, ["contentObstructed", "content_obstructed"]),
     blockingEvidenceSource: getRecordString(row, ["blockingEvidenceSource", "blocking_evidence_source"]),
     visualHierarchyBasis: getRecordString(row, ["visualHierarchyBasis", "visual_hierarchy_basis"]),
+    firstLayerConsentChoices: row.firstLayerConsentChoices ?? row.first_layer_consent_choices ?? null,
     screenshotArtifactAvailable: evidenceRefs.some((ref) => /screen|image|png|jpeg|jpg/i.test(ref)),
     domDigestAvailable: Boolean(getRecordString(row, ["domDigest", "dom_digest", "domEvidenceDigest", "dom_evidence_digest"])),
     evidenceRefs
@@ -2037,7 +2038,7 @@ function getPreconsentRepresentativeVendorNames(evidenceDetails: CertScoreFindin
 
   return representativeVendors.length > 0
     ? representativeVendors
-    : uniqueStrings((evidenceDetails?.vendors ?? []).map((vendor) => vendor.name)).filter(isDisplayVendorName);
+    : uniqueStrings((evidenceDetails?.directlyObservedPreConsentVendors ?? evidenceDetails?.vendors ?? []).map((vendor) => vendor.name)).filter(isDisplayVendorName);
 }
 
 function buildPreConsentTrackingEvidenceDetails(
@@ -2179,10 +2180,14 @@ function buildPreConsentTrackingEvidenceDetails(
   const representativeRequests = sortRepresentativeRequestsByVendorCoverage(allRepresentativeRequests, vendors);
   const preConsentCookieExamples = getPreconsentCookieExamples(cookieRows, consentTimeline);
 
-  const representativeVendorNames = uniqueStrings([
-    ...representativeRequests.flatMap((request) => request.vendor ? [request.vendor] : []),
-    ...vendors
-  ]).filter(isDisplayVendorName);
+  const directlyObservedVendorNames = uniqueStrings(
+    representativeRequests.flatMap((request) => request.vendor ? [request.vendor] : [])
+  ).filter(isDisplayVendorName);
+  const relatedOrInferredVendorNames = vendors.filter((vendor) => !directlyObservedVendorNames.includes(vendor));
+  const representativeVendorNames =
+    directlyObservedVendorNames.length > 0
+      ? directlyObservedVendorNames
+      : vendors;
   const vendorDetails = representativeVendorNames.slice(0, 8).map((name) => {
     const matchingRequest = representativeRequests.find((request) =>
       request.vendor === name || inferVendorNameFromUrl(request.url, [name]) === name
@@ -2195,6 +2200,13 @@ function buildPreConsentTrackingEvidenceDetails(
       firstSeenMs: matchingRequest?.firstSeenMs ?? null
     };
   });
+  const relatedOrInferredVendorDetails = relatedOrInferredVendorNames.slice(0, 8).map((name) => ({
+    name,
+    category: normalizeVendorCategory(name, null, classifyTrackingCategory(name)),
+    preConsent: true,
+    representativeUrl: null,
+    firstSeenMs: null
+  }));
 
   const identifierLikeRequestCount = representativeRequests.filter((request) => request.identifierLike).length;
   const deviceDataLikeRequestCount = representativeRequests.filter((request) => request.deviceDataLike).length;
@@ -2248,7 +2260,7 @@ function buildPreConsentTrackingEvidenceDetails(
         representativeRequests.length,
       representativePreConsentTrackingRequests: representativeRequests.length,
       uniquePreConsentTrackingVendorsObserved:
-        getCountValue(packet, ["preConsentTrackingVendors", "total_vendor_count", "preConsentVendorCount"]) ?? vendorDetails.length,
+        directlyObservedVendorNames.length,
       preConsentTrackingCookies:
         getCountValue(packet, ["preConsentTrackingCookies", "preconsent_cookie_before_consent_count"]) ??
         (cookieRows.length > 0
@@ -2260,6 +2272,13 @@ function buildPreConsentTrackingEvidenceDetails(
     ...(requestClassificationAnchors.length > 0 ? { requestClassificationAnchors } : {}),
     ...(preConsentCookieExamples.length > 0 ? { preConsentCookieExamples } : {}),
     vendors: vendorDetails,
+    directlyObservedPreConsentVendors: vendorDetails.map((vendor) => ({ ...vendor, preConsent: true })),
+    ...(relatedOrInferredVendorDetails.length > 0 ? { relatedOrInferredVendors: relatedOrInferredVendorDetails } : {}),
+    vendorEvidenceCompleteness: {
+      representativeRequestsCapped: allRepresentativeRequests.length > representativeRequests.length,
+      someVendorAnchorsOmittedFromPublicPacket: relatedOrInferredVendorDetails.length > 0,
+      vendorDisplayLimitedToAnchoredEvidence: true
+    },
     representativeRequests,
     identifierEvidence: {
       addressingOrSignalingTransmittedByRequest: representativeRequests.length > 0,

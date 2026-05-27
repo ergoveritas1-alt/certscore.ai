@@ -73,6 +73,25 @@ export type PreConsentTrackingEvidenceDetails = {
     representativeUrl: string | null;
     firstSeenMs: number | null;
   }>;
+  directlyObservedPreConsentVendors?: Array<{
+    name: string;
+    category: string | null;
+    preConsent: true;
+    representativeUrl: string | null;
+    firstSeenMs: number | null;
+  }>;
+  relatedOrInferredVendors?: Array<{
+    name: string;
+    category: string | null;
+    preConsent: boolean;
+    representativeUrl: string | null;
+    firstSeenMs: number | null;
+  }>;
+  vendorEvidenceCompleteness?: {
+    representativeRequestsCapped?: boolean;
+    someVendorAnchorsOmittedFromPublicPacket?: boolean;
+    vendorDisplayLimitedToAnchoredEvidence?: boolean;
+  };
   representativeRequests: Array<{
     url: string;
     requestUrl?: string;
@@ -235,6 +254,9 @@ export type CertScoreFindingEvidenceDetails = {
   requestClassificationAnchors?: PreConsentTrackingEvidenceDetails["requestClassificationAnchors"];
   preConsentCookieExamples?: PreConsentTrackingEvidenceDetails["preConsentCookieExamples"];
   vendors?: PreConsentTrackingEvidenceDetails["vendors"];
+  directlyObservedPreConsentVendors?: PreConsentTrackingEvidenceDetails["directlyObservedPreConsentVendors"];
+  relatedOrInferredVendors?: PreConsentTrackingEvidenceDetails["relatedOrInferredVendors"];
+  vendorEvidenceCompleteness?: PreConsentTrackingEvidenceDetails["vendorEvidenceCompleteness"];
   representativeRequests?: PreConsentTrackingEvidenceDetails["representativeRequests"];
   identifierEvidence?: PreConsentTrackingEvidenceDetails["identifierEvidence"];
   policyEvidence?: PreConsentTrackingEvidenceDetails["policyEvidence"];

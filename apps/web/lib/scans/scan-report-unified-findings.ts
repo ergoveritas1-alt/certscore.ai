@@ -1469,6 +1469,14 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     "consentUiPathEvidence",
     "consent_ui_path_evidence"
   ]);
+  const firstLayerConsentChoices =
+    getRuntimeObject(hybridRuntimeEvidenceRecord, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
+    getRuntimeObject(retainedConsentUiPathEvidence, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
+    getRuntimeObject(input.runtimeArtifacts, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
+    getRuntimeObject(
+      getRuntimeObject(input.runtimeArtifacts, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]),
+      ["firstLayerConsentChoices", "first_layer_consent_choices"]
+    );
   const rejectPath = selectBestRejectPathEvidence({
     retainedConsentUiPathEvidence,
     rejectPath: getRuntimeObject(input.runtimeArtifacts, [
@@ -1783,6 +1791,17 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
 
   const rejectAvailableOnFirstLayer =
     rejectPath?.rejectAvailableOnFirstLayer === true || rejectPath?.reject_available_on_first_layer === true;
+  const firstLayerCapturedBeforeInteraction =
+    firstLayerConsentChoices?.capturedBeforeInteraction === true ||
+    firstLayerConsentChoices?.captured_before_interaction === true;
+  const firstLayerRejectVisible =
+    firstLayerCapturedBeforeInteraction &&
+    (firstLayerConsentChoices?.rejectVisibleOnFirstLayer === true ||
+      firstLayerConsentChoices?.reject_visible_on_first_layer === true);
+  const firstLayerRejectAbsent =
+    firstLayerCapturedBeforeInteraction &&
+    (firstLayerConsentChoices?.rejectVisibleOnFirstLayer === false ||
+      firstLayerConsentChoices?.reject_visible_on_first_layer === false);
   const choiceAsymmetry = String(rejectPath?.choiceAsymmetry ?? rejectPath?.choice_asymmetry ?? "unknown");
   const acceptClickDepth = getFiniteNumber(rejectPath?.acceptClickDepth ?? rejectPath?.accept_click_depth);
   const rejectClickDepth = getFiniteNumber(rejectPath?.rejectClickDepth ?? rejectPath?.reject_click_depth);
@@ -1809,6 +1828,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     consentSurfaceDiagnostics,
     consentSurfaceObserved: consentSurfaceObservedForPath,
     rejectPathDepthAndAvailability: rejectPath,
+    firstLayerConsentChoices,
     hybridConsentSummary,
     hybridConsentVisual: getRuntimeObject(input.runtimeArtifacts, ["hybridConsentVisual", "hybrid_consent_visual"]),
     hybridUiSummary
@@ -1876,6 +1896,8 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     rejectPath &&
     concreteRejectPathObserved &&
     !rejectAvailableOnFirstLayer &&
+    firstLayerRejectAbsent &&
+    !firstLayerRejectVisible &&
     (
       consentSurfaceGate.eligibleForConsentUxPromotion ||
       consentSurfaceGate.eligibleForRetainedRejectPathPromotion
@@ -1891,6 +1913,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         consentSurfaceDiagnostics,
         consentSurfaceObserved,
         rejectPathDepthAndAvailability: rejectPath,
+        firstLayerConsentChoices,
         reject_button_missing: choiceAsymmetry === "material",
         runtimeEvidenceArtifacts: ["scan_runtime_artifacts.reject_path_depth_and_availability"],
         signalKey: "privacy.dark_pattern_reject_button_missing",
@@ -1925,6 +1948,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         consentSurfaceDiagnostics,
         consentSurfaceObserved,
         rejectPathDepthAndAvailability: rejectPath,
+        firstLayerConsentChoices,
         runtimeEvidenceArtifacts: ["scan_runtime_artifacts.reject_path_depth_and_availability"],
         signalKey: "privacy.dark_pattern_accept_button_prominence",
         signalLabel: "Accept action more prominent than reject",

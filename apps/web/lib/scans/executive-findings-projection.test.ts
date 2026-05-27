@@ -357,7 +357,11 @@ test("projects surfaced unified findings into executive findings and regulatory 
   assert.equal(preconsentFinding?.evidenceDetails?.consentState?.trackingOccurredBeforeConsentChoice, true);
   assert.deepEqual(
     preconsentFinding?.evidenceDetails?.vendors?.map((vendor) => vendor.name),
-    ["Meta Pixel", "Google Analytics"]
+    ["Meta Pixel"]
+  );
+  assert.deepEqual(
+    preconsentFinding?.evidenceDetails?.relatedOrInferredVendors?.map((vendor) => vendor.name),
+    ["Google Analytics"]
   );
   assert.deepEqual(preconsentFinding?.evidenceDetails?.representativeRequests?.map((request) => request.url), [
     "https://connect.facebook.net/en_US/fbevents.js"
@@ -365,7 +369,7 @@ test("projects surfaced unified findings into executive findings and regulatory 
   assert.deepEqual(preconsentFinding?.evidenceDetails?.counts, {
     totalPreConsentThirdPartyTrackingRequests: 2,
     representativePreConsentTrackingRequests: 1,
-    uniquePreConsentTrackingVendorsObserved: 2,
+    uniquePreConsentTrackingVendorsObserved: 1,
     preConsentTrackingCookies: 0,
     identifierLikeRequests: 0
   });
@@ -3760,7 +3764,12 @@ test("keeps scanned page URL separate from representative third-party request UR
   assert.deepEqual(
     finding?.evidenceDetails?.vendors?.map((vendor) => [vendor.name, vendor.category]),
     [
-      ["Microsoft Clarity", "session_replay"],
+      ["Microsoft Clarity", "session_replay"]
+    ]
+  );
+  assert.deepEqual(
+    finding?.evidenceDetails?.relatedOrInferredVendors?.map((vendor) => [vendor.name, vendor.category]),
+    [
       ["Google Tag Manager", "tag_manager"],
       ["Microsoft Advertising", "advertising_measurement"]
     ]
@@ -4494,6 +4503,90 @@ test("projects pre-consent tracking when tracker requests have timeline and non-
   assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://example.com/");
   assert.equal(finding?.evidenceDetails?.representativeRequests?.[0]?.scannedPageUrl, "https://example.com/");
   assert.equal(finding?.evidenceDetails?.representativeRequests?.[0]?.consentSurfaceObserved, true);
+});
+
+test("keeps pre-consent tracking eligible while limiting direct vendors to retained request anchors", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      concernContext: {
+        assertionLevels: ["strong"],
+        evidenceStrengthFlags: ["direct_runtime"],
+        externalSurfacingEligibilities: ["eligible"],
+        negativeEvidenceFlags: [],
+        originTypes: ["snapshot_signal"],
+        promotionEligibilities: ["eligible"]
+      },
+      details: {
+        family: "consent_tracking",
+        kind: "preconsent_tracking",
+        vendors: ["Google Tag Manager", "Meta Pixel"]
+      },
+      evidence: {
+        counts: {
+          firstThirdPartyRequestMs: 1449,
+          preconsentViolationCount: 1
+        },
+        entities: {
+          consentSurfaceObserved: ["true"],
+          consentTimeline: [
+            JSON.stringify({
+              firstCmpVisibleMs: 0,
+              firstConsentActionMs: null,
+              firstNonEssentialRequestMs: 1449
+            })
+          ],
+          preconsent_tracker_vendors: ["Google Tag Manager", "Meta Pixel"],
+          requestPurposeClassificationConfidence: [
+            JSON.stringify({
+              category: "tag_manager",
+              classificationBasis: "vendor_signature",
+              confidence: 0.94,
+              essentiality: "non_essential",
+              firstPartyOrThirdParty: "third_party",
+              hostname: "www.googletagmanager.com",
+              matchedSignatureId: "google_tag_manager",
+              pageUrl: "https://www.caterpillar.com/",
+              requestUrl: "https://www.googletagmanager.com/gtm.js?id=GTM-TEST",
+              runtimePhase: "pre_consent",
+              timestampMs: 1449,
+              vendor: "Google Tag Manager",
+              vendorAttributionBasis: "tracker_signature"
+            })
+          ],
+          runtimeRequestUrls: ["https://www.googletagmanager.com/gtm.js?id=GTM-TEST"],
+          runtimeVendors: ["Google Tag Manager", "Meta Pixel"]
+        },
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: ["https://www.caterpillar.com/"],
+        sourceUrls: ["https://www.googletagmanager.com/gtm.js?id=GTM-TEST"]
+      },
+      primaryPageUrl: "https://www.caterpillar.com/",
+      severity: "high",
+      summary: "Tracker vendors fired before consent interaction."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "pre_consent_tracking_detected");
+
+  assert.ok(finding);
+  assert.ok(projection.topFindings.some((entry) => entry.id === "pre_consent_tracking_detected"));
+  assert.deepEqual(
+    finding?.evidenceDetails?.directlyObservedPreConsentVendors?.map((vendor) => vendor.name),
+    ["Google Tag Manager"]
+  );
+  assert.deepEqual(finding?.evidenceDetails?.vendors?.map((vendor) => vendor.name), ["Google Tag Manager"]);
+  assert.deepEqual(
+    finding?.evidenceDetails?.relatedOrInferredVendors?.map((vendor) => vendor.name),
+    ["Meta Pixel"]
+  );
+  assert.deepEqual(finding?.evidenceDetails?.representativeRequests?.map((request) => request.vendor), [
+    "Google Tag Manager"
+  ]);
+  assert.equal(finding?.evidenceDetails?.vendorEvidenceCompleteness?.vendorDisplayLimitedToAnchoredEvidence, true);
+  assert.equal(finding?.evidenceDetails?.vendorEvidenceCompleteness?.someVendorAnchorsOmittedFromPublicPacket, true);
+  assert.match(finding?.evidencePreview?.join(" ") ?? "", /Google Tag Manager/);
+  assert.doesNotMatch(finding?.evidencePreview?.join(" ") ?? "", /Meta Pixel/);
 });
 
 test("projects first-party proxy pre-consent tracker evidence without using request URL as scan context", () => {

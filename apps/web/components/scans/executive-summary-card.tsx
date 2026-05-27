@@ -717,7 +717,7 @@ function buildRegulatoryLensEvidencePayload(finding: CertScoreFinding, context?:
       timing: details.timing ?? undefined,
       vendors: compactStringList([
         ...(details.runtimeVendors ?? []),
-        ...(details.vendors ?? []).map((vendor) => vendor.name)
+        ...((details.directlyObservedPreConsentVendors ?? details.vendors ?? []).map((vendor) => vendor.name))
       ]),
       runtimeRequestUrls: compactStringList(details.runtimeRequestUrls, 3, 220),
       evidenceFlags: compactStringList(details.evidenceFlags, 5, 140),
@@ -3583,9 +3583,16 @@ function compactPreConsentTrackingEvidenceJsonPayload(finding: CertScoreFinding)
       ]) ?? null,
       counts: details.counts ?? {},
       requestSelectionNote: details.requestSelectionNote ?? null,
-      vendors: (details.vendors ?? []).slice(0, 5).map((vendor) =>
+      vendors: (details.directlyObservedPreConsentVendors ?? details.vendors ?? []).slice(0, 5).map((vendor) =>
         compactObject(vendor, ["name", "category", "preConsent", "firstSeenMs", "representativeUrl"])
       ),
+      directlyObservedPreConsentVendors: (details.directlyObservedPreConsentVendors ?? []).slice(0, 5).map((vendor) =>
+        compactObject(vendor, ["name", "category", "preConsent", "firstSeenMs", "representativeUrl"])
+      ),
+      relatedOrInferredVendors: (details.relatedOrInferredVendors ?? []).slice(0, 5).map((vendor) =>
+        compactObject(vendor, ["name", "category", "preConsent", "firstSeenMs", "representativeUrl"])
+      ),
+      vendorEvidenceCompleteness: details.vendorEvidenceCompleteness ?? null,
       representativeRequests: compactPreconsentRepresentativeRequests(details),
       identifierEvidence: compactEvidenceRecord(details.identifierEvidence, [
         "addressingOrSignalingTransmittedByRequest",

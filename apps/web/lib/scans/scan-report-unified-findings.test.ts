@@ -1953,6 +1953,23 @@ test("runtime reject path depth promotes concrete dark-pattern reject-missing ev
     reject_path_depth_and_availability: {
       acceptClickDepth: 1,
       choiceAsymmetry: "material",
+      firstLayerConsentChoices: {
+        acceptVisibleOnFirstLayer: true,
+        capturedAtMs: 0,
+        capturedBeforeInteraction: true,
+        domDigestAvailable: true,
+        evidenceSource: "runtime_consent_ui_probe",
+        normalizedChoices: [
+          { action: "settings", label: "Cookie Settings", sameSurface: true },
+          { action: "accept", label: "I Accept", sameSurface: true }
+        ],
+        phase: "before_consent_interaction",
+        rejectVisibleOnFirstLayer: false,
+        sameSurfaceCandidates: true,
+        settingsVisibleOnFirstLayer: true,
+        visibleChoiceLabels: ["Cookie Settings", "I Accept"],
+        visualArtifactAvailable: true
+      },
       preferencesRequiredBeforeReject: true,
       rejectAvailableOnFirstLayer: false,
       rejectClickDepth: 2
@@ -1983,6 +2000,71 @@ test("runtime reject path depth promotes concrete dark-pattern reject-missing ev
   assert.ok(!weakState.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "forced_consent_wall"));
 });
 
+test("runtime reject path does not promote reject-missing when retained first layer shows reject", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [],
+    primaryPolicyEnrichment: null,
+    runtimeArtifacts: {
+      consent_actionable_choice_observed: true,
+      consent_surface_observed: true,
+      reject_path_depth_and_availability: {
+        acceptClickDepth: 1,
+        choiceAsymmetry: "material",
+        firstLayerConsentChoices: {
+          acceptVisibleOnFirstLayer: true,
+          capturedAtMs: 0,
+          capturedBeforeInteraction: true,
+          domDigestAvailable: true,
+          evidenceSource: "runtime_consent_ui_probe",
+          normalizedChoices: [
+            { action: "settings", label: "Cookie Settings", sameSurface: true },
+            { action: "reject", label: "Reject All", sameSurface: true },
+            { action: "accept", label: "I Accept", sameSurface: true }
+          ],
+          phase: "before_consent_interaction",
+          rejectVisibleOnFirstLayer: true,
+          sameSurfaceCandidates: true,
+          settingsVisibleOnFirstLayer: true,
+          visibleChoiceLabels: ["Cookie Settings", "Reject All", "I Accept"],
+          visualArtifactAvailable: true
+        },
+        preferencesRequiredBeforeReject: true,
+        rejectAvailableOnFirstLayer: false,
+        rejectClickDepth: 2,
+        rejectClickDepthViaSettings: 2
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.caterpillar.com/",
+      registered_domain: "caterpillar.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+
+  assert.ok(!state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "reject_button_missing"));
+  assert.ok(!state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "accept_more_prominent_than_reject"));
+  assert.ok(!state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "consent_dark_patterns_detected"));
+});
+
 test("runtime reject path uses retained consent UI path when derived reject artifact is inconclusive", () => {
   const state = buildScanReportUnifiedFindingState({
     accessibilityRuleCounts: [],
@@ -2001,6 +2083,23 @@ test("runtime reject path uses retained consent UI path when derived reject arti
       hybrid_runtime_evidence: {
         consentUiPathEvidence: {
           choiceAsymmetry: "material",
+          firstLayerConsentChoices: {
+            acceptVisibleOnFirstLayer: true,
+            capturedAtMs: 0,
+            capturedBeforeInteraction: true,
+            domDigestAvailable: true,
+            evidenceSource: "runtime_consent_ui_probe",
+            normalizedChoices: [
+              { action: "settings", label: "Cookie Settings", sameSurface: true },
+              { action: "accept", label: "I Accept", sameSurface: true }
+            ],
+            phase: "before_consent_interaction",
+            rejectVisibleOnFirstLayer: false,
+            sameSurfaceCandidates: true,
+            settingsVisibleOnFirstLayer: true,
+            visibleChoiceLabels: ["Cookie Settings", "I Accept"],
+            visualArtifactAvailable: true
+          },
           layerInspected: "deeper_layer",
           preferencesRequiredBeforeReject: true,
           rejectAvailableOnFirstLayer: false,
@@ -2144,6 +2243,23 @@ test("runtime reject path depth promotes forced consent only with retained block
       reject_path_depth_and_availability: {
         acceptClickDepth: 1,
         choiceAsymmetry: "material",
+        firstLayerConsentChoices: {
+          acceptVisibleOnFirstLayer: true,
+          capturedAtMs: 0,
+          capturedBeforeInteraction: true,
+          domDigestAvailable: true,
+          evidenceSource: "runtime_consent_ui_probe",
+          normalizedChoices: [
+            { action: "settings", label: "Cookie Settings", sameSurface: true },
+            { action: "accept", label: "I Accept", sameSurface: true }
+          ],
+          phase: "before_consent_interaction",
+          rejectVisibleOnFirstLayer: false,
+          sameSurfaceCandidates: true,
+          settingsVisibleOnFirstLayer: true,
+          visibleChoiceLabels: ["Cookie Settings", "I Accept"],
+          visualArtifactAvailable: true
+        },
         preferencesRequiredBeforeReject: true,
         rejectAvailableOnFirstLayer: false,
         rejectClickDepth: 2
