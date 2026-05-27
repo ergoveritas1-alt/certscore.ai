@@ -503,7 +503,7 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                 <button
                   type="button"
                   aria-label="Show previous finding"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-900 shadow-sm shadow-slate-200/70 transition hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-950 hover:text-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
                   onClick={showPrevious}
                 >
                   <ArrowIcon direction="left" />
@@ -511,7 +511,7 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                 <button
                   type="button"
                   aria-label="Show next finding"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-900 shadow-sm shadow-slate-200/70 transition hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-950 hover:text-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
                   onClick={showNext}
                 >
                   <ArrowIcon direction="right" />
