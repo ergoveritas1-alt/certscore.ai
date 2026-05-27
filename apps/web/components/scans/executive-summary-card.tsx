@@ -1,5 +1,3 @@
-"use client";
-
 import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import React from "react";
 import {
@@ -34,6 +32,7 @@ import {
 } from "../../lib/marketing/finding-regulatory-context";
 import { CopyJsonButton } from "./copy-json-button";
 import { EvidenceJsonBlock } from "./evidence-json-block";
+import { RegulatoryMappingFilterControl, type RegulatoryMappingFilterId } from "./executive-regulatory-mapping-filter";
 import { FindingHashFocus } from "./finding-hash-focus";
 import { InfoTip } from "./info-tip";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
@@ -3381,18 +3380,6 @@ type TopFindingRegulatoryBadge = {
   tone: "privacy" | "consumer" | "accessibility" | "neutral";
 };
 
-type RegulatoryMappingFilterId = "gdpr" | "ccpa" | "ftc" | "ada";
-
-const REGULATORY_MAPPING_FILTERS: Array<{
-  id: RegulatoryMappingFilterId;
-  label: string;
-}> = [
-  { id: "gdpr", label: "GDPR / ePrivacy" },
-  { id: "ccpa", label: "CCPA / CPRA" },
-  { id: "ftc", label: "FTC" },
-  { id: "ada", label: "ADA / accessibility" }
-];
-
 type TopFindingRegulatoryContextDisplay = {
   applicabilityNotes: FindingRegulatoryContextItem[];
   badges: TopFindingRegulatoryBadge[];
@@ -3477,76 +3464,6 @@ function getFindingRegulatoryFilterIds(finding: CertScoreFinding): RegulatoryMap
     }
     return [];
   });
-}
-
-function formatRegulatoryMappingFilterLabel(selectedFilters: RegulatoryMappingFilterId[]) {
-  if (selectedFilters.length === 0) {
-    return "All mappings";
-  }
-  if (selectedFilters.length === 1) {
-    return REGULATORY_MAPPING_FILTERS.find((filter) => filter.id === selectedFilters[0])?.label ?? "1 selected";
-  }
-  if (selectedFilters.length === 2) {
-    return selectedFilters
-      .map((id) => REGULATORY_MAPPING_FILTERS.find((filter) => filter.id === id)?.label.split(" / ")[0] ?? id.toUpperCase())
-      .join(" + ");
-  }
-  return `${selectedFilters.length} selected`;
-}
-
-function RegulatoryMappingFilterControl(input: {
-  selectedFilters: RegulatoryMappingFilterId[];
-  onChange: (filters: RegulatoryMappingFilterId[]) => void;
-}) {
-  const selected = new Set(input.selectedFilters);
-  const toggleFilter = (filterId: RegulatoryMappingFilterId) => {
-    const next = new Set(selected);
-    if (next.has(filterId)) {
-      next.delete(filterId);
-    } else {
-      next.add(filterId);
-    }
-    input.onChange(REGULATORY_MAPPING_FILTERS.map((filter) => filter.id).filter((id) => next.has(id)));
-  };
-
-  return (
-    <details className="group/filter relative">
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 marker:hidden [&::-webkit-details-marker]:hidden">
-        <span className="text-slate-500">Regulatory mapping</span>
-        <span>{formatRegulatoryMappingFilterLabel(input.selectedFilters)}</span>
-        <ScanReportDisclosureIcon className="h-4 w-4 group-open/filter:-rotate-90" />
-      </summary>
-      <div className="absolute bottom-full right-0 z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white py-2 shadow-[0_18px_50px_-24px_rgba(15,23,42,0.35)]">
-        <button
-          type="button"
-          className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-medium text-slate-900 hover:bg-slate-50"
-          onClick={() => input.onChange([])}
-        >
-          <span>All mappings</span>
-          {input.selectedFilters.length === 0 ? <span className="text-lg leading-none text-slate-900">✓</span> : null}
-        </button>
-        <div className="my-1 border-t border-slate-100" />
-        {REGULATORY_MAPPING_FILTERS.map((filter) => (
-          <label
-            key={filter.id}
-            className="flex cursor-pointer items-center justify-between gap-3 px-4 py-2.5 text-sm text-slate-800 hover:bg-slate-50"
-          >
-            <span>{filter.label}</span>
-            <span className="relative inline-flex h-6 w-10 items-center">
-              <input
-                type="checkbox"
-                className="peer sr-only"
-                checked={selected.has(filter.id)}
-                onChange={() => toggleFilter(filter.id)}
-              />
-              <span className="absolute inset-0 rounded-full bg-slate-200 transition peer-checked:bg-sky-600" />
-              <span className="absolute left-1 h-4 w-4 rounded-full bg-white shadow-sm transition peer-checked:translate-x-4" />
-            </span>
-          </label>
-        ))}
-      </div>
-    </details>
-  );
 }
 
 function makeReportFacingRegulatoryContextCopy(context: FindingRegulatoryContext) {
@@ -4144,20 +4061,13 @@ export function ExecutiveSummaryCard(input: {
     "collection_endpoints_detected",
     "high_request_density"
   ]);
-  const [selectedRegulatoryMappings, setSelectedRegulatoryMappings] = React.useState<RegulatoryMappingFilterId[]>([]);
   const categorySummary = Object.entries(input.vendorCategoryCounts)
     .sort((left, right) => right[1] - left[1])
     .slice(0, 4)
     .map(([key, count]) => `${formatCategoryLabel(key)} ${count}`)
     .join(" · ");
   const availableTopFindings = input.topFindings.filter((finding) => !suppressedTopFindingIds.has(finding.id));
-  const filteredTopFindings = selectedRegulatoryMappings.length > 0
-    ? availableTopFindings.filter((finding) => {
-        const mappingIds = getFindingRegulatoryFilterIds(finding);
-        return selectedRegulatoryMappings.some((filterId) => mappingIds.includes(filterId));
-      })
-    : availableTopFindings;
-  const topFindingIconKeys = assignUniqueFindingTitleIconKeys(filteredTopFindings);
+  const topFindingIconKeys = assignUniqueFindingTitleIconKeys(availableTopFindings);
   const regulatoryFindingInput =
     Array.isArray(input.allFindings) && input.allFindings.length > 0 ? input.allFindings : input.topFindings;
   const cookieCountMismatchNote = getCookieCountMismatchNote({
@@ -4437,28 +4347,32 @@ export function ExecutiveSummaryCard(input: {
                   {narrativePresentation.findingsHeading}
                 </h2>
               </div>
-              <RegulatoryMappingFilterControl
-                selectedFilters={selectedRegulatoryMappings}
-                onChange={setSelectedRegulatoryMappings}
-              />
+              {availableTopFindings.length > 0 ? <RegulatoryMappingFilterControl targetListId="executive-top-findings-list" /> : null}
             </div>
           </div>
 
           <div
+            id="executive-top-findings-list"
             className="grid gap-3 overflow-visible"
             data-executive-top-findings-list
             data-testid="executive-top-findings-list"
           >
             <FindingHashFocus />
-            {filteredTopFindings.length > 0 ? (
-              filteredTopFindings.map((finding, index) => {
+            {availableTopFindings.length > 0 ? (
+              <>
+              {availableTopFindings.map((finding, index) => {
                 const iconKey = topFindingIconKeys.get(finding.id) ?? getFindingTitleIconKey(finding.id);
                 const densityBenchmark = getFindingDensityBenchmark(finding.id);
                 const display = getPublicReportFindingDisplayForCertFinding(finding);
                 const criticalityBadge = display.criticality;
                 const cardTone = getFindingCardTone(finding, index === 0, criticalityBadge);
+                const regulatoryMappingIds = getFindingRegulatoryFilterIds(finding);
                 return (
-                <div key={finding.id} className={`overflow-visible rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${cardTone.card}`}>
+                <div
+                  key={finding.id}
+                  className={`overflow-visible rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${cardTone.card}`}
+                  data-regulatory-mapping-ids={regulatoryMappingIds.join(" ")}
+                >
                   <div className={`h-1 w-full rounded-t-[1.4rem] ${cardTone.band}`} />
                   <div className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
@@ -4510,11 +4424,15 @@ export function ExecutiveSummaryCard(input: {
                 </div>
                 </div>
                 );
-              })
-            ) : selectedRegulatoryMappings.length > 0 ? (
-              <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700">
+              })}
+              <div
+                className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700"
+                data-regulatory-filter-empty-state
+                hidden
+              >
                 No top findings match the selected regulatory mapping.
               </div>
+              </>
             ) : (
               <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700">
                 {displayState === "Limited review"
