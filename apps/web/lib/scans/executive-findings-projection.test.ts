@@ -1169,6 +1169,94 @@ test("does not leak structured runtime disclosure rows into RTB summary vendor t
   assert.deepEqual(finding?.evidenceDetails?.vendors?.map((vendor) => vendor.name), ["The Trade Desk"]);
 });
 
+test("splits RTB cookie-sync direct vendor counts from related redirect and inferred vendor context", () => {
+  const broadRuntimeVendors = [
+    "Criteo",
+    "AppNexus / Xandr",
+    "Taboola",
+    "The Trade Desk",
+    "Rubicon Project",
+    ...Array.from({ length: 34 }, (_, index) => `Related Adtech ${index + 1}`)
+  ];
+  const makeSyncRow = (
+    hostname: string,
+    pathSample: string,
+    urlSample: string,
+    vendor: string,
+    redirectTargetHost: string,
+    queryKeysSample: string[] = ["uid"]
+  ) => JSON.stringify({
+    hostname,
+    pathSample,
+    queryKeysSample,
+    reason: "identifier_query",
+    redirectTargetHost,
+    runtimePhase: "pre_consent",
+    scannedPageUrl: "https://www.nbcnews.com/",
+    urlSample,
+    vendor
+  });
+
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("rtb_cookie_sync_observed", {
+      confidenceBand: "high",
+      details: {
+        family: "consent_tracking",
+        kind: "rtb_cookie_sync_observed",
+        vendors: broadRuntimeVendors
+      },
+      evidence: {
+        counts: { rtb_cookie_sync_observation_count: 12 },
+        entities: {
+          rtbCookieSyncEvidence: [
+            makeSyncRow("gum.criteo.com", "/sync", "https://gum.criteo.com/sync?uid=abc", "Criteo", "id.rlcdn.com"),
+            makeSyncRow("ib.adnxs.com", "/setuid", "https://ib.adnxs.com/setuid?uid=abc", "AppNexus / Xandr", "sync.taboola.com"),
+            makeSyncRow("la-match.taboola.com", "/sync", "https://la-match.taboola.com/sync?uid=abc", "Taboola", "cm.g.doubleclick.net"),
+            makeSyncRow("match.adsrvr.org", "/track/cmf/generic", "https://match.adsrvr.org/track/cmf/generic?ttd_pid=abc", "The Trade Desk", "eus.rubiconproject.com", ["ttd_pid"]),
+            makeSyncRow("eus.rubiconproject.com", "/usync.html", "https://eus.rubiconproject.com/usync.html?p=abc", "Rubicon Project", "x.bidswitch.net", ["p"]),
+            makeSyncRow("gum.criteo.com", "/sync", "https://gum.criteo.com/sync?uid=def", "Criteo", "match.adsrvr.org"),
+            makeSyncRow("ib.adnxs.com", "/setuid", "https://ib.adnxs.com/setuid?uid=def", "AppNexus / Xandr", "sync.outbrain.com"),
+            makeSyncRow("la-match.taboola.com", "/sync", "https://la-match.taboola.com/sync?uid=def", "Taboola", "id.rlcdn.com"),
+            makeSyncRow("match.adsrvr.org", "/track/cmf/generic", "https://match.adsrvr.org/track/cmf/generic?ttd_pid=def", "The Trade Desk", "sync.taboola.com", ["ttd_pid"]),
+            makeSyncRow("eus.rubiconproject.com", "/usync.html", "https://eus.rubiconproject.com/usync.html?p=def", "Rubicon Project", "cm.g.doubleclick.net", ["p"]),
+            makeSyncRow("gum.criteo.com", "/sync", "https://gum.criteo.com/sync?uid=ghi", "Criteo", "eus.rubiconproject.com"),
+            makeSyncRow("ib.adnxs.com", "/setuid", "https://ib.adnxs.com/setuid?uid=ghi", "AppNexus / Xandr", "x.bidswitch.net")
+          ],
+          runtimeVendors: broadRuntimeVendors
+        },
+        fetchQuality: null,
+        flags: ["privacy.rtb_cookie_sync_observed"],
+        pageUrls: ["https://www.nbcnews.com/"],
+        snippets: [],
+        sourceUrls: [
+          "https://gum.criteo.com/sync?uid=abc",
+          "https://ib.adnxs.com/setuid?uid=abc",
+          "https://la-match.taboola.com/sync?uid=abc",
+          "https://match.adsrvr.org/track/cmf/generic?ttd_pid=abc",
+          "https://eus.rubiconproject.com/usync.html?p=abc"
+        ]
+      },
+      primaryPageUrl: "https://www.nbcnews.com/",
+      severity: "high",
+      summary: "Request-level real-time bidding (RTB) or identity-sync evidence was retained."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "rtb_cookie_sync_observed");
+
+  assert.ok(finding);
+  assert.ok(projection.topFindings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
+  assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://www.nbcnews.com/");
+  assert.equal(finding?.evidenceDetails?.counts?.totalRtbCookieSyncObservations, 12);
+  assert.equal(finding?.evidenceDetails?.counts?.representativeSyncRequests, 8);
+  assert.equal(finding?.evidenceDetails?.counts?.uniqueDirectSyncVendorsObserved, 5);
+  assert.equal(finding?.evidenceDetails?.counts?.uniqueRelatedOrRedirectHostsObserved, 7);
+  assert.equal(finding?.evidenceDetails?.counts?.uniqueRelatedOrInferredSyncVendors, 34);
+  assert.equal(finding?.evidenceDetails?.counts?.strongSyncEvidenceRows, 12);
+  assert.equal(finding?.evidenceDetails?.counts?.syncPathOnlyRows, 0);
+  assert.equal(finding?.evidenceDetails?.counts?.uniqueSyncVendorsObserved, undefined);
+});
+
 test("projects cross-domain identifier sharing rows into executive evidence details", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("cross_domain_identifier_sharing_observed", {
@@ -1218,6 +1306,102 @@ test("projects cross-domain identifier sharing rows into executive evidence deta
   assert.ok(finding.evidencePreview.some((entry) => entry.includes("liveramp.com")));
   assert.ok(finding.evidencePreview.some((entry) => entry.includes("partnerid")));
   assert.ok(finding.evidencePreview.some((entry) => entry.includes("%5Bredacted%5D")));
+});
+
+test("keeps cross-domain identifier sharing scan context on audited page when row page URL is an endpoint", () => {
+  const endpointUrl = "https://pbs.yahoo.com/setuid [query_redacted=true query_keys=bidder,uid,gdpr,us_privacy]";
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("cross_domain_identifier_sharing_observed", {
+      confidenceBand: "high",
+      evidence: {
+        counts: {},
+        entities: {
+          crossDomainIdentifierSharingCategories: ["identity_graph", "advertising"],
+          crossDomainIdentifierSharingDestinations: ["adnxs.com", "yahoo.com", "amazon-adsystem.com", "rlcdn.com"],
+          crossDomainIdentifierSharingEvidence: [
+            JSON.stringify({
+              classificationReason: "identifier_query_redirect_chain",
+              destinationClassification: "rtb_identity",
+              destinationDomain: "ib.adnxs.com",
+              destinationEtldPlusOne: "adnxs.com",
+              entropyScore: 3.8,
+              identifierClass: "durable_id",
+              key: "uid",
+              pageUrl: endpointUrl,
+              redirectChainProvenance: "retained_redirect_chain",
+              repeatedAcrossEtlds: ["adnxs.com", "yahoo.com"],
+              requestUrlRedacted: "https://ib.adnxs.com/prebid/setuid?uid=%5Bredacted%5D",
+              valueHash: "a".repeat(64),
+              valueLength: 24
+            }),
+            JSON.stringify({
+              classificationReason: "identifier_query_redirect_chain",
+              destinationClassification: "rtb_identity",
+              destinationDomain: "pbs.yahoo.com",
+              destinationEtldPlusOne: "yahoo.com",
+              entropyScore: 3.5,
+              identifierClass: "durable_id",
+              key: "uid",
+              pageUrl: endpointUrl,
+              redirectChainProvenance: "retained_redirect_chain",
+              repeatedAcrossEtlds: ["adnxs.com", "yahoo.com"],
+              requestUrlRedacted: endpointUrl,
+              valueHash: "b".repeat(64),
+              valueLength: 22
+            }),
+            JSON.stringify({
+              classificationReason: "identifier_query_redirect_chain",
+              destinationClassification: "advertising",
+              destinationDomain: "aax-eu.amazon-adsystem.com",
+              destinationEtldPlusOne: "amazon-adsystem.com",
+              entropyScore: 3.1,
+              identifierClass: "partner_id",
+              key: "pid",
+              pageUrl: endpointUrl,
+              repeatedAcrossEtlds: ["amazon-adsystem.com", "rlcdn.com"],
+              requestUrlRedacted: "https://aax-eu.amazon-adsystem.com/s/dcm?pid=%5Bredacted%5D",
+              valueHash: "c".repeat(64),
+              valueLength: 20
+            }),
+            JSON.stringify({
+              classificationReason: "identifier_query_redirect_chain",
+              destinationClassification: "identity_graph",
+              destinationDomain: "id.rlcdn.com",
+              destinationEtldPlusOne: "rlcdn.com",
+              entropyScore: 3.6,
+              identifierClass: "partner_id",
+              key: "partner_uid",
+              pageUrl: endpointUrl,
+              repeatedAcrossEtlds: ["amazon-adsystem.com", "rlcdn.com"],
+              requestUrlRedacted: "https://id.rlcdn.com/464246.gif?partner_uid=%5Bredacted%5D",
+              valueHash: "d".repeat(64),
+              valueLength: 26
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: ["direct_runtime"],
+        pageUrls: ["https://www.nbcnews.com/", endpointUrl],
+        snippets: [],
+        sourceUrls: [endpointUrl]
+      },
+      primaryPageUrl: endpointUrl,
+      sourceUrl: endpointUrl,
+      severity: "high",
+      summary: "Identifier-like values were observed in retained identity-sync request evidence."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "cross_domain_identifier_sharing_observed");
+
+  assert.ok(finding);
+  assert.ok(projection.topFindings.some((entry) => entry.id === "cross_domain_identifier_sharing_observed"));
+  assert.equal(finding.evidenceDetails?.scanContext?.pageUrl, "https://www.nbcnews.com/");
+  assert.equal(finding.evidenceDetails?.counts?.crossDomainIdentifierEvidenceRows, 4);
+  assert.deepEqual(finding.evidenceDetails?.trackingEvidence?.identifierKeys, ["uid", "pid", "partner_uid"]);
+  assert.ok(finding.evidenceDetails?.runtimeRequestUrls?.some((url) => url.includes("pbs.yahoo.com/setuid")));
+  assert.ok(finding.evidenceDetails?.representativeRequests?.some((request) => request.url.includes("ib.adnxs.com/prebid/setuid")));
+  assert.notEqual(finding.evidenceDetails?.scanContext?.pageUrl, endpointUrl);
 });
 
 test("projects policy runtime conflicts with compact canonical evidence references", () => {
@@ -1350,6 +1534,48 @@ test("generic policy runtime alignment review projects as medium even with retai
   assert.equal(finding?.label, "Policy/runtime alignment review");
   assert.equal(finding?.severity, "medium");
   assert.equal(finding?.confidence, "good");
+});
+
+test("generic policy runtime alignment review is not projected when retained policy evidence found no disclosure gap", () => {
+  const retainedNoGapPolicyEvidence = JSON.stringify({
+    evaluated: true,
+    cookieOrPrivacyPolicyFound: true,
+    relevantDisclosureFound: true,
+    disclosureGapObserved: false
+  });
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePolicyRuntimeConflictPacket(
+      { unifiedFindingId: "policy_behavior_conflict" },
+      { kind: "policy_behavior_conflict" },
+      { policyEvidence: [retainedNoGapPolicyEvidence] }
+    )
+  ]);
+
+  assert.equal(
+    projection.findings.some((item) => item.id === "policy_behavior_contradiction_detected"),
+    false
+  );
+  assert.equal(
+    projection.topFindings.some((item) => item.id === "policy_behavior_contradiction_detected"),
+    false
+  );
+});
+
+test("specific policy runtime contradiction still projects when a retained no-gap disclosure review is present", () => {
+  const retainedNoGapPolicyEvidence = JSON.stringify({
+    evaluated: true,
+    cookieOrPrivacyPolicyFound: true,
+    relevantDisclosureFound: true,
+    disclosureGapObserved: false
+  });
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePolicyRuntimeConflictPacket({}, {}, { policyEvidence: [retainedNoGapPolicyEvidence] })
+  ]);
+  const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
+
+  assert.ok(finding);
+  assert.equal(finding.label, "Policy/runtime behavior conflict");
+  assert.ok(projection.topFindings.some((item) => item.id === "policy_behavior_contradiction_detected"));
 });
 
 test("policy runtime contradiction missing policy snippet is not projected", () => {
@@ -3466,18 +3692,64 @@ test("projects CPRA CBA opt-out missing into executive findings and top findings
 
 test("projects CPRA CBA opt-out subtype for partial privacy choice treatment", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
-    makeCpraPacket({ optOutControlFound: "true", optOutUiResult: "partial_no_icon" })
+    makePacket("cpra_cba_opt_out_missing", {
+      confidenceBand: "high",
+      details: { family: "consent_tracking", kind: "cpra_cba_opt_out_missing" },
+      evidence: {
+        counts: {},
+        entities: {
+          cbaVendorTier1: [
+            "adsrvr.org",
+            "amazon-adsystem.com",
+            "criteo.com",
+            "doubleclick.net",
+            "openx.net",
+            "pubmatic.com",
+            "rubiconproject.com",
+            "taboola.com",
+            "yahoo.com"
+          ],
+          choiceControlsInspected: ["true"],
+          gpcHandlingObserved: ["not_determined"],
+          gpcScanStateSent: ["false"],
+          optOutControlFound: ["true"],
+          optOutUiResult: ["partial_no_icon"],
+          policyCbaLanguage: ["full_cba_language"],
+          policyUiCongruent: ["true"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.cpra_cba_opt_out_missing"],
+        pageUrls: ["https://www.nbcnews.com/"],
+        snippets: [],
+        sourceUrls: []
+      },
+      severity: "high",
+      summary: "Cross-context behavioral advertising vendors were retained with partial privacy-choice evidence."
+    })
   ]);
   const finding = projection.findings.find((candidate) => candidate.id === "cpra_cba_opt_out_missing");
 
+  assert.ok(finding);
+  assert.equal(finding?.severity, "medium");
+  assert.equal(finding?.shortSummary.includes("missing"), false);
+  assert.doesNotMatch(finding?.shortSummary ?? "", /absent|no CPRA-specific opt-out control/i);
   assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.optOutSubtype, "partial_no_icon");
+  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.result, "partial_no_icon");
   assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.privacyChoiceCompletenessSubtype, "incomplete_or_unconfirmed");
   assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.privacyChoiceCompletenessSubtype, "incomplete_or_unconfirmed");
   assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.missingOrAbsent, false);
   assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.incompleteOrUnconfirmed, true);
+  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.choiceControlsInspected, true);
+  assert.equal(finding?.evidenceDetails?.counts?.cbaVendorsObserved, 9);
+  assert.equal(finding?.evidenceDetails?.counts?.optOutControlsObserved, 1);
+  assert.equal(finding?.evidenceDetails?.trackingOrSharingContext?.cbaVendorEvidenceObserved, true);
   const policyEvidence = finding?.evidenceDetails?.policyEvidence as Record<string, unknown> | undefined;
   assert.equal(policyEvidence?.evaluated, true);
   assert.equal(policyEvidence?.policyCbaLanguage, "full_cba_language");
+  assert.equal(policyEvidence?.policyUiCongruent, true);
+  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.policyUiCongruent, true);
+  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcScanStateSent, false);
+  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcHandlingObserved, "not_determined");
   assert.equal(projection.topFindingEligibility.cpra_cba_opt_out_missing?.eligibility, "top_candidate");
   assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.matchedCriteria.includes("privacy_choice_control_observed"));
   assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.matchedCriteria.includes("cpra_completeness_not_confirmed"));
@@ -3937,6 +4209,138 @@ test("labels Bing sync endpoints by endpoint vendor while preserving initiating 
   assert.equal(request?.initiatingVendor, "Microsoft Clarity");
   assert.equal(request?.category, "advertising_measurement");
   assert.equal(request?.scannedPageUrl, "https://www.kbdlab.io/");
+});
+
+test("keeps direct pre-consent request attribution on hostname-supported vendors for nbcnews-style rows", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("preconsent_tracking", {
+      confidenceBand: "high",
+      concernContext: {
+        assertionLevels: ["strong"],
+        evidenceStrengthFlags: ["direct_runtime"],
+        externalSurfacingEligibilities: ["eligible"],
+        negativeEvidenceFlags: [],
+        originTypes: ["snapshot_signal"],
+        promotionEligibilities: ["eligible"]
+      },
+      details: {
+        family: "consent_tracking",
+        kind: "preconsent_tracking",
+        vendors: ["Google Ads", "Akamai mPulse", "DoubleVerify", "Criteo", "Amazon Ads", "Rubicon Project"]
+      },
+      evidence: {
+        counts: {
+          firstThirdPartyTrackingRequestMs: 1005,
+          preConsentTrackingCookies: 1,
+          totalPreConsentThirdPartyTrackingRequests: 8
+        },
+        entities: {
+          consentTimeline: [
+            JSON.stringify({
+              firstConsentActionMs: null,
+              firstNonEssentialRequestMs: 1005
+            })
+          ],
+          preconsent_tracker_vendors: ["Google Ads", "Akamai mPulse", "DoubleVerify", "Criteo", "Amazon Ads", "Rubicon Project"],
+          requestPurposeClassificationConfidence: [
+            JSON.stringify({
+              category: "advertising",
+              classification: "non_essential",
+              collectionEndpointType: "direct_third_party",
+              confidence: 0.95,
+              essentiality: "non_essential",
+              firstPartyOrThirdParty: "third_party",
+              hostname: "gum.criteo.com",
+              pageUrl: "https://aamt.nbcnews.com/b/ss/nbcnewsprod/1/JS-2.27.0/s12345",
+              requestUrl: "https://gum.criteo.com/sync?uid=abc",
+              runtimePhase: null,
+              timestampMs: 1005,
+              vendor: "Google Ads",
+              vendorAttributionBasis: "initiator_chain"
+            }),
+            JSON.stringify({
+              category: "advertising",
+              classification: "non_essential",
+              collectionEndpointType: "direct_third_party",
+              confidence: 0.94,
+              essentiality: "non_essential",
+              firstPartyOrThirdParty: "third_party",
+              hostname: "aax-eu.amazon-adsystem.com",
+              pageUrl: "https://aamt.nbcnews.com/b/ss/nbcnewsprod/1/JS-2.27.0/s12345",
+              requestUrl: "https://aax-eu.amazon-adsystem.com/e/dtb/bid?src=abc",
+              runtimePhase: null,
+              timestampMs: 1012,
+              vendor: "Akamai mPulse",
+              vendorAttributionBasis: "container_context"
+            }),
+            JSON.stringify({
+              category: "advertising",
+              classification: "non_essential",
+              collectionEndpointType: "direct_third_party",
+              confidence: 0.93,
+              essentiality: "non_essential",
+              firstPartyOrThirdParty: "third_party",
+              hostname: "eus.rubiconproject.com",
+              pageUrl: "https://aamt.nbcnews.com/b/ss/nbcnewsprod/1/JS-2.27.0/s12345",
+              requestUrl: "https://eus.rubiconproject.com/usync.html?p=abc",
+              runtimePhase: null,
+              timestampMs: 1020,
+              vendor: "DoubleVerify",
+              vendorAttributionBasis: "ecosystem_association"
+            })
+          ],
+          runtimeRequestUrls: [
+            "https://gum.criteo.com/sync?uid=abc",
+            "https://aax-eu.amazon-adsystem.com/e/dtb/bid?src=abc",
+            "https://eus.rubiconproject.com/usync.html?p=abc"
+          ],
+          runtimeVendors: ["Google Ads", "Akamai mPulse", "DoubleVerify", "Criteo", "Amazon Ads", "Rubicon Project"]
+        },
+        flags: ["privacy.preconsent_tracking_detected"],
+        pageUrls: ["https://www.nbcnews.com/", "https://aamt.nbcnews.com/b/ss/nbcnewsprod/1/JS-2.27.0/s12345"],
+        sourceUrls: ["https://aamt.nbcnews.com/b/ss/nbcnewsprod/1/JS-2.27.0/s12345"]
+      },
+      primaryPageUrl: "https://www.nbcnews.com/",
+      sourceUrl: "https://aamt.nbcnews.com/b/ss/nbcnewsprod/1/JS-2.27.0/s12345",
+      severity: "high",
+      summary: "Tracker vendors fired before consent interaction."
+    })
+  ]);
+
+  const finding = projection.findings.find((entry) => entry.id === "pre_consent_tracking_detected");
+  const representativeRequests = finding?.evidenceDetails?.representativeRequests ?? [];
+
+  assert.ok(finding);
+  assert.ok(projection.topFindings.some((entry) => entry.id === "pre_consent_tracking_detected"));
+  assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://www.nbcnews.com/");
+  assert.deepEqual(representativeRequests.map((request) => request.vendor), [
+    "Criteo",
+    "Amazon Ads",
+    "Rubicon Project"
+  ]);
+  assert.deepEqual(representativeRequests.map((request) => request.runtimePhase), [
+    "pre_consent",
+    "pre_consent",
+    "pre_consent"
+  ]);
+  assert.deepEqual(
+    finding?.evidenceDetails?.directlyObservedPreConsentVendors?.map((vendor) => vendor.name),
+    ["Criteo", "Amazon Ads", "Rubicon Project"]
+  );
+  assert.deepEqual(
+    finding?.evidenceDetails?.relatedOrInferredVendors?.map((vendor) => vendor.name),
+    ["Google Ads", "Akamai mPulse", "DoubleVerify"]
+  );
+  assert.deepEqual(
+    finding?.evidenceDetails?.relatedOrInferredVendors?.map((vendor) => vendor.attributionBasis),
+    [
+      "related_runtime_vendor_without_public_direct_request_anchor",
+      "related_runtime_vendor_without_public_direct_request_anchor",
+      "related_runtime_vendor_without_public_direct_request_anchor"
+    ]
+  );
+  assert.equal(finding?.evidenceDetails?.vendorEvidenceCompleteness?.someVendorAnchorsOmittedFromPublicPacket, false);
+  assert.doesNotMatch(JSON.stringify(representativeRequests), /"vendor":"Google Ads"|"vendor":"Akamai mPulse"|"vendor":"DoubleVerify"/);
 });
 
 test("keeps scanned page URL separate from Amazon Ads config URLs", () => {
@@ -4584,7 +4988,10 @@ test("keeps pre-consent tracking eligible while limiting direct vendors to retai
     "Google Tag Manager"
   ]);
   assert.equal(finding?.evidenceDetails?.vendorEvidenceCompleteness?.vendorDisplayLimitedToAnchoredEvidence, true);
-  assert.equal(finding?.evidenceDetails?.vendorEvidenceCompleteness?.someVendorAnchorsOmittedFromPublicPacket, true);
+  assert.equal(finding?.evidenceDetails?.vendorEvidenceCompleteness?.representativeRequestsCapped, false);
+  assert.equal(finding?.evidenceDetails?.vendorEvidenceCompleteness?.directVendorAnchorsOmittedFromPublicPacket, false);
+  assert.equal(finding?.evidenceDetails?.vendorEvidenceCompleteness?.someVendorAnchorsOmittedFromPublicPacket, false);
+  assert.equal(finding?.evidenceDetails?.vendorEvidenceCompleteness?.relatedVendorAttributionLimitedByAnchors, true);
   assert.match(finding?.evidencePreview?.join(" ") ?? "", /Google Tag Manager/);
   assert.doesNotMatch(finding?.evidencePreview?.join(" ") ?? "", /Meta Pixel/);
 });

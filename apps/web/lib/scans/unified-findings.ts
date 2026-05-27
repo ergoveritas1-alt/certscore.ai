@@ -150,7 +150,9 @@ export type UnifiedFindingDetails =
       directlyObservedPreConsentVendors?: string[];
       relatedOrInferredVendors?: string[];
       vendorEvidenceCompleteness?: {
+        directVendorAnchorsOmittedFromPublicPacket?: boolean;
         representativeRequestsCapped?: boolean;
+        relatedVendorAttributionLimitedByAnchors?: boolean;
         someVendorAnchorsOmittedFromPublicPacket?: boolean;
         vendorDisplayLimitedToAnchoredEvidence?: boolean;
       };
@@ -1860,8 +1862,10 @@ function buildUnifiedFindingDetails(input: {
       ...(directlyObservedPreConsentVendors.length > 0
         ? {
             vendorEvidenceCompleteness: {
+              directVendorAnchorsOmittedFromPublicPacket: false,
               representativeRequestsCapped: false,
-              someVendorAnchorsOmittedFromPublicPacket: relatedOrInferredVendors.length > 0,
+              relatedVendorAttributionLimitedByAnchors: relatedOrInferredVendors.length > 0,
+              someVendorAnchorsOmittedFromPublicPacket: false,
               vendorDisplayLimitedToAnchoredEvidence: true
             }
           }

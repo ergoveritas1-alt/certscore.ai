@@ -22,8 +22,13 @@ import { evaluateCookieRetentionReview, COOKIE_RETENTION_THRESHOLDS } from "./co
 import { evaluateRuntimeVendorDisclosureEvidence, getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import { getConsentControlLifecycleEvidence } from "./consent-control-lifecycle";
 import { getConsentGovernanceDisclosureEvidence } from "./consent-governance-disclosure";
-import { buildPromotionGradePreconsentRequests } from "./preconsent-public-evidence";
-import { getReportFacingScannedPageUrl, getReportFacingScannedPageUrls } from "./report-facing-page-url";
+import { buildPromotionGradePreconsentRequests, inferDirectEndpointVendorFromUrl } from "./preconsent-public-evidence";
+import {
+  getReportFacingScannedPageUrl,
+  getReportFacingScannedPageUrls,
+  isRuntimeRequestEvidenceUrl,
+  stripReportUrlAnnotation
+} from "./report-facing-page-url";
 
 const MAX_DISPLAY_SNIPPET_LENGTH = 240;
 
@@ -495,6 +500,14 @@ function mapSeverity(
   if (findingId === "policy_behavior_contradiction_detected" && !isSpecificPolicyRuntimeContradiction(packet)) {
     return "medium";
   }
+  if (findingId === "cpra_cba_opt_out_missing") {
+    const optOutUiResult = uniqueStrings(getEntityValues(packet, /optOutUiResult|opt_out_ui_result/i))[0] ?? null;
+    const optOutControlFound = parseBooleanEntity(getEntityValues(packet, /optOutControlFound|opt_out_control_found/i)[0]);
+    const optOutSubtype = deriveCpraOptOutSubtype({ optOutControlFound, optOutUiResult });
+    if (optOutSubtype !== "opt_out_absent") {
+      return "medium";
+    }
+  }
   if (findingId === "fingerprinting_related_signals_observed") {
     const tier = deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet)).tier;
     return tier >= 2 ? "medium" : "low";
@@ -929,28 +942,44 @@ function sanitizeRequestClassificationAnchor(row: Record<string, unknown>) {
   const hostname =
     getRecordString(row, ["hostname", "host", "domain"]) ??
     getUrlHostname(url);
+  const endpointVendor = inferDirectEndpointVendorFromUrl(url);
+  const rowVendor = getRecordString(row, ["vendor", "vendorName", "vendor_name", "matchedVendorName", "matched_vendor_name"]);
+  const rowCategory = getRecordString(row, ["category", "vendorCategory", "vendor_category", "classification", "purpose"]);
   const result: Record<string, unknown> = {
     ...(url ? { requestUrl: url } : {}),
     hostname,
     ...(url ? { registrableDomain: getUrlHostname(url)?.split(".").slice(-2).join(".") ?? hostname } : {}),
-    vendor: getRecordString(row, ["vendor", "vendorName", "vendor_name", "matchedVendorName", "matched_vendor_name"]),
-    category: getRecordString(row, ["category", "vendorCategory", "vendor_category", "classification", "purpose"]),
+    vendor: endpointVendor?.vendorName ?? rowVendor,
+    ...(endpointVendor && rowVendor && endpointVendor.vendorName !== rowVendor ? { relatedOrInitiatingVendor: rowVendor } : {}),
+    category: endpointVendor?.vendorCategory ?? rowCategory,
     essentiality: getRecordString(row, ["essentiality", "classificationEssentiality", "classification_essentiality"]),
     confidence: getRecordString(row, ["confidence", "classificationConfidence", "classification_confidence"]),
     phase: getRecordString(row, ["phase", "runtimePhase", "runtime_phase", "timingStatus", "timing_status"]),
     firstObservedMs: getRecordNumber(row, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms", "timestampMs", "timestamp_ms"]),
     evidenceSource: getRecordString(row, ["evidenceSource", "evidence_source", "source"]),
-    vendorAttributionBasis: getRecordString(row, [
-      "vendorAttributionBasis",
-      "vendor_attribution_basis",
-      "classificationBasis",
-      "classification_basis",
-      "matchedSignatureId",
-      "matched_signature_id",
-      "evidenceSource",
-      "evidence_source",
-      "source"
-    ])
+    vendorAttributionBasis: endpointVendor && rowVendor && endpointVendor.vendorName !== rowVendor
+      ? `${getRecordString(row, [
+          "vendorAttributionBasis",
+          "vendor_attribution_basis",
+          "classificationBasis",
+          "classification_basis",
+          "matchedSignatureId",
+          "matched_signature_id",
+          "evidenceSource",
+          "evidence_source",
+          "source"
+        ]) ?? "request_row_vendor"}:${endpointVendor.basis}`
+      : getRecordString(row, [
+          "vendorAttributionBasis",
+          "vendor_attribution_basis",
+          "classificationBasis",
+          "classification_basis",
+          "matchedSignatureId",
+          "matched_signature_id",
+          "evidenceSource",
+          "evidence_source",
+          "source"
+        ])
   };
 
   return Object.fromEntries(
@@ -1222,9 +1251,57 @@ function hasRejectPersistencePromotionEvidence(packet: UnifiedFindingDisplayPack
   return hasConfirmedFlag && hasTimedPostRejectRequest;
 }
 
+function getRetainedPolicyDisclosureEvaluation(packet: UnifiedFindingDisplayPacket) {
+  return getFirstEntityJsonObject(packet, "policyEvidence") ??
+    getFirstEntityJsonObject(packet, "policy_evidence") ??
+    getFirstEntityJsonObject(packet, "policyDisclosureEvidence") ??
+    getFirstEntityJsonObject(packet, "policy_disclosure_evidence") ??
+    getFirstEntityJsonObject(packet, "runtimePolicyDisclosureEvidence") ??
+    getFirstEntityJsonObject(packet, "runtime_policy_disclosure_evidence");
+}
+
+function hasEligiblePolicyRuntimeVendorDisclosureEvidence(packet: UnifiedFindingDisplayPacket) {
+  return evaluateRuntimeVendorDisclosureEvidence(
+    { runtimeVendorDisclosureEvidence: getEntityJsonObjects(packet, "runtimeVendorDisclosureEvidence") },
+    "policy_behavior_conflict"
+  ).disposition === "eligible";
+}
+
+function shouldBlockGenericPolicyRuntimeAlignmentProjection(packet: UnifiedFindingDisplayPacket) {
+  const policyEvidence = getRetainedPolicyDisclosureEvaluation(packet);
+  if (!policyEvidence) {
+    return false;
+  }
+
+  const evaluated = getRecordBoolean(policyEvidence, ["evaluated"]) === true;
+  const relevantDisclosureFound = getRecordBoolean(policyEvidence, [
+    "relevantDisclosureFound",
+    "relevant_disclosure_found"
+  ]) === true;
+  const disclosureGapObserved = getRecordBoolean(policyEvidence, [
+    "disclosureGapObserved",
+    "disclosure_gap_observed"
+  ]);
+
+  if (!evaluated || !relevantDisclosureFound || disclosureGapObserved !== false) {
+    return false;
+  }
+
+  const concreteConflict = Boolean(
+    isSpecificPolicyRuntimeContradiction(packet) &&
+      buildPolicyRuntimeConflictDetails(packet) &&
+      evaluatePolicyRuntimeConflictPresentation(packet).complete
+  );
+  return !concreteConflict && !hasEligiblePolicyRuntimeVendorDisclosureEvidence(packet);
+}
+
 function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof typeof CERT_SCORE_FINDING_REGISTRY> {
   const primary = getMappedFindingId(packet);
   const ids = primary ? [primary] : [];
+
+  if (primary === "policy_behavior_contradiction_detected" && shouldBlockGenericPolicyRuntimeAlignmentProjection(packet)) {
+    return [];
+  }
 
   if (
     primary === "policy_behavior_contradiction_detected" &&
@@ -1546,7 +1623,7 @@ function getAuditPageUrlCandidates(packet: UnifiedFindingDisplayPacket) {
   ].flatMap((row) => [
     getRecordString(row, ["scannedPageUrl", "scanned_page_url"]),
     getRecordString(row, ["pageUrl", "page_url"])
-  ]);
+  ]).map(normalizeReportFacingPageUrl);
   const initialCandidates = uniqueCaseInsensitiveStrings([
     ...retainedRowPageUrls,
     getReportFacingScannedPageUrl(packet),
@@ -1778,19 +1855,33 @@ function normalizeVendorCategory(
 }
 
 function inferEndpointVendorNameFromUrl(url: string | null | undefined) {
-  if (!url) {
+  return inferDirectEndpointVendorFromUrl(url)?.vendorName ?? null;
+}
+
+function normalizeRepresentativeRuntimePhase(input: {
+  runtimePhase: string | null;
+  firstSeenMs: number | null;
+  consentActionMs: number | null;
+  noConsentActionObserved: boolean;
+}) {
+  if (input.runtimePhase) {
+    return input.runtimePhase;
+  }
+  if (input.noConsentActionObserved && input.firstSeenMs !== null) {
+    return "pre_consent";
+  }
+  if (input.firstSeenMs !== null && input.consentActionMs !== null && input.firstSeenMs < input.consentActionMs) {
+    return "pre_consent";
+  }
+  return input.runtimePhase;
+}
+
+function normalizeReportFacingPageUrl(value: string | null | undefined) {
+  if (!value || !/^https?:\/\//i.test(value)) {
     return null;
   }
-  if (/c?\.?bing\.com|bat\.bing\.com/i.test(url)) {
-    return "Microsoft Advertising / Bing UET";
-  }
-  if (/clarity\.ms|c\.clarity\.ms/i.test(url)) {
-    return "Microsoft Clarity";
-  }
-  if (/googletagmanager\.com/i.test(url)) {
-    return "Google Tag Manager";
-  }
-  return null;
+  const normalized = stripReportUrlAnnotation(value);
+  return isRuntimeRequestEvidenceUrl(normalized) ? null : normalized;
 }
 
 function getPreconsentCookieExamples(cookieRows: Record<string, unknown>[], consentTimeline?: Record<string, unknown> | null) {
@@ -2092,7 +2183,11 @@ function buildPreConsentTrackingEvidenceDetails(
     maxItems: 8
   });
   const promotionGradeScannedPageUrl =
-    promotionGradePreconsentRequests.find((request) => request.scannedPageUrl)?.scannedPageUrl ?? scannedPageUrl;
+    promotionGradePreconsentRequests
+      .map((request) => normalizeReportFacingPageUrl(request.scannedPageUrl))
+      .find((pageUrl): pageUrl is string => pageUrl !== null) ??
+    getReportFacingScannedPageUrl(packet) ??
+    scannedPageUrl;
   const requestUrls = uniqueCaseInsensitiveStrings([
     ...promotionGradePreconsentRequests.map((request) => request.requestUrl),
     ...getEntityUrlValues(packet, /^(?:preconsent_tracker_evidence_urls|runtimeRequestUrls|requestUrls|runtimeEvidenceUrls)$/i),
@@ -2101,9 +2196,17 @@ function buildPreConsentTrackingEvidenceDetails(
   ]).slice(0, 8);
 
   const promotionGradeRepresentativeRequests = promotionGradePreconsentRequests.map((request) => {
-    const endpointVendor = inferEndpointVendorNameFromUrl(request.requestUrl);
+    const endpointVendorMatch = inferDirectEndpointVendorFromUrl(request.requestUrl);
+    const endpointVendor = endpointVendorMatch?.vendorName ?? null;
     const displayVendor = endpointVendor ?? request.vendorName;
     const isFirstPartyProxy = request.collectionEndpointType === "first_party_collection_proxy";
+    const firstSeenMs = request.firstSeenMs ?? firstThirdPartyRequestMs;
+    const runtimePhase = normalizeRepresentativeRuntimePhase({
+      runtimePhase: request.runtimePhase,
+      firstSeenMs,
+      consentActionMs: request.consentActionMs,
+      noConsentActionObserved: request.noConsentActionObserved
+    });
     return {
       url: request.requestUrl,
       requestUrl: request.requestUrl,
@@ -2111,11 +2214,13 @@ function buildPreConsentTrackingEvidenceDetails(
       vendor: displayVendor,
       vendorName: displayVendor,
       endpointVendor,
-      initiatingVendor: endpointVendor && request.vendorName && endpointVendor !== request.vendorName ? request.vendorName : null,
-      category: classifyEndpointCategory(request.requestUrl, normalizeVendorCategory(displayVendor, request.requestUrl, request.vendorCategory)),
-      vendorCategory: classifyEndpointCategory(request.requestUrl, normalizeVendorCategory(displayVendor, request.requestUrl, request.vendorCategory)),
+      initiatingVendor: request.relatedOrInitiatingVendor ?? (endpointVendor && request.vendorName && endpointVendor !== request.vendorName ? request.vendorName : null),
+      category: endpointVendorMatch?.vendorCategory ??
+        classifyEndpointCategory(request.requestUrl, normalizeVendorCategory(displayVendor, request.requestUrl, request.vendorCategory)),
+      vendorCategory: endpointVendorMatch?.vendorCategory ??
+        classifyEndpointCategory(request.requestUrl, normalizeVendorCategory(displayVendor, request.requestUrl, request.vendorCategory)),
       resourceType: /\.js(?:[?#]|$)|\/gtm\.js|script/i.test(request.requestUrl) ? "script" : null,
-      firstSeenMs: request.firstSeenMs ?? firstThirdPartyRequestMs,
+      firstSeenMs,
       thirdParty: request.firstPartyOrThirdParty === "third_party" || !isFirstPartyProxy,
       firstPartyOrThirdParty: request.firstPartyOrThirdParty ?? (isFirstPartyProxy ? "first_party" : "third_party"),
       collectionEndpointType: request.collectionEndpointType,
@@ -2124,7 +2229,7 @@ function buildPreConsentTrackingEvidenceDetails(
       identifierLike: isLikelyIdentifierRequest(request.requestUrl),
       deviceDataLike: isLikelyDeviceDataRequest(request.requestUrl),
       queryKeysSample: getUrlQueryKeysSample(request.requestUrl),
-      scannedPageUrl: request.scannedPageUrl ?? promotionGradeScannedPageUrl,
+      scannedPageUrl: normalizeReportFacingPageUrl(request.scannedPageUrl) ?? promotionGradeScannedPageUrl,
       registrableDomain: request.registrableDomain,
       vendorAttributionBasis: endpointVendor && endpointVendor !== request.vendorName
         ? `${request.vendorAttributionBasis ?? "request_url"}:endpoint_vendor`
@@ -2136,7 +2241,7 @@ function buildPreConsentTrackingEvidenceDetails(
       consentSurfaceObserved: request.consentSurfaceObserved,
       consentInteractionRecorded: request.consentInteractionRecorded,
       confidence: request.confidence,
-      runtimePhase: request.runtimePhase
+      runtimePhase
     };
   });
   const fallbackRepresentativeRequests = requestUrls.map((url, index) => {
@@ -2150,12 +2255,14 @@ function buildPreConsentTrackingEvidenceDetails(
       inferVendorNameFromUrl(url, vendors) ??
       vendors[index] ??
       null;
-    const endpointVendor = inferEndpointVendorNameFromUrl(url);
+    const endpointVendorMatch = inferDirectEndpointVendorFromUrl(url);
+    const endpointVendor = endpointVendorMatch?.vendorName ?? null;
     const vendor = endpointVendor ?? rowVendor;
     const category = normalizeVendorCategory(
       vendor,
       url,
-      getRecordString(matchedRow ?? {}, ["category", "vendorCategory", "classification"]) ??
+      endpointVendorMatch?.vendorCategory ??
+        getRecordString(matchedRow ?? {}, ["category", "vendorCategory", "classification"]) ??
         classifyTrackingCategory(`${vendor ?? ""} ${hostname} ${url}`)
     );
     return {
@@ -2183,7 +2290,13 @@ function buildPreConsentTrackingEvidenceDetails(
   const directlyObservedVendorNames = uniqueStrings(
     representativeRequests.flatMap((request) => request.vendor ? [request.vendor] : [])
   ).filter(isDisplayVendorName);
+  const allDirectVendorNames = uniqueStrings(
+    allRepresentativeRequests.flatMap((request) => request.vendor ? [request.vendor] : [])
+  ).filter(isDisplayVendorName);
   const relatedOrInferredVendorNames = vendors.filter((vendor) => !directlyObservedVendorNames.includes(vendor));
+  const representativeRequestsCapped = allRepresentativeRequests.length > representativeRequests.length;
+  const directVendorAnchorsOmittedFromPublicPacket =
+    representativeRequestsCapped && allDirectVendorNames.some((vendor) => !directlyObservedVendorNames.includes(vendor));
   const representativeVendorNames =
     directlyObservedVendorNames.length > 0
       ? directlyObservedVendorNames
@@ -2205,7 +2318,8 @@ function buildPreConsentTrackingEvidenceDetails(
     category: normalizeVendorCategory(name, null, classifyTrackingCategory(name)),
     preConsent: true,
     representativeUrl: null,
-    firstSeenMs: null
+    firstSeenMs: null,
+    attributionBasis: "related_runtime_vendor_without_public_direct_request_anchor"
   }));
 
   const identifierLikeRequestCount = representativeRequests.filter((request) => request.identifierLike).length;
@@ -2275,8 +2389,10 @@ function buildPreConsentTrackingEvidenceDetails(
     directlyObservedPreConsentVendors: vendorDetails.map((vendor) => ({ ...vendor, preConsent: true })),
     ...(relatedOrInferredVendorDetails.length > 0 ? { relatedOrInferredVendors: relatedOrInferredVendorDetails } : {}),
     vendorEvidenceCompleteness: {
-      representativeRequestsCapped: allRepresentativeRequests.length > representativeRequests.length,
-      someVendorAnchorsOmittedFromPublicPacket: relatedOrInferredVendorDetails.length > 0,
+      directVendorAnchorsOmittedFromPublicPacket,
+      representativeRequestsCapped,
+      relatedVendorAttributionLimitedByAnchors: relatedOrInferredVendorDetails.length > 0,
+      someVendorAnchorsOmittedFromPublicPacket: directVendorAnchorsOmittedFromPublicPacket,
       vendorDisplayLimitedToAnchoredEvidence: true
     },
     representativeRequests,
@@ -2700,6 +2816,16 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     };
   });
   const syncClassifications = classifyRtbCookieSyncEvidenceRows(syncRows);
+  const directSyncVendorNames = uniqueStrings(syncClassifications.flatMap((classification) => {
+    const rowUrl = getRecordString(classification.row, ["url", "urlSample", "url_sample", "requestUrl", "request_url"]);
+    const endpointVendor = inferDirectEndpointVendorFromUrl(rowUrl ?? (classification.hostname ? `https://${classification.hostname}/` : null));
+    return endpointVendor?.vendorName ?? classification.vendor ?? classification.hostname;
+  })).filter(isDisplayVendorName);
+  const relatedOrRedirectHosts = uniqueStrings(syncClassifications.flatMap((classification) => {
+    const host = classification.hostname;
+    const redirectHost = classification.redirectTargetHost;
+    return redirectHost && redirectHost !== host ? [redirectHost] : [];
+  }));
   const subtypeCounts = syncClassifications.reduce<Record<string, number>>((counts, classification) => {
     counts[classification.subtype] = (counts[classification.subtype] ?? 0) + 1;
     return counts;
@@ -2722,6 +2848,7 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     ...getEntityValues(packet, /rtb.*domain|runtime.*vendor|vendor/i),
     ...detailVendors
   ]).filter(isDisplayVendorName);
+  const relatedOrInferredSyncVendors = vendors.filter((vendor) => !directSyncVendorNames.includes(vendor));
   const requestPurposeRows = getRequestPurposeClassificationRows(packet);
   const retainedRepresentativeRequests = publicSyncRows
     .map((row) => {
@@ -2779,7 +2906,9 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       totalRtbCookieSyncObservations:
         getCountValue(packet, ["rtb_cookie_sync_observation_count", "rtbCookieSyncObservationCount"]) ?? syncRows.length,
       representativeSyncRequests: representativeRequests.length,
-      uniqueSyncVendorsObserved: vendors.length,
+      uniqueDirectSyncVendorsObserved: directSyncVendorNames.length,
+      uniqueRelatedOrRedirectHostsObserved: relatedOrRedirectHosts.length,
+      uniqueRelatedOrInferredSyncVendors: relatedOrInferredSyncVendors.length > 0 ? relatedOrInferredSyncVendors.length : null,
       identifierLikeRequests: representativeRequests.filter((request) => request.identifierLike).length,
       strongSyncEvidenceRows: strongSubtypeCount,
       syncPathOnlyRows: weakSubtypeCount

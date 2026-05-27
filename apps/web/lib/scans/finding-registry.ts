@@ -86,9 +86,12 @@ export type PreConsentTrackingEvidenceDetails = {
     preConsent: boolean;
     representativeUrl: string | null;
     firstSeenMs: number | null;
+    attributionBasis?: string | null;
   }>;
   vendorEvidenceCompleteness?: {
+    directVendorAnchorsOmittedFromPublicPacket?: boolean;
     representativeRequestsCapped?: boolean;
+    relatedVendorAttributionLimitedByAnchors?: boolean;
     someVendorAnchorsOmittedFromPublicPacket?: boolean;
     vendorDisplayLimitedToAnchoredEvidence?: boolean;
   };
@@ -174,7 +177,7 @@ export type CertScoreFindingDefinition = {
 };
 
 export type CertScoreFindingEvidenceDetails = {
-  counts?: Record<string, number>;
+  counts?: Record<string, number | null>;
   scanContext?: PreConsentTrackingEvidenceDetails["scanContext"];
   consentState?: PreConsentTrackingEvidenceDetails["consentState"];
   consentBasis?: string;

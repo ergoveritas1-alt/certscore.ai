@@ -6,6 +6,7 @@ export type PromotionGradePreconsentRequest = {
   vendorName: string;
   vendorCategory: string;
   vendorAttributionBasis: string | null;
+  relatedOrInitiatingVendor: string | null;
   classificationBasis: string | null;
   collectionEndpointType: string | null;
   firstPartyOrThirdParty: string | null;
@@ -17,6 +18,12 @@ export type PromotionGradePreconsentRequest = {
   consentInteractionRecorded: boolean;
   confidence: number | string | null;
   runtimePhase: string | null;
+};
+
+export type DirectEndpointVendorMatch = {
+  vendorName: string;
+  vendorCategory: string;
+  basis: string;
 };
 
 const PROMOTION_TRACKING_CATEGORIES = new Set([
@@ -101,6 +108,36 @@ function getUrlHostname(value: string | null | undefined) {
   } catch {
     return null;
   }
+}
+
+function hostMatches(hostname: string, domain: string) {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
+export function inferDirectEndpointVendorFromUrl(url: string | null | undefined): DirectEndpointVendorMatch | null {
+  const hostname = getUrlHostname(url);
+  if (!hostname) {
+    return null;
+  }
+
+  const directHostMatches: Array<{ domain: string; vendorName: string; vendorCategory: string; basis: string }> = [
+    { domain: "googletagmanager.com", vendorName: "Google Tag Manager", vendorCategory: "tag_manager", basis: "hostname_signature:googletagmanager.com" },
+    { domain: "googleadservices.com", vendorName: "Google Ads", vendorCategory: "advertising_measurement", basis: "hostname_signature:googleadservices.com" },
+    { domain: "doubleclick.net", vendorName: "Google Ads", vendorCategory: "advertising_measurement", basis: "hostname_signature:doubleclick.net" },
+    { domain: "googlesyndication.com", vendorName: "Google Ads", vendorCategory: "advertising_measurement", basis: "hostname_signature:googlesyndication.com" },
+    { domain: "criteo.com", vendorName: "Criteo", vendorCategory: "advertising", basis: "hostname_signature:criteo.com" },
+    { domain: "amazon-adsystem.com", vendorName: "Amazon Ads", vendorCategory: "advertising", basis: "hostname_signature:amazon-adsystem.com" },
+    { domain: "rubiconproject.com", vendorName: "Rubicon Project", vendorCategory: "advertising", basis: "hostname_signature:rubiconproject.com" },
+    { domain: "doubleverify.com", vendorName: "DoubleVerify", vendorCategory: "advertising_measurement", basis: "hostname_signature:doubleverify.com" },
+    { domain: "adobedtm.com", vendorName: "Adobe Launch", vendorCategory: "tag_manager", basis: "hostname_signature:adobedtm.com" },
+    { domain: "clarity.ms", vendorName: "Microsoft Clarity", vendorCategory: "session_replay", basis: "hostname_signature:clarity.ms" },
+    { domain: "bing.com", vendorName: "Microsoft Advertising / Bing UET", vendorCategory: "advertising_measurement", basis: "hostname_signature:bing.com" },
+    { domain: "rlcdn.com", vendorName: "LiveRamp", vendorCategory: "advertising", basis: "hostname_signature:rlcdn.com" },
+    { domain: "adnxs.com", vendorName: "AppNexus / Xandr", vendorCategory: "advertising", basis: "hostname_signature:adnxs.com" },
+    { domain: "adsrvr.org", vendorName: "The Trade Desk", vendorCategory: "advertising", basis: "hostname_signature:adsrvr.org" }
+  ];
+
+  return directHostMatches.find((match) => hostMatches(hostname, match.domain)) ?? null;
 }
 
 export function getUrlRegistrableDomain(value: string | null | undefined) {
@@ -200,8 +237,10 @@ export function buildPromotionGradePreconsentRequests(input: {
     }
     const requestUrl = getString(row, ["requestUrl", "request_url", "url", "representativeUrl", "representative_url", "urlSample", "url_sample"]);
     const hostname = getString(row, ["hostname", "host", "domain"]) ?? getUrlHostname(requestUrl);
-    const vendorName = getString(row, ["vendorName", "vendor_name", "vendor", "matchedVendorName", "matched_vendor_name", "name"]);
-    const vendorCategory = getCategory(row);
+    const endpointVendor = inferDirectEndpointVendorFromUrl(requestUrl);
+    const rowVendorName = getString(row, ["vendorName", "vendor_name", "vendor", "matchedVendorName", "matched_vendor_name", "name"]);
+    const vendorName = endpointVendor?.vendorName ?? rowVendorName;
+    const vendorCategory = endpointVendor?.vendorCategory ?? getCategory(row);
     if (!requestUrl || !hostname || !vendorName || !vendorCategory) {
       continue;
     }
@@ -211,22 +250,34 @@ export function buildPromotionGradePreconsentRequests(input: {
     }
     seen.add(key);
     requests.push({
-      scannedPageUrl: getString(row, ["pageUrl", "page_url", "scannedPageUrl", "scanned_page_url"]) ?? input.scannedPageUrl ?? null,
+      scannedPageUrl: getString(row, ["scannedPageUrl", "scanned_page_url", "pageUrl", "page_url"]) ?? input.scannedPageUrl ?? null,
       requestUrl,
       hostname,
       registrableDomain: getUrlRegistrableDomain(hostname) ?? hostname,
       vendorName,
       vendorCategory,
-      vendorAttributionBasis: getString(row, [
-        "vendorAttributionBasis",
-        "vendor_attribution_basis",
-        "classificationBasis",
-        "classification_basis",
-        "evidenceSource",
-        "evidence_source",
-        "matchedSignatureId",
-        "matched_signature_id"
-      ]),
+      vendorAttributionBasis: endpointVendor && rowVendorName && endpointVendor.vendorName !== rowVendorName
+        ? `${getString(row, [
+            "vendorAttributionBasis",
+            "vendor_attribution_basis",
+            "classificationBasis",
+            "classification_basis",
+            "evidenceSource",
+            "evidence_source",
+            "matchedSignatureId",
+            "matched_signature_id"
+          ]) ?? "request_row_vendor"}:${endpointVendor.basis}`
+        : getString(row, [
+            "vendorAttributionBasis",
+            "vendor_attribution_basis",
+            "classificationBasis",
+            "classification_basis",
+            "evidenceSource",
+            "evidence_source",
+            "matchedSignatureId",
+            "matched_signature_id"
+          ]),
+      relatedOrInitiatingVendor: endpointVendor && rowVendorName && endpointVendor.vendorName !== rowVendorName ? rowVendorName : null,
       classificationBasis: getString(row, ["classificationBasis", "classification_basis", "evidenceSource", "evidence_source"]),
       collectionEndpointType: getString(row, ["collectionEndpointType", "collection_endpoint_type"]),
       firstPartyOrThirdParty: getString(row, ["firstPartyOrThirdParty", "first_party_or_third_party", "party"]),
