@@ -8,6 +8,7 @@ import {
   listAdminPulseRequests,
   type AdminPulseRequestStatus
 } from "../../../../server/admin/list-pulse-requests";
+import { withServerTiming } from "../../../../server/performance/log-server-timing";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -83,15 +84,17 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   const activeQuery = normalizeQuery(resolved.q);
   const pageSize = normalizePageSize(resolved.perPage);
   const page = normalizePage(resolved.page);
-  const [counts, requests] = await Promise.all([
-    getAdminPulseOverviewCounts(),
-    listAdminPulseRequests({
-      limit: pageSize,
-      offset: (page - 1) * pageSize,
-      query: activeQuery,
-      status: activeStatus
-    })
-  ]);
+  const [counts, requests] = await withServerTiming("app.admin.pulse", () =>
+    Promise.all([
+      getAdminPulseOverviewCounts(),
+      listAdminPulseRequests({
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+        query: activeQuery,
+        status: activeStatus
+      })
+    ])
+  );
 
   return (
     <div className="space-y-4">

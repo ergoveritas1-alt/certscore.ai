@@ -2,28 +2,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-s
 import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { formatAdminDateTime } from "../../../lib/admin/date-time";
 import { getAdminScanOverviewMetrics, listAdminScans } from "../../../server/admin/list-admin-scans";
-import { listAdminUsers } from "../../../server/admin/list-admin-users";
+import { getAdminUserOverview } from "../../../server/admin/list-admin-users";
 import { getMonitorSiteRequestCounts } from "../../../server/admin/list-monitor-site-requests";
 import { getAdminPulseOverviewCounts, listAdminPulseRequests } from "../../../server/admin/list-pulse-requests";
+import { withServerTiming } from "../../../server/performance/log-server-timing";
 
 export default async function AdminOverviewPage() {
-  const [users, scans, scanMetrics, monitorRequestCounts, pulseCounts, pulseRequests] = await Promise.all([
-    listAdminUsers(),
-    listAdminScans(10),
-    getAdminScanOverviewMetrics(),
-    getMonitorSiteRequestCounts(),
-    getAdminPulseOverviewCounts(),
-    listAdminPulseRequests({ limit: 6 })
-  ]);
-  const organizations = new Set(users.flatMap((user) => (user.organizationId ? [user.organizationId] : [])));
-  const activePlans = users.reduce<Record<string, number>>((accumulator, user) => {
-    if (!user.plan) {
-      return accumulator;
-    }
-
-    accumulator[user.plan] = (accumulator[user.plan] ?? 0) + 1;
-    return accumulator;
-  }, {});
+  const [userOverview, scans, scanMetrics, monitorRequestCounts, pulseCounts, pulseRequests] = await withServerTiming("app.admin.overview", () =>
+    Promise.all([
+      getAdminUserOverview({ limit: 8 }),
+      listAdminScans(10),
+      getAdminScanOverviewMetrics(),
+      getMonitorSiteRequestCounts(),
+      getAdminPulseOverviewCounts(),
+      listAdminPulseRequests({ limit: 6 })
+    ])
+  );
+  const users = userOverview.recentUsers;
+  const activePlans = userOverview.metrics.activePlans;
 
   return (
     <div className="space-y-8">
@@ -33,7 +29,7 @@ export default async function AdminOverviewPage() {
             <CardTitle>Users</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold text-slate-900">{users.length}</p>
+            <p className="text-2xl font-semibold text-slate-900">{userOverview.metrics.totalUsers}</p>
             <p className="text-sm text-slate-600">User records with organization bootstrap state.</p>
           </CardContent>
         </Card>
@@ -42,7 +38,7 @@ export default async function AdminOverviewPage() {
             <CardTitle>Workspaces</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold text-slate-900">{organizations.size}</p>
+            <p className="text-2xl font-semibold text-slate-900">{userOverview.metrics.totalWorkspaces}</p>
             <p className="text-sm text-slate-600">Organizations currently attached to user memberships.</p>
           </CardContent>
         </Card>

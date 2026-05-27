@@ -2,7 +2,10 @@
 
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
 import {
+  loadAdminUserOverviewData,
   loadAdminUsersData,
+  type AdminUserOverviewMetricsRow,
+  type AdminUserOverviewRow,
   type AdminDomainSummaryRow as DomainRow,
   type AdminMembershipRow as MembershipRow,
   type AdminOrganizationScanSummaryRow as ScanRow,
@@ -28,6 +31,12 @@ export type AdminUserListItem = {
   planStatus: PlanStatus | null;
   totalScans: number;
   updatedAt: string;
+};
+
+export type AdminUserOverviewMetrics = {
+  activePlans: Record<string, number>;
+  totalUsers: number;
+  totalWorkspaces: number;
 };
 
 function normalizeMembershipRole(role: string | null) {
@@ -101,4 +110,51 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
       lastCompletedScanAt: organization ? latestCompletedScan.get(organization.id) ?? null : null
     } satisfies AdminUserListItem;
   });
+}
+
+function mapAdminUserOverviewRow(row: AdminUserOverviewRow): AdminUserListItem {
+  return {
+    id: row.id,
+    email: row.email,
+    fullName: row.full_name,
+    authProvider: row.auth_provider,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    organizationId: row.organization_id,
+    organizationName: row.organization_name,
+    organizationSlug: row.organization_slug,
+    membershipRole: normalizeMembershipRole(row.membership_role),
+    plan: (row.plan as PlanCode | null | undefined) ?? null,
+    planStatus: (row.plan_status as PlanStatus | null | undefined) ?? null,
+    domainCount: Number(row.domain_count ?? 0),
+    totalScans: Number(row.total_scans ?? 0),
+    completedScans: Number(row.completed_scans ?? 0),
+    lastCompletedScanAt: row.last_completed_scan_at
+  };
+}
+
+function mapOverviewMetrics(row: AdminUserOverviewMetricsRow | null): AdminUserOverviewMetrics {
+  return {
+    totalUsers: Number(row?.total_users ?? 0),
+    totalWorkspaces: Number(row?.total_workspaces ?? 0),
+    activePlans: {
+      free: Number(row?.free_plan_users ?? 0),
+      individual: Number(row?.individual_plan_users ?? 0),
+      pro: Number(row?.pro_plan_users ?? 0),
+      team: Number(row?.team_plan_users ?? 0)
+    }
+  };
+}
+
+export async function getAdminUserOverview(input: { limit?: number } = {}): Promise<{
+  metrics: AdminUserOverviewMetrics;
+  recentUsers: AdminUserListItem[];
+}> {
+  await requirePlatformAdminContext();
+  const { metrics, users } = await loadAdminUserOverviewData(input.limit ?? 8);
+
+  return {
+    metrics: mapOverviewMetrics(metrics),
+    recentUsers: users.map(mapAdminUserOverviewRow)
+  };
 }

@@ -199,6 +199,28 @@ export type AdminOrganizationScanSummaryRow = {
   organization_id: string | null;
 };
 
+export type AdminUserOverviewRow = AdminUserRow & {
+  completed_scans: number;
+  domain_count: number;
+  last_completed_scan_at: string | null;
+  membership_role: string | null;
+  organization_id: string | null;
+  organization_name: string | null;
+  organization_slug: string | null;
+  plan: string | null;
+  plan_status: string | null;
+  total_scans: number;
+};
+
+export type AdminUserOverviewMetricsRow = {
+  free_plan_users: number;
+  individual_plan_users: number;
+  pro_plan_users: number;
+  team_plan_users: number;
+  total_users: number;
+  total_workspaces: number;
+};
+
 export type AdminPolicyReviewQueueRow = {
   assigned_to: string | null;
   created_at: string;
@@ -717,6 +739,82 @@ export async function loadAdminUsersData(): Promise<{
     memberships,
     organizations,
     scans,
+    users
+  };
+}
+
+export async function loadAdminUserOverviewData(limit = 8): Promise<{
+  metrics: AdminUserOverviewMetricsRow | null;
+  users: AdminUserOverviewRow[];
+}> {
+  const normalizedLimit = Math.min(Math.max(limit, 1), 25);
+  const [metrics, users] = await Promise.all([
+    queryOne<AdminUserOverviewMetricsRow>(
+      `with selected_memberships as (
+         select distinct on (user_id) user_id, organization_id
+           from organization_members
+          order by user_id, created_at desc
+       )
+       select
+         (select count(*)::int from users) as total_users,
+         (select count(distinct organization_id)::int from organization_members) as total_workspaces,
+         count(*) filter (where organizations.plan = 'free')::int as free_plan_users,
+         count(*) filter (where organizations.plan = 'individual')::int as individual_plan_users,
+         count(*) filter (where organizations.plan = 'pro')::int as pro_plan_users,
+         count(*) filter (where organizations.plan = 'team')::int as team_plan_users
+        from users
+        left join selected_memberships on selected_memberships.user_id = users.id
+        left join organizations on organizations.id = selected_memberships.organization_id`,
+      [],
+      { readOnly: true }
+    ),
+    query<AdminUserOverviewRow>(
+      `select users.id,
+              users.email,
+              users.full_name,
+              users.auth_provider,
+              users.created_at,
+              users.updated_at,
+              membership.organization_id,
+              membership.role as membership_role,
+              organizations.name as organization_name,
+              organizations.slug as organization_slug,
+              organizations.plan,
+              organizations.plan_status,
+              coalesce(domain_counts.domain_count, 0)::int as domain_count,
+              coalesce(scan_counts.total_scans, 0)::int as total_scans,
+              coalesce(scan_counts.completed_scans, 0)::int as completed_scans,
+              scan_counts.last_completed_scan_at
+         from users
+         left join lateral (
+           select organization_id, role
+             from organization_members
+            where organization_members.user_id = users.id
+            order by created_at desc
+            limit 1
+         ) membership on true
+         left join organizations on organizations.id = membership.organization_id
+         left join lateral (
+           select count(*)::int as domain_count
+             from domains
+            where domains.organization_id = membership.organization_id
+         ) domain_counts on membership.organization_id is not null
+         left join lateral (
+           select count(*)::int as total_scans,
+                  count(*) filter (where completed_at is not null)::int as completed_scans,
+                  max(completed_at) as last_completed_scan_at
+             from scans
+            where scans.organization_id = membership.organization_id
+         ) scan_counts on membership.organization_id is not null
+        order by users.created_at desc
+        limit $1`,
+      [normalizedLimit],
+      { readOnly: true }
+    ).then((result) => result.rows)
+  ]);
+
+  return {
+    metrics,
     users
   };
 }

@@ -261,8 +261,7 @@ export async function listAdminPulseRequests(input: {
     { readOnly: true }
   );
 
-  const topFindingIdsByScanId = await loadTopFindingIdsByScanId(rows.rows);
-  return rows.rows.map((row) => mapPulseRequestRow(row, topFindingIdsByScanId));
+  return rows.rows.map((row) => mapPulseRequestRow(row));
 }
 
 export async function getAdminPulseRequestDetail(pulseRequestId: string): Promise<AdminPulseRequestDetail | null> {
@@ -400,6 +399,5 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
     { readOnly: true }
   );
 
-  const topFindingIdsByScanId = await loadTopFindingIdsByScanId(rows.rows);
-  return rows.rows.map((row) => mapPulseRequestRow(row, topFindingIdsByScanId));
+  return rows.rows.map((row) => mapPulseRequestRow(row));
 }
