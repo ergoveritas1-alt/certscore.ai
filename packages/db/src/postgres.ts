@@ -4,6 +4,26 @@ import { getDatabaseEnv } from "./env";
 let writePool: Pool | null = null;
 let readPool: Pool | null = null;
 
+const DEFAULT_QUERY_LOG_THRESHOLD_MS = 250;
+
+function getQueryLogThresholdMs() {
+  const rawValue = process.env.DB_QUERY_LOG_THRESHOLD_MS?.trim();
+  if (!rawValue) {
+    return DEFAULT_QUERY_LOG_THRESHOLD_MS;
+  }
+
+  const parsed = Number.parseInt(rawValue, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_QUERY_LOG_THRESHOLD_MS;
+}
+
+function shouldLogQueries() {
+  return process.env.DB_QUERY_LOG_ENABLED?.trim().toLowerCase() !== "false";
+}
+
+function summarizeQuery(text: string) {
+  return text.replace(/\s+/g, " ").trim().slice(0, 220);
+}
+
 function getSslConfig(mode: string | undefined): PoolConfig["ssl"] {
   switch (mode) {
     case "disable":
@@ -52,7 +72,42 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
   options: { readOnly?: boolean } = {}
 ): Promise<QueryResult<T>> {
   const pool = options.readOnly ? getReadPool() : getWritePool();
-  return pool.query<T>(text, values);
+  const startedAt = performance.now();
+
+  try {
+    const result = await pool.query<T>(text, values);
+    const durationMs = Math.round(performance.now() - startedAt);
+    if (shouldLogQueries() && durationMs >= getQueryLogThresholdMs()) {
+      console.warn(
+        JSON.stringify({
+          durationMs,
+          event: "db.slow_query",
+          paramCount: values.length,
+          readOnly: Boolean(options.readOnly),
+          rowCount: result.rowCount,
+          sql: summarizeQuery(text)
+        })
+      );
+    }
+
+    return result;
+  } catch (error) {
+    const durationMs = Math.round(performance.now() - startedAt);
+    if (shouldLogQueries()) {
+      console.warn(
+        JSON.stringify({
+          durationMs,
+          error: error instanceof Error ? error.message : String(error),
+          event: "db.query_error",
+          paramCount: values.length,
+          readOnly: Boolean(options.readOnly),
+          sql: summarizeQuery(text)
+        })
+      );
+    }
+
+    throw error;
+  }
 }
 
 export async function queryOne<T extends QueryResultRow = QueryResultRow>(

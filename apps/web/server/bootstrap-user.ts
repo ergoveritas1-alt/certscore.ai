@@ -94,6 +94,19 @@ function mapOrganizationRow(row: {
   };
 }
 
+function shouldRefreshUserProfile(input: {
+  authProvider: string;
+  email: string;
+  existingProfile: UserRecord;
+  fullName: string | null;
+}) {
+  return (
+    input.existingProfile.auth_provider !== input.authProvider ||
+    input.existingProfile.email !== input.email ||
+    input.existingProfile.full_name !== input.fullName
+  );
+}
+
 export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promise<BootstrapResult> {
   const existingProfileById = (await findAppUserProfileById(user.id)) as UserRecord | null;
   const existingProfileByEmail =
@@ -101,12 +114,21 @@ export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promi
   const existingProfile = existingProfileById ?? existingProfileByEmail;
   const canonicalUserId = existingProfile?.id ?? user.id;
   const mergedProvider = mergeAuthProviders(existingProfile?.auth_provider, user.authProvider);
-  const profile = (await upsertAppUserProfile({
-    authProvider: mergedProvider,
-    email: user.email,
-    fullName: user.fullName ?? existingProfile?.full_name ?? null,
-    userId: canonicalUserId
-  })) as UserRecord;
+  const fullName = user.fullName ?? existingProfile?.full_name ?? null;
+  const profile =
+    existingProfile && !shouldRefreshUserProfile({
+      authProvider: mergedProvider,
+      email: user.email,
+      existingProfile,
+      fullName
+    })
+      ? existingProfile
+      : ((await upsertAppUserProfile({
+          authProvider: mergedProvider,
+          email: user.email,
+          fullName,
+          userId: canonicalUserId
+        })) as UserRecord);
 
   let membership = (await findOrganizationMembershipByUserId(canonicalUserId)) as OrganizationMemberRecord | null;
   let organization: OrganizationRecord | null = null;

@@ -8,6 +8,7 @@ import {
   getOrganizationManualRescanLimitOverride,
   getPlanLimits
 } from "../../server/plans/get-plan-limits";
+import { withServerTiming } from "../../server/performance/log-server-timing";
 import { getOrganizationScans } from "../../server/scans/get-organization-scans";
 
 function formatDate(value: string | null) {
@@ -25,18 +26,22 @@ function formatDate(value: string | null) {
 }
 
 export default async function DashboardPage() {
-  const { organization, profile } = await getDashboardContext();
-  const [basePlanLimits, manualRescanLimitOverride, recentScans] = await Promise.all([
-    getPlanLimits(organization.plan),
-    getOrganizationManualRescanLimitOverride(organization.id),
-    getOrganizationScans(organization.id)
-  ]);
+  const { organization, profile } = await withServerTiming("app.dashboard.context", () => getDashboardContext());
+  const [basePlanLimits, manualRescanLimitOverride, recentScans] = await withServerTiming("app.dashboard.primary_data", () =>
+    Promise.all([
+      getPlanLimits(organization.plan),
+      getOrganizationManualRescanLimitOverride(organization.id),
+      getOrganizationScans(organization.id)
+    ])
+  );
   const planLimits = await applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
-  const scanUsage = await getDashboardScanUsage({
-    accountCreatedAt: profile.created_at,
-    monthlyLimit: planLimits.manualRescanLimitPerMonth,
-    organizationId: organization.id
-  });
+  const scanUsage = await withServerTiming("app.dashboard.scan_usage", () =>
+    getDashboardScanUsage({
+      accountCreatedAt: profile.created_at,
+      monthlyLimit: planLimits.manualRescanLimitPerMonth,
+      organizationId: organization.id
+    })
+  );
   const monthlyLimitLabel = scanUsage.monthlyLimit === null ? "unlimited" : String(scanUsage.monthlyLimit);
   const remainingScans =
     scanUsage.monthlyLimit === null ? null : Math.max(0, scanUsage.monthlyLimit - scanUsage.monthlyScansUsed);

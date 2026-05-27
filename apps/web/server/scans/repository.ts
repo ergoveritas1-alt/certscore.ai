@@ -1452,41 +1452,7 @@ export async function loadOrganizationScanPageData(
           error: { message: getErrorMessage(error) } as QueryErrorLike
         }))
     : Promise.resolve({ data: [] as OrganizationScanDomainRow[], error: null as QueryErrorLike });
-  const domainsWithoutLastScannedAtPromise = domainIds.length
-    ? query<OrganizationScanDomainRow>(
-        `
-          select id, hostname, latest_scan_id
-          from domains
-          where organization_id = $1
-            and id = any($2::uuid[])
-        `,
-        [organizationId, domainIds],
-        { readOnly: true }
-      )
-        .then((result) => ({ data: result.rows, error: null as QueryErrorLike }))
-        .catch((error) => ({
-          data: [] as OrganizationScanDomainRow[],
-          error: { message: getErrorMessage(error) } as QueryErrorLike
-        }))
-    : Promise.resolve({ data: [] as OrganizationScanDomainRow[], error: null as QueryErrorLike });
   const snapshotsPromise = summaryScanIds.length
-    ? query<OrganizationScanSnapshotRow>(
-        `
-          select
-            *
-          from scan_snapshots
-          where scan_id = any($1::uuid[])
-        `,
-        [summaryScanIds],
-        { readOnly: true }
-      )
-        .then((result) => ({ data: result.rows, error: null as QueryErrorLike }))
-        .catch((error) => ({
-          data: [] as OrganizationScanSnapshotRow[],
-          error: { message: getErrorMessage(error) } as QueryErrorLike
-        }))
-    : Promise.resolve({ data: [] as OrganizationScanSnapshotRow[], error: null as QueryErrorLike });
-  const snapshotsFallbackPromise = summaryScanIds.length
     ? query<OrganizationScanSnapshotRow>(
         `
           select
@@ -1529,7 +1495,23 @@ export async function loadOrganizationScanPageData(
 
   let domains = domainsWithLastScannedAt;
   if (domainsError && isMissingLastScannedAtColumn(domainsError)) {
-    const fallback = await domainsWithoutLastScannedAtPromise;
+    const fallback = domainIds.length
+      ? await query<OrganizationScanDomainRow>(
+          `
+            select id, hostname, latest_scan_id
+            from domains
+            where organization_id = $1
+              and id = any($2::uuid[])
+          `,
+          [organizationId, domainIds],
+          { readOnly: true }
+        )
+          .then((result) => ({ data: result.rows, error: null as QueryErrorLike }))
+          .catch((error) => ({
+            data: [] as OrganizationScanDomainRow[],
+            error: { message: getErrorMessage(error) } as QueryErrorLike
+          }))
+      : { data: [] as OrganizationScanDomainRow[], error: null as QueryErrorLike };
     domains = (fallback.data ?? []).map((domain) => ({
       ...domain,
       last_scanned_at: null
@@ -1540,7 +1522,23 @@ export async function loadOrganizationScanPageData(
 
   let resolvedSnapshots = snapshots;
   if (snapshotsError && isMissingTieredSnapshotColumn(snapshotsError)) {
-    const fallback = await snapshotsFallbackPromise;
+    const fallback = summaryScanIds.length
+      ? await query<OrganizationScanSnapshotRow>(
+          `
+            select
+              *
+            from scan_snapshots
+            where scan_id = any($1::uuid[])
+          `,
+          [summaryScanIds],
+          { readOnly: true }
+        )
+          .then((result) => ({ data: result.rows, error: null as QueryErrorLike }))
+          .catch((error) => ({
+            data: [] as OrganizationScanSnapshotRow[],
+            error: { message: getErrorMessage(error) } as QueryErrorLike
+          }))
+      : { data: [] as OrganizationScanSnapshotRow[], error: null as QueryErrorLike };
     if (fallback.error) {
       throw new Error(`Failed to load organization scans: ${fallback.error.message}`);
     }

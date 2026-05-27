@@ -32,8 +32,10 @@ export async function getBetterAuthSessionUser(): Promise<AuthenticatedAppUser |
     return null;
   }
 
-  const data = await listBetterAuthAccountsByUserId(session.user.id);
-  const existingAppUser = await findAppUserByEmailRecord(normalizeEmail(session.user.email));
+  const [data, existingAppUser] = await Promise.all([
+    listBetterAuthAccountsByUserId(session.user.id),
+    findAppUserByEmailRecord(normalizeEmail(session.user.email))
+  ]);
 
   return {
     authProvider: normalizeProviderList((data as BetterAuthAccountRow[] | null) ?? []),

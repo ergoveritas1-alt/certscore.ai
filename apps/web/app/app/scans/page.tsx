@@ -8,6 +8,7 @@ import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { getScanThrottleCopy } from "../../../lib/scan-access";
 import { getRescanAvailability } from "../../../lib/scans/rescan-policy";
 import { getDashboardContext } from "../../../server/auth";
+import { withServerTiming } from "../../../server/performance/log-server-timing";
 import { getOrganizationScansPage } from "../../../server/scans/get-organization-scans";
 
 function formatDateTime(value: string | null) {
@@ -106,14 +107,16 @@ type ScansPageProps = {
 };
 
 export default async function ScansPage({ searchParams }: ScansPageProps) {
-  const { organization } = await getDashboardContext();
+  const { organization } = await withServerTiming("app.scans.context", () => getDashboardContext());
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const page = normalizePage(resolvedSearchParams.page);
   const pageSize = normalizePageSize(resolvedSearchParams.perPage);
-  const result = await getOrganizationScansPage(organization.id, {
-    page,
-    pageSize
-  });
+  const result = await withServerTiming("app.scans.page_data", () =>
+    getOrganizationScansPage(organization.id, {
+      page,
+      pageSize
+    })
+  );
   const scans = result.items;
   const focusScanId = resolvedSearchParams.focusScanId ?? null;
   const hasActiveScans = scans.some((scan) => scan.status === "queued" || scan.status === "running");

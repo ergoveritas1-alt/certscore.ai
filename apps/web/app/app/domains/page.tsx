@@ -4,6 +4,7 @@ import { AddDomainForm } from "../../../components/domains/add-domain-form";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { getDashboardContext } from "../../../server/auth";
 import { getOrganizationDomains } from "../../../server/domains/get-organization-domains";
+import { withServerTiming } from "../../../server/performance/log-server-timing";
 import { getPlanLimits } from "../../../server/plans/get-plan-limits";
 
 function formatDateTime(value: string | null) {
@@ -51,11 +52,13 @@ function formatScheduled(value: string | null, dueNow: boolean) {
 }
 
 export default async function DomainsPage() {
-  const { organization } = await getDashboardContext();
-  const [domains, planLimits] = await Promise.all([
-    getOrganizationDomains(organization.id),
-    getPlanLimits(organization.plan)
-  ]);
+  const { organization } = await withServerTiming("app.domains.context", () => getDashboardContext());
+  const [domains, planLimits] = await withServerTiming("app.domains.primary_data", () =>
+    Promise.all([
+      getOrganizationDomains(organization.id),
+      getPlanLimits(organization.plan)
+    ])
+  );
 
   return (
     <div className="space-y-8">
