@@ -296,6 +296,8 @@ pnpm test:scan-pipeline
 ## Production expectation
 
 - Treat the AWS ECS/Fargate service for `certscore.ai` as the preferred target web topology.
+- The current production deploy route for `apps/web` is directly to the existing AWS ECS/Fargate public web service for `certscore.ai`.
+- Do not deploy WC01 web changes to alternate hosts or obsolete hosting paths. Use the direct ECS/Fargate route and verify the ECS service and public host before claiming production is live.
 - `consentcheck.site` is not a WC01 web host and WC01 must not claim or deploy it.
 - A push to `main` is not enough to claim either host is live; for web changes, confirm the intended ECS deployment has completed successfully and the public host is serving the expected revision.
 - If the active production host is uncertain, call it out before claiming a change is live in production.
