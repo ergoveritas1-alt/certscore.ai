@@ -17,7 +17,7 @@ const REGULATORY_MAPPING_FILTERS: Array<{
 
 function formatRegulatoryMappingFilterLabel(selectedFilters: RegulatoryMappingFilterId[]) {
   if (selectedFilters.length === 0) {
-    return "All mappings";
+    return "All";
   }
   if (selectedFilters.length === 1) {
     return REGULATORY_MAPPING_FILTERS.find((filter) => filter.id === selectedFilters[0])?.label ?? "1 selected";
@@ -71,9 +71,9 @@ export function RegulatoryMappingFilterControl(input: { targetListId: string }) 
 
   return (
     <details className="group/filter relative">
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 marker:hidden [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200/80 marker:hidden [&::-webkit-details-marker]:hidden">
         <span className="text-slate-500">Regulatory mapping</span>
-        <span>{formatRegulatoryMappingFilterLabel(selectedFilters)}</span>
+        <span className="text-slate-900">{formatRegulatoryMappingFilterLabel(selectedFilters)}</span>
         <ScanReportDisclosureIcon className="h-4 w-4 group-open/filter:-rotate-90" />
       </summary>
       <div className="absolute bottom-full right-0 z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white py-2 shadow-[0_18px_50px_-24px_rgba(15,23,42,0.35)]">
@@ -82,7 +82,7 @@ export function RegulatoryMappingFilterControl(input: { targetListId: string }) 
           className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-medium text-slate-900 hover:bg-slate-50"
           onClick={() => setSelectedFilters([])}
         >
-          <span>All mappings</span>
+          <span>All</span>
           {selectedFilters.length === 0 ? <span className="text-lg leading-none text-slate-900">✓</span> : null}
         </button>
         <div className="my-1 border-t border-slate-100" />
