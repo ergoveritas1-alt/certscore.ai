@@ -107,7 +107,6 @@ import {
   type PolicyBehaviorConflictType,
   type PolicyBehaviorRuntimeObservationType
 } from "../../lib/scans/contradiction-evidence-contract";
-import { PRIMARY_SCAN_CATEGORY_META } from "../../lib/scans/signal-taxonomy";
 import { getFindingReferenceHrefForReportFindingId } from "../../lib/marketing/finding-reference-links";
 import {
   getPublicReportFindingDisplay,
@@ -1233,6 +1232,15 @@ function hasTruthySignal(
   });
 }
 
+const HIDDEN_KEY_RISK_SIGNAL_SECTIONS = new Set([
+  "Privacy & Tracking",
+  "Fingerprinting",
+  "Financial & Claims",
+  "Accessibility",
+  "Cookies & Storage",
+  "Vendors & Requests"
+]);
+
 const OPERATIONAL_SNAPSHOT_SECTIONS = [
   {
     title: "Coverage",
@@ -1705,6 +1713,8 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
     severity: input.finding.severity,
     title: input.finding.title
   });
+  const observedSummary = display.observedSummary
+    ?? (input.finding.observedValue ? sanitizePublicReportEvidenceText(input.finding.observedValue) : null);
   const findingJsonPayload = JSON.stringify(compactEvidenceJsonForDisplay(buildReviewFindingSummaryJson(input.finding)), null, 2);
   const positiveSurfaceFinding = isPositiveSurfaceFinding(input.finding);
 
@@ -1751,8 +1761,8 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
         <div className="min-w-0 space-y-2">
           <div>
             <p className="mt-1 text-sm text-slate-700">
-              {input.finding.observedValue
-                ? sanitizePublicReportEvidenceText(input.finding.observedValue)
+              {observedSummary
+                ? observedSummary
                 : positiveSurfaceFinding
                   ? "Positive surface detected"
                   : `${display.criticality} reference criticality`}
@@ -4337,7 +4347,6 @@ function CategorySeverityCounts(input: { findings: UnifiedFindingDisplayPacket[]
 }
 
 function CategoryFindingSummaryCard(input: { finding: UnifiedFindingDisplayPacket }) {
-  const summary = getCollapsedFindingSummary(input.finding) ?? input.finding.presentation.whyThisMatters;
   const positiveSurfaceFinding = isPositiveSurfaceFinding(input.finding);
   const display = getPublicReportFindingDisplay({
     confidence: input.finding.confidenceBand,
@@ -4347,6 +4356,7 @@ function CategoryFindingSummaryCard(input: { finding: UnifiedFindingDisplayPacke
     severity: input.finding.severity,
     title: input.finding.title
   });
+  const summary = display.observedSummary ?? getCollapsedFindingSummary(input.finding) ?? input.finding.presentation.whyThisMatters;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
@@ -4577,10 +4587,14 @@ function mergeUnifiedFindingPacketsById(findings: UnifiedFindingDisplayPacket[])
   return [...new Map(findings.map((finding) => [finding.unifiedFindingId, finding])).values()];
 }
 
+const HIDDEN_ANALYST_DETAIL_PILLAR_IDS = new Set(["consumer_protection_commercial_practices"]);
+
 function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
   const showHomepagePreviewGate = input.previewMode === "homepage" && Boolean(input.createAccountHref);
   const { globalUnifiedFindings, sectionDrafts } = input.unifiedFindingState;
-  const pillarSections = sectionDrafts.map(({ pillar, sections }) => {
+  const pillarSections = sectionDrafts
+    .filter(({ pillar }) => !pillar || !HIDDEN_ANALYST_DETAIL_PILLAR_IDS.has(pillar.id))
+    .map(({ pillar, sections }) => {
     if (!pillar) {
       throw new Error("Canonical taxonomy pillar missing from unified finding state");
     }
@@ -4635,32 +4649,10 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
         .map((finding) => [finding.unifiedFindingId, finding])
     ).values()
   ]);
-  const vendorGroups = deriveVendorContext({
-    scanRecord: input.scanRecord,
-    snapshot: input.snapshot
-  });
   const suppressEmptyBlockedChrome =
     input.scanRecord.accessPostureSummary?.accessPostureClass === "early_loss" &&
     input.scanRecord.accessPostureSummary?.stopTier === "tier1_front_door" &&
     reviewFindings.length === 0;
-  const sectionTiles = [
-    ...new Map(
-      pillarSections.flatMap(({ sections }) =>
-        sections.map(({ alignedReviewFindings, section }) => {
-          const sectionScore = deriveSectionScore(alignedReviewFindings);
-          return [
-            section.id,
-            {
-              href: `#coverage-section-${section.id}`,
-              label: section.label,
-              showValueText: false,
-              value: formatSectionScore(sectionScore)
-            }
-          ] as const;
-        })
-      )
-    ).values()
-  ];
 
   return (
     <div className="space-y-6">
@@ -4671,15 +4663,6 @@ function CanonicalTaxonomyReview(input: CanonicalTaxonomyReviewProps) {
           defaultOpen={false}
           contentClassName="space-y-6"
         >
-          <AgencyAdvisorySummary
-            badges={input.executiveSummary.badges}
-            findings={reviewFindings}
-            metrics={input.executiveSummary.metrics}
-            sectionTiles={sectionTiles}
-            snapshot={input.snapshot}
-            statusCallout={input.executiveSummary.statusCallout}
-            vendorGroups={vendorGroups}
-          />
           <div className="relative overflow-hidden rounded-2xl">
             <FindingsOverview findings={reviewFindings} />
             {showHomepagePreviewGate && input.createAccountHref ? (
@@ -5383,7 +5366,22 @@ type SharedScanDetailViewProps = {
   previewPayload?: PreviewScanPayload | null;
   previewMode?: "full" | "homepage";
   scanRecord: ScanDetailResponse;
+  viewerAccessRole?: string | null;
 };
+
+type ScanReportAccessRole = "admin" | "advanced" | "user";
+
+function normalizeScanReportAccessRole(role: string | null | undefined): ScanReportAccessRole {
+  if (role === "admin" || role === "owner") {
+    return "admin";
+  }
+
+  if (role === "advanced") {
+    return "advanced";
+  }
+
+  return "user";
+}
 
 export function SharedScanDetailView({
   analyticsScanSource = "unknown",
@@ -5396,8 +5394,12 @@ export function SharedScanDetailView({
   previewNotice = null,
   previewPayload: previewPayloadOverride = null,
   previewMode = "full",
-  scanRecord
+  scanRecord,
+  viewerAccessRole = "admin"
 }: SharedScanDetailViewProps) {
+  const scanReportAccessRole = normalizeScanReportAccessRole(viewerAccessRole);
+  const showAnalystDetail = scanReportAccessRole !== "user";
+  const showAdvancedDiagnostics = scanReportAccessRole === "admin";
   const previewPayload = previewPayloadOverride ?? scanRecord.previewPayload ?? null;
   const snapshot = scanRecord.snapshot;
   const isZeroCoveragePreviewCompletion =
@@ -5960,7 +5962,7 @@ export function SharedScanDetailView({
           </CollapsibleSectionCard>
           <div className="space-y-5">
             {executiveFindingsProjection.groupedFindings
-              .filter((group) => !["Privacy & Tracking", "Fingerprinting", "Financial & Claims", "Accessibility", "Cookies & Storage"].includes(group.section))
+              .filter((group) => !HIDDEN_KEY_RISK_SIGNAL_SECTIONS.has(group.section))
               .map((group) => (
                 <FindingsSection key={group.section} findings={group.findings} section={group.section} />
               ))}
@@ -5971,7 +5973,7 @@ export function SharedScanDetailView({
         )}
       </>
       ) : null}
-      {!isScanInFlight && snapshot ? (
+      {showAnalystDetail && !isScanInFlight && snapshot ? (
         <>
           {reviewSectionError ? (
             <ScanSectionFallback
@@ -6077,6 +6079,7 @@ export function SharedScanDetailView({
         </>
       ) : null}
 
+      {showAdvancedDiagnostics ? (
       <div className="relative overflow-hidden rounded-2xl">
         <CollapsibleSectionCard
           title={
@@ -6098,104 +6101,6 @@ export function SharedScanDetailView({
           >
             <AccessPostureSummaryCard summary={scanRecord.accessPostureSummary} />
           </CollapsibleSectionCard>
-
-          {snapshot ? (
-            <CollapsibleSectionCard
-              title={
-                <span className="flex items-center gap-1.5">
-                  <span>AI, Automation & Emerging Practices</span>
-                  <InfoTip text="AI assistants, automation disclosures, AI answer experiences, and related emerging-practice signals kept in diagnostics for research and lower-priority review." />
-                </span>
-              }
-            >
-              <ResultCategorySection
-                title={PRIMARY_SCAN_CATEGORY_META.ai_automation_emerging_practices.label}
-                collapsible={false}
-                metrics={[
-                  {
-                    label: "AI chatbot",
-                    value: formatCompactValue(snapshot.ai_chatbot_present),
-                    tooltip:
-                      "Whether the scan detected a likely visible chatbot or assistant experience based on vendor signatures, widget markers, and explicit assistant language."
-                  },
-                  {
-                    label: "AI vendor",
-                    value: formatCompactValue(snapshot.ai_chatbot_vendor),
-                    tooltip:
-                      "The strongest visible AI or chat-assistant vendor signature detected on the site during the scan, if any."
-                  },
-                  {
-                    label: "AI disclosure",
-                    value: formatCompactValue(snapshot.ai_disclosure_text_present),
-                    tooltip:
-                      "Whether visible page text suggested explicit AI-related disclosure language such as AI-generated responses, powered by AI, or automated assistant messaging."
-                  },
-                  {
-                    label: "AI search/answers",
-                    value: formatCompactValue(snapshot.ai_search_or_answer_experience_detected),
-                    tooltip:
-                      "Whether the scan detected a clearly AI-labeled question-to-answer or instant-answer experience, beyond generic site search."
-                  }
-                ]}
-                details={[
-                  { label: "AI assistant widget", value: snapshot.ai_assistant_widget_detected },
-                  { label: "AI policy reference", value: snapshot.ai_terms_or_policy_ai_reference },
-                  { label: "AI help-center reference", value: snapshot.ai_help_center_ai_reference },
-                  { label: "Hiring automation signal", value: snapshot.ai_hiring_automation_signal_detected }
-                ]}
-              />
-            </CollapsibleSectionCard>
-          ) : null}
-
-          {snapshot ? (
-            <ResultCategorySection
-              title={PRIMARY_SCAN_CATEGORY_META.security_trust_governance.label}
-              intro={PRIMARY_SCAN_CATEGORY_META.security_trust_governance.description}
-              includes="Transport and headers, DNS authentication, trust and disclosure pages, and incident or vulnerability transparency signals."
-              collapsible={false}
-              metrics={[
-                {
-                  label: "TLS minimum",
-                  value: formatCompactValue(snapshot.tls_version_min_supported),
-                  tooltip:
-                    "The minimum TLS protocol version observed or inferred for the site, used as a basic indicator of transport security posture."
-                },
-                {
-                  label: "HSTS",
-                  value: formatCompactValue(snapshot.hsts_enabled),
-                  tooltip:
-                    "Whether HTTP Strict Transport Security was observed, which helps enforce HTTPS usage in supported browsers."
-                },
-                {
-                  label: "CSP",
-                  value: formatCompactValue(snapshot.csp_header_present),
-                  tooltip:
-                    "Whether a Content Security Policy header was observed, which is a basic indicator of script and resource-loading controls."
-                },
-                {
-                  label: "DMARC",
-                  value: formatCompactValue(snapshot.dmarc_record_present),
-                  tooltip:
-                    "Whether a DMARC record was detected for the domain, which is a useful public signal of email authentication governance."
-                }
-              ]}
-              details={[
-                { label: "Permissions policy", value: snapshot.permissions_policy_present },
-                { label: "security.txt", value: snapshot.security_txt_present },
-                { label: "Vulnerability disclosure page", value: snapshot.vulnerability_disclosure_page_present },
-                { label: "Trust center", value: snapshot.trust_center_present },
-                { label: "Incident status page", value: snapshot.incident_status_page_present },
-                { label: "DNSSEC", value: snapshot.dnssec_enabled },
-                { label: "SPF", value: snapshot.spf_record_present },
-                { label: "DKIM", value: snapshot.dkim_record_detected },
-                { label: "Certificate authority", value: snapshot.certificate_authority },
-                { label: "Security posture changed", value: snapshot.security_header_posture_changed },
-                { label: "Infrastructure changed", value: snapshot.infrastructure_change_detected },
-                { label: "Country inferred", value: snapshot.country_inferred },
-                { label: "Jurisdiction guess", value: snapshot.jurisdiction_guess }
-              ]}
-            />
-          ) : null}
 
           <FindingEvidenceDiagnostics findings={findingEvidenceDiagnostics} />
 
@@ -6328,6 +6233,7 @@ export function SharedScanDetailView({
           <HomepagePreviewGate href={createAccountHref} mode="full" />
         ) : null}
       </div>
+      ) : null}
       <p className="px-1 text-xs leading-5 text-slate-500">
         CertScore.ai automated findings may contain errors. Always review the supporting evidence.
       </p>

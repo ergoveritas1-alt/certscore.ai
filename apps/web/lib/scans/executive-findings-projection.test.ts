@@ -1522,18 +1522,96 @@ test("policy runtime contradiction with full anchors renders as strong self-prov
   ]);
 });
 
-test("generic policy runtime alignment review projects as medium even with retained bridge evidence", () => {
+test("generic policy runtime alignment review bridge remains audit-only in executive projection", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePolicyRuntimeConflictPacket(
       { unifiedFindingId: "policy_behavior_conflict" },
-      { kind: "policy_behavior_conflict" }
+      {
+        bridgeMappingType: "deterministic_policy_runtime_review_mapping",
+        conflictBridgeReasoning: "Policy disclosure anchor and concrete runtime behavior indicate a policy/runtime alignment review area.",
+        conflictSupportsPromotion: false,
+        conflictType: null,
+        contradictionPromotionEligible: false,
+        kind: "policy_behavior_conflict"
+      }
     )
   ]);
-  const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
 
-  assert.equal(finding?.label, "Policy/runtime alignment review");
-  assert.equal(finding?.severity, "medium");
-  assert.equal(finding?.confidence, "good");
+  assert.equal(
+    projection.findings.some((item) => item.id === "policy_behavior_contradiction_detected"),
+    false
+  );
+  assert.equal(
+    projection.topFindings.some((item) => item.id === "policy_behavior_contradiction_detected"),
+    false
+  );
+});
+
+test("policy runtime alignment does not promote from third-party request volume alone", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("policy_behavior_conflict", {
+      confidenceBand: "high",
+      confidenceInputs: {
+        evidenceQualityFlags: [],
+        hasConcretePayloadEvidence: false,
+        hasCorroboratedPositiveSurfaceEvidence: true,
+        hasDirectRuntimeEvidence: true,
+        hasKeyPageDiscoveryEvidence: true,
+        hasMultipleHumanFacingUrls: false,
+        hasPageAttribution: true,
+        hasPacketBackedEvidence: true,
+        hasPolicyTextEvidence: true,
+        hasReadableSurfaceSnippetEvidence: true,
+        hasStructuredValidationEvidence: true,
+        isFallbackOnly: false,
+        issueCount: 0,
+        signalCount: 1,
+        sourceCount: 2,
+        sourceKinds: ["signal"],
+        validationCount: 0
+      },
+      details: {
+        family: "contradiction",
+        kind: "policy_behavior_conflict"
+      },
+      evidence: {
+        counts: {
+          thirdPartyCookieCount: 88,
+          thirdPartyRequestCount: 488,
+          thirdPartyRequestDomainCount: 112
+        },
+        entities: {
+          policyEvidence: [
+            JSON.stringify({
+              evaluated: true,
+              cookieOrPrivacyPolicyFound: true,
+              relevantDisclosureFound: true,
+              disclosureGapObserved: false
+            })
+          ],
+          runtimeDomains: ["gum.criteo.com", "aax-eu.amazon-adsystem.com"],
+          runtimeVendors: ["Criteo", "Amazon Ads"]
+        },
+        fetchQuality: null,
+        flags: ["policy_runtime_alignment_review_signal"],
+        pageUrls: ["https://www.nbcnews.com/"],
+        snippets: ["Public privacy disclosures were evaluated."],
+        sourceUrls: ["https://www.nbcnews.com/privacy"]
+      },
+      primaryPageUrl: "https://www.nbcnews.com/",
+      severity: "high",
+      summary: "Runtime third-party request volume was high."
+    })
+  ]);
+
+  assert.equal(
+    projection.findings.some((item) => item.id === "policy_behavior_contradiction_detected"),
+    false
+  );
+  assert.equal(
+    projection.topFindings.some((item) => item.id === "policy_behavior_contradiction_detected"),
+    false
+  );
 });
 
 test("generic policy runtime alignment review is not projected when retained policy evidence found no disclosure gap", () => {
@@ -1546,7 +1624,14 @@ test("generic policy runtime alignment review is not projected when retained pol
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePolicyRuntimeConflictPacket(
       { unifiedFindingId: "policy_behavior_conflict" },
-      { kind: "policy_behavior_conflict" },
+      {
+        bridgeMappingType: "deterministic_policy_runtime_review_mapping",
+        conflictBridgeReasoning: "Policy disclosure anchor and concrete runtime behavior indicate a policy/runtime alignment review area.",
+        conflictSupportsPromotion: false,
+        conflictType: null,
+        contradictionPromotionEligible: false,
+        kind: "policy_behavior_conflict"
+      },
       { policyEvidence: [retainedNoGapPolicyEvidence] }
     )
   ]);
@@ -1557,6 +1642,135 @@ test("generic policy runtime alignment review is not projected when retained pol
   );
   assert.equal(
     projection.topFindings.some((item) => item.id === "policy_behavior_contradiction_detected"),
+    false
+  );
+});
+
+test("policy runtime disclosure mismatch promotes only with retained unmatched evidence and rationale", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("policy_behavior_conflict", {
+      confidenceBand: "high",
+      confidenceInputs: {
+        evidenceQualityFlags: [],
+        hasConcretePayloadEvidence: false,
+        hasCorroboratedPositiveSurfaceEvidence: true,
+        hasDirectRuntimeEvidence: true,
+        hasKeyPageDiscoveryEvidence: true,
+        hasMultipleHumanFacingUrls: false,
+        hasPageAttribution: true,
+        hasPacketBackedEvidence: true,
+        hasPolicyTextEvidence: true,
+        hasReadableSurfaceSnippetEvidence: true,
+        hasStructuredValidationEvidence: true,
+        isFallbackOnly: false,
+        issueCount: 0,
+        signalCount: 1,
+        sourceCount: 2,
+        sourceKinds: ["signal"],
+        validationCount: 0
+      },
+      details: {
+        family: "contradiction",
+        kind: "policy_behavior_conflict"
+      },
+      evidence: {
+        counts: {},
+        entities: {
+          policyEvidence: [
+            JSON.stringify({
+              evaluated: true,
+              cookieOrPrivacyPolicyFound: true,
+              relevantDisclosureFound: true,
+              disclosureGapObserved: false
+            })
+          ],
+          runtimeVendorDisclosureEvidence: [
+            JSON.stringify({
+              subtype: "runtime_vendor_not_disclosed",
+              observedRuntimeVendors: ["Criteo", "Amazon Ads"],
+              observedRuntimeDomains: ["gum.criteo.com", "aax-eu.amazon-adsystem.com"],
+              unmatchedRuntimeVendors: ["Criteo"],
+              unmatchedRuntimeDomains: ["gum.criteo.com"],
+              policySurfacesSearched: [
+                {
+                  type: "privacy_policy",
+                  url: "https://www.example.com/privacy",
+                  reached: true,
+                  searchedTerms: ["Criteo"]
+                }
+              ],
+              matchedVendorDisclosureCount: 1,
+              unmatchedVendorDisclosureCount: 1,
+              mismatchRationale: "Criteo runtime request evidence was retained, but the reached privacy policy surface did not disclose Criteo or its domain in the retained comparison.",
+              coverageStatus: "usable",
+              evidenceConfidence: "strong",
+              directVsInferred: "direct",
+              parentFindingId: "policy_behavior_conflict"
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: ["https://www.example.com/"],
+        snippets: [],
+        sourceUrls: ["https://www.example.com/privacy", "https://gum.criteo.com/sync"]
+      },
+      primaryPageUrl: "https://www.example.com/",
+      severity: "high"
+    })
+  ]);
+
+  const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
+
+  assert.ok(finding);
+  assert.equal(finding.label, "Policy/runtime alignment review");
+  assert.match(finding.shortSummary, /Criteo/);
+  assert.match(finding.shortSummary, /not clearly reflected/);
+  assert.ok(projection.topFindings.some((item) => item.id === "policy_behavior_contradiction_detected"));
+});
+
+test("policy runtime summary does not overstate unmatched vendors without retained disclosure comparison evidence", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("policy_behavior_conflict", {
+      confidenceBand: "high",
+      details: { family: "contradiction", kind: "policy_behavior_conflict" },
+      evidence: {
+        counts: {},
+        entities: {
+          runtimeVendorDisclosureEvidence: [
+            JSON.stringify({
+              subtype: "runtime_vendor_not_disclosed",
+              observedRuntimeVendors: ["Criteo"],
+              observedRuntimeDomains: ["gum.criteo.com"],
+              unmatchedRuntimeVendors: [],
+              unmatchedRuntimeDomains: [],
+              policySurfacesSearched: [{ type: "privacy_policy", url: "https://www.example.com/privacy", reached: true }],
+              matchedVendorDisclosureCount: 0,
+              unmatchedVendorDisclosureCount: 0,
+              mismatchRationale: "",
+              coverageStatus: "usable",
+              evidenceConfidence: "strong",
+              directVsInferred: "direct",
+              parentFindingId: "policy_behavior_conflict"
+            })
+          ]
+        },
+        fetchQuality: null,
+        flags: [],
+        pageUrls: ["https://www.example.com/"],
+        snippets: [],
+        sourceUrls: ["https://www.example.com/privacy"]
+      },
+      primaryPageUrl: "https://www.example.com/",
+      severity: "high"
+    })
+  ]);
+
+  const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
+
+  assert.equal(finding, undefined);
+  assert.equal(
+    projection.findings.some((item) => /not clearly reflected/i.test(item.shortSummary)),
     false
   );
 });

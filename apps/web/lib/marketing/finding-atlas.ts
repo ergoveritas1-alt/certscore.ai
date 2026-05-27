@@ -2589,3 +2589,30 @@ export function getFindingReferenceItems(): FindingReferenceItem[] {
 }
 
 export const getTopFindingAtlasItems = getFindingReferenceItems;
+
+export function getFindingReferenceObservedCopy(findingId: string) {
+  const definition = CERT_SCORE_FINDING_REGISTRY[findingId];
+  if (!definition) {
+    return null;
+  }
+
+  return OBSERVED[findingId] ?? definition.whyItMatters;
+}
+
+export function getFindingReferenceTitle(findingId: string) {
+  const definition = CERT_SCORE_FINDING_REGISTRY[findingId];
+  if (!definition) {
+    return null;
+  }
+
+  return PUBLIC_TITLE_OVERRIDES[findingId] ?? definition.label;
+}
+
+export function getFindingReferenceCriticality(findingId: string) {
+  const definition = CERT_SCORE_FINDING_REGISTRY[findingId];
+  if (!definition) {
+    return null;
+  }
+
+  return SEVERITY_OVERRIDES[findingId] ?? SEVERITY_BY_SECTION[definition.section];
+}

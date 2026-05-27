@@ -1,3 +1,5 @@
+"use client";
+
 import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import React from "react";
 import {
@@ -26,7 +28,9 @@ import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findin
 import { buildPromotionGradePreconsentRequests } from "../../lib/scans/preconsent-public-evidence";
 import {
   getFindingRegulatoryContext,
-  getFindingReviewContextChips
+  getFindingReviewContextChips,
+  type FindingRegulatoryContext,
+  type FindingRegulatoryContextItem
 } from "../../lib/marketing/finding-regulatory-context";
 import { CopyJsonButton } from "./copy-json-button";
 import { EvidenceJsonBlock } from "./evidence-json-block";
@@ -3242,6 +3246,8 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const reference = getFindingReferenceLink(input.finding);
   const registryContext = getFindingRegulatoryContext(input.finding.id);
   const registryGuideHref = registryContext ? `/findings/${input.finding.id}` : null;
+  const display = getPublicReportFindingDisplayForCertFinding(input.finding);
+  const observedSummary = display.observedSummary ?? input.finding.shortSummary;
   const evidencePayload = buildFindingEvidenceJsonPayload(input.finding);
   const compactedEvidencePayload = compactEvidenceJsonForDisplay(evidencePayload);
   const jsonPayload =
@@ -3263,18 +3269,15 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
     typeof fingerprintTelemetry?.confidenceExplanation === "string" ? fingerprintTelemetry.confidenceExplanation : null;
   const evidenceBasisItems = buildEvidenceBasisItems(input.finding);
   const evidenceBasisCopy = buildEvidenceBasisCopy(input.finding);
+  const regulatoryContext = buildTopFindingRegulatoryContextDisplay(input.finding);
 
   return (
     <details id={getFindingEvidenceAnchor(input.finding)} className={`group mt-3 scroll-mt-24 rounded-xl border px-3 py-2 ${tone.summary}`}>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-medium leading-5">
-        <span className="line-clamp-2 min-w-0 group-open:line-clamp-none">{input.finding.shortSummary}</span>
+        <span className="line-clamp-2 min-w-0 group-open:line-clamp-none">{observedSummary}</span>
         <ScanReportDisclosureIcon />
       </summary>
       <div className="mt-4 space-y-4">
-        <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Why this matters</p>
-          <p className="text-sm leading-6 text-slate-700">{input.finding.whyItMatters}</p>
-        </div>
         <div className="space-y-1.5">
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Review and remediation starting points</p>
           <p className="text-sm leading-6 text-slate-700">{getFindingFixText(input.finding)}</p>
@@ -3367,6 +3370,242 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
             />
           </details>
         ) : null}
+        {regulatoryContext ? <TopFindingRegulatoryContextDisclosure context={regulatoryContext} /> : null}
+      </div>
+    </details>
+  );
+}
+
+type TopFindingRegulatoryBadge = {
+  label: string;
+  tone: "privacy" | "consumer" | "accessibility" | "neutral";
+};
+
+type RegulatoryMappingFilterId = "gdpr" | "ccpa" | "ftc" | "ada";
+
+const REGULATORY_MAPPING_FILTERS: Array<{
+  id: RegulatoryMappingFilterId;
+  label: string;
+}> = [
+  { id: "gdpr", label: "GDPR / ePrivacy" },
+  { id: "ccpa", label: "CCPA / CPRA" },
+  { id: "ftc", label: "FTC" },
+  { id: "ada", label: "ADA / accessibility" }
+];
+
+type TopFindingRegulatoryContextDisplay = {
+  applicabilityNotes: FindingRegulatoryContextItem[];
+  badges: TopFindingRegulatoryBadge[];
+  caution: string;
+  primaryCopy: string;
+  primaryLabel: string;
+};
+
+function buildTopFindingRegulatoryContextDisplay(finding: CertScoreFinding): TopFindingRegulatoryContextDisplay | null {
+  const context = getFindingRegulatoryContext(finding.id);
+  if (!context) {
+    return null;
+  }
+
+  const items = [...context.technicalStandards, ...context.jurisdictionalContexts];
+  const badges = buildRegulatoryContextBadges(context, items);
+  if (badges.length === 0) {
+    return null;
+  }
+
+  return {
+    applicabilityNotes: items,
+    badges,
+    caution: context.displayCaution,
+    primaryCopy: makeReportFacingRegulatoryContextCopy(context),
+    primaryLabel: context.primaryConcern.label
+  };
+}
+
+function buildRegulatoryContextBadges(
+  context: FindingRegulatoryContext,
+  items: FindingRegulatoryContextItem[]
+): TopFindingRegulatoryBadge[] {
+  const haystack = [
+    context.category,
+    context.regulatoryConcernGroup,
+    context.primaryConcern.label,
+    context.primaryConcern.displayCopy,
+    ...items.flatMap((item) => [item.id, item.label, item.appliesWhen, ...item.sourceRefs])
+  ].join(" ");
+  const badges: TopFindingRegulatoryBadge[] = [];
+  const addBadge = (label: string, tone: TopFindingRegulatoryBadge["tone"]) => {
+    if (!badges.some((badge) => badge.label === label)) {
+      badges.push({ label, tone });
+    }
+  };
+
+  if (/\bGDPR\b|ePrivacy|EU\/EEA|PECR|ICO|European Accessibility Act|EN 301 549|Web Accessibility Directive/i.test(haystack)) {
+    addBadge("GDPR / ePrivacy", "privacy");
+  }
+  if (/CCPA|CPRA|CIPA|California|sale\/share|Do Not Sell|Do Not Share/i.test(haystack)) {
+    addBadge("CCPA / CPRA", "privacy");
+  }
+  if (/FTC|consumer-protection|consumer protection|dark-pattern|deception|unfairness/i.test(haystack)) {
+    addBadge("FTC", "consumer");
+  }
+  if (/\bADA\b|Section 508|WCAG|accessibility|Title II|Title III/i.test(haystack)) {
+    addBadge("ADA / accessibility", "accessibility");
+  }
+
+  return badges.slice(0, 4);
+}
+
+function getFindingRegulatoryFilterIds(finding: CertScoreFinding): RegulatoryMappingFilterId[] {
+  const context = buildTopFindingRegulatoryContextDisplay(finding);
+  if (!context) {
+    return [];
+  }
+
+  return context.badges.flatMap((badge): RegulatoryMappingFilterId[] => {
+    if (/GDPR|ePrivacy/i.test(badge.label)) {
+      return ["gdpr"];
+    }
+    if (/CCPA|CPRA/i.test(badge.label)) {
+      return ["ccpa"];
+    }
+    if (/FTC/i.test(badge.label)) {
+      return ["ftc"];
+    }
+    if (/ADA|accessibility/i.test(badge.label)) {
+      return ["ada"];
+    }
+    return [];
+  });
+}
+
+function formatRegulatoryMappingFilterLabel(selectedFilters: RegulatoryMappingFilterId[]) {
+  if (selectedFilters.length === 0) {
+    return "All mappings";
+  }
+  if (selectedFilters.length === 1) {
+    return REGULATORY_MAPPING_FILTERS.find((filter) => filter.id === selectedFilters[0])?.label ?? "1 selected";
+  }
+  if (selectedFilters.length === 2) {
+    return selectedFilters
+      .map((id) => REGULATORY_MAPPING_FILTERS.find((filter) => filter.id === id)?.label.split(" / ")[0] ?? id.toUpperCase())
+      .join(" + ");
+  }
+  return `${selectedFilters.length} selected`;
+}
+
+function RegulatoryMappingFilterControl(input: {
+  selectedFilters: RegulatoryMappingFilterId[];
+  onChange: (filters: RegulatoryMappingFilterId[]) => void;
+}) {
+  const selected = new Set(input.selectedFilters);
+  const toggleFilter = (filterId: RegulatoryMappingFilterId) => {
+    const next = new Set(selected);
+    if (next.has(filterId)) {
+      next.delete(filterId);
+    } else {
+      next.add(filterId);
+    }
+    input.onChange(REGULATORY_MAPPING_FILTERS.map((filter) => filter.id).filter((id) => next.has(id)));
+  };
+
+  return (
+    <details className="group/filter relative">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 marker:hidden [&::-webkit-details-marker]:hidden">
+        <span className="text-slate-500">Regulatory mapping</span>
+        <span>{formatRegulatoryMappingFilterLabel(input.selectedFilters)}</span>
+        <ScanReportDisclosureIcon className="h-4 w-4 group-open/filter:-rotate-90" />
+      </summary>
+      <div className="absolute bottom-full right-0 z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white py-2 shadow-[0_18px_50px_-24px_rgba(15,23,42,0.35)]">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-medium text-slate-900 hover:bg-slate-50"
+          onClick={() => input.onChange([])}
+        >
+          <span>All mappings</span>
+          {input.selectedFilters.length === 0 ? <span className="text-lg leading-none text-slate-900">✓</span> : null}
+        </button>
+        <div className="my-1 border-t border-slate-100" />
+        {REGULATORY_MAPPING_FILTERS.map((filter) => (
+          <label
+            key={filter.id}
+            className="flex cursor-pointer items-center justify-between gap-3 px-4 py-2.5 text-sm text-slate-800 hover:bg-slate-50"
+          >
+            <span>{filter.label}</span>
+            <span className="relative inline-flex h-6 w-10 items-center">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={selected.has(filter.id)}
+                onChange={() => toggleFilter(filter.id)}
+              />
+              <span className="absolute inset-0 rounded-full bg-slate-200 transition peer-checked:bg-sky-600" />
+              <span className="absolute left-1 h-4 w-4 rounded-full bg-white shadow-sm transition peer-checked:translate-x-4" />
+            </span>
+          </label>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function makeReportFacingRegulatoryContextCopy(context: FindingRegulatoryContext) {
+  return `${context.primaryConcern.displayCopy} This is shown as regulatory review context for the scanned report finding, not as a determination that any law applies or was breached.`;
+}
+
+function getRegulatoryBadgeToneClasses(tone: TopFindingRegulatoryBadge["tone"]) {
+  switch (tone) {
+    case "accessibility":
+      return "border-violet-200 bg-violet-50 text-violet-800";
+    case "consumer":
+      return "border-amber-200 bg-amber-50 text-amber-900";
+    case "privacy":
+      return "border-sky-200 bg-sky-50 text-sky-800";
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-700";
+  }
+}
+
+function TopFindingRegulatoryContextDisclosure(input: { context: TopFindingRegulatoryContextDisplay }) {
+  return (
+    <details className="group/regulatory min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">Regulatory context</span>
+          <span className="mt-2 flex flex-wrap gap-1.5">
+            {input.context.badges.map((badge) => (
+              <span
+                key={badge.label}
+                className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getRegulatoryBadgeToneClasses(badge.tone)}`}
+              >
+                {badge.label}
+              </span>
+            ))}
+          </span>
+        </span>
+        <ScanReportDisclosureIcon className="group-open/regulatory:rotate-90" />
+      </summary>
+      <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{input.context.primaryLabel}</p>
+          <p className="text-sm leading-6 text-slate-700">{input.context.primaryCopy}</p>
+        </div>
+        <details className="group/notes rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+            <span>View applicability notes</span>
+            <ScanReportDisclosureIcon className="group-open/notes:rotate-90" />
+          </summary>
+          <div className="mt-3 space-y-3">
+            <p className="text-sm leading-6 text-slate-700">{input.context.caution}</p>
+            <ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
+              {input.context.applicabilityNotes.map((item) => (
+                <li key={item.id}>
+                  <span className="font-medium text-slate-900">{item.label}:</span> {item.appliesWhen}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </details>
       </div>
     </details>
   );
@@ -3905,12 +4144,19 @@ export function ExecutiveSummaryCard(input: {
     "collection_endpoints_detected",
     "high_request_density"
   ]);
+  const [selectedRegulatoryMappings, setSelectedRegulatoryMappings] = React.useState<RegulatoryMappingFilterId[]>([]);
   const categorySummary = Object.entries(input.vendorCategoryCounts)
     .sort((left, right) => right[1] - left[1])
     .slice(0, 4)
     .map(([key, count]) => `${formatCategoryLabel(key)} ${count}`)
     .join(" · ");
-  const filteredTopFindings = input.topFindings.filter((finding) => !suppressedTopFindingIds.has(finding.id));
+  const availableTopFindings = input.topFindings.filter((finding) => !suppressedTopFindingIds.has(finding.id));
+  const filteredTopFindings = selectedRegulatoryMappings.length > 0
+    ? availableTopFindings.filter((finding) => {
+        const mappingIds = getFindingRegulatoryFilterIds(finding);
+        return selectedRegulatoryMappings.some((filterId) => mappingIds.includes(filterId));
+      })
+    : availableTopFindings;
   const topFindingIconKeys = assignUniqueFindingTitleIconKeys(filteredTopFindings);
   const regulatoryFindingInput =
     Array.isArray(input.allFindings) && input.allFindings.length > 0 ? input.allFindings : input.topFindings;
@@ -3918,7 +4164,7 @@ export function ExecutiveSummaryCard(input: {
     beforeConsentCookieCount: input.beforeConsentCookieCount,
     findings: regulatoryFindingInput
   });
-  const executiveHeadlineFindings = filteredTopFindings.slice(0, 3).map((finding) => {
+  const executiveHeadlineFindings = availableTopFindings.slice(0, 3).map((finding) => {
     const display = getPublicReportFindingDisplayForCertFinding(finding);
     return {
       ...finding,
@@ -3986,7 +4232,7 @@ export function ExecutiveSummaryCard(input: {
     scanOutcome: input.scanOutcome,
     thirdPartyDomains: input.thirdPartyDomains,
     thirdPartyRequestCount: input.thirdPartyRequestCount,
-    topFindingCount: filteredTopFindings.length,
+    topFindingCount: availableTopFindings.length,
     vendorCount: vendorEvidence.length
   });
   const coverageCalloutMicrocards = [
@@ -4005,7 +4251,7 @@ export function ExecutiveSummaryCard(input: {
   );
   const scanMarkedIncomplete = /incomplete|partial|interrupted|degraded/i.test(`${input.status ?? ""} ${input.scanOutcome ?? ""}`);
   const shouldShowHomepageRetainedQualifier =
-    scanMarkedIncomplete && filteredTopFindings.length > 0 && (hasProtectedRouteInterruption || hasMeaningfulInterruption);
+    scanMarkedIncomplete && availableTopFindings.length > 0 && (hasProtectedRouteInterruption || hasMeaningfulInterruption);
   const pagesScanned = typeof input.pagesScanned === "number" ? input.pagesScanned : 0;
   const retainedFindingCount = Math.max(input.topFindings.length, input.allFindings?.length ?? 0);
   const policyEnrichmentCount = input.policyEnrichmentCount ?? 0;
@@ -4072,7 +4318,7 @@ export function ExecutiveSummaryCard(input: {
     findings: regulatoryFindingInput,
     score: input.score,
     vendorNames: uniqueStrings([
-      ...getRepresentativeVendorsFromFindings(filteredTopFindings),
+      ...getRepresentativeVendorsFromFindings(availableTopFindings),
       ...input.preConsentVendorNames,
       ...input.sessionReplayVendorNames,
       ...input.resolvedVendorNames
@@ -4191,6 +4437,10 @@ export function ExecutiveSummaryCard(input: {
                   {narrativePresentation.findingsHeading}
                 </h2>
               </div>
+              <RegulatoryMappingFilterControl
+                selectedFilters={selectedRegulatoryMappings}
+                onChange={setSelectedRegulatoryMappings}
+              />
             </div>
           </div>
 
@@ -4261,6 +4511,10 @@ export function ExecutiveSummaryCard(input: {
                 </div>
                 );
               })
+            ) : selectedRegulatoryMappings.length > 0 ? (
+              <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700">
+                No top findings match the selected regulatory mapping.
+              </div>
             ) : (
               <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700">
                 {displayState === "Limited review"

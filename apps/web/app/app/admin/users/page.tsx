@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
-import { MembershipRoleForm } from "../../../../components/admin/membership-role-form";
+import { MembershipRoleForm, type MembershipRole } from "../../../../components/admin/membership-role-form";
 import { OrganizationPlanForm } from "../../../../components/admin/organization-plan-form";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
@@ -89,7 +89,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                     {user.organizationId ? (
                       <MembershipRoleForm
                         action={updateMembershipRoleFormAction}
-                        defaultRole={(user.membershipRole ?? "user") as "admin" | "user"}
+                        defaultRole={(user.membershipRole ?? "user") as MembershipRole}
                         organizationId={user.organizationId}
                         userId={user.id}
                       />

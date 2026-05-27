@@ -2702,6 +2702,11 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
 
   assert.match(html, /consentState/);
   assert.match(html, /Evidence details/);
+  assert.match(html, /Regulatory context/);
+  assert.match(html, /GDPR \/ ePrivacy/);
+  assert.match(html, /CCPA \/ CPRA/);
+  assert.match(html, /View applicability notes/);
+  assert.match(html, /regulatory review context for the scanned report finding/);
   assert.match(html, /Evidence basis/);
   assert.match(html, /Observed runtime behavior: No accept, reject, manage, or close interaction was recorded before the retained request evidence\./);
   assert.match(html, /First classified non-essential\/tracker request timestamp: 1500ms\./);
@@ -2880,9 +2885,46 @@ test("ExecutiveSummaryCard hides evidence detail toggle when retained JSON would
     })
   );
 
-  assert.match(html, /Consent UX requires review/);
+  assert.match(html, /Retained consent-surface evidence showed choice-architecture signals/);
   assert.doesNotMatch(html, /Evidence details/);
   assert.doesNotMatch(html, /\{\} JSON evidence|>\{\}<\/pre>/);
+});
+
+test("ExecutiveSummaryCard omits top-finding regulatory context for unmapped findings", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No fingerprinting evidence detected.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      posture: "Clear",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 92,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyDomains: [],
+      topFindings: [
+        makeFinding("bounded_key_page_discovery_unresolved" as CertScoreFinding["id"], "Unmapped diagnostic finding", {
+          shortSummary: "Unmapped diagnostic finding."
+        })
+      ],
+      topObservedEntities: [],
+      trackerSummary: "No third-party domains observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.doesNotMatch(html, /Regulatory context/);
 });
 
 test("ExecutiveSummaryCard renders fractional regulatory rating bar segments", () => {

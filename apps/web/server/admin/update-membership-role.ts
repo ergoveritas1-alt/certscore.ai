@@ -9,7 +9,7 @@ import { requirePlatformAdminContext } from "./platform-admin";
 const schema = z.object({
   organizationId: z.string().uuid("Invalid organization."),
   userId: z.string().uuid("Invalid user."),
-  role: z.enum(["admin", "user"])
+  role: z.enum(["admin", "advanced", "user"])
 });
 
 export async function updateMembershipRoleFormAction(formData: FormData): Promise<void> {

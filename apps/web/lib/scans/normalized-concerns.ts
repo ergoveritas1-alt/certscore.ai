@@ -847,9 +847,12 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     if (evidence.mismatchRationale) {
       policySnippets.add(truncatePolicySnippet(evidence.mismatchRationale));
     }
-    runtimeArtifacts.add(
-      `Disclosure alignment note: ${Math.max(evidence.unmatchedRuntimeVendors.length, evidence.unmatchedRuntimeDomains.length)} observed runtime vendor/domain entr${Math.max(evidence.unmatchedRuntimeVendors.length, evidence.unmatchedRuntimeDomains.length) === 1 ? "y was" : "ies were"} not clearly reflected in retained disclosure evidence.`
-    );
+    const unmatchedEntryCount = Math.max(evidence.unmatchedRuntimeVendors.length, evidence.unmatchedRuntimeDomains.length);
+    if (unmatchedEntryCount > 0 && evidence.mismatchRationale.trim().length > 0) {
+      runtimeArtifacts.add(
+        `Disclosure alignment note: ${unmatchedEntryCount} observed runtime vendor/domain entr${unmatchedEntryCount === 1 ? "y was" : "ies were"} not clearly reflected in retained disclosure evidence.`
+      );
+    }
     counts.matchedVendorDisclosureCount = (counts.matchedVendorDisclosureCount ?? 0) + evidence.matchedVendorDisclosureCount;
     counts.unmatchedVendorDisclosureCount = (counts.unmatchedVendorDisclosureCount ?? 0) + evidence.unmatchedVendorDisclosureCount;
   }

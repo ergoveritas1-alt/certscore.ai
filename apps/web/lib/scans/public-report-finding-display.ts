@@ -1,5 +1,10 @@
 import { getFindingReferenceIdForReportFindingId } from "../marketing/finding-reference-links";
-import { getFindingReferenceItems } from "../marketing/finding-atlas";
+import {
+  getFindingReferenceItems,
+  getFindingReferenceCriticality,
+  getFindingReferenceObservedCopy,
+  getFindingReferenceTitle
+} from "../marketing/finding-atlas";
 import type { CertScoreFinding, CertScoreFindingConfidence, CertScoreFindingSeverity } from "./finding-registry";
 
 export type PublicReportCriticality = CertScoreFindingSeverity;
@@ -76,12 +81,20 @@ export function getPublicReportFindingReferenceId(findingId: string) {
 export function getPublicReportFindingDisplay(input: PublicReportFindingDisplayInput) {
   const referenceId = getPublicReportFindingReferenceId(input.findingId);
   const reference = referenceId ? FINDING_REFERENCE_BY_ID.get(referenceId) : null;
-  const title = reference?.title ?? input.title ?? input.label ?? input.findingId.replaceAll("_", " ");
-  const criticality = reference?.criticality ?? normalizeCriticality(input.severity);
+  const canonicalFindingId = referenceId ?? input.findingId;
+  const title =
+    reference?.title ??
+    getFindingReferenceTitle(canonicalFindingId) ??
+    input.title ??
+    input.label ??
+    input.findingId.replaceAll("_", " ");
+  const criticality = reference?.criticality ?? getFindingReferenceCriticality(canonicalFindingId) ?? normalizeCriticality(input.severity);
+  const observedSummary = reference?.observed ?? getFindingReferenceObservedCopy(canonicalFindingId);
   const remediation = REPORT_REMEDIATION_COPY[referenceId ?? input.findingId] ?? softenReportRemediation(input.remediation ?? "");
 
   return {
     criticality,
+    observedSummary,
     reference,
     referenceId,
     remediation,

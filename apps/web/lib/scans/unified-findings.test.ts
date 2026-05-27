@@ -54,11 +54,15 @@ test("collapses signal, issue, and validation sources into one unified finding p
       },
       requestPurposeClassificationConfidence: [
         {
+          category: "analytics",
           confidence: 0.95,
           essentiality: "non_essential",
-          requestUrl: "https://example.com/collect"
+          runtimePhase: "pre_consent",
+          requestUrl: "https://example.com/collect",
+          vendor: "Example Analytics"
         }
       ],
+      runtimeRequestUrls: ["https://example.com/collect"],
       runtimeVendors: ["Example Analytics"]
     }
   });
@@ -67,6 +71,9 @@ test("collapses signal, issue, and validation sources into one unified finding p
     {
       description: "Observed before a clear user choice was made.",
       fallbackEvidence: {
+        consentTimeline: linkedValidation.evidence?.consentTimeline,
+        runtimeRequestUrls: ["https://example.com/collect"],
+        requestPurposeClassificationConfidence: linkedValidation.evidence?.requestPurposeClassificationConfidence,
         signalKey: "privacy.preconsent_tracking_detected",
         signalValue: true
       },
@@ -1516,6 +1523,7 @@ test("specializes high-sensitivity third-party tracking evidence into a sensitiv
               evidenceStrength: "suspected",
               matchSnippet: "condition=asthma",
               requestUrl: "https://tracker.example.net/collect",
+              samePage: true,
               vendorHost: "tracker.example.net"
             }
           ],

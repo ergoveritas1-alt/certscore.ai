@@ -24,8 +24,12 @@ type ScanDetailPageProps = {
 const RECENT_SCAN_REUSED_MESSAGE =
   "CertScore found a completed scan for this website from the past 24 hours, so this request opened the existing report instead of starting a duplicate scan.";
 
+function canViewCapturedImage(input: { isPlatformAdmin: boolean; role: string | null | undefined }) {
+  return input.isPlatformAdmin || input.role === "admin" || input.role === "advanced";
+}
+
 export default async function ScanDetailPage({ params, searchParams }: ScanDetailPageProps) {
-  const [{ scanId }, { organization, user }] = await Promise.all([params, getDashboardContext()]);
+  const [{ scanId }, { membership, organization, user }] = await Promise.all([params, getDashboardContext()]);
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const recentScanReused = resolvedSearchParams.recentScanReused === "1";
   const scanRecord = await getScanById({
@@ -51,7 +55,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
 
   const scanDomainLabel = scanRecord.scan.domainHostname?.trim() || "Scanned website";
   const isPlatformAdmin = isPlatformAdminEmail(user.email);
-  const visualEvidenceArtifact = isPlatformAdmin
+  const visualEvidenceArtifact = canViewCapturedImage({ isPlatformAdmin, role: membership.role })
     ? getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts).find((artifact) => artifact.status === "available" && artifact.key)
     : null;
   const visualEvidenceHref = visualEvidenceArtifact
@@ -93,6 +97,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
         }
         headerActionsPlacement="belowTitle"
         scanRecord={scanRecord}
+        viewerAccessRole={membership.role}
       />
     </>
   );

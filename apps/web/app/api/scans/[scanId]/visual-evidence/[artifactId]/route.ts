@@ -16,16 +16,21 @@ type RouteContext = {
   }>;
 };
 
+function canViewVisualEvidence(input: { isPlatformAdmin: boolean; role: string | null | undefined }) {
+  return input.isPlatformAdmin || input.role === "admin" || input.role === "advanced";
+}
+
 export async function GET(_request: Request, context: RouteContext) {
   const [{ artifactId, scanId }, user] = await Promise.all([context.params, getCurrentUser()]);
   if (!user) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
-  if (!isPlatformAdminEmail(user.email)) {
-    return NextResponse.json({ error: "Admin access required." }, { status: 403 });
+
+  const { membership, organization } = await bootstrapAppUserSession(user);
+  if (!canViewVisualEvidence({ isPlatformAdmin: isPlatformAdminEmail(user.email), role: membership.role })) {
+    return NextResponse.json({ error: "Admin or advanced access required." }, { status: 403 });
   }
 
-  const { organization } = await bootstrapAppUserSession(user);
   const scanRecord = await getScanById({
     organizationId: organization.id,
     scanId,

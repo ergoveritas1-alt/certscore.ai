@@ -36,6 +36,7 @@ test("registry defines contracts for the high-risk finding set", () => {
       "cross_domain_identifier_sharing_observed",
 	      "dark_pattern_consent_signals_detected",
 	      "fingerprinting_observed",
+      "forced_consent_interaction",
       "long_lived_cookie_retention_review",
 	      "non_essential_tracking_continued_after_reject",
 	      "policy_behavior_contradiction_detected",
@@ -958,6 +959,11 @@ test("non-consent overlays do not satisfy consent dark-pattern UI evidence by th
     },
     consentSurfaceObserved: true,
     consentUiArtifactRefs: ["hybrid_runtime_evidence"],
+    consentUiPathEvidence: {
+      blockingEvidenceSource: "runtime_consent_ui_probe",
+      pageInteractionBlocked: true,
+      unrelatedOverlayClassifier: "consent_surface"
+    },
     forced_consent_wall: true,
     overlayKind: "consent_overlay",
     hybridConsentSummary: {
@@ -974,7 +980,7 @@ test("non-consent overlays do not satisfy consent dark-pattern UI evidence by th
   });
 
   assert.equal(ageGateDecision?.status, "downgrade");
-  assert.ok(ageGateDecision?.missingRequirements.includes("materialChoiceAsymmetryEvidence"));
+  assert.ok(ageGateDecision?.missingRequirements.includes("consentSpecificBlockingInteraction"));
   assert.equal(consentWallDecision?.status, "pass_strong");
 });
 

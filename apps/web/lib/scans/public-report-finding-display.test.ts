@@ -50,6 +50,20 @@ test("does not render known stale mapped report titles", () => {
   }
 });
 
+test("exposes atlas observed copy for scan report descriptors", () => {
+  const display = getPublicReportFindingDisplay({
+    findingId: "policy_behavior_contradiction_detected",
+    label: "Policy/runtime alignment review",
+    remediation: "legacy remediation",
+    severity: "high"
+  });
+
+  assert.equal(
+    display.observedSummary,
+    "Retained report evidence connected a public policy or disclosure claim to concrete runtime behavior, showed runtime third-party vendors/domains not clearly reflected in retained disclosure evidence, or retained consent-governance disclosure context as a supporting alignment review signal."
+  );
+});
+
 test("family confidence tooltips avoid cross-family leakage", () => {
   assert.match(
     getPublicReportConfidenceDefinition({

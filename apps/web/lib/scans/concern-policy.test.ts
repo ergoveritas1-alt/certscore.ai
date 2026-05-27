@@ -1402,9 +1402,12 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       rawEvidence: {
         sensitivePayloadViolations: [
           {
+            detectedType: "health_information",
             evidenceSource: "sensitive_field_third_party_tracking_correlation",
             evidenceStrength: "suspected",
+            matchSnippet: "condition=asthma",
             requestUrl: "https://tracker.example.com/collect",
+            samePage: true,
             vendorHost: "tracker.example.com"
           }
         ]
@@ -2077,8 +2080,10 @@ test("pre-consent policy requires timeline sequence plus non-essential request c
       },
       requestPurposeClassificationConfidence: [
         {
+          category: "analytics",
           confidence: 0.9,
           essentiality: "non_essential",
+          runtimePhase: "pre_consent",
           requestUrl: "https://analytics.example/pixel",
           vendor: "Example Analytics"
         }
@@ -2754,8 +2759,10 @@ test("deriveConcernPolicy promotes pre-consent evidence with consentTimeline seq
       preconsent_tracker_vendors: ["Meta Pixel"],
       requestPurposeClassificationConfidence: [
         {
+          category: "advertising",
           confidence: 0.9,
           essentiality: "non_essential",
+          runtimePhase: "pre_consent",
           requestUrl: "https://connect.facebook.net/fbevents.js",
           vendor: "Meta Pixel"
         }
@@ -3470,7 +3477,7 @@ test("deriveConcernPolicy keeps non-consent forced interactions audit-only", () 
   assert.equal(policy.allowedNarrativeTier, "weak");
   assert.equal(policy.promotionEligibility, "internal_only");
   assert.equal(policy.externalSurfacingEligibility, "audit_only");
-  assert.ok(policy.negativeEvidenceFlags.includes("missing_consent_specific_blocking_evidence"));
+  assert.ok(policy.negativeEvidenceFlags.includes("missing_specific_runtime_anchor"));
 });
 
 test("deriveConcernPolicy keeps RTB cookie sync audit-only for vendor names or generic adtech without sync evidence", () => {

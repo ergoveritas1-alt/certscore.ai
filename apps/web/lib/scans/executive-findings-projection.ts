@@ -1267,10 +1267,22 @@ function hasEligiblePolicyRuntimeVendorDisclosureEvidence(packet: UnifiedFinding
   ).disposition === "eligible";
 }
 
+function hasCompletePolicyRuntimeConflictEvidence(packet: UnifiedFindingDisplayPacket) {
+  return Boolean(
+    isSpecificPolicyRuntimeContradiction(packet) &&
+      buildPolicyRuntimeConflictDetails(packet) &&
+      evaluatePolicyRuntimeConflictPresentation(packet).complete
+  );
+}
+
+function hasPolicyBehaviorExecutivePromotionEvidence(packet: UnifiedFindingDisplayPacket) {
+  return hasCompletePolicyRuntimeConflictEvidence(packet) || hasEligiblePolicyRuntimeVendorDisclosureEvidence(packet);
+}
+
 function shouldBlockGenericPolicyRuntimeAlignmentProjection(packet: UnifiedFindingDisplayPacket) {
   const policyEvidence = getRetainedPolicyDisclosureEvaluation(packet);
   if (!policyEvidence) {
-    return false;
+    return !hasPolicyBehaviorExecutivePromotionEvidence(packet);
   }
 
   const evaluated = getRecordBoolean(policyEvidence, ["evaluated"]) === true;
@@ -1283,16 +1295,11 @@ function shouldBlockGenericPolicyRuntimeAlignmentProjection(packet: UnifiedFindi
     "disclosure_gap_observed"
   ]);
 
-  if (!evaluated || !relevantDisclosureFound || disclosureGapObserved !== false) {
-    return false;
+  if (evaluated && relevantDisclosureFound && disclosureGapObserved === false) {
+    return !hasPolicyBehaviorExecutivePromotionEvidence(packet);
   }
 
-  const concreteConflict = Boolean(
-    isSpecificPolicyRuntimeContradiction(packet) &&
-      buildPolicyRuntimeConflictDetails(packet) &&
-      evaluatePolicyRuntimeConflictPresentation(packet).complete
-  );
-  return !concreteConflict && !hasEligiblePolicyRuntimeVendorDisclosureEvidence(packet);
+  return !hasPolicyBehaviorExecutivePromotionEvidence(packet);
 }
 
 function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof typeof CERT_SCORE_FINDING_REGISTRY> {
@@ -4725,18 +4732,25 @@ function buildExecutiveShortSummary(
 }
 
 function isSpecificPolicyRuntimeContradiction(packet: UnifiedFindingDisplayPacket) {
-  if (packet.unifiedFindingId === "policy_behavior_conflict" || !evaluatePolicyRuntimeConflictPresentation(packet).complete) {
+  if (!evaluatePolicyRuntimeConflictPresentation(packet).complete) {
     return false;
   }
 
   const details = packet.details as Record<string, unknown> | null | undefined;
-  const conflictType = typeof details?.conflictType === "string" ? details.conflictType : "";
-  const policyClaimType = typeof details?.policyClaimType === "string" ? details.policyClaimType : "";
-  const policySnippet = typeof details?.policySnippet === "string" ? details.policySnippet : "";
-  const haystack = `${conflictType} ${policyClaimType} ${policySnippet}`;
+  if (details?.bridgeMappingType === "deterministic_policy_runtime_review_mapping") {
+    return false;
+  }
 
-  return /only\s+after|after\s+(?:you\s+)?(?:set\s+)?(?:cookie\s+)?preferences|after\s+consent|consent(?:ed|ing)?|consent[- ]?gated|reject(?:ion)?\s+(?:disables|stops|prevents|turns off|suppresses)|disabled\s+after\s+reject|only\s+necessary|necessary\s+cookies?\s+only|no\s+(?:sale|share|sharing|marketing|advertis(?:ing|er)|third[- ]party advertising)|declared_no_|declared_only_necessary|declared_tracking_disabled_after_reject/i.test(
-    haystack
+  return Boolean(
+    typeof details?.conflictType === "string" &&
+      details.conflictType.trim().length > 0 &&
+      typeof details?.policyClaimType === "string" &&
+      details.policyClaimType.trim().length > 0 &&
+      typeof details?.runtimeObservationType === "string" &&
+      details.runtimeObservationType.trim().length > 0 &&
+      typeof details?.conflictBridgeReasoning === "string" &&
+      details.conflictBridgeReasoning.trim().length > 0 &&
+      details.conflictSupportsPromotion === true
   );
 }
 

@@ -1037,7 +1037,7 @@ export async function updatePolicyReviewQueueRow(input: {
 
 export async function updateAdminMembershipRole(input: {
   organizationId: string;
-  role: "admin" | "user";
+  role: "admin" | "advanced" | "user";
   userId: string;
 }) {
   await query(

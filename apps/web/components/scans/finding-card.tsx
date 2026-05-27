@@ -42,6 +42,7 @@ function getBadgeCopy(finding: CertScoreFinding) {
 export function FindingCard({ finding }: { finding: CertScoreFinding }) {
   const badgeCopy = getBadgeCopy(finding);
   const display = getPublicReportFindingDisplayForCertFinding(finding);
+  const observedSummary = display.observedSummary ?? finding.shortSummary;
 
   return (
     <details className="group rounded-[1.55rem] border border-slate-200/80 bg-white/92 p-5 shadow-[0_16px_44px_-26px_rgba(15,23,42,0.24)] transition-[box-shadow,border-color] hover:border-slate-300/80 hover:shadow-[0_20px_50px_-30px_rgba(15,23,42,0.28)]">
@@ -69,7 +70,7 @@ export function FindingCard({ finding }: { finding: CertScoreFinding }) {
           </div>
           <div className="space-y-1.5">
             <h3 className="text-lg font-semibold tracking-tight text-slate-950">{display.title}</h3>
-            <p className="max-w-3xl text-sm leading-6 text-slate-700">{finding.shortSummary}</p>
+            <p className="max-w-3xl text-sm leading-6 text-slate-700">{observedSummary}</p>
           </div>
         </div>
         <ScanReportDisclosureIcon />

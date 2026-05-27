@@ -2,14 +2,16 @@
 
 import { useFormStatus } from "react-dom";
 
+export type MembershipRole = "admin" | "advanced" | "user";
+
 type MembershipRoleFormProps = {
   action: (formData: FormData) => Promise<void>;
-  defaultRole: "admin" | "user";
+  defaultRole: MembershipRole;
   organizationId: string;
   userId: string;
 };
 
-function RoleSelect({ defaultRole }: { defaultRole: "admin" | "user" }) {
+function RoleSelect({ defaultRole }: { defaultRole: MembershipRole }) {
   const { pending } = useFormStatus();
 
   return (
@@ -21,6 +23,7 @@ function RoleSelect({ defaultRole }: { defaultRole: "admin" | "user" }) {
       onChange={(event) => event.currentTarget.form?.requestSubmit()}
     >
       <option value="admin">admin</option>
+      <option value="advanced">advanced</option>
       <option value="user">user</option>
     </select>
   );
