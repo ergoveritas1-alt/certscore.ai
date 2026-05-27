@@ -37,7 +37,7 @@ const personas = [
   {
     title: "Operators verifying consent flows",
     detail:
-      "Check whether reject and accept paths actually change tracking activity after a visitor makes a choice."
+      "Review when cookies and trackers appear in milliseconds, including whether they load pre-consent or change after accept/reject choices."
   },
   {
     title: "Teams reviewing third-party websites",
