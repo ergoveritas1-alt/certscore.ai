@@ -1,4 +1,4 @@
-import { HeadBucketCommand, S3Client } from "@aws-sdk/client-s3";
+import { HeadBucketCommand, PutObjectCommand, S3Client, type PutObjectCommandInput } from "@aws-sdk/client-s3";
 import { getS3Env } from "./env";
 
 let s3Client: S3Client | null = null;
@@ -27,6 +27,22 @@ export function getS3Client() {
   }
 
   return s3Client;
+}
+
+export async function putStorageObject(input: {
+  body: NonNullable<PutObjectCommandInput["Body"]>;
+  bucket?: string;
+  contentType?: string;
+  key: string;
+}) {
+  await getS3Client().send(
+    new PutObjectCommand({
+      Body: input.body,
+      Bucket: input.bucket ?? getStorageBucketName(),
+      ContentType: input.contentType,
+      Key: input.key
+    })
+  );
 }
 
 export async function inspectStorageBucketAccess(bucket = getStorageBucketName()) {
