@@ -2,12 +2,14 @@ import "server-only";
 
 import type Stripe from "stripe";
 import { getPlanForStripePriceId } from "./stripe-config";
+import { getStripeClient } from "./stripe-client";
 import {
   findOrganizationIdByStripeCustomer,
   markBillingEventFailed,
   markBillingEventProcessed,
   markBillingEventProcessing,
   type BillingEventQueueRow,
+  updateOrganizationInvoiceState,
   updateOrganizationBillingPlan
 } from "./repository";
 
@@ -42,6 +44,10 @@ function getSubscriptionCurrentPeriodEnd(subscription: Stripe.Subscription) {
   return subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null;
 }
 
+function getSubscriptionCurrentPeriodStart(subscription: Stripe.Subscription) {
+  return subscription.current_period_start ? new Date(subscription.current_period_start * 1000).toISOString() : null;
+}
+
 function getPlanStatus(subscriptionStatus: Stripe.Subscription.Status) {
   switch (subscriptionStatus) {
     case "active":
@@ -56,6 +62,19 @@ function getPlanStatus(subscriptionStatus: Stripe.Subscription.Status) {
     default:
       return "paused";
   }
+}
+
+function getInvoiceSubscriptionId(invoice: Stripe.Invoice) {
+  const value = (invoice as Stripe.Invoice & { subscription?: string | Stripe.Subscription | null }).subscription;
+  if (!value) {
+    return null;
+  }
+
+  return typeof value === "string" ? value : value.id;
+}
+
+function getInvoiceCustomerId(invoice: Stripe.Invoice) {
+  return getCustomerId(invoice.customer as string | Stripe.Customer | Stripe.DeletedCustomer | null);
 }
 
 async function resolveOrganizationId(input: {
@@ -89,10 +108,13 @@ async function applySubscription(subscription: Stripe.Subscription) {
 
   await updateOrganizationBillingPlan({
     currentPeriodEnd: getSubscriptionCurrentPeriodEnd(subscription),
+    currentPeriodStart: getSubscriptionCurrentPeriodStart(subscription),
     organizationId,
     plan,
     planStatus: getPlanStatus(subscription.status),
+    stripeLatestInvoiceId: typeof subscription.latest_invoice === "string" ? subscription.latest_invoice : subscription.latest_invoice?.id ?? null,
     stripeCustomerId: customerId,
+    stripePaymentStatus: subscription.status === "past_due" ? "payment_failed" : "paid",
     stripePriceId: priceId,
     stripeSubscriptionId: subscription.id,
     stripeSubscriptionStatus: subscription.status
@@ -100,11 +122,18 @@ async function applySubscription(subscription: Stripe.Subscription) {
 }
 
 async function applyCheckoutCompleted(session: Stripe.Checkout.Session) {
-  const organizationId = getStringMetadataValue(session.metadata, "certscore_organization_id");
+  const organizationId = getStringMetadataValue(session.metadata, "certscore_organization_id") ?? session.client_reference_id;
   const plan = getStringMetadataValue(session.metadata, "certscore_plan");
   const customerId = getCustomerId(session.customer as string | Stripe.Customer | Stripe.DeletedCustomer | null);
 
   if (!organizationId || (plan !== "individual" && plan !== "pro") || typeof session.subscription !== "string") {
+    return;
+  }
+
+  const subscription = await getStripeClient().subscriptions.retrieve(session.subscription);
+  const subscriptionPlan = getSubscriptionPlan(subscription);
+  if (subscriptionPlan) {
+    await applySubscription(subscription);
     return;
   }
 
@@ -133,13 +162,44 @@ async function applySubscriptionDeleted(subscription: Stripe.Subscription) {
 
   await updateOrganizationBillingPlan({
     currentPeriodEnd: getSubscriptionCurrentPeriodEnd(subscription),
+    currentPeriodStart: getSubscriptionCurrentPeriodStart(subscription),
     organizationId,
     plan: "free",
     planStatus: "inactive",
+    stripeLatestInvoiceId: typeof subscription.latest_invoice === "string" ? subscription.latest_invoice : subscription.latest_invoice?.id ?? null,
     stripeCustomerId: customerId,
+    stripePaymentStatus: "canceled",
     stripePriceId: null,
     stripeSubscriptionId: subscription.id,
     stripeSubscriptionStatus: subscription.status
+  });
+}
+
+async function applyInvoicePaymentState(invoice: Stripe.Invoice, paymentStatus: "paid" | "payment_failed") {
+  const subscriptionId = getInvoiceSubscriptionId(invoice);
+  const customerId = getInvoiceCustomerId(invoice);
+  let organizationId = await resolveOrganizationId({
+    customerId,
+    metadata: invoice.metadata
+  });
+
+  if (!organizationId && subscriptionId) {
+    const subscription = await getStripeClient().subscriptions.retrieve(subscriptionId);
+    await applySubscription(subscription);
+    organizationId = await resolveOrganizationId({
+      customerId: getSubscriptionCustomerId(subscription),
+      metadata: subscription.metadata
+    });
+  }
+
+  if (!organizationId) {
+    return;
+  }
+
+  await updateOrganizationInvoiceState({
+    organizationId,
+    stripeLatestInvoiceId: invoice.id,
+    stripePaymentStatus: paymentStatus
   });
 }
 
@@ -154,6 +214,12 @@ async function applyBillingEvent(event: Stripe.Event) {
       return;
     case "customer.subscription.deleted":
       await applySubscriptionDeleted(event.data.object as Stripe.Subscription);
+      return;
+    case "invoice.payment_succeeded":
+      await applyInvoicePaymentState(event.data.object as Stripe.Invoice, "paid");
+      return;
+    case "invoice.payment_failed":
+      await applyInvoicePaymentState(event.data.object as Stripe.Invoice, "payment_failed");
       return;
     default:
       return;

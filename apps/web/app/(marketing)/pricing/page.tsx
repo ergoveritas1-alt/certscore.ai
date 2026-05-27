@@ -30,7 +30,8 @@ const includedScanValue: Record<string, string> = {
 };
 
 function getPlanSignupHref(plan: string) {
-  return `/login?mode=create_account&next=${encodeURIComponent(`/app/modify-plan?plan=${plan}`)}`;
+  const publicPlan = plan === "individual" ? "starter" : plan;
+  return `/login?mode=create_account&plan=${encodeURIComponent(publicPlan)}&next=${encodeURIComponent(`/app/billing/checkout?plan=${publicPlan}`)}`;
 }
 
 export default function PricingPage() {
@@ -179,6 +180,9 @@ export default function PricingPage() {
                   pendingContent="Opening..."
                   size="sm"
                 />
+                <p className="text-xs leading-5 text-slate-500">
+                  Secure checkout. Create an account first so scans, credits, and history stay attached to your workspace.
+                </p>
               </CardContent>
             </Card>
           ))}

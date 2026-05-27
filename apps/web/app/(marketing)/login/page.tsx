@@ -8,11 +8,26 @@ import { getCurrentUser } from "../../../server/auth";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<{
+    next?: string;
+  }>;
+};
+
+function getSafeRedirectPath(nextPath: string | undefined) {
+  if (nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//")) {
+    return nextPath;
+  }
+
+  return "/app";
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const user = await getCurrentUser();
+  const resolvedSearchParams = await searchParams;
 
   if (user) {
-    redirect("/app");
+    redirect(getSafeRedirectPath(resolvedSearchParams?.next));
   }
 
   const requestHeaders = await headers();

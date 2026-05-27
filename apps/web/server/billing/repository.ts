@@ -9,7 +9,10 @@ export type BillingAccountRow = {
   organization_name: string;
   plan: PlanCode;
   plan_current_period_end: string | null;
+  plan_current_period_start: string | null;
   stripe_customer_id: string | null;
+  stripe_latest_invoice_id: string | null;
+  stripe_payment_status: string | null;
   stripe_price_id: string | null;
   stripe_subscription_id: string | null;
   stripe_subscription_status: string | null;
@@ -30,7 +33,10 @@ export async function loadBillingAccountForOrganization(organizationId: string):
         organizations.name as organization_name,
         organizations.plan,
         organizations.plan_current_period_end,
+        organizations.plan_current_period_start,
         organizations.stripe_customer_id,
+        organizations.stripe_latest_invoice_id,
+        organizations.stripe_payment_status,
         organizations.stripe_price_id,
         organizations.stripe_subscription_id,
         organizations.stripe_subscription_status,
@@ -125,10 +131,13 @@ export async function markBillingEventFailed(input: { queueId: string; errorMess
 
 export async function updateOrganizationBillingPlan(input: {
   currentPeriodEnd: string | null;
+  currentPeriodStart?: string | null;
   organizationId: string;
   plan: PlanCode;
   planStatus: string;
+  stripeLatestInvoiceId?: string | null;
   stripeCustomerId: string | null;
+  stripePaymentStatus?: string | null;
   stripePriceId: string | null;
   stripeSubscriptionId: string | null;
   stripeSubscriptionStatus: string | null;
@@ -141,7 +150,10 @@ export async function updateOrganizationBillingPlan(input: {
             stripe_subscription_id = $5,
             stripe_subscription_status = $6,
             stripe_price_id = $7,
-            plan_current_period_end = $8::timestamptz
+            plan_current_period_end = $8::timestamptz,
+            plan_current_period_start = coalesce($9::timestamptz, plan_current_period_start),
+            stripe_payment_status = coalesce($10, stripe_payment_status),
+            stripe_latest_invoice_id = coalesce($11, stripe_latest_invoice_id)
       where id = $1`,
     [
       input.organizationId,
@@ -151,7 +163,24 @@ export async function updateOrganizationBillingPlan(input: {
       input.stripeSubscriptionId,
       input.stripeSubscriptionStatus,
       input.stripePriceId,
-      input.currentPeriodEnd
+      input.currentPeriodEnd,
+      input.currentPeriodStart ?? null,
+      input.stripePaymentStatus ?? null,
+      input.stripeLatestInvoiceId ?? null
     ]
+  );
+}
+
+export async function updateOrganizationInvoiceState(input: {
+  organizationId: string;
+  stripeLatestInvoiceId: string | null;
+  stripePaymentStatus: string;
+}) {
+  await query(
+    `update organizations
+        set stripe_latest_invoice_id = coalesce($2, stripe_latest_invoice_id),
+            stripe_payment_status = $3
+      where id = $1`,
+    [input.organizationId, input.stripeLatestInvoiceId, input.stripePaymentStatus]
   );
 }

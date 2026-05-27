@@ -26,7 +26,9 @@ const webhookEvents = [
   "checkout.session.completed",
   "customer.subscription.created",
   "customer.subscription.updated",
-  "customer.subscription.deleted"
+  "customer.subscription.deleted",
+  "invoice.payment_succeeded",
+  "invoice.payment_failed"
 ] as const;
 
 function getRequiredEnv(name: string) {
@@ -123,6 +125,25 @@ async function findWebhookEndpoint(stripe: Stripe, url: string) {
 async function findOrCreateWebhookEndpoint(stripe: Stripe, apply: boolean) {
   const url = getWebhookUrl();
   const existingEndpoint = await findWebhookEndpoint(stripe, url);
+  if (existingEndpoint && apply) {
+    const enabledEvents = new Set(existingEndpoint.enabled_events);
+    const hasExpectedEvents = webhookEvents.every((event) => enabledEvents.has(event));
+    if (!hasExpectedEvents) {
+      const endpoint = await stripe.webhookEndpoints.update(existingEndpoint.id, {
+        enabled_events: [...webhookEvents],
+        metadata: {
+          ...existingEndpoint.metadata,
+          certscore_managed: "true"
+        }
+      });
+      return {
+        endpoint,
+        secret: null,
+        url
+      };
+    }
+  }
+
   if (existingEndpoint || !apply) {
     return {
       endpoint: existingEndpoint,

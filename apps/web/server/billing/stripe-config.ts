@@ -2,20 +2,26 @@ import "server-only";
 
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
 import { z } from "zod";
-
-const paidPlanCodes = ["individual", "pro"] as const satisfies readonly PlanCode[];
+import {
+  getPublicCheckoutPlanCode,
+  normalizeCheckoutPlan,
+  paidPlanCodes,
+  type PaidPlanCode,
+  type PublicCheckoutPlanCode
+} from "./plan-mapping";
 
 const stripeBillingEnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url(),
   STRIPE_BILLING_PORTAL_CONFIGURATION_ID: z.string().optional(),
   STRIPE_BILLING_PORTAL_RETURN_PATH: z.string().optional(),
   STRIPE_PRICE_INDIVIDUAL_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_STARTER_MONTHLY: z.string().optional(),
   STRIPE_PRICE_PRO_MONTHLY: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional()
 });
 
-export type PaidPlanCode = (typeof paidPlanCodes)[number];
+export { getPublicCheckoutPlanCode, normalizeCheckoutPlan, type PaidPlanCode, type PublicCheckoutPlanCode };
 
 export function getStripeBillingEnv(env: NodeJS.ProcessEnv = process.env) {
   return stripeBillingEnvSchema.parse(env);
@@ -27,7 +33,10 @@ export function isPaidPlanCode(plan: PlanCode): plan is PaidPlanCode {
 
 export function getStripePriceIdForPlan(plan: PaidPlanCode, env: NodeJS.ProcessEnv = process.env) {
   const values = getStripeBillingEnv(env);
-  const priceId = plan === "individual" ? values.STRIPE_PRICE_INDIVIDUAL_MONTHLY : values.STRIPE_PRICE_PRO_MONTHLY;
+  const priceId =
+    plan === "individual"
+      ? values.STRIPE_PRICE_STARTER_MONTHLY ?? values.STRIPE_PRICE_INDIVIDUAL_MONTHLY
+      : values.STRIPE_PRICE_PRO_MONTHLY;
   return priceId?.trim() || null;
 }
 
@@ -37,7 +46,7 @@ export function getPlanForStripePriceId(priceId: string | null | undefined, env:
   }
 
   const values = getStripeBillingEnv(env);
-  if (priceId === values.STRIPE_PRICE_INDIVIDUAL_MONTHLY) {
+  if (priceId === values.STRIPE_PRICE_STARTER_MONTHLY || priceId === values.STRIPE_PRICE_INDIVIDUAL_MONTHLY) {
     return "individual";
   }
 

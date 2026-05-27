@@ -3,6 +3,7 @@ import { getStripeBillingEnv } from "../../../../server/billing/stripe-config";
 import { getStripeClient } from "../../../../server/billing/stripe-client";
 import { upsertBillingEvent } from "../../../../server/billing/repository";
 import { processBillingEventQueueRow } from "../../../../server/billing/stripe-webhook-processor";
+import { constructVerifiedStripeWebhookEvent } from "../../../../server/billing/webhook-signature";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,12 @@ export async function POST(request: Request) {
   let event;
 
   try {
-    event = getStripeClient().webhooks.constructEvent(body, signature, webhookSecret);
+    event = constructVerifiedStripeWebhookEvent({
+      body,
+      secret: webhookSecret,
+      signature,
+      stripe: getStripeClient()
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Invalid Stripe webhook signature." },
