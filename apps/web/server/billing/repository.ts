@@ -8,8 +8,11 @@ export type BillingAccountRow = {
   organization_id: string;
   organization_name: string;
   plan: PlanCode;
+  plan_current_period_end: string | null;
   stripe_customer_id: string | null;
+  stripe_price_id: string | null;
   stripe_subscription_id: string | null;
+  stripe_subscription_status: string | null;
 };
 
 export type BillingEventQueueRow = {
@@ -26,8 +29,11 @@ export async function loadBillingAccountForOrganization(organizationId: string):
         organizations.id as organization_id,
         organizations.name as organization_name,
         organizations.plan,
+        organizations.plan_current_period_end,
         organizations.stripe_customer_id,
+        organizations.stripe_price_id,
         organizations.stripe_subscription_id,
+        organizations.stripe_subscription_status,
         users.email
        from organizations
        left join organization_members on organization_members.organization_id = organizations.id

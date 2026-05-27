@@ -53,8 +53,12 @@ function getWebhookUrl() {
     return explicitUrl;
   }
 
-  const appUrl = getRequiredEnv("NEXT_PUBLIC_APP_URL");
+  const appUrl = getAppUrl();
   return new URL("/api/stripe/webhook", appUrl).toString();
+}
+
+function getAppUrl() {
+  return getRequiredEnv("NEXT_PUBLIC_APP_URL").replace(/\/+$/, "");
 }
 
 async function findActivePriceByLookupKey(stripe: Stripe, lookupKey: string) {
@@ -142,6 +146,61 @@ async function findOrCreateWebhookEndpoint(stripe: Stripe, apply: boolean) {
   };
 }
 
+async function findOrCreateBillingPortalConfiguration(stripe: Stripe, apply: boolean) {
+  const appUrl = getAppUrl();
+  const configurations = await stripe.billingPortal.configurations.list({ limit: 100 });
+  const existingConfiguration =
+    configurations.data.find(
+      (configuration) => configuration.active && configuration.metadata.certscore_managed === "true"
+    ) ?? null;
+
+  const params = {
+    business_profile: {
+      headline: "Manage your CertScore.ai subscription.",
+      privacy_policy_url: `${appUrl}/privacy`,
+      terms_of_service_url: `${appUrl}/terms`
+    },
+    default_return_url: `${appUrl}/app/modify-plan`,
+    features: {
+      customer_update: {
+        allowed_updates: ["email", "tax_id"],
+        enabled: true
+      },
+      invoice_history: {
+        enabled: true
+      },
+      payment_method_update: {
+        enabled: true
+      },
+      subscription_cancel: {
+        cancellation_reason: {
+          enabled: true,
+          options: ["too_expensive", "missing_features", "switched_service", "unused", "too_complex", "other"]
+        },
+        enabled: true,
+        mode: "at_period_end",
+        proration_behavior: "none"
+      },
+      subscription_update: {
+        enabled: false
+      }
+    },
+    metadata: {
+      certscore_managed: "true"
+    }
+  } satisfies Stripe.BillingPortal.ConfigurationCreateParams;
+
+  if (existingConfiguration && apply) {
+    return stripe.billingPortal.configurations.update(existingConfiguration.id, params);
+  }
+
+  if (existingConfiguration || !apply) {
+    return existingConfiguration;
+  }
+
+  return stripe.billingPortal.configurations.create(params);
+}
+
 async function main() {
   const apply = isApplyMode();
   const stripe = new Stripe(getRequiredEnv("STRIPE_SECRET_KEY"), {
@@ -162,11 +221,18 @@ async function main() {
   }
 
   const webhook = await findOrCreateWebhookEndpoint(stripe, apply);
+  const billingPortalConfiguration = await findOrCreateBillingPortalConfiguration(stripe, apply);
 
   console.log(
     JSON.stringify(
       {
         apply,
+        billingPortal: {
+          cancellationMode: billingPortalConfiguration?.features.subscription_cancel.mode ?? "at_period_end",
+          id: billingPortalConfiguration?.id ?? null,
+          status: billingPortalConfiguration ? "ready" : apply ? "missing" : "would_create",
+          subscriptionCancelEnabled: billingPortalConfiguration?.features.subscription_cancel.enabled ?? null
+        },
         prices: priceResults,
         webhook: {
           enabledEvents: webhookEvents,

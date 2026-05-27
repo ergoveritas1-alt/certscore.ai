@@ -244,6 +244,18 @@ export default function PricingPage() {
           . Custom plans can support higher throttling rates.
         </p>
 
+        <p className="mx-auto mt-3 max-w-3xl text-center text-sm leading-6 text-slate-500">
+          Paid plans renew monthly until cancelled. After signing in, you can cancel from{" "}
+          <Link href="/app/modify-plan" className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800">
+            Modify plan
+          </Link>{" "}
+          using Stripe&apos;s secure billing portal. See the{" "}
+          <Link href="/terms" className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800">
+            Terms
+          </Link>{" "}
+          for subscription details.
+        </p>
+
         <p className="mt-3 text-center text-sm text-slate-500">
           Not sure yet?{" "}
           <Link href="/#homepage-scan" className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800">

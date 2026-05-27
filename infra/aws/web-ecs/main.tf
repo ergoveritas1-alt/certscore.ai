@@ -467,6 +467,7 @@ resource "aws_ecs_task_definition" "certscore" {
         { name = "NEXT_PUBLIC_APP_URL", value = local.certscore_base_url },
         { name = "STRIPE_PRICE_INDIVIDUAL_MONTHLY", value = var.stripe_price_individual_monthly },
         { name = "STRIPE_PRICE_PRO_MONTHLY", value = var.stripe_price_pro_monthly },
+        { name = "STRIPE_BILLING_PORTAL_CONFIGURATION_ID", value = var.stripe_billing_portal_configuration_id },
         { name = "STRIPE_BILLING_PORTAL_RETURN_PATH", value = var.stripe_billing_portal_return_path }
       ])
       secrets = local.base_secrets

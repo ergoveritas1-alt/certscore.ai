@@ -7,6 +7,7 @@ const paidPlanCodes = ["individual", "pro"] as const satisfies readonly PlanCode
 
 const stripeBillingEnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url(),
+  STRIPE_BILLING_PORTAL_CONFIGURATION_ID: z.string().optional(),
   STRIPE_BILLING_PORTAL_RETURN_PATH: z.string().optional(),
   STRIPE_PRICE_INDIVIDUAL_MONTHLY: z.string().optional(),
   STRIPE_PRICE_PRO_MONTHLY: z.string().optional(),

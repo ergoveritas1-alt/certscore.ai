@@ -20,7 +20,7 @@ const sections = [
   {
     title: "2. Account And Submitted Information",
     body:
-      "We may collect information you provide directly, such as your email address, name, authentication details, submitted domains, and scan settings."
+      "We may collect information you provide directly, such as your email address, name, authentication details, submitted domains, scan settings, selected plan, and account preferences."
   },
   {
     title: "3. Usage And Operational Data",
@@ -35,35 +35,40 @@ const sections = [
   {
     title: "5. Third-Party Services",
     body:
-      "CertScore.ai uses third-party infrastructure and service providers, including PostgreSQL-compatible database hosting, S3-compatible object storage, AWS, and Gmail SMTP where applicable. These providers process data as part of hosting, job processing, storage, email delivery, and platform operation."
+      "CertScore.ai uses third-party infrastructure and service providers, including PostgreSQL-compatible database hosting, S3-compatible object storage, AWS, Stripe for payment and subscription processing, and Gmail SMTP where applicable. These providers process data as part of hosting, job processing, storage, email delivery, payment processing, subscription management, and platform operation."
   },
   {
-    title: "6. Data Retention",
+    title: "6. Payments And Subscription Records",
+    body:
+      "Payment card details are handled by Stripe rather than stored directly by CertScore.ai. CertScore.ai may retain Stripe customer identifiers, subscription identifiers, plan status, invoice or checkout status, billing event metadata, and related operational records needed to provide paid plans, support cancellation, reconcile payments, prevent fraud, and maintain business records."
+  },
+  {
+    title: "7. Data Retention",
     body:
       "We retain account data, scan metadata, and related operational records for as long as needed to operate the service, subject to plan limits, retention settings, and operational needs."
   },
   {
-    title: "7. Your Privacy Rights",
+    title: "8. Your Privacy Rights",
     body:
       "Depending on where you live, you may have rights to request access to personal data, deletion, correction, portability, restriction, objection, or certain opt-outs. CertScore.ai provides a public privacy request form at certscore.ai/privacy-request and also accepts requests sent to privacy@certscore.ai."
   },
   {
-    title: "8. Cookies and Tracking",
+    title: "9. Cookies and Tracking",
     body:
       "CertScore.ai uses cookies and similar technologies to operate the service, maintain sessions, and understand usage. We use Google Analytics and Microsoft Clarity for website analytics and session behavior analysis. Microsoft Clarity is configured with strict masking to avoid intentionally collecting sensitive form inputs or private report content."
   },
   {
-    title: "9. Security",
+    title: "10. Security",
     body:
       "We use reasonable technical and operational measures to protect account and scan data, but no system can guarantee absolute security."
   },
   {
-    title: "10. Changes to This Policy",
+    title: "11. Changes to This Policy",
     body:
       "We may update this Privacy Policy from time to time. Material changes will be reflected on this page with updated content."
   },
   {
-    title: "11. Contact",
+    title: "12. Contact",
     body:
       "If you have privacy-related questions, email privacy@certscore.ai or use the privacy request form linked from this policy and the site footer."
   }
@@ -91,6 +96,13 @@ export default function PrivacyPage() {
               privacy@certscore.ai
             </a>
             .
+          </p>
+          <p className="text-sm leading-6 text-slate-600">
+            To manage or cancel a paid subscription, sign in and use{" "}
+            <a className="font-medium text-sky-700 hover:text-sky-800" href="/app/modify-plan">
+              the Modify plan page
+            </a>
+            . Payment and subscription management is processed through Stripe.
           </p>
         </div>
 

@@ -7,7 +7,7 @@ import { createPageMetadata } from "../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "Terms of Service",
   description:
-    "Read the CertScore.ai Terms of Service, including lawful use, no legal advice language, acceptable use, and service limitations.",
+    "Read the CertScore.ai Terms of Service, including lawful use, subscriptions, cancellation, no legal advice language, acceptable use, and service limitations.",
   path: "/terms"
 });
 
@@ -43,22 +43,37 @@ const sections = [
       "You may not use CertScore.ai to interfere with service operations, attempt unauthorized access, disrupt or degrade third-party websites or services, or use the service for unlawful activity."
   },
   {
-    title: "7. Limitation of Liability",
+    title: "7. Plans, Billing, And Automatic Renewal",
+    body:
+      "Paid CertScore.ai plans are subscription services billed through Stripe. Unless otherwise stated at checkout, paid subscriptions renew monthly until cancelled. Prices, included scan limits, and plan features are shown on the pricing and modify-plan pages before checkout. You are responsible for keeping payment information current and for reviewing plan limits before purchasing."
+  },
+  {
+    title: "8. Cancellation",
+    body:
+      "You may cancel a paid subscription online from the logged-in Modify plan page at certscore.ai/app/modify-plan by selecting Cancel subscription or Manage billing. Cancellation is processed through Stripe's secure billing portal. If cancellation is scheduled for the end of the current billing period, access to paid plan features may continue until that period ends unless Stripe or CertScore.ai indicates otherwise."
+  },
+  {
+    title: "9. Refunds And Plan Changes",
+    body:
+      "Subscription fees are generally non-refundable except where required by law or where CertScore.ai states otherwise in writing. Plan changes, downgrades, cancellation timing, credits, taxes, invoices, and payment-method updates may be handled by Stripe. If you believe a billing error occurred, contact support through certscore.ai or the contact information listed on this site."
+  },
+  {
+    title: "10. Limitation of Liability",
     body:
       "CertScore.ai is provided on an as-is basis. To the maximum extent permitted by law, CertScore.ai and its operators are not liable for indirect, incidental, special, consequential, or business-interruption damages arising from use of the service."
   },
   {
-    title: "8. Termination",
+    title: "11. Termination",
     body:
       "We may suspend or terminate access if the service is used in breach of these terms or in ways that create risk for the platform, other users, or third parties."
   },
   {
-    title: "9. Governing Law",
+    title: "12. Governing Law",
     body:
       "These terms are governed by the laws of the applicable operating jurisdiction of CertScore.ai, without regard to conflict-of-law principles."
   },
   {
-    title: "10. Contact Information",
+    title: "13. Contact Information",
     body:
       "If you have questions about these terms, contact CertScore.ai through the contact information or support channel listed on certscore.ai."
   }
@@ -74,7 +89,14 @@ export default function TermsPage() {
           <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Terms of Service</h1>
           <p className="text-lg text-slate-600">
             These terms explain how CertScore.ai may be used and set expectations around lawful use,
-            service limitations, acceptable use, and the review-oriented nature of the product.
+            service limitations, subscriptions, cancellation, acceptable use, and the review-oriented nature of the product.
+          </p>
+          <p className="text-sm leading-6 text-slate-600">
+            To cancel a paid subscription, sign in and use{" "}
+            <a className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800" href="/app/modify-plan">
+              the Modify plan page
+            </a>
+            . The logged-in page links to Stripe&apos;s secure billing portal for cancellation, invoices, and payment-method updates.
           </p>
         </div>
 

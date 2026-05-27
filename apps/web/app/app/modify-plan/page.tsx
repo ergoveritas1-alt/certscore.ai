@@ -1,13 +1,16 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { PLAN_DEFINITIONS } from "@website-signal-risk-scanner/shared";
 import Link from "next/link";
+import { CancelSubscriptionForm } from "../../../components/plans/cancel-subscription-form";
 import { ModifyPlanSelectForm } from "../../../components/plans/modify-plan-select-form";
 import { SCAN_ACCESS } from "../../../lib/scan-access";
 import { getDashboardContext } from "../../../server/auth";
 import {
   openStripeBillingPortalFormAction,
+  openStripeSubscriptionCancellationFormAction,
   startStripeCheckoutFormAction
 } from "../../../server/billing/actions";
+import { loadBillingAccountForOrganization } from "../../../server/billing/repository";
 import { getPlanBillingIntent, getStripeBillingMode } from "../../../server/billing/stripe-config";
 
 const planDescriptions: Record<string, string> = {
@@ -16,9 +19,50 @@ const planDescriptions: Record<string, string> = {
   team: "For API access, portfolios, agencies, custom retention, or higher-volume workflows."
 };
 
-export default async function ModifyPlanPage() {
+type ModifyPlanPageProps = {
+  searchParams?: Promise<{
+    billing?: string;
+  }>;
+};
+
+function getBillingNotice(code: string | undefined) {
+  switch (code) {
+    case "success":
+      return "Checkout completed. Your plan will update after Stripe confirms the subscription.";
+    case "cancelled":
+      return "Cancellation or billing changes were returned from Stripe. Your plan will update after Stripe confirms the subscription status.";
+    case "already-cancelled":
+      return "That subscription is already cancelled.";
+    case "no-active-subscription":
+      return "There is no active Stripe subscription to cancel for this account.";
+    default:
+      return null;
+  }
+}
+
+function formatBillingDate(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeZone: "UTC"
+  }).format(new Date(value));
+}
+
+export default async function ModifyPlanPage({ searchParams }: ModifyPlanPageProps) {
   const { organization } = await getDashboardContext();
+  const resolvedSearchParams = await searchParams;
   const billingMode = getStripeBillingMode();
+  const billingAccount = await loadBillingAccountForOrganization(organization.id);
+  const billingNotice = getBillingNotice(resolvedSearchParams?.billing);
+  const hasActiveStripeSubscription = Boolean(
+    billingAccount?.stripe_customer_id &&
+      billingAccount?.stripe_subscription_id &&
+      billingAccount?.stripe_subscription_status !== "canceled"
+  );
+  const periodEndLabel = formatBillingDate(billingAccount?.plan_current_period_end);
 
   return (
     <div className="space-y-8">
@@ -31,11 +75,51 @@ export default async function ModifyPlanPage() {
         </p>
       </div>
 
+      {billingNotice ? (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-950">
+          {billingNotice}
+        </div>
+      ) : null}
+
       {!billingMode.enabled ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
           Stripe billing is not configured yet. Missing: {billingMode.missing.join(", ")}.
         </div>
       ) : null}
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-700">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2">
+            <h2 className="text-base font-semibold text-slate-950">Billing and cancellation</h2>
+            <p>
+              You can manage payment methods, invoices, subscription changes, and cancellation from this page. Paid subscriptions renew
+              monthly until cancelled. Cancellation is handled through Stripe&apos;s secure billing portal.
+            </p>
+            {hasActiveStripeSubscription ? (
+              <p className="text-slate-600">
+                Current Stripe subscription status: {billingAccount?.stripe_subscription_status ?? "active"}
+                {periodEndLabel ? `; current billing period ends ${periodEndLabel}.` : "."}
+              </p>
+            ) : (
+              <p className="text-slate-600">No active Stripe subscription is connected to this account.</p>
+            )}
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <form action={openStripeBillingPortalFormAction}>
+              <input name="intent" type="hidden" value="manage_billing" />
+              <button
+                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 hover:bg-slate-50"
+                type="submit"
+              >
+                Manage billing
+              </button>
+            </form>
+            {hasActiveStripeSubscription ? (
+              <CancelSubscriptionForm action={openStripeSubscriptionCancellationFormAction} />
+            ) : null}
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-4 lg:grid-cols-4">
         {PLAN_DEFINITIONS.map((plan) => {
@@ -99,6 +183,17 @@ export default async function ModifyPlanPage() {
           {SCAN_ACCESS.salesEmail}
         </a>
         . Custom plans can support higher throttling rates.
+      </p>
+      <p className="max-w-3xl text-xs leading-5 text-slate-500">
+        Subscription and cancellation terms are summarized in the{" "}
+        <Link className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800" href="/terms">
+          Terms of Service
+        </Link>
+        . Privacy-related account and payment processing details are summarized in the{" "}
+        <Link className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800" href="/privacy">
+          Privacy Policy
+        </Link>
+        .
       </p>
     </div>
   );

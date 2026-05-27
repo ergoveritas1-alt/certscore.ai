@@ -232,6 +232,12 @@ variable "stripe_price_pro_monthly" {
   default     = ""
 }
 
+variable "stripe_billing_portal_configuration_id" {
+  description = "Optional Stripe Billing Portal configuration id with subscription cancellation enabled."
+  type        = string
+  default     = ""
+}
+
 variable "stripe_billing_portal_return_path" {
   description = "Return path used after Stripe Billing Portal sessions."
   type        = string
