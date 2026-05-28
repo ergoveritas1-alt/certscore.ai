@@ -184,16 +184,6 @@ export default async function MarketingHomePage() {
                 />
               </CardContent>
             </Card>
-
-            <div className="space-y-3 text-slate-500">
-              <p className="text-sm leading-6">
-                Evidence-based scanning for teams comparing live browser behavior with consent controls, cookie posture, and privacy disclosures.{" "}
-                <Link href="/findings" className="font-medium text-sky-700 hover:text-sky-800">
-                  Browse the findings registry
-                </Link>
-                .
-              </p>
-            </div>
           </div>
         </div>
       </section>
