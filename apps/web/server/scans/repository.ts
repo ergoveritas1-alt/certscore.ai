@@ -1254,20 +1254,26 @@ export async function loadScanComparisonArtifacts(input: {
   previousTrackerRows: Array<Record<string, unknown>>;
   relatedPreviewSnapshot: Record<string, unknown> | null;
 }> {
-  const previousSnapshot = input.previousScanId
-    ? await queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [input.previousScanId], { readOnly: true })
-    : null;
-  const previousTrackerRows = input.previousScanId
-    ? await query<Record<string, unknown>>(
+  const [
+    previousSnapshot,
+    previousTrackerRows,
+    relatedPreviewSnapshot,
+    previousPolicyRows
+  ] = await Promise.all([
+    input.previousScanId
+      ? queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [input.previousScanId], { readOnly: true })
+      : Promise.resolve(null),
+    input.previousScanId
+      ? query<Record<string, unknown>>(
         `select vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, collection_endpoint_type, before_consent, script_host, matched_signature_id
            from scan_tracker_vendors
           where scan_id = $1`,
         [input.previousScanId],
         { readOnly: true }
       ).then((result) => result.rows)
-    : [];
-  const relatedPreviewSnapshot = input.domainField
-    ? await queryOne<Record<string, unknown>>(
+      : Promise.resolve([]),
+    input.domainField
+      ? queryOne<Record<string, unknown>>(
         `select *
            from scan_snapshots
           where domain = $1
@@ -1278,9 +1284,9 @@ export async function loadScanComparisonArtifacts(input: {
         [input.domainField, input.scanId],
         { readOnly: true }
       )
-    : null;
-  const previousPolicyRows = input.previousScanId
-    ? await query<Record<string, unknown>>(
+      : Promise.resolve(null),
+    input.previousScanId
+      ? query<Record<string, unknown>>(
         `select *
            from policy_enrichment
           where scan_id = $1
@@ -1288,7 +1294,8 @@ export async function loadScanComparisonArtifacts(input: {
         [input.previousScanId],
         { readOnly: true }
       ).then((result) => result.rows)
-    : [];
+      : Promise.resolve([])
+  ]);
 
   return {
     previousPolicyRows,

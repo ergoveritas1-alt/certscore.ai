@@ -603,6 +603,7 @@ async function loadScanDetailRecord(input: {
   scanId: string;
   allowAnonymousFallback?: boolean;
   anonymousOnly?: boolean;
+  includeUrlscanSupplement?: boolean;
   viewerEmail?: string | null;
 }) {
   const scanCore = await loadScanCoreRecord(input).catch((error) => {
@@ -642,12 +643,9 @@ async function loadScanDetailRecord(input: {
     validationRunId
   } = await loadScanDetailArtifacts(input.scanId);
 
-  let validationFindings: ScanValidationFindingRecord[] = [];
-
-  if (validationRunId) {
-    const { findings: findingRows } = await loadScanValidationFindingRows(input.scanId, validationRunId);
-
-    validationFindings = findingRows.map((row) => {
+  const validationFindingsPromise = validationRunId
+    ? loadScanValidationFindingRows(input.scanId, validationRunId).then(async ({ findings: findingRows }) => {
+      const validationFindings = findingRows.map((row) => {
       const verdictRows = Array.isArray(row.validation_verdicts)
         ? row.validation_verdicts
         : row.validation_verdicts
@@ -689,15 +687,19 @@ async function loadScanDetailRecord(input: {
       scanId: input.scanId
     });
 
-    validationFindings = [...validationFindings, ...supplementalValidationFindings];
-  }
+      return [...validationFindings, ...supplementalValidationFindings];
+    })
+    : Promise.resolve([] as ScanValidationFindingRecord[]);
 
-  const { previousPolicyRows, previousSnapshot, previousTrackerRows, relatedPreviewSnapshot } =
-    await loadScanComparisonArtifacts({
-      domainField: snapshot && typeof (snapshot as Record<string, unknown>).domain === "string" ? ((snapshot as Record<string, unknown>).domain as string) : null,
-      previousScanId,
-      scanId: input.scanId
-    });
+  const comparisonArtifactsPromise = loadScanComparisonArtifacts({
+    domainField: snapshot && typeof (snapshot as Record<string, unknown>).domain === "string" ? ((snapshot as Record<string, unknown>).domain as string) : null,
+    previousScanId,
+    scanId: input.scanId
+  });
+  const [
+    validationFindings,
+    { previousPolicyRows, previousSnapshot, previousTrackerRows, relatedPreviewSnapshot }
+  ] = await Promise.all([validationFindingsPromise, comparisonArtifactsPromise]);
   const rawPolicyEnrichmentRows = ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row));
   const policyEvidenceHashes = collectPolicyEvidenceHashes(rawPolicyEnrichmentRows);
   const policyEvidenceByHash = await loadPolicyEvidenceByHash(policyEvidenceHashes);
@@ -778,10 +780,12 @@ async function loadScanDetailRecord(input: {
         ...supplementalCoverageSignals.snapshotOverrides
       } satisfies Record<string, unknown>)
     : null;
-  const previewPayload = await getFullScanUrlscanSupplement({
-    domainHostname,
-    snapshot: normalizedSnapshot
-  });
+  const previewPayload = input.includeUrlscanSupplement === false
+    ? null
+    : await getFullScanUrlscanSupplement({
+        domainHostname,
+        snapshot: normalizedSnapshot
+      });
   const supplementalPolicySignals = normalizeSupplementalPolicySignals(deriveSupplementalPolicySignals({
     existingSignalKeys: normalizedSignals.map((signal) => signal.key),
     policyEnrichment: displayPolicyEnrichment,
@@ -1299,6 +1303,7 @@ async function loadScanDetailRecord(input: {
 export async function getScanById(input: { organizationId: string; scanId: string; viewerEmail?: string | null }) {
   return loadScanDetailRecord({
     allowAnonymousFallback: false,
+    includeUrlscanSupplement: false,
     organizationId: input.organizationId,
     scanId: input.scanId,
     viewerEmail: input.viewerEmail

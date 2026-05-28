@@ -9,6 +9,7 @@ import { hasPendingPostCompletionFindingWork } from "../../../../lib/scans/scan-
 import { getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidence";
 import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../server/auth";
+import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { getScanById } from "../../../../server/scans/get-scan-by-id";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 
@@ -29,21 +30,28 @@ function canViewCapturedImage(input: { isPlatformAdmin: boolean; role: string | 
 }
 
 export default async function ScanDetailPage({ params, searchParams }: ScanDetailPageProps) {
-  const [{ scanId }, { membership, organization, user }] = await Promise.all([params, getDashboardContext()]);
+  const [{ scanId }, { membership, organization, user }] = await Promise.all([
+    params,
+    withServerTiming("app.scan_detail.context", () => getDashboardContext())
+  ]);
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const recentScanReused = resolvedSearchParams.recentScanReused === "1";
-  const scanRecord = await getScanById({
-    organizationId: organization.id,
-    scanId,
-    viewerEmail: user.email
-  });
+  const scanRecord = await withServerTiming("app.scan_detail.record", () =>
+    getScanById({
+      organizationId: organization.id,
+      scanId,
+      viewerEmail: user.email
+    })
+  );
 
   if (!scanRecord) {
     notFound();
   }
 
   if (typeof scanRecord.snapshot?.report_finding_count !== "number") {
-    const reportFindingCount = buildScanReportUnifiedFindings(scanRecord).length;
+    const reportFindingCount = await withServerTiming("app.scan_detail.backfill_finding_count", async () =>
+      buildScanReportUnifiedFindings(scanRecord).length
+    );
     await persistReportFindingCount({
       count: reportFindingCount,
       scanId: scanRecord.scan.id
