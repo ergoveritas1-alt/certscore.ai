@@ -1364,7 +1364,26 @@ export async function loadOrganizationScanPageData(
 
   const scanRowsPromise = query<OrganizationScanQueryRow>(
     `
-      with visible_scans as (
+      with candidate_scan_ids as (
+        select s.id
+        from scans s
+        where s.organization_id = $1
+
+        union
+
+        select coalesce(scan_request.fulfilled_by_scan_id, scan_request.scan_id) as id
+        from scan_requests scan_request
+        where scan_request.organization_id = $1
+          and coalesce(scan_request.fulfilled_by_scan_id, scan_request.scan_id) is not null
+
+        union
+
+        select workspace_domain.latest_scan_id as id
+        from domains workspace_domain
+        where workspace_domain.organization_id = $1
+          and workspace_domain.latest_scan_id is not null
+      ),
+      visible_scans as (
         select distinct on (s.id)
           s.id,
           s.domain_id,
@@ -1379,7 +1398,9 @@ export async function loadOrganizationScanPageData(
           s.created_at,
           s.started_at,
           s.completed_at
-        from scans s
+        from candidate_scan_ids candidate
+        join scans s
+          on s.id = candidate.id
         left join domains source_domain
           on source_domain.id = s.domain_id
         left join scan_requests scan_request
@@ -1392,9 +1413,6 @@ export async function loadOrganizationScanPageData(
            or lower(workspace_domain.hostname) = lower(coalesce(scan_request.normalized_domain, source_domain.hostname))
            or lower(workspace_domain.normalized_url) = lower(coalesce(scan_request.normalized_url, source_domain.normalized_url))
          )
-        where s.organization_id = $1
-           or scan_request.id is not null
-           or workspace_domain.latest_scan_id = s.id
         order by s.id, workspace_domain.id nulls last, scan_request.requested_at desc nulls last
       )
       select *
@@ -1407,7 +1425,29 @@ export async function loadOrganizationScanPageData(
   ).then((result) => result.rows);
   const countPromise = input?.includeCount
     ? queryOne<{ count: number }>(
-        `select count(*)::int as count from scans where organization_id = $1`,
+        `
+          with candidate_scan_ids as (
+            select s.id
+            from scans s
+            where s.organization_id = $1
+
+            union
+
+            select coalesce(scan_request.fulfilled_by_scan_id, scan_request.scan_id) as id
+            from scan_requests scan_request
+            where scan_request.organization_id = $1
+              and coalesce(scan_request.fulfilled_by_scan_id, scan_request.scan_id) is not null
+
+            union
+
+            select workspace_domain.latest_scan_id as id
+            from domains workspace_domain
+            where workspace_domain.organization_id = $1
+              and workspace_domain.latest_scan_id is not null
+          )
+          select count(*)::int as count
+          from candidate_scan_ids
+        `,
         [organizationId],
         { readOnly: true }
       )
