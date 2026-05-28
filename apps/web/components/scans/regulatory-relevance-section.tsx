@@ -50,7 +50,7 @@ function RegulatoryRelevanceContent({ mappings }: { mappings: AgencyMapping[] })
       <div className="space-y-4">
         {mappings.map((mapping) => (
           <details key={mapping.agencyKey} className="group/agency rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-            <summary className="flex cursor-pointer list-none items-start gap-3 marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
+            <summary className="flex cursor-pointer list-none items-start gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
               <ScanReportDisclosureIcon className="mt-0.5 group-open/agency:rotate-90" />
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-slate-900">{mapping.agencyLabel}</p>

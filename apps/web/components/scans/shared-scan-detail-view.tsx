@@ -1723,7 +1723,7 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
       id={getReviewFindingAnchor(input.finding)}
       className={`group/finding scroll-mt-24 rounded-lg border px-3 py-3 ${getFindingToneClasses(input.finding)}`}
     >
-      <summary className="flex cursor-pointer list-none items-center gap-2 marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
+      <summary className="flex cursor-pointer list-none items-center gap-2 marker:hidden [&::-webkit-details-marker]:hidden">
         <ScanReportDisclosureIcon className="group-open/finding:rotate-90" />
         <p className="shrink-0 whitespace-nowrap text-sm font-semibold text-slate-950">
           {display.title}
@@ -1798,7 +1798,7 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
         </div>
       </div>
       <details className="group/evidence mt-3 rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
-        <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
           <ScanReportDisclosureIcon className="group-open/evidence:rotate-90" />
           <span>Evidence</span>
         </summary>
@@ -1846,7 +1846,7 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
             </div>
           ) : null}
           <details className="group/json rounded-lg border border-slate-200/80 bg-white/70 px-3 py-2">
-            <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
+            <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
               <ScanReportDisclosureIcon className="group-open/json:rotate-90" />
               <span>Technical JSON</span>
             </summary>
@@ -3296,7 +3296,7 @@ function AgencyAdvisorySummary(input: {
 
         {(infrastructureItems.length > 0 || audienceItems.length > 0 || input.vendorGroups.length > 0 || input.statusCallout) ? (
           <details className="group/context rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
-              <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
+              <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
                 <ScanReportDisclosureIcon className="group-open/context:rotate-90" />
                 <span>Operational context</span>
               </summary>
@@ -3309,7 +3309,7 @@ function AgencyAdvisorySummary(input: {
                 <div className="grid gap-4 xl:grid-cols-2">
                   {input.vendorGroups.length > 0 ? (
                     <details className="group/context-card rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
-                      <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
+                      <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
                         <ScanReportDisclosureIcon className="group-open/context-card:rotate-90" />
                         <span>Vendors</span>
                       </summary>
@@ -3330,7 +3330,7 @@ function AgencyAdvisorySummary(input: {
                     </details>
                   ) : null}
                   <details className="group/context-card rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
-                    <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
+                    <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
                       <ScanReportDisclosureIcon className="group-open/context-card:rotate-90" />
                       <span>Infrastructure profile</span>
                     </summary>
@@ -3345,7 +3345,7 @@ function AgencyAdvisorySummary(input: {
                     )}
                   </details>
                   <details className="group/context-card rounded-lg border border-slate-200/80 bg-white/60 px-3 py-2">
-                    <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
+                    <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 marker:hidden [&::-webkit-details-marker]:hidden">
                       <ScanReportDisclosureIcon className="group-open/context-card:rotate-90" />
                       <span>Audience & sensitive context</span>
                     </summary>
@@ -3393,7 +3393,7 @@ function ScanPassWarningCallout(input: {
 
   return (
     <details className={`${toneClasses} group/warning`}>
-      <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
+      <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] marker:hidden [&::-webkit-details-marker]:hidden">
         <ScanReportDisclosureIcon className="group-open/warning:rotate-90 opacity-70" />
         <span>{input.statusCallout.title}</span>
       </summary>
@@ -3576,7 +3576,7 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 px-6 py-5">
       <details className="group/noteworthy" open={true}>
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
           <span className="flex min-w-0 items-center gap-3">
             <ScanReportDisclosureIcon className="group-open/noteworthy:rotate-90" />
             <span className="min-w-0">
@@ -4450,7 +4450,7 @@ function CoverageMatrix(input: {
                             id={`coverage-category-${category.id}`}
                             className="group/category scroll-mt-24 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
                           >
-                            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
                               <div className="flex min-w-0 items-center gap-2">
                                 <ScanReportDisclosureIcon className="group-open/category:rotate-90" />
                                 <p className="text-sm text-slate-700">{category.label}</p>

@@ -71,13 +71,13 @@ export function RegulatoryMappingFilterControl(input: { targetListId: string }) 
 
   return (
     <details className="group/filter relative">
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200/80 marker:hidden [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 marker:hidden [&::-webkit-details-marker]:hidden">
         <span className="text-slate-500">Regulatory mapping</span>
         <span className="text-slate-900">{formatRegulatoryMappingFilterLabel(selectedFilters)}</span>
         <ScanReportDisclosureIcon className="h-4 w-4 group-open/filter:-rotate-90" />
       </summary>
       <div className="absolute bottom-[calc(100%+0.25rem)] right-0 z-20 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white py-2 shadow-[0_18px_50px_-24px_rgba(15,23,42,0.35)]">
-        <label className="flex cursor-pointer items-center justify-between gap-3 px-4 py-2.5 text-sm font-medium text-slate-900 hover:bg-slate-50">
+        <label className="flex cursor-pointer items-center justify-between gap-3 px-4 py-2.5 text-sm font-medium text-slate-900">
           <span>All</span>
           <span className="relative inline-flex h-6 w-10 items-center">
             <input
@@ -95,7 +95,7 @@ export function RegulatoryMappingFilterControl(input: { targetListId: string }) 
         {REGULATORY_MAPPING_FILTERS.map((filter) => (
           <label
             key={filter.id}
-            className="flex cursor-pointer items-center justify-between gap-3 px-4 py-2.5 text-sm text-slate-800 hover:bg-slate-50"
+            className="flex cursor-pointer items-center justify-between gap-3 px-4 py-2.5 text-sm text-slate-800"
           >
             <span>{filter.label}</span>
             <span className="relative inline-flex h-6 w-10 items-center">
