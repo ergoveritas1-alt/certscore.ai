@@ -33,3 +33,14 @@ test("VendorBrandChip falls back to favicon lookup for unknown host-like labels"
 
   assert.match(html, /https:\/\/www\.google\.com\/s2\/favicons\?domain=app\.mps\.vsnt\.net&amp;sz=64/);
 });
+
+test("VendorBrandChip caps long labels and preserves the full value in the title", () => {
+  const label = "68547f8f-2fd8-4ff3-9b63-51e86e2edee8.edge.permutive.ap";
+  const html = renderToStaticMarkup(
+    createElement(VendorBrandChip, { label, suffix: "domain" })
+  );
+
+  assert.match(html, /68547f8f-2fd8-4ff3-9b6\.\.\./);
+  assert.match(html, /title="68547f8f-2fd8-4ff3-9b63-51e86e2edee8\.edge\.permutive\.ap"/);
+  assert.doesNotMatch(html, />68547f8f-2fd8-4ff3-9b63-51e86e2edee8\.edge\.permutive\.ap</);
+});

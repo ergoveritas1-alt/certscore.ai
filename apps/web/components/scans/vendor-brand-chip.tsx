@@ -106,6 +106,16 @@ function getVendorLogoUrl(mark: VendorBrandMark, label: string) {
   return domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64` : null;
 }
 
+const VENDOR_CHIP_LABEL_MAX_LENGTH = 22;
+
+function formatVendorChipLabel(label: string) {
+  const normalized = label.trim();
+  if (normalized.length <= VENDOR_CHIP_LABEL_MAX_LENGTH) {
+    return normalized;
+  }
+  return `${normalized.slice(0, VENDOR_CHIP_LABEL_MAX_LENGTH)}...`;
+}
+
 export function VendorBrandChip(input: {
   category?: string | null;
   className?: string;
@@ -117,9 +127,13 @@ export function VendorBrandChip(input: {
   const logoUrl = getVendorLogoUrl(mark, input.label);
   const category = input.category ?? "vendor";
   const meta = input.suffix ?? `${category.replaceAll("_", " ")}${typeof input.requestCount === "number" ? ` · ${input.requestCount} req` : ""}`;
+  const displayLabel = formatVendorChipLabel(input.label);
 
   return (
-    <span className={`inline-flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 ${input.className ?? ""}`}>
+    <span
+      className={`inline-flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 ${input.className ?? ""}`}
+      title={displayLabel === input.label ? undefined : input.label}
+    >
       <span
         aria-hidden="true"
         className={`inline-flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[9px] font-bold leading-none ${mark.tone}`}
@@ -134,7 +148,7 @@ export function VendorBrandChip(input: {
           />
         ) : mark.initials}
       </span>
-      <span className="truncate font-medium text-slate-800">{input.label}</span>
+      <span className="truncate font-medium text-slate-800">{displayLabel}</span>
       {meta ? <span className="shrink-0 text-slate-500">· {meta}</span> : null}
     </span>
   );

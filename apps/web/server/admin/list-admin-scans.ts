@@ -153,7 +153,7 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       domainHostname: scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null,
       organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
       requesterIp: selectRequesterIp(diagnosticEventMap.get(scan.id) ?? []),
-      scanViewHref: scan.organization_id ? `/app/scans/${scan.id}` : `/scan/${scan.id}`,
+      scanViewHref: `/app/scans/${scan.id}`,
       scanType: scan.scan_type,
       source: typeof scan.scan_config_json?.source === "string" ? scan.scan_config_json.source : null,
       status: scan.status,
@@ -236,11 +236,7 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
     rowKind: "request",
     scanId: linkedScanId ?? request.public_id,
     scanType: request.request_type,
-    scanViewHref: linkedScanId
-      ? request.organization_id || request.scan_organization_id
-        ? `/app/scans/${linkedScanId}`
-        : `/scan/${linkedScanId}`
-      : "",
+    scanViewHref: linkedScanId ? `/app/scans/${linkedScanId}` : "",
     source: request.request_channel,
     status: request.status,
     stopTier: null,
