@@ -4271,7 +4271,7 @@ export function ExecutiveSummaryCard(input: {
         data-executive-summary-layout
       >
         <div className="flex flex-col gap-5 lg:min-h-0">
-          <div className="rounded-[1.8rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,1))] p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.28)]">
+          <div className="space-y-5">
             <div className="flex flex-wrap items-center gap-3">
               <span
                 data-testid="executive-posture-badge"
@@ -4285,7 +4285,7 @@ export function ExecutiveSummaryCard(input: {
                 </span>
               ) : null}
             </div>
-            <div className="mt-5 space-y-3">
+            <div className="space-y-3">
               <div className="space-y-2">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Executive readout</p>
                 <h2
