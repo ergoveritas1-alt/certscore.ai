@@ -95,7 +95,7 @@ function renderPolicyRecord(
 
   return (
     <details key={enrichmentKey} className="group rounded-xl border border-slate-200 bg-white px-3 py-3" open>
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-4 transition-colors hover:bg-slate-100/70">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold text-slate-950">{pageType}</p>

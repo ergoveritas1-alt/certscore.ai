@@ -380,7 +380,7 @@ function DetailDisclosure(input: {
 
   return (
     <details className="group mt-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5" open={input.defaultOpen}>
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100/70">
         <span>{input.summary}</span>
         <ScanReportDisclosureIcon />
       </summary>
@@ -2175,7 +2175,7 @@ function RegulatoryLensFindingCard(input: {
   return (
     <div className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700">
       <details className="group/json">
-        <summary className="flex cursor-pointer list-none items-start justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
           <span className="min-w-0 space-y-1.5 leading-5">
             <span className="line-clamp-2">{input.finding.label}</span>
             {input.finding.reviewContextLabel ? (
@@ -2521,7 +2521,7 @@ function ExecutiveMetricCard(input: {
 function BenchmarkScoreNote({ message }: { message: string }) {
   return (
     <details className="group rounded-[1rem] border border-slate-200 bg-white/85 px-4 py-3 text-sm leading-6 text-slate-700">
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
         <span className="line-clamp-2 min-w-0 group-open:line-clamp-none">
           <span className="font-semibold text-slate-950">Score note:</span>{" "}
           {message}
@@ -3317,7 +3317,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
 
   return (
     <details id={getFindingEvidenceAnchor(input.finding)} className={`group mt-3 scroll-mt-24 rounded-xl border px-3 py-2 ${tone.summary}`}>
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-medium leading-5">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-medium leading-5 transition-colors hover:bg-slate-100/70">
         <span className="line-clamp-2 min-w-0 group-open:line-clamp-none">{observedSummary}</span>
         <ScanReportDisclosureIcon />
       </summary>
@@ -3403,7 +3403,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
             className="group/json min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5"
             suppressHydrationWarning
           >
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-slate-100/70">
               <span>Evidence details</span>
               <ScanReportDisclosureIcon className="group-open/json:rotate-90" />
             </summary>
@@ -3531,7 +3531,7 @@ function getRegulatoryBadgeToneClasses(tone: TopFindingRegulatoryBadge["tone"]) 
 function TopFindingRegulatoryContextDisclosure(input: { context: TopFindingRegulatoryContextDisplay }) {
   return (
     <details className="group/regulatory min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 transition-colors hover:bg-slate-100/70">
         <span className="min-w-0">
           <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">Regulatory context</span>
           <span className="mt-2 flex flex-wrap gap-1.5">
@@ -3553,7 +3553,7 @@ function TopFindingRegulatoryContextDisclosure(input: { context: TopFindingRegul
           <p className="text-sm leading-6 text-slate-700">{input.context.primaryCopy}</p>
         </div>
         <details className="group/notes rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-slate-100/70">
             <span>View applicability notes</span>
             <ScanReportDisclosureIcon className="group-open/notes:rotate-90" />
           </summary>
@@ -4525,7 +4525,7 @@ export function ExecutiveSummaryCard(input: {
                         id={getRegulatoryLensAnchor(lens.acronym)}
                         className="group scroll-mt-24 rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3"
                       >
-                        <summary className="relative grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2">
+                        <summary className="relative grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2 transition-colors hover:bg-slate-100/70">
                           <span className="min-w-0 self-start">
                             <span className="flex flex-wrap items-center gap-2">
                               <span className="text-sm font-semibold text-slate-900">{lens.acronym}</span>
@@ -4599,7 +4599,7 @@ export function ExecutiveSummaryCard(input: {
                     <div className="mt-3 space-y-2">
                       {policySurfaces.map((surface) => (
                         <details key={`${surface.pageLabel}:${surface.pageUrl ?? "unknown"}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100/70">
                             <span>{surface.pageLabel}</span>
                             <ScanReportDisclosureIcon />
                           </summary>
@@ -4639,7 +4639,7 @@ export function ExecutiveSummaryCard(input: {
                     <div className="mt-3 space-y-2">
                       {scanInterruptions.map((event) => (
                         <details key={`${event.label}:${event.details.join("|")}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100/70">
                             <span>{event.label}</span>
                             <ScanReportDisclosureIcon />
                           </summary>

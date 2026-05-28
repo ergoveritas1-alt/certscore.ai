@@ -28,7 +28,7 @@ export function CollapsibleSectionCard({
       <details suppressHydrationWarning className="group/section" {...(defaultOpen ? { open: true } : {})}>
         <summary
           className={cn(
-            "flex cursor-pointer list-none items-start gap-3 px-6 py-5 marker:hidden [&::-webkit-details-marker]:hidden",
+            "flex cursor-pointer list-none items-start gap-3 px-6 py-5 transition-colors hover:bg-slate-100/70 marker:hidden [&::-webkit-details-marker]:hidden",
             summaryClassName
           )}
         >

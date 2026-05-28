@@ -72,7 +72,7 @@ export function ReportExecutiveSummary({
     <div className="grid gap-4">
       {statusCallout ? (
         <details className={`${getCalloutClassName(statusCallout.tone)} group/callout`}>
-          <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold marker:hidden [&::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold marker:hidden [&::-webkit-details-marker]:hidden transition-colors hover:bg-slate-100/70">
             <ScanReportDisclosureIcon className="group-open/callout:rotate-90 opacity-70" />
             <span>{statusCallout.title}</span>
           </summary>
