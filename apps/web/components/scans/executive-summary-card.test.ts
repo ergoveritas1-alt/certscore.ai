@@ -1387,7 +1387,7 @@ test("ExecutiveSummaryCard qualifies incomplete protected-route scans when homep
     })
   );
 
-  assert.match(html, /Homepage evidence was retained; some non-homepage routes were protected or unavailable\./);
+  assert.doesNotMatch(html, /Homepage evidence was retained; some non-homepage routes were protected or unavailable\./);
   assert.match(html, /Session replay service signal observed/);
 });
 
@@ -1459,8 +1459,8 @@ test("ExecutiveSummaryCard renders limited review for latimes-style interrupted 
   assert.match(html, /Limited review/);
   assert.doesNotMatch(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
   assert.match(html, /Runtime coverage was limited by site protections/);
-  assert.match(html, /CertScore did not confirm a headline homepage issue from retained evidence/);
-  assert.match(html, /Observed vendor and request counts may be incomplete/);
+  assert.doesNotMatch(html, /CertScore did not confirm a headline homepage issue from retained evidence/);
+  assert.doesNotMatch(html, /Observed vendor and request counts may be incomplete/);
   assert.match(html, /This scan has incomplete coverage/);
   assert.match(html, /No headline homepage issue was confirmed from retained evidence/);
   assert.match(html, /Observed footprint may be incomplete because site protections interrupted runtime collection/);
@@ -1590,9 +1590,9 @@ test("ExecutiveSummaryCard surfaces under-observed ecosystem coverage diagnostic
 
   assert.match(html, /Limited review/);
   assert.match(html, /Runtime coverage was limited by site protections/);
-  assert.match(html, /Likely incomplete ecosystem/);
-  assert.match(html, /Coverage diagnostic: Observed request volume was unusually low for this benchmark/);
-  assert.match(html, /Observed vendor and request counts may be incomplete/);
+  assert.doesNotMatch(html, /Likely incomplete ecosystem/);
+  assert.doesNotMatch(html, /Coverage diagnostic: Observed request volume was unusually low for this benchmark/);
+  assert.doesNotMatch(html, /Observed vendor and request counts may be incomplete/);
   assert.doesNotMatch(html, /tracking was missed|blocked trackers detected|non-compliant|hidden tracking/i);
   assert.doesNotMatch(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
 });
@@ -3294,7 +3294,7 @@ test("ExecutiveSummaryCard renders accessibility-only self-scan copy without pri
 
   assert.match(html, /Accessibility issue detected/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
-  assert.match(html, /Primary concerns:<\/span> Visual contrast accessibility issue/);
+  assert.doesNotMatch(html, /Primary concerns:/);
   assert.match(html, /Next step: review affected text\/background color pairs and adjust contrast to meet WCAG contrast guidance\./);
   assert.match(html, /Automated accessibility signals are the main review area\./);
   assert.match(html, /1 third-party domain observed; no classified tracker vendors identified\./);
@@ -3573,7 +3573,7 @@ test("ExecutiveSummaryCard renders a neutral empty state when no headline findin
     })
   );
 
-  assert.match(html, /Primary concerns:<\/span> No headline findings surfaced from the available scan coverage\./);
+  assert.doesNotMatch(html, /Primary concerns:/);
   assert.match(html, /Highest-priority issues/);
   assert.match(html, /Review the supporting evidence below for lower-priority signals and scan context\./);
 });
@@ -3616,7 +3616,7 @@ test("ExecutiveSummaryCard scopes the hero copy when scan coverage is thin", () 
   );
 
   assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
-  assert.match(html, /Coverage note:<\/span> These are automated observations from the public scan\. Review the evidence before taking action\. Third-party tracking observed before recorded consent/);
+  assert.doesNotMatch(html, /Coverage note:/);
   assert.match(html, /Automated homepage findings/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
 });
@@ -3660,7 +3660,7 @@ test("ExecutiveSummaryCard scopes the hero copy when the scan outcome shows bloc
   );
 
   assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
-  assert.match(html, /Coverage note:<\/span> These are automated observations from the public scan\. Review the evidence before taking action\. Third-party tracking observed before recorded consent/);
+  assert.doesNotMatch(html, /Coverage note:/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
 });
 
@@ -3704,7 +3704,7 @@ test("ExecutiveSummaryCard scopes the hero copy when coverage level is limited p
   );
 
   assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
-  assert.match(html, /Coverage note:<\/span> These are automated observations from the public scan\. Review the evidence before taking action\. Third-party tracking observed before recorded consent/);
+  assert.doesNotMatch(html, /Coverage note:/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
 });
 
@@ -3793,7 +3793,7 @@ test("ExecutiveSummaryCard switches to host-resolution scope language when the r
   );
 
   assert.match(html, /Requested domain resolved to a different host during this scan/);
-  assert.match(html, /Scope note:<\/span> Observed runtime and disclosure signals came from www\.brandforce\.com, not helio\.com\./);
+  assert.doesNotMatch(html, /Scope note:/);
   assert.match(html, /Observed on landed host/);
   assert.doesNotMatch(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
@@ -3844,7 +3844,7 @@ test("ExecutiveSummaryCard switches to blocked-access language when no reliable 
   );
 
   assert.match(html, /Public site access was limited during this scan/);
-  assert.match(html, /Scan limitation:<\/span> No reliable privacy or consent findings were retained because the scan could not verify a usable public page\./);
+  assert.doesNotMatch(html, /Scan limitation:/);
   assert.match(html, /Access limitation/);
   assert.match(html, /This run was blocked before it established a trustworthy public browsing path/);
   assert.doesNotMatch(html, /Regulatory findings/);

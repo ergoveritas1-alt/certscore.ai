@@ -153,6 +153,7 @@ export function AppShell({
   isPlatformAdmin = false
 }: AppShellProps) {
   const pathname = usePathname() ?? "";
+  const isScanReportPath = /^\/app\/scans\/[^/]+\/?$/.test(pathname);
   const userInitial = userEmail.slice(0, 1).toUpperCase();
   const displayOrganizationName = organizationName.replace(/\s+workspace$/i, "");
   const displayPlan =
@@ -387,7 +388,14 @@ export function AppShell({
           </aside>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-slate-50">
-            <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-6 text-ink sm:px-6 sm:py-8">{children}</main>
+            <main
+              className={[
+                "min-w-0 flex-1 overflow-x-hidden px-4 pb-6 text-ink sm:px-6 sm:pb-8",
+                isScanReportPath ? "pt-0 sm:pt-0.5" : "pt-6 sm:pt-8"
+              ].join(" ")}
+            >
+              {children}
+            </main>
             <footer className="border-t border-slate-200 px-6 py-4 text-xs text-slate-400">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p>Copyright © 2026 CertScore.ai. All rights reserved.</p>

@@ -2310,9 +2310,9 @@ function BenchmarkMetricCard(input: {
   const benchmarkTooltip = [benchmarkTooltipBase, input.note].filter(Boolean).join(" ");
 
   return (
-    <div className={`relative overflow-visible rounded-[1.6rem] border border-slate-200 px-5 py-4 ${tone.card}`}>
+    <div className={`relative overflow-visible rounded-[1.1rem] border border-slate-200 px-3.5 py-2.5 ${tone.card}`}>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+        <p className="text-[9px] uppercase tracking-[0.13em] text-slate-500">
           {input.label === "Overall score" ? (
             <>
               Overall
@@ -2334,27 +2334,27 @@ function BenchmarkMetricCard(input: {
           {benchmarkTooltip ? <InfoTip align="end" placement="bottom" text={benchmarkTooltip} /> : null}
         </span>
       </div>
-      <div className="mt-5">
+      <div className="mt-2">
         <div className="flex items-end gap-1">
-          <span className={`text-[3.2rem] font-semibold leading-none tracking-tight ${tone.value}`}>{actualValue ?? "—"}</span>
-          {input.maxValue ? <span className="pb-1 text-[2rem] leading-none text-slate-500">/100</span> : null}
+          <span className={`text-[2.15rem] font-semibold leading-none tracking-tight ${tone.value}`}>{actualValue ?? "—"}</span>
+          {input.maxValue ? <span className="pb-0.5 text-[1.35rem] leading-none text-slate-500">/100</span> : null}
         </div>
-        <p className="mt-1 text-xs leading-5 text-slate-600">{actualLabel}</p>
+        <p className="mt-0.5 text-[11px] leading-4 text-slate-600">{actualLabel}</p>
       </div>
-      <div className="mt-5 space-y-2">
-        <div className={`relative h-3 rounded-full ${tone.rail}`}>
+      <div className="mt-3 space-y-1">
+        <div className={`relative h-2 rounded-full ${tone.rail}`}>
           <div
-            className={`absolute left-0 top-0 h-3 rounded-full ${tone.fill}`}
+            className={`absolute left-0 top-0 h-2 rounded-full ${tone.fill}`}
             style={{ width: `${Math.max(actualRatio * 100, actualValue === null ? 0 : 6)}%` }}
           />
           {benchmarkRatio !== null ? (
             <div
-              className={`absolute top-1/2 h-5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full ${tone.marker}`}
+              className={`absolute top-1/2 h-4 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full ${tone.marker}`}
               style={{ left: `${benchmarkRatio * 100}%` }}
             />
           ) : null}
         </div>
-        <div className={`h-4 text-[11px] ${deltaClassName}`} aria-hidden="true" />
+        <div className={`h-2 text-[10px] ${deltaClassName}`} aria-hidden="true" />
       </div>
     </div>
   );
@@ -4190,23 +4190,7 @@ export function ExecutiveSummaryCard(input: {
     topFindingCount: availableTopFindings.length,
     vendorCount: vendorEvidence.length
   });
-  const coverageCalloutMicrocards = [
-    ...(input.coverageMicrocards ?? []),
-    ...(input.coverageDiagnosticIndicators ?? []).map((indicator) => ({
-      label: indicator.label,
-      tooltip: indicator.message,
-      tone: "amber" as const
-    }))
-  ];
   const hasMeaningfulInterruption = hasMeaningfulExecutiveInterruption({ scanInterruptions });
-  const hasProtectedRouteInterruption = scanInterruptions.some((interruption) =>
-    /protected route|protected or unavailable|authentication|auth|forbidden|restricted/i.test(
-      `${interruption.label} ${interruption.details.join(" ")}`
-    )
-  );
-  const scanMarkedIncomplete = /incomplete|partial|interrupted|degraded/i.test(`${input.status ?? ""} ${input.scanOutcome ?? ""}`);
-  const shouldShowHomepageRetainedQualifier =
-    scanMarkedIncomplete && availableTopFindings.length > 0 && (hasProtectedRouteInterruption || hasMeaningfulInterruption);
   const pagesScanned = typeof input.pagesScanned === "number" ? input.pagesScanned : 0;
   const retainedFindingCount = Math.max(input.topFindings.length, input.allFindings?.length ?? 0);
   const policyEnrichmentCount = input.policyEnrichmentCount ?? 0;
@@ -4310,80 +4294,50 @@ export function ExecutiveSummaryCard(input: {
                 >
                   {narrativePresentation.headline}
                 </h2>
-                {shouldShowHomepageRetainedQualifier ? (
-                  <p className="max-w-3xl text-sm leading-6 text-slate-600">
-                    Homepage evidence was retained; some non-homepage routes were protected or unavailable.
-                  </p>
-                ) : null}
               </div>
-              <div
-                data-testid="executive-summary-callout"
-                className="rounded-[1.2rem] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-6 text-slate-700"
-              >
-                <span className="font-medium text-slate-950">{narrativePresentation.summaryLabel}</span>{" "}
-                {narrativePresentation.summaryMessage}
-                {coverageCalloutMicrocards.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {coverageCalloutMicrocards.map((card) => (
-                      <span
-                        key={card.label}
-                        aria-label={card.tooltip ?? card.label}
-                        title={card.tooltip ?? undefined}
-                        className={
-                          card.tone === "amber"
-                            ? "inline-flex rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-950"
-                            : "inline-flex rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700"
-                        }
-                      >
-                        {card.label}
-                      </span>
-                    ))}
+              {input.accessLimitationNotice ? null : input.lightweightHeroMetrics && input.lightweightHeroMetrics.length > 0 ? (
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {input.lightweightHeroMetrics.slice(0, 3).map((metric) => (
+                    <ExecutiveMetricCard
+                      key={metric.label}
+                      accent={metric.accent}
+                      helper={metric.helper}
+                      label={metric.label}
+                      value={metric.value}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <BenchmarkMetricCard
+                      label="Overall score"
+                      actualValue={input.score}
+                      benchmarkValue={input.domainBenchmark?.expectedOverallScore ?? null}
+                      benchmarkIndustry={input.domainBenchmark?.industry ?? null}
+                      maxValue={100}
+                    />
+                    <BenchmarkMetricCard
+                      label="Third-party requests"
+                      actualValue={input.thirdPartyRequestCount}
+                      benchmarkValue={input.domainBenchmark?.expectedThirdPartyRequests ?? null}
+                      benchmarkIndustry={input.domainBenchmark?.industry ?? null}
+                    />
+                    <BenchmarkMetricCard
+                      label="Cookies before consent"
+                      actualValue={input.beforeConsentCookieCount}
+                      benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
+                      benchmarkIndustry={input.domainBenchmark?.industry ?? null}
+                      note={cookieCountMismatchNote}
+                    />
                   </div>
-                ) : null}
-              </div>
+                  {benchmarkScoreExplanation ? (
+                    <BenchmarkScoreNote message={benchmarkScoreExplanation} />
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
-          {input.accessLimitationNotice ? null : input.lightweightHeroMetrics && input.lightweightHeroMetrics.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-3">
-              {input.lightweightHeroMetrics.slice(0, 3).map((metric) => (
-                <ExecutiveMetricCard
-                  key={metric.label}
-                  accent={metric.accent}
-                  helper={metric.helper}
-                  label={metric.label}
-                  value={metric.value}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <BenchmarkMetricCard
-                  label="Overall score"
-                  actualValue={input.score}
-                  benchmarkValue={input.domainBenchmark?.expectedOverallScore ?? null}
-                  benchmarkIndustry={input.domainBenchmark?.industry ?? null}
-                  maxValue={100}
-                />
-                <BenchmarkMetricCard
-                  label="Third-party requests"
-                  actualValue={input.thirdPartyRequestCount}
-                  benchmarkValue={input.domainBenchmark?.expectedThirdPartyRequests ?? null}
-                  benchmarkIndustry={input.domainBenchmark?.industry ?? null}
-                />
-                <BenchmarkMetricCard
-                  label="Cookies before consent"
-                  actualValue={input.beforeConsentCookieCount}
-                  benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
-                  benchmarkIndustry={input.domainBenchmark?.industry ?? null}
-                  note={cookieCountMismatchNote}
-                />
-              </div>
-              {benchmarkScoreExplanation ? (
-                <BenchmarkScoreNote message={benchmarkScoreExplanation} />
-              ) : null}
-            </div>
-          )}
           <div className="space-y-3">
             <div className="flex items-end justify-between gap-4">
               <div>
