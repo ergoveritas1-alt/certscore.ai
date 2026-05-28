@@ -363,6 +363,7 @@ function getFindingEvidenceAnchor(finding: CertScoreFinding) {
 }
 
 function DetailDisclosure(input: {
+  defaultOpen?: boolean;
   itemDisplay?: "plain" | "brand";
   items: string[];
   richItems?: Array<{ key: string; node: React.ReactNode }>;
@@ -378,7 +379,7 @@ function DetailDisclosure(input: {
   }
 
   return (
-    <details className="group mt-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
+    <details className="group mt-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5" open={input.defaultOpen}>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
         <span>{input.summary}</span>
         <ScanReportDisclosureIcon />
@@ -4582,6 +4583,7 @@ export function ExecutiveSummaryCard(input: {
                     </p>
                   ) : null}
                   <DetailDisclosure
+                    defaultOpen={namedVendors.length > 0}
                     summary={trackerFootprintExpandLabel}
                     title={namedVendors.length > 0 ? "Observed vendors and domains" : "Observed domains"}
                     richItems={trackerFootprintRichDetails}
