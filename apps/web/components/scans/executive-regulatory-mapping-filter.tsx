@@ -76,15 +76,21 @@ export function RegulatoryMappingFilterControl(input: { targetListId: string }) 
         <span className="text-slate-900">{formatRegulatoryMappingFilterLabel(selectedFilters)}</span>
         <ScanReportDisclosureIcon className="h-4 w-4 group-open/filter:-rotate-90" />
       </summary>
-      <div className="absolute bottom-full right-0 z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white py-2 shadow-[0_18px_50px_-24px_rgba(15,23,42,0.35)]">
-        <button
-          type="button"
-          className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-medium text-slate-900 hover:bg-slate-50"
-          onClick={() => setSelectedFilters([])}
-        >
+      <div className="absolute bottom-[calc(100%+0.25rem)] right-0 z-20 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white py-2 shadow-[0_18px_50px_-24px_rgba(15,23,42,0.35)]">
+        <label className="flex cursor-pointer items-center justify-between gap-3 px-4 py-2.5 text-sm font-medium text-slate-900 hover:bg-slate-50">
           <span>All</span>
-          {selectedFilters.length === 0 ? <span className="text-lg leading-none text-slate-900">✓</span> : null}
-        </button>
+          <span className="relative inline-flex h-6 w-10 items-center">
+            <input
+              type="checkbox"
+              aria-label="Show all regulatory mappings"
+              className="peer sr-only"
+              checked={selectedFilters.length === 0}
+              onChange={() => setSelectedFilters([])}
+            />
+            <span className="absolute inset-0 rounded-full bg-slate-200 transition peer-checked:bg-sky-600" />
+            <span className="absolute left-1 h-4 w-4 rounded-full bg-white shadow-sm transition peer-checked:translate-x-4" />
+          </span>
+        </label>
         <div className="my-1 border-t border-slate-100" />
         {REGULATORY_MAPPING_FILTERS.map((filter) => (
           <label
