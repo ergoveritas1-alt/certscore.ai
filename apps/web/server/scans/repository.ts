@@ -1029,7 +1029,8 @@ export async function persistScanReportFindingCount(input: {
   await query(
     `update scan_snapshots
         set report_finding_count = $2
-      where scan_id = $1`,
+      where scan_id = $1
+        and report_finding_count is distinct from $2`,
     [input.scanId, input.count]
   );
 }
@@ -1473,7 +1474,12 @@ export async function loadOrganizationScanPageData(
     ? query<OrganizationRuntimeArtifactRow>(
         `
           select
-            *
+            scan_id,
+            consent_audit_completed,
+            consent_reject_interaction_succeeded,
+            consent_reject_reduced_tracking,
+            consent_reject_reduced_third_party_cookies,
+            hybrid_runtime_evidence
           from scan_runtime_artifacts
           where scan_id = any($1::uuid[])
         `,
@@ -1651,163 +1657,11 @@ export async function loadOrganizationScanPageData(
     }
   }
 
-  const validationRuns: OrganizationValidationRunSummaryRow[] = [];
-  if (summaryScanIds.length) {
-    for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      try {
-        const validationRunRows = await query<OrganizationValidationRunSummaryRow>(
-          `
-            select id, scan_id, finding_count, created_at
-            from validation_runs
-            where scan_id = any($1::uuid[])
-            order by created_at desc
-          `,
-          [scanIdBatch],
-          { readOnly: true }
-        ).then((result) => result.rows);
-
-        validationRuns.push(...validationRunRows);
-      } catch (error) {
-        throw new Error(`Failed to load organization scans: ${getErrorMessage(error)}`);
-      }
-    }
-  }
-
   const diagnosticEvents: OrganizationScanDiagnosticEventRow[] = [];
-  if (summaryScanIds.length) {
-    for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      try {
-        const diagnosticEventRows = await query<OrganizationScanDiagnosticEventRow>(
-          `
-            select scan_id, event_type, message, metadata_json, created_at
-            from scan_events
-            where scan_id = any($1::uuid[])
-            order by created_at asc
-          `,
-          [scanIdBatch],
-          { readOnly: true }
-        ).then((result) => result.rows);
-
-        diagnosticEvents.push(...diagnosticEventRows);
-      } catch (error) {
-        throw new Error(`Failed to load organization scans: ${getErrorMessage(error)}`);
-      }
-    }
-  }
-
   const policyEnrichmentRows: OrganizationPolicyEnrichmentRow[] = [];
-  if (summaryScanIds.length) {
-    for (const scanIdBatch of chunkValues(summaryScanIds, CHANGE_EVENT_BATCH_SIZE)) {
-      try {
-        const policyRows = await query<OrganizationPolicyEnrichmentRow>(
-          `
-            select *
-            from policy_enrichment
-            where scan_id = any($1::uuid[])
-            order by created_at asc
-          `,
-          [scanIdBatch],
-          { readOnly: true }
-        ).then((result) => result.rows);
-
-        policyEnrichmentRows.push(...policyRows);
-      } catch (error) {
-        throw new Error(`Failed to load organization scans: ${getErrorMessage(error)}`);
-      }
-    }
-  }
-
-  const latestValidationRunByScanId = new Map<string, string>();
-  for (const validationRun of validationRuns) {
-    if (!latestValidationRunByScanId.has(validationRun.scan_id)) {
-      latestValidationRunByScanId.set(validationRun.scan_id, validationRun.id);
-    }
-  }
-
-  const latestValidationRunIds = [
-    ...new Set(
-      [...latestValidationRunByScanId.values()].filter(
-        (validationRunId): validationRunId is string =>
-          typeof validationRunId === "string" && validationRunId.trim().length > 0
-      )
-    )
-  ];
-
+  const validationRuns: OrganizationValidationRunSummaryRow[] = [];
   const validationFindingRows: OrganizationValidationFindingSummaryRow[] = [];
-  if (latestValidationRunIds.length) {
-    for (const validationRunIdBatch of chunkValues(latestValidationRunIds, CHANGE_EVENT_BATCH_SIZE)) {
-      try {
-        const data = await query<OrganizationValidationFindingSummaryRow>(
-          `
-            select
-              id,
-              validation_run_id,
-              category,
-              subtype,
-              finding_family,
-              finding_source,
-              finding_scope,
-              finding_subject,
-              rule_key,
-              title,
-              description,
-              severity,
-              page_url,
-              evidence_json
-            from validation_run_findings
-            where validation_run_id = any($1::uuid[])
-          `,
-          [validationRunIdBatch],
-          { readOnly: true }
-        ).then((result) => result.rows);
-
-        validationFindingRows.push(...data);
-      } catch (error) {
-        throw new Error(`Failed to load organization scans: ${getErrorMessage(error)}`);
-      }
-    }
-  }
-
-  const validationFindingIds = validationFindingRows.map((row) => row.id);
   const verdictByFindingId = new Map<string, OrganizationValidationVerdictRow>();
-
-  if (validationFindingIds.length > 0) {
-    for (const findingIdBatch of chunkValues(validationFindingIds, CHANGE_EVENT_BATCH_SIZE)) {
-      let data: OrganizationValidationVerdictRow[];
-      try {
-        data = await query<OrganizationValidationVerdictRow>(
-          `
-            select
-              validation_run_finding_id,
-              verdict,
-              confidence,
-              rationale,
-              agreement_score,
-              model,
-              prompt_version,
-              evidence_json,
-              created_at,
-              system_confidence_score,
-              system_confidence_band,
-              system_confidence_explanation
-            from validation_verdicts
-            where validation_run_finding_id = any($1::uuid[])
-            order by created_at desc
-          `,
-          [findingIdBatch],
-          { readOnly: true }
-        ).then((result) => result.rows);
-      } catch (error) {
-        throw new Error(`Failed to load organization scan verdicts: ${getErrorMessage(error)}`);
-      }
-
-      for (const row of data) {
-        if (!verdictByFindingId.has(row.validation_run_finding_id)) {
-          verdictByFindingId.set(row.validation_run_finding_id, row);
-        }
-      }
-    }
-  }
 
   return {
     changeSummaries,

@@ -42,11 +42,13 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
     notFound();
   }
 
-  const reportFindingCount = buildScanReportUnifiedFindings(scanRecord).length;
-  await persistReportFindingCount({
-    count: reportFindingCount,
-    scanId: scanRecord.scan.id
-  });
+  if (typeof scanRecord.snapshot?.report_finding_count !== "number") {
+    const reportFindingCount = buildScanReportUnifiedFindings(scanRecord).length;
+    await persistReportFindingCount({
+      count: reportFindingCount,
+      scanId: scanRecord.scan.id
+    });
+  }
   const pendingPostCompletionWork = hasPendingPostCompletionFindingWork({
     reportFindingsDerived: true,
     signalEnrichmentWorkflow: scanRecord.signalEnrichmentWorkflow,

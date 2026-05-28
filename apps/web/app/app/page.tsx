@@ -31,7 +31,7 @@ export default async function DashboardPage() {
     Promise.all([
       getPlanLimits(organization.plan),
       getOrganizationManualRescanLimitOverride(organization.id),
-      getOrganizationScans(organization.id)
+      getOrganizationScans(organization.id, 100)
     ])
   );
   const planLimits = await applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
