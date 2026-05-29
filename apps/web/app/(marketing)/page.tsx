@@ -175,9 +175,8 @@ export default async function MarketingHomePage() {
               <CardContent className="space-y-4">
                 <DomainScanForm
                   buttonLabel="Scan a website"
-                  emptySubmitDomain="kbdlab.io"
                   inputLabel="Website to analyze"
-                  inputPlaceholder="kbdlab.io"
+                  inputPlaceholder="Enter website here"
                   mode="full"
                   sampleDomains={["grammarly.com", "nbcnews.com", "latimes.com", "kbdlab.io"]}
                   scanSource="homepage"
