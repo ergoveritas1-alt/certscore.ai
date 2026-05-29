@@ -280,8 +280,8 @@ export function DomainScanForm({
             autoComplete="url"
             className={
               compact
-                ? "h-12 rounded-[1.2rem] pr-28 text-left text-sm placeholder:text-left"
-                : "h-14 rounded-[1.6rem] pr-20 text-base"
+                ? "h-12 rounded-[1.2rem] pr-40 text-left text-sm placeholder:text-left"
+                : "h-14 rounded-[1.6rem] pr-32 text-base"
             }
             id="domain"
             name="domain"
@@ -294,6 +294,11 @@ export function DomainScanForm({
             value={domain}
             aria-label={inputLabel}
           />
+          {mode === "full" ? (
+            <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
+              <ScanFromSelect compact={compact} onChange={setScanFrom} value={scanFrom} variant="icon" />
+            </div>
+          ) : null}
           <Button
             aria-label={buttonLabel}
             className={
@@ -330,7 +335,6 @@ export function DomainScanForm({
           <p className="max-w-sm text-xs text-slate-500 sm:text-right">{helperText}</p>
         </div>
       ) : null}
-      {mode === "full" ? <ScanFromSelect compact={compact} onChange={setScanFrom} value={scanFrom} /> : null}
       {sampleDomains.length > 0 ? (
         <div className="rounded-[1.35rem] border border-slate-200 bg-white/80 p-2 shadow-[0_14px_30px_rgba(15,23,42,0.04)]">
           <div className="px-2 pb-2 pt-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400">View sample scans</div>
