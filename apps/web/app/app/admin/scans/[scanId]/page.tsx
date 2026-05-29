@@ -52,6 +52,23 @@ function getExecutionPlan(scanConfigJson: Record<string, unknown> | null) {
   };
 }
 
+function getRequestedGeo(scanConfigJson: Record<string, unknown> | null) {
+  const requestedGeo =
+    scanConfigJson && typeof scanConfigJson.requestedGeo === "object" && scanConfigJson.requestedGeo !== null
+      ? (scanConfigJson.requestedGeo as Record<string, unknown>)
+      : null;
+
+  return {
+    country: typeof requestedGeo?.country === "string" ? requestedGeo.country : null,
+    provider: typeof requestedGeo?.provider === "string" ? requestedGeo.provider : null,
+    region: typeof requestedGeo?.region === "string" ? requestedGeo.region : null
+  };
+}
+
+function getLatestRuntimeContextMetadata(events: Array<{ metadataJson: Record<string, unknown> | null }>) {
+  return events.find((event) => event.metadataJson)?.metadataJson ?? null;
+}
+
 const SNAPSHOT_SECTIONS = [
   {
     title: "Identity And Crawl",
@@ -310,6 +327,8 @@ export default async function AdminScanDetailPage({ params }: AdminScanDetailPag
   }
 
   const executionPlan = getExecutionPlan(record.scan.scanConfigJson);
+  const requestedGeo = getRequestedGeo(record.scan.scanConfigJson);
+  const latestRuntimeContext = getLatestRuntimeContextMetadata(record.runtimeContextEvents);
   const scanSource =
     record.scan.scanConfigJson && typeof record.scan.scanConfigJson.source === "string"
       ? record.scan.scanConfigJson.source
@@ -328,6 +347,7 @@ export default async function AdminScanDetailPage({ params }: AdminScanDetailPag
             <p>Domain: {record.domainHostname ?? "Unknown"}</p>
             <p>Type: {record.scan.scanType}</p>
             <p>Status: {record.scan.status}</p>
+            <p>Scan from: {record.scan.scanFromLabel}</p>
             <p>
               Source: {scanSource ?? "Not recorded"}{" "}
               {scanSource === "pulse_api" ? (
@@ -401,6 +421,22 @@ export default async function AdminScanDetailPage({ params }: AdminScanDetailPag
           <p>Browser nav timeout: {formatValue(executionPlan.browserNavigationTimeoutMs)}</p>
           <p>Browser post-load wait: {formatValue(executionPlan.browserPostLoadWaitMs)}</p>
           <p>Block stylesheets: {formatValue(executionPlan.blockStylesheetsInBrowser)}</p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 bg-white">
+        <CardHeader>
+          <CardTitle>Scan From Context</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
+          <p>Requested location: {record.scan.scanFromLabel}</p>
+          <p>Requested provider: {formatValue(requestedGeo.provider)}</p>
+          <p>Requested country: {formatValue(requestedGeo.country)}</p>
+          <p>Requested region: {formatValue(requestedGeo.region)}</p>
+          <p>Runtime egress ID: {formatValue(latestRuntimeContext?.egressId)}</p>
+          <p>Runtime provider: {formatValue(latestRuntimeContext?.egressProvider)}</p>
+          <p>Proxy configured: {formatValue(latestRuntimeContext?.proxyConfigured)}</p>
+          <p>Runtime event: {formatAdminDateTime(record.runtimeContextEvents[0]?.createdAt ?? null)}</p>
         </CardContent>
       </Card>
 

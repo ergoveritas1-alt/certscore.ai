@@ -49,6 +49,12 @@ const openApiDocument = {
           { name: "detail", in: "query", schema: { type: "string", enum: ["tiny", "quick", "standard", "full"], default: "standard" } },
           { name: "freshness", in: "query", schema: { type: "string", enum: ["latest", "refresh"], default: "latest" } },
           {
+            name: "scanFrom",
+            in: "query",
+            description: "Execution context for newly queued scans. Existing scans are returned with their recorded context.",
+            schema: { type: "string", enum: ["default", "california", "eu", "uk"], default: "default" }
+          },
+          {
             name: "forceNewScan",
             in: "query",
             description: "Set true to bypass the 24-hour recent-scan reuse check. This does not bypass validation or the 5-minute scan-generation throttle.",

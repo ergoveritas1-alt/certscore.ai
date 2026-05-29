@@ -11,6 +11,7 @@ import {
   resolvePolicyReviewVerdict,
   type PolicyReviewVerdict
 } from "@website-signal-risk-scanner/shared";
+import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
@@ -57,6 +58,11 @@ export type AdminScanDetail = {
     titleHash: string | null;
   }>;
   runtimeArtifacts: Record<string, unknown> | null;
+  runtimeContextEvents: Array<{
+    createdAt: string | null;
+    message: string | null;
+    metadataJson: Record<string, unknown> | null;
+  }>;
   scan: {
     completedAt: string | null;
     createdAt: string;
@@ -64,6 +70,8 @@ export type AdminScanDetail = {
     pagesRequested: number;
     pagesScanned: number;
     scanConfigJson: Record<string, unknown> | null;
+    scanFromLabel: string;
+    scanFromValue: string;
     scanType: string;
     status: string;
   };
@@ -171,6 +179,7 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
     policyEnrichment,
     policyReviewQueue,
     runtimeArtifacts,
+    runtimeContextEvents,
     scan,
     snapshot,
     trackerVendors
@@ -234,6 +243,7 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
     createdAt: scanRow.created_at,
     startedAt: null
   });
+  const scanFromDisplay = getScanFromDisplay(scanRow.scan_config_json ?? null);
 
   return {
     accessPostureSummary: {
@@ -252,7 +262,9 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
       completedAt: scanRow.completed_at,
       pagesRequested: scanRow.pages_requested ?? 0,
       pagesScanned: scanRow.pages_scanned,
-      scanConfigJson: scanRow.scan_config_json ?? null
+      scanConfigJson: scanRow.scan_config_json ?? null,
+      scanFromLabel: scanFromDisplay.label,
+      scanFromValue: scanFromDisplay.value
     },
     domainHostname: (domain as { hostname: string } | null)?.hostname ?? null,
     organizationName: (organization as { name: string } | null)?.name ?? null,
@@ -261,6 +273,14 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
       ? buildAgencyMappings(buildAgencyMappingSource(stripRecord(snapshot as Record<string, unknown>)))
       : [],
     policyEnrichment: ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row)),
+    runtimeContextEvents: ((runtimeContextEvents ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      createdAt: typeof row.created_at === "string" ? row.created_at : null,
+      message: typeof row.message === "string" ? row.message : null,
+      metadataJson:
+        row.metadata_json && typeof row.metadata_json === "object" && !Array.isArray(row.metadata_json)
+          ? (row.metadata_json as Record<string, unknown>)
+          : null
+    })),
     policyReviewQueue: ((policyReviewQueue ?? []) as Array<Record<string, unknown>>).map((row) => {
       const strippedRow = stripTimestampFields(row);
       const savedReviewerNotes = normalizePolicyReviewNote(

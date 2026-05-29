@@ -4,6 +4,8 @@ import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useRef, useState } from "react";
 import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
+import { ScanFromSelect } from "../scans/scan-from-select";
+import type { ScanFrom } from "@website-signal-risk-scanner/shared";
 
 type DomainScanFormProps = {
   buttonLabel?: string;
@@ -161,6 +163,7 @@ export function DomainScanForm({
   const [domain, setDomain] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
   const isSubmittingRef = useRef(false);
 
   function resetValidationState() {
@@ -188,7 +191,8 @@ export function DomainScanForm({
     try {
       const response = await fetch(mode === "preview" ? "/api/preview-scan" : "/api/full-scan", {
         body: JSON.stringify({
-          domain: submittedDomain
+          domain: submittedDomain,
+          scanFrom
         }),
         headers: {
           "Content-Type": "application/json"
@@ -327,6 +331,7 @@ export function DomainScanForm({
           <p className="max-w-sm text-xs text-slate-500 sm:text-right">{helperText}</p>
         </div>
       ) : null}
+      {mode === "full" ? <ScanFromSelect compact={compact} onChange={setScanFrom} value={scanFrom} /> : null}
       {sampleDomains.length > 0 ? (
         <div className="rounded-[1.35rem] border border-slate-200 bg-white/80 p-2 shadow-[0_14px_30px_rgba(15,23,42,0.04)]">
           <div className="px-2 pb-2 pt-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400">View sample scans</div>

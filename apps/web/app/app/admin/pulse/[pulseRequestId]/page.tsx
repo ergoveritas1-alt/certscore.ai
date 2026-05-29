@@ -62,6 +62,7 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
             <Field label="Requested URL" value={request.requestedUrl ?? "Not recorded"} />
             <Field label="Normalized URL" value={request.normalizedUrl ?? "Not recorded"} />
             <Field label="Resolution" value={formatLabel(request.resolutionMode)} />
+            <Field label="Scan from" value={request.scanFromLabel} />
             <Field label="Detail / format" value={`${formatLabel(detail)} / ${formatLabel(format)}`} />
             <Field label="Freshness / wait" value={`${formatLabel(freshness)} / ${typeof waitSeconds === "number" ? waitSeconds : 0}s`} />
             <Field label="Requested" value={formatAdminDateTime(request.requestedAt, { includeSeconds: true })} />

@@ -5,7 +5,9 @@ import {
   SCAN_EVENT_TYPES,
   USAGE_METRIC_KEYS,
   getPlanDefinition,
+  normalizeScanFrom,
   type PlanCode,
+  type ScanFrom,
   type ScanType
 } from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
@@ -31,7 +33,7 @@ import {
   updateDomainLatestScan
 } from "./repository";
 import { buildQueuedFullScanConfig } from "./full-scan-config";
-import { findRecentCompletedScanForDomain, findRecentCompletedScanInHistory, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
+import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest, type ScanRequestStatus } from "./scan-request-log";
 
 export type CreateFullScanActionState = {
@@ -72,6 +74,7 @@ type QueueFullScanInput = {
     source?: string | null;
     userAgent?: string | null;
   };
+  scanFrom?: ScanFrom;
   source?: string;
 };
 
@@ -92,6 +95,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   reusedExistingScan?: boolean;
   scanId: string | null;
 }> {
+  const scanFrom = normalizeScanFrom(input.scanFrom);
   const basePlanLimits = input.planLimitsOverride ?? (await getPlanLimits(input.planCode));
   const manualRescanLimitOverride = await getOrganizationManualRescanLimitOverride(input.organizationId).catch((error) => {
     console.error("[web] organization manual scan limit override lookup failed", {
@@ -151,6 +155,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         planCode: input.planCode,
         provenance: input.provenance ?? null,
         scanType: input.scanType ?? "full",
+        scanFrom,
         source: input.source ?? null
       },
       resolutionMode: details.resolutionMode ?? null,
@@ -169,20 +174,19 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   };
 
   if (!input.bypassRecentScanReuse) {
-    const recentScan =
-      findRecentCompletedScanInHistory(domainRecord.scans) ??
-      (await findRecentCompletedScanForDomain({
-        allowCrossWorkspace: true,
-        normalizedDomain: domainRecord.domain.hostname,
-        normalizedUrl: domainRecord.domain.normalizedUrl,
-        organizationId: input.organizationId
-      }).catch((error) => {
+    const recentScan = await findRecentCompletedScanForDomain({
+      allowCrossWorkspace: true,
+      normalizedDomain: domainRecord.domain.hostname,
+      normalizedUrl: domainRecord.domain.normalizedUrl,
+      organizationId: input.organizationId,
+      scanFrom
+    }).catch((error) => {
         console.error("[web] workspace recent scan reuse lookup failed", {
           domainId: domainRecord.domain.id,
           error: error instanceof Error ? error.message : String(error)
         });
         return null;
-      }));
+      });
 
     if (recentScan) {
       try {
@@ -374,6 +378,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     normalizedUrl: domainRecord.domain.normalizedUrl,
     priorScanAcceleration,
     profile: planLimits.scanProfile,
+    scanFrom,
     source: input.source ?? "manual-dashboard"
   });
   const queueMetadata = getFullScanQueueMetadata({
@@ -447,6 +452,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         queuePriority: queueMetadata.queuePriority,
         queueAvailabilityReason: fullScanQueueAvailability.reason,
         source: input.provenance?.source ?? scanConfig.source,
+        scanFrom,
+        requestedGeo: scanConfig.requestedGeo ?? null,
         originIp: input.provenance?.originIp ?? null,
         githubRunId: input.provenance?.githubRunId ?? null,
         githubWorkflow: input.provenance?.githubWorkflow ?? null,
@@ -516,6 +523,7 @@ export async function createFullScanAction(
 
   const dashboardContext = await getDashboardContext();
   const domainId = String(formData.get("domainId") ?? "").trim();
+  const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
 
   if (domainId.length === 0) {
     return {
@@ -529,6 +537,7 @@ export async function createFullScanAction(
     planCode: dashboardContext.organization.plan,
     submittedByUserId: dashboardContext.user.id,
     enforceMonthlyUsageLimit: true,
+    scanFrom,
     source: "manual-dashboard"
   });
 

@@ -162,6 +162,7 @@ export type OrganizationScanQueryRow = {
   id: string;
   pages_requested: number;
   pages_scanned: number;
+  scan_config_json: Record<string, unknown> | null;
   scan_type: string;
   started_at: string | null;
   status: string;

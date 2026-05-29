@@ -69,6 +69,7 @@ import {
   type DomainBenchmarkEstimate
 } from "./domain-benchmark-estimate";
 import { getFullScanUrlscanSupplement } from "./urlscan-supplement";
+import { getScanFromDisplay } from "../../lib/scans/scan-from";
 
 export type ScanDetailRecord = {
   id: string;
@@ -79,6 +80,8 @@ export type ScanDetailRecord = {
   pagesRequested: number;
   pagesScanned: number;
   scanConfigJson: Record<string, unknown> | null;
+  scanFromLabel: string;
+  scanFromValue: string;
   executionSummary: ScannerExecutionSummary | null;
   createdAt: string;
   startedAt: string | null;
@@ -769,6 +772,7 @@ async function loadScanDetailRecord(input: {
     createdAt: scanRow.created_at,
     startedAt: displayState.startedAt
   });
+  const scanFromDisplay = getScanFromDisplay(scanRow.scan_config_json);
   const scanObservedAt = displayState.completedAt ?? displayState.startedAt ?? scanRow.created_at;
   const supplementalCoverageSignals = deriveSupplementalCoverageSignals({
     events: normalizedEvents,
@@ -1231,6 +1235,8 @@ async function loadScanDetailRecord(input: {
       pagesRequested: scanRow.pages_requested,
       pagesScanned: scanRow.pages_scanned,
       scanConfigJson: scanRow.scan_config_json,
+      scanFromLabel: scanFromDisplay.label,
+      scanFromValue: scanFromDisplay.value,
       executionSummary: getScannerExecutionSummary(scanRow.scan_config_json),
       createdAt: displayCreatedAt,
       startedAt: displayState.startedAt,

@@ -8,6 +8,7 @@ import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveUnverifiedHomepageReason } from "../../lib/scans/unverified-homepage-reason";
 import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
+import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import {
   summarizeLegacyChangeEvents,
   type LegacyScanEventRow
@@ -67,6 +68,8 @@ export type OrganizationScanListItem = {
   interruptionLabel: string | null;
   interruptionReason: string | null;
   recoverableFindingClasses: RecoverableFindingClass[];
+  scanFromLabel: string;
+  scanFromValue: string;
   stopTier: ScanExecutionTier | null;
 };
 
@@ -479,6 +482,7 @@ async function loadOrganizationScans(
       createdAt: scan.created_at,
       startedAt: scan.started_at
     });
+    const scanFromDisplay = getScanFromDisplay(scan.scan_config_json);
     return {
         id: scan.id,
         domainActiveScanExists: latestDomainScan?.status === "queued" || latestDomainScan?.status === "running",
@@ -525,7 +529,9 @@ async function loadOrganizationScans(
         accessPostureClass: normalizedAccessPosture.accessPostureClass,
         highestSuccessfulTier: normalizedAccessPosture.highestSuccessfulTier,
         stopTier: normalizedAccessPosture.stopTier,
-        recoverableFindingClasses: normalizedAccessPosture.recoverableFindingClasses
+        recoverableFindingClasses: normalizedAccessPosture.recoverableFindingClasses,
+        scanFromLabel: scanFromDisplay.label,
+        scanFromValue: scanFromDisplay.value
     } satisfies OrganizationScanListItem;
     }),
     totalCount: count ?? scanRows.length

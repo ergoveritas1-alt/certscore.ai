@@ -1,4 +1,4 @@
-import { FULL_SCAN_EVENT_TYPES, SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
+import { FULL_SCAN_EVENT_TYPES, SCAN_EVENT_TYPES, normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { getPlanLimits } from "../plans/get-plan-limits";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getFullScanQueueMetadata } from "../queue/scan-queue-priority";
@@ -27,13 +27,16 @@ export async function createAnonymousFullScan(input: {
   hostname: string;
   normalizedUrl: string;
   provenance?: ScanQueueProvenance;
+  scanFrom?: ScanFrom;
 }) {
+  const scanFrom = normalizeScanFrom(input.scanFrom);
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
   if (!input.bypassRecentScanReuse) {
     const recentScan = await findRecentCompletedScanForDomain({
       normalizedDomain: input.hostname,
       normalizedUrl: input.normalizedUrl,
-      organizationId: null
+      organizationId: null,
+      scanFrom
     }).catch((error) => {
       console.error("[web] anonymous recent scan reuse lookup failed", {
         error: error instanceof Error ? error.message : String(error),
@@ -53,7 +56,8 @@ export async function createAnonymousFullScan(input: {
         requestedUrl: input.normalizedUrl,
         requestContext: {
           bypassRecentScanReuse: Boolean(input.bypassRecentScanReuse),
-          provenance: input.provenance ?? null
+          provenance: input.provenance ?? null,
+          scanFrom
         },
         resolutionMode: "reused_existing_scan",
         reusedCompletedAt: recentScan.completedAt,
@@ -84,7 +88,8 @@ export async function createAnonymousFullScan(input: {
       requestedUrl: input.normalizedUrl,
       requestContext: {
         bypassRecentScanReuse: Boolean(input.bypassRecentScanReuse),
-        provenance: input.provenance ?? null
+        provenance: input.provenance ?? null,
+        scanFrom
       },
       errorCode: "queue_unavailable",
       errorMessage: fullScanQueueAvailability.reason ?? "Full scan queue is unavailable.",
@@ -114,6 +119,7 @@ export async function createAnonymousFullScan(input: {
     normalizedUrl: input.normalizedUrl,
     priorScanAcceleration,
     profile: planLimits.scanProfile,
+    scanFrom,
     source: input.provenance?.source ?? "marketing-anonymous-full-scan"
   });
   const queueMetadata = getFullScanQueueMetadata({
@@ -144,7 +150,8 @@ export async function createAnonymousFullScan(input: {
       pagesRequested,
       provenance: input.provenance ?? null,
       queueOrigin: queueMetadata.queueOrigin,
-      queuePriority: queueMetadata.queuePriority
+      queuePriority: queueMetadata.queuePriority,
+      scanFrom
     },
     resolutionMode: "queued_new_scan",
     scanId: scan.id,
@@ -182,6 +189,8 @@ export async function createAnonymousFullScan(input: {
       queuePriority: queueMetadata.queuePriority,
       queueAvailabilityReason: fullScanQueueAvailability.reason,
       source: input.provenance?.source ?? scanConfig.source,
+      scanFrom,
+      requestedGeo: scanConfig.requestedGeo ?? null,
       originIp: input.provenance?.originIp ?? null,
       githubRunId: input.provenance?.githubRunId ?? null,
       githubWorkflow: input.provenance?.githubWorkflow ?? null,

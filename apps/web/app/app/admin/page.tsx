@@ -53,6 +53,22 @@ export default async function AdminOverviewPage() {
         </Card>
         <Card className="border-slate-200 bg-white">
           <CardHeader>
+            <CardTitle>Scan From</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm text-slate-600">
+            {scanMetrics.scanFromCounts.length > 0 ? (
+              scanMetrics.scanFromCounts.map((item) => (
+                <p key={item.value}>
+                  {item.label}: {item.count}
+                </p>
+              ))
+            ) : (
+              <p>No scan-location data yet.</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200 bg-white">
+          <CardHeader>
             <CardTitle>Plan Mix</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 text-sm text-slate-600">
@@ -114,7 +130,7 @@ export default async function AdminOverviewPage() {
               <div key={scan.scanId} className="rounded-2xl border border-slate-200 p-4">
                 <p className="font-medium text-slate-900">{scan.domainHostname ?? "Unknown domain"}</p>
                 <p className="text-sm text-slate-500">
-                  {scan.organizationName ?? "Unknown workspace"} · {scan.scanType} · {scan.status}
+                  {scan.organizationName ?? "Unknown workspace"} · {scan.scanType} · {scan.status} · Scan from {scan.scanFromLabel}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
                   Signals {scan.totalSignals ?? 0} · CertScore.ai {scan.certscoreOverall ?? "n/a"} · Completed {formatAdminDateTime(scan.completedAt)}

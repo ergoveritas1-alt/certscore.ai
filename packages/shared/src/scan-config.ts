@@ -1,3 +1,5 @@
+import type { RequestedGeoTarget, ScanFrom } from "./scan-location";
+
 export type SharedCrawlerIdentityConfig = {
   productToken?: string;
   publicUrl?: string;
@@ -48,6 +50,8 @@ export type SharedScanConfig = {
   post403Policy?: SharedPost403PolicyConfig;
   processor?: string;
   profile?: string;
+  requestedGeo?: RequestedGeoTarget;
+  scanFrom?: ScanFrom;
   source?: string;
   triggerMode?: string;
 };
@@ -63,6 +67,8 @@ type BuildSharedFullScanConfigInput = {
   post403Policy?: SharedPost403PolicyConfig;
   processor: string;
   profile: string;
+  requestedGeo?: RequestedGeoTarget;
+  scanFrom?: ScanFrom;
   source: string;
   triggerMode?: string;
 };
@@ -78,6 +84,8 @@ export function buildSharedFullScanConfig(input: BuildSharedFullScanConfigInput)
       : {}),
     ...(input.normalizedUrl ? { normalizedUrl: input.normalizedUrl } : {}),
     ...(input.post403Policy ? { post403Policy: input.post403Policy } : {}),
+    ...(input.requestedGeo ? { requestedGeo: input.requestedGeo } : {}),
+    ...(input.scanFrom ? { scanFrom: input.scanFrom } : {}),
     ...(input.triggerMode ? { triggerMode: input.triggerMode } : {}),
     maxPages: input.maxPages,
     processor: input.processor,

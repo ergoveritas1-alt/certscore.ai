@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { findRecentCompletedScanInHistory, isScanWithinReuseWindow } from "./recent-scan-reuse";
 
@@ -8,6 +9,14 @@ test("recent scan reuse uses UTC instants for the 24 hour window", () => {
   assert.equal(isScanWithinReuseWindow({ completedAt: "2026-05-18T12:00:00.000Z", now }), true);
   assert.equal(isScanWithinReuseWindow({ completedAt: "2026-05-18T11:59:59.999Z", now }), false);
   assert.equal(isScanWithinReuseWindow({ completedAt: "2026-05-19T12:00:00.001Z", now }), false);
+});
+
+test("recent scan database reuse is isolated by scan-from value", () => {
+  const source = readFileSync("apps/web/server/scans/recent-scan-reuse.ts", "utf8");
+
+  assert.match(source, /scanFromParameter/);
+  assert.match(source, /scan_config_json->>'scanFrom'/);
+  assert.match(source, /DEFAULT_SCAN_FROM/);
 });
 
 test("recent scan reuse selects the newest completed scan in the 24 hour window", () => {

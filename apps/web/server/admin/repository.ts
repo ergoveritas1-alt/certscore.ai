@@ -1,6 +1,7 @@
 "use server";
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { SCAN_FROM_VALUES, formatScanFromLabel } from "@website-signal-risk-scanner/shared";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { ensureMonitorSiteRequestsTable } from "../monitor-site/monitor-site-request";
 import { ensureScanRequestLogTable } from "../scans/scan-request-log";
@@ -39,6 +40,7 @@ export type AdminScanRequestRow = {
   reuse_window_hours: number | null;
   scan_domain_hostname: string | null;
   scan_created_at: string | null;
+  scan_config_json: Record<string, unknown> | null;
   scan_id: string | null;
   scan_organization_id: string | null;
   scan_status: string | null;
@@ -286,6 +288,7 @@ export type AdminScanOverviewCounts = {
   blockedOrCaptchaCount: number;
   http403Count: number;
   http429Count: number;
+  scanFromCounts: Array<{ count: number; label: string; value: string }>;
   totalPhysicalScans: number;
   totalScanRequests: number;
   totalScans: number;
@@ -423,6 +426,7 @@ export async function loadAdminScanRequestRows(limit: number): Promise<AdminScan
             sr.created_at,
             scan.status as scan_status,
             scan.created_at as scan_created_at,
+            scan.scan_config_json as scan_config_json,
             scan.organization_id as scan_organization_id,
             domain.hostname as scan_domain_hostname
        from public.scan_requests sr
@@ -447,6 +451,7 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
   policyEnrichment: Array<Record<string, unknown>>;
   policyReviewQueue: Array<Record<string, unknown>>;
   runtimeArtifacts: Record<string, unknown> | null;
+  runtimeContextEvents: Array<Record<string, unknown>>;
   scan: AdminScanQueryRow | null;
   snapshot: Record<string, unknown> | null;
   trackerVendors: Array<Record<string, unknown>>;
@@ -469,6 +474,7 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
       policyEnrichment: [],
       policyReviewQueue: [],
       runtimeArtifacts: null,
+      runtimeContextEvents: [],
       scan: null,
       snapshot: null,
       trackerVendors: []
@@ -484,6 +490,7 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
     domain,
     organization,
     runtimeArtifacts,
+    runtimeContextEvents,
     policyEnrichment,
     policyReviewQueue
   ] = await Promise.all([
@@ -528,6 +535,15 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
       : Promise.resolve(null),
     queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [scanId], { readOnly: true }),
     query<Record<string, unknown>>(
+      `select event_type, message, metadata_json, created_at
+         from scan_events
+        where scan_id = $1
+          and event_type = 'scanner.runtime_context'
+        order by created_at desc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
       `select *
          from policy_enrichment
         where scan_id = $1
@@ -554,6 +570,7 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
     policyEnrichment,
     policyReviewQueue,
     runtimeArtifacts,
+    runtimeContextEvents,
     scan,
     snapshot,
     trackerVendors
@@ -1016,7 +1033,7 @@ export async function updateAdminOrganizationPlan(input: {
 
 export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCounts> {
   await ensureScanRequestLogTable();
-  const [totalScansResult, totalScanRequestsResult, unlinkedScanRequestsResult, http403Result, http429Result, blockedOrCaptchaResult] = await Promise.all([
+  const [totalScansResult, totalScanRequestsResult, unlinkedScanRequestsResult, http403Result, http429Result, blockedOrCaptchaResult, scanFromResult] = await Promise.all([
     query<{ count: string }>(`select count(*)::text as count from scans`, [], { readOnly: true }),
     query<{ count: string }>(`select count(*)::text as count from scan_requests`, [], { readOnly: true }),
     query<{ count: string }>(
@@ -1051,6 +1068,14 @@ export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCo
            or scan_outcome = 'content_capture_degraded'`,
       [],
       { readOnly: true }
+    ),
+    query<{ count: string; scan_from: string }>(
+      `select coalesce(scan_config_json->>'scanFrom', 'default') as scan_from,
+              count(*)::text as count
+         from scans
+        group by coalesce(scan_config_json->>'scanFrom', 'default')`,
+      [],
+      { readOnly: true }
     )
   ]);
 
@@ -1062,6 +1087,11 @@ export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCo
     totalScans: totalPhysicalScans + totalUnlinkedScanRequests,
     totalPhysicalScans,
     totalScanRequests,
+    scanFromCounts: SCAN_FROM_VALUES.map((scanFrom) => ({
+      count: Number(scanFromResult.rows.find((row) => row.scan_from === scanFrom)?.count ?? "0"),
+      label: formatScanFromLabel(scanFrom),
+      value: scanFrom
+    })),
     http403Count: Number(http403Result.rows[0]?.count ?? "0"),
     http429Count: Number(http429Result.rows[0]?.count ?? "0"),
     blockedOrCaptchaCount: Number(blockedOrCaptchaResult.rows[0]?.count ?? "0")

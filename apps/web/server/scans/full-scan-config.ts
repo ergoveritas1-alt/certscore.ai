@@ -1,8 +1,11 @@
 import {
   buildSharedFullScanConfig,
+  getScanFromDefinition,
+  normalizeScanFrom,
   type SharedCrawlSeedHint,
   type SharedPriorScanAccelerationConfig,
-  type SharedScanConfig
+  type SharedScanConfig,
+  type ScanFrom
 } from "@website-signal-risk-scanner/shared";
 
 export const QUEUED_FULL_SCAN_PROCESSOR = "queued-full-scan-v1";
@@ -22,6 +25,7 @@ export type BuildQueuedFullScanConfigInput = {
   normalizedUrl: string;
   priorScanAcceleration?: QueuedFullScanPriorScanAcceleration | null;
   profile: string;
+  scanFrom?: ScanFrom;
   source: string;
 };
 
@@ -31,6 +35,8 @@ export type QueuedFullScanPriorScanAcceleration = {
 };
 
 export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput): SharedScanConfig {
+  const scanFrom = normalizeScanFrom(input.scanFrom);
+  const scanFromDefinition = getScanFromDefinition(scanFrom);
   return buildSharedFullScanConfig({
     ...(input.priorScanAcceleration
       ? {
@@ -48,6 +54,8 @@ export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput)
     post403Policy: QUEUED_FULL_SCAN_POST_403_POLICY,
     processor: QUEUED_FULL_SCAN_PROCESSOR,
     profile: input.profile,
+    requestedGeo: scanFromDefinition.requestedGeo,
+    scanFrom,
     source: input.source
   });
 }

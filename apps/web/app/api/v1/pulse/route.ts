@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { normalizeScanFrom } from "@website-signal-risk-scanner/shared";
 import { absoluteUrl } from "../../../../lib/seo";
 import { buildPulseError } from "../../../../lib/pulse/error";
 import {
@@ -228,7 +229,8 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   const waitSeconds = gptAction ? parseGptPulseWaitSeconds(url) : parsePulseWaitSeconds(url.searchParams.get("wait"));
   const requester = getPulseRequesterContext(request);
   const forceNewScan = gptAction ? false : parseForceNewScan(url.searchParams.get("forceNewScan"));
-  const contextBase = { ...requester, format, detail, freshness, forceNewScan, waitSeconds, channel: gptAction ? "gpt_action" : "pulse_api", source: gptAction ? "gpt_action" : "pulse_api" };
+  const scanFrom = normalizeScanFrom(url.searchParams.get("scanFrom"));
+  const contextBase = { ...requester, format, detail, freshness, forceNewScan, scanFrom, waitSeconds, channel: gptAction ? "gpt_action" : "pulse_api", source: gptAction ? "gpt_action" : "pulse_api" };
   const scanId = url.searchParams.get("scanId")?.trim() || null;
   const jobId = url.searchParams.get("jobId")?.trim() || null;
   const rawUrl = url.searchParams.get("url")?.trim() || null;
@@ -461,8 +463,8 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     });
     const recentScan = forceNewScan
       ? null
-      : await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, { maxAgeHours: RECENT_SCAN_REUSE_WINDOW_HOURS });
-    const latestScan = recentScan ?? (await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain));
+      : await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, { maxAgeHours: RECENT_SCAN_REUSE_WINDOW_HOURS, scanFrom });
+    const latestScan = recentScan ?? (await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, { scanFrom }));
     const latestScanRecord = latestScan ? await getAnonymousScanById(latestScan.id).catch(() => null) : null;
     const recentScanRecord = recentScan ? latestScanRecord : null;
 
@@ -566,7 +568,8 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         host: request.headers.get("host"),
         userAgent: requester.userAgent,
         originIp: requester.ipHash
-      }
+      },
+      scanFrom
     });
     if ("reusedExistingScan" in queued && queued.reusedExistingScan) {
       const reusedScanRecord = await getAnonymousScanById(queued.scan.id).catch(() => null);

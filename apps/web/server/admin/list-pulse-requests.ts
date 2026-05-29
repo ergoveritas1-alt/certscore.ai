@@ -1,6 +1,7 @@
 "use server";
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { formatScanFromLabel, normalizeScanFrom } from "@website-signal-risk-scanner/shared";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
 import { getAnonymousScanById } from "../scans/get-scan-by-id";
@@ -34,6 +35,8 @@ export type AdminPulseRequestListItem = {
   resultPulseUrl: string | null;
   resultReportUrl: string | null;
   scanId: string | null;
+  scanFromLabel: string;
+  scanFromValue: string;
   requestChannel: string | null;
   requestedByAnonymous: boolean | null;
   sourceIp: string | null;
@@ -104,6 +107,7 @@ function mapPulseRequestRow(row: Record<string, unknown>, topFindingIdsByScanId:
   const responseSummary = asRecord(row.response_summary);
   const scanId = typeof row.scan_id === "string" ? row.scan_id : null;
   const storedTopFindingIds = asStringArray(responseSummary.topFindingIds);
+  const scanFromValue = normalizeScanFrom(requestContext.scanFrom ?? asRecord(row.scan_config_json).scanFrom);
   return {
     completedAt: typeof row.completed_at === "string" ? row.completed_at : null,
     createdAt: String(row.created_at),
@@ -121,6 +125,8 @@ function mapPulseRequestRow(row: Record<string, unknown>, topFindingIdsByScanId:
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
     scanId,
+    scanFromLabel: formatScanFromLabel(scanFromValue),
+    scanFromValue,
     requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
     requestedByAnonymous: typeof requestedBy.anonymous === "boolean" ? requestedBy.anonymous : null,
     sourceIp: getRequestContextString(requestContext, "sourceIp"),
@@ -238,9 +244,11 @@ export async function listAdminPulseRequests(input: {
             pr.created_at,
             ss.total_signals::int as snapshot_total_signals,
             ss.report_finding_count::int as snapshot_finding_count,
+            s.scan_config_json,
             coalesce(pf.feedback_count, 0)::int as feedback_count
        from pulse_requests pr
        left join scan_snapshots ss on ss.scan_id = pr.scan_id
+       left join scans s on s.id = pr.scan_id
        left join lateral (
          select count(*)::int as feedback_count
            from pulse_feedback
@@ -298,8 +306,10 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               pr.elapsed_seconds,
               pr.created_at,
               pr.updated_at,
+              s.scan_config_json,
               coalesce(pf.feedback_count, 0)::int as feedback_count
          from pulse_requests pr
+         left join scans s on s.id = pr.scan_id
          left join lateral (
            select count(*)::int as feedback_count
              from pulse_feedback
@@ -385,8 +395,10 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
             pr.completed_at,
             pr.elapsed_seconds,
             pr.created_at,
+            s.scan_config_json,
             coalesce(pf.feedback_count, 0)::int as feedback_count
        from pulse_requests pr
+       left join scans s on s.id = pr.scan_id
        left join lateral (
          select count(*)::int as feedback_count
            from pulse_feedback

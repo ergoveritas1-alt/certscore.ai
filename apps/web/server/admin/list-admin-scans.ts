@@ -3,6 +3,7 @@
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
+import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveDisplayCreatedAt } from "../scans/display-state";
 import {
   loadAdminScanOverviewCounts,
@@ -49,6 +50,8 @@ export type AdminScanListItem = {
   rowKind: "scan" | "request";
   scanViewHref: string;
   scanType: string;
+  scanFromLabel: string;
+  scanFromValue: string;
   source: string | null;
   status: string;
   stopTier: ScanExecutionTier | null;
@@ -60,6 +63,7 @@ export type AdminScanOverviewMetrics = {
   blockedOrCaptchaCount: number;
   http403Count: number;
   http429Count: number;
+  scanFromCounts: Array<{ count: number; label: string; value: string }>;
   totalPhysicalScans: number;
   totalScanRequests: number;
   totalScans: number;
@@ -156,6 +160,8 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       requesterIp: selectRequesterIp(diagnosticEventMap.get(scan.id) ?? []),
       scanViewHref: getAdminAuthenticatedScanHref(scan.id),
       scanType: scan.scan_type,
+      scanFromLabel: getScanFromDisplay(scan.scan_config_json).label,
+      scanFromValue: getScanFromDisplay(scan.scan_config_json).value,
       source: typeof scan.scan_config_json?.source === "string" ? scan.scan_config_json.source : null,
       status: scan.status,
       createdAt: displayCreatedAt,
@@ -198,6 +204,8 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
   const organizationName =
     request.organization_name ?? (request.organization_id || request.scan_organization_id ? "Unknown workspace" : "Public / anonymous");
   const requestContext = getNestedMetadataObject(request.request_context);
+  const scanConfig = getNestedMetadataObject(request.scan_config_json);
+  const scanFromDisplay = getScanFromDisplay(requestContext ?? scanConfig);
   const requestedBy = getNestedMetadataObject(request.requested_by);
   const provenance = requestContext ? getNestedMetadataObject(requestContext.provenance) : null;
   const requesterIp =
@@ -237,6 +245,8 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
     rowKind: "request",
     scanId: linkedScanId ?? request.public_id,
     scanType: request.request_type,
+    scanFromLabel: scanFromDisplay.label,
+    scanFromValue: scanFromDisplay.value,
     scanViewHref: getAdminAuthenticatedScanHref(linkedScanId),
     source: request.request_channel,
     status: request.status,

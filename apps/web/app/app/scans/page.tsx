@@ -189,6 +189,7 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                 <thead>
                   <tr className="text-left text-slate-500">
                     <th className="pb-3 pr-4 font-medium">Website</th>
+                    <th className="pb-3 pr-4 font-medium">Scan from</th>
                     <th className="pb-3 pr-4 font-medium">Type</th>
                     <th className="pb-3 pr-4 font-medium">Status</th>
                     <th className="pb-3 pr-4 font-medium">Scan state</th>
@@ -230,6 +231,9 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                           <p className="font-medium text-slate-900">{scan.domainHostname ?? "Unknown website"}</p>
                           <p className="text-xs text-slate-500">{getStatusCopy(scan.status)}</p>
                         </div>
+                      </td>
+                      <td className="py-4 pr-4 text-slate-600">
+                        <Badge className="bg-slate-100 text-slate-700 ring-1 ring-slate-200">{scan.scanFromLabel}</Badge>
                       </td>
                       <td className="py-4 pr-4 text-slate-600">{scan.scanType}</td>
                       <td className="py-4 pr-4 text-slate-600">
@@ -340,6 +344,10 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                       <div className="rounded-2xl bg-slate-50 px-4 py-3">
                         <dt className="text-slate-500">Type</dt>
                         <dd className="mt-1 font-medium text-slate-900">{scan.scanType}</dd>
+                      </div>
+                      <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <dt className="text-slate-500">Scan from</dt>
+                        <dd className="mt-1 font-medium text-slate-900">{scan.scanFromLabel}</dd>
                       </div>
                       <div className="rounded-2xl bg-slate-50 px-4 py-3">
                         <dt className="text-slate-500">Signals</dt>

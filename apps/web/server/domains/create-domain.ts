@@ -1,6 +1,6 @@
 "use server";
 
-import { createDomainRequestSchema, getPlanDefinition, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
+import { createDomainRequestSchema, getPlanDefinition, normalizeScanFrom, parseDomainBatchInput, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
 import { getQueueAvailability } from "../../lib/env";
 import { getDashboardContext } from "../auth";
@@ -38,6 +38,7 @@ export async function createOrQueueDomainScan(input: {
     source?: string | null;
     userAgent?: string | null;
   };
+  scanFrom?: ScanFrom;
 }) {
   const dashboardContext = await getDashboardContext();
   const parsedInput = createDomainRequestSchema.safeParse({
@@ -92,6 +93,7 @@ export async function createOrQueueDomainScan(input: {
       enforceMonthlyUsageLimit: false,
       provenance: input.provenance,
       bypassRecentScanReuse: input.bypassRecentScanReuse,
+      scanFrom: input.scanFrom,
       source: "marketing-full-scan"
     });
 
@@ -168,6 +170,7 @@ export async function createOrQueueDomainScan(input: {
     enforceMonthlyUsageLimit: true,
     bypassRecentScanReuse: input.bypassRecentScanReuse,
     provenance: input.provenance,
+    scanFrom: input.scanFrom,
     source: "new-domain-overview"
   });
 
@@ -183,6 +186,7 @@ export async function createDomainAction(
   formData: FormData
 ): Promise<CreateDomainActionState> {
   const domainInput = String(formData.get("domain") ?? "");
+  const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
   const parsedBatch = parseDomainBatchInput(domainInput);
 
   if (parsedBatch.valid.length === 0) {
@@ -198,7 +202,8 @@ export async function createDomainAction(
     parsedBatch.valid.map((item) =>
       createOrQueueDomainScan({
         domain: item.domain,
-        allowExistingDomainRescan: true
+        allowExistingDomainRescan: true,
+        scanFrom
       })
     )
   );

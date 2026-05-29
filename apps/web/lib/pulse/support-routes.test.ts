@@ -29,7 +29,7 @@ test("OpenAPI route returns valid Pulse API JSON", async () => {
 
   const pulseParameters = body.paths["/api/v1/pulse"].get.parameters.map((parameter: { name: string }) => parameter.name);
   assert.deepEqual(
-    ["url", "scanId", "jobId", "format", "detail", "freshness", "forceNewScan", "wait"].every((name) => pulseParameters.includes(name)),
+    ["url", "scanId", "jobId", "format", "detail", "freshness", "scanFrom", "forceNewScan", "wait"].every((name) => pulseParameters.includes(name)),
     true
   );
   assert.ok(body.paths["/api/v1/pulse"].get.responses["200"]);
@@ -128,7 +128,6 @@ test("Pulse and full-scan routes preserve 24-hour reuse and forceNewScan bypass"
   assert.match(fullScanRoute, /parseForceNewScan/);
   assert.match(fullScanRoute, /bypassRecentScanReuse: forceNewScan/);
   assert.match(anonymousScanSource, /findRecentCompletedScanForDomain/);
-  assert.match(authenticatedScanSource, /findRecentCompletedScanInHistory/);
   assert.match(authenticatedScanSource, /findRecentCompletedScanForDomain/);
   assert.match(domainSource, /reusedExistingScan: queueResult\.reusedExistingScan/);
 });

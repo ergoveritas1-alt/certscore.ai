@@ -1,4 +1,5 @@
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { DEFAULT_SCAN_FROM, normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { randomUUID } from "node:crypto";
 import {
   PULSE_API_VERSION,
@@ -35,12 +36,14 @@ export function createPulsePublicId(prefix = "pulse_req") {
   return `${prefix}_${randomUUID()}`;
 }
 
-export async function findLatestCompletedAnonymousScanForDomain(normalizedDomain: string, input?: { maxAgeHours?: number }) {
+export async function findLatestCompletedAnonymousScanForDomain(normalizedDomain: string, input?: { maxAgeHours?: number; scanFrom?: ScanFrom }) {
   await ensurePulseTables();
+  const scanFrom = normalizeScanFrom(input?.scanFrom);
   const maxAgeClause =
     typeof input?.maxAgeHours === "number"
       ? "and s.completed_at is not null and s.completed_at >= timezone('utc', now()) - ($3::int * interval '1 hour')"
       : "";
+  const scanFromParameter = typeof input?.maxAgeHours === "number" ? "$4" : "$3";
   return queryOne<{ id: string }>(
     `select s.id
        from scans s
@@ -48,11 +51,14 @@ export async function findLatestCompletedAnonymousScanForDomain(normalizedDomain
       where s.organization_id is null
         and d.organization_id is null
         and s.status = 'completed'
+        and coalesce(s.scan_config_json->>'scanFrom', '${DEFAULT_SCAN_FROM}') = ${scanFromParameter}
         and (lower(d.hostname) = lower($1) or lower(d.normalized_url) = lower($2))
         ${maxAgeClause}
       order by s.completed_at desc nulls last, s.created_at desc
       limit 1`,
-    typeof input?.maxAgeHours === "number" ? [normalizedDomain, `https://${normalizedDomain}`, input.maxAgeHours] : [normalizedDomain, `https://${normalizedDomain}`],
+    typeof input?.maxAgeHours === "number"
+      ? [normalizedDomain, `https://${normalizedDomain}`, input.maxAgeHours, scanFrom]
+      : [normalizedDomain, `https://${normalizedDomain}`, scanFrom],
     { readOnly: true }
   );
 }

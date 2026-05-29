@@ -5021,6 +5021,9 @@ function ResultHeroPanel(input: {
                 {input.scanExecutionSummary.title}
               </span>
             ) : null}
+            <span className="rounded-full border border-teal-200 bg-teal-50/90 px-3 py-1 text-xs font-medium text-teal-800">
+              Scan from: {input.scanRecord.scan.scanFromLabel}
+            </span>
             {input.preConsentTrackingObserved ? (
               <span className="rounded-full border border-amber-200 bg-amber-50/90 px-3 py-1 text-xs font-medium text-amber-800">
                 Pre-consent activity
@@ -5732,6 +5735,9 @@ export function SharedScanDetailView({
         title={
           <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
             <span className="break-words">Scan: {scanRecord.scan.domainHostname ?? "Unknown website"}</span>
+            <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-800">
+              Scan from: {scanRecord.scan.scanFromLabel}
+            </span>
             <InfoTip
               align="start"
               className="translate-y-0.5 align-middle"

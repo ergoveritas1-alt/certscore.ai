@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createDomainRequestSchema, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
+import { createDomainRequestSchema, normalizeScanFrom, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { getCurrentUser } from "../../../server/auth";
 import { isBetterAuthConfigurationError } from "../../../server/better-auth/env";
 import { checkDomainDns } from "../../../server/domains/domain-dns";
@@ -51,6 +51,7 @@ export async function POST(request: Request) {
   try {
     const payload = await request.json();
     const forceNewScan = parseForceNewScan(payload?.forceNewScan);
+    const scanFrom = normalizeScanFrom(payload?.scanFrom);
     const provenance = getScanRequestProvenance(request);
     const rawDomain = typeof payload?.domain === "string" ? payload.domain : "";
     const parsedBatch = parseDomainBatchInput(rawDomain);
@@ -125,7 +126,8 @@ export async function POST(request: Request) {
         bypassRecentScanReuse: forceNewScan,
         hostname: firstDomain.hostname,
         normalizedUrl: firstDomain.normalizedUrl,
-        provenance
+        provenance,
+        scanFrom
       }).catch(async (error) => {
         const message = error instanceof Error ? error.message : String(error);
 
@@ -177,7 +179,8 @@ export async function POST(request: Request) {
           allowExistingDomainRescan: true,
           bypassRecentScanReuse: forceNewScan,
           domain: item.normalizedUrl,
-          provenance
+          provenance,
+          scanFrom
         })
       )
     );

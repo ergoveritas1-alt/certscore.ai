@@ -1,4 +1,5 @@
 import { queryOne } from "@website-signal-risk-scanner/db";
+import { DEFAULT_SCAN_FROM, normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 
 export const RECENT_SCAN_REUSE_WINDOW_HOURS = 24;
 
@@ -48,11 +49,13 @@ export async function findRecentCompletedScanForDomain(input: {
   normalizedDomain: string;
   normalizedUrl: string;
   organizationId: string | null;
+  scanFrom?: ScanFrom;
   windowHours?: number;
 }) {
+  const scanFrom = normalizeScanFrom(input.scanFrom);
   const parameters = input.allowCrossWorkspace
-    ? [input.windowHours ?? RECENT_SCAN_REUSE_WINDOW_HOURS, input.normalizedDomain, input.normalizedUrl]
-    : [input.organizationId, input.windowHours ?? RECENT_SCAN_REUSE_WINDOW_HOURS, input.normalizedDomain, input.normalizedUrl];
+    ? [input.windowHours ?? RECENT_SCAN_REUSE_WINDOW_HOURS, input.normalizedDomain, input.normalizedUrl, scanFrom]
+    : [input.organizationId, input.windowHours ?? RECENT_SCAN_REUSE_WINDOW_HOURS, input.normalizedDomain, input.normalizedUrl, scanFrom];
   const organizationFilter = input.allowCrossWorkspace
     ? ""
     : `and s.organization_id is not distinct from $1
@@ -60,6 +63,7 @@ export async function findRecentCompletedScanForDomain(input: {
   const windowParameter = input.allowCrossWorkspace ? "$1" : "$2";
   const domainParameter = input.allowCrossWorkspace ? "$2" : "$3";
   const urlParameter = input.allowCrossWorkspace ? "$3" : "$4";
+  const scanFromParameter = input.allowCrossWorkspace ? "$4" : "$5";
 
   return queryOne<CompletedScanCandidate>(
     `select s.id, s.organization_id as "organizationId", s.completed_at as "completedAt"
@@ -70,6 +74,7 @@ export async function findRecentCompletedScanForDomain(input: {
         and s.status = 'completed'
         and s.completed_at is not null
         and s.completed_at >= timezone('utc', now()) - (${windowParameter}::int * interval '1 hour')
+        and coalesce(s.scan_config_json->>'scanFrom', '${DEFAULT_SCAN_FROM}') = ${scanFromParameter}
         and (lower(d.hostname) = lower(${domainParameter}) or lower(d.normalized_url) = lower(${urlParameter}))
       order by s.completed_at desc, s.created_at desc
       limit 1`,
