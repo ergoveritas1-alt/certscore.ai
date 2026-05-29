@@ -179,6 +179,7 @@ export default async function MarketingHomePage() {
                   inputLabel="Website to analyze"
                   inputPlaceholder="kbdlab.io"
                   mode="full"
+                  sampleDomains={["grammarly.com", "nbcnews.com", "latimes.com", "kbdlab.io"]}
                   scanSource="homepage"
                 />
               </CardContent>

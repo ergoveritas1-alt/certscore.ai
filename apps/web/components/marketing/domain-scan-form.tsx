@@ -13,6 +13,7 @@ type DomainScanFormProps = {
   inputPlaceholder?: string;
   emptySubmitDomain?: string;
   mode?: "full" | "preview";
+  sampleDomains?: string[];
   scanSource?: ScanSource;
 };
 
@@ -153,6 +154,7 @@ export function DomainScanForm({
   inputLabel = "Website domain",
   inputPlaceholder = "Enter yoursite.com",
   mode = "preview",
+  sampleDomains = [],
   scanSource = "unknown"
 }: DomainScanFormProps) {
   const router = useRouter();
@@ -165,8 +167,7 @@ export function DomainScanForm({
     setErrorMessage(null);
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitDomain(rawDomain: string) {
     if (isSubmittingRef.current) {
       return;
     }
@@ -174,7 +175,7 @@ export function DomainScanForm({
     isSubmittingRef.current = true;
     setErrorMessage(null);
 
-    const submittedDomain = domain.trim() || emptySubmitDomain.trim();
+    const submittedDomain = rawDomain.trim();
 
     if (!submittedDomain) {
       isSubmittingRef.current = false;
@@ -258,6 +259,16 @@ export function DomainScanForm({
     }
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await submitDomain(domain || emptySubmitDomain);
+  }
+
+  async function handleSampleScan(sampleDomain: string) {
+    setDomain(sampleDomain);
+    await submitDomain(sampleDomain);
+  }
+
   return (
     <form className={compact ? "space-y-2" : "space-y-4"} onSubmit={(event) => void handleSubmit(event)}>
       <div className="space-y-2">
@@ -314,6 +325,36 @@ export function DomainScanForm({
       {helperText && !compact ? (
         <div className="flex justify-start sm:justify-end">
           <p className="max-w-sm text-xs text-slate-500 sm:text-right">{helperText}</p>
+        </div>
+      ) : null}
+      {sampleDomains.length > 0 ? (
+        <div className="rounded-[1.35rem] border border-slate-200 bg-white/80 p-2 shadow-[0_14px_30px_rgba(15,23,42,0.04)]">
+          <div className="px-2 pb-2 pt-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400">Sample scans</div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {sampleDomains.map((sampleDomain) => (
+              <button
+                key={sampleDomain}
+                className="group flex min-h-11 items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 text-left text-sm font-semibold text-slate-800 transition hover:border-sky-200 hover:bg-sky-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:cursor-wait disabled:opacity-60"
+                disabled={isSubmitting}
+                onClick={() => void handleSampleScan(sampleDomain)}
+                type="button"
+              >
+                <span>{sampleDomain}</span>
+                <span className="ml-3 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm transition group-hover:text-sky-600">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                    <path
+                      d="M5 12h14M13 6l6 6-6 6"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2.2"
+                    />
+                  </svg>
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
       {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
