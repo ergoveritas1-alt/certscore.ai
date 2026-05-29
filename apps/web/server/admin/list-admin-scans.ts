@@ -13,6 +13,7 @@ import {
   type AdminScanDiagnosticEventRow as ScanDiagnosticEventRow,
   type AdminScanRequestRow as ScanRequestRow
 } from "./repository";
+import { getAdminAuthenticatedScanHref } from "./admin-scan-links";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminScanListItem = {
@@ -153,7 +154,7 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       domainHostname: scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null,
       organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
       requesterIp: selectRequesterIp(diagnosticEventMap.get(scan.id) ?? []),
-      scanViewHref: `/app/scans/${scan.id}`,
+      scanViewHref: getAdminAuthenticatedScanHref(scan.id),
       scanType: scan.scan_type,
       source: typeof scan.scan_config_json?.source === "string" ? scan.scan_config_json.source : null,
       status: scan.status,
@@ -236,7 +237,7 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
     rowKind: "request",
     scanId: linkedScanId ?? request.public_id,
     scanType: request.request_type,
-    scanViewHref: linkedScanId ? `/app/scans/${linkedScanId}` : "",
+    scanViewHref: getAdminAuthenticatedScanHref(linkedScanId),
     source: request.request_channel,
     status: request.status,
     stopTier: null,
