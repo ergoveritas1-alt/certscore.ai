@@ -135,14 +135,8 @@ export default async function MarketingHomePage() {
               accessibility issues, and disclosure inconsistencies — based on observed behavior, not policy claims. Findings are mapped to GDPR and CCPA.
             </p>
             <div className="flex flex-col gap-3 pt-1 sm:flex-row">
-              <PendingButtonLink
-                className="w-full border-0 bg-[linear-gradient(135deg,#2f63ea_0%,#2454db_100%)] text-white shadow-[0_16px_32px_rgba(47,99,234,0.18)] hover:brightness-[1.04] sm:w-auto"
-                href="/#homepage-scan"
-                idleContent="Scan a website"
-                pendingContent="Opening..."
-              />
               <a
-                className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-800 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 sm:w-auto"
+                className="inline-flex h-11 w-full items-center justify-center rounded-xl border-0 bg-[linear-gradient(135deg,#2f63ea_0%,#2454db_100%)] px-4 text-sm font-medium text-white shadow-[0_16px_32px_rgba(47,99,234,0.18)] transition hover:brightness-[1.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 sm:w-auto"
                 data-analytics-cta-location="homepage"
                 data-analytics-destination-url={certscoreGptUrl}
                 data-analytics-event="gpt_cta_clicked"
