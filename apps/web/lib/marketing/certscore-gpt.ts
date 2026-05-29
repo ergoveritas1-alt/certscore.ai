@@ -1,5 +1,6 @@
 export const DEFAULT_CERTSCORE_GPT_URL =
-  "https://chatgpt.com/g/g-6a124a5a7ba08191b6cbe6d3ca03616b-gdpr-ccpa-consent-scanner-by-certscore-ai";
+  // ChatGPT direct /g/... deep links can boot to a blank page in new cross-site tabs; the GPTs search entry hydrates reliably.
+  "https://chatgpt.com/gpts?search=GDPR%20%26%20CCPA%20Cookie%2C%20Consent%20%26%20Privacy%20Scanner";
 
 export function getCertScoreGptUrl() {
   return process.env.NEXT_PUBLIC_CERTSCORE_GPT_URL || DEFAULT_CERTSCORE_GPT_URL;
