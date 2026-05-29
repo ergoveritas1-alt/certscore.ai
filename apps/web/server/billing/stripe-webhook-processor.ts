@@ -1,6 +1,7 @@
 import "server-only";
 
 import type Stripe from "stripe";
+import { sendBillingAlertEmail } from "./billing-alert-email";
 import { getPlanForStripePriceId } from "./stripe-config";
 import { getStripeClient } from "./stripe-client";
 import {
@@ -234,7 +235,11 @@ export async function processBillingEventQueueRow(row: BillingEventQueueRow) {
   await markBillingEventProcessing(row.id);
 
   try {
-    await applyBillingEvent(row.payload_json as Stripe.Event);
+    const event = row.payload_json as Stripe.Event;
+    await applyBillingEvent(event);
+    await sendBillingAlertEmail(event).catch((error) => {
+      console.error("Failed to send Stripe billing alert email.", error);
+    });
     await markBillingEventProcessed(row.id);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown Stripe billing event processing error.";

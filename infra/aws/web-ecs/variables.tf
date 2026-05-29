@@ -202,6 +202,12 @@ variable "feedback_to_email_secret_arn" {
   default     = ""
 }
 
+variable "billing_alert_to_email_secret_arn" {
+  description = "Optional Secrets Manager ARN containing BILLING_ALERT_TO_EMAIL."
+  type        = string
+  default     = ""
+}
+
 variable "privacy_request_to_email_secret_arn" {
   description = "Secrets Manager ARN containing PRIVACY_REQUEST_TO_EMAIL."
   type        = string

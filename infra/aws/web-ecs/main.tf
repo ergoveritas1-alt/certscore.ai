@@ -56,6 +56,7 @@ locals {
       { name = "GMAIL_SMTP_APP_PASSWORD", valueFrom = var.gmail_smtp_app_password_secret_arn },
       { name = "FEEDBACK_TO_EMAIL", valueFrom = var.feedback_to_email_secret_arn }
     ],
+    var.billing_alert_to_email_secret_arn != "" ? [{ name = "BILLING_ALERT_TO_EMAIL", valueFrom = var.billing_alert_to_email_secret_arn }] : [],
     var.google_client_id_secret_arn != "" ? [{ name = "GOOGLE_CLIENT_ID", valueFrom = var.google_client_id_secret_arn }] : [],
     var.google_client_secret_secret_arn != "" ? [{ name = "GOOGLE_CLIENT_SECRET", valueFrom = var.google_client_secret_secret_arn }] : [],
     var.openai_api_key_secret_arn != "" ? [{ name = "OPENAI_API_KEY", valueFrom = var.openai_api_key_secret_arn }] : [],

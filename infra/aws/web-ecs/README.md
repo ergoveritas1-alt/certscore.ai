@@ -104,6 +104,7 @@ The default example now targets the RDS/default VPC because that is the fastest 
 - S3 credentials
 - Gmail credentials
 - `FEEDBACK_TO_EMAIL`
+- optional `BILLING_ALERT_TO_EMAIL`
 - optional `PRIVACY_REQUEST_TO_EMAIL`
 - optional model API keys
 
