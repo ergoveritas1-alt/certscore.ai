@@ -329,7 +329,7 @@ export function DomainScanForm({
       ) : null}
       {sampleDomains.length > 0 ? (
         <div className="rounded-[1.35rem] border border-slate-200 bg-white/80 p-2 shadow-[0_14px_30px_rgba(15,23,42,0.04)]">
-          <div className="px-2 pb-2 pt-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400">Sample scans</div>
+          <div className="px-2 pb-2 pt-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400">View sample scans</div>
           <div className="grid gap-2 sm:grid-cols-2">
             {sampleDomains.map((sampleDomain) => (
               <button
