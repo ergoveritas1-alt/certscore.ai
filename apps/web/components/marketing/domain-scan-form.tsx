@@ -4,8 +4,7 @@ import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useRef, useState } from "react";
 import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
-import { ScanFromSelect } from "../scans/scan-from-select";
-import type { ScanFrom } from "@website-signal-risk-scanner/shared";
+import { ScanFromSelect, type ScanFrom } from "../scans/scan-from-select";
 
 type DomainScanFormProps = {
   buttonLabel?: string;

@@ -1,6 +1,13 @@
 "use client";
 
-import { SCAN_FROM_DEFINITIONS, SCAN_FROM_VALUES, type ScanFrom } from "@website-signal-risk-scanner/shared";
+export const SCAN_FROM_OPTIONS = [
+  { label: "Default", value: "default" },
+  { label: "California", value: "california" },
+  { label: "EU", value: "eu" },
+  { label: "UK", value: "uk" }
+] as const;
+
+export type ScanFrom = (typeof SCAN_FROM_OPTIONS)[number]["value"];
 
 type ScanFromSelectProps = {
   compact?: boolean;
@@ -33,9 +40,9 @@ export function ScanFromSelect({
         onChange={(event) => onChange?.(event.target.value as ScanFrom)}
         value={value}
       >
-        {SCAN_FROM_VALUES.map((scanFrom) => (
-          <option key={scanFrom} value={scanFrom}>
-            {SCAN_FROM_DEFINITIONS[scanFrom].label}
+        {SCAN_FROM_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
