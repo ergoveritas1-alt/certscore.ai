@@ -132,7 +132,8 @@ export default async function MarketingHomePage() {
             </h1>
             <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
               Automated runtime analysis surfacing pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity,
-              accessibility issues, and disclosure inconsistencies — based on observed behavior, not policy claims. Findings are mapped to GDPR and CCPA.
+              accessibility issues, and disclosure inconsistencies — based on observed behavior, not policy claims. Findings are mapped to GDPR/ePrivacy,
+              CCPA/CPRA/CIPA, FTC and ADA.
             </p>
             <div className="flex flex-col gap-3 pt-1 sm:flex-row">
               <a
