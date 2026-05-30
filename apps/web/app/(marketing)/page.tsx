@@ -173,7 +173,7 @@ export default async function MarketingHomePage() {
                   inputLabel="Website to analyze"
                   inputPlaceholder="Enter website here"
                   mode="full"
-                  sampleDomains={["grammarly.com", "nbcnews.com", "latimes.com", "nvidia.com"]}
+                  sampleDomains={["caltech.edu", "nbcnews.com", "latimes.com", "nvidia.com"]}
                   scanSource="homepage"
                 />
               </CardContent>

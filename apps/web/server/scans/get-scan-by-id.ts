@@ -354,7 +354,7 @@ function getStringRecordValue(record: Record<string, unknown> | null | undefined
 function buildStoredSignalPopulationRecords(input: {
   observedAt: string | null;
   rows: SignalRow[];
-  source: "nano" | "validation";
+  source: "browser_extension_bx01" | "nano" | "validation";
 }) {
   return input.rows.flatMap((row) => {
     const populationStatus =
@@ -387,7 +387,18 @@ function buildStoredSignalPopulationRecords(input: {
                   (value as { kind?: unknown }).kind === "validation")
             )
           : [],
-        reportSignalSource: "document_semantic_signal",
+        reportSignalSource:
+          input.source === "browser_extension_bx01"
+            ? row.signal_key.startsWith("privacy.") ||
+                row.signal_key.startsWith("commerce.") ||
+                row.signal_key.startsWith("financial.") ||
+                row.signal_key.startsWith("entity.") ||
+                row.signal_key.startsWith("disclosure.") ||
+                row.signal_key.startsWith("context.") ||
+                row.signal_key.startsWith("accessibility.")
+              ? "snapshot_signal"
+              : null
+            : "document_semantic_signal",
         source: input.source,
         value: row.signal_value_json,
         valueType:
@@ -741,6 +752,7 @@ async function loadScanDetailRecord(input: {
   const scannerSignalRows = rawSignalRows.filter((signal) => !signal.population_source || signal.population_source === "scanner");
   const storedNanoSignalRows = rawSignalRows.filter((signal) => signal.population_source === "nano");
   const storedValidationSignalRows = rawSignalRows.filter((signal) => signal.population_source === "validation");
+  const storedBrowserExtensionSignalRows = rawSignalRows.filter((signal) => signal.population_source === "browser_extension_bx01");
   const normalizedSignals = scannerSignalRows.map(
     (signal) => {
       const taxonomy = mapSignalKeyToTaxonomy({
@@ -1094,6 +1106,11 @@ async function loadScanDetailRecord(input: {
       stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>)
     : null;
   const mergedSignals = buildMergedSignalRecords({
+    browserExtensionSignals: buildStoredSignalPopulationRecords({
+      observedAt: scanObservedAt,
+      rows: storedBrowserExtensionSignalRows,
+      source: "browser_extension_bx01"
+    }),
     nanoSignals: buildStoredSignalPopulationRecords({
       observedAt: scanObservedAt,
       rows: storedNanoSignalRows,

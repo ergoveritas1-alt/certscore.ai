@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CertScore Browser Evidence</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <img class="brand-mark" src="../assets/certscore-mark-cropped.png" alt="" />
+        <div class="brand-copy">
+          <h1><span>CertScore</span><span>.ai</span></h1>
+          <p>Browser pre-consent evidence</p>
+        </div>
+      </header>
+
+      <section class="target">
+        <span>Current URL</span>
+        <strong id="current-url">Loading...</strong>
+      </section>
+
+      <button id="open-options" class="secondary-button" type="button">Extension options</button>
+      <label class="fresh-toggle">
+        <input id="fresh-visit" type="checkbox" />
+        <span>
+          <strong>Fresh visit</strong>
+          <small>Clear this site’s cookies and storage before reload.</small>
+        </span>
+      </label>
+      <button id="run-scan" type="button">Run Browser Pre-Consent Scan</button>
+
+      <p class="note">The page will reload. CertScore will observe this tab for about 15 seconds.</p>
+
+      <section class="checklist" aria-label="Evidence checks">
+        <span>Evidence checks</span>
+        <ul>
+          <li>Third-party trackers</li>
+          <li>Cookies set before consent</li>
+          <li>Third-party tracking before recorded consent</li>
+          <li>Potential privacy compliance violations</li>
+          <li>Fingerprinting techniques</li>
+          <li>Data transfers to other countries</li>
+        </ul>
+      </section>
+
+      <section class="status">
+        <span>Status</span>
+        <strong id="status-label">Ready</strong>
+        <p id="status-message" class="status-message">Waiting for a reviewer-started browser scan.</p>
+        <div id="status-meta" class="status-meta" hidden>
+          <span id="status-elapsed">0s elapsed</span>
+          <span id="status-phase">ready</span>
+        </div>
+      </section>
+
+      <section id="results" class="results" hidden>
+        <div>
+          <span>Requests</span>
+          <strong id="result-requests">0</strong>
+        </div>
+        <div>
+          <span>Cookies</span>
+          <strong id="result-cookies">0</strong>
+        </div>
+        <div>
+          <span>Banner</span>
+          <strong id="result-banner">Unknown</strong>
+        </div>
+      </section>
+
+      <a id="report-link" href="#" target="_blank" rel="noreferrer" hidden>Open CertScore report</a>
+      <a id="signup-link" class="cta-link" href="https://certscore.ai/login?mode=create_account" target="_blank" rel="noreferrer" hidden>
+        Sign up to see fuller analysis
+      </a>
+      <p id="error" class="error" hidden></p>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

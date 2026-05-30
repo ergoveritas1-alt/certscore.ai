@@ -35,6 +35,7 @@
     "ops:check:live-db": "pnpm exec tsx ./scripts/check-live-db-consistency.ts",
     "ops:smoke:auth": "pnpm exec tsx ./scripts/check-production-auth-smoke.ts",
     "ops:smoke:ada-financial": "pnpm exec tsx ./scripts/check-ada-financial-live-smoke.ts",
+    "ops:smoke:bx01-handoff": "pnpm exec tsx ./scripts/smoke-bx01-handoff.ts",
     "ops:smoke:findings": "pnpm exec tsx ./scripts/check-live-finding-smoke.ts",
     "ops:smoke:pulse": "BASE_URL=https://certscore.ai node --import tsx ./scripts/smoke-pulse-endpoints.ts",
     "ops:smoke:pulse-production": "BASE_URL=https://certscore.ai node ./scripts/smoke-pulse-production.mjs",

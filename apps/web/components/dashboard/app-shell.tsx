@@ -34,6 +34,16 @@ function ScansIcon(props: NavIconProps) {
   );
 }
 
+function BrowserEvidenceIcon(props: NavIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
+      <rect x="4" y="5" width="16" height="13.5" rx="2.5" />
+      <path d="M4 9h16" />
+      <path d="M8 14h3.5M14 14h2" />
+    </svg>
+  );
+}
+
 function ChangesIcon(props: NavIconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
@@ -109,6 +119,7 @@ const navItems = [
   { href: "/app", label: "Overview", icon: OverviewIcon },
   { href: "/app/signals", label: "Scan view", icon: SignalsIcon },
   { href: "/app/scans", label: "Scan History", icon: ScansIcon },
+  { href: "/app/browser-scans", label: "Browser Evidence", icon: BrowserEvidenceIcon },
   { href: "/app/modify-plan", label: "Modify plan", icon: PlanIcon },
   { href: "/app/settings", label: "Settings", icon: SettingsIcon }
 ] as const;
@@ -128,6 +139,10 @@ function isItemActive(pathname: string, href: string) {
 
   if (href === "/app/scans") {
     return pathname === href;
+  }
+
+  if (href === "/app/browser-scans") {
+    return pathname === href || pathname.startsWith("/app/browser-scans/");
   }
 
   if (href === "/app") {

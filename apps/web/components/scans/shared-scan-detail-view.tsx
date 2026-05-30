@@ -5386,6 +5386,19 @@ function normalizeScanReportAccessRole(role: string | null | undefined): ScanRep
   return "user";
 }
 
+function BrowserExtensionEvidenceNotice() {
+  return (
+    <section className="rounded-[1.2rem] border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm leading-6 text-emerald-950">
+      <p className="font-semibold">Browser-extension evidence</p>
+      <p className="mt-1">
+        This report includes evidence captured from a reviewer-controlled browser extension session. These observations are distinct from
+        CertScore server-side Chromium scans and may reflect that browser profile, location, cache, extensions, prior consent state, login
+        state, and network path.
+      </p>
+    </section>
+  );
+}
+
 export function SharedScanDetailView({
   analyticsScanSource = "unknown",
   autoRefresh = null,
@@ -5405,6 +5418,7 @@ export function SharedScanDetailView({
   const showAdvancedDiagnostics = scanReportAccessRole === "admin";
   const previewPayload = previewPayloadOverride ?? scanRecord.previewPayload ?? null;
   const snapshot = scanRecord.snapshot;
+  const isBrowserExtensionScan = scanRecord.scan.scanType === "browser_extension";
   const isZeroCoveragePreviewCompletion =
     scanRecord.scan.scanType === "preview" &&
     scanRecord.scan.status === "completed" &&
@@ -5747,6 +5761,7 @@ export function SharedScanDetailView({
           </span>
         }
       />
+      {isBrowserExtensionScan ? <BrowserExtensionEvidenceNotice /> : null}
       {isScanInFlight ? (
         <FullScanProgressCard
           buildPhaseSummaries={buildPhaseSummaries}

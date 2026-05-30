@@ -1,0 +1,570 @@
+import { config, getApiBaseUrl } from "./config.js";
+
+const activeScans = new Map();
+
+function nowMs(scan) {
+  return Math.max(0, Math.round(performance.now() - scan.startedAt));
+}
+
+function setStatus(status) {
+  chrome.storage.local.set({ certscoreBx01Status: status });
+  chrome.runtime.sendMessage({ status, type: "BX01_STATUS" }).catch(() => {});
+}
+
+function setScanStatus(scan, updates) {
+  setStatus({
+    busy: true,
+    label: updates.label,
+    message: updates.message,
+    phase: updates.phase,
+    startedAt: scan.startedAtEpochMs,
+    targetUrl: scan.targetUrl
+  });
+}
+
+function setBadge(status) {
+  if (!chrome.action?.setBadgeText) {
+    return;
+  }
+
+  const text = status === "observing" ? "..." : status === "complete" ? "OK" : status === "error" ? "!" : "";
+  const color = status === "complete" ? "#126c5b" : status === "error" ? "#be123c" : "#0b2e4f";
+  chrome.action.setBadgeText({ text });
+  chrome.action.setBadgeBackgroundColor({ color });
+}
+
+function hostnameFromUrl(url) {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function originFromUrl(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+async function clearSiteDataForFreshVisit(targetUrl) {
+  const origin = originFromUrl(targetUrl);
+  if (!origin) {
+    return false;
+  }
+
+  await chrome.browsingData.remove(
+    {
+      origins: [origin]
+    },
+    {
+      cacheStorage: true,
+      cookies: true,
+      fileSystems: true,
+      indexedDB: true,
+      localStorage: true,
+      serviceWorkers: true,
+      webSQL: true
+    }
+  );
+
+  return true;
+}
+
+function eventHeaders(headers = [], name) {
+  const match = headers.find((header) => header.name?.toLowerCase() === name.toLowerCase());
+  return match?.value;
+}
+
+function trimOptionalString(value, maxLength) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
+}
+
+function eventHeaderValues(headers = [], name) {
+  return headers.filter((header) => header.name?.toLowerCase() === name.toLowerCase()).map((header) => header.value ?? "");
+}
+
+function cookieDomainMatches(cookieDomain, hostname) {
+  const normalized = cookieDomain.replace(/^\./, "").toLowerCase();
+  return hostname === normalized || hostname.endsWith(`.${normalized}`);
+}
+
+async function baselineCookies(targetUrl) {
+  const cookies = await chrome.cookies.getAll({ url: targetUrl });
+  return new Map(
+    cookies.map((cookie) => [
+      `${cookie.name}|${cookie.domain}|${cookie.path}`,
+      {
+        domain: cookie.domain,
+        expiration: cookie.expirationDate ?? null,
+        httpOnly: cookie.httpOnly,
+        name: cookie.name,
+        path: cookie.path,
+        sameSite: cookie.sameSite,
+        secure: cookie.secure
+      }
+    ])
+  );
+}
+
+function serializeCookie(cookie, observedAtMs, eventType, source, timingPrecision) {
+  return {
+    cookieName: cookie.name,
+    domain: cookie.domain,
+    eventType,
+    expiration: cookie.expirationDate ?? cookie.expiration ?? null,
+    httpOnly: Boolean(cookie.httpOnly),
+    observedAtMs,
+    path: cookie.path ?? "/",
+    sameSite: cookie.sameSite ?? "unspecified",
+    secure: Boolean(cookie.secure),
+    source,
+    timingPrecision,
+    valueCaptured: false
+  };
+}
+
+function parseSetCookieHeader(headerValue, requestUrl, observedAtMs) {
+  const [nameValue, ...attributes] = headerValue.split(";").map((part) => part.trim()).filter(Boolean);
+  const separatorIndex = nameValue.indexOf("=");
+  if (separatorIndex <= 0) {
+    return null;
+  }
+
+  const url = new URL(requestUrl);
+  const cookie = {
+    domain: url.hostname,
+    eventType: "cookie_observed",
+    expiration: null,
+    httpOnly: false,
+    observedAtMs,
+    path: "/",
+    sameSite: "unspecified",
+    secure: false,
+    source: "Set-Cookie header",
+    timingPrecision: "exact_event",
+    valueCaptured: false,
+    cookieName: nameValue.slice(0, separatorIndex).trim().slice(0, 255)
+  };
+
+  for (const attribute of attributes) {
+    const [rawKey, ...rawValueParts] = attribute.split("=");
+    const key = rawKey.trim().toLowerCase();
+    const value = rawValueParts.join("=").trim();
+
+    if (key === "domain" && value) {
+      cookie.domain = value.slice(0, 255);
+    } else if (key === "path" && value) {
+      cookie.path = value.slice(0, 1024);
+    } else if (key === "samesite" && value) {
+      cookie.sameSite = value.slice(0, 32);
+    } else if (key === "secure") {
+      cookie.secure = true;
+    } else if (key === "httponly") {
+      cookie.httpOnly = true;
+    } else if (key === "max-age" && value) {
+      const maxAge = Number(value);
+      cookie.expiration = Number.isFinite(maxAge) ? Math.round(Date.now() / 1000 + maxAge) : null;
+    } else if (key === "expires" && value) {
+      const expiresAt = Date.parse(value);
+      cookie.expiration = Number.isFinite(expiresAt) ? Math.round(expiresAt / 1000) : null;
+    }
+  }
+
+  return cookie.cookieName ? cookie : null;
+}
+
+async function uploadEvents(scan, events) {
+  if (events.length === 0) {
+    return;
+  }
+
+  for (let index = 0; index < events.length; index += config.maxEventsPerUpload) {
+    const batch = events.slice(index, index + config.maxEventsPerUpload);
+    const response = await fetch(`${scan.apiBaseUrl}/api/browser-scans/${scan.browserScanId}/events`, {
+      body: JSON.stringify({ events: batch }),
+      credentials: "include",
+      headers: {
+        "content-type": "application/json",
+        "x-certscore-browser-scan-token": scan.uploadToken
+      },
+      method: "POST"
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      const detail = body?.path ? `${body.error ?? "Invalid event"} at ${body.path}` : body?.error;
+      throw new Error(`Event upload failed with ${response.status}${detail ? `: ${detail}` : ""}.`);
+    }
+  }
+}
+
+async function uploadArtifact(scan, artifact) {
+  const response = await fetch(`${scan.apiBaseUrl}/api/browser-scans/${scan.browserScanId}/artifact`, {
+    body: JSON.stringify(artifact),
+    credentials: "include",
+    headers: {
+      "content-type": "application/json",
+      "x-certscore-browser-scan-token": scan.uploadToken
+    },
+    method: "POST"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Artifact upload failed with ${response.status}.`);
+  }
+}
+
+async function uploadScreenshotArtifact(scan) {
+  if (!chrome.tabs?.get || !chrome.tabs?.captureVisibleTab) {
+    return;
+  }
+
+  const tab = await chrome.tabs.get(scan.tabId).catch(() => null);
+  if (!tab?.windowId) {
+    return;
+  }
+
+  const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }).catch(() => null);
+  if (!dataUrl) {
+    return;
+  }
+  if (dataUrl.length > config.maxScreenshotDataUrlBytes) {
+    scan.events.push({
+      eventType: "browser_capture_note",
+      message: "Visible-tab screenshot skipped because it exceeded the BX01 MVP upload size limit.",
+      observedAtMs: nowMs(scan),
+      sourceId: "BX01",
+      sourceType: "browser_extension"
+    });
+    return;
+  }
+
+  await uploadArtifact(scan, {
+    artifactJson: {
+      capturedAtMs: nowMs(scan),
+      dataUrl,
+      description: "Reviewer-visible tab screenshot captured by BX01 near the end of the scan window.",
+      sourceId: "BX01",
+      sourceType: "browser_extension",
+      targetUrl: scan.targetUrl
+    },
+    artifactType: "screenshot",
+    contentType: "image/png"
+  });
+}
+
+async function completeScan(scan) {
+  setScanStatus(scan, {
+    label: "Normalizing",
+    message: "Comparing the starting cookie jar with the post-reload browser state.",
+    phase: "normalizing"
+  });
+
+  const endingCookies = await baselineCookies(scan.targetUrl);
+  for (const [key, cookie] of endingCookies.entries()) {
+    if (!scan.baselineCookies.has(key)) {
+      scan.events.push(serializeCookie(cookie, nowMs(scan), "cookie_observed", "baseline_diff", "scan_window_diff"));
+    }
+  }
+
+  const consent = await chrome.tabs.sendMessage(scan.tabId, { type: "BX01_SUMMARIZE_CONSENT_UI" }).catch(() => null);
+  if (consent?.summary) {
+    scan.events.push({
+      ...consent.summary,
+      eventType: "consent_ui_observed",
+      observedAtMs: nowMs(scan)
+    });
+
+    await uploadArtifact(scan, {
+      artifactJson: {
+        consentInteractionObserved: Boolean(consent.consentInteractionObserved || scan.consentInteractionObserved),
+        ...consent.summary
+      },
+      artifactType: "banner_dom_summary",
+      contentType: "application/json"
+    });
+  }
+
+  await uploadScreenshotArtifact(scan);
+
+  setScanStatus(scan, {
+    label: "Reporting",
+    message: `Packaging ${scan.events.length} browser-observed events for CertScore intake.`,
+    phase: "reporting"
+  });
+
+  await uploadEvents(scan, scan.events);
+
+  const durationMs = nowMs(scan);
+  const networkRequestCount = scan.events.filter((event) => event.eventType === "network_request").length;
+  const cookieEventCount = scan.events.filter((event) => event.eventType?.startsWith("cookie_")).length;
+  const bannerObserved = scan.events.some((event) => event.eventType === "consent_ui_observed" && event.bannerObserved);
+
+  const response = await fetch(`${scan.apiBaseUrl}/api/browser-scans/${scan.browserScanId}/complete`, {
+    body: JSON.stringify({
+      durationMs,
+      summary: {
+        bannerObserved,
+        cookieEventCount,
+        networkRequestCount,
+        sourceId: "BX01",
+        sourceType: "browser_extension"
+      }
+    }),
+    credentials: "include",
+    headers: {
+      "content-type": "application/json",
+      "x-certscore-browser-scan-token": scan.uploadToken
+    },
+    method: "POST"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Completion failed with ${response.status}.`);
+  }
+
+  const body = await response.json();
+  const summary = {
+    bannerObserved,
+    cookieEventCount,
+    networkRequestCount
+  };
+  cleanupScan(scan.tabId);
+  setStatus({
+    anonymous: scan.anonymous,
+    busy: false,
+    label: "Complete",
+    message: `Captured ${networkRequestCount} requests, ${cookieEventCount} cookie events, and ${bannerObserved ? "a visible consent banner" : "no visible consent banner"}.`,
+    phase: "complete",
+    reportUrl: body.reportUrl,
+    summary,
+    targetUrl: scan.targetUrl
+  });
+  setBadge("complete");
+}
+
+function cleanupScan(tabId) {
+  activeScans.delete(tabId);
+}
+
+chrome.webRequest.onBeforeRequest.addListener(
+  (details) => {
+    const scan = activeScans.get(details.tabId);
+    if (!scan) {
+      return;
+    }
+
+    const hostname = hostnameFromUrl(details.url);
+    scan.events.push({
+      consentInteractionObserved: scan.consentInteractionObserved,
+      eventType: "network_request",
+      hostname,
+      initiator: trimOptionalString(details.initiator, 8192),
+      observedAtMs: nowMs(scan),
+      resourceType: details.type,
+      tabId: details.tabId,
+      url: details.url
+    });
+  },
+  { urls: ["http://*/*", "https://*/*"] }
+);
+
+chrome.webRequest.onBeforeSendHeaders.addListener(
+  (details) => {
+    const scan = activeScans.get(details.tabId);
+    if (!scan) {
+      return;
+    }
+
+    const last = scan.events[scan.events.length - 1];
+    if (last?.eventType === "network_request" && last.url === details.url) {
+      last.referrer = trimOptionalString(eventHeaders(details.requestHeaders, "referer"), 8192);
+    }
+  },
+  { urls: ["http://*/*", "https://*/*"] },
+  ["requestHeaders"]
+);
+
+chrome.webRequest.onHeadersReceived.addListener(
+  (details) => {
+    const scan = activeScans.get(details.tabId);
+    if (!scan) {
+      return;
+    }
+
+    const setCookieHeaders = eventHeaderValues(details.responseHeaders, "set-cookie");
+    for (const header of setCookieHeaders) {
+      const cookie = parseSetCookieHeader(header, details.url, nowMs(scan));
+      if (cookie) {
+        scan.events.push(cookie);
+      }
+    }
+  },
+  { urls: ["http://*/*", "https://*/*"] },
+  ["responseHeaders"]
+);
+
+chrome.cookies.onChanged.addListener((changeInfo) => {
+  for (const scan of activeScans.values()) {
+    if (changeInfo.removed || !cookieDomainMatches(changeInfo.cookie.domain, scan.targetHostname)) {
+      continue;
+    }
+
+    scan.events.push(
+      serializeCookie(
+        changeInfo.cookie,
+        nowMs(scan),
+        changeInfo.cause === "overwrite" ? "cookie_changed" : "cookie_added",
+        "chrome.cookies.onChanged",
+        "exact_event"
+      )
+    );
+  }
+});
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "BX01_CONSENT_INTERACTION") {
+    for (const scan of activeScans.values()) {
+      scan.consentInteractionObserved = true;
+    }
+    return false;
+  }
+
+  if (message?.type !== "BX01_START_SCAN") {
+    return false;
+  }
+
+  startScan(message)
+    .then((result) => sendResponse(result))
+    .catch((error) => {
+      setStatus({ busy: false, error: error instanceof Error ? error.message : String(error), label: "Error" });
+      sendResponse({ error: error instanceof Error ? error.message : String(error), ok: false });
+    });
+
+  return true;
+});
+
+async function startScan(message) {
+  setBadge("observing");
+  const apiBaseUrl = await getApiBaseUrl();
+  const targetUrl = message.targetUrl;
+  const startedAtEpochMs = Date.now();
+
+  setStatus({
+    busy: true,
+    label: "Queueing",
+    message: message.freshVisit
+      ? "Preparing a fresh-visit BX01 session and clearing this site’s local browser state."
+      : "Opening a short-lived BX01 browser evidence session with CertScore.",
+    phase: "queueing",
+    startedAt: startedAtEpochMs,
+    targetUrl
+  });
+
+  await fetch(`${apiBaseUrl}/api/browser-scans/metadata`, {
+    credentials: "include",
+    headers: { accept: "application/json" },
+    method: "GET"
+  }).catch(() => null);
+
+  const startResponse = await fetch(`${apiBaseUrl}/api/browser-scans/start`, {
+    body: JSON.stringify({
+      scanWindowMs: message.scanWindowMs ?? config.defaultScanWindowMs,
+      targetUrl
+    }),
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    method: "POST"
+  });
+
+  if (!startResponse.ok) {
+    if (startResponse.status === 401) {
+      throw new Error("Sign in to CertScore before running a browser scan.");
+    }
+    if (startResponse.status === 404) {
+      throw new Error(`BX01 API was not found at ${apiBaseUrl}. Open extension options and point the API URL at a CertScore build that includes browser scan routes.`);
+    }
+    throw new Error(`Start failed with ${startResponse.status}.`);
+  }
+
+  const session = await startResponse.json();
+  if (message.freshVisit) {
+    setStatus({
+      busy: true,
+      label: "Freshening",
+      message: "Clearing cookies, cache storage, local storage, IndexedDB, and service workers for this origin only.",
+      phase: "freshening",
+      startedAt: startedAtEpochMs,
+      targetUrl
+    });
+    await clearSiteDataForFreshVisit(targetUrl);
+  }
+
+  let tabId = message.tabId;
+  if (message.launchFromCertScore) {
+    const createdTab = await chrome.tabs.create({ active: true, url: session.targetUrl || targetUrl });
+    if (!createdTab.id) {
+      throw new Error("Could not open target website tab for BX01 scan.");
+    }
+    tabId = createdTab.id;
+  }
+
+  const scanWindowMs = session.scanWindowMs ?? config.defaultScanWindowMs;
+  const baseline = await baselineCookies(targetUrl);
+  const scan = {
+    anonymous: Boolean(session.anonymous),
+    baselineCookies: baseline,
+    apiBaseUrl,
+    browserScanId: session.browserScanId,
+    consentInteractionObserved: false,
+    events: [],
+    startedAt: performance.now(),
+    startedAtEpochMs,
+    tabId,
+    targetHostname: hostnameFromUrl(session.targetUrl || targetUrl),
+    targetUrl: session.targetUrl || targetUrl,
+    uploadToken: session.uploadToken
+  };
+
+  activeScans.set(tabId, scan);
+  setScanStatus(scan, {
+    label: "Reloading",
+    message: "Reloading the page without clicking the consent banner so pre-consent activity is visible.",
+    phase: "reloading"
+  });
+  await chrome.tabs.reload(tabId, { bypassCache: true });
+
+  setScanStatus(scan, {
+    label: "Scanning",
+    message: `Watching network requests, cookie changes, and consent UI for ${Math.round(scanWindowMs / 1000)} seconds.`,
+    phase: "scanning"
+  });
+  setTimeout(() => {
+    completeScan(scan).catch((error) => {
+      cleanupScan(scan.tabId);
+      setStatus({
+        busy: false,
+        error: error instanceof Error ? error.message : String(error),
+        label: "Error",
+        message: "The scan stopped before CertScore could finish packaging the evidence.",
+        phase: "error",
+        targetUrl: scan.targetUrl
+      });
+      setBadge("error");
+    });
+  }, scanWindowMs);
+
+  return { browserScanId: session.browserScanId, ok: true };
+}

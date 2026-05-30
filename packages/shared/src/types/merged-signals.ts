@@ -1,6 +1,6 @@
 import type { ReportSignalSource } from "../taxonomy/report-pillars";
 
-export type SignalPopulationSource = "scanner" | "nano" | "validation";
+export type SignalPopulationSource = "scanner" | "nano" | "validation" | "browser_extension_bx01";
 
 export type SignalPopulationStatus = "present" | "missing" | "conflicting" | "insufficient";
 

@@ -1,0 +1,95 @@
+const BUTTON_PATTERNS = {
+  acceptObserved: /\b(accept|agree|allow all|ok)\b/i,
+  doNotSellShareObserved: /\b(do not sell|do not share|do not sell or share)\b/i,
+  manageObserved: /\b(manage|preferences|settings|choices|customize)\b/i,
+  rejectObserved: /\b(reject|decline|deny|necessary only)\b/i
+};
+
+const BANNER_PATTERN = /\b(cookie|cookies|consent|privacy preferences|do not sell|tracking technologies)\b/i;
+
+function visibleText(element) {
+  const style = window.getComputedStyle(element);
+  if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) {
+    return "";
+  }
+
+  const rect = element.getBoundingClientRect();
+  if (rect.width < 20 || rect.height < 12) {
+    return "";
+  }
+
+  return (element.innerText || element.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+function summarizeConsentUi() {
+  const candidates = Array.from(
+    document.querySelectorAll('[id*="cookie" i], [class*="cookie" i], [id*="consent" i], [class*="consent" i], [aria-label*="cookie" i], [aria-label*="consent" i], dialog, aside, [role="dialog"], [role="alertdialog"], footer')
+  );
+
+  const snippets = [];
+  const buttons = [];
+  let selectorSummary = "";
+
+  for (const element of candidates.slice(0, 80)) {
+    const text = visibleText(element);
+    if (!text || !BANNER_PATTERN.test(text)) {
+      continue;
+    }
+
+    if (!selectorSummary) {
+      selectorSummary = `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ""}`;
+    }
+
+    snippets.push(text.slice(0, 240));
+    const controls = Array.from(element.querySelectorAll("button, a, input, [role='button']")).slice(0, 20);
+    for (const control of controls) {
+      const label = visibleText(control) || control.getAttribute("aria-label") || control.getAttribute("value") || "";
+      if (label.trim()) {
+        buttons.push(label.trim().slice(0, 120));
+      }
+    }
+
+    if (snippets.length >= 8) {
+      break;
+    }
+  }
+
+  const joinedButtons = buttons.join(" | ");
+  return {
+    acceptObserved: BUTTON_PATTERNS.acceptObserved.test(joinedButtons),
+    bannerObserved: snippets.length > 0,
+    buttonsObserved: Array.from(new Set(buttons)).slice(0, 20),
+    doNotSellShareObserved: BUTTON_PATTERNS.doNotSellShareObserved.test(joinedButtons),
+    manageObserved: BUTTON_PATTERNS.manageObserved.test(joinedButtons),
+    matchedTextSnippets: snippets,
+    rejectObserved: BUTTON_PATTERNS.rejectObserved.test(joinedButtons),
+    selectorSummary
+  };
+}
+
+let consentInteractionObserved = false;
+
+document.addEventListener(
+  "click",
+  (event) => {
+    const target = event.target instanceof Element ? event.target.closest("button, a, input, [role='button']") : null;
+    const label = target ? visibleText(target) || target.getAttribute("aria-label") || target.getAttribute("value") || "" : "";
+    if (label && /(accept|agree|reject|decline|manage|preferences|settings|choices|do not sell|do not share)/i.test(label)) {
+      consentInteractionObserved = true;
+      chrome.runtime.sendMessage({
+        label: label.slice(0, 120),
+        type: "BX01_CONSENT_INTERACTION"
+      });
+    }
+  },
+  true
+);
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "BX01_SUMMARIZE_CONSENT_UI") {
+    sendResponse({
+      consentInteractionObserved,
+      summary: summarizeConsentUi()
+    });
+  }
+});

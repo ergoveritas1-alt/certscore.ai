@@ -27,7 +27,7 @@ function chunkValues<T>(values: T[], size: number) {
 function buildStoredSignalPopulationRecords(input: {
   observedAtByScanId: Map<string, string | null>;
   rows: SummarySignalRow[];
-  source: "nano" | "validation";
+  source: "browser_extension_bx01" | "nano" | "validation";
 }) {
   return input.rows.flatMap((row) => {
     const populationStatus =
@@ -60,7 +60,18 @@ function buildStoredSignalPopulationRecords(input: {
                   (value as { kind?: unknown }).kind === "validation")
             )
           : [],
-        reportSignalSource: "document_semantic_signal",
+        reportSignalSource:
+          input.source === "browser_extension_bx01"
+            ? row.signal_key.startsWith("privacy.") ||
+                row.signal_key.startsWith("commerce.") ||
+                row.signal_key.startsWith("financial.") ||
+                row.signal_key.startsWith("entity.") ||
+                row.signal_key.startsWith("disclosure.") ||
+                row.signal_key.startsWith("context.") ||
+                row.signal_key.startsWith("accessibility.")
+              ? "snapshot_signal"
+              : null
+            : "document_semantic_signal",
         source: input.source,
         value: row.signal_value_json,
         valueType:
@@ -173,6 +184,11 @@ export async function loadMergedSignalsByScanId(input: {
       });
 
     const mergedSignals = buildMergedSignalRecords({
+      browserExtensionSignals: buildStoredSignalPopulationRecords({
+        observedAtByScanId: input.observedAtByScanId,
+        rows: rows.filter((row) => row.population_source === "browser_extension_bx01"),
+        source: "browser_extension_bx01"
+      }),
       nanoSignals: buildStoredSignalPopulationRecords({
         observedAtByScanId: input.observedAtByScanId,
         rows: rows.filter((row) => row.population_source === "nano"),

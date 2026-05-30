@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "CertScore Browser Evidence",
+  "description": "Capture browser-observed pre-consent evidence for CertScore scans.",
+  "version": "0.1.0",
+  "action": {
+    "default_icon": {
+      "16": "assets/icons/icon-16.png",
+      "32": "assets/icons/icon-32.png",
+      "48": "assets/icons/icon-48.png",
+      "128": "assets/icons/icon-128.png"
+    },
+    "default_popup": "src/popup.html",
+    "default_title": "CertScore Browser Evidence"
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "options_page": "src/options/options.html",
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "32": "assets/icons/icon-32.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  },
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "permissions": ["activeTab", "browsingData", "cookies", "scripting", "storage", "tabs", "webRequest", "windows"]
+}

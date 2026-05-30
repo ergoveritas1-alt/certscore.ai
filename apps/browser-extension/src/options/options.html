@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CertScore Extension Options</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <img src="../../assets/certscore-mark-cropped.png" alt="" />
+        <div>
+          <h1><span>CertScore</span><span>.ai</span></h1>
+          <p>BX01 browser evidence settings</p>
+        </div>
+      </header>
+
+      <label for="api-base-url">CertScore API base URL</label>
+      <input id="api-base-url" type="url" placeholder="https://certscore.ai" />
+      <p class="hint">Use https://certscore.ai after deployment. Use http://localhost:3000 for local WC01 testing.</p>
+
+      <div class="actions">
+        <button id="save" type="button">Save</button>
+        <button id="use-local" type="button">Use localhost</button>
+        <button id="use-production" type="button">Use production</button>
+      </div>
+
+      <p id="status" class="status" role="status"></p>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

@@ -59,21 +59,39 @@ async function getMigrationFiles() {
     .sort((left, right) => left.localeCompare(right));
 }
 
+function requiresNonTransactionalMigration(sql) {
+  return /\bcreate\s+index\s+concurrently\b/i.test(sql);
+}
+
+async function recordAppliedMigration(client, migrationName, checksum) {
+  await client.query(
+    `
+      insert into public.${MIGRATIONS_TABLE} (name, checksum)
+      values ($1, $2)
+      on conflict (name) do update
+      set checksum = excluded.checksum,
+          applied_at = now()
+    `,
+    [migrationName, checksum]
+  );
+}
+
 async function applyMigration(client, migrationName, sql, checksum) {
+  if (requiresNonTransactionalMigration(sql)) {
+    try {
+      await client.query(sql);
+      await recordAppliedMigration(client, migrationName, checksum);
+    } catch (error) {
+      throw new Error(`Failed applying ${migrationName}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
+
   await client.query("begin");
 
   try {
     await client.query(sql);
-    await client.query(
-      `
-        insert into public.${MIGRATIONS_TABLE} (name, checksum)
-        values ($1, $2)
-        on conflict (name) do update
-        set checksum = excluded.checksum,
-            applied_at = now()
-      `,
-      [migrationName, checksum]
-    );
+    await recordAppliedMigration(client, migrationName, checksum);
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");

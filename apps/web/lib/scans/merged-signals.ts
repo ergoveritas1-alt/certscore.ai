@@ -65,6 +65,8 @@ function getSourcePriority(source: SignalPopulationSource) {
   switch (source) {
     case "scanner":
       return 3;
+    case "browser_extension_bx01":
+      return 3;
     case "nano":
       return 2;
     default:
@@ -122,6 +124,19 @@ function getMergedSignalStringArray(mergedSignals: MergedSignalRecord[], key: st
 function getMergedSignalNumber(mergedSignals: MergedSignalRecord[], key: string) {
   const value = getMergedSignalValue(mergedSignals, key);
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getBx01ObservedAtMs(refs: string[]) {
+  for (const ref of refs) {
+    const match = /^bx01\.[^:]+:(\d+):/.exec(ref);
+    if (match?.[1]) {
+      const value = Number(match[1]);
+      if (Number.isFinite(value)) {
+        return value;
+      }
+    }
+  }
+  return null;
 }
 
 function isPresentMergedSignal(signal: MergedSignalRecord) {
@@ -232,6 +247,54 @@ function buildSiblingEvidenceForMergedSignal(signal: MergedSignalRecord, mergedS
     };
   }
 
+  if (signal.key === "privacy.preconsent_tracking_detected" || signal.key === "privacy.preconsent_tracker_vendors") {
+    const preconsentSignalRows = mergedSignals.filter(
+      (entry) => entry.key === "privacy.preconsent_tracking_detected" || entry.key === "privacy.preconsent_tracker_vendors"
+    );
+    const preconsentTrackerVendors = uniqueStrings([
+      ...getMergedSignalStringArray(mergedSignals, "privacy.preconsent_tracker_vendors"),
+      ...(Array.isArray(signal.value) ? signal.value.filter((value): value is string => typeof value === "string") : [])
+    ]);
+    const preconsentTrackerCategories = uniqueStrings(getMergedSignalStringArray(mergedSignals, "privacy.preconsent_tracker_categories"));
+    const runtimeRequestUrls = uniqueStrings(
+      preconsentSignalRows
+        .flatMap((entry) => entry.evidenceRefs)
+        .filter((ref) => /^https?:\/\//i.test(ref))
+    );
+    const firstNonEssentialRequestMs = getBx01ObservedAtMs(preconsentSignalRows.flatMap((entry) => entry.evidenceRefs));
+    const consentSurfaceSignal = mergedSignals.find((entry) => entry.key === "privacy.cookie_banner_present");
+    const firstCmpVisibleMs = consentSurfaceSignal ? getBx01ObservedAtMs(consentSurfaceSignal.evidenceRefs) : null;
+    const consentSurfaceObserved = consentSurfaceSignal?.value === true ? true : null;
+    const consentActionableChoiceObserved = mergedSignals.some(
+      (entry) => entry.key === "privacy.reject_all_present" && entry.value === true
+    )
+      ? true
+      : null;
+    const requestPurposeClassificationConfidence = runtimeRequestUrls.map((requestUrl, index) => ({
+      category: preconsentTrackerCategories[index] ?? preconsentTrackerCategories[0] ?? "tracking",
+      confidence: signal.confidence ?? 0.8,
+      essentiality: "non_essential",
+      requestUrl,
+      runtimePhase: "pre_consent",
+      vendor: preconsentTrackerVendors[index] ?? preconsentTrackerVendors[0] ?? "Unknown tracker"
+    }));
+
+    return {
+      consentActionableChoiceObserved,
+      consentSurfaceObserved,
+      consentTimeline: {
+        firstCmpVisibleMs,
+        firstConsentActionMs: null,
+        firstNonEssentialRequestMs
+      },
+      preconsent_tracker_evidence_urls: runtimeRequestUrls,
+      preconsent_tracker_vendors: preconsentTrackerVendors,
+      requestPurposeClassificationConfidence,
+      runtimeEvidenceArtifacts: uniqueStrings([...runtimeRequestUrls, ...signal.evidenceRefs]),
+      runtimeRequestUrls
+    };
+  }
+
   if (/^(?:financial|commercial|entity)\./.test(signal.key)) {
     const siblingSignals = mergedSignals
       .filter((entry) => /^(?:financial|commercial|entity)\./.test(entry.key))
@@ -273,6 +336,7 @@ function selectPopulation(populations: PopulatedSignalRecord[]) {
 }
 
 export function buildMergedSignalRecords(input: {
+  browserExtensionSignals?: MergeableSignalInput[];
   nanoSignals?: MergeableSignalInput[];
   scannerSignals?: MergeableSignalInput[];
   validationSignals?: MergeableSignalInput[];
@@ -280,6 +344,7 @@ export function buildMergedSignalRecords(input: {
   const grouped = new Map<string, PopulatedSignalRecord[]>();
   const rows = [
     ...(input.scannerSignals ?? []),
+    ...(input.browserExtensionSignals ?? []),
     ...(input.nanoSignals ?? []),
     ...(input.validationSignals ?? [])
   ].map(normalizePopulation);
