@@ -113,7 +113,7 @@ async function checkDiscovery() {
   const result = await fetchTarget("/.well-known/certscore-pulse");
   assert.equal(result.response.status, 200);
   const body = parseJson(result);
-  assert.equal(body.name, "CertScore Pulse");
+  assert.equal(body.name, "CertScore Pulse beta");
   assert.equal(body.api, "https://certscore.ai/api/v1/pulse");
   assert.equal(body.openapi, "https://certscore.ai/api/v1/openapi.json");
   assert.equal(body.docs, "https://certscore.ai/api-pulse");
