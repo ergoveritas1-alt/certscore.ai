@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { getBrowserScanSessionById } from "../../../server/browser-scans/repository";
@@ -40,8 +41,12 @@ export default async function BrowserScanPublicPage({ params }: BrowserScanPubli
   const { browserScanId } = await params;
   const scan = await getBrowserScanSessionById({ browserScanId });
 
-  if (!scan || scan.user_id !== null) {
+  if (!scan) {
     notFound();
+  }
+
+  if (scan.user_id !== null) {
+    redirect(scan.canonical_scan_id ? `/app/scans/${scan.canonical_scan_id}` : `/app/browser-scans/${scan.id}`);
   }
 
   const summary = scan.summary_json ?? {};
