@@ -55,6 +55,22 @@ https://certscore.ai/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&deta
 Canonical documentation:
 https://certscore.ai/api-pulse
 
+MCP developer-preview stdio server:
+https://certscore.ai/api-pulse#mcp
+
+Local stdio command:
+CERTSCORE_API_KEY=<token> pnpm mcp:certscore
+
+MCP live smoke:
+CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke
+
+MCP workflow:
+1. create_scan with a public URL.
+2. get_scan_status when create_scan returns a jobId.
+3. get_report with the stable scanId.
+4. export_findings for structured review handoff.
+5. explain_finding for evidence, caveats, and next steps.
+
 Plain browser-readable fallback:
 https://certscore.ai/api-pulse/agent
 

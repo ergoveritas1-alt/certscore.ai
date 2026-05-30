@@ -100,6 +100,14 @@ const detailLevels = [
   }
 ] as const;
 
+const mcpTools = [
+  ["create_scan", "Start a CertScore scan for a public URL from an agent or developer workflow."],
+  ["get_scan_status", "Check a queued or running scan without inventing status from partial results."],
+  ["get_report", "Retrieve the evidence-backed Pulse report for a stable scan ID."],
+  ["export_findings", "Return structured findings for ticketing, review, or compliance workflows."],
+  ["explain_finding", "Explain one finding with public evidence, caveats, and reviewer next steps."]
+] as const;
+
 const exampleMeta = {
   apiVersion: "v1",
   schemaVersion: "0.5.1",
@@ -569,9 +577,75 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
           </CardContent>
         </Card>
 
+        <Card id="mcp" className="border-violet-200 bg-violet-50 shadow-none">
+          <CardHeader>
+            <CardTitle>MCP preview</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm leading-7 text-slate-700">
+            <p>
+              CertScore MCP is a developer-preview stdio server for teams that want to run Pulse checks inside AI development,
+              security, and ops workflows. It uses the same evidence-backed Pulse surface: automated public-web observations for
+              review, with stable scan and finding IDs.
+            </p>
+            <div className="grid gap-3 md:grid-cols-2">
+              {mcpTools.map(([name, description]) => (
+                <div key={name} className="rounded-lg border border-violet-200 bg-white p-3">
+                  <p className="font-semibold text-slate-950">{name}</p>
+                  <p className="mt-1 text-slate-600">{description}</p>
+                </div>
+              ))}
+            </div>
+            <p>
+              The first preview is intentionally narrow: create a scan, check status, retrieve a report, export findings, and explain
+              a specific finding. Account browsing and drift comparison tools are not part of the initial MCP scope.
+            </p>
+            <CodeBlock>{`Local stdio preview:
+CERTSCORE_API_KEY=<token> pnpm mcp:certscore
+
+Optional:
+CERTSCORE_BASE_URL=https://certscore.ai
+CERTSCORE_REQUEST_TIMEOUT_MS=300000
+
+Live smoke:
+CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke`}</CodeBlock>
+            <CodeBlock>{`Example MCP client config:
+{
+  "mcpServers": {
+    "certscore": {
+      "command": "pnpm",
+      "args": ["mcp:certscore"],
+      "cwd": "/path/to/WC01",
+      "env": {
+        "CERTSCORE_API_KEY": "YOUR_TOKEN",
+        "CERTSCORE_BASE_URL": "https://certscore.ai"
+      }
+    }
+  }
+}`}</CodeBlock>
+            <p>
+              Recommended workflow: call `create_scan` with a public URL, poll `get_scan_status` when a job ID is returned, retrieve the
+              stable report with `get_report`, then use `export_findings` or `explain_finding` for review and ticketing.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <a
+                className="inline-flex w-fit rounded-full border border-violet-300 bg-white px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100"
+                href={`mailto:${PULSE_FEEDBACK_EMAIL}?subject=CertScore%20MCP%20preview`}
+              >
+                Request MCP preview
+              </a>
+              <Link
+                className="inline-flex w-fit rounded-full border border-violet-300 bg-white px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100"
+                href="/api-pulse#quick-start"
+              >
+                View Pulse API quick start
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="border-slate-200 bg-white shadow-none">
           <CardHeader>
-            <CardTitle>Quick start</CardTitle>
+            <CardTitle id="quick-start">Quick start</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-7 text-slate-600">
             <CodeBlock>GET https://certscore.ai/api/v1/pulse?url=https://kbdlab.io</CodeBlock>
@@ -824,6 +898,9 @@ Content-Type: application/json
           <CardContent className="flex flex-wrap gap-3 text-sm">
             <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api-pulse/agent">
               Agent fallback page
+            </Link>
+            <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api-pulse#mcp">
+              MCP preview
             </Link>
             <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api-pulse-agent-guide.txt">
               Agent text guide
