@@ -409,6 +409,7 @@ test("Robots allows public Pulse docs and support endpoints while keeping generi
     assert.ok(allow.includes("/api/v1/pulse-self-test"));
     assert.ok(allow.includes("/.well-known/certscore-pulse"));
     assert.ok(disallow.includes("/api/"));
+    assert.ok(disallow.includes("/cdn-cgi/"));
   }
 });
 

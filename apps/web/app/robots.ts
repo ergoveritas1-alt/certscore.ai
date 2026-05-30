@@ -30,6 +30,7 @@ const publicAllowPaths = [
 ];
 
 const privateDisallowPaths = ["/app/", "/api/", "/auth/", "/dashboard/", "/account/", "/admin/", "/private/"];
+const infrastructureDisallowPaths = ["/cdn-cgi/"];
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -37,7 +38,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: publicAllowPaths,
-        disallow: privateDisallowPaths
+        disallow: [...privateDisallowPaths, ...infrastructureDisallowPaths]
       },
       {
         userAgent: [
@@ -52,7 +53,7 @@ export default function robots(): MetadataRoute.Robots {
           "anthropic-ai"
         ],
         allow: publicAllowPaths,
-        disallow: privateDisallowPaths
+        disallow: [...privateDisallowPaths, ...infrastructureDisallowPaths]
       }
     ],
     sitemap: `${SITE_URL}/sitemap.xml`

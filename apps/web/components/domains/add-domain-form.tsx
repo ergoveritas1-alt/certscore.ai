@@ -1,10 +1,10 @@
 "use client";
 
 import { Button, Input } from "@website-signal-risk-scanner/ui";
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { clearPendingScanStarted, markPendingScanStarted } from "../analytics/data-layer-events";
 import { createDomainAction, type CreateDomainActionState } from "../../server/domains/create-domain";
-import { ScanFromSelect } from "../scans/scan-from-select";
+import { ScanFromSelect, type ScanFrom } from "../scans/scan-from-select";
 
 const initialState: CreateDomainActionState = {
   error: null
@@ -17,6 +17,7 @@ type AddDomainFormProps = {
 
 export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
   const [state, action, isPending] = useActionState(createDomainAction, initialState);
+  const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
 
   useEffect(() => {
     if (state.error) {
@@ -27,13 +28,10 @@ export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
   return (
     <form action={action} className="space-y-4" onSubmit={() => markPendingScanStarted("dashboard")}>
       <div>
-        <div className="mb-3">
-          <ScanFromSelect />
-        </div>
         <div className="relative">
           <Input
             autoComplete="url"
-            className="h-14 rounded-[1.75rem] border-slate-300 pr-40 text-xl shadow-none placeholder:text-slate-400 focus:border-slate-300 focus:ring-slate-200"
+            className="h-14 rounded-[1.75rem] border-slate-300 pr-52 text-xl shadow-none placeholder:text-slate-400 focus:border-slate-300 focus:ring-slate-200"
             defaultValue=""
             id="domain"
             name="domain"
@@ -41,6 +39,9 @@ export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
             required
             type="text"
           />
+          <div className="absolute right-[10.6rem] top-1/2 -translate-y-1/2">
+            <ScanFromSelect onChange={setScanFrom} value={scanFrom} variant="icon" />
+          </div>
           <Button
             aria-label="Start scanning"
             className="absolute right-2.5 top-1/2 h-10 -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] px-4 text-sm font-medium text-white shadow-[0_10px_24px_rgba(15,139,215,0.16)] hover:brightness-[1.04]"

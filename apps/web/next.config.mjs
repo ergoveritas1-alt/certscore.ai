@@ -9,8 +9,68 @@ const nextConfig = {
   devIndicators: false,
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  async headers() {
+    return [
+      {
+        source: "/api/v1/:path*",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex, nofollow"
+          }
+        ]
+      },
+      {
+        source: "/api-pulse-agent-guide.txt",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex"
+          }
+        ]
+      },
+      {
+        source: "/llms.txt",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex"
+          }
+        ]
+      },
+      {
+        source: "/.well-known/certscore-pulse",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex"
+          }
+        ]
+      }
+    ];
+  },
   async redirects() {
     return [
+      {
+        source: "/preview",
+        destination: "/",
+        permanent: true
+      },
+      {
+        source: "/contact",
+        destination: "/contact-sales",
+        permanent: true
+      },
+      {
+        source: "/guides/findings",
+        destination: "/findings",
+        permanent: true
+      },
+      {
+        source: "/guides/findings/:findingId",
+        destination: "/findings/:findingId",
+        permanent: true
+      },
       {
         source: "/:path*",
         has: [
