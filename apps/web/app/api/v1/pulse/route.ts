@@ -20,7 +20,12 @@ import {
   parsePulseWaitSeconds
 } from "../../../../lib/pulse/request";
 import { buildPulseStatus } from "../../../../lib/pulse/status";
-import { parseBearerToken, validateIntegrationApiKey, type IntegrationApiKeyScope } from "../../../../server/integrations/api-keys";
+import {
+  checkIntegrationApiKeyUsageLimit,
+  parseBearerToken,
+  validateIntegrationApiKey,
+  type IntegrationApiKeyScope
+} from "../../../../server/integrations/api-keys";
 import { checkDomainDns } from "../../../../server/domains/domain-dns";
 import { createAnonymousFullScan } from "../../../../server/scans/create-anonymous-full-scan";
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
@@ -275,6 +280,21 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
           format
         }),
         { headers: { "Cache-Control": "no-store" }, status: auth.reason === "missing_scope" ? 403 : 401 },
+        requestId,
+        routeName
+      );
+    }
+    const usageLimit = await checkIntegrationApiKeyUsageLimit({ key: auth.key });
+    if (!usageLimit.allowed) {
+      return pulseJson(
+        buildPulseError({
+          code: "rate_limited",
+          message: "This CertScore API key has reached its Pulse request limit. Try again after the retry window.",
+          retryAfterSeconds: usageLimit.retryAfterSeconds,
+          detail,
+          format
+        }),
+        { headers: { "Cache-Control": "no-store", "Retry-After": String(usageLimit.retryAfterSeconds) }, status: 429 },
         requestId,
         routeName
       );

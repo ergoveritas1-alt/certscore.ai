@@ -103,7 +103,7 @@ export function ApiKeysCard({ apiKeys }: ApiKeysCardProps) {
       <div className="overflow-hidden rounded-2xl border border-slate-200">
         <div className="grid grid-cols-[1fr,9rem,9rem,7rem] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
           <span>Name</span>
-          <span>Last used</span>
+          <span>Usage</span>
           <span>Expires</span>
           <span>Status</span>
         </div>
@@ -155,7 +155,15 @@ function ApiKeyRow({
         </div>
         <p className="text-xs text-slate-500">Created {formatDateTime(apiKey.createdAt)}</p>
       </div>
-      <p>{formatDateTime(apiKey.lastUsedAt)}</p>
+      <div className="space-y-1">
+        <p>
+          {apiKey.usage.hourlyCount}/{apiKey.usage.hourlyLimit} hour
+        </p>
+        <p className="text-xs text-slate-500">
+          {apiKey.usage.dailyCount}/{apiKey.usage.dailyLimit} day
+        </p>
+        <p className="text-xs text-slate-500">Last used {formatDateTime(apiKey.lastUsedAt)}</p>
+      </div>
       <p>{formatExpiry(apiKey.expiresAt)}</p>
       <div className="space-y-2">
         <span className={["inline-flex rounded-full px-2 py-1 text-xs font-medium", statusClasses].join(" ")}>{statusLabel}</span>
