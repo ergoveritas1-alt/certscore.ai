@@ -44,6 +44,117 @@ function getProcessingTone(ready: boolean) {
     : "bg-amber-50 text-amber-900 ring-1 ring-amber-200";
 }
 
+type ProgressStepState = "active" | "complete" | "pending";
+
+function getStepTone(state: ProgressStepState) {
+  if (state === "complete") {
+    return {
+      dot: "border-emerald-200 bg-emerald-500 text-white",
+      label: "text-slate-950",
+      rail: "bg-emerald-100"
+    };
+  }
+
+  if (state === "active") {
+    return {
+      dot: "border-sky-200 bg-sky-500 text-white",
+      label: "text-slate-950",
+      rail: "bg-sky-100"
+    };
+  }
+
+  return {
+    dot: "border-slate-200 bg-white text-slate-400",
+    label: "text-slate-500",
+    rail: "bg-slate-100"
+  };
+}
+
+function BrowserScanProgressCard({
+  canonicalScanMaterialized,
+  observedSignalsIngested,
+  rawEvidenceCaptured,
+  status
+}: {
+  canonicalScanMaterialized: boolean;
+  observedSignalsIngested: boolean;
+  rawEvidenceCaptured: boolean;
+  status: string;
+}) {
+  const completed = status === "completed";
+  const failed = status === "failed";
+  const steps: Array<{ description: string; label: string; state: ProgressStepState }> = [
+    {
+      description: "BX01 opens the target in Chrome and prepares a fresh visit.",
+      label: "Open target",
+      state: failed ? "pending" : "complete"
+    },
+    {
+      description: "Network, cookie, consent UI, and screenshot evidence are observed.",
+      label: "Capture evidence",
+      state: rawEvidenceCaptured || completed ? "complete" : failed ? "pending" : "active"
+    },
+    {
+      description: "Bounded browser-extension evidence is stored with BX01 provenance.",
+      label: "Upload evidence",
+      state: rawEvidenceCaptured ? "complete" : completed ? "active" : "pending"
+    },
+    {
+      description: "WS01 converts BX01 evidence into normalized observed runtime signals.",
+      label: "Normalize signals",
+      state: observedSignalsIngested ? "complete" : rawEvidenceCaptured ? "active" : "pending"
+    },
+    {
+      description: "WC01 routes normalized concerns through policy and unified findings.",
+      label: "Prepare report",
+      state: canonicalScanMaterialized ? "complete" : observedSignalsIngested ? "active" : "pending"
+    }
+  ];
+  const activeStep =
+    steps.find((step) => step.state === "active") ??
+    [...steps].reverse().find((step) => step.state === "complete") ??
+    steps[0];
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle>Local-extension scan progress</CardTitle>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {failed
+                ? "BX01 could not finish this browser evidence session. Review the extension popup for the latest error."
+                : activeStep?.description ?? "CertScore is preparing browser-extension evidence."}
+            </p>
+          </div>
+          <Badge className="w-fit bg-sky-50 text-sky-800 ring-1 ring-sky-200">
+            {failed ? "needs attention" : canonicalScanMaterialized ? "report ready" : activeStep?.label ?? "working"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-3 md:grid-cols-5">
+          {steps.map((step, index) => {
+            const tone = getStepTone(step.state);
+            return (
+              <div key={step.label} className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${tone.dot}`}>
+                    {step.state === "complete" ? "OK" : index + 1}
+                  </span>
+                  <span className={`min-w-0 text-sm font-semibold ${tone.label}`}>{step.label}</span>
+                </div>
+                <div className={`mt-3 h-1.5 rounded-full ${tone.rail}`} />
+                <p className="mt-2 text-xs leading-5 text-slate-500">{step.description}</p>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default async function BrowserScanPage({ params }: BrowserScanPageProps) {
   const [{ browserScanId }, { user }] = await Promise.all([params, getDashboardContext()]);
   const scan = await getBrowserScanSessionForUser({
@@ -111,6 +222,13 @@ export default async function BrowserScanPage({ params }: BrowserScanPageProps) 
           Open canonical scan report
         </a>
       ) : null}
+
+      <BrowserScanProgressCard
+        canonicalScanMaterialized={canonicalScanMaterialized}
+        observedSignalsIngested={observedSignalsIngested}
+        rawEvidenceCaptured={rawEvidenceCaptured}
+        status={scan.status}
+      />
 
       <Card>
         <CardHeader>
