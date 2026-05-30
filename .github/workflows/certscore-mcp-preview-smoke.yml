@@ -9,7 +9,7 @@ on:
         default: "CertScore MCP preview smoke"
         type: string
       expires_at:
-        description: "Optional ISO timestamp for key expiry."
+        description: "Optional ISO timestamp for key expiry. Defaults to 30 days from workflow start."
         required: false
         type: string
       smoke_url:
@@ -42,6 +42,8 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Export masked key metadata
+        env:
+          REQUESTED_EXPIRES_AT: ${{ inputs.expires_at }}
         run: |
           {
             node <<'NODE'
@@ -51,11 +53,14 @@ jobs:
           const [, kind, secret] = token.split("_");
           const tokenPrefix = `cs_${kind}_${secret.slice(0, 8)}`;
           const publicId = `api_key_${randomBytes(12).toString("base64url")}`;
+          const requestedExpiresAt = process.env.REQUESTED_EXPIRES_AT?.trim();
+          const expiresAt = requestedExpiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
           console.error(`::add-mask::${token}`);
           console.log(`CERTSCORE_API_KEY=${token}`);
           console.log(`API_KEY_TOKEN_HASH=${tokenHash}`);
           console.log(`API_KEY_TOKEN_PREFIX=${tokenPrefix}`);
           console.log(`API_KEY_PUBLIC_ID=${publicId}`);
+          console.log(`API_KEY_EXPIRES_AT=${expiresAt}`);
           NODE
           } >> "${GITHUB_ENV}"
 
@@ -74,7 +79,6 @@ jobs:
       - name: Insert key hash in ECS network
         env:
           API_KEY_NAME: ${{ inputs.key_name }}
-          API_KEY_EXPIRES_AT: ${{ inputs.expires_at }}
           API_KEY_SCOPES: pulse:read,pulse:scan,mcp
         run: |
           set -euo pipefail
