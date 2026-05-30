@@ -58,6 +58,8 @@ ENV BUILD_RUNTIME_TARGET="${BUILD_RUNTIME_TARGET}"
 
 WORKDIR /app
 
+RUN npm install --omit=dev --no-audit --no-fund pg@8.20.0
+
 COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/node_modules ./node_modules
