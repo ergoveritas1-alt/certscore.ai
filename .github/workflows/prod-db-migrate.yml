@@ -58,6 +58,8 @@ jobs:
             --output json > task-definition.json
 
           CONTAINER_NAME="$(jq -r '.taskDefinition.containerDefinitions[0].name // empty' task-definition.json)"
+          LOG_GROUP="$(jq -r '.taskDefinition.containerDefinitions[0].logConfiguration.options["awslogs-group"] // empty' task-definition.json)"
+          LOG_PREFIX="$(jq -r '.taskDefinition.containerDefinitions[0].logConfiguration.options["awslogs-stream-prefix"] // empty' task-definition.json)"
           test -n "${CONTAINER_NAME}" || (echo "Could not resolve container name" && exit 1)
 
           OVERRIDES="$(jq -nc --arg name "${CONTAINER_NAME}" '{
@@ -96,6 +98,19 @@ jobs:
             --cluster "${ECS_CLUSTER_NAME}" \
             --tasks "${TASK_ARN}" \
             --output json > stopped-task.json
+
+          if [ -n "${LOG_GROUP}" ] && [ -n "${LOG_PREFIX}" ]; then
+            TASK_ID="${TASK_ARN##*/}"
+            LOG_STREAM="${LOG_PREFIX}/${CONTAINER_NAME}/${TASK_ID}"
+            echo "CloudWatch log stream: ${LOG_GROUP}:${LOG_STREAM}"
+            aws logs get-log-events \
+              --region "${AWS_REGION}" \
+              --log-group-name "${LOG_GROUP}" \
+              --log-stream-name "${LOG_STREAM}" \
+              --limit 200 \
+              --output text \
+              --query 'events[].message' || true
+          fi
 
           EXIT_CODE="$(jq -r --arg name "${CONTAINER_NAME}" '.tasks[0].containers[] | select(.name == $name) | .exitCode // empty' stopped-task.json)"
           test "${EXIT_CODE}" = "0" || (cat stopped-task.json && exit 1)
