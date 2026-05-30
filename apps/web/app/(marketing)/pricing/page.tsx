@@ -5,7 +5,7 @@ import { Badge, Card, CardContent } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../../components/layout/site-footer";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
-import { SCAN_ACCESS } from "../../../lib/scan-access";
+import { SCAN_ACCESS, formatScanThrottleIntervalLabel } from "../../../lib/scan-access";
 import { createPageMetadata } from "../../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
@@ -238,7 +238,7 @@ export default function PricingPage() {
         </div>
 
         <p className="mt-5 text-center text-sm text-slate-500">
-          * Scan requests are limited to one request every {SCAN_ACCESS.scanThrottleMinutes} minutes. For batch scanning or higher throughput, contact{" "}
+          * Scan requests are limited to one request every {formatScanThrottleIntervalLabel()}. For batch scanning or higher throughput, contact{" "}
           <a className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800" href={`mailto:${SCAN_ACCESS.salesEmail}`}>
             {SCAN_ACCESS.salesEmail}
           </a>

@@ -5,8 +5,9 @@ import { RescanDomainForm } from "../../../components/scans/rescan-domain-form";
 import { ScanHistoryLiveRefresh } from "../../../components/scans/scan-history-live-refresh";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../components/ui/pagination-controls";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
-import { getScanThrottleCopy } from "../../../lib/scan-access";
+import { getAdminScanThrottleMs, getScanThrottleCopy } from "../../../lib/scan-access";
 import { getRescanAvailability } from "../../../lib/scans/rescan-policy";
+import { isPlatformAdminEmail } from "../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../server/auth";
 import { withServerTiming } from "../../../server/performance/log-server-timing";
 import { getOrganizationScansPage } from "../../../server/scans/get-organization-scans";
@@ -107,7 +108,8 @@ type ScansPageProps = {
 };
 
 export default async function ScansPage({ searchParams }: ScansPageProps) {
-  const { organization } = await withServerTiming("app.scans.context", () => getDashboardContext());
+  const { organization, user } = await withServerTiming("app.scans.context", () => getDashboardContext());
+  const adminRescanCooldownMs = isPlatformAdminEmail(user.email) ? getAdminScanThrottleMs() : undefined;
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const page = normalizePage(resolvedSearchParams.page);
   const pageSize = normalizePageSize(resolvedSearchParams.perPage);
@@ -208,7 +210,8 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                       ? getRescanAvailability({
                           activeScanExists: scan.domainActiveScanExists,
                           lastScannedAt: scan.domainLastScannedAt,
-                          planCode: organization.plan
+                          planCode: organization.plan,
+                          rescanCooldownMs: adminRescanCooldownMs
                         })
                       : null;
                     const cooldownMessage =
@@ -290,7 +293,8 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                   ? getRescanAvailability({
                       activeScanExists: scan.domainActiveScanExists,
                       lastScannedAt: scan.domainLastScannedAt,
-                      planCode: organization.plan
+                      planCode: organization.plan,
+                      rescanCooldownMs: adminRescanCooldownMs
                     })
                   : null;
                 const cooldownMessage =

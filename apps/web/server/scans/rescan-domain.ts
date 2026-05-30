@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { getQueueAvailability } from "../../lib/env";
+import { getAdminScanThrottleMs } from "../../lib/scan-access";
+import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { getDashboardContext } from "../auth";
 import { queueFullScanForDomain, type CreateFullScanActionState } from "./create-full-scan";
 
@@ -37,6 +39,7 @@ export async function rescanDomainAction(
     submittedByUserId: dashboardContext.user.id,
     enforceCooldown: true,
     enforceMonthlyUsageLimit: false,
+    scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
     source: "manual-rescan"
   });
 

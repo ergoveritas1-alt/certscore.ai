@@ -206,6 +206,10 @@ function parseGptPulseWaitSeconds(url: URL) {
   return Math.max(0, Math.min(GPT_ACTION_MAX_WAIT_SECONDS, parsed));
 }
 
+function getRequestedScanFrom(url: URL) {
+  return normalizeScanFrom(url.searchParams.get("scanFrom") ?? url.searchParams.get("geo"));
+}
+
 async function checkGptActionLimit(ipHash: string | null) {
   const usage = await getPulseGptActionUsage({ ipHash });
   if (usage.hourlyCount >= GPT_ACTION_HOURLY_LIMIT) {
@@ -229,7 +233,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   const waitSeconds = gptAction ? parseGptPulseWaitSeconds(url) : parsePulseWaitSeconds(url.searchParams.get("wait"));
   const requester = getPulseRequesterContext(request);
   const forceNewScan = gptAction ? false : parseForceNewScan(url.searchParams.get("forceNewScan"));
-  const scanFrom = normalizeScanFrom(url.searchParams.get("scanFrom"));
+  const scanFrom = getRequestedScanFrom(url);
   const contextBase = { ...requester, format, detail, freshness, forceNewScan, scanFrom, waitSeconds, channel: gptAction ? "gpt_action" : "pulse_api", source: gptAction ? "gpt_action" : "pulse_api" };
   const scanId = url.searchParams.get("scanId")?.trim() || null;
   const jobId = url.searchParams.get("jobId")?.trim() || null;

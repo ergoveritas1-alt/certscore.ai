@@ -12,7 +12,7 @@ test("full scan queue errors preserve active scan specificity", () => {
 test("full scan queue errors distinguish recent scan cooldowns", () => {
   assert.equal(
     getFullScanQueueErrorCode(
-      "Scan requests are limited to one request every 5 minutes. Try again after 10:45 AM."
+      "Scan requests are limited to one request every 1 minute. Try again after 10:45 AM."
     ),
     "rescan_cooldown"
   );

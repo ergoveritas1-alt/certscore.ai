@@ -51,13 +51,19 @@ const openApiDocument = {
           {
             name: "scanFrom",
             in: "query",
-            description: "Execution context for newly queued scans. Existing scans are returned with their recorded context.",
-            schema: { type: "string", enum: ["default", "california", "eu", "uk"], default: "default" }
+            description: "Geo execution context for newly queued scans. Existing scans are returned with their recorded context. Alias: geo.",
+            schema: { type: "string", enum: ["default", "eu", "uk", "california"], default: "default" }
+          },
+          {
+            name: "geo",
+            in: "query",
+            description: "Alias for scanFrom. Allowed values: default, eu, uk, california.",
+            schema: { type: "string", enum: ["default", "eu", "uk", "california"], default: "default" }
           },
           {
             name: "forceNewScan",
             in: "query",
-            description: "Set true to bypass the 24-hour recent-scan reuse check. This does not bypass validation or the 5-minute scan-generation throttle.",
+            description: "Set true to bypass the 24-hour recent-scan reuse check. This does not bypass validation or the 1-minute scan-generation throttle.",
             schema: { type: "boolean", default: false }
           },
           { name: "wait", in: "query", schema: { type: "integer", minimum: 0, maximum: 80 } }

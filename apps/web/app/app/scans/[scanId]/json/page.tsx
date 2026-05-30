@@ -6,8 +6,9 @@ import { ScanFindingsPane } from "../../../../../components/scans/scan-findings-
 import { ScanViewActions } from "../../../../../components/scans/scan-view-actions";
 import { ScanStatusAutoRefresh } from "../../../../../components/scans/scan-status-auto-refresh";
 import { hasPendingPostCompletionFindingWork } from "../../../../../lib/scans/scan-auto-refresh";
-import { getScanThrottleCopy } from "../../../../../lib/scan-access";
+import { getAdminScanThrottleMs, getScanThrottleCopy } from "../../../../../lib/scan-access";
 import { getRescanAvailability } from "../../../../../lib/scans/rescan-policy";
+import { isPlatformAdminEmail } from "../../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../../server/auth";
 import { getScanById } from "../../../../../server/scans/get-scan-by-id";
 import { persistReportFindingCount } from "../../../../../server/scans/persist-report-finding-count";
@@ -52,6 +53,7 @@ function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
 
 export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
   const [{ scanId }, { organization, user }] = await Promise.all([params, getDashboardContext()]);
+  const adminRescanCooldownMs = isPlatformAdminEmail(user.email) ? getAdminScanThrottleMs() : undefined;
   const scanRecord = await getScanById({
     organizationId: organization.id,
     scanId,
@@ -71,7 +73,8 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
     ? getRescanAvailability({
         activeScanExists: false,
         lastScannedAt: scanRecord.scan.createdAt,
-        planCode: organization.plan
+        planCode: organization.plan,
+        rescanCooldownMs: adminRescanCooldownMs
       })
     : null;
   const showRescan = canRescan && !scanIsWithinReuseWindow && Boolean(scanRecord.scan.domainId) && Boolean(rescanAvailability);

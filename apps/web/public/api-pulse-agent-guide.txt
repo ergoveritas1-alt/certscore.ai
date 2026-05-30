@@ -41,6 +41,7 @@ OpenAPI / GPT Action beta quick start:
    url: <public URL>
    format: markdown
    detail: standard
+   scanFrom: default | eu | uk | california
    wait: 35
 3. Use detail=tiny for quick checks.
 4. Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans.
@@ -114,9 +115,10 @@ Expected public response contracts:
 - HTTP 202 pending responses include Retry-After when a polling delay is recommended.
 - HTTP 429 throttled responses include Retry-After when retry timing is known.
 - Pulse uses freshness=latest and freshness=refresh. There is no refresh=true parameter.
+- Use scanFrom or geo to select the geo execution context for newly queued scans. Allowed values are default, eu, uk, and california. Existing scans are returned with their recorded scan context.
 - Pulse reuses an eligible completed scan from the prior 24 hours before queueing a new scan. Time comparisons use UTC instants.
-- Use forceNewScan=true only when you need to bypass the 24-hour reuse check. It does not bypass validation or the 5-minute normalized-domain scan-generation throttle.
-- New Pulse scan generation is throttled to one submitted scan job per normalized domain every 5 minutes. A throttled request returns HTTP 429, Retry-After when known, and support guidance at support@certscore.ai.
+- Use forceNewScan=true only when you need to bypass the 24-hour reuse check. It does not bypass validation or the 1-minute normalized-domain scan-generation throttle.
+- New Pulse scan generation is throttled to one submitted scan job per normalized domain every 1 minute. A throttled request returns HTTP 429, Retry-After when known, and support guidance at support@certscore.ai.
 - X-RateLimit-* headers are not emitted unless a route has accurate enforced bucket state.
 
 Use guidance:

@@ -20,8 +20,9 @@ import {
 } from "../plans/get-plan-limits";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getFullScanQueueMetadata } from "../queue/scan-queue-priority";
-import { SCAN_ACCESS, getScanThrottleCopy } from "../../lib/scan-access";
+import { SCAN_ACCESS, getAdminScanThrottleMs, getScanThrottleCopy } from "../../lib/scan-access";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
+import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { ensureValidationRunForManualScan } from "../validation/repository";
 import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
 import {
@@ -75,6 +76,7 @@ type QueueFullScanInput = {
     userAgent?: string | null;
   };
   scanFrom?: ScanFrom;
+  scanThrottleMs?: number;
   source?: string;
 };
 
@@ -251,7 +253,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     const availability = getRescanAvailability({
       activeScanExists,
       lastScannedAt,
-      planCode: input.planCode
+      planCode: input.planCode,
+      rescanCooldownMs: input.scanThrottleMs
     });
 
     if (!availability.allowed) {
@@ -538,6 +541,7 @@ export async function createFullScanAction(
     submittedByUserId: dashboardContext.user.id,
     enforceMonthlyUsageLimit: true,
     scanFrom,
+    scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
     source: "manual-dashboard"
   });
 

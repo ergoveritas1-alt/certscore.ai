@@ -3,7 +3,7 @@ import { PLAN_DEFINITIONS } from "@website-signal-risk-scanner/shared";
 import Link from "next/link";
 import { CancelSubscriptionForm } from "../../../components/plans/cancel-subscription-form";
 import { ModifyPlanSelectForm } from "../../../components/plans/modify-plan-select-form";
-import { SCAN_ACCESS } from "../../../lib/scan-access";
+import { SCAN_ACCESS, formatScanThrottleIntervalLabel } from "../../../lib/scan-access";
 import { getDashboardContext } from "../../../server/auth";
 import {
   openStripeBillingPortalFormAction,
@@ -71,7 +71,7 @@ export default async function ModifyPlanPage({ searchParams }: ModifyPlanPagePro
         <h1 className="text-3xl font-semibold tracking-tight">Modify plan</h1>
         <p className="max-w-3xl text-sm leading-6 text-slate-600">
           Select the plan that fits your review workflow. Plans are based on page scans per month, with scan requests paced at one request
-          every {SCAN_ACCESS.scanThrottleMinutes} minutes.
+          every {formatScanThrottleIntervalLabel()}.
         </p>
       </div>
 
@@ -178,7 +178,7 @@ export default async function ModifyPlanPage({ searchParams }: ModifyPlanPagePro
         })}
       </div>
       <p className="max-w-3xl text-xs leading-5 text-slate-500">
-        * Scan requests are limited to one request every {SCAN_ACCESS.scanThrottleMinutes} minutes. For batch scanning or higher throughput, contact{" "}
+        * Scan requests are limited to one request every {formatScanThrottleIntervalLabel()}. For batch scanning or higher throughput, contact{" "}
         <a className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800" href={`mailto:${SCAN_ACCESS.salesEmail}`}>
           {SCAN_ACCESS.salesEmail}
         </a>

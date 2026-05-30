@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   try {
     const payload = await request.json();
     const forceNewScan = parseForceNewScan(payload?.forceNewScan);
-    const scanFrom = normalizeScanFrom(payload?.scanFrom);
+    const scanFrom = normalizeScanFrom(payload?.scanFrom ?? payload?.geo);
     const provenance = getScanRequestProvenance(request);
     const rawDomain = typeof payload?.domain === "string" ? payload.domain : "";
     const parsedBatch = parseDomainBatchInput(rawDomain);

@@ -65,6 +65,20 @@ const chatGptOpenApiDocument = {
             schema: { type: "string", enum: ["tiny", "standard"], default: "standard" }
           },
           {
+            name: "scanFrom",
+            in: "query",
+            required: false,
+            description: "Geo execution context for newly queued scans. Existing scans are returned with their recorded context. Alias: geo.",
+            schema: { type: "string", enum: ["default", "eu", "uk", "california"], default: "default" }
+          },
+          {
+            name: "geo",
+            in: "query",
+            required: false,
+            description: "Alias for scanFrom. Allowed values: default, eu, uk, california.",
+            schema: { type: "string", enum: ["default", "eu", "uk", "california"], default: "default" }
+          },
+          {
             name: "wait",
             in: "query",
             required: false,

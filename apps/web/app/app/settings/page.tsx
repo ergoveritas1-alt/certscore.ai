@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { EmailVerificationCard } from "../../../components/settings/email-verification-card";
-import { SCAN_ACCESS } from "../../../lib/scan-access";
+import { SCAN_ACCESS, formatScanThrottleIntervalLabel } from "../../../lib/scan-access";
 import { getDashboardContext } from "../../../server/auth";
 import { getBetterAuthVerificationStatus } from "../../../server/better-auth/user";
 import { getDashboardScanUsage } from "../../../server/dashboard/get-dashboard-scan-usage";
@@ -99,7 +99,7 @@ export default async function SettingsPage() {
             </div>
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-[0.16em] text-emerald-700">Scan pacing</p>
-              <p className="mt-2 text-lg font-semibold text-emerald-950">{SCAN_ACCESS.scanThrottleMinutes} min</p>
+              <p className="mt-2 text-lg font-semibold text-emerald-950">{formatScanThrottleIntervalLabel()}</p>
               <p className="mt-1 text-xs text-emerald-700">Between scan requests</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
@@ -121,7 +121,7 @@ export default async function SettingsPage() {
           <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 text-sm leading-6 text-slate-700">
             <p className="font-semibold text-slate-950">Scan pacing</p>
             <p className="mt-1">
-              To keep capacity reliable, scan requests are limited to one request every {SCAN_ACCESS.scanThrottleMinutes} minutes.
+              To keep capacity reliable, scan requests are limited to one request every {formatScanThrottleIntervalLabel()}.
             </p>
             <p className="mt-2">
               Teams interested in higher request throughput or batch scanning can contact{" "}

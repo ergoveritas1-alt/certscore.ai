@@ -6,6 +6,7 @@ When a user asks you to scan, check, audit, review, or assess a website:
    - url: the user-provided website
    - format: markdown
    - detail: standard
+   - scanFrom: default | eu | uk | california, when the user requests a specific scan location
    - wait: 35
 
 2. Present the returned markdown clearly.

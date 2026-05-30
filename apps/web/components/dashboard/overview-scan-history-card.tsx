@@ -99,10 +99,11 @@ function getPrimaryBadgeLabel(scan: OrganizationScanListItem) {
 
 type OverviewScanHistoryCardProps = {
   planCode: PlanCode;
+  rescanCooldownMs?: number;
   scans: OrganizationScanListItem[];
 };
 
-export function OverviewScanHistoryCard({ planCode, scans }: OverviewScanHistoryCardProps) {
+export function OverviewScanHistoryCard({ planCode, rescanCooldownMs, scans }: OverviewScanHistoryCardProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_SCAN_HISTORY_PAGE_SIZE);
   const scanGroups = useMemo(
@@ -216,7 +217,8 @@ export function OverviewScanHistoryCard({ planCode, scans }: OverviewScanHistory
                     ? getRescanAvailability({
                         activeScanExists: latestScan.domainActiveScanExists,
                         lastScannedAt: latestScan.domainLastScannedAt,
-                        planCode
+                        planCode,
+                        rescanCooldownMs
                       })
                     : null;
 

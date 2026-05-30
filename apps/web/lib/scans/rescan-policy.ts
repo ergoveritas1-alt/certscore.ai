@@ -12,12 +12,13 @@ export function getRescanCooldownMs(planCode: PlanCode): number {
 export function getNextAllowedRescanAt(input: {
   lastScannedAt: string | null;
   planCode: PlanCode;
+  rescanCooldownMs?: number;
 }): string | null {
   if (!input.lastScannedAt) {
     return null;
   }
 
-  return new Date(new Date(input.lastScannedAt).getTime() + getRescanCooldownMs(input.planCode)).toISOString();
+  return new Date(new Date(input.lastScannedAt).getTime() + (input.rescanCooldownMs ?? getRescanCooldownMs(input.planCode))).toISOString();
 }
 
 export function getRescanAvailability(input: {
@@ -25,6 +26,7 @@ export function getRescanAvailability(input: {
   lastScannedAt: string | null;
   now?: Date;
   planCode: PlanCode;
+  rescanCooldownMs?: number;
 }) {
   if (input.activeScanExists) {
     return {
@@ -44,7 +46,8 @@ export function getRescanAvailability(input: {
 
   const nextAllowedAt = getNextAllowedRescanAt({
     lastScannedAt: input.lastScannedAt,
-    planCode: input.planCode
+    planCode: input.planCode,
+    rescanCooldownMs: input.rescanCooldownMs
   });
 
   if (!nextAllowedAt) {

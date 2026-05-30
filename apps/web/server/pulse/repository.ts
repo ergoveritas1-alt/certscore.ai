@@ -200,7 +200,7 @@ export async function updatePulseRequestRateLimited(input: {
     `update pulse_requests
         set status = 'rate_limited',
             resolution_mode = 'rate_limited',
-            throttle_reason = 'domain_5_minute_scan_limit',
+            throttle_reason = 'domain_1_minute_scan_limit',
             retry_after_seconds = $2,
             scan_id = coalesce($3, scan_id)
       where public_id = $1`,
@@ -240,11 +240,11 @@ export async function claimPulseDomainScanCreation(input: { normalizedDomain: st
 
   await query(
     `insert into pulse_domain_throttles (normalized_domain, expires_at, last_pulse_request_id)
-     values ($1, timezone('utc', now()) + interval '5 minutes', $2)
+     values ($1, timezone('utc', now()) + interval '1 minute', $2)
      on conflict (normalized_domain)
      do update set
        last_scan_created_at = timezone('utc', now()),
-       expires_at = timezone('utc', now()) + interval '5 minutes',
+       expires_at = timezone('utc', now()) + interval '1 minute',
        last_pulse_request_id = excluded.last_pulse_request_id`,
     [input.normalizedDomain, input.pulseRequestId]
   );

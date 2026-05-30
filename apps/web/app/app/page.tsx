@@ -1,6 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { OverviewScanHistoryCard } from "../../components/dashboard/overview-scan-history-card";
 import { AddDomainForm } from "../../components/domains/add-domain-form";
+import { getAdminScanThrottleMs } from "../../lib/scan-access";
+import { isPlatformAdminEmail } from "../../server/admin/platform-admin";
 import { getDashboardContext } from "../../server/auth";
 import { getDashboardScanUsage } from "../../server/dashboard/get-dashboard-scan-usage";
 import {
@@ -26,7 +28,8 @@ function formatDate(value: string | null) {
 }
 
 export default async function DashboardPage() {
-  const { organization, profile } = await withServerTiming("app.dashboard.context", () => getDashboardContext());
+  const { organization, profile, user } = await withServerTiming("app.dashboard.context", () => getDashboardContext());
+  const adminRescanCooldownMs = isPlatformAdminEmail(user.email) ? getAdminScanThrottleMs() : undefined;
   const [basePlanLimits, manualRescanLimitOverride, recentScans] = await withServerTiming("app.dashboard.primary_data", () =>
     Promise.all([
       getPlanLimits(organization.plan),
@@ -86,7 +89,7 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      <OverviewScanHistoryCard planCode={organization.plan} scans={recentScans} />
+      <OverviewScanHistoryCard planCode={organization.plan} rescanCooldownMs={adminRescanCooldownMs} scans={recentScans} />
     </div>
   );
 }

@@ -13,6 +13,8 @@ import {
 import { checkDomainDns } from "./domain-dns";
 import { getPlanLimits } from "../plans/get-plan-limits";
 import { queueFullScanForDomain } from "../scans/create-full-scan";
+import { isPlatformAdminEmail } from "../admin/platform-admin";
+import { getAdminScanThrottleMs } from "../../lib/scan-access";
 
 export type CreateDomainActionState = {
   error: string | null;
@@ -94,6 +96,7 @@ export async function createOrQueueDomainScan(input: {
       provenance: input.provenance,
       bypassRecentScanReuse: input.bypassRecentScanReuse,
       scanFrom: input.scanFrom,
+      scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
       source: "marketing-full-scan"
     });
 
@@ -171,6 +174,7 @@ export async function createOrQueueDomainScan(input: {
     bypassRecentScanReuse: input.bypassRecentScanReuse,
     provenance: input.provenance,
     scanFrom: input.scanFrom,
+    scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
     source: "new-domain-overview"
   });
 
