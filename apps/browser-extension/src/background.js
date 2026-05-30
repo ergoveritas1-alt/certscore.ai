@@ -374,6 +374,10 @@ async function completeScan(scan) {
     summary,
     targetUrl: scan.targetUrl
   });
+  if (typeof scan.launcherTabId === "number" && body.reportUrl) {
+    const reportUrl = new URL(body.reportUrl, scan.apiBaseUrl).toString();
+    chrome.tabs.update(scan.launcherTabId, { active: true, url: reportUrl }).catch(() => {});
+  }
   setBadge("complete");
 }
 
@@ -464,7 +468,7 @@ chrome.cookies.onChanged.addListener((changeInfo) => {
   }
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "BX01_CONSENT_INTERACTION") {
     for (const scan of activeScans.values()) {
       scan.consentInteractionObserved = true;
@@ -476,7 +480,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
-  startScan(message)
+  startScan({
+    ...message,
+    launcherTabId: message.returnToLauncherOnComplete === true ? sender.tab?.id : null
+  })
     .then((result) => sendResponse(result))
     .catch((error) => {
       setStatus({ busy: false, error: error instanceof Error ? error.message : String(error), label: "Error" });
@@ -560,6 +567,7 @@ async function startScan(message) {
     browserScanId: session.browserScanId,
     consentInteractionObserved: false,
     events: [],
+    launcherTabId: typeof message.launcherTabId === "number" ? message.launcherTabId : null,
     startedAt: performance.now(),
     startedAtEpochMs,
     tabId,
@@ -596,5 +604,5 @@ async function startScan(message) {
     });
   }, scanWindowMs);
 
-  return { browserScanId: session.browserScanId, ok: true };
+  return { browserScanId: session.browserScanId, ok: true, reportUrl: session.reportUrl };
 }

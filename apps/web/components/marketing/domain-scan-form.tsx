@@ -77,6 +77,7 @@ type Bx01WindowMessage = {
     browserScanId?: string;
     error?: string;
     ok?: boolean;
+    reportUrl?: string;
   };
   source?: string;
   type?: string;
@@ -246,6 +247,7 @@ export function DomainScanForm({
       {
         freshVisit: true,
         requestId,
+        returnToLauncherOnComplete: true,
         scanWindowMs: BX01_SCAN_WINDOW_MS,
         targetUrl,
         type: "CERTSCORE_BX01_START_SCAN"
@@ -265,7 +267,7 @@ export function DomainScanForm({
       scan_status: "queued"
     });
 
-    router.push(`/browser-scans/${response.browserScanId}`);
+    router.push(response.reportUrl ?? `/app/browser-scans/${response.browserScanId}`);
   }
 
   async function submitDomain(rawDomain: string) {
@@ -516,6 +518,26 @@ export function DomainScanForm({
               >
                 Open extension setup page
               </a>
+            </div>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                onClick={() => setShowExtensionInstructions(false)}
+                type="button"
+              >
+                Close
+              </button>
+              <button
+                className="inline-flex items-center justify-center rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60"
+                disabled={isSubmitting}
+                onClick={() => {
+                  setShowExtensionInstructions(false);
+                  void submitDomain(domain || emptySubmitDomain);
+                }}
+                type="button"
+              >
+                Check again
+              </button>
             </div>
           </div>
         </div>

@@ -9,7 +9,7 @@ const steps = [
   "Choose Load unpacked.",
   "Select apps/browser-extension from this WC01 checkout.",
   "Sign in to CertScore in the same Chrome profile.",
-  "Open the target website, click the CertScore extension, and run a browser pre-consent scan."
+  "Return to CertScore, choose Local extension in the scan selector, and click Scan."
 ];
 
 type BrowserScanSetupPageProps = {
@@ -32,7 +32,7 @@ export default async function BrowserScanSetupPage({ searchParams }: BrowserScan
               <Badge className="bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200">BX01</Badge>
             </div>
             <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              BX01 is a load-unpacked Chrome extension for capturing browser-observed pre-consent evidence during reviewer-initiated scans.
+              BX01 captures browser-observed pre-consent evidence during reviewer-initiated scans launched from CertScore.
             </p>
           </div>
           <Link
@@ -75,9 +75,13 @@ export default async function BrowserScanSetupPage({ searchParams }: BrowserScan
 
             {targetUrl ? (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-950">
-                Open the CertScore extension on this page and start the scan. BX01 will open the target website in a new tab, reload it, and upload bounded browser evidence.
+                Use the scan box in CertScore with Local extension selected. CertScore will ask BX01 to open this target in a new tab, capture evidence, and return you to the report automatically.
               </div>
-            ) : null}
+            ) : (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-950">
+                The normal flow starts from the CertScore scan box: select Local extension, enter a URL, and click Scan. The extension popup is only a fallback control surface.
+              </div>
+            )}
           </CardContent>
         </Card>
 

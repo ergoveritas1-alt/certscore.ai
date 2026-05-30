@@ -139,6 +139,7 @@ window.addEventListener("message", (event) => {
     .sendMessage({
       freshVisit: event.data.freshVisit !== false,
       launchFromCertScore: true,
+      returnToLauncherOnComplete: event.data.returnToLauncherOnComplete === true,
       scanWindowMs: event.data.scanWindowMs,
       targetUrl: event.data.targetUrl,
       type: "BX01_START_SCAN"
