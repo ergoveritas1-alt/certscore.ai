@@ -99,7 +99,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
                 scanId={scanRecord.scan.id}
                 visualEvidenceHref={visualEvidenceHref}
               />
-              <div className="w-full lg:ml-auto lg:max-w-[16rem]">
+              <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                 <DomainScanForm
                   buttonLabel="Scan"
                   compact

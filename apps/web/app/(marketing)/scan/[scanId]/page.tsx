@@ -129,7 +129,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
                   domainLabel={publicScanDomainLabel}
                   scanId={scanRecord.scan.id}
                 />
-                <div className="w-full lg:ml-auto lg:max-w-[16rem]">
+                <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                   <DomainScanForm
                     buttonLabel="Scan"
                     compact
