@@ -95,6 +95,28 @@ function eventHeaderValues(headers = [], name) {
   return headers.filter((header) => header.name?.toLowerCase() === name.toLowerCase()).map((header) => header.value ?? "");
 }
 
+function summarizeResponseHeaders(headers = []) {
+  const allowed = new Set([
+    "cache-control",
+    "content-security-policy",
+    "content-type",
+    "location",
+    "permissions-policy",
+    "referrer-policy",
+    "set-cookie",
+    "strict-transport-security",
+    "x-content-type-options"
+  ]);
+
+  return [
+    ...new Set(
+      headers
+        .map((header) => header.name?.toLowerCase())
+        .filter((name) => name && allowed.has(name))
+    )
+  ].slice(0, 40);
+}
+
 function cookieDomainMatches(cookieDomain, hostname) {
   const normalized = cookieDomain.replace(/^\./, "").toLowerCase();
   return hostname === normalized || hostname.endsWith(`.${normalized}`);
@@ -372,6 +394,7 @@ chrome.webRequest.onBeforeRequest.addListener(
       eventType: "network_request",
       hostname,
       initiator: trimOptionalString(details.initiator, 8192),
+      method: trimOptionalString(details.method, 16),
       observedAtMs: nowMs(scan),
       resourceType: details.type,
       tabId: details.tabId,
@@ -405,6 +428,13 @@ chrome.webRequest.onHeadersReceived.addListener(
     }
 
     const setCookieHeaders = eventHeaderValues(details.responseHeaders, "set-cookie");
+    const matchingNetworkEvents = scan.events.filter((event) => event.eventType === "network_request" && event.url === details.url);
+    const networkEvent = matchingNetworkEvents[matchingNetworkEvents.length - 1];
+    if (networkEvent) {
+      networkEvent.statusCode = details.statusCode;
+      networkEvent.responseHeadersObserved = summarizeResponseHeaders(details.responseHeaders);
+    }
+
     for (const header of setCookieHeaders) {
       const cookie = parseSetCookieHeader(header, details.url, nowMs(scan));
       if (cookie) {

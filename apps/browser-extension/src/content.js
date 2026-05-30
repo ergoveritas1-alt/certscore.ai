@@ -1,5 +1,6 @@
 const BUTTON_PATTERNS = {
   acceptObserved: /\b(accept|agree|allow all|ok)\b/i,
+  closeObserved: /\b(close|dismiss|continue without accepting|maybe later|not now|×|x)\b/i,
   doNotSellShareObserved: /\b(do not sell|do not share|do not sell or share)\b/i,
   manageObserved: /\b(manage|preferences|settings|choices|customize)\b/i,
   rejectObserved: /\b(reject|decline|deny|necessary only)\b/i
@@ -29,11 +30,22 @@ function summarizeConsentUi() {
   const snippets = [];
   const buttons = [];
   let selectorSummary = "";
+  let largestCandidate = null;
 
   for (const element of candidates.slice(0, 80)) {
     const text = visibleText(element);
     if (!text || !BANNER_PATTERN.test(text)) {
       continue;
+    }
+
+    const rect = element.getBoundingClientRect();
+    if (!largestCandidate || rect.width * rect.height > largestCandidate.area) {
+      largestCandidate = {
+        area: rect.width * rect.height,
+        height: rect.height,
+        position: window.getComputedStyle(element).position,
+        width: rect.width
+      };
     }
 
     if (!selectorSummary) {
@@ -55,13 +67,21 @@ function summarizeConsentUi() {
   }
 
   const joinedButtons = buttons.join(" | ");
+  const viewportArea = Math.max(1, window.innerWidth * window.innerHeight);
+  const coverage = largestCandidate ? largestCandidate.area / viewportArea : 0;
+  const fixedLike = largestCandidate ? /fixed|sticky/i.test(largestCandidate.position) : false;
   return {
     acceptObserved: BUTTON_PATTERNS.acceptObserved.test(joinedButtons),
     bannerObserved: snippets.length > 0,
     buttonsObserved: Array.from(new Set(buttons)).slice(0, 20),
+    closeObserved: BUTTON_PATTERNS.closeObserved.test(joinedButtons),
+    contentObstructed: snippets.length > 0 && coverage >= 0.25,
+    cookieWallDetected: snippets.length > 0 && coverage >= 0.45,
     doNotSellShareObserved: BUTTON_PATTERNS.doNotSellShareObserved.test(joinedButtons),
+    firstLayerButtonCount: buttons.length,
     manageObserved: BUTTON_PATTERNS.manageObserved.test(joinedButtons),
     matchedTextSnippets: snippets,
+    pageInteractionBlocked: snippets.length > 0 && fixedLike && coverage >= 0.35,
     rejectObserved: BUTTON_PATTERNS.rejectObserved.test(joinedButtons),
     selectorSummary
   };
