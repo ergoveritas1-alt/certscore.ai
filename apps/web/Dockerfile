@@ -58,9 +58,9 @@ ENV BUILD_RUNTIME_TARGET="${BUILD_RUNTIME_TARGET}"
 
 WORKDIR /app
 
-COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/.next/standalone ./
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/packages/db/migrations ./packages/db/migrations
 COPY --from=builder /app/scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
