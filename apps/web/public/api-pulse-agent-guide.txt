@@ -64,6 +64,10 @@ CERTSCORE_API_KEY=<token> pnpm mcp:certscore
 MCP live smoke:
 CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke
 
+MCP preview key generation:
+pnpm db:migrate
+pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"
+
 MCP workflow:
 1. create_scan with a public URL.
 2. get_scan_status when create_scan returns a jobId.

@@ -607,7 +607,11 @@ CERTSCORE_BASE_URL=https://certscore.ai
 CERTSCORE_REQUEST_TIMEOUT_MS=300000
 
 Live smoke:
-CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke`}</CodeBlock>
+CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke
+
+Generate preview key:
+pnpm db:migrate
+pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"`}</CodeBlock>
             <CodeBlock>{`Example MCP client config:
 {
   "mcpServers": {
@@ -625,6 +629,10 @@ CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke`}</CodeBlock>
             <p>
               Recommended workflow: call `create_scan` with a public URL, poll `get_scan_status` when a job ID is returned, retrieve the
               stable report with `get_report`, then use `export_findings` or `explain_finding` for review and ticketing.
+            </p>
+            <p>
+              Preview keys are scoped to `pulse:read`, `pulse:scan`, and `mcp`; WC01 validates bearer tokens before request
+              attribution and rate-limit policy, without changing evidence, concern, finding, or projection logic.
             </p>
             <div className="flex flex-wrap gap-3">
               <a

@@ -22,6 +22,13 @@ Run from this monorepo:
 CERTSCORE_API_KEY=... pnpm mcp:certscore
 ```
 
+Generate a scoped preview key after applying DB migrations:
+
+```bash
+pnpm db:migrate
+pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"
+```
+
 Run the built package directly:
 
 ```bash

@@ -20,6 +20,7 @@ import {
   parsePulseWaitSeconds
 } from "../../../../lib/pulse/request";
 import { buildPulseStatus } from "../../../../lib/pulse/status";
+import { parseBearerToken, validateIntegrationApiKey, type IntegrationApiKeyScope } from "../../../../server/integrations/api-keys";
 import { checkDomainDns } from "../../../../server/domains/domain-dns";
 import { createAnonymousFullScan } from "../../../../server/scans/create-anonymous-full-scan";
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
@@ -210,6 +211,16 @@ function getRequestedScanFrom(url: URL) {
   return normalizeScanFrom(url.searchParams.get("scanFrom") ?? url.searchParams.get("geo"));
 }
 
+function requiredScopesForPulseRequest(input: { hasUrl: boolean; hasScanId: boolean; hasJobId: boolean }): IntegrationApiKeyScope[] {
+  if (input.hasUrl) {
+    return ["pulse:scan", "mcp"];
+  }
+  if (input.hasScanId || input.hasJobId) {
+    return ["pulse:read", "mcp"];
+  }
+  return ["pulse:read", "mcp"];
+}
+
 async function checkGptActionLimit(ipHash: string | null) {
   const usage = await getPulseGptActionUsage({ ipHash });
   if (usage.hourlyCount >= GPT_ACTION_HOURLY_LIMIT) {
@@ -234,10 +245,60 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   const requester = getPulseRequesterContext(request);
   const forceNewScan = gptAction ? false : parseForceNewScan(url.searchParams.get("forceNewScan"));
   const scanFrom = getRequestedScanFrom(url);
-  const contextBase = { ...requester, format, detail, freshness, forceNewScan, scanFrom, waitSeconds, channel: gptAction ? "gpt_action" : "pulse_api", source: gptAction ? "gpt_action" : "pulse_api" };
   const scanId = url.searchParams.get("scanId")?.trim() || null;
   const jobId = url.searchParams.get("jobId")?.trim() || null;
   const rawUrl = url.searchParams.get("url")?.trim() || null;
+  const bearer = parseBearerToken(request);
+  let apiKeyContext: { apiKeyId?: string | null; accountId?: string | null; userId?: string | null; channel?: string; source?: string } = {};
+  if (bearer.provided) {
+    if (!bearer.token) {
+      return pulseJson(
+        buildPulseError({ code: "unauthorized", message: "Use Authorization: Bearer <token> for CertScore integration API access.", detail, format }),
+        { headers: { "Cache-Control": "no-store" }, status: 401 },
+        requestId,
+        routeName
+      );
+    }
+    const auth = await validateIntegrationApiKey(
+      bearer.token,
+      requiredScopesForPulseRequest({ hasUrl: Boolean(rawUrl), hasScanId: Boolean(scanId), hasJobId: Boolean(jobId) })
+    );
+    if (!auth.ok) {
+      return pulseJson(
+        buildPulseError({
+          code: auth.reason === "missing_scope" ? "forbidden" : "unauthorized",
+          message:
+            auth.reason === "missing_scope"
+              ? "This CertScore API key does not include the required Pulse scope."
+              : "This CertScore API key is invalid, expired, or revoked.",
+          detail,
+          format
+        }),
+        { headers: { "Cache-Control": "no-store" }, status: auth.reason === "missing_scope" ? 403 : 401 },
+        requestId,
+        routeName
+      );
+    }
+    apiKeyContext = {
+      accountId: auth.key.organizationId,
+      apiKeyId: auth.key.publicId,
+      channel: "mcp",
+      source: "mcp",
+      userId: auth.key.ownerUserId
+    };
+  }
+  const contextBase = {
+    ...requester,
+    ...apiKeyContext,
+    format,
+    detail,
+    freshness,
+    forceNewScan,
+    scanFrom,
+    waitSeconds,
+    channel: apiKeyContext.channel ?? (gptAction ? "gpt_action" : "pulse_api"),
+    source: apiKeyContext.source ?? (gptAction ? "gpt_action" : "pulse_api")
+  };
   const startedAt = Date.now();
 
   try {

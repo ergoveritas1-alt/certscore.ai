@@ -275,8 +275,10 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /developer-preview stdio server/);
   assert.match(source, /pnpm mcp:certscore/);
   assert.match(source, /pnpm mcp:certscore:smoke/);
+  assert.match(source, /pnpm mcp:certscore:generate-key/);
   assert.match(source, /Example MCP client config/);
   assert.match(source, /Recommended workflow/);
+  assert.match(source, /without changing evidence, concern, finding, or projection logic/);
   assert.match(source, /create_scan/);
   assert.match(source, /get_scan_status/);
   assert.match(source, /get_report/);
@@ -343,6 +345,7 @@ test("Pulse plain text agent guide is retrievable and covers fetch failures", ()
   assert.match(source, /https:\/\/certscore\.ai\/api-pulse#mcp/);
   assert.match(source, /CERTSCORE_API_KEY=<token> pnpm mcp:certscore/);
   assert.match(source, /CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke/);
+  assert.match(source, /pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"/);
   assert.match(source, /explain_finding for evidence, caveats, and next steps/);
   assert.match(source, /https:\/\/certscore\.ai\/api-pulse\/agent/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/openapi\.chatgpt\.json/);
@@ -357,6 +360,17 @@ test("Pulse plain text agent guide is retrievable and covers fetch failures", ()
   assert.match(source, /Markdown is best for conversational summaries/);
   assert.match(source, /automated public-web observations for review/);
   assert.match(source, /automated runtime analysis of public websites/);
+});
+
+test("Pulse route validates supplied integration bearer tokens outside the finding pipeline", () => {
+  const source = readFileSync("apps/web/app/api/v1/pulse/route.ts", "utf8");
+
+  assert.match(source, /parseBearerToken/);
+  assert.match(source, /validateIntegrationApiKey/);
+  assert.match(source, /requiredScopesForPulseRequest/);
+  assert.match(source, /channel: "mcp"/);
+  assert.match(source, /source: "mcp"/);
+  assert.doesNotMatch(source, /normalized-concerns|concern-policy|unified-findings|executive-findings-projection/);
 });
 
 test("Pulse public text surfaces keep cautious language outside explicit avoid guidance", async () => {
