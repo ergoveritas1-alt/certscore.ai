@@ -1,10 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { ApiKeysCard } from "../../../components/settings/api-keys-card";
 import { EmailVerificationCard } from "../../../components/settings/email-verification-card";
 import { SCAN_ACCESS, formatScanThrottleIntervalLabel } from "../../../lib/scan-access";
 import { getDashboardContext } from "../../../server/auth";
 import { getBetterAuthVerificationStatus } from "../../../server/better-auth/user";
 import { getDashboardScanUsage } from "../../../server/dashboard/get-dashboard-scan-usage";
 import { getSystemHealth } from "../../../server/health/get-system-health";
+import { listIntegrationApiKeysForOrganization } from "../../../server/integrations/api-keys";
 import {
   applyManualRescanLimitOverride,
   getOrganizationManualRescanLimitOverride,
@@ -61,11 +63,12 @@ function formatMissingTables(tables: string[]) {
 export default async function SettingsPage() {
   const { organization, profile, user } = await getDashboardContext();
   const userProviders = user.authProvider.split(",").map((provider) => provider.trim());
-  const [basePlanLimits, manualRescanLimitOverride, systemHealth, verificationStatus] = await Promise.all([
+  const [basePlanLimits, manualRescanLimitOverride, systemHealth, verificationStatus, apiKeys] = await Promise.all([
     getPlanLimits(organization.plan),
     getOrganizationManualRescanLimitOverride(organization.id),
     getSystemHealth(),
-    userProviders.includes("password") ? getBetterAuthVerificationStatus(user.betterAuthUserId ?? user.id) : Promise.resolve(null)
+    userProviders.includes("password") ? getBetterAuthVerificationStatus(user.betterAuthUserId ?? user.id) : Promise.resolve(null),
+    listIntegrationApiKeysForOrganization(organization.id)
   ]);
   const planLimits = await applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
   const scanUsage = await getDashboardScanUsage({
@@ -148,6 +151,16 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <Card className="border border-slate-200 bg-white">
+        <CardHeader>
+          <CardTitle>API keys</CardTitle>
+          <p className="text-sm text-slate-600">Create scoped keys for the Pulse API and MCP integrations.</p>
+        </CardHeader>
+        <CardContent>
+          <ApiKeysCard apiKeys={apiKeys} />
+        </CardContent>
+      </Card>
 
       <Card className="border border-slate-200 bg-white">
         <CardHeader>

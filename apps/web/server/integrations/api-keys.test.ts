@@ -8,6 +8,12 @@ test("generateIntegrationApiKey creates preview keys with stable prefixes", () =
   assert.match(getIntegrationApiKeyPrefix(token), /^cs_preview_[A-Za-z0-9_-]{8}$/);
 });
 
+test("generateIntegrationApiKey supports live keys", () => {
+  const token = generateIntegrationApiKey("cs_live");
+  assert.match(token, /^cs_live_[A-Za-z0-9_-]{32,}$/);
+  assert.match(getIntegrationApiKeyPrefix(token), /^cs_live_[A-Za-z0-9_-]{8}$/);
+});
+
 test("hashIntegrationApiKey is deterministic and does not expose the raw token", () => {
   const token = "cs_preview_testtokenabcdefghijklmnopqrstuvwxyz123456";
   const hash = hashIntegrationApiKey(token);

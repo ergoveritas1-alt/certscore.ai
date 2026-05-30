@@ -8,9 +8,13 @@ export type IntegrationApiKeyRecord = {
   name: string;
   tokenPrefix: string;
   scopes: IntegrationApiKeyScope[];
+  status: "active" | "revoked";
   organizationId: string | null;
   ownerUserId: string | null;
   expiresAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+  revokedAt: string | null;
 };
 
 type IntegrationApiKeyRow = {
@@ -18,15 +22,20 @@ type IntegrationApiKeyRow = {
   name: string;
   token_prefix: string;
   scopes: string[];
+  status: "active" | "revoked";
   organization_id: string | null;
   owner_user_id: string | null;
   expires_at: string | null;
+  last_used_at: string | null;
+  created_at: string;
+  revoked_at?: string | null;
 };
 
-const TOKEN_PREFIX = "cs_preview";
+const PREVIEW_TOKEN_PREFIX = "cs_preview";
+const LIVE_TOKEN_PREFIX = "cs_live";
 const API_KEY_PATTERN = /^cs_(?:preview|live)_[A-Za-z0-9_-]{32,}$/;
 
-export function generateIntegrationApiKey(prefix = TOKEN_PREFIX) {
+export function generateIntegrationApiKey(prefix = PREVIEW_TOKEN_PREFIX) {
   return `${prefix}_${randomBytes(32).toString("base64url")}`;
 }
 
@@ -62,9 +71,13 @@ function mapRow(row: IntegrationApiKeyRow): IntegrationApiKeyRecord {
     name: row.name,
     tokenPrefix: row.token_prefix,
     scopes: normalizeScopes(row.scopes ?? []),
+    status: row.status,
     organizationId: row.organization_id,
     ownerUserId: row.owner_user_id,
-    expiresAt: row.expires_at
+    expiresAt: row.expires_at,
+    lastUsedAt: row.last_used_at,
+    createdAt: row.created_at,
+    revokedAt: row.revoked_at ?? null
   };
 }
 
@@ -75,8 +88,9 @@ export async function createIntegrationApiKey(input: {
   ownerUserId?: string | null;
   createdBy?: string | null;
   expiresAt?: string | null;
+  prefix?: "preview" | "live";
 }) {
-  const token = generateIntegrationApiKey();
+  const token = generateIntegrationApiKey(input.prefix === "live" ? LIVE_TOKEN_PREFIX : PREVIEW_TOKEN_PREFIX);
   const tokenHash = hashIntegrationApiKey(token);
   const tokenPrefix = getIntegrationApiKeyPrefix(token);
   const publicId = `api_key_${randomBytes(12).toString("base64url")}`;
@@ -101,12 +115,42 @@ export async function createIntegrationApiKey(input: {
   return { publicId, token, tokenPrefix };
 }
 
+export async function listIntegrationApiKeysForOrganization(organizationId: string) {
+  const result = await query<IntegrationApiKeyRow>(
+    `select public_id, name, token_prefix, scopes, status, organization_id, owner_user_id,
+            expires_at, last_used_at, created_at, null::timestamptz as revoked_at
+       from integration_api_keys
+      where organization_id = $1
+      order by created_at desc
+      limit 50`,
+    [organizationId]
+  );
+  return result.rows.map(mapRow);
+}
+
+export async function revokeIntegrationApiKey(input: {
+  organizationId: string;
+  publicId: string;
+}) {
+  const row = await queryOne<{ public_id: string }>(
+    `update integration_api_keys
+        set status = 'revoked'
+      where public_id = $1
+        and organization_id = $2
+        and status = 'active'
+      returning public_id`,
+    [input.publicId, input.organizationId]
+  );
+  return Boolean(row);
+}
+
 export async function validateIntegrationApiKey(token: string, requiredScopes: IntegrationApiKeyScope[]) {
   if (!API_KEY_PATTERN.test(token)) {
     return { ok: false as const, reason: "malformed" as const };
   }
   const row = await queryOne<IntegrationApiKeyRow>(
-    `select public_id, name, token_prefix, scopes, organization_id, owner_user_id, expires_at
+    `select public_id, name, token_prefix, scopes, status, organization_id, owner_user_id,
+            expires_at, last_used_at, created_at
        from integration_api_keys
       where token_hash = $1
         and status = 'active'
