@@ -48,7 +48,7 @@ export default async function DashboardPage() {
   const monthlyLimitLabel = scanUsage.monthlyLimit === null ? "unlimited" : String(scanUsage.monthlyLimit);
   const remainingScans =
     scanUsage.monthlyLimit === null ? null : Math.max(0, scanUsage.monthlyLimit - scanUsage.monthlyScansUsed);
-  const remainingScansLabel = remainingScans === null ? "Unlimited page scans" : `${remainingScans} page scans`;
+  const remainingScansLabel = remainingScans === null ? "Unlimited scans" : `${remainingScans} scans`;
   const remainingPercentLabel = scanUsage.remainingPercent === null ? "unlimited" : `${scanUsage.remainingPercent}%`;
 
   return (

@@ -46,11 +46,11 @@ export async function getDashboardScanUsage(input: {
             and period_end = $3::date
           limit 1
        ) as counter_value,
-       coalesce(sum(greatest(pages_requested, 1)) filter (
+       count(*) filter (
          where scan_type in ('full', 'scheduled')
            and created_at >= $2::date
            and created_at < ($3::date + interval '1 day')
-       ), 0)::int as monthly_scans_used,
+       )::int as monthly_scans_used,
        count(*)::int as total_scans
      from scans
      where organization_id = $1`,

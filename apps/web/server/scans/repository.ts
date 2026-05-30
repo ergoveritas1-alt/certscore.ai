@@ -641,13 +641,13 @@ export async function loadUsageCounter(input: {
   );
 }
 
-export async function loadMonthlyRequestedPageScanUsage(input: {
+export async function loadMonthlyScanUsage(input: {
   organizationId: string;
   periodEnd: string;
   periodStart: string;
 }): Promise<number> {
-  const row = await queryOne<{ page_scan_usage: number }>(
-    `select coalesce(sum(greatest(pages_requested, 1)), 0)::int as page_scan_usage
+  const row = await queryOne<{ scan_usage: number }>(
+    `select count(*)::int as scan_usage
        from scans
       where organization_id = $1
         and scan_type in ('full', 'scheduled')
@@ -657,7 +657,7 @@ export async function loadMonthlyRequestedPageScanUsage(input: {
     { readOnly: true }
   );
 
-  return row?.page_scan_usage ?? 0;
+  return row?.scan_usage ?? 0;
 }
 
 export async function loadPriorScanAccelerationCandidate(input: {
