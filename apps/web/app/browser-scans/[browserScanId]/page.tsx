@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { ScanStatusAutoRefresh } from "../../../components/scans/scan-status-auto-refresh";
 import { getBrowserScanSessionById } from "../../../server/browser-scans/repository";
 
 export const dynamic = "force-dynamic";
@@ -49,10 +50,16 @@ export default async function BrowserScanPublicPage({ params }: BrowserScanPubli
     redirect(scan.canonical_scan_id ? `/app/scans/${scan.canonical_scan_id}` : `/app/browser-scans/${scan.id}`);
   }
 
+  if (scan.canonical_scan_id) {
+    redirect(`/scan/${scan.canonical_scan_id}`);
+  }
+
   const summary = scan.summary_json ?? {};
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-950 sm:px-6">
+      <ScanStatusAutoRefresh status={scan.status === "started" ? "running" : scan.status} />
+
       <div className="mx-auto max-w-4xl space-y-6">
         <section className="rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-panel sm:px-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
