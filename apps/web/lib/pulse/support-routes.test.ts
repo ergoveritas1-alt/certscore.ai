@@ -279,6 +279,7 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /Example MCP client config/);
   assert.match(source, /Recommended workflow/);
   assert.match(source, /without changing evidence, concern, finding, or projection logic/);
+  assert.match(source, /authenticated MCP smoke/);
   assert.match(source, /create_scan/);
   assert.match(source, /get_scan_status/);
   assert.match(source, /get_report/);

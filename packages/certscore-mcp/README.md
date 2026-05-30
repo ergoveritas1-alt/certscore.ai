@@ -100,3 +100,7 @@ CERTSCORE_MCP_SMOKE_URL=https://example.com
 ```
 
 Without `CERTSCORE_API_KEY`, the smoke script exits successfully with a skip message.
+
+## Runbook
+
+See `docs/certscore-mcp-preview-runbook.md` for migration, key issuance, smoke testing, deploy verification, and scan-to-report guardrails.

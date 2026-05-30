@@ -634,6 +634,10 @@ pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"`}</CodeBlock>
               Preview keys are scoped to `pulse:read`, `pulse:scan`, and `mcp`; WC01 validates bearer tokens before request
               attribution and rate-limit policy, without changing evidence, concern, finding, or projection logic.
             </p>
+            <p>
+              Operators should apply the integration-key migration, generate a scoped preview key, and run authenticated MCP smoke
+              before promoting the preview beyond internal use.
+            </p>
             <div className="flex flex-wrap gap-3">
               <a
                 className="inline-flex w-fit rounded-full border border-violet-300 bg-white px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100"
