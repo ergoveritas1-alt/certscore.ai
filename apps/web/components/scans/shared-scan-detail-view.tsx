@@ -521,29 +521,6 @@ function getHybridRuntimeSummaryRows(runtimeArtifacts: Record<string, unknown> |
   ];
 }
 
-function getBrowserExtensionRawEvidenceSummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
-  const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
-  const browserExtension = getRecord(hybrid?.browserExtension);
-  const rawEvidenceSummary = getRecord(browserExtension?.rawEvidenceSummary);
-  const summary = getRecord(browserExtension?.summary);
-
-  return {
-    bannerObserved:
-      rawEvidenceSummary?.bannerObserved === true || summary?.bannerObserved === true
-        ? true
-        : rawEvidenceSummary?.bannerObserved === false || summary?.bannerObserved === false
-          ? false
-          : null,
-    cookieEventCount:
-      getRecordNumber(rawEvidenceSummary, "cookieEventCount") ??
-      getRecordNumber(summary, "cookieEventCount"),
-    networkRequestCount:
-      getRecordNumber(summary, "networkRequestCount") ??
-      (Array.isArray(rawEvidenceSummary?.networkEvents) ? rawEvidenceSummary.networkEvents.length : null),
-    thirdPartyRequestCount: getRecordNumber(rawEvidenceSummary, "thirdPartyRequestCount")
-  };
-}
-
 function getPolicyField(record: Record<string, unknown> | null | undefined, ...keys: string[]) {
   if (!record) {
     return null;
@@ -5533,40 +5510,6 @@ export function SharedScanDetailView({
     executiveFingerprintCategories.length > 0 ||
     executiveFingerprintReasons.length > 0 ||
     certScoreSummary.fingerprintLabel !== "None detected";
-  const browserExtensionEvidenceSummary =
-    scanRecord.scan.scanType === "browser_extension"
-      ? getBrowserExtensionRawEvidenceSummary(runtimeArtifacts)
-      : null;
-  const lightweightHeroMetrics = browserExtensionEvidenceSummary
-    ? [
-        {
-          accent: "sky" as const,
-          helper:
-            typeof browserExtensionEvidenceSummary.thirdPartyRequestCount === "number"
-              ? `${browserExtensionEvidenceSummary.thirdPartyRequestCount} third-party`
-              : "Captured by BX01",
-          label: "Requests captured",
-          value: browserExtensionEvidenceSummary.networkRequestCount ?? null
-        },
-        {
-          accent: "emerald" as const,
-          helper: "Cookie values not captured",
-          label: "Cookie events",
-          value: browserExtensionEvidenceSummary.cookieEventCount ?? null
-        },
-        {
-          accent: browserExtensionEvidenceSummary.bannerObserved === true ? ("emerald" as const) : ("slate" as const),
-          helper: "Browser-extension observation",
-          label: "Consent banner",
-          value:
-            browserExtensionEvidenceSummary.bannerObserved === true
-              ? "Seen"
-              : browserExtensionEvidenceSummary.bannerObserved === false
-                ? "Not seen"
-                : "Unknown"
-        }
-      ]
-    : null;
   const cookiesSeenCount = Math.max(
     getRecordNumber(hybridStorageSummary, "cookiesSeenCount") ?? 0,
     getRecordNumber(snapshot, "cookie_count_total") ?? 0,
@@ -5910,7 +5853,6 @@ export function SharedScanDetailView({
             policySurfaces={executivePolicySurfaces}
             scanInterruptions={executiveScanInterruptions}
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
-            lightweightHeroMetrics={lightweightHeroMetrics}
           />
           
         </>
