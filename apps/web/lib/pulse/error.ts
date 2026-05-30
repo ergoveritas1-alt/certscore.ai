@@ -13,6 +13,7 @@ export function buildPulseError(input: {
   code: string;
   message: string;
   retryAfterSeconds?: number | null;
+  resolution?: { label: string; url: string } | null;
   url?: string | null;
   detail?: PulseDetail;
   format?: PulseFormat;
@@ -36,6 +37,7 @@ export function buildPulseError(input: {
       message: input.message,
       retryAfterSeconds: input.retryAfterSeconds ?? null
     },
+    resolution: input.resolution ?? null,
     feedback: {
       email: PULSE_FEEDBACK_EMAIL
     },

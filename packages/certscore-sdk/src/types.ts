@@ -304,6 +304,7 @@ export interface PulseErrorResponse {
     retryAfterSeconds?: number | null;
     [key: string]: unknown;
   };
+  resolution?: { label?: string; url?: string } | null;
   feedback?: FeedbackInfo;
   agentInterpretation?: AgentInterpretation;
   disclaimer?: string;

@@ -202,7 +202,15 @@ const chatGptOpenApiDocument = {
                   throttled: {
                     value: {
                       type: "certscore_pulse_error",
-                      error: { code: "rate_limited", message: "Pulse is receiving too many requests. Try again shortly.", retryAfterSeconds: 60 },
+                      error: {
+                        code: "rate_limited",
+                        message: "This CertScore API key has reached its Pulse request limit. Try again after the retry window or manage your plan.",
+                        retryAfterSeconds: 60
+                      },
+                      resolution: {
+                        label: "Manage plan",
+                        url: "https://certscore.ai/app/modify-plan"
+                      },
                       feedback: { email: "support@certscore.ai" },
                       agentInterpretation: {
                         responseClass: "rate_limited",
@@ -440,6 +448,14 @@ const chatGptOpenApiDocument = {
             }
           },
           feedback: { $ref: "#/components/schemas/PulseFeedback" },
+          resolution: {
+            type: ["object", "null"],
+            additionalProperties: false,
+            properties: {
+              label: { type: "string" },
+              url: { type: "string" }
+            }
+          },
           agentInterpretation: { $ref: "#/components/schemas/PulseAgentInterpretation" },
           disclaimer: { type: "string" }
         }

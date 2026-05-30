@@ -294,7 +294,7 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /200 completed tiny JSON/);
   assert.match(source, /200 completed full JSON/);
   assert.match(source, /202 pending\/running response/);
-  assert.match(source, /429 throttled response/);
+  assert.match(source, /429 rate-limit response/);
 });
 
 test("Pulse agent fallback page documents the fetch failure diagnostic contract", () => {
@@ -485,6 +485,31 @@ test("Pulse invalid-input errors use the documented public-safe shape", () => {
   assert.equal(body.agentInterpretation.responseClass, "api_error");
   assert.equal(body.agentInterpretation.requiresHumanReview, true);
   assert.match(body.disclaimer, /automated public-web observations for review/i);
+  assert.doesNotMatch(JSON.stringify(body), /stack|DATABASE_URL|token|secret/i);
+});
+
+test("Pulse rate-limit errors can include a public plan-management resolution", () => {
+  const body = buildPulseError({
+    code: "rate_limited",
+    message: "This CertScore API key has reached its Pulse request limit. Try again after the retry window or manage your plan.",
+    retryAfterSeconds: 3600,
+    resolution: {
+      label: "Manage plan",
+      url: "https://certscore.ai/app/modify-plan"
+    },
+    detail: "tiny",
+    format: "json"
+  });
+
+  assert.equal(body.type, "certscore_pulse_error");
+  assert.equal(body.error.code, "rate_limited");
+  assert.match(body.error.message, /request limit/i);
+  assert.equal(body.error.retryAfterSeconds, 3600);
+  assert.deepEqual(body.resolution, {
+    label: "Manage plan",
+    url: "https://certscore.ai/app/modify-plan"
+  });
+  assert.equal(body.agentInterpretation.responseClass, "rate_limited");
   assert.doesNotMatch(JSON.stringify(body), /stack|DATABASE_URL|token|secret/i);
 });
 

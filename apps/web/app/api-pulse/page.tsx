@@ -381,15 +381,19 @@ const responseExamples = [
     }
   },
   {
-    title: "429 throttled response",
+    title: "429 rate-limit response",
     language: "json",
     value: {
       type: "certscore_pulse_error",
       meta: exampleMeta,
       error: {
-        code: "pulse_throttled",
-        message: "A Pulse scan for this domain was requested recently. Try again in a few minutes.",
+        code: "rate_limited",
+        message: "This CertScore API key has reached its Pulse request limit. Try again after the retry window or manage your plan.",
         retryAfterSeconds: 240
+      },
+      resolution: {
+        label: "Manage plan",
+        url: "https://certscore.ai/app/modify-plan"
       },
       feedback: {
         email: PULSE_FEEDBACK_EMAIL

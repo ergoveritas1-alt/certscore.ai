@@ -289,6 +289,14 @@ const openApiDocument = {
             }
           },
           feedback: { $ref: "#/components/schemas/PulseFeedback" },
+          resolution: {
+            type: ["object", "null"],
+            additionalProperties: false,
+            properties: {
+              label: { type: "string" },
+              url: { type: "string" }
+            }
+          },
           agentInterpretation: { $ref: "#/components/schemas/PulseAgentInterpretation" },
           disclaimer: { type: "string" }
         }

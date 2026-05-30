@@ -289,8 +289,12 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       return pulseJson(
         buildPulseError({
           code: "rate_limited",
-          message: "This CertScore API key has reached its Pulse request limit. Try again after the retry window.",
+          message: "This CertScore API key has reached its Pulse request limit. Try again after the retry window or manage your plan.",
           retryAfterSeconds: usageLimit.retryAfterSeconds,
+          resolution: {
+            label: "Manage plan",
+            url: "https://certscore.ai/app/modify-plan"
+          },
           detail,
           format
         }),
