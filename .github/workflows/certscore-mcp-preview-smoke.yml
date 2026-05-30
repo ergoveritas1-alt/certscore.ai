@@ -1,0 +1,188 @@
+name: CertScore MCP Preview Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      key_name:
+        description: "Display name for the generated integration key."
+        required: false
+        default: "CertScore MCP preview smoke"
+        type: string
+      expires_at:
+        description: "Optional ISO timestamp for key expiry."
+        required: false
+        type: string
+      smoke_url:
+        description: "Public URL to use for the MCP smoke scan."
+        required: false
+        default: "https://example.com"
+        type: string
+
+concurrency:
+  group: certscore-mcp-preview-smoke
+  cancel-in-progress: false
+
+jobs:
+  issue-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      ECS_CLUSTER_NAME: ${{ vars.AWS_WEB_ECS_CLUSTER }}
+      ECS_CERTSCORE_SERVICE_NAME: ${{ vars.AWS_WEB_CERTSCORE_SERVICE }}
+      CERTSCORE_BASE_URL: https://certscore.ai
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Export masked key metadata
+        run: |
+          {
+            node <<'NODE'
+          const { createHash, randomBytes } = require("node:crypto");
+          const token = `cs_preview_${randomBytes(32).toString("base64url")}`;
+          const tokenHash = createHash("sha256").update(token, "utf8").digest("hex");
+          const [, kind, secret] = token.split("_");
+          const tokenPrefix = `cs_${kind}_${secret.slice(0, 8)}`;
+          const publicId = `api_key_${randomBytes(12).toString("base64url")}`;
+          console.error(`::add-mask::${token}`);
+          console.log(`CERTSCORE_API_KEY=${token}`);
+          console.log(`API_KEY_TOKEN_HASH=${tokenHash}`);
+          console.log(`API_KEY_TOKEN_PREFIX=${tokenPrefix}`);
+          console.log(`API_KEY_PUBLIC_ID=${publicId}`);
+          NODE
+          } >> "${GITHUB_ENV}"
+
+      - name: Validate configuration
+        run: |
+          test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing secret AWS_ROLE_TO_ASSUME" && exit 1)
+          test -n "${ECS_CLUSTER_NAME}" || (echo "Missing var AWS_WEB_ECS_CLUSTER" && exit 1)
+          test -n "${ECS_CERTSCORE_SERVICE_NAME}" || (echo "Missing var AWS_WEB_CERTSCORE_SERVICE" && exit 1)
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+
+      - name: Insert key hash in ECS network
+        env:
+          API_KEY_NAME: ${{ inputs.key_name }}
+          API_KEY_EXPIRES_AT: ${{ inputs.expires_at }}
+          API_KEY_SCOPES: pulse:read,pulse:scan,mcp
+        run: |
+          set -euo pipefail
+
+          aws ecs describe-services \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --services "${ECS_CERTSCORE_SERVICE_NAME}" \
+            --output json > service.json
+
+          TASK_DEFINITION="$(jq -r '.services[0].taskDefinition // empty' service.json)"
+          NETWORK_CONFIGURATION="$(jq -c '.services[0].networkConfiguration' service.json)"
+          test -n "${TASK_DEFINITION}" || (echo "Could not resolve task definition" && exit 1)
+          test "${NETWORK_CONFIGURATION}" != "null" || (echo "Could not resolve network configuration" && exit 1)
+
+          aws ecs describe-task-definition \
+            --region "${AWS_REGION}" \
+            --task-definition "${TASK_DEFINITION}" \
+            --output json > task-definition.json
+
+          CONTAINER_NAME="$(jq -r '.taskDefinition.containerDefinitions[0].name // empty' task-definition.json)"
+          LOG_GROUP="$(jq -r '.taskDefinition.containerDefinitions[0].logConfiguration.options["awslogs-group"] // empty' task-definition.json)"
+          LOG_PREFIX="$(jq -r '.taskDefinition.containerDefinitions[0].logConfiguration.options["awslogs-stream-prefix"] // empty' task-definition.json)"
+          test -n "${CONTAINER_NAME}" || (echo "Could not resolve container name" && exit 1)
+
+          OVERRIDES="$(jq -nc \
+            --arg name "${CONTAINER_NAME}" \
+            --arg publicId "${API_KEY_PUBLIC_ID}" \
+            --arg keyName "${API_KEY_NAME}" \
+            --arg tokenPrefix "${API_KEY_TOKEN_PREFIX}" \
+            --arg tokenHash "${API_KEY_TOKEN_HASH}" \
+            --arg scopes "${API_KEY_SCOPES}" \
+            --arg expiresAt "${API_KEY_EXPIRES_AT}" \
+            '{
+              containerOverrides: [
+                {
+                  name: $name,
+                  command: ["node", "./apps/web/scripts/insert-integration-api-key.mjs"],
+                  environment: [
+                    { name: "API_KEY_PUBLIC_ID", value: $publicId },
+                    { name: "API_KEY_NAME", value: $keyName },
+                    { name: "API_KEY_TOKEN_PREFIX", value: $tokenPrefix },
+                    { name: "API_KEY_TOKEN_HASH", value: $tokenHash },
+                    { name: "API_KEY_SCOPES", value: $scopes },
+                    { name: "API_KEY_EXPIRES_AT", value: $expiresAt },
+                    { name: "API_KEY_CREATED_BY", value: "github-actions" },
+                    { name: "PGCONNECT_TIMEOUT", value: "15" },
+                    { name: "PGOPTIONS", value: "-c lock_timeout=10000 -c statement_timeout=60000" }
+                  ]
+                }
+              ]
+            }')"
+
+          aws ecs run-task \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --task-definition "${TASK_DEFINITION}" \
+            --launch-type FARGATE \
+            --network-configuration "${NETWORK_CONFIGURATION}" \
+            --overrides "${OVERRIDES}" \
+            --output json > run-task.json
+
+          jq -e '.failures | length == 0' run-task.json >/dev/null
+          TASK_ARN="$(jq -r '.tasks[0].taskArn // empty' run-task.json)"
+          test -n "${TASK_ARN}" || (echo "ECS insert task did not return a task ARN" && exit 1)
+
+          aws ecs wait tasks-stopped \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --tasks "${TASK_ARN}"
+
+          aws ecs describe-tasks \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --tasks "${TASK_ARN}" \
+            --output json > stopped-task.json
+
+          if [ -n "${LOG_GROUP}" ] && [ -n "${LOG_PREFIX}" ]; then
+            TASK_ID="${TASK_ARN##*/}"
+            LOG_STREAM="${LOG_PREFIX}/${CONTAINER_NAME}/${TASK_ID}"
+            echo "CloudWatch log stream: ${LOG_GROUP}:${LOG_STREAM}"
+            aws logs get-log-events \
+              --region "${AWS_REGION}" \
+              --log-group-name "${LOG_GROUP}" \
+              --log-stream-name "${LOG_STREAM}" \
+              --limit 200 \
+              --output text \
+              --query 'events[].message' || true
+          fi
+
+          EXIT_CODE="$(jq -r --arg name "${CONTAINER_NAME}" '.tasks[0].containers[] | select(.name == $name) | .exitCode // empty' stopped-task.json)"
+          test "${EXIT_CODE}" = "0" || (cat stopped-task.json && exit 1)
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run authenticated MCP smoke
+        env:
+          CERTSCORE_MCP_SMOKE_URL: ${{ inputs.smoke_url }}
+        run: pnpm mcp:certscore:smoke
