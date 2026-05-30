@@ -3400,7 +3400,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
         ) : null}
         {jsonPayload ? (
           <details
-            className="group/json min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5"
+            className="group/json block w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5"
             suppressHydrationWarning
           >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
@@ -4267,10 +4267,10 @@ export function ExecutiveSummaryCard(input: {
   return (
     <section className="overflow-visible rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
       <div
-        className="grid items-stretch gap-6 px-6 py-6 lg:grid-cols-[1.35fr_0.9fr] lg:px-8"
+        className="grid min-w-0 items-stretch gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.9fr)] lg:px-8"
         data-executive-summary-layout
       >
-        <div className="flex flex-col gap-5 lg:min-h-0">
+        <div className="min-w-0 flex flex-col gap-5 lg:min-h-0">
           <div className="space-y-5">
             <div className="flex flex-wrap items-center gap-3">
               <span
@@ -4352,7 +4352,7 @@ export function ExecutiveSummaryCard(input: {
 
           <div
             id="executive-top-findings-list"
-            className="grid gap-3 overflow-visible"
+            className="grid min-w-0 gap-3 overflow-visible"
             data-executive-top-findings-list
             data-testid="executive-top-findings-list"
           >
@@ -4369,7 +4369,7 @@ export function ExecutiveSummaryCard(input: {
                 return (
                 <div
                   key={finding.id}
-                  className={`overflow-visible rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${cardTone.card}`}
+                  className={`min-w-0 overflow-visible rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${cardTone.card}`}
                   data-regulatory-mapping-ids={regulatoryMappingIds.join(" ")}
                 >
                   <div className={`h-1 w-full rounded-t-[1.4rem] ${cardTone.band}`} />
@@ -4443,7 +4443,7 @@ export function ExecutiveSummaryCard(input: {
         </div>
 
         <div
-          className="space-y-4 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]"
+          className="min-w-0 space-y-4 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]"
           data-executive-snapshot-pane
         >
           {input.accessLimitationNotice ? (
