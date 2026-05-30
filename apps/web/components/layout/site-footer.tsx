@@ -10,6 +10,7 @@ const footerSections = [
       { href: "/how-it-works", label: "How It Works" },
       { href: "/findings", label: "Findings" },
       { href: "/api-pulse", label: "Pulse API beta" },
+      { href: "/api-pulse#mcp", label: "MCP preview" },
       { href: "/pricing", label: "Pricing" }
     ]
   },
