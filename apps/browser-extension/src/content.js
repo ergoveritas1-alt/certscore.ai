@@ -93,3 +93,56 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
   }
 });
+
+window.addEventListener("message", (event) => {
+  if (event.source !== window || !event.data || typeof event.data !== "object") {
+    return;
+  }
+
+  if (event.data.type === "CERTSCORE_BX01_PING") {
+    window.postMessage(
+      {
+        requestId: event.data.requestId,
+        source: "certscore-bx01-extension",
+        type: "CERTSCORE_BX01_READY"
+      },
+      window.location.origin
+    );
+    return;
+  }
+
+  if (event.data.type !== "CERTSCORE_BX01_START_SCAN") {
+    return;
+  }
+
+  chrome.runtime
+    .sendMessage({
+      freshVisit: event.data.freshVisit !== false,
+      launchFromCertScore: true,
+      scanWindowMs: event.data.scanWindowMs,
+      targetUrl: event.data.targetUrl,
+      type: "BX01_START_SCAN"
+    })
+    .then((response) => {
+      window.postMessage(
+        {
+          requestId: event.data.requestId,
+          response,
+          source: "certscore-bx01-extension",
+          type: "CERTSCORE_BX01_START_RESPONSE"
+        },
+        window.location.origin
+      );
+    })
+    .catch((error) => {
+      window.postMessage(
+        {
+          error: error instanceof Error ? error.message : String(error),
+          requestId: event.data.requestId,
+          source: "certscore-bx01-extension",
+          type: "CERTSCORE_BX01_START_RESPONSE"
+        },
+        window.location.origin
+      );
+    });
+});

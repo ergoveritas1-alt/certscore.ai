@@ -6,15 +6,18 @@ export const SCAN_FROM_OPTIONS = [
   { description: "Standard CertScore scan", label: "Default", value: "default" },
   { flag: "🇪🇺", label: "EU", value: "eu" },
   { flag: "🇬🇧", label: "UK", value: "uk" },
-  { flag: "california", label: "California", value: "california" }
+  { flag: "california", label: "California", value: "california" },
+  { description: "Run from this browser with the CertScore extension", icon: "local", label: "Local-extension", value: "local_extension" }
 ] as const;
 
 export type ScanFrom = (typeof SCAN_FROM_OPTIONS)[number]["value"];
+export type ServerScanFrom = Exclude<ScanFrom, "local_extension">;
 
 type ScanFromSelectProps = {
   compact?: boolean;
   id?: string;
   name?: string;
+  includeLocalExtension?: boolean;
   onChange?: (value: ScanFrom) => void;
   variant?: "field" | "icon";
   value?: ScanFrom;
@@ -41,7 +44,21 @@ function CaliforniaFlagIcon() {
   );
 }
 
-function FlagMarker({ flag, selected }: { flag?: string; selected: boolean }) {
+function LocalExtensionIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24">
+      <path d="M5.5 8.5h13a2 2 0 0 1 2 2v5.75a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2V10.5a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 8.5V7.25A4 4 0 0 1 12 3.25a4 4 0 0 1 4 4V8.5M8.5 13.5h.01M12 13.5h.01M15.5 13.5h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+      <path d="M12 16.25v-2.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function FlagMarker({ flag, icon, selected }: { flag?: string; icon?: string; selected: boolean }) {
+  if (icon === "local") {
+    return <LocalExtensionIcon className={selected ? "h-4 w-4 text-sky-600" : "h-4 w-4 text-slate-500"} />;
+  }
+
   if (flag === "california") {
     return <CaliforniaFlagIcon />;
   }
@@ -56,6 +73,7 @@ function FlagMarker({ flag, selected }: { flag?: string; selected: boolean }) {
 export function ScanFromSelect({
   compact = false,
   id = "scanFrom",
+  includeLocalExtension = false,
   name = "scanFrom",
   onChange,
   variant = "field",
@@ -63,7 +81,8 @@ export function ScanFromSelect({
 }: ScanFromSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const selectedOption = SCAN_FROM_OPTIONS.find((option) => option.value === value) ?? SCAN_FROM_OPTIONS[0];
+  const options = includeLocalExtension ? SCAN_FROM_OPTIONS : SCAN_FROM_OPTIONS.filter((option) => option.value !== "local_extension");
+  const selectedOption = options.find((option) => option.value === value) ?? options[0] ?? SCAN_FROM_OPTIONS[0];
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -81,7 +100,7 @@ export function ScanFromSelect({
     setIsOpen(false);
   }
 
-  const menuOptions = variant === "icon" ? SCAN_FROM_OPTIONS.filter((option) => option.value !== "default") : SCAN_FROM_OPTIONS;
+  const menuOptions = variant === "icon" ? options.filter((option) => option.value !== "default") : options;
 
   const buttonClassName =
     variant === "icon"
@@ -107,7 +126,11 @@ export function ScanFromSelect({
         title={`Scan from: ${selectedOption.label}`}
         type="button"
       >
-        <GlobeIcon className={variant === "icon" ? "h-5 w-5" : "h-4 w-4"} />
+        {"icon" in selectedOption && selectedOption.icon === "local" ? (
+          <LocalExtensionIcon className={variant === "icon" ? "h-5 w-5" : "h-4 w-4"} />
+        ) : (
+          <GlobeIcon className={variant === "icon" ? "h-5 w-5" : "h-4 w-4"} />
+        )}
         {variant === "field" ? <span>{selectedOption.label}</span> : null}
         {variant === "field" ? (
           <svg aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 20 20">
@@ -131,7 +154,11 @@ export function ScanFromSelect({
                   type="button"
                 >
                   <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-base leading-none">
-                    <FlagMarker flag={"flag" in option ? option.flag : undefined} selected={isSelected} />
+                    <FlagMarker
+                      flag={"flag" in option ? option.flag : undefined}
+                      icon={"icon" in option ? option.icon : undefined}
+                      selected={isSelected}
+                    />
                   </span>
                   <span className="min-w-0">
                     <span className={isSelected ? "block text-sm font-semibold text-slate-950" : "block text-sm font-semibold text-slate-700"}>{option.label}</span>

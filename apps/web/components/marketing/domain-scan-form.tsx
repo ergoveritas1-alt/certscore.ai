@@ -4,7 +4,7 @@ import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useRef, useState } from "react";
 import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
-import { ScanFromSelect, type ScanFrom } from "../scans/scan-from-select";
+import { ScanFromSelect, type ScanFrom, type ServerScanFrom } from "../scans/scan-from-select";
 
 type DomainScanFormProps = {
   buttonLabel?: string;
@@ -67,6 +67,21 @@ const FULL_SCAN_ERROR_GUIDANCE: Record<string, string> = {
   rescan_cooldown: "Email support@certscore.ai if you need higher-throughput scanning."
 };
 
+const BX01_SCAN_WINDOW_MS = 15000;
+const BX01_EXTENSION_TIMEOUT_MS = 1200;
+
+type Bx01WindowMessage = {
+  error?: string;
+  requestId?: string;
+  response?: {
+    browserScanId?: string;
+    error?: string;
+    ok?: boolean;
+  };
+  source?: string;
+  type?: string;
+};
+
 function getScanSubmitErrorMessage(mode: ScanMode, payload: ScanSubmitPayload): string {
   const code = payload.code ?? null;
   const guidance = mode === "full" && code ? FULL_SCAN_ERROR_GUIDANCE[code] : null;
@@ -82,6 +97,50 @@ function getScanSubmitErrorMessage(mode: ScanMode, payload: ScanSubmitPayload): 
   }
 
   return payload.error ?? GENERIC_SCAN_ERROR_MESSAGES[mode] ?? "The scan could not be started. Please try again.";
+}
+
+function createRequestId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `bx01-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizeBrowserScanTarget(rawDomain: string) {
+  const value = rawDomain.trim();
+  const withScheme = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  const url = new URL(withScheme);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Enter a website domain, like example.com.");
+  }
+  return url.toString();
+}
+
+function waitForBx01Message(requestId: string, expectedType: string, timeoutMs: number) {
+  return new Promise<Bx01WindowMessage>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener("message", handleMessage);
+      reject(new Error("CertScore Chrome extension was not detected."));
+    }, timeoutMs);
+
+    function handleMessage(event: MessageEvent) {
+      if (event.source !== window || !event.data || typeof event.data !== "object") {
+        return;
+      }
+
+      const data = event.data as Bx01WindowMessage;
+      if (data.source !== "certscore-bx01-extension" || data.type !== expectedType || data.requestId !== requestId) {
+        return;
+      }
+
+      window.clearTimeout(timeout);
+      window.removeEventListener("message", handleMessage);
+      resolve(data);
+    }
+
+    window.addEventListener("message", handleMessage);
+  });
 }
 
 function recordScanSubmitFailure(event: ScanSubmitFailure) {
@@ -161,12 +220,52 @@ export function DomainScanForm({
   const router = useRouter();
   const [domain, setDomain] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showExtensionInstructions, setShowExtensionInstructions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
   const isSubmittingRef = useRef(false);
 
   function resetValidationState() {
     setErrorMessage(null);
+  }
+
+  async function assertBx01ExtensionInstalled() {
+    const requestId = createRequestId();
+    const ready = waitForBx01Message(requestId, "CERTSCORE_BX01_READY", BX01_EXTENSION_TIMEOUT_MS);
+    window.postMessage({ requestId, type: "CERTSCORE_BX01_PING" }, window.location.origin);
+    await ready;
+  }
+
+  async function startLocalExtensionScan(rawDomain: string) {
+    const targetUrl = normalizeBrowserScanTarget(rawDomain);
+    await assertBx01ExtensionInstalled();
+
+    const requestId = createRequestId();
+    const responsePromise = waitForBx01Message(requestId, "CERTSCORE_BX01_START_RESPONSE", 10000);
+    window.postMessage(
+      {
+        freshVisit: true,
+        requestId,
+        scanWindowMs: BX01_SCAN_WINDOW_MS,
+        targetUrl,
+        type: "CERTSCORE_BX01_START_SCAN"
+      },
+      window.location.origin
+    );
+    const message = await responsePromise;
+    const response = message.response;
+    if (message.error || !response?.ok || !response.browserScanId) {
+      throw new Error(message.error ?? response?.error ?? "The local extension scan could not be started.");
+    }
+
+    await pushDataLayerEventBeforeNavigation({
+      event: "scan_started",
+      scan_source: scanSource,
+      scan_target_type: getScanTargetType(targetUrl),
+      scan_status: "queued"
+    });
+
+    router.push(`/browser-scans/${response.browserScanId}`);
   }
 
   async function submitDomain(rawDomain: string) {
@@ -188,10 +287,26 @@ export function DomainScanForm({
     setIsSubmitting(true);
 
     try {
+      if (mode === "full" && scanFrom === "local_extension") {
+        try {
+          await startLocalExtensionScan(submittedDomain);
+        } catch (error) {
+          if (/extension was not detected/i.test(error instanceof Error ? error.message : String(error))) {
+            setShowExtensionInstructions(true);
+            setErrorMessage(null);
+          } else {
+            setErrorMessage(error instanceof Error ? error.message : "The local extension scan could not be started.");
+          }
+          isSubmittingRef.current = false;
+          setIsSubmitting(false);
+        }
+        return;
+      }
+
       const response = await fetch(mode === "preview" ? "/api/preview-scan" : "/api/full-scan", {
         body: JSON.stringify({
           domain: submittedDomain,
-          scanFrom
+          scanFrom: scanFrom as ServerScanFrom
         }),
         headers: {
           "Content-Type": "application/json"
@@ -296,7 +411,7 @@ export function DomainScanForm({
           />
           {mode === "full" ? (
             <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
-              <ScanFromSelect compact={compact} onChange={setScanFrom} value={scanFrom} variant="icon" />
+              <ScanFromSelect compact={compact} includeLocalExtension onChange={setScanFrom} value={scanFrom} variant="icon" />
             </div>
           ) : null}
           <Button
@@ -366,6 +481,45 @@ export function DomainScanForm({
         </div>
       ) : null}
       {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
+      {showExtensionInstructions ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6" role="dialog" aria-modal="true" aria-labelledby="bx01-install-title">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.24)]">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Local-extension scan</p>
+                <h2 id="bx01-install-title" className="text-xl font-semibold tracking-tight text-slate-950">Install the CertScore Chrome extension</h2>
+              </div>
+              <button
+                aria-label="Close extension install instructions"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                onClick={() => setShowExtensionInstructions(false)}
+                type="button"
+              >
+                <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+                  <path d="m5 5 10 10M15 5 5 15" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+                </svg>
+              </button>
+            </div>
+            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
+              <p>
+                Local-extension scans run from your own Chrome browser. CertScore did not detect the BX01 extension on this page.
+              </p>
+              <ol className="list-decimal space-y-2 pl-5">
+                <li>Open Chrome Extensions and enable Developer mode.</li>
+                <li>Choose Load unpacked.</li>
+                <li>Select the CertScore extension folder: <span className="font-mono text-xs">apps/browser-extension</span>.</li>
+                <li>Return to this page and run the scan again with Local-extension selected.</li>
+              </ol>
+              <a
+                className="inline-flex font-semibold text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
+                href="/app/browser-scans/setup"
+              >
+                Open extension setup page
+              </a>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </form>
   );
 }

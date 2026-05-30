@@ -567,6 +567,51 @@ export async function completeBrowserScanSession(input: {
     [input.browserScanId, input.durationMs, JSON.stringify(summary), canonicalScanId]
   );
 
+  const canonicalScan = await queryOne<BrowserScanCanonicalScanRow>(
+    `select id, organization_id, domain_id, started_at::text
+       from scans
+      where id = $1`,
+    [canonicalScanId]
+  );
+
+  if (canonicalScan) {
+    await query(
+      `insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+       select $1, $2, $3, 'browser_extension.normalization_requested', $4, $5::jsonb
+       where not exists (
+         select 1
+           from scan_events
+          where scan_id = $1
+            and event_type = 'browser_extension.normalization_requested'
+       )`,
+      [
+        canonicalScan.id,
+        canonicalScan.domain_id,
+        canonicalScan.organization_id,
+        "BX01 browser-extension evidence is ready for WS01 observed-signal normalization.",
+        JSON.stringify({
+          browserScanId: input.browserScanId,
+          canonicalScanId: canonicalScan.id,
+          requestedAt: new Date().toISOString(),
+          sourceId: BROWSER_SCAN_SOURCE_ID,
+          sourceType: BROWSER_SCAN_SOURCE_TYPE,
+          status: "pending"
+        })
+      ]
+    );
+
+    await query(
+      `update browser_scan_sessions
+          set summary_json = coalesce(summary_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'observedSignalPackageStatus', 'requested',
+              'observedSignalNormalizationRequestedAt', timezone('utc', now())
+            )
+        where id = $1`,
+      [input.browserScanId]
+    );
+  }
+
   return { canonicalScanId };
 }
 
