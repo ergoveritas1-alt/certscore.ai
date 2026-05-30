@@ -19,6 +19,7 @@ COPY packages/shared ./packages/shared
 COPY packages/ui ./packages/ui
 COPY packages/db ./packages/db
 COPY packages/validation-shared ./packages/validation-shared
+COPY scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
 
 RUN printf 'export const generatedBuildInfo = {"gitRef":"%s","gitSha":"%s","imageTag":"%s","runtimeTarget":"%s"} as const;\n' \
   "${BUILD_GIT_REF}" \
@@ -61,6 +62,8 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder /app/packages/db/migrations ./packages/db/migrations
+COPY --from=builder /app/scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
 
 EXPOSE 3000
 

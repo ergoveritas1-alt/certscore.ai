@@ -13,36 +13,89 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      id-token: write
 
     env:
-      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-      PGCONNECT_TIMEOUT: "15"
-      PGOPTIONS: "-c lock_timeout=10000 -c statement_timeout=60000"
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      ECS_CLUSTER_NAME: ${{ vars.AWS_WEB_ECS_CLUSTER }}
+      ECS_CERTSCORE_SERVICE_NAME: ${{ vars.AWS_WEB_CERTSCORE_SERVICE }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Validate database configuration
+      - name: Validate migration configuration
         run: |
-          test -n "${DATABASE_URL}" || (echo "Missing secret PROD_DATABASE_URL" && exit 1)
-          case "${DATABASE_URL}" in
-            *127.0.0.1*|*localhost*) echo "DATABASE_URL points at a local database." && exit 1 ;;
-          esac
+          test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing secret AWS_ROLE_TO_ASSUME" && exit 1)
+          test -n "${ECS_CLUSTER_NAME}" || (echo "Missing var AWS_WEB_ECS_CLUSTER" && exit 1)
+          test -n "${ECS_CERTSCORE_SERVICE_NAME}" || (echo "Missing var AWS_WEB_CERTSCORE_SERVICE" && exit 1)
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          version: 10.6.3
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
+      - name: Apply database migrations in ECS network
+        run: |
+          set -euo pipefail
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          aws ecs describe-services \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --services "${ECS_CERTSCORE_SERVICE_NAME}" \
+            --output json > service.json
 
-      - name: Apply database migrations
-        run: pnpm db:migrate
+          TASK_DEFINITION="$(jq -r '.services[0].taskDefinition // empty' service.json)"
+          NETWORK_CONFIGURATION="$(jq -c '.services[0].networkConfiguration' service.json)"
+          test -n "${TASK_DEFINITION}" || (echo "Could not resolve task definition" && exit 1)
+          test "${NETWORK_CONFIGURATION}" != "null" || (echo "Could not resolve network configuration" && exit 1)
+
+          aws ecs describe-task-definition \
+            --region "${AWS_REGION}" \
+            --task-definition "${TASK_DEFINITION}" \
+            --output json > task-definition.json
+
+          CONTAINER_NAME="$(jq -r '.taskDefinition.containerDefinitions[0].name // empty' task-definition.json)"
+          test -n "${CONTAINER_NAME}" || (echo "Could not resolve container name" && exit 1)
+
+          OVERRIDES="$(jq -nc --arg name "${CONTAINER_NAME}" '{
+            containerOverrides: [
+              {
+                name: $name,
+                command: ["node", "./scripts/apply-db-migrations.mjs"],
+                environment: [
+                  { name: "PGCONNECT_TIMEOUT", value: "15" },
+                  { name: "PGOPTIONS", value: "-c lock_timeout=10000 -c statement_timeout=60000" }
+                ]
+              }
+            ]
+          }')"
+
+          aws ecs run-task \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --task-definition "${TASK_DEFINITION}" \
+            --launch-type FARGATE \
+            --network-configuration "${NETWORK_CONFIGURATION}" \
+            --overrides "${OVERRIDES}" \
+            --output json > run-task.json
+
+          jq -e '.failures | length == 0' run-task.json >/dev/null
+          TASK_ARN="$(jq -r '.tasks[0].taskArn // empty' run-task.json)"
+          test -n "${TASK_ARN}" || (echo "ECS migration task did not return a task ARN" && exit 1)
+
+          aws ecs wait tasks-stopped \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --tasks "${TASK_ARN}"
+
+          aws ecs describe-tasks \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --tasks "${TASK_ARN}" \
+            --output json > stopped-task.json
+
+          EXIT_CODE="$(jq -r --arg name "${CONTAINER_NAME}" '.tasks[0].containers[] | select(.name == $name) | .exitCode // empty' stopped-task.json)"
+          test "${EXIT_CODE}" = "0" || (cat stopped-task.json && exit 1)
