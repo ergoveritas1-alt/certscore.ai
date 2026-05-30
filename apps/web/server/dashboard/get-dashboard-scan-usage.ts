@@ -1,6 +1,7 @@
 "use server";
 
 import { queryOne } from "@website-signal-risk-scanner/db";
+import { USAGE_METRIC_KEYS } from "@website-signal-risk-scanner/shared";
 
 export type DashboardScanUsage = {
   accountCreatedAt: string;
@@ -31,21 +32,32 @@ export async function getDashboardScanUsage(input: {
 }): Promise<DashboardScanUsage> {
   const monthWindow = getCurrentMonthWindow();
   const row = await queryOne<{
+    counter_value: number | null;
     monthly_scans_used: number;
     total_scans: number;
   }>(
     `select
-       count(*) filter (
-         where created_at >= $2::date
+       (
+         select value
+           from usage_counters
+          where organization_id = $1
+            and metric_key = $4
+            and period_start = $2::date
+            and period_end = $3::date
+          limit 1
+       ) as counter_value,
+       coalesce(sum(greatest(pages_requested, 1)) filter (
+         where scan_type in ('full', 'scheduled')
+           and created_at >= $2::date
            and created_at < ($3::date + interval '1 day')
-       )::int as monthly_scans_used,
+       ), 0)::int as monthly_scans_used,
        count(*)::int as total_scans
      from scans
      where organization_id = $1`,
-    [input.organizationId, monthWindow.periodStart, monthWindow.periodEnd],
+    [input.organizationId, monthWindow.periodStart, monthWindow.periodEnd, USAGE_METRIC_KEYS.manualFullScans],
     { readOnly: true }
   );
-  const monthlyScansUsed = row?.monthly_scans_used ?? 0;
+  const monthlyScansUsed = Math.max(row?.monthly_scans_used ?? 0, row?.counter_value ?? 0);
   const monthlyLimit = input.monthlyLimit;
   const remainingPercent =
     typeof monthlyLimit === "number" && monthlyLimit > 0

@@ -38,7 +38,7 @@ export async function rescanDomainAction(
     planCode: dashboardContext.organization.plan,
     submittedByUserId: dashboardContext.user.id,
     enforceCooldown: true,
-    enforceMonthlyUsageLimit: false,
+    enforceMonthlyUsageLimit: true,
     scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
     source: "manual-rescan"
   });

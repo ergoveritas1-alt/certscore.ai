@@ -141,6 +141,7 @@ export async function runScheduledMonitoringSweep(input: {
       planCode: candidate.organizationPlan,
       planLimitsOverride: planLimits,
       scanType: "scheduled",
+      enforceMonthlyUsageLimit: true,
       source: "scheduled-monitoring",
       submittedByUserId: null
     });

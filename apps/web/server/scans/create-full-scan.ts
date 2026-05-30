@@ -28,6 +28,7 @@ import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
 import {
   createQueuedFullScan,
   insertQueuedFullScanEvent,
+  loadMonthlyRequestedPageScanUsage,
   loadPriorScanAccelerationCandidate,
   loadUsageCounter,
   upsertUsageCounter,
@@ -248,6 +249,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     domainRecord.domain.lastScannedAt ??
     domainRecord.scans.find((scan) => scan.status === "completed" && scan.completedAt)?.completedAt ??
     null;
+  const pagesRequested = domainRecord.domain.maxPagesOverride ?? planLimits.maxPagesPerScan;
 
   if (input.enforceCooldown) {
     const availability = getRescanAvailability({
@@ -292,14 +294,22 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     const monthWindow = getCurrentMonthWindow();
     const metricKey = USAGE_METRIC_KEYS.manualFullScans;
     let usageCounter;
+    let requestedPageScanUsage = 0;
 
     try {
-      usageCounter = await loadUsageCounter({
-        metricKey,
-        organizationId: input.organizationId,
-        periodStart: monthWindow.periodStart,
-        periodEnd: monthWindow.periodEnd
-      });
+      [usageCounter, requestedPageScanUsage] = await Promise.all([
+        loadUsageCounter({
+          metricKey,
+          organizationId: input.organizationId,
+          periodStart: monthWindow.periodStart,
+          periodEnd: monthWindow.periodEnd
+        }),
+        loadMonthlyRequestedPageScanUsage({
+          organizationId: input.organizationId,
+          periodStart: monthWindow.periodStart,
+          periodEnd: monthWindow.periodEnd
+        })
+      ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not verify scan limits.";
       await logRequest({
@@ -315,14 +325,17 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       };
     }
 
-    const currentUsage = Number(usageCounter?.value ?? 0);
+    const currentUsage = Math.max(Number(usageCounter?.value ?? 0), requestedPageScanUsage);
     const monthlyLimit = planLimits.manualRescanLimitPerMonth;
 
-    if (monthlyLimit !== null && currentUsage >= monthlyLimit) {
+    if (monthlyLimit !== null && currentUsage + pagesRequested > monthlyLimit) {
       const message =
         planLimits.planCode === "free"
           ? "You’ve already used the Trial plan scan allowance for this month."
-          : `You’ve reached the ${planDefinition.label} page-scan limit of ${monthlyLimit} for this billing period.`;
+          : `This scan needs ${pagesRequested} page scan${pagesRequested === 1 ? "" : "s"}, but your ${planDefinition.label} plan has ${Math.max(
+              0,
+              monthlyLimit - currentUsage
+            )} of ${monthlyLimit} remaining for this billing period.`;
       await logRequest({
         errorCode: "monthly_usage_limit",
         errorMessage: message,
@@ -336,7 +349,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       };
     }
 
-    const nextUsageValue = currentUsage + 1;
+    const nextUsageValue = currentUsage + pagesRequested;
 
     try {
       await upsertUsageCounter({
@@ -363,7 +376,6 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     }
   }
 
-  const pagesRequested = domainRecord.domain.maxPagesOverride ?? planLimits.maxPagesPerScan;
   const priorScanAcceleration = await loadPriorScanAccelerationCandidate({
     domainId: domainRecord.domain.id,
     normalizedUrl: domainRecord.domain.normalizedUrl,

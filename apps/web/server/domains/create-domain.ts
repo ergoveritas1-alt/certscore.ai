@@ -92,7 +92,7 @@ export async function createOrQueueDomainScan(input: {
       planCode: dashboardContext.organization.plan,
       submittedByUserId: dashboardContext.user.id,
       enforceCooldown: true,
-      enforceMonthlyUsageLimit: false,
+      enforceMonthlyUsageLimit: true,
       provenance: input.provenance,
       bypassRecentScanReuse: input.bypassRecentScanReuse,
       scanFrom: input.scanFrom,

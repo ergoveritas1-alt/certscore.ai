@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { getFullScanQueueErrorCode } from "./full-scan-errors";
 
@@ -21,7 +22,7 @@ test("full scan queue errors distinguish recent scan cooldowns", () => {
 test("full scan queue errors distinguish monthly usage limits", () => {
   assert.equal(getFullScanQueueErrorCode("You’ve already used the Trial plan scan allowance for this month."), "monthly_usage_limit");
   assert.equal(
-    getFullScanQueueErrorCode("You’ve reached the Pro manual scan limit of 100 for this billing period."),
+    getFullScanQueueErrorCode("This scan needs 5 page scans, but your Pro plan has 0 of 500 remaining for this billing period."),
     "monthly_usage_limit"
   );
 });
@@ -37,4 +38,18 @@ test("full scan queue errors distinguish domain limits", () => {
 test("full scan queue errors keep queue and domain failures separate", () => {
   assert.equal(getFullScanQueueErrorCode("Full scan queue availability is degraded."), "scan_queue_unavailable");
   assert.equal(getFullScanQueueErrorCode("Enter a valid website domain."), "invalid_domain");
+});
+
+test("workspace scan quota uses page-scan units across normal scan entry points", () => {
+  const createFullScanSource = readFileSync("apps/web/server/scans/create-full-scan.ts", "utf8");
+  const dashboardUsageSource = readFileSync("apps/web/server/dashboard/get-dashboard-scan-usage.ts", "utf8");
+  const createDomainSource = readFileSync("apps/web/server/domains/create-domain.ts", "utf8");
+  const rescanSource = readFileSync("apps/web/server/scans/rescan-domain.ts", "utf8");
+  const scheduledSource = readFileSync("apps/web/server/scheduling/run-scheduled-monitoring.ts", "utf8");
+
+  assert.match(createFullScanSource, /currentUsage \+ pagesRequested > monthlyLimit/);
+  assert.match(createFullScanSource, /currentUsage \+ pagesRequested/);
+  assert.match(dashboardUsageSource, /sum\(greatest\(pages_requested, 1\)\)/);
+  assert.doesNotMatch(createFullScanSource, /currentUsage \+ 1/);
+  assert.doesNotMatch(`${createDomainSource}\n${rescanSource}\n${scheduledSource}`, /enforceMonthlyUsageLimit: false/);
 });
