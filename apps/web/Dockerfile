@@ -64,6 +64,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/packages/db/migrations ./packages/db/migrations
 COPY --from=builder /app/scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
+COPY --from=builder /app/scripts/apply-db-migrations.mjs ./apps/web/scripts/apply-db-migrations.mjs
 
 EXPOSE 3000
 

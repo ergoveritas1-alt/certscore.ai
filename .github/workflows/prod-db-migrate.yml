@@ -66,7 +66,7 @@ jobs:
             containerOverrides: [
               {
                 name: $name,
-                command: ["node", "./scripts/apply-db-migrations.mjs"],
+                command: ["node", "./apps/web/scripts/apply-db-migrations.mjs"],
                 environment: [
                   { name: "PGCONNECT_TIMEOUT", value: "15" },
                   { name: "PGOPTIONS", value: "-c lock_timeout=10000 -c statement_timeout=60000" }
