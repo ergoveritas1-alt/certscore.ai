@@ -2708,7 +2708,7 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
   assert.match(html, /CCPA \/ CPRA/);
   assert.match(html, /View applicability notes/);
   assert.match(html, /regulatory review context for the scanned report finding/);
-  assert.match(html, /CertScore observed Google Tag Manager and HubSpot before any consent interaction was recorded\. The first classified tracking signal occurred at 1500ms after page load\./);
+  assert.match(html, /Google Tag Manager and HubSpot appeared before recorded consent; first classified signal at 1500ms after page load\. Tracking before a clear user choice can undermine consent expectations\./);
   assert.match(html, /Confirm whether these services are intentionally allowed before consent or should be gated by consent controls\./);
   assert.match(html, /Learn more/);
   assert.doesNotMatch(html, /Evidence basis/);

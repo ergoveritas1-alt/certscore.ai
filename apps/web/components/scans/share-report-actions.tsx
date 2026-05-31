@@ -78,6 +78,41 @@ function MonitorIcon() {
   );
 }
 
+function ExternalLinkIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+      <path d="M14 5h5v5M19 5l-8 8" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <path d="M11 6.5H7.5A2.5 2.5 0 0 0 5 9v7.5A2.5 2.5 0 0 0 7.5 19H15a2.5 2.5 0 0 0 2.5-2.5V13" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function JsonIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+      <path d="M9 7 5 12l4 5M15 7l4 5-4 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function MarkdownIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+      <rect height="12" rx="2" stroke="currentColor" strokeWidth="1.8" width="16" x="4" y="6" />
+      <path d="M7.5 15V9l2.5 3 2.5-3v6M16 9v6M14.2 13.2 16 15l1.8-1.8" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function FullJsonIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+      <path d="M7 4.5h7l3 3v12H7z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.7" />
+      <path d="M14 4.5v3h3M9.5 11h5M9.5 14h5M9.5 17h3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
 function VisualEvidenceIcon() {
   return (
     <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24">
@@ -275,38 +310,44 @@ export function AgentSummaryActions({ domainLabel, scanId }: ShareReportActionsP
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+    <div className="space-y-2">
+      <p className="text-xs leading-5 text-slate-600">
         CertScore.ai can make mistakes. Treat this automated summary as a review aid and verify important conclusions against the retained evidence and your own legal, privacy, and accessibility review.
       </p>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Agent summary</p>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
-            Share this scan through the CertScore Pulse API using this report's scan ID.
+      <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Agent summary</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Share this scan through the CertScore Pulse API using this report's scan ID.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link aria-label="View Pulse page" className={iconActionClassName()} href={`/pulse/${encodeURIComponent(domainLabel)}`} title="View Pulse page">
+              <ExternalLinkIcon />
+              <IconTooltip label="View Pulse page" />
+            </Link>
+            <button aria-label="Copy Pulse JSON URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}`))} title="Copy Pulse JSON URL" type="button">
+              <JsonIcon />
+              <IconTooltip label="Copy Pulse JSON URL" />
+            </button>
+            <button aria-label="Copy Pulse Markdown URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&format=markdown`))} title="Copy Pulse Markdown URL" type="button">
+              <MarkdownIcon />
+              <IconTooltip label="Copy Pulse Markdown URL" />
+            </button>
+            <button aria-label="Copy Full Pulse JSON URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&detail=full`))} title="Copy Full Pulse JSON URL" type="button">
+              <FullJsonIcon />
+              <IconTooltip label="Copy Full Pulse JSON URL" />
+            </button>
+          </div>
+        </div>
+        {copyState === "copied" ? <p className="mt-2 text-xs leading-5 text-emerald-700">Pulse URL copied.</p> : null}
+        {copyState === "failed" ? (
+          <p className="mt-2 text-xs leading-5 text-amber-700">
+            Copy was not available in this browser. Use the Pulse API links from this section.
           </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link className={actionClassName()} href={`/pulse/${encodeURIComponent(domainLabel)}`}>
-            View Pulse page
-          </Link>
-          <button className={actionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}`))} type="button">
-            Copy Pulse JSON URL
-          </button>
-          <button className={actionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&format=markdown`))} type="button">
-            Copy Pulse Markdown URL
-          </button>
-          <button className={actionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&detail=full`))} type="button">
-            Copy Full Pulse JSON URL
-          </button>
-        </div>
-      </div>
-      {copyState === "copied" ? <p className="mt-2 text-xs leading-5 text-emerald-700">Pulse URL copied.</p> : null}
-      {copyState === "failed" ? (
-        <p className="mt-2 text-xs leading-5 text-amber-700">
-          Copy was not available in this browser. Use the Pulse API links from this section.
-        </p>
-      ) : null}
-    </section>
+        ) : null}
+      </section>
+    </div>
   );
 }

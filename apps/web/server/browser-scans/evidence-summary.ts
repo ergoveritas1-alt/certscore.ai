@@ -36,6 +36,7 @@ export function summarizeBrowserEvidence(input: {
   const networkEvents = eventPayloads.filter((event) => event.eventType === "network_request");
   const cookieEvents = eventPayloads.filter(isBrowserCookieEvent);
   const consentEvents = eventPayloads.filter((event) => event.eventType === "consent_ui_observed");
+  const fingerprintEvents = eventPayloads.filter((event) => event.eventType === "fingerprint_api_observed");
   const thirdPartyNetworkEvents = networkEvents.filter((event) => isLikelyThirdParty(event.hostname, input.targetHostname));
   const consentSummary = consentEvents.find((event) => event.bannerObserved) ?? consentEvents[0] ?? null;
   const firstThirdPartyRequestMs = thirdPartyNetworkEvents[0]?.observedAtMs ?? null;
@@ -47,6 +48,14 @@ export function summarizeBrowserEvidence(input: {
     cookieDomains: uniqueStrings(cookieEvents.map((event) => event.domain)),
     cookieNames: uniqueStrings(cookieEvents.map((event) => event.cookieName)),
     cookies: cookieEvents,
+    fingerprintCategories: uniqueStrings(fingerprintEvents.map((event) => event.category)),
+    fingerprintEvents: fingerprintEvents.slice(0, 100).map((event) => ({
+      api: event.api,
+      category: event.category,
+      observedAtMs: event.observedAtMs,
+      sampleCount: event.sampleCount ?? 1,
+      scriptUrl: event.scriptUrl ?? null
+    })),
     networkEvidence: networkEvents.slice(0, 500).map((event) => ({
       consentInteractionObserved: event.consentInteractionObserved === true,
       hostname: event.hostname,

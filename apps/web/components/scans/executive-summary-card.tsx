@@ -472,12 +472,12 @@ function buildPreConsentTrackingCardCopy(finding: CertScoreFinding): ExecutiveFi
   const timestampText = typeof firstTrackerTimestampMs === "number" ? `${firstTrackerTimestampMs}ms` : null;
   const observedSignal =
     vendorText && timestampText
-      ? `CertScore observed ${vendorText} before any consent interaction was recorded. The first classified tracking signal occurred at ${timestampText} after page load.`
+      ? `${vendorText} appeared before recorded consent; first classified signal at ${timestampText} after page load.`
       : vendorText
-        ? `CertScore observed ${vendorText} before any consent interaction was recorded.`
+        ? `${vendorText} appeared before any recorded consent interaction.`
         : timestampText
-          ? `A classified third-party tracking signal was observed before any consent interaction was recorded. First classified tracking signal: ${timestampText}.`
-          : "A classified third-party tracking signal was observed before any consent interaction was recorded.";
+          ? `A classified tracking signal appeared before recorded consent at ${timestampText}.`
+          : "A classified tracking signal appeared before any recorded consent interaction.";
 
   return {
     evidenceBasis: [
@@ -488,13 +488,84 @@ function buildPreConsentTrackingCardCopy(finding: CertScoreFinding): ExecutiveFi
     reviewFocus: vendorText
       ? "Confirm whether these services are intentionally allowed before consent or should be gated by consent controls."
       : "Confirm whether the classified third-party tracking signal is intentionally allowed before consent or should be gated by consent controls.",
-    summary: observedSignal
+    summary: `${observedSignal} Tracking before a clear user choice can undermine consent expectations.`
+  };
+}
+
+function formatDurationDays(days: number) {
+  if (days >= 365) {
+    const years = days / 365;
+    return years >= 2 ? `${years.toFixed(years >= 10 ? 0 : 1)} years` : "1 year";
+  }
+  return `${Math.round(days)} days`;
+}
+
+function getCookieRetentionRows(finding: CertScoreFinding) {
+  const details = finding.evidenceDetails as (Record<string, unknown> & { counts?: Record<string, unknown> }) | undefined;
+  const rows = [
+    details?.["cookieRetentionEvidence"],
+    details?.["longLivedCookieEvidence"],
+    details?.["retentionEvidence"],
+    details?.["cookies"]
+  ].flatMap((value) => Array.isArray(value) ? value : []);
+
+  return rows.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row));
+}
+
+function getCookieDurationDays(row: Record<string, unknown>) {
+  const value =
+    row.durationDays ??
+    row.duration_days ??
+    row.lifetimeDays ??
+    row.lifetime_days ??
+    row.retentionDays ??
+    row.retention_days;
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  const maxAge = row.maxAgeSeconds ?? row.max_age_seconds ?? row.maxAge ?? row.max_age;
+  return typeof maxAge === "number" && Number.isFinite(maxAge) && maxAge > 0 ? maxAge / 86400 : null;
+}
+
+function buildCookieRetentionCardCopy(finding: CertScoreFinding): ExecutiveFindingCardCopy {
+  const rows = getCookieRetentionRows(finding);
+  const counts = finding.evidenceDetails?.counts ?? {};
+  const longLivedCount =
+    typeof counts.longLivedCookieCount === "number" && counts.longLivedCookieCount > 0
+      ? counts.longLivedCookieCount
+      : rows.length;
+  const trackingCount =
+    typeof counts.longLivedTrackingCookieCount === "number" && counts.longLivedTrackingCookieCount > 0
+      ? counts.longLivedTrackingCookieCount
+      : rows.filter((row) => /tracking|advert|marketing|analytics/i.test(String(row.classification ?? row.category ?? ""))).length;
+  const longestDuration = rows
+    .map(getCookieDurationDays)
+    .filter((value): value is number => typeof value === "number")
+    .sort((a, b) => b - a)[0] ?? null;
+  const vendors = getRepresentativeVendorNames(finding, 2);
+  const domains = getRepresentativeDomainNames(finding, 2);
+  const durationText = longestDuration ? `; longest retained lifetime about ${formatDurationDays(longestDuration)}` : "";
+  const summary = `${longLivedCount || "Multiple"} long-lived cookie${longLivedCount === 1 ? "" : "s"} retained${trackingCount ? `, including ${trackingCount} tracking-classified` : ""}${durationText}.`;
+  const context = "Long cookie lifetimes can raise retention, minimization, consent, opt-out, and disclosure review questions.";
+
+  return {
+    evidenceBasis: [
+      vendors.length > 0 ? `Representative vendors: ${formatInlineList(vendors)}.` : null,
+      domains.length > 0 ? `Representative domains: ${formatInlineList(domains)}.` : null,
+      longestDuration ? `Longest observed lifetime: about ${formatDurationDays(longestDuration)}.` : null,
+      CERTSCORE_REVIEW_DISCLAIMER
+    ].filter(Boolean).join(" "),
+    reviewFocus: "Confirm each cookie's purpose, vendor role, consent state, retention disclosure, opt-out behavior, and whether the observed lifetime is intentionally configured.",
+    summary: `${summary} ${context}`
   };
 }
 
 function buildExecutiveFindingCardCopy(finding: CertScoreFinding): ExecutiveFindingCardCopy {
   if (finding.id === "pre_consent_tracking_detected") {
     return buildPreConsentTrackingCardCopy(finding);
+  }
+  if (finding.id === "long_lived_cookie_retention_review") {
+    return buildCookieRetentionCardCopy(finding);
   }
   if (isAccessibilityFinding(finding)) {
     return buildAccessibilityCardCopy(finding);
@@ -516,7 +587,7 @@ function buildExecutiveFindingCardCopy(finding: CertScoreFinding): ExecutiveFind
   return {
     evidenceBasis: `${observedEvidence || fallbackSummary} ${CERTSCORE_REVIEW_DISCLAIMER}`,
     reviewFocus: sentenceCase(getRecommendedNextStep(finding).replace(/^Next step:\s*/i, "")),
-    summary: observedEvidence || fallbackSummary
+    summary: `${observedEvidence || fallbackSummary} ${finding.whyItMatters ? finding.whyItMatters.split(/(?<=[.!?])\s+/)[0] : ""}`.trim()
   };
 }
 

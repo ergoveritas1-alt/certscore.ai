@@ -19,8 +19,8 @@ export const DEFAULT_SCAN_FROM = "default" satisfies ScanFrom;
 
 export const SCAN_FROM_DEFINITIONS = {
   default: {
-    description: "Standard CertScore scan",
-    label: "Default",
+    description: "Default CertScore scan",
+    label: "Cloud",
     requestedGeo: {
       countryCode: null,
       provider: "aws-default",

@@ -5021,9 +5021,11 @@ function ResultHeroPanel(input: {
                 {input.scanExecutionSummary.title}
               </span>
             ) : null}
-            <span className="rounded-full border border-teal-200 bg-teal-50/90 px-3 py-1 text-xs font-medium text-teal-800">
-              Scan from: {input.scanRecord.scan.scanFromLabel}
-            </span>
+            {input.scanRecord.scan.scanFromValue !== "default" ? (
+              <span className="rounded-full border border-teal-200 bg-teal-50/90 px-3 py-1 text-xs font-medium text-teal-800">
+                Scan from: {input.scanRecord.scan.scanFromLabel}
+              </span>
+            ) : null}
             {input.preConsentTrackingObserved ? (
               <span className="rounded-full border border-amber-200 bg-amber-50/90 px-3 py-1 text-xs font-medium text-amber-800">
                 Pre-consent activity
@@ -5386,19 +5388,6 @@ function normalizeScanReportAccessRole(role: string | null | undefined): ScanRep
   return "user";
 }
 
-function BrowserExtensionEvidenceNotice() {
-  return (
-    <section className="rounded-[1.2rem] border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm leading-6 text-emerald-950">
-      <p className="font-semibold">Browser-extension evidence</p>
-      <p className="mt-1">
-        This report includes evidence captured from a reviewer-controlled browser extension session. These observations are distinct from
-        CertScore server-side Chromium scans and may reflect that browser profile, location, cache, extensions, prior consent state, login
-        state, and network path.
-      </p>
-    </section>
-  );
-}
-
 export function SharedScanDetailView({
   analyticsScanSource = "unknown",
   autoRefresh = null,
@@ -5748,9 +5737,11 @@ export function SharedScanDetailView({
         title={
           <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
             <span className="break-words">Scan: {scanRecord.scan.domainHostname ?? "Unknown website"}</span>
-            <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-800">
-              Scan from: {scanRecord.scan.scanFromLabel}
-            </span>
+            {scanRecord.scan.scanFromValue !== "default" ? (
+              <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-800">
+                Scan from: {scanRecord.scan.scanFromLabel}
+              </span>
+            ) : null}
             <InfoTip
               align="start"
               className="translate-y-0.5 align-middle"
@@ -5760,7 +5751,6 @@ export function SharedScanDetailView({
           </span>
         }
       />
-      {isBrowserExtensionScan ? <BrowserExtensionEvidenceNotice /> : null}
       {isScanInFlight ? (
         <FullScanProgressCard
           buildPhaseSummaries={buildPhaseSummaries}

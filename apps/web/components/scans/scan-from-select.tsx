@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 
 export const SCAN_FROM_OPTIONS = [
-  { description: "Standard CertScore scan", label: "Default", value: "default" },
+  { description: "Default CertScore scan", icon: "cloud", label: "Cloud", value: "default" },
+  { description: "Run from this browser", icon: "local", label: "Local-extension", value: "local_extension" },
   { flag: "🇪🇺", label: "EU", value: "eu" },
   { flag: "🇬🇧", label: "UK", value: "uk" },
-  { flag: "california", label: "California", value: "california" },
-  { description: "Run from this browser with the CertScore extension", icon: "local", label: "Local-extension", value: "local_extension" }
+  { flag: "california", label: "California", value: "california" }
 ] as const;
 
 export type ScanFrom = (typeof SCAN_FROM_OPTIONS)[number]["value"];
@@ -54,7 +54,19 @@ function LocalExtensionIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+function CloudIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24">
+      <path d="M7.8 18.2h9.1a4.1 4.1 0 0 0 .9-8.1 6 6 0 0 0-11.4-1.9A5 5 0 0 0 7.8 18.2Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 function FlagMarker({ flag, icon, selected }: { flag?: string; icon?: string; selected: boolean }) {
+  if (icon === "cloud") {
+    return <CloudIcon className={selected ? "h-4 w-4 text-sky-600" : "h-4 w-4 text-slate-500"} />;
+  }
+
   if (icon === "local") {
     return <LocalExtensionIcon className={selected ? "h-4 w-4 text-sky-600" : "h-4 w-4 text-slate-500"} />;
   }
@@ -100,7 +112,7 @@ export function ScanFromSelect({
     setIsOpen(false);
   }
 
-  const menuOptions = variant === "icon" ? options.filter((option) => option.value !== "default") : options;
+  const menuOptions = options;
 
   const buttonClassName =
     variant === "icon"
@@ -128,6 +140,8 @@ export function ScanFromSelect({
       >
         {"icon" in selectedOption && selectedOption.icon === "local" ? (
           <LocalExtensionIcon className={variant === "icon" ? "h-5 w-5" : "h-4 w-4"} />
+        ) : "icon" in selectedOption && selectedOption.icon === "cloud" ? (
+          <CloudIcon className={variant === "icon" ? "h-5 w-5" : "h-4 w-4"} />
         ) : (
           <GlobeIcon className={variant === "icon" ? "h-5 w-5" : "h-4 w-4"} />
         )}
