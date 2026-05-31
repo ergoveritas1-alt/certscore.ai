@@ -194,7 +194,7 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col">
-        <header className="border-b border-slate-800 bg-slate-950 pl-[17px] pr-6 pt-2 pb-0 text-white">
+        <header className="relative z-[80] border-b border-slate-800 bg-slate-950 pl-[17px] pr-6 pt-2 pb-0 text-white">
           {process.env.NODE_ENV === "development" && DEV_INSTANCE_LABEL ? (
             <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-300/10 px-3 py-2 font-mono text-[11px] text-amber-100">
               <span className="rounded-full border border-amber-300/30 bg-amber-300/15 px-2 py-0.5 uppercase tracking-[0.2em] text-amber-200">
@@ -259,7 +259,7 @@ export function AppShell({
                 </button>
 
                 {accountMenuOpen ? (
-                  <div className="absolute right-0 z-30 mt-3 w-52 overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 p-2 shadow-[0_24px_60px_rgba(2,6,23,0.65)]">
+                  <div className="absolute right-0 z-[120] mt-3 w-52 overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 p-2 shadow-[0_24px_60px_rgba(2,6,23,0.65)]">
                     <div className="space-y-1">
                       <Link
                         href="/app/settings"
