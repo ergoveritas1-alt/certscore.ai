@@ -404,7 +404,7 @@ function getRecord(value: unknown) {
 function buildStoredSignalPopulationRecords(input: {
   observedAt: string | null;
   rows: SignalPopulationRow[];
-  source: "nano" | "validation";
+  source: "browser_extension_bx01" | "nano" | "validation";
 }): PopulatedSignalRecord[] {
   return input.rows.map((row) => ({
     confidence: typeof row.confidence === "number" ? row.confidence : null,
@@ -434,7 +434,18 @@ function buildStoredSignalPopulationRecords(input: {
               (value as { kind?: unknown }).kind === "validation")
         )
       : [],
-    reportSignalSource: "document_semantic_signal" as const,
+    reportSignalSource:
+      input.source === "browser_extension_bx01"
+        ? row.signal_key.startsWith("privacy.") ||
+            row.signal_key.startsWith("commerce.") ||
+            row.signal_key.startsWith("financial.") ||
+            row.signal_key.startsWith("entity.") ||
+            row.signal_key.startsWith("disclosure.") ||
+            row.signal_key.startsWith("context.") ||
+            row.signal_key.startsWith("accessibility.")
+          ? "snapshot_signal"
+          : null
+        : "document_semantic_signal",
     source: input.source,
     value: row.signal_value_json,
     valueType:
@@ -1041,7 +1052,15 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
               where policy_enrichment.scan_id = scan_events.scan_id
             ) as has_policy_rows,
             false as recovered,
-            null::text as recovery_mode
+            case
+              when scan_events.metadata_json->>'recoveryMode' in (
+                'browser_extension_signal_reprojection',
+                'completed_scan_backfill',
+                'missing_unified_projection'
+              )
+              then scan_events.metadata_json->>'recoveryMode'
+              else null
+            end as recovery_mode
           from scan_events
           join scans on scans.id = scan_events.scan_id
           where scan_events.event_type = $1
@@ -1555,6 +1574,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   const runtimeArtifactsRecord = runtimeArtifacts ?? null;
   const rawSignalRows = rawSignals;
   const scannerSignalRows = rawSignalRows.filter((signal) => !signal.population_source || signal.population_source === "scanner");
+  const storedBrowserExtensionSignalRows = rawSignalRows.filter((signal) => signal.population_source === "browser_extension_bx01");
   const storedNanoSignalRows = rawSignalRows.filter((signal) => signal.population_source === "nano");
   const storedValidationSignalRows = rawSignalRows.filter((signal) => signal.population_source === "validation");
   const fallbackFinancialEvidence = extractFallbackFinancialEvidenceFromRuntimeArtifacts(runtimeArtifactsRecord);
@@ -1572,6 +1592,11 @@ export async function loadCompletedScanArtifacts(scanId: string) {
       })
     : fallbackPolicyRows;
   const mergedSignals = buildMergedSignalRecords({
+    browserExtensionSignals: buildStoredSignalPopulationRecords({
+      observedAt: typeof scan?.completed_at === "string" ? scan.completed_at : null,
+      rows: storedBrowserExtensionSignalRows,
+      source: "browser_extension_bx01"
+    }),
     nanoSignals: buildStoredSignalPopulationRecords({
       observedAt: typeof scan?.completed_at === "string" ? scan.completed_at : null,
       rows: storedNanoSignalRows,
@@ -2397,6 +2422,7 @@ async function loadScanRecordForFindingCount(input: {
 
   const rawSignalRows = (signals ?? []) as SignalPopulationRow[];
   const scannerSignalRows = rawSignalRows.filter((signal) => !signal.population_source || signal.population_source === "scanner");
+  const storedBrowserExtensionSignalRows = rawSignalRows.filter((signal) => signal.population_source === "browser_extension_bx01");
   const storedNanoSignalRows = rawSignalRows.filter((signal) => signal.population_source === "nano");
   const storedValidationSignalRows = rawSignalRows.filter((signal) => signal.population_source === "validation");
   const normalizedDocumentSources = (documentSources ?? []) as Array<Record<string, unknown>>;
@@ -2502,6 +2528,11 @@ async function loadScanRecordForFindingCount(input: {
     preconsentViolations: (preconsentViolations ?? []) as Array<Record<string, unknown>>,
     runtimeArtifacts: (runtimeArtifacts as Record<string, unknown> | null) ?? null,
     mergedSignals: buildMergedSignalRecords({
+      browserExtensionSignals: buildStoredSignalPopulationRecords({
+        observedAt: typeof snapshot?.completed_at === "string" ? snapshot.completed_at : null,
+        rows: storedBrowserExtensionSignalRows,
+        source: "browser_extension_bx01"
+      }),
       nanoSignals: buildStoredSignalPopulationRecords({
         observedAt: typeof snapshot?.completed_at === "string" ? snapshot.completed_at : null,
         rows: storedNanoSignalRows,
