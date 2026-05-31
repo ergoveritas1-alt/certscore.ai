@@ -6,6 +6,7 @@ import type { AuthenticatedAppUser } from "../auth-flows/types";
 import { bootstrapAppUserSession } from "../bootstrap-user";
 import { createOrganizationDomain, findOrganizationDomainByNormalizedUrl } from "../domains/repository";
 import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan-repository";
+import { deriveBrowserScanCanonicalMaterializationFromObservedSignals } from "./canonical-materialization";
 import { summarizeBrowserEvidence, type BrowserScanArtifactRow, type BrowserScanEventRow } from "./evidence-summary";
 import {
   BROWSER_SCAN_CAPTURE_MODE,
@@ -420,6 +421,7 @@ export async function ingestBrowserScanObservedSignals(input: {
   }
 
   const signals = input.signalPackage.observedSignals;
+  const materialized = deriveBrowserScanCanonicalMaterializationFromObservedSignals(signals);
   if (signals.length > 0) {
     const values: unknown[] = [];
     const rows = signals.map((signal, index) => {
@@ -479,25 +481,74 @@ export async function ingestBrowserScanObservedSignals(input: {
   }
 
   await query(
+    `update scan_snapshots
+        set total_signals = $2::int,
+            privacy_signal_count = $3::int,
+            tracker_vendor_count = $4::int,
+            cookie_banner_present = $5::boolean,
+            accept_all_present = $6::boolean,
+            reject_all_present = $7::boolean,
+            granular_preferences_present = $8::boolean,
+            do_not_sell_link_present = $9::boolean,
+            preconsent_tracking_detected = $10::boolean,
+            tracking_before_consent_detected = $10::boolean,
+            cookie_count_total = $11::int,
+            tracker_count_total = $12::int,
+            analytics_tracker_count = $13::int,
+            advertising_tracker_count = $14::int,
+            session_replay_tracker_count = $15::int,
+            tag_manager_present = $16::boolean,
+            third_party_script_domain_count = $17::int,
+            tracker_regulatory_risk_score = $18::int,
+            consent_maturity_score = $19::int,
+            privacy_score = $20::int,
+            certscore_overall = $21::int
+      where scan_id = $1`,
+    [
+      canonicalScan.id,
+      signals.length,
+      signals.filter((signal) => signal.category === "privacy").length,
+      materialized.trackerVendorCount,
+      materialized.cookieBannerPresent,
+      materialized.acceptAllPresent,
+      materialized.rejectAllPresent,
+      materialized.granularPreferencesPresent,
+      materialized.doNotSellLinkPresent,
+      materialized.preconsentTrackingDetected,
+      materialized.cookieCountTotal,
+      materialized.trackerVendorCount,
+      materialized.vendorCategoryCounts.analytics,
+      materialized.vendorCategoryCounts.advertising,
+      materialized.sessionReplayTrackerCount,
+      materialized.tagManagerPresent,
+      materialized.thirdPartyScriptDomainCount,
+      Math.max(0, 100 - materialized.score),
+      materialized.cookieBannerPresent ? (materialized.rejectAllPresent ? 80 : 45) : 65,
+      materialized.privacyScore,
+      materialized.score
+    ]
+  );
+
+  await query(
     `update scan_runtime_artifacts
-        set hybrid_runtime_evidence = coalesce(hybrid_runtime_evidence, '{}'::jsonb)
-          || jsonb_build_object(
-            'browserExtensionObservedSignals',
-            jsonb_build_object(
-              'populationSource', $2::text,
-              'signalCount', $3::int,
-              'sourceId', $4::text,
-              'sourceType', $5::text
-            )
-          ),
+        set third_party_request_domains = $2::text[],
+            third_party_request_count = $3::int,
+            initial_cookie_count = $4::int,
+            consent_preconsent_violation_count = $5::int,
+            consent_baseline_tracker_evidence_urls = $6::text[],
+            consent_baseline_tracker_vendor_names = $7::text[],
+            hybrid_runtime_evidence = coalesce(hybrid_runtime_evidence, '{}'::jsonb) || $8::jsonb,
             updated_at = timezone('utc', now())
       where scan_id = $1`,
     [
       canonicalScan.id,
-      BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
-      signals.length,
-      BROWSER_SCAN_SOURCE_ID,
-      BROWSER_SCAN_SOURCE_TYPE
+      materialized.thirdPartyRequestDomains,
+      materialized.thirdPartyRequestCount,
+      materialized.cookieCountTotal,
+      materialized.preconsentViolationCount,
+      materialized.preconsentTrackerEvidenceUrls,
+      materialized.preconsentTrackerVendors,
+      JSON.stringify(materialized.hybridRuntimeEvidencePatch)
     ]
   );
 

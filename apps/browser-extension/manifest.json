@@ -22,7 +22,13 @@
     {
       "matches": ["http://*/*", "https://*/*"],
       "js": ["src/content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["src/fingerprint-probe.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
   "icons": {

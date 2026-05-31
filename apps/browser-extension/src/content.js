@@ -119,6 +119,17 @@ window.addEventListener("message", (event) => {
     return;
   }
 
+  if (event.data.source === "certscore-bx01-fingerprint-probe" && event.data.type === "CERTSCORE_BX01_FINGERPRINT_API") {
+    chrome.runtime.sendMessage({
+      api: String(event.data.api || "").slice(0, 160),
+      category: String(event.data.category || "").slice(0, 80),
+      sampleCount: Number.isFinite(event.data.sampleCount) ? event.data.sampleCount : 1,
+      scriptUrl: typeof event.data.scriptUrl === "string" ? event.data.scriptUrl.slice(0, 512) : null,
+      type: "BX01_FINGERPRINT_API_OBSERVED"
+    });
+    return;
+  }
+
   if (event.data.type === "CERTSCORE_BX01_PING") {
     window.postMessage(
       {

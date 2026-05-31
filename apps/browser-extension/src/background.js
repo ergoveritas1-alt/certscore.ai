@@ -476,6 +476,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message?.type === "BX01_FINGERPRINT_API_OBSERVED") {
+    const scan = typeof sender.tab?.id === "number" ? activeScans.get(sender.tab.id) : null;
+    const category = typeof message.category === "string" ? message.category : "";
+    if (
+      scan &&
+      ["audio", "canvas_webgl", "fonts_plugins", "hardware", "screen_viewport", "storage", "timezone_locale"].includes(category)
+    ) {
+      scan.events.push({
+        api: trimOptionalString(message.api, 160) || "unknown",
+        category,
+        eventType: "fingerprint_api_observed",
+        observedAtMs: nowMs(scan),
+        sampleCount: Number.isFinite(message.sampleCount) ? Math.max(1, Math.min(1000, Math.round(message.sampleCount))) : 1,
+        scriptUrl: trimOptionalString(message.scriptUrl, 512)
+      });
+    }
+    return false;
+  }
+
   if (message?.type !== "BX01_START_SCAN") {
     return false;
   }

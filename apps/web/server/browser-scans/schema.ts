@@ -70,6 +70,14 @@ export const browserScanEventSchema = z.discriminatedUnion("eventType", [
     observedAtMs: observedAtMsSchema,
     sourceId: z.literal(BROWSER_SCAN_SOURCE_ID).optional(),
     sourceType: z.literal(BROWSER_SCAN_SOURCE_TYPE).optional()
+  }),
+  z.object({
+    api: boundedString(160),
+    category: z.enum(["audio", "canvas_webgl", "fonts_plugins", "hardware", "screen_viewport", "storage", "timezone_locale"]),
+    eventType: z.literal("fingerprint_api_observed"),
+    observedAtMs: observedAtMsSchema,
+    sampleCount: z.number().int().min(1).max(1000).optional(),
+    scriptUrl: z.string().trim().max(512).nullable().optional()
   })
 ]);
 

@@ -14,6 +14,7 @@ const required = [
   "assets/certscore-mark-cropped.png",
   "src/background.js",
   "src/content.js",
+  "src/fingerprint-probe.js",
   "src/config.js",
   "src/options/options.css",
   "src/options/options.html",

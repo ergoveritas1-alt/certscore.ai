@@ -5,6 +5,7 @@ import {
   buildNormalizedConcerns,
   buildUnifiedFindingCandidatesFromConcerns
 } from "../../lib/scans/normalized-concerns";
+import { deriveBrowserScanCanonicalMaterializationFromObservedSignals } from "./canonical-materialization";
 import { summarizeBrowserEvidence, type BrowserScanEventRow } from "./evidence-summary";
 
 test("raw BX01 browser evidence alone does not create concern-backed finding candidates", () => {
@@ -158,4 +159,105 @@ test("WS01-normalized BX01 signals enter the canonical concern pipeline", () => 
       candidate.fallbackEvidence.preconsent_tracker_evidence_urls.includes("https://www.googletagmanager.com/gtm.js?id=GTM-TEST")
     )
   );
+});
+
+test("WS01-normalized BX01 signals materialize canonical dashboard fields", () => {
+  const materialized = deriveBrowserScanCanonicalMaterializationFromObservedSignals([
+    {
+      category: "privacy",
+      confidence: 0.72,
+      evidenceRefs: ["https://cdn.example.net/app.js"],
+      key: "privacy.third_party_request_count",
+      label: "Third-party request count",
+      observedAtMs: 120,
+      populationSource: "browser_extension_bx01",
+      provenance: { sourceId: "BX01", sourceType: "browser_extension" },
+      value: 4,
+      valueType: "number"
+    },
+    {
+      category: "privacy",
+      confidence: 0.72,
+      evidenceRefs: ["https://cdn.example.net/app.js"],
+      key: "privacy.third_party_request_domains",
+      label: "Third-party request domains",
+      observedAtMs: 120,
+      populationSource: "browser_extension_bx01",
+      provenance: { sourceId: "BX01", sourceType: "browser_extension" },
+      value: ["cdn.example.net", "metrics.example.net"],
+      valueType: "string_array"
+    },
+    {
+      category: "privacy",
+      confidence: 0.78,
+      evidenceRefs: ["https://www.googletagmanager.com/gtm.js?id=GTM-TEST"],
+      key: "privacy.tracker_vendors",
+      label: "Tracker vendors",
+      observedAtMs: 150,
+      populationSource: "browser_extension_bx01",
+      provenance: { sourceId: "BX01", sourceType: "browser_extension" },
+      value: ["Google Tag Manager"],
+      valueType: "string_array"
+    },
+    {
+      category: "privacy",
+      confidence: 0.78,
+      evidenceRefs: ["https://www.googletagmanager.com/gtm.js?id=GTM-TEST"],
+      key: "privacy.tracker_vendor_count",
+      label: "Tracker vendor count",
+      observedAtMs: 150,
+      populationSource: "browser_extension_bx01",
+      provenance: { sourceId: "BX01", sourceType: "browser_extension" },
+      value: 1,
+      valueType: "number"
+    },
+    {
+      category: "privacy",
+      confidence: 0.82,
+      evidenceRefs: ["https://www.googletagmanager.com/gtm.js?id=GTM-TEST"],
+      key: "privacy.preconsent_tracker_categories",
+      label: "Pre-consent tracker categories",
+      observedAtMs: 150,
+      populationSource: "browser_extension_bx01",
+      provenance: { sourceId: "BX01", sourceType: "browser_extension" },
+      value: ["tag_manager"],
+      valueType: "string_array"
+    },
+    {
+      category: "privacy",
+      confidence: 0.76,
+      evidenceRefs: ["bx01.fingerprint_api:60:canvas_webgl:HTMLCanvasElement.toDataURL"],
+      key: "privacy.fingerprinting_tier",
+      label: "Fingerprinting evidence tier",
+      observedAtMs: 60,
+      populationSource: "browser_extension_bx01",
+      provenance: { sourceId: "BX01", sourceType: "browser_extension" },
+      value: 2,
+      valueType: "number"
+    },
+    {
+      category: "privacy",
+      confidence: 0.76,
+      evidenceRefs: ["bx01.fingerprint_api:60:canvas_webgl:HTMLCanvasElement.toDataURL"],
+      key: "privacy.fingerprinting_attribute_categories",
+      label: "Fingerprinting attribute categories",
+      observedAtMs: 60,
+      populationSource: "browser_extension_bx01",
+      provenance: { sourceId: "BX01", sourceType: "browser_extension" },
+      value: ["canvas_webgl", "audio"],
+      valueType: "string_array"
+    }
+  ]);
+
+  assert.equal(materialized.thirdPartyRequestCount, 4);
+  assert.deepEqual(materialized.thirdPartyRequestDomains, ["cdn.example.net", "metrics.example.net"]);
+  assert.deepEqual(materialized.hybridRuntimeEvidencePatch.vendorSummary.normalizedVendors, ["Google Tag Manager"]);
+  assert.deepEqual(materialized.hybridRuntimeEvidencePatch.vendorSummary.rawThirdPartyDomains, ["cdn.example.net", "metrics.example.net"]);
+  assert.equal(materialized.hybridRuntimeEvidencePatch.vendorSummary.vendorCategoryCounts.tag_manager, 1);
+  assert.equal(materialized.hybridRuntimeEvidencePatch.fingerprintSummary.tier, 2);
+  assert.deepEqual(materialized.hybridRuntimeEvidencePatch.fingerprintSummary.attributeCategories, [
+    { count: 1, firstSeenMs: null, name: "canvas_webgl" },
+    { count: 1, firstSeenMs: null, name: "audio" }
+  ]);
+  assert.ok(materialized.score < 100);
 });
