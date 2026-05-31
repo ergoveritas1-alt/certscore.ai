@@ -1,6 +1,7 @@
 import { config, getApiBaseUrl } from "./config.js";
 
 const activeScans = new Map();
+let progressWindowId = null;
 
 function nowMs(scan) {
   return Math.max(0, Math.round(performance.now() - scan.startedAt));
@@ -49,6 +50,38 @@ function setBadge(status) {
   const color = status === "complete" ? "#126c5b" : status === "error" ? "#be123c" : "#0b2e4f";
   chrome.action.setBadgeText({ text });
   chrome.action.setBadgeBackgroundColor({ color });
+}
+
+async function openProgressWindow() {
+  if (!chrome.windows?.create || !chrome.runtime?.getURL) {
+    return;
+  }
+
+  if (typeof progressWindowId === "number") {
+    try {
+      await chrome.windows.update(progressWindowId, { focused: true });
+      return;
+    } catch {
+      progressWindowId = null;
+    }
+  }
+
+  const window = await chrome.windows.create({
+    focused: true,
+    height: 520,
+    type: "popup",
+    url: chrome.runtime.getURL("src/progress/progress.html"),
+    width: 430
+  });
+  progressWindowId = typeof window?.id === "number" ? window.id : null;
+}
+
+if (chrome.windows?.onRemoved) {
+  chrome.windows.onRemoved.addListener((windowId) => {
+    if (windowId === progressWindowId) {
+      progressWindowId = null;
+    }
+  });
 }
 
 function hostnameFromUrl(url) {
@@ -534,6 +567,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function startScan(message) {
+  await openProgressWindow();
   setBadge("observing");
   const apiBaseUrl = await getApiBaseUrl();
   const targetUrl = message.targetUrl;

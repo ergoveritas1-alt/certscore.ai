@@ -1284,6 +1284,15 @@ function isContextOnlyLensFinding(finding: RegulatoryLensFinding) {
   return CONTEXT_ONLY_REGULATORY_FINDING_SOURCES.has(String(finding.evidence.source ?? ""));
 }
 
+function isMeasuredCountLensFinding(finding: RegulatoryLensFinding) {
+  return (
+    finding.evidence.source === "regulatory_counts" &&
+    typeof finding.evidence.count === "number" &&
+    Number.isFinite(finding.evidence.count) &&
+    finding.evidence.count > 0
+  );
+}
+
 function capContextOnlyLensTone(input: {
   findings: RegulatoryLensFinding[];
   score: number;
@@ -1293,6 +1302,9 @@ function capContextOnlyLensTone(input: {
     return { score: input.score, tone: input.tone };
   }
   if (input.findings.length === 0 || input.findings.some((finding) => !isContextOnlyLensFinding(finding))) {
+    return { score: input.score, tone: input.tone };
+  }
+  if (input.findings.some(isMeasuredCountLensFinding)) {
     return { score: input.score, tone: input.tone };
   }
 

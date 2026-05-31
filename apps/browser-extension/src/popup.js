@@ -51,20 +51,6 @@ function getLaunchTargetFromCertScoreUrl(tabUrl) {
   }
 }
 
-async function openProgressWindow() {
-  if (!extensionApiAvailable || !chrome.windows?.create) {
-    return;
-  }
-
-  await chrome.windows.create({
-    focused: true,
-    height: 520,
-    type: "popup",
-    url: chrome.runtime.getURL("src/progress/progress.html"),
-    width: 430
-  });
-}
-
 function setError(message) {
   errorEl.textContent = message;
   errorEl.hidden = !message;
@@ -181,7 +167,6 @@ runButton.addEventListener("click", async () => {
     return;
   }
 
-  await openProgressWindow();
   renderStatus({
     busy: true,
     label: "Starting...",

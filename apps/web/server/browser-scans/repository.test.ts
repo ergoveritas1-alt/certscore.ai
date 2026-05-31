@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { summarizeBrowserEvidence, type BrowserScanArtifactRow, type BrowserScanEventRow } from "./evidence-summary";
+import { buildBrowserObservedSignalPackageFromEvidence } from "./observed-signal-package";
 
 test("summarizeBrowserEvidence preserves browser-extension provenance shape without cookie values", () => {
   const events: BrowserScanEventRow[] = [
@@ -113,4 +114,35 @@ test("summarizeBrowserEvidence does not synthesize tracker findings from raw BX0
   assert.equal("classifiedThirdPartyRequests" in summary, false);
   assert.equal("requestObservations" in summary, false);
   assert.deepEqual(summary.thirdPartyRequestDomains, ["www.googletagmanager.com"]);
+});
+
+test("WS01-normalized BX01 signal package preserves request timing provenance", () => {
+  const summary = summarizeBrowserEvidence({
+    artifacts: [],
+    events: [
+      {
+        event_type: "network_request",
+        observed_at_ms: 25,
+        event_json: {
+          consentInteractionObserved: false,
+          eventType: "network_request",
+          hostname: "www.googletagmanager.com",
+          observedAtMs: 25,
+          resourceType: "script",
+          url: "https://www.googletagmanager.com/gtm.js?id=GTM-TEST"
+        }
+      }
+    ],
+    targetHostname: "example.com"
+  });
+
+  const signalPackage = buildBrowserObservedSignalPackageFromEvidence({ evidence: summary });
+  const preconsentSignal = signalPackage.observedSignals.find(
+    (signal) => signal.key === "privacy.preconsent_tracking_detected"
+  );
+
+  assert.equal(preconsentSignal?.value, true);
+  assert.ok(
+    preconsentSignal?.evidenceRefs.includes("bx01.network_request:25:https://www.googletagmanager.com/gtm.js?id=GTM-TEST")
+  );
 });
