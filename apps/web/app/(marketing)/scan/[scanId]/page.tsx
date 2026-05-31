@@ -7,7 +7,10 @@ import { SharedScanDetailView } from "../../../../components/scans/shared-scan-d
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
 import { AgentSummaryActions, ShareReportActions } from "../../../../components/scans/share-report-actions";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
-import { hasPendingPostCompletionFindingWork } from "../../../../lib/scans/scan-auto-refresh";
+import {
+  hasPendingBrowserExtensionNormalization,
+  hasPendingPostCompletionFindingWork
+} from "../../../../lib/scans/scan-auto-refresh";
 import { absoluteUrl } from "../../../../lib/seo";
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
@@ -98,6 +101,11 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     notFound();
   }
 
+  const pendingBrowserExtensionNormalization = hasPendingBrowserExtensionNormalization({
+    events: scanRecord.events,
+    scanType: scanRecord.scan.scanType,
+    status: scanRecord.scan.status
+  });
   const reportFindingCount = buildScanReportUnifiedFindings(scanRecord).length;
   await persistReportFindingCount({
     count: reportFindingCount,
@@ -118,6 +126,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
           analyticsScanSource="homepage"
           autoRefresh={
             <ScanStatusAutoRefresh
+              pendingBrowserExtensionNormalization={pendingBrowserExtensionNormalization}
               pendingPostCompletionWork={pendingPostCompletionWork}
               status={scanRecord.scan.status}
             />

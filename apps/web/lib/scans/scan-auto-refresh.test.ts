@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SignalEnrichmentWorkflowState } from "@website-signal-risk-scanner/shared";
-import { hasPendingPostCompletionFindingWork } from "./scan-auto-refresh";
+import {
+  hasPendingBrowserExtensionNormalization,
+  hasPendingPostCompletionFindingWork
+} from "./scan-auto-refresh";
 
 function makeWorkflow(overrides: Partial<SignalEnrichmentWorkflowState> = {}): SignalEnrichmentWorkflowState {
   return {
@@ -88,6 +91,50 @@ test("hasPendingPostCompletionFindingWork follows the enrichment workflow state"
     hasPendingPostCompletionFindingWork({
       signalEnrichmentWorkflow: makeWorkflow(),
       status: "running"
+    }),
+    false
+  );
+});
+
+test("hasPendingBrowserExtensionNormalization follows WS01 observed-signal lifecycle events", () => {
+  assert.equal(
+    hasPendingBrowserExtensionNormalization({
+      events: [{ eventType: "browser_extension.normalization_requested" }],
+      scanType: "browser_extension",
+      status: "completed"
+    }),
+    true
+  );
+
+  assert.equal(
+    hasPendingBrowserExtensionNormalization({
+      events: [
+        { eventType: "browser_extension.normalization_requested" },
+        { eventType: "browser_extension.observed_signals_ingested" }
+      ],
+      scanType: "browser_extension",
+      status: "completed"
+    }),
+    false
+  );
+
+  assert.equal(
+    hasPendingBrowserExtensionNormalization({
+      events: [
+        { eventType: "browser_extension.normalization_requested" },
+        { eventType: "browser_extension.normalization_failed" }
+      ],
+      scanType: "browser_extension",
+      status: "completed"
+    }),
+    false
+  );
+
+  assert.equal(
+    hasPendingBrowserExtensionNormalization({
+      events: [{ eventType: "browser_extension.normalization_requested" }],
+      scanType: "full",
+      status: "completed"
     }),
     false
   );

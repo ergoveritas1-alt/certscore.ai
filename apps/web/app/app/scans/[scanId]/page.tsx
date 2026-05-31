@@ -5,7 +5,10 @@ import { SharedScanDetailView } from "../../../../components/scans/shared-scan-d
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { ShareReportActions } from "../../../../components/scans/share-report-actions";
-import { hasPendingPostCompletionFindingWork } from "../../../../lib/scans/scan-auto-refresh";
+import {
+  hasPendingBrowserExtensionNormalization,
+  hasPendingPostCompletionFindingWork
+} from "../../../../lib/scans/scan-auto-refresh";
 import { getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidence";
 import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../server/auth";
@@ -48,7 +51,13 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
     notFound();
   }
 
-  if (typeof scanRecord.snapshot?.report_finding_count !== "number") {
+  const pendingBrowserExtensionNormalization = hasPendingBrowserExtensionNormalization({
+    events: scanRecord.events,
+    scanType: scanRecord.scan.scanType,
+    status: scanRecord.scan.status
+  });
+
+  if (typeof scanRecord.snapshot?.report_finding_count !== "number" || scanRecord.scan.scanType === "browser_extension") {
     const reportFindingCount = await withServerTiming("app.scan_detail.backfill_finding_count", async () =>
       buildScanReportUnifiedFindings(scanRecord).length
     );
@@ -86,6 +95,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
         analyticsScanSource="dashboard"
         autoRefresh={
           <ScanStatusAutoRefresh
+            pendingBrowserExtensionNormalization={pendingBrowserExtensionNormalization}
             pendingPostCompletionWork={pendingPostCompletionWork}
             status={scanRecord.scan.status}
           />

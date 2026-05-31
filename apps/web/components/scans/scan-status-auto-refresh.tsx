@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import React, { useEffect, useRef } from "react";
 
 type ScanStatusAutoRefreshProps = {
+  pendingBrowserExtensionNormalization?: boolean;
   pendingPostCompletionWork?: boolean;
   status: string;
 };
@@ -13,21 +14,31 @@ export function shouldAutoRefreshScanStatus(input: ScanStatusAutoRefreshProps) {
     input.status === "queued" ||
     input.status === "running" ||
     input.status === "processing" ||
+    input.pendingBrowserExtensionNormalization === true ||
     input.pendingPostCompletionWork === true
   );
 }
 
 export function ScanStatusAutoRefresh({
+  pendingBrowserExtensionNormalization = false,
   pendingPostCompletionWork = false,
   status
 }: ScanStatusAutoRefreshProps) {
-  const shouldRefresh = shouldAutoRefreshScanStatus({ pendingPostCompletionWork, status });
+  const shouldRefresh = shouldAutoRefreshScanStatus({
+    pendingBrowserExtensionNormalization,
+    pendingPostCompletionWork,
+    status
+  });
 
   if (!shouldRefresh) {
     return null;
   }
 
-  const statusLabel = pendingPostCompletionWork ? "finalizing findings" : status;
+  const statusLabel = pendingBrowserExtensionNormalization
+    ? "normalizing browser evidence"
+    : pendingPostCompletionWork
+      ? "finalizing findings"
+      : status;
 
   return (
     <>

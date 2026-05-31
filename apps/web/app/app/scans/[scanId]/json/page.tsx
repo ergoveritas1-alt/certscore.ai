@@ -5,7 +5,10 @@ import { buildScanReportUnifiedFindings } from "../../../../../components/scans/
 import { ScanFindingsPane } from "../../../../../components/scans/scan-findings-pane";
 import { ScanViewActions } from "../../../../../components/scans/scan-view-actions";
 import { ScanStatusAutoRefresh } from "../../../../../components/scans/scan-status-auto-refresh";
-import { hasPendingPostCompletionFindingWork } from "../../../../../lib/scans/scan-auto-refresh";
+import {
+  hasPendingBrowserExtensionNormalization,
+  hasPendingPostCompletionFindingWork
+} from "../../../../../lib/scans/scan-auto-refresh";
 import { getAdminScanThrottleMs, getScanThrottleCopy } from "../../../../../lib/scan-access";
 import { getRescanAvailability } from "../../../../../lib/scans/rescan-policy";
 import { isPlatformAdminEmail } from "../../../../../server/admin/platform-admin";
@@ -100,6 +103,11 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
     signalEnrichmentWorkflow: scanRecord.signalEnrichmentWorkflow,
     status: scanRecord.scan.status
   });
+  const pendingBrowserExtensionNormalization = hasPendingBrowserExtensionNormalization({
+    events: scanRecord.events,
+    scanType: scanRecord.scan.scanType,
+    status: scanRecord.scan.status
+  });
 
   return (
     <div className="space-y-8">
@@ -115,6 +123,7 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
             {formatDateTime(scanRecord.scan.completedAt)}
           </p>
           <ScanStatusAutoRefresh
+            pendingBrowserExtensionNormalization={pendingBrowserExtensionNormalization}
             pendingPostCompletionWork={pendingPostCompletionWork}
             status={scanRecord.scan.status}
           />
