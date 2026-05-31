@@ -89,21 +89,23 @@ function summarizeConsentUi() {
 
 let consentInteractionObserved = false;
 
-function hasActiveExtensionContext() {
+function getRuntime() {
   try {
-    return Boolean(chrome?.runtime?.id);
+    const runtime = globalThis.chrome?.runtime;
+    return runtime?.id ? runtime : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
 function sendRuntimeMessage(message) {
-  if (!hasActiveExtensionContext()) {
+  const runtime = getRuntime();
+  if (!runtime) {
     return Promise.resolve(null);
   }
 
   try {
-    return Promise.resolve(chrome.runtime.sendMessage(message)).catch(() => null);
+    return Promise.resolve(runtime.sendMessage(message)).catch(() => null);
   } catch {
     return Promise.resolve(null);
   }
@@ -125,8 +127,9 @@ document.addEventListener(
   true
 );
 
-if (hasActiveExtensionContext()) {
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+const runtime = getRuntime();
+if (runtime) {
+  runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "BX01_SUMMARIZE_CONSENT_UI") {
       sendResponse({
         consentInteractionObserved,
@@ -136,7 +139,7 @@ if (hasActiveExtensionContext()) {
   });
 }
 
-window.addEventListener("message", (event) => {
+async function handleWindowMessage(event) {
   if (event.source !== window || !event.data || typeof event.data !== "object") {
     return;
   }
@@ -153,7 +156,7 @@ window.addEventListener("message", (event) => {
   }
 
   if (event.data.type === "CERTSCORE_BX01_PING") {
-    if (!hasActiveExtensionContext()) {
+    if (!getRuntime()) {
       return;
     }
 
@@ -172,39 +175,34 @@ window.addEventListener("message", (event) => {
     return;
   }
 
-  if (!hasActiveExtensionContext()) {
+  if (!getRuntime()) {
     return;
   }
 
-  chrome.runtime
-    .sendMessage({
-      freshVisit: event.data.freshVisit !== false,
-      launchFromCertScore: true,
-      returnToLauncherOnComplete: event.data.returnToLauncherOnComplete === true,
-      scanWindowMs: event.data.scanWindowMs,
-      targetUrl: event.data.targetUrl,
-      type: "BX01_START_SCAN"
-    })
-    .then((response) => {
-      window.postMessage(
-        {
-          requestId: event.data.requestId,
-          response,
-          source: "certscore-bx01-extension",
-          type: "CERTSCORE_BX01_START_RESPONSE"
-        },
-        window.location.origin
-      );
-    })
-    .catch((error) => {
-      window.postMessage(
-        {
-          error: error instanceof Error ? error.message : String(error),
-          requestId: event.data.requestId,
-          source: "certscore-bx01-extension",
-          type: "CERTSCORE_BX01_START_RESPONSE"
-        },
-        window.location.origin
-      );
-    });
+  const response = await sendRuntimeMessage({
+    freshVisit: event.data.freshVisit !== false,
+    launchFromCertScore: true,
+    returnToLauncherOnComplete: event.data.returnToLauncherOnComplete === true,
+    scanWindowMs: event.data.scanWindowMs,
+    targetUrl: event.data.targetUrl,
+    type: "BX01_START_SCAN"
+  });
+
+  if (!response) {
+    return;
+  }
+
+  window.postMessage(
+    {
+      requestId: event.data.requestId,
+      response,
+      source: "certscore-bx01-extension",
+      type: "CERTSCORE_BX01_START_RESPONSE"
+    },
+    window.location.origin
+  );
+}
+
+window.addEventListener("message", (event) => {
+  void handleWindowMessage(event).catch(() => {});
 });
