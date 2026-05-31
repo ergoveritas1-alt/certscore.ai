@@ -380,6 +380,13 @@ function isAccessibilityFinding(finding: CertScoreFinding) {
 function buildAccessibilityCardCopy(finding: CertScoreFinding): ExecutiveFindingCardCopy {
   const counts = finding.evidenceDetails?.counts ?? {};
   const accessibilityEvidence = finding.evidenceDetails?.accessibilityEvidence ?? {};
+  const examples = getAccessibilityExampleRows(finding);
+  const primaryExample = examples[0] ?? null;
+  const primaryRule = primaryExample ? getFirstStringValue(primaryExample, ["ruleCode", "rule_code", "ruleId", "rule_id", "axeRuleId", "help"]) : null;
+  const primarySelector = primaryExample
+    ? getFirstStringArrayValue(primaryExample, ["representativeSelectors", "representative_selectors", "selectors", "target", "targets"])[0] ?? null
+    : null;
+  const primaryPage = primaryExample ? getFirstStringValue(primaryExample, ["pageUrl", "page_url", "url"]) : null;
   const affectedNodes =
     typeof counts.representativeAxeExampleCount === "number" && counts.representativeAxeExampleCount > 0
       ? counts.representativeAxeExampleCount
@@ -402,14 +409,70 @@ function buildAccessibilityCardCopy(finding: CertScoreFinding): ExecutiveFinding
     ? `${affectedNodes} affected ${affectedNodes === 1 ? "element" : "elements"}${pageCount ? ` across ${pageCount} ${pageCount === 1 ? "page" : "pages"}` : ""}`
     : "affected elements";
   const impactText = maxImpact ? ` The highest retained impact was ${maxImpact}.` : "";
-  const summary = `${finding.label} was retained for manual accessibility review, with ${impactedSurface}.${impactText}`;
+  const sourceContext = primaryRule
+    ? ` Retained axe evidence points to ${primaryRule}${primarySelector ? ` on selector ${primarySelector}` : ""}${primaryPage ? ` at ${primaryPage}` : ""}.`
+    : "";
+  const summary = `${finding.label} was retained for manual accessibility review, with ${impactedSurface}.${impactText}${sourceContext}`;
+  const reviewTarget = primaryRule || primarySelector
+    ? `Start with ${primaryRule ? `the ${primaryRule} rule` : "the retained rule"}${primarySelector ? ` on ${primarySelector}` : ""}; then verify nearby labels, instructions, focus order, accessible names, and error states in the actual page flow.`
+    : "Review the affected elements with keyboard navigation and screen-reader checks. Confirm that labels, focus order, accessible names, instructions, and error states match the intended user flow, then validate fixes against the relevant WCAG rule.";
 
   return {
     evidenceBasis: `${summary} ${CERTSCORE_REVIEW_DISCLAIMER}`,
-    reviewFocus:
-      "Review the affected elements with keyboard navigation and screen-reader checks. Confirm that labels, focus order, accessible names, instructions, and error states match the intended user flow, then validate fixes against the relevant WCAG rule.",
+    reviewFocus: reviewTarget,
     summary
   };
+}
+
+function getRecordValue(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    if (key in row) {
+      return row[key];
+    }
+  }
+  return undefined;
+}
+
+function getFirstStringValue(row: Record<string, unknown>, keys: string[]) {
+  const value = getRecordValue(row, keys);
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getFirstNumberValue(row: Record<string, unknown>, keys: string[]) {
+  const value = getRecordValue(row, keys);
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function getFirstStringArrayValue(row: Record<string, unknown>, keys: string[]) {
+  const value = getRecordValue(row, keys);
+  if (Array.isArray(value)) {
+    return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
+  }
+  return typeof value === "string" && value.trim().length > 0 ? [value.trim()] : [];
+}
+
+function asRecordRows(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+    : [];
+}
+
+function getAccessibilityExampleRows(finding: CertScoreFinding) {
+  const details = finding.evidenceDetails;
+  const accessibilityEvidence = details?.accessibilityEvidence;
+  return [
+    ...asRecordRows(accessibilityEvidence?.accessibilityRuleExamples),
+    ...asRecordRows(accessibilityEvidence?.ruleExamples),
+    ...asRecordRows(accessibilityEvidence?.axeEvidence),
+    ...asRecordRows(accessibilityEvidence?.accessibilityAxeEvidence)
+  ];
 }
 
 function getRepresentativeVendorNames(finding: CertScoreFinding, maxItems = 3) {
@@ -500,6 +563,10 @@ function formatDurationDays(days: number) {
   return `${Math.round(days)} days`;
 }
 
+function formatApproxDurationDays(days: number) {
+  return `${formatDurationDays(days)} (${Math.round(days)} days)`;
+}
+
 function getCookieRetentionRows(finding: CertScoreFinding) {
   const details = finding.evidenceDetails as (Record<string, unknown> & { counts?: Record<string, unknown> }) | undefined;
   const rows = [
@@ -542,17 +609,21 @@ function buildCookieRetentionCardCopy(finding: CertScoreFinding): ExecutiveFindi
     .map(getCookieDurationDays)
     .filter((value): value is number => typeof value === "number")
     .sort((a, b) => b - a)[0] ?? null;
+  const thresholdDays = longestDuration ? (longestDuration >= 365 ? 365 : 180) : null;
+  const thresholdText =
+    longestDuration && thresholdDays
+      ? ` Longest observed lifetime was about ${formatApproxDurationDays(longestDuration)}, exceeding CertScore's ${thresholdDays}-day cookie-retention review threshold by about ${Math.max(0, Math.round(longestDuration - thresholdDays))} days.`
+      : "";
   const vendors = getRepresentativeVendorNames(finding, 2);
   const domains = getRepresentativeDomainNames(finding, 2);
-  const durationText = longestDuration ? `; longest retained lifetime about ${formatDurationDays(longestDuration)}` : "";
-  const summary = `${longLivedCount || "Multiple"} long-lived cookie${longLivedCount === 1 ? "" : "s"} retained${trackingCount ? `, including ${trackingCount} tracking-classified` : ""}${durationText}.`;
+  const summary = `${longLivedCount || "Multiple"} long-lived cookie${longLivedCount === 1 ? "" : "s"} retained${trackingCount ? `, including ${trackingCount} tracking-classified` : ""}.${thresholdText}`;
   const context = "Long cookie lifetimes can raise retention, minimization, consent, opt-out, and disclosure review questions.";
 
   return {
     evidenceBasis: [
       vendors.length > 0 ? `Representative vendors: ${formatInlineList(vendors)}.` : null,
       domains.length > 0 ? `Representative domains: ${formatInlineList(domains)}.` : null,
-      longestDuration ? `Longest observed lifetime: about ${formatDurationDays(longestDuration)}.` : null,
+      longestDuration && thresholdDays ? `Longest observed lifetime: about ${formatApproxDurationDays(longestDuration)}; CertScore threshold: ${thresholdDays} days.` : null,
       CERTSCORE_REVIEW_DISCLAIMER
     ].filter(Boolean).join(" "),
     reviewFocus: "Confirm each cookie's purpose, vendor role, consent state, retention disclosure, opt-out behavior, and whether the observed lifetime is intentionally configured.",
@@ -3467,6 +3538,55 @@ function FindingTitleIcon(input: { finding: CertScoreFinding; iconKey?: FindingT
   );
 }
 
+function buildFindingEvidenceHighlights(finding: CertScoreFinding) {
+  const details = finding.evidenceDetails;
+  const highlightRows: string[] = [];
+
+  if (finding.id === "pre_consent_tracking_detected") {
+    const vendorRows = [
+      ...asRecordRows(details?.vendors),
+      ...asRecordRows(details?.runtimeVendors),
+      ...asRecordRows(details?.trackingEvidence?.vendors)
+    ];
+    const timing = details?.timing as Record<string, unknown> | undefined;
+    const fallbackFirstSeenMs = typeof timing?.firstThirdPartyTrackingRequestMs === "number" ? timing.firstThirdPartyTrackingRequestMs : null;
+
+    for (const row of vendorRows) {
+      const name = getFirstStringValue(row, ["name", "vendor", "label"]);
+      if (!name) {
+        continue;
+      }
+      const firstSeenMs = getFirstNumberValue(row, ["firstSeenMs", "first_seen_ms", "firstRequestMs", "first_request_ms"]) ?? fallbackFirstSeenMs;
+      highlightRows.push(`"${name}", "preConsent": true${typeof firstSeenMs === "number" ? `, "firstSeenMs": ${Math.round(firstSeenMs)}` : ""}`);
+      if (highlightRows.length >= 3) {
+        break;
+      }
+    }
+  }
+
+  if (highlightRows.length === 0 && finding.id === "long_lived_cookie_retention_review") {
+    for (const row of getCookieRetentionRows(finding).slice(0, 3)) {
+      const name = getFirstStringValue(row, ["cookieName", "cookie_name", "name"]) ?? "retained cookie";
+      const domain = getFirstStringValue(row, ["domain", "cookieDomain", "cookie_domain", "host"]);
+      const durationDays = getCookieDurationDays(row);
+      highlightRows.push(`"${name}"${domain ? `, "domain": "${domain}"` : ""}${durationDays ? `, "durationDays": ${Math.round(durationDays)}` : ""}`);
+    }
+  }
+
+  if (highlightRows.length === 0 && isAccessibilityFinding(finding)) {
+    for (const row of getAccessibilityExampleRows(finding).slice(0, 3)) {
+      const rule = getFirstStringValue(row, ["ruleCode", "rule_code", "ruleId", "rule_id", "axeRuleId"]);
+      const selector = getFirstStringArrayValue(row, ["representativeSelectors", "representative_selectors", "selectors", "target", "targets"])[0] ?? null;
+      const impact = getFirstStringValue(row, ["impact", "severity", "axeImpact"]);
+      if (rule || selector || impact) {
+        highlightRows.push(`${rule ? `"rule": "${rule}"` : "\"rule\": \"retained axe example\""}${selector ? `, "selector": "${selector}"` : ""}${impact ? `, "impact": "${impact}"` : ""}`);
+      }
+    }
+  }
+
+  return highlightRows.slice(0, 3);
+}
+
 function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const reference = getFindingReferenceLink(input.finding);
   const registryContext = getFindingRegulatoryContext(input.finding.id);
@@ -3476,6 +3596,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const observedSummary = cardCopy.summary || display.observedSummary || input.finding.shortSummary;
   const evidencePayload = buildFindingEvidenceJsonPayload(input.finding);
   const compactedEvidencePayload = compactEvidenceJsonForDisplay(evidencePayload);
+  const evidenceHighlights = buildFindingEvidenceHighlights(input.finding);
   const jsonPayload =
     hasMeaningfulFindingEvidence(input.finding) && hasMeaningfulJsonValue(compactedEvidencePayload)
       ? JSON.stringify(compactedEvidencePayload, null, 2)
@@ -3566,6 +3687,13 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
               <span>Evidence details</span>
               <ScanReportDisclosureIcon className="group-open/json:rotate-90" />
             </summary>
+            {evidenceHighlights.length > 0 ? (
+              <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-950">
+                {evidenceHighlights.map((highlight) => (
+                  <p className="font-mono" key={highlight}>{highlight}</p>
+                ))}
+              </div>
+            ) : null}
             <EvidenceJsonBlock
               payload={jsonPayload}
               className="relative mt-3 min-w-0 max-w-full overflow-hidden rounded-lg bg-slate-950"
@@ -4286,7 +4414,8 @@ export function ExecutiveSummaryCard(input: {
       severity: display.criticality
     };
   });
-  const namedVendors = uniqueStrings(input.resolvedVendorNames).slice(0, 8);
+  const allNamedVendors = uniqueStrings(input.resolvedVendorNames);
+  const namedVendors = allNamedVendors.slice(0, 8);
   const thirdPartyDomains = input.thirdPartyDomains.slice(0, 10);
   const vendorMixRichDetails = input.topObservedEntities
     .slice(0, 6)
@@ -4312,8 +4441,10 @@ export function ExecutiveSummaryCard(input: {
     thirdPartyDomainCount: input.thirdPartyDomains.length,
     vendorCount: namedVendors.length
   });
-  const trackerFootprintRichDetails = trackerFootprintExpandLabel
-    ? uniqueStrings([...vendorEvidence, ...thirdPartyDomains]).map((label) => ({
+  const trackerFootprintAllDetails = trackerFootprintExpandLabel
+    ? uniqueStrings([...vendorEvidence, ...thirdPartyDomains])
+    : [];
+  const trackerFootprintRichDetails = trackerFootprintAllDetails.slice(0, 10).map((label) => ({
         key: label,
         node: (
           <VendorBrandChip
@@ -4322,15 +4453,17 @@ export function ExecutiveSummaryCard(input: {
             suffix={namedVendors.includes(label) ? "vendor" : "domain"}
           />
         )
-      }))
-    : [];
+      }));
   const trackerFootprintDetailSummary = formatTrackerFootprintSummary({
     thirdPartyDomainCount: input.thirdPartyDomains.length,
     vendorCount: namedVendors.length
   });
+  const hiddenTrackerFootprintCount = Math.max(0, trackerFootprintAllDetails.length - trackerFootprintRichDetails.length);
   const domainTruncationNote =
-    thirdPartyDomains.length < input.thirdPartyDomains.length
-      ? `Showing ${thirdPartyDomains.length} of ${input.thirdPartyDomains.length} observed domains.`
+    hiddenTrackerFootprintCount > 0
+      ? `Showing the first ${trackerFootprintRichDetails.length}; ${hiddenTrackerFootprintCount} more observed ${hiddenTrackerFootprintCount === 1 ? "entity is" : "entities are"} retained in evidence.`
+      : thirdPartyDomains.length < input.thirdPartyDomains.length
+        ? `Showing ${thirdPartyDomains.length} of ${input.thirdPartyDomains.length} observed domains.`
       : null;
   const policySurfaces = input.policySurfaces ?? [];
   const policySurfaceSummary = formatPolicySurfaceSummary(policySurfaces);

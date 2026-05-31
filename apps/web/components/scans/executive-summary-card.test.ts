@@ -3026,7 +3026,7 @@ test("ExecutiveSummaryCard keeps tracker disclosure counts aligned with the full
   );
 
   assert.match(html, /13 third-party domains observed; 1 classified tracker vendor identified\./);
-  assert.match(html, /Showing 10 of 13 observed domains\./);
+  assert.match(html, /Showing the first 10; 1 more observed entity is retained in evidence\./);
   assert.doesNotMatch(html, /1 vendor names and 13 third-party domains/);
 });
 

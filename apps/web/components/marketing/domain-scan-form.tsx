@@ -70,6 +70,17 @@ const FULL_SCAN_ERROR_GUIDANCE: Record<string, string> = {
 const BX01_SCAN_WINDOW_MS = 15000;
 const BX01_EXTENSION_TIMEOUT_MS = 1200;
 
+const SAMPLE_SCAN_ACCENTS: Record<string, { accent: string; label: string; tone: string }> = {
+  "caltech.edu": { accent: "bg-sky-500", label: "Higher ed", tone: "from-sky-50 to-white" },
+  "latimes.com": { accent: "bg-rose-500", label: "Publisher", tone: "from-rose-50 to-white" },
+  "nbcnews.com": { accent: "bg-violet-500", label: "Media", tone: "from-violet-50 to-white" },
+  "nvidia.com": { accent: "bg-emerald-500", label: "Enterprise", tone: "from-emerald-50 to-white" }
+};
+
+function getSampleScanAccent(domain: string) {
+  return SAMPLE_SCAN_ACCENTS[domain.toLowerCase()] ?? { accent: "bg-slate-500", label: "Sample", tone: "from-slate-50 to-white" };
+}
+
 type Bx01WindowMessage = {
   error?: string;
   requestId?: string;
@@ -519,32 +530,53 @@ export function DomainScanForm({
         </div>
       ) : null}
       {sampleDomains.length > 0 ? (
-        <div className="rounded-[1.35rem] border border-slate-200 bg-white/80 p-2 shadow-[0_14px_30px_rgba(15,23,42,0.04)]">
-          <div className="px-2 pb-2 pt-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400">View sample scans</div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {sampleDomains.map((sampleDomain) => (
-              <button
-                key={sampleDomain}
-                className="group flex min-h-11 items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 text-left text-sm font-semibold text-slate-800 transition hover:border-sky-200 hover:bg-sky-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:cursor-wait disabled:opacity-60"
-                disabled={isSubmitting}
-                onClick={() => void handleSampleScan(sampleDomain)}
-                type="button"
-              >
-                <span>{sampleDomain}</span>
-                <span className="ml-3 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm transition group-hover:text-sky-600">
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                    <path
-                      d="M5 12h14M13 6l6 6-6 6"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2.2"
-                    />
-                  </svg>
-                </span>
-              </button>
-            ))}
+        <div className="overflow-hidden rounded-[1.4rem] border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+            <div>
+              <div className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-500">View sample scans</div>
+              <p className="mt-1 text-xs text-slate-500">Open a live report with retained evidence.</p>
+            </div>
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-sky-600 shadow-sm ring-1 ring-slate-200">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" />
+              </svg>
+            </span>
+          </div>
+          <div className="grid gap-px bg-slate-100 sm:grid-cols-2">
+            {sampleDomains.map((sampleDomain) => {
+              const accent = getSampleScanAccent(sampleDomain);
+              return (
+                <button
+                  key={sampleDomain}
+                  className={`group relative min-h-20 overflow-hidden bg-gradient-to-br ${accent.tone} px-4 py-3 text-left transition hover:z-10 hover:shadow-[0_18px_36px_rgba(15,23,42,0.12)] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:cursor-wait disabled:opacity-60`}
+                  disabled={isSubmitting}
+                  onClick={() => void handleSampleScan(sampleDomain)}
+                  type="button"
+                >
+                  <span className={`absolute left-0 top-0 h-full w-1 ${accent.accent}`} aria-hidden="true" />
+                  <span className="flex items-start justify-between gap-3">
+                    <span>
+                      <span className="block text-base font-semibold tracking-tight text-slate-950">{sampleDomain}</span>
+                      <span className="mt-2 inline-flex rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        {accent.label}
+                      </span>
+                    </span>
+                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm ring-1 ring-slate-200 transition group-hover:translate-x-0.5 group-hover:text-sky-600">
+                      <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" aria-hidden="true">
+                        <path
+                          d="M5 12h14M13 6l6 6-6 6"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2.2"
+                        />
+                      </svg>
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       ) : null}

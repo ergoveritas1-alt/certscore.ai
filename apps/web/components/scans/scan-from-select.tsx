@@ -82,6 +82,16 @@ function FlagMarker({ flag, icon, selected }: { flag?: string; icon?: string; se
   return <GlobeIcon className={selected ? "h-4 w-4 text-sky-600" : "h-4 w-4 text-slate-400"} />;
 }
 
+function SelectedScanFromMarker({ option }: { option: (typeof SCAN_FROM_OPTIONS)[number] }) {
+  return (
+    <FlagMarker
+      flag={"flag" in option ? option.flag : undefined}
+      icon={"icon" in option ? option.icon : undefined}
+      selected
+    />
+  );
+}
+
 export function ScanFromSelect({
   compact = false,
   id = "scanFrom",
@@ -138,13 +148,7 @@ export function ScanFromSelect({
         title={`Scan from: ${selectedOption.label}`}
         type="button"
       >
-        {"icon" in selectedOption && selectedOption.icon === "local" ? (
-          <LocalExtensionIcon className={variant === "icon" ? "h-5 w-5" : "h-4 w-4"} />
-        ) : "icon" in selectedOption && selectedOption.icon === "cloud" ? (
-          <CloudIcon className={variant === "icon" ? "h-5 w-5" : "h-4 w-4"} />
-        ) : (
-          <GlobeIcon className={variant === "icon" ? "h-5 w-5" : "h-4 w-4"} />
-        )}
+        <SelectedScanFromMarker option={selectedOption} />
         {variant === "field" ? <span>{selectedOption.label}</span> : null}
         {variant === "field" ? (
           <svg aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 20 20">
@@ -153,7 +157,7 @@ export function ScanFromSelect({
         ) : null}
       </button>
       {isOpen ? (
-        <div className={variant === "icon" ? "absolute left-1/2 top-[calc(100%+0.55rem)] z-30 w-max min-w-[9.25rem] -translate-x-1/2 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_18px_46px_rgba(15,23,42,0.16)]" : "absolute left-0 top-[calc(100%+0.55rem)] z-30 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_18px_46px_rgba(15,23,42,0.16)]"}>
+        <div className={variant === "icon" ? "absolute left-1/2 top-[calc(100%+0.55rem)] z-[100] w-max min-w-[9.25rem] -translate-x-1/2 isolate overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_18px_46px_rgba(15,23,42,0.16)]" : "absolute left-0 top-[calc(100%+0.55rem)] z-[100] w-64 isolate overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_18px_46px_rgba(15,23,42,0.16)]"}>
           <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Scan from</div>
           <div role="listbox" aria-label="Scan from">
             {menuOptions.map((option) => {
