@@ -115,7 +115,7 @@ async function requeueNanoSignalEnrichmentPoll(input: {
 }
 
 async function deriveAndPersistUnifiedFindingsForScan(input: {
-  recoveryMode?: "completed_scan_backfill" | "missing_unified_projection" | null;
+  recoveryMode?: "browser_extension_signal_reprojection" | "completed_scan_backfill" | "missing_unified_projection" | null;
   scanId: string;
   suppressWorkflowEvents?: boolean;
   validationRunId?: string | null;
@@ -6242,7 +6242,7 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
 
 export async function processNanoSignalEnrichmentJob(input: {
   pollCount?: number;
-  recoveryMode?: "completed_scan_backfill" | "missing_unified_projection" | null;
+  recoveryMode?: "browser_extension_signal_reprojection" | "completed_scan_backfill" | "missing_unified_projection" | null;
   scanId: string;
 }) {
   const { state } = await getValidationPipelineState();
@@ -6612,7 +6612,9 @@ export async function processNanoSignalEnrichmentJob(input: {
     return;
   }
 
-  if (!hasCompletedUnifiedDerivation) {
+  const shouldReprojectAfterBrowserExtensionSignals = input.recoveryMode === "browser_extension_signal_reprojection";
+
+  if (!hasCompletedUnifiedDerivation || shouldReprojectAfterBrowserExtensionSignals) {
     await deriveAndPersistUnifiedFindingsForScan({
       recoveryMode: input.recoveryMode ?? null,
       scanId

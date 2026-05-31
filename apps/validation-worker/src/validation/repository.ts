@@ -292,7 +292,7 @@ export type NanoSignalScanLease = {
   client: PoolClient;
   pollCount: number;
   recovered: boolean;
-  recoveryMode: "completed_scan_backfill" | "missing_unified_projection" | null;
+  recoveryMode: "browser_extension_signal_reprojection" | "completed_scan_backfill" | "missing_unified_projection" | null;
   scanId: string;
 };
 
@@ -1101,12 +1101,48 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
                 and findings_completed.event_type = $5
             )
         ),
+        browser_extension_reprojection as (
+          select
+            scans.id as scan_id,
+            observed_signals.created_at as requested_at,
+            0 as poll_count,
+            null::numeric as recheck_after_epoch_ms,
+            1 as terminal_priority,
+            true as has_policy_rows,
+            true as recovered,
+            'browser_extension_signal_reprojection'::text as recovery_mode
+          from scans
+          join lateral (
+            select scan_events.created_at
+              from scan_events
+             where scan_events.scan_id = scans.id
+               and scan_events.event_type = 'browser_extension.observed_signals_ingested'
+             order by scan_events.created_at desc
+             limit 1
+          ) observed_signals on true
+          left join lateral (
+            select scan_events.created_at
+              from scan_events
+             where scan_events.scan_id = scans.id
+               and scan_events.event_type = $5
+             order by scan_events.created_at desc
+             limit 1
+          ) unified_findings on true
+          where scans.status = 'completed'
+            and coalesce(scans.completed_at, scans.updated_at, scans.created_at) >= now() - interval '24 hours'
+            and (
+              unified_findings.created_at is null
+              or unified_findings.created_at < observed_signals.created_at
+            )
+        ),
         candidates as (
           select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, has_policy_rows, recovered, recovery_mode from requested
           union all
           select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, has_policy_rows, recovered, recovery_mode from recovered
           union all
           select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, has_policy_rows, recovered, recovery_mode from unified_recovery
+          union all
+          select scan_id, requested_at, poll_count, recheck_after_epoch_ms, terminal_priority, has_policy_rows, recovered, recovery_mode from browser_extension_reprojection
         )
         select candidates.scan_id, candidates.requested_at, candidates.poll_count, candidates.recovered, candidates.recovery_mode
         from candidates
