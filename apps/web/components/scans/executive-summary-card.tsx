@@ -372,6 +372,46 @@ type ExecutiveFindingCardCopy = {
   summary: string;
 };
 
+function isAccessibilityFinding(finding: CertScoreFinding) {
+  const haystack = `${finding.id} ${finding.label} ${finding.section}`.toLowerCase();
+  return /accessibility|wcag|keyboard|screen reader|semantic|label|contrast|alternative text/.test(haystack);
+}
+
+function buildAccessibilityCardCopy(finding: CertScoreFinding): ExecutiveFindingCardCopy {
+  const counts = finding.evidenceDetails?.counts ?? {};
+  const accessibilityEvidence = finding.evidenceDetails?.accessibilityEvidence ?? {};
+  const affectedNodes =
+    typeof counts.representativeAxeExampleCount === "number" && counts.representativeAxeExampleCount > 0
+      ? counts.representativeAxeExampleCount
+      : typeof counts.wcagErrorCountTotal === "number" && counts.wcagErrorCountTotal > 0
+        ? counts.wcagErrorCountTotal
+        : typeof accessibilityEvidence.affectedNodes === "number" && accessibilityEvidence.affectedNodes > 0
+          ? accessibilityEvidence.affectedNodes
+          : null;
+  const pageCount =
+    typeof counts.representativeAxePageCount === "number" && counts.representativeAxePageCount > 0
+      ? counts.representativeAxePageCount
+      : typeof accessibilityEvidence.pageCount === "number" && accessibilityEvidence.pageCount > 0
+        ? accessibilityEvidence.pageCount
+        : null;
+  const maxImpact =
+    typeof accessibilityEvidence.impact === "string"
+      ? accessibilityEvidence.impact
+      : null;
+  const impactedSurface = affectedNodes
+    ? `${affectedNodes} affected ${affectedNodes === 1 ? "element" : "elements"}${pageCount ? ` across ${pageCount} ${pageCount === 1 ? "page" : "pages"}` : ""}`
+    : "affected elements";
+  const impactText = maxImpact ? ` The highest retained impact was ${maxImpact}.` : "";
+  const summary = `${finding.label} was retained for manual accessibility review, with ${impactedSurface}.${impactText}`;
+
+  return {
+    evidenceBasis: `${summary} ${CERTSCORE_REVIEW_DISCLAIMER}`,
+    reviewFocus:
+      "Review the affected elements with keyboard navigation and screen-reader checks. Confirm that labels, focus order, accessible names, instructions, and error states match the intended user flow, then validate fixes against the relevant WCAG rule.",
+    summary
+  };
+}
+
 function getRepresentativeVendorNames(finding: CertScoreFinding, maxItems = 3) {
   const details = finding.evidenceDetails;
   const normalizeVendorName = (value: unknown) => {
@@ -455,6 +495,9 @@ function buildPreConsentTrackingCardCopy(finding: CertScoreFinding): ExecutiveFi
 function buildExecutiveFindingCardCopy(finding: CertScoreFinding): ExecutiveFindingCardCopy {
   if (finding.id === "pre_consent_tracking_detected") {
     return buildPreConsentTrackingCardCopy(finding);
+  }
+  if (isAccessibilityFinding(finding)) {
+    return buildAccessibilityCardCopy(finding);
   }
 
   const vendors = getRepresentativeVendorNames(finding);

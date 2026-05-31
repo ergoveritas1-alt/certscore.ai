@@ -2857,6 +2857,16 @@ test("ExecutiveSummaryCard uses accessibility-specific evidence basis rows", () 
   assert.doesNotMatch(html, /title="Vendor attribution:/);
   assert.doesNotMatch(html, /title="Cookie timing:/);
   assert.doesNotMatch(html, /title="Consent state:/);
+  assert.match(
+    html,
+    /Visual contrast accessibility issue was retained for manual accessibility review, with 11 affected elements across 1 page\. The highest retained impact was critical\./
+  );
+  assert.match(
+    html,
+    /Review the affected elements with keyboard navigation and screen-reader checks\. Confirm that labels, focus order, accessible names, instructions, and error states match the intended user flow/
+  );
+  assert.doesNotMatch(html, /Retained counts:/);
+  assert.doesNotMatch(html, /representativeAxeExampleCount/);
 });
 
 test("ExecutiveSummaryCard hides evidence detail toggle when retained JSON would be metadata-only", () => {
@@ -3303,7 +3313,10 @@ test("ExecutiveSummaryCard renders accessibility-only self-scan copy without pri
   assert.match(html, /Accessibility issue detected/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
   assert.doesNotMatch(html, /Primary concerns:/);
-  assert.match(html, /Review affected text\/background color pairs and adjust contrast to meet WCAG contrast guidance\./);
+  assert.match(
+    html,
+    /Review the affected elements with keyboard navigation and screen-reader checks\. Confirm that labels, focus order, accessible names, instructions, and error states match the intended user flow/
+  );
   assert.doesNotMatch(html, /Next step: review affected text\/background color pairs/);
   assert.match(html, /Automated accessibility signals are the main review area\./);
   assert.match(html, /1 third-party domain observed; no classified tracker vendors identified\./);
