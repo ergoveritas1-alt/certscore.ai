@@ -510,7 +510,8 @@ export function DomainScanForm({
                 <li>Open Chrome Extensions and enable Developer mode.</li>
                 <li>Choose Load unpacked.</li>
                 <li>Select the CertScore extension folder: <span className="font-mono text-xs">apps/browser-extension</span>.</li>
-                <li>Return to this page and run the scan again with Local-extension selected.</li>
+                <li>Reload this CertScore tab after loading or reloading the extension.</li>
+                <li>Run the scan again with Local-extension selected.</li>
               </ol>
               <a
                 className="inline-flex font-semibold text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"

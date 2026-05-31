@@ -89,6 +89,26 @@ function summarizeConsentUi() {
 
 let consentInteractionObserved = false;
 
+function hasActiveExtensionContext() {
+  try {
+    return Boolean(chrome?.runtime?.id);
+  } catch {
+    return false;
+  }
+}
+
+function sendRuntimeMessage(message) {
+  if (!hasActiveExtensionContext()) {
+    return Promise.resolve(null);
+  }
+
+  try {
+    return Promise.resolve(chrome.runtime.sendMessage(message)).catch(() => null);
+  } catch {
+    return Promise.resolve(null);
+  }
+}
+
 document.addEventListener(
   "click",
   (event) => {
@@ -96,7 +116,7 @@ document.addEventListener(
     const label = target ? visibleText(target) || target.getAttribute("aria-label") || target.getAttribute("value") || "" : "";
     if (label && /(accept|agree|reject|decline|manage|preferences|settings|choices|do not sell|do not share)/i.test(label)) {
       consentInteractionObserved = true;
-      chrome.runtime.sendMessage({
+      void sendRuntimeMessage({
         label: label.slice(0, 120),
         type: "BX01_CONSENT_INTERACTION"
       });
@@ -105,14 +125,16 @@ document.addEventListener(
   true
 );
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === "BX01_SUMMARIZE_CONSENT_UI") {
-    sendResponse({
-      consentInteractionObserved,
-      summary: summarizeConsentUi()
-    });
-  }
-});
+if (hasActiveExtensionContext()) {
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type === "BX01_SUMMARIZE_CONSENT_UI") {
+      sendResponse({
+        consentInteractionObserved,
+        summary: summarizeConsentUi()
+      });
+    }
+  });
+}
 
 window.addEventListener("message", (event) => {
   if (event.source !== window || !event.data || typeof event.data !== "object") {
@@ -120,7 +142,7 @@ window.addEventListener("message", (event) => {
   }
 
   if (event.data.source === "certscore-bx01-fingerprint-probe" && event.data.type === "CERTSCORE_BX01_FINGERPRINT_API") {
-    chrome.runtime.sendMessage({
+    void sendRuntimeMessage({
       api: String(event.data.api || "").slice(0, 160),
       category: String(event.data.category || "").slice(0, 80),
       sampleCount: Number.isFinite(event.data.sampleCount) ? event.data.sampleCount : 1,
@@ -131,6 +153,10 @@ window.addEventListener("message", (event) => {
   }
 
   if (event.data.type === "CERTSCORE_BX01_PING") {
+    if (!hasActiveExtensionContext()) {
+      return;
+    }
+
     window.postMessage(
       {
         requestId: event.data.requestId,
@@ -143,6 +169,10 @@ window.addEventListener("message", (event) => {
   }
 
   if (event.data.type !== "CERTSCORE_BX01_START_SCAN") {
+    return;
+  }
+
+  if (!hasActiveExtensionContext()) {
     return;
   }
 
