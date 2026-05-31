@@ -2125,7 +2125,7 @@ test("ExecutiveSummaryCard links mapped findings to registry interpretation cont
   assert.match(html, /M7 4L13 10L7 16/);
   assert.doesNotMatch(html, /M8 4 4 12l4 8/);
   assert.match(html, /Learn how this finding is interpreted/);
-  assert.match(html, /Learn how CertScore interprets this finding/);
+  assert.doesNotMatch(html, /Learn how CertScore interprets this finding/);
   assert.match(html, /href="\/findings\/pre_consent_tracking_detected"/);
   assert.match(
     html,
@@ -2242,7 +2242,8 @@ test("ExecutiveSummaryCard renders directional finding-density context for surfa
   assert.match(html, /not a compliance benchmark or legal conclusion/);
   assert.doesNotMatch(html, /View evidence/);
   assert.doesNotMatch(html, /Audit finding/);
-  assert.match(html, /Next step: confirm whether these vendors are necessary before consent/);
+  assert.match(html, /Confirm whether the classified third-party tracking signal is intentionally allowed before consent or should be gated by consent controls/);
+  assert.doesNotMatch(html, /Review and remediation starting points/);
   assert.equal(html.match(/Seen on ~18% of scanned top sites/g)?.length, 2);
   assert.equal(html.match(/Seen on ~9% of scanned top sites/g)?.length, 2);
 
@@ -2707,14 +2708,20 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
   assert.match(html, /CCPA \/ CPRA/);
   assert.match(html, /View applicability notes/);
   assert.match(html, /regulatory review context for the scanned report finding/);
-  assert.match(html, /Evidence basis/);
-  assert.match(html, /Observed runtime behavior: No accept, reject, manage, or close interaction was recorded before the retained request evidence\./);
-  assert.match(html, /First classified non-essential\/tracker request timestamp: 1500ms\./);
-  assert.match(html, /title="Runtime requests: Strong"/);
-  assert.match(html, /title="Vendor attribution: Strong"/);
-  assert.match(html, /title="Cookie timing: Partial"/);
-  assert.match(html, /title="Consent state: Strong"/);
-  assert.match(html, /title="Policy context: Not evaluated"/);
+  assert.match(html, /CertScore observed Google Tag Manager and HubSpot before any consent interaction was recorded\. The first classified tracking signal occurred at 1500ms after page load\./);
+  assert.match(html, /Confirm whether these services are intentionally allowed before consent or should be gated by consent controls\./);
+  assert.match(html, /Learn more/);
+  assert.doesNotMatch(html, /Evidence basis/);
+  assert.doesNotMatch(html, /No accept, reject, manage, or close interaction was recorded before the retained request evidence\. Representative vendors: Google Tag Manager and HubSpot\. Automated public-web observation for review; not legal advice, certification, or a compliance determination\./);
+  assert.doesNotMatch(html, /Why this matters/);
+  assert.doesNotMatch(html, /Review and remediation starting points/);
+  assert.doesNotMatch(html, /Observed runtime behavior:/);
+  assert.doesNotMatch(html, /First classified non-essential\/tracker request timestamp: 1500ms\./);
+  assert.doesNotMatch(html, /title="Runtime requests: Strong"/);
+  assert.doesNotMatch(html, /title="Vendor attribution: Strong"/);
+  assert.doesNotMatch(html, /title="Cookie timing: Partial"/);
+  assert.doesNotMatch(html, /title="Consent state: Strong"/);
+  assert.doesNotMatch(html, /title="Policy context: Not evaluated"/);
   assert.match(html, /evidenceVersion/);
   assert.match(html, /timingAnalysis/);
   assert.match(html, /requestSelectionNote/);
@@ -2792,7 +2799,8 @@ test("ExecutiveSummaryCard explains executive and finding cookie count differenc
   assert.match(html, /Executive metric includes all retained cookie timing records; this finding shows the subset attributed to tracking\/storage evidence\./);
   assert.match(html, /trackingCookieWritesBeforeConsent/);
   assert.match(html, /totalUniqueCookiesObserved/);
-  assert.match(html, /Partial means some timing evidence was retained directly, while related vendor\/request attribution may be aggregated or unavailable\./);
+  assert.match(html, /Retained counts: 13 preConsentTrackingCookies; 10 total cookie count\./);
+  assert.doesNotMatch(html, /Partial means some timing evidence was retained directly/);
 });
 
 test("ExecutiveSummaryCard uses accessibility-specific evidence basis rows", () => {
@@ -2840,11 +2848,11 @@ test("ExecutiveSummaryCard uses accessibility-specific evidence basis rows", () 
     })
   );
 
-  assert.match(html, /title="Axe rule retained: Strong"/);
-  assert.match(html, /title="Affected nodes: 11"/);
-  assert.match(html, /title="Page coverage: 1 page"/);
-  assert.match(html, /title="Impact\/severity: Critical"/);
-  assert.match(html, /title="Manual verification: Recommended"/);
+  assert.doesNotMatch(html, /title="Axe rule retained: Strong"/);
+  assert.doesNotMatch(html, /title="Affected nodes: 11"/);
+  assert.doesNotMatch(html, /title="Page coverage: 1 page"/);
+  assert.doesNotMatch(html, /title="Impact\/severity: Critical"/);
+  assert.doesNotMatch(html, /title="Manual verification: Recommended"/);
   assert.doesNotMatch(html, /title="Runtime requests:/);
   assert.doesNotMatch(html, /title="Vendor attribution:/);
   assert.doesNotMatch(html, /title="Cookie timing:/);
@@ -3295,7 +3303,8 @@ test("ExecutiveSummaryCard renders accessibility-only self-scan copy without pri
   assert.match(html, /Accessibility issue detected/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
   assert.doesNotMatch(html, /Primary concerns:/);
-  assert.match(html, /Next step: review affected text\/background color pairs and adjust contrast to meet WCAG contrast guidance\./);
+  assert.match(html, /Review affected text\/background color pairs and adjust contrast to meet WCAG contrast guidance\./);
+  assert.doesNotMatch(html, /Next step: review affected text\/background color pairs/);
   assert.match(html, /Automated accessibility signals are the main review area\./);
   assert.match(html, /1 third-party domain observed; no classified tracker vendors identified\./);
   assert.match(html, /View observed third-party domain/);

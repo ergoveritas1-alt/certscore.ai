@@ -276,6 +276,9 @@ export function AgentSummaryActions({ domainLabel, scanId }: ShareReportActionsP
 
   return (
     <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+        CertScore.ai can make mistakes. Treat this automated summary as a review aid and verify important conclusions against the retained evidence and your own legal, privacy, and accessibility review.
+      </p>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Agent summary</p>

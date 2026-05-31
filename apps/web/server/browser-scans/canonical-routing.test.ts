@@ -5,7 +5,10 @@ import {
   buildNormalizedConcerns,
   buildUnifiedFindingCandidatesFromConcerns
 } from "../../lib/scans/normalized-concerns";
-import { deriveBrowserScanCanonicalMaterializationFromObservedSignals } from "./canonical-materialization";
+import {
+  deriveBrowserScanCanonicalMaterializationFromObservedSignals,
+  deriveBrowserScanCanonicalMaterializationFromStoredSignalRows
+} from "./canonical-materialization";
 import { summarizeBrowserEvidence, type BrowserScanEventRow } from "./evidence-summary";
 
 test("raw BX01 browser evidence alone does not create concern-backed finding candidates", () => {
@@ -259,5 +262,49 @@ test("WS01-normalized BX01 signals materialize canonical dashboard fields", () =
     { count: 1, firstSeenMs: null, name: "canvas_webgl" },
     { count: 1, firstSeenMs: null, name: "audio" }
   ]);
+  assert.ok(materialized.score < 100);
+});
+
+test("stored WS01-normalized BX01 signal rows can repair browser-extension dashboard fields", () => {
+  const materialized = deriveBrowserScanCanonicalMaterializationFromStoredSignalRows([
+    {
+      category: "privacy",
+      confidence: 0.72,
+      evidence_refs: ["https://analytics.example.test/collect"],
+      observed_at: "2026-05-30T12:00:00.120Z",
+      population_source: "browser_extension_bx01",
+      signal_key: "privacy.third_party_request_count",
+      signal_label: "Third-party request count",
+      signal_value_json: 233,
+      value_type: "number"
+    },
+    {
+      category: "privacy",
+      confidence: 0.72,
+      evidence_refs: ["https://analytics.example.test/collect"],
+      observed_at: "2026-05-30T12:00:00.120Z",
+      population_source: "browser_extension_bx01",
+      signal_key: "privacy.third_party_request_domains",
+      signal_label: "Third-party request domains",
+      signal_value_json: ["analytics.example.test", "cdn.example.test"],
+      value_type: "string_array"
+    },
+    {
+      category: "privacy",
+      confidence: 0.72,
+      evidence_refs: ["bx01.cookie:150:_ga"],
+      observed_at: "2026-05-30T12:00:00.150Z",
+      population_source: "browser_extension_bx01",
+      signal_key: "privacy.cookie_count_total",
+      signal_label: "Cookie count total",
+      signal_value_json: 147,
+      value_type: "number"
+    }
+  ]);
+
+  assert.equal(materialized.thirdPartyRequestCount, 233);
+  assert.equal(materialized.cookieCountTotal, 147);
+  assert.equal(materialized.hybridRuntimeEvidencePatch.networkSummary.thirdPartyRequestCount, 233);
+  assert.equal(materialized.hybridRuntimeEvidencePatch.storageSummary.cookiesSeenCount, 147);
   assert.ok(materialized.score < 100);
 });

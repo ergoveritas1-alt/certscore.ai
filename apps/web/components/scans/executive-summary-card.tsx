@@ -173,6 +173,11 @@ function formatInlineList(values: string[]) {
   return `${values.slice(0, -1).join(", ")}, and ${values[values.length - 1]}`;
 }
 
+function sentenceCase(value: string) {
+  const trimmed = value.trim();
+  return trimmed ? `${trimmed[0]?.toUpperCase() ?? ""}${trimmed.slice(1)}` : trimmed;
+}
+
 function formatTrackerFootprintSummary(input: {
   thirdPartyDomainCount: number;
   vendorCount: number;
@@ -343,7 +348,7 @@ function getRecommendedNextStep(finding: CertScoreFinding) {
     return "Next step: review affected text/background color pairs and adjust contrast to meet WCAG contrast guidance.";
   }
   if (label.includes("accessibility") || label.includes("wcag") || label.includes("keyboard")) {
-    return "Next step: review affected elements with keyboard and screen-reader checks.";
+    return "Next step: review affected elements with keyboard navigation and screen-reader checks, then confirm that labels, focus behavior, accessible names, and visible instructions match the intended user flow.";
   }
   if (label.includes("session_recording") || label.includes("session replay")) {
     return "Next step: confirm whether session replay collection is disclosed and appropriately consent-gated.";
@@ -356,6 +361,120 @@ function getRecommendedNextStep(finding: CertScoreFinding) {
   }
 
   return `Next step: ${getFindingFixText(finding)}`;
+}
+
+const CERTSCORE_REVIEW_DISCLAIMER =
+  "Automated public-web observation for review; not legal advice, certification, or a compliance determination.";
+
+type ExecutiveFindingCardCopy = {
+  evidenceBasis: string;
+  reviewFocus: string;
+  summary: string;
+};
+
+function getRepresentativeVendorNames(finding: CertScoreFinding, maxItems = 3) {
+  const details = finding.evidenceDetails;
+  const normalizeVendorName = (value: unknown) => {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    if (trimmed.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(trimmed) as { vendor?: unknown; name?: unknown };
+        const parsedName = typeof parsed.vendor === "string" ? parsed.vendor : typeof parsed.name === "string" ? parsed.name : null;
+        return parsedName?.trim() || null;
+      } catch {
+        return null;
+      }
+    }
+    return trimmed;
+  };
+  const vendorNames = [
+    ...(details?.vendors ?? []).map((vendor) => vendor.name),
+    ...(details?.directlyObservedPreConsentVendors ?? []),
+    ...(details?.runtimeVendors ?? []),
+    ...(Array.isArray(details?.trackingEvidence?.vendors) ? details.trackingEvidence.vendors : []),
+    ...(Array.isArray(details?.sessionReplayEvidence?.vendors) ? details.sessionReplayEvidence.vendors : [])
+  ];
+
+  return uniqueStrings(vendorNames.map(normalizeVendorName)).slice(0, maxItems);
+}
+
+function getRepresentativeDomainNames(finding: CertScoreFinding, maxItems = 3) {
+  const details = finding.evidenceDetails;
+  const domains = [
+    ...(Array.isArray(details?.runtimeRequestUrls) ? details.runtimeRequestUrls : []),
+    ...(Array.isArray(details?.sourceUrls) ? details.sourceUrls : []),
+    ...(Array.isArray(details?.trackingEvidence?.domains) ? details.trackingEvidence.domains : []),
+    ...(Array.isArray(details?.runtimeVendorDisclosure?.observedRuntimeDomains) ? details.runtimeVendorDisclosure.observedRuntimeDomains : [])
+  ].flatMap((value) => {
+    if (typeof value !== "string" || !value.trim()) {
+      return [];
+    }
+    try {
+      return [new URL(value).hostname.toLowerCase()];
+    } catch {
+      return [value.replace(/^https?:\/\//i, "").split("/")[0]?.toLowerCase() ?? value];
+    }
+  });
+
+  return uniqueStrings(domains).slice(0, maxItems);
+}
+
+function buildPreConsentTrackingCardCopy(finding: CertScoreFinding): ExecutiveFindingCardCopy {
+  const firstTrackerTimestampMs = finding.evidenceDetails?.timing?.firstThirdPartyTrackingRequestMs;
+  const representativeVendors = getRepresentativeVendorNames(finding);
+  const vendorText = representativeVendors.length > 0 ? formatInlineList(representativeVendors) : null;
+  const timestampText = typeof firstTrackerTimestampMs === "number" ? `${firstTrackerTimestampMs}ms` : null;
+  const observedSignal =
+    vendorText && timestampText
+      ? `CertScore observed ${vendorText} before any consent interaction was recorded. The first classified tracking signal occurred at ${timestampText} after page load.`
+      : vendorText
+        ? `CertScore observed ${vendorText} before any consent interaction was recorded.`
+        : timestampText
+          ? `A classified third-party tracking signal was observed before any consent interaction was recorded. First classified tracking signal: ${timestampText}.`
+          : "A classified third-party tracking signal was observed before any consent interaction was recorded.";
+
+  return {
+    evidenceBasis: [
+      "No accept, reject, manage, or close interaction was recorded before the retained request evidence.",
+      vendorText ? `Representative vendors: ${vendorText}.` : null,
+      CERTSCORE_REVIEW_DISCLAIMER
+    ].filter(Boolean).join(" "),
+    reviewFocus: vendorText
+      ? "Confirm whether these services are intentionally allowed before consent or should be gated by consent controls."
+      : "Confirm whether the classified third-party tracking signal is intentionally allowed before consent or should be gated by consent controls.",
+    summary: observedSignal
+  };
+}
+
+function buildExecutiveFindingCardCopy(finding: CertScoreFinding): ExecutiveFindingCardCopy {
+  if (finding.id === "pre_consent_tracking_detected") {
+    return buildPreConsentTrackingCardCopy(finding);
+  }
+
+  const vendors = getRepresentativeVendorNames(finding);
+  const domains = getRepresentativeDomainNames(finding);
+  const countEntries = Object.entries(finding.evidenceDetails?.counts ?? {})
+    .filter(([, value]) => typeof value === "number" && value > 0)
+    .slice(0, 2)
+    .map(([key, value]) => `${value} ${key.replaceAll("_", " ")}`);
+  const observedEvidence = [
+    vendors.length > 0 ? `Representative vendors: ${formatInlineList(vendors)}.` : null,
+    domains.length > 0 ? `Representative domains: ${formatInlineList(domains)}.` : null,
+    countEntries.length > 0 ? `Retained counts: ${countEntries.join("; ")}.` : null
+  ].filter(Boolean).join(" ");
+  const fallbackSummary = finding.shortSummary || `${finding.label} surfaced from retained scan evidence.`;
+
+  return {
+    evidenceBasis: `${observedEvidence || fallbackSummary} ${CERTSCORE_REVIEW_DISCLAIMER}`,
+    reviewFocus: sentenceCase(getRecommendedNextStep(finding).replace(/^Next step:\s*/i, "")),
+    summary: observedEvidence || fallbackSummary
+  };
 }
 
 function getFindingEvidenceAnchor(finding: CertScoreFinding) {
@@ -2786,58 +2905,6 @@ function buildEvidenceBasisItems(finding: CertScoreFinding): Array<{ label: stri
   ];
 }
 
-function buildEvidenceBasisCopy(finding: CertScoreFinding) {
-  const details = finding.evidenceDetails;
-  if (!details) {
-    return null;
-  }
-
-  if (finding.id === "pre_consent_tracking_detected") {
-    const firstRequestMs = details.timing?.firstThirdPartyTrackingRequestMs;
-    const vendors = (details.vendors ?? []).map((vendor) => vendor.name).filter(Boolean).slice(0, 3);
-    const consentText = details.consentState?.userConsentActionObserved
-      ? "Observed before the recorded consent choice in the retained timing sequence."
-      : "No accept, reject, manage, or close interaction was recorded before the retained request evidence.";
-    const timingText = typeof firstRequestMs === "number"
-      ? ` First classified non-essential/tracker request timestamp: ${firstRequestMs}ms.`
-      : "";
-    const vendorText = vendors.length > 0 ? ` Representative vendors: ${formatInlineList(vendors)}.` : "";
-    return `Observed runtime behavior: ${consentText}${timingText}${vendorText} Automated runtime observation supports review; it is not a legal determination.`;
-  }
-
-  if (
-    finding.id === "consent_dark_patterns_detected" ||
-    finding.id === "reject_option_missing_or_hidden" ||
-    finding.id === "asymmetric_consent_ui"
-  ) {
-    const basis = typeof details.consentUiEvidence?.basis === "string"
-      ? details.consentUiEvidence.basis
-      : "Retained consent interaction evidence suggests consent UX review.";
-    return `Observed runtime behavior: ${basis} Retained evidence suggests consent UX review; it is not a legal determination.`;
-  }
-
-  if (finding.id === "consent_preference_reopen_control_not_observed") {
-    return "Observed public-page evidence: CertScore did not observe an obvious cookie preferences, privacy settings, or consent-preference reopen control in retained control-search evidence. Manual review should confirm whether users can revisit, change, or withdraw cookie/privacy choices.";
-  }
-
-  if (
-    finding.id === "third_party_cookie_pre_consent" ||
-    finding.id === "analytics_cookie_pre_consent" ||
-    finding.id === "adtech_cookie_pre_consent"
-  ) {
-    const cookieEvidence = details.cookieEvidence;
-    const hasDirectCookieTimingEvidence =
-      hasRecords(cookieEvidence?.cookieWriteEvidence) || hasRecords(cookieEvidence?.storageEvidence);
-    if (cookieEvidence) {
-      return hasDirectCookieTimingEvidence
-        ? "Cookie timing evidence was retained directly for this finding. Partial means some timing evidence was retained directly, while related vendor/request attribution may be aggregated or unavailable."
-        : "Partial means some timing evidence was retained directly, while related vendor/request attribution may be aggregated or unavailable.";
-    }
-  }
-
-  return null;
-}
-
 function getFindingCardTone(
   finding: CertScoreFinding,
   isFirst: boolean,
@@ -3291,7 +3358,8 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const registryContext = getFindingRegulatoryContext(input.finding.id);
   const registryGuideHref = registryContext ? `/findings/${input.finding.id}` : null;
   const display = getPublicReportFindingDisplayForCertFinding(input.finding);
-  const observedSummary = display.observedSummary ?? input.finding.shortSummary;
+  const cardCopy = buildExecutiveFindingCardCopy(input.finding);
+  const observedSummary = cardCopy.summary || display.observedSummary || input.finding.shortSummary;
   const evidencePayload = buildFindingEvidenceJsonPayload(input.finding);
   const compactedEvidencePayload = compactEvidenceJsonForDisplay(evidencePayload);
   const jsonPayload =
@@ -3311,8 +3379,6 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
     : [];
   const confidenceExplanation =
     typeof fingerprintTelemetry?.confidenceExplanation === "string" ? fingerprintTelemetry.confidenceExplanation : null;
-  const evidenceBasisItems = buildEvidenceBasisItems(input.finding);
-  const evidenceBasisCopy = buildEvidenceBasisCopy(input.finding);
   const regulatoryContext = buildTopFindingRegulatoryContextDisplay(input.finding);
 
   return (
@@ -3321,19 +3387,19 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
         <span className="line-clamp-2 min-w-0 group-open:line-clamp-none">{observedSummary}</span>
         <ScanReportDisclosureIcon />
       </summary>
-      <div className="mt-4 space-y-4">
-        <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Review and remediation starting points</p>
-          <p className="text-sm leading-6 text-slate-700">{getFindingFixText(input.finding)}</p>
-          <p className="text-sm leading-6 text-slate-700">{getRecommendedNextStep(input.finding)}</p>
+      <div className="mt-4 space-y-3">
+        <div className="space-y-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Review focus</p>
+          <p className="text-sm leading-6 text-slate-700">{cardCopy.reviewFocus.replace(/^Review focus:\s*/i, "")}</p>
           {registryGuideHref ? (
             <a
               href={registryGuideHref}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center text-sm font-medium text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
+              aria-label="Learn more about how CertScore interprets this finding"
+              className="inline-flex text-sm font-medium text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
             >
-              Learn how CertScore interprets this finding
+              Learn more
             </a>
           ) : null}
           {reference ? (
@@ -3375,27 +3441,6 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
               <p className="text-sm leading-6 text-slate-700">{confidenceExplanation}</p>
             ) : null}
             <p className="text-sm leading-6 text-slate-700">This does not independently establish a legal determination or liability.</p>
-          </div>
-        ) : null}
-        {evidenceBasisItems.length > 0 ? (
-          <div className="space-y-3 rounded-lg border border-slate-200 bg-white px-3 py-3">
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Evidence basis</p>
-              {evidenceBasisCopy ? <p className="text-sm leading-6 text-slate-700">{evidenceBasisCopy}</p> : null}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {evidenceBasisItems.map((item) => (
-                <span
-                  key={`${item.label}:${item.status}`}
-                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${getEvidenceBasisTone(item.status)}`}
-                  title={`${item.label}: ${item.status}`}
-                >
-                  <span>{item.label}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>{item.status}</span>
-                </span>
-              ))}
-            </div>
           </div>
         ) : null}
         {jsonPayload ? (

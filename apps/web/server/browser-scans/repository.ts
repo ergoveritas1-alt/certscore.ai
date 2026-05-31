@@ -530,16 +530,22 @@ export async function ingestBrowserScanObservedSignals(input: {
   );
 
   await query(
-    `update scan_runtime_artifacts
-        set third_party_request_domains = $2::text[],
-            third_party_request_count = $3::int,
-            initial_cookie_count = $4::int,
-            consent_preconsent_violation_count = $5::int,
-            consent_baseline_tracker_evidence_urls = $6::text[],
-            consent_baseline_tracker_vendor_names = $7::text[],
-            hybrid_runtime_evidence = coalesce(hybrid_runtime_evidence, '{}'::jsonb) || $8::jsonb,
-            updated_at = timezone('utc', now())
-      where scan_id = $1`,
+    `insert into scan_runtime_artifacts (
+       scan_id, organization_id, domain_id, third_party_request_domains, third_party_request_count,
+       initial_cookie_names, initial_cookie_domains, initial_cookie_count,
+       consent_preconsent_violation_count, consent_baseline_tracker_evidence_urls,
+       consent_baseline_tracker_vendor_names, hybrid_runtime_evidence
+     )
+     values ($1, $9, $10, $2::text[], $3::int, '{}'::text[], '{}'::text[], $4::int, $5::int, $6::text[], $7::text[], $8::jsonb)
+     on conflict (scan_id) do update
+       set third_party_request_domains = excluded.third_party_request_domains,
+           third_party_request_count = excluded.third_party_request_count,
+           initial_cookie_count = excluded.initial_cookie_count,
+           consent_preconsent_violation_count = excluded.consent_preconsent_violation_count,
+           consent_baseline_tracker_evidence_urls = excluded.consent_baseline_tracker_evidence_urls,
+           consent_baseline_tracker_vendor_names = excluded.consent_baseline_tracker_vendor_names,
+           hybrid_runtime_evidence = coalesce(scan_runtime_artifacts.hybrid_runtime_evidence, '{}'::jsonb) || excluded.hybrid_runtime_evidence,
+           updated_at = timezone('utc', now())`,
     [
       canonicalScan.id,
       materialized.thirdPartyRequestDomains,
@@ -548,7 +554,9 @@ export async function ingestBrowserScanObservedSignals(input: {
       materialized.preconsentViolationCount,
       materialized.preconsentTrackerEvidenceUrls,
       materialized.preconsentTrackerVendors,
-      JSON.stringify(materialized.hybridRuntimeEvidencePatch)
+      JSON.stringify(materialized.hybridRuntimeEvidencePatch),
+      canonicalScan.organization_id,
+      canonicalScan.domain_id
     ]
   );
 

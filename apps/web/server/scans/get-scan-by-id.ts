@@ -70,6 +70,7 @@ import {
 } from "./domain-benchmark-estimate";
 import { getFullScanUrlscanSupplement } from "./urlscan-supplement";
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
+import { deriveBrowserScanCanonicalMaterializationFromStoredSignalRows } from "../browser-scans/canonical-materialization";
 
 export type ScanDetailRecord = {
   id: string;
@@ -790,10 +791,35 @@ async function loadScanDetailRecord(input: {
     events: normalizedEvents,
     existingSignals: normalizedSignals
   });
+  const browserExtensionMaterialization =
+    scanRow.scan_type === "browser_extension" && storedBrowserExtensionSignalRows.length > 0
+      ? deriveBrowserScanCanonicalMaterializationFromStoredSignalRows(storedBrowserExtensionSignalRows)
+      : null;
+  const browserExtensionSnapshotOverrides: Record<string, unknown> = browserExtensionMaterialization
+    ? {
+        accept_all_present: browserExtensionMaterialization.acceptAllPresent,
+        advertising_tracker_count: browserExtensionMaterialization.vendorCategoryCounts.advertising,
+        analytics_tracker_count: browserExtensionMaterialization.vendorCategoryCounts.analytics,
+        cookie_banner_present: browserExtensionMaterialization.cookieBannerPresent,
+        cookie_count_total: browserExtensionMaterialization.cookieCountTotal,
+        granular_preferences_present: browserExtensionMaterialization.granularPreferencesPresent,
+        preconsent_tracking_detected: browserExtensionMaterialization.preconsentTrackingDetected,
+        privacy_score: browserExtensionMaterialization.privacyScore,
+        reject_all_present: browserExtensionMaterialization.rejectAllPresent,
+        session_replay_tracker_count: browserExtensionMaterialization.sessionReplayTrackerCount,
+        tag_manager_present: browserExtensionMaterialization.tagManagerPresent,
+        third_party_script_domain_count: browserExtensionMaterialization.thirdPartyScriptDomainCount,
+        tracker_count_total: browserExtensionMaterialization.trackerVendorCount,
+        tracker_vendor_count: browserExtensionMaterialization.trackerVendorCount,
+        tracking_before_consent_detected: browserExtensionMaterialization.preconsentTrackingDetected,
+        certscore_overall: browserExtensionMaterialization.score
+      }
+    : {};
   const normalizedSnapshot = snapshot
     ? ({
         ...stripSnapshotRecord(snapshot as Record<string, unknown>),
-        ...supplementalCoverageSignals.snapshotOverrides
+        ...supplementalCoverageSignals.snapshotOverrides,
+        ...browserExtensionSnapshotOverrides
       } satisfies Record<string, unknown>)
     : null;
   const previewPayload = input.includeUrlscanSupplement === false
@@ -1101,9 +1127,37 @@ async function loadScanDetailRecord(input: {
     pagesScanned: scanRow.pages_scanned,
     recoverableFindingClasses: accessPostureSummary.recoverableFindingClasses
   });
-  const normalizedRuntimeArtifacts = runtimeArtifacts
-    ? withHybridRuntimeArtifactFallbacks(stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>)) ??
-      stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>)
+  const baseRuntimeArtifacts = runtimeArtifacts
+    ? stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>)
+    : null;
+  const browserExtensionRuntimeArtifacts: Record<string, unknown> | null =
+    browserExtensionMaterialization
+      ? (() => {
+          const existingHybrid =
+            baseRuntimeArtifacts?.hybrid_runtime_evidence &&
+            typeof baseRuntimeArtifacts.hybrid_runtime_evidence === "object" &&
+            !Array.isArray(baseRuntimeArtifacts.hybrid_runtime_evidence)
+              ? (baseRuntimeArtifacts.hybrid_runtime_evidence as Record<string, unknown>)
+              : {};
+          const mergedHybrid = {
+            ...existingHybrid,
+            ...browserExtensionMaterialization.hybridRuntimeEvidencePatch
+          };
+
+          return {
+            ...(baseRuntimeArtifacts ?? {}),
+            consent_baseline_tracker_evidence_urls: browserExtensionMaterialization.preconsentTrackerEvidenceUrls,
+            consent_baseline_tracker_vendor_names: browserExtensionMaterialization.preconsentTrackerVendors,
+            consent_preconsent_violation_count: browserExtensionMaterialization.preconsentViolationCount,
+            hybrid_runtime_evidence: mergedHybrid,
+            initial_cookie_count: browserExtensionMaterialization.cookieCountTotal,
+            third_party_request_count: browserExtensionMaterialization.thirdPartyRequestCount,
+            third_party_request_domains: browserExtensionMaterialization.thirdPartyRequestDomains
+          } satisfies Record<string, unknown>;
+        })()
+      : baseRuntimeArtifacts;
+  const normalizedRuntimeArtifacts = browserExtensionRuntimeArtifacts
+    ? withHybridRuntimeArtifactFallbacks(browserExtensionRuntimeArtifacts) ?? browserExtensionRuntimeArtifacts
     : null;
   const mergedSignals = buildMergedSignalRecords({
     browserExtensionSignals: buildStoredSignalPopulationRecords({

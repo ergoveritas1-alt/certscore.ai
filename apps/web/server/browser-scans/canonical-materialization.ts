@@ -173,3 +173,63 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
     vendorCategoryCounts
   };
 }
+
+export type BrowserScanStoredObservedSignalRow = {
+  category: string;
+  confidence?: number | null;
+  evidence_refs?: string[] | null;
+  observed_at?: string | null;
+  population_source?: string | null;
+  signal_key: string;
+  signal_label: string;
+  signal_value_json: boolean | number | string | string[];
+  value_type: string;
+};
+
+export function deriveBrowserScanCanonicalMaterializationFromStoredSignalRows(
+  rows: BrowserScanStoredObservedSignalRow[]
+) {
+  return deriveBrowserScanCanonicalMaterializationFromObservedSignals(
+    rows
+      .filter((row) => row.population_source === BROWSER_SCAN_SIGNAL_POPULATION_SOURCE)
+      .flatMap((row) => {
+        const valueType =
+          row.value_type === "boolean" ||
+          row.value_type === "number" ||
+          row.value_type === "text" ||
+          row.value_type === "string_array"
+            ? row.value_type
+            : null;
+        if (!valueType) {
+          return [];
+        }
+
+        return [
+          {
+            category:
+              row.category === "accessibility" ||
+              row.category === "privacy" ||
+              row.category === "disclosure" ||
+              row.category === "commerce" ||
+              row.category === "financial" ||
+              row.category === "entity" ||
+              row.category === "context"
+                ? row.category
+                : "privacy",
+            confidence: row.confidence ?? null,
+            evidenceRefs: row.evidence_refs ?? [],
+            key: row.signal_key,
+            label: row.signal_label,
+            observedAtMs: null,
+            populationSource: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
+            provenance: {
+              sourceId: BROWSER_SCAN_SOURCE_ID,
+              sourceType: BROWSER_SCAN_SOURCE_TYPE
+            },
+            value: row.signal_value_json,
+            valueType
+          }
+        ];
+      })
+  );
+}
