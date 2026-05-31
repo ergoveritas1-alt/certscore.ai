@@ -4416,7 +4416,7 @@ export function ExecutiveSummaryCard(input: {
   });
   const allNamedVendors = uniqueStrings(input.resolvedVendorNames);
   const namedVendors = allNamedVendors.slice(0, 8);
-  const thirdPartyDomains = input.thirdPartyDomains.slice(0, 10);
+  const thirdPartyDomains = input.thirdPartyDomains;
   const vendorMixRichDetails = input.topObservedEntities
     .slice(0, 6)
     .map((entity) => ({
@@ -4444,7 +4444,8 @@ export function ExecutiveSummaryCard(input: {
   const trackerFootprintAllDetails = trackerFootprintExpandLabel
     ? uniqueStrings([...vendorEvidence, ...thirdPartyDomains])
     : [];
-  const trackerFootprintRichDetails = trackerFootprintAllDetails.slice(0, 10).map((label) => ({
+  const trackerFootprintVisibleLimit = 6;
+  const trackerFootprintRichDetails = trackerFootprintAllDetails.slice(0, trackerFootprintVisibleLimit).map((label) => ({
         key: label,
         node: (
           <VendorBrandChip
@@ -4461,7 +4462,7 @@ export function ExecutiveSummaryCard(input: {
   const hiddenTrackerFootprintCount = Math.max(0, trackerFootprintAllDetails.length - trackerFootprintRichDetails.length);
   const domainTruncationNote =
     hiddenTrackerFootprintCount > 0
-      ? `Showing the first ${trackerFootprintRichDetails.length}; ${hiddenTrackerFootprintCount} more observed ${hiddenTrackerFootprintCount === 1 ? "entity is" : "entities are"} retained in evidence.`
+      ? `And ${hiddenTrackerFootprintCount} more observed ${hiddenTrackerFootprintCount === 1 ? "vendor or domain is" : "vendors or domains are"} retained in evidence.`
       : thirdPartyDomains.length < input.thirdPartyDomains.length
         ? `Showing ${thirdPartyDomains.length} of ${input.thirdPartyDomains.length} observed domains.`
       : null;
@@ -4661,10 +4662,10 @@ export function ExecutiveSummaryCard(input: {
                 return (
                 <div
                   key={finding.id}
-                  className={`min-w-0 overflow-visible rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${cardTone.card}`}
+                  className={`min-w-0 overflow-hidden rounded-[1.4rem] border shadow-[0_12px_35px_-26px_rgba(15,23,42,0.18)] ${cardTone.card}`}
                   data-regulatory-mapping-ids={regulatoryMappingIds.join(" ")}
                 >
-                  <div className={`h-1 w-full rounded-t-[1.4rem] ${cardTone.band}`} />
+                  <div className={`h-1 w-full ${cardTone.band}`} />
                   <div className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">

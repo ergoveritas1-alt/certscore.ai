@@ -109,7 +109,7 @@ export default function HomepageTrialPage() {
               Surface public website signals across consent, privacy, accessibility, and disclosures.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600">
-              CertScore helps teams surface pre-consent tracking, broken user controls, and policy-to-behavior contradictions with reviewable evidence from the live site.
+              CertScore.ai helps teams surface pre-consent tracking, broken user controls, and policy-to-behavior contradictions with reviewable evidence from the live site.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <PendingButtonLink

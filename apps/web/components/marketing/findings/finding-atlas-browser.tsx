@@ -620,22 +620,22 @@ function getRelatedReadingLinks(finding: FindingReferenceItem) {
 
 function getEvidenceStandardNote(finding: FindingReferenceItem) {
   if (finding.category === "Accessibility") {
-    return "Evidence levels explain how CertScore treats retained accessibility artifacts. They are not legal conclusions.";
+    return "Evidence levels explain how CertScore.ai treats retained accessibility artifacts. They are not legal conclusions.";
   }
 
   if (CONSENT_UI_FINDING_IDS.has(finding.id)) {
-    return "Evidence levels explain how CertScore treats retained consent-surface artifacts. They are not legal conclusions.";
+    return "Evidence levels explain how CertScore.ai treats retained consent-surface artifacts. They are not legal conclusions.";
   }
 
   if (finding.id === "cpra_cba_opt_out_missing") {
-    return "Evidence levels explain how CertScore treats retained public-surface and runtime artifacts. They are not legal conclusions.";
+    return "Evidence levels explain how CertScore.ai treats retained public-surface and runtime artifacts. They are not legal conclusions.";
   }
 
   if (RUNTIME_ARTIFACT_FINDING_IDS.has(finding.id)) {
-    return "Evidence levels explain how CertScore treats retained runtime artifacts. They are not legal conclusions.";
+    return "Evidence levels explain how CertScore.ai treats retained runtime artifacts. They are not legal conclusions.";
   }
 
-  return "Evidence levels explain how CertScore treats retained review artifacts. They are not legal conclusions.";
+  return "Evidence levels explain how CertScore.ai treats retained review artifacts. They are not legal conclusions.";
 }
 
 function EvidenceStandard({ finding }: { finding: FindingReferenceItem }) {

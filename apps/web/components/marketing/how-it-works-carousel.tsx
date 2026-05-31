@@ -13,7 +13,7 @@ type CarouselSlide = {
 const SLIDES: CarouselSlide[] = [
   {
     src: "/how-it-works/executive-summary.png",
-    alt: "CertScore report executive summary showing score, cookies before consent, third-party requests, and review lenses.",
+    alt: "CertScore.ai report executive summary showing score, cookies before consent, third-party requests, and review lenses.",
     title: "Executive summary",
     highlight: "Start with a plain-English readout of the site's highest-level privacy, consent, tracker, and accessibility posture."
   },

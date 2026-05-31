@@ -79,17 +79,8 @@ export async function generateMetadata({ params }: PublicScanDetailPageProps): P
   };
 }
 
-function RecentScanReuseNotice() {
-  return (
-    <section className="rounded-[1.2rem] border border-sky-200 bg-sky-50 px-5 py-4 text-sm leading-6 text-slate-700">
-      <p className="font-semibold text-slate-950">Recent scan reused</p>
-      <p className="mt-1">
-        CertScore found a completed scan for this website from the past 24 hours, so this request opened the existing report instead of
-        starting a duplicate scan.
-      </p>
-    </section>
-  );
-}
+const RECENT_SCAN_REUSED_MESSAGE =
+  "CertScore.ai found a completed scan for this website from the past 24 hours, so this request opened the existing report instead of starting a duplicate scan.";
 
 export default async function PublicScanDetailPage({ params, searchParams }: PublicScanDetailPageProps) {
   const { scanId } = await params;
@@ -131,6 +122,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
               status={scanRecord.scan.status}
             />
           }
+          createdAtInfoTip={recentScanReused ? RECENT_SCAN_REUSED_MESSAGE : null}
           headerActions={
             scanRecord.scan.status === "completed" ? (
               <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -156,7 +148,6 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
         />
         {scanRecord.scan.status === "completed" ? (
           <div className="mt-8 space-y-4">
-            {recentScanReused ? <RecentScanReuseNotice /> : null}
             <AgentSummaryActions domainLabel={publicScanDomainLabel} scanId={scanRecord.scan.id} />
           </div>
         ) : null}

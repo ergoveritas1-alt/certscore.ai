@@ -35,7 +35,7 @@ const personas = [
       "Run white-label-ready scans that surface observable website behavior without depending on manual inspection alone."
   },
   {
-    title: "Operators verifying consent flows",
+    title: "Digital policy analysts verifying consent flows",
     detail:
       "Review when cookies and trackers appear in milliseconds, including whether they load pre-consent or change after accept/reject choices."
   },
@@ -102,7 +102,7 @@ export default async function MarketingHomePage() {
   const findingRegistrySchema = {
     "@context": "https://schema.org",
     "@type": "ItemList",
-    name: "CertScore finding reference pages",
+    name: "CertScore.ai finding reference pages",
     itemListElement: findings.map((finding, index) => ({
       "@type": "ListItem",
       position: index + 1,
@@ -145,7 +145,7 @@ export default async function MarketingHomePage() {
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                Try CertScore GPT-API
+                Try CertScore.ai GPT-API
               </a>
               <PendingButtonLink
                 className="w-full border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 sm:w-auto"
@@ -165,7 +165,7 @@ export default async function MarketingHomePage() {
           <div className="space-y-4">
             <Card id="homepage-scan" className="border-slate-200 bg-slate-50 shadow-none">
               <CardHeader>
-                <CardTitle>Scan any website.</CardTitle>
+                <CardTitle className="text-[1.625rem] leading-tight">Scan any website.</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <DomainScanForm
@@ -188,9 +188,9 @@ export default async function MarketingHomePage() {
         <div className="mx-auto max-w-6xl px-6 py-16">
           <div className="max-w-2xl space-y-3">
             <Badge tone="neutral">Personas</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Who CertScore is built for</h2>
+            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Who CertScore.ai is built for</h2>
             <p className="text-sm text-slate-600">
-              CertScore is most useful for teams that need repeatable evidence about public website behavior.
+              CertScore.ai is most useful for teams that need repeatable evidence about public website behavior.
             </p>
           </div>
 
@@ -229,7 +229,7 @@ export default async function MarketingHomePage() {
                 Get a clearer read on public-facing website signals.
               </h2>
               <p className="max-w-3xl text-lg leading-8 text-slate-300">
-                Use CertScore to observe website behavior, detect tracking activity, verify consent flows, and monitor changes over time.
+                Use CertScore.ai to observe website behavior, detect tracking activity, verify consent flows, and monitor changes over time.
               </p>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <PendingButtonLink
@@ -256,7 +256,7 @@ export default async function MarketingHomePage() {
       <section className="border-t border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-8">
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
-            CertScore provides automated, evidence-based insights into website behavior. It is not legal advice, certification, or a compliance determination.
+            CertScore.ai provides automated, evidence-based insights into website behavior. It is not legal advice, certification, or a compliance determination.
           </p>
         </div>
       </section>

@@ -87,7 +87,7 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
   },
   third_party_cookie_pre_consent: {
     overview:
-      "A third-party cookie or storage artifact was retained before CertScore recorded a matching consent action or prior consent state.",
+      "A third-party cookie or storage artifact was retained before CertScore.ai recorded a matching consent action or prior consent state.",
     regulatoryLabel: "Cookie/storage timing before choice",
     regulatoryCopy:
       "Useful for reviewing cookie consent timing, domain and scope, storage purpose, vendor role, necessity, exemptions, and regional configuration.",
@@ -103,7 +103,7 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
   },
   long_lived_cookie_retention_review: {
     overview:
-      "Runtime cookie evidence includes a retained name, domain, page attribution, classification, and expiry duration that crosses CertScore's retention review threshold.",
+      "Runtime cookie evidence includes a retained name, domain, page attribution, classification, and expiry duration that crosses CertScore.ai's retention review threshold.",
     regulatoryLabel: "Cookie retention review",
     regulatoryCopy:
       "Useful for reviewing whether observed cookie lifetimes match stated retention, minimization, consent, opt-out, and disclosure practices without treating the threshold as a legal conclusion.",
@@ -506,7 +506,7 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
             <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Findings overview</p>
               <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
-                Browse the review items CertScore can surface.
+                Browse the review items CertScore.ai can surface.
               </h2>
             </div>
 

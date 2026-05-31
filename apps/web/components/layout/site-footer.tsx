@@ -58,7 +58,7 @@ export function SiteFooter() {
             ...section.links,
             {
               href: certscoreGptUrl,
-              label: "CertScore GPT beta",
+              label: "CertScore.ai GPT beta",
               external: true,
               analyticsEvent: "gpt_cta_clicked",
               analyticsLocation: "footer"
@@ -123,7 +123,7 @@ export function SiteFooter() {
           </nav>
         </div>
         <div className="space-y-2 border-t border-slate-100 pt-5 text-xs leading-5 text-slate-400">
-          <p>CertScore surfaces automated public-web observations for review. It does not provide legal advice, certification, or compliance determinations.</p>
+          <p>CertScore.ai surfaces automated public-web observations for review. It does not provide legal advice, certification, or compliance determinations.</p>
           <p>
             Privacy rights requests can be submitted at <Link href="/privacy-request" className="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">certscore.ai/privacy-request</Link> or by emailing <a href="mailto:privacy@certscore.ai" className="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">privacy@certscore.ai</a>.
           </p>

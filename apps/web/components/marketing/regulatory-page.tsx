@@ -92,7 +92,7 @@ export function RegulatoryPage({ config }: { config: RegulatoryPageConfig }) {
     ]),
     createItemListSchema({
       name: `${config.badge} review signals`,
-      description: `Public-web review signals CertScore surfaces for ${config.badge}.`,
+      description: `Public-web review signals CertScore.ai surfaces for ${config.badge}.`,
       path: config.path,
       items: config.signalCards.map((card) => ({
         name: card.title,
@@ -169,7 +169,7 @@ export function RegulatoryPage({ config }: { config: RegulatoryPageConfig }) {
       <section className="mx-auto max-w-6xl px-6 py-14">
         <div className="max-w-3xl space-y-3">
           <Badge tone="neutral">Review signals</Badge>
-          <h2 className="text-3xl font-semibold tracking-tight text-slate-950">What CertScore can surface for review</h2>
+          <h2 className="text-3xl font-semibold tracking-tight text-slate-950">What CertScore.ai can surface for review</h2>
         </div>
         <div className="mt-8 grid gap-5 md:grid-cols-3">
           {config.signalCards.map((card) => (

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CertScore Scan Progress</title>
+    <title>CertScore.ai Scan Progress</title>
     <link rel="stylesheet" href="progress.css" />
   </head>
   <body>
@@ -15,6 +15,14 @@
           <p>BX01 browser scan progress</p>
         </div>
       </header>
+
+      <section id="busy-callout" class="busy-callout" hidden>
+        <span class="busy-hourglass" aria-hidden="true">⌛</span>
+        <div>
+          <strong>Scanning is in progress...</strong>
+          <p>Keep the CertScore.ai and target-site tabs open. They will update automatically when your scan result is ready.</p>
+        </div>
+      </section>
 
       <section class="status">
         <span>Status</span>
@@ -30,11 +38,9 @@
         <span>Evidence checks</span>
         <ul>
           <li>Third-party trackers</li>
-          <li>Cookies set before consent</li>
-          <li>Third-party tracking before recorded consent</li>
-          <li>Potential privacy compliance violations</li>
-          <li>Fingerprinting techniques</li>
-          <li>Data transfers to other countries</li>
+          <li>Cookies before consent</li>
+          <li>Potential privacy compliance issues</li>
+          <li>Fingerprinting review</li>
         </ul>
       </section>
 
@@ -53,7 +59,7 @@
         </div>
       </section>
 
-      <a id="report-link" href="#" target="_blank" rel="noreferrer" hidden>Open CertScore report</a>
+      <a id="report-link" href="#" target="_blank" rel="noreferrer" hidden>Open CertScore.ai report</a>
       <a id="signup-link" class="cta-link" href="https://certscore.ai/login?mode=create_account" target="_blank" rel="noreferrer" hidden>
         Sign up to see fuller analysis
       </a>

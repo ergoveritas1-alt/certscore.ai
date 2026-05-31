@@ -6,7 +6,6 @@ const statusMessageEl = document.querySelector("#status-message");
 const statusMetaEl = document.querySelector("#status-meta");
 const statusElapsedEl = document.querySelector("#status-elapsed");
 const statusPhaseEl = document.querySelector("#status-phase");
-const openOptionsButton = document.querySelector("#open-options");
 const freshVisitInput = document.querySelector("#fresh-visit");
 const runButton = document.querySelector("#run-scan");
 const errorEl = document.querySelector("#error");
@@ -107,7 +106,7 @@ function syncElapsedTimer(status) {
 
 function renderStatus(status) {
   const label = status?.label ?? "Ready";
-  statusEl.textContent = status?.busy ? `hourglass ${label}` : label;
+  statusEl.textContent = status?.busy ? "Scanning is in progress..." : label;
   statusMessageEl.textContent = status?.message ?? "Waiting for a reviewer-started browser scan.";
   runButton.disabled = Boolean(status?.busy);
   syncElapsedTimer(status);
@@ -183,7 +182,11 @@ runButton.addEventListener("click", async () => {
   }
 
   await openProgressWindow();
-  renderStatus({ busy: true, label: "Starting...", message: "Opening persistent progress window." });
+  renderStatus({
+    busy: true,
+    label: "Starting...",
+    message: "Keep the CertScore.ai and target-site tabs open while BX01 captures browser evidence."
+  });
   const response = await chrome.runtime.sendMessage({
     type: "BX01_START_SCAN",
     freshVisit: Boolean(freshVisitInput.checked),
@@ -196,15 +199,6 @@ runButton.addEventListener("click", async () => {
   if (!response?.ok) {
     renderStatus({ error: response?.error ?? "Browser scan could not start.", label: "Error" });
   }
-});
-
-openOptionsButton.addEventListener("click", () => {
-  if (typeof chrome !== "undefined" && chrome.runtime?.openOptionsPage) {
-    chrome.runtime.openOptionsPage();
-    return;
-  }
-
-  setError("Load this folder as a Chrome extension to open extension options.");
 });
 
 if (extensionApiAvailable) {

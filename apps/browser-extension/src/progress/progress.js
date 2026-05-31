@@ -5,6 +5,7 @@ const statusMessageEl = document.querySelector("#status-message");
 const statusMetaEl = document.querySelector("#status-meta");
 const statusElapsedEl = document.querySelector("#status-elapsed");
 const statusPhaseEl = document.querySelector("#status-phase");
+const busyCalloutEl = document.querySelector("#busy-callout");
 const errorEl = document.querySelector("#error");
 const reportLink = document.querySelector("#report-link");
 const signupLink = document.querySelector("#signup-link");
@@ -16,6 +17,7 @@ const resultBannerEl = document.querySelector("#result-banner");
 let currentApiBaseUrl = config.apiBaseUrl;
 let currentStatus = null;
 let elapsedTimer = null;
+let autoCloseTimer = null;
 
 function getElapsedSeconds(status) {
   if (!status?.startedAt) {
@@ -44,8 +46,12 @@ function renderStatus(status) {
   }
 
   const label = status?.label ?? "Waiting";
-  statusEl.textContent = status?.busy ? `hourglass ${label}` : label;
+  const isBusy = status?.busy === true;
+  statusEl.textContent = isBusy ? "Scanning is in progress..." : label;
   statusMessageEl.textContent = status?.message ?? "Start a browser pre-consent scan from the extension popup.";
+  if (busyCalloutEl) {
+    busyCalloutEl.hidden = !isBusy;
+  }
   errorEl.textContent = status?.error ?? "";
   errorEl.hidden = !status?.error;
 
@@ -72,6 +78,16 @@ function renderStatus(status) {
   updateElapsed();
   if (status?.busy && status?.startedAt) {
     elapsedTimer = setInterval(updateElapsed, 1000);
+  }
+
+  if (autoCloseTimer) {
+    clearTimeout(autoCloseTimer);
+    autoCloseTimer = null;
+  }
+  if (status?.phase === "complete" && status?.reportUrl) {
+    autoCloseTimer = setTimeout(() => {
+      window.close();
+    }, 2200);
   }
 }
 

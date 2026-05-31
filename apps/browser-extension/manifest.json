@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "CertScore Browser Evidence",
-  "description": "Capture browser-observed pre-consent evidence for CertScore scans.",
+  "name": "CertScore.ai Browser Evidence",
+  "description": "Capture browser-observed pre-consent evidence for CertScore.ai scans.",
   "version": "0.1.0",
   "action": {
     "default_icon": {
@@ -11,7 +11,7 @@
       "128": "assets/icons/icon-128.png"
     },
     "default_popup": "src/popup.html",
-    "default_title": "CertScore Browser Evidence"
+    "default_title": "CertScore.ai Browser Evidence"
   },
   "background": {
     "service_worker": "src/background.js",

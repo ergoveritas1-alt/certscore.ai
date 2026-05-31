@@ -341,7 +341,7 @@ async function completeScan(scan) {
 
   setScanStatus(scan, {
     label: "Reporting",
-    message: `Packaging ${scan.events.length} browser-observed events for CertScore intake.`,
+    message: `Packaging ${scan.events.length} browser-observed events for CertScore.ai intake.`,
     phase: "reporting"
   });
 
@@ -544,8 +544,8 @@ async function startScan(message) {
     busy: true,
     label: "Queueing",
     message: message.freshVisit
-      ? "Preparing a fresh-visit BX01 session and clearing this site’s local browser state."
-      : "Opening a short-lived BX01 browser evidence session with CertScore.",
+      ? "Scanning is in progress. BX01 is preparing a fresh visit and clearing this site's local browser state."
+      : "Scanning is in progress. BX01 is opening a browser evidence session with CertScore.ai.",
     phase: "queueing",
     startedAt: startedAtEpochMs,
     targetUrl
@@ -571,10 +571,10 @@ async function startScan(message) {
 
   if (!startResponse.ok) {
     if (startResponse.status === 401) {
-      throw new Error("Sign in to CertScore before running a browser scan.");
+      throw new Error("Sign in to CertScore.ai before running a browser scan.");
     }
     if (startResponse.status === 404) {
-      throw new Error(`BX01 API was not found at ${apiBaseUrl}. Open extension options and point the API URL at a CertScore build that includes browser scan routes.`);
+      throw new Error(`BX01 API was not found at ${apiBaseUrl}. Point the API URL at a CertScore.ai build that includes browser scan routes.`);
     }
     throw new Error(`Start failed with ${startResponse.status}.`);
   }
@@ -585,7 +585,7 @@ async function startScan(message) {
       browserScanId: session.browserScanId,
       busy: true,
       label: "Freshening",
-      message: "Clearing cookies, cache storage, local storage, IndexedDB, and service workers for this origin only.",
+      message: "Scanning is in progress. Clearing cookies, cache storage, local storage, IndexedDB, and service workers for this origin only.",
       phase: "freshening",
       startedAt: startedAtEpochMs,
       targetUrl
@@ -625,14 +625,14 @@ async function startScan(message) {
   activeScans.set(tabId, scan);
   setScanStatus(scan, {
     label: "Reloading",
-    message: "Reloading the page without clicking the consent banner so pre-consent activity is visible.",
+    message: "Scanning is in progress. Reloading the page without clicking the consent banner so pre-consent activity is visible.",
     phase: "reloading"
   });
   await chrome.tabs.reload(tabId, { bypassCache: true });
 
   setScanStatus(scan, {
     label: "Scanning",
-    message: `Watching network requests, cookie changes, and consent UI for ${Math.round(scanWindowMs / 1000)} seconds.`,
+    message: `Scanning is in progress. Keep the CertScore.ai and target-site tabs open while BX01 watches browser evidence for ${Math.round(scanWindowMs / 1000)} seconds.`,
     phase: "scanning"
   });
   setTimeout(() => {
@@ -642,7 +642,7 @@ async function startScan(message) {
         busy: false,
         error: error instanceof Error ? error.message : String(error),
         label: "Error",
-        message: "The scan stopped before CertScore could finish packaging the evidence.",
+        message: "The scan stopped before CertScore.ai could finish packaging the evidence.",
         phase: "error",
         targetUrl: scan.targetUrl
       });

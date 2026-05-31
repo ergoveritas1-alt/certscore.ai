@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CertScore Browser Evidence</title>
+    <title>CertScore.ai Browser Evidence</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
@@ -21,7 +21,6 @@
         <strong id="current-url">Loading...</strong>
       </section>
 
-      <button id="open-options" class="secondary-button" type="button">Extension options</button>
       <label class="fresh-toggle">
         <input id="fresh-visit" type="checkbox" />
         <span>
@@ -31,17 +30,15 @@
       </label>
       <button id="run-scan" type="button">Run Browser Pre-Consent Scan</button>
 
-      <p class="note">The page will reload. CertScore will observe this tab for about 15 seconds.</p>
+      <p class="note">The page will reload. CertScore.ai will observe this tab for about 15 seconds.</p>
 
       <section class="checklist" aria-label="Evidence checks">
         <span>Evidence checks</span>
         <ul>
           <li>Third-party trackers</li>
-          <li>Cookies set before consent</li>
-          <li>Third-party tracking before recorded consent</li>
-          <li>Potential privacy compliance violations</li>
-          <li>Fingerprinting techniques</li>
-          <li>Data transfers to other countries</li>
+          <li>Cookies before consent</li>
+          <li>Potential privacy compliance issues</li>
+          <li>Fingerprinting review</li>
         </ul>
       </section>
 
@@ -70,7 +67,7 @@
         </div>
       </section>
 
-      <a id="report-link" href="#" target="_blank" rel="noreferrer" hidden>Open CertScore report</a>
+      <a id="report-link" href="#" target="_blank" rel="noreferrer" hidden>Open CertScore.ai report</a>
       <a id="signup-link" class="cta-link" href="https://certscore.ai/login?mode=create_account" target="_blank" rel="noreferrer" hidden>
         Sign up to see fuller analysis
       </a>

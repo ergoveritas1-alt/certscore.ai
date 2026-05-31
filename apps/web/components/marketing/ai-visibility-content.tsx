@@ -88,7 +88,7 @@ export function AiVisibilityContent({
     aiSummary ??
     [
       `${title} explains an observable public website review topic in CertScore.ai's evidence-backed scanning workflow.`,
-      "CertScore.ai observes public website behavior around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, accessibility, and privacy disclosures. CertScore findings are automated risk signals for review and are not legal advice, certification, or compliance determinations."
+      "CertScore.ai observes public website behavior around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, accessibility, and privacy disclosures. CertScore.ai findings are automated risk signals for review and are not legal advice, certification, or compliance determinations."
     ];
 
   return (
@@ -180,7 +180,7 @@ export function AiVisibilityContent({
         {relatedLinks.length > 0 ? (
           <Card className="min-w-0 border-slate-200 bg-sand shadow-none">
             <CardHeader>
-              <CardTitle className="text-xl text-slate-950">Related CertScore pages</CardTitle>
+              <CardTitle className="text-xl text-slate-950">Related CertScore.ai pages</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-3 text-sm text-slate-600">
               {relatedLinks.map((link) => (

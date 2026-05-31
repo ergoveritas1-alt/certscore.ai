@@ -71,14 +71,14 @@ const BX01_SCAN_WINDOW_MS = 15000;
 const BX01_EXTENSION_TIMEOUT_MS = 1200;
 
 const SAMPLE_SCAN_ACCENTS: Record<string, { accent: string; label: string; tone: string }> = {
-  "caltech.edu": { accent: "bg-sky-500", label: "Higher ed", tone: "from-sky-50 to-white" },
-  "latimes.com": { accent: "bg-rose-500", label: "Publisher", tone: "from-rose-50 to-white" },
-  "nbcnews.com": { accent: "bg-violet-500", label: "Media", tone: "from-violet-50 to-white" },
-  "nvidia.com": { accent: "bg-emerald-500", label: "Enterprise", tone: "from-emerald-50 to-white" }
+  "caltech.edu": { accent: "bg-sky-400", label: "Higher ed", tone: "from-sky-500/20 to-cyan-400/5" },
+  "latimes.com": { accent: "bg-rose-400", label: "Publisher", tone: "from-rose-500/20 to-orange-400/5" },
+  "nbcnews.com": { accent: "bg-violet-400", label: "Media", tone: "from-violet-500/20 to-fuchsia-400/5" },
+  "nvidia.com": { accent: "bg-emerald-400", label: "Enterprise", tone: "from-emerald-500/20 to-lime-400/5" }
 };
 
 function getSampleScanAccent(domain: string) {
-  return SAMPLE_SCAN_ACCENTS[domain.toLowerCase()] ?? { accent: "bg-slate-500", label: "Sample", tone: "from-slate-50 to-white" };
+  return SAMPLE_SCAN_ACCENTS[domain.toLowerCase()] ?? { accent: "bg-slate-400", label: "Sample", tone: "from-slate-500/20 to-slate-400/5" };
 }
 
 type Bx01WindowMessage = {
@@ -149,7 +149,7 @@ function waitForBx01Message(requestId: string, expectedType: string, timeoutMs: 
   return new Promise<Bx01WindowMessage>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       window.removeEventListener("message", handleMessage);
-      reject(new Error("CertScore Chrome extension was not detected."));
+      reject(new Error("CertScore.ai Chrome extension was not detected."));
     }, timeoutMs);
 
     function handleMessage(event: MessageEvent) {
@@ -285,7 +285,7 @@ export function DomainScanForm({
     setLocalExtensionStatus({
       busy: true,
       label: "Connecting",
-      message: "Checking for the CertScore Chrome extension on this page.",
+      message: "Checking for the CertScore.ai Chrome extension on this page.",
       phase: "extension-check"
     });
     window.postMessage({ requestId, type: "CERTSCORE_BX01_PING" }, window.location.origin);
@@ -325,7 +325,7 @@ export function DomainScanForm({
       browserScanId: response.browserScanId,
       busy: true,
       label: "Opening target",
-      message: "BX01 is opening the target tab. CertScore will move to the report automatically as evidence arrives.",
+      message: "BX01 is opening the target tab. CertScore.ai will move to the report automatically as evidence arrives.",
       phase: "open-target",
       targetUrl
     });
@@ -469,7 +469,7 @@ export function DomainScanForm({
   return (
     <form className={compact ? "space-y-2" : "space-y-4"} onSubmit={(event) => void handleSubmit(event)}>
       <div className="space-y-2">
-        <div className="relative">
+        <div className="relative z-30">
           <Input
             autoComplete="url"
             className={
@@ -530,39 +530,34 @@ export function DomainScanForm({
         </div>
       ) : null}
       {sampleDomains.length > 0 ? (
-        <div className="overflow-hidden rounded-[1.4rem] border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-          <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+        <div className="relative z-0 overflow-hidden rounded-[1.25rem] border border-slate-800 bg-slate-950 shadow-[0_24px_60px_rgba(2,6,23,0.22)]">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-900/70 px-4 py-3">
             <div>
-              <div className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-500">View sample scans</div>
-              <p className="mt-1 text-xs text-slate-500">Open a live report with retained evidence.</p>
+              <div className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-sky-300">View sample scans</div>
+              <p className="mt-1 text-xs text-slate-400">Open a live report with retained evidence.</p>
             </div>
-            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-sky-600 shadow-sm ring-1 ring-slate-200">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                <path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" />
-              </svg>
-            </span>
           </div>
-          <div className="grid gap-px bg-slate-100 sm:grid-cols-2">
+          <div className="space-y-px bg-slate-800">
             {sampleDomains.map((sampleDomain) => {
               const accent = getSampleScanAccent(sampleDomain);
               return (
                 <button
                   key={sampleDomain}
-                  className={`group relative min-h-20 overflow-hidden bg-gradient-to-br ${accent.tone} px-4 py-3 text-left transition hover:z-10 hover:shadow-[0_18px_36px_rgba(15,23,42,0.12)] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:cursor-wait disabled:opacity-60`}
+                  className={`group relative w-full overflow-hidden bg-slate-950 bg-gradient-to-r ${accent.tone} px-4 py-2.5 text-left transition hover:z-10 hover:bg-slate-900 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 disabled:cursor-wait disabled:opacity-60`}
                   disabled={isSubmitting}
                   onClick={() => void handleSampleScan(sampleDomain)}
                   type="button"
                 >
-                  <span className={`absolute left-0 top-0 h-full w-1 ${accent.accent}`} aria-hidden="true" />
-                  <span className="flex items-start justify-between gap-3">
-                    <span>
-                      <span className="block text-base font-semibold tracking-tight text-slate-950">{sampleDomain}</span>
-                      <span className="mt-2 inline-flex rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  <span className="absolute left-0 top-0 h-full w-1 bg-slate-600" aria-hidden="true" />
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <span className="truncate font-mono text-[0.95rem] font-semibold tracking-wide text-slate-50 transition group-hover:text-sky-300">{sampleDomain}</span>
+                      <span className="inline-flex shrink-0 rounded-full border border-slate-700 bg-slate-900/80 px-2 py-0.5 font-mono text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-slate-400">
                         {accent.label}
                       </span>
                     </span>
-                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm ring-1 ring-slate-200 transition group-hover:translate-x-0.5 group-hover:text-sky-600">
-                      <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" aria-hidden="true">
+                    <span className="inline-flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-400 shadow-sm transition group-hover:translate-x-0.5 group-hover:border-sky-400/70 group-hover:text-sky-300">
+                      <svg viewBox="0 0 24 24" className="h-2.5 w-2.5" aria-hidden="true">
                         <path
                           d="M5 12h14M13 6l6 6-6 6"
                           fill="none"
@@ -602,7 +597,7 @@ export function DomainScanForm({
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Local-extension scan</p>
-                <h2 id="bx01-install-title" className="text-xl font-semibold tracking-tight text-slate-950">Install the CertScore Chrome extension</h2>
+                <h2 id="bx01-install-title" className="text-xl font-semibold tracking-tight text-slate-950">Install the CertScore.ai Chrome extension</h2>
               </div>
               <button
                 aria-label="Close extension install instructions"
@@ -617,13 +612,13 @@ export function DomainScanForm({
             </div>
             <div className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
               <p>
-                Local-extension scans run from your own Chrome browser. CertScore did not detect the BX01 extension on this page.
+                Local-extension scans run from your own Chrome browser. CertScore.ai did not detect the BX01 extension on this page.
               </p>
               <ol className="list-decimal space-y-2 pl-5">
                 <li>Open Chrome Extensions and enable Developer mode.</li>
                 <li>Choose Load unpacked.</li>
-                <li>Select the CertScore extension folder: <span className="font-mono text-xs">apps/browser-extension</span>.</li>
-                <li>Reload this CertScore tab after loading or reloading the extension.</li>
+                <li>Select the CertScore.ai extension folder: <span className="font-mono text-xs">apps/browser-extension</span>.</li>
+                <li>Reload this CertScore.ai tab after loading or reloading the extension.</li>
                 <li>Run the scan again with Local-extension selected.</li>
               </ol>
               <a

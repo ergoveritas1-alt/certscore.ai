@@ -82,7 +82,7 @@ export function GuideTemplate({
   ]);
   const relatedGuidesSchema = createItemListSchema({
     name: `${title} related guides`,
-    description: `Related CertScore guide pages for ${title.toLowerCase()}.`,
+    description: `Related CertScore.ai guide pages for ${title.toLowerCase()}.`,
     path: pagePath,
     items: [
       ...relatedGuides.map((guide) => ({
@@ -243,7 +243,7 @@ export function GuideTemplate({
               CertScore.ai scans public website behavior around tracking, cookies, consent, session recording indicators, fingerprinting-related signals, accessibility, and disclosures.
             </p>
             <p>
-              CertScore findings are automated risk signals supported by retained evidence; they are not legal advice, certification, or compliance determinations.
+              CertScore.ai findings are automated risk signals supported by retained evidence; they are not legal advice, certification, or compliance determinations.
             </p>
           </CardContent>
         </Card>

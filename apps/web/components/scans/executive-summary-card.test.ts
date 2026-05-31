@@ -1288,9 +1288,10 @@ test("ExecutiveSummaryCard renders logo badges for observed tracker vendors and 
   assert.match(html, /\/vendor-logos\/magnite\.png/);
   assert.match(html, /\/vendor-logos\/facebook\.png/);
   assert.match(html, /\/vendor-logos\/onetrust\.png/);
-  assert.match(html, /\/vendor-logos\/adobe\.png/);
-  assert.match(html, /\/vendor-logos\/jwplayer\.png/);
-  assert.match(html, /\/vendor-logos\/vudu\.png/);
+  assert.match(html, /And 10 more observed vendors or domains are retained in evidence\./);
+  assert.doesNotMatch(html, /\/vendor-logos\/adobe\.png/);
+  assert.doesNotMatch(html, /\/vendor-logos\/jwplayer\.png/);
+  assert.doesNotMatch(html, /\/vendor-logos\/vudu\.png/);
 });
 
 test("ExecutiveSummaryCard treats protected routes outside the homepage as a soft diagnostic", () => {
@@ -3026,7 +3027,7 @@ test("ExecutiveSummaryCard keeps tracker disclosure counts aligned with the full
   );
 
   assert.match(html, /13 third-party domains observed; 1 classified tracker vendor identified\./);
-  assert.match(html, /Showing the first 10; 1 more observed entity is retained in evidence\./);
+  assert.match(html, /And 8 more observed vendors or domains are retained in evidence\./);
   assert.doesNotMatch(html, /1 vendor names and 13 third-party domains/);
 });
 
@@ -3097,8 +3098,8 @@ test("ExecutiveSummaryCard labels truncated observed domain lists", () => {
   );
 
   assert.match(html, /11 third-party domains observed; no classified tracker vendors identified\./);
-  assert.match(html, /Showing 10 of 11 observed domains\./);
-  assert.match(html, /observed-10\.example/);
+  assert.match(html, /And 5 more observed vendors or domains are retained in evidence\./);
+  assert.doesNotMatch(html, /observed-10\.example/);
   assert.doesNotMatch(html, /observed-11\.example/);
 });
 
