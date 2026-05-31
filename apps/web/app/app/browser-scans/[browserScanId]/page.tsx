@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { redirect } from "next/navigation";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { BrowserExtensionLiveStatus } from "../../../../components/scans/browser-extension-live-status";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { getDashboardContext } from "../../../../server/auth";
 import { getBrowserScanSessionById, getBrowserScanSessionForUser } from "../../../../server/browser-scans/repository";
@@ -200,6 +201,7 @@ export default async function BrowserScanPage({ params }: BrowserScanPageProps) 
   return (
     <div className="space-y-6 pb-6">
       <ScanStatusAutoRefresh status={scan.status === "started" ? "running" : scan.status} />
+      <BrowserExtensionLiveStatus browserScanId={scan.id} />
 
       <section className="rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-panel sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

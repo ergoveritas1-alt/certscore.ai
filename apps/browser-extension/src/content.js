@@ -135,6 +135,18 @@ if (runtime) {
         consentInteractionObserved,
         summary: summarizeConsentUi()
       });
+      return true;
+    }
+
+    if (message?.type === "BX01_STATUS") {
+      window.postMessage(
+        {
+          source: "certscore-bx01-extension",
+          status: message.status,
+          type: "CERTSCORE_BX01_STATUS"
+        },
+        window.location.origin
+      );
     }
   });
 }

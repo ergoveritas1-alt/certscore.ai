@@ -11,15 +11,33 @@ function setStatus(status) {
   chrome.runtime.sendMessage({ status, type: "BX01_STATUS" }).catch(() => {});
 }
 
+function sendStatusToLauncher(scanOrLauncherTabId, status) {
+  const launcherTabId =
+    typeof scanOrLauncherTabId === "number"
+      ? scanOrLauncherTabId
+      : typeof scanOrLauncherTabId?.launcherTabId === "number"
+        ? scanOrLauncherTabId.launcherTabId
+        : null;
+
+  if (typeof launcherTabId !== "number") {
+    return;
+  }
+
+  chrome.tabs.sendMessage(launcherTabId, { status, type: "BX01_STATUS" }).catch(() => {});
+}
+
 function setScanStatus(scan, updates) {
-  setStatus({
+  const status = {
+    browserScanId: scan.browserScanId,
     busy: true,
     label: updates.label,
     message: updates.message,
     phase: updates.phase,
     startedAt: scan.startedAtEpochMs,
     targetUrl: scan.targetUrl
-  });
+  };
+  setStatus(status);
+  sendStatusToLauncher(scan, status);
 }
 
 function setBadge(status) {
@@ -364,8 +382,9 @@ async function completeScan(scan) {
     networkRequestCount
   };
   cleanupScan(scan.tabId);
-  setStatus({
+  const completeStatus = {
     anonymous: scan.anonymous,
+    browserScanId: scan.browserScanId,
     busy: false,
     label: "Complete",
     message: `Captured ${networkRequestCount} requests, ${cookieEventCount} cookie events, and ${bannerObserved ? "a visible consent banner" : "no visible consent banner"}.`,
@@ -373,7 +392,9 @@ async function completeScan(scan) {
     reportUrl: body.reportUrl,
     summary,
     targetUrl: scan.targetUrl
-  });
+  };
+  setStatus(completeStatus);
+  sendStatusToLauncher(scan, completeStatus);
   if (typeof scan.launcherTabId === "number" && body.reportUrl) {
     const reportUrl = new URL(body.reportUrl, scan.apiBaseUrl).toString();
     chrome.tabs.update(scan.launcherTabId, { active: true, url: reportUrl }).catch(() => {});
@@ -517,8 +538,9 @@ async function startScan(message) {
   const apiBaseUrl = await getApiBaseUrl();
   const targetUrl = message.targetUrl;
   const startedAtEpochMs = Date.now();
+  const launcherTabId = typeof message.launcherTabId === "number" ? message.launcherTabId : null;
 
-  setStatus({
+  const queueingStatus = {
     busy: true,
     label: "Queueing",
     message: message.freshVisit
@@ -527,7 +549,9 @@ async function startScan(message) {
     phase: "queueing",
     startedAt: startedAtEpochMs,
     targetUrl
-  });
+  };
+  setStatus(queueingStatus);
+  sendStatusToLauncher(launcherTabId, queueingStatus);
 
   await fetch(`${apiBaseUrl}/api/browser-scans/metadata`, {
     credentials: "include",
@@ -557,14 +581,17 @@ async function startScan(message) {
 
   const session = await startResponse.json();
   if (message.freshVisit) {
-    setStatus({
+    const fresheningStatus = {
+      browserScanId: session.browserScanId,
       busy: true,
       label: "Freshening",
       message: "Clearing cookies, cache storage, local storage, IndexedDB, and service workers for this origin only.",
       phase: "freshening",
       startedAt: startedAtEpochMs,
       targetUrl
-    });
+    };
+    setStatus(fresheningStatus);
+    sendStatusToLauncher(launcherTabId, fresheningStatus);
     await clearSiteDataForFreshVisit(targetUrl);
   }
 
@@ -586,7 +613,7 @@ async function startScan(message) {
     browserScanId: session.browserScanId,
     consentInteractionObserved: false,
     events: [],
-    launcherTabId: typeof message.launcherTabId === "number" ? message.launcherTabId : null,
+    launcherTabId,
     startedAt: performance.now(),
     startedAtEpochMs,
     tabId,

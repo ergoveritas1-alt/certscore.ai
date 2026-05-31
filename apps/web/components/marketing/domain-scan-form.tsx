@@ -2,7 +2,7 @@
 
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
 import { ScanFromSelect, type ScanFrom, type ServerScanFrom } from "../scans/scan-from-select";
 
@@ -80,7 +80,23 @@ type Bx01WindowMessage = {
     reportUrl?: string;
   };
   source?: string;
+  status?: Bx01Status;
   type?: string;
+};
+
+type Bx01Status = {
+  browserScanId?: string;
+  busy?: boolean;
+  label?: string;
+  message?: string;
+  phase?: string;
+  reportUrl?: string;
+  summary?: {
+    bannerObserved?: boolean;
+    cookieEventCount?: number;
+    networkRequestCount?: number;
+  };
+  targetUrl?: string;
 };
 
 function getScanSubmitErrorMessage(mode: ScanMode, payload: ScanSubmitPayload): string {
@@ -221,6 +237,7 @@ export function DomainScanForm({
   const router = useRouter();
   const [domain, setDomain] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [localExtensionStatus, setLocalExtensionStatus] = useState<Bx01Status | null>(null);
   const [showExtensionInstructions, setShowExtensionInstructions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
@@ -228,11 +245,38 @@ export function DomainScanForm({
 
   function resetValidationState() {
     setErrorMessage(null);
+    if (!isSubmittingRef.current) {
+      setLocalExtensionStatus(null);
+    }
   }
+
+  useEffect(() => {
+    function handleMessage(event: MessageEvent) {
+      if (event.source !== window || !event.data || typeof event.data !== "object") {
+        return;
+      }
+
+      const data = event.data as Bx01WindowMessage;
+      if (data.source !== "certscore-bx01-extension" || data.type !== "CERTSCORE_BX01_STATUS" || !data.status) {
+        return;
+      }
+
+      setLocalExtensionStatus(data.status);
+    }
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
 
   async function assertBx01ExtensionInstalled() {
     const requestId = createRequestId();
     const ready = waitForBx01Message(requestId, "CERTSCORE_BX01_READY", BX01_EXTENSION_TIMEOUT_MS);
+    setLocalExtensionStatus({
+      busy: true,
+      label: "Connecting",
+      message: "Checking for the CertScore Chrome extension on this page.",
+      phase: "extension-check"
+    });
     window.postMessage({ requestId, type: "CERTSCORE_BX01_PING" }, window.location.origin);
     await ready;
   }
@@ -240,6 +284,13 @@ export function DomainScanForm({
   async function startLocalExtensionScan(rawDomain: string) {
     const targetUrl = normalizeBrowserScanTarget(rawDomain);
     await assertBx01ExtensionInstalled();
+    setLocalExtensionStatus({
+      busy: true,
+      label: "Starting",
+      message: "Asking BX01 to open the target in Chrome and begin browser-side evidence capture.",
+      phase: "starting",
+      targetUrl
+    });
 
     const requestId = createRequestId();
     const responsePromise = waitForBx01Message(requestId, "CERTSCORE_BX01_START_RESPONSE", 10000);
@@ -259,6 +310,14 @@ export function DomainScanForm({
     if (message.error || !response?.ok || !response.browserScanId) {
       throw new Error(message.error ?? response?.error ?? "The local extension scan could not be started.");
     }
+    setLocalExtensionStatus({
+      browserScanId: response.browserScanId,
+      busy: true,
+      label: "Opening target",
+      message: "BX01 is opening the target tab. CertScore will move to the report automatically as evidence arrives.",
+      phase: "open-target",
+      targetUrl
+    });
 
     await pushDataLayerEventBeforeNavigation({
       event: "scan_started",
@@ -294,9 +353,16 @@ export function DomainScanForm({
           await startLocalExtensionScan(submittedDomain);
         } catch (error) {
           if (/extension was not detected/i.test(error instanceof Error ? error.message : String(error))) {
+            setLocalExtensionStatus(null);
             setShowExtensionInstructions(true);
             setErrorMessage(null);
           } else {
+            setLocalExtensionStatus({
+              busy: false,
+              label: "Error",
+              message: error instanceof Error ? error.message : "The local extension scan could not be started.",
+              phase: "error"
+            });
             setErrorMessage(error instanceof Error ? error.message : "The local extension scan could not be started.");
           }
           isSubmittingRef.current = false;
@@ -483,6 +549,21 @@ export function DomainScanForm({
         </div>
       ) : null}
       {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
+      {mode === "full" && scanFrom === "local_extension" && localExtensionStatus ? (
+        <div className="rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-slate-700">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="font-semibold text-slate-950">{localExtensionStatus.label ?? "Local-extension scan"}</p>
+              <p className="mt-1 leading-6">{localExtensionStatus.message ?? "BX01 is preparing the browser scan."}</p>
+            </div>
+            {localExtensionStatus.phase ? (
+              <span className="mt-1 w-fit rounded-full bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-sky-700 ring-1 ring-sky-100">
+                {localExtensionStatus.phase}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       {showExtensionInstructions ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6" role="dialog" aria-modal="true" aria-labelledby="bx01-install-title">
           <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.24)]">
