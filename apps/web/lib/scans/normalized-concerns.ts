@@ -798,6 +798,9 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
     }
     sourceUrls.add(normalizedValue);
   };
+  for (const artifact of getStringArrayEvidence(rawEvidence.runtimeEvidenceArtifacts ?? rawEvidence.runtime_evidence_artifacts)) {
+    runtimeArtifacts.add(artifact);
+  }
 
   for (const cookie of cookieRetentionEvidence) {
     addPageUrl(cookie.pageUrl);

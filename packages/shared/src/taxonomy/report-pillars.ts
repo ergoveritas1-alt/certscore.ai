@@ -2482,6 +2482,32 @@ export const REPORT_UNIFIED_FINDINGS = [
     validationRuleKeys: ["section_review.policy_extraction_provider_error"]
   }),
   defineReportUnifiedFinding({
+    id: "scan_quality_visual_artifact_missing",
+    label: "Scan visual evidence missing",
+    owner: "manual_review_triggers",
+    signalMappings: [{ source: "runtime_artifact_signal", key: "scan_quality.visual_artifact_missing" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "scan_quality_visual_no_go",
+    label: "Scan visual access no-go",
+    owner: "manual_review_triggers",
+    signalMappings: [
+      { source: "runtime_artifact_signal", key: "scan_quality.visual_access_blocked" },
+      { source: "runtime_artifact_signal", key: "scan_quality.visual_access_challenge" },
+      { source: "runtime_artifact_signal", key: "scan_quality.visual_auth_or_login_wall" },
+      { source: "runtime_artifact_signal", key: "scan_quality.visual_maintenance_or_unavailable" },
+      { source: "runtime_artifact_signal", key: "scan_quality.visual_blank_or_unusable" },
+      { source: "runtime_artifact_signal", key: "scan_quality.visual_wrong_site_or_soft_404" },
+      { source: "runtime_artifact_signal", key: "scan_quality.visual_parked_or_placeholder" }
+    ]
+  }),
+  defineReportUnifiedFinding({
+    id: "scan_quality_visual_degraded",
+    label: "Scan visual evidence degraded but usable",
+    owner: "manual_review_triggers",
+    signalMappings: [{ source: "runtime_artifact_signal", key: "scan_quality.visual_degraded_but_useful" }]
+  }),
+  defineReportUnifiedFinding({
     id: "disclosure_likely_obstructed",
     label: "Disclosure likely obstructed",
     owner: "clarity_completeness_risk",
