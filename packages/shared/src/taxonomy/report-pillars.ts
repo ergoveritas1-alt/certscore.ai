@@ -2483,13 +2483,13 @@ export const REPORT_UNIFIED_FINDINGS = [
   }),
   defineReportUnifiedFinding({
     id: "scan_quality_visual_artifact_missing",
-    label: "Scan visual evidence missing",
+    label: "Screenshot evidence missing",
     owner: "manual_review_triggers",
     signalMappings: [{ source: "runtime_artifact_signal", key: "scan_quality.visual_artifact_missing" }]
   }),
   defineReportUnifiedFinding({
     id: "scan_quality_visual_no_go",
-    label: "Scan visual access no-go",
+    label: "Captured page was not a normal public site",
     owner: "manual_review_triggers",
     signalMappings: [
       { source: "runtime_artifact_signal", key: "scan_quality.visual_access_blocked" },
@@ -2503,7 +2503,7 @@ export const REPORT_UNIFIED_FINDINGS = [
   }),
   defineReportUnifiedFinding({
     id: "scan_quality_visual_degraded",
-    label: "Scan visual evidence degraded but usable",
+    label: "Captured page was degraded but usable",
     owner: "manual_review_triggers",
     signalMappings: [{ source: "runtime_artifact_signal", key: "scan_quality.visual_degraded_but_useful" }]
   }),

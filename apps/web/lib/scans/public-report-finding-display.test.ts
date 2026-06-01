@@ -64,6 +64,20 @@ test("exposes atlas observed copy for scan report descriptors", () => {
   );
 });
 
+test("uses scan-quality wording for captured-page visual findings", () => {
+  const display = getPublicReportFindingDisplay({
+    findingId: "scan_quality_visual_no_go",
+    label: "Scan visual access no-go",
+    remediation: "legacy remediation",
+    severity: "high"
+  });
+
+  assert.equal(display.title, "Captured page was not a normal public site");
+  assert.match(display.observedSummary ?? "", /no-go state/i);
+  assert.match(display.observedSummary ?? "", /access-limited/i);
+  assert.match(display.remediation, /normal browsing path/i);
+});
+
 test("family confidence tooltips avoid cross-family leakage", () => {
   assert.match(
     getPublicReportConfidenceDefinition({
@@ -95,10 +109,19 @@ test("family confidence tooltips avoid cross-family leakage", () => {
     }),
     /without determining CPRA applicability, sale\/share status, opt-out sufficiency, GPC handling, or compliance status/i
   );
+  assert.match(
+    getPublicReportConfidenceDefinition({
+      confidence: "strong",
+      findingId: "scan_quality_visual_no_go",
+      section: "Runtime & Diagnostics"
+    }),
+    /does not by itself determine whether the real public site has a privacy, consent, accessibility, or disclosure issue/i
+  );
 });
 
 test("unmapped findings use fallback notes instead of guessed atlas links", () => {
   assert.equal(getPublicReportFindingFallbackNote("policy_clarity_risk"), "Policy review signal. Reference page not yet available.");
   assert.equal(getPublicReportFindingFallbackNote("bounded_key_page_discovery_unresolved"), "Review signal. Reference page not yet available.");
   assert.equal(getPublicReportFindingFallbackNote("third_party_cookie_pre_consent"), null);
+  assert.equal(getPublicReportFindingFallbackNote("scan_quality_visual_no_go"), "Scan-quality signal. Reference page not yet available.");
 });

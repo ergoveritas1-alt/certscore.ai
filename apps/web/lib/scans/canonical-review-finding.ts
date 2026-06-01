@@ -115,6 +115,18 @@ export function normalizeFindingName(title: string | null | undefined | unknown)
     return "Contact page not retrievable";
   }
 
+  if (/^(visual access review no-go|scan visual access no-go|captured page was not a normal public site)$/i.test(normalized)) {
+    return "Captured page was not a normal public site";
+  }
+
+  if (/^(visual evidence degraded but usable|scan visual evidence degraded but usable|captured page was degraded but usable)$/i.test(normalized)) {
+    return "Captured page was degraded but usable";
+  }
+
+  if (/^(scan visual evidence missing|screenshot evidence missing)$/i.test(normalized)) {
+    return "Screenshot evidence missing";
+  }
+
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 

@@ -154,6 +154,48 @@ test("keeps privacy headline for privacy consent retained top findings", () => {
   assert.equal(presentation.headline, "Immediate privacy and consent issues detected");
 });
 
+test("uses scan-quality headline for captured-page no-go findings", () => {
+  const presentation = deriveExecutiveNarrativePresentation({
+    executiveHeadline: "Captured page was not a normal public site",
+    finalHost: "example.com",
+    posture: "Action Needed",
+    requestedHost: "example.com",
+    topFindings: [
+      {
+        id: "scan_quality_visual_no_go",
+        label: "Captured page was not a normal public site",
+        section: "Runtime & Diagnostics"
+      }
+    ]
+  });
+
+  assert.equal(presentation.headline, "Captured page needs scan-quality review");
+  assert.doesNotMatch(presentation.headline, /privacy and consent issues/i);
+});
+
+test("uses mixed scan-quality headline when captured-page state accompanies other findings", () => {
+  const presentation = deriveExecutiveNarrativePresentation({
+    executiveHeadline: "Captured page was not a normal public site · Tracking started before consent",
+    finalHost: "example.com",
+    posture: "Action Needed",
+    requestedHost: "example.com",
+    topFindings: [
+      {
+        id: "scan_quality_visual_no_go",
+        label: "Captured page was not a normal public site",
+        section: "Runtime & Diagnostics"
+      },
+      {
+        id: "pre_consent_tracking_detected",
+        label: "Tracking started before consent",
+        section: "Privacy & Tracking"
+      }
+    ]
+  });
+
+  assert.equal(presentation.headline, "Captured-page condition limits scan interpretation");
+});
+
 test("uses mixed headline when retained top findings span privacy and accessibility", () => {
   const presentation = deriveExecutiveNarrativePresentation({
     executiveHeadline: "Tracking started before consent · Visual contrast accessibility issue",

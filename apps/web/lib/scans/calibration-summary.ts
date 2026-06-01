@@ -346,6 +346,9 @@ function getPostureHeadline(posture: ExecutivePosture) {
 
 function getFindingTopic(input: { id?: string; label?: string; section?: string }) {
   const haystack = `${input.id ?? ""} ${input.label ?? ""} ${input.section ?? ""}`.toLowerCase();
+  if (/scan.quality|visual_access|visual access|visual artifact|captured page|screenshot evidence|no-go|no go|normal public site|degraded but usable/.test(haystack)) {
+    return "scan_quality" as const;
+  }
   if (/accessibility|wcag|contrast|keyboard|screen.reader|alt.text|form label|focus/.test(haystack)) {
     return "accessibility" as const;
   }
@@ -365,6 +368,7 @@ function summarizeFindingTopics(findings: Array<{ id?: string; label?: string; s
     hasFinancial: topics.has("financial"),
     hasOther: topics.has("other"),
     hasPrivacy: topics.has("privacy"),
+    hasScanQuality: topics.has("scan_quality"),
     hasFindings: findings.length > 0
   };
 }
@@ -377,6 +381,13 @@ function getTopicAwarePostureHeadline(
 
   if (!topics.hasFindings) {
     return posture === "Clear" ? "No major issues surfaced from retained evidence" : "No headline findings surfaced from retained evidence";
+  }
+
+  if (topics.hasScanQuality) {
+    if (topics.hasPrivacy || topics.hasAccessibility || topics.hasFinancial || topics.hasOther) {
+      return "Captured-page condition limits scan interpretation";
+    }
+    return "Captured page needs scan-quality review";
   }
 
   if (topics.hasPrivacy && topics.hasAccessibility) {
@@ -421,6 +432,9 @@ function getCoverageScopedPostureHeadline(
     return "Limited scan coverage did not surface major homepage issues";
   }
   const topics = summarizeFindingTopics(findings);
+  if (topics.hasScanQuality) {
+    return "Limited scan coverage needs captured-page review";
+  }
   if (topics.hasFinancial) {
     return "Limited scan coverage surfaced possible financial-claims concerns";
   }
