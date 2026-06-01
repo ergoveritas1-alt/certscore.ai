@@ -4731,17 +4731,19 @@ export function ExecutiveSummaryCard(input: {
               )}
             </div>
           </div>
-          <div className="space-y-3">
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Top findings</p>
-                <h2 data-testid="executive-findings-heading" className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-[2.2rem]">
-                  {narrativePresentation.findingsHeading}
-                </h2>
+          {isScanNotRepresentative ? null : (
+            <div className="space-y-3">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Top findings</p>
+                  <h2 data-testid="executive-findings-heading" className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-[2.2rem]">
+                    {narrativePresentation.findingsHeading}
+                  </h2>
+                </div>
+                {displayedTopFindings.length > 0 ? <RegulatoryMappingFilterControl targetListId="executive-top-findings-list" /> : null}
               </div>
-              {displayedTopFindings.length > 0 && !isScanNotRepresentative ? <RegulatoryMappingFilterControl targetListId="executive-top-findings-list" /> : null}
             </div>
-          </div>
+          )}
 
           <div
             id="executive-top-findings-list"
