@@ -514,8 +514,8 @@ export async function loadScanCoreRecord(input: {
   scan: ScanDetailQueryRow;
   scanOrganizationId: string | null;
 }> {
-  const adminCanViewAnonymousScans = isPlatformAdminEmail(input.viewerEmail);
-  const allowAnonymousAccess = input.anonymousOnly === true || input.allowAnonymousFallback === true || adminCanViewAnonymousScans;
+  const adminCanViewAnyScan = isPlatformAdminEmail(input.viewerEmail);
+  const allowAnonymousAccess = input.anonymousOnly === true || input.allowAnonymousFallback === true || adminCanViewAnyScan;
 
   const loadScan = async (organizationId: string | null) => {
     return await queryOne<ScanDetailQueryRow>(
@@ -569,6 +569,10 @@ export async function loadScanCoreRecord(input: {
   }
 
   if (!scan && (await hasCrossWorkspaceReuseAccess())) {
+    scan = await loadScanWithoutOrganizationScope();
+  }
+
+  if (!scan && adminCanViewAnyScan) {
     scan = await loadScanWithoutOrganizationScope();
   }
 

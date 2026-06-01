@@ -129,6 +129,67 @@ test("access-limited coverage packet does not project into canonical top finding
   assert.deepEqual(projection.trace.projectedFindingIds, []);
 });
 
+test("visual no-go packet prevents executive projection of placeholder-page findings", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("scan_quality_visual_no_go", {
+      presentationDecision: {
+        confidenceRationale: "WS01 visual access review classified the capture as a maintenance page.",
+        downgradeReasons: [],
+        rationale: "normal public page was not verified",
+        status: "surface",
+        verificationLabel: "Direct",
+        verificationState: "verified"
+      },
+      severity: "high",
+      sourceRefs: [{ kind: "signal", key: "scan_quality.visual_maintenance_or_unavailable", source: "runtime_artifact_signal" }],
+      surfacingDecision: {
+        decisionState: "review",
+        policyVersion: "test",
+        reportLane: "confidence_and_coverage",
+        reportable: true,
+        supports: [],
+        unifiedFindingId: "scan_quality_visual_no_go",
+        usedFamilyDefault: true,
+        usedFindingOverride: false,
+        appliedRules: ["family.context.default"],
+        decisionReasons: ["Visual access review no-go."],
+        family: "context",
+        surfaceTier: "secondary"
+      }
+    }),
+    makePacket("preconsent_tracking", {
+      presentationDecision: {
+        confidenceRationale: "Runtime evidence was retained on the captured page.",
+        downgradeReasons: [],
+        rationale: "tracking before consent",
+        status: "surface",
+        verificationLabel: "Direct",
+        verificationState: "verified"
+      },
+      severity: "high",
+      sourceRefs: [{ kind: "signal", key: "privacy.trackers_before_consent_detected", source: "runtime_artifact_signal" }],
+      surfacingDecision: {
+        decisionState: "confirmed",
+        policyVersion: "test",
+        reportLane: "main",
+        reportable: true,
+        supports: [],
+        unifiedFindingId: "preconsent_tracking",
+        usedFamilyDefault: true,
+        usedFindingOverride: false,
+        appliedRules: ["family.consent_tracking.default"],
+        decisionReasons: ["Runtime evidence retained."],
+        family: "consent_tracking",
+        surfaceTier: "section"
+      }
+    })
+  ]);
+
+  assert.deepEqual(projection.findings.map((finding) => finding.id), []);
+  assert.deepEqual(projection.topFindings.map((finding) => finding.id), []);
+  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, ["scan_quality_visual_no_go"]);
+});
+
 function makePolicyRuntimeConflictPacket(
   overrides: Partial<UnifiedFindingDisplayPacket> = {},
   detailOverrides: Record<string, unknown> = {},

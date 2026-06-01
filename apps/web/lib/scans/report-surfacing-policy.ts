@@ -339,6 +339,9 @@ const ACCESSIBILITY_IDS = [
 
 const CONTEXT_IDS = [
   "regulator_operated_mock_investment_example",
+  "scan_quality_visual_artifact_missing",
+  "scan_quality_visual_no_go",
+  "scan_quality_visual_degraded",
   "popup_behavior_observed",
   "blocking_overlay_observed",
   "autoplay_media_observed"

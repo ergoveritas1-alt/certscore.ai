@@ -5090,13 +5090,22 @@ function hasFingerprintingCorroboratingTrackingFinding(packets: UnifiedFindingDi
 export function projectExecutiveFindingsFromUnifiedPackets(
   packets: UnifiedFindingDisplayPacket[]
 ): ExecutiveFindingsProjection {
+  const visualNoGoPackets = packets.filter(
+    (packet) =>
+      packet.unifiedFindingId === "scan_quality_visual_no_go" &&
+      packet.presentationDecision.status !== "suppress" &&
+      packet.surfacingDecision.reportable
+  );
   const surfacedPackets = packets.filter((packet) =>
     packet.presentationDecision.status === "surface" &&
     isFindingProjectionEligible({ lane: "executive", packet })
   );
+  const executiveInputPackets = visualNoGoPackets.length > 0
+    ? visualNoGoPackets
+    : surfacedPackets;
   const mappedPacketRows: ExecutiveProjectionPacketRow[] = [];
-  const hasCorroboratingTrackingFinding = hasFingerprintingCorroboratingTrackingFinding(surfacedPackets);
-  for (const packet of surfacedPackets) {
+  const hasCorroboratingTrackingFinding = hasFingerprintingCorroboratingTrackingFinding(executiveInputPackets);
+  for (const packet of executiveInputPackets) {
     const findingIds = getMappedFindingIds(packet);
     const executiveEligibleFindingIds = findingIds.filter((findingId) => {
       if (packet.unifiedFindingId !== "fingerprinting_observed") {

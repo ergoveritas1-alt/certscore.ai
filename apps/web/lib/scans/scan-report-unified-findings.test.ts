@@ -1094,6 +1094,57 @@ test("observed baseline tracker URL fallback creates canonical preconsent packet
   ]);
 });
 
+test("WS01 visual no-go runtime artifact enters canonical concern pipeline", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    runtimeArtifacts: {
+      visual_access_review: {
+        artifact_ref: "initial_load:abc123",
+        go_no_go: "NO_GO",
+        key_visual_evidence: [
+          "Page says AI-powered robots are recharging.",
+          "Page says the site is currently unavailable."
+        ],
+        page_state: "maintenance_or_unavailable",
+        reason_code: "maintenance_recharging_page",
+        short_explanation: "Initial-load page text indicated a maintenance or unavailable placeholder instead of normal public content.",
+        status: "available",
+        version: "visual-access-review-v1"
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.grammarly.com/",
+      registered_domain: "grammarly.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "scan_quality_visual_no_go");
+
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.surfacingDecision.reportable, true);
+  assert.equal(packet?.surfacingDecision.reportLane, "confidence_and_coverage");
+  assert.equal(packet?.sourceRefs.some((source) => source.kind === "signal" && source.key === "scan_quality.visual_maintenance_or_unavailable"), true);
+  assert.equal(packet?.concernContext?.originTypes.includes("compatibility_signal"), true);
+});
+
 function buildPreconsentRuntimeState(
   runtimeArtifacts: Record<string, unknown>,
   snapshot: Record<string, unknown> = {},

@@ -127,7 +127,7 @@ export function SiteFooter() {
           <p>
             Privacy rights requests can be submitted at <Link href="/privacy-request" className="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">certscore.ai/privacy-request</Link> or by emailing <a href="mailto:privacy@certscore.ai" className="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">privacy@certscore.ai</a>.
           </p>
-          <p>Copyright © 2026 CertScore.ai. All rights reserved.</p>
+          <p>© 2026 ErgoVeritas, LLC. CertScore.ai is operated by ErgoVeritas, LLC. All rights reserved.</p>
         </div>
       </div>
     </footer>
