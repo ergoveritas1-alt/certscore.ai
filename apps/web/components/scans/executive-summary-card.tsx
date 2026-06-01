@@ -2898,7 +2898,7 @@ function NotScoredSnapshotPane() {
       </div>
       <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Public page access</p>
-        <p className="mt-2 text-sm font-semibold text-slate-950">Normal public site was not reached</p>
+        <p className="mt-2 text-sm font-semibold text-slate-950">Representative page not captured</p>
         <p className="mt-1 text-sm leading-6 text-slate-600">
           The retained visual evidence showed a maintenance, unavailable, blocked, placeholder, wrong-site, blank, or otherwise non-representative page.
         </p>
@@ -4750,7 +4750,11 @@ export function ExecutiveSummaryCard(input: {
             data-testid="executive-top-findings-list"
           >
             <FindingHashFocus />
-            {displayedTopFindings.length > 0 ? (
+            {isScanNotRepresentative ? (
+              <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700">
+                Scores and regulatory projections were withheld for this scan because the captured page was not representative of the public site. Re-run when the site is available or try a different scan context.
+              </div>
+            ) : displayedTopFindings.length > 0 ? (
               <>
               {displayedTopFindings.map((finding, index) => {
                 const iconKey = topFindingIconKeys.get(finding.id) ?? getFindingTitleIconKey(finding.id);
