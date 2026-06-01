@@ -222,9 +222,8 @@ export function ScanFromSelect({
                       selected={isSelected}
                     />
                   </span>
-                  <span className="min-w-0">
+                  <span className="min-w-0 flex-1">
                     <span className={isSelected ? "block text-sm font-semibold text-slate-950" : "block text-sm font-semibold text-slate-700"}>{option.label}</span>
-                    <span className="block whitespace-normal break-words text-xs text-slate-500">{option.description}</span>
                   </span>
                   {isSelected ? (
                     <svg aria-hidden="true" className="h-4 w-4 text-sky-600" fill="none" viewBox="0 0 20 20">
@@ -240,11 +239,10 @@ export function ScanFromSelect({
               <div className="px-3 pb-1 pt-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Options</div>
               <label
                 className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                title="fresh re-scan even if url has been scanned in past 24 hr"
+                title="Bypass the 24-hour recent-scan reuse check."
               >
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold text-slate-700">Fresh re-scan</span>
-                  <span className="block whitespace-normal break-words text-xs text-slate-500">Bypass the 24-hour recent-scan reuse check.</span>
                 </span>
                 <input
                   checked={freshRescan}
