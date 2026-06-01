@@ -21,6 +21,7 @@ import { ExecutiveSummaryCard, type ExecutivePolicySurface, type ExecutiveScanIn
 import { FindingsSection } from "./findings-section";
 import { FullScanProgressCard } from "./full-scan-progress-card";
 import { FingerprintingPanel } from "./fingerprinting-panel";
+import { GdprEprivacyCoverageChecklistCard } from "./gdpr-eprivacy-coverage-checklist-card";
 import { InfoTip } from "./info-tip";
 import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
@@ -124,6 +125,7 @@ import {
 } from "../../lib/scans/finding-evidence-contracts";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
+import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import {
   formatCollectionEndpointType,
 } from "../../lib/scans/tracker-risk";
@@ -5696,6 +5698,12 @@ export function SharedScanDetailView({
     vendorCount: executiveResolvedVendorNames.length + executiveUnresolvedVendorHosts.length,
     verifiedPublicSurfacesCount: getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)
   });
+  const gdprEprivacyCoverageChecklist = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
+    scanCompleted: scanRecord.scan.status === "completed",
+    unifiedFindings: findingEvidenceDiagnostics
+  });
+  const shouldOpenGdprEprivacyCoverageChecklist = publicTopExecutiveFindings.length === 0;
 
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
@@ -5843,6 +5851,10 @@ export function SharedScanDetailView({
             policySurfaces={executivePolicySurfaces}
             scanInterruptions={executiveScanInterruptions}
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
+          />
+          <GdprEprivacyCoverageChecklistCard
+            defaultOpen={shouldOpenGdprEprivacyCoverageChecklist}
+            items={gdprEprivacyCoverageChecklist}
           />
           
         </>
