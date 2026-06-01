@@ -81,6 +81,10 @@ const FINDING_CRITICALITY_BADGES = {
     badge: "high",
     rationale: "Concrete policy/runtime mismatch evidence can require review, while still needing implementation context."
   },
+  scan_quality_visual_no_go: {
+    badge: "high",
+    rationale: "The retained visual evidence shows the scan did not capture a normal public site, so substantive findings should be reviewed or rerun before reliance."
+  },
   consent_preference_reopen_control_not_observed: {
     badge: "medium",
     rationale: "Consent lifecycle review signal that depends on retained control-search coverage and tracking context."

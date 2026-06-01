@@ -389,6 +389,22 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
     },
     reviewPrompts: ["Which policy text, runtime anchor, disclosure surface, and bridge rationale support the alignment review?"]
   },
+  scan_quality_visual_no_go: {
+    overview:
+      "The retained initial-load visual evidence shows a maintenance, block, placeholder, wrong-site, blank, or otherwise non-representative page state.",
+    regulatoryLabel: "Scan-quality no-go review",
+    regulatoryCopy:
+      "Useful for deciding whether substantive runtime privacy, consent, disclosure, and accessibility findings should be rerun before review.",
+    evidence: {
+      title: "Visual no-go sample",
+      lines: [
+        "{\"artifact\":\"initial_load_visual\",\"pageState\":\"maintenance_or_unavailable\"}",
+        "{\"goNoGo\":\"NO_GO\",\"reasonCode\":\"maintenance_recharging_page\"}",
+        "{\"coverageStatus\":\"non_representative_public_surface\"}"
+      ]
+    },
+    reviewPrompts: ["What retained screenshot, page text, and page-state reason show the scan did not capture a normal public site?"]
+  },
   probable_fingerprinting: {
     overview:
       "Runtime evidence shows a clustered set of high-entropy browser or device signals that may warrant probable fingerprinting review.",

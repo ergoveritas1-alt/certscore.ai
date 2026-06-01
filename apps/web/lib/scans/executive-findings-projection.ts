@@ -74,6 +74,7 @@ const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SC
   reject_did_not_reduce_tracking: "reject_tracking_persists_after_reject",
   reject_button_missing: "reject_option_missing_or_hidden",
   rtb_cookie_sync_observed: "rtb_cookie_sync_observed",
+  scan_quality_visual_no_go: "scan_quality_visual_no_go",
   session_replay_observed: "session_recording_services_detected",
   session_replay_undisclosed: "session_recording_services_detected",
   session_replay_present_with_sensitive_surfaces_observed: "session_replay_present_with_sensitive_surfaces_observed",

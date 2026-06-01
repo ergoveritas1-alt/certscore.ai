@@ -664,6 +664,16 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "Interstitials can block access and create pressure to act.",
     remediation: "Avoid full-page interruptions for non-essential messaging."
   },
+  scan_quality_visual_no_go: {
+    id: "scan_quality_visual_no_go",
+    label: "Captured page was not a normal public site",
+    section: "Runtime & Diagnostics",
+    defaultSurfacePriority: 104,
+    whyItMatters:
+      "When the retained initial-load screenshot shows a maintenance, block, challenge, wrong-site, blank, or placeholder state, runtime privacy and consent signals from that session may not represent the normal public site.",
+    remediation:
+      "Rerun the scan from a normal browsing path or after the site is available, then compare the retained screenshot and runtime evidence before relying on substantive findings."
+  },
   keyboard_navigation_accessibility_issue: {
     id: "keyboard_navigation_accessibility_issue",
     label: "Keyboard navigation accessibility issue",

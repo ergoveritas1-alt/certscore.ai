@@ -185,9 +185,10 @@ test("visual no-go packet prevents executive projection of placeholder-page find
     })
   ]);
 
-  assert.deepEqual(projection.findings.map((finding) => finding.id), []);
-  assert.deepEqual(projection.topFindings.map((finding) => finding.id), []);
-  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, ["scan_quality_visual_no_go"]);
+  assert.deepEqual(projection.findings.map((finding) => finding.id), ["scan_quality_visual_no_go"]);
+  assert.deepEqual(projection.topFindings.map((finding) => finding.id), ["scan_quality_visual_no_go"]);
+  assert.equal(projection.topFindings[0]?.label, "Captured page was not a normal public site");
+  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
 });
 
 function makePolicyRuntimeConflictPacket(
