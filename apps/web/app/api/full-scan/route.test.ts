@@ -27,8 +27,8 @@ test("full scan queue errors distinguish monthly usage limits", () => {
   );
 });
 
-test("full scan queue errors distinguish domain limits", () => {
-  assert.equal(getFullScanQueueErrorCode("You’ve reached the Trial plan website limit."), "domain_limit");
+test("full scan queue errors do not expose a website-count limit", () => {
+  assert.notEqual(getFullScanQueueErrorCode("You’ve reached the Trial plan website limit."), "domain_limit");
   assert.equal(
     getFullScanQueueErrorCode("This domain is already connected to your workspace."),
     "domain_already_connected"
@@ -52,5 +52,7 @@ test("workspace scan quota uses one unit per normal scan entry point", () => {
   assert.match(dashboardUsageSource, /count\(\*\) filter/);
   assert.doesNotMatch(createFullScanSource, /currentUsage \+ pagesRequested/);
   assert.doesNotMatch(dashboardUsageSource, /sum\(greatest\(pages_requested, 1\)\)/);
+  assert.doesNotMatch(createDomainSource, /maxDomains/);
+  assert.doesNotMatch(createDomainSource, /website limit/i);
   assert.doesNotMatch(`${createDomainSource}\n${rescanSource}\n${scheduledSource}`, /enforceMonthlyUsageLimit: false/);
 });

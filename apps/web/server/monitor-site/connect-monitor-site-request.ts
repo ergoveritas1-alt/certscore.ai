@@ -8,12 +8,10 @@ import { z } from "zod";
 import { getDashboardContext } from "../auth";
 import { checkDomainDns } from "../domains/domain-dns";
 import {
-  countOrganizationDomains,
   createOrganizationDomain,
   findOrganizationDomainByNormalizedUrl
 } from "../domains/repository";
 import { updateAdminMonitorSiteRequestSetup } from "../admin/repository";
-import { getPlanLimits } from "../plans/get-plan-limits";
 import { ensureMonitorSiteRequestsTable } from "./monitor-site-request";
 
 type MonitorSiteSetupRequestRow = {
@@ -182,11 +180,6 @@ export async function connectMonitorSiteRequestFormAction(formData: FormData): P
     setupRedirect(parsed.token, { error: "invalid-domain" });
   }
 
-  const [domainCount, planLimits] = await Promise.all([
-    countOrganizationDomains(dashboardContext.organization.id),
-    getPlanLimits(dashboardContext.organization.plan)
-  ]);
-
   const dnsStatus = await checkDomainDns(parsedDomain.data.hostname);
   if (!dnsStatus.exists) {
     setupRedirect(parsed.token, { error: "dns" });
@@ -198,10 +191,6 @@ export async function connectMonitorSiteRequestFormAction(formData: FormData): P
   });
 
   if (!domain) {
-    if (domainCount >= planLimits.maxDomains) {
-      setupRedirect(parsed.token, { error: "domain-limit" });
-    }
-
     domain = await createOrganizationDomain({
       hostname: parsedDomain.data.hostname,
       normalizedUrl: parsedDomain.data.normalizedUrl,

@@ -9,10 +9,6 @@ export function getFullScanQueueErrorCode(error: string | null | undefined) {
     return "domain_already_connected";
   }
 
-  if (/website limit|domain limit|Trial plan website limit/i.test(message)) {
-    return "domain_limit";
-  }
-
   if (/manual scan limit|billing period|scan allowance/i.test(message)) {
     return "monthly_usage_limit";
   }

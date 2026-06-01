@@ -12,7 +12,6 @@ export type PlanDefinition = {
   monthlyPageScanLabel: string;
   summary: string;
   trialLabel?: string;
-  maxDomains: number;
   maxPagesPerScan: number;
   scanFrequency: ScanFrequency;
   scanProfile: ScanProfile;
@@ -32,7 +31,6 @@ export const PLAN_DEFINITIONS: PlanDefinition[] = [
     monthlyPageScanLabel: "10 page scans / 7 days",
     summary: "Try the scan workflow before choosing a monthly plan.",
     trialLabel: "One-week free trial",
-    maxDomains: 1,
     maxPagesPerScan: 3,
     scanFrequency: "manual",
     scanProfile: "homepage",
@@ -49,7 +47,6 @@ export const PLAN_DEFINITIONS: PlanDefinition[] = [
     coverageLabel: "50 page scans / month",
     monthlyPageScanLabel: "50 page scans / month",
     summary: "For teams that need repeatable page-level checks without a large volume commitment.",
-    maxDomains: 1,
     maxPagesPerScan: 5,
     scanFrequency: "hourly",
     scanProfile: "standard",
@@ -66,7 +63,6 @@ export const PLAN_DEFINITIONS: PlanDefinition[] = [
     coverageLabel: "500 page scans / month",
     monthlyPageScanLabel: "500 page scans / month",
     summary: "For ongoing review work, more page coverage, and recurring scan history.",
-    maxDomains: 20,
     maxPagesPerScan: 5,
     scanFrequency: "hourly",
     scanProfile: "standard",
@@ -83,7 +79,6 @@ export const PLAN_DEFINITIONS: PlanDefinition[] = [
     coverageLabel: "Custom page-scan volume",
     monthlyPageScanLabel: "Custom page-scan volume",
     summary: "For higher-volume page scanning, portfolio workflows, API access, and custom evidence needs.",
-    maxDomains: 100,
     maxPagesPerScan: 5,
     scanFrequency: "hourly",
     scanProfile: "team",

@@ -46,8 +46,6 @@ const GENERIC_SCAN_ERROR_MESSAGES: Record<ScanMode, string> = {
 const FULL_SCAN_ERROR_MESSAGES: Record<string, string> = {
   active_scan_exists: "A scan is already queued or running for this site. Open scan history or try again shortly.",
   domain_already_connected: "This site is already connected to your workspace. Sign in to open it from scan history.",
-  domain_limit:
-    "This account has reached its website limit. Review your plan after signing in, or email support@certscore.ai.",
   full_scan_server_error: "The scan service hit an unexpected error. Try again in a minute.",
   invalid_domain: "Enter a valid website domain, like example.com.",
   monthly_usage_limit:
@@ -62,7 +60,6 @@ const FULL_SCAN_ERROR_MESSAGES: Record<string, string> = {
 };
 
 const FULL_SCAN_ERROR_GUIDANCE: Record<string, string> = {
-  domain_limit: "Review your plan after signing in, or email support@certscore.ai.",
   monthly_usage_limit: "Review your plan after signing in, or email support@certscore.ai.",
   rescan_cooldown: "Email support@certscore.ai if you need higher-throughput scanning."
 };

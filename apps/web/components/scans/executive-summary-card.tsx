@@ -2897,13 +2897,6 @@ function NotScoredSnapshotPane() {
         </p>
       </div>
       <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Public page access</p>
-        <p className="mt-2 text-sm font-semibold text-slate-950">Representative page not captured</p>
-        <p className="mt-1 text-sm leading-6 text-slate-600">
-          The retained visual evidence showed a maintenance, unavailable, blocked, placeholder, wrong-site, blank, or otherwise non-representative page.
-        </p>
-      </div>
-      <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Report status</p>
         <p className="mt-2 text-sm font-semibold text-slate-950">Not scored</p>
         <p className="mt-1 text-sm leading-6 text-slate-600">

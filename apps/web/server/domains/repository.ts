@@ -331,22 +331,6 @@ export async function loadDomainOrganizationAndSettings(organizationId: string):
   }
 }
 
-export async function countOrganizationDomains(organizationId: string): Promise<number> {
-  try {
-    const result = await query<{ count: string }>(
-      `select count(*)::text as count
-         from domains
-        where organization_id = $1`,
-      [organizationId],
-      { readOnly: true }
-    );
-
-    return Number(result.rows[0]?.count ?? "0");
-  } catch (error) {
-    throw new Error(`Could not verify domain limits: ${getErrorMessage(error)}`);
-  }
-}
-
 export async function findOrganizationDomainByNormalizedUrl(input: {
   normalizedUrl: string;
   organizationId: string;

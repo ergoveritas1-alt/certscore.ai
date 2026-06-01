@@ -1965,6 +1965,9 @@ test("ExecutiveSummaryCard withholds scores when the captured page is not repres
   assert.match(html, /Scan quality snapshot/);
   assert.doesNotMatch(html, /Top findings/);
   assert.doesNotMatch(html, /Why this scan was not scored/);
+  assert.doesNotMatch(html, /Public page access/);
+  assert.doesNotMatch(html, /Representative page not captured/);
+  assert.doesNotMatch(html, /retained visual evidence showed/);
   assert.doesNotMatch(html, /Overall score/);
   assert.doesNotMatch(html, /63\/100 overall score/);
   assert.doesNotMatch(html, /Review lenses/);

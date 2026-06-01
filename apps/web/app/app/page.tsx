@@ -85,7 +85,7 @@ export default async function DashboardPage() {
           <CardTitle>Add domain(s) to scan</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 pt-0 pb-3">
-          <AddDomainForm maxDomains={planLimits.maxDomains} planCode={organization.plan} />
+          <AddDomainForm planCode={organization.plan} />
         </CardContent>
       </Card>
 

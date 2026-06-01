@@ -11,11 +11,10 @@ const initialState: CreateDomainActionState = {
 };
 
 type AddDomainFormProps = {
-  maxDomains: number;
   planCode: string;
 };
 
-export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
+export function AddDomainForm({ planCode }: AddDomainFormProps) {
   const [state, action, isPending] = useActionState(createDomainAction, initialState);
   const [freshRescan, setFreshRescan] = useState(false);
   const [scanFrom, setScanFrom] = useState<ScanFrom>("default");

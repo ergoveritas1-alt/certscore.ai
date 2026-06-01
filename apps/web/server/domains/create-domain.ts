@@ -1,11 +1,10 @@
 "use server";
 
-import { createDomainRequestSchema, getPlanDefinition, normalizeScanFrom, parseDomainBatchInput, type ScanFrom } from "@website-signal-risk-scanner/shared";
+import { createDomainRequestSchema, normalizeScanFrom, parseDomainBatchInput, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
 import { getQueueAvailability } from "../../lib/env";
 import { getDashboardContext } from "../auth";
 import {
-  countOrganizationDomains,
   createOrganizationDomain,
   findOrganizationDomainByNormalizedUrl,
   loadDomainOrganizationAndSettings
@@ -54,12 +53,10 @@ export async function createOrQueueDomainScan(input: {
     };
   }
 
-  const [planLimits, organizationSettingsAndOrg, domainCount] = await Promise.all([
+  const [planLimits, organizationSettingsAndOrg] = await Promise.all([
     getPlanLimits(dashboardContext.organization.plan),
-    loadDomainOrganizationAndSettings(dashboardContext.organization.id),
-    countOrganizationDomains(dashboardContext.organization.id)
+    loadDomainOrganizationAndSettings(dashboardContext.organization.id)
   ]);
-  const planDefinition = getPlanDefinition(planLimits.planCode);
   const organizationSettings = organizationSettingsAndOrg.settings;
 
   const { hostname, normalizedUrl } = parsedInput.data;
@@ -119,18 +116,6 @@ export async function createOrQueueDomainScan(input: {
   if (!queueAvailability.enabled) {
     return {
       error: queueAvailability.reason,
-      scanId: null
-    };
-  }
-
-  if (domainCount >= planLimits.maxDomains) {
-    return {
-      error:
-        planLimits.planCode === "free"
-          ? "You’ve reached the Trial plan website limit."
-          : `You’ve reached the ${planDefinition.label} plan workspace website limit of ${planLimits.maxDomains} site${
-              planLimits.maxDomains === 1 ? "" : "s"
-            }.`,
       scanId: null
     };
   }

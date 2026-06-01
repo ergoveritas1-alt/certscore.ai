@@ -5,12 +5,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
-  countOrganizationDomains,
   createOrganizationDomain,
   findOrganizationDomainByNormalizedUrl,
   loadDomainOrganizationAndSettings
 } from "../domains/repository";
-import { getPlanLimits } from "../plans/get-plan-limits";
 import {
   loadAdminMonitorSiteRequestById,
   updateAdminMonitorSiteRequestSetup
@@ -54,15 +52,6 @@ export async function prepareMonitorSiteSetupFormAction(formData: FormData): Pro
   });
 
   if (!domain) {
-    const [domainCount, planLimits] = await Promise.all([
-      countOrganizationDomains(parsed.organizationId),
-      getPlanLimits(organizationState.organization.plan)
-    ]);
-
-    if (domainCount >= planLimits.maxDomains) {
-      throw new Error("Workspace domain limit would be exceeded. Adjust the workspace before preparing setup.");
-    }
-
     domain = await createOrganizationDomain({
       hostname: parsedDomain.data.hostname,
       normalizedUrl: parsedDomain.data.normalizedUrl,

@@ -5,7 +5,6 @@ import { queryOne } from "@website-signal-risk-scanner/db";
 
 export type PlanLimitRecord = {
   planCode: PlanCode;
-  maxDomains: number;
   maxPagesPerScan: number;
   scanFrequency: ScanFrequency;
   manualRescanLimitPerMonth: number | null;
@@ -19,7 +18,6 @@ export async function getPlanLimits(planCode: PlanCode): Promise<PlanLimitRecord
 
   return {
     planCode,
-    maxDomains: plan.maxDomains,
     maxPagesPerScan: plan.maxPagesPerScan,
     scanFrequency: plan.scanFrequency,
     manualRescanLimitPerMonth: plan.manualRescanLimitPerMonth,

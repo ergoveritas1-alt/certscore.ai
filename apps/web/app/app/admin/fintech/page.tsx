@@ -7,16 +7,14 @@ import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../server/auth";
 import { listOrganizationChanges } from "../../../../server/changes/list-organization-changes";
 import { getOrganizationDomains } from "../../../../server/domains/get-organization-domains";
-import { getPlanLimits } from "../../../../server/plans/get-plan-limits";
 import { getOrganizationScans } from "../../../../server/scans/get-organization-scans";
 import { getOrganizationSignalOverview } from "../../../../server/signals/get-organization-signal-overview";
 
 export default async function AdminFintechPage() {
   const { organization, user } = await getDashboardContext();
   const adminRescanCooldownMs = isPlatformAdminEmail(user.email) ? getAdminScanThrottleMs() : undefined;
-  const [domains, planLimits, recentScans, recentChanges, signalOverview] = await Promise.all([
+  const [domains, recentScans, recentChanges, signalOverview] = await Promise.all([
     getOrganizationDomains(organization.id),
-    getPlanLimits(organization.plan),
     getOrganizationScans(organization.id),
     listOrganizationChanges(organization.id, 5),
     getOrganizationSignalOverview(organization.id)
@@ -55,9 +53,7 @@ export default async function AdminFintechPage() {
             <CardTitle>Fintech Domains</CardTitle>
           </CardHeader>
           <CardContent className="space-y-0 pb-2.5 text-sm text-slate-600">
-            <p className="text-2xl font-semibold text-slate-900">
-              {fintechDomains.length}/{planLimits.maxDomains}
-            </p>
+            <p className="text-2xl font-semibold text-slate-900">{fintechDomains.length}</p>
             <p>Domains classified as fintech in this workspace.</p>
           </CardContent>
         </Card>
@@ -86,7 +82,7 @@ export default async function AdminFintechPage() {
           <CardTitle>Add domain(s) to scan</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 pt-0 pb-3">
-          <AddDomainForm maxDomains={planLimits.maxDomains} planCode={organization.plan} />
+          <AddDomainForm planCode={organization.plan} />
         </CardContent>
       </Card>
 
