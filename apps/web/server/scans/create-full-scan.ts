@@ -535,6 +535,7 @@ export async function createFullScanAction(
 
   const dashboardContext = await getDashboardContext();
   const domainId = String(formData.get("domainId") ?? "").trim();
+  const forceNewScan = formData.get("forceNewScan") === "true";
   const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
 
   if (domainId.length === 0) {
@@ -548,6 +549,7 @@ export async function createFullScanAction(
     organizationId: dashboardContext.organization.id,
     planCode: dashboardContext.organization.plan,
     submittedByUserId: dashboardContext.user.id,
+    bypassRecentScanReuse: forceNewScan,
     enforceMonthlyUsageLimit: true,
     scanFrom,
     scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,

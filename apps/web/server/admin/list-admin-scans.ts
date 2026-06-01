@@ -30,6 +30,7 @@ export type AdminScanListItem = {
   domainId: string | null;
   findingCount: number | null;
   firstGeneratedAt: string | null;
+  freshRescanRequested: boolean | null;
   highestSuccessfulTier: ScanExecutionTier | null;
   homepageFetchHttpStatus: number | null;
   interruptionLabel: string | null;
@@ -171,6 +172,7 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       totalSignals: snapshot?.total_signals ?? null,
       topFindingCount: null,
       findingCount: snapshot?.report_finding_count ?? null,
+      freshRescanRequested: getFreshRescanRequested(linkedRequest?.request_context ?? null),
       certscoreOverall: snapshot?.certscore_overall ?? null,
       homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
       robotsFetchHttpStatus: snapshot?.robots_fetch_http_status ?? null,
@@ -226,6 +228,7 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
     domainId: null,
     findingCount: null,
     firstGeneratedAt: request.scan_created_at ?? request.reused_completed_at ?? null,
+    freshRescanRequested: getFreshRescanRequested(request.request_context),
     highestSuccessfulTier: null,
     homepageFetchHttpStatus: null,
     interruptionLabel: null,
@@ -263,6 +266,27 @@ function getLinkedScanIdForRequest(request: ScanRequestRow) {
 function getStringMetadataValue(value: unknown) {
   const normalized = typeof value === "string" ? value.trim() : "";
   return normalized.length > 0 ? normalized : null;
+}
+
+function getBooleanMetadataValue(value: unknown) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") {
+      return true;
+    }
+    if (normalized === "false") {
+      return false;
+    }
+  }
+  return null;
+}
+
+function getFreshRescanRequested(requestContext: unknown) {
+  const context = getNestedMetadataObject(requestContext);
+  return getBooleanMetadataValue(context?.bypassRecentScanReuse) ?? getBooleanMetadataValue(context?.forceNewScan);
 }
 
 function getNestedMetadataObject(value: unknown) {

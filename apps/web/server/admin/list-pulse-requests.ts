@@ -25,6 +25,7 @@ export type AdminPulseRequestListItem = {
   elapsedSeconds: number | null;
   feedbackCount: number;
   format: string | null;
+  freshRescanRequested: boolean | null;
   freshness: string | null;
   jobId: string;
   normalizedDomain: string | null;
@@ -101,6 +102,28 @@ function getRequestContextString(value: unknown, key: string) {
   return typeof nested === "string" && nested.trim().length > 0 ? nested.trim() : null;
 }
 
+function getRequestContextBoolean(value: unknown, key: string) {
+  const record = asRecord(value);
+  const nested = record[key];
+  if (typeof nested === "boolean") {
+    return nested;
+  }
+  if (typeof nested === "string") {
+    const normalized = nested.trim().toLowerCase();
+    if (normalized === "true") {
+      return true;
+    }
+    if (normalized === "false") {
+      return false;
+    }
+  }
+  return null;
+}
+
+function getFreshRescanRequested(requestContext: Record<string, unknown>) {
+  return getRequestContextBoolean(requestContext, "bypassRecentScanReuse") ?? getRequestContextBoolean(requestContext, "forceNewScan");
+}
+
 function mapPulseRequestRow(row: Record<string, unknown>, topFindingIdsByScanId: Map<string, string[]> = new Map()): AdminPulseRequestListItem {
   const requestContext = asRecord(row.request_context);
   const requestedBy = asRecord(row.requested_by);
@@ -115,6 +138,7 @@ function mapPulseRequestRow(row: Record<string, unknown>, topFindingIdsByScanId:
     elapsedSeconds: typeof row.elapsed_seconds === "number" ? row.elapsed_seconds : null,
     feedbackCount: typeof row.feedback_count === "number" ? row.feedback_count : 0,
     format: getRequestContextString(requestContext, "format"),
+    freshRescanRequested: getFreshRescanRequested(requestContext),
     freshness: getRequestContextString(requestContext, "freshness"),
     jobId: String(row.job_id),
     normalizedDomain: typeof row.normalized_domain === "string" ? row.normalized_domain : null,

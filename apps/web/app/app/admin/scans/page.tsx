@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { FreshRescanBadge } from "../../../../components/scans/fresh-rescan-badge";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
@@ -146,6 +147,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                             </span>
                           );
                         })()}
+                        <FreshRescanBadge value={scan.freshRescanRequested} />
                         {scan.rowKind === "request" ? (
                           <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Request</span>
                         ) : (

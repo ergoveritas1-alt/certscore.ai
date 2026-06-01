@@ -190,6 +190,7 @@ export async function createDomainAction(
   formData: FormData
 ): Promise<CreateDomainActionState> {
   const domainInput = String(formData.get("domain") ?? "");
+  const forceNewScan = formData.get("forceNewScan") === "true";
   const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
   const parsedBatch = parseDomainBatchInput(domainInput);
 
@@ -207,6 +208,7 @@ export async function createDomainAction(
       createOrQueueDomainScan({
         domain: item.domain,
         allowExistingDomainRescan: true,
+        bypassRecentScanReuse: forceNewScan,
         scanFrom
       })
     )

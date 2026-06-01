@@ -68,6 +68,7 @@ export type OrganizationScanListItem = {
   interruptionLabel: string | null;
   interruptionReason: string | null;
   recoverableFindingClasses: RecoverableFindingClass[];
+  freshRescanRequested: boolean | null;
   scanFromLabel: string;
   scanFromValue: string;
   stopTier: ScanExecutionTier | null;
@@ -97,6 +98,27 @@ function getRecordNumberLike(record: Record<string, unknown> | null, key: string
   }
 
   return null;
+}
+
+function getRecordBoolean(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") {
+      return true;
+    }
+    if (normalized === "false") {
+      return false;
+    }
+  }
+  return null;
+}
+
+function getFreshRescanRequested(requestContext: Record<string, unknown> | null) {
+  return getRecordBoolean(requestContext, "bypassRecentScanReuse") ?? getRecordBoolean(requestContext, "forceNewScan");
 }
 
 function deriveLoggedInterruptionReason(scanEvents: ScanDiagnosticEventRow[]) {
@@ -530,6 +552,7 @@ async function loadOrganizationScans(
         highestSuccessfulTier: normalizedAccessPosture.highestSuccessfulTier,
         stopTier: normalizedAccessPosture.stopTier,
         recoverableFindingClasses: normalizedAccessPosture.recoverableFindingClasses,
+        freshRescanRequested: getFreshRescanRequested(scan.request_context),
         scanFromLabel: scanFromDisplay.label,
         scanFromValue: scanFromDisplay.value
     } satisfies OrganizationScanListItem;

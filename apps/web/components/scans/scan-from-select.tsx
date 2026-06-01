@@ -3,11 +3,36 @@
 import { useEffect, useRef, useState } from "react";
 
 export const SCAN_FROM_OPTIONS = [
-  { description: "Default CertScore scan", icon: "cloud", label: "Cloud", value: "default" },
-  { description: "Run from this browser", icon: "local", label: "Local-extension", value: "local_extension" },
-  { flag: "🇪🇺", label: "EU", value: "eu" },
-  { flag: "🇬🇧", label: "UK", value: "uk" },
-  { flag: "california", label: "California", value: "california" }
+  {
+    description: "Run from CertScore's default cloud scanner.",
+    icon: "cloud",
+    label: "Cloud",
+    value: "default"
+  },
+  {
+    description: "Run from this browser using the CertScore Chrome extension.",
+    icon: "local",
+    label: "Local-extension",
+    value: "local_extension"
+  },
+  {
+    description: "Run from CertScore's European Union scan context.",
+    flag: "🇪🇺",
+    label: "EU",
+    value: "eu"
+  },
+  {
+    description: "Run from CertScore's United Kingdom scan context.",
+    flag: "🇬🇧",
+    label: "UK",
+    value: "uk"
+  },
+  {
+    description: "Run from CertScore's California scan context.",
+    flag: "california",
+    label: "California",
+    value: "california"
+  }
 ] as const;
 
 export type ScanFrom = (typeof SCAN_FROM_OPTIONS)[number]["value"];
@@ -15,10 +40,14 @@ export type ServerScanFrom = Exclude<ScanFrom, "local_extension">;
 
 type ScanFromSelectProps = {
   compact?: boolean;
+  freshRescanName?: string;
+  freshRescanValue?: boolean;
   id?: string;
   name?: string;
   includeLocalExtension?: boolean;
+  includeFreshRescanOption?: boolean;
   onChange?: (value: ScanFrom) => void;
+  onFreshRescanChange?: (value: boolean) => void;
   variant?: "field" | "icon";
   value?: ScanFrom;
 };
@@ -94,17 +123,23 @@ function SelectedScanFromMarker({ option }: { option: (typeof SCAN_FROM_OPTIONS)
 
 export function ScanFromSelect({
   compact = false,
+  freshRescanName = "forceNewScan",
+  freshRescanValue,
   id = "scanFrom",
+  includeFreshRescanOption = false,
   includeLocalExtension = false,
   name = "scanFrom",
   onChange,
+  onFreshRescanChange,
   variant = "field",
   value = "default"
 }: ScanFromSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [uncontrolledFreshRescan, setUncontrolledFreshRescan] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const options = includeLocalExtension ? SCAN_FROM_OPTIONS : SCAN_FROM_OPTIONS.filter((option) => option.value !== "local_extension");
   const selectedOption = options.find((option) => option.value === value) ?? options[0] ?? SCAN_FROM_OPTIONS[0];
+  const freshRescan = freshRescanValue ?? uncontrolledFreshRescan;
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -122,6 +157,13 @@ export function ScanFromSelect({
     setIsOpen(false);
   }
 
+  function setFreshRescan(nextValue: boolean) {
+    if (freshRescanValue === undefined) {
+      setUncontrolledFreshRescan(nextValue);
+    }
+    onFreshRescanChange?.(nextValue);
+  }
+
   const menuOptions = options;
 
   const buttonClassName =
@@ -134,6 +176,7 @@ export function ScanFromSelect({
   return (
     <div ref={wrapperRef} className={variant === "icon" ? "relative" : compact ? "relative inline-flex items-center gap-2 text-xs font-medium text-slate-600" : "relative block space-y-1.5"}>
       <input id={id} name={name} type="hidden" value={value} />
+      {includeFreshRescanOption && freshRescan ? <input name={freshRescanName} type="hidden" value="true" /> : null}
       {variant === "field" ? (
         <span className={compact ? "shrink-0" : "block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500"}>
           Scan from
@@ -157,7 +200,7 @@ export function ScanFromSelect({
         ) : null}
       </button>
       {isOpen ? (
-        <div className={variant === "icon" ? "absolute left-1/2 top-[calc(100%+0.55rem)] z-[100] w-max min-w-[9.25rem] -translate-x-1/2 isolate overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_18px_46px_rgba(15,23,42,0.16)]" : "absolute left-0 top-[calc(100%+0.55rem)] z-[100] w-64 isolate overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_18px_46px_rgba(15,23,42,0.16)]"}>
+        <div className={variant === "icon" ? "absolute right-[-6rem] top-[calc(100%+0.55rem)] z-[100] w-[min(20rem,calc(100vw-2rem))] isolate overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_18px_46px_rgba(15,23,42,0.16)]" : "absolute left-0 top-[calc(100%+0.55rem)] z-[100] w-72 isolate overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_18px_46px_rgba(15,23,42,0.16)]"}>
           <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Scan from</div>
           <div role="listbox" aria-label="Scan from">
             {menuOptions.map((option) => {
@@ -169,6 +212,7 @@ export function ScanFromSelect({
                   key={option.value}
                   onClick={() => selectScanFrom(option.value)}
                   role="option"
+                  title={option.description}
                   type="button"
                 >
                   <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-base leading-none">
@@ -180,7 +224,7 @@ export function ScanFromSelect({
                   </span>
                   <span className="min-w-0">
                     <span className={isSelected ? "block text-sm font-semibold text-slate-950" : "block text-sm font-semibold text-slate-700"}>{option.label}</span>
-                    {"description" in option ? <span className="block text-xs text-slate-500">{option.description}</span> : null}
+                    <span className="block whitespace-normal break-words text-xs text-slate-500">{option.description}</span>
                   </span>
                   {isSelected ? (
                     <svg aria-hidden="true" className="h-4 w-4 text-sky-600" fill="none" viewBox="0 0 20 20">
@@ -191,6 +235,41 @@ export function ScanFromSelect({
               );
             })}
           </div>
+          {includeFreshRescanOption ? (
+            <div className="mt-1 border-t border-slate-200/70 pt-1">
+              <div className="px-3 pb-1 pt-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Options</div>
+              <label
+                className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
+                title="fresh re-scan even if url has been scanned in past 24 hr"
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-slate-700">Fresh re-scan</span>
+                  <span className="block whitespace-normal break-words text-xs text-slate-500">Bypass the 24-hour recent-scan reuse check.</span>
+                </span>
+                <input
+                  checked={freshRescan}
+                  className="sr-only"
+                  onChange={(event) => setFreshRescan(event.target.checked)}
+                  type="checkbox"
+                />
+                <span
+                  className={
+                    freshRescan
+                      ? "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-sky-500 transition"
+                      : "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-slate-200 transition"
+                  }
+                >
+                  <span
+                    className={
+                      freshRescan
+                        ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
+                        : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
+                    }
+                  />
+                </span>
+              </label>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

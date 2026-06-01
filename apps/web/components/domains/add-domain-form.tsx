@@ -17,6 +17,7 @@ type AddDomainFormProps = {
 
 export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
   const [state, action, isPending] = useActionState(createDomainAction, initialState);
+  const [freshRescan, setFreshRescan] = useState(false);
   const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
 
   useEffect(() => {
@@ -40,7 +41,14 @@ export function AddDomainForm({ maxDomains, planCode }: AddDomainFormProps) {
             type="text"
           />
           <div className="absolute right-[10.6rem] top-1/2 -translate-y-1/2">
-            <ScanFromSelect onChange={setScanFrom} value={scanFrom} variant="icon" />
+            <ScanFromSelect
+              freshRescanValue={freshRescan}
+              includeFreshRescanOption
+              onChange={setScanFrom}
+              onFreshRescanChange={setFreshRescan}
+              value={scanFrom}
+              variant="icon"
+            />
           </div>
           <Button
             aria-label="Start scanning"

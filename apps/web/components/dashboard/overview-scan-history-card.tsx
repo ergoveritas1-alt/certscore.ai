@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-s
 import { getScanThrottleCopy } from "../../lib/scan-access";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import type { OrganizationScanListItem } from "../../server/scans/get-organization-scans";
+import { FreshRescanBadge } from "../scans/fresh-rescan-badge";
 import { RescanDomainForm } from "../scans/rescan-domain-form";
 import { PendingButtonLink } from "../ui/pending-link";
 
@@ -256,6 +257,7 @@ export function OverviewScanHistoryCard({ planCode, rescanCooldownMs, scans }: O
                           {latestScan.certscoreOverall !== null ? <span>Overall {latestScan.certscoreOverall}</span> : null}
                           {latestScan.cmpVendorName ? <span>CMP {latestScan.cmpVendorName}</span> : null}
                           {latestScan.cookieBannerPresent === false ? <span>Banner not visible</span> : null}
+                          <FreshRescanBadge value={latestScan.freshRescanRequested} />
                         </div>
                         {latestScan.scanQualityWarning && latestScan.scanQualityWarning !== latestScan.interruptionReason ? (
                           <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -306,6 +308,9 @@ export function OverviewScanHistoryCard({ planCode, rescanCooldownMs, scans }: O
                                         {scan.scanType} · {scan.status}
                                       </span>
                                       <span className="block text-xs text-slate-500">{formatDateTime(scan.createdAt)}</span>
+                                      <span className="mt-1 block">
+                                        <FreshRescanBadge value={scan.freshRescanRequested} />
+                                      </span>
                                     </a>
                                   ))}
                                 </div>

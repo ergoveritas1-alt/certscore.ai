@@ -1,6 +1,7 @@
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { PendingScanStartedEvent } from "../../../components/analytics/data-layer-events";
+import { FreshRescanBadge } from "../../../components/scans/fresh-rescan-badge";
 import { RescanDomainForm } from "../../../components/scans/rescan-domain-form";
 import { ScanHistoryLiveRefresh } from "../../../components/scans/scan-history-live-refresh";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../components/ui/pagination-controls";
@@ -236,7 +237,10 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                         </div>
                       </td>
                       <td className="py-4 pr-4 text-slate-600">
-                        <Badge className="bg-slate-100 text-slate-700 ring-1 ring-slate-200">{scan.scanFromLabel}</Badge>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge className="bg-slate-100 text-slate-700 ring-1 ring-slate-200">{scan.scanFromLabel}</Badge>
+                          <FreshRescanBadge value={scan.freshRescanRequested} />
+                        </div>
                       </td>
                       <td className="py-4 pr-4 text-slate-600">{scan.scanType}</td>
                       <td className="py-4 pr-4 text-slate-600">
@@ -352,6 +356,12 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                       <div className="rounded-2xl bg-slate-50 px-4 py-3">
                         <dt className="text-slate-500">Scan from</dt>
                         <dd className="mt-1 font-medium text-slate-900">{scan.scanFromLabel}</dd>
+                      </div>
+                      <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <dt className="text-slate-500">Fresh re-scan</dt>
+                        <dd className="mt-1">
+                          <FreshRescanBadge value={scan.freshRescanRequested} />
+                        </dd>
                       </div>
                       <div className="rounded-2xl bg-slate-50 px-4 py-3">
                         <dt className="text-slate-500">Signals</dt>

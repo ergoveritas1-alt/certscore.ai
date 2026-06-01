@@ -30,7 +30,7 @@ export function QueueFullScanForm({ domainId, disabled = false, unavailableReaso
   return (
     <form action={action} className="space-y-3" onSubmit={() => markPendingScanStarted("dashboard")}>
       <input name="domainId" type="hidden" value={domainId} />
-      <ScanFromSelect />
+      <ScanFromSelect includeFreshRescanOption />
       {errorMessage ? <p className="max-w-sm text-sm text-red-600">{errorMessage}</p> : null}
       <Button
         className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"

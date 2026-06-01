@@ -251,6 +251,7 @@ export function DomainScanForm({
   const [localExtensionStatus, setLocalExtensionStatus] = useState<Bx01Status | null>(null);
   const [showExtensionInstructions, setShowExtensionInstructions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [freshRescan, setFreshRescan] = useState(false);
   const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
   const isSubmittingRef = useRef(false);
 
@@ -385,6 +386,7 @@ export function DomainScanForm({
       const response = await fetch(mode === "preview" ? "/api/preview-scan" : "/api/full-scan", {
         body: JSON.stringify({
           domain: submittedDomain,
+          forceNewScan: mode === "full" ? freshRescan : false,
           scanFrom: scanFrom as ServerScanFrom
         }),
         headers: {
@@ -490,7 +492,16 @@ export function DomainScanForm({
           />
           {mode === "full" ? (
             <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
-              <ScanFromSelect compact={compact} includeLocalExtension onChange={setScanFrom} value={scanFrom} variant="icon" />
+              <ScanFromSelect
+                compact={compact}
+                freshRescanValue={freshRescan}
+                includeFreshRescanOption
+                includeLocalExtension
+                onChange={setScanFrom}
+                onFreshRescanChange={setFreshRescan}
+                value={scanFrom}
+                variant="icon"
+              />
             </div>
           ) : null}
           <Button

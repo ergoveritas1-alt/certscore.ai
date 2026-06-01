@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { FreshRescanBadge } from "../../../../components/scans/fresh-rescan-badge";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
@@ -206,7 +207,12 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                         <p className="text-xs text-slate-500">
                           {formatLabel(request.freshness)} · {formatLabel(request.resolutionMode)}
                         </p>
-                        <p className="mt-1 text-xs text-slate-500">Scan from: {request.scanFromLabel}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                            Scan from: {request.scanFromLabel}
+                          </span>
+                          <FreshRescanBadge value={request.freshRescanRequested} />
+                        </div>
                       </td>
                       <td className="py-3 pr-4 align-top text-slate-700">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${statusClass(request.status)}`}>

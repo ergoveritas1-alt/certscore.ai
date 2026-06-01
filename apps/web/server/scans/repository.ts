@@ -162,6 +162,7 @@ export type OrganizationScanQueryRow = {
   id: string;
   pages_requested: number;
   pages_scanned: number;
+  request_context: Record<string, unknown> | null;
   scan_config_json: Record<string, unknown> | null;
   scan_type: string;
   started_at: string | null;
@@ -1422,6 +1423,7 @@ export async function loadOrganizationScanPageData(
           s.status,
           s.pages_requested,
           s.pages_scanned,
+          scan_request.request_context,
           s.created_at,
           s.started_at,
           s.completed_at
