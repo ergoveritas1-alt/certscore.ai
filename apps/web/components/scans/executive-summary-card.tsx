@@ -96,6 +96,9 @@ export type ExecutiveScanInterruption = {
 };
 
 function getPostureClasses(posture: ExecutiveDisplayState) {
+  if (posture === "Scan not representative") {
+    return "border-slate-300 bg-slate-100/90 text-slate-950";
+  }
   if (posture === "Action Needed") {
     return "border-rose-200 bg-rose-50/90 text-rose-950";
   }
@@ -2848,6 +2851,75 @@ function BenchmarkScoreNote({ message }: { message: string }) {
   );
 }
 
+function NotScoredMetricCard(input: {
+  helper: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-[1.1rem] border border-slate-200 bg-white px-3.5 py-3">
+      <p className="text-[9px] uppercase tracking-[0.13em] text-slate-500">{input.label}</p>
+      <p className="mt-2 text-base font-semibold leading-5 text-slate-950">{input.value}</p>
+      <p className="mt-1.5 text-[11px] leading-4 text-slate-600">{input.helper}</p>
+    </div>
+  );
+}
+
+function NotScoredHeroMetrics() {
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      <NotScoredMetricCard
+        label="Captured state"
+        value="Not representative"
+        helper="The retained page was not the normal public site."
+      />
+      <NotScoredMetricCard
+        label="Automated runtime signal"
+        value="Unavailable"
+        helper="Substantive automated scoring was withheld."
+      />
+      <NotScoredMetricCard
+        label="Report status"
+        value="Not scored"
+        helper="Re-run when the public site is available."
+      />
+    </div>
+  );
+}
+
+function NotScoredSnapshotPane() {
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Scan quality snapshot</p>
+        <p className="text-sm leading-6 text-slate-600">
+          The scan retained evidence explaining why the report was not scored.
+        </p>
+      </div>
+      <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Public page access</p>
+        <p className="mt-2 text-sm font-semibold text-slate-950">Normal public site was not reached</p>
+        <p className="mt-1 text-sm leading-6 text-slate-600">
+          The retained visual evidence showed a maintenance, unavailable, blocked, placeholder, wrong-site, blank, or otherwise non-representative page.
+        </p>
+      </div>
+      <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Report status</p>
+        <p className="mt-2 text-sm font-semibold text-slate-950">Not scored</p>
+        <p className="mt-1 text-sm leading-6 text-slate-600">
+          CertScore did not issue privacy, consent, accessibility, or regulatory scores from this run.
+        </p>
+      </div>
+      <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Recommended next step</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Re-run the scan when the site is available, or try a different scan context if the retained screenshot still does not show the normal public site.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function getFindingReferenceLink(finding: CertScoreFinding) {
   if (finding.id === "third_party_tracking_pre_consent") {
     return {
@@ -3234,6 +3306,8 @@ function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKe
       return ["focus-target", "keyboard-key", "warning-triangle"];
     case "policy_behavior_contradiction_detected":
       return ["policy-sync", "shield-balance", "chain-link"];
+    case "scan_quality_visual_no_go":
+      return ["warning-triangle", "default-circle"];
     case "policy_clarity_risk":
       return ["document-clarity", "policy-sync", "chain-link"];
     case "access_limited_no_reliable_findings":
@@ -4411,14 +4485,17 @@ export function ExecutiveSummaryCard(input: {
     .map(([key, count]) => `${formatCategoryLabel(key)} ${count}`)
     .join(" · ");
   const availableTopFindings = input.topFindings.filter((finding) => !suppressedTopFindingIds.has(finding.id));
-  const topFindingIconKeys = assignUniqueFindingTitleIconKeys(availableTopFindings);
+  const nonRepresentativeScanFinding = availableTopFindings.find((finding) => finding.id === "scan_quality_visual_no_go");
+  const isScanNotRepresentative = Boolean(nonRepresentativeScanFinding);
+  const displayedTopFindings = nonRepresentativeScanFinding ? [nonRepresentativeScanFinding] : availableTopFindings;
+  const topFindingIconKeys = assignUniqueFindingTitleIconKeys(displayedTopFindings);
   const regulatoryFindingInput =
     Array.isArray(input.allFindings) && input.allFindings.length > 0 ? input.allFindings : input.topFindings;
   const cookieCountMismatchNote = getCookieCountMismatchNote({
     beforeConsentCookieCount: input.beforeConsentCookieCount,
     findings: regulatoryFindingInput
   });
-  const executiveHeadlineFindings = availableTopFindings.slice(0, 3).map((finding) => {
+  const executiveHeadlineFindings = displayedTopFindings.slice(0, 3).map((finding) => {
     const display = getPublicReportFindingDisplayForCertFinding(finding);
     return {
       ...finding,
@@ -4482,19 +4559,21 @@ export function ExecutiveSummaryCard(input: {
   const policySurfaceSummary = formatPolicySurfaceSummary(policySurfaces);
   const policySurfaceLabelsByUrl = buildPolicySurfaceSharedUrlLabels(policySurfaces);
   const scanInterruptions = input.scanInterruptions ?? [];
-  const displayState = deriveExecutiveDisplayState({
-    beforeConsentCookieCount: input.beforeConsentCookieCount,
-    coverageLevel: input.coverageLevel,
-    domainBenchmark: input.domainBenchmark,
-    policySurfaces,
-    posture: input.posture,
-    scanInterruptions,
-    scanOutcome: input.scanOutcome,
-    thirdPartyDomains: input.thirdPartyDomains,
-    thirdPartyRequestCount: input.thirdPartyRequestCount,
-    topFindingCount: availableTopFindings.length,
-    vendorCount: vendorEvidence.length
-  });
+  const displayState: ExecutiveDisplayState = isScanNotRepresentative
+    ? "Scan not representative"
+    : deriveExecutiveDisplayState({
+        beforeConsentCookieCount: input.beforeConsentCookieCount,
+        coverageLevel: input.coverageLevel,
+        domainBenchmark: input.domainBenchmark,
+        policySurfaces,
+        posture: input.posture,
+        scanInterruptions,
+        scanOutcome: input.scanOutcome,
+        thirdPartyDomains: input.thirdPartyDomains,
+        thirdPartyRequestCount: input.thirdPartyRequestCount,
+        topFindingCount: displayedTopFindings.length,
+        vendorCount: vendorEvidence.length
+      });
   const hasMeaningfulInterruption = hasMeaningfulExecutiveInterruption({ scanInterruptions });
   const pagesScanned = typeof input.pagesScanned === "number" ? input.pagesScanned : 0;
   const retainedFindingCount = Math.max(input.topFindings.length, input.allFindings?.length ?? 0);
@@ -4557,17 +4636,19 @@ export function ExecutiveSummaryCard(input: {
   const regulatoryLenses = input.unifiedFindings
     ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions)
     : buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);
-  const benchmarkScoreExplanation = deriveBenchmarkScoreExplanation({
-    benchmark: input.domainBenchmark,
-    findings: regulatoryFindingInput,
-    score: input.score,
-    vendorNames: uniqueStrings([
-      ...getRepresentativeVendorsFromFindings(availableTopFindings),
-      ...input.preConsentVendorNames,
-      ...input.sessionReplayVendorNames,
-      ...input.resolvedVendorNames
-    ])
-  });
+  const benchmarkScoreExplanation = isScanNotRepresentative
+    ? null
+    : deriveBenchmarkScoreExplanation({
+        benchmark: input.domainBenchmark,
+        findings: regulatoryFindingInput,
+        score: input.score,
+        vendorNames: uniqueStrings([
+          ...getRepresentativeVendorsFromFindings(displayedTopFindings),
+          ...input.preConsentVendorNames,
+          ...input.sessionReplayVendorNames,
+          ...input.resolvedVendorNames
+        ])
+      });
 
   return (
     <section className="overflow-visible rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
@@ -4599,11 +4680,18 @@ export function ExecutiveSummaryCard(input: {
                 >
                   {narrativePresentation.headline}
                 </h2>
+                {isScanNotRepresentative ? (
+                  <p className="max-w-3xl text-sm leading-6 text-slate-600">
+                    CertScore captured a maintenance, unavailable, blocked, placeholder, wrong-site, blank, or otherwise non-representative page instead of the normal public site. Scores, regulatory projections, and substantive findings are withheld for this scan.
+                  </p>
+                ) : null}
                 {benchmarkScoreExplanation ? (
                   <BenchmarkScoreNote message={benchmarkScoreExplanation} />
                 ) : null}
               </div>
-              {input.accessLimitationNotice ? null : input.lightweightHeroMetrics && input.lightweightHeroMetrics.length > 0 ? (
+              {input.accessLimitationNotice ? null : isScanNotRepresentative ? (
+                <NotScoredHeroMetrics />
+              ) : input.lightweightHeroMetrics && input.lightweightHeroMetrics.length > 0 ? (
                 <div className="grid gap-2 sm:grid-cols-3">
                   {input.lightweightHeroMetrics.slice(0, 3).map((metric) => (
                     <ExecutiveMetricCard
@@ -4651,7 +4739,7 @@ export function ExecutiveSummaryCard(input: {
                   {narrativePresentation.findingsHeading}
                 </h2>
               </div>
-              {availableTopFindings.length > 0 ? <RegulatoryMappingFilterControl targetListId="executive-top-findings-list" /> : null}
+              {displayedTopFindings.length > 0 && !isScanNotRepresentative ? <RegulatoryMappingFilterControl targetListId="executive-top-findings-list" /> : null}
             </div>
           </div>
 
@@ -4662,9 +4750,9 @@ export function ExecutiveSummaryCard(input: {
             data-testid="executive-top-findings-list"
           >
             <FindingHashFocus />
-            {availableTopFindings.length > 0 ? (
+            {displayedTopFindings.length > 0 ? (
               <>
-              {availableTopFindings.map((finding, index) => {
+              {displayedTopFindings.map((finding, index) => {
                 const iconKey = topFindingIconKeys.get(finding.id) ?? getFindingTitleIconKey(finding.id);
                 const densityBenchmark = getFindingDensityBenchmark(finding.id);
                 const display = getPublicReportFindingDisplayForCertFinding(finding);
@@ -4751,7 +4839,9 @@ export function ExecutiveSummaryCard(input: {
           className="min-w-0 space-y-4 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]"
           data-executive-snapshot-pane
         >
-          {input.accessLimitationNotice ? (
+          {isScanNotRepresentative ? (
+            <NotScoredSnapshotPane />
+          ) : input.accessLimitationNotice ? (
             <>
               <div className="space-y-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Scan coverage</p>

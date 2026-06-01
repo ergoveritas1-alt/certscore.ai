@@ -1,7 +1,7 @@
 import type { CertScoreFinding } from "./finding-registry";
 
 export type ExecutivePosture = "Clear" | "Watch" | "Action Needed";
-export type ExecutiveDisplayState = ExecutivePosture | "Limited review" | "Evidence review";
+export type ExecutiveDisplayState = ExecutivePosture | "Limited review" | "Evidence review" | "Scan not representative";
 
 const MATERIAL_INCOMPLETE_BEFORE_CONSENT_COOKIE_THRESHOLD = 5;
 const UNDER_OBSERVED_ECOSYSTEM_REQUEST_RATIO_THRESHOLD = 0.35;
@@ -373,6 +373,10 @@ function summarizeFindingTopics(findings: Array<{ id?: string; label?: string; s
   };
 }
 
+function hasNonRepresentativeScanFinding(findings: Array<{ id?: string; label?: string; section?: string }> = []) {
+  return findings.some((finding) => finding.id === "scan_quality_visual_no_go");
+}
+
 function getTopicAwarePostureHeadline(
   posture: ExecutivePosture,
   findings: Array<{ id?: string; label?: string; section?: string }> = []
@@ -384,6 +388,9 @@ function getTopicAwarePostureHeadline(
   }
 
   if (topics.hasScanQuality) {
+    if (hasNonRepresentativeScanFinding(findings)) {
+      return "Automated scan could not evaluate this site";
+    }
     if (topics.hasPrivacy || topics.hasAccessibility || topics.hasFinancial || topics.hasOther) {
       return "Captured-page condition limits scan interpretation";
     }
@@ -419,6 +426,9 @@ function getDisplayStateHeadline(
   }
   if (displayState === "Evidence review") {
     return "Material runtime evidence needs review";
+  }
+  if (displayState === "Scan not representative") {
+    return "Automated scan could not evaluate this site";
   }
 
   return getTopicAwarePostureHeadline(posture, findings);
@@ -534,6 +544,18 @@ export function deriveExecutiveNarrativePresentation(input: {
   }
 
   const displayState = input.displayState ?? input.posture;
+
+  if (displayState === "Scan not representative" || hasNonRepresentativeScanFinding(input.topFindings)) {
+    return {
+      findingsHeading: "Why this scan was not scored",
+      headline: "Automated scan could not evaluate this site",
+      hostResolutionCategory,
+      limitedCoverage: false,
+      summaryLabel: "Scan quality note:",
+      summaryMessage:
+        "CertScore captured a maintenance, unavailable, blocked, placeholder, wrong-site, blank, or otherwise non-representative page instead of the normal public site. Because the observed page was not representative, this scan does not issue scores, regulatory projections, or substantive findings."
+    };
+  }
 
   if (displayState === "Limited review") {
     return {

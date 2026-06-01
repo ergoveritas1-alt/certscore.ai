@@ -666,7 +666,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   scan_quality_visual_no_go: {
     id: "scan_quality_visual_no_go",
-    label: "Captured page was not a normal public site",
+    label: "Normal public site was not reached",
     section: "Runtime & Diagnostics",
     defaultSurfacePriority: 104,
     whyItMatters:

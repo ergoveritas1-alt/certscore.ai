@@ -1913,6 +1913,64 @@ test("ExecutiveSummaryCard shows benchmark beside posture without scanned timest
   assert.ok(html.indexOf("Action Needed") < html.indexOf("Benchmark: Web portal"));
 });
 
+test("ExecutiveSummaryCard withholds scores when the captured page is not representative", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      beforeConsentCookieCount: 46,
+      domainBenchmark: {
+        confidence: "medium",
+        estimatedRankLabel: "Typical",
+        expectedCookiesBeforeConsent: 4,
+        expectedOverallScore: 78,
+        expectedThirdPartyRequests: 12,
+        industry: "SaaS / web application",
+        rationale: "Matched to a SaaS benchmark."
+      },
+      finalHost: "www.grammarly.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-06-01T19:28:00.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: ["Google Tag Manager"],
+      requestedHost: "grammarly.com",
+      resolvedVendorNames: ["Google Tag Manager"],
+      score: 63,
+      scanOutcome: "completed_partial",
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 77,
+      thirdPartyDomains: ["www.googletagmanager.com"],
+      topFindings: [
+        makeFinding("scan_quality_visual_no_go", "Normal public site was not reached", {
+          section: "Runtime & Diagnostics",
+          severity: "high",
+          shortSummary: "The retained initial-load evidence did not show the normal public site."
+        })
+      ],
+      topObservedEntities: [{ label: "Google Tag Manager", category: "analytics", requestCount: 5 }],
+      trackerSummary: "1 vendor across 1 third-party domain",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { analytics: 1 }
+    })
+  );
+
+  assert.match(html, /Scan not representative/);
+  assert.match(html, /Automated scan could not evaluate this site/);
+  assert.match(html, /Scores, regulatory projections, and substantive findings are withheld for this scan/);
+  assert.match(html, /Not scored/);
+  assert.match(html, /Why this scan was not scored/);
+  assert.match(html, /Normal public site was not reached/);
+  assert.match(html, /Scan quality snapshot/);
+  assert.doesNotMatch(html, /Overall score/);
+  assert.doesNotMatch(html, /63\/100 overall score/);
+  assert.doesNotMatch(html, /Review lenses/);
+  assert.doesNotMatch(html, /CCPA \/ CPRA \/ CIPA/);
+  assert.doesNotMatch(html, /no-go/i);
+});
+
 test("buildRegulatoryLenses promotes retained financial-promotion findings into the financial claims lens", () => {
   const lenses = buildRegulatoryLenses(
     [
@@ -3525,11 +3583,13 @@ test("ExecutiveSummaryCard assigns specific icons to accessibility and policy ru
 
 test("ExecutiveSummaryCard assigns distinct preferred icons to executive top finding ids", () => {
   const topFindings = [
-    ...EXECUTIVE_SUMMARY_TOP_FINDING_IDS.map((id) => makeFinding(id, id, {
-      section: id.includes("accessibility") || id.includes("keyboard") || id.includes("contrast") || id.includes("focus") || id.includes("semantic") || id.includes("alternative")
-        ? "Accessibility"
-        : "Privacy & Tracking"
-    })),
+    ...EXECUTIVE_SUMMARY_TOP_FINDING_IDS
+      .filter((id) => id !== "scan_quality_visual_no_go")
+      .map((id) => makeFinding(id, id, {
+        section: id.includes("accessibility") || id.includes("keyboard") || id.includes("contrast") || id.includes("focus") || id.includes("semantic") || id.includes("alternative")
+          ? "Accessibility"
+          : "Privacy & Tracking"
+      })),
     makeFinding("policy_clarity_risk", "Disclosure clarity remains weak")
   ];
   const html = renderToStaticMarkup(

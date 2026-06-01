@@ -58,7 +58,7 @@ const SCAN_QUALITY_FINDING_IDS = new Set([
 
 const SCAN_QUALITY_TITLE_COPY: Record<string, string> = {
   scan_quality_visual_artifact_missing: "Screenshot evidence missing",
-  scan_quality_visual_no_go: "Captured page was not a normal public site",
+  scan_quality_visual_no_go: "Normal public site was not reached",
   scan_quality_visual_degraded: "Captured page was degraded but usable"
 };
 
@@ -66,7 +66,7 @@ const SCAN_QUALITY_OBSERVED_COPY: Record<string, string> = {
   scan_quality_visual_artifact_missing:
     "The scanner did not retain usable screenshot evidence for the initial public-page view. Treat this as a scan-quality limitation, not as a substantive privacy, consent, or accessibility finding.",
   scan_quality_visual_no_go:
-    "Nano reviewed the captured screenshot and classified the visible page as a no-go state, such as a challenge, access block, unavailable page, blank page, wrong site, soft-404, or parked placeholder. Runtime signals from that session should be interpreted as access-limited until a normal public page is verified.",
+    "The captured screenshot showed a challenge, access block, unavailable page, blank page, wrong site, soft-404, or parked placeholder instead of the normal public site. CertScore withholds scores and substantive projections until a representative public page is verified.",
   scan_quality_visual_degraded:
     "Nano reviewed the captured screenshot and classified the visible page as degraded but still usable. Findings may remain useful, but the report should be read with the captured-page condition in mind."
 };
@@ -97,7 +97,7 @@ const REPORT_REMEDIATION_COPY: Record<string, string> = {
   scan_quality_visual_artifact_missing:
     "Retry the scan and confirm the initial-load screenshot artifact is retained before relying on scan-result interpretation.",
   scan_quality_visual_no_go:
-    "Retry from a normal browsing path or allow scanner access, then compare the screenshot and retained runtime evidence before treating the underlying scan results as representative of the real public site.",
+    "Retry from a normal browsing path or allow scanner access, then compare the screenshot and retained runtime evidence before treating the scan as representative of the real public site.",
   scan_quality_visual_degraded:
     "Review the screenshot alongside retained evidence and rerun if the captured page condition could materially change the interpretation."
 };

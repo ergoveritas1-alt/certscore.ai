@@ -169,7 +169,9 @@ test("uses scan-quality headline for captured-page no-go findings", () => {
     ]
   });
 
-  assert.equal(presentation.headline, "Captured page needs scan-quality review");
+  assert.equal(presentation.headline, "Automated scan could not evaluate this site");
+  assert.equal(presentation.findingsHeading, "Why this scan was not scored");
+  assert.match(presentation.summaryMessage, /does not issue scores/);
   assert.doesNotMatch(presentation.headline, /privacy and consent issues/i);
 });
 
@@ -193,7 +195,8 @@ test("uses mixed scan-quality headline when captured-page state accompanies othe
     ]
   });
 
-  assert.equal(presentation.headline, "Captured-page condition limits scan interpretation");
+  assert.equal(presentation.headline, "Automated scan could not evaluate this site");
+  assert.equal(presentation.findingsHeading, "Why this scan was not scored");
 });
 
 test("uses mixed headline when retained top findings span privacy and accessibility", () => {

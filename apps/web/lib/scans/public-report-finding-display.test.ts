@@ -72,9 +72,9 @@ test("uses scan-quality wording for captured-page visual findings", () => {
     severity: "high"
   });
 
-  assert.equal(display.title, "Captured page was not a normal public site");
-  assert.match(display.observedSummary ?? "", /no-go state/i);
-  assert.match(display.observedSummary ?? "", /access-limited/i);
+  assert.equal(display.title, "Normal public site was not reached");
+  assert.doesNotMatch(display.observedSummary ?? "", /no-go/i);
+  assert.match(display.observedSummary ?? "", /withholds scores/i);
   assert.match(display.remediation, /normal browsing path/i);
 });
 
