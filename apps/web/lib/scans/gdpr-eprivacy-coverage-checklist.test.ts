@@ -4,6 +4,8 @@ import {
   deriveGdprEprivacyCoverageChecklist,
   type GdprEprivacyCoverageChecklistItem
 } from "./gdpr-eprivacy-coverage-checklist";
+import type { GdprEprivacyCoverageOutcome } from "./gdpr-eprivacy-coverage-policy";
+import { deriveGdprEprivacyReviewSummary } from "./gdpr-eprivacy-review-summary";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 
 function makeFinding(
@@ -31,6 +33,28 @@ function byId(items: GdprEprivacyCoverageChecklistItem[], id: string) {
   const item = items.find((candidate) => candidate.id === id);
   assert.ok(item, `expected checklist item ${id}`);
   return item;
+}
+
+function makeCoverageOutcome(
+  outcome: Omit<GdprEprivacyCoverageOutcome, "criticalEvidence">
+): GdprEprivacyCoverageOutcome {
+  return {
+    ...outcome,
+    criticalEvidence: {
+      missingOrIncompleteSourceSignals: [],
+      pipeline: {
+        concernPolicyKey: `gdpr_eprivacy_coverage.${outcome.rowId}.${outcome.status.toLowerCase().replaceAll(" ", "_")}`,
+        projectionStage: "coverage_policy",
+        wc01NormalizedConcernKey: `gdpr_eprivacy.coverage.${outcome.rowId}`,
+        ws01EvidenceRole: "observed runtime signal identification, evidence capture, and logging"
+      },
+      projectedFindings: [],
+      retainedEvidence: {
+        evidenceRefs: outcome.evidenceRefs
+      },
+      statusBasis: outcome.limitation
+    }
+  };
 }
 
 test("deriveGdprEprivacyCoverageChecklist maps canonical unified findings without creating pass/fail language", () => {
@@ -70,18 +94,18 @@ test("deriveGdprEprivacyCoverageChecklist uses canonical row coverage outcomes b
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: true,
     coverageOutcomes: {
-      consent_surface_observed: {
+      consent_surface_observed: makeCoverageOutcome({
         evidenceRefs: ["Evidence: retained consent surface observation"],
         limitation: "A consent surface was retained.",
         rowId: "consent_surface_observed",
         status: "Observed"
-      },
-      sensitive_surfaces_third_party_tracking: {
+      }),
+      sensitive_surfaces_third_party_tracking: makeCoverageOutcome({
         evidenceRefs: ["Evidence: sensitive third-party tracking correlation completed"],
         limitation: "Sensitive-field correlation completed for the tested context.",
         rowId: "sensitive_surfaces_third_party_tracking",
         status: "Not observed"
-      }
+      })
     },
     scanCompleted: true,
     unifiedFindings: []
@@ -102,12 +126,12 @@ test("deriveGdprEprivacyCoverageChecklist keeps projected findings ahead of row 
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: true,
     coverageOutcomes: {
-      post_reject_tracking_reduction: {
+      post_reject_tracking_reduction: makeCoverageOutcome({
         evidenceRefs: ["Evidence: reject interaction missing"],
         limitation: "Reject action was not confirmed.",
         rowId: "post_reject_tracking_reduction",
         status: "Not testable"
-      }
+      })
     },
     scanCompleted: true,
     unifiedFindings: [
@@ -127,7 +151,7 @@ test("deriveGdprEprivacyCoverageChecklist maps already-projected executive findi
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     coverageOutcomes: {
-      pre_consent_cookies_storage: {
+      pre_consent_cookies_storage: makeCoverageOutcome({
         evidenceRefs: [
           "Observed before-consent cookie/storage count: 4",
           "Evidence: hybrid runtime storage summary"
@@ -136,7 +160,7 @@ test("deriveGdprEprivacyCoverageChecklist maps already-projected executive findi
           "Cookie/storage inventory retained before-consent observations, but no eligible unified cookie/storage finding was projected for this row.",
         rowId: "pre_consent_cookies_storage",
         status: "Insufficient evidence"
-      }
+      })
     },
     projectedFindings: [
       {
@@ -192,6 +216,10 @@ test("deriveGdprEprivacyCoverageChecklist treats retained runtime vendor disclos
   });
 
   assert.equal(byId(items, "runtime_vendor_disclosure_alignment").status, "Review signal");
+  assert.deepEqual(
+    byId(items, "runtime_vendor_disclosure_alignment").criticalEvidence.missingOrIncompleteSourceSignals,
+    []
+  );
 });
 
 test("deriveGdprEprivacyCoverageChecklist carries canonical source refs into checklist evidence refs", () => {
@@ -216,4 +244,154 @@ test("deriveGdprEprivacyCoverageChecklist carries canonical source refs into che
     "Evidence flag: direct_runtime",
     "Evidence strength: direct runtime"
   ]);
+});
+
+test("deriveGdprEprivacyCoverageChecklist ignores non-array entity previews in evidence packets", () => {
+  const finding = makeFinding("preconsent_tracking", "Pre-consent tracking");
+  finding.evidence = {
+    ...finding.evidence,
+    entities: {
+      runtimeRequestUrls: ["https://tracker.example/pixel"],
+      runtimeVendorDisclosureEvidence: { retained: true } as unknown as string[]
+    }
+  };
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: [finding]
+  });
+
+  assert.deepEqual(
+    byId(items, "pre_consent_third_party_tracking").criticalEvidence.retainedEvidence.findingEntities,
+    [
+      {
+        id: "preconsent_tracking",
+        entities: {
+          runtimeRequestUrls: ["https://tracker.example/pixel"]
+        },
+        evidenceFlags: ["direct_runtime"],
+        sourceRefs: []
+      }
+    ]
+  );
+});
+
+test("deriveGdprEprivacyReviewSummary composes gatech-style reject persistence story from canonical row evidence", () => {
+  const preConsentFinding = makeFinding("preconsent_tracking", "Pre-consent tracking detected");
+  preConsentFinding.evidence = {
+    ...preConsentFinding.evidence,
+    flags: ["direct_runtime"],
+    entities: {
+      runtimeVendors: ["Google Analytics", "Google Tag Manager", "Microsoft Clarity"]
+    }
+  };
+
+  const postRejectFinding = makeFinding("reject_tracking_persists_after_reject", "Tracking persisted after reject");
+  postRejectFinding.evidence = {
+    ...postRejectFinding.evidence,
+    flags: ["direct_runtime", "reject_did_not_reduce_tracking", "nonessential_vendor_persisted_after_reject"],
+    entities: {
+      runtimeVendors: ["Google Analytics", "Microsoft Clarity"]
+    }
+  };
+
+  const vendorDisclosureFinding = makeFinding("policy_behavior_conflict", "Policy/behavior conflict", "audit_only");
+  vendorDisclosureFinding.evidence = {
+    ...vendorDisclosureFinding.evidence,
+    flags: ["direct_runtime", "contradiction_runtime_artifact_retained"],
+    entities: {
+      findingSubtype: ["runtime_vendor_not_disclosed"],
+      runtimeVendorDisclosureEvidence: [
+        JSON.stringify({
+          coverageStatus: "usable",
+          unmatchedRuntimeVendors: ["Google Analytics", "Google Tag Manager", "Microsoft Clarity"]
+        })
+      ],
+      unmatchedRuntimeVendors: ["Google Analytics", "Google Tag Manager", "Microsoft Clarity"]
+    }
+  };
+
+  const sessionReplayFinding = makeFinding("session_recording_services_detected", "Session replay observed");
+  sessionReplayFinding.evidence = {
+    ...sessionReplayFinding.evidence,
+    flags: ["direct_runtime", "privacy.session_replay_runtime_vendors"],
+    entities: {
+      session_replay_runtime_vendors: ["Microsoft Clarity"]
+    }
+  };
+
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      consent_surface_observed: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: retained consent surface observation"],
+        limitation: "A consent surface or first-layer consent controls were retained in the tested context.",
+        rowId: "consent_surface_observed",
+        status: "Observed"
+      }),
+      reject_all_path_availability: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: reject path depth and availability", "Reject click depth: 1"],
+        limitation: "A reject or equivalent refusal path was retained in the tested consent surface.",
+        rowId: "reject_all_path_availability",
+        status: "Observed"
+      }),
+      preference_withdrawal_control: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: consent control lifecycle"],
+        limitation: "Consent-control lifecycle evidence was retained, and no reopen or withdrawal control was observed in the tested context.",
+        rowId: "preference_withdrawal_control",
+        status: "Not observed"
+      }),
+      sensitive_surfaces_third_party_tracking: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: sensitive third-party tracking correlation completed"],
+        limitation: "Sensitive-field correlation completed for the tested context and did not retain eligible sensitive fields alongside third-party tracking.",
+        rowId: "sensitive_surfaces_third_party_tracking",
+        status: "Not observed"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: [
+      preConsentFinding,
+      postRejectFinding,
+      vendorDisclosureFinding,
+      sessionReplayFinding
+    ]
+  });
+  const rejectPath = byId(items, "reject_all_path_availability");
+  rejectPath.criticalEvidence.retainedEvidence = {
+    ...rejectPath.criticalEvidence.retainedEvidence,
+    completeRejectPathAvailable: true,
+    rejectClickDepth: 1,
+    rejectInteractionSucceeded: true
+  };
+  const preference = byId(items, "preference_withdrawal_control");
+  preference.criticalEvidence.retainedEvidence = {
+    ...preference.criticalEvidence.retainedEvidence,
+    cmpReopenControlObserved: false,
+    coverageStatus: "usable",
+    preferenceCenterReachableAfterInitialLayer: false
+  };
+  const sensitive = byId(items, "sensitive_surfaces_third_party_tracking");
+  sensitive.criticalEvidence.retainedEvidence = {
+    ...sensitive.criticalEvidence.retainedEvidence,
+    eligibleSensitiveFieldCount: 0,
+    sensitiveThirdPartyTrackingCorrelationStatus: "ok"
+  };
+
+  const summary = deriveGdprEprivacyReviewSummary(items);
+  const renderedSummary = JSON.stringify(summary);
+
+  assert.equal(summary.bullets[0]?.headline, "Reject path observed, but tracking persisted around refusal");
+  assert.match(renderedSummary, /Third-party tracking observed before recorded consent/);
+  assert.match(renderedSummary, /Google Analytics/);
+  assert.match(renderedSummary, /Google Tag Manager/);
+  assert.match(renderedSummary, /Microsoft Clarity/);
+  assert.match(renderedSummary, /Post-choice consent controls may be hard to revisit/);
+  assert.doesNotMatch(renderedSummary, /violates GDPR|legal violation/i);
+  assert.doesNotMatch(renderedSummary, /sensitive-surface tracking/i);
+  assert.doesNotMatch(renderedSummary, /cookies before consent/i);
+  assert.doesNotMatch(renderedSummary, /\bWS01\b|\bWC01\b/);
+  assert.equal(
+    summary.bullets.filter((bullet) => bullet.id === "post_choice_controls_hard_to_revisit").length,
+    1
+  );
 });

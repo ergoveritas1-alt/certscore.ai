@@ -1,5 +1,9 @@
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
-import type { GdprEprivacyCoverageOutcome } from "./gdpr-eprivacy-coverage-policy";
+import type {
+  GdprEprivacyCoverageCriticalEvidence,
+  GdprEprivacyCoverageOutcome,
+  GdprEprivacyCoverageSourceSignalGap
+} from "./gdpr-eprivacy-coverage-policy";
 
 export type GdprEprivacyCoverageChecklistStatus =
   | "Observed"
@@ -13,6 +17,7 @@ export type GdprEprivacyCoverageChecklistStatus =
 export type GdprEprivacyCoverageChecklistTone = "neutral" | "review" | "warning" | "muted";
 
 export type GdprEprivacyCoverageChecklistItem = {
+  criticalEvidence: GdprEprivacyCoverageCriticalEvidence;
   id: string;
   label: string;
   status: GdprEprivacyCoverageChecklistStatus;
@@ -178,6 +183,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     label: "Cross-border endpoint review",
     explanation: "Whether observed third-party endpoints created a public-web international transfer review signal.",
     findingIds: [
+      "cross_border_endpoint_transfer_review_signal",
       "missing_transfer_disclosure"
     ],
     defaultFindingStatus: "Review signal",
@@ -294,16 +300,7 @@ function normalizeFindingStatus(
   definition: ChecklistRowDefinition,
   findings: UnifiedFindingDisplayPacket[]
 ): Exclude<GdprEprivacyCoverageChecklistStatus, "Not observed" | "Not testable" | "Out of scope"> {
-  if (
-    definition.id === "runtime_vendor_disclosure_alignment" &&
-    findings.some((finding) =>
-      finding.unifiedFindingId === "policy_behavior_conflict" &&
-      (
-        finding.evidence?.entities?.findingSubtype?.includes("runtime_vendor_not_disclosed") ||
-        (finding.evidence?.entities?.runtimeVendorDisclosureEvidence?.length ?? 0) > 0
-      )
-    )
-  ) {
+  if (findings.some((finding) => isRuntimeVendorDisclosureAlignmentEvidence(definition.id, finding))) {
     return "Review signal";
   }
 
@@ -315,6 +312,147 @@ function normalizeFindingStatus(
   }
 
   return definition.defaultFindingStatus;
+}
+
+function isRuntimeVendorDisclosureAlignmentEvidence(rowId: string, finding: UnifiedFindingDisplayPacket) {
+  return (
+    rowId === "runtime_vendor_disclosure_alignment" &&
+    finding.unifiedFindingId === "policy_behavior_conflict" &&
+    (
+      finding.evidence?.entities?.findingSubtype?.includes("runtime_vendor_not_disclosed") ||
+      (finding.evidence?.entities?.runtimeVendorDisclosureEvidence?.length ?? 0) > 0
+    )
+  );
+}
+
+function isFindingPresentationStatusSufficientForCoverageRow(rowId: string, finding: UnifiedFindingDisplayPacket) {
+  if (finding.presentationDecision.status === "surface") {
+    return true;
+  }
+
+  return isRuntimeVendorDisclosureAlignmentEvidence(rowId, finding);
+}
+
+function makeSourceSignalGap(
+  field: string,
+  expected: unknown,
+  actual: unknown,
+  whyNeeded: string,
+  source: "WS01" | "WC01" = "WC01"
+): GdprEprivacyCoverageSourceSignalGap {
+  return { actual, expected, field, source, whyNeeded };
+}
+
+function getFindingEntityPreview(finding: UnifiedFindingDisplayPacket) {
+  const entities = finding.evidence?.entities ?? {};
+  return Object.fromEntries(
+    Object.entries(entities)
+      .filter(([, values]) => Array.isArray(values) && values.length > 0)
+      .slice(0, 5)
+      .map(([key, values]) => [key, values.slice(0, 5)])
+  );
+}
+
+function getUnifiedFindingCriticalEvidence(
+  status: GdprEprivacyCoverageChecklistStatus,
+  statusBasis: string,
+  rowId: string,
+  findings: UnifiedFindingDisplayPacket[]
+): GdprEprivacyCoverageCriticalEvidence {
+  const insufficientPresentationFindings = findings.filter(
+    (finding) => !isFindingPresentationStatusSufficientForCoverageRow(rowId, finding)
+  );
+
+  return {
+    missingOrIncompleteSourceSignals: insufficientPresentationFindings.length > 0
+      ? [
+          makeSourceSignalGap(
+            "WC01.unifiedFinding.presentationDecision.status",
+            "surface",
+            insufficientPresentationFindings.map((finding) => finding.presentationDecision.status),
+            "Required to treat a matched canonical finding as fully surfaced evidence for this checklist row."
+          )
+        ]
+      : [],
+    pipeline: {
+      concernPolicyKey: `gdpr_eprivacy_coverage.${rowId}.${status.toLowerCase().replaceAll(" ", "_")}`,
+      projectionStage: "unified_finding",
+      wc01NormalizedConcernKey: `gdpr_eprivacy.coverage.${rowId}`,
+      ws01EvidenceRole: "observed runtime signal identification, evidence capture, and logging"
+    },
+    projectedFindings: findings.map((finding) => ({
+      id: finding.unifiedFindingId,
+      label: finding.presentation?.findingName || finding.title,
+      severity: finding.severity
+    })),
+    retainedEvidence: {
+      evidenceRefs: getEvidenceRefs(findings),
+      findingEntities: findings.map((finding) => ({
+        id: finding.unifiedFindingId,
+        entities: getFindingEntityPreview(finding),
+        evidenceFlags: (finding.evidence?.flags ?? []).slice(0, 5),
+        sourceRefs: (finding.sourceRefs ?? []).flatMap((sourceRef) => {
+          const formatted = formatSourceRef(sourceRef);
+          return formatted ? [formatted] : [];
+        }).slice(0, 5)
+      })),
+      status
+    },
+    statusBasis
+  };
+}
+
+function getProjectedFindingCriticalEvidence(
+  status: GdprEprivacyCoverageChecklistStatus,
+  statusBasis: string,
+  rowId: string,
+  findings: NonNullable<GdprEprivacyCoverageChecklistInput["projectedFindings"]>
+): GdprEprivacyCoverageCriticalEvidence {
+  return {
+    missingOrIncompleteSourceSignals: [],
+    pipeline: {
+      concernPolicyKey: `gdpr_eprivacy_coverage.${rowId}.${status.toLowerCase().replaceAll(" ", "_")}`,
+      projectionStage: "executive_projection",
+      wc01NormalizedConcernKey: `gdpr_eprivacy.coverage.${rowId}`,
+      ws01EvidenceRole: "observed runtime signal identification, evidence capture, and logging"
+    },
+    projectedFindings: findings.map((finding) => ({
+      id: finding.id,
+      label: finding.label
+    })),
+    retainedEvidence: {
+      evidenceRefs: getProjectedEvidenceRefs(findings),
+      projectedFindingPreview: findings.map((finding) => ({
+        id: finding.id,
+        evidencePreview: (finding.evidencePreview ?? []).slice(0, 5),
+        label: finding.label
+      })),
+      status
+    },
+    statusBasis
+  };
+}
+
+function getFallbackCriticalEvidence(
+  status: GdprEprivacyCoverageChecklistStatus,
+  statusBasis: string,
+  rowId: string,
+  missingOrIncompleteSourceSignals: GdprEprivacyCoverageSourceSignalGap[] = []
+): GdprEprivacyCoverageCriticalEvidence {
+  return {
+    missingOrIncompleteSourceSignals,
+    pipeline: {
+      concernPolicyKey: `gdpr_eprivacy_coverage.${rowId}.${status.toLowerCase().replaceAll(" ", "_")}`,
+      projectionStage: "coverage_fallback",
+      wc01NormalizedConcernKey: `gdpr_eprivacy.coverage.${rowId}`,
+      ws01EvidenceRole: "observed runtime signal identification, evidence capture, and logging"
+    },
+    projectedFindings: [],
+    retainedEvidence: {
+      status
+    },
+    statusBasis
+  };
 }
 
 export function deriveGdprEprivacyCoverageChecklist(
@@ -336,31 +474,46 @@ export function deriveGdprEprivacyCoverageChecklist(
 
     if (matchingFindings.length > 0) {
       const status = normalizeFindingStatus(definition, matchingFindings);
+      const evidenceRefs = getEvidenceRefs(matchingFindings);
       return {
+        criticalEvidence: getUnifiedFindingCriticalEvidence(
+          status,
+          `Canonical unified finding${matchingFindings.length === 1 ? "" : "s"} projected for this row.`,
+          definition.id,
+          matchingFindings
+        ),
         id: definition.id,
         label: definition.label,
         status,
         tone: getChecklistTone(status),
         explanation: definition.explanation,
-        evidenceRefs: getEvidenceRefs(matchingFindings)
+        evidenceRefs
       };
     }
 
     if (matchingProjectedFindings.length > 0) {
       const status = definition.defaultFindingStatus;
+      const evidenceRefs = getProjectedEvidenceRefs(matchingProjectedFindings);
       return {
+        criticalEvidence: getProjectedFindingCriticalEvidence(
+          status,
+          `Executive/regulatory projection already retained finding evidence for this row.`,
+          definition.id,
+          matchingProjectedFindings
+        ),
         id: definition.id,
         label: definition.label,
         status,
         tone: getChecklistTone(status),
         explanation: definition.explanation,
-        evidenceRefs: getProjectedEvidenceRefs(matchingProjectedFindings)
+        evidenceRefs
       };
     }
 
     const coverageOutcome = input.coverageOutcomes?.[definition.id];
     if (coverageOutcome) {
       return {
+        criticalEvidence: coverageOutcome.criticalEvidence,
         id: definition.id,
         label: definition.label,
         status: coverageOutcome.status,
@@ -373,6 +526,21 @@ export function deriveGdprEprivacyCoverageChecklist(
 
     if (definition.requiresPublicWebCoverage && !publicCoverageIsTestable) {
       return {
+        criticalEvidence: getFallbackCriticalEvidence(
+          "Not testable",
+          input.scanCompleted
+            ? "Public-web coverage was limited, so this row cannot be evaluated from the retained scan context."
+            : "The scan has not completed, so row evidence is not available yet.",
+          definition.id,
+          [
+            makeSourceSignalGap(
+              "WC01.coverageOutcomes." + definition.id,
+              "row-specific retained policy outcome or projected finding",
+              "missing",
+              "Required to render row-grade critical evidence without relying on display-layer inference."
+            )
+          ]
+        ),
         id: definition.id,
         label: definition.label,
         status: "Not testable" as const,
@@ -386,6 +554,19 @@ export function deriveGdprEprivacyCoverageChecklist(
     }
 
     return {
+      criticalEvidence: getFallbackCriticalEvidence(
+        "Not observed",
+        definition.notObservedText,
+        definition.id,
+        [
+          makeSourceSignalGap(
+            "WC01.coverageOutcomes." + definition.id,
+            "row-specific retained policy outcome or projected finding",
+            "missing",
+            "Required to prove this row status from retained canonical evidence rather than default checklist fallback."
+          )
+        ]
+      ),
       id: definition.id,
       label: definition.label,
       status: "Not observed" as const,

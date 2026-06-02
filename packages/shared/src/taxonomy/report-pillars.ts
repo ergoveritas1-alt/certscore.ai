@@ -2774,6 +2774,19 @@ export const REPORT_UNIFIED_FINDINGS = [
     ]
   }),
   defineReportUnifiedFinding({
+    id: "cross_border_endpoint_transfer_review_signal",
+    label: "Cross-border endpoint transfer review signal",
+    owner: "cross_border_data_handling_transparency",
+    mirrors: ["preconsent_tracking_incidents"],
+    overlays: ["governance_accountability_transfers", "tracking_profiling_sensitive_data_risk"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.cross_border_endpoint_transfer_review_signal" }],
+    aliases: [
+      "Cross-border endpoint review signal",
+      "Endpoint transfer review signal",
+      "International transfer endpoint review"
+    ]
+  }),
+  defineReportUnifiedFinding({
     id: "consent_mechanism_absent",
     label: "Consent controls absent",
     owner: "consent_interface_control_availability",

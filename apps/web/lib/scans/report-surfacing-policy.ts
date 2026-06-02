@@ -268,6 +268,7 @@ const CONSENT_TRACKING_IDS = [
   "retargeting_pixel_observed",
   "video_content_tracking_exposure",
   "cross_domain_identifier_sharing_observed",
+  "cross_border_endpoint_transfer_review_signal",
   "rtb_cookie_sync_observed",
   "pre_submit_text_capture_detected",
   "fingerprinting_observed"
@@ -641,6 +642,13 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     family: "consent_tracking",
     initialState: "confirmed",
     initialTier: "headline",
+    initialLane: "main"
+  },
+  cross_border_endpoint_transfer_review_signal: {
+    findingId: "cross_border_endpoint_transfer_review_signal",
+    family: "consent_tracking",
+    initialState: "review",
+    initialTier: "section",
     initialLane: "main"
   },
   session_replay_undisclosed: {

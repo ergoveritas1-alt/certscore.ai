@@ -1151,6 +1151,36 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
+    if (/endpointJurisdictionEvidence|endpoint_jurisdiction_evidence|crossBorderEndpointEvidence|cross_border_endpoint_evidence/i.test(key) && Array.isArray(value)) {
+      const rows = getPlainRecordArray(value);
+      const compactRows = compactJsonRows(rows, 20);
+      addEntity(entities, "endpointJurisdictionEvidence", compactRows);
+      addEntity(
+        entities,
+        "endpointTransferReviewHosts",
+        rows.flatMap((row) => getStringValue(row.host) ?? [])
+      );
+      addEntity(
+        entities,
+        "endpointTransferReviewCountries",
+        rows.flatMap((row) => getStringValue(row.inferredCountryCode ?? row.inferred_country_code) ?? [])
+      );
+      addEntity(
+        entities,
+        "endpointTransferReviewRegions",
+        rows.flatMap((row) => getStringValue(row.inferredRegion ?? row.inferred_region) ?? [])
+      );
+      addEntity(
+        entities,
+        "endpointTransferReviewVendors",
+        rows.flatMap((row) => getStringValue(row.matchedVendorName ?? row.matched_vendor_name) ?? [])
+      );
+      if (compactRows.length > 0) {
+        runtimeArtifacts.add(`${compactRows.length} endpoint jurisdiction evidence row${compactRows.length === 1 ? "" : "s"} retained for transfer review.`);
+      }
+      continue;
+    }
+
     if (/runtimeHostInventory|runtime_host_inventory|runtimeHostInventoryContext/i.test(key) && Array.isArray(value)) {
       const rows = getPlainRecordArray(value).slice(0, 20);
       const compactRows = compactJsonRows(rows, 20);

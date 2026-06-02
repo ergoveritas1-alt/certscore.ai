@@ -6,7 +6,33 @@ export type GdprEprivacyCoverageOutcomeStatus =
   | "Not testable"
   | "Insufficient evidence";
 
+export type GdprEprivacyCoverageSourceSignalGap = {
+  actual: unknown;
+  expected: unknown;
+  field: string;
+  source: "WS01" | "WC01";
+  whyNeeded: string;
+};
+
+export type GdprEprivacyCoverageCriticalEvidence = {
+  missingOrIncompleteSourceSignals: GdprEprivacyCoverageSourceSignalGap[];
+  pipeline: {
+    concernPolicyKey: string;
+    projectionStage: "coverage_policy" | "unified_finding" | "executive_projection" | "coverage_fallback";
+    wc01NormalizedConcernKey: string;
+    ws01EvidenceRole: string;
+  };
+  projectedFindings: Array<{
+    id: string;
+    label: string;
+    severity?: string;
+  }>;
+  retainedEvidence: Record<string, unknown>;
+  statusBasis: string;
+};
+
 export type GdprEprivacyCoverageOutcome = {
+  criticalEvidence: GdprEprivacyCoverageCriticalEvidence;
   evidenceRefs: string[];
   limitation: string;
   rowId: string;
@@ -87,6 +113,16 @@ function getStringArray(record: Record<string, unknown> | null | undefined, keys
   return [...new Set(values)];
 }
 
+function getRawValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    if (record && Object.prototype.hasOwnProperty.call(record, key)) {
+      return record[key];
+    }
+  }
+
+  return null;
+}
+
 function getObject(record: Record<string, unknown> | null | undefined, keys: string[]) {
   for (const key of keys) {
     const value = getRecord(record?.[key]);
@@ -107,6 +143,34 @@ function getObjectArray(record: Record<string, unknown> | null | undefined, keys
   }
 
   return [];
+}
+
+function compactArray<T>(values: T[], limit = 5) {
+  return values.filter((value) => value !== null && value !== undefined).slice(0, limit);
+}
+
+function compactRecord(record: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => {
+      if (value === null || value === undefined) {
+        return false;
+      }
+      if (Array.isArray(value)) {
+        return value.length > 0;
+      }
+      return true;
+    })
+  );
+}
+
+function sourceGap(
+  field: string,
+  expected: unknown,
+  actual: unknown,
+  whyNeeded: string,
+  source: "WS01" | "WC01" = "WS01"
+): GdprEprivacyCoverageSourceSignalGap {
+  return { actual, expected, field, source, whyNeeded };
 }
 
 function getEventMetadata(events: GdprEprivacyCoveragePolicyEvent[] | undefined, phase: string) {
@@ -170,13 +234,50 @@ function getObservedPreferenceControlLabels(lifecycle: Record<string, unknown>) 
     .filter((value): value is string => Boolean(value));
 }
 
+function hasAmbiguousPreferenceControlEvidence(
+  lifecycle: Record<string, unknown>,
+  observedControlLabels: string[]
+) {
+  const observedControls = getObjectArray(lifecycle, ["observedControls", "observed_controls"]);
+  return (
+    observedControlLabels.length === 0 &&
+    (
+      getBoolean(lifecycle, ["cmpReopenControlObserved", "cmp_reopen_control_observed"]) === true ||
+      getBoolean(lifecycle, [
+        "preferenceCenterReachableAfterInitialLayer",
+        "preference_center_reachable_after_initial_layer"
+      ]) === true ||
+      observedControls.length > 0
+    )
+  );
+}
+
 function makeOutcome(
   rowId: string,
   status: GdprEprivacyCoverageOutcomeStatus,
   limitation: string,
-  evidenceRefs: string[] = []
+  evidenceRefs: string[] = [],
+  criticalEvidence?: {
+    missingOrIncompleteSourceSignals?: GdprEprivacyCoverageSourceSignalGap[];
+    retainedEvidence?: Record<string, unknown>;
+  }
 ): GdprEprivacyCoverageOutcome {
   return {
+    criticalEvidence: {
+      missingOrIncompleteSourceSignals: criticalEvidence?.missingOrIncompleteSourceSignals ?? [],
+      pipeline: {
+        concernPolicyKey: `gdpr_eprivacy_coverage.${rowId}.${status.toLowerCase().replaceAll(" ", "_")}`,
+        projectionStage: "coverage_policy",
+        wc01NormalizedConcernKey: `gdpr_eprivacy.coverage.${rowId}`,
+        ws01EvidenceRole: "observed runtime signal identification, evidence capture, and logging"
+      },
+      projectedFindings: [],
+      retainedEvidence: compactRecord({
+        evidenceRefs: [...new Set(evidenceRefs)].slice(0, 6),
+        ...(criticalEvidence?.retainedEvidence ?? {})
+      }),
+      statusBasis: limitation
+    },
     evidenceRefs: [...new Set(evidenceRefs)].slice(0, 6),
     limitation,
     rowId,
@@ -210,15 +311,23 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
     (layerInspected !== null && layerInspected !== "none" && layerInspected !== "unknown");
 
   if (consentSurfaceObserved) {
+    const evidenceRefs = [
+      "Evidence: retained consent surface observation",
+      ...visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 3),
+      layerInspected ? `Layer inspected: ${layerInspected}` : null
+    ].filter((value): value is string => Boolean(value));
     return makeOutcome(
       "consent_surface_observed",
       "Observed",
       "A consent surface or first-layer consent controls were retained in the tested context.",
-      [
-        "Evidence: retained consent surface observation",
-        ...visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 3),
-        layerInspected ? `Layer inspected: ${layerInspected}` : null
-      ].filter((value): value is string => Boolean(value))
+      evidenceRefs,
+      {
+        retainedEvidence: {
+          consentSurfaceObserved: true,
+          layerInspected,
+          visibleChoiceLabels: compactArray(visibleChoiceLabels, 5)
+        }
+      }
     );
   }
 
@@ -232,7 +341,13 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
       "consent_surface_observed",
       "Not observed",
       "Runtime consent-surface checks completed for the tested context and did not retain an actionable consent surface.",
-      ["Evidence: retained consent surface observation"]
+      ["Evidence: retained consent surface observation"],
+      {
+        retainedEvidence: {
+          consentSurfaceObserved: false,
+          runtimeCaptureCompleted: true
+        }
+      }
     );
   }
 
@@ -258,7 +373,23 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
       [
         `Observed before-consent cookie/storage count: ${cookiesBeforeConsentCount}`,
         "Evidence: hybrid runtime storage summary"
-      ]
+      ],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "WC01.unifiedFindings.preConsentCookieStorageFinding",
+            "eligible projected unified finding when retained observations satisfy policy gates",
+            "missing",
+            "Required to classify retained before-consent cookie/storage observations as a canonical gap.",
+            "WC01"
+          )
+        ],
+        retainedEvidence: {
+          cookiesBeforeConsentCount,
+          cookiesSeenCount,
+          storageSummaryRetained: Boolean(storageSummary)
+        }
+      }
     );
   }
 
@@ -267,7 +398,81 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
       "pre_consent_cookies_storage",
       "Not observed",
       "Cookie/storage inventory was retained for the tested context, and no eligible pre-consent cookie/storage finding was projected.",
-      ["Evidence: hybrid runtime storage summary"]
+      ["Evidence: hybrid runtime storage summary"],
+      {
+        retainedEvidence: {
+          cookiesBeforeConsentCount: cookiesBeforeConsentCount ?? 0,
+          cookiesSeenCount,
+          runtimeCaptureCompleted: hasRuntimeCapture(input),
+          storageSummaryRetained: Boolean(storageSummary)
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
+function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const trackerVendors = getStringArray(input.runtimeArtifacts, [
+    "preconsent_tracker_vendors",
+    "tracker_vendors"
+  ]);
+  const trackerEvidenceUrls = getStringArray(input.runtimeArtifacts, [
+    "preconsent_tracker_evidence_urls",
+    "tracker_evidence_urls"
+  ]);
+  const preconsentTrackingDetected =
+    getBoolean(input.snapshot, ["preconsent_tracking_detected", "tracking_before_consent_detected"]) === true ||
+    trackerVendors.length > 0 ||
+    trackerEvidenceUrls.length > 0;
+  const trackerVendorCount =
+    trackerVendors.length ||
+    getNumber(input.snapshot, ["tracker_vendor_count", "tracker_count_total"]) ||
+    0;
+
+  if (preconsentTrackingDetected) {
+    return makeOutcome(
+      "pre_consent_third_party_tracking",
+      "Insufficient evidence",
+      "Pre-consent third-party tracking evidence was retained, but no eligible unified tracking finding was projected for this row.",
+      [
+        "Evidence: pre-consent tracking runtime signal",
+        trackerVendorCount > 0 ? `Pre-consent tracker vendors: ${trackerVendorCount}` : null
+      ].filter((value): value is string => Boolean(value)),
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "WC01.unifiedFindings.preConsentTrackingFinding",
+            "eligible projected unified finding when retained pre-consent tracking evidence satisfies policy gates",
+            "missing",
+            "Required to classify retained pre-consent tracker observations as a canonical gap.",
+            "WC01"
+          )
+        ],
+        retainedEvidence: {
+          preconsentTrackingDetected,
+          trackerEvidenceUrls: compactArray(trackerEvidenceUrls, 3),
+          trackerVendorCount,
+          trackerVendors: compactArray(trackerVendors, 5)
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "pre_consent_third_party_tracking",
+      "Not observed",
+      "Runtime tracking checks completed for the tested context, and no eligible pre-consent third-party tracking finding was projected.",
+      ["Evidence: runtime capture completed"],
+      {
+        retainedEvidence: {
+          preconsentTrackingDetected: false,
+          runtimeCaptureCompleted: true,
+          trackerVendorCount
+        }
+      }
     );
   }
 
@@ -305,27 +510,46 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     rejectAvailability === "available" ||
     rejectAvailability === "reject_available_first_layer";
 
-  if (rejectPathAvailable) {
-    const evidenceRefs = [
-      "Evidence: reject path depth and availability",
-      getString(rejectPath, ["layerInspected", "layer_inspected"])
-        ? `Layer inspected: ${getString(rejectPath, ["layerInspected", "layer_inspected"])}`
-        : null,
-      getNumber(rejectPath, ["rejectClickDepth", "reject_click_depth", "observedRejectPathDepth", "observed_reject_path_depth"]) !== null
-        ? `Reject click depth: ${getNumber(rejectPath, ["rejectClickDepth", "reject_click_depth", "observedRejectPathDepth", "observed_reject_path_depth"])}`
-        : null,
-      ...getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"])
-        .filter((label) => /\b(?:decline|reject|refuse|deny|opt[-\s]?out)\b/i.test(label))
-        .map((label) => `Visible choice: ${label}`)
-    ].filter((value): value is string => Boolean(value));
-
-    return makeOutcome(
+	  if (rejectPathAvailable) {
+    const rejectClickDepth = getNumber(rejectPath, [
+      "rejectClickDepth",
+      "reject_click_depth",
+      "observedRejectPathDepth",
+      "observed_reject_path_depth"
+    ]);
+    const layerInspected = getString(rejectPath, ["layerInspected", "layer_inspected"]);
+    const visibleRejectLabels = getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"])
+      .filter((label) => /\b(?:decline|reject|refuse|deny|opt[-\s]?out)\b/i.test(label));
+	    const evidenceRefs = [
+	      "Evidence: reject path depth and availability",
+	      layerInspected
+	        ? `Layer inspected: ${layerInspected}`
+	        : null,
+	      rejectClickDepth !== null
+	        ? `Reject click depth: ${rejectClickDepth}`
+	        : null,
+	      ...visibleRejectLabels.map((label) => `Visible choice: ${label}`)
+	    ].filter((value): value is string => Boolean(value));
+	
+	    return makeOutcome(
       "reject_all_path_availability",
-      "Observed",
-      "A reject or equivalent refusal path was retained in the tested consent surface.",
-      evidenceRefs
-    );
-  }
+	      "Observed",
+	      "A reject or equivalent refusal path was retained in the tested consent surface.",
+	      evidenceRefs,
+      {
+        retainedEvidence: {
+          completeRejectPathAvailable: getBoolean(rejectPath, [
+            "completeRejectPathAvailable",
+            "complete_reject_path_available"
+          ]),
+          layerInspected,
+          rejectClickDepth,
+          rejectInteractionSucceeded,
+          visibleRejectLabels: compactArray(visibleRejectLabels, 5)
+        }
+      }
+	    );
+	  }
 
   if (
     attempted &&
@@ -342,7 +566,32 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
         interactionModel ? `Consent interaction model: ${interactionModel}` : null,
         ...skipNegativeReasons,
         ...diagnosticNegativeReasons
-      ].filter((value): value is string => Boolean(value))
+      ].filter((value): value is string => Boolean(value)),
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "hybridRuntimeEvidence.rejectPathDepthAndAvailability.completeRejectPathAvailable",
+            true,
+            getRawValue(rejectPath, ["completeRejectPathAvailable", "complete_reject_path_available"]),
+            "Required to prove a complete reject-all or equivalent refusal path."
+          ),
+          sourceGap(
+            "scanSnapshots.consent_reject_button_count",
+            "greater than 0 or explicit complete-reject negative reason",
+            rejectButtonCount,
+            "Required to distinguish missing reject controls from incomplete reject-path testing.",
+            "WC01"
+          )
+        ],
+        retainedEvidence: {
+          attempted,
+          diagnosticNegativeReasons: compactArray(diagnosticNegativeReasons, 5),
+          interactionModel,
+          preferenceButtonCount,
+          rejectButtonCount,
+          skipNegativeReasons: compactArray(skipNegativeReasons, 5)
+        }
+      }
     );
   }
 
@@ -351,7 +600,15 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
       "reject_all_path_availability",
       "Not observed",
       "Consent audit ran for the tested context, and no eligible reject-path availability finding was projected.",
-      ["Evidence: consent audit attempted"]
+      ["Evidence: consent audit attempted"],
+      {
+        retainedEvidence: {
+          attempted,
+          completeRejectPathAvailable: false,
+          rejectButtonCount,
+          rejectInteractionSucceeded: false
+        }
+      }
     );
   }
 
@@ -374,13 +631,78 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     ...getStringArray(reductionEvidence, ["reasonCodes", "reason_codes"]),
     ...getStringArray(reductionEvidence, ["negativeReasonCodes", "negative_reason_codes"])
   ];
+  const baselineVendors = getStringArray(reductionEvidence, [
+    "baselineVendors",
+    "baseline_vendors",
+    "baselineTrackerVendors",
+    "baseline_tracker_vendors"
+  ]);
+  const postRejectVendors = getStringArray(reductionEvidence, [
+    "postRejectVendors",
+    "post_reject_vendors",
+    "postRejectTrackerVendors",
+    "post_reject_tracker_vendors"
+  ]);
+  const persistedVendors = getStringArray(reductionEvidence, [
+    "persistedVendors",
+    "persisted_vendors",
+    "persistedTrackerVendors",
+    "persisted_tracker_vendors"
+  ]);
+  const postRejectWindowAvailable = getBoolean(reductionEvidence, [
+    "postRejectWindowAvailable",
+    "post_reject_window_available"
+  ]);
+  const postRejectRequestRecordsObserved = getBoolean(reductionEvidence, [
+    "postRejectRequestRecordsObserved",
+    "post_reject_request_records_observed"
+  ]);
+  const postRejectRetainedEvidence = {
+    baselineVendors: compactArray(baselineVendors, 5),
+    persistedVendors: compactArray(persistedVendors, 5),
+    postRejectRequestRecordsObserved,
+    postRejectVendors: compactArray(postRejectVendors, 5),
+    postRejectWindowAvailable,
+    reductionEvaluationStatus: reductionStatus,
+    rejectInteractionConfirmed: rejectInteractionSucceeded
+  };
+  const postRejectMissingSignals = [
+    rejectInteractionSucceeded
+      ? null
+      : sourceGap(
+          "postRejectTrackingReductionEvidence.rejectInteractionConfirmed",
+          true,
+          getRawValue(reductionEvidence, ["rejectInteractionConfirmed", "reject_interaction_confirmed"]),
+          "Required to establish a valid after-reject state."
+        ),
+    postRejectWindowAvailable === true
+      ? null
+      : sourceGap(
+          "postRejectTrackingReductionEvidence.postRejectWindowAvailable",
+          true,
+          postRejectWindowAvailable,
+          "Required to compare baseline tracking against the post-reject window."
+        ),
+    postRejectRequestRecordsObserved === true || reductionStatus === "no_post_reject_non_essential_observed"
+      ? null
+      : sourceGap(
+          "postRejectTrackingReductionEvidence.postRejectRequestRecordsObserved",
+          true,
+          postRejectRequestRecordsObserved,
+          "Required to prove whether non-essential requests persisted after reject."
+        )
+  ].filter((value): value is GdprEprivacyCoverageSourceSignalGap => Boolean(value));
 
   if (reductionStatus === "not_testable") {
     return makeOutcome(
       "post_reject_tracking_reduction",
       "Not testable",
       "Reject-path audit did not retain a confirmed reject action, so post-reject tracking reduction could not be evaluated.",
-      reductionEvidenceRefs
+      reductionEvidenceRefs,
+      {
+        missingOrIncompleteSourceSignals: postRejectMissingSignals,
+        retainedEvidence: postRejectRetainedEvidence
+      }
     );
   }
 
@@ -389,7 +711,11 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
       "post_reject_tracking_reduction",
       "Insufficient evidence",
       "A reject action was retained, but the post-reject comparison window or request evidence was incomplete.",
-      reductionEvidenceRefs
+      reductionEvidenceRefs,
+      {
+        missingOrIncompleteSourceSignals: postRejectMissingSignals,
+        retainedEvidence: postRejectRetainedEvidence
+      }
     );
   }
 
@@ -398,7 +724,10 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
       "post_reject_tracking_reduction",
       "Not observed",
       "A reject action and post-reject comparison evidence were retained, and no eligible post-reject tracking persistence finding was projected.",
-      reductionEvidenceRefs
+      reductionEvidenceRefs,
+      {
+        retainedEvidence: postRejectRetainedEvidence
+      }
     );
   }
 
@@ -407,7 +736,19 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
       "post_reject_tracking_reduction",
       "Insufficient evidence",
       "Post-reject persistence evidence was retained, but no eligible unified post-reject tracking finding was projected for this row.",
-      reductionEvidenceRefs
+      reductionEvidenceRefs,
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "WC01.unifiedFindings.postRejectTrackingPersistenceFinding",
+            "eligible projected unified finding when persistence evidence satisfies policy gates",
+            "missing",
+            "Required to classify retained post-reject persistence evidence as a canonical gap.",
+            "WC01"
+          )
+        ],
+        retainedEvidence: postRejectRetainedEvidence
+      }
     );
   }
 
@@ -419,7 +760,15 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
       [
         "Evidence: reject persistence diagnostic",
         ...getStringArray(rejectDiagnostic, ["negativeReasonCodes"])
-      ]
+      ],
+      {
+        missingOrIncompleteSourceSignals: postRejectMissingSignals,
+        retainedEvidence: {
+          attempted,
+          rejectInteractionConfirmed: false,
+          rejectPersistenceDiagnosticReasons: compactArray(getStringArray(rejectDiagnostic, ["negativeReasonCodes"]), 5)
+        }
+      }
     );
   }
 
@@ -428,7 +777,12 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
       "post_reject_tracking_reduction",
       "Not observed",
       "A reject action was retained, and no eligible post-reject tracking persistence finding was projected.",
-      ["Evidence: reject interaction retained"]
+      ["Evidence: reject interaction retained"],
+      {
+        retainedEvidence: {
+          rejectInteractionConfirmed: true
+        }
+      }
     );
   }
 
@@ -443,37 +797,106 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
 
   const coverageStatus = getString(lifecycle, ["coverageStatus", "coverage_status"]);
   const observedControlLabels = getObservedPreferenceControlLabels(lifecycle).slice(0, 3);
+  const postChoiceClickOutcome = getRecord(
+    getRawValue(lifecycle, [
+      "postChoicePreferenceControlClickOutcome",
+      "post_choice_preference_control_click_outcome"
+    ])
+  );
+  const postChoiceOutcome = getString(postChoiceClickOutcome, ["outcome"]);
+  const postChoiceOutcomeDecisive =
+    postChoiceOutcome === "opened_preference_center" ||
+    postChoiceOutcome === "navigated_to_policy_or_notice";
+  const postChoiceOutcomeCleanAbsence = postChoiceOutcome === "no_qualifying_control_observed";
+  const postChoiceOutcomeIncomplete =
+    Boolean(postChoiceClickOutcome) &&
+    !postChoiceOutcomeDecisive &&
+    !postChoiceOutcomeCleanAbsence;
   const explicitControlObserved =
     getBoolean(lifecycle, ["privacySettingsControlObserved", "privacy_settings_control_observed"]) === true ||
     getBoolean(lifecycle, ["cookiePreferencesLinkObserved", "cookie_preferences_link_observed"]) === true ||
     getBoolean(lifecycle, ["withdrawalTextObserved", "withdrawal_text_observed"]) === true ||
     getBoolean(lifecycle, ["footerPreferenceLinkObserved", "footer_preference_link_observed"]) === true;
   const controlObserved =
-    explicitControlObserved ||
+    !postChoiceOutcomeIncomplete &&
+    !postChoiceOutcomeCleanAbsence &&
     (
-      getBoolean(lifecycle, ["cmpReopenControlObserved", "cmp_reopen_control_observed"]) === true &&
+      postChoiceOutcomeDecisive ||
+      explicitControlObserved ||
+      (
+        getBoolean(lifecycle, ["cmpReopenControlObserved", "cmp_reopen_control_observed"]) === true &&
+        observedControlLabels.length > 0
+      ) ||
+      (
+        getBoolean(lifecycle, [
+          "preferenceCenterReachableAfterInitialLayer",
+          "preference_center_reachable_after_initial_layer"
+        ]) === true &&
+        observedControlLabels.length > 0
+      ) ||
       observedControlLabels.length > 0
-    ) ||
-    (
-      getBoolean(lifecycle, [
-        "preferenceCenterReachableAfterInitialLayer",
-        "preference_center_reachable_after_initial_layer"
-      ]) === true &&
-      observedControlLabels.length > 0
-    ) ||
-    observedControlLabels.length > 0;
+    );
+  const ambiguousControlEvidence =
+    !postChoiceOutcomeCleanAbsence && hasAmbiguousPreferenceControlEvidence(lifecycle, observedControlLabels);
   const evidenceRefs = [
     "Evidence: consent control lifecycle",
     ...getStringArray(lifecycle, ["evidenceRefs", "evidence_refs"]),
-    ...observedControlLabels.map((label) => `Observed control: ${label}`)
-  ];
+    ...observedControlLabels.map((label) => `Observed control: ${label}`),
+    postChoiceOutcome ? `Post-choice control outcome: ${postChoiceOutcome}` : null,
+    ambiguousControlEvidence ? "Ambiguous control evidence retained" : null
+  ].filter((value): value is string => Boolean(value));
+  const lifecycleRetainedEvidence = {
+    cmpReopenControlObserved: getBoolean(lifecycle, ["cmpReopenControlObserved", "cmp_reopen_control_observed"]),
+    cookiePreferencesLinkObserved: getBoolean(lifecycle, [
+      "cookiePreferencesLinkObserved",
+      "cookie_preferences_link_observed"
+    ]),
+    coverageStatus,
+    footerPreferenceLinkObserved: getBoolean(lifecycle, [
+      "footerPreferenceLinkObserved",
+      "footer_preference_link_observed"
+    ]),
+    observedControlLabels,
+    postChoicePreferenceControlClickOutcome: postChoiceClickOutcome,
+    preferenceCenterReachableAfterInitialLayer: getBoolean(lifecycle, [
+      "preferenceCenterReachableAfterInitialLayer",
+      "preference_center_reachable_after_initial_layer"
+    ]),
+    privacySettingsControlObserved: getBoolean(lifecycle, [
+      "privacySettingsControlObserved",
+      "privacy_settings_control_observed"
+    ]),
+    withdrawalTextObserved: getBoolean(lifecycle, ["withdrawalTextObserved", "withdrawal_text_observed"])
+  };
+  const lifecycleAmbiguousGap = sourceGap(
+    "consentControlLifecycleEvidence.postChoicePreferenceControlClickOutcome",
+    "tested usable preference or withdrawal control",
+    postChoiceOutcome ?? "ambiguous CMP/post-choice signal without a qualifying control label",
+    "Required to prove that the retained control actually reopens or changes consent preferences."
+  );
 
   if (controlObserved) {
     return makeOutcome(
       "preference_withdrawal_control",
       "Observed",
       "A cookie preferences, privacy settings, CMP reopen, or consent-withdrawal control was retained in lifecycle evidence.",
-      evidenceRefs
+      evidenceRefs,
+      {
+        retainedEvidence: lifecycleRetainedEvidence
+      }
+    );
+  }
+
+  if (coverageStatus === "usable" && (ambiguousControlEvidence || postChoiceOutcomeIncomplete)) {
+    return makeOutcome(
+      "preference_withdrawal_control",
+      "Insufficient evidence",
+      "Consent-control lifecycle evidence retained a CMP or post-choice control signal, but did not prove a usable preference or withdrawal control.",
+      evidenceRefs,
+      {
+        missingOrIncompleteSourceSignals: [lifecycleAmbiguousGap],
+        retainedEvidence: lifecycleRetainedEvidence
+      }
     );
   }
 
@@ -482,7 +905,10 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
       "preference_withdrawal_control",
       "Not observed",
       "Consent-control lifecycle evidence was retained, and no reopen or withdrawal control was observed in the tested context.",
-      evidenceRefs
+      evidenceRefs,
+      {
+        retainedEvidence: lifecycleRetainedEvidence
+      }
     );
   }
 
@@ -491,7 +917,18 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
       "preference_withdrawal_control",
       "Insufficient evidence",
       "Consent-control lifecycle evidence was retained, but coverage was partial, so absence of a reopen or withdrawal control is not treated as complete.",
-      evidenceRefs
+      evidenceRefs,
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "consentControlLifecycleEvidence.coverageStatus",
+            "usable",
+            coverageStatus,
+            "Required to treat absence of a preference or withdrawal control as a clean tested observation."
+          )
+        ],
+        retainedEvidence: lifecycleRetainedEvidence
+      }
     );
   }
 
@@ -499,7 +936,18 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
     "preference_withdrawal_control",
     "Not testable",
     "Consent-control lifecycle evidence was missing or insufficient for the tested context.",
-    evidenceRefs
+    evidenceRefs,
+    {
+      missingOrIncompleteSourceSignals: [
+        sourceGap(
+          "consentControlLifecycleEvidence.coverageStatus",
+          "usable or partial lifecycle evidence",
+          coverageStatus,
+          "Required to evaluate whether a preference or withdrawal control was available."
+        )
+      ],
+      retainedEvidence: lifecycleRetainedEvidence
+    }
   );
 }
 
@@ -520,7 +968,23 @@ function deriveVendorDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput) {
       "runtime_vendor_disclosure_alignment",
       "Not testable",
       "Runtime vendors were observed, but no privacy or cookie policy surface was retained, so disclosure alignment cannot be evaluated.",
-      [`Runtime vendor count: ${trackerVendorCount}`]
+      [`Runtime vendor count: ${trackerVendorCount}`],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "scanSnapshots.privacy_policy_present or scanSnapshots.cookie_policy_present",
+            true,
+            hasPolicySurface,
+            "Required to compare observed runtime vendors against public disclosure surfaces.",
+            "WC01"
+          )
+        ],
+        retainedEvidence: {
+          cookiePolicyPresent: getBoolean(input.snapshot, ["cookie_policy_present"]),
+          privacyPolicyPresent: getBoolean(input.snapshot, ["privacy_policy_present"]),
+          runtimeVendorCount: trackerVendorCount
+        }
+      }
     );
   }
 
@@ -529,7 +993,21 @@ function deriveVendorDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput) {
       "runtime_vendor_disclosure_alignment",
       "Insufficient evidence",
       "Runtime vendors and policy surfaces were retained, but no canonical vendor-disclosure comparison artifact was retained for this scan.",
-      [`Runtime vendor count: ${trackerVendorCount}`]
+      [`Runtime vendor count: ${trackerVendorCount}`],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "runtimeVendorDisclosureEvidence",
+            "one or more canonical vendor-disclosure comparison rows",
+            disclosureEvidence.length,
+            "Required to evaluate whether observed runtime vendors align with retained disclosure surfaces."
+          )
+        ],
+        retainedEvidence: {
+          hasPolicySurface,
+          runtimeVendorCount: trackerVendorCount
+        }
+      }
     );
   }
 
@@ -544,7 +1022,26 @@ function deriveVendorDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput) {
         `Runtime vendor count: ${trackerVendorCount}`,
         `Disclosure comparison rows: ${disclosureEvidence.length}`,
         unmatchedCount > 0 ? `Unmatched runtime vendor/domain count: ${unmatchedCount}` : null
-      ].filter((value): value is string => Boolean(value))
+      ].filter((value): value is string => Boolean(value)),
+      {
+        missingOrIncompleteSourceSignals: unmatchedCount > 0
+          ? [
+              sourceGap(
+                "WC01.unifiedFindings.runtimeVendorDisclosureAlignmentFinding",
+                "eligible projected unified finding when unmatched vendor evidence satisfies policy gates",
+                "missing",
+                "Required to classify retained vendor-disclosure mismatch evidence as a canonical review signal.",
+                "WC01"
+              )
+            ]
+          : [],
+        retainedEvidence: {
+          disclosureComparisonRows: disclosureEvidence.length,
+          hasPolicySurface,
+          runtimeVendorCount: trackerVendorCount,
+          unmatchedRuntimeVendorOrDomainCount: unmatchedCount
+        }
+      }
     );
   }
 
@@ -559,22 +1056,45 @@ function deriveSensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
 
   if (status === "ok") {
     const count = eligibleSensitiveFieldCount ?? rawSensitiveFieldCount ?? 0;
-    if (count <= 0) {
-      return makeOutcome(
-        "sensitive_surfaces_third_party_tracking",
-        "Not observed",
-        "Sensitive-field correlation completed for the tested context and did not retain eligible sensitive fields alongside third-party tracking.",
-        ["Evidence: sensitive third-party tracking correlation completed"]
-      );
-    }
-
-    return makeOutcome(
-      "sensitive_surfaces_third_party_tracking",
-      "Insufficient evidence",
-      "Sensitive-field correlation retained candidate fields, but no eligible sensitive-surface tracking unified finding was projected.",
-      [`Eligible sensitive fields: ${count}`]
-    );
-  }
+	    if (count <= 0) {
+	      return makeOutcome(
+	        "sensitive_surfaces_third_party_tracking",
+	        "Not observed",
+	        "Sensitive-field correlation completed for the tested context and did not retain eligible sensitive fields alongside third-party tracking.",
+	        ["Evidence: sensitive third-party tracking correlation completed"],
+        {
+          retainedEvidence: {
+            eligibleSensitiveFieldCount: count,
+            rawSensitiveFieldCount,
+            sensitiveThirdPartyTrackingCorrelationStatus: status
+          }
+        }
+	      );
+	    }
+	
+	    return makeOutcome(
+	      "sensitive_surfaces_third_party_tracking",
+	      "Insufficient evidence",
+	      "Sensitive-field correlation retained candidate fields, but no eligible sensitive-surface tracking unified finding was projected.",
+	      [`Eligible sensitive fields: ${count}`],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "WC01.unifiedFindings.sensitiveThirdPartyTrackingFinding",
+            "eligible projected unified finding when sensitive-field correlation satisfies policy gates",
+            "missing",
+            "Required to classify retained sensitive-field tracking correlation as a canonical review signal.",
+            "WC01"
+          )
+        ],
+        retainedEvidence: {
+          eligibleSensitiveFieldCount: count,
+          rawSensitiveFieldCount,
+          sensitiveThirdPartyTrackingCorrelationStatus: status
+        }
+      }
+	    );
+	  }
 
   return null;
 }
@@ -589,26 +1109,50 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
   const fingerprintingObserved =
     getBoolean(input.snapshot, ["fingerprinting_or_identity_vendor_detected", "fingerprinting_detected"]) === true;
 
-  if (sessionReplayObserved || fingerprintingObserved) {
-    return makeOutcome(
+	  if (sessionReplayObserved || fingerprintingObserved) {
+	    return makeOutcome(
       "session_replay_fingerprinting_review",
       "Insufficient evidence",
       "Replay or fingerprinting-like runtime evidence was retained, but no eligible replay/fingerprinting unified finding was projected.",
-      [
-        sessionReplayObserved ? "Session replay signal observed" : null,
-        fingerprintingObserved ? "Fingerprinting or identity vendor signal observed" : null
-      ].filter((value): value is string => Boolean(value))
-    );
-  }
+	      [
+	        sessionReplayObserved ? "Session replay signal observed" : null,
+	        fingerprintingObserved ? "Fingerprinting or identity vendor signal observed" : null
+	      ].filter((value): value is string => Boolean(value)),
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "WC01.unifiedFindings.sessionReplayFingerprintingFinding",
+            "eligible projected unified finding when retained replay/fingerprinting evidence satisfies policy gates",
+            "missing",
+            "Required to classify retained replay or fingerprinting-like runtime evidence as a canonical review signal.",
+            "WC01"
+          )
+        ],
+        retainedEvidence: {
+          fingerprintingObserved,
+          sessionReplayCount,
+          sessionReplayObserved
+        }
+      }
+	    );
+	  }
 
   if (hasRuntimeCapture(input) || sessionReplayCount !== null) {
     return makeOutcome(
-      "session_replay_fingerprinting_review",
-      "Not observed",
-      "Runtime vendor/fingerprinting checks completed for the tested context, and no eligible replay or fingerprinting finding was projected.",
-      ["Evidence: runtime capture completed"]
-    );
-  }
+	      "session_replay_fingerprinting_review",
+	      "Not observed",
+	      "Runtime vendor/fingerprinting checks completed for the tested context, and no eligible replay or fingerprinting finding was projected.",
+	      ["Evidence: runtime capture completed"],
+      {
+        retainedEvidence: {
+          fingerprintingObserved: false,
+          runtimeCaptureCompleted: hasRuntimeCapture(input),
+          sessionReplayCount: sessionReplayCount ?? 0,
+          sessionReplayObserved: false
+        }
+      }
+	    );
+	  }
 
   return null;
 }
@@ -638,23 +1182,123 @@ function deriveCrossBorderOutcome(input: GdprEprivacyCoveragePolicyInput) {
     const transferReviewRows = endpointJurisdictionRows.filter((row) =>
       getBoolean(row, ["transferReviewSignal", "transfer_review_signal"]) === true
     ).length;
-    return makeOutcome(
-      "cross_border_endpoint_review",
-      "Not observed",
-      "Endpoint jurisdiction evidence was retained, and no eligible cross-border endpoint finding was projected.",
+	    return makeOutcome(
+	      "cross_border_endpoint_review",
+	      transferReviewRows > 0 ? "Insufficient evidence" : "Not observed",
+	      transferReviewRows > 0
+	        ? "Endpoint transfer-review evidence was retained, but no eligible cross-border endpoint finding was projected."
+	        : "Endpoint jurisdiction evidence was retained, and no eligible cross-border endpoint finding was projected.",
       [
         `Endpoint jurisdiction rows: ${endpointJurisdictionRows.length}`,
         transferReviewRows > 0 ? `Transfer review signal rows: ${transferReviewRows}` : null
-      ].filter((value): value is string => Boolean(value))
-    );
-  }
+	      ].filter((value): value is string => Boolean(value)),
+      {
+        missingOrIncompleteSourceSignals: transferReviewRows > 0
+          ? [
+              sourceGap(
+                "WC01.unifiedFindings.crossBorderEndpointFinding",
+                "eligible projected unified finding when transfer-review endpoint evidence satisfies policy gates",
+                "missing",
+                "Required to classify retained endpoint transfer-review evidence as a canonical review signal.",
+                "WC01"
+              )
+            ]
+          : [],
+        retainedEvidence: {
+          endpointJurisdictionRows: endpointJurisdictionRows.length,
+          transferReviewSignalRows: transferReviewRows
+        }
+      }
+	    );
+	  }
 
   if (thirdPartyDomainCount !== null && thirdPartyDomainCount > 0) {
     return makeOutcome(
-      "cross_border_endpoint_review",
-      "Not testable",
-      "Third-party endpoint inventory was retained, but endpoint jurisdiction or transfer-region evidence was not retained for this scan.",
-      [`Third-party endpoint domains observed: ${thirdPartyDomainCount}`]
+	      "cross_border_endpoint_review",
+	      "Not testable",
+	      "Third-party endpoint inventory was retained, but endpoint jurisdiction or transfer-region evidence was not retained for this scan.",
+	      [`Third-party endpoint domains observed: ${thirdPartyDomainCount}`],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "hybridRuntimeEvidence.endpointJurisdictionEvidence",
+            "one or more endpoint jurisdiction evidence rows",
+            endpointJurisdictionRows.length,
+            "Required to evaluate whether observed third-party endpoints create a transfer-region review signal."
+          )
+        ],
+        retainedEvidence: {
+          endpointJurisdictionRows: 0,
+          thirdPartyDomainCount
+        }
+      }
+	    );
+	  }
+
+  return null;
+}
+
+function deriveAccessibilityConsentControlsOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const visualAccessReview = getObject(input.runtimeArtifacts, ["visualAccessReview", "visual_access_review"]);
+  const axeEvidenceRows = getObjectArray(input.runtimeArtifacts, ["accessibilityAxeEvidence", "accessibility_axe_evidence"]);
+  const keyboardIssueCount = getNumber(input.snapshot, ["wcag_keyboard_navigation_issue_count"]);
+  const focusIssueCount = getNumber(input.snapshot, ["wcag_focus_indicator_issue_count"]);
+  const ariaIssueCount = getNumber(input.snapshot, ["wcag_aria_error_count"]);
+  const labelIssueCount = getNumber(input.snapshot, ["wcag_form_label_error_count"]);
+  const retainedIssueCount =
+    (keyboardIssueCount ?? 0) +
+    (focusIssueCount ?? 0) +
+    (ariaIssueCount ?? 0) +
+    (labelIssueCount ?? 0);
+  const accessibilityEvidenceRetained = Boolean(visualAccessReview) || axeEvidenceRows.length > 0 || retainedIssueCount > 0;
+
+  if (retainedIssueCount > 0) {
+    return makeOutcome(
+      "accessibility_consent_controls",
+      "Insufficient evidence",
+      "Consent-control accessibility evidence was retained, but no eligible consent-control accessibility finding was projected.",
+      [
+        "Evidence: accessibility audit context",
+        `Accessibility issue count: ${retainedIssueCount}`
+      ],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "WC01.unifiedFindings.consentControlAccessibilityFinding",
+            "eligible projected unified finding when retained consent-control accessibility evidence satisfies policy gates",
+            "missing",
+            "Required to classify retained consent-control accessibility evidence as a canonical review signal.",
+            "WC01"
+          )
+        ],
+        retainedEvidence: {
+          ariaIssueCount,
+          axeEvidenceRows: axeEvidenceRows.length,
+          focusIssueCount,
+          keyboardIssueCount,
+          labelIssueCount,
+          visualAccessReviewRetained: Boolean(visualAccessReview)
+        }
+      }
+    );
+  }
+
+  if (accessibilityEvidenceRetained || hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "accessibility_consent_controls",
+      "Not observed",
+      "Consent-control accessibility checks completed for the tested context, and no eligible accessibility finding was projected.",
+      ["Evidence: accessibility audit context"],
+      {
+        retainedEvidence: {
+          ariaIssueCount: ariaIssueCount ?? 0,
+          axeEvidenceRows: axeEvidenceRows.length,
+          focusIssueCount: focusIssueCount ?? 0,
+          keyboardIssueCount: keyboardIssueCount ?? 0,
+          labelIssueCount: labelIssueCount ?? 0,
+          visualAccessReviewRetained: Boolean(visualAccessReview)
+        }
+      }
     );
   }
 
@@ -665,13 +1309,15 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
   const outcomes = [
     deriveConsentSurfaceOutcome(input),
     derivePreConsentCookieStorageOutcome(input),
+    derivePreConsentThirdPartyTrackingOutcome(input),
     deriveRejectPathOutcome(input),
     derivePostRejectOutcome(input),
     derivePreferenceWithdrawalOutcome(input),
     deriveVendorDisclosureOutcome(input),
     deriveSensitiveSurfaceOutcome(input),
     deriveSessionReplayFingerprintingOutcome(input),
-    deriveCrossBorderOutcome(input)
+    deriveCrossBorderOutcome(input),
+    deriveAccessibilityConsentControlsOutcome(input)
   ];
 
   return Object.fromEntries(

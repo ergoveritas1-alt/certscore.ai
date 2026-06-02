@@ -16,6 +16,7 @@ import {
   deriveConsentAuditFindings
 } from "./consent-audit-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "./executive-findings-projection";
+import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
 
 function packet(id: string, categoryId: string, relation: "owner" | "mirror" | "overlay") {
   return {
@@ -139,6 +140,63 @@ test("session replay snapshot signal retains persisted tracker vendor provenance
   assert.deepEqual(packet?.evidence?.entities?.runtimeVendors, ["FullStory"]);
   assert.deepEqual(packet?.evidence?.entities?.runtimeRequestUrls, ["https://www.draftkings.com"]);
   assert.ok(packet?.evidence?.flags?.includes("commerce.session_replay_tool_detected"));
+});
+
+test("cross-border endpoint jurisdiction evidence surfaces through unified findings and GDPR coverage", () => {
+  const candidates = buildReviewFindings({
+    issues: [],
+    prioritizedAccessibilityRuleRows: [],
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        endpointJurisdictionEvidence: [
+          {
+            confidence: "high",
+            etldPlusOne: "googletagmanager.com",
+            firstPartyStatus: "third_party",
+            host: "www.googletagmanager.com",
+            inferenceBasis: "known_runtime_service_domain",
+            inferredCountryCode: "US",
+            inferredRegion: "US_OR_GLOBAL",
+            matchedVendorCategory: "tag_manager",
+            matchedVendorName: "Google Tag Manager",
+            requestCount: 2,
+            samplePaths: ["/gtag/js", "/gtm.js"],
+            scriptCount: 2,
+            sources: ["request", "script"],
+            transferReviewSignal: true
+          }
+        ]
+      }
+    },
+    sectionId: "tracking_third_party_ecosystem",
+    sectionItems: []
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: candidates,
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+  const packet = packets.find((finding) => finding.unifiedFindingId === "cross_border_endpoint_transfer_review_signal");
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "review");
+  assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
+  assert.deepEqual(packet?.evidence?.entities?.endpointTransferReviewHosts, ["www.googletagmanager.com"]);
+  assert.deepEqual(packet?.evidence?.entities?.endpointTransferReviewRegions, ["US_OR_GLOBAL"]);
+  assert.equal(packet?.evidence?.entities?.consentGovernanceDisclosureEvidence, undefined);
+
+  const checklist = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {},
+    projectedFindings: [],
+    scanCompleted: true,
+    unifiedFindings: packets
+  });
+  const crossBorderRow = checklist.find((row) => row.id === "cross_border_endpoint_review");
+
+  assert.equal(crossBorderRow?.status, "Review signal");
+  assert.deepEqual(crossBorderRow?.criticalEvidence.missingOrIncompleteSourceSignals, []);
 });
 
 test("contrast snapshot signal surfaces from persisted axe count and representative examples", () => {

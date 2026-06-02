@@ -17,7 +17,12 @@ import { ScanCompletedEvent } from "../analytics/data-layer-events";
 import { CookieStoragePanel } from "./cookie-storage-panel";
 import { DiagnosticsPanel } from "./diagnostics-panel";
 import { EvidenceJsonBlock } from "./evidence-json-block";
-import { ExecutiveSummaryCard, type ExecutivePolicySurface, type ExecutiveScanInterruption } from "./executive-summary-card";
+import {
+  ExecutiveSummaryCard,
+  buildRegulatoryLensesFromUnifiedPackets,
+  type ExecutivePolicySurface,
+  type ExecutiveScanInterruption
+} from "./executive-summary-card";
 import { FindingsSection } from "./findings-section";
 import { FullScanProgressCard } from "./full-scan-progress-card";
 import { FingerprintingPanel } from "./fingerprinting-panel";
@@ -5675,6 +5680,29 @@ export function SharedScanDetailView({
         ? scanRecord.snapshot.coverage_level
         : null
       : null;
+  const executiveAccessibilitySignals = {
+    accessibilityClaimMismatchDetected: getRecordBoolean(snapshot, "accessibility_claim_mismatch_detected"),
+    accessibilityLitigationRiskScore: getRecordNumber(snapshot, "accessibility_litigation_risk_score"),
+    accessibilityStatementPresent: getRecordBoolean(snapshot, "accessibility_statement_present"),
+    adaDemandLetterProbability: getRecordNumber(snapshot, "ada_demand_letter_probability"),
+    ecommerceSiteLikely: getRecordBoolean(snapshot, "ecommerce_site_likely"),
+    wcagErrorCountTotal: getRecordNumber(snapshot, "wcag_error_count_total"),
+    wcagFormLabelErrorCount: getRecordNumber(snapshot, "wcag_form_label_error_count"),
+    wcagKeyboardNavigationIssueCount: getRecordNumber(snapshot, "wcag_keyboard_navigation_issue_count"),
+    wcagMissingAltCount: getRecordNumber(snapshot, "wcag_missing_alt_count"),
+    wcagViolations: scanRecord.accessibilityRuleExamples.map((example) => ({
+      description: example.description,
+      help: example.help,
+      helpUrl: example.helpUrl,
+      impact: example.impact,
+      nodeCount: example.nodeCount,
+      pageUrl: example.pageUrl,
+      representativeSelectors: example.representativeSelectors,
+      ruleCode: example.ruleCode,
+      ruleGroup: example.ruleGroup,
+      severity: example.severity
+    }))
+  };
   const scanCalibrationSummary = buildScanCalibrationSummary({
     accessLimitationNotice: executiveAccessNoticeCardProps,
     beforeConsentCookieCount: cookiesBeforeConsentCount,
@@ -5712,6 +5740,20 @@ export function SharedScanDetailView({
     scanCompleted: scanRecord.scan.status === "completed",
     unifiedFindings: findingEvidenceDiagnostics
   });
+  const regulatoryLensCounts = {
+    beforeConsentCookieCount: cookiesBeforeConsentCount,
+    thirdPartyRequestCount: executiveThirdPartyRequestCount
+  };
+  const regulatoryLensOptions = {
+    accessibilitySignals: executiveAccessibilitySignals,
+    agencyMappings: scanRecord.agencyMappings,
+    benchmarkIndustry: scanRecord.domainBenchmark?.industry ?? null,
+    regulatoryRisk: scanRecord.regulatoryRisk
+  };
+  const gdprEprivacyExecutiveLens =
+    buildRegulatoryLensesFromUnifiedPackets(findingEvidenceDiagnostics, regulatoryLensCounts, regulatoryLensOptions).find(
+      (lens) => lens.acronym === "GDPR / ePrivacy"
+    ) ?? null;
   const shouldOpenGdprEprivacyCoverageChecklist = publicTopExecutiveFindings.length === 0;
 
   return (
@@ -5801,29 +5843,7 @@ export function SharedScanDetailView({
               <ExecutiveSummaryCard
                 accessLimitationNotice={executiveAccessNoticeCardProps}
                 allFindings={allExecutiveFindings}
-                accessibilitySignals={{
-              accessibilityClaimMismatchDetected: getRecordBoolean(snapshot, "accessibility_claim_mismatch_detected"),
-              accessibilityLitigationRiskScore: getRecordNumber(snapshot, "accessibility_litigation_risk_score"),
-              accessibilityStatementPresent: getRecordBoolean(snapshot, "accessibility_statement_present"),
-              adaDemandLetterProbability: getRecordNumber(snapshot, "ada_demand_letter_probability"),
-              ecommerceSiteLikely: getRecordBoolean(snapshot, "ecommerce_site_likely"),
-              wcagErrorCountTotal: getRecordNumber(snapshot, "wcag_error_count_total"),
-              wcagFormLabelErrorCount: getRecordNumber(snapshot, "wcag_form_label_error_count"),
-              wcagKeyboardNavigationIssueCount: getRecordNumber(snapshot, "wcag_keyboard_navigation_issue_count"),
-              wcagMissingAltCount: getRecordNumber(snapshot, "wcag_missing_alt_count"),
-              wcagViolations: scanRecord.accessibilityRuleExamples.map((example) => ({
-                description: example.description,
-                help: example.help,
-                helpUrl: example.helpUrl,
-                impact: example.impact,
-                nodeCount: example.nodeCount,
-                pageUrl: example.pageUrl,
-                representativeSelectors: example.representativeSelectors,
-                ruleCode: example.ruleCode,
-                ruleGroup: example.ruleGroup,
-                severity: example.severity
-              }))
-            }}
+                accessibilitySignals={executiveAccessibilitySignals}
             agencyMappings={scanRecord.agencyMappings}
             beforeConsentCookieCount={cookiesBeforeConsentCount}
             coverageDiagnosticIndicators={scanCalibrationSummary.coverage.diagnosticIndicators}
@@ -5863,6 +5883,7 @@ export function SharedScanDetailView({
           />
           <GdprEprivacyCoverageChecklistCard
             defaultOpen={shouldOpenGdprEprivacyCoverageChecklist}
+            gdprEprivacyLens={gdprEprivacyExecutiveLens}
             items={gdprEprivacyCoverageChecklist}
           />
           

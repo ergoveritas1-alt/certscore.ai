@@ -16,6 +16,7 @@ export type ConsentControlLifecycleEvidence = {
   coverageStatus: "usable" | "partial" | "blocked" | "insufficient";
   bannerDismissedOrInitialLayerUnavailable?: boolean;
   priorConsentStatePossible?: boolean;
+  postChoicePreferenceControlClickOutcome?: Record<string, unknown> | null;
   observedControls?: Array<Record<string, unknown>>;
   evidenceRefs?: string[];
 };
@@ -96,10 +97,12 @@ function normalizeEvidence(raw: Record<string, unknown>): ConsentControlLifecycl
       : [],
     pagesChecked,
     policyLinksInspected: getStringArray(source.policyLinksInspected ?? source.policy_links_inspected),
-    preferenceCenterReachableAfterInitialLayer:
-      getBoolean(source.preferenceCenterReachableAfterInitialLayer ?? source.preference_center_reachable_after_initial_layer),
-    priorConsentStatePossible:
-      getBoolean(source.priorConsentStatePossible ?? source.prior_consent_state_possible) ?? undefined,
+	    preferenceCenterReachableAfterInitialLayer:
+	      getBoolean(source.preferenceCenterReachableAfterInitialLayer ?? source.preference_center_reachable_after_initial_layer),
+	    postChoicePreferenceControlClickOutcome:
+	      getRecord(source.postChoicePreferenceControlClickOutcome ?? source.post_choice_preference_control_click_outcome),
+	    priorConsentStatePossible:
+	      getBoolean(source.priorConsentStatePossible ?? source.prior_consent_state_possible) ?? undefined,
     privacySettingsControlObserved:
       getBoolean(source.privacySettingsControlObserved ?? source.privacy_settings_control_observed) === true,
     withdrawalTextObserved:

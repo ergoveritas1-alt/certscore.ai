@@ -584,6 +584,14 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "A large external footprint increases privacy exposure and operational complexity.",
     remediation: "Trim third-party dependencies and remove vendors that do not serve a clear purpose."
   },
+  cross_border_endpoint_transfer_review_signal: {
+    id: "cross_border_endpoint_transfer_review_signal",
+    label: "Cross-border endpoint transfer review signal",
+    section: "Vendors & Requests",
+    defaultSurfacePriority: 73,
+    whyItMatters: "Third-party runtime endpoints with retained jurisdiction or transfer-region evidence can create international-transfer review obligations.",
+    remediation: "Review observed endpoint vendors, regions, and disclosures, then document transfer mechanisms or reduce non-essential cross-border endpoint use where appropriate."
+  },
   collection_endpoints_detected: {
     id: "collection_endpoints_detected",
     label: "Collection endpoints detected",

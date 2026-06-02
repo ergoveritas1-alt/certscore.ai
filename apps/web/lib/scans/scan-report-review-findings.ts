@@ -159,6 +159,63 @@ function getRecordObjectArray(record: Record<string, unknown> | null | undefined
     : [];
 }
 
+function getEndpointJurisdictionRows(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
+  return [
+    ...getRecordObjectArray(runtimeArtifacts, "endpoint_jurisdiction_evidence"),
+    ...getRecordObjectArray(runtimeArtifacts, "endpointJurisdictionEvidence"),
+    ...getRecordObjectArray(runtimeArtifacts, "cross_border_endpoint_evidence"),
+    ...getRecordObjectArray(runtimeArtifacts, "crossBorderEndpointEvidence"),
+    ...getRecordObjectArray(hybridRuntimeEvidence, "endpoint_jurisdiction_evidence"),
+    ...getRecordObjectArray(hybridRuntimeEvidence, "endpointJurisdictionEvidence"),
+    ...getRecordObjectArray(hybridRuntimeEvidence, "cross_border_endpoint_evidence"),
+    ...getRecordObjectArray(hybridRuntimeEvidence, "crossBorderEndpointEvidence")
+  ];
+}
+
+function isTransferReviewEndpointRow(row: Record<string, unknown>) {
+  const transferReviewSignal = row.transferReviewSignal ?? row.transfer_review_signal;
+  const firstPartyStatus = getRecordString(row, "firstPartyStatus") ?? getRecordString(row, "first_party_status");
+  const confidence = getRecordString(row, "confidence");
+  const inferredRegion = getRecordString(row, "inferredRegion") ?? getRecordString(row, "inferred_region");
+  const inferredCountryCode = getRecordString(row, "inferredCountryCode") ?? getRecordString(row, "inferred_country_code");
+  const requestCount = typeof row.requestCount === "number" ? row.requestCount : typeof row.request_count === "number" ? row.request_count : 0;
+  const scriptCount = typeof row.scriptCount === "number" ? row.scriptCount : typeof row.script_count === "number" ? row.script_count : 0;
+
+  return (
+    transferReviewSignal === true &&
+    firstPartyStatus === "third_party" &&
+    (confidence === "medium" || confidence === "high") &&
+    Boolean(inferredRegion || inferredCountryCode) &&
+    (requestCount > 0 || scriptCount > 0)
+  );
+}
+
+function compactEndpointJurisdictionRow(row: Record<string, unknown>) {
+  return {
+    confidence: getRecordString(row, "confidence"),
+    etldPlusOne: getRecordString(row, "etldPlusOne") ?? getRecordString(row, "etld_plus_one"),
+    firstPartyStatus: getRecordString(row, "firstPartyStatus") ?? getRecordString(row, "first_party_status"),
+    host: getRecordString(row, "host"),
+    inferredCountryCode: getRecordString(row, "inferredCountryCode") ?? getRecordString(row, "inferred_country_code"),
+    inferredRegion: getRecordString(row, "inferredRegion") ?? getRecordString(row, "inferred_region"),
+    inferenceBasis: getRecordString(row, "inferenceBasis") ?? getRecordString(row, "inference_basis"),
+    matchedVendorCategory: getRecordString(row, "matchedVendorCategory") ?? getRecordString(row, "matched_vendor_category"),
+    matchedVendorName: getRecordString(row, "matchedVendorName") ?? getRecordString(row, "matched_vendor_name"),
+    requestCount: typeof row.requestCount === "number" ? row.requestCount : typeof row.request_count === "number" ? row.request_count : null,
+    samplePaths: [
+      ...getRecordStringArray(row, "samplePaths"),
+      ...getRecordStringArray(row, "sample_paths")
+    ].slice(0, 5),
+    scriptCount: typeof row.scriptCount === "number" ? row.scriptCount : typeof row.script_count === "number" ? row.script_count : null,
+    sources: uniqueStrings([
+      ...getRecordStringArray(row, "sources"),
+      ...getRecordStringArray(row, "source")
+    ]),
+    transferReviewSignal: row.transferReviewSignal === true || row.transfer_review_signal === true
+  };
+}
+
 function firstRecordObject(...values: Array<unknown>) {
   for (const value of values) {
     if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -2447,7 +2504,43 @@ export function buildReviewFindings(input: {
       }];
     });
 
-  const issueFindings: CanonicalReviewFinding[] = input.issues.map((issue, index) => ({
+  const runtimeDerivedIssues: CanonicalReviewIssue[] = [];
+  if (input.sectionId === "tracking_third_party_ecosystem") {
+    const endpointJurisdictionRows = getEndpointJurisdictionRows(input.runtimeArtifacts);
+    const transferReviewEndpointRows = endpointJurisdictionRows
+      .filter(isTransferReviewEndpointRow)
+      .map(compactEndpointJurisdictionRow)
+      .filter((row) => row.host);
+
+    if (transferReviewEndpointRows.length > 0) {
+      const endpointHosts = uniqueStrings(transferReviewEndpointRows.map((row) => row.host));
+      const endpointRegions = uniqueStrings(transferReviewEndpointRows.map((row) => row.inferredRegion));
+      const endpointCountries = uniqueStrings(transferReviewEndpointRows.map((row) => row.inferredCountryCode));
+      const endpointVendors = uniqueStrings(transferReviewEndpointRows.map((row) => row.matchedVendorName));
+      runtimeDerivedIssues.push({
+        description:
+          `Observed ${transferReviewEndpointRows.length} third-party endpoint${transferReviewEndpointRows.length === 1 ? "" : "s"} with retained jurisdiction or transfer-region evidence that merits international-transfer review.`,
+        evidence: endpointHosts.slice(0, 6),
+        fallbackEvidence: {
+          endpointJurisdictionEvidence: transferReviewEndpointRows,
+          endpoint_jurisdiction_evidence: transferReviewEndpointRows,
+          endpointJurisdictionRows: endpointJurisdictionRows.length,
+          endpointTransferReviewHosts: endpointHosts,
+          endpointTransferReviewRegions: endpointRegions,
+          endpointTransferReviewCountries: endpointCountries,
+          endpointTransferReviewVendors: endpointVendors,
+          supportingSignals: ["privacy.cross_border_endpoint_transfer_review_signal"],
+          transferReviewSignalRows: transferReviewEndpointRows.length,
+          unifiedFindingId: "cross_border_endpoint_transfer_review_signal"
+        },
+        severity: "medium",
+        title: "Cross-border endpoint transfer review signal"
+      });
+    }
+  }
+
+  const allIssues = [...input.issues, ...runtimeDerivedIssues];
+  const issueFindings: CanonicalReviewFinding[] = allIssues.map((issue, index) => ({
     categoryId: input.categoryId ?? getDefaultIssueCategoryId(input.sectionId),
     description: issue.description,
     evidence: issue.evidence,

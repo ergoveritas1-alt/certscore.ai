@@ -103,9 +103,16 @@ test("does not project without consent or tracking context", () => {
 });
 
 test("normalizes nested lifecycle evidence without raw page content", () => {
-  const evidence = getConsentControlLifecycleEvidence(baseEvidence());
+  const evidence = getConsentControlLifecycleEvidence(baseEvidence({
+    postChoicePreferenceControlClickOutcome: {
+      attempted: true,
+      controlText: "Cookie Preferences",
+      outcome: "opened_preference_center"
+    }
+  }));
 
   assert.deepEqual(evidence?.pagesChecked, ["https://example.com/"]);
+  assert.equal(evidence?.postChoicePreferenceControlClickOutcome?.outcome, "opened_preference_center");
   assert.equal(JSON.stringify(evidence).includes("<html"), false);
   assert.equal(JSON.stringify(evidence).includes("Privacy Policy -> https://example.com/privacy"), true);
 });

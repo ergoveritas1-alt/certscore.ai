@@ -305,28 +305,100 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes consent control lifecycl
           evidenceRefs: ["post_reject_consent_control_lifecycle"],
           footerLinksInspected: ["Cookie Preferences -> https://example.test/cookies"],
           initialConsentLayerObserved: true,
+	          observedControls: [
+	            {
+	              pageUrl: "https://example.test/",
+	              source: "footer_link",
+	              text: "Cookie Preferences"
+	            }
+	          ],
+	          pagesChecked: ["https://example.test/"],
+	          postChoicePreferenceControlClickOutcome: {
+	            attempted: true,
+	            controlText: "Cookie Preferences",
+	            finalUrl: "https://example.test/cookies",
+	            href: "https://example.test/cookies",
+	            outcome: "navigated_to_policy_or_notice",
+	            pageUrl: "https://example.test/",
+	            source: "footer_link"
+	          },
+	          preferenceCenterReachableAfterInitialLayer: true
+	        }
+	      }
+    }
+  });
+
+  assert.equal(observed.preference_withdrawal_control?.status, "Observed");
+	  assert.deepEqual(observed.preference_withdrawal_control?.evidenceRefs, [
+	    "Evidence: consent control lifecycle",
+	    "post_reject_consent_control_lifecycle",
+	    "Observed control: Cookie Preferences",
+	    "Post-choice control outcome: navigated_to_policy_or_notice"
+	  ]);
+
+  const notObserved = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        consentControlLifecycleEvidence: {
+          controlsSearched: ["cookie preferences"],
+          cmpReopenControlObserved: false,
+          coverageStatus: "usable",
+          evidenceRefs: ["post_reject_consent_control_lifecycle"],
+          footerLinksInspected: ["Privacy Notice -> https://example.test/privacy"],
+          initialConsentLayerObserved: true,
+          observedControls: [],
+          pagesChecked: ["https://example.test/"],
+          preferenceCenterReachableAfterInitialLayer: false
+        }
+      }
+    }
+  });
+
+  assert.equal(notObserved.preference_withdrawal_control?.status, "Not observed");
+  assert.match(notObserved.preference_withdrawal_control?.limitation ?? "", /no reopen or withdrawal control/i);
+
+  const postChoiceCleanAbsence = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        consentControlLifecycleEvidence: {
+          controlsSearched: ["cookie preferences"],
+          cmpReopenControlObserved: true,
+          coverageStatus: "usable",
+          evidenceRefs: ["browser_runtime_consent_control_lifecycle", "post_reject_consent_control_lifecycle"],
+          footerLinksInspected: ["Privacy Notice -> https://example.test/privacy"],
+          initialConsentLayerObserved: true,
           observedControls: [
             {
               pageUrl: "https://example.test/",
-              source: "footer_link",
-              text: "Cookie Preferences"
+              source: "cmp_reopen",
+              text: "This website uses cookies. Accept Decline Cookie"
             }
           ],
           pagesChecked: ["https://example.test/"],
+          postChoicePreferenceControlClickOutcome: {
+            attempted: false,
+            controlText: null,
+            href: null,
+            outcome: "no_qualifying_control_observed",
+            pageUrl: "https://example.test/",
+            source: "none"
+          },
           preferenceCenterReachableAfterInitialLayer: true
         }
       }
     }
   });
 
-  assert.equal(observed.preference_withdrawal_control?.status, "Observed");
-  assert.deepEqual(observed.preference_withdrawal_control?.evidenceRefs, [
-    "Evidence: consent control lifecycle",
-    "post_reject_consent_control_lifecycle",
-    "Observed control: Cookie Preferences"
-  ]);
+  assert.equal(postChoiceCleanAbsence.preference_withdrawal_control?.status, "Not observed");
+  assert.ok(
+    postChoiceCleanAbsence.preference_withdrawal_control?.evidenceRefs.includes(
+      "Post-choice control outcome: no_qualifying_control_observed"
+    )
+  );
 
-  const notObserved = deriveGdprEprivacyCoveragePolicyOutcomes({
+  const ambiguousCmpReopenOnly = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
       hybridRuntimeEvidence: {
@@ -345,8 +417,12 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes consent control lifecycl
     }
   });
 
-  assert.equal(notObserved.preference_withdrawal_control?.status, "Not observed");
-  assert.match(notObserved.preference_withdrawal_control?.limitation ?? "", /no reopen or withdrawal control/i);
+  assert.equal(ambiguousCmpReopenOnly.preference_withdrawal_control?.status, "Insufficient evidence");
+  assert.ok(
+    ambiguousCmpReopenOnly.preference_withdrawal_control?.evidenceRefs.includes(
+      "Ambiguous control evidence retained"
+    )
+  );
 
   const genericCookieNoticeOnly = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -372,7 +448,56 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes consent control lifecycl
     }
   });
 
-  assert.equal(genericCookieNoticeOnly.preference_withdrawal_control?.status, "Not observed");
+	  assert.equal(genericCookieNoticeOnly.preference_withdrawal_control?.status, "Insufficient evidence");
+  assert.match(
+    genericCookieNoticeOnly.preference_withdrawal_control?.limitation ?? "",
+    /did not prove a usable preference or withdrawal control/i
+  );
+	  assert.ok(
+	    genericCookieNoticeOnly.preference_withdrawal_control?.evidenceRefs.includes(
+	      "Ambiguous control evidence retained"
+	    )
+	  );
+
+	  const retainedButClickDidNotOpen = deriveGdprEprivacyCoveragePolicyOutcomes({
+	    ...completedInputBase,
+	    runtimeArtifacts: {
+	      hybridRuntimeEvidence: {
+	        consentControlLifecycleEvidence: {
+	          controlsSearched: ["cookie preferences"],
+	          cookiePreferencesLinkObserved: true,
+	          coverageStatus: "usable",
+	          evidenceRefs: ["post_reject_consent_control_lifecycle"],
+	          footerLinksInspected: ["Cookie Preferences -> https://example.test/cookies"],
+	          initialConsentLayerObserved: true,
+	          observedControls: [
+	            {
+	              pageUrl: "https://example.test/",
+	              source: "footer_link",
+	              text: "Cookie Preferences"
+	            }
+	          ],
+	          pagesChecked: ["https://example.test/"],
+	          postChoicePreferenceControlClickOutcome: {
+	            attempted: true,
+	            controlText: "Cookie Preferences",
+	            href: "https://example.test/cookies",
+	            outcome: "no_ui_change",
+	            pageUrl: "https://example.test/",
+	            source: "footer_link"
+	          },
+	          preferenceCenterReachableAfterInitialLayer: true
+	        }
+	      }
+	    }
+	  });
+
+	  assert.equal(retainedButClickDidNotOpen.preference_withdrawal_control?.status, "Insufficient evidence");
+	  assert.ok(
+	    retainedButClickDidNotOpen.preference_withdrawal_control?.evidenceRefs.includes(
+	      "Post-choice control outcome: no_ui_change"
+	    )
+	  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps cross-border review untestable without jurisdiction evidence", () => {
@@ -420,7 +545,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes nested hybrid endpoint j
     }
   });
 
-  assert.equal(outcomes.cross_border_endpoint_review?.status, "Not observed");
+  assert.equal(outcomes.cross_border_endpoint_review?.status, "Insufficient evidence");
   assert.deepEqual(outcomes.cross_border_endpoint_review?.evidenceRefs, [
     "Endpoint jurisdiction rows: 1",
     "Transfer review signal rows: 1"

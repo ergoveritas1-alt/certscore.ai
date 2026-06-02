@@ -328,6 +328,16 @@ function normalizeUnifiedFindingEvidenceRecord(
   assignCanonicalField("policySummaryShort", ["policy_summary_short"]);
   assignCanonicalField("runtimeEvidence", ["runtime_evidence"]);
   assignCanonicalField("runtimeEvidenceArtifacts", ["runtime_evidence_artifacts"]);
+  assignCanonicalField("endpointJurisdictionEvidence", [
+    "endpoint_jurisdiction_evidence",
+    "crossBorderEndpointEvidence",
+    "cross_border_endpoint_evidence"
+  ]);
+  assignCanonicalField("endpointTransferReviewHosts", ["endpoint_transfer_review_hosts"]);
+  assignCanonicalField("endpointTransferReviewRegions", ["endpoint_transfer_review_regions"]);
+  assignCanonicalField("endpointTransferReviewCountries", ["endpoint_transfer_review_countries"]);
+  assignCanonicalField("endpointTransferReviewVendors", ["endpoint_transfer_review_vendors"]);
+  assignCanonicalField("transferReviewSignalRows", ["transfer_review_signal_rows"]);
   assignCanonicalField("consentActionableChoiceObserved", ["consent_actionable_choice_observed"]);
   assignCanonicalField("hybridConsentSummary", ["hybrid_consent_summary"]);
   assignCanonicalField("hybridUiSummary", ["hybrid_ui_summary"]);
@@ -964,6 +974,7 @@ const CONSENT_TRACKING_FINDING_IDS = new Set([
   "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
   "rtb_cookie_sync_observed",
+  "cross_border_endpoint_transfer_review_signal",
   "gpc_signal_not_honored",
   "weak_cookie_security_attributes",
   "consent_surface_required_deeper_sweep",
@@ -2639,6 +2650,59 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   ]);
   if (crossDomainIdentifierCategories.length > 0) {
     entities.crossDomainIdentifierSharingCategories = crossDomainIdentifierCategories;
+  }
+  const endpointJurisdictionRows = stringifyEvidenceRows(
+    normalizedFallbackEvidence.endpointJurisdictionEvidence ??
+      normalizedFallbackEvidence.endpoint_jurisdiction_evidence ??
+      normalizedFallbackEvidence.crossBorderEndpointEvidence ??
+      normalizedFallbackEvidence.cross_border_endpoint_evidence
+  );
+  if (endpointJurisdictionRows.length > 0) {
+    entities.endpointJurisdictionEvidence = endpointJurisdictionRows;
+  }
+  const endpointTransferReviewHosts = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.endpointTransferReviewHosts)
+      ? (normalizedFallbackEvidence.endpointTransferReviewHosts as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.endpoint_transfer_review_hosts)
+      ? (normalizedFallbackEvidence.endpoint_transfer_review_hosts as string[])
+      : [])
+  ]);
+  if (endpointTransferReviewHosts.length > 0) {
+    entities.endpointTransferReviewHosts = endpointTransferReviewHosts;
+  }
+  const endpointTransferReviewRegions = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.endpointTransferReviewRegions)
+      ? (normalizedFallbackEvidence.endpointTransferReviewRegions as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.endpoint_transfer_review_regions)
+      ? (normalizedFallbackEvidence.endpoint_transfer_review_regions as string[])
+      : [])
+  ]);
+  if (endpointTransferReviewRegions.length > 0) {
+    entities.endpointTransferReviewRegions = endpointTransferReviewRegions;
+  }
+  const endpointTransferReviewCountries = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.endpointTransferReviewCountries)
+      ? (normalizedFallbackEvidence.endpointTransferReviewCountries as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.endpoint_transfer_review_countries)
+      ? (normalizedFallbackEvidence.endpoint_transfer_review_countries as string[])
+      : [])
+  ]);
+  if (endpointTransferReviewCountries.length > 0) {
+    entities.endpointTransferReviewCountries = endpointTransferReviewCountries;
+  }
+  const endpointTransferReviewVendors = uniqueStrings([
+    ...(Array.isArray(normalizedFallbackEvidence.endpointTransferReviewVendors)
+      ? (normalizedFallbackEvidence.endpointTransferReviewVendors as string[])
+      : []),
+    ...(Array.isArray(normalizedFallbackEvidence.endpoint_transfer_review_vendors)
+      ? (normalizedFallbackEvidence.endpoint_transfer_review_vendors as string[])
+      : [])
+  ]);
+  if (endpointTransferReviewVendors.length > 0) {
+    entities.endpointTransferReviewVendors = endpointTransferReviewVendors;
   }
   const overlayFacts = getOverlayEvidenceFacts(normalizedFallbackEvidence);
   if (overlayFacts) {
@@ -4362,6 +4426,22 @@ function selectObservedValue(packet: UnifiedFindingPacket) {
         : "Identifier-like values were observed in retained requests to external identity, RTB, or adtech destinations, which may indicate cross-site tracking, attribution, or data-sharing behavior under the tested scan conditions.";
   }
 
+  if (packet.unifiedFindingId === "cross_border_endpoint_transfer_review_signal") {
+    const hosts = uniqueStrings(
+      Object.entries(packet.evidence?.entities ?? {}).flatMap(([key, values]) =>
+        /endpointTransferReviewHosts/i.test(key) ? values : []
+      )
+    );
+    const regions = uniqueStrings(
+      Object.entries(packet.evidence?.entities ?? {}).flatMap(([key, values]) =>
+        /endpointTransferReviewRegions/i.test(key) ? values : []
+      )
+    );
+    const hostText = hosts.length > 0 ? ` (${hosts.slice(0, 3).join(", ")}${hosts.length > 3 ? ` +${hosts.length - 3} more` : ""})` : "";
+    const regionText = regions.length > 0 ? ` with inferred region context ${regions.slice(0, 3).join(", ")}` : "";
+    return `Third-party runtime endpoints${hostText} were retained${regionText}, creating a public-web international-transfer review signal under the tested scan conditions.`;
+  }
+
   if (packet.unifiedFindingId === "sensitive_data_collection_with_third_party_tracking_present") {
     const observedValue = getSensitivePayloadObservedValue(packet);
     if (observedValue) {
@@ -5349,6 +5429,10 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   cross_domain_identifier_sharing_observed: {
     suggestedFix: "Review the retained redacted request samples, confirm which vendors receive the identifier-like values, and gate or remove non-essential sharing where it is not clearly needed or disclosed.",
     whyThisMatters: "Identifier-like values propagated across adtech, affiliate, analytics, identity, or marketing destinations can support cross-site tracking, attribution, or profiling."
+  },
+  cross_border_endpoint_transfer_review_signal: {
+    suggestedFix: "Review the retained third-party endpoint hosts, inferred regions, vendors, and public disclosures, then document transfer mechanisms or remove non-essential cross-border endpoint calls.",
+    whyThisMatters: "Runtime calls to third-party endpoints with jurisdiction or transfer-region evidence can create international-transfer review obligations even when the scan does not determine legal compliance."
   },
   weak_cookie_security_attributes: {
     suggestedFix: "Review the observed cookie set and tighten weak attributes such as missing Secure or HttpOnly flags and weak SameSite settings where appropriate.",
