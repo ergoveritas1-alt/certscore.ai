@@ -4638,26 +4638,32 @@ export function ExecutiveSummaryCard(input: {
       });
 
   return (
-    <section className="overflow-visible rounded-[2rem] border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
+    <section className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
+      <details className="group/executive-summary" data-testid="executive-summary-details" open>
+        <summary
+          className="flex min-h-[4.75rem] cursor-pointer list-none flex-wrap items-center gap-3 px-6 py-4 marker:hidden [&::-webkit-details-marker]:hidden lg:px-8"
+          data-testid="executive-summary-toggle"
+        >
+          <ScanReportDisclosureIcon className="group-open/executive-summary:rotate-90" />
+          <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Exec Summary</p>
+          <span
+            data-testid="executive-posture-badge"
+            className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] ${getPostureClasses(displayState)}`}
+          >
+            {displayState}
+          </span>
+          {input.domainBenchmark ? (
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-600">
+              Benchmark: {input.domainBenchmark.industry}
+            </span>
+          ) : null}
+        </summary>
       <div
-        className="grid min-w-0 items-stretch gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.9fr)] lg:px-8"
+        className="grid min-w-0 items-stretch gap-6 px-6 pb-6 pt-1 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.9fr)] lg:px-8"
         data-executive-summary-layout
       >
         <div className="min-w-0 flex flex-col gap-5 lg:min-h-0">
           <div className="space-y-5">
-            <div className="flex flex-wrap items-center gap-3">
-              <span
-                data-testid="executive-posture-badge"
-                className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] ${getPostureClasses(displayState)}`}
-              >
-                {displayState}
-              </span>
-              {input.domainBenchmark ? (
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-600">
-                  Benchmark: {input.domainBenchmark.industry}
-                </span>
-              ) : null}
-            </div>
             <div className="space-y-3">
               <div className="space-y-2">
                 <h2
@@ -5027,6 +5033,7 @@ export function ExecutiveSummaryCard(input: {
           )}
         </div>
       </div>
+      </details>
     </section>
   );
 }

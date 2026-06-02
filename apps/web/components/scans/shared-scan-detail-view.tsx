@@ -26,6 +26,12 @@ import {
 import { FindingsSection } from "./findings-section";
 import { FullScanProgressCard } from "./full-scan-progress-card";
 import { FingerprintingPanel } from "./fingerprinting-panel";
+import {
+  BetaRegulatoryChecklistCard,
+  type BetaRegulatoryChecklistArea,
+  type BetaRegulatoryChecklistRow,
+  type BetaRegulatoryChecklistStatus
+} from "./beta-regulatory-checklist-card";
 import { CaliforniaPrivacyCoverageChecklistCard } from "./california-privacy-coverage-checklist-card";
 import { GdprEprivacyCoverageChecklistCard } from "./gdpr-eprivacy-coverage-checklist-card";
 import { InfoTip } from "./info-tip";
@@ -5386,6 +5392,243 @@ type SharedScanDetailViewProps = {
   viewerAccessRole?: string | null;
 };
 
+type BetaRegulatoryLens = {
+  acronym: string;
+  findings: Array<{ label: string }>;
+  ratingLabel: string;
+  score: number | null;
+  summary: string;
+};
+
+type BetaRowSeed = Omit<BetaRegulatoryChecklistRow, "evidenceRefs" | "status"> & {
+  evidenceRefs?: string[];
+  evidenceRefScope?: "lens" | "none";
+  status?: BetaRegulatoryChecklistStatus;
+};
+
+type BetaAreaSeed = {
+  id: string;
+  lensAcronym?: string;
+  navLabel: string;
+  rows: BetaRowSeed[];
+  subtitle: string;
+  summary: string;
+  title: string;
+};
+
+function normalizeBetaStatusFromLens(lens: BetaRegulatoryLens | null, fallback: BetaRegulatoryChecklistStatus = "not_testable") {
+  return lens && lens.findings.length > 0 ? "review_signal" : fallback;
+}
+
+function buildBetaCounters(rows: BetaRegulatoryChecklistRow[]): BetaRegulatoryChecklistArea["counters"] {
+  return {
+    checked: rows.filter((row) => row.status === "checked").length,
+    gaps: rows.filter((row) => row.status === "gap_observed").length,
+    notApplicable: rows.filter((row) => row.status === "not_applicable").length,
+    notObserved: rows.filter((row) => row.status === "not_observed").length,
+    notTestable: rows.filter((row) => row.status === "not_testable").length,
+    review: rows.filter((row) => row.status === "review_signal" || row.status === "litigation_risk_signal").length
+  };
+}
+
+function buildBetaArea(seed: BetaAreaSeed, lenses: BetaRegulatoryLens[]): BetaRegulatoryChecklistArea {
+  const lens = seed.lensAcronym ? lenses.find((item) => item.acronym === seed.lensAcronym) ?? null : null;
+  const lensEvidenceRefs = lens?.findings.map((finding) => finding.label).slice(0, 6) ?? [];
+  const rows = seed.rows.map((row, index): BetaRegulatoryChecklistRow => {
+    const status =
+      row.status ??
+      (index === 0 && seed.id === "california-cipa" && lens?.findings.length
+        ? "litigation_risk_signal"
+        : index === 0
+          ? normalizeBetaStatusFromLens(lens)
+          : "not_testable");
+    return {
+      ...row,
+      evidenceRefs: row.evidenceRefScope === "lens" || (index === 0 && lensEvidenceRefs.length > 0) ? lensEvidenceRefs : row.evidenceRefs,
+      status
+    };
+  });
+  const score = typeof lens?.score === "number" ? lens.score : null;
+  const status =
+    rows.some((row) => row.status === "gap_observed")
+      ? "needs_work"
+      : rows.some((row) => row.status === "review_signal" || row.status === "litigation_risk_signal")
+        ? "review_recommended"
+        : score === null
+          ? "limited_coverage"
+          : score >= 80
+            ? "strong"
+            : "limited_coverage";
+
+  return {
+    counters: buildBetaCounters(rows),
+    id: seed.id,
+    navLabel: seed.navLabel,
+    rows,
+    score,
+    status,
+    subtitle: seed.subtitle,
+    summary: lens?.summary ? `${lens.summary} ${seed.summary}` : seed.summary,
+    title: seed.title
+  };
+}
+
+function betaRows(input: Array<[string, string, string, BetaRegulatoryChecklistRow["evidenceCapability"], BetaRegulatoryChecklistStatus?]>): BetaRowSeed[] {
+  return input.map(([id, label, note, evidenceCapability, status]) => ({
+    evidenceCapability,
+    id,
+    label,
+    note,
+    regulatoryMapping: [],
+    status
+  }));
+}
+
+function buildBetaRegulatoryChecklistAreas(lenses: BetaRegulatoryLens[]) {
+  const seeds: BetaAreaSeed[] = [
+    {
+      id: "ftc-dark-patterns",
+      lensAcronym: "FTC",
+      navLabel: "FTC / Dark Patterns",
+      title: "FTC / Dark Patterns",
+      subtitle: "Privacy UX, consent friction, misleading choice architecture, and consumer-protection review signals.",
+      summary: "FTC dark-pattern beta review focuses on public-web choice architecture, opt-out visibility, consent friction, privacy-control accessibility, and runtime behavior after a recorded choice.",
+      rows: betaRows([
+        ["choice_imbalance", "Choice imbalance", "CertScore reviews whether accept or continue choices appear materially more prominent than reject, decline, or manage choices.", "currently_supported"],
+        ["hidden_opt_out", "Hidden or hard-to-find opt-out", "Opt-out or reject controls require retained visibility, depth, and interaction-path evidence before stronger status is projected.", "near_term_supported"],
+        ["confusing_labels", "Confusing consent or privacy labels", "Ambiguous or misleading labels are beta review signals and require retained consent-control text evidence.", "near_term_supported"],
+        ["forced_consent_flow", "Forced or obstructive consent flow", "Cookie-wall or obstructive-flow indicators are reviewed only when retained runtime evidence supports them.", "near_term_supported"],
+        ["tracking_choice_consistency", "Tracking inconsistent with user choice", "This requires a confirmed reject or opt-out action plus before/after tracking comparison.", "near_term_supported"],
+        ["post_choice_controls", "Post-choice control availability", "CertScore reviews whether users can reopen or change privacy choices after the initial interaction.", "near_term_supported"],
+        ["claims_vs_behavior", "Runtime claims vs observed behavior", "Public disclosures can be compared with retained runtime vendors only through normalized policy/behavior findings.", "near_term_supported"],
+        ["privacy_choice_accessibility", "Accessibility of privacy choices", "Basic accessibility signals on privacy controls are eligible when retained by the public-web scan.", "currently_supported"]
+      ])
+    },
+    {
+      id: "ada-wcag",
+      lensAcronym: "DOJ / ADA accessibility",
+      navLabel: "ADA / WCAG",
+      title: "ADA / WCAG",
+      subtitle: "Website accessibility and privacy-control accessibility review signals.",
+      summary: "ADA/WCAG beta review uses automated accessibility review signals only. It does not imply a full WCAG conformance audit.",
+      rows: betaRows([
+        ["keyboard_navigation", "Keyboard navigation", "Keyboard traversal and focusability issues are reviewed when retained accessibility evidence supports them.", "currently_supported"],
+        ["visible_focus", "Visible focus indicators", "Focus-visibility signals are beta mapped where automated evidence is retained.", "near_term_supported"],
+        ["form_labels", "Form labels and accessible names", "Missing labels or ambiguous accessible names are reviewed from retained automated accessibility evidence.", "currently_supported"],
+        ["image_alt", "Image text alternatives", "Meaningful image alternative-text issues are reviewed from automated accessibility evidence.", "currently_supported"],
+        ["color_contrast", "Color contrast", "Automated contrast review signals are eligible where retained by the scan.", "currently_supported"],
+        ["semantic_structure", "Semantic structure", "Heading, landmark, role, and structure issues are reviewed from retained accessibility evidence.", "currently_supported"],
+        ["privacy_control_accessibility", "Consent/privacy control accessibility", "Privacy and consent controls are reviewed when accessibility evidence is linked to the control context.", "currently_supported"],
+        ["modal_focus_management", "Modal/dialog focus management", "Dialog semantics, focus trap, and escape behavior need retained modal-specific evidence.", "near_term_supported"]
+      ])
+    },
+    {
+      id: "india-dpdp",
+      navLabel: "India DPDP",
+      title: "India DPDP",
+      subtitle: "Notice, consent, withdrawal, children's data, vendor disclosure, and rights-path review signals.",
+      summary: "India DPDP beta review is limited to public notice, consent-choice, withdrawal, vendor-disclosure, contact, children's-data cue, and sensitive-form signals that CertScore can observe from public pages.",
+      rows: betaRows([
+        ["privacy_notice", "Privacy notice availability", "Public privacy notice availability can be reviewed when policy surfaces are retained.", "currently_supported", "not_observed"],
+        ["collection_notice", "Collection-context notice", "Collection-context notice requires retained forms or collection surfaces with nearby disclosure cues.", "near_term_supported"],
+        ["choice_mechanism", "Consent or choice mechanism", "Consent, preference, cookie, or privacy-choice mechanisms can be reviewed when observed in the tested path.", "near_term_supported"],
+        ["withdrawal", "Consent withdrawal / preference management", "Withdrawal or preference-management review requires retained post-choice control evidence.", "near_term_supported"],
+        ["purpose_transparency", "Purpose / data-use transparency", "Purpose transparency requires policy text extraction and normalized disclosure cues.", "near_term_supported"],
+        ["vendor_alignment", "Vendor / third-party disclosure alignment", "Runtime vendors must be compared with retained public disclosures through WC01 normalized findings.", "near_term_supported"],
+        ["children_data", "Children's data signals", "Child-directed content, age gates, parental-consent cues, or children's notice cues require retained public-page evidence.", "near_term_supported"],
+        ["grievance_contact", "Grievance / privacy contact mechanism", "Privacy contact, grievance, or rights request paths require retained policy/contact evidence.", "near_term_supported"],
+        ["sensitive_context", "Sensitive or high-risk form context", "Sensitive-field context can be reviewed when forms and tracking are retained together.", "near_term_supported"]
+      ])
+    },
+    {
+      id: "us-state-privacy",
+      navLabel: "U.S. State Privacy",
+      title: "U.S. State Privacy",
+      subtitle: "Targeted advertising, sale, profiling, sensitive data, and universal opt-out review signals.",
+      summary: "U.S. State Privacy beta review reuses public-web signals for privacy notices, rights paths, targeted advertising, opt-out availability, GPC handling, sensitive forms, and vendor disclosure alignment.",
+      rows: betaRows([
+        ["privacy_notice", "Privacy notice availability", "Public privacy notice availability can be reviewed when retained policy surfaces exist.", "currently_supported", "not_observed"],
+        ["rights_path", "Consumer rights / request path", "Rights request paths require retained public policy or footer/contact evidence.", "near_term_supported"],
+        ["sale_targeted_opt_out", "Opt-out of sale / targeted advertising", "Sale or targeted-advertising opt-out paths require retained opt-out link or preference evidence.", "near_term_supported"],
+        ["universal_opt_out", "Universal opt-out / GPC handling", "GPC handling requires a sent preference signal and retained site response evidence.", "near_term_supported"],
+        ["targeted_ads", "Targeted advertising signals", "Adtech, retargeting, social pixels, and cross-site measurement are eligible when projected through unified findings.", "currently_supported"],
+        ["profiling_cues", "Profiling disclosure cues", "Profiling or automated decision-making cues require retained policy text evidence.", "near_term_supported"],
+        ["sensitive_context", "Sensitive data collection context", "Sensitive forms or field patterns are reviewed only when retained from the public-web path.", "near_term_supported"],
+        ["vendor_alignment", "Vendor disclosure alignment", "Runtime vendors must be compared with retained public disclosures through WC01 normalized findings.", "near_term_supported"],
+        ["post_opt_out", "Post-opt-out tracking behavior", "Before/after tracking comparison requires a confirmed opt-out or reject action.", "near_term_supported"],
+        ["control_accessibility", "Privacy control accessibility", "Basic accessibility signals on privacy controls are eligible when retained.", "currently_supported"]
+      ])
+    },
+    {
+      id: "california-cipa",
+      lensAcronym: "CCPA / CPRA / CIPA",
+      navLabel: "California Tracking Litigation (CIPA)",
+      title: "California Tracking Litigation (CIPA)",
+      subtitle: "Session replay, chat widgets, pixels, behavioral analytics, and sensitive-form tracking signals.",
+      summary: "CertScore reviews public-web signals commonly associated with California website tracking claims. These are litigation-risk review signals, not legal conclusions.",
+      rows: betaRows([
+        ["session_replay", "Session replay / behavioral recording", "Session replay libraries, behavioral recording scripts, or collection endpoints are litigation-risk review signals when retained.", "currently_supported"],
+        ["chat_widget", "Chat widget / support widget tracking", "Third-party chat or support widget tracking requires retained runtime vendor evidence.", "near_term_supported"],
+        ["pixels_analytics", "Third-party pixels and analytics", "Pixels, analytics, adtech, and cross-site measurement vendors are reviewed from retained runtime evidence.", "currently_supported"],
+        ["input_monitoring", "Keystroke or input-monitoring indicators", "Input or interaction-capture indicators require retained script behavior or vendor-category evidence.", "near_term_supported"],
+        ["sensitive_form_tracking", "Sensitive form with third-party tracking", "Sensitive form context plus third-party tracking must be retained together.", "near_term_supported"],
+        ["tracking_before_notice", "Tracking before clear notice or consent", "Pre-notice or pre-choice tracking is reviewed from retained timing evidence.", "currently_supported"],
+        ["vendor_alignment", "Vendor disclosure alignment", "Runtime tracking vendors must be compared with retained public policy or cookie disclosures.", "near_term_supported"],
+        ["post_refusal", "Post-refusal tracking persistence", "Post-refusal persistence requires a confirmed reject or opt-out action and retained after-state tracking evidence.", "near_term_supported"]
+      ])
+    },
+    {
+      id: "uk-gdpr-pecr",
+      navLabel: "UK GDPR / PECR",
+      title: "UK GDPR / PECR",
+      subtitle: "UK privacy, cookies, consent, tracking, and transparency review signals.",
+      summary: "UK GDPR/PECR beta review reuses GDPR/ePrivacy-style public-web signals with UK-specific framing, without duplicating raw signal paths.",
+      rows: betaRows([
+        ["notice_surface", "Cookie/tracking notice or consent surface", "Cookie or tracking notice evidence must be retained from the tested context.", "currently_supported", "not_observed"],
+        ["storage_before_consent", "Cookies or storage before consent", "Before-consent storage is eligible when retained and normalized through the GDPR/ePrivacy concern pipeline.", "currently_supported"],
+        ["tracking_before_consent", "Third-party tracking before consent", "Pre-consent third-party tracking requires retained request timing evidence.", "currently_supported"],
+        ["reject_refuse", "Reject/refuse option availability", "Reject/refuse availability requires retained consent UI path evidence.", "currently_supported"],
+        ["tracking_after_refusal", "Tracking after refusal", "Tracking after refusal requires a confirmed refusal action and retained after-state request evidence.", "near_term_supported"],
+        ["post_choice", "Post-choice consent controls", "Post-choice controls require retained lifecycle or preference-management evidence.", "near_term_supported"],
+        ["vendor_alignment", "Runtime vendors vs disclosures", "Runtime vendors must be compared with retained public disclosures.", "near_term_supported"],
+        ["session_replay", "Session replay / behavioral analytics", "Behavioral analytics signals are eligible when retained and projected through unified findings.", "currently_supported"],
+        ["sensitive_tracking", "Sensitive forms with third-party tracking", "Sensitive forms and third-party tracking must be retained together.", "near_term_supported"],
+        ["cross_border", "Cross-border endpoint review", "Endpoint geography or transfer-review evidence requires retained endpoint jurisdiction signals.", "near_term_supported"],
+        ["control_accessibility", "Consent/privacy control accessibility", "Basic automated accessibility signals on privacy controls are eligible when retained.", "currently_supported"]
+      ])
+    }
+  ];
+
+  const compactSeeds = [
+    ["brazil-lgpd", "Brazil LGPD", "Notice, consent/legal basis, data subject rights, vendor disclosure, and transfer review signals."],
+    ["canada-pipeda-quebec", "Canada PIPEDA / Quebec Law 25", "Notice, consent, transparency, tracking, and privacy-governance review signals."],
+    ["australia-privacy-act", "Australia Privacy Act", "Notice, collection transparency, third-party disclosure, and sensitive-data review signals."],
+    ["singapore-pdpa", "Singapore PDPA", "Consent, notification, purpose limitation, withdrawal, and vendor disclosure review signals."]
+  ] as const;
+
+  compactSeeds.forEach(([id, title, subtitle]) => {
+    seeds.push({
+      id,
+      navLabel: title,
+      title,
+      subtitle,
+      summary: `${title} beta review is limited to public notice, collection-context cues, consent or privacy-choice mechanisms, runtime vendor disclosure alignment, third-party tracking, sensitive-form context, privacy contact paths, and privacy-control accessibility.`,
+      rows: betaRows([
+        ["privacy_notice", "Privacy notice availability", "Public privacy notice availability can be reviewed when retained policy surfaces exist.", "currently_supported", "not_observed"],
+        ["collection_notice", "Collection-context notice", "Collection-context notice requires retained forms or collection surfaces with nearby disclosure cues.", "near_term_supported"],
+        ["choice_mechanism", "Consent or privacy-choice mechanism", "Choice mechanisms are reviewed when observed in the tested public path.", "near_term_supported"],
+        ["vendor_alignment", "Runtime vendors vs disclosures", "Runtime vendors must be compared with retained public disclosures.", "near_term_supported"],
+        ["third_party_tracking", "Third-party tracking signals", "Third-party tracking is eligible when retained and projected through unified findings.", "currently_supported"],
+        ["sensitive_context", "Sensitive or high-risk form context", "Sensitive forms require retained field/context evidence.", "near_term_supported"],
+        ["privacy_contact", "Privacy contact / rights request path", "Privacy contact or rights request paths require retained public policy/contact evidence.", "near_term_supported"],
+        ["control_accessibility", "Privacy control accessibility", "Basic accessibility signals on privacy controls are eligible when retained.", "currently_supported"]
+      ])
+    });
+  });
+
+  return seeds.map((seed) => buildBetaArea(seed, lenses));
+}
+
 type ScanReportAccessRole = "admin" | "advanced" | "user";
 
 function normalizeScanReportAccessRole(role: string | null | undefined): ScanReportAccessRole {
@@ -5774,6 +6017,10 @@ export function SharedScanDetailView({
     executiveRegulatoryLenses.find((lens) => lens.acronym === "GDPR / ePrivacy") ?? null;
   const californiaPrivacyExecutiveLens =
     executiveRegulatoryLenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA") ?? null;
+  const betaRegulatoryChecklistAreas = buildBetaRegulatoryChecklistAreas(executiveRegulatoryLenses);
+  const betaRegulatoryChecklistAreaById = new Map(
+    betaRegulatoryChecklistAreas.map((area) => [area.id, area])
+  );
 
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
@@ -5911,7 +6158,8 @@ export function SharedScanDetailView({
                   />
                 ),
                 id: "gdpr-eprivacy",
-                label: "GDPR / ePrivacy"
+                label: "GDPR / ePrivacy",
+                shortLabel: "GDPR / ePrivacy"
               },
               {
                 content: (
@@ -5922,7 +6170,92 @@ export function SharedScanDetailView({
                   />
                 ),
                 id: "california-privacy",
-                label: "California CCPA / CPRA"
+                label: "California CCPA / CPRA",
+                shortLabel: "California"
+              },
+              {
+                content: betaRegulatoryChecklistAreaById.get("ftc-dark-patterns") ? (
+                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("ftc-dark-patterns")!} defaultOpen />
+                ) : null,
+                id: "ftc-dark-patterns",
+                label: "FTC / Dark Patterns",
+                shortLabel: "FTC"
+              },
+              {
+                content: betaRegulatoryChecklistAreaById.get("ada-wcag") ? (
+                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("ada-wcag")!} defaultOpen />
+                ) : null,
+                id: "ada-wcag",
+                label: "ADA / WCAG",
+                shortLabel: "ADA / WCAG"
+              },
+              {
+                content: betaRegulatoryChecklistAreaById.get("india-dpdp") ? (
+                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("india-dpdp")!} defaultOpen />
+                ) : null,
+                id: "india-dpdp",
+                label: "India DPDP",
+                shortLabel: "India DPDP"
+              },
+              {
+                content: betaRegulatoryChecklistAreaById.get("us-state-privacy") ? (
+                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("us-state-privacy")!} defaultOpen />
+                ) : null,
+                group: "united_states",
+                id: "us-state-privacy",
+                label: "U.S. State Privacy"
+              },
+              {
+                content: betaRegulatoryChecklistAreaById.get("california-cipa") ? (
+                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("california-cipa")!} defaultOpen />
+                ) : null,
+                group: "united_states",
+                id: "california-cipa",
+                label: "California Tracking Litigation (CIPA)",
+                shortLabel: "CIPA"
+              },
+              {
+                content: betaRegulatoryChecklistAreaById.get("uk-gdpr-pecr") ? (
+                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("uk-gdpr-pecr")!} defaultOpen />
+                ) : null,
+                group: "europe_uk",
+                id: "uk-gdpr-pecr",
+                label: "UK GDPR / PECR"
+              },
+              {
+                content: betaRegulatoryChecklistAreaById.get("brazil-lgpd") ? (
+                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("brazil-lgpd")!} defaultOpen />
+                ) : null,
+                group: "international",
+                id: "brazil-lgpd",
+                label: "Brazil LGPD"
+              },
+              {
+                content: betaRegulatoryChecklistAreaById.get("canada-pipeda-quebec") ? (
+                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("canada-pipeda-quebec")!} defaultOpen />
+                ) : null,
+                group: "international",
+                id: "canada-pipeda-quebec",
+                label: "Canada PIPEDA / Quebec Law 25",
+                shortLabel: "Canada"
+              },
+              {
+                content: betaRegulatoryChecklistAreaById.get("australia-privacy-act") ? (
+                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("australia-privacy-act")!} defaultOpen />
+                ) : null,
+                group: "international",
+                id: "australia-privacy-act",
+                label: "Australia Privacy Act",
+                shortLabel: "Australia"
+              },
+              {
+                content: betaRegulatoryChecklistAreaById.get("singapore-pdpa") ? (
+                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("singapore-pdpa")!} defaultOpen />
+                ) : null,
+                group: "international",
+                id: "singapore-pdpa",
+                label: "Singapore PDPA",
+                shortLabel: "Singapore"
               }
             ]}
           />
