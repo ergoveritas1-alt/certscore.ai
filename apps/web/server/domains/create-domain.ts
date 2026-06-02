@@ -207,5 +207,9 @@ export async function createDomainAction(
     };
   }
 
+  if (queuedResults.length === 1 && queuedResults[0]?.scanId) {
+    redirect(`/app/scans/${queuedResults[0].scanId}`);
+  }
+
   redirect("/app/scans");
 }
