@@ -6,6 +6,7 @@ import { evaluateFindingEvidenceContractForRawEvidence } from "./finding-evidenc
 import type { CertScoreFinding } from "./finding-registry";
 import { selectTopFindings } from "./rank-findings";
 import {
+  deriveRuntimeVendorDisclosureEvidenceFromRetainedSources,
   evaluateRuntimeVendorDisclosureEvidence,
   RUNTIME_VENDOR_DISCLOSURE_ALIASES,
   RUNTIME_VENDOR_DISCLOSURE_SUBTYPE
@@ -132,6 +133,48 @@ function makeFinding(id: string, evidenceDetails?: CertScoreFinding["evidenceDet
     shortSummary: "Test summary."
   };
 }
+
+test("derives runtime vendor disclosure evidence from retained runtime vendors and document sources", () => {
+  const evidence = deriveRuntimeVendorDisclosureEvidenceFromRetainedSources({
+    documentSources: [
+      {
+        canonical_url: "https://www.gatech.edu/privacy",
+        document_text:
+          "Privacy & Legal Notice. Our website uses persistent cookies in conjunction with a third party technology partner to analyze search engine usage and web traffic patterns. This information is used in aggregate to monitor and enhance web pages. The notice also describes server logs, browser information, security uses, and contact details for privacy questions.",
+        document_type: "privacy_policy",
+        id: "doc-1",
+        source_status: "ready"
+      }
+    ],
+    runtimeArtifacts: {
+      consent_baseline_tracker_evidence_urls: [
+        "https://www.googletagmanager.com/gtm.js?id=GTM-1",
+        "https://www.google-analytics.com/g/collect?v=2",
+        "https://k.clarity.ms/collect"
+      ],
+      hybrid_runtime_evidence: {
+        vendorSummary: {
+          normalizedVendors: ["Google Analytics", "Google Tag Manager", "Microsoft Clarity"]
+        }
+      }
+    },
+    trackerVendors: [
+      { scriptHost: "www.google-analytics.com", vendorCategory: "analytics", vendorName: "Google Analytics" },
+      { scriptHost: "www.googletagmanager.com", vendorCategory: "tag_manager", vendorName: "Google Tag Manager" },
+      { scriptHost: "k.clarity.ms", vendorCategory: "session_replay", vendorName: "Microsoft Clarity" }
+    ]
+  });
+
+  assert.equal(evidence.length, 1);
+  assert.deepEqual(evidence[0]?.unmatchedRuntimeVendors, [
+    "Google Analytics",
+    "Google Tag Manager",
+    "Microsoft Clarity"
+  ]);
+  assert.equal(evidence[0]?.policySurfacesSearched[0]?.reached, true);
+  assert.equal(evidence[0]?.policySurfacesSearched[0]?.unmatchedVendorNames?.includes("Microsoft Clarity"), true);
+  assert.match(evidence[0]?.mismatchRationale ?? "", /not clearly matched/i);
+});
 
 test("projects runtime vendor disclosure subtype through cookie disclosure gap parent", () => {
   const packets = buildPackets({ evidence: runtimeVendorEvidence() });

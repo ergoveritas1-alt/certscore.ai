@@ -571,6 +571,36 @@ test("WS01-style cookie write timing evidence satisfies cookie pre-consent stron
   assert.equal(decision?.status, "pass_strong");
 });
 
+test("WS01-style first-party analytics cookie snapshot evidence satisfies analytics pre-consent strong", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("analytics_cookies_before_consent", {
+    consent_timeline: {
+      first_cmp_visible_ms: 0,
+      first_consent_action_ms: null,
+      first_tracking_cookie_seen_ms: null
+    },
+    consentActionableChoiceObserved: true,
+    consentSurfaceObserved: true,
+    preconsent_cookie_categories: ["analytics"],
+    preconsent_cookie_evidence: [
+      {
+        beforeConsent: true,
+        category: "analytics",
+        cookieName: "_ga",
+        domain: ".example.com",
+        evidenceGrade: "moderate",
+        initiatorVendor: "Google Analytics",
+        party: "first_party",
+        timingBasis: "initial_cookie_snapshot_with_visible_cmp",
+        timingEvidence: "before_consent_cookie_write"
+      }
+    ],
+    preconsent_cookie_names: ["_ga"],
+    preconsent_cookie_timing_evidence: ["before_consent_cookie_write"]
+  });
+
+  assert.equal(decision?.status, "pass_strong");
+});
+
 test("post-reject tracking without successful reject interaction is downgraded", () => {
   const decision = evaluateFindingEvidenceContractForRawEvidence("reject_did_not_reduce_tracking", {
     postRejectNonEssentialRequestUrls: ["https://analytics.example.net/collect"],
@@ -845,6 +875,43 @@ test("reject behind preferences path satisfies reject path evidence", () => {
       preferencesRequiredBeforeReject: true,
       rejectAvailableOnFirstLayer: false,
       rejectClickDepth: 2
+    }
+  });
+
+  assert.equal(decision?.status, "pass_strong");
+});
+
+test("retained complete-reject-path missing classification satisfies reject path evidence", () => {
+  const decision = evaluateFindingEvidenceContractForRawEvidence("reject_button_missing", {
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+    consentSurfaceDiagnostics: {
+      bannerRendered: true,
+      hydrationSettleWaitMs: 1500,
+      candidateButtons: [
+        { label: "Accept all", visible: true, interactable: true },
+        { label: "Cookie preferences", visible: true, interactable: true }
+      ],
+      viewportStatus: "visible_in_viewport"
+    },
+    consentSurfaceObserved: true,
+    hybridConsentSummary: {
+      acceptActionLabels: ["Accept all"],
+      acceptPresent: true,
+      bannerPresent: true,
+      manageActionLabels: ["Cookie preferences"],
+      managePresent: true,
+      rejectActionLabels: [],
+      rejectPresent: false
+    },
+    rejectPathDepthAndAvailability: {
+      availability: "not_found",
+      bannerLayerInspected: true,
+      completeRejectPathAvailable: false,
+      completeRejectPathDetected: false,
+      negativeReasonCodes: ["complete_reject_choice_controls_not_detected"],
+      rejectAvailableOnFirstLayer: false,
+      rejectEquivalentFound: false,
+      rejectPathAvailabilityClassification: "complete_reject_path_not_detected"
     }
   });
 

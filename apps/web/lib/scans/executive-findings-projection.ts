@@ -1243,6 +1243,7 @@ function getThirdPartyCookiePreConsentRows(packet: UnifiedFindingDisplayPacket) 
     const nonEssential = row.nonEssential === true || row.non_essential === true || promotionCategory;
     const beforeConsent =
       timingEvidence === "before_consent_cookie_write" ||
+      timingEvidence === "initial_cookie_snapshot_with_visible_cmp" ||
       (timingEvidence === null && (row.beforeConsent === true || row.before_consent === true));
     return (
       beforeConsent &&
@@ -1252,6 +1253,50 @@ function getThirdPartyCookiePreConsentRows(packet: UnifiedFindingDisplayPacket) 
       Boolean(cookieName && vendorOrHost)
     );
   });
+}
+
+function getAnalyticsCookiePreConsentRows(packet: UnifiedFindingDisplayPacket) {
+  const cookieRows = getEntityJsonObjects(packet, "preconsent_cookie_evidence");
+  return cookieRows.filter((row) => {
+    const timingEvidence = getRecordString(row, ["timingEvidence", "timing_evidence"]);
+    const category = getRecordString(row, ["category", "cookieCategory", "cookie_category", "vendorCategory", "vendor_category"]);
+    const cookieName = getRecordString(row, ["cookieName", "cookie_name"]);
+    const vendorOrHost = getRecordString(row, [
+      "vendor",
+      "cookieInitiatorVendor",
+      "cookie_initiator_vendor",
+      "initiatorVendor",
+      "initiator_vendor",
+      "responseHost",
+      "response_host",
+      "cookieInitiatorDomain",
+      "cookie_initiator_domain",
+      "domain"
+    ]);
+    const analyticsCategory = /analytics|tag_manager|tag_management/i.test(category ?? "");
+    const analyticsName = /(^_ga|^_gid|^_gat|ga_|goog|gtm|s_ecid|ajs_|_hj)/i.test(cookieName ?? "");
+    const nonEssential = row.nonEssential === true || row.non_essential === true || analyticsCategory || analyticsName;
+    const beforeConsent =
+      timingEvidence === "before_consent_cookie_write" ||
+      timingEvidence === "initial_cookie_snapshot_with_visible_cmp" ||
+      (timingEvidence === null && (row.beforeConsent === true || row.before_consent === true));
+    return beforeConsent && nonEssential && (analyticsCategory || analyticsName) && Boolean(cookieName && vendorOrHost);
+  });
+}
+
+function hasAnalyticsCookiePreConsentEvidence(packet: UnifiedFindingDisplayPacket) {
+  const analyticsCookieRows = getAnalyticsCookiePreConsentRows(packet);
+  const preconsentCookieCategories = getEntityValues(packet, /^preconsent_cookie_categories$/i);
+  const preconsentCookieNames = getEntityValues(packet, /^preconsent_(?:nonessential_)?cookie_names$/i);
+  const preconsentCookieTimingEvidence = getEntityValues(packet, /^preconsent_cookie_timing_evidence$/i);
+  return (
+    analyticsCookieRows.length > 0 ||
+    (
+      preconsentCookieTimingEvidence.some((value) => value === "before_consent_cookie_write" || value === "initial_cookie_snapshot_with_visible_cmp") &&
+      preconsentCookieCategories.some((category) => /analytics|tag_manager|tag_management/i.test(category)) &&
+      preconsentCookieNames.some((name) => /(^_ga|^_gid|^_gat|ga_|goog|gtm|s_ecid|ajs_|_hj)/i.test(name))
+    )
+  );
 }
 
 function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPacket) {
@@ -1525,6 +1570,9 @@ function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof t
 
   if (hasThirdPartyCookiePreConsentEvidence(packet) && !ids.includes("third_party_cookie_pre_consent")) {
     ids.push("third_party_cookie_pre_consent");
+  }
+  if (hasAnalyticsCookiePreConsentEvidence(packet) && !ids.includes("analytics_cookie_pre_consent")) {
+    ids.push("analytics_cookie_pre_consent");
   }
 
   return ids;
@@ -2130,7 +2178,7 @@ function getCookieEvidenceSourceRequestUrl(row: Record<string, unknown>) {
 }
 
 function isPreconsentTimingStatus(value: string | null | undefined) {
-  return value === "pre_consent" || value === "before_consent_cookie_write";
+  return value === "pre_consent" || value === "before_consent_cookie_write" || value === "initial_cookie_snapshot_with_visible_cmp";
 }
 
 function classifyEndpointCategory(url: string | null | undefined, fallback: string | null | undefined) {

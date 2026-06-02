@@ -106,6 +106,37 @@ test("normalizes initial-cookie sentinel timestamps as unknown timing values", (
   assert.equal(row.timingEvidence, "before_consent_cookie_write");
 });
 
+test("normalizes retained first-party analytics pre-consent cookie evidence", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      preconsentCookieEvidence: [
+        {
+          beforeConsent: true,
+          category: "analytics",
+          cookieInitiatorDomain: ".example.com",
+          cookieInitiatorVendor: "Google Analytics",
+          cookieName: "_ga",
+          cookiePartyType: "first_party",
+          cookieSetMethod: "initial_cookie_snapshot",
+          domain: ".example.com",
+          evidenceGrade: "moderate",
+          timingBasis: "initial_cookie_snapshot_with_visible_cmp",
+          timingEvidence: "initial_cookie_snapshot_with_visible_cmp"
+        }
+      ]
+    }
+  });
+
+  const row = inventory.beforeConsentRows.find((entry) => entry.cookieName === "_ga");
+  assert.ok(row);
+  assert.equal(row.category, "analytics");
+  assert.equal(row.initiatorVendor, "Google Analytics");
+  assert.equal(row.party, "first_party");
+  assert.equal(row.timingEvidence, "before_consent_cookie_write");
+  assert.equal(row.timingBasis, "initial_cookie_snapshot_with_visible_cmp");
+  assert.equal(row.evidenceGrade, "moderate");
+});
+
 test("builds cookie disclosure gap evidence from runtime and policy inventory", () => {
   const inventory = buildRuntimeCookieInventory({
     hybridRuntimeEvidence: {

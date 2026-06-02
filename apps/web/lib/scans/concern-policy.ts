@@ -2253,7 +2253,7 @@ export function deriveConcernPolicy(input: {
       };
     }
   }
-  if (suggestedUnifiedFindingId === "policy_behavior_conflict") {
+  if (suggestedUnifiedFindingId === "policy_behavior_conflict" || suggestedUnifiedFindingId === "policy_behavior_contradiction_detected") {
     const review = evaluateRuntimeVendorDisclosureEvidence(input.rawEvidence, "policy_behavior_conflict");
     if (review.evidence.length > 0) {
       return {

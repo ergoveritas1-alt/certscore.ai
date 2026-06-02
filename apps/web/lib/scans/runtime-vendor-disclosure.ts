@@ -57,6 +57,22 @@ export type RuntimeVendorDisclosureReview = {
   negativeEvidenceFlags: string[];
 };
 
+export type RuntimeVendorDisclosureSourceDocument = {
+  canonical_url?: unknown;
+  document_text?: unknown;
+  document_type?: unknown;
+  id?: unknown;
+  source_status?: unknown;
+  source_url?: unknown;
+  title?: unknown;
+};
+
+export type RuntimeVendorDisclosureTrackerVendor = {
+  scriptHost?: string | null;
+  vendorCategory?: string | null;
+  vendorName?: string | null;
+};
+
 function getRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
@@ -88,6 +104,10 @@ function getRows(value: unknown): Record<string, unknown>[] {
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
 }
 
 function getStringArray(record: Record<string, unknown>, keys: string[]) {
@@ -164,6 +184,239 @@ function normalizeParentFindingId(value: unknown): RuntimeVendorDisclosureEviden
     return normalized;
   }
   return undefined;
+}
+
+function getNestedRecord(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = getRecord(record?.[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getRuntimeStringArray(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  const values: string[] = [];
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "string" && value.trim()) {
+      values.push(value.trim());
+    } else if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (typeof entry === "string" && entry.trim()) {
+          values.push(entry.trim());
+        }
+      }
+    }
+  }
+  return uniqueStrings(values);
+}
+
+function hostFromUrl(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function vendorSearchTerms(vendor: string) {
+  const normalized = vendor.trim();
+  const lower = normalized.toLowerCase();
+  const terms = [normalized];
+  if (/google analytics/i.test(normalized)) {
+    terms.push("google analytics", "google-analytics.com", "gtag", "_ga");
+  }
+  if (/google tag manager/i.test(normalized)) {
+    terms.push("google tag manager", "googletagmanager.com", "gtm");
+  }
+  if (/microsoft clarity|clarity/i.test(normalized)) {
+    terms.push("microsoft clarity", "clarity.ms", "clarity");
+  }
+  if (/meta|facebook/i.test(normalized)) {
+    terms.push("meta pixel", "facebook pixel", "facebook.com", "connect.facebook.net");
+  }
+  if (/linkedin/i.test(normalized)) {
+    terms.push("linkedin insight", "linkedin", "licdn.com");
+  }
+  if (/doubleclick/i.test(normalized)) {
+    terms.push("doubleclick", "doubleclick.net");
+  }
+  if (lower.includes("/")) {
+    terms.push(...lower.split("/").map((part) => part.trim()));
+  }
+  return uniqueStrings(terms);
+}
+
+function snippetAroundTerm(text: string, terms: string[]) {
+  const lowerText = text.toLowerCase();
+  for (const term of terms) {
+    const normalized = term.toLowerCase();
+    const index = lowerText.indexOf(normalized);
+    if (index < 0) {
+      continue;
+    }
+    const start = Math.max(0, index - 180);
+    const end = Math.min(text.length, index + term.length + 240);
+    return text.slice(start, end).replace(/\s+/g, " ").trim();
+  }
+
+  return text.slice(0, 420).replace(/\s+/g, " ").trim();
+}
+
+function documentSurfaceType(documentType: string | null, url: string | null): RuntimeVendorPolicySurfaceType {
+  const haystack = `${documentType ?? ""} ${url ?? ""}`.toLowerCase();
+  if (/cookie/.test(haystack)) {
+    return "cookie_policy";
+  }
+  if (/privacy|legal|notice/.test(haystack)) {
+    return "privacy_policy";
+  }
+  return "other";
+}
+
+function isReadyPolicyDocument(row: RuntimeVendorDisclosureSourceDocument) {
+  const status = getString(row.source_status);
+  const text = getString(row.document_text);
+  if (!text || text.length < 200) {
+    return false;
+  }
+  return !status || status === "ready";
+}
+
+function collectObservedRuntimeVendors(input: {
+  runtimeArtifacts?: Record<string, unknown> | null;
+  trackerVendors?: RuntimeVendorDisclosureTrackerVendor[];
+}) {
+  const hybrid = getNestedRecord(input.runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]);
+  const vendorSummary = getNestedRecord(hybrid, ["vendorSummary", "vendor_summary"]);
+  return uniqueStrings([
+    ...getRuntimeStringArray(vendorSummary, ["normalizedVendors", "normalized_vendors"]),
+    ...getRuntimeStringArray(input.runtimeArtifacts, [
+      "consent_baseline_tracker_vendor_names",
+      "consent_post_reject_tracker_vendor_names",
+      "consent_reject_persisted_tracker_vendor_names",
+      "preconsent_tracker_vendors",
+      "tracker_vendors"
+    ]),
+    ...(input.trackerVendors ?? []).map((vendor) => vendor.vendorName ?? null)
+  ]).filter((vendor) => !/^(?:unknown|other|cdn|first party)$/i.test(vendor));
+}
+
+function collectObservedRuntimeDomains(input: {
+  runtimeArtifacts?: Record<string, unknown> | null;
+  trackerVendors?: RuntimeVendorDisclosureTrackerVendor[];
+  vendors: string[];
+}) {
+  const hybrid = getNestedRecord(input.runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]);
+  const vendorSummary = getNestedRecord(hybrid, ["vendorSummary", "vendor_summary"]);
+  const evidenceUrls = getRuntimeStringArray(input.runtimeArtifacts, [
+    "consent_baseline_tracker_evidence_urls",
+    "consent_post_reject_tracker_evidence_urls",
+    "consent_post_accept_tracker_evidence_urls"
+  ]);
+  const vendorTerms = input.vendors.flatMap(vendorSearchTerms).map((term) => term.toLowerCase());
+  const evidenceHosts = evidenceUrls
+    .map(hostFromUrl)
+    .filter((host): host is string => Boolean(host))
+    .filter((host) => vendorTerms.some((term) => host.includes(term.replace(/[^a-z0-9.]/g, "")) || term.includes(host)));
+
+  return uniqueStrings([
+    ...evidenceHosts,
+    ...(input.trackerVendors ?? []).map((vendor) => vendor.scriptHost ?? null),
+    ...getRuntimeStringArray(vendorSummary, ["rawThirdPartyDomains", "raw_third_party_domains"])
+      .filter((domain) => vendorTerms.some((term) => domain.toLowerCase().includes(term.replace(/[^a-z0-9.]/g, ""))))
+  ]);
+}
+
+export function deriveRuntimeVendorDisclosureEvidenceFromRetainedSources(input: {
+  documentSources?: RuntimeVendorDisclosureSourceDocument[];
+  runtimeArtifacts?: Record<string, unknown> | null;
+  trackerVendors?: RuntimeVendorDisclosureTrackerVendor[];
+}): RuntimeVendorDisclosureEvidence[] {
+  if (getRuntimeVendorDisclosureEvidence(input.runtimeArtifacts).length > 0) {
+    return [];
+  }
+
+  const vendors = collectObservedRuntimeVendors(input);
+  const documents = (input.documentSources ?? []).filter(isReadyPolicyDocument);
+  if (vendors.length === 0 || documents.length === 0) {
+    return [];
+  }
+
+  const vendorTerms = new Map(vendors.map((vendor) => [vendor, vendorSearchTerms(vendor)]));
+  const matchedVendors = new Set<string>();
+  const surfaces: RuntimeVendorPolicySurface[] = documents.slice(0, 6).map((document) => {
+    const text = getString(document.document_text) ?? "";
+    const url = getString(document.canonical_url) ?? getString(document.source_url) ?? undefined;
+    const matchedVendorNames: string[] = [];
+    const unmatchedVendorNames: string[] = [];
+    for (const vendor of vendors) {
+      const terms = vendorTerms.get(vendor) ?? [vendor];
+      const matched = terms.some((term) => new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text));
+      if (matched) {
+        matchedVendors.add(vendor);
+        matchedVendorNames.push(vendor);
+      } else {
+        unmatchedVendorNames.push(vendor);
+      }
+    }
+    const searchedTerms = uniqueStrings([...vendorTerms.values()].flat());
+    const snippetTerms = matchedVendorNames.length > 0
+      ? matchedVendorNames.flatMap((vendor) => vendorTerms.get(vendor) ?? [vendor])
+      : ["third party", "cookie", "traffic", "analytics", "web traffic"];
+    return {
+      matchedVendorNames,
+      reached: true,
+      retainedEvidenceRef: getString(document.id) ? `scan_document_sources:${getString(document.id)}` : undefined,
+      searchedTerms,
+      snippet: snippetAroundTerm(text, snippetTerms),
+      type: documentSurfaceType(getString(document.document_type), url ?? null),
+      unmatchedVendorNames,
+      url
+    };
+  });
+  const unmatchedVendors = vendors.filter((vendor) => !matchedVendors.has(vendor));
+  if (unmatchedVendors.length === 0) {
+    return [];
+  }
+
+  const observedDomains = collectObservedRuntimeDomains({
+    runtimeArtifacts: input.runtimeArtifacts,
+    trackerVendors: input.trackerVendors,
+    vendors
+  });
+  const categories = uniqueStrings((input.trackerVendors ?? []).map((vendor) => vendor.vendorCategory ?? null));
+  const firstPrivacyUrl = surfaces.find((surface) => surface.type === "privacy_policy" && surface.url)?.url;
+  const firstCookieUrl = surfaces.find((surface) => surface.type === "cookie_policy" && surface.url)?.url;
+
+  return [
+    {
+      categories,
+      cookiePolicyUrl: firstCookieUrl,
+      coverageStatus: "usable",
+      directVsInferred: "direct",
+      evidenceConfidence: "moderate",
+      matchedVendorDisclosureCount: matchedVendors.size,
+      mismatchRationale:
+        `Observed runtime vendors (${unmatchedVendors.slice(0, 5).join(", ")}) were not clearly matched by name or known domain alias in retained policy disclosure surfaces.`,
+      observedRuntimeDomains: observedDomains,
+      observedRuntimeVendors: vendors,
+      parentFindingId: "policy_behavior_contradiction_detected",
+      policySurfacesSearched: surfaces,
+      privacyPolicyUrl: firstPrivacyUrl,
+      subtype: RUNTIME_VENDOR_DISCLOSURE_SUBTYPE,
+      unmatchedRuntimeDomains: observedDomains.filter((domain) =>
+        unmatchedVendors.some((vendor) => vendorSearchTerms(vendor).some((term) => domain.toLowerCase().includes(term.toLowerCase().replace(/[^a-z0-9.]/g, ""))))
+      ),
+      unmatchedRuntimeVendors: unmatchedVendors,
+      unmatchedVendorDisclosureCount: unmatchedVendors.length
+    }
+  ];
 }
 
 function parseSurface(row: Record<string, unknown>): RuntimeVendorPolicySurface | null {

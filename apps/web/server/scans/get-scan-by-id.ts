@@ -32,6 +32,7 @@ import {
   mergeNanoPolicyInputsWithFallback,
   shouldPreferNanoDocumentSources
 } from "../../lib/scans/nano-document-sources";
+import { deriveRuntimeVendorDisclosureEvidenceFromRetainedSources } from "../../lib/scans/runtime-vendor-disclosure";
 import { getPrimaryPolicyEnrichmentRow, getPolicyPageType } from "../../lib/scans/policy-enrichment-row";
 import { getHybridDerivedTrackerVendors } from "../../lib/scans/hybrid-runtime-evidence";
 import { buildMergedSignalRecords } from "../../lib/scans/merged-signals";
@@ -1159,6 +1160,19 @@ async function loadScanDetailRecord(input: {
   const normalizedRuntimeArtifacts = browserExtensionRuntimeArtifacts
     ? withHybridRuntimeArtifactFallbacks(browserExtensionRuntimeArtifacts) ?? browserExtensionRuntimeArtifacts
     : null;
+  const runtimeVendorDisclosureEvidence = deriveRuntimeVendorDisclosureEvidenceFromRetainedSources({
+    documentSources: normalizedDocumentSources,
+    runtimeArtifacts: normalizedRuntimeArtifacts,
+    trackerVendors: normalizedTrackerVendors
+  });
+  const reportRuntimeArtifacts =
+    normalizedRuntimeArtifacts && runtimeVendorDisclosureEvidence.length > 0
+      ? {
+          ...normalizedRuntimeArtifacts,
+          runtime_vendor_disclosure_evidence: runtimeVendorDisclosureEvidence,
+          runtimeVendorDisclosureEvidence: runtimeVendorDisclosureEvidence
+        }
+      : normalizedRuntimeArtifacts;
   const mergedSignals = buildMergedSignalRecords({
     browserExtensionSignals: buildStoredSignalPopulationRecords({
       observedAt: scanObservedAt,
@@ -1315,8 +1329,8 @@ async function loadScanDetailRecord(input: {
       errorMessage: scanRow.error_message
     } satisfies ScanDetailRecord,
     snapshot: normalizedSnapshot ? (normalizedSnapshot satisfies Exclude<ScanSnapshotRecord, null>) : null,
-    runtimeArtifacts: normalizedRuntimeArtifacts
-      ? (normalizedRuntimeArtifacts satisfies Exclude<ScanRuntimeArtifactRecord, null>)
+    runtimeArtifacts: reportRuntimeArtifacts
+      ? (reportRuntimeArtifacts satisfies Exclude<ScanRuntimeArtifactRecord, null>)
       : null,
     macroEnrichment:
       macroEnrichment

@@ -126,6 +126,7 @@ import {
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
+import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import {
   formatCollectionEndpointType,
 } from "../../lib/scans/tracker-risk";
@@ -5700,6 +5701,14 @@ export function SharedScanDetailView({
   });
   const gdprEprivacyCoverageChecklist = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
+    coverageOutcomes: deriveGdprEprivacyCoveragePolicyOutcomes({
+      coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
+      events: scanRecord.events,
+      runtimeArtifacts,
+      scanCompleted: scanRecord.scan.status === "completed",
+      snapshot
+    }),
+    projectedFindings: allExecutiveFindings,
     scanCompleted: scanRecord.scan.status === "completed",
     unifiedFindings: findingEvidenceDiagnostics
   });
@@ -5739,8 +5748,8 @@ export function SharedScanDetailView({
             ) : null}
           </>
         }
-        statusLabel={isIncompleteScanCoverage ? "Incomplete" : undefined}
-        statusTone={isIncompleteScanCoverage ? "warning" : undefined}
+        statusLabel={isIncompleteScanCoverage ? "Limited" : undefined}
+        statusTone={isIncompleteScanCoverage ? "info" : undefined}
         status={scanRecord.scan.status}
         title={
           <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">

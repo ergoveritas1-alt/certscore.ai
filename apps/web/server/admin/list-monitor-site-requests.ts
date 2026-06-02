@@ -147,8 +147,6 @@ export async function listMonitorSiteRequests(
   return rows.map(toMonitorSiteRequest);
 }
 
-export type { AdminMonitorSiteRequestStatus, AdminMonitorSiteRequestSetupFilter, AdminMonitorSiteRequestStageFilter };
-
 export async function getMonitorSiteRequestCounts(): Promise<AdminMonitorSiteRequestCounts> {
   await requirePlatformAdminContext();
   return await loadAdminMonitorSiteRequestCounts();

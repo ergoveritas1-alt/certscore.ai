@@ -312,7 +312,7 @@ export function AgentSummaryActions({ domainLabel, scanId }: ShareReportActionsP
   return (
     <div className="space-y-2">
       <p className="text-xs leading-5 text-slate-600">
-        CertScore.ai can make mistakes. Treat this automated summary as a review aid and verify important conclusions against the retained evidence and your own legal, privacy, and accessibility review.
+        CertScore.ai can make mistakes. Treat automated public-web results as a review aid, not legal advice, certification, or a compliance determination; verify important conclusions against retained evidence.
       </p>
       <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

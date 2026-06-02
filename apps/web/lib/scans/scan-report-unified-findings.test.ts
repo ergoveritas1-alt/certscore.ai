@@ -1279,6 +1279,44 @@ test("promotion-grade preconsent timing and vendor anchors surface as executive 
   assert.equal(projection.posture, "Action Needed");
 });
 
+test("first-party analytics preconsent cookie evidence projects analytics cookie finding", () => {
+  const state = buildPreconsentRuntimeState({
+    consent_actionable_choice_observed: true,
+    consent_surface_observed: true,
+    consent_timeline: {
+      firstCmpVisibleMs: 0,
+      firstConsentActionMs: null,
+      firstTrackingCookieSetMs: null,
+      timelineConfidence: "moderate"
+    },
+    hybrid_runtime_evidence: {
+      preconsentCookieEvidence: [
+        {
+          beforeConsent: true,
+          category: "analytics",
+          cookieInitiatorDomain: ".example.com",
+          cookieInitiatorVendor: "Google Analytics",
+          cookieName: "_ga",
+          cookiePartyType: "first_party",
+          cookieSetMethod: "initial_cookie_snapshot",
+          domain: ".example.com",
+          evidenceGrade: "moderate",
+          timingBasis: "initial_cookie_snapshot_with_visible_cmp",
+          timingEvidence: "initial_cookie_snapshot_with_visible_cmp"
+        }
+      ]
+    }
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.deepEqual(packet?.evidence?.entities?.preconsent_cookie_names, ["_ga"]);
+  assert.deepEqual(packet?.evidence?.entities?.preconsent_cookie_categories, ["analytics"]);
+  assert.ok(projection.findings.some((finding) => finding.id === "analytics_cookie_pre_consent"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "third_party_cookie_pre_consent"));
+});
+
 test("preconsent request-purpose anchors surface when retained signature rows omit numeric confidence", () => {
   const state = buildPreconsentRuntimeState({
     consent_actionable_choice_observed: true,
@@ -1822,6 +1860,15 @@ test("runtime-derived reject persistence projects when retained post-reject rows
           vendor: "Google Analytics"
         }
       ],
+      postRejectTrackingReductionEvidence: {
+        auditAttempted: true,
+        auditCompleted: true,
+        evidenceSource: "consent_interaction_audit",
+        nonEssentialTrackingPersisted: true,
+        postRejectNonEssentialRequestCount: 1,
+        reductionEvaluationStatus: "not_reduced",
+        rejectInteractionConfirmed: true
+      },
       consent_reject_suppression_checks: {
         baseline_contradiction_detected: false,
         cmp_initialization_only: false,
@@ -2051,6 +2098,84 @@ test("runtime reject path depth promotes concrete dark-pattern reject-missing ev
   assert.ok(!weakState.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "forced_consent_wall"));
 });
 
+test("runtime reject path promotes missing reject when WS01 retained complete-reject-path missing classification", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [],
+    primaryPolicyEnrichment: null,
+    runtimeArtifacts: {
+      consent_actionable_choice_observed: false,
+      consent_surface_observed: true,
+      hybridConsentSummary: {
+        acceptActionLabels: ["Accept all"],
+        acceptPresent: true,
+        bannerPresent: true,
+        manageActionLabels: ["Cookie preferences"],
+        managePresent: true,
+        rejectActionLabels: [],
+        rejectPresent: false
+      },
+      reject_path_depth_and_availability: {
+        availability: "not_found",
+        bannerLayerInspected: true,
+        completeRejectPathAvailable: false,
+        completeRejectPathDetected: false,
+        evidenceRefs: ["Cookie preferences", "Accept all"],
+        firstLayerConsentChoices: {
+          acceptVisibleOnFirstLayer: true,
+          capturedAtMs: 0,
+          capturedBeforeInteraction: true,
+          domDigestAvailable: true,
+          evidenceSource: "runtime_consent_ui_probe",
+          normalizedChoices: [
+            { action: "settings", label: "Cookie preferences", sameSurface: true },
+            { action: "accept", label: "Accept all", sameSurface: true }
+          ],
+          phase: "before_consent_interaction",
+          rejectVisibleOnFirstLayer: false,
+          sameSurfaceCandidates: true,
+          settingsVisibleOnFirstLayer: true,
+          visibleChoiceLabels: ["Cookie preferences", "Accept all"],
+          visualArtifactAvailable: true
+        },
+        negativeReasonCodes: ["complete_reject_choice_controls_not_detected"],
+        preferenceLabels: ["Cookie preferences"],
+        rejectAvailableOnFirstLayer: false,
+        rejectEquivalentFound: false,
+        rejectPathAvailabilityClassification: "complete_reject_path_not_detected"
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "reject_button_missing");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.ok(projection.findings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
+});
+
 test("runtime reject path does not promote reject-missing when retained first layer shows reject", () => {
   const state = buildScanReportUnifiedFindingState({
     accessibilityRuleCounts: [],
@@ -2276,6 +2401,73 @@ test("runtime policy alignment bridges create canonical policy/runtime review ca
   const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "policy_behavior_conflict");
 
   assert.equal(packet?.presentationDecision.status, "surface");
+});
+
+test("runtime vendor disclosure evidence surfaces through canonical policy/runtime review packet", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [],
+    primaryPolicyEnrichment: null,
+    runtimeArtifacts: {
+      runtime_vendor_disclosure_evidence: [
+        {
+          coverageStatus: "usable",
+          directVsInferred: "direct",
+          evidenceConfidence: "moderate",
+          matchedVendorDisclosureCount: 1,
+          mismatchRationale: "Microsoft Clarity was not clearly matched in retained privacy policy evidence.",
+          observedRuntimeDomains: ["www.google-analytics.com", "clarity.ms"],
+          observedRuntimeVendors: ["Google Analytics", "Microsoft Clarity"],
+          parentFindingId: "policy_behavior_contradiction_detected",
+          policySurfacesSearched: [
+            {
+              reached: true,
+              searchedTerms: ["microsoft clarity", "clarity.ms"],
+              snippet: "We use cookies and analytics to understand website traffic.",
+              type: "privacy_policy",
+              unmatchedVendorNames: ["Microsoft Clarity"],
+              url: "https://www.example.com/privacy"
+            }
+          ],
+          subtype: "runtime_vendor_not_disclosed",
+          unmatchedRuntimeDomains: ["clarity.ms"],
+          unmatchedRuntimeVendors: ["Microsoft Clarity"],
+          unmatchedVendorDisclosureCount: 1
+        }
+      ]
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "policy_behavior_conflict");
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.deepEqual(packet?.evidence?.entities?.findingSubtype, [
+    "runtime_vendor_not_disclosed",
+    "consent_governance_disclosure_gap"
+  ]);
+  assert.deepEqual(packet?.evidence?.entities?.unmatchedRuntimeVendors, ["Microsoft Clarity"]);
 });
 
 test("runtime reject path depth does not infer forced consent from reject-path evidence alone", () => {

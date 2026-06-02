@@ -42,6 +42,7 @@ import {
 import { normalizePolicySnippet } from "./policy-snippet-normalization";
 import { isPromotionGradePreconsentRequestRow } from "./preconsent-public-evidence";
 import { evaluateConsentSurfaceGate } from "./promotion-evidence-contracts";
+import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import {
   buildReviewFindings,
   buildSectionReviewIssues,
@@ -335,6 +336,8 @@ function compactPreconsentCookieEvidenceRow(row: RuntimeCookieEvidenceRow) {
     responseUrl: row.responseUrl,
     setAtMs: row.setAtMs,
     setMethod: row.setMethod,
+    timingBasis: row.timingBasis,
+    evidenceGrade: row.evidenceGrade,
     timingEvidence: row.timingEvidence
   };
 }
@@ -1194,6 +1197,20 @@ function hasPolicyRuntimeAlignmentReviewBridge(source: Record<string, unknown>) 
   return evaluatePolicyRuntimeAlignmentReviewEvidence(source).eligible;
 }
 
+function hasRejectPathUnavailableClassification(path: Record<string, unknown> | null) {
+  const classification = getRuntimeString(path, [
+    "rejectPathAvailabilityClassification",
+    "reject_path_availability_classification"
+  ]);
+  return (
+    classification === "complete_reject_path_not_detected" ||
+    classification === "reject_path_test_failed" ||
+    getRuntimeBoolean(path, ["completeRejectPathDetected", "complete_reject_path_detected"]) === false ||
+    getRuntimeBoolean(path, ["completeRejectPathAvailable", "complete_reject_path_available"]) === false ||
+    getRuntimeBoolean(path, ["rejectEquivalentFound", "reject_equivalent_found"]) === false
+  );
+}
+
 function hasConcreteRejectPathShape(path: Record<string, unknown> | null) {
   if (!path) {
     return false;
@@ -1210,6 +1227,7 @@ function hasConcreteRejectPathShape(path: Record<string, unknown> | null) {
     choiceAsymmetry === "material" ||
     choiceAsymmetry === "minor" ||
     preferencesRequiredBeforeReject === true ||
+    hasRejectPathUnavailableClassification(path) ||
     rejectClickDepth !== null
   );
 }
@@ -1448,6 +1466,39 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     });
   }
 
+  const runtimeVendorDisclosureEvidence = getRuntimeVendorDisclosureEvidence(input.runtimeArtifacts);
+  if (runtimeVendorDisclosureEvidence.length > 0) {
+    const unmatchedVendors = uniqueStrings(runtimeVendorDisclosureEvidence.flatMap((row) => row.unmatchedRuntimeVendors));
+    const surfaceUrls = uniqueStrings(
+      runtimeVendorDisclosureEvidence.flatMap((row) => row.policySurfacesSearched.map((surface) => surface.url))
+    );
+    candidates.push({
+      categoryId: "policy_clarity_consistency_review",
+      description:
+        "Retained runtime vendor evidence was compared with retained public policy disclosure surfaces for vendor-specific alignment review.",
+      fallbackEvidence: {
+        runtimeVendorDisclosureEvidence,
+        runtimeEvidenceArtifacts: ["scan_runtime_artifacts.runtime_vendor_disclosure_evidence"],
+        signalKey: "context.policy_behavior_conflict_detected",
+        signalLabel: "Runtime vendor disclosure alignment review",
+        signalValue: true,
+        sourceUrls: surfaceUrls,
+        unifiedFindingId: "policy_behavior_conflict"
+      },
+      id: `runtime-derived-signal-context.runtime_vendor_disclosure.${unmatchedVendors.join(".") || "review"}`,
+      linkedValidationFinding: null,
+      observedValue: unmatchedVendors.length > 0
+        ? `Unmatched runtime vendors: ${unmatchedVendors.slice(0, 4).join(", ")}`
+        : "Runtime vendor disclosure comparison retained",
+      severity: unmatchedVendors.length > 0 ? "medium" : "low",
+      signalKey: "context.policy_behavior_conflict_detected",
+      signalLabel: "Runtime vendor disclosure alignment review",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Runtime vendor disclosure alignment review"
+    });
+  }
+
   const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
   const preconsentEvidenceRecord = preconsentEvidenceQuality as Record<string, unknown> | null;
   const hybridRuntimeEvidenceRecord = getRuntimeObject(input.runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]);
@@ -1591,6 +1642,18 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     Array.isArray(rejectPath?.accept_labels) && rejectPath.accept_labels.length > 0 ||
     Array.isArray(rejectPath?.rejectLabels) && rejectPath.rejectLabels.length > 0 ||
     Array.isArray(rejectPath?.reject_labels) && rejectPath.reject_labels.length > 0 ||
+    Array.isArray(rejectPath?.preferenceLabels) && rejectPath.preferenceLabels.length > 0 ||
+    Array.isArray(rejectPath?.preference_labels) && rejectPath.preference_labels.length > 0 ||
+    firstLayerConsentChoices?.settingsVisibleOnFirstLayer === true ||
+    firstLayerConsentChoices?.settings_visible_on_first_layer === true ||
+    (
+      Array.isArray(firstLayerConsentChoices?.normalizedChoices) &&
+      firstLayerConsentChoices.normalizedChoices.some((choice) => getRuntimeString(choice, ["action"]) === "settings")
+    ) ||
+    (
+      Array.isArray(firstLayerConsentChoices?.normalized_choices) &&
+      firstLayerConsentChoices.normalized_choices.some((choice) => getRuntimeString(choice, ["action"]) === "settings")
+    ) ||
     rejectPath?.forcedActionRequired === true ||
     rejectPath?.forced_action_required === true;
   const nonEssentialRequestRows = requestClassifications.filter(isPromotionGradePreconsentRequestRow);
@@ -1688,10 +1751,22 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   const rejectInteractionSucceeded =
     rejectPath?.rejectInteractionSucceeded === true ||
     rejectPath?.reject_interaction_succeeded === true ||
+    getRuntimeObject(input.runtimeArtifacts, [
+      "postRejectTrackingReductionEvidence",
+      "post_reject_tracking_reduction_evidence"
+    ])?.rejectInteractionConfirmed === true ||
+    getRuntimeObject(input.runtimeArtifacts, [
+      "postRejectTrackingReductionEvidence",
+      "post_reject_tracking_reduction_evidence"
+    ])?.reject_interaction_confirmed === true ||
     getRuntimeBoolean(input.runtimeArtifacts, [
       "consentRejectInteractionSucceeded",
       "consent_reject_interaction_succeeded"
     ]) === true;
+  const postRejectReductionEvidence = getRuntimeObject(input.runtimeArtifacts, [
+    "postRejectTrackingReductionEvidence",
+    "post_reject_tracking_reduction_evidence"
+  ]);
   const postRejectRows = getRuntimeObjectArray(input.runtimeArtifacts, [
     "consentRejectPostRejectNonEssentialRequests",
     "consent_reject_post_reject_non_essential_requests"
@@ -1781,6 +1856,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         consentInteraction,
         persisted_tracker_vendors: [...new Set([...persistedTrackerVendors, ...postRejectTrackerVendors])],
         post_reject_tracker_vendors: postRejectTrackerVendors,
+        postRejectTrackingReductionEvidence: postRejectReductionEvidence,
         promotionDecision: {
           promoted: confirmed,
           reason: confirmed
@@ -1862,6 +1938,8 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     (firstLayerConsentChoices?.rejectVisibleOnFirstLayer === false ||
       firstLayerConsentChoices?.reject_visible_on_first_layer === false);
   const choiceAsymmetry = String(rejectPath?.choiceAsymmetry ?? rejectPath?.choice_asymmetry ?? "unknown");
+  const rejectPathUnavailable = hasRejectPathUnavailableClassification(rejectPath);
+  const effectiveChoiceAsymmetry = rejectPathUnavailable && choiceAsymmetry === "unknown" ? "material" : choiceAsymmetry;
   const acceptClickDepth = getFiniteNumber(rejectPath?.acceptClickDepth ?? rejectPath?.accept_click_depth);
   const rejectClickDepth = getFiniteNumber(rejectPath?.rejectClickDepth ?? rejectPath?.reject_click_depth);
   const preferencesRequiredBeforeReject =
@@ -1869,7 +1947,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   const concreteRejectPathObserved =
     consentSurfaceObservedForPath &&
     consentActionableChoiceObservedForPath &&
-    (acceptClickDepth !== null || rejectClickDepth !== null || preferencesRequiredBeforeReject);
+    (acceptClickDepth !== null || rejectClickDepth !== null || preferencesRequiredBeforeReject || rejectPathUnavailable);
   const consentSurfaceDiagnostics =
     getRuntimeObject(input.runtimeArtifacts, ["consentSurfaceDiagnostics", "consent_surface_diagnostics"]) ??
     getRuntimeObject(rejectPath, ["consentSurfaceDiagnostics", "consent_surface_diagnostics"]);
@@ -1966,13 +2044,13 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     rejectPath &&
     concreteRejectPathObserved &&
     !rejectAvailableOnFirstLayer &&
-    firstLayerRejectAbsent &&
+    (firstLayerRejectAbsent || rejectPathUnavailable) &&
     !firstLayerRejectVisible &&
     (
       consentSurfaceGate.eligibleForConsentUxPromotion ||
       consentSurfaceGate.eligibleForRetainedRejectPathPromotion
     ) &&
-    (choiceAsymmetry === "material" || choiceAsymmetry === "minor")
+    (effectiveChoiceAsymmetry === "material" || effectiveChoiceAsymmetry === "minor")
   ) {
     candidates.push({
       categoryId: "choice_symmetry_dark_pattern_indicators",
@@ -1984,7 +2062,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         consentSurfaceObserved,
         rejectPathDepthAndAvailability: rejectPath,
         firstLayerConsentChoices,
-        reject_button_missing: choiceAsymmetry === "material",
+        reject_button_missing: effectiveChoiceAsymmetry === "material",
         runtimeEvidenceArtifacts: ["scan_runtime_artifacts.reject_path_depth_and_availability"],
         signalKey: "privacy.dark_pattern_reject_button_missing",
         signalLabel: "Reject button missing",
@@ -1992,14 +2070,16 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         snippets: [
           rejectClickDepth !== null && acceptClickDepth !== null
             ? `Reject required ${rejectClickDepth} interaction step(s), while accept required ${acceptClickDepth}.`
+            : rejectPathUnavailable
+              ? "The retained consent interaction structure did not detect a complete reject-all or equivalent path."
             : "Reject was not available on the first consent layer in the retained consent interaction structure."
         ],
         unifiedFindingId: "reject_button_missing"
       },
       id: "runtime-derived-signal-privacy.dark_pattern_reject_button_missing.evidence_quality",
       linkedValidationFinding: null,
-      observedValue: choiceAsymmetry,
-      severity: choiceAsymmetry === "material" ? "high" : "medium",
+      observedValue: effectiveChoiceAsymmetry,
+      severity: effectiveChoiceAsymmetry === "material" ? "high" : "medium",
       signalKey: "privacy.dark_pattern_reject_button_missing",
       signalLabel: "Reject button missing",
       signalSource: "runtime_artifact_signal",

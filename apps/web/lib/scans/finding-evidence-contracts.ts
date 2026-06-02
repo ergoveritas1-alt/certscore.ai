@@ -1048,11 +1048,24 @@ function hasRejectPathDepthEvidence(rawEvidence: Record<string, unknown> | null 
         ? rejectPath.status
         : typeof rejectPath.outcome === "string"
           ? rejectPath.outcome
-          : typeof rejectPath.layerInspected === "string"
-            ? rejectPath.layerInspected
-            : typeof rejectPath.layer_inspected === "string"
-              ? rejectPath.layer_inspected
-              : null;
+          : typeof rejectPath.rejectPathAvailabilityClassification === "string"
+            ? rejectPath.rejectPathAvailabilityClassification
+            : typeof rejectPath.reject_path_availability_classification === "string"
+              ? rejectPath.reject_path_availability_classification
+              : typeof rejectPath.layerInspected === "string"
+                ? rejectPath.layerInspected
+                : typeof rejectPath.layer_inspected === "string"
+                  ? rejectPath.layer_inspected
+                  : null;
+  const unavailableClassification =
+    status === "complete_reject_path_not_detected" ||
+    status === "reject_path_test_failed" ||
+    rejectPath.completeRejectPathDetected === false ||
+    rejectPath.complete_reject_path_detected === false ||
+    rejectPath.completeRejectPathAvailable === false ||
+    rejectPath.complete_reject_path_available === false ||
+    rejectPath.rejectEquivalentFound === false ||
+    rejectPath.reject_equivalent_found === false;
   const inspected =
     rejectPath.bannerLayerInspected === true ||
     rejectPath.banner_layer_inspected === true ||
@@ -1067,7 +1080,8 @@ function hasRejectPathDepthEvidence(rawEvidence: Record<string, unknown> | null 
     typeof rejectPath.observedRejectPathDepth === "number" ||
     typeof rejectPath.observed_reject_path_depth === "number" ||
     typeof rejectPath.acceptClickDepth === "number" ||
-    typeof rejectPath.accept_click_depth === "number";
+    typeof rejectPath.accept_click_depth === "number" ||
+    unavailableClassification;
   const hasChoiceAsymmetry =
     rejectPath.choiceAsymmetry === "material" ||
     rejectPath.choice_asymmetry === "material" ||
@@ -1077,7 +1091,7 @@ function hasRejectPathDepthEvidence(rawEvidence: Record<string, unknown> | null 
     typeof rejectPath.rejectAvailableOnFirstLayer === "boolean" ||
     typeof rejectPath.reject_available_on_first_layer === "boolean";
   return (
-    (inspected && Boolean(status && ["available", "hidden", "not_found", "unavailable", "failed", "untested", "first_layer", "deeper_layer"].includes(status))) ||
+    (inspected && Boolean(status && ["available", "hidden", "not_found", "unavailable", "failed", "untested", "first_layer", "deeper_layer", "complete_reject_path_not_detected", "reject_path_test_failed"].includes(status))) ||
     (inspected && hasChoiceAsymmetry && hasAvailabilityFact)
   );
 }

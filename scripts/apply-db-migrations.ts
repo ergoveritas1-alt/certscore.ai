@@ -67,7 +67,7 @@ async function getMigrationFiles() {
 }
 
 function requiresNonTransactionalMigration(sql: string) {
-  return /\bcreate\s+index\s+concurrently\b/i.test(sql);
+  return /\bcreate\s+index\s+concurrently(?:\s+if\s+not\s+exists)?\b/i.test(sql);
 }
 
 async function recordAppliedMigration(client: Client, migrationName: string, checksum: string) {
@@ -90,7 +90,14 @@ async function applyMigration(client: Client, migrationName: string) {
 
   if (requiresNonTransactionalMigration(sql)) {
     try {
-      await client.query(sql);
+      const statements = sql
+        .split(";")
+        .map((statement) => statement.trim())
+        .filter(Boolean);
+
+      for (const statement of statements) {
+        await client.query(statement);
+      }
       await recordAppliedMigration(client, migrationName, checksum);
     } catch (error) {
       throw new Error(

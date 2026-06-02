@@ -12,6 +12,8 @@ export type RuntimeCookieEvidenceRow = {
   sourceRequestUrl: string | null;
   setAtMs: number | null;
   setMethod: string | null;
+  timingBasis: string | null;
+  evidenceGrade: string | null;
   timingEvidence: "before_consent_cookie_write" | "initial_cookie_snapshot" | "unknown";
 };
 
@@ -289,7 +291,7 @@ function isPreconsentCookieWrite(row: Record<string, unknown>, hybrid: Record<st
     return true;
   }
   const timingEvidence = getString(row.timingEvidence ?? row.timing_evidence);
-  if (timingEvidence === "before_consent_cookie_write") {
+  if (timingEvidence === "before_consent_cookie_write" || timingEvidence === "initial_cookie_snapshot_with_visible_cmp") {
     return true;
   }
   const setAtMs = getNumber(row.setAtMs ?? row.set_at_ms ?? row.firstObservedAtMs ?? row.first_observed_at_ms);
@@ -334,6 +336,8 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     sourceRequestUrl: getString(row.sourceRequestUrl ?? row.source_request_url ?? row.responseUrl ?? row.response_url ?? row.initiatorUrl ?? row.initiator_url),
     setAtMs,
     setMethod: getString(row.cookieSetMethod ?? row.cookie_set_method ?? row.setMethod ?? row.set_method),
+    timingBasis: getString(row.timingBasis ?? row.timing_basis ?? row.timingEvidence ?? row.timing_evidence),
+    evidenceGrade: getString(row.evidenceGrade ?? row.evidence_grade),
     timingEvidence: isPreconsentCookieWrite(row, hybrid) ? "before_consent_cookie_write" : "unknown"
   };
 }
@@ -354,6 +358,8 @@ function normalizeInitialCookieRow(cookieName: string, domain: string | null): R
     sourceRequestUrl: null,
     setAtMs: null,
     setMethod: "initial_cookie_snapshot",
+    timingBasis: "initial_cookie_snapshot",
+    evidenceGrade: null,
     timingEvidence: "initial_cookie_snapshot"
   };
 }

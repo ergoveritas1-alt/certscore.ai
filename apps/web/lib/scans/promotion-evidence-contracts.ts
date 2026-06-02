@@ -214,6 +214,32 @@ function hasVisibleButtonCandidate(
   });
 }
 
+function getRejectPathUnavailableClassification(rejectPath: Record<string, unknown> | null | undefined) {
+  const classification =
+    typeof rejectPath?.rejectPathAvailabilityClassification === "string"
+      ? rejectPath.rejectPathAvailabilityClassification
+      : typeof rejectPath?.reject_path_availability_classification === "string"
+        ? rejectPath.reject_path_availability_classification
+        : null;
+  const completeRejectPathDetected =
+    rejectPath?.completeRejectPathDetected === false ||
+    rejectPath?.complete_reject_path_detected === false;
+  const completeRejectPathAvailable =
+    rejectPath?.completeRejectPathAvailable === false ||
+    rejectPath?.complete_reject_path_available === false;
+  const rejectEquivalentFound =
+    rejectPath?.rejectEquivalentFound === false ||
+    rejectPath?.reject_equivalent_found === false;
+
+  return (
+    classification === "complete_reject_path_not_detected" ||
+    classification === "reject_path_test_failed" ||
+    completeRejectPathDetected ||
+    completeRejectPathAvailable ||
+    rejectEquivalentFound
+  );
+}
+
 export function evaluateConsentSurfaceGate(
   rawEvidence: Record<string, unknown> | null | undefined
 ): ConsentSurfaceGateDecision {
@@ -390,6 +416,7 @@ export function evaluateConsentSurfaceGate(
       acceptClickDepth !== null ||
       rejectClickDepth !== null ||
       preferencesRequiredBeforeReject ||
+      getRejectPathUnavailableClassification(rejectPath) ||
       layerInspected === "first_layer" ||
       layerInspected === "deeper_layer" ||
       rejectPath?.bannerLayerInspected === true ||
@@ -402,6 +429,7 @@ export function evaluateConsentSurfaceGate(
     (
       rejectAvailableOnFirstLayer === false ||
       preferencesRequiredBeforeReject ||
+      getRejectPathUnavailableClassification(rejectPath) ||
       layerInspected === "deeper_layer" ||
       (acceptClickDepth !== null && rejectClickDepth !== null && rejectClickDepth > acceptClickDepth)
     );
@@ -1090,13 +1118,17 @@ function hasPromotionGradePreconsentCookieEvidence(rawEvidence: Record<string, u
     const cookieName = typeof row.cookieName === "string" ? row.cookieName : typeof row.cookie_name === "string" ? row.cookie_name : null;
     const inferredCategory = cookieName ? classifyCookieNameForPromotion(cookieName) : "unknown";
     const promotionCategory = isPromotionGradeCookieCategory(category) || isPromotionGradeCookieCategory(inferredCategory);
+    const firstPartyTrackingCookie =
+      party === "first_party" &&
+      (isPromotionGradeCookieCategory(category) || isPromotionGradeCookieCategory(inferredCategory));
     const nonEssential = row.nonEssential === true || row.non_essential === true || promotionCategory;
     const beforeConsent =
       timingEvidence === "before_consent_cookie_write" ||
+      timingEvidence === "initial_cookie_snapshot_with_visible_cmp" ||
       (timingEvidence === null && row.beforeConsent === true) ||
       (timingEvidence === null && row.before_consent === true);
     const namedEvidence = Boolean(cookieName);
-    return thirdParty && promotionCategory && nonEssential && beforeConsent && namedEvidence;
+    return (thirdParty || firstPartyTrackingCookie) && promotionCategory && nonEssential && beforeConsent && namedEvidence;
   });
   return promotionGradeRows.length > 0;
 }

@@ -7,7 +7,7 @@ type ScanPageHeaderProps = {
   autoRefresh?: ReactNode;
   createdAtLabel?: ReactNode;
   statusLabel?: string;
-  statusTone?: "success" | "warning";
+  statusTone?: "info" | "success" | "warning";
   status: string;
   title: ReactNode;
 };

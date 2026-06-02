@@ -1,4 +1,5 @@
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
+import type { GdprEprivacyCoverageOutcome } from "./gdpr-eprivacy-coverage-policy";
 
 export type GdprEprivacyCoverageChecklistStatus =
   | "Observed"
@@ -33,6 +34,12 @@ type ChecklistRowDefinition = {
 
 export type GdprEprivacyCoverageChecklistInput = {
   coverageLimited: boolean;
+  coverageOutcomes?: Record<string, GdprEprivacyCoverageOutcome>;
+  projectedFindings?: Array<{
+    evidencePreview?: string[];
+    id: string;
+    label: string;
+  }>;
   scanCompleted: boolean;
   unifiedFindings: UnifiedFindingDisplayPacket[];
 };
@@ -207,17 +214,99 @@ function getChecklistTone(status: GdprEprivacyCoverageChecklistStatus): GdprEpri
   }
 }
 
+function compactEvidenceRef(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.length <= 140) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, 137).trimEnd()}...`;
+}
+
+function formatSourceRef(ref: UnifiedFindingDisplayPacket["sourceRefs"][number]) {
+  switch (ref.kind) {
+    case "signal":
+      return `Signal: ${ref.label ?? ref.key}`;
+    case "validation":
+      return `Validation: ${ref.title ?? ref.ruleKey}`;
+    case "issue":
+      return `Review issue: ${ref.title}`;
+    default:
+      return null;
+  }
+}
+
 function getEvidenceRefs(findings: UnifiedFindingDisplayPacket[]) {
-  return findings
-    .map((finding) => finding.presentation?.findingName || finding.title || finding.unifiedFindingId)
-    .filter((value, index, values) => values.indexOf(value) === index)
-    .slice(0, 3);
+  const refs = new Set<string>();
+
+  for (const finding of findings) {
+    refs.add(finding.presentation?.findingName || finding.title || finding.unifiedFindingId);
+
+    for (const sourceRef of finding.sourceRefs ?? []) {
+      const formatted = formatSourceRef(sourceRef);
+      if (formatted) {
+        refs.add(formatted);
+      }
+    }
+
+    for (const artifact of finding.evidence?.flags ?? []) {
+      refs.add(`Evidence flag: ${artifact}`);
+    }
+    for (const artifact of finding.concernContext?.evidenceStrengthFlags ?? []) {
+      refs.add(`Evidence strength: ${artifact.replaceAll("_", " ")}`);
+    }
+    for (const url of [...(finding.evidence?.pageUrls ?? []), ...(finding.evidence?.sourceUrls ?? [])]) {
+      refs.add(`Source: ${url}`);
+    }
+  }
+
+  return [...refs].flatMap((value) => {
+    const compact = compactEvidenceRef(value);
+    return compact ? [compact] : [];
+  }).slice(0, 6);
+}
+
+function getProjectedEvidenceRefs(findings: NonNullable<GdprEprivacyCoverageChecklistInput["projectedFindings"]>) {
+  const refs = new Set<string>();
+
+  for (const finding of findings) {
+    refs.add(finding.label);
+    for (const preview of finding.evidencePreview ?? []) {
+      refs.add(preview);
+    }
+  }
+
+  return [...refs].flatMap((value) => {
+    const compact = compactEvidenceRef(value);
+    return compact ? [compact] : [];
+  }).slice(0, 6);
 }
 
 function normalizeFindingStatus(
   definition: ChecklistRowDefinition,
   findings: UnifiedFindingDisplayPacket[]
 ): Exclude<GdprEprivacyCoverageChecklistStatus, "Not observed" | "Not testable" | "Out of scope"> {
+  if (
+    definition.id === "runtime_vendor_disclosure_alignment" &&
+    findings.some((finding) =>
+      finding.unifiedFindingId === "policy_behavior_conflict" &&
+      (
+        finding.evidence?.entities?.findingSubtype?.includes("runtime_vendor_not_disclosed") ||
+        (finding.evidence?.entities?.runtimeVendorDisclosureEvidence?.length ?? 0) > 0
+      )
+    )
+  ) {
+    return "Review signal";
+  }
+
   if (
     definition.defaultFindingStatus !== "Observed" &&
     findings.some((finding) => finding.presentationDecision.status !== "surface")
@@ -232,11 +321,16 @@ export function deriveGdprEprivacyCoverageChecklist(
   input: GdprEprivacyCoverageChecklistInput
 ): GdprEprivacyCoverageChecklistItem[] {
   const findingsById = new Map(input.unifiedFindings.map((finding) => [finding.unifiedFindingId, finding]));
+  const projectedFindingsById = new Map((input.projectedFindings ?? []).map((finding) => [finding.id, finding]));
   const publicCoverageIsTestable = input.scanCompleted && !input.coverageLimited;
 
   const rows = CHECKLIST_ROWS.map((definition) => {
     const matchingFindings = definition.findingIds.flatMap((id) => {
       const finding = findingsById.get(id);
+      return finding ? [finding] : [];
+    });
+    const matchingProjectedFindings = definition.findingIds.flatMap((id) => {
+      const finding = projectedFindingsById.get(id);
       return finding ? [finding] : [];
     });
 
@@ -249,6 +343,31 @@ export function deriveGdprEprivacyCoverageChecklist(
         tone: getChecklistTone(status),
         explanation: definition.explanation,
         evidenceRefs: getEvidenceRefs(matchingFindings)
+      };
+    }
+
+    if (matchingProjectedFindings.length > 0) {
+      const status = definition.defaultFindingStatus;
+      return {
+        id: definition.id,
+        label: definition.label,
+        status,
+        tone: getChecklistTone(status),
+        explanation: definition.explanation,
+        evidenceRefs: getProjectedEvidenceRefs(matchingProjectedFindings)
+      };
+    }
+
+    const coverageOutcome = input.coverageOutcomes?.[definition.id];
+    if (coverageOutcome) {
+      return {
+        id: definition.id,
+        label: definition.label,
+        status: coverageOutcome.status,
+        tone: getChecklistTone(coverageOutcome.status),
+        explanation: definition.explanation,
+        evidenceRefs: coverageOutcome.evidenceRefs,
+        limitation: coverageOutcome.limitation
       };
     }
 
@@ -277,17 +396,5 @@ export function deriveGdprEprivacyCoverageChecklist(
     };
   });
 
-  return [
-    ...rows,
-    {
-      id: "internal_gdpr_controls_documentation",
-      label: "Internal GDPR controls / documentation",
-      status: "Out of scope" as const,
-      tone: getChecklistTone("Out of scope"),
-      explanation:
-        "DPIAs, RoPA, processor contracts, lawful-basis records, retention enforcement, and DSR workflows require internal review and are not assessed by this public scan.",
-      evidenceRefs: [],
-      limitation: "This public-web scan does not inspect internal governance records, contracts, backend retention, or data-subject request workflows."
-    }
-  ];
+  return rows;
 }
