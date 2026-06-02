@@ -32,7 +32,8 @@ import {
 } from "../../lib/marketing/finding-regulatory-context";
 import { CopyJsonButton } from "./copy-json-button";
 import { EvidenceJsonBlock } from "./evidence-json-block";
-import { RegulatoryMappingFilterControl, type RegulatoryMappingFilterId } from "./executive-regulatory-mapping-filter";
+import { ExecutiveTopFindingsCarousel } from "./executive-top-findings-carousel";
+import type { RegulatoryMappingFilterId } from "./executive-regulatory-mapping-filter";
 import { FindingHashFocus } from "./finding-hash-focus";
 import { InfoTip } from "./info-tip";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
@@ -2583,12 +2584,6 @@ function BenchmarkMetricCard(input: {
             ? `${Math.abs(delta)} below expected${benchmarkContext}`
             : `At expected level${benchmarkContext}`
       : null;
-  const actualLabel =
-    actualValue === null
-      ? "No value retained"
-      : input.label === "Overall score"
-        ? `${actualValue}/100 overall score`
-        : `${actualValue} ${input.label.toLowerCase()}`;
   const tone =
     input.label === "Overall score"
       ? {
@@ -2627,26 +2622,22 @@ function BenchmarkMetricCard(input: {
       ? `Expected ${benchmarkValue}.`
       : null;
   const benchmarkTooltip = [benchmarkTooltipBase, input.note].filter(Boolean).join(" ");
+  const displayLabel =
+    input.label === "Third-party requests"
+      ? "3rd-party requests"
+      : input.label;
+  const actualLabel =
+    actualValue === null
+      ? "No value retained"
+      : input.label === "Overall score"
+        ? `${actualValue}/100 overall score`
+        : `${actualValue} ${displayLabel.toLowerCase()}`;
 
   return (
     <div className={`relative overflow-visible rounded-[1.1rem] border border-slate-200 px-3.5 py-2.5 ${tone.card}`}>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[9px] uppercase tracking-[0.13em] text-slate-500">
-          {input.label === "Overall score" ? (
-            <>
-              Overall
-              <br />
-              score
-            </>
-          ) : input.label === "Third-party requests" ? (
-            <>
-              Third-party
-              <br />
-              requests
-            </>
-          ) : (
-            input.label
-          )}
+        <p className="whitespace-nowrap text-[9px] uppercase tracking-[0.13em] text-slate-500">
+          {displayLabel}
         </p>
         <span className="inline-flex items-center gap-1">
           <span className="sr-only">{benchmarkValue !== null ? `Expected ${benchmarkValue}` : "Expected benchmark unavailable"}</span>
@@ -4669,7 +4660,6 @@ export function ExecutiveSummaryCard(input: {
             </div>
             <div className="space-y-3">
               <div className="space-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Executive readout</p>
                 <h2
                   data-testid="executive-headline"
                   className="max-w-3xl text-[2rem] font-semibold leading-tight tracking-tight text-slate-950 lg:text-[2.5rem]"
@@ -4727,7 +4717,7 @@ export function ExecutiveSummaryCard(input: {
               )}
             </div>
           </div>
-          {isScanNotRepresentative ? null : (
+          {isScanNotRepresentative || displayedTopFindings.length > 0 ? null : (
             <div className="space-y-3">
               <div className="flex items-end justify-between gap-4">
                 <div>
@@ -4736,7 +4726,6 @@ export function ExecutiveSummaryCard(input: {
                     {narrativePresentation.findingsHeading}
                   </h2>
                 </div>
-                {displayedTopFindings.length > 0 ? <RegulatoryMappingFilterControl targetListId="executive-top-findings-list" /> : null}
               </div>
             </div>
           )}
@@ -4753,7 +4742,10 @@ export function ExecutiveSummaryCard(input: {
                 Scores and regulatory projections were withheld for this scan because the captured page was not representative of the public site. Re-run when the site is available or try a different scan context.
               </div>
             ) : displayedTopFindings.length > 0 ? (
-              <>
+              <ExecutiveTopFindingsCarousel
+                count={displayedTopFindings.length}
+                heading={narrativePresentation.findingsHeading}
+              >
               {displayedTopFindings.map((finding, index) => {
                 const iconKey = topFindingIconKeys.get(finding.id) ?? getFindingTitleIconKey(finding.id);
                 const densityBenchmark = getFindingDensityBenchmark(finding.id);
@@ -4819,14 +4811,7 @@ export function ExecutiveSummaryCard(input: {
                 </div>
                 );
               })}
-              <div
-                className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700"
-                data-regulatory-filter-empty-state
-                hidden
-              >
-                No top findings match the selected regulatory mapping.
-              </div>
-              </>
+              </ExecutiveTopFindingsCarousel>
             ) : (
               <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700">
                 {displayState === "Limited review"
@@ -4859,63 +4844,65 @@ export function ExecutiveSummaryCard(input: {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
               </div>
               <div className="space-y-3">
-                <div id="tracker-footprint" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Review lenses</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Findings organized by privacy, consumer protection, and accessibility review context. Automated signals for review, not a legal determination.
-                  </p>
-                  {hasIncompleteCoverageNotice ? (
-                    <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
-                      This scan has incomplete coverage. Treat missing or low-confidence results as unresolved until a complete rescan confirms them.
-                    </p>
-                  ) : null}
-                  <div className="mt-3 space-y-3">
-                    {regulatoryLenses.map((lens) => (
-                      <details
-                        key={lens.acronym}
-                        id={getRegulatoryLensAnchor(lens.acronym)}
-                        className="group scroll-mt-24 rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3"
-                      >
-                        <summary className="relative grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2">
-                          <span className="min-w-0 self-start">
-                            <span className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-semibold text-slate-900">{lens.acronym}</span>
-                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
-                                {lens.ratingLabel}
+                <details id="review-lenses" className="group/review-lenses scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Review lenses</span>
+                    <ScanReportDisclosureIcon className="group-open/review-lenses:rotate-90" />
+                  </summary>
+                  <div className="mt-3 hidden space-y-3 group-open/review-lenses:block">
+                    {hasIncompleteCoverageNotice ? (
+                      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
+                        This scan has incomplete coverage. Treat missing or low-confidence results as unresolved until a complete rescan confirms them.
+                      </p>
+                    ) : null}
+                    <div className="space-y-3">
+                      {regulatoryLenses.map((lens) => (
+                        <details
+                          key={lens.acronym}
+                          id={getRegulatoryLensAnchor(lens.acronym)}
+                          className="group scroll-mt-24 rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3"
+                        >
+                          <summary className="relative grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2">
+                            <span className="min-w-0 self-start">
+                              <span className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-semibold text-slate-900">{lens.acronym}</span>
+                                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
+                                  {lens.ratingLabel}
+                                </span>
                               </span>
                             </span>
-                          </span>
-                          <span className="shrink-0 self-start text-right">
-                            <span className="block text-xl font-semibold tracking-tight text-slate-900">{lens.score ?? "—"}</span>
-                            {typeof lens.score === "number" ? (
-                              <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
-                            ) : null}
-                          </span>
-                          <span className="col-span-2 min-w-0 pr-6 text-xs leading-5 text-slate-600">{lens.summary}</span>
-                          <ScanReportDisclosureIcon className="absolute bottom-0 right-0" />
-                        </summary>
-                        <div className="mt-3 border-t border-slate-200 pt-3">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
-                          <div className="mt-2 space-y-2">
-                            {lens.findings.length > 0 ? (
-                              lens.findings.map((item) => (
-                                <RegulatoryLensFindingCard
-                                  key={`${lens.acronym}-${item.id}-${item.label}`}
-                                  finding={item}
-                                  lens={lens}
-                                />
-                              ))
-                            ) : (
-                              <span className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700">
-                                No top-level issue mapped here
-                              </span>
-                            )}
+                            <span className="shrink-0 self-start text-right">
+                              <span className="block text-xl font-semibold tracking-tight text-slate-900">{lens.score ?? "—"}</span>
+                              {typeof lens.score === "number" ? (
+                                <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
+                              ) : null}
+                            </span>
+                            <span className="col-span-2 min-w-0 pr-6 text-xs leading-5 text-slate-600">{lens.summary}</span>
+                            <ScanReportDisclosureIcon className="absolute bottom-0 right-0" />
+                          </summary>
+                          <div className="mt-3 border-t border-slate-200 pt-3">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
+                            <div className="mt-2 space-y-2">
+                              {lens.findings.length > 0 ? (
+                                lens.findings.map((item) => (
+                                  <RegulatoryLensFindingCard
+                                    key={`${lens.acronym}-${item.id}-${item.label}`}
+                                    finding={item}
+                                    lens={lens}
+                                  />
+                                ))
+                              ) : (
+                                <span className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700">
+                                  No top-level issue mapped here
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </details>
-                    ))}
+                        </details>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                </details>
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                   <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                     Tracker footprint
@@ -4942,6 +4929,22 @@ export function ExecutiveSummaryCard(input: {
                     items={[]}
                     truncationNote={domainTruncationNote}
                   />
+                  {categorySummary ? (
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Vendor mix</p>
+                      <p className="mt-1 text-sm text-slate-800">{categorySummary}</p>
+                      <DetailDisclosure
+                        summary={`${input.topObservedEntities.length} named entities, ${Object.keys(input.vendorCategoryCounts).length} categories`}
+                        title="Category and entity detail"
+                        richItems={vendorMixRichDetails}
+                        items={[
+                          ...Object.entries(input.vendorCategoryCounts).map(([key, count]) => `${formatCategoryLabel(key)} · ${count}`),
+                          ...input.preConsentVendorNames.slice(0, 3).map((vendor) => `${vendor} · pre-consent`),
+                          ...input.sessionReplayVendorNames.slice(0, 3).map((vendor) => `${vendor} · session replay`)
+                        ]}
+                      />
+                    </div>
+                  ) : null}
                 </div>
                 {policySurfaces.length > 0 ? (
                   <div id="policy-surfaces" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
@@ -4982,11 +4985,6 @@ export function ExecutiveSummaryCard(input: {
                     <p className="mt-2 text-sm text-slate-800">
                       {scanInterruptions.length} interruption event{scanInterruptions.length === 1 ? "" : "s"} retained
                     </p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {hasMeaningfulInterruption
-                        ? "Coverage was limited by site protections. Findings shown here are based on retained observable evidence."
-                        : "Protected routes were encountered outside the public homepage. Homepage findings are based on observable public-page evidence."}
-                    </p>
                     <div className="mt-3 space-y-2">
                       {scanInterruptions.map((event) => (
                         <details key={`${event.label}:${event.details.join("|")}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
@@ -5025,22 +5023,6 @@ export function ExecutiveSummaryCard(input: {
                   </div>
                 ) : null}
               </div>
-              {categorySummary ? (
-                <div id="vendor-mix" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Vendor mix</p>
-                  <p className="mt-2 text-sm text-slate-800">{categorySummary}</p>
-                  <DetailDisclosure
-                    summary={`${input.topObservedEntities.length} named entities, ${Object.keys(input.vendorCategoryCounts).length} categories`}
-                    title="Category and entity detail"
-                    richItems={vendorMixRichDetails}
-                    items={[
-                      ...Object.entries(input.vendorCategoryCounts).map(([key, count]) => `${formatCategoryLabel(key)} · ${count}`),
-                      ...input.preConsentVendorNames.slice(0, 3).map((vendor) => `${vendor} · pre-consent`),
-                      ...input.sessionReplayVendorNames.slice(0, 3).map((vendor) => `${vendor} · session replay`)
-                    ]}
-                  />
-                </div>
-              ) : null}
             </>
           )}
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export const SCAN_FROM_OPTIONS = [
   {
@@ -50,6 +51,13 @@ type ScanFromSelectProps = {
   onFreshRescanChange?: (value: boolean) => void;
   variant?: "field" | "icon";
   value?: ScanFrom;
+};
+
+type MenuPosition = {
+  left: number;
+  maxHeight: number;
+  top: number;
+  width: number;
 };
 
 function GlobeIcon({ className = "h-4 w-4" }: { className?: string }) {
@@ -135,15 +143,24 @@ export function ScanFromSelect({
   value = "default"
 }: ScanFromSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const [uncontrolledFreshRescan, setUncontrolledFreshRescan] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const options = includeLocalExtension ? SCAN_FROM_OPTIONS : SCAN_FROM_OPTIONS.filter((option) => option.value !== "local_extension");
   const selectedOption = options.find((option) => option.value === value) ?? options[0] ?? SCAN_FROM_OPTIONS[0];
   const freshRescan = freshRescanValue ?? uncontrolledFreshRescan;
 
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
-      if (!wrapperRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!wrapperRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setIsOpen(false);
       }
     }
@@ -151,6 +168,51 @@ export function ScanFromSelect({
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, []);
+
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function updateMenuPosition() {
+      const buttonRect = buttonRef.current?.getBoundingClientRect();
+
+      if (!buttonRect) {
+        return;
+      }
+
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const viewportPadding = 16;
+      const gap = 9;
+      const width = variant === "icon" ? Math.min(320, viewportWidth - viewportPadding * 2) : Math.min(288, viewportWidth - viewportPadding * 2);
+      const desiredLeft = variant === "icon" ? buttonRect.right - width + 96 : buttonRect.left;
+      const left = Math.min(Math.max(viewportPadding, desiredLeft), Math.max(viewportPadding, viewportWidth - width - viewportPadding));
+      const measuredHeight = menuRef.current?.offsetHeight;
+      const targetHeight = measuredHeight && measuredHeight > 0 ? measuredHeight : includeFreshRescanOption ? 390 : 260;
+      const spaceBelow = viewportHeight - buttonRect.bottom - gap - viewportPadding;
+      const spaceAbove = buttonRect.top - gap - viewportPadding;
+      const opensAbove = spaceBelow < Math.min(targetHeight, 300) && spaceAbove > spaceBelow;
+      const maxHeight = Math.max(180, Math.min(targetHeight, opensAbove ? spaceAbove : spaceBelow));
+      const top = opensAbove ? Math.max(viewportPadding, buttonRect.top - gap - maxHeight) : Math.min(buttonRect.bottom + gap, viewportHeight - viewportPadding - maxHeight);
+
+      setMenuPosition({
+        left,
+        maxHeight,
+        top,
+        width
+      });
+    }
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [includeFreshRescanOption, isOpen, variant]);
 
   function selectScanFrom(nextValue: ScanFrom) {
     onChange?.(nextValue);
@@ -188,6 +250,7 @@ export function ScanFromSelect({
         aria-label={`Scan from: ${selectedOption.label}`}
         className={buttonClassName}
         onClick={() => setIsOpen((current) => !current)}
+        ref={buttonRef}
         title={`Scan from: ${selectedOption.label}`}
         type="button"
       >
@@ -199,77 +262,89 @@ export function ScanFromSelect({
           </svg>
         ) : null}
       </button>
-      {isOpen ? (
-        <div className={variant === "icon" ? "absolute right-[-6rem] top-[calc(100%+0.55rem)] z-[100] w-[min(20rem,calc(100vw-2rem))] isolate overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_18px_46px_rgba(15,23,42,0.16)]" : "absolute left-0 top-[calc(100%+0.55rem)] z-[100] w-72 isolate overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_18px_46px_rgba(15,23,42,0.16)]"}>
-          <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Scan from</div>
-          <div role="listbox" aria-label="Scan from">
-            {menuOptions.map((option) => {
-              const isSelected = option.value === value;
-              return (
-                <button
-                  aria-selected={isSelected}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none"
-                  key={option.value}
-                  onClick={() => selectScanFrom(option.value)}
-                  role="option"
-                  title={option.description}
-                  type="button"
-                >
-                  <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-base leading-none">
-                    <FlagMarker
-                      flag={"flag" in option ? option.flag : undefined}
-                      icon={"icon" in option ? option.icon : undefined}
-                      selected={isSelected}
+      {isOpen && isMounted
+        ? createPortal(
+            <div
+              className="fixed z-[1000] isolate overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_18px_46px_rgba(15,23,42,0.16)]"
+              ref={menuRef}
+              style={{
+                left: menuPosition?.left ?? 16,
+                maxHeight: menuPosition?.maxHeight ?? 320,
+                top: menuPosition?.top ?? 16,
+                width: menuPosition?.width ?? (variant === "icon" ? 320 : 288)
+              }}
+            >
+              <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Scan from</div>
+              <div role="listbox" aria-label="Scan from">
+                {menuOptions.map((option) => {
+                  const isSelected = option.value === value;
+                  return (
+                    <button
+                      aria-selected={isSelected}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none"
+                      key={option.value}
+                      onClick={() => selectScanFrom(option.value)}
+                      role="option"
+                      title={option.description}
+                      type="button"
+                    >
+                      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-base leading-none">
+                        <FlagMarker
+                          flag={"flag" in option ? option.flag : undefined}
+                          icon={"icon" in option ? option.icon : undefined}
+                          selected={isSelected}
+                        />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className={isSelected ? "block text-sm font-semibold text-slate-950" : "block text-sm font-semibold text-slate-700"}>{option.label}</span>
+                      </span>
+                      {isSelected ? (
+                        <svg aria-hidden="true" className="h-4 w-4 text-sky-600" fill="none" viewBox="0 0 20 20">
+                          <path d="m4.5 10.5 3.25 3.25 7.75-8" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" />
+                        </svg>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              {includeFreshRescanOption ? (
+                <div className="mt-1 border-t border-slate-200/70 pt-1">
+                  <div className="px-3 pb-1 pt-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Options</div>
+                  <label
+                    className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
+                    title="Bypass the 24-hour recent-scan reuse check."
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-slate-700">Fresh re-scan</span>
+                    </span>
+                    <input
+                      checked={freshRescan}
+                      className="sr-only"
+                      onChange={(event) => setFreshRescan(event.target.checked)}
+                      type="checkbox"
                     />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className={isSelected ? "block text-sm font-semibold text-slate-950" : "block text-sm font-semibold text-slate-700"}>{option.label}</span>
-                  </span>
-                  {isSelected ? (
-                    <svg aria-hidden="true" className="h-4 w-4 text-sky-600" fill="none" viewBox="0 0 20 20">
-                      <path d="m4.5 10.5 3.25 3.25 7.75-8" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" />
-                    </svg>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-          {includeFreshRescanOption ? (
-            <div className="mt-1 border-t border-slate-200/70 pt-1">
-              <div className="px-3 pb-1 pt-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Options</div>
-              <label
-                className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                title="Bypass the 24-hour recent-scan reuse check."
-              >
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-slate-700">Fresh re-scan</span>
-                </span>
-                <input
-                  checked={freshRescan}
-                  className="sr-only"
-                  onChange={(event) => setFreshRescan(event.target.checked)}
-                  type="checkbox"
-                />
-                <span
-                  className={
-                    freshRescan
-                      ? "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-sky-500 transition"
-                      : "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-slate-200 transition"
-                  }
-                >
-                  <span
-                    className={
-                      freshRescan
-                        ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
-                        : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
-                    }
-                  />
-                </span>
-              </label>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+                    <span
+                      className={
+                        freshRescan
+                          ? "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-sky-500 transition"
+                          : "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-slate-200 transition"
+                      }
+                    >
+                      <span
+                        className={
+                          freshRescan
+                            ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
+                            : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
+                        }
+                      />
+                    </span>
+                  </label>
+                </div>
+              ) : null}
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }

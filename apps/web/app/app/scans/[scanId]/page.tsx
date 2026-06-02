@@ -74,6 +74,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
 
   const scanDomainLabel = scanRecord.scan.domainHostname?.trim() || "Scanned website";
   const isPlatformAdmin = isPlatformAdminEmail(user.email);
+  const canUseLocalExtensionScan = isPlatformAdmin;
   const visualEvidenceArtifacts = canViewCapturedImage({ isPlatformAdmin, role: membership.role })
     ? getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts)
         .filter((artifact) => artifact.status === "available" && artifact.key)
@@ -111,6 +112,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
               />
               <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                 <DomainScanForm
+                  allowLocalExtensionScan={canUseLocalExtensionScan}
                   buttonLabel="Scan"
                   compact
                   inputLabel="Scan another website"

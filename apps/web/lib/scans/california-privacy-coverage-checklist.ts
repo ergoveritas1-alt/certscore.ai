@@ -1,0 +1,299 @@
+import type { UnifiedFindingDisplayPacket } from "./unified-findings";
+import type {
+  CaliforniaPrivacyCoverageCriticalEvidence,
+  CaliforniaPrivacyCoverageOutcome,
+  CaliforniaPrivacyCoverageOutcomeStatus,
+  CaliforniaPrivacyCoverageSourceSignalGap
+} from "./california-privacy-coverage-policy";
+
+export type CaliforniaPrivacyCoverageChecklistStatus = CaliforniaPrivacyCoverageOutcomeStatus;
+export type CaliforniaPrivacyCoverageChecklistTone = "neutral" | "review" | "warning" | "muted";
+
+export type CaliforniaPrivacyCoverageChecklistItem = {
+  criticalEvidence: CaliforniaPrivacyCoverageCriticalEvidence;
+  id: string;
+  label: string;
+  status: CaliforniaPrivacyCoverageChecklistStatus;
+  tone: CaliforniaPrivacyCoverageChecklistTone;
+  explanation: string;
+  evidenceRefs: string[];
+  limitation?: string;
+};
+
+type ChecklistRowDefinition = {
+  id: string;
+  label: string;
+  explanation: string;
+  findingIds: string[];
+  defaultFindingStatus: Exclude<CaliforniaPrivacyCoverageChecklistStatus, "Not observed" | "Not testable" | "Not applicable">;
+  notObservedText: string;
+};
+
+export type CaliforniaPrivacyCoverageChecklistInput = {
+  coverageLimited: boolean;
+  coverageOutcomes?: Record<string, CaliforniaPrivacyCoverageOutcome>;
+  projectedFindings?: Array<{
+    evidencePreview?: string[];
+    id: string;
+    label: string;
+  }>;
+  scanCompleted: boolean;
+  unifiedFindings: UnifiedFindingDisplayPacket[];
+};
+
+const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
+  {
+    id: "privacy_notice_availability",
+    label: "Privacy notice availability",
+    explanation: "Whether a public privacy notice or privacy policy was observed and reachable from the tested context.",
+    findingIds: ["privacy_policy_present", "privacy_policy_missing_surface", "privacy_policy_unavailable"],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No privacy notice finding was surfaced in this scan context."
+  },
+  {
+    id: "notice_at_collection",
+    label: "Notice at collection",
+    explanation: "Whether public collection-context surfaces included nearby privacy notice or disclosure cues.",
+    findingIds: ["privacy_policy_missing_surface", "policy_clarity_risk"],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No notice-at-collection issue was surfaced in this scan context."
+  },
+  {
+    id: "do_not_sell_share_availability",
+    label: "Do Not Sell or Share availability",
+    explanation: "Whether an equivalent opt-out path was observed when sale/share or targeted-advertising signals were present.",
+    findingIds: ["cpra_cba_opt_out_missing", "sale_sharing_controls_missing", "targeted_advertising_choices_present"],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No Do Not Sell or Share availability issue was surfaced in this scan context."
+  },
+  {
+    id: "gpc_opt_out_signal_handling",
+    label: "GPC / opt-out signal handling",
+    explanation: "Whether an opt-out preference signal such as GPC was sent and appeared honored or recognized.",
+    findingIds: ["gpc_signal_not_honored", "gpc_disclosure_present"],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No GPC handling issue was surfaced in this scan context."
+  },
+  {
+    id: "targeted_advertising_signals",
+    label: "Targeted advertising signals",
+    explanation: "Whether advertising, retargeting, social pixel, or cross-context tracking signals were observed.",
+    findingIds: ["cpra_cba_opt_out_missing", "sale_sharing_controls_missing", "targeted_advertising_disclosure_present"],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No targeted advertising or cross-context tracking signal was surfaced in this scan context."
+  },
+  {
+    id: "sale_share_disclosure_alignment",
+    label: "Sale/share disclosure alignment",
+    explanation: "Whether observed runtime adtech or sale/share-like signals aligned with reviewed public disclosures.",
+    findingIds: ["do_not_sell_sharing_disclosure_conflict", "policy_behavior_conflict", "policy_behavior_contradiction_detected", "third_party_recipient_disclosure_missing", "targeted_advertising_disclosure_present"],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No sale/share disclosure-alignment finding was surfaced in this scan context."
+  },
+  {
+    id: "limit_use_sensitive_pi",
+    label: "Limit Use of Sensitive Personal Information",
+    explanation: "Whether a Limit Use path was observed when sensitive personal information context was detected.",
+    findingIds: ["sensitive_collection_surface_observed", "sensitive_data_collection_with_third_party_tracking_present"],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No Limit Use or sensitive PI applicability issue was surfaced in this scan context."
+  },
+  {
+    id: "opt_out_friction_dark_patterns",
+    label: "Opt-out friction / choice balance",
+    explanation: "Whether privacy choice flows created friction, imbalance, confusing labels, or reduced refusal visibility.",
+    findingIds: ["accept_more_prominent_than_reject", "consent_dark_patterns_detected", "dismiss_without_reject", "forced_consent_wall", "reject_option_missing_or_hidden"],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No opt-out friction finding was surfaced in this scan context."
+  },
+  {
+    id: "post_opt_out_tracking_behavior",
+    label: "Post-opt-out tracking behavior",
+    explanation: "Whether targeted advertising, sale/share, or non-essential tracking decreased after opt-out or reject.",
+    findingIds: ["reject_did_not_reduce_tracking", "reject_tracking_persists_after_reject", "reject_did_not_reduce_third_party_cookies"],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No post-opt-out tracking persistence finding was surfaced in this scan context."
+  },
+  {
+    id: "sensitive_forms_third_party_tracking",
+    label: "Sensitive forms with third-party tracking",
+    explanation: "Whether sensitive forms or high-risk collection contexts appeared alongside third-party tracking.",
+    findingIds: ["sensitive_data_collection_with_third_party_tracking_present", "possible_session_replay_on_sensitive_input_surface"],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No sensitive form and third-party tracking correlation was surfaced in this scan context."
+  },
+  {
+    id: "privacy_control_accessibility",
+    label: "Privacy control accessibility",
+    explanation: "Whether privacy-choice controls produced basic automated accessibility signals.",
+    findingIds: ["focus_management_issue", "keyboard_navigation_accessibility_issue", "semantic_labeling_accessibility_issue", "visual_contrast_accessibility_issue"],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No privacy-control accessibility issue was surfaced in this scan context."
+  }
+];
+
+function getChecklistTone(status: CaliforniaPrivacyCoverageChecklistStatus): CaliforniaPrivacyCoverageChecklistTone {
+  switch (status) {
+    case "Gap observed":
+    case "Review signal":
+    case "Insufficient evidence":
+      return "warning";
+    case "Not applicable":
+    case "Not testable":
+      return "muted";
+    default:
+      return "neutral";
+  }
+}
+
+function makeSourceSignalGap(
+  field: string,
+  expected: unknown,
+  actual: unknown,
+  whyNeeded: string,
+  source: "WS01" | "WC01" = "WC01"
+): CaliforniaPrivacyCoverageSourceSignalGap {
+  return { actual, expected, field, source, whyNeeded };
+}
+
+function getEvidenceRefs(findings: UnifiedFindingDisplayPacket[]) {
+  return findings.flatMap((finding) => [
+    finding.presentation?.findingName || finding.title,
+    ...(finding.evidence?.flags ?? []).map((flag) => `Evidence flag: ${flag}`).slice(0, 3)
+  ]).slice(0, 6);
+}
+
+function getFindingEntityPreview(finding: UnifiedFindingDisplayPacket) {
+  const entities = finding.evidence?.entities ?? {};
+  return Object.fromEntries(
+    Object.entries(entities)
+      .filter(([, values]) => Array.isArray(values) && values.length > 0)
+      .slice(0, 5)
+      .map(([key, values]) => [key, values.slice(0, 5)])
+  );
+}
+
+function getUnifiedFindingCriticalEvidence(
+  status: CaliforniaPrivacyCoverageChecklistStatus,
+  statusBasis: string,
+  rowId: string,
+  findings: UnifiedFindingDisplayPacket[]
+): CaliforniaPrivacyCoverageCriticalEvidence {
+  return {
+    missingOrIncompleteSourceSignals: [],
+    pipeline: {
+      concernPolicyKey: `california_privacy_coverage.${rowId}.${status.toLowerCase().replaceAll(" ", "_")}`,
+      projectionStage: "unified_finding",
+      wc01NormalizedConcernKey: `california_privacy.coverage.${rowId}`,
+      ws01EvidenceRole: "observed runtime signal identification, evidence capture, and logging"
+    },
+    projectedFindings: findings.map((finding) => ({
+      id: finding.unifiedFindingId,
+      label: finding.presentation?.findingName || finding.title,
+      severity: finding.severity
+    })),
+    retainedEvidence: {
+      evidenceRefs: getEvidenceRefs(findings),
+      findingEntities: findings.map((finding) => ({
+        id: finding.unifiedFindingId,
+        entities: getFindingEntityPreview(finding),
+        evidenceFlags: (finding.evidence?.flags ?? []).slice(0, 5)
+      })),
+      status
+    },
+    statusBasis
+  };
+}
+
+function getFallbackCriticalEvidence(
+  status: CaliforniaPrivacyCoverageChecklistStatus,
+  statusBasis: string,
+  rowId: string,
+  missingOrIncompleteSourceSignals: CaliforniaPrivacyCoverageSourceSignalGap[] = []
+): CaliforniaPrivacyCoverageCriticalEvidence {
+  return {
+    missingOrIncompleteSourceSignals,
+    pipeline: {
+      concernPolicyKey: `california_privacy_coverage.${rowId}.${status.toLowerCase().replaceAll(" ", "_")}`,
+      projectionStage: "coverage_fallback",
+      wc01NormalizedConcernKey: `california_privacy.coverage.${rowId}`,
+      ws01EvidenceRole: "observed runtime signal identification, evidence capture, and logging"
+    },
+    projectedFindings: [],
+    retainedEvidence: { status },
+    statusBasis
+  };
+}
+
+export function deriveCaliforniaPrivacyCoverageChecklist(
+  input: CaliforniaPrivacyCoverageChecklistInput
+): CaliforniaPrivacyCoverageChecklistItem[] {
+  const findingsById = new Map(input.unifiedFindings.map((finding) => [finding.unifiedFindingId, finding]));
+  const publicCoverageIsTestable = input.scanCompleted && !input.coverageLimited;
+
+  return CHECKLIST_ROWS.map((definition) => {
+    const matchingFindings = definition.findingIds.flatMap((id) => {
+      const finding = findingsById.get(id);
+      return finding ? [finding] : [];
+    });
+    const policyOutcome = input.coverageOutcomes?.[definition.id];
+
+    if (policyOutcome) {
+      return {
+        criticalEvidence: policyOutcome.criticalEvidence,
+        evidenceRefs: policyOutcome.evidenceRefs,
+        explanation: definition.explanation,
+        id: definition.id,
+        label: definition.label,
+        limitation: policyOutcome.limitation,
+        status: policyOutcome.status,
+        tone: getChecklistTone(policyOutcome.status)
+      };
+    }
+
+    if (matchingFindings.length > 0) {
+      const status = definition.defaultFindingStatus;
+      const statusBasis = `Canonical unified finding evidence was retained for this California row: ${matchingFindings.map((finding) => finding.presentation?.findingName || finding.title).join(", ")}.`;
+      return {
+        criticalEvidence: getUnifiedFindingCriticalEvidence(status, statusBasis, definition.id, matchingFindings),
+        evidenceRefs: getEvidenceRefs(matchingFindings),
+        explanation: definition.explanation,
+        id: definition.id,
+        label: definition.label,
+        limitation: statusBasis,
+        status,
+        tone: getChecklistTone(status)
+      };
+    }
+
+    const status = publicCoverageIsTestable ? "Not observed" : "Not testable";
+    const statusBasis = publicCoverageIsTestable
+      ? definition.notObservedText
+      : "Public-web coverage was limited, so this California row was not testable.";
+    return {
+      criticalEvidence: getFallbackCriticalEvidence(
+        status,
+        statusBasis,
+        definition.id,
+        publicCoverageIsTestable
+          ? []
+          : [
+              makeSourceSignalGap(
+                "WS01.californiaPrivacyEvidence",
+                "completed California evidence packet",
+                "missing_or_limited",
+                "Required to evaluate this California checklist row.",
+                "WS01"
+              )
+            ]
+      ),
+      evidenceRefs: [],
+      explanation: definition.explanation,
+      id: definition.id,
+      label: definition.label,
+      limitation: statusBasis,
+      status,
+      tone: getChecklistTone(status)
+    };
+  });
+}

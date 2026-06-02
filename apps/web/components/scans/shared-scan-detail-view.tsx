@@ -26,9 +26,11 @@ import {
 import { FindingsSection } from "./findings-section";
 import { FullScanProgressCard } from "./full-scan-progress-card";
 import { FingerprintingPanel } from "./fingerprinting-panel";
+import { CaliforniaPrivacyCoverageChecklistCard } from "./california-privacy-coverage-checklist-card";
 import { GdprEprivacyCoverageChecklistCard } from "./gdpr-eprivacy-coverage-checklist-card";
 import { InfoTip } from "./info-tip";
 import { RedirectFlowPanel } from "./redirect-flow-panel";
+import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import { ScanPageHeader } from "./scan-page-header";
 import { VendorFootprintCard } from "./vendor-footprint-card";
@@ -130,6 +132,8 @@ import {
 } from "../../lib/scans/finding-evidence-contracts";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
+import { deriveCaliforniaPrivacyCoverageChecklist } from "../../lib/scans/california-privacy-coverage-checklist";
+import { deriveCaliforniaPrivacyCoveragePolicyOutcomes } from "../../lib/scans/california-privacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import {
@@ -5740,6 +5744,17 @@ export function SharedScanDetailView({
     scanCompleted: scanRecord.scan.status === "completed",
     unifiedFindings: findingEvidenceDiagnostics
   });
+  const californiaPrivacyCoverageChecklist = deriveCaliforniaPrivacyCoverageChecklist({
+    coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
+    coverageOutcomes: deriveCaliforniaPrivacyCoveragePolicyOutcomes({
+      coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
+      runtimeArtifacts,
+      scanCompleted: scanRecord.scan.status === "completed"
+    }),
+    projectedFindings: allExecutiveFindings,
+    scanCompleted: scanRecord.scan.status === "completed",
+    unifiedFindings: findingEvidenceDiagnostics
+  });
   const regulatoryLensCounts = {
     beforeConsentCookieCount: cookiesBeforeConsentCount,
     thirdPartyRequestCount: executiveThirdPartyRequestCount
@@ -5750,11 +5765,15 @@ export function SharedScanDetailView({
     benchmarkIndustry: scanRecord.domainBenchmark?.industry ?? null,
     regulatoryRisk: scanRecord.regulatoryRisk
   };
+  const executiveRegulatoryLenses = buildRegulatoryLensesFromUnifiedPackets(
+    findingEvidenceDiagnostics,
+    regulatoryLensCounts,
+    regulatoryLensOptions
+  );
   const gdprEprivacyExecutiveLens =
-    buildRegulatoryLensesFromUnifiedPackets(findingEvidenceDiagnostics, regulatoryLensCounts, regulatoryLensOptions).find(
-      (lens) => lens.acronym === "GDPR / ePrivacy"
-    ) ?? null;
-  const shouldOpenGdprEprivacyCoverageChecklist = publicTopExecutiveFindings.length === 0;
+    executiveRegulatoryLenses.find((lens) => lens.acronym === "GDPR / ePrivacy") ?? null;
+  const californiaPrivacyExecutiveLens =
+    executiveRegulatoryLenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA") ?? null;
 
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
@@ -5881,10 +5900,31 @@ export function SharedScanDetailView({
             scanInterruptions={executiveScanInterruptions}
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
           />
-          <GdprEprivacyCoverageChecklistCard
-            defaultOpen={shouldOpenGdprEprivacyCoverageChecklist}
-            gdprEprivacyLens={gdprEprivacyExecutiveLens}
-            items={gdprEprivacyCoverageChecklist}
+          <RegulatoryChecklistSection
+            tabs={[
+              {
+                content: (
+                  <GdprEprivacyCoverageChecklistCard
+                    defaultOpen
+                    gdprEprivacyLens={gdprEprivacyExecutiveLens}
+                    items={gdprEprivacyCoverageChecklist}
+                  />
+                ),
+                id: "gdpr-eprivacy",
+                label: "GDPR / ePrivacy"
+              },
+              {
+                content: (
+                  <CaliforniaPrivacyCoverageChecklistCard
+                    californiaLens={californiaPrivacyExecutiveLens}
+                    defaultOpen
+                    items={californiaPrivacyCoverageChecklist}
+                  />
+                ),
+                id: "california-privacy",
+                label: "California CCPA / CPRA"
+              }
+            ]}
           />
           
         </>

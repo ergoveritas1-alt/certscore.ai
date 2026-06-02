@@ -864,6 +864,35 @@ export type CpraCbaOptOutEvidence = {
   limitation: "homepage_only";
 };
 
+export type CaliforniaPrivacyEvidence = {
+  privacyNoticeObserved: boolean | null;
+  privacyNoticeUrls: string[];
+  collectionContextObserved: boolean | null;
+  collectionNoticeCueObserved: boolean | null;
+  collectionContextUrls: string[];
+  saleShareRuntimeSignalsObserved: boolean | null;
+  targetedAdvertisingSignalsObserved: boolean | null;
+  advertisingSharingVendors: string[];
+  doNotSellSharePathObserved: boolean | null;
+  doNotSellSharePathUrl: string | null;
+  doNotSellSharePathLabel: string | null;
+  gpcTestRan: boolean;
+  gpcSignalSent: boolean | null;
+  gpcRecognitionObserved: boolean | null;
+  gpcTrackingReductionObserved: boolean | null;
+  sensitivePiContextObserved: boolean | null;
+  sensitivePiCategories: string[];
+  limitUseSensitivePiPathObserved: boolean | null;
+  limitUseSensitivePiPathUrl: string | null;
+  optOutInteractionConfirmed: boolean | null;
+  postOptOutTrackingReductionObserved: boolean | null;
+  postOptOutTrackingPersisted: boolean | null;
+  privacyControlAccessibilityIssueObserved: boolean | null;
+  privacyControlAccessibilitySignals: string[];
+  policyRuntimeDisclosureAlignment: "aligned" | "gap_observed" | "review" | "not_testable";
+  evidenceRefs: string[];
+};
+
 export type ConsentTimelineEvidence = {
   navigationStartMs: 0;
   firstCmpVisibleMs: number | null;
@@ -979,6 +1008,7 @@ export type ScanRuntimeArtifact = {
   keyPageDiscoverySummary: KeyPageDiscoverySummary | null;
   cookieAttributeSummary?: CookieAttributeSummary | null;
   cpraCbaOptOutEvidence?: CpraCbaOptOutEvidence | null;
+  californiaPrivacyEvidence?: CaliforniaPrivacyEvidence | null;
   gpcVerification?: GpcVerification | null;
   buildPhaseSummaries?: Array<{
     attempts: number;

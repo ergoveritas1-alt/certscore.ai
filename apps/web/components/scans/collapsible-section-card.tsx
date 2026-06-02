@@ -36,7 +36,7 @@ export function CollapsibleSectionCard({
             <ScanReportDisclosureIcon className="mt-0.5 group-open/section:rotate-90" />
           ) : null}
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-slate-900">{title}</p>
+            <div className="font-semibold text-slate-900">{title}</div>
             {subtitle ? <div className="mt-1 text-sm text-slate-500">{subtitle}</div> : null}
           </div>
         </summary>

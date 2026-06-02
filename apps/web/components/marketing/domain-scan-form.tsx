@@ -7,6 +7,7 @@ import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation 
 import { ScanFromSelect, type ScanFrom, type ServerScanFrom } from "../scans/scan-from-select";
 
 type DomainScanFormProps = {
+  allowLocalExtensionScan?: boolean;
   buttonLabel?: string;
   compact?: boolean;
   helperText?: string;
@@ -25,6 +26,7 @@ type ScanSubmitPayload = {
   error?: string | null;
   previewUrl?: string | null;
   reusedExistingScan?: boolean | null;
+  scanId?: string | null;
   scanUrl?: string | null;
 };
 
@@ -232,6 +234,7 @@ function isCurrentPageDestination(destination: string) {
 }
 
 export function DomainScanForm({
+  allowLocalExtensionScan = false,
   buttonLabel = "Start full scan",
   compact = false,
   emptySubmitDomain = "",
@@ -251,6 +254,14 @@ export function DomainScanForm({
   const [freshRescan, setFreshRescan] = useState(false);
   const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
   const isSubmittingRef = useRef(false);
+
+  useEffect(() => {
+    if (!allowLocalExtensionScan && scanFrom === "local_extension") {
+      setScanFrom("default");
+      setLocalExtensionStatus(null);
+      setShowExtensionInstructions(false);
+    }
+  }, [allowLocalExtensionScan, scanFrom]);
 
   function resetValidationState() {
     setErrorMessage(null);
@@ -393,7 +404,7 @@ export function DomainScanForm({
       });
 
       const payload = (await response.json()) as ScanSubmitPayload;
-      const destination = mode === "preview" ? payload.previewUrl : payload.scanUrl;
+      const destination = mode === "preview" ? payload.previewUrl : payload.scanId ? `/app/scans/${payload.scanId}` : payload.scanUrl;
 
       if (!response.ok) {
         recordScanSubmitFailure({
@@ -493,7 +504,7 @@ export function DomainScanForm({
                 compact={compact}
                 freshRescanValue={freshRescan}
                 includeFreshRescanOption
-                includeLocalExtension
+                includeLocalExtension={allowLocalExtensionScan}
                 onChange={setScanFrom}
                 onFreshRescanChange={setFreshRescan}
                 value={scanFrom}
