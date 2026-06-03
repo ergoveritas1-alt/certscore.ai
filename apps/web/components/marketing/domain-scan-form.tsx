@@ -233,6 +233,14 @@ function isCurrentPageDestination(destination: string) {
   }
 }
 
+export function getScanSubmitDestination(mode: ScanMode, payload: ScanSubmitPayload) {
+  if (mode === "preview") {
+    return payload.previewUrl ?? null;
+  }
+
+  return payload.scanUrl ?? (payload.scanId ? `/app/scans/${payload.scanId}` : null);
+}
+
 export function DomainScanForm({
   allowLocalExtensionScan = false,
   buttonLabel = "Start full scan",
@@ -404,7 +412,7 @@ export function DomainScanForm({
       });
 
       const payload = (await response.json()) as ScanSubmitPayload;
-      const destination = mode === "preview" ? payload.previewUrl : payload.scanId ? `/app/scans/${payload.scanId}` : payload.scanUrl;
+      const destination = getScanSubmitDestination(mode, payload);
 
       if (!response.ok) {
         recordScanSubmitFailure({

@@ -1534,6 +1534,21 @@ test("sensitive, video, and fingerprinting contracts stay evidence-only", () => 
   );
 
   assert.equal(
+    evaluateFindingEvidenceContractForRawEvidence("sensitive_data_collection_with_third_party_tracking_present", {
+      sensitivePayloadViolations: [
+        {
+          detectedType: "email",
+          evidenceStrength: "concrete_payload",
+          payloadExposureObserved: true,
+          requestUrl: "https://analytics.example.net/collect",
+          vendorHost: "analytics.example.net"
+        }
+      ]
+    })?.status,
+    "pass_strong"
+  );
+
+  assert.equal(
     evaluateFindingEvidenceContractForRawEvidence("session_replay_present_with_sensitive_surfaces_observed", {
       sensitivePayloadViolations: [
         {

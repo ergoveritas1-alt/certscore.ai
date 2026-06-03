@@ -2623,6 +2623,19 @@ export const REPORT_UNIFIED_FINDINGS = [
     overlays: ["governance_accountability_transfers", "cross_border_data_handling_transparency"],
     validationRuleKeys: ["section_review.no_transfer_mechanism_noted"]
   }),
+  defineReportUnifiedFinding({
+    id: "cross_border_vendor_disclosure_gap",
+    label: "Cross-border vendor disclosure gap observed",
+    owner: "cross_border_data_handling_transparency",
+    mirrors: ["data_handling_disclosures"],
+    overlays: ["governance_accountability_transfers", "tracking_profiling_sensitive_data_risk"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.cross_border_vendor_disclosure_gap" }],
+    aliases: [
+      "Vendor/transfer disclosure alignment gap",
+      "Cross-border vendor disclosure mismatch",
+      "Cross-border runtime vendor not disclosed"
+    ]
+  }),
 
   defineReportUnifiedFinding({
     id: "policy_behavior_conflict",

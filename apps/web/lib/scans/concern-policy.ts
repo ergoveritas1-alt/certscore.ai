@@ -26,6 +26,7 @@ import {
   hasConcreteCrossDomainIdentifierSharingEvidence,
   hasConcretePreconsentArtifact,
   hasConcreteRtbCookieSyncEvidence,
+  hasDirectSensitiveCollectionSurfaceArtifact,
   hasConcreteReplayArtifact,
   hasConcreteRetargetingArtifact,
   hasConcreteSensitivePayloadArtifact,
@@ -660,6 +661,26 @@ export function hasStrongRightsFrictionEvidence(evidence: Record<string, unknown
 
 export function hasSensitivePayloadEvidence(evidence: Record<string, unknown> | null | undefined) {
   return hasConcreteSensitivePayloadArtifact(evidence);
+}
+
+function hasSensitiveCollectionSurfaceEvidence(evidence: Record<string, unknown> | null | undefined) {
+  return (
+    hasDirectSensitiveCollectionSurfaceArtifact(evidence) ||
+    evidence?.sensitiveCollectionSurfaceObserved === true ||
+    evidence?.sensitive_collection_surface_observed === true ||
+    evidence?.highSensitivityDataCollectionDetected === true ||
+    evidence?.high_sensitivity_data_collection_detected === true ||
+    getStringArrayValues(evidence, [
+      "sensitiveFieldSelectors",
+      "sensitive_field_selectors",
+      "sensitiveFieldLabels",
+      "sensitive_field_labels",
+      "sensitiveFieldTypes",
+      "sensitive_field_types",
+      "sensitiveFormUrls",
+      "sensitive_form_urls"
+    ]).length > 0
+  );
 }
 
 export function hasConcreteSessionReplayEvidence(evidence: Record<string, unknown> | null | undefined) {
@@ -2399,6 +2420,11 @@ export function deriveConcernPolicy(input: {
         hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(input.rawEvidence) ||
         hasSensitiveSessionReplayCorrelationLabel(input.rawEvidence)
       )
+    ) &&
+    !(
+      isSensitiveThirdPartyTrackingConcern(input.concern) &&
+      hasSensitiveCollectionSurfaceEvidence(input.rawEvidence) &&
+      hasConcreteSensitiveThirdPartyTrackingArtifact(input.rawEvidence)
     )
   ) {
     return {
@@ -2588,7 +2614,7 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isSensitiveThirdPartyTrackingConcern(input.concern)) {
-    if (!hasConcreteSensitivePayloadArtifact(input.rawEvidence)) {
+    if (!hasSensitiveCollectionSurfaceEvidence(input.rawEvidence)) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",

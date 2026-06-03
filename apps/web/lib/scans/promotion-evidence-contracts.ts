@@ -2052,6 +2052,64 @@ export function hasConcreteSensitivePayloadArtifact(rawEvidence: Record<string, 
   });
 }
 
+export function hasDirectSensitiveCollectionSurfaceArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  if (
+    rawEvidence.sensitiveCollectionSurfaceObserved === true ||
+    rawEvidence.sensitive_collection_surface_observed === true ||
+    rawEvidence.highSensitivityDataCollectionDetected === true ||
+    rawEvidence.high_sensitivity_data_collection_detected === true
+  ) {
+    return true;
+  }
+
+  if (
+    getStringArrayValues(rawEvidence, [
+      "sensitiveFieldSelectors",
+      "sensitive_field_selectors",
+      "sensitiveFieldLabels",
+      "sensitive_field_labels",
+      "sensitiveFieldTypes",
+      "sensitive_field_types",
+      "sensitiveFormUrls",
+      "sensitive_form_urls"
+    ]).length > 0
+  ) {
+    return true;
+  }
+
+  return getSensitivePayloadRows(rawEvidence).some((row) => {
+    if (row.evidenceStrength === "detector_only") {
+      return false;
+    }
+
+    const evidenceSource = typeof row.evidenceSource === "string"
+      ? row.evidenceSource
+      : typeof row.evidence_source === "string"
+        ? row.evidence_source
+        : "";
+    if (
+      /^sensitive_field_(?:third_party_tracking|session_replay)_correlation$/.test(evidenceSource) &&
+      typeof row.requestUrl === "string" &&
+      row.requestUrl.trim().length > 0
+    ) {
+      return true;
+    }
+
+    return (
+      typeof row.detectedType === "string" && row.detectedType.trim().length > 0 &&
+      (
+        typeof row.matchSnippet === "string" && row.matchSnippet.trim().length > 0 ||
+        typeof row.sourceField === "string" && row.sourceField.trim().length > 0 ||
+        typeof row.sourceLocation === "string" && row.sourceLocation.trim().length > 0
+      )
+    );
+  });
+}
+
 export function hasConcreteSensitiveSessionReplayArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
   return getSensitivePayloadRows(rawEvidence).some((row) => {
     const typedRow = row as {
@@ -2093,6 +2151,63 @@ function hasSensitiveReplaySamePageOrFlowLinkage(rawEvidence: Record<string, unk
   );
 }
 
+function payloadExposureObservedInSensitiveRow(row: Record<string, unknown>) {
+  const sameFlowLinkage = getObjectValue(row, ["sameFlowLinkage", "same_flow_linkage"]);
+  return (
+    row.payloadExposureObserved === true ||
+    row.payload_exposure_observed === true ||
+    row.userValueObserved === true ||
+    row.user_value_observed === true ||
+    sameFlowLinkage?.userValueObserved === true ||
+    sameFlowLinkage?.user_value_observed === true
+  );
+}
+
+function hasRetainedSensitiveValueInRequestRow(row: Record<string, unknown>) {
+  const candidates = [
+    row.detectedType,
+    row.detected_type,
+    row.sourceField,
+    row.source_field,
+    row.payloadValue,
+    row.payload_value,
+    row.observedValue,
+    row.observed_value,
+    row.matchedValue,
+    row.matched_value,
+    row.userValue,
+    row.user_value,
+    row.sensitiveValue,
+    row.sensitive_value,
+    row.personalDataValue,
+    row.personal_data_value,
+    row.matchSnippet,
+    row.match_snippet
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+
+  return (
+    payloadExposureObservedInSensitiveRow(row) ||
+    /email|e-mail|user[_ -]?value|sensitive[_ -]?value|personal[_ -]?data|personal[_ -]?info|phone|address|ssn|passport|government[_ -]?id|health|medical|financial|payment/i.test(
+      candidates
+    ) ||
+    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(candidates)
+  );
+}
+
+function hasSamePageOrFlowLinkage(row: Record<string, unknown>) {
+  const sameFlowLinkage = getObjectValue(row, ["sameFlowLinkage", "same_flow_linkage"]);
+  return (
+    row.samePage === true ||
+    row.same_page === true ||
+    row.sameFlow === true ||
+    row.same_flow === true ||
+    sameFlowLinkage?.samePageOrFlow === true ||
+    sameFlowLinkage?.same_page_or_flow === true
+  );
+}
+
 export function hasSensitiveSessionReplaySurfaceCooccurrenceArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
   return hasSensitiveReplaySamePageOrFlowLinkage(rawEvidence);
 }
@@ -2121,6 +2236,71 @@ export function hasScanLevelSensitiveSessionReplayCoPresenceArtifact(rawEvidence
 }
 
 export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  const sameContext =
+    rawEvidence.samePageTrackingObserved === true ||
+    rawEvidence.same_page_tracking_observed === true ||
+    rawEvidence.sameFlowTrackingObserved === true ||
+    rawEvidence.same_flow_tracking_observed === true ||
+    ["before_form", "during_form", "after_form"].includes(
+      typeof rawEvidence.requestTimingRelativeToForm === "string"
+        ? rawEvidence.requestTimingRelativeToForm
+        : typeof rawEvidence.request_timing_relative_to_form === "string"
+          ? rawEvidence.request_timing_relative_to_form
+          : ""
+    );
+  const trackingVendors = getStringArrayValues(rawEvidence, [
+    "thirdPartyTrackingVendors",
+    "third_party_tracking_vendors",
+    "runtimeVendors",
+    "runtime_vendors"
+  ]);
+  const trackingDomains = getStringArrayValues(rawEvidence, [
+    "thirdPartyTrackingDomains",
+    "third_party_tracking_domains",
+    "runtimeRequestDomains",
+    "runtime_request_domains"
+  ]);
+  const trackingCategories = getStringArrayValues(rawEvidence, [
+    "thirdPartyTrackingCategories",
+    "third_party_tracking_categories",
+    "runtimeVendorCategories",
+    "runtime_vendor_categories"
+  ]);
+  const infrastructureOnlyVendors = getStringArrayValues(rawEvidence, [
+    "infrastructureOnlyVendors",
+    "infrastructure_only_vendors"
+  ]).map((value) => value.toLowerCase());
+  const allVendorsInfrastructureOnly =
+    trackingVendors.length > 0 &&
+    trackingVendors.every((vendor) => infrastructureOnlyVendors.includes(vendor.toLowerCase()));
+  const trackingObserved =
+    rawEvidence.behavioralAnalyticsObserved === true ||
+    rawEvidence.behavioral_analytics_observed === true ||
+    rawEvidence.sessionReplayObserved === true ||
+    rawEvidence.session_replay_observed === true ||
+    rawEvidence.advertisingPixelObserved === true ||
+    rawEvidence.advertising_pixel_observed === true ||
+    rawEvidence.analyticsObserved === true ||
+    rawEvidence.analytics_observed === true ||
+    rawEvidence.tagManagerObserved === true ||
+    rawEvidence.tag_manager_observed === true ||
+    trackingVendors.length > 0 ||
+    trackingDomains.length > 0 ||
+    trackingCategories.some((category) => /advertising|analytics|behavioral|measurement|replay|tag[_ -]?manager|tracking/i.test(category));
+
+  if (
+    hasDirectSensitiveCollectionSurfaceArtifact(rawEvidence) &&
+    sameContext &&
+    trackingObserved &&
+    !allVendorsInfrastructureOnly
+  ) {
+    return true;
+  }
+
   return getSensitivePayloadRows(rawEvidence).some((row) => {
     const typedRow = row as {
       evidenceSource?: unknown;
@@ -2132,24 +2312,26 @@ export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Reco
       return false;
     }
 
-    const sameFlowLinkage = getObjectValue(row, ["sameFlowLinkage", "same_flow_linkage"]);
-    if (
-      row.samePage !== true &&
-      row.same_page !== true &&
-      row.sameFlow !== true &&
-      row.same_flow !== true &&
-      sameFlowLinkage?.samePageOrFlow !== true &&
-      sameFlowLinkage?.same_page_or_flow !== true
-    ) {
+    const explicitSensitiveTrackingCorrelation =
+      typedRow.evidenceSource === "sensitive_field_third_party_tracking_correlation" ||
+      row.evidence_source === "sensitive_field_third_party_tracking_correlation";
+
+    const samePageOrFlowLinked = hasSamePageOrFlowLinkage(row);
+    const retainedSensitiveRequestValue = hasRetainedSensitiveValueInRequestRow(row);
+    if (!explicitSensitiveTrackingCorrelation && !samePageOrFlowLinked && !retainedSensitiveRequestValue) {
       return false;
     }
 
     const hostname = getRuntimeEvidenceHostname(typedRow);
-    if (typedRow.evidenceSource !== "sensitive_field_third_party_tracking_correlation" && !isTrackingRuntimeHost(hostname)) {
+    if (
+      !retainedSensitiveRequestValue &&
+      typedRow.evidenceSource !== "sensitive_field_third_party_tracking_correlation" &&
+      !isTrackingRuntimeHost(hostname)
+    ) {
       return false;
     }
 
-    if (hostname.length > 0) {
+    if (hostname.length > 0 && (samePageOrFlowLinked || retainedSensitiveRequestValue)) {
       return true;
     }
 
@@ -2159,7 +2341,11 @@ export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Reco
 
     try {
       const parsed = new URL(typedRow.requestUrl);
-      return (parsed.protocol === "https:" || parsed.protocol === "http:") && parsed.hostname.includes(".");
+      return (
+        (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+        parsed.hostname.includes(".") &&
+        (samePageOrFlowLinked || retainedSensitiveRequestValue)
+      );
     } catch {
       return false;
     }

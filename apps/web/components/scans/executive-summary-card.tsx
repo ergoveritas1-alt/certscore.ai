@@ -3867,16 +3867,16 @@ function TopFindingRegulatoryContextDisclosure(input: { context: TopFindingRegul
           </summary>
           <div className="mt-3 space-y-3">
             <p className="text-sm leading-6 text-slate-700">{input.context.caution}</p>
-            <div className="space-y-2 text-sm leading-6 text-slate-700" suppressHydrationWarning>
+            <ul className="space-y-2 text-sm leading-6 text-slate-700">
               {input.context.applicabilityNotes.map((item) => (
-                <div key={item.id} className="grid grid-cols-[0.5rem_minmax(0,1fr)] gap-2">
-                  <span aria-hidden="true" className="pt-[0.45rem] text-slate-400">•</span>
+                <li key={item.id} className="grid grid-cols-[0.5rem_minmax(0,1fr)] gap-2">
+                  <span aria-hidden="true" className="pt-[0.45rem] text-slate-400">{"\u2022"}</span>
                   <span>
                     <span className="font-medium text-slate-900">{item.label}:</span> {item.appliesWhen}
                   </span>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         </details>
       </div>

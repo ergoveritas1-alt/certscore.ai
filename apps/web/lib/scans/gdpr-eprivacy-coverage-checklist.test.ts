@@ -11,12 +11,14 @@ import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 function makeFinding(
   unifiedFindingId: string,
   findingName: string,
-  status: "surface" | "audit_only" | "suppress" = "surface",
-  sourceRefs: UnifiedFindingDisplayPacket["sourceRefs"] = []
+  status: "surface" | "audit_only" | "support_only" | "suppress" = "surface",
+  sourceRefs: UnifiedFindingDisplayPacket["sourceRefs"] = [],
+  evidence: Partial<NonNullable<UnifiedFindingDisplayPacket["evidence"]>> = {}
 ) {
   return {
     evidence: {
-      flags: ["direct_runtime"]
+      flags: ["direct_runtime"],
+      ...evidence
     },
     concernContext: {
       evidenceStrengthFlags: ["direct_runtime"]
@@ -76,6 +78,87 @@ test("deriveGdprEprivacyCoverageChecklist maps canonical unified findings withou
   assert.equal(byId(items, "post_reject_tracking_reduction").status, "Gap observed");
   assert.equal(byId(items, "pre_consent_third_party_tracking").status, "Not observed");
   assert.equal(items.some((item) => ["Pass", "Fail"].includes(String(item.status))), false);
+});
+
+test("deriveGdprEprivacyCoverageChecklist does not map generic transfer disclosure findings to cross-border endpoint review", () => {
+  const genericItems = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      cross_border_endpoint_review: makeCoverageOutcome({
+        evidenceRefs: ["Runtime vendor: Cloudflare Web Analytics"],
+        limitation: "Third-party endpoint inventory was retained.",
+        rowId: "cross_border_endpoint_review",
+        status: "Review signal"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("missing_transfer_disclosure", "Missing transfer disclosure")
+    ]
+  });
+
+  assert.equal(byId(genericItems, "cross_border_endpoint_review").status, "Review signal");
+
+  const genericProjectedItems = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      cross_border_endpoint_review: makeCoverageOutcome({
+        evidenceRefs: ["Runtime vendor: Cloudflare Web Analytics"],
+        limitation: "Third-party endpoint inventory was retained.",
+        rowId: "cross_border_endpoint_review",
+        status: "Review signal"
+      })
+    },
+    projectedFindings: [
+      {
+        id: "missing_transfer_disclosure",
+        label: "Missing transfer disclosure"
+      }
+    ],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  assert.equal(byId(genericProjectedItems, "cross_border_endpoint_review").status, "Review signal");
+
+  const vendorGapItems = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("cross_border_vendor_disclosure_gap", "Cross-border vendor disclosure gap observed", "surface", [], {
+        entities: {
+          crossBorderDisclosureGapBasis: ["transfer_endpoint_runtime_vendor_not_disclosed"],
+          endpointJurisdictionEvidence: ["{}"],
+          runtimeVendorDisclosureEvidence: ["{}"]
+        }
+      })
+    ]
+  });
+
+  assert.equal(byId(vendorGapItems, "cross_border_endpoint_review").status, "Gap observed");
+  assert.deepEqual(byId(vendorGapItems, "cross_border_endpoint_review").criticalEvidence.projectedFindings, [
+    {
+      id: "cross_border_vendor_disclosure_gap",
+      label: "Cross-border vendor disclosure gap observed",
+      severity: undefined
+    }
+  ]);
+
+  const linkedItems = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("missing_transfer_disclosure", "Missing transfer disclosure", "surface", [], {
+        entities: {
+          crossBorderDisclosureGapBasis: ["transfer_endpoint_runtime_vendor_not_disclosed"],
+          endpointJurisdictionEvidence: ["{}"],
+          runtimeVendorDisclosureEvidence: ["{}"]
+        }
+      })
+    ]
+  });
+
+  assert.equal(byId(linkedItems, "cross_border_endpoint_review").status, "Gap observed");
 });
 
 test("deriveGdprEprivacyCoverageChecklist treats missing findings as not testable when public-web coverage is limited", () => {
@@ -199,6 +282,88 @@ test("deriveGdprEprivacyCoverageChecklist marks audit-only projected context as 
   ]);
 });
 
+test("deriveGdprEprivacyCoverageChecklist treats support-only sensitive surface context as a review signal", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding(
+        "sensitive_collection_surface_observed",
+        "Sensitive collection surface observed",
+        "support_only",
+        [
+          {
+            kind: "signal",
+            key: "commerce.high_sensitivity_data_collection_detected",
+            label: "High-sensitivity data collection detected",
+            source: "document_semantic_signal"
+          }
+        ]
+      )
+    ]
+  });
+
+  const row = byId(items, "sensitive_surfaces_third_party_tracking");
+  assert.equal(row.status, "Review signal");
+  assert.deepEqual(row.criticalEvidence.missingOrIncompleteSourceSignals, []);
+  assert.deepEqual(row.evidenceRefs, [
+    "Sensitive collection surface observed",
+    "Signal: High-sensitivity data collection detected",
+    "Evidence flag: direct_runtime",
+    "Evidence strength: direct runtime"
+  ]);
+});
+
+test("deriveGdprEprivacyCoverageChecklist treats sensitive collection with third-party tracking as a gap", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding(
+        "sensitive_data_collection_with_third_party_tracking_present",
+        "Sensitive collection with third-party tracking observed",
+        "surface",
+        [
+          {
+            kind: "signal",
+            key: "commerce.high_sensitivity_data_collection_detected",
+            label: "High-sensitivity data collection detected",
+            source: "document_semantic_signal"
+          }
+        ]
+      )
+    ]
+  });
+
+  const row = byId(items, "sensitive_surfaces_third_party_tracking");
+  assert.equal(row.status, "Gap observed");
+  assert.deepEqual(row.criticalEvidence.missingOrIncompleteSourceSignals, []);
+});
+
+test("deriveGdprEprivacyCoverageChecklist does not map general accessibility findings to consent controls", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      accessibility_consent_controls: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: accessibility audit context"],
+        limitation:
+          "Consent-control accessibility checks completed for the tested context, and no eligible accessibility finding was projected.",
+        rowId: "accessibility_consent_controls",
+        status: "Not observed"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("visual_contrast_accessibility_issue", "Visual contrast accessibility issue")
+    ]
+  });
+
+  assert.equal(byId(items, "accessibility_consent_controls").status, "Not observed");
+  assert.deepEqual(byId(items, "accessibility_consent_controls").evidenceRefs, [
+    "Evidence: accessibility audit context"
+  ]);
+});
+
 test("deriveGdprEprivacyCoverageChecklist treats direct runtime vendor disclosure mismatch as a gap", () => {
   const finding = makeFinding("policy_behavior_conflict", "Policy/behavior conflict", "audit_only");
   finding.evidence = {
@@ -233,6 +398,64 @@ test("deriveGdprEprivacyCoverageChecklist treats direct runtime vendor disclosur
       ]
     }
   };
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: [finding]
+  });
+
+  assert.equal(byId(items, "runtime_vendor_disclosure_alignment").status, "Gap observed");
+  assert.deepEqual(
+    byId(items, "runtime_vendor_disclosure_alignment").criticalEvidence.missingOrIncompleteSourceSignals,
+    []
+  );
+});
+
+test("deriveGdprEprivacyCoverageChecklist treats partial runtime vendor disclosure mismatch as a gap", () => {
+  const finding = makeFinding("policy_behavior_conflict", "Policy/behavior conflict", "audit_only");
+  finding.evidence = {
+    ...finding.evidence,
+    entities: {
+      ...finding.evidence?.entities,
+      findingSubtype: ["runtime_vendor_not_disclosed"],
+      runtimeVendorDisclosureEvidence: [
+        JSON.stringify({
+          coverageStatus: "usable",
+          directVsInferred: "direct",
+          evidenceConfidence: "moderate",
+          matchedVendorDisclosureCount: 1,
+          mismatchRationale:
+            "Observed runtime vendors (Cloudflare Web Analytics, Google Tag Manager) were not clearly matched by name or known domain alias in retained policy disclosure surfaces.",
+          observedRuntimeDomains: [
+            "www.googletagmanager.com",
+            "static.cloudflareinsights.com",
+            "www.google-analytics.com"
+          ],
+          observedRuntimeVendors: [
+            "Cloudflare Web Analytics",
+            "Google Analytics",
+            "Google Tag Manager"
+          ],
+          policySurfacesSearched: [
+            {
+              matchedVendorNames: ["Google Analytics"],
+              reached: true,
+              searchedTerms: ["Cloudflare Web Analytics", "Google Analytics", "Google Tag Manager"],
+              snippet: "The trusted third parties with whom we directly work include Google Analytics.",
+              type: "privacy_policy",
+              unmatchedVendorNames: ["Cloudflare Web Analytics", "Google Tag Manager"],
+              url: "https://www.caltech.edu/privacy-notice"
+            }
+          ],
+          subtype: "runtime_vendor_not_disclosed",
+          unmatchedRuntimeDomains: ["www.googletagmanager.com"],
+          unmatchedRuntimeVendors: ["Cloudflare Web Analytics", "Google Tag Manager"],
+          unmatchedVendorDisclosureCount: 2
+        })
+      ]
+    }
+  };
+
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     scanCompleted: true,
@@ -393,9 +616,10 @@ test("deriveGdprEprivacyReviewSummary composes gatech-style reject persistence s
       }),
       preference_withdrawal_control: makeCoverageOutcome({
         evidenceRefs: ["Evidence: consent control lifecycle"],
-        limitation: "Consent-control lifecycle evidence was retained, and no reopen or withdrawal control was observed in the tested context.",
+        limitation:
+          "CertScore observed an initial consent surface, but did not observe an obvious cookie preferences, privacy settings, or consent-preference reopen control on the tested public pages. Review whether users can later change or withdraw consent through another path.",
         rowId: "preference_withdrawal_control",
-        status: "Not observed"
+        status: "Gap observed"
       }),
       sensitive_surfaces_third_party_tracking: makeCoverageOutcome({
         evidenceRefs: ["Evidence: sensitive third-party tracking correlation completed"],

@@ -716,6 +716,32 @@ test("high-sensitivity candidates with third-party tracking specialize into sens
   assert.equal(concern.promotionEligibility, "eligible");
 });
 
+test("high-sensitivity candidates with direct same-page tracking specialize into sensitive tracking findings without payload exposure", () => {
+  const concern = normalizeConcernFromReviewFindingCandidate({
+    description: "Sensitive form fields appeared alongside third-party measurement.",
+    fallbackEvidence: {
+      directVsInferred: "direct",
+      evidenceConfidence: "moderate",
+      highSensitivityDataCollectionDetected: true,
+      samePageTrackingObserved: true,
+      sensitiveFieldLabels: ["Medical condition"],
+      sensitiveFormUrls: ["https://example.com/appointment"],
+      thirdPartyTrackingCategories: ["analytics"],
+      thirdPartyTrackingVendors: ["Google Analytics"]
+    },
+    observedValue: "Yes",
+    severity: "high",
+    signalKey: "commerce.high_sensitivity_data_collection_detected",
+    signalLabel: "High-sensitivity data collection detected",
+    signalSource: "snapshot_signal",
+    sourceType: "signal",
+    title: "High-sensitivity data collection detected"
+  });
+
+  assert.equal(concern.suggestedUnifiedFindingId, "sensitive_data_collection_with_third_party_tracking_present");
+  assert.equal(concern.promotionEligibility, "eligible");
+});
+
 const sensitiveCollectionCases = [
   {
     detectedType: "ssn",

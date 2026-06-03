@@ -199,6 +199,156 @@ test("cross-border endpoint jurisdiction evidence surfaces through unified findi
   assert.deepEqual(crossBorderRow?.criticalEvidence.missingOrIncompleteSourceSignals, []);
 });
 
+test("cross-border endpoint-only evidence remains a review signal without disclosure gap promotion", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [],
+    primaryPolicyEnrichment: null,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        endpointJurisdictionEvidence: [
+          {
+            confidence: "medium",
+            etldPlusOne: "cloudflareinsights.com",
+            firstPartyStatus: "third_party",
+            host: "static.cloudflareinsights.com",
+            inferenceBasis: "known_runtime_service_domain",
+            inferredCountryCode: "US",
+            inferredRegion: "US_OR_GLOBAL",
+            matchedVendorCategory: "analytics",
+            matchedVendorName: "Cloudflare Web Analytics",
+            requestCount: 1,
+            scriptCount: 1,
+            sources: ["request", "script"],
+            transferReviewSignal: true
+          }
+        ]
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+
+  assert.ok(state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "cross_border_endpoint_transfer_review_signal"));
+  assert.equal(state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "missing_transfer_disclosure"), false);
+});
+
+test("cross-border transfer endpoint plus retained vendor disclosure mismatch promotes vendor disclosure gap", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [],
+    primaryPolicyEnrichment: null,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        endpointJurisdictionEvidence: [
+          {
+            confidence: "medium",
+            etldPlusOne: "cloudflareinsights.com",
+            firstPartyStatus: "third_party",
+            host: "static.cloudflareinsights.com",
+            inferenceBasis: "known_runtime_service_domain",
+            inferredCountryCode: "US",
+            inferredRegion: "US_OR_GLOBAL",
+            matchedVendorCategory: "analytics",
+            matchedVendorName: "Cloudflare Web Analytics",
+            requestCount: 1,
+            scriptCount: 1,
+            sources: ["request", "script"],
+            transferReviewSignal: true
+          }
+        ]
+      },
+      runtime_vendor_disclosure_evidence: [
+        {
+          coverageStatus: "usable",
+          directVsInferred: "direct",
+          evidenceConfidence: "moderate",
+          matchedVendorDisclosureCount: 0,
+          mismatchRationale:
+            "Cloudflare Web Analytics was not clearly matched by name or known domain alias in retained privacy/cookie disclosure evidence.",
+          observedRuntimeDomains: ["static.cloudflareinsights.com"],
+          observedRuntimeVendors: ["Cloudflare Web Analytics"],
+          parentFindingId: "policy_behavior_contradiction_detected",
+          policySurfacesSearched: [
+            {
+              reached: true,
+              searchedTerms: ["cloudflare web analytics", "static.cloudflareinsights.com", "international transfer"],
+              snippet: "We use cookies and analytics to understand website traffic.",
+              type: "privacy_policy",
+              unmatchedVendorNames: ["Cloudflare Web Analytics"],
+              url: "https://www.example.com/privacy"
+            }
+          ],
+          subtype: "runtime_vendor_not_disclosed",
+          unmatchedRuntimeDomains: ["static.cloudflareinsights.com"],
+          unmatchedRuntimeVendors: ["Cloudflare Web Analytics"],
+          unmatchedVendorDisclosureCount: 1
+        }
+      ]
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+  const transferGap = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "cross_border_vendor_disclosure_gap");
+
+  assert.equal(transferGap?.presentationDecision.status, "surface");
+  assert.equal(transferGap?.title, "Cross-border vendor disclosure gap observed");
+  assert.deepEqual(transferGap?.evidence?.entities?.endpointTransferReviewVendors, ["Cloudflare Web Analytics"]);
+  assert.deepEqual(transferGap?.evidence?.entities?.findingSubtype, ["runtime_vendor_not_disclosed"]);
+  assert.equal(state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "missing_transfer_disclosure"), false);
+
+  const checklist = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {},
+    projectedFindings: [],
+    scanCompleted: true,
+    unifiedFindings: state.globalUnifiedFindings
+  });
+  assert.equal(checklist.find((row) => row.id === "cross_border_endpoint_review")?.status, "Gap observed");
+});
+
 test("contrast snapshot signal surfaces from persisted axe count and representative examples", () => {
   const candidates = buildReviewFindings({
     issues: [],

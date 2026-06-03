@@ -231,6 +231,7 @@ const RIGHTS_GAP_IDS = [
   "missing_dsar_high_exposure",
   "rights_fulfillment_friction",
   "cookie_disclosure_gap",
+  "cross_border_vendor_disclosure_gap",
   "missing_transfer_disclosure",
   "cpra_cba_opt_out_missing",
   "sale_sharing_controls_missing"
@@ -383,6 +384,7 @@ const CONFIRMED_RIGHTS_GAP_IDS = [
 
 const WEAK_REVIEW_RIGHTS_GAP_IDS = [
   "cookie_disclosure_gap",
+  "cross_border_vendor_disclosure_gap",
   "missing_dsar_mechanism",
   "missing_transfer_disclosure",
   "privacy_contact_channel_missing"
@@ -647,6 +649,13 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
   cross_border_endpoint_transfer_review_signal: {
     findingId: "cross_border_endpoint_transfer_review_signal",
     family: "consent_tracking",
+    initialState: "review",
+    initialTier: "section",
+    initialLane: "main"
+  },
+  cross_border_vendor_disclosure_gap: {
+    findingId: "cross_border_vendor_disclosure_gap",
+    family: "rights_gap",
     initialState: "review",
     initialTier: "section",
     initialLane: "main"

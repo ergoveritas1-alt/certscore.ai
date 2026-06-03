@@ -7,7 +7,7 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import {
   hasConcreteRtbCookieSyncEvidence,
-  hasConcreteSensitivePayloadArtifact,
+  hasDirectSensitiveCollectionSurfaceArtifact,
   hasConcreteSensitiveThirdPartyTrackingArtifact,
   hasScanLevelSensitiveSessionReplayCoPresenceArtifact,
   hasSensitiveSessionReplaySurfaceCooccurrenceArtifact
@@ -631,9 +631,9 @@ export function inferSpecializedUnifiedFindingId(input: {
           runtimeRequestUrls: runtimeRequestUrlsForSpecialization
         }
       : rawEvidence;
-  const hasSensitivePayload = hasConcreteSensitivePayloadArtifact(specializationEvidence);
+  const hasSensitiveSurface = hasDirectSensitiveCollectionSurfaceArtifact(specializationEvidence);
   if (
-    hasSensitivePayload &&
+    hasSensitiveSurface &&
     (input.signalKey === "commerce.high_sensitivity_data_collection_detected" ||
       input.signalKey === "commerce.form_collects_health_information" ||
       input.signalKey === "commerce.form_collects_financial_information" ||
@@ -1115,6 +1115,8 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
         } else {
           addSourceUrl(value);
         }
+      } else if (/crossBorderDisclosureGapBasis|cross_border_disclosure_gap_basis/i.test(key)) {
+        addEntity(entities, "crossBorderDisclosureGapBasis", [value]);
       } else if (/policyDsarMechanism|policy_dsar_mechanism/i.test(key)) {
         addEntity(entities, "policyDsarMechanism", [value]);
       } else if (/claim|policy|disclosure|summary|snippet|description|rationale/i.test(key)) {
@@ -1141,6 +1143,11 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       for (const entry of getNestedStringEvidence(value).slice(0, 12)) {
         policySnippets.add(truncatePolicySnippet(entry));
       }
+      continue;
+    }
+
+    if (/crossBorderDisclosureGapBasis|cross_border_disclosure_gap_basis/i.test(key) && Array.isArray(value)) {
+      addEntity(entities, "crossBorderDisclosureGapBasis", getStringArrayEvidence(value));
       continue;
     }
 
@@ -2027,6 +2034,150 @@ function expandFinancialCompanionConcerns(concern: NormalizedConcern): Normalize
   return [concern, ...companions];
 }
 
+function normalizeMatchToken(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^www\./, "")
+    .replace(/[^a-z0-9.]+/g, "");
+}
+
+function isTransferReviewEndpointEvidenceRow(row: Record<string, unknown>) {
+  const transferReviewSignal = getBooleanValue(row.transferReviewSignal ?? row.transfer_review_signal);
+  const firstPartyStatus = getStringValue(row.firstPartyStatus ?? row.first_party_status);
+  const inferredRegion = getStringValue(row.inferredRegion ?? row.inferred_region);
+  const inferredCountryCode = getStringValue(row.inferredCountryCode ?? row.inferred_country_code);
+  const confidence = getStringValue(row.confidence);
+
+  return (
+    transferReviewSignal === true &&
+    firstPartyStatus === "third_party" &&
+    Boolean(inferredRegion || inferredCountryCode) &&
+    (confidence === "medium" || confidence === "high" || confidence === "strong")
+  );
+}
+
+function getEndpointJurisdictionEvidenceRowsFromConcern(concern: NormalizedConcern) {
+  const rawEvidence = concern.evidenceBundle.rawEvidence;
+  if (!rawEvidence) {
+    return [];
+  }
+  const hybridRuntimeEvidence =
+    rawEvidence.hybridRuntimeEvidence && typeof rawEvidence.hybridRuntimeEvidence === "object" && !Array.isArray(rawEvidence.hybridRuntimeEvidence)
+      ? rawEvidence.hybridRuntimeEvidence as Record<string, unknown>
+      : null;
+
+  return [
+    ...getPlainRecordArray(rawEvidence.endpointJurisdictionEvidence),
+    ...getPlainRecordArray(rawEvidence.endpoint_jurisdiction_evidence),
+    ...getPlainRecordArray(rawEvidence.crossBorderEndpointEvidence),
+    ...getPlainRecordArray(rawEvidence.cross_border_endpoint_evidence),
+    ...getPlainRecordArray(hybridRuntimeEvidence?.endpointJurisdictionEvidence),
+    ...getPlainRecordArray(hybridRuntimeEvidence?.endpoint_jurisdiction_evidence),
+    ...getPlainRecordArray(hybridRuntimeEvidence?.crossBorderEndpointEvidence),
+    ...getPlainRecordArray(hybridRuntimeEvidence?.cross_border_endpoint_evidence)
+  ].filter(isTransferReviewEndpointEvidenceRow);
+}
+
+function getEndpointMatchTokens(row: Record<string, unknown>) {
+  const host = getStringValue(row.host);
+  const etldPlusOne = getStringValue(row.etldPlusOne ?? row.etld_plus_one);
+  const vendor = getStringValue(row.matchedVendorName ?? row.matched_vendor_name);
+  return uniqueStrings([host, etldPlusOne, vendor]).map(normalizeMatchToken).filter(Boolean);
+}
+
+function getDisclosureMismatchTokens(row: ReturnType<typeof getRuntimeVendorDisclosureEvidence>[number]) {
+  return uniqueStrings([
+    ...row.unmatchedRuntimeVendors,
+    ...row.unmatchedRuntimeDomains,
+    ...row.observedRuntimeVendors,
+    ...row.observedRuntimeDomains
+  ]).map(normalizeMatchToken).filter(Boolean);
+}
+
+function tokensIntersect(left: string[], right: string[]) {
+  return left.some((leftToken) =>
+    right.some((rightToken) =>
+      leftToken === rightToken ||
+      leftToken.endsWith(`.${rightToken}`) ||
+      rightToken.endsWith(`.${leftToken}`) ||
+      (leftToken.length >= 4 && rightToken.includes(leftToken)) ||
+      (rightToken.length >= 4 && leftToken.includes(rightToken))
+    )
+  );
+}
+
+function buildCrossBorderTransferDisclosureGapCompanions(concerns: NormalizedConcern[], domainContext?: ScanDomainContext) {
+  const endpointRows = concerns.flatMap(getEndpointJurisdictionEvidenceRowsFromConcern);
+  if (endpointRows.length === 0) {
+    return [];
+  }
+
+  const disclosureRows = concerns.flatMap((concern) => getRuntimeVendorDisclosureEvidence(concern.evidenceBundle.rawEvidence));
+  const eligiblePairs = endpointRows.flatMap((endpoint) => {
+    const endpointTokens = getEndpointMatchTokens(endpoint);
+    return disclosureRows
+      .filter((disclosure) => {
+        const reachedReviewableSurface = disclosure.policySurfacesSearched.some(
+          (surface) => surface.reached && Boolean(surface.url) && Boolean(surface.snippet)
+        );
+        return (
+          reachedReviewableSurface &&
+          (disclosure.unmatchedRuntimeVendors.length > 0 || disclosure.unmatchedRuntimeDomains.length > 0) &&
+          disclosure.unmatchedVendorDisclosureCount > 0 &&
+          tokensIntersect(endpointTokens, getDisclosureMismatchTokens(disclosure))
+        );
+      })
+      .map((disclosure) => ({ disclosure, endpoint }));
+  });
+
+  if (eligiblePairs.length === 0) {
+    return [];
+  }
+
+  const endpointEvidence = eligiblePairs.map((pair) => pair.endpoint);
+  const disclosureEvidence = eligiblePairs.map((pair) => pair.disclosure);
+  const vendors = uniqueStrings(endpointEvidence.map((row) => getStringValue(row.matchedVendorName ?? row.matched_vendor_name)));
+  const hosts = uniqueStrings(endpointEvidence.map((row) => getStringValue(row.host)));
+  const regions = uniqueStrings(endpointEvidence.map((row) => getStringValue(row.inferredRegion ?? row.inferred_region)));
+  const unmatchedVendors = uniqueStrings(disclosureEvidence.flatMap((row) => row.unmatchedRuntimeVendors));
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "data_handling_disclosures",
+      description:
+        "Transfer-relevant third-party endpoint evidence intersected with retained public disclosure-search evidence showing a matching runtime vendor or domain was not clearly disclosed.",
+      domainContext,
+      evidence: hosts,
+      observedValue:
+        `International-transfer disclosure alignment gap observed for ${uniqueStrings([...vendors, ...unmatchedVendors]).slice(0, 3).join(", ") || hosts.slice(0, 3).join(", ")}.`,
+      originKey: "privacy.cross_border_endpoint_disclosure_gap",
+      originType: "compatibility_signal",
+      rawEvidence: {
+        crossBorderDisclosureGapBasis: "transfer_endpoint_runtime_vendor_not_disclosed",
+        endpointJurisdictionEvidence: endpointEvidence,
+        endpointTransferReviewHosts: hosts,
+        endpointTransferReviewRegions: regions,
+        endpointTransferReviewVendors: vendors,
+        runtime_vendor_disclosure_evidence: disclosureEvidence,
+        runtimeVendorDisclosureEvidence: disclosureEvidence,
+        supportingSignals: [
+          "privacy.cross_border_endpoint_transfer_review_signal",
+          "privacy.runtime_vendor_not_disclosed"
+        ],
+        transferDisclosureGapObserved: true,
+        unifiedFindingId: "cross_border_vendor_disclosure_gap"
+      },
+      severity: "medium",
+      signalKey: "privacy.cross_border_endpoint_disclosure_gap",
+      signalLabel: "Cross-border vendor disclosure gap observed",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Cross-border vendor disclosure gap observed"
+    })
+  ];
+}
+
 export function buildNormalizedConcerns(input: {
   domainContext?: ScanDomainContext;
   reviewFindingCandidates: ReviewFindingCandidateInput[];
@@ -2042,7 +2193,10 @@ export function buildNormalizedConcerns(input: {
     })
   ];
 
-  return concerns.flatMap(expandFinancialCompanionConcerns);
+  return [
+    ...concerns,
+    ...buildCrossBorderTransferDisclosureGapCompanions(concerns, input.domainContext)
+  ].flatMap(expandFinancialCompanionConcerns);
 }
 
 function isPolicyBehaviorMissingBridgeReviewConcern(concern: NormalizedConcern) {

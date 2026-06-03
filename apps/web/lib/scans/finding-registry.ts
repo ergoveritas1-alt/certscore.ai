@@ -494,13 +494,13 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   sensitive_data_collection_with_third_party_tracking_present: {
     id: "sensitive_data_collection_with_third_party_tracking_present",
-    label: "Sensitive input surfaces detected alongside third-party tracking",
+    label: "Sensitive collection with third-party tracking observed",
     section: "Privacy & Tracking",
     defaultSurfacePriority: 98,
     whyItMatters:
-      "Collecting sensitive data on pages that also load third-party tracking can increase exposure by linking sensitive form activity with analytics, advertising, or profiling infrastructure.",
+      "Sensitive or high-risk collection surfaces that appear alongside third-party tracking can increase privacy review risk, even when payload transmission is not observed.",
     remediation:
-      "Review the page or form where sensitive data is collected, remove non-essential third-party tracking from that flow, and confirm that only tightly controlled collection endpoints remain."
+      "Review whether tracking on the affected page or flow is necessary, disclosed, consent-gated where required, and excluded from sensitive form interactions."
   },
   sensitive_collection_surface_observed: {
     id: "sensitive_collection_surface_observed",
@@ -591,6 +591,14 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     defaultSurfacePriority: 73,
     whyItMatters: "Third-party runtime endpoints with retained jurisdiction or transfer-region evidence can create international-transfer review obligations.",
     remediation: "Review observed endpoint vendors, regions, and disclosures, then document transfer mechanisms or reduce non-essential cross-border endpoint use where appropriate."
+  },
+  cross_border_vendor_disclosure_gap: {
+    id: "cross_border_vendor_disclosure_gap",
+    label: "Cross-border vendor disclosure gap observed",
+    section: "Vendors & Requests",
+    defaultSurfacePriority: 82,
+    whyItMatters: "Transfer-relevant endpoint evidence paired with an unmatched runtime vendor creates a disclosure-alignment gap for review without proving that international-transfer language is missing.",
+    remediation: "Review the observed endpoint vendor, known domain aliases, and public privacy/cookie disclosures, then add or clarify vendor and related processing-location disclosure where appropriate."
   },
   collection_endpoints_detected: {
     id: "collection_endpoints_detected",

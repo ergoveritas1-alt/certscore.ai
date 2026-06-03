@@ -1420,6 +1420,31 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
       }
     },
     {
+      name: "high-sensitivity concern with direct same-context tracking stays eligible without payload exposure",
+      concern: makeConcern({
+        originKey: "commerce.high_sensitivity_data_collection_detected",
+        suggestedUnifiedFindingId: "sensitive_data_collection_with_third_party_tracking_present",
+        title: "Sensitive collection with third-party tracking observed"
+      }),
+      evidenceStrengthFlags: ["direct_runtime", "page_attributed"] as const,
+      rawEvidence: {
+        directVsInferred: "direct",
+        evidenceConfidence: "moderate",
+        highSensitivityDataCollectionDetected: true,
+        samePageTrackingObserved: true,
+        sensitiveFieldLabels: ["Medical condition"],
+        sensitiveFormUrls: ["https://example.com/appointment"],
+        thirdPartyTrackingCategories: ["analytics"],
+        thirdPartyTrackingVendors: ["Google Analytics"]
+      },
+      expected: {
+        allowedNarrativeTier: "strong",
+        promotionEligibility: "eligible",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: []
+      }
+    },
+    {
       name: "generic high-sensitivity signal without payload evidence is blocked",
       concern: makeConcern({
         originKey: "commerce.high_sensitivity_data_collection_detected",

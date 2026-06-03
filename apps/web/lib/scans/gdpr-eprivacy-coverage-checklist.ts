@@ -132,7 +132,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
       "consent_control_not_reopenable",
       "consent_preference_reopen_control_not_observed"
     ],
-    defaultFindingStatus: "Review signal",
+    defaultFindingStatus: "Gap observed",
     notObservedText: "No consent preference reopen-control finding was surfaced in this scan context.",
     requiresPublicWebCoverage: true
   },
@@ -188,6 +188,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     explanation: "Whether observed third-party endpoints created a public-web international transfer review signal.",
     findingIds: [
       "cross_border_endpoint_transfer_review_signal",
+      "cross_border_vendor_disclosure_gap",
       "missing_transfer_disclosure"
     ],
     defaultFindingStatus: "Review signal",
@@ -198,12 +199,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     id: "accessibility_consent_controls",
     label: "Accessibility of consent controls",
     explanation: "Whether consent controls appeared reachable and understandable through basic automated accessibility checks.",
-    findingIds: [
-      "focus_management_issue",
-      "keyboard_navigation_accessibility_issue",
-      "semantic_labeling_accessibility_issue",
-      "visual_contrast_accessibility_issue"
-    ],
+    findingIds: [],
     defaultFindingStatus: "Review signal",
     notObservedText: "No consent-control accessibility finding was surfaced in this scan context.",
     requiresPublicWebCoverage: true
@@ -304,18 +300,41 @@ function normalizeFindingStatus(
   definition: ChecklistRowDefinition,
   findings: UnifiedFindingDisplayPacket[]
 ): Exclude<GdprEprivacyCoverageChecklistStatus, "Not observed" | "Not testable" | "Out of scope"> {
-  if (findings.some((finding) => isRuntimeVendorDisclosureAlignmentGapEvidence(definition.id, finding))) {
+  if (
+    findings.some((finding) =>
+      isRuntimeVendorDisclosureAlignmentGapEvidence(definition.id, finding) ||
+      isCrossBorderDisclosureGapEvidence(definition.id, finding) ||
+      isSensitiveSurfaceGapEvidence(definition.id, finding)
+    )
+  ) {
     return "Gap observed";
   }
 
   if (
     definition.defaultFindingStatus !== "Observed" &&
-    findings.some((finding) => finding.presentationDecision.status !== "surface")
+    findings.some((finding) => !isFindingPresentationStatusSufficientForCoverageRow(definition.id, finding))
   ) {
     return "Insufficient evidence";
   }
 
   return definition.defaultFindingStatus;
+}
+
+function isCrossBorderDisclosureGapEvidence(rowId: string, finding: UnifiedFindingDisplayPacket) {
+  if (rowId !== "cross_border_endpoint_review") {
+    return false;
+  }
+
+  if (finding.unifiedFindingId === "cross_border_vendor_disclosure_gap") {
+    return true;
+  }
+
+  if (finding.unifiedFindingId !== "missing_transfer_disclosure") {
+    return false;
+  }
+
+  const entities = finding.evidence?.entities ?? {};
+  return entities.crossBorderDisclosureGapBasis?.some((value) => value === "transfer_endpoint_runtime_vendor_not_disclosed") === true;
 }
 
 function isRuntimeVendorDisclosureAlignmentGapEvidence(rowId: string, finding: UnifiedFindingDisplayPacket) {
@@ -348,7 +367,6 @@ function isRuntimeVendorDisclosureAlignmentGapEvidence(rowId: string, finding: U
         row.directVsInferred !== "inferred" &&
         observedRuntimeCount > 0 &&
         unmatchedRuntimeCount > 0 &&
-        row.matchedVendorDisclosureCount === 0 &&
         row.unmatchedVendorDisclosureCount > 0 &&
         reachedPolicySurfaces > 0
       );
@@ -367,12 +385,52 @@ function isRuntimeVendorDisclosureAlignmentEvidence(rowId: string, finding: Unif
   );
 }
 
+function isSensitiveSurfaceReviewEvidence(rowId: string, finding: UnifiedFindingDisplayPacket) {
+  return (
+    rowId === "sensitive_surfaces_third_party_tracking" &&
+    finding.unifiedFindingId === "sensitive_collection_surface_observed"
+  );
+}
+
+function isSensitiveSurfaceGapEvidence(rowId: string, finding: UnifiedFindingDisplayPacket) {
+  return (
+    rowId === "sensitive_surfaces_third_party_tracking" &&
+    finding.unifiedFindingId === "sensitive_data_collection_with_third_party_tracking_present"
+  );
+}
+
 function isFindingPresentationStatusSufficientForCoverageRow(rowId: string, finding: UnifiedFindingDisplayPacket) {
   if (finding.presentationDecision.status === "surface") {
     return true;
   }
 
-  return isRuntimeVendorDisclosureAlignmentEvidence(rowId, finding);
+  return (
+    isRuntimeVendorDisclosureAlignmentEvidence(rowId, finding) ||
+    isSensitiveSurfaceReviewEvidence(rowId, finding)
+  );
+}
+
+function isFindingEligibleForCoverageRow(rowId: string, finding: UnifiedFindingDisplayPacket) {
+  if (rowId === "cross_border_endpoint_review" && finding.unifiedFindingId === "cross_border_vendor_disclosure_gap") {
+    return isCrossBorderDisclosureGapEvidence(rowId, finding);
+  }
+
+  if (rowId === "cross_border_endpoint_review" && finding.unifiedFindingId === "missing_transfer_disclosure") {
+    return isCrossBorderDisclosureGapEvidence(rowId, finding);
+  }
+
+  return true;
+}
+
+function isProjectedFindingEligibleForCoverageRow(
+  rowId: string,
+  finding: NonNullable<GdprEprivacyCoverageChecklistInput["projectedFindings"]>[number]
+) {
+  if (rowId === "cross_border_endpoint_review" && finding.id === "missing_transfer_disclosure") {
+    return false;
+  }
+
+  return true;
 }
 
 function makeSourceSignalGap(
@@ -510,11 +568,11 @@ export function deriveGdprEprivacyCoverageChecklist(
   const rows = CHECKLIST_ROWS.map((definition) => {
     const matchingFindings = definition.findingIds.flatMap((id) => {
       const finding = findingsById.get(id);
-      return finding ? [finding] : [];
+      return finding && isFindingEligibleForCoverageRow(definition.id, finding) ? [finding] : [];
     });
     const matchingProjectedFindings = definition.findingIds.flatMap((id) => {
       const finding = projectedFindingsById.get(id);
-      return finding ? [finding] : [];
+      return finding && isProjectedFindingEligibleForCoverageRow(definition.id, finding) ? [finding] : [];
     });
 
     if (matchingFindings.length > 0) {

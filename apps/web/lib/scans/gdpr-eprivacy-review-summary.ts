@@ -482,7 +482,10 @@ export function deriveGdprEprivacyReviewSummary(
   if (
     preferenceCoverageUsable &&
     preferenceUnavailable &&
-    (rowIs(preferenceControl, "Review signal") || rowIs(preferenceControl, "Not observed") || rowIs(preferenceControl, "Insufficient evidence"))
+    (rowIs(preferenceControl, "Gap observed") ||
+      rowIs(preferenceControl, "Review signal") ||
+      rowIs(preferenceControl, "Not observed") ||
+      rowIs(preferenceControl, "Insufficient evidence"))
   ) {
     addBullet(bullets, {
       copy: rowIs(consentSurface, "Observed")

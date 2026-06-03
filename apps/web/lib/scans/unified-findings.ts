@@ -950,6 +950,7 @@ const RIGHTS_GAP_FINDING_IDS = new Set([
   "missing_dsar_high_exposure",
   "rights_fulfillment_friction",
   "cookie_disclosure_gap",
+  "cross_border_vendor_disclosure_gap",
   "missing_transfer_disclosure",
   "data_categories_disclosure_missing",
   "third_party_recipient_disclosure_missing",
@@ -974,6 +975,7 @@ const CONSENT_TRACKING_FINDING_IDS = new Set([
   "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
   "rtb_cookie_sync_observed",
+  "cross_border_vendor_disclosure_gap",
   "cross_border_endpoint_transfer_review_signal",
   "gpc_signal_not_honored",
   "weak_cookie_security_attributes",
@@ -4442,6 +4444,45 @@ function selectObservedValue(packet: UnifiedFindingPacket) {
     return `Third-party runtime endpoints${hostText} were retained${regionText}, creating a public-web international-transfer review signal under the tested scan conditions.`;
   }
 
+  if (packet.unifiedFindingId === "cross_border_vendor_disclosure_gap") {
+    const endpointRows = uniqueStrings(
+      Object.entries(packet.evidence?.entities ?? {}).flatMap(([key, values]) =>
+        /endpointJurisdictionEvidence/i.test(key) ? values : []
+      )
+    ).flatMap((value) => {
+      try {
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? [parsed as Record<string, unknown>]
+          : [];
+      } catch {
+        return [];
+      }
+    });
+    const hosts = uniqueStrings([
+      ...Object.entries(packet.evidence?.entities ?? {}).flatMap(([key, values]) =>
+        /endpointTransferReviewHosts/i.test(key) ? values : []
+      ),
+      ...endpointRows.flatMap((row) => typeof row.host === "string" ? [row.host] : [])
+    ]);
+    const vendors = uniqueStrings([
+      ...Object.entries(packet.evidence?.entities ?? {}).flatMap(([key, values]) =>
+        /endpointTransferReviewVendors|observedRuntimeVendors|unmatchedRuntimeVendors/i.test(key) ? values : []
+      ),
+      ...endpointRows.flatMap((row) => typeof row.matchedVendorName === "string" ? [row.matchedVendorName] : [])
+    ]);
+    const regions = uniqueStrings([
+      ...Object.entries(packet.evidence?.entities ?? {}).flatMap(([key, values]) =>
+        /endpointTransferReviewRegions/i.test(key) ? values : []
+      ),
+      ...endpointRows.flatMap((row) => typeof row.inferredRegion === "string" ? [row.inferredRegion] : [])
+    ]);
+    const hostText = hosts[0] ?? "a transfer-relevant third-party endpoint";
+    const vendorText = vendors[0] ?? "the associated runtime vendor";
+    const regionText = regions[0] ? `, and retained inferred region context ${regions[0]}` : "";
+    return `CertScore observed ${hostText}, associated with ${vendorText}${regionText}. Reviewed public privacy/cookie disclosure surfaces did not clearly match ${vendorText} by name or known domain alias. Review whether the vendor and related international processing are disclosed under another name, covered by broader provider language, or should be added to the site's disclosures.`;
+  }
+
   if (packet.unifiedFindingId === "sensitive_data_collection_with_third_party_tracking_present") {
     const observedValue = getSensitivePayloadObservedValue(packet);
     if (observedValue) {
@@ -5434,6 +5475,10 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Review the retained third-party endpoint hosts, inferred regions, vendors, and public disclosures, then document transfer mechanisms or remove non-essential cross-border endpoint calls.",
     whyThisMatters: "Runtime calls to third-party endpoints with jurisdiction or transfer-region evidence can create international-transfer review obligations even when the scan does not determine legal compliance."
   },
+  cross_border_vendor_disclosure_gap: {
+    suggestedFix: "Review the retained endpoint vendor, known aliases, and public privacy/cookie disclosures, then clarify the vendor and related processing-location disclosure where appropriate.",
+    whyThisMatters: "A transfer-relevant endpoint plus an unmatched runtime vendor is a public-web disclosure alignment gap for review; it does not by itself prove a missing transfer mechanism or unlawful transfer."
+  },
   weak_cookie_security_attributes: {
     suggestedFix: "Review the observed cookie set and tighten weak attributes such as missing Secure or HttpOnly flags and weak SameSite settings where appropriate.",
     whyThisMatters: "Weak cookie attributes can make it easier for cookies to be handled in less protective ways than expected."
@@ -5451,8 +5496,8 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     whyThisMatters: "Session replay observed in the same scan as sensitive input surfaces is meaningful review context even when same-page replay linkage has not been retained."
   },
   sensitive_data_collection_with_third_party_tracking_present: {
-    suggestedFix: "Review the page or form where sensitive data is collected and suppress third-party advertising, replay, or analytics tooling unless it is clearly necessary and tightly controlled.",
-    whyThisMatters: "Collecting sensitive data on pages that also load third-party tracking can materially increase privacy and data-handling risk."
+    suggestedFix: "Review whether tracking on the affected page or flow is necessary, disclosed, consent-gated where required, and excluded from sensitive form interactions.",
+    whyThisMatters: "Sensitive or high-risk collection surfaces that appear alongside third-party tracking can materially increase privacy review risk, even when payload transmission is not observed."
   },
   sensitive_collection_surface_observed: {
     suggestedFix: "Review the affected form fields, minimize sensitive collection where possible, and keep non-essential tracking or replay tooling out of that flow.",

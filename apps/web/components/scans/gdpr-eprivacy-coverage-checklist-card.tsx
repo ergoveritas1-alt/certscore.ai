@@ -358,6 +358,10 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
   }
 
   if (item.id === "cross_border_endpoint_review") {
+    if (item.status === "Gap observed") {
+      return "A transfer-relevant third-party analytics endpoint was observed, and the associated runtime vendor was not clearly matched in retained public vendor disclosure evidence.";
+    }
+
     return item.status === "Review signal"
       ? "Observed third-party endpoints created a public-web international transfer review signal."
       : "No public-web international transfer review signal was projected from observed third-party endpoints.";
