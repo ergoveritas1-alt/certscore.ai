@@ -21,6 +21,7 @@ test("classifies expanded non-essential cookie families", () => {
   assert.equal(classifyRuntimeCookieCategory("dpm"), "dmp");
   assert.equal(classifyRuntimeCookieCategory("aam", ".webmd.com"), "dmp");
   assert.equal(classifyRuntimeCookieCategory("IDE"), "advertising");
+  assert.equal(classifyRuntimeCookieCategory("_twpid", ".nvidia.com"), "advertising");
   assert.equal(classifyRuntimeCookieCategory("rlas3"), "advertising");
   assert.equal(classifyRuntimeCookieCategory("s_ecid"), "analytics");
   assert.equal(classifyRuntimeCookieCategory("QSI_HistorySession"), "session_replay");

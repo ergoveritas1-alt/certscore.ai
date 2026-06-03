@@ -536,26 +536,36 @@ function getRequestUrl(row: Record<string, unknown>) {
 
 function getSessionReplayVendors(hybrid: Record<string, unknown> | null) {
   const requestToVendorObservations = getObjectArray(hybrid?.requestToVendorObservations);
+  const summary = getRecord(hybrid?.sessionReplayEvidenceSummary ?? hybrid?.session_replay_evidence_summary);
   const vendors = requestToVendorObservations
     .filter(looksLikeSessionReplayVendor)
     .flatMap((row) => (typeof row.vendor === "string" ? [row.vendor] : []));
 
-  return uniqueStrings(vendors);
+  return uniqueStrings([
+    ...vendors,
+    ...getStringArray(summary?.vendors)
+  ]);
 }
 
 function getSessionReplayRequestUrls(hybrid: Record<string, unknown> | null) {
+  const summary = getRecord(hybrid?.sessionReplayEvidenceSummary ?? hybrid?.session_replay_evidence_summary);
   const requestObservations = getObjectArray(hybrid?.requestObservations);
   const sessionReplayHosts = getObjectArray(hybrid?.requestToVendorObservations)
     .filter(looksLikeSessionReplayVendor)
-    .flatMap((row) => getString(row.hostname));
+    .flatMap((row) => getString(row.hostname))
+    .concat(getStringArray(summary?.scriptHosts ?? summary?.script_hosts));
 
   return uniqueStrings(
-    requestObservations
+    [
+      ...requestObservations
       .filter((row) => {
         const domain = getString(row.domain);
-        return Boolean(domain && sessionReplayHosts.includes(domain)) || /qualtrics|siteintercept|hotjar|fullstory|clarity|contentsquare|mouseflow/i.test(getRequestUrl(row) ?? "");
+        return Boolean(domain && sessionReplayHosts.some((host) => domain === host || domain.endsWith(`.${host}`))) ||
+          /qualtrics|siteintercept|hotjar|fullstory|clarity|contentsquare|mouseflow/i.test(getRequestUrl(row) ?? "");
       })
-      .flatMap((row) => getRequestUrl(row) ?? [])
+      .flatMap((row) => getRequestUrl(row) ?? []),
+      ...getStringArray(summary?.requestUrls ?? summary?.request_urls)
+    ]
   );
 }
 

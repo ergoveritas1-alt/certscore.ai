@@ -232,8 +232,8 @@ function getObservedDomains(item: GdprEprivacyCoverageChecklistItem | null) {
 
 function getPreConsentVendors(item: GdprEprivacyCoverageChecklistItem | null) {
   return uniqueStrings([
-    ...getObservedVendors(item),
-    ...getEntityStrings(item, ["preConsentVendorNames", "runtimeVendors", "relatedVendors"])
+    ...getRetainedStrings(item, ["baselineVendors", "preConsentVendors", "preConsentVendorNames"]),
+    ...getEntityStrings(item, ["preConsentVendorNames", "runtimeVendors", "relatedVendors", "vendors"])
   ]).slice(0, 8);
 }
 
@@ -349,7 +349,7 @@ export function deriveGdprEprivacyEvidenceCard(item: GdprEprivacyCoverageCheckli
         ],
         interactionPath: "Around or after recorded reject interaction",
         whatCertScoreObserved: getPostRejectVendors(item).length > 0
-          ? `Tracking activity persisted around refusal for ${getPostRejectVendors(item).join(", ")}.`
+          ? `Non-essential tracking was still observed after the recorded reject action for ${getPostRejectVendors(item).join(", ")}.`
           : defaultObserved,
         whyThisMatters: "If non-essential tracking persists after refusal, the consent control may not be enforcing the represented choice."
       };
@@ -393,6 +393,18 @@ export function deriveGdprEprivacyEvidenceCard(item: GdprEprivacyCoverageCheckli
           ? `Behavioral analytics or session replay vendor observed: ${getSessionReplayVendors(item).join(", ")}.`
           : defaultObserved,
         whyThisMatters: "Session replay and behavioral analytics often require extra review for purpose, disclosure, masking, and consent controls."
+      };
+    case "cross_border_endpoint_review":
+      return {
+        ...common,
+        evidenceType: ["Runtime browser scan", "Endpoint jurisdiction evidence", "Vendor disclosure comparison"],
+        humanVerificationSteps: [
+          "Review analytics, behavioral tracking, adtech, and identifier-bearing endpoint vendors before generic asset hosts.",
+          "Confirm transfer context, vendor purpose, and public disclosure alignment for material runtime vendors."
+        ],
+        whatCertScoreObserved: getRetainedStrings(item, ["evidenceHighlights"])[0] ??
+          "Transfer-relevant third-party endpoint evidence was retained for review.",
+        whyThisMatters: "Transfer-relevant analytics or behavioral tracking endpoints can require review of vendor purpose, region, disclosure alignment, and transfer safeguards."
       };
     case "sensitive_surfaces_third_party_tracking":
       return {
@@ -522,10 +534,12 @@ export function deriveGdprEprivacyReviewSummary(
     });
   }
 
-  const inScopeRows = items.filter((item) => item.status !== "Out of scope");
-  const usableRows = inScopeRows.filter((item) => item.status !== "Not testable").length;
-  const gapCount = items.filter((item) => item.status === "Gap observed").length;
-  const reviewSignalCount = items.filter((item) => item.status === "Review signal").length;
+  const inScopeRows = items.filter((item) => item.assessmentStatus !== "not_applicable");
+  const usableRows = inScopeRows.filter((item) =>
+    item.evidenceState !== "not_testable" && item.assessmentStatus !== "coverage_limitation"
+  ).length;
+  const gapCount = items.filter((item) => item.assessmentStatus === "gap_observed").length;
+  const reviewSignalCount = items.filter((item) => item.assessmentStatus === "review_signal").length;
   const evidenceCards = items.map(deriveGdprEprivacyEvidenceCard);
 
   return {

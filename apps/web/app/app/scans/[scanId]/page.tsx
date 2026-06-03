@@ -76,15 +76,15 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   const isPlatformAdmin = isPlatformAdminEmail(user.email);
   const canUseLocalExtensionScan = isPlatformAdmin;
   const visualEvidenceArtifacts = canViewCapturedImage({ isPlatformAdmin, role: membership.role })
-    ? getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts)
-        .filter((artifact) => artifact.status === "available" && artifact.key)
-        .sort((left, right) => {
-          const leftPriority = left.captureStep === "initial_load" ? 0 : 1;
-          const rightPriority = right.captureStep === "initial_load" ? 0 : 1;
-          return leftPriority - rightPriority;
-        })
+    ? getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts).sort((left, right) => {
+        const leftPriority = left.captureStep === "initial_load" ? 0 : 1;
+        const rightPriority = right.captureStep === "initial_load" ? 0 : 1;
+        return leftPriority - rightPriority;
+      })
     : [];
-  const visualEvidenceArtifact = visualEvidenceArtifacts[0] ?? null;
+  const visualEvidenceArtifact =
+    visualEvidenceArtifacts.find((artifact) => artifact.status === "available" && artifact.key) ?? null;
+  const visualEvidenceStatus = visualEvidenceArtifact?.status ?? visualEvidenceArtifacts[0]?.status ?? null;
   const visualEvidenceHref = visualEvidenceArtifact
     ? `/api/scans/${scanRecord.scan.id}/visual-evidence/${encodeURIComponent(visualEvidenceArtifact.id)}`
     : null;
@@ -109,6 +109,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
                 domainLabel={scanDomainLabel}
                 scanId={scanRecord.scan.id}
                 visualEvidenceHref={visualEvidenceHref}
+                visualEvidenceStatus={visualEvidenceStatus}
               />
               <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                 <DomainScanForm
@@ -126,6 +127,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
         }
         headerActionsPlacement="belowTitle"
         scanRecord={scanRecord}
+        showAllRegulatoryChecklistOptions={isPlatformAdmin || membership.role === "admin"}
         viewerAccessRole={membership.role}
       />
     </>

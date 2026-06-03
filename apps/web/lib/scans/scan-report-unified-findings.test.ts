@@ -1356,7 +1356,8 @@ test("WS01 visual no-go runtime artifact enters canonical concern pipeline", () 
 function buildPreconsentRuntimeState(
   runtimeArtifacts: Record<string, unknown>,
   snapshot: Record<string, unknown> = {},
-  validationFindings: unknown[] = []
+  validationFindings: unknown[] = [],
+  preconsentViolationRows: unknown[] = []
 ) {
   return buildScanReportUnifiedFindingState({
     accessibilityRuleCounts: [],
@@ -1383,7 +1384,7 @@ function buildPreconsentRuntimeState(
     deriveAccessibilityRuleEvidenceRows: () => [],
     deriveConsentAuditFindings: () => [],
     derivePolicyBehaviorContradictions: () => [],
-    derivePreconsentViolationRows: () => [],
+    derivePreconsentViolationRows: () => preconsentViolationRows as never,
     filterContradictoryPositiveSurfaceFindings: (findings) => findings
   });
 }
@@ -1485,6 +1486,82 @@ test("promotion-grade preconsent timing and vendor anchors surface as executive 
   assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
   assert.ok(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
   assert.equal(projection.posture, "Action Needed");
+});
+
+test("request-only preconsent violation rows do not synthesize analytics cookie findings", () => {
+  const state = debugBuildScanReportUnifiedFindingStateForScan({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [
+      {
+        collection_endpoint_type: "direct_third_party",
+        confidence: 0.95,
+        detection_source: "hybrid_runtime_signature",
+        evidence_urls: [
+          "https://www.googletagmanager.com/gtm.js?id=GTM-P8H9J4S",
+          "https://www.google-analytics.com/g/collect"
+        ],
+        first_party_or_third_party: "third_party",
+        matched_signature_id: "cookie_hint:_ga",
+        script_host: "www.googletagmanager.com",
+        vendor_category: "analytics",
+        vendor_name: "Google Analytics"
+      }
+    ] as never,
+    runtimeArtifacts: {
+      consent_actionable_choice_observed: true,
+      consent_surface_observed: true,
+      consent_timeline: {
+        firstCmpVisibleMs: 1000,
+        firstConsentActionMs: null,
+        firstNonEssentialRequestMs: 250,
+        timelineConfidence: "high"
+      },
+      hybrid_runtime_evidence: {
+        requestPurposeClassificationConfidence: [
+          {
+            category: "analytics",
+            classification_basis: "tracker_signature",
+            confidence: 0.95,
+            essentiality: "non_essential",
+            hostname: "www.googletagmanager.com",
+            request_url: "https://www.googletagmanager.com/gtm.js?id=GTM-P8H9J4S",
+            runtime_phase: "pre_consent",
+            ts_ms: 250,
+            vendor_name: "Google Analytics"
+          }
+        ],
+        timelineMarkers: {
+          consentBannerDetectedMs: 1000,
+          firstRequestMs: 250,
+          firstThirdPartyRequestMs: 250
+        }
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.example.com/",
+      registered_domain: "example.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+  const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.evidence?.entities?.preconsent_cookie_evidence, undefined);
+  assert.ok(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "analytics_cookie_pre_consent"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "third_party_cookie_pre_consent"));
 });
 
 test("first-party analytics preconsent cookie evidence projects analytics cookie finding", () => {

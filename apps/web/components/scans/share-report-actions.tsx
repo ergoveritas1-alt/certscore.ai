@@ -2,12 +2,14 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import type { VisualEvidenceArtifactStatus } from "../../lib/scans/visual-evidence";
 import { sendReportEmailAction, type SendReportEmailActionState } from "../../server/scans/email-report";
 
 type ShareReportActionsProps = {
   domainLabel: string;
   scanId: string;
   visualEvidenceHref?: string | null;
+  visualEvidenceStatus?: VisualEvidenceArtifactStatus | null;
 };
 
 const initialSendReportEmailActionState: SendReportEmailActionState = {
@@ -37,12 +39,29 @@ function iconActionClassName(tone: "primary" | "secondary" = "secondary") {
   return `${base} border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950`;
 }
 
+function disabledIconActionClassName() {
+  return "group relative inline-flex h-10 w-10 cursor-not-allowed items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-400 shadow-sm";
+}
+
 function IconTooltip({ label }: { label: string }) {
   return (
     <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
       {label}
     </span>
   );
+}
+
+function getVisualEvidenceUnavailableLabel(status: VisualEvidenceArtifactStatus | null | undefined) {
+  if (status === "upload_failed") {
+    return "Captured image upload failed";
+  }
+  if (status === "capture_failed") {
+    return "Captured image unavailable";
+  }
+  if (status === "disabled") {
+    return "Captured image disabled";
+  }
+  return "Captured image unavailable";
 }
 
 function ShareIcon() {
@@ -125,7 +144,8 @@ function VisualEvidenceIcon() {
 export function ShareReportActions({
   domainLabel,
   scanId,
-  visualEvidenceHref = null
+  visualEvidenceHref = null,
+  visualEvidenceStatus = null
 }: ShareReportActionsProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [currentUrl, setCurrentUrl] = useState("");
@@ -222,6 +242,16 @@ export function ShareReportActions({
             <VisualEvidenceIcon />
             <IconTooltip label="View captured image" />
           </a>
+        ) : visualEvidenceStatus ? (
+          <span
+            aria-label={getVisualEvidenceUnavailableLabel(visualEvidenceStatus)}
+            className={disabledIconActionClassName()}
+            role="img"
+            title={getVisualEvidenceUnavailableLabel(visualEvidenceStatus)}
+          >
+            <VisualEvidenceIcon />
+            <IconTooltip label={getVisualEvidenceUnavailableLabel(visualEvidenceStatus)} />
+          </span>
         ) : null}
       </div>
       {copyState === "failed" ? (

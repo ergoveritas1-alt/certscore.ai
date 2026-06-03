@@ -2811,6 +2811,88 @@ export function deriveExecutiveAccessLimitationNotice(
   };
 }
 
+function getRuntimeVisualAccessReview(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  return getRecord(runtimeArtifacts?.visual_access_review) ?? getRecord(runtimeArtifacts?.visualAccessReview);
+}
+
+export function deriveVisualAccessLimitationNotice(
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+): ExecutiveAccessLimitationNotice | null {
+  const visualAccessReview = getRuntimeVisualAccessReview(runtimeArtifacts);
+  if (!visualAccessReview) {
+    return null;
+  }
+
+  const goNoGo = getRecordString(visualAccessReview, "goNoGo") ?? getRecordString(visualAccessReview, "go_no_go");
+  const status = getRecordString(visualAccessReview, "status");
+  const pageState = getRecordString(visualAccessReview, "pageState") ?? getRecordString(visualAccessReview, "page_state");
+  const reasonCode = getRecordString(visualAccessReview, "reasonCode") ?? getRecordString(visualAccessReview, "reason_code");
+  const visualArtifactMissing =
+    status === "missing_visual_artifact" ||
+    pageState === "missing_visual_artifact" ||
+    reasonCode === "visual_evidence_upload_failed";
+  if (visualArtifactMissing) {
+    return null;
+  }
+  // A GO/degraded_but_useful visual review is retained scan-quality context, not a no-go.
+  if (goNoGo !== "NO_GO") {
+    return null;
+  }
+
+  const shortExplanation =
+    getRecordString(visualAccessReview, "shortExplanation") ??
+    getRecordString(visualAccessReview, "short_explanation") ??
+    (status === "missing_visual_artifact"
+      ? "Initial-load visual evidence was not retained as an available screenshot artifact."
+      : "Retained visual review did not verify a normal public page for this scan.");
+  const reason =
+    reasonCode === "visual_evidence_upload_failed"
+      ? "Reason: the initial-load screenshot was captured but the retained artifact upload failed."
+      : reasonCode
+        ? `Reason: retained visual access review reported ${reasonCode}.`
+        : `Reason: ${shortExplanation}`;
+
+  return {
+    summary:
+      "No reliable privacy or consent findings should be treated as conclusive because retained visual review did not verify a normal public page.",
+    review: {
+      coverageLabel: "Visual verification unavailable",
+      guidance: [
+        "Retry the scan after screenshot retention is healthy, then rely on the projected privacy and consent findings.",
+        "Treat substantive checklist conclusions as coverage-limited until a normal public page is visually retained."
+      ],
+      message: shortExplanation,
+      outcomeTitle: "Normal public site was not visually verified",
+      verifiedPolicyInsights: [],
+      verifiedSurfaces: [],
+      recommendationTitle: "Retry With Retained Visual Evidence",
+      reason,
+      title: "Normal public site was not reached",
+      whatThisMeans: [
+        "The scanner retained a visual no-go state, so runtime privacy signals may not represent the normal public website.",
+        "This is a scan quality limitation, not evidence that Grammarly did or did not perform the underlying behaviors."
+      ]
+    },
+    finding: {
+      id: "scan_quality_visual_no_go",
+      label: "Normal public site was not reached",
+      section: "Runtime & Diagnostics",
+      defaultSurfacePriority: 120,
+      whyItMatters:
+        "When the retained visual review cannot verify a normal public page, raw runtime signals can reflect a blocked, wrong, or unverifiable page state.",
+      remediation:
+        "Retry the scan after visual evidence retention is available and confirm the captured page represents the normal public website.",
+      confidence: "strong",
+      directVsInferred: "direct",
+      evidencePreview: [shortExplanation, reason],
+      evidenceRefs: ["scan_runtime_artifacts.visual_access_review"],
+      severity: "medium",
+      shortSummary:
+        "Retained visual review did not verify a normal public page, so substantive privacy and consent conclusions are coverage-limited."
+    }
+  };
+}
+
 export function selectExecutiveAccessLimitationNotice(input: {
   allExecutiveFindings: unknown[];
   notice: ExecutiveAccessLimitationNotice | null;
@@ -2818,6 +2900,9 @@ export function selectExecutiveAccessLimitationNotice(input: {
 }) {
   if (!input.notice) {
     return null;
+  }
+  if (input.notice.finding.id === "scan_quality_visual_no_go") {
+    return input.notice;
   }
   if (input.allExecutiveFindings.length > 0 || input.topExecutiveFindings.length > 0) {
     return null;
@@ -5389,6 +5474,7 @@ type SharedScanDetailViewProps = {
   previewPayload?: PreviewScanPayload | null;
   previewMode?: "full" | "homepage";
   scanRecord: ScanDetailResponse;
+  showAllRegulatoryChecklistOptions?: boolean;
   viewerAccessRole?: string | null;
 };
 
@@ -5655,11 +5741,13 @@ export function SharedScanDetailView({
   previewPayload: previewPayloadOverride = null,
   previewMode = "full",
   scanRecord,
+  showAllRegulatoryChecklistOptions,
   viewerAccessRole = "admin"
 }: SharedScanDetailViewProps) {
   const scanReportAccessRole = normalizeScanReportAccessRole(viewerAccessRole);
   const showAnalystDetail = scanReportAccessRole !== "user";
   const showAdvancedDiagnostics = scanReportAccessRole === "admin";
+  const canViewAllRegulatoryChecklistOptions = showAllRegulatoryChecklistOptions ?? scanReportAccessRole === "admin";
   const previewPayload = previewPayloadOverride ?? scanRecord.previewPayload ?? null;
   const snapshot = scanRecord.snapshot;
   const isBrowserExtensionScan = scanRecord.scan.scanType === "browser_extension";
@@ -5683,14 +5771,16 @@ export function SharedScanDetailView({
         review: null
       })
     : null;
+  const runtimeArtifacts = scanRecord.runtimeArtifacts;
+  const visualAccessLimitationNotice = deriveVisualAccessLimitationNotice(runtimeArtifacts);
   const requestedExecutiveAccessLimitationNotice =
+    visualAccessLimitationNotice ??
     executiveAccessLimitationOverride ??
     (snapshot ? deriveExecutiveAccessLimitationNotice(snapshot, scanRecord.events, scanRecord.policyEnrichment) : null) ??
     zeroCoveragePreviewNotice;
   const suppressLimitedSurfaceReview =
     scanRecord.accessPostureSummary?.accessPostureClass === "early_loss" &&
     scanRecord.accessPostureSummary?.stopTier === "tier1_front_door";
-  const runtimeArtifacts = scanRecord.runtimeArtifacts;
   const hybridRuntimeSummaryRows = getHybridRuntimeSummaryRows(runtimeArtifacts);
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
   const hybridVendorSummary = getRecord(hybridRuntimeEvidence?.vendorSummary);
@@ -6201,7 +6291,7 @@ export function SharedScanDetailView({
                 content: betaRegulatoryChecklistAreaById.get("us-state-privacy") ? (
                   <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("us-state-privacy")!} defaultOpen />
                 ) : null,
-                group: "united_states",
+                group: "united_states" as const,
                 id: "us-state-privacy",
                 label: "U.S. State Privacy"
               },
@@ -6209,7 +6299,7 @@ export function SharedScanDetailView({
                 content: betaRegulatoryChecklistAreaById.get("california-cipa") ? (
                   <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("california-cipa")!} defaultOpen />
                 ) : null,
-                group: "united_states",
+                group: "united_states" as const,
                 id: "california-cipa",
                 label: "California Tracking Litigation (CIPA)",
                 shortLabel: "CIPA"
@@ -6218,7 +6308,7 @@ export function SharedScanDetailView({
                 content: betaRegulatoryChecklistAreaById.get("uk-gdpr-pecr") ? (
                   <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("uk-gdpr-pecr")!} defaultOpen />
                 ) : null,
-                group: "europe_uk",
+                group: "europe_uk" as const,
                 id: "uk-gdpr-pecr",
                 label: "UK GDPR / PECR"
               },
@@ -6226,7 +6316,7 @@ export function SharedScanDetailView({
                 content: betaRegulatoryChecklistAreaById.get("brazil-lgpd") ? (
                   <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("brazil-lgpd")!} defaultOpen />
                 ) : null,
-                group: "international",
+                group: "international" as const,
                 id: "brazil-lgpd",
                 label: "Brazil LGPD"
               },
@@ -6234,7 +6324,7 @@ export function SharedScanDetailView({
                 content: betaRegulatoryChecklistAreaById.get("canada-pipeda-quebec") ? (
                   <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("canada-pipeda-quebec")!} defaultOpen />
                 ) : null,
-                group: "international",
+                group: "international" as const,
                 id: "canada-pipeda-quebec",
                 label: "Canada PIPEDA / Quebec Law 25",
                 shortLabel: "Canada"
@@ -6243,7 +6333,7 @@ export function SharedScanDetailView({
                 content: betaRegulatoryChecklistAreaById.get("australia-privacy-act") ? (
                   <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("australia-privacy-act")!} defaultOpen />
                 ) : null,
-                group: "international",
+                group: "international" as const,
                 id: "australia-privacy-act",
                 label: "Australia Privacy Act",
                 shortLabel: "Australia"
@@ -6252,12 +6342,12 @@ export function SharedScanDetailView({
                 content: betaRegulatoryChecklistAreaById.get("singapore-pdpa") ? (
                   <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("singapore-pdpa")!} defaultOpen />
                 ) : null,
-                group: "international",
+                group: "international" as const,
                 id: "singapore-pdpa",
                 label: "Singapore PDPA",
                 shortLabel: "Singapore"
               }
-            ]}
+            ].filter((tab) => canViewAllRegulatoryChecklistOptions || tab.id === "gdpr-eprivacy")}
           />
           
         </>

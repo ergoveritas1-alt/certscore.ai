@@ -1,4 +1,5 @@
 import type { CertScoreFindingEvidenceDetails } from "./finding-registry";
+import { inferDirectEndpointVendorFromUrl } from "./preconsent-public-evidence";
 
 type ExecutiveEvidenceFinding = {
   evidenceDetails?: CertScoreFindingEvidenceDetails;
@@ -57,6 +58,47 @@ function uniqueStrings(values: string[]) {
   return [...new Set(values)];
 }
 
+function normalizeVendorCategory(input: {
+  category: string | null;
+  name: string;
+  url: string | null;
+}) {
+  const endpointMatch = inferDirectEndpointVendorFromUrl(input.url);
+  if (endpointMatch) {
+    return endpointMatch.vendorCategory;
+  }
+
+  const identity = `${input.name} ${input.url ?? ""}`;
+  if (/google\s+analytics|google-analytics|analytics\.google|google-analytics\.com|googleanalytics/i.test(identity)) {
+    return "analytics";
+  }
+  if (/google\s+tag\s+manager|googletagmanager\.com|gtm\.js|\bgtm\b/i.test(identity)) {
+    return "tag_manager";
+  }
+  if (/microsoft\s+clarity|clarity\.ms|\bclarity\b/i.test(identity)) {
+    return "session_replay";
+  }
+  if (/appnexus|xandr|adnxs/i.test(identity)) {
+    return "advertising";
+  }
+  if (/doubleclick|googleads\.g\.doubleclick|googleadservices|google\s+ads|googlesyndication|gads/i.test(identity)) {
+    return "advertising_measurement";
+  }
+  if (/linkedin\s+insight|linkedin\.com\/insight|px\.ads\.linkedin/i.test(identity)) {
+    return "advertising_measurement";
+  }
+  if (/meta\s+pixel|facebook\s+pixel|connect\.facebook\.net|facebook\.com\/tr/i.test(identity)) {
+    return "advertising_measurement";
+  }
+  if (/tiktok\s+pixel|analytics\.tiktok|business-api\.tiktok/i.test(identity)) {
+    return "advertising_measurement";
+  }
+  if (/microsoft\s+advertising|bing\s+uet|bat\.bing\.com|bingads|uet/i.test(identity)) {
+    return "advertising_measurement";
+  }
+  return input.category;
+}
+
 function formatPrimitiveEvidence(record: Record<string, unknown>, nameKeys: string[], extraKeys: string[]) {
   const name = getFirstStringValue(record, nameKeys);
   if (!name) {
@@ -64,9 +106,19 @@ function formatPrimitiveEvidence(record: Record<string, unknown>, nameKeys: stri
   }
 
   const parts = [quote(name)];
+  const url = getFirstStringValue(record, ["representativeUrl", "representative_url", "requestUrl", "request_url", "url"]);
   for (const key of extraKeys) {
     const value = record[key];
-    if (typeof value === "string" && value.trim().length > 0) {
+    if (key === "category") {
+      const category = normalizeVendorCategory({
+        category: typeof value === "string" && value.trim().length > 0 ? value.trim() : null,
+        name,
+        url
+      });
+      if (category) {
+        parts.push(`${quote(key)}: ${quote(category)}`);
+      }
+    } else if (typeof value === "string" && value.trim().length > 0) {
       parts.push(`${quote(key)}: ${quote(value.trim())}`);
     } else if (typeof value === "number" && Number.isFinite(value)) {
       parts.push(`${quote(key)}: ${Math.round(value)}`);
@@ -94,7 +146,11 @@ function buildPreConsentTrackingHighlights(finding: ExecutiveEvidenceFinding) {
     ...asRecordRows(trackingEvidence?.vendors),
     ...asRecordRows(trackingEvidence?.representativeRequests),
     ...asRecordRows(details?.representativeRequests)
-  ];
+  ].sort((left, right) => {
+    const leftPreConsent = getFirstBooleanValue(left, ["preConsent", "pre_consent", "beforeConsent", "before_consent"]);
+    const rightPreConsent = getFirstBooleanValue(right, ["preConsent", "pre_consent", "beforeConsent", "before_consent"]);
+    return Number(rightPreConsent === true) - Number(leftPreConsent === true);
+  });
   const highlights: string[] = [];
 
   for (const row of rows) {
@@ -104,7 +160,64 @@ function buildPreConsentTrackingHighlights(finding: ExecutiveEvidenceFinding) {
     }
     const preConsent = getFirstBooleanValue(row, ["preConsent", "pre_consent", "beforeConsent", "before_consent"]) ?? true;
     const firstSeenMs = getFirstNumberValue(row, ["firstSeenMs", "first_seen_ms", "firstRequestMs", "first_request_ms", "timestampMs", "timestamp_ms"]) ?? fallbackFirstSeenMs;
-    highlights.push(`${quote(name)}, ${quote("preConsent")}: ${preConsent}${typeof firstSeenMs === "number" ? `, ${quote("firstSeenMs")}: ${Math.round(firstSeenMs)}` : ""}`);
+    const retainedCategory = getFirstStringValue(row, ["category", "vendorCategory", "vendor_category", "requestCategory", "request_category"]);
+    const url = getFirstStringValue(row, ["representativeUrl", "representative_url", "requestUrl", "request_url", "url"]);
+    const category = normalizeVendorCategory({ category: retainedCategory, name, url });
+    const consentState = getFirstStringValue(row, ["consentState", "consent_state", "runtimePhase", "runtime_phase"]);
+    highlights.push([
+      quote(name),
+      `${quote("preConsent")}: ${preConsent}`,
+      typeof firstSeenMs === "number" ? `${quote("firstSeenMs")}: ${Math.round(firstSeenMs)}` : null,
+      consentState ? `${quote("consentState")}: ${quote(consentState)}` : null,
+      category ? `${quote("category")}: ${quote(category)}` : null
+    ].filter((value): value is string => Boolean(value)).join(", "));
+    if (highlights.length >= 3) {
+      break;
+    }
+  }
+
+  return highlights;
+}
+
+function buildPreConsentCookieStorageHighlights(finding: ExecutiveEvidenceFinding) {
+  const details = finding.evidenceDetails;
+  const cookieEvidence = getRecord(details?.cookieEvidence);
+  const rows = [
+    ...asRecordRows(details?.preConsentCookieExamples),
+    ...asRecordRows(cookieEvidence?.cookieWriteEvidence),
+    ...asRecordRows(cookieEvidence?.cookies),
+    ...asRecordRows(cookieEvidence?.examples),
+    ...asRecordRows(cookieEvidence?.storageEvidence)
+  ].sort((left, right) => {
+    const leftPreConsent = getFirstBooleanValue(left, ["preConsent", "pre_consent", "beforeConsent", "before_consent"]);
+    const rightPreConsent = getFirstBooleanValue(right, ["preConsent", "pre_consent", "beforeConsent", "before_consent"]);
+    return Number(rightPreConsent === true) - Number(leftPreConsent === true);
+  });
+  const highlights: string[] = [];
+
+  for (const row of rows) {
+    const preConsent = getFirstBooleanValue(row, ["preConsent", "pre_consent", "beforeConsent", "before_consent"]);
+    if (preConsent === false && rows.some((candidate) =>
+      getFirstBooleanValue(candidate, ["preConsent", "pre_consent", "beforeConsent", "before_consent"]) === true
+    )) {
+      continue;
+    }
+    const name = getFirstStringValue(row, ["name", "vendor", "label", "cookieName", "cookie_name", "storageKey", "storage_key"]);
+    if (!name) {
+      continue;
+    }
+    const firstSeenMs = getFirstNumberValue(row, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "timestampMs", "timestamp_ms"]);
+    const retainedCategory = getFirstStringValue(row, ["category", "vendorCategory", "vendor_category", "cookieCategory", "cookie_category"]);
+    const domain = getFirstStringValue(row, ["domain", "hostname", "host"]);
+    const url = getFirstStringValue(row, ["representativeUrl", "representative_url", "requestUrl", "request_url", "url"]);
+    const category = normalizeVendorCategory({ category: retainedCategory, name, url: url ?? domain });
+    highlights.push([
+      quote(name),
+      `${quote("preConsent")}: ${preConsent ?? true}`,
+      typeof firstSeenMs === "number" ? `${quote("firstSeenMs")}: ${Math.round(firstSeenMs)}` : null,
+      category ? `${quote("category")}: ${quote(category)}` : null,
+      domain ? `${quote("domain")}: ${quote(domain)}` : null
+    ].filter((value): value is string => Boolean(value)).join(", "));
     if (highlights.length >= 3) {
       break;
     }
@@ -166,8 +279,14 @@ function buildGenericEvidenceHighlights(finding: ExecutiveEvidenceFinding) {
 
 export function buildRegulatoryChecklistEvidenceHighlights(finding: ExecutiveEvidenceFinding) {
   const highlights =
-    finding.id === "pre_consent_tracking_detected"
+    finding.id === "preconsent_tracking" ||
+    finding.id === "pre_consent_tracking_detected" ||
+    finding.id === "third_party_tracking_pre_consent"
       ? buildPreConsentTrackingHighlights(finding)
+      : finding.id === "adtech_cookie_pre_consent" ||
+          finding.id === "analytics_cookie_pre_consent" ||
+          finding.id === "third_party_cookie_pre_consent"
+        ? buildPreConsentCookieStorageHighlights(finding)
       : buildGenericEvidenceHighlights(finding);
 
   if (highlights.length > 0) {

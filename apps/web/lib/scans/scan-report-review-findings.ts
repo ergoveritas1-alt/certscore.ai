@@ -83,36 +83,6 @@ function roughEtldPlusOne(hostname: string | null | undefined) {
     : lastTwo;
 }
 
-function getHostnameForCookieScope(value: string | null | undefined) {
-  if (!value) {
-    return null;
-  }
-  try {
-    return new URL(value.includes("://") ? value : `https://${value}`).hostname.toLowerCase();
-  } catch {
-    return value.replace(/^https?:\/\//i, "").split("/")[0]?.replace(/^\./, "").toLowerCase() ?? null;
-  }
-}
-
-function isSameSiteCookieScope(cookieHost: string | null | undefined, pageHost: string | null | undefined) {
-  const cookieSite = roughEtldPlusOne(getHostnameForCookieScope(cookieHost));
-  const pageSite = roughEtldPlusOne(getHostnameForCookieScope(pageHost));
-  return Boolean(cookieSite && pageSite && cookieSite === pageSite);
-}
-
-function getPreconsentPageHost(snapshot: Record<string, unknown>) {
-  return typeof snapshot.registered_domain === "string"
-    ? snapshot.registered_domain
-    : typeof snapshot.final_url === "string"
-      ? snapshot.final_url
-      : null;
-}
-
-function getCookieHintName(value: string | null | undefined) {
-  const match = value?.match(/^cookie_hint:(.+)$/i);
-  return match?.[1]?.trim() || null;
-}
-
 function formatCompactValue(value: unknown) {
   if (value === null || value === undefined || value === "") {
     return "Not observed";
@@ -367,10 +337,14 @@ function getRecordNumber(record: Record<string, unknown> | null | undefined, key
 }
 
 function looksLikeSessionReplayVendor(row: TrackerVendorEvidenceRow) {
+  const identity = `${row.vendorName} ${row.scriptHost ?? ""} ${row.matchedSignatureId ?? ""}`;
+  if (/google\s+analytics|google-analytics|analytics\.google|google-analytics\.com|google\s+tag\s+manager|googletagmanager|\bgtm\b/i.test(identity)) {
+    return false;
+  }
   return (
     row.vendorCategory === "session_replay" ||
     /fullstory|hotjar|clarity|qualtrics|siteintercept|logrocket|mouseflow|smartlook|contentsquare|quantum\s*metric|crazy\s*egg|inspectlet|lucky\s*orange/i.test(
-      `${row.vendorName} ${row.scriptHost ?? ""} ${row.matchedSignatureId ?? ""}`
+      identity
     )
   );
 }
@@ -413,6 +387,9 @@ function classifyPostRejectRequestUrl(url: string, fallbackVendor?: string | nul
   }
   if (/(^|\.)googletagmanager\.com$/i.test(hostname ?? "")) {
     return { category: "tag_manager", confidence: "high", hostname, vendor: "Google Tag Manager" };
+  }
+  if (/(^|\.)google-analytics\.com$|(^|\.)analytics\.google\.com$/i.test(hostname ?? "")) {
+    return { category: "analytics", confidence: "high", hostname, vendor: "Google Analytics" };
   }
   if (/munchkin\.marketo\.net$/i.test(hostname ?? "")) {
     return { category: "marketing_automation", confidence: "high", hostname, vendor: "Marketo" };
@@ -1157,42 +1134,6 @@ export type PreconsentViolationRow = {
   vendorName: string;
 };
 
-function isPromotionGradePreconsentCookieViolation(row: PreconsentViolationRow, pageHost: string | null) {
-  const cookieName = getCookieHintName(row.matchedSignatureId);
-  if (!cookieName || isFunctionalCookieExcludedFromTrackingEvidence(cookieName, row.scriptHost ?? null)) {
-    return false;
-  }
-  if (row.firstPartyOrThirdParty !== "third_party") {
-    return false;
-  }
-  if (row.scriptHost && isSameSiteCookieScope(row.scriptHost, pageHost)) {
-    return false;
-  }
-  return isNonEssentialCookieCategory(row.vendorCategory);
-}
-
-function buildPreconsentCookieEvidenceFromViolationRows(input: {
-  pageHost: string | null;
-  rows: PreconsentViolationRow[];
-}) {
-  return input.rows
-    .filter((row) => isPromotionGradePreconsentCookieViolation(row, input.pageHost))
-    .map((row) => ({
-      beforeConsent: true,
-      category: row.vendorCategory,
-      cookieName: getCookieHintName(row.matchedSignatureId),
-      cookiePartyType: "third_party",
-      domain: row.scriptHost ?? null,
-      initiatorDomain: row.scriptHost ?? null,
-      initiatorVendor: row.vendorName,
-      nonEssential: true,
-      party: "third_party",
-      thirdParty: true,
-      timingEvidence: "before_consent_cookie_write",
-      vendor: row.vendorName
-    }));
-}
-
 export type TrackerVendorEvidenceRow = {
   beforeConsent?: boolean | null;
   collectionEndpointType?: string | null;
@@ -1683,10 +1624,6 @@ export function buildSectionReviewIssues(input: {
     );
     const preconsentScriptHosts = uniqueStrings(input.preconsentViolationRows.map((row) => row.scriptHost));
     const preconsentVendors = uniqueStrings(input.preconsentViolationRows.map((row) => row.vendorName));
-    const preconsentCookieEvidence = buildPreconsentCookieEvidenceFromViolationRows({
-      pageHost: getPreconsentPageHost(input.snapshot),
-      rows: input.preconsentViolationRows
-    });
     const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
     const highRiskContext = deriveHighRiskTrackingContext({
       hostname:
@@ -1712,17 +1649,6 @@ export function buildSectionReviewIssues(input: {
         preconsent_tracker_evidence_urls: preconsentEvidenceUrls,
         preconsent_tracker_script_hosts: preconsentScriptHosts,
         preconsent_tracker_vendors: uniqueStrings([...preconsentVendors, ...highRiskContext.highRiskVendors.map((vendor) => vendor.name)]),
-        ...(preconsentCookieEvidence.length > 0
-          ? {
-              preconsent_cookie_categories: uniqueStrings(preconsentCookieEvidence.map((row) => row.category)),
-              preconsent_cookie_evidence: preconsentCookieEvidence,
-              preconsent_cookie_initiator_domains: uniqueStrings(preconsentCookieEvidence.map((row) => row.initiatorDomain)),
-              preconsent_cookie_initiator_vendors: uniqueStrings(preconsentCookieEvidence.map((row) => row.initiatorVendor)),
-              preconsent_cookie_names: uniqueStrings(preconsentCookieEvidence.map((row) => row.cookieName)),
-              preconsent_cookie_timing_evidence: ["before_consent_cookie_write"],
-              preconsent_nonessential_cookie_names: uniqueStrings(preconsentCookieEvidence.map((row) => row.cookieName))
-            }
-          : {}),
         preconsent_tracking_detected: true,
         runtimeEvidenceArtifacts: uniqueStrings([
           ...preconsentEvidenceUrls,

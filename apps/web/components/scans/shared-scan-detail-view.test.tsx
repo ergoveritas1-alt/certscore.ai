@@ -377,6 +377,39 @@ async function loadExecutiveAccessLimitationNotice() {
   }).deriveExecutiveAccessLimitationNotice;
 }
 
+async function loadVisualAccessLimitationNotice() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (sharedScanDetailViewImport as unknown as { deriveVisualAccessLimitationNotice?: unknown })
+      .deriveVisualAccessLimitationNotice
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    deriveVisualAccessLimitationNotice: (
+      runtimeArtifacts: Record<string, unknown> | null | undefined
+    ) =>
+      | {
+          summary: string;
+          finding: { id: string; label: string; shortSummary: string };
+          review: { coverageLabel: string; outcomeTitle: string; reason: string; title: string };
+        }
+      | null;
+  }).deriveVisualAccessLimitationNotice;
+}
+
 async function loadSelectExecutiveAccessLimitationNotice() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule =
@@ -1272,6 +1305,62 @@ test("deriveExecutiveAccessLimitationNotice suppresses healthy-looking summaries
   assert.match(notice?.summary ?? "", /No reliable privacy or consent findings were retained/i);
 });
 
+test("deriveVisualAccessLimitationNotice does not treat screenshot upload failure as site no-go", async () => {
+  const deriveVisualAccessLimitationNotice = await loadVisualAccessLimitationNotice();
+
+  const notice = deriveVisualAccessLimitationNotice({
+    visual_access_review: {
+      artifactRef: "initial_load:3aa98210d0f5",
+      goNoGo: "NO_GO",
+      pageState: "missing_visual_artifact",
+      reasonCode: "visual_evidence_upload_failed",
+      shortExplanation: "Initial-load visual evidence was not retained as an available screenshot artifact.",
+      status: "missing_visual_artifact"
+    }
+  });
+
+  assert.equal(notice, null);
+});
+
+test("deriveVisualAccessLimitationNotice does not treat degraded but usable visual GO as site no-go", async () => {
+  const deriveVisualAccessLimitationNotice = await loadVisualAccessLimitationNotice();
+
+  const notice = deriveVisualAccessLimitationNotice({
+    visual_access_review: {
+      artifactRef: "initial_load:f50e875c64e64921",
+      goNoGo: "GO",
+      pageState: "degraded_but_useful",
+      reasonCode: "branding_visible_with_empty_body",
+      shortExplanation:
+        "The Georgia Tech header and navigation are visible, indicating a real public page, despite the page body appearing largely blank.",
+      status: "available"
+    }
+  });
+
+  assert.equal(notice, null);
+});
+
+test("deriveVisualAccessLimitationNotice turns retained bad-page visual no-go into a coverage notice", async () => {
+  const deriveVisualAccessLimitationNotice = await loadVisualAccessLimitationNotice();
+
+  const notice = deriveVisualAccessLimitationNotice({
+    visual_access_review: {
+      artifactRef: "initial_load:3aa98210d0f5",
+      goNoGo: "NO_GO",
+      pageState: "challenge_or_robot_page",
+      reasonCode: "bot_challenge_visible",
+      shortExplanation: "The retained visual evidence showed a bot challenge instead of the normal public page.",
+      status: "available"
+    }
+  });
+
+  assert.equal(notice?.finding.id, "scan_quality_visual_no_go");
+  assert.equal(notice?.review.title, "Normal public site was not reached");
+  assert.equal(notice?.review.coverageLabel, "Visual verification unavailable");
+  assert.match(notice?.review.reason ?? "", /bot_challenge_visible/i);
+  assert.match(notice?.summary ?? "", /visual review did not verify a normal public page/i);
+});
+
 test("hasIncompleteScanCoverage suppresses partial flag when retained coverage is substantial", async () => {
   const hasIncompleteScanCoverage = await loadHasIncompleteScanCoverage();
 
@@ -1451,6 +1540,33 @@ test("selectExecutiveAccessLimitationNotice does not replace retained unified fi
       allExecutiveFindings: [],
       notice,
       topExecutiveFindings: []
+    }),
+    notice
+  );
+});
+
+test("selectExecutiveAccessLimitationNotice lets retained visual no-go limit substantive findings", async () => {
+  const selectExecutiveAccessLimitationNotice = await loadSelectExecutiveAccessLimitationNotice();
+  const notice = {
+    finding: { id: "scan_quality_visual_no_go", label: "Normal public site was not reached" },
+    review: { coverageLabel: "Visual verification unavailable" },
+    summary: "No reliable findings were retained."
+  };
+  const visualNoGoFinding = { id: "scan_quality_visual_no_go" };
+
+  assert.equal(
+    selectExecutiveAccessLimitationNotice({
+      allExecutiveFindings: [visualNoGoFinding],
+      notice,
+      topExecutiveFindings: [visualNoGoFinding]
+    }),
+    notice
+  );
+  assert.equal(
+    selectExecutiveAccessLimitationNotice({
+      allExecutiveFindings: [visualNoGoFinding, { id: "tracking_before_consent" }],
+      notice,
+      topExecutiveFindings: [visualNoGoFinding]
     }),
     notice
   );

@@ -73,8 +73,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained consent and runti
     }
   });
 
-  assert.equal(outcomes.pre_consent_cookies_storage?.status, "Insufficient evidence");
-  assert.match(outcomes.pre_consent_cookies_storage?.limitation ?? "", /before-consent observations/i);
+  assert.equal(outcomes.pre_consent_cookies_storage?.status, "Not observed");
+  assert.match(outcomes.pre_consent_cookies_storage?.limitation ?? "", /did not classify/i);
   assert.equal(outcomes.reject_all_path_availability?.status, "Insufficient evidence");
   assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /complete reject-all control/i);
   assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not testable");
@@ -109,6 +109,34 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained consent surfaces a
     "Visible choice: Accept",
     "Visible choice: Decline"
   ]);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats unclassified before-consent storage inventory as not observed", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        storageSummary: {
+          cookiesBeforeConsentCount: 3,
+          cookiesSeenCount: 5
+        }
+      }
+    }
+  });
+
+  const outcome = outcomes.pre_consent_cookies_storage;
+  assert.equal(outcome?.status, "Not observed");
+  assert.deepEqual(outcome?.evidenceRefs, [
+    "Observed before-consent cookie/storage count: 3",
+    "Evidence: hybrid runtime storage summary"
+  ]);
+  assert.deepEqual(outcome?.criticalEvidence.missingOrIncompleteSourceSignals, []);
+  assert.equal(outcome?.criticalEvidence.pipeline.projectionStage, "coverage_policy");
+  assert.equal(
+    outcome?.criticalEvidence.retainedEvidence.eligibleNonEssentialCookieStorageFindingProjected,
+    false
+  );
+  assert.match(outcome?.criticalEvidence.statusBasis ?? "", /eligible non-essential cookie\/storage evidence/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats direct same-context sensitive tracking correlation as a gap", () => {
@@ -558,6 +586,116 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes declares retained session replay 
       vendors: ["Microsoft Clarity"]
     }
   );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 session replay summary request and timing evidence", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        sessionReplayEvidenceSummary: {
+          artifactCount: 1,
+          collectionEndpointObserved: true,
+          consentStates: ["pre_consent"],
+          firstSeenMs: 250,
+          libraryOnly: false,
+          maskingOrExclusionBasis: [],
+          maskingOrExclusionObserved: false,
+          preConsentObserved: true,
+          requestUrls: ["https://static.hotjar.com/c/hotjar-123.js"],
+          sensitiveSurfaceOverlap: false,
+          scriptHosts: ["static.hotjar.com"],
+          vendors: ["Hotjar"]
+        }
+      }
+    },
+    snapshot: {
+      session_replay_tracker_count: 1,
+      session_replay_tool_detected: true
+    }
+  });
+
+  const outcome = outcomes.session_replay_fingerprinting_review;
+  assert.equal(outcome?.status, "Gap observed");
+  assert.match(outcome?.limitation ?? "", /before a recorded consent action/i);
+  assert.deepEqual(outcome?.evidenceRefs, [
+    "Session replay signal observed before consent",
+    "Runtime vendor: Hotjar",
+    "Consent state: pre_consent"
+  ]);
+  assert.deepEqual(
+    outcome?.criticalEvidence.retainedEvidence.sessionReplayEvidence,
+    {
+      collectionEndpointObserved: true,
+      consentStates: ["pre_consent"],
+      firstSeenMs: 250,
+      libraryLoadObserved: true,
+      maskingOrExclusionObserved: false,
+      postAcceptObserved: false,
+      postChoiceConsentControlsObserved: false,
+      preConsentObserved: true,
+      requestUrls: ["https://static.hotjar.com/c/hotjar-123.js"],
+      sensitiveSurfaceOverlap: false,
+      vendorDisclosed: false,
+      vendorDisclosureGap: false,
+      vendors: ["Hotjar"]
+    }
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat mislabeled Google Analytics as session replay", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      requestPurposeClassificationConfidence: [
+        {
+          category: "session_replay",
+          requestUrl: "https://www.google-analytics.com/g/collect?v=2",
+          runtimePhase: "pre_consent",
+          vendor: "Google Analytics"
+        },
+        {
+          category: "session_replay",
+          requestUrl: "https://www.googletagmanager.com/gtm.js?id=GTM-TEST",
+          runtimePhase: "pre_consent",
+          vendor: "Google Tag Manager"
+        }
+      ]
+    },
+    snapshot: {
+      session_replay_tool_detected: false,
+      session_replay_tracker_count: 0
+    }
+  });
+
+  assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Not observed");
+  assert.equal(
+    outcomes.session_replay_fingerprinting_review?.criticalEvidence.retainedEvidence.sessionReplayObserved,
+    false
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes still treats Microsoft Clarity as pre-consent session replay", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      requestPurposeClassificationConfidence: [
+        {
+          category: "session_replay",
+          requestUrl: "https://c.clarity.ms/collect",
+          runtimePhase: "pre_consent",
+          vendor: "Microsoft Clarity"
+        }
+      ]
+    },
+    snapshot: {
+      session_replay_tool_detected: false,
+      session_replay_tracker_count: 0
+    }
+  });
+
+  assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Gap observed");
+  assert.match(outcomes.session_replay_fingerprinting_review?.limitation ?? "", /before a recorded consent action/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes consumes nested reject interaction evidence", () => {

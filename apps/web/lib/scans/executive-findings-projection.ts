@@ -2056,11 +2056,14 @@ function normalizeVendorCategory(
   category: string | null | undefined
 ) {
   const normalized = `${vendor ?? ""} ${url ?? ""}`.toLowerCase();
-  if (/microsoft\s+clarity|clarity\.ms|\bclarity\b/i.test(normalized)) {
-    return "session_replay";
+  if (/google\s+analytics|google-analytics|analytics\.google|google-analytics\.com|googleanalytics/i.test(normalized)) {
+    return "analytics";
   }
   if (/google\s+tag\s+manager|googletagmanager\.com|gtm\.js|\bgtm\b/i.test(normalized)) {
     return "tag_manager";
+  }
+  if (/microsoft\s+clarity|clarity\.ms|\bclarity\b/i.test(normalized)) {
+    return "session_replay";
   }
   if (/microsoft\s+advertising|bing\s+uet|bat\.bing\.com|\buet\b|\bbing\b/i.test(normalized)) {
     return "advertising_measurement";

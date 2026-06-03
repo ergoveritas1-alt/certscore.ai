@@ -19,10 +19,22 @@ export type GdprEprivacyCoverageChecklistStatus =
 
 export type GdprEprivacyCoverageChecklistTone = "neutral" | "review" | "warning" | "muted";
 
+export type RegulatoryEvidenceState = "observed" | "not_observed" | "not_testable" | "not_applicable";
+
+export type RegulatoryAssessmentStatus =
+  | "gap_observed"
+  | "review_signal"
+  | "checked"
+  | "coverage_limitation"
+  | "not_applicable";
+
 export type GdprEprivacyCoverageChecklistItem = {
+  assessmentStatus: RegulatoryAssessmentStatus;
   criticalEvidence: GdprEprivacyCoverageCriticalEvidence;
+  evidenceState: RegulatoryEvidenceState;
   id: string;
   label: string;
+  note: string;
   status: GdprEprivacyCoverageChecklistStatus;
   tone: GdprEprivacyCoverageChecklistTone;
   explanation: string;
@@ -56,23 +68,16 @@ export type GdprEprivacyCoverageChecklistInput = {
 const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   {
     id: "consent_surface_observed",
-    label: "Consent surface observed",
-    explanation: "Whether an actionable cookie/consent banner or preference surface was visible in the tested context.",
-    findingIds: [
-      "accept_more_prominent_than_reject",
-      "accept_only_banner",
-      "consent_control_not_reopenable",
-      "dismiss_without_reject",
-      "forced_consent_wall",
-      "reject_button_missing"
-    ],
+    label: "Consent banner / preference surface",
+    explanation: "Whether an actionable cookie/consent banner or preference surface was observed in the tested context.",
+    findingIds: [],
     defaultFindingStatus: "Observed",
     notObservedText: "No actionable consent surface issue was surfaced from the canonical report findings.",
     requiresPublicWebCoverage: true
   },
   {
     id: "pre_consent_cookies_storage",
-    label: "Pre-consent cookies / storage",
+    label: "Cookies or storage before consent",
     explanation: "Whether non-essential cookies or browser storage were observed before a recorded consent action.",
     findingIds: [
       "adtech_cookie_pre_consent",
@@ -98,12 +103,13 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "reject_all_path_availability",
-    label: "Reject-all path availability",
+    label: "Decline / reject option availability",
     explanation: "Whether a reject-all or equivalent refusal path was available from the observed consent surface.",
     findingIds: [
       "accept_only_banner",
       "dismiss_without_reject",
       "forced_consent_wall",
+      "accept_more_prominent_than_reject",
       "reject_button_missing",
       "reject_option_missing_or_hidden"
     ],
@@ -113,7 +119,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "post_reject_tracking_reduction",
-    label: "Post-reject tracking reduction",
+    label: "Tracking after refusal",
     explanation: "Whether non-essential tracking materially decreased after a reject action was recorded.",
     findingIds: [
       "reject_did_not_reduce_tracking",
@@ -126,7 +132,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "preference_withdrawal_control",
-    label: "Preference / withdrawal control",
+    label: "Post-choice consent controls",
     explanation: "Whether CertScore observed a way to reopen or change consent preferences after the initial choice.",
     findingIds: [
       "consent_control_not_reopenable",
@@ -138,8 +144,8 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "runtime_vendor_disclosure_alignment",
-    label: "Runtime vendor disclosure alignment",
-    explanation: "Whether observed runtime vendors appeared to align with reviewed public privacy/cookie disclosures.",
+    label: "Runtime vendors vs. disclosures",
+    explanation: "Whether observed runtime vendors were clearly matched by name or known domain alias in reviewed public privacy/cookie disclosures.",
     findingIds: [
       "cookie_disclosure_gap",
       "do_not_sell_sharing_disclosure_conflict",
@@ -167,8 +173,8 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "session_replay_fingerprinting_review",
-    label: "Session replay / fingerprinting review",
-    explanation: "Whether session replay, behavioral recording, or fingerprinting-like signals were observed or partially indicated.",
+    label: "Session replay / behavioral analytics",
+    explanation: "Whether session replay, behavioral recording, or behavioral analytics signals were observed in the tested context.",
     findingIds: [
       "fingerprinting_observed",
       "fingerprinting_related_signals_observed",
@@ -184,8 +190,8 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "cross_border_endpoint_review",
-    label: "Cross-border endpoint review",
-    explanation: "Whether observed third-party endpoints created a public-web international transfer review signal.",
+    label: "Cross-border analytics / tracking endpoint review",
+    explanation: "Whether transfer-relevant analytics, behavioral tracking, adtech, or identifier-bearing third-party endpoints were observed.",
     findingIds: [
       "cross_border_endpoint_transfer_review_signal",
       "cross_border_vendor_disclosure_gap",
@@ -218,6 +224,82 @@ function getChecklistTone(status: GdprEprivacyCoverageChecklistStatus): GdprEpri
     default:
       return "neutral";
   }
+}
+
+function getAssessmentStatus(status: GdprEprivacyCoverageChecklistStatus): RegulatoryAssessmentStatus {
+  switch (status) {
+    case "Gap observed":
+      return "gap_observed";
+    case "Review signal":
+      return "review_signal";
+    case "Insufficient evidence":
+    case "Not testable":
+      return "coverage_limitation";
+    case "Out of scope":
+      return "not_applicable";
+    case "Observed":
+    case "Not observed":
+    default:
+      return "checked";
+  }
+}
+
+function getEvidenceState(input: {
+  id: string;
+  status: GdprEprivacyCoverageChecklistStatus;
+  assessmentStatus: RegulatoryAssessmentStatus;
+}): RegulatoryEvidenceState {
+  if (input.status === "Not testable" || input.status === "Insufficient evidence" || input.assessmentStatus === "coverage_limitation") {
+    return "not_testable";
+  }
+  if (input.status === "Out of scope" || input.assessmentStatus === "not_applicable") {
+    return "not_applicable";
+  }
+  if (input.status === "Not observed") {
+    return "not_observed";
+  }
+  if (
+    input.status === "Gap observed" &&
+    (
+      input.id === "reject_all_path_availability" ||
+      input.id === "preference_withdrawal_control"
+    )
+  ) {
+    return "not_observed";
+  }
+
+  return "observed";
+}
+
+function buildChecklistItem(input: {
+  criticalEvidence: GdprEprivacyCoverageCriticalEvidence;
+  evidenceRefs: string[];
+  explanation: string;
+  id: string;
+  label: string;
+  limitation?: string;
+  status: GdprEprivacyCoverageChecklistStatus;
+}): GdprEprivacyCoverageChecklistItem {
+  const assessmentStatus = getAssessmentStatus(input.status);
+  const evidenceState = getEvidenceState({
+    assessmentStatus,
+    id: input.id,
+    status: input.status
+  });
+
+  return {
+    assessmentStatus,
+    criticalEvidence: input.criticalEvidence,
+    evidenceRefs: input.evidenceRefs,
+    evidenceState,
+    explanation: input.explanation,
+    id: input.id,
+    label: input.label,
+    limitation: input.limitation,
+    note: input.explanation,
+    status: input.status,
+    tone: getChecklistTone(input.status)
+  };
 }
 
 function compactEvidenceRef(value: string | null | undefined) {
@@ -410,7 +492,403 @@ function isFindingPresentationStatusSufficientForCoverageRow(rowId: string, find
   );
 }
 
+function getSessionReplayEvidenceFromOutcome(outcome: GdprEprivacyCoverageOutcome | undefined) {
+  const evidence = outcome?.criticalEvidence.retainedEvidence.sessionReplayEvidence;
+  return evidence && typeof evidence === "object" && !Array.isArray(evidence)
+    ? evidence as Record<string, unknown>
+    : null;
+}
+
+function getStringArrayEntity(values: unknown) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+}
+
+function sessionReplayEvidenceHasPreConsentSignal(evidence: Record<string, unknown> | null) {
+  return (
+    evidence?.preConsentObserved === true ||
+    getStringArrayEntity(evidence?.consentStates).some((value) => /pre[_ -]?consent/i.test(value))
+  );
+}
+
+function sessionReplayEvidenceHasPostConsentSignal(evidence: Record<string, unknown> | null) {
+  return (
+    evidence?.postAcceptObserved === true ||
+    getStringArrayEntity(evidence?.consentStates).some((value) => /post[_ -]?(?:accept|consent)|after[_ -]?consent/i.test(value))
+  );
+}
+
+function getSessionReplayVendorsFromEvidence(evidence: Record<string, unknown> | null) {
+  return getStringArrayEntity(evidence?.vendors);
+}
+
+function getSessionReplayFindingVendors(findings: UnifiedFindingDisplayPacket[]) {
+  const vendors = new Set<string>();
+
+  for (const finding of findings) {
+    const entities = finding.evidence?.entities ?? {};
+    for (const key of [
+      "sessionReplayVendors",
+      "session_replay_runtime_vendors",
+      "runtimeVendors",
+      "vendors"
+    ]) {
+      for (const vendor of getStringArrayEntity(entities[key])) {
+        vendors.add(vendor);
+      }
+    }
+  }
+
+  return [...vendors];
+}
+
+function hasSessionReplayFindingPreConsentEvidence(findings: UnifiedFindingDisplayPacket[]) {
+  return findings.some((finding) => {
+    const entities = finding.evidence?.entities ?? {};
+    return (
+      getStringArrayEntity(entities.consentStates).some((value) => /pre[_ -]?consent/i.test(value)) ||
+      getStringArrayEntity(entities.runtimePhase).some((value) => /pre[_ -]?consent/i.test(value)) ||
+      (finding.evidence?.flags ?? []).some((value) => /pre[_ -]?consent/i.test(value))
+    );
+  });
+}
+
+function hasSessionReplayGapFinding(findings: UnifiedFindingDisplayPacket[]) {
+  return findings.some((finding) =>
+    finding.unifiedFindingId === "possible_session_replay_on_sensitive_input_surface" ||
+    finding.unifiedFindingId === "session_replay_present_with_sensitive_surfaces_observed" ||
+    finding.unifiedFindingId === "session_replay_undisclosed"
+  );
+}
+
+function formatVendorPhrase(vendors: string[]) {
+  if (vendors.length === 0) {
+    return null;
+  }
+
+  if (vendors.length === 1) {
+    return vendors[0] ?? null;
+  }
+
+  if (vendors.length === 2) {
+    return `${vendors[0]} and ${vendors[1]}`;
+  }
+
+  return `${vendors.slice(0, -1).join(", ")}, and ${vendors.at(-1)}`;
+}
+
+function getFindingEntityStrings(findings: UnifiedFindingDisplayPacket[], keys: string[]) {
+  const values = new Set<string>();
+
+  for (const finding of findings) {
+    const entities = finding.evidence?.entities ?? {};
+    for (const key of keys) {
+      const entityValues = entities[key];
+      if (!Array.isArray(entityValues)) {
+        continue;
+      }
+      for (const value of entityValues) {
+        if (typeof value === "string" && value.trim().length > 0) {
+          values.add(value.trim());
+        }
+      }
+    }
+  }
+
+  return [...values];
+}
+
+function getFindingEntityRows(findings: UnifiedFindingDisplayPacket[], keys: string[]) {
+  const rows: Record<string, unknown>[] = [];
+
+  for (const finding of findings) {
+    const entities = finding.evidence?.entities ?? {};
+    for (const key of keys) {
+      const entityValues = entities[key];
+      if (!Array.isArray(entityValues)) {
+        continue;
+      }
+      for (const value of entityValues) {
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          rows.push(value as Record<string, unknown>);
+          continue;
+        }
+        if (typeof value !== "string") {
+          continue;
+        }
+        try {
+          const parsed = JSON.parse(value) as unknown;
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            rows.push(parsed as Record<string, unknown>);
+          }
+        } catch {
+          // Keep malformed row strings in Advanced Evidence only.
+        }
+      }
+    }
+  }
+
+  return rows;
+}
+
+function getStringValue(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function uniqueEntityStrings(values: Array<string | null | undefined>) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+function isTransferRelevantVendorName(value: string) {
+  return /google tag manager|google analytics|microsoft clarity|hotjar|contentsquare|fullstory|logrocket|segment|mixpanel|amplitude|meta|facebook|google ads|doubleclick|bing|microsoft advertising|linkedin|appnexus|xandr|tiktok/i.test(value);
+}
+
+function buildCrossBorderEndpointEvidenceHighlights(findings: UnifiedFindingDisplayPacket[]) {
+  const endpointRows = getFindingEntityRows(findings, [
+    "endpointJurisdictionEvidence",
+    "crossBorderEndpointEvidence"
+  ]);
+  const vendors = uniqueEntityStrings([
+    ...getFindingEntityStrings(findings, [
+      "endpointTransferReviewVendors",
+      "observedRuntimeVendors",
+      "runtimeVendors",
+      "relatedVendors",
+      "unmatchedRuntimeVendors"
+    ]),
+    ...endpointRows.flatMap((row) => [
+      getStringValue(row.matchedVendorName),
+      getStringValue(row.matched_vendor_name),
+      getStringValue(row.vendor),
+      getStringValue(row.vendorName),
+      getStringValue(row.vendor_name)
+    ])
+  ]).filter(isTransferRelevantVendorName);
+
+  if (vendors.length === 0) {
+    return [];
+  }
+
+  return [
+    `Transfer-relevant advertising, analytics, or behavioral tracking endpoints were observed for ${formatVendorPhrase(vendors.slice(0, 6))}. Additional third-party asset endpoints were retained as supporting runtime context.`
+  ];
+}
+
+function getRowEvidenceHighlights(input: {
+  findings: UnifiedFindingDisplayPacket[];
+  projectedFindings: NonNullable<GdprEprivacyCoverageChecklistInput["projectedFindings"]>;
+  rowId: string;
+}) {
+  if (input.rowId === "cross_border_endpoint_review") {
+    const crossBorderHighlights = buildCrossBorderEndpointEvidenceHighlights(input.findings);
+    if (crossBorderHighlights.length > 0) {
+      return crossBorderHighlights;
+    }
+  }
+
+  return input.projectedFindings.flatMap(buildRegulatoryChecklistEvidenceHighlights).slice(0, 3);
+}
+
+function specializeSessionReplayChecklistRow(input: {
+  definition: ChecklistRowDefinition;
+  evidenceRefs: string[];
+  findings: UnifiedFindingDisplayPacket[];
+  status: GdprEprivacyCoverageChecklistStatus;
+  coverageOutcome?: GdprEprivacyCoverageOutcome;
+}) {
+  if (input.definition.id !== "session_replay_fingerprinting_review") {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation: input.definition.explanation,
+      label: input.definition.label,
+      status: input.status
+    };
+  }
+
+  const outcomeEvidence = getSessionReplayEvidenceFromOutcome(input.coverageOutcome);
+  const vendors = [
+    ...new Set([
+      ...getSessionReplayFindingVendors(input.findings),
+      ...getSessionReplayVendorsFromEvidence(outcomeEvidence)
+    ])
+  ];
+  const vendorPhrase = formatVendorPhrase(vendors);
+  const preConsentObserved =
+    (input.status === "Gap observed" || input.coverageOutcome?.status === "Gap observed") &&
+    (
+      sessionReplayEvidenceHasPreConsentSignal(outcomeEvidence) ||
+      hasSessionReplayFindingPreConsentEvidence(input.findings)
+    );
+  const gapObserved = input.status === "Gap observed" || input.coverageOutcome?.status === "Gap observed" || hasSessionReplayGapFinding(input.findings);
+  const postConsentOrNotPreConsent =
+    sessionReplayEvidenceHasPostConsentSignal(outcomeEvidence) ||
+    outcomeEvidence?.preConsentObserved === false ||
+    /pre-consent replay (?:not retained|evidence was not retained|evidence retained)/i.test(input.coverageOutcome?.limitation ?? "") ||
+    input.findings.some((finding) => finding.unifiedFindingId === "session_replay_observed" || finding.unifiedFindingId === "session_recording_services_detected");
+
+  if (gapObserved) {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation: preConsentObserved
+        ? "CertScore observed session replay or behavioral analytics before a recorded consent action. Review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls."
+        : "CertScore observed session replay or behavioral analytics in a higher-risk context, such as sensitive-surface co-presence, disclosure mismatch, post-reject persistence, or retained payload exposure. Review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.",
+      label: preConsentObserved
+        ? "Session replay before consent observed"
+        : "Session replay disclosure or sensitive-surface gap observed",
+      status: "Gap observed" as const
+    };
+  }
+
+  if (input.status === "Observed" || input.status === "Review signal" || postConsentOrNotPreConsent) {
+    const timingPhrase = sessionReplayEvidenceHasPostConsentSignal(outcomeEvidence)
+      ? "observed after the pre-consent phase"
+      : "not observed pre-consent in retained evidence";
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation: `CertScore observed session replay or behavioral analytics vendors ${timingPhrase}${vendorPhrase ? `, including ${vendorPhrase}` : ""}. Because these tools can capture user interaction behavior, review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.`,
+      label: "Session replay / behavioral analytics observed",
+      status: "Review signal" as const
+    };
+  }
+
+  if (input.status === "Not observed") {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation: "No eligible session replay, behavioral recording, or fingerprinting-like signal was observed in the tested context.",
+      label: "No session replay / behavioral analytics observed",
+      status: input.status
+    };
+  }
+
+  if (input.status === "Not testable") {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation: "Session replay and behavioral analytics review was not testable from retained runtime evidence for this scan context.",
+      label: "Session replay review not testable",
+      status: input.status
+    };
+  }
+
+  return {
+    evidenceRefs: input.evidenceRefs,
+    explanation: input.definition.explanation,
+    label: input.definition.label,
+    status: input.status
+  };
+}
+
+function specializeChecklistRow(input: {
+  definition: ChecklistRowDefinition;
+  evidenceRefs: string[];
+  findings: UnifiedFindingDisplayPacket[];
+  status: GdprEprivacyCoverageChecklistStatus;
+  coverageOutcome?: GdprEprivacyCoverageOutcome;
+}) {
+  if (input.definition.id === "session_replay_fingerprinting_review") {
+    return specializeSessionReplayChecklistRow(input);
+  }
+
+  if (input.definition.id === "consent_surface_observed" && input.status === "Observed") {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation: "An actionable cookie/consent banner or preference surface was observed in the tested context.",
+      label: input.definition.label,
+      status: "Observed" as const
+    };
+  }
+
+  if (input.definition.id === "preference_withdrawal_control" && input.status === "Gap observed") {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation:
+        "No obvious cookie preferences, privacy settings, or consent-preference reopen control was observed after the recorded consent choice in the tested context.",
+      label: input.definition.label,
+      status: "Gap observed" as const
+    };
+  }
+
+  if (input.definition.id === "runtime_vendor_disclosure_alignment" && input.status === "Gap observed") {
+    const extractionQualityNote = hasLimitedDisclosureSnippetEvidence(input.findings)
+      ? " Reviewed disclosure surfaces were reached, but retained snippets appear limited; verify full policy/cookie disclosure coverage during manual review."
+      : "";
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation:
+        `Observed runtime vendors were not clearly matched by name or known domain alias in the reviewed public privacy / cookie disclosures.${extractionQualityNote}`,
+      label: input.definition.label,
+      status: "Gap observed" as const
+    };
+  }
+
+  if (input.definition.id === "cross_border_endpoint_review" && input.status === "Gap observed") {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation:
+        "Transfer-relevant third-party analytics or behavioral tracking endpoints were observed, and associated runtime vendors were not clearly matched in retained public disclosure evidence.",
+      label: input.definition.label,
+      status: "Gap observed" as const
+    };
+  }
+
+  if (input.definition.id === "reject_all_path_availability" && input.status === "Observed") {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation: "A reject-all or equivalent refusal path was observed from the consent surface in the tested context.",
+      label: input.definition.label,
+      status: "Observed" as const
+    };
+  }
+
+  if (input.definition.id === "sensitive_surfaces_third_party_tracking" && input.status === "Not observed") {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation:
+        "Sensitive-field correlation completed and did not retain eligible sensitive fields alongside third-party tracking in the tested context.",
+      label: input.definition.label,
+      status: "Not observed" as const
+    };
+  }
+
+  if (input.definition.id === "accessibility_consent_controls" && input.status === "Not observed") {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation:
+        "No automated accessibility issue was retained for the consent banner, preference center, or privacy-choice controls in the tested context.",
+      label: input.definition.label,
+      status: "Not observed" as const
+    };
+  }
+
+  return {
+    evidenceRefs: input.evidenceRefs,
+    explanation: input.definition.explanation,
+    label: input.definition.label,
+    status: input.status
+  };
+}
+
 function isFindingEligibleForCoverageRow(rowId: string, finding: UnifiedFindingDisplayPacket) {
+  if (rowId === "post_reject_tracking_reduction") {
+    return hasConfirmedPostRejectEvidence(finding);
+  }
+
   if (rowId === "cross_border_endpoint_review" && finding.unifiedFindingId === "cross_border_vendor_disclosure_gap") {
     return isCrossBorderDisclosureGapEvidence(rowId, finding);
   }
@@ -426,11 +904,115 @@ function isProjectedFindingEligibleForCoverageRow(
   rowId: string,
   finding: NonNullable<GdprEprivacyCoverageChecklistInput["projectedFindings"]>[number]
 ) {
+  if (rowId === "post_reject_tracking_reduction") {
+    return hasConfirmedProjectedPostRejectEvidence(finding);
+  }
+
   if (rowId === "cross_border_endpoint_review" && finding.id === "missing_transfer_disclosure") {
     return false;
   }
 
   return true;
+}
+
+function getRecordValue(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function getNestedRecord(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = getRecordValue(record?.[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getNestedBoolean(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+  return null;
+}
+
+function parseEntityRecords(values: unknown) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  return values.flatMap((value): Record<string, unknown>[] => {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return [value as Record<string, unknown>];
+    }
+    if (typeof value !== "string") {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? [parsed as Record<string, unknown>]
+        : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function postRejectEvidenceHasConfirmedWindow(evidence: Record<string, unknown> | null | undefined) {
+  if (!evidence) {
+    return false;
+  }
+  const reductionEvidence = getNestedRecord(evidence, [
+    "postRejectTrackingReductionEvidence",
+    "post_reject_tracking_reduction_evidence",
+    "postRejectEvidence",
+    "post_reject_evidence"
+  ]) ?? evidence;
+  return (
+    getNestedBoolean(reductionEvidence, ["rejectInteractionConfirmed", "reject_interaction_confirmed"]) === true &&
+    getNestedBoolean(reductionEvidence, ["postRejectWindowAvailable", "post_reject_window_available"]) === true
+  );
+}
+
+function hasConfirmedPostRejectEvidence(finding: UnifiedFindingDisplayPacket) {
+  if (!(finding.evidence?.flags ?? []).includes("reject_evidence_confirmed")) {
+    return false;
+  }
+  const entities = finding.evidence?.entities ?? {};
+  return (
+    postRejectEvidenceHasConfirmedWindow(entities as Record<string, unknown>) ||
+    parseEntityRecords(entities.postRejectTrackingReductionEvidence).some(postRejectEvidenceHasConfirmedWindow) ||
+    parseEntityRecords(entities.postRejectEvidence).some(postRejectEvidenceHasConfirmedWindow)
+  );
+}
+
+function hasConfirmedProjectedPostRejectEvidence(
+  finding: NonNullable<GdprEprivacyCoverageChecklistInput["projectedFindings"]>[number]
+) {
+  return postRejectEvidenceHasConfirmedWindow(finding.evidenceDetails as Record<string, unknown> | undefined);
+}
+
+function hasLimitedDisclosureSnippetEvidence(findings: UnifiedFindingDisplayPacket[]) {
+  const rows = getFindingEntityRows(findings, ["runtimeVendorDisclosureEvidence"]);
+  const snippets = rows.flatMap((row) => {
+    const policySurfaces = Array.isArray(row.policySurfacesSearched)
+      ? row.policySurfacesSearched
+      : Array.isArray(row.policy_surfaces_searched)
+        ? row.policy_surfaces_searched
+        : [];
+    return policySurfaces.flatMap((surface) => {
+      if (!surface || typeof surface !== "object" || Array.isArray(surface)) {
+        return [];
+      }
+      const record = surface as Record<string, unknown>;
+      const snippet = getStringValue(record.snippet) ?? getStringValue(record.textSnippet) ?? getStringValue(record.text_snippet);
+      return snippet ? [snippet] : [];
+    });
+  });
+  return snippets.length > 0 && snippets.every((snippet) => snippet.length < 220);
 }
 
 function makeSourceSignalGap(
@@ -487,7 +1069,7 @@ function getUnifiedFindingCriticalEvidence(
       severity: finding.severity
     })),
     retainedEvidence: {
-      evidenceHighlights: projectedFindings.flatMap(buildRegulatoryChecklistEvidenceHighlights).slice(0, 3),
+      evidenceHighlights: getRowEvidenceHighlights({ findings, projectedFindings, rowId }),
       evidenceRefs: getEvidenceRefs(findings),
       findingEntities: findings.map((finding) => ({
         id: finding.unifiedFindingId,
@@ -566,6 +1148,7 @@ export function deriveGdprEprivacyCoverageChecklist(
   const publicCoverageIsTestable = input.scanCompleted && !input.coverageLimited;
 
   const rows = CHECKLIST_ROWS.map((definition) => {
+    const coverageOutcome = input.coverageOutcomes?.[definition.id];
     const matchingFindings = definition.findingIds.flatMap((id) => {
       const finding = findingsById.get(id);
       return finding && isFindingEligibleForCoverageRow(definition.id, finding) ? [finding] : [];
@@ -578,58 +1161,75 @@ export function deriveGdprEprivacyCoverageChecklist(
     if (matchingFindings.length > 0) {
       const status = normalizeFindingStatus(definition, matchingFindings);
       const evidenceRefs = getEvidenceRefs(matchingFindings);
-      return {
+      const specialized = specializeChecklistRow({
+        coverageOutcome,
+        definition,
+        evidenceRefs,
+        findings: matchingFindings,
+        status
+      });
+      return buildChecklistItem({
         criticalEvidence: getUnifiedFindingCriticalEvidence(
-          status,
+          specialized.status,
           `Canonical unified finding${matchingFindings.length === 1 ? "" : "s"} projected for this row.`,
           definition.id,
           matchingFindings,
           matchingProjectedFindings
         ),
+        evidenceRefs: specialized.evidenceRefs,
+        explanation: specialized.explanation,
         id: definition.id,
-        label: definition.label,
-        status,
-        tone: getChecklistTone(status),
-        explanation: definition.explanation,
-        evidenceRefs
-      };
+        label: specialized.label,
+        status: specialized.status
+      });
     }
 
     if (matchingProjectedFindings.length > 0) {
       const status = definition.defaultFindingStatus;
       const evidenceRefs = getProjectedEvidenceRefs(matchingProjectedFindings);
-      return {
+      const specialized = specializeChecklistRow({
+        coverageOutcome,
+        definition,
+        evidenceRefs,
+        findings: [],
+        status
+      });
+      return buildChecklistItem({
         criticalEvidence: getProjectedFindingCriticalEvidence(
-          status,
+          specialized.status,
           `Executive/regulatory projection already retained finding evidence for this row.`,
           definition.id,
           matchingProjectedFindings
         ),
+        evidenceRefs: specialized.evidenceRefs,
+        explanation: specialized.explanation,
         id: definition.id,
-        label: definition.label,
-        status,
-        tone: getChecklistTone(status),
-        explanation: definition.explanation,
-        evidenceRefs
-      };
+        label: specialized.label,
+        status: specialized.status
+      });
     }
 
-    const coverageOutcome = input.coverageOutcomes?.[definition.id];
     if (coverageOutcome) {
-      return {
-        criticalEvidence: coverageOutcome.criticalEvidence,
-        id: definition.id,
-        label: definition.label,
-        status: coverageOutcome.status,
-        tone: getChecklistTone(coverageOutcome.status),
-        explanation: definition.explanation,
+      const specialized = specializeChecklistRow({
+        coverageOutcome,
+        definition,
         evidenceRefs: coverageOutcome.evidenceRefs,
-        limitation: coverageOutcome.limitation
-      };
+        findings: [],
+        status: coverageOutcome.status
+      });
+      return buildChecklistItem({
+        criticalEvidence: coverageOutcome.criticalEvidence,
+        evidenceRefs: specialized.evidenceRefs,
+        explanation: specialized.explanation,
+        id: definition.id,
+        label: specialized.label,
+        limitation: coverageOutcome.limitation,
+        status: specialized.status,
+      });
     }
 
     if (definition.requiresPublicWebCoverage && !publicCoverageIsTestable) {
-      return {
+      return buildChecklistItem({
         criticalEvidence: getFallbackCriticalEvidence(
           "Not testable",
           input.scanCompleted
@@ -645,19 +1245,18 @@ export function deriveGdprEprivacyCoverageChecklist(
             )
           ]
         ),
+        evidenceRefs: [],
+        explanation: definition.explanation,
         id: definition.id,
         label: definition.label,
-        status: "Not testable" as const,
-        tone: getChecklistTone("Not testable"),
-        explanation: definition.explanation,
-        evidenceRefs: [],
         limitation: input.scanCompleted
           ? "Public-web coverage was limited, so absence of a finding is not treated as a clean observation."
-          : "The scan has not completed, so this coverage row is not testable yet."
-      };
+          : "The scan has not completed, so this coverage row is not testable yet.",
+        status: "Not testable" as const,
+      });
     }
 
-    return {
+    return buildChecklistItem({
       criticalEvidence: getFallbackCriticalEvidence(
         "Not observed",
         definition.notObservedText,
@@ -671,14 +1270,13 @@ export function deriveGdprEprivacyCoverageChecklist(
           )
         ]
       ),
+      evidenceRefs: [],
+      explanation: definition.explanation,
       id: definition.id,
       label: definition.label,
+      limitation: definition.notObservedText,
       status: "Not observed" as const,
-      tone: getChecklistTone("Not observed"),
-      explanation: definition.explanation,
-      evidenceRefs: [],
-      limitation: definition.notObservedText
-    };
+    });
   });
 
   return rows;

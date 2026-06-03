@@ -441,25 +441,17 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
   if (cookiesBeforeConsentCount !== null && cookiesBeforeConsentCount > 0) {
     return makeOutcome(
       "pre_consent_cookies_storage",
-      "Insufficient evidence",
-      "Cookie/storage inventory retained before-consent observations, but no eligible unified cookie/storage finding was projected for this row.",
+      "Not observed",
+      "Cookie/storage inventory retained before-consent observations, but WS01/WC01 did not classify the retained examples as eligible non-essential cookie/storage evidence for this row.",
       [
         `Observed before-consent cookie/storage count: ${cookiesBeforeConsentCount}`,
         "Evidence: hybrid runtime storage summary"
       ],
       {
-        missingOrIncompleteSourceSignals: [
-          sourceGap(
-            "WC01.unifiedFindings.preConsentCookieStorageFinding",
-            "eligible projected unified finding when retained observations satisfy policy gates",
-            "missing",
-            "Required to classify retained before-consent cookie/storage observations as a canonical gap.",
-            "WC01"
-          )
-        ],
         retainedEvidence: {
           cookiesBeforeConsentCount,
           cookiesSeenCount,
+          eligibleNonEssentialCookieStorageFindingProjected: false,
           storageSummaryRetained: Boolean(storageSummary)
         }
       }
@@ -1596,6 +1588,8 @@ const SESSION_REPLAY_URL_PATTERN =
   /clarity\.ms|hotjar\.com|hotjar\.io|fullstory\.com|logrocket\.com|mouseflow\.com|contentsquare\.(?:com|net)|smartlook\.com|inspectlet\.com|luckyorange\.com|quantummetric\.com|sessioncam\.com/i;
 const SESSION_REPLAY_VENDOR_PATTERN =
   /microsoft clarity|clarity|hotjar|fullstory|logrocket|mouseflow|contentsquare|smartlook|inspectlet|lucky orange|quantum metric|sessioncam/i;
+const NON_REPLAY_ANALYTICS_VENDOR_PATTERN =
+  /google analytics|google tag manager|\bgtm\b|googletagmanager|google-analytics|analytics\.google/i;
 
 function hostFromUrl(value: string | null | undefined) {
   if (!value) {
@@ -1617,6 +1611,11 @@ function isSessionReplayEvidenceRow(row: Record<string, unknown>) {
   const category = getString(row, ["category", "vendorCategory", "vendor_category", "purpose"]);
   const vendor = getString(row, ["vendor", "vendorName", "vendor_name"]);
   const requestUrl = getString(row, ["requestUrl", "request_url", "url"]);
+  const vendorAndUrl = `${vendor ?? ""} ${requestUrl ?? ""}`;
+
+  if (NON_REPLAY_ANALYTICS_VENDOR_PATTERN.test(vendorAndUrl)) {
+    return false;
+  }
 
   return (
     /session_replay|session replay|behavioral|recording/i.test(category ?? "") ||
@@ -1656,6 +1655,7 @@ function buildSessionReplayRuntimeEvidence(input: GdprEprivacyCoveragePolicyInpu
   ]).filter((vendor) => SESSION_REPLAY_VENDOR_PATTERN.test(vendor));
   const requestUrls = uniqueStrings([
     ...classificationRows.map((row) => getString(row, ["requestUrl", "request_url", "url"])),
+    ...getStringArray(summary, ["requestUrls", "request_urls"]),
     ...postAcceptEvidenceUrls
   ]);
   const vendors = uniqueStrings([
@@ -1669,12 +1669,17 @@ function buildSessionReplayRuntimeEvidence(input: GdprEprivacyCoveragePolicyInpu
     "session_replay_runtime_artifacts",
     "sessionReplayRuntimeArtifacts"
   ]);
-  const firstSeenMsValues = classificationRows
-    .map(getSessionReplayTiming)
+  const summaryFirstSeenMs = getNumber(summary, ["firstSeenMs", "first_seen_ms"]);
+  const firstSeenMsValues = [
+    ...classificationRows.map(getSessionReplayTiming),
+    summaryFirstSeenMs
+  ]
     .filter((value): value is number => value !== null)
     .sort((left, right) => left - right);
   const consentStates = uniqueStrings([
     ...classificationRows.map((row) => getString(row, ["runtimePhase", "runtime_phase", "timingStatus", "timing_status"])),
+    ...getStringArray(summary, ["consentStates", "consent_states"]),
+    getBoolean(summary, ["preConsentObserved", "pre_consent_observed"]) === true ? "pre_consent" : null,
     postAcceptEvidenceUrls.length > 0 || postAcceptVendors.length > 0 ? "post_accept" : null
   ]);
   const disclosureRows = getRuntimeVendorDisclosureEvidence(input.runtimeArtifacts).filter((row) =>
@@ -1720,7 +1725,9 @@ function buildSessionReplayRuntimeEvidence(input: GdprEprivacyCoveragePolicyInpu
         "withdrawalTextObserved",
         "withdrawal_text_observed"
       ]) === true,
-    preConsentObserved: consentStates.some((state) => /pre.?consent/i.test(state)),
+    preConsentObserved:
+      getBoolean(summary, ["preConsentObserved", "pre_consent_observed"]) === true ||
+      consentStates.some((state) => /pre.?consent/i.test(state)),
     requestUrls: compactArray(requestUrls, 5),
     runtimeArtifacts: compactArray(snapshotRuntimeArtifacts, 5),
     sensitiveSurfaceOverlap: getBoolean(summary, ["sensitiveSurfaceOverlap", "sensitive_surface_overlap"]),

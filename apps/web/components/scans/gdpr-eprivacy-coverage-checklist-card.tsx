@@ -1,9 +1,12 @@
+import React from "react";
 import { cn } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
 import type {
   GdprEprivacyCoverageChecklistItem,
-  GdprEprivacyCoverageChecklistStatus
+  GdprEprivacyCoverageChecklistStatus,
+  RegulatoryAssessmentStatus,
+  RegulatoryEvidenceState
 } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import {
   deriveGdprEprivacyReviewSummary,
@@ -21,22 +24,63 @@ type GdprEprivacyCoverageChecklistCardProps = {
   items: GdprEprivacyCoverageChecklistItem[];
 };
 
-function getStatusBadgeClasses(status: GdprEprivacyCoverageChecklistStatus) {
+function getAssessmentBadgeClasses(status: RegulatoryAssessmentStatus) {
   switch (status) {
-    case "Gap observed":
+    case "gap_observed":
       return "border-amber-200 bg-amber-50 text-amber-900";
-    case "Review signal":
+    case "review_signal":
       return "border-indigo-200 bg-indigo-50 text-indigo-900";
-    case "Insufficient evidence":
-      return "border-violet-200 bg-violet-50 text-violet-900";
-    case "Observed":
-      return "border-sky-200 bg-sky-50 text-sky-900";
-    case "Not testable":
-      return "border-slate-300 bg-slate-100 text-slate-700";
-    case "Out of scope":
+    case "coverage_limitation":
+      return "border-violet-200 bg-violet-50 text-violet-700";
+    case "not_applicable":
       return "border-slate-200 bg-white text-slate-600";
+    case "checked":
     default:
       return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  }
+}
+
+function getEvidenceStateBadgeClasses(state: RegulatoryEvidenceState) {
+  switch (state) {
+    case "observed":
+      return "border-slate-200 bg-slate-50 text-slate-700";
+    case "not_observed":
+      return "border-slate-200 bg-white text-slate-600";
+    case "not_testable":
+      return "border-slate-300 bg-slate-100 text-slate-600";
+    case "not_applicable":
+    default:
+      return "border-slate-200 bg-white text-slate-500";
+  }
+}
+
+function getAssessmentStatusLabel(status: RegulatoryAssessmentStatus) {
+  switch (status) {
+    case "gap_observed":
+      return "Gap observed";
+    case "review_signal":
+      return "Review signal";
+    case "coverage_limitation":
+      return "Coverage limitation";
+    case "not_applicable":
+      return "Not applicable";
+    case "checked":
+    default:
+      return "Checked";
+  }
+}
+
+function getEvidenceStateLabel(state: RegulatoryEvidenceState) {
+  switch (state) {
+    case "observed":
+      return "Observed";
+    case "not_observed":
+      return "Not observed";
+    case "not_testable":
+      return "Not testable";
+    case "not_applicable":
+    default:
+      return "Not applicable";
   }
 }
 
@@ -175,7 +219,9 @@ function CoverageStatusIcon({ icon }: { icon: ReturnType<typeof getCoverageIconM
 
 function getEvidenceJson(item: GdprEprivacyCoverageChecklistItem) {
   return {
+    assessmentStatus: item.assessmentStatus,
     coverageArea: item.label,
+    evidenceState: item.evidenceState,
     status: item.status,
     ...item.criticalEvidence
   };
@@ -210,12 +256,12 @@ function getGdprSummaryTitle(input: {
   toneClass?: string;
 }) {
   const ratingBucket = typeof input.score === "number" ? Math.max(0, Math.min(5, input.score / 20)) : 0;
-  const gapCount = input.items.filter((item) => item.status === "Gap observed").length;
-  const reviewCount = input.items.filter((item) =>
-    item.status === "Review signal" || item.status === "Insufficient evidence"
+  const gapCount = input.items.filter((item) => item.assessmentStatus === "gap_observed").length;
+  const reviewCount = input.items.filter((item) => item.assessmentStatus === "review_signal").length;
+  const checkedCount = input.items.filter((item) => item.assessmentStatus === "checked").length;
+  const notTestableCount = input.items.filter((item) =>
+    item.evidenceState === "not_testable" || item.assessmentStatus === "coverage_limitation"
   ).length;
-  const checkedCount = input.items.filter((item) => item.status === "Observed" || item.status === "Not observed").length;
-  const notTestableCount = input.items.filter((item) => item.status === "Not testable").length;
   const statusSummary = [
     {
       className: "border-rose-200 bg-rose-50 text-rose-700",
@@ -323,7 +369,9 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
 
   if (item.id === "post_reject_tracking_reduction") {
     return item.status === "Gap observed"
-      ? "Non-essential tracking did not materially decrease after the recorded reject action."
+      ? hasQuantitativePostRejectReductionEvidence(item)
+        ? "Non-essential tracking did not materially decrease after the recorded reject action."
+        : "Non-essential tracking was still observed after the recorded reject action."
       : item.status === "Not testable"
         ? "The retained scan context did not include a confirmed reject action, so post-reject tracking reduction could not be tested."
         : "Post-reject tracking reduction evidence did not produce an eligible gap signal.";
@@ -352,14 +400,17 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
   }
 
   if (item.id === "session_replay_fingerprinting_review") {
-    return item.status === "Not observed"
-      ? "No eligible session replay, behavioral recording, or fingerprinting-like signal was observed in the tested context."
-      : "Session replay, behavioral recording, or fingerprinting-like signals require review from the retained runtime evidence.";
+    return item.explanation || (
+      item.status === "Not observed"
+        ? "No eligible session replay, behavioral recording, or fingerprinting-like signal was observed in the tested context."
+        : "Session replay, behavioral recording, or fingerprinting-like signals require review from the retained runtime evidence."
+    );
   }
 
   if (item.id === "cross_border_endpoint_review") {
     if (item.status === "Gap observed") {
-      return "A transfer-relevant third-party analytics endpoint was observed, and the associated runtime vendor was not clearly matched in retained public vendor disclosure evidence.";
+      return getStringArrayFromRetainedEvidence(item, "evidenceHighlights")[0] ??
+        "Transfer-relevant analytics / behavioral tracking endpoints were observed. Additional third-party asset endpoints were retained as supporting runtime context.";
     }
 
     return item.status === "Review signal"
@@ -394,13 +445,48 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
   }
 }
 
+function getRetainedEvidenceRecord(item: GdprEprivacyCoverageChecklistItem) {
+  const evidence = item.criticalEvidence.retainedEvidence;
+  return evidence && typeof evidence === "object" && !Array.isArray(evidence)
+    ? evidence as Record<string, unknown>
+    : {};
+}
+
+function getStringArrayFromRetainedEvidence(item: GdprEprivacyCoverageChecklistItem, key: string) {
+  const value = getRetainedEvidenceRecord(item)[key];
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+}
+
+function hasQuantitativePostRejectReductionEvidence(item: GdprEprivacyCoverageChecklistItem) {
+  const evidence = getRetainedEvidenceRecord(item);
+  return [
+    "trackingReductionPercent",
+    "trackingReductionRatio",
+    "nonEssentialTrackingReductionPercent",
+    "baselineRequestCount",
+    "postRejectRequestCount",
+    "baselineTrackerCount",
+    "postRejectTrackerCount"
+  ].some((key) => typeof evidence[key] === "number" && Number.isFinite(evidence[key] as number));
+}
+
 function getGdprSectionSummary(input: {
   fallbackSummary: string;
+  items: GdprEprivacyCoverageChecklistItem[];
   lensSummary?: string;
   reviewSummary: ReturnType<typeof deriveGdprEprivacyReviewSummary>;
 }) {
   const primary = input.lensSummary ?? input.fallbackSummary;
-  return `${primary} ${input.reviewSummary.coverageText} ${input.reviewSummary.priorityReviewText} Review retained evidence for consent timing, refusal behavior, post-choice controls, runtime vendor disclosure alignment, and accessibility of consent controls.`;
+  const consentAccessibilityNeedsReview = input.items.some((item) =>
+    item.id === "accessibility_consent_controls" &&
+    (item.assessmentStatus === "gap_observed" || item.assessmentStatus === "review_signal")
+  );
+  const reviewAreas = consentAccessibilityNeedsReview
+    ? "consent timing, refusal behavior, post-choice controls, runtime vendor disclosure alignment, cross-border analytics/tracking endpoint context, and consent-control accessibility"
+    : "consent timing, refusal behavior, post-choice controls, runtime vendor disclosure alignment, and cross-border analytics/tracking endpoint context";
+  return `${primary} ${input.reviewSummary.coverageText} ${input.reviewSummary.priorityReviewText} Review retained evidence for ${reviewAreas}.`;
 }
 
 export function GdprEprivacyCoverageChecklistCard({
@@ -414,6 +500,7 @@ export function GdprEprivacyCoverageChecklistCard({
   const gdprSectionSummary =
     getGdprSectionSummary({
       fallbackSummary: `${reviewSummary.coverageText} ${reviewSummary.priorityReviewText}`,
+      items,
       lensSummary: gdprEprivacyLens?.summary,
       reviewSummary
     });
@@ -453,14 +540,24 @@ export function GdprEprivacyCoverageChecklistCard({
                   <CoverageStatusGlyph status={item.status} />
                   <div className="min-w-0 space-y-2">
                     <p className="font-medium text-slate-950">{getGdprEprivacyCustomerLabel(item)}</p>
-                    <span
-                      className={cn(
-                        "inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
-                        getStatusBadgeClasses(item.status)
-                      )}
-                    >
-                      {item.status}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={cn(
+                          "inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.1em]",
+                          getEvidenceStateBadgeClasses(item.evidenceState)
+                        )}
+                      >
+                        {getEvidenceStateLabel(item.evidenceState)}
+                      </span>
+                      <span
+                        className={cn(
+                          "inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
+                          getAssessmentBadgeClasses(item.assessmentStatus)
+                        )}
+                      >
+                        {getAssessmentStatusLabel(item.assessmentStatus)}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <p className="mt-1 text-xs leading-5 text-slate-500 md:hidden">{getScanContextNote(item)}</p>
