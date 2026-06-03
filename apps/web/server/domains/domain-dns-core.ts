@@ -9,6 +9,7 @@ export type DomainDnsStatus =
     };
 
 export type DnsResolver = (hostname: string) => Promise<unknown[]>;
+export type DnsLookupResolver = (hostname: string) => Promise<unknown>;
 
 const NO_RECORD_CODES = new Set(["ENODATA", "ENOTFOUND", "ESERVFAIL", "ETIMEOUT"]);
 
@@ -33,7 +34,7 @@ async function hasDnsRecords(hostname: string, resolver: DnsResolver) {
 
 export async function checkDomainDnsWithResolvers(
   hostname: string,
-  resolvers: { resolve4: DnsResolver; resolve6: DnsResolver }
+  resolvers: { lookup?: DnsLookupResolver; resolve4: DnsResolver; resolve6: DnsResolver }
 ): Promise<DomainDnsStatus> {
   const normalizedHostname = hostname.trim().toLowerCase();
 
@@ -43,7 +44,7 @@ export async function checkDomainDnsWithResolvers(
       hasDnsRecords(normalizedHostname, resolvers.resolve6)
     ]);
 
-    if (hasIpv4 || hasIpv6) {
+    if (hasIpv4 || hasIpv6 || (resolvers.lookup ? await hasLookupRecord(normalizedHostname, resolvers.lookup) : false)) {
       return {
         exists: true,
         reason: null
@@ -64,5 +65,20 @@ export async function checkDomainDnsWithResolvers(
       exists: false,
       reason: "We could not verify that domain right now. Try again in a minute."
     };
+  }
+}
+
+async function hasLookupRecord(hostname: string, resolver: DnsLookupResolver) {
+  try {
+    const record = await resolver(hostname);
+    return Array.isArray(record) ? record.length > 0 : Boolean(record);
+  } catch (error) {
+    const code = getDnsErrorCode(error);
+
+    if (code && NO_RECORD_CODES.has(code)) {
+      return false;
+    }
+
+    throw error;
   }
 }

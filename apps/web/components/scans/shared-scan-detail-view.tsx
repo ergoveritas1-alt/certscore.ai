@@ -6238,6 +6238,7 @@ export function SharedScanDetailView({
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
           />
           <RegulatoryChecklistSection
+            showAdvancedEvidenceToggle={showAdvancedDiagnostics}
             tabs={[
               {
                 content: (

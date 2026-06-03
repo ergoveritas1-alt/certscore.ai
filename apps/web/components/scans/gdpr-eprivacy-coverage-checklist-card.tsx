@@ -1,6 +1,9 @@
+"use client";
+
 import React from "react";
 import { cn } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
+import { useRegulatoryChecklistAdvancedEvidence } from "./regulatory-checklist-advanced-evidence-context";
 import { RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
 import type {
   GdprEprivacyCoverageChecklistItem,
@@ -494,6 +497,7 @@ export function GdprEprivacyCoverageChecklistCard({
   gdprEprivacyLens,
   items
 }: GdprEprivacyCoverageChecklistCardProps) {
+  const { expandAllAdvancedEvidence } = useRegulatoryChecklistAdvancedEvidence();
   const gdprScore = typeof gdprEprivacyLens?.score === "number" ? gdprEprivacyLens.score : null;
   const gdprRatingLabel = gdprEprivacyLens?.ratingLabel ?? "Not scored";
   const reviewSummary = deriveGdprEprivacyReviewSummary(items);
@@ -565,7 +569,7 @@ export function GdprEprivacyCoverageChecklistCard({
               <div className="min-w-0 space-y-1">
                 <p className="hidden text-sm leading-6 text-slate-600 md:block">{getScanContextNote(item)}</p>
                 {item.limitation ? <p className="text-xs leading-5 text-slate-500">{item.limitation}</p> : null}
-                <details className="mt-2 rounded-md border border-slate-200 bg-white">
+                <details className="mt-2 rounded-md border border-slate-200 bg-white" open={expandAllAdvancedEvidence || undefined}>
                   <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Advanced evidence
                   </summary>

@@ -1033,6 +1033,7 @@ export type ScanRuntimeArtifact = {
       | "robots_homepage_setup"
       | "page_discovery_fetch"
       | "browser_runtime_capture"
+      | "early_exit_visual_evidence_capture"
       | "policy_enrichment"
       | "runtime_artifact_assembly"
       | "network_snapshot_assembly";

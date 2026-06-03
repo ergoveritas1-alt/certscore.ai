@@ -4,6 +4,7 @@ import React from "react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { cn } from "@website-signal-risk-scanner/ui";
+import { RegulatoryChecklistAdvancedEvidenceProvider } from "./regulatory-checklist-advanced-evidence-context";
 
 type RegulatoryChecklistTab = {
   content: ReactNode;
@@ -14,11 +15,13 @@ type RegulatoryChecklistTab = {
 };
 
 type RegulatoryChecklistSectionProps = {
+  showAdvancedEvidenceToggle?: boolean;
   tabs: RegulatoryChecklistTab[];
 };
 
-export function RegulatoryChecklistSection({ tabs }: RegulatoryChecklistSectionProps) {
+export function RegulatoryChecklistSection({ showAdvancedEvidenceToggle = false, tabs }: RegulatoryChecklistSectionProps) {
   const [activeTabId, setActiveTabId] = useState(tabs[0]?.id ?? "");
+  const [expandAllAdvancedEvidence, setExpandAllAdvancedEvidence] = useState(false);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null;
   const visibleTabs = tabs.filter((tab) => !tab.group || tab.group === "visible");
   const menuGroups = [
@@ -58,6 +61,21 @@ export function RegulatoryChecklistSection({ tabs }: RegulatoryChecklistSectionP
           </div>
           <div className="flex max-w-full flex-wrap items-center gap-2 pb-1 lg:justify-end lg:pb-0">
             <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-100/80 p-1 shadow-inner shadow-slate-200/60">
+              {showAdvancedEvidenceToggle ? (
+                <button
+                  type="button"
+                  aria-pressed={expandAllAdvancedEvidence}
+                  className={cn(
+                    "rounded-full px-2.5 py-1.5 text-[11px] font-semibold transition",
+                    expandAllAdvancedEvidence
+                      ? "bg-sky-600 text-white shadow-[0_12px_24px_-14px_rgba(2,132,199,0.9)] ring-1 ring-sky-700"
+                      : "text-sky-700 hover:bg-white hover:text-sky-900"
+                  )}
+                  onClick={() => setExpandAllAdvancedEvidence((value) => !value)}
+                >
+                  {expandAllAdvancedEvidence ? "Collapse all" : "Expand all"}
+                </button>
+              ) : null}
               {visibleTabs.map((tab) => {
           const selected = tab.id === activeTab.id;
           return (
@@ -127,7 +145,9 @@ export function RegulatoryChecklistSection({ tabs }: RegulatoryChecklistSectionP
         </div>
       </div>
       <div className="-mt-px [&>*]:rounded-t-none">
-        {activeTab.content}
+        <RegulatoryChecklistAdvancedEvidenceProvider value={{ expandAllAdvancedEvidence }}>
+          {activeTab.content}
+        </RegulatoryChecklistAdvancedEvidenceProvider>
       </div>
     </section>
   );

@@ -47,3 +47,20 @@ test("checkDomainDns rejects domains without address records", async () => {
   assert.equal(status.exists, false);
   assert.match(status.reason, /could not find DNS records/i);
 });
+
+test("checkDomainDns accepts domains resolved by platform lookup fallback", async () => {
+  const status = await checkDomainDnsWithResolvers("sonymcs.com", {
+    lookup: async () => [{ address: "98.87.70.224", family: 4 }],
+    resolve4: async () => {
+      throw dnsError("ENOTFOUND");
+    },
+    resolve6: async () => {
+      throw dnsError("ENODATA");
+    }
+  });
+
+  assert.deepEqual(status, {
+    exists: true,
+    reason: null
+  });
+});

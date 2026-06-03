@@ -1,5 +1,8 @@
+"use client";
+
 import { cn } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
+import { useRegulatoryChecklistAdvancedEvidence } from "./regulatory-checklist-advanced-evidence-context";
 import { RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
 
 export type BetaRegulatoryChecklistStatus =
@@ -232,6 +235,8 @@ function getSummaryTitle(area: BetaRegulatoryChecklistArea) {
 }
 
 export function BetaRegulatoryChecklistCard({ area, defaultOpen = true }: BetaRegulatoryChecklistCardProps) {
+  const { expandAllAdvancedEvidence } = useRegulatoryChecklistAdvancedEvidence();
+
   return (
     <CollapsibleSectionCard defaultOpen={defaultOpen} title={getSummaryTitle(area)} contentClassName="space-y-4">
       <section className="rounded-lg border border-slate-200 bg-white p-4">
@@ -256,7 +261,7 @@ export function BetaRegulatoryChecklistCard({ area, defaultOpen = true }: BetaRe
               <div className="min-w-0 space-y-1">
                 <p className="text-sm leading-6 text-slate-600">{row.note}</p>
                 <p className="text-xs leading-5 text-slate-500">Evidence capability: {getCapabilityLabel(row.evidenceCapability)}.</p>
-                <details className="mt-2 rounded-md border border-slate-200 bg-white">
+                <details className="mt-2 rounded-md border border-slate-200 bg-white" open={expandAllAdvancedEvidence || undefined}>
                   <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Advanced evidence
                   </summary>

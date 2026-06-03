@@ -1,5 +1,8 @@
+"use client";
+
 import { cn } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
+import { useRegulatoryChecklistAdvancedEvidence } from "./regulatory-checklist-advanced-evidence-context";
 import { RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
 import type {
   CaliforniaPrivacyCoverageChecklistItem,
@@ -132,6 +135,7 @@ export function CaliforniaPrivacyCoverageChecklistCard({
   defaultOpen = true,
   items
 }: CaliforniaPrivacyCoverageChecklistCardProps) {
+  const { expandAllAdvancedEvidence } = useRegulatoryChecklistAdvancedEvidence();
   const score = typeof californiaLens?.score === "number" ? californiaLens.score : null;
   const ratingLabel = californiaLens?.ratingLabel ?? "Not scored";
   const summary = getCaliforniaSummary({ items, lensSummary: californiaLens?.summary });
@@ -163,7 +167,7 @@ export function CaliforniaPrivacyCoverageChecklistCard({
               </div>
               <div className="min-w-0 space-y-1">
                 <p className="hidden text-sm leading-6 text-slate-600 md:block">{item.limitation}</p>
-                <details className="mt-2 rounded-md border border-slate-200 bg-white">
+                <details className="mt-2 rounded-md border border-slate-200 bg-white" open={expandAllAdvancedEvidence || undefined}>
                   <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Advanced evidence
                   </summary>
