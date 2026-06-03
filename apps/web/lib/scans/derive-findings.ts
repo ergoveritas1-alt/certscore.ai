@@ -228,6 +228,10 @@ function normalizeComparableHost(value: string | null | undefined) {
   return host ? host.toLowerCase().replace(/^www\./, "") : null;
 }
 
+function isSameSiteHostAlias(left: string | null, right: string | null) {
+  return Boolean(left && right && (left === right || left.endsWith(`.${right}`) || right.endsWith(`.${left}`)));
+}
+
 function looksLikeAdtechHost(host: string) {
   return /(adnxs|appnexus|infolinks|rtmark|media\.net|doubleclick|taboola|outbrain|criteo|pubmatic|rubicon|adsrvr|google-analytics|googletagmanager|plausible|cloudflareinsights|casalemedia|gumgum|3lift|bidswitch|id5-sync|openx|tapad|mathtag|scorecardresearch|quantserve|crwdcntrl)/i.test(
     host
@@ -481,7 +485,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   const landedOnDifferentHost = Boolean(
     requestedHost &&
     finalHost &&
-    normalizeComparableHost(requestedHost) !== normalizeComparableHost(finalHost)
+    !isSameSiteHostAlias(normalizeComparableHost(requestedHost), normalizeComparableHost(finalHost))
   );
   const cookieBuckets = cookieWriteObservations.reduce<{
     adtech: string[];

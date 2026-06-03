@@ -90,6 +90,10 @@ export function normalizeComparableHost(value: string | null | undefined) {
   return host ? host.toLowerCase().replace(/^www\./, "") : null;
 }
 
+function isSameSiteHostAlias(left: string, right: string) {
+  return left === right || left.endsWith(`.${right}`) || right.endsWith(`.${left}`);
+}
+
 export function deriveHostResolutionCategory(input: {
   finalHost: string | null;
   requestedHost: string | null;
@@ -101,7 +105,7 @@ export function deriveHostResolutionCategory(input: {
     return "same_host" as const;
   }
 
-  if (normalizedRequestedHost !== normalizedFinalHost) {
+  if (!isSameSiteHostAlias(normalizedRequestedHost, normalizedFinalHost)) {
     return "off_origin_landing" as const;
   }
 

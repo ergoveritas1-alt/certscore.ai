@@ -19,6 +19,16 @@ test("treats apex and www as a same-site alias instead of off-origin", () => {
   );
 });
 
+test("treats requested-domain subdomains as same-site aliases", () => {
+  assert.equal(
+    deriveHostResolutionCategory({
+      finalHost: "https://web.mit.edu/",
+      requestedHost: "https://mit.edu/"
+    }),
+    "same_site_alias"
+  );
+});
+
 test("treats truly different hosts as off-origin landings", () => {
   assert.equal(
     deriveHostResolutionCategory({
