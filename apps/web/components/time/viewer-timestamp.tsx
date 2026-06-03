@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+const FALLBACK_TIME_ZONE = "America/Los_Angeles";
+
 type ViewerTimestampProps = {
   value: string | Date | null;
   fallback?: string;
@@ -34,6 +36,7 @@ function formatViewerTimestampFallback(value: string | Date) {
   }
 
   return new Intl.DateTimeFormat("en-US", {
+    timeZone: FALLBACK_TIME_ZONE,
     month: "short",
     day: "numeric",
     year: "numeric",
