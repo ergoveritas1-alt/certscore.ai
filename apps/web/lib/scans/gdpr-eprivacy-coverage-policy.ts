@@ -1147,7 +1147,9 @@ function getSessionReplayTiming(row: Record<string, unknown>) {
 
 function buildSessionReplayRuntimeEvidence(input: GdprEprivacyCoveragePolicyInput) {
   const hybrid = getHybridRuntimeEvidence(input.runtimeArtifacts);
-  const summary = getObject(hybrid, ["sessionReplayEvidenceSummary", "session_replay_evidence_summary"]);
+  const summary =
+    getObject(hybrid, ["sessionReplayEvidenceSummary", "session_replay_evidence_summary"]) ??
+    getObject(input.runtimeArtifacts, ["sessionReplayEvidenceSummary", "session_replay_evidence_summary"]);
   const classificationRows = [
     ...getObjectArray(input.runtimeArtifacts, [
       "requestPurposeClassificationConfidence",
@@ -1172,8 +1174,14 @@ function buildSessionReplayRuntimeEvidence(input: GdprEprivacyCoveragePolicyInpu
   const vendors = uniqueStrings([
     ...classificationRows.map((row) => getString(row, ["vendor", "vendorName", "vendor_name"])),
     ...postAcceptVendors,
-    ...getStringArray(summary, ["vendors"])
+    ...getStringArray(summary, ["vendors"]),
+    ...getStringArray(input.snapshot, ["session_replay_vendor_names", "sessionReplayVendorNames"]),
+    ...getStringArray(input.snapshot, ["session_replay_runtime_vendors", "sessionReplayRuntimeVendors"])
   ]).filter((vendor) => SESSION_REPLAY_VENDOR_PATTERN.test(vendor));
+  const snapshotRuntimeArtifacts = getStringArray(input.snapshot, [
+    "session_replay_runtime_artifacts",
+    "sessionReplayRuntimeArtifacts"
+  ]);
   const firstSeenMsValues = classificationRows
     .map(getSessionReplayTiming)
     .filter((value): value is number => value !== null)
@@ -1189,7 +1197,12 @@ function buildSessionReplayRuntimeEvidence(input: GdprEprivacyCoveragePolicyInpu
   const postChoiceControls = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
   const artifactCount = getNumber(summary, ["artifactCount", "artifact_count"]);
 
-  if (vendors.length === 0 && requestUrls.length === 0 && (artifactCount ?? 0) === 0) {
+  if (
+    vendors.length === 0 &&
+    requestUrls.length === 0 &&
+    snapshotRuntimeArtifacts.length === 0 &&
+    (artifactCount ?? 0) === 0
+  ) {
     return null;
   }
 
@@ -1222,6 +1235,7 @@ function buildSessionReplayRuntimeEvidence(input: GdprEprivacyCoveragePolicyInpu
       ]) === true,
     preConsentObserved: consentStates.some((state) => /pre.?consent/i.test(state)),
     requestUrls: compactArray(requestUrls, 5),
+    runtimeArtifacts: compactArray(snapshotRuntimeArtifacts, 5),
     sensitiveSurfaceOverlap: getBoolean(summary, ["sensitiveSurfaceOverlap", "sensitive_surface_overlap"]),
     vendorDisclosed: disclosureRows.some((row) => row.matchedVendorDisclosureCount > 0 && row.unmatchedVendorDisclosureCount === 0),
     vendorDisclosureGap: disclosureRows.some((row) => row.unmatchedVendorDisclosureCount > 0),
@@ -1263,52 +1277,25 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
     );
   }
 
-  if (sessionReplayPostAcceptObserved) {
-    const maskingObserved = getBoolean(sessionReplayEvidence, ["maskingOrExclusionObserved"]);
-    const postChoiceControlsObserved = getBoolean(sessionReplayEvidence, ["postChoiceConsentControlsObserved"]);
-    const vendorDisclosed = getBoolean(sessionReplayEvidence, ["vendorDisclosed"]);
-    const reviewMissingSignals = [
-      vendorDisclosed === true
-        ? null
-        : sourceGap(
-            "runtimeVendorDisclosureEvidence.sessionReplayVendorDisclosed",
-            true,
-            vendorDisclosed,
-            "Required to distinguish disclosed post-consent replay from disclosure-review risk.",
-            "WC01"
-          ),
-      maskingObserved === true
-        ? null
-        : sourceGap(
-            "hybridRuntimeEvidence.sessionReplayEvidenceSummary.maskingOrExclusionObserved",
-            true,
-            maskingObserved,
-            "Required to lower session replay concern when masking or exclusion evidence is retained."
-          ),
-      postChoiceControlsObserved === true
-        ? null
-        : sourceGap(
-            "consentControlLifecycleEvidence.preferenceCenterReachableAfterInitialLayer",
-            true,
-            postChoiceControlsObserved,
-            "Required to confirm users can revisit consent choices after accepting."
-          )
-    ].filter((value): value is GdprEprivacyCoverageSourceSignalGap => Boolean(value));
-    const status: GdprEprivacyCoverageOutcomeStatus = reviewMissingSignals.length === 0 ? "Observed" : "Review signal";
-
+  if (sessionReplayPostAcceptObserved || (sessionReplayObserved && sessionReplayEvidence && !sessionReplayPreConsentObserved)) {
     return makeOutcome(
       "session_replay_fingerprinting_review",
-      status,
-      status === "Observed"
-        ? "Session replay appeared only after a confirmed accept action, with retained disclosure/control evidence."
-        : "Session replay appeared only after a confirmed accept action, but disclosure, masking, or withdrawal-control evidence needs review.",
+      "Observed",
+      sessionReplayPostAcceptObserved
+        ? "Session replay or behavioral analytics were retained only after a recorded accept/consent state; no pre-consent replay evidence was retained."
+        : "Session replay or behavioral analytics were retained in runtime evidence, with no pre-consent replay evidence retained for the tested context.",
       [
-        "Session replay signal observed after accept",
+        sessionReplayPostAcceptObserved
+          ? "Session replay signal observed after consent"
+          : "Session replay signal observed; pre-consent replay not retained",
         ...sessionReplayVendors.map((vendor) => `Runtime vendor: ${vendor}`),
-        ...sessionReplayConsentStates.map((state) => `Consent state: ${state}`)
+        ...(
+          sessionReplayConsentStates.length > 0
+            ? sessionReplayConsentStates.map((state) => `Consent state: ${state}`)
+            : ["Consent timing: no pre-consent replay evidence retained"]
+        )
       ],
       {
-        missingOrIncompleteSourceSignals: reviewMissingSignals,
         retainedEvidence: {
           sessionReplayEvidence
         }

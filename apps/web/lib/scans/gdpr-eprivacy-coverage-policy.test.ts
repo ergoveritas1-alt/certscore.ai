@@ -189,7 +189,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes retained vendor-disclosu
   ]);
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes surfaces post-accept session replay as review evidence", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes surfaces post-accept session replay as observed evidence", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -255,10 +255,10 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes surfaces post-accept session repl
   });
 
   const outcome = outcomes.session_replay_fingerprinting_review;
-  assert.equal(outcome?.status, "Review signal");
-  assert.match(outcome?.limitation ?? "", /after a confirmed accept action/i);
+  assert.equal(outcome?.status, "Observed");
+  assert.match(outcome?.limitation ?? "", /no pre-consent replay evidence was retained/i);
   assert.deepEqual(outcome?.evidenceRefs, [
-    "Session replay signal observed after accept",
+    "Session replay signal observed after consent",
     "Runtime vendor: Microsoft Clarity",
     "Consent state: post_accept"
   ]);
@@ -281,6 +281,51 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes surfaces post-accept session repl
       sensitiveSurfaceOverlap: false,
       vendorDisclosed: false,
       vendorDisclosureGap: true,
+      vendors: ["Microsoft Clarity"]
+    }
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes declares retained session replay vendor without pre-consent replay as observed", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      sessionReplayEvidenceSummary: {
+        collectionEndpointObserved: true,
+        libraryOnly: false,
+        vendors: ["Microsoft Clarity"]
+      }
+    },
+    snapshot: {
+      session_replay_runtime_artifacts: [
+        "vendor:Microsoft Clarity|signature:clarity|host:www.clarity.ms|source:script_signature"
+      ],
+      session_replay_tracker_count: 0,
+      session_replay_vendor_names: ["Microsoft Clarity"]
+    }
+  });
+
+  const outcome = outcomes.session_replay_fingerprinting_review;
+  assert.equal(outcome?.status, "Observed");
+  assert.match(outcome?.limitation ?? "", /no pre-consent replay evidence retained/i);
+  assert.deepEqual(outcome?.evidenceRefs, [
+    "Session replay signal observed; pre-consent replay not retained",
+    "Runtime vendor: Microsoft Clarity",
+    "Consent timing: no pre-consent replay evidence retained"
+  ]);
+  assert.deepEqual(
+    outcome?.criticalEvidence.retainedEvidence.sessionReplayEvidence,
+    {
+      collectionEndpointObserved: true,
+      libraryLoadObserved: false,
+      postAcceptObserved: false,
+      postChoiceConsentControlsObserved: false,
+      preConsentObserved: false,
+      runtimeArtifacts: [
+        "vendor:Microsoft Clarity|signature:clarity|host:www.clarity.ms|source:script_signature"
+      ],
+      vendorDisclosed: false,
+      vendorDisclosureGap: false,
       vendors: ["Microsoft Clarity"]
     }
   );
