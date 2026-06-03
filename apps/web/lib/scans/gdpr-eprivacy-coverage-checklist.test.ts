@@ -199,14 +199,38 @@ test("deriveGdprEprivacyCoverageChecklist marks audit-only projected context as 
   ]);
 });
 
-test("deriveGdprEprivacyCoverageChecklist treats retained runtime vendor disclosure packet as review signal", () => {
+test("deriveGdprEprivacyCoverageChecklist treats direct runtime vendor disclosure mismatch as a gap", () => {
   const finding = makeFinding("policy_behavior_conflict", "Policy/behavior conflict", "audit_only");
   finding.evidence = {
     ...finding.evidence,
     entities: {
       ...finding.evidence?.entities,
       findingSubtype: ["runtime_vendor_not_disclosed"],
-      runtimeVendorDisclosureEvidence: ["retained comparison evidence"]
+      runtimeVendorDisclosureEvidence: [
+        JSON.stringify({
+          coverageStatus: "usable",
+          directVsInferred: "direct",
+          evidenceConfidence: "moderate",
+          matchedVendorDisclosureCount: 0,
+          mismatchRationale: "Observed runtime vendor was not clearly matched by name or known domain alias in retained policy disclosure surfaces.",
+          observedRuntimeDomains: ["static.cloudflareinsights.com"],
+          observedRuntimeVendors: ["Cloudflare Web Analytics"],
+          policySurfacesSearched: [
+            {
+              reached: true,
+              searchedTerms: ["Cloudflare Web Analytics"],
+              snippet: "Retained privacy policy snippet.",
+              type: "privacy_policy",
+              unmatchedVendorNames: ["Cloudflare Web Analytics"],
+              url: "https://example.test/privacy"
+            }
+          ],
+          subtype: "runtime_vendor_not_disclosed",
+          unmatchedRuntimeDomains: [],
+          unmatchedRuntimeVendors: ["Cloudflare Web Analytics"],
+          unmatchedVendorDisclosureCount: 1
+        })
+      ]
     }
   };
   const items = deriveGdprEprivacyCoverageChecklist({
@@ -215,7 +239,7 @@ test("deriveGdprEprivacyCoverageChecklist treats retained runtime vendor disclos
     unifiedFindings: [finding]
   });
 
-  assert.equal(byId(items, "runtime_vendor_disclosure_alignment").status, "Review signal");
+  assert.equal(byId(items, "runtime_vendor_disclosure_alignment").status, "Gap observed");
   assert.deepEqual(
     byId(items, "runtime_vendor_disclosure_alignment").criticalEvidence.missingOrIncompleteSourceSignals,
     []
@@ -243,6 +267,38 @@ test("deriveGdprEprivacyCoverageChecklist carries canonical source refs into che
     "Signal: Pre-consent tracking detected",
     "Evidence flag: direct_runtime",
     "Evidence strength: direct runtime"
+  ]);
+});
+
+test("deriveGdprEprivacyCoverageChecklist retains executive evidence highlights for matching unified rows", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    projectedFindings: [
+      {
+        evidenceDetails: {
+          vendors: [
+            {
+              category: "analytics",
+              firstSeenMs: 482,
+              name: "Cloudflare Web Analytics",
+              preConsent: true,
+              representativeUrl: null
+            }
+          ]
+        },
+        evidencePreview: ["Cloudflare Web Analytics fired before consent"],
+        id: "pre_consent_tracking_detected",
+        label: "Third-party tracking observed before recorded consent"
+      }
+    ],
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("pre_consent_tracking_detected", "Third-party tracking observed before recorded consent")
+    ]
+  });
+
+  assert.deepEqual(byId(items, "pre_consent_third_party_tracking").criticalEvidence.retainedEvidence.evidenceHighlights, [
+    "\"Cloudflare Web Analytics\", \"preConsent\": true, \"firstSeenMs\": 482"
   ]);
 });
 

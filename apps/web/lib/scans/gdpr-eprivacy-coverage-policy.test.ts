@@ -189,6 +189,103 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes retained vendor-disclosu
   ]);
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes surfaces post-accept session replay as review evidence", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentAcceptInteractionSucceeded: true,
+      consentAcceptNewTrackerVendorNames: ["Microsoft Clarity"],
+      consentPostAcceptTrackerEvidenceUrls: [
+        "https://www.clarity.ms/tag/example",
+        "https://c.clarity.ms/collect"
+      ],
+      consentPostAcceptTrackerVendorNames: ["Microsoft Clarity"],
+      hybridRuntimeEvidence: {
+        sessionReplayEvidenceSummary: {
+          collectionEndpointObserved: true,
+          libraryOnly: false,
+          maskingOrExclusionObserved: false,
+          sensitiveSurfaceOverlap: false,
+          vendors: ["Microsoft Clarity"]
+        }
+      },
+      requestPurposeClassificationConfidence: [
+        {
+          category: "session_replay",
+          confidence: 0.9,
+          essentiality: "non_essential",
+          firstObservedMs: 2410,
+          requestUrl: "https://www.clarity.ms/tag/example",
+          runtimePhase: "post_accept",
+          timingStatus: "post_consent",
+          vendor: "Microsoft Clarity"
+        },
+        {
+          category: "session_replay",
+          confidence: 0.9,
+          essentiality: "non_essential",
+          firstObservedMs: 2680,
+          requestUrl: "https://c.clarity.ms/collect",
+          runtimePhase: "post_accept",
+          timingStatus: "post_consent",
+          vendor: "Microsoft Clarity"
+        }
+      ],
+      runtimeVendorDisclosureEvidence: [
+        {
+          coverageStatus: "usable",
+          directVsInferred: "direct",
+          evidenceConfidence: "moderate",
+          matchedVendorDisclosureCount: 0,
+          mismatchRationale: "Microsoft Clarity was not clearly matched in retained policy text.",
+          observedRuntimeDomains: ["clarity.ms"],
+          observedRuntimeVendors: ["Microsoft Clarity"],
+          policySurfacesSearched: [],
+          subtype: "runtime_vendor_not_disclosed",
+          unmatchedRuntimeDomains: ["clarity.ms"],
+          unmatchedRuntimeVendors: ["Microsoft Clarity"],
+          unmatchedVendorDisclosureCount: 1
+        }
+      ]
+    },
+    snapshot: {
+      session_replay_tool_detected: false,
+      session_replay_tracker_count: 0
+    }
+  });
+
+  const outcome = outcomes.session_replay_fingerprinting_review;
+  assert.equal(outcome?.status, "Review signal");
+  assert.match(outcome?.limitation ?? "", /after a confirmed accept action/i);
+  assert.deepEqual(outcome?.evidenceRefs, [
+    "Session replay signal observed after accept",
+    "Runtime vendor: Microsoft Clarity",
+    "Consent state: post_accept"
+  ]);
+  assert.deepEqual(
+    outcome?.criticalEvidence.retainedEvidence.sessionReplayEvidence,
+    {
+      acceptInteractionConfirmed: true,
+      collectionEndpointObserved: true,
+      consentStates: ["post_accept"],
+      firstSeenMs: 2410,
+      libraryLoadObserved: true,
+      maskingOrExclusionObserved: false,
+      postAcceptObserved: true,
+      postChoiceConsentControlsObserved: false,
+      preConsentObserved: false,
+      requestUrls: [
+        "https://www.clarity.ms/tag/example",
+        "https://c.clarity.ms/collect"
+      ],
+      sensitiveSurfaceOverlap: false,
+      vendorDisclosed: false,
+      vendorDisclosureGap: true,
+      vendors: ["Microsoft Clarity"]
+    }
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes consumes nested reject interaction evidence", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

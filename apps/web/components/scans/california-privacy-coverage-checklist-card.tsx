@@ -1,6 +1,6 @@
 import { cn } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
-import { EvidenceJsonBlock } from "./evidence-json-block";
+import { RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
 import type {
   CaliforniaPrivacyCoverageChecklistItem,
   CaliforniaPrivacyCoverageChecklistStatus
@@ -167,12 +167,7 @@ export function CaliforniaPrivacyCoverageChecklistCard({
                   <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Advanced evidence
                   </summary>
-                  {item.evidenceRefs.length > 0 ? (
-                    <p className="border-t border-slate-200 px-3 py-2 text-xs leading-5 text-slate-500">
-                      Evidence reference{item.evidenceRefs.length === 1 ? "" : "s"}: {getDisplayEvidenceRefs(item).join(", ")}
-                    </p>
-                  ) : null}
-                  <EvidenceJsonBlock payload={stringifyEvidenceJson(item)} className="rounded-none border-t border-slate-800" preClassName="max-h-72 px-3 py-3 pr-12 font-mono text-[11px] leading-5" />
+                  <RegulatoryChecklistEvidenceDetails evidenceRefs={getDisplayEvidenceRefs(item)} jsonPayload={stringifyEvidenceJson(item)} />
                 </details>
               </div>
             </div>

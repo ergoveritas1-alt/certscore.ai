@@ -1,9 +1,12 @@
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
+import type { CertScoreFindingEvidenceDetails } from "./finding-registry";
 import type {
   GdprEprivacyCoverageCriticalEvidence,
   GdprEprivacyCoverageOutcome,
   GdprEprivacyCoverageSourceSignalGap
 } from "./gdpr-eprivacy-coverage-policy";
+import { buildRegulatoryChecklistEvidenceHighlights } from "./regulatory-checklist-evidence-highlights";
+import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 
 export type GdprEprivacyCoverageChecklistStatus =
   | "Observed"
@@ -41,6 +44,7 @@ export type GdprEprivacyCoverageChecklistInput = {
   coverageLimited: boolean;
   coverageOutcomes?: Record<string, GdprEprivacyCoverageOutcome>;
   projectedFindings?: Array<{
+    evidenceDetails?: CertScoreFindingEvidenceDetails;
     evidencePreview?: string[];
     id: string;
     label: string;
@@ -300,8 +304,8 @@ function normalizeFindingStatus(
   definition: ChecklistRowDefinition,
   findings: UnifiedFindingDisplayPacket[]
 ): Exclude<GdprEprivacyCoverageChecklistStatus, "Not observed" | "Not testable" | "Out of scope"> {
-  if (findings.some((finding) => isRuntimeVendorDisclosureAlignmentEvidence(definition.id, finding))) {
-    return "Review signal";
+  if (findings.some((finding) => isRuntimeVendorDisclosureAlignmentGapEvidence(definition.id, finding))) {
+    return "Gap observed";
   }
 
   if (
@@ -312,6 +316,44 @@ function normalizeFindingStatus(
   }
 
   return definition.defaultFindingStatus;
+}
+
+function isRuntimeVendorDisclosureAlignmentGapEvidence(rowId: string, finding: UnifiedFindingDisplayPacket) {
+  if (
+    rowId !== "runtime_vendor_disclosure_alignment" ||
+    !(
+      finding.unifiedFindingId === "policy_behavior_conflict" ||
+      finding.unifiedFindingId === "policy_behavior_contradiction_detected" ||
+      finding.unifiedFindingId === "cookie_disclosure_gap"
+    )
+  ) {
+    return false;
+  }
+
+  const entities = finding.evidence?.entities ?? {};
+  const subtypes = entities.findingSubtype ?? [];
+  const hasRuntimeVendorNotDisclosedSubtype = Array.isArray(subtypes) &&
+    subtypes.some((subtype) => subtype === "runtime_vendor_not_disclosed");
+  const disclosureRows = getRuntimeVendorDisclosureEvidence(entities);
+  return (
+    hasRuntimeVendorNotDisclosedSubtype &&
+    disclosureRows.some((row) => {
+      const unmatchedRuntimeCount = row.unmatchedRuntimeVendors.length + row.unmatchedRuntimeDomains.length;
+      const observedRuntimeCount = row.observedRuntimeVendors.length + row.observedRuntimeDomains.length;
+      const reachedPolicySurfaces = row.policySurfacesSearched.filter((surface) =>
+        surface.reached && Boolean(surface.url) && Boolean(surface.snippet)
+      ).length;
+      return (
+        row.coverageStatus === "usable" &&
+        row.directVsInferred !== "inferred" &&
+        observedRuntimeCount > 0 &&
+        unmatchedRuntimeCount > 0 &&
+        row.matchedVendorDisclosureCount === 0 &&
+        row.unmatchedVendorDisclosureCount > 0 &&
+        reachedPolicySurfaces > 0
+      );
+    })
+  );
 }
 
 function isRuntimeVendorDisclosureAlignmentEvidence(rowId: string, finding: UnifiedFindingDisplayPacket) {
@@ -357,7 +399,8 @@ function getUnifiedFindingCriticalEvidence(
   status: GdprEprivacyCoverageChecklistStatus,
   statusBasis: string,
   rowId: string,
-  findings: UnifiedFindingDisplayPacket[]
+  findings: UnifiedFindingDisplayPacket[],
+  projectedFindings: NonNullable<GdprEprivacyCoverageChecklistInput["projectedFindings"]> = []
 ): GdprEprivacyCoverageCriticalEvidence {
   const insufficientPresentationFindings = findings.filter(
     (finding) => !isFindingPresentationStatusSufficientForCoverageRow(rowId, finding)
@@ -386,6 +429,7 @@ function getUnifiedFindingCriticalEvidence(
       severity: finding.severity
     })),
     retainedEvidence: {
+      evidenceHighlights: projectedFindings.flatMap(buildRegulatoryChecklistEvidenceHighlights).slice(0, 3),
       evidenceRefs: getEvidenceRefs(findings),
       findingEntities: findings.map((finding) => ({
         id: finding.unifiedFindingId,
@@ -421,6 +465,7 @@ function getProjectedFindingCriticalEvidence(
       label: finding.label
     })),
     retainedEvidence: {
+      evidenceHighlights: findings.flatMap(buildRegulatoryChecklistEvidenceHighlights).slice(0, 3),
       evidenceRefs: getProjectedEvidenceRefs(findings),
       projectedFindingPreview: findings.map((finding) => ({
         id: finding.id,
@@ -480,7 +525,8 @@ export function deriveGdprEprivacyCoverageChecklist(
           status,
           `Canonical unified finding${matchingFindings.length === 1 ? "" : "s"} projected for this row.`,
           definition.id,
-          matchingFindings
+          matchingFindings,
+          matchingProjectedFindings
         ),
         id: definition.id,
         label: definition.label,

@@ -112,10 +112,6 @@ function getPostureClasses(posture: ExecutiveDisplayState) {
   return "border-emerald-200 bg-emerald-50/90 text-emerald-950";
 }
 
-function formatCategoryLabel(value: string) {
-  return value.replaceAll("_", " ");
-}
-
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
@@ -182,19 +178,6 @@ function sentenceCase(value: string) {
   return trimmed ? `${trimmed[0]?.toUpperCase() ?? ""}${trimmed.slice(1)}` : trimmed;
 }
 
-function formatTrackerFootprintSummary(input: {
-  thirdPartyDomainCount: number;
-  vendorCount: number;
-}) {
-  const domainLabel = `${input.thirdPartyDomainCount} third-party domain${input.thirdPartyDomainCount === 1 ? "" : "s"}`;
-  const vendorLabel =
-    input.vendorCount === 0
-      ? "no classified tracker vendors identified"
-      : `${input.vendorCount} classified tracker vendor${input.vendorCount === 1 ? "" : "s"} identified`;
-
-  return `${domainLabel} observed; ${vendorLabel}.`;
-}
-
 function formatTrackerFootprintExpandLabel(input: {
   thirdPartyDomainCount: number;
   vendorCount: number;
@@ -226,38 +209,6 @@ function getPolicyDisclosureType(label: string) {
     return "terms";
   }
   return "policy";
-}
-
-function formatPolicyDisclosureTypes(types: string[]) {
-  const orderedTypes = ["cookie", "privacy", "terms", "policy"].filter((type) => types.includes(type));
-  const uniqueTypes = orderedTypes.length > 0 ? orderedTypes : types;
-
-  if (uniqueTypes.length === 2 && uniqueTypes.includes("cookie") && uniqueTypes.includes("privacy")) {
-    return "cookie/privacy";
-  }
-
-  return uniqueTypes.length > 1 ? "multiple disclosure types" : uniqueTypes[0] ?? "policy";
-}
-
-function formatPolicySurfaceSummary(policySurfaces: ExecutivePolicySurface[]) {
-  const coveredPolicySurfaceUrlCount = new Set(policySurfaces.map((surface) => surface.pageUrl).filter(Boolean)).size;
-  const disclosureTypes = uniqueStrings(policySurfaces.map((surface) => getPolicyDisclosureType(surface.pageLabel)));
-
-  if (coveredPolicySurfaceUrlCount === 1 && disclosureTypes.length > 1) {
-    return `1 policy URL covered across ${formatPolicyDisclosureTypes(disclosureTypes)} disclosures`;
-  }
-
-  if (coveredPolicySurfaceUrlCount === 1) {
-    return "1 policy URL covered";
-  }
-
-  if (coveredPolicySurfaceUrlCount > 1) {
-    return disclosureTypes.length > coveredPolicySurfaceUrlCount
-      ? `${coveredPolicySurfaceUrlCount} policy URLs covered across ${disclosureTypes.length} disclosure types`
-      : `${coveredPolicySurfaceUrlCount} policy URLs covered`;
-  }
-
-  return `${policySurfaces.length} policy surface${policySurfaces.length === 1 ? "" : "s"} retained`;
 }
 
 function buildPolicySurfaceSharedUrlLabels(policySurfaces: ExecutivePolicySurface[]) {
@@ -3916,9 +3867,9 @@ function TopFindingRegulatoryContextDisclosure(input: { context: TopFindingRegul
           </summary>
           <div className="mt-3 space-y-3">
             <p className="text-sm leading-6 text-slate-700">{input.context.caution}</p>
-            <div className="space-y-2 text-sm leading-6 text-slate-700" role="list">
+            <div className="space-y-2 text-sm leading-6 text-slate-700" suppressHydrationWarning>
               {input.context.applicabilityNotes.map((item) => (
-                <div key={item.id} className="grid grid-cols-[0.5rem_minmax(0,1fr)] gap-2" role="listitem">
+                <div key={item.id} className="grid grid-cols-[0.5rem_minmax(0,1fr)] gap-2">
                   <span aria-hidden="true" className="pt-[0.45rem] text-slate-400">•</span>
                   <span>
                     <span className="font-medium text-slate-900">{item.label}:</span> {item.appliesWhen}
@@ -4466,11 +4417,6 @@ export function ExecutiveSummaryCard(input: {
     "collection_endpoints_detected",
     "high_request_density"
   ]);
-  const categorySummary = Object.entries(input.vendorCategoryCounts)
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 4)
-    .map(([key, count]) => `${formatCategoryLabel(key)} ${count}`)
-    .join(" · ");
   const availableTopFindings = input.topFindings.filter((finding) => !suppressedTopFindingIds.has(finding.id));
   const nonRepresentativeScanFinding = availableTopFindings.find((finding) => finding.id === "scan_quality_visual_no_go");
   const isScanNotRepresentative = Boolean(nonRepresentativeScanFinding);
@@ -4493,18 +4439,6 @@ export function ExecutiveSummaryCard(input: {
   const allNamedVendors = uniqueStrings(input.resolvedVendorNames);
   const namedVendors = allNamedVendors.slice(0, 8);
   const thirdPartyDomains = input.thirdPartyDomains;
-  const vendorMixRichDetails = input.topObservedEntities
-    .slice(0, 6)
-    .map((entity) => ({
-      key: `${entity.label}:${entity.category}:${entity.requestCount}`,
-      node: (
-        <VendorBrandChip
-          category={entity.category}
-          label={entity.label}
-          requestCount={entity.requestCount}
-        />
-      )
-    }));
   const fingerprintEvidence = input.fingerprintReasons.filter(Boolean);
   const hasProbableFingerprintingFinding = regulatoryFindingInput.some((finding) => finding.id === "probable_fingerprinting");
   const shouldShowFingerprintSnapshot =
@@ -4531,10 +4465,6 @@ export function ExecutiveSummaryCard(input: {
           />
         )
       }));
-  const trackerFootprintDetailSummary = formatTrackerFootprintSummary({
-    thirdPartyDomainCount: input.thirdPartyDomains.length,
-    vendorCount: namedVendors.length
-  });
   const hiddenTrackerFootprintCount = Math.max(0, trackerFootprintAllDetails.length - trackerFootprintRichDetails.length);
   const domainTruncationNote =
     hiddenTrackerFootprintCount > 0
@@ -4543,7 +4473,6 @@ export function ExecutiveSummaryCard(input: {
         ? `Showing ${thirdPartyDomains.length} of ${input.thirdPartyDomains.length} observed domains.`
       : null;
   const policySurfaces = input.policySurfaces ?? [];
-  const policySurfaceSummary = formatPolicySurfaceSummary(policySurfaces);
   const policySurfaceLabelsByUrl = buildPolicySurfaceSharedUrlLabels(policySurfaces);
   const scanInterruptions = input.scanInterruptions ?? [];
   const displayState: ExecutiveDisplayState = isScanNotRepresentative
@@ -4920,14 +4849,13 @@ export function ExecutiveSummaryCard(input: {
                       />
                     ) : null}
                   </p>
-                  <p className="mt-2 text-sm text-slate-800">{trackerFootprintDetailSummary}</p>
                   {hasMeaningfulInterruption ? (
                     <p className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-950">
                       Observed footprint may be incomplete because site protections interrupted runtime collection.
                     </p>
                   ) : null}
                   <DetailDisclosure
-                    defaultOpen={namedVendors.length > 0}
+                    defaultOpen={false}
                     summary={trackerFootprintExpandLabel}
                     title={namedVendors.length > 0 ? "Observed vendors and domains" : "Observed domains"}
                     richItems={trackerFootprintRichDetails}
@@ -4935,27 +4863,10 @@ export function ExecutiveSummaryCard(input: {
                     items={[]}
                     truncationNote={domainTruncationNote}
                   />
-                  {categorySummary ? (
-                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Vendor mix</p>
-                      <p className="mt-1 text-sm text-slate-800">{categorySummary}</p>
-                      <DetailDisclosure
-                        summary={`${input.topObservedEntities.length} named entities, ${Object.keys(input.vendorCategoryCounts).length} categories`}
-                        title="Category and entity detail"
-                        richItems={vendorMixRichDetails}
-                        items={[
-                          ...Object.entries(input.vendorCategoryCounts).map(([key, count]) => `${formatCategoryLabel(key)} · ${count}`),
-                          ...input.preConsentVendorNames.slice(0, 3).map((vendor) => `${vendor} · pre-consent`),
-                          ...input.sessionReplayVendorNames.slice(0, 3).map((vendor) => `${vendor} · session replay`)
-                        ]}
-                      />
-                    </div>
-                  ) : null}
                 </div>
                 {policySurfaces.length > 0 ? (
                   <div id="policy-surfaces" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Policy Surfaces</p>
-                    <p className="mt-2 text-sm text-slate-800">{policySurfaceSummary}</p>
                     <div className="mt-3 space-y-2">
                       {policySurfaces.map((surface) => (
                         <details key={`${surface.pageLabel}:${surface.pageUrl ?? "unknown"}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
@@ -4988,9 +4899,6 @@ export function ExecutiveSummaryCard(input: {
                 {scanInterruptions.length > 0 ? (
                   <div id="fingerprinting" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Scan Interruption</p>
-                    <p className="mt-2 text-sm text-slate-800">
-                      {scanInterruptions.length} interruption event{scanInterruptions.length === 1 ? "" : "s"} retained
-                    </p>
                     <div className="mt-3 space-y-2">
                       {scanInterruptions.map((event) => (
                         <details key={`${event.label}:${event.details.join("|")}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">

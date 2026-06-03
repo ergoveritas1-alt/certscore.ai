@@ -1,9 +1,11 @@
 import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 
 export type GdprEprivacyCoverageOutcomeStatus =
+  | "Gap observed"
   | "Observed"
   | "Not observed"
   | "Not testable"
+  | "Review signal"
   | "Insufficient evidence";
 
 export type GdprEprivacyCoverageSourceSignalGap = {
@@ -161,6 +163,10 @@ function compactRecord(record: Record<string, unknown>) {
       return true;
     })
   );
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
 }
 
 function sourceGap(
@@ -1099,15 +1105,216 @@ function deriveSensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
   return null;
 }
 
+const SESSION_REPLAY_URL_PATTERN =
+  /clarity\.ms|hotjar\.com|hotjar\.io|fullstory\.com|logrocket\.com|mouseflow\.com|contentsquare\.(?:com|net)|smartlook\.com|inspectlet\.com|luckyorange\.com|quantummetric\.com|sessioncam\.com/i;
+const SESSION_REPLAY_VENDOR_PATTERN =
+  /microsoft clarity|clarity|hotjar|fullstory|logrocket|mouseflow|contentsquare|smartlook|inspectlet|lucky orange|quantum metric|sessioncam/i;
+
+function hostFromUrl(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function isCollectionEndpointUrl(value: string) {
+  return /(?:^|[./-])(?:collect|collection|record|recorder|session|events?|track|ingest|c\.gif|data)(?:[./?_-]|$)/i.test(value) ||
+    /(?:^|\.)c\.clarity\.ms$/i.test(hostFromUrl(value) ?? "");
+}
+
+function isSessionReplayEvidenceRow(row: Record<string, unknown>) {
+  const category = getString(row, ["category", "vendorCategory", "vendor_category", "purpose"]);
+  const vendor = getString(row, ["vendor", "vendorName", "vendor_name"]);
+  const requestUrl = getString(row, ["requestUrl", "request_url", "url"]);
+
+  return (
+    /session_replay|session replay|behavioral|recording/i.test(category ?? "") ||
+    SESSION_REPLAY_VENDOR_PATTERN.test(vendor ?? "") ||
+    SESSION_REPLAY_URL_PATTERN.test(requestUrl ?? "")
+  );
+}
+
+function getSessionReplayTiming(row: Record<string, unknown>) {
+  return (
+    getNumber(row, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms", "timestampMs", "timestamp_ms", "tsMs", "ts_ms"]) ??
+    null
+  );
+}
+
+function buildSessionReplayRuntimeEvidence(input: GdprEprivacyCoveragePolicyInput) {
+  const hybrid = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const summary = getObject(hybrid, ["sessionReplayEvidenceSummary", "session_replay_evidence_summary"]);
+  const classificationRows = [
+    ...getObjectArray(input.runtimeArtifacts, [
+      "requestPurposeClassificationConfidence",
+      "request_purpose_classification_confidence"
+    ]),
+    ...getObjectArray(hybrid, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"])
+  ].filter(isSessionReplayEvidenceRow);
+  const postAcceptEvidenceUrls = getStringArray(input.runtimeArtifacts, [
+    "consentPostAcceptTrackerEvidenceUrls",
+    "consent_post_accept_tracker_evidence_urls"
+  ]).filter((url) => SESSION_REPLAY_URL_PATTERN.test(url));
+  const postAcceptVendors = getStringArray(input.runtimeArtifacts, [
+    "consentAcceptNewTrackerVendorNames",
+    "consent_accept_new_tracker_vendor_names",
+    "consentPostAcceptTrackerVendorNames",
+    "consent_post_accept_tracker_vendor_names"
+  ]).filter((vendor) => SESSION_REPLAY_VENDOR_PATTERN.test(vendor));
+  const requestUrls = uniqueStrings([
+    ...classificationRows.map((row) => getString(row, ["requestUrl", "request_url", "url"])),
+    ...postAcceptEvidenceUrls
+  ]);
+  const vendors = uniqueStrings([
+    ...classificationRows.map((row) => getString(row, ["vendor", "vendorName", "vendor_name"])),
+    ...postAcceptVendors,
+    ...getStringArray(summary, ["vendors"])
+  ]).filter((vendor) => SESSION_REPLAY_VENDOR_PATTERN.test(vendor));
+  const firstSeenMsValues = classificationRows
+    .map(getSessionReplayTiming)
+    .filter((value): value is number => value !== null)
+    .sort((left, right) => left - right);
+  const consentStates = uniqueStrings([
+    ...classificationRows.map((row) => getString(row, ["runtimePhase", "runtime_phase", "timingStatus", "timing_status"])),
+    postAcceptEvidenceUrls.length > 0 || postAcceptVendors.length > 0 ? "post_accept" : null
+  ]);
+  const disclosureRows = getRuntimeVendorDisclosureEvidence(input.runtimeArtifacts).filter((row) =>
+    [...row.observedRuntimeVendors, ...row.unmatchedRuntimeVendors].some((vendor) => SESSION_REPLAY_VENDOR_PATTERN.test(vendor)) ||
+    [...row.observedRuntimeDomains, ...row.unmatchedRuntimeDomains].some((domain) => SESSION_REPLAY_URL_PATTERN.test(domain))
+  );
+  const postChoiceControls = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
+  const artifactCount = getNumber(summary, ["artifactCount", "artifact_count"]);
+
+  if (vendors.length === 0 && requestUrls.length === 0 && (artifactCount ?? 0) === 0) {
+    return null;
+  }
+
+  return compactRecord({
+    acceptInteractionConfirmed: getBoolean(input.runtimeArtifacts, [
+      "consentAcceptInteractionSucceeded",
+      "consent_accept_interaction_succeeded"
+    ]),
+    collectionEndpointObserved:
+      getBoolean(summary, ["collectionEndpointObserved", "collection_endpoint_observed"]) === true ||
+      requestUrls.some(isCollectionEndpointUrl),
+    consentStates,
+    firstSeenMs: firstSeenMsValues[0] ?? null,
+    libraryLoadObserved:
+      getBoolean(summary, ["libraryOnly", "library_only"]) === true ||
+      requestUrls.some((url) => /(?:script|tag|recorder|clarity\.ms\/tag|hotjar|fullstory|logrocket)/i.test(url)),
+    maskingOrExclusionObserved: getBoolean(summary, [
+      "maskingOrExclusionObserved",
+      "masking_or_exclusion_observed"
+    ]),
+    postAcceptObserved: consentStates.some((state) => /post.?accept|post.?consent/i.test(state)),
+    postChoiceConsentControlsObserved:
+      getBoolean(postChoiceControls, [
+        "preferenceCenterReachableAfterInitialLayer",
+        "preference_center_reachable_after_initial_layer",
+        "cmpReopenControlObserved",
+        "cmp_reopen_control_observed",
+        "withdrawalTextObserved",
+        "withdrawal_text_observed"
+      ]) === true,
+    preConsentObserved: consentStates.some((state) => /pre.?consent/i.test(state)),
+    requestUrls: compactArray(requestUrls, 5),
+    sensitiveSurfaceOverlap: getBoolean(summary, ["sensitiveSurfaceOverlap", "sensitive_surface_overlap"]),
+    vendorDisclosed: disclosureRows.some((row) => row.matchedVendorDisclosureCount > 0 && row.unmatchedVendorDisclosureCount === 0),
+    vendorDisclosureGap: disclosureRows.some((row) => row.unmatchedVendorDisclosureCount > 0),
+    vendors: compactArray(vendors, 5)
+  });
+}
+
 function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const sessionReplayEvidence = buildSessionReplayRuntimeEvidence(input);
+  const sessionReplayVendors = getStringArray(sessionReplayEvidence, ["vendors"]);
+  const sessionReplayConsentStates = getStringArray(sessionReplayEvidence, ["consentStates"]);
+  const sessionReplayPreConsentObserved = getBoolean(sessionReplayEvidence, ["preConsentObserved"]) === true;
+  const sessionReplayPostAcceptObserved = getBoolean(sessionReplayEvidence, ["postAcceptObserved"]) === true;
   const sessionReplayCount =
     getNumber(input.snapshot, ["session_replay_tracker_count"]) ??
     getNumber(input.snapshot, ["session_replay_count"]);
   const sessionReplayObserved =
     getBoolean(input.snapshot, ["session_replay_tool_detected", "session_replay_detected"]) === true ||
-    (sessionReplayCount !== null && sessionReplayCount > 0);
+    (sessionReplayCount !== null && sessionReplayCount > 0) ||
+    sessionReplayVendors.length > 0;
   const fingerprintingObserved =
     getBoolean(input.snapshot, ["fingerprinting_or_identity_vendor_detected", "fingerprinting_detected"]) === true;
+
+  if (sessionReplayPreConsentObserved) {
+    return makeOutcome(
+      "session_replay_fingerprinting_review",
+      "Gap observed",
+      "Session replay or behavioral recording evidence was retained before a recorded consent action.",
+      [
+        "Session replay signal observed before consent",
+        ...sessionReplayVendors.map((vendor) => `Runtime vendor: ${vendor}`),
+        ...sessionReplayConsentStates.map((state) => `Consent state: ${state}`)
+      ],
+      {
+        retainedEvidence: {
+          sessionReplayEvidence
+        }
+      }
+    );
+  }
+
+  if (sessionReplayPostAcceptObserved) {
+    const maskingObserved = getBoolean(sessionReplayEvidence, ["maskingOrExclusionObserved"]);
+    const postChoiceControlsObserved = getBoolean(sessionReplayEvidence, ["postChoiceConsentControlsObserved"]);
+    const vendorDisclosed = getBoolean(sessionReplayEvidence, ["vendorDisclosed"]);
+    const reviewMissingSignals = [
+      vendorDisclosed === true
+        ? null
+        : sourceGap(
+            "runtimeVendorDisclosureEvidence.sessionReplayVendorDisclosed",
+            true,
+            vendorDisclosed,
+            "Required to distinguish disclosed post-consent replay from disclosure-review risk.",
+            "WC01"
+          ),
+      maskingObserved === true
+        ? null
+        : sourceGap(
+            "hybridRuntimeEvidence.sessionReplayEvidenceSummary.maskingOrExclusionObserved",
+            true,
+            maskingObserved,
+            "Required to lower session replay concern when masking or exclusion evidence is retained."
+          ),
+      postChoiceControlsObserved === true
+        ? null
+        : sourceGap(
+            "consentControlLifecycleEvidence.preferenceCenterReachableAfterInitialLayer",
+            true,
+            postChoiceControlsObserved,
+            "Required to confirm users can revisit consent choices after accepting."
+          )
+    ].filter((value): value is GdprEprivacyCoverageSourceSignalGap => Boolean(value));
+    const status: GdprEprivacyCoverageOutcomeStatus = reviewMissingSignals.length === 0 ? "Observed" : "Review signal";
+
+    return makeOutcome(
+      "session_replay_fingerprinting_review",
+      status,
+      status === "Observed"
+        ? "Session replay appeared only after a confirmed accept action, with retained disclosure/control evidence."
+        : "Session replay appeared only after a confirmed accept action, but disclosure, masking, or withdrawal-control evidence needs review.",
+      [
+        "Session replay signal observed after accept",
+        ...sessionReplayVendors.map((vendor) => `Runtime vendor: ${vendor}`),
+        ...sessionReplayConsentStates.map((state) => `Consent state: ${state}`)
+      ],
+      {
+        missingOrIncompleteSourceSignals: reviewMissingSignals,
+        retainedEvidence: {
+          sessionReplayEvidence
+        }
+      }
+    );
+  }
 
 	  if (sessionReplayObserved || fingerprintingObserved) {
 	    return makeOutcome(
@@ -1131,6 +1338,7 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
         retainedEvidence: {
           fingerprintingObserved,
           sessionReplayCount,
+          sessionReplayEvidence,
           sessionReplayObserved
         }
       }

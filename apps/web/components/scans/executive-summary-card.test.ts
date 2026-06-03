@@ -1198,7 +1198,7 @@ test("ExecutiveSummaryCard explains interruption-backed limited coverage only wh
 
   assert.match(withInterruption, /Coverage was limited by site protections/);
   assert.match(withInterruption, /Findings shown here are based on retained observable evidence/);
-  assert.match(withInterruption, /1 interruption event retained/);
+  assert.doesNotMatch(withInterruption, /1 interruption event retained/);
   assert.match(withInterruption, /Captcha\/security challenge/);
   assert.doesNotMatch(withoutInterruption, /Coverage was limited by site protections/);
 });
@@ -3094,9 +3094,10 @@ test("ExecutiveSummaryCard keeps tracker disclosure counts aligned with the full
     })
   );
 
-  assert.match(html, /13 third-party domains observed; 1 classified tracker vendor identified\./);
+  assert.doesNotMatch(html, /13 third-party domains observed; 1 classified tracker vendor identified\./);
   assert.match(html, /And 8 more observed vendors or domains are retained in evidence\./);
   assert.doesNotMatch(html, /1 vendor names and 13 third-party domains/);
+  assert.doesNotMatch(html, /ads 1/);
 });
 
 test("ExecutiveSummaryCard uses domain-only tracker expand copy when no classified vendors are present", () => {
@@ -3129,7 +3130,7 @@ test("ExecutiveSummaryCard uses domain-only tracker expand copy when no classifi
     })
   );
 
-  assert.match(html, /1 third-party domain observed; no classified tracker vendors identified\./);
+  assert.doesNotMatch(html, /1 third-party domain observed; no classified tracker vendors identified\./);
   assert.match(html, /View observed third-party domain/);
   assert.doesNotMatch(html, /View observed vendors and domains/);
 });
@@ -3165,7 +3166,7 @@ test("ExecutiveSummaryCard labels truncated observed domain lists", () => {
     })
   );
 
-  assert.match(html, /11 third-party domains observed; no classified tracker vendors identified\./);
+  assert.doesNotMatch(html, /11 third-party domains observed; no classified tracker vendors identified\./);
   assert.match(html, /And 5 more observed vendors or domains are retained in evidence\./);
   assert.doesNotMatch(html, /observed-10\.example/);
   assert.doesNotMatch(html, /observed-11\.example/);
@@ -3201,11 +3202,12 @@ test("ExecutiveSummaryCard keeps vendor-and-domain tracker expand copy when clas
     })
   );
 
-  assert.match(html, /3 third-party domains observed; 2 classified tracker vendors identified\./);
+  assert.doesNotMatch(html, /3 third-party domains observed; 2 classified tracker vendors identified\./);
   assert.match(html, /View observed vendors and domains/);
+  assert.doesNotMatch(html, /analytics 1/);
 });
 
-test("ExecutiveSummaryCard explains one policy URL covered across multiple disclosure types", () => {
+test("ExecutiveSummaryCard omits policy URL count summary across multiple disclosure types", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
@@ -3239,11 +3241,13 @@ test("ExecutiveSummaryCard explains one policy URL covered across multiple discl
     })
   );
 
-  assert.match(html, /1 policy URL covered across cookie\/privacy disclosures/);
+  assert.doesNotMatch(html, /1 policy URL covered across cookie\/privacy disclosures/);
+  assert.match(html, /Cookie policy/);
+  assert.match(html, /Privacy policy/);
   assert.doesNotMatch(html, /1 surface URL covered/);
 });
 
-test("ExecutiveSummaryCard pluralizes multiple covered policy URLs", () => {
+test("ExecutiveSummaryCard omits multiple covered policy URL summary", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
@@ -3277,7 +3281,9 @@ test("ExecutiveSummaryCard pluralizes multiple covered policy URLs", () => {
     })
   );
 
-  assert.match(html, /2 policy URLs covered/);
+  assert.doesNotMatch(html, /2 policy URLs covered/);
+  assert.match(html, /Privacy policy/);
+  assert.match(html, /Cookie policy/);
   assert.doesNotMatch(html, /2 surface URLs covered/);
 });
 
@@ -3316,7 +3322,7 @@ test("ExecutiveSummaryCard clarifies when disclosure labels share a policy URL",
     })
   );
 
-  assert.match(html, /2 policy URLs covered across 3 disclosure types/);
+  assert.doesNotMatch(html, /2 policy URLs covered across 3 disclosure types/);
   assert.match(html, /This URL is shared by Privacy policy and Cookie policy/);
 });
 
@@ -3388,12 +3394,12 @@ test("ExecutiveSummaryCard renders accessibility-only self-scan copy without pri
   );
   assert.doesNotMatch(html, /Next step: review affected text\/background color pairs/);
   assert.match(html, /Automated accessibility signals are the main review area\./);
-  assert.match(html, /1 third-party domain observed; no classified tracker vendors identified\./);
+  assert.doesNotMatch(html, /1 third-party domain observed; no classified tracker vendors identified\./);
   assert.match(html, /View observed third-party domain/);
   assert.doesNotMatch(html, /View observed vendors and domains/);
   assert.equal(
     (html.match(/1 third-party domain observed; no classified tracker vendors identified\./g) ?? []).length,
-    1
+    0
   );
   assert.match(
     html,

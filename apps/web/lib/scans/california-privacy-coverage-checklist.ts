@@ -1,10 +1,12 @@
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
+import type { CertScoreFindingEvidenceDetails } from "./finding-registry";
 import type {
   CaliforniaPrivacyCoverageCriticalEvidence,
   CaliforniaPrivacyCoverageOutcome,
   CaliforniaPrivacyCoverageOutcomeStatus,
   CaliforniaPrivacyCoverageSourceSignalGap
 } from "./california-privacy-coverage-policy";
+import { buildRegulatoryChecklistEvidenceHighlights } from "./regulatory-checklist-evidence-highlights";
 
 export type CaliforniaPrivacyCoverageChecklistStatus = CaliforniaPrivacyCoverageOutcomeStatus;
 export type CaliforniaPrivacyCoverageChecklistTone = "neutral" | "review" | "warning" | "muted";
@@ -33,6 +35,7 @@ export type CaliforniaPrivacyCoverageChecklistInput = {
   coverageLimited: boolean;
   coverageOutcomes?: Record<string, CaliforniaPrivacyCoverageOutcome>;
   projectedFindings?: Array<{
+    evidenceDetails?: CertScoreFindingEvidenceDetails;
     evidencePreview?: string[];
     id: string;
     label: string;
@@ -177,7 +180,8 @@ function getUnifiedFindingCriticalEvidence(
   status: CaliforniaPrivacyCoverageChecklistStatus,
   statusBasis: string,
   rowId: string,
-  findings: UnifiedFindingDisplayPacket[]
+  findings: UnifiedFindingDisplayPacket[],
+  projectedFindings: NonNullable<CaliforniaPrivacyCoverageChecklistInput["projectedFindings"]> = []
 ): CaliforniaPrivacyCoverageCriticalEvidence {
   return {
     missingOrIncompleteSourceSignals: [],
@@ -193,6 +197,7 @@ function getUnifiedFindingCriticalEvidence(
       severity: finding.severity
     })),
     retainedEvidence: {
+      evidenceHighlights: projectedFindings.flatMap(buildRegulatoryChecklistEvidenceHighlights).slice(0, 3),
       evidenceRefs: getEvidenceRefs(findings),
       findingEntities: findings.map((finding) => ({
         id: finding.unifiedFindingId,
@@ -229,11 +234,16 @@ export function deriveCaliforniaPrivacyCoverageChecklist(
   input: CaliforniaPrivacyCoverageChecklistInput
 ): CaliforniaPrivacyCoverageChecklistItem[] {
   const findingsById = new Map(input.unifiedFindings.map((finding) => [finding.unifiedFindingId, finding]));
+  const projectedFindingsById = new Map((input.projectedFindings ?? []).map((finding) => [finding.id, finding]));
   const publicCoverageIsTestable = input.scanCompleted && !input.coverageLimited;
 
   return CHECKLIST_ROWS.map((definition) => {
     const matchingFindings = definition.findingIds.flatMap((id) => {
       const finding = findingsById.get(id);
+      return finding ? [finding] : [];
+    });
+    const matchingProjectedFindings = definition.findingIds.flatMap((id) => {
+      const finding = projectedFindingsById.get(id);
       return finding ? [finding] : [];
     });
     const policyOutcome = input.coverageOutcomes?.[definition.id];
@@ -255,7 +265,7 @@ export function deriveCaliforniaPrivacyCoverageChecklist(
       const status = definition.defaultFindingStatus;
       const statusBasis = `Canonical unified finding evidence was retained for this California row: ${matchingFindings.map((finding) => finding.presentation?.findingName || finding.title).join(", ")}.`;
       return {
-        criticalEvidence: getUnifiedFindingCriticalEvidence(status, statusBasis, definition.id, matchingFindings),
+        criticalEvidence: getUnifiedFindingCriticalEvidence(status, statusBasis, definition.id, matchingFindings, matchingProjectedFindings),
         evidenceRefs: getEvidenceRefs(matchingFindings),
         explanation: definition.explanation,
         id: definition.id,
