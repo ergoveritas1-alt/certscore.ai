@@ -5742,7 +5742,7 @@ export function SharedScanDetailView({
   previewMode = "full",
   scanRecord,
   showAllRegulatoryChecklistOptions,
-  viewerAccessRole = "admin"
+  viewerAccessRole = "user"
 }: SharedScanDetailViewProps) {
   const scanReportAccessRole = normalizeScanReportAccessRole(viewerAccessRole);
   const showAnalystDetail = scanReportAccessRole !== "user";
