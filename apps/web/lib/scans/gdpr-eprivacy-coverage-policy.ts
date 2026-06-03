@@ -2010,7 +2010,9 @@ function deriveAccessibilityConsentControlsOutcome(input: GdprEprivacyCoveragePo
     return makeOutcome(
       "accessibility_consent_controls",
       "Not observed",
-      "No basic automated accessibility issue was retained for the observed consent or privacy controls in the tested context.",
+      evaluation.retainedEvidence.examplesAreGeneralPageOnly === true
+        ? "Automated accessibility issues were retained for the tested page context, such as a general page or navigation control, but WS01 did not tie the retained examples to the observed consent banner, preference center, or privacy-choice controls."
+        : "No basic automated accessibility issue was retained for the observed consent or privacy controls in the tested context.",
       evaluation.evidenceRefs,
       {
         retainedEvidence: evaluation.retainedEvidence
@@ -2163,7 +2165,16 @@ function evaluateConsentControlAccessibility(input: {
     };
   }
 
-  if (input.generalPageAccessibilityIssuesObserved || input.examplesAreGeneralPageOnly === true) {
+  if (input.examplesAreGeneralPageOnly === true && input.controlAccessibilityIssueObserved === false) {
+    return {
+      evidenceRefs,
+      missingOrIncompleteSourceSignals: [],
+      retainedEvidence,
+      status: "Not observed" as const
+    };
+  }
+
+  if (input.generalPageAccessibilityIssuesObserved) {
     return {
       evidenceRefs,
       missingOrIncompleteSourceSignals: [],

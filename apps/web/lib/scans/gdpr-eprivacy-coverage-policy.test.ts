@@ -735,6 +735,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps general page accessibility 
         }
       ],
       californiaPrivacyEvidence: {
+        examplesAreGeneralPageOnly: true,
         privacyControlAccessibilityIssueObserved: false,
         privacyControlAccessibilitySignals: []
       },
@@ -750,14 +751,58 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps general page accessibility 
     }
   });
 
-  assert.equal(outcomes.accessibility_consent_controls?.status, "Review signal");
+  assert.equal(outcomes.accessibility_consent_controls?.status, "Not observed");
   assert.match(
     outcomes.accessibility_consent_controls?.limitation ?? "",
-    /not clearly tied to consent or privacy-choice controls/i
+    /general page or navigation control/i
+  );
+  assert.match(
+    outcomes.accessibility_consent_controls?.limitation ?? "",
+    /did not tie the retained examples to the observed consent banner/i
   );
   assert.equal(
     outcomes.accessibility_consent_controls?.criticalEvidence.retainedEvidence.controlAccessibilityIssueObserved,
     false
+  );
+  assert.equal(
+    outcomes.accessibility_consent_controls?.criticalEvidence.retainedEvidence.examplesAreGeneralPageOnly,
+    true
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps legacy ambiguous page accessibility evidence in review", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      accessibilityAxeEvidence: [
+        {
+          help: "ARIA input fields must have an accessible name",
+          impact: "serious",
+          pageUrl: "https://www.caltech.edu/",
+          representativeSelectors: [".grid-carousel__carousel-inner"],
+          ruleId: "aria-input-field-name"
+        }
+      ],
+      californiaPrivacyEvidence: {
+        privacyControlAccessibilityIssueObserved: false,
+        privacyControlAccessibilitySignals: []
+      },
+      visualAccessReview: {
+        retained: true
+      }
+    },
+    snapshot: {
+      wcag_aria_error_count: 1,
+      wcag_focus_indicator_issue_count: 0,
+      wcag_form_label_error_count: 0,
+      wcag_keyboard_navigation_issue_count: 0
+    }
+  });
+
+  assert.equal(outcomes.accessibility_consent_controls?.status, "Review signal");
+  assert.match(
+    outcomes.accessibility_consent_controls?.limitation ?? "",
+    /not clearly tied to consent or privacy-choice controls/i
   );
 });
 
