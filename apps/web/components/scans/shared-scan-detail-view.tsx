@@ -5559,6 +5559,7 @@ type SharedScanDetailViewProps = {
   previewPayload?: PreviewScanPayload | null;
   previewMode?: "full" | "homepage";
   scanRecord: ScanDetailResponse;
+  canViewReviewLenses?: boolean;
   showAllRegulatoryChecklistOptions?: boolean;
   viewerAccessRole?: string | null;
 };
@@ -5826,12 +5827,14 @@ export function SharedScanDetailView({
   previewPayload: previewPayloadOverride = null,
   previewMode = "full",
   scanRecord,
+  canViewReviewLenses,
   showAllRegulatoryChecklistOptions,
   viewerAccessRole = "user"
 }: SharedScanDetailViewProps) {
   const scanReportAccessRole = normalizeScanReportAccessRole(viewerAccessRole);
   const showAnalystDetail = scanReportAccessRole !== "user";
   const showAdvancedDiagnostics = scanReportAccessRole === "admin";
+  const canViewSignalSnapshotReviewLenses = canViewReviewLenses ?? scanReportAccessRole === "admin";
   const canViewAllRegulatoryChecklistOptions = showAllRegulatoryChecklistOptions ?? scanReportAccessRole === "admin";
   const previewPayload = previewPayloadOverride ?? scanRecord.previewPayload ?? null;
   const snapshot = scanRecord.snapshot;
@@ -6319,6 +6322,7 @@ export function SharedScanDetailView({
             policyEnrichmentCount={scanRecord.policyEnrichment.length}
             policySurfaces={executivePolicySurfaces}
             scanInterruptions={executiveScanInterruptions}
+            showReviewLenses={canViewSignalSnapshotReviewLenses}
             showProtectedRouteInterruptions={showAdvancedDiagnostics}
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
           />

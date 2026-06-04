@@ -321,14 +321,12 @@ function getMissingEvidenceNeeded(input: {
     return fromSourceGaps;
   }
 
-  if (input.rowId === "consent_choice_quality") {
-    const retainedMissingEvidenceNeeded = retainedStringArray(input.retained, [
-      "missingEvidenceNeeded",
-      "missing_evidence_needed"
-    ]);
-    if (retainedMissingEvidenceNeeded.length > 0) {
-      return [...retainedMissingEvidenceNeeded, ...fromSourceGaps].slice(0, 8);
-    }
+  const retainedMissingEvidenceNeeded = retainedStringArray(input.retained, [
+    "missingEvidenceNeeded",
+    "missing_evidence_needed"
+  ]);
+  if (retainedMissingEvidenceNeeded.length > 0) {
+    return [...retainedMissingEvidenceNeeded, ...fromSourceGaps].slice(0, 8);
   }
 
   const rowSpecific = (() => {
@@ -1896,6 +1894,8 @@ function hasUsableVendorDisclosureMismatchEvidence(item: GdprEprivacyCoverageChe
   const retainedRowHasUsableMismatch = retainedRows.some((row) => {
     const coverageStatus = readRetainedString(row, ["coverageStatus", "coverage_status"]);
     const directVsInferred = readRetainedString(row, ["directVsInferred", "direct_vs_inferred"]);
+    const evidenceConfidence = readRetainedString(row, ["evidenceConfidence", "evidence_confidence"]);
+    const mismatchRationale = readRetainedString(row, ["mismatchRationale", "mismatch_rationale"]);
     const unmatchedVendors = retainedStringArray(row, ["unmatchedRuntimeVendors", "unmatched_runtime_vendors"]);
     const unmatchedDomains = retainedStringArray(row, ["unmatchedRuntimeDomains", "unmatched_runtime_domains"]);
     const observedVendors = retainedStringArray(row, ["observedRuntimeVendors", "observed_runtime_vendors"]);
@@ -1915,16 +1915,21 @@ function hasUsableVendorDisclosureMismatchEvidence(item: GdprEprivacyCoverageChe
         surfaceRecord &&
         readRetainedBoolean(surfaceRecord, ["reached"]) === true &&
         Boolean(readRetainedString(surfaceRecord, ["url"])) &&
-        Boolean(readRetainedString(surfaceRecord, ["snippet", "textSnippet", "text_snippet"]))
+        Boolean(readRetainedString(surfaceRecord, ["snippet", "textSnippet", "text_snippet"])) &&
+        retainedStringArray(surfaceRecord, ["searchedTerms", "searched_terms"]).length > 0
       );
     }).length;
+    const directOrModerate =
+      directVsInferred !== "inferred" &&
+      (directVsInferred === "direct" || evidenceConfidence === "moderate" || evidenceConfidence === "high");
     return (
       coverageStatus === "usable" &&
-      directVsInferred !== "inferred" &&
+      directOrModerate &&
       observedVendors.length + observedDomains.length > 0 &&
       unmatchedVendors.length + unmatchedDomains.length > 0 &&
       (unmatchedDisclosureCount ?? 0) > 0 &&
-      reachedPolicySurfaces > 0
+      reachedPolicySurfaces > 0 &&
+      Boolean(mismatchRationale)
     );
   });
   if (retainedRowHasUsableMismatch) {

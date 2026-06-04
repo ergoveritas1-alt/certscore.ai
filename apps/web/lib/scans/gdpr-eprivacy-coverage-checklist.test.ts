@@ -73,8 +73,11 @@ const usableRuntimeVendorDisclosureMismatch = JSON.stringify({
   observedRuntimeVendors: ["DoubleVerify"],
   policySurfacesSearched: [
     {
+      matchedVendorNames: [],
       reached: true,
+      searchedTerms: ["DoubleVerify", "doubleverify.com"],
       snippet: "We use analytics and advertising partners.",
+      unmatchedVendorNames: ["DoubleVerify"],
       url: "https://example.test/privacy"
     }
   ],
@@ -709,8 +712,11 @@ test("deriveGdprEprivacyCoverageChecklist words runtime vendor disclosure gaps a
           observedRuntimeVendors: ["Google Analytics", "Microsoft Clarity"],
           policySurfacesSearched: [
             {
+              matchedVendorNames: ["Google Analytics"],
               reached: true,
+              searchedTerms: ["Google Analytics", "Microsoft Clarity"],
               snippet: "We use analytics tools.",
+              unmatchedVendorNames: ["Microsoft Clarity"],
               url: "https://example.test/privacy"
             }
           ],
@@ -808,6 +814,45 @@ test("deriveGdprEprivacyCoverageChecklist keeps unconfirmed post-reject findings
   assert.equal(byId(items, "post_reject_tracking_reduction").status, "Not testable");
   assert.deepEqual(byId(items, "post_reject_tracking_reduction").evidenceRefs, [
     "Evidence: reject interaction missing"
+  ]);
+});
+
+test("deriveGdprEprivacyCoverageChecklist renders retained post-reject persistence without concrete details as review signal", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      post_reject_tracking_reduction: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: post-reject tracking reduction evidence"],
+        limitation:
+          "A reject action and post-reject comparison window were retained, and post-reject non-essential activity was observed, but CertScore did not retain enough canonical detail to project a post-reject persistence gap.",
+        retainedEvidence: {
+          missingEvidenceNeeded: [
+            "Eligible post-reject non-essential vendor/request/cookie details with category, URL/domain, timing, and consent state."
+          ],
+          postRejectNonEssentialActivityRetained: true,
+          postRejectRequestRecordsObserved: true,
+          postRejectWindowAvailable: true,
+          projectionSuppressed: true,
+          projectionSuppressionReason:
+            "Eligible post-reject non-essential vendor/request/cookie details with category, URL/domain, timing, and consent state were not retained.",
+          reductionEvaluationStatus: "not_reduced",
+          rejectInteractionConfirmed: true
+        },
+        rowId: "post_reject_tracking_reduction",
+        status: "Review signal"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+  const row = byId(items, "post_reject_tracking_reduction");
+
+  assert.equal(row.status, "Review signal");
+  assert.equal(row.assessmentStatus, "review_signal");
+  assert.equal(row.evidenceState, "observed");
+  assert.deepEqual(row.criticalEvidence.projectedFindings, []);
+  assert.deepEqual(row.criticalEvidence.retainedEvidence.missingEvidenceNeeded, [
+    "Eligible post-reject non-essential vendor/request/cookie details with category, URL/domain, timing, and consent state."
   ]);
 });
 
@@ -1084,6 +1129,127 @@ test("deriveGdprEprivacyCoverageChecklist treats direct runtime vendor disclosur
     byId(items, "runtime_vendor_disclosure_alignment").criticalEvidence.missingOrIncompleteSourceSignals,
     []
   );
+});
+
+test("deriveGdprEprivacyCoverageChecklist treats retained vendors and policy surfaces without comparison as review signal", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      runtime_vendor_disclosure_alignment: makeCoverageOutcome({
+        evidenceRefs: ["Runtime vendor count: 2"],
+        limitation:
+          "Runtime vendors and policy surfaces were retained, but no canonical vendor-disclosure comparison artifact was retained. Manual review is needed to determine disclosure alignment.",
+        retainedEvidence: {
+          hasPolicySurface: true,
+          runtimeVendorCount: 2
+        },
+        rowId: "runtime_vendor_disclosure_alignment",
+        status: "Review signal"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+  const row = byId(items, "runtime_vendor_disclosure_alignment");
+
+  assert.equal(row.status, "Review signal");
+  assert.equal(row.assessmentStatus, "review_signal");
+  assert.equal(row.evidenceState, "observed");
+  assert.deepEqual(row.criticalEvidence.projectedFindings, []);
+  assert.equal(
+    row.criticalEvidence.statusBasis,
+    "Runtime vendors and policy surfaces were retained, but no canonical vendor-disclosure comparison artifact was retained. Manual review is needed to determine disclosure alignment."
+  );
+  assert.deepEqual(row.criticalEvidence.retainedEvidence.missingEvidenceNeeded, [
+    "Usable runtime-vendor disclosure comparison with searched policy surfaces, matched/unmatched vendors, confidence, and rationale."
+  ]);
+});
+
+test("deriveGdprEprivacyCoverageChecklist does not gap vendor disclosure alignment without runtime vendors", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  assert.equal(byId(items, "runtime_vendor_disclosure_alignment").status, "Not observed");
+});
+
+test("deriveGdprEprivacyCoverageChecklist treats runtime vendors without policy surface as not testable", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      runtime_vendor_disclosure_alignment: makeCoverageOutcome({
+        evidenceRefs: ["Runtime vendor count: 2"],
+        limitation:
+          "Runtime vendors were observed, but no privacy or cookie policy surface was retained, so disclosure alignment cannot be evaluated.",
+        retainedEvidence: {
+          hasPolicySurface: false,
+          runtimeVendorCount: 2
+        },
+        rowId: "runtime_vendor_disclosure_alignment",
+        status: "Not testable"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  assert.equal(byId(items, "runtime_vendor_disclosure_alignment").status, "Not testable");
+  assert.equal(byId(items, "runtime_vendor_disclosure_alignment").assessmentStatus, "coverage_limitation");
+});
+
+test("deriveGdprEprivacyCoverageChecklist treats usable matched vendor disclosure comparison as checked", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      runtime_vendor_disclosure_alignment: makeCoverageOutcome({
+        evidenceRefs: ["Runtime vendor count: 2", "Disclosure comparison rows: 1"],
+        limitation:
+          "Runtime vendor disclosure comparison evidence was retained, and observed runtime vendors were matched in retained disclosure surfaces.",
+        retainedEvidence: {
+          disclosureComparisonRows: 1,
+          hasPolicySurface: true,
+          runtimeVendorCount: 2,
+          runtimeVendorDisclosureEvidence: [
+            {
+              coverageStatus: "usable",
+              directVsInferred: "direct",
+              evidenceConfidence: "moderate",
+              matchedVendorDisclosureCount: 2,
+              mismatchRationale:
+                "Observed runtime vendors were matched by name or known domain alias in retained policy disclosure surfaces.",
+              observedRuntimeDomains: ["www.googletagmanager.com", "www.google-analytics.com"],
+              observedRuntimeVendors: ["Google Tag Manager", "Google Analytics"],
+              policySurfacesSearched: [
+                {
+                  matchedVendorNames: ["Google Tag Manager", "Google Analytics"],
+                  reached: true,
+                  searchedTerms: ["Google Tag Manager", "Google Analytics"],
+                  snippet: "We use Google Tag Manager and Google Analytics.",
+                  type: "privacy_policy",
+                  unmatchedVendorNames: [],
+                  url: "https://example.test/privacy"
+                }
+              ],
+              unmatchedRuntimeDomains: [],
+              unmatchedRuntimeVendors: [],
+              unmatchedVendorDisclosureCount: 0
+            }
+          ]
+        },
+        rowId: "runtime_vendor_disclosure_alignment",
+        status: "Observed"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+  const row = byId(items, "runtime_vendor_disclosure_alignment");
+
+  assert.equal(row.status, "Observed");
+  assert.equal(row.assessmentStatus, "checked");
+  assert.equal(row.evidenceState, "observed");
 });
 
 test("deriveGdprEprivacyCoverageChecklist treats partial runtime vendor disclosure mismatch as a gap", () => {

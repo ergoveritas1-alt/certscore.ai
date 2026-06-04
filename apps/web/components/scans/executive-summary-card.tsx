@@ -4475,6 +4475,7 @@ export function ExecutiveSummaryCard(input: {
   policyEnrichmentCount?: number | null;
   policySurfaces?: ExecutivePolicySurface[] | null;
   scanInterruptions?: ExecutiveScanInterruption[] | null;
+  showReviewLenses?: boolean;
   showProtectedRouteInterruptions?: boolean;
   verifiedPublicSurfacesCount?: number | null;
   lightweightHeroMetrics?: Array<{
@@ -4859,50 +4860,51 @@ export function ExecutiveSummaryCard(input: {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
               </div>
               <div className="space-y-3">
-                <details id="review-lenses" className="group/review-lenses scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Review lenses</span>
-                    <ScanReportDisclosureIcon className="group-open/review-lenses:rotate-90" />
-                  </summary>
-                  <div className="mt-3 hidden space-y-3 group-open/review-lenses:block">
-                    {hasIncompleteCoverageNotice ? (
-                      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
-                        This scan has incomplete coverage. Treat missing or low-confidence results as unresolved until a complete rescan confirms them.
-                      </p>
-                    ) : null}
-                    <div className="space-y-3">
-                      {regulatoryLenses.map((lens) => (
-                        <details
-                          key={lens.acronym}
-                          id={getRegulatoryLensAnchor(lens.acronym)}
-                          className="group scroll-mt-24 rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3"
-                        >
-                          <summary className="relative grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2">
-                            <span className="min-w-0 self-start">
-                              <span className="flex flex-wrap items-center gap-2">
-                                <span className="text-sm font-semibold text-slate-900">{lens.acronym}</span>
-                                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
-                                  {lens.ratingLabel}
+                {input.showReviewLenses !== false ? (
+                  <details id="review-lenses" className="group/review-lenses scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Review lenses</span>
+                      <ScanReportDisclosureIcon className="group-open/review-lenses:rotate-90" />
+                    </summary>
+                    <div className="mt-3 hidden space-y-3 group-open/review-lenses:block">
+                      {hasIncompleteCoverageNotice ? (
+                        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
+                          This scan has incomplete coverage. Treat missing or low-confidence results as unresolved until a complete rescan confirms them.
+                        </p>
+                      ) : null}
+                      <div className="space-y-3">
+                        {regulatoryLenses.map((lens) => (
+                          <details
+                            key={lens.acronym}
+                            id={getRegulatoryLensAnchor(lens.acronym)}
+                            className="group scroll-mt-24 rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3"
+                          >
+                            <summary className="relative grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2">
+                              <span className="min-w-0 self-start">
+                                <span className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm font-semibold text-slate-900">{lens.acronym}</span>
+                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
+                                    {lens.ratingLabel}
+                                  </span>
                                 </span>
                               </span>
-                            </span>
-                            <span className="shrink-0 self-start text-right">
-                              <span className="block text-xl font-semibold tracking-tight text-slate-900">{lens.score ?? "—"}</span>
-                              {typeof lens.score === "number" ? (
-                                <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
-                              ) : null}
-                            </span>
-                            <span className="col-span-2 min-w-0 pr-6 text-xs leading-5 text-slate-600">{lens.summary}</span>
-                            <ScanReportDisclosureIcon className="absolute bottom-0 right-0" />
-                          </summary>
-                          <div className="mt-3 border-t border-slate-200 pt-3">
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
-                            <div className="mt-2 space-y-2">
-                              {lens.findings.length > 0 ? (
-                                lens.findings.map((item) => (
-                                  <RegulatoryLensFindingCard
-                                    key={`${lens.acronym}-${item.id}-${item.label}`}
-                                    finding={item}
+                              <span className="shrink-0 self-start text-right">
+                                <span className="block text-xl font-semibold tracking-tight text-slate-900">{lens.score ?? "—"}</span>
+                                {typeof lens.score === "number" ? (
+                                  <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
+                                ) : null}
+                              </span>
+                              <span className="col-span-2 min-w-0 pr-6 text-xs leading-5 text-slate-600">{lens.summary}</span>
+                              <ScanReportDisclosureIcon className="absolute bottom-0 right-0" />
+                            </summary>
+                            <div className="mt-3 border-t border-slate-200 pt-3">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
+                              <div className="mt-2 space-y-2">
+                                {lens.findings.length > 0 ? (
+                                  lens.findings.map((item) => (
+                                    <RegulatoryLensFindingCard
+                                      key={`${lens.acronym}-${item.id}-${item.label}`}
+                                      finding={item}
                                     lens={lens}
                                   />
                                 ))
@@ -4918,6 +4920,7 @@ export function ExecutiveSummaryCard(input: {
                     </div>
                   </div>
                 </details>
+                ) : null}
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Consent platform</p>
                   <div className="mt-3 flex items-center gap-3">

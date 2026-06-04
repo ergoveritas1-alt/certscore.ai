@@ -7,7 +7,6 @@ import { DomainScanForm } from "../../components/marketing/domain-scan-form";
 import { HomepageFindingsOverview } from "../../components/marketing/homepage-findings-overview";
 import { PendingButtonLink } from "../../components/ui/pending-link";
 import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
-import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 const SAMPLE_REPORT_URL = "https://certscore.ai/scan/bc6e4dfa-8a25-43f8-822d-a10e89950799";
@@ -89,7 +88,6 @@ function PersonaIcon({ index }: { index: number }) {
 
 export default async function MarketingHomePage() {
   const findings = getFindingReferenceItems();
-  const certscoreGptUrl = getCertScoreGptUrl();
   const softwareApplicationSchema = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -136,17 +134,6 @@ export default async function MarketingHomePage() {
               CCPA/CPRA/CIPA, FTC and ADA.
             </p>
             <div className="flex flex-col gap-3 pt-1 sm:flex-row">
-              <a
-                className="inline-flex h-11 w-full items-center justify-center rounded-xl border-0 bg-[linear-gradient(135deg,#2f63ea_0%,#2454db_100%)] px-4 text-sm font-medium text-white shadow-[0_16px_32px_rgba(47,99,234,0.18)] transition hover:brightness-[1.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 sm:w-auto"
-                data-analytics-cta-location="homepage"
-                data-analytics-destination-url={certscoreGptUrl}
-                data-analytics-event="gpt_cta_clicked"
-                href={certscoreGptUrl}
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                Try CertScore.ai GPT-API
-              </a>
               <PendingButtonLink
                 className="w-full border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 sm:w-auto"
                 data-analytics-cta-type="sample_report"

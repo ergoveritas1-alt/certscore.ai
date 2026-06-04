@@ -1266,6 +1266,43 @@ test("ExecutiveSummaryCard explains interruption-backed limited coverage only wh
   assert.doesNotMatch(withoutInterruption, /Coverage was limited by site protections/);
 });
 
+test("ExecutiveSummaryCard hides review lenses when viewer access disallows them", () => {
+  const html = renderToStaticMarkup(createElement(ExecutiveSummaryCard, {
+    accessLimitationNotice: null,
+    beforeConsentCookieCount: 0,
+    domainBenchmark: null,
+    finalHost: "example.com",
+    fingerprintReasons: [],
+    fingerprintLabel: "None detected",
+    fingerprintNarrative: "No fingerprinting evidence detected.",
+    landedOnDifferentHost: false,
+    lastScannedAt: "2026-04-21T17:07:47.000Z",
+    posture: "Watch",
+    preConsentVendorNames: [],
+    requestedHost: "example.com",
+    resolvedVendorNames: [],
+    score: 72,
+    sessionReplayVendorNames: [],
+    showReviewLenses: false,
+    thirdPartyRequestCount: 0,
+    thirdPartyDomains: [],
+    topFindings: [
+      makeFinding("accessibility_risk_score", "Automated accessibility issues observed", {
+        section: "Accessibility"
+      })
+    ],
+    topObservedEntities: [],
+    trackerSummary: "No meaningful third-party footprint observed",
+    unifiedFindings: [],
+    unresolvedVendorHosts: [],
+    vendorCategoryCounts: {}
+  }));
+
+  assert.match(html, /Signal snapshot/);
+  assert.doesNotMatch(html, /Review lenses/);
+  assert.match(html, /Consent platform/);
+});
+
 test("ExecutiveSummaryCard renders real vendor logo lookups in vendor badges", () => {
   const html = renderToStaticMarkup(createElement(ExecutiveSummaryCard, {
     accessLimitationNotice: null,

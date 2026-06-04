@@ -824,7 +824,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes projects preview consent lifecycl
   ]);
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes marks policy/vendor alignment observed when both sides are retained", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes marks policy/vendor alignment as review signal when comparison artifact is missing", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     snapshot: {
@@ -833,8 +833,41 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks policy/vendor alignment obs
     }
   });
 
-  assert.equal(outcomes.runtime_vendor_disclosure_alignment?.status, "Insufficient evidence");
-  assert.match(outcomes.runtime_vendor_disclosure_alignment?.limitation ?? "", /no canonical vendor-disclosure comparison artifact/i);
+  assert.equal(outcomes.runtime_vendor_disclosure_alignment?.status, "Review signal");
+  assert.equal(
+    outcomes.runtime_vendor_disclosure_alignment?.limitation,
+    "Runtime vendors and policy surfaces were retained, but no canonical vendor-disclosure comparison artifact was retained. Manual review is needed to determine disclosure alignment."
+  );
+  assert.deepEqual(outcomes.runtime_vendor_disclosure_alignment?.criticalEvidence.projectedFindings, []);
+  assert.deepEqual(
+    outcomes.runtime_vendor_disclosure_alignment?.criticalEvidence.missingOrIncompleteSourceSignals.map((gap) => gap.whyNeeded),
+    ["Usable runtime-vendor disclosure comparison with searched policy surfaces, matched/unmatched vendors, confidence, and rationale."]
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not gap vendor alignment when no runtime vendors were retained", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    snapshot: {
+      privacy_policy_present: true,
+      tracker_vendor_count: 0
+    }
+  });
+
+  assert.equal(outcomes.runtime_vendor_disclosure_alignment, undefined);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained runtime vendors without policy surface as not testable", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    snapshot: {
+      privacy_policy_present: false,
+      tracker_vendor_count: 2
+    }
+  });
+
+  assert.equal(outcomes.runtime_vendor_disclosure_alignment?.status, "Not testable");
+  assert.match(outcomes.runtime_vendor_disclosure_alignment?.limitation ?? "", /no privacy or cookie policy surface/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes consumes retained vendor-disclosure comparison evidence", () => {
@@ -879,6 +912,47 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes retained vendor-disclosu
     "Disclosure comparison rows: 1",
     "Unmatched runtime vendor/domain count: 1"
   ]);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes marks usable matched vendor-disclosure comparison as observed", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      runtimeVendorDisclosureEvidence: [
+        {
+          coverageStatus: "usable",
+          directVsInferred: "direct",
+          evidenceConfidence: "moderate",
+          matchedVendorDisclosureCount: 2,
+          mismatchRationale: "Observed runtime vendors were matched by name or known domain alias in retained policy disclosure surfaces.",
+          observedRuntimeDomains: ["www.googletagmanager.com", "www.google-analytics.com"],
+          observedRuntimeVendors: ["Google Tag Manager", "Google Analytics"],
+          policySurfacesSearched: [
+            {
+              matchedVendorNames: ["Google Tag Manager", "Google Analytics"],
+              reached: true,
+              searchedTerms: ["Google Tag Manager", "Google Analytics"],
+              snippet: "We use Google Tag Manager and Google Analytics.",
+              type: "privacy_policy",
+              unmatchedVendorNames: [],
+              url: "https://example.test/privacy"
+            }
+          ],
+          subtype: "runtime_vendor_not_disclosed",
+          unmatchedRuntimeDomains: [],
+          unmatchedRuntimeVendors: [],
+          unmatchedVendorDisclosureCount: 0
+        }
+      ]
+    },
+    snapshot: {
+      privacy_policy_present: true,
+      tracker_vendor_count: 2
+    }
+  });
+
+  assert.equal(outcomes.runtime_vendor_disclosure_alignment?.status, "Observed");
+  assert.match(outcomes.runtime_vendor_disclosure_alignment?.limitation ?? "", /observed runtime vendors were matched/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats partial runtime vendor disclosure mismatch as a gap", () => {
@@ -1320,12 +1394,40 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
   });
   assert.equal(insufficient.post_reject_tracking_reduction?.status, "Insufficient evidence");
 
+  const rejectNotConfirmed = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      postRejectTrackingReductionEvidence: {
+        postRejectRequestRecordsObserved: true,
+        postRejectWindowAvailable: true,
+        reductionEvaluationStatus: "not_testable",
+        rejectInteractionConfirmed: false
+      }
+    }
+  });
+  assert.equal(rejectNotConfirmed.post_reject_tracking_reduction?.status, "Not testable");
+
+  const postRejectWindowMissing = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      postRejectTrackingReductionEvidence: {
+        postRejectRequestRecordsObserved: true,
+        postRejectWindowAvailable: false,
+        reductionEvaluationStatus: "not_testable",
+        rejectInteractionConfirmed: true
+      }
+    }
+  });
+  assert.equal(postRejectWindowMissing.post_reject_tracking_reduction?.status, "Not testable");
+
   const reduced = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
       postRejectTrackingReductionEvidence: {
         evidenceSource: "consent_interaction_audit",
         reasonCodes: ["reject_interaction_succeeded", "post_reject_timing_window_available"],
+        postRejectRequestRecordsObserved: true,
+        postRejectWindowAvailable: true,
         reductionEvaluationStatus: "reduced",
         rejectInteractionConfirmed: true
       }
@@ -1343,13 +1445,63 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
     runtimeArtifacts: {
       postRejectTrackingReductionEvidence: {
         evidenceSource: "consent_interaction_audit",
-        reasonCodes: ["non_essential_tracking_persisted_after_reject"],
+        postRejectNonEssentialRequestsRetained: true,
+        postRejectRequestRecordsObserved: true,
+        postRejectWindowAvailable: true,
+        reasonCodes: [
+          "reject_interaction_succeeded",
+          "post_reject_timing_window_available",
+          "post_reject_request_records_observed",
+          "post_reject_non_essential_requests_retained"
+        ],
         reductionEvaluationStatus: "not_reduced",
         rejectInteractionConfirmed: true
       }
     }
   });
-  assert.equal(retainedPersistenceWithoutProjection.post_reject_tracking_reduction?.status, "Insufficient evidence");
+  assert.equal(retainedPersistenceWithoutProjection.post_reject_tracking_reduction?.status, "Review signal");
+  assert.equal(
+    retainedPersistenceWithoutProjection.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.projectionSuppressed,
+    true
+  );
+  assert.deepEqual(retainedPersistenceWithoutProjection.post_reject_tracking_reduction?.criticalEvidence.projectedFindings, []);
+
+  const retainedConcretePersistence = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      postRejectTrackingReductionEvidence: {
+        evidenceSource: "consent_interaction_audit",
+        postRejectNonEssentialRequests: [
+          {
+            category: "analytics",
+            consentState: "after_reject",
+            domain: "www.google-analytics.com",
+            msAfterReject: 842,
+            nonEssential: true,
+            reason: "classified analytics request after reject",
+            requestUrl: "https://www.google-analytics.com/g/collect",
+            vendor: "Google Analytics"
+          }
+        ],
+        postRejectNonEssentialRequestsRetained: true,
+        postRejectRequestRecordsObserved: true,
+        postRejectWindowAvailable: true,
+        reasonCodes: [
+          "reject_interaction_succeeded",
+          "post_reject_timing_window_available",
+          "post_reject_request_records_observed",
+          "post_reject_non_essential_requests_retained"
+        ],
+        reductionEvaluationStatus: "not_reduced",
+        rejectInteractionConfirmed: true
+      }
+    }
+  });
+  assert.equal(retainedConcretePersistence.post_reject_tracking_reduction?.status, "Gap observed");
+  assert.equal(
+    retainedConcretePersistence.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.concretePostRejectNonEssentialDetailsRetained,
+    true
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps general page accessibility issues as consent-control review", () => {

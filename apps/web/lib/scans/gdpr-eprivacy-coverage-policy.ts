@@ -1332,6 +1332,75 @@ function normalizePostRejectFailureClass(
   return failureClass;
 }
 
+function getPostRejectNonEssentialRows(record: Record<string, unknown> | null | undefined) {
+  return [
+    ...getObjectArray(record, [
+      "postRejectNonEssentialRequests",
+      "post_reject_non_essential_requests",
+      "consentRejectPostRejectNonEssentialRequests",
+      "consent_reject_post_reject_non_essential_requests"
+    ]),
+    ...getObjectArray(record, [
+      "postRejectNonEssentialCookies",
+      "post_reject_non_essential_cookies",
+      "postRejectNonEssentialStorage",
+      "post_reject_non_essential_storage"
+    ])
+  ];
+}
+
+function getPostRejectRowCategory(row: Record<string, unknown>) {
+  return getString(row, [
+    "category",
+    "purposeCategory",
+    "purpose_category",
+    "vendorCategory",
+    "vendor_category",
+    "classification",
+    "classifiedCategory",
+    "classified_category"
+  ]);
+}
+
+function hasConcretePostRejectNonEssentialDetail(row: Record<string, unknown>) {
+  const vendorOrDomain =
+    getString(row, ["vendor", "vendorName", "vendor_name", "postRejectVendor", "post_reject_vendor", "domain", "host", "hostname"]) !== null;
+  const requestOrStorageArtifact =
+    getString(row, [
+      "url",
+      "requestUrl",
+      "request_url",
+      "responseUrl",
+      "response_url",
+      "cookieName",
+      "cookie_name",
+      "storageKey",
+      "storage_key"
+    ]) !== null;
+  const category = getPostRejectRowCategory(row);
+  const eligibleCategory = category
+    ? /analytics|advertising|tracking|marketing|measurement|adtech|session[_\s-]?replay/i.test(category)
+    : false;
+  const timingOrCounts =
+    getNumber(row, ["msAfterReject", "ms_after_reject", "timestampMs", "timestamp_ms", "requestCount", "request_count"]) !== null ||
+    getNumber(row, ["baselineCount", "baseline_count", "postRejectCount", "post_reject_count"]) !== null;
+  const consentState = getString(row, ["consentState", "consent_state", "phase", "timingEvidence", "timing_evidence"]);
+  const afterReject = consentState ? /after[_\s-]?reject|post[_\s-]?reject|reject/i.test(consentState) : false;
+  const nonEssentialReason =
+    getString(row, [
+      "nonEssentialReason",
+      "non_essential_reason",
+      "classificationReason",
+      "classification_reason",
+      "reason",
+      "reasonClassifiedNonEssential",
+      "reason_classified_non_essential"
+    ]) !== null ||
+    getBoolean(row, ["nonEssential", "non_essential", "eligibleNonEssential", "eligible_non_essential"]) === true;
+
+  return vendorOrDomain && requestOrStorageArtifact && eligibleCategory && timingOrCounts && afterReject && nonEssentialReason;
+}
+
 function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
   const rejectDiagnostic = getEventMetadata(input.events, "reject_persistence_diagnostic");
@@ -1375,6 +1444,18 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     "postRejectRequestRecordsObserved",
     "post_reject_request_records_observed"
   ]);
+  const postRejectNonEssentialRequestsRetained =
+    getBoolean(reductionEvidence, [
+      "postRejectNonEssentialRequestsRetained",
+      "post_reject_non_essential_requests_retained",
+      "postRejectNonEssentialActivityRetained",
+      "post_reject_non_essential_activity_retained"
+    ]) ??
+    getStringArray(reductionEvidence, ["reasonCodes", "reason_codes"]).some((reason) =>
+      reason === "post_reject_non_essential_requests_retained"
+    );
+  const postRejectNonEssentialRows = getPostRejectNonEssentialRows(reductionEvidence);
+  const concretePostRejectNonEssentialRows = postRejectNonEssentialRows.filter(hasConcretePostRejectNonEssentialDetail);
   const retainedRejectInteractionFailureClass =
     getString(reductionEvidence, ["rejectInteractionFailureClass", "reject_interaction_failure_class"]) ??
       getStringArray(reductionEvidence, ["negativeReasonCodes", "negative_reason_codes"]).find((reason) =>
@@ -1389,7 +1470,11 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
       : getPostRejectFailureReason(rejectInteractionFailureClass);
   const postRejectRetainedEvidence = {
     baselineVendors: compactArray(baselineVendors, 5),
+    concretePostRejectNonEssentialDetailsRetained: concretePostRejectNonEssentialRows.length > 0,
     persistedVendors: compactArray(persistedVendors, 5),
+    postRejectNonEssentialActivityRetained: postRejectNonEssentialRequestsRetained,
+    postRejectNonEssentialRequestCount: postRejectNonEssentialRows.length,
+    postRejectNonEssentialRequests: compactArray(postRejectNonEssentialRows, 5),
     postRejectRequestRecordsObserved,
     postRejectVendors: compactArray(postRejectVendors, 5),
     postRejectWindowAvailable,
@@ -1488,22 +1573,42 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
   }
 
   if (reductionStatus === "not_reduced") {
+    const hasConcretePostRejectPersistenceEvidence =
+      postRejectNonEssentialRequestsRetained === true &&
+      concretePostRejectNonEssentialRows.length > 0;
+    const projectionSuppressionReason = hasConcretePostRejectPersistenceEvidence
+      ? null
+      : "Eligible post-reject non-essential vendor/request/cookie details with category, URL/domain, timing, and consent state were not retained.";
     return makeOutcome(
       "post_reject_tracking_reduction",
-      "Insufficient evidence",
-      "Post-reject persistence evidence was retained, but no eligible unified post-reject tracking finding was projected for this row.",
+      hasConcretePostRejectPersistenceEvidence ? "Gap observed" : "Review signal",
+      hasConcretePostRejectPersistenceEvidence
+        ? "A reject action and post-reject comparison window were retained, and eligible non-essential tracking activity persisted after reject."
+        : "A reject action and post-reject comparison window were retained, and post-reject non-essential activity was observed, but CertScore did not retain enough canonical detail to project a post-reject persistence gap.",
       reductionEvidenceRefs,
       {
-        missingOrIncompleteSourceSignals: [
-          sourceGap(
-            "CertScore.unifiedFindings.postRejectTrackingPersistenceFinding",
-            "eligible projected unified finding when persistence evidence satisfies policy gates",
-            "missing",
-            "Required to classify retained post-reject persistence evidence as a canonical gap.",
-            "CertScore"
-          )
-        ],
-        retainedEvidence: postRejectRetainedEvidence
+        missingOrIncompleteSourceSignals: hasConcretePostRejectPersistenceEvidence
+          ? []
+          : [
+              sourceGap(
+                "postRejectTrackingReductionEvidence.postRejectNonEssentialRequests",
+                "eligible post-reject non-essential vendor/request/cookie details with category, URL/domain, timing, and consent state",
+                postRejectNonEssentialRows.length,
+                "Eligible post-reject non-essential vendor/request/cookie details with category, URL/domain, timing, and consent state."
+              )
+            ],
+        retainedEvidence: {
+          ...postRejectRetainedEvidence,
+          ...(hasConcretePostRejectPersistenceEvidence
+            ? {}
+            : {
+                missingEvidenceNeeded: [
+                  "Eligible post-reject non-essential vendor/request/cookie details with category, URL/domain, timing, and consent state."
+                ],
+                projectionSuppressed: true,
+                projectionSuppressionReason
+              })
+        }
       }
     );
   }
@@ -1830,36 +1935,44 @@ function deriveVendorDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput) {
     (sum, row) => sum + Math.max(row.unmatchedRuntimeVendors.length, row.unmatchedRuntimeDomains.length),
     0
   );
-  const hasUsableDirectDisclosureMismatch = disclosureEvidence.some((row) => {
+  const isUsableDisclosureComparison = (row: (typeof disclosureEvidence)[number]) => {
     const unmatchedRuntimeCount = row.unmatchedRuntimeVendors.length + row.unmatchedRuntimeDomains.length;
     const observedRuntimeCount = row.observedRuntimeVendors.length + row.observedRuntimeDomains.length;
-    const reachedPolicySurfaces = row.policySurfacesSearched.filter((surface) =>
-      surface.reached && Boolean(surface.url) && Boolean(surface.snippet)
-    ).length;
+    const directOrModerate =
+      row.directVsInferred !== "inferred" &&
+      (row.directVsInferred === "direct" || row.evidenceConfidence === "moderate" || row.evidenceConfidence === "strong");
+    const searchedPolicySurfaces = row.policySurfacesSearched.filter((surface) =>
+      surface.reached &&
+      Boolean(surface.url) &&
+      Boolean(surface.snippet) &&
+      (surface.searchedTerms?.length ?? 0) > 0
+    );
+    const searchedMatchedNames = searchedPolicySurfaces.flatMap((surface) => surface.matchedVendorNames ?? []);
+    const searchedUnmatchedNames = searchedPolicySurfaces.flatMap((surface) => surface.unmatchedVendorNames ?? []);
+    const matchedEvidenceRetained = row.matchedVendorDisclosureCount > 0 || searchedMatchedNames.length > 0;
+    const unmatchedEvidenceRetained = unmatchedRuntimeCount > 0 && (row.unmatchedVendorDisclosureCount > 0 || searchedUnmatchedNames.length > 0);
+    const comparisonHasVendorDisposition = matchedEvidenceRetained || unmatchedEvidenceRetained;
     return (
       row.coverageStatus === "usable" &&
-      row.directVsInferred !== "inferred" &&
+      directOrModerate &&
       observedRuntimeCount > 0 &&
-      unmatchedRuntimeCount > 0 &&
-      row.unmatchedVendorDisclosureCount > 0 &&
-      reachedPolicySurfaces > 0
+      searchedPolicySurfaces.length > 0 &&
+      comparisonHasVendorDisposition &&
+      Boolean(row.mismatchRationale)
     );
+  };
+  const hasUsableDirectDisclosureMismatch = disclosureEvidence.some((row) => {
+    const unmatchedRuntimeCount = row.unmatchedRuntimeVendors.length + row.unmatchedRuntimeDomains.length;
+    return isUsableDisclosureComparison(row) && unmatchedRuntimeCount > 0 && row.unmatchedVendorDisclosureCount > 0;
+  });
+  const hasUsableMatchedDisclosureComparison = disclosureEvidence.some((row) => {
+    const unmatchedRuntimeCount = row.unmatchedRuntimeVendors.length + row.unmatchedRuntimeDomains.length;
+    return isUsableDisclosureComparison(row) && unmatchedRuntimeCount === 0 && row.matchedVendorDisclosureCount > 0;
   });
   const strongestDisclosureMismatch = disclosureEvidence
     .filter((row) => {
       const unmatchedRuntimeCount = row.unmatchedRuntimeVendors.length + row.unmatchedRuntimeDomains.length;
-      const observedRuntimeCount = row.observedRuntimeVendors.length + row.observedRuntimeDomains.length;
-      const reachedPolicySurfaces = row.policySurfacesSearched.filter((surface) =>
-        surface.reached && Boolean(surface.url) && Boolean(surface.snippet)
-      ).length;
-      return (
-        row.coverageStatus === "usable" &&
-        row.directVsInferred !== "inferred" &&
-        observedRuntimeCount > 0 &&
-        unmatchedRuntimeCount > 0 &&
-        row.unmatchedVendorDisclosureCount > 0 &&
-        reachedPolicySurfaces > 0
-      );
+      return isUsableDisclosureComparison(row) && unmatchedRuntimeCount > 0 && row.unmatchedVendorDisclosureCount > 0;
     })
     .sort((left, right) => {
       const confidenceScore = (value: string) => value === "strong" ? 3 : value === "moderate" ? 2 : 1;
@@ -1904,8 +2017,8 @@ function deriveVendorDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput) {
   if (trackerVendorCount > 0 && hasPolicySurface && disclosureEvidence.length === 0) {
     return makeOutcome(
       "runtime_vendor_disclosure_alignment",
-      "Insufficient evidence",
-      "Runtime vendors and policy surfaces were retained, but no canonical vendor-disclosure comparison artifact was retained for this scan.",
+      "Review signal",
+      "Runtime vendors and policy surfaces were retained, but no canonical vendor-disclosure comparison artifact was retained. Manual review is needed to determine disclosure alignment.",
       [`Runtime vendor count: ${trackerVendorCount}`],
       {
         missingOrIncompleteSourceSignals: [
@@ -1913,7 +2026,7 @@ function deriveVendorDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput) {
             "runtimeVendorDisclosureEvidence",
             "one or more canonical vendor-disclosure comparison rows",
             disclosureEvidence.length,
-            "Required to evaluate whether observed runtime vendors align with retained disclosure surfaces."
+            "Usable runtime-vendor disclosure comparison with searched policy surfaces, matched/unmatched vendors, confidence, and rationale."
           )
         ],
         retainedEvidence: {
@@ -1927,9 +2040,11 @@ function deriveVendorDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput) {
   if (trackerVendorCount > 0 && hasPolicySurface) {
     return makeOutcome(
       "runtime_vendor_disclosure_alignment",
-      hasUsableDirectDisclosureMismatch ? "Gap observed" : unmatchedCount > 0 ? "Insufficient evidence" : "Not observed",
+      hasUsableDirectDisclosureMismatch ? "Gap observed" : hasUsableMatchedDisclosureComparison ? "Observed" : unmatchedCount > 0 ? "Insufficient evidence" : "Not observed",
       hasUsableDirectDisclosureMismatch
         ? strongestMismatchCopy
+        : hasUsableMatchedDisclosureComparison
+          ? "Runtime vendor disclosure comparison evidence was retained, and observed runtime vendors were matched in retained disclosure surfaces."
         : unmatchedCount > 0
           ? "Runtime vendor disclosure comparison evidence was retained, but no eligible disclosure-alignment finding was projected."
         : "Runtime vendor disclosure comparison evidence was retained, and no eligible disclosure-alignment finding was projected.",

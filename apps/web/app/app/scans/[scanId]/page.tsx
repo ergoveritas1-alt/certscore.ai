@@ -127,6 +127,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
         }
         headerActionsPlacement="belowTitle"
         scanRecord={scanRecord}
+        canViewReviewLenses={isPlatformAdmin || membership.role === "admin"}
         showAllRegulatoryChecklistOptions={isPlatformAdmin || membership.role === "admin"}
         viewerAccessRole={membership.role}
       />
