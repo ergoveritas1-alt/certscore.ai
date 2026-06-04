@@ -110,9 +110,10 @@ function getCoverageIconMeta(status: GdprEprivacyCoverageChecklistStatus) {
         label: "Needs review",
         tooltip: "Canonical evidence projected a gap for this row. Review the retained evidence before drawing conclusions."
       };
-    case "Review signal":
-      return {
-        className: "border-indigo-200 bg-indigo-50 text-indigo-700",
+      case "Review signal":
+      case "Not confirmed":
+        return {
+          className: "border-indigo-200 bg-indigo-50 text-indigo-700",
         icon: "flag" as const,
         label: "Needs review",
         tooltip: "Canonical evidence projected a review signal. This needs human review, not automatic pass/fail treatment."
@@ -344,11 +345,13 @@ function getGdprSummaryTitle(input: {
 }
 
 function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
-  if (item.id === "consent_surface_observed") {
-    return item.status === "Observed"
-      ? "An actionable cookie/consent banner or preference surface was observed in the tested context."
-      : "No actionable cookie/consent banner or preference surface was observed in the tested context.";
-  }
+    if (item.id === "consent_surface_observed") {
+      return item.status === "Observed"
+        ? "An actionable cookie/consent banner or preference surface was observed in the tested context."
+        : item.status === "Not confirmed"
+          ? "Privacy/ad-choice controls were observed, but a first-layer GDPR/ePrivacy cookie consent banner was not confirmed."
+        : "No actionable cookie/consent banner or preference surface was observed in the tested context.";
+    }
 
   if (item.id === "pre_consent_cookies_storage") {
     return item.status === "Gap observed"
@@ -424,7 +427,7 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
   if (item.id === "accessibility_consent_controls") {
     return item.status === "Review signal"
       ? "Consent controls produced a basic automated accessibility review signal."
-      : "Consent controls did not produce an eligible basic automated accessibility issue in the tested context.";
+      : "No consent/privacy-control accessibility issue was retained in the tested context.";
   }
 
   const subject = item.label.charAt(0).toLowerCase() + item.label.slice(1);

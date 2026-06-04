@@ -11,6 +11,7 @@ import {
   getNanoDocumentSourceDedupKeys,
   isolateLikelyLegalDocumentText,
   looksLikeIntermediaryOrBlockPage,
+  looksLikeSoft404PolicyDocument,
   promoteSectionFinancialReviewFindings,
   prioritizePendingNanoDocumentSources,
   resolveReusableNanoDocumentExtractions,
@@ -1380,20 +1381,17 @@ test("buildNanoDocCandidateUrls falls back to broader legal-hub seed urls when n
   for (const url of [
     "https://example.com/privacy",
     "https://example.com/privacy-policy",
-    "https://example.com/legal/privacy-policy",
     "https://example.com/terms",
     "https://example.com/terms-of-service",
-    "https://example.com/legal/terms-of-service",
+    "https://example.com/policies/terms-and-policies",
     "https://example.com/cookie-policy",
     "https://example.com/cookies",
-    "https://example.com/policies/cookies-and-tracking",
-    "https://example.com/policies/terms-and-policies",
-    "https://example.com/responsible-gaming",
-    "https://example.com/responsible-gambling",
-    "https://example.com/your-privacy-choices"
+    "https://example.com/policies/cookies-and-tracking"
   ]) {
     assert.equal(candidates.some((candidate) => candidate.url === url), true, url);
   }
+  assert.equal(candidates.some((candidate) => candidate.url === "https://example.com/legal/privacy-policy"), false);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://example.com/legal/terms-of-service"), false);
 });
 
 test("buildNanoDocCandidateUrls prioritizes common policy-hub cookie notice paths", () => {
@@ -1494,6 +1492,55 @@ test("buildNanoDocCandidateUrls rejects browser cookie-help pages from recent do
   assert.equal(candidates.some((candidate) => candidate.url === "https://fandango.com/cookie-policy"), true);
   assert.equal(candidates.some((candidate) => candidate.url === "https://fandango.com/cookies"), true);
   assert.equal(candidates.some((candidate) => candidate.url === "https://www.fandango.com/policies/fanclub-terms"), true);
+});
+
+test("buildNanoDocCandidateUrls rejects 404-like recent legal documents", () => {
+  const candidates = buildNanoDocCandidateUrls({
+    discoveryCandidates: [],
+    domainHostname: "cimediacloud.com",
+    pages: [],
+    recentDomainDocumentCandidates: [
+      {
+        canonical_url: "https://cimediacloud.com/legal/privacy",
+        document_type: "privacy_policy",
+        title: "404 | Sony's Ci Media Cloud"
+      },
+      {
+        canonical_url: "https://cimediacloud.com/legal/enterprise-end-user-agreement",
+        document_type: "terms_of_service",
+        title: "404 | Sony's Ci Media Cloud"
+      }
+    ]
+  });
+
+  assert.equal(candidates.some((candidate) => candidate.url === "https://cimediacloud.com/legal/privacy"), false);
+  assert.equal(
+    candidates.some((candidate) => candidate.url === "https://cimediacloud.com/legal/enterprise-end-user-agreement"),
+    false
+  );
+  assert.equal(candidates.some((candidate) => candidate.url === "https://cimediacloud.com/privacy"), true);
+  assert.equal(candidates.some((candidate) => candidate.url === "https://cimediacloud.com/terms"), true);
+});
+
+test("looksLikeSoft404PolicyDocument rejects Sony-style 200 error policy pages", () => {
+  assert.equal(
+    looksLikeSoft404PolicyDocument({
+      canonicalUrl: "https://cimediacloud.com/legal/privacy",
+      text:
+        "Oops! This isn't like us. The page you're looking for can't be found. Ci you on the other side! By clicking Accept All, you consent to the use of cookies.",
+      title: "404 | Sony's Ci Media Cloud"
+    }),
+    true
+  );
+
+  assert.equal(
+    looksLikeSoft404PolicyDocument({
+      canonicalUrl: "https://cimediacloud.com/privacy/",
+      text: "Privacy Policy. This policy explains how Sony Media Cloud Services LLC collects and uses personal information.",
+      title: "Privacy Policy | Sony's Ci Media Cloud"
+    }),
+    false
+  );
 });
 
 test("buildNanoDocCandidateUrls rejects generic third-party policy hubs for unrelated domains", () => {

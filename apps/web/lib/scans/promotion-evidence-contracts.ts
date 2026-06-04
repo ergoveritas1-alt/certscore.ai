@@ -18,6 +18,7 @@ type ContractDecision = {
 
 export type ConsentSurfaceDecisionState =
   | "consent_surface_observed"
+  | "privacy_choice_surface_only"
   | "consent_surface_not_present"
   | "prior_consent_or_suppressed_banner_suspected"
   | "consent_surface_unstable_or_not_evaluable"
@@ -248,6 +249,13 @@ export function evaluateConsentSurfaceGate(
   const uiSummary = getObjectValue(rawEvidence, ["hybridUiSummary", "hybrid_ui_summary"]);
   const diagnostics = getObjectValue(rawEvidence, ["consentSurfaceDiagnostics", "consent_surface_diagnostics"]);
   const rejectPath = getObjectValue(rawEvidence, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]);
+  const consentControlLifecycle =
+    getObjectValue(rawEvidence, ["consentControlLifecycleEvidence", "consent_control_lifecycle_evidence"]) ??
+    getNestedObjectValue(rawEvidence, [
+      ["hybridRuntimeEvidence", "consentControlLifecycleEvidence"],
+      ["hybrid_runtime_evidence", "consentControlLifecycleEvidence"],
+      ["hybrid_runtime_evidence", "consent_control_lifecycle_evidence"]
+    ]);
   const consentUiPath =
     getObjectValue(rawEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]) ??
     getNestedObjectValue(rawEvidence, [
@@ -255,7 +263,7 @@ export function evaluateConsentSurfaceGate(
       ["hybrid_runtime_evidence", "consentUiPathEvidence"],
       ["hybrid_runtime_evidence", "consent_ui_path_evidence"]
     ]);
-  const sources = [consentSummary, consentVisual, uiSummary, diagnostics, rejectPath, consentUiPath];
+  const sources = [consentSummary, consentVisual, uiSummary, diagnostics, rejectPath, consentUiPath, consentControlLifecycle];
   const candidateButtons = [
     ...getObjectArrayValues(rawEvidence, ["candidateButtons", "candidate_buttons", "consentCandidateButtons", "consent_candidate_buttons"]),
     ...getObjectArrayValues(diagnostics, ["candidateButtons", "candidate_buttons", "buttons"]),
@@ -272,6 +280,7 @@ export function evaluateConsentSurfaceGate(
   ]).filter((state): state is ConsentSurfaceDecisionState =>
     [
       "consent_surface_observed",
+      "privacy_choice_surface_only",
       "consent_surface_not_present",
       "prior_consent_or_suppressed_banner_suspected",
       "consent_surface_unstable_or_not_evaluable",
@@ -306,8 +315,61 @@ export function evaluateConsentSurfaceGate(
       "cookieBannerPresent",
       "consentBannerPresent"
     ]);
-  const consentSurfaceObserved = explicitStates.includes("consent_surface_observed") || bannerRendered === true;
-  const explicitNotPresent = explicitStates.includes("consent_surface_not_present") || bannerRendered === false;
+  const lifecycleSurfacePurpose = getStringFromSources(rawEvidence, [consentControlLifecycle], [
+    "surfacePurpose",
+    "surface_purpose"
+  ]);
+  const lifecyclePlacement = getStringFromSources(rawEvidence, [consentControlLifecycle], [
+    "privacyControlPlacement",
+    "privacy_control_placement"
+  ]);
+  const lifecycleLayer = getStringFromSources(rawEvidence, [consentControlLifecycle], [
+    "layerInspected",
+    "layer_inspected"
+  ]);
+    const lifecycleInitialLayerObserved = getBooleanFromSources(rawEvidence, [consentControlLifecycle], [
+      "initialConsentLayerObserved",
+      "initial_consent_layer_observed"
+    ]);
+    const firstLayerCookieConsentBannerObserved = getBooleanFromSources(rawEvidence, sources, [
+      "firstLayerCookieConsentBannerObserved",
+      "first_layer_cookie_consent_banner_observed"
+    ]);
+    const gdprEprivacyConsentSurfaceObserved = getStringFromSources(rawEvidence, sources, [
+      "gdprEprivacyConsentSurfaceObserved",
+      "gdpr_eprivacy_consent_surface_observed"
+    ]);
+    const lifecycleContaminationDetected = getBooleanFromSources(rawEvidence, [consentControlLifecycle], [
+      "consentSurfaceContaminationDetected",
+      "consent_surface_contamination_detected"
+    ]);
+  const retainedContaminationDetected = getBooleanFromSources(rawEvidence, [consentUiPath, rejectPath], [
+    "consentSurfaceContaminationDetected",
+    "consent_surface_contamination_detected"
+  ]);
+  const privacyChoiceSurfaceOnly =
+    lifecycleInitialLayerObserved !== true &&
+    lifecycleSurfacePurpose !== "cookie_consent" &&
+    (
+      lifecycleLayer === "footer_link" ||
+      lifecyclePlacement === "footer" ||
+      lifecycleSurfacePurpose === "sale_share_opt_out" ||
+      lifecycleSurfacePurpose === "targeted_ads_opt_out" ||
+      lifecycleSurfacePurpose === "ad_choices" ||
+      lifecycleSurfacePurpose === "privacy_policy" ||
+      lifecycleContaminationDetected === true ||
+        retainedContaminationDetected === true
+      );
+    const firstLayerConsentDisqualified =
+      firstLayerCookieConsentBannerObserved === false ||
+      gdprEprivacyConsentSurfaceObserved === "false" ||
+      gdprEprivacyConsentSurfaceObserved === "unconfirmed" ||
+      gdprEprivacyConsentSurfaceObserved === "unknown";
+    const consentSurfaceObserved =
+      (explicitStates.includes("consent_surface_observed") || bannerRendered === true) &&
+      !privacyChoiceSurfaceOnly &&
+      !firstLayerConsentDisqualified;
+    const explicitNotPresent = explicitStates.includes("consent_surface_not_present") || bannerRendered === false;
 
   const stableRenderedState =
     getBooleanFromSources(rawEvidence, sources, [
@@ -495,11 +557,13 @@ export function evaluateConsentSurfaceGate(
         consentSummary?.reject_depth_class === "absent"
       )
     );
-  const hasExplicitPromotionSuppressor =
-    explicitNotPresent ||
-    priorConsentSuspected ||
-    rejectPresentFirstLayer ||
-    explicitStates.includes("consent_surface_unstable_or_not_evaluable");
+    const hasExplicitPromotionSuppressor =
+      explicitNotPresent ||
+      privacyChoiceSurfaceOnly ||
+      firstLayerConsentDisqualified ||
+      priorConsentSuspected ||
+      rejectPresentFirstLayer ||
+      explicitStates.includes("consent_surface_unstable_or_not_evaluable");
   const eligibleForRetainedRejectPathPromotion =
     consentSurfaceObserved &&
     retainedRejectPathEvidence &&
@@ -510,6 +574,7 @@ export function evaluateConsentSurfaceGate(
 
   const states: ConsentSurfaceDecisionState[] = uniqueStrings([
     ...explicitStates,
+    privacyChoiceSurfaceOnly ? "privacy_choice_surface_only" : null,
     priorConsentSuspected ? "prior_consent_or_suppressed_banner_suspected" : null,
     consentSurfaceObserved ? "consent_surface_observed" : explicitNotPresent ? "consent_surface_not_present" : null,
     unstableOrNotEvaluable ? "consent_surface_unstable_or_not_evaluable" : null,
@@ -2236,11 +2301,22 @@ export function hasScanLevelSensitiveSessionReplayCoPresenceArtifact(rawEvidence
 }
 
 export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Record<string, unknown> | null | undefined) {
-  if (!rawEvidence) {
-    return false;
-  }
-
-  const sameContext =
+    if (!rawEvidence) {
+      return false;
+    }
+  
+    const evidenceStrengthFlags = getStringArrayValues(rawEvidence, [
+      "evidenceStrengthFlags",
+      "evidence_strength_flags"
+    ]);
+    const fallbackOrPolicyOnly =
+      evidenceStrengthFlags.some((flag) => flag === "fallback_only" || flag === "policy_text") &&
+      !evidenceStrengthFlags.some((flag) => flag === "direct_runtime" || flag === "concrete_payload");
+    if (fallbackOrPolicyOnly) {
+      return false;
+    }
+  
+    const sameContext =
     rawEvidence.samePageTrackingObserved === true ||
     rawEvidence.same_page_tracking_observed === true ||
     rawEvidence.sameFlowTrackingObserved === true ||

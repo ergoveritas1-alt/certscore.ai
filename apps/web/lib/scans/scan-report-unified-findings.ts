@@ -1951,6 +1951,9 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   const consentSurfaceDiagnostics =
     getRuntimeObject(input.runtimeArtifacts, ["consentSurfaceDiagnostics", "consent_surface_diagnostics"]) ??
     getRuntimeObject(rejectPath, ["consentSurfaceDiagnostics", "consent_surface_diagnostics"]);
+  const consentControlLifecycleEvidence =
+    getRuntimeObject(input.runtimeArtifacts, ["consentControlLifecycleEvidence", "consent_control_lifecycle_evidence"]) ??
+    getRuntimeObject(hybridRuntimeEvidenceRecord, ["consentControlLifecycleEvidence", "consent_control_lifecycle_evidence"]);
   const hybridConsentSummary = getRuntimeObject(input.runtimeArtifacts, ["hybridConsentSummary", "hybrid_consent_summary"]);
   const hybridUiSummary = getRuntimeObject(input.runtimeArtifacts, ["hybridUiSummary", "hybrid_ui_summary"]);
   const pageAccessBlockedUntilChoice =
@@ -1964,6 +1967,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     consentActionableChoiceObserved: consentActionableChoiceObservedForPath,
     consentSurfaceDiagnostics,
     consentSurfaceObserved: consentSurfaceObservedForPath,
+    consentControlLifecycleEvidence,
     rejectPathDepthAndAvailability: rejectPath,
     firstLayerConsentChoices,
     hybridConsentSummary,

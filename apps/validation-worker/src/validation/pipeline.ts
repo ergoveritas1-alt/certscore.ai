@@ -5171,6 +5171,17 @@ export function looksLikeIntermediaryOrBlockPage(input: { canonicalUrl: string; 
   return url.includes("/login");
 }
 
+export function looksLikeSoft404PolicyDocument(input: { canonicalUrl: string; title: string | null; text: string | null }) {
+  const combined = `${input.canonicalUrl} ${input.title ?? ""} ${input.text ?? ""}`;
+  return (
+    /\b(?:404|410|page not found|not found|this page is out of tune)\b/i.test(combined) ||
+    /(?:oops|sorry)[!.]?\s+this isn(?:'|’)t like us/i.test(combined) ||
+    /page you(?:'|’)re looking for can(?:'|’)t be found/i.test(combined) ||
+    /we can(?:'|’)t find the page you(?:'|’)re looking for/i.test(combined) ||
+    /\/404(?:\/|$|\?)/i.test(input.canonicalUrl)
+  );
+}
+
 export function shouldRenderNanoDocumentFallback(input: {
   canonicalUrl: string;
   documentType: string;
@@ -5327,6 +5338,41 @@ async function fetchNanoDocumentSource(input: {
 
     if (renderedFallback && "documentText" in renderedFallback && typeof renderedFallback.documentText === "string") {
       const renderedDocumentText = renderedFallback.documentText;
+      if (
+        looksLikeSoft404PolicyDocument({
+          canonicalUrl: renderedFallback.canonicalUrl,
+          text: renderedDocumentText,
+          title: renderedFallback.title ?? title
+        })
+      ) {
+        return {
+          outcome: "intermediary" as const,
+          row: {
+            canonical_url: renderedFallback.canonicalUrl,
+            document_text: null,
+            document_type: input.documentType,
+            extraction_status: "failed",
+            evidence_refs: [renderedFallback.canonicalUrl],
+            extracted_fields_json: {
+              page_type: input.documentType,
+              page_url: renderedFallback.canonicalUrl
+            },
+            metadata_json: {
+              ...baseMetadata,
+              ...renderedFallback.metadata,
+              fetch_fingerprint: responseFingerprint,
+              http_status: response.status,
+              request_referer: request.metadata.referer,
+              rejection_reason: "soft_404_policy_document"
+            },
+            source: "nano_doc_retrieval",
+            source_status: "rejected",
+            source_url: input.url,
+            title: renderedFallback.title ?? title
+          } satisfies Record<string, unknown>
+        };
+      }
+
       return {
         outcome: "ready" as const,
         row: {
@@ -5404,6 +5450,35 @@ async function fetchNanoDocumentSource(input: {
             http_status: response.status,
             request_referer: request.metadata.referer,
             rejection_reason: "intermediary_or_block_page"
+          },
+          source: "nano_doc_retrieval",
+          source_status: "rejected",
+          source_url: input.url,
+          title
+        } satisfies Record<string, unknown>
+      };
+    }
+
+    if (looksLikeSoft404PolicyDocument({ canonicalUrl, text, title })) {
+      return {
+        outcome: "intermediary" as const,
+        row: {
+          canonical_url: canonicalUrl,
+          document_text: null,
+          document_type: input.documentType,
+          extraction_status: "failed",
+          evidence_refs: canonicalUrl ? [canonicalUrl] : [],
+          extracted_fields_json: {
+            page_type: input.documentType,
+            page_url: canonicalUrl
+          },
+          metadata_json: {
+            ...baseMetadata,
+            ...(renderedFallback && "error" in renderedFallback ? { render_fallback_error: renderedFallback.error } : {}),
+            fetch_fingerprint: responseFingerprint,
+            http_status: response.status,
+            request_referer: request.metadata.referer,
+            rejection_reason: "soft_404_policy_document"
           },
           source: "nano_doc_retrieval",
           source_status: "rejected",

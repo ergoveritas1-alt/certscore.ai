@@ -6,7 +6,7 @@ export type ConsentGovernanceDisclosureEvidence = {
     consentBannerObserved?: boolean;
     cmpObserved?: boolean;
     preferenceCenterObserved?: boolean;
-    consentDependentTrackingObserved?: boolean;
+    consentRelevantTrackingObserved?: boolean;
     consentDependentCookieObserved?: boolean;
     policyClaimsConsentForTracking?: boolean;
   };
@@ -167,7 +167,7 @@ function normalizeEvidence(rawEvidence: Record<string, unknown>): ConsentGoverna
       cmpObserved: readBoolean(relevanceSource, ["cmpObserved", "cmp_observed"]),
       consentBannerObserved: readBoolean(relevanceSource, ["consentBannerObserved", "consent_banner_observed", "cookieBannerPresent", "cookie_banner_present", "consentSurfaceObserved", "consent_surface_observed"]),
       consentDependentCookieObserved: readBoolean(relevanceSource, ["consentDependentCookieObserved", "consent_dependent_cookie_observed"]),
-      consentDependentTrackingObserved: readBoolean(relevanceSource, ["consentDependentTrackingObserved", "consent_dependent_tracking_observed", "preconsentTrackingDetected", "preconsent_tracking_detected", "tracking_before_consent_detected"]),
+      consentRelevantTrackingObserved: readBoolean(relevanceSource, ["trackingRequiringConsentReviewObserved", "tracking_requiring_consent_review_observed", "consentRelevantTrackingObserved", "consent_relevant_tracking_observed", "consentDependentTrackingObserved", "consent_dependent_tracking_observed", "preconsentTrackingDetected", "preconsent_tracking_detected", "tracking_before_consent_detected"]),
       policyClaimsConsentForTracking: readBoolean(relevanceSource, ["policyClaimsConsentForTracking", "policy_claims_consent_for_tracking", "consentGatingClaimObserved", "consent_gating_claim_observed"]),
       preferenceCenterObserved: readBoolean(relevanceSource, ["preferenceCenterObserved", "preference_center_observed", "granularPreferencesPresent", "granular_preferences_present"])
     },
@@ -280,7 +280,7 @@ export function evaluateConsentGovernanceDisclosureEvidence(
     evidence.relevanceTriggers.cmpObserved === true ||
     evidence.relevanceTriggers.consentBannerObserved === true ||
     evidence.relevanceTriggers.preferenceCenterObserved === true ||
-    evidence.relevanceTriggers.consentDependentTrackingObserved === true ||
+    evidence.relevanceTriggers.consentRelevantTrackingObserved === true ||
     evidence.relevanceTriggers.consentDependentCookieObserved === true;
   const hasPolicyOnlyClaim = evidence.relevanceTriggers.policyClaimsConsentForTracking === true && !hasRuntimeOrConsentSurface;
   if (hasPolicyOnlyClaim && (evidence.supportingAnchors.runtimeAnchors?.length ?? 0) === 0) {

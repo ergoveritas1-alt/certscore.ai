@@ -51,6 +51,7 @@ type DomainBenchmarkCardData = {
 type UnifiedRegulatoryContext = {
   beforeConsentCookieEvidence?: Record<string, unknown> | null;
   beforeConsentCookieCount?: number;
+  cookieBannerPresent?: boolean | null;
   rawBeforeConsentCookieObservationCount?: number;
   hasSensitiveGamblingTrackingRisk?: boolean;
   hasSensitiveHealthTrackingRisk?: boolean;
@@ -95,6 +96,10 @@ export type ExecutiveScanInterruption = {
   details: string[];
   label: string;
 };
+
+function isProtectedRouteInterruption(interruption: ExecutiveScanInterruption) {
+  return /protected route/i.test(`${interruption.label} ${interruption.details.join(" ")}`);
+}
 
 function getPostureClasses(posture: ExecutiveDisplayState) {
   if (posture === "Scan not representative") {
@@ -195,6 +200,40 @@ function formatTrackerFootprintExpandLabel(input: {
   }
 
   return "";
+}
+
+const RECOGNIZED_CMP_BRANDS = [
+  { key: "onetrust", label: "OneTrust" },
+  { key: "cookiebot", label: "Cookiebot" },
+  { key: "didomi", label: "Didomi" },
+  { key: "trustarc", label: "TrustArc" },
+  { key: "osano", label: "Osano" },
+  { key: "usercentrics", label: "Usercentrics" },
+  { key: "cookieyes", label: "CookieYes" },
+  { key: "quantcast", label: "Quantcast Choice" },
+  { key: "sourcepoint", label: "Sourcepoint" }
+] as const;
+
+function getRecognizedCmpBrand(cmpVendorName: string | null | undefined) {
+  const normalized = cmpVendorName?.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  return RECOGNIZED_CMP_BRANDS.find((brand) => normalized.includes(brand.key)) ?? null;
+}
+
+function formatTrackerFootprintCountLabel(input: {
+  domainCount: number;
+  vendorCount: number;
+}) {
+  const total = input.domainCount + input.vendorCount;
+  if (total === 0) {
+    return null;
+  }
+
+  const vendorLabel = `${input.vendorCount} ${input.vendorCount === 1 ? "vendor" : "vendors"}`;
+  const domainLabel = `${input.domainCount} domain`;
+  return `${total} total: ${vendorLabel}, ${domainLabel}`;
 }
 
 function getPolicyDisclosureType(label: string) {
@@ -625,9 +664,12 @@ function DetailDisclosure(input: {
   defaultOpen?: boolean;
   itemDisplay?: "plain" | "brand";
   items: string[];
+  previewItems?: string[];
   richItems?: Array<{ key: string; node: React.ReactNode }>;
+  summaryMeta?: React.ReactNode;
   summary: string;
   title: string;
+  scrollable?: boolean;
   truncationNote?: string | null;
 }) {
   const uniqueItems = [...new Set(input.items.filter(Boolean))];
@@ -639,8 +681,18 @@ function DetailDisclosure(input: {
 
   return (
     <details className="group mt-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5" open={input.defaultOpen}>
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
-        <span>{input.summary}</span>
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 text-xs font-medium text-slate-700">
+        <span className="min-w-0 space-y-1.5">
+          <span className="flex flex-wrap items-center gap-2">
+            <span>{input.summary}</span>
+            {input.summaryMeta}
+          </span>
+          {input.previewItems && input.previewItems.length > 0 ? (
+            <span className="block text-[11px] font-normal leading-5 text-slate-500">
+              {input.previewItems.join(", ")}
+            </span>
+          ) : null}
+        </span>
         <ScanReportDisclosureIcon />
       </summary>
       <div className="mt-3 space-y-2">
@@ -650,7 +702,7 @@ function DetailDisclosure(input: {
             {input.truncationNote}
           </p>
         ) : null}
-        <div className="flex flex-wrap gap-2">
+        <div className={`flex flex-wrap gap-2 ${input.scrollable ? "max-h-[13.2rem] overflow-y-auto pr-1" : ""}`}>
           {richItems.map((item) => (
             <React.Fragment key={item.key}>{item.node}</React.Fragment>
           ))}
@@ -1613,6 +1665,9 @@ export function buildRegulatoryLenses(
   const retainedThirdPartyRequestContextExplanation =
     !trackingFinding && thirdPartyRequestCount > 0 ? THIRD_PARTY_REQUEST_CONTEXT_NOT_TOP_LEVEL_COPY : undefined;
   const beforeConsentCookieEvidence = options?.unifiedContext?.beforeConsentCookieEvidence;
+  const noConfirmedCookieBannerWithPreConsentTracking =
+    options?.unifiedContext?.cookieBannerPresent === false &&
+    (hasTrackingConcern || hasPreConsentCookieConcern);
   const hasConsentConcern =
     findingIds.has("consent_dark_patterns_detected") ||
     findingIds.has("asymmetric_consent_ui") ||
@@ -1875,10 +1930,12 @@ export function buildRegulatoryLenses(
       findings: privacyTrackingNotes,
       ratingLabel: gdprDisplay.tone.label,
       score: gdprDisplay.score,
-      summary: sensitiveTrackingFinding
-        ? "Sensitive-data collection and tracking exposure are the main issue."
+      summary: noConfirmedCookieBannerWithPreConsentTracking
+        ? "Consent and pre-consent tracking risk is the main issue."
         : hasTrackingConcern || hasPreConsentCookieConcern
         ? "Consent and pre-consent tracking risk is the main issue."
+        : sensitiveTrackingFinding
+        ? "Sensitive-data collection and tracking exposure are the main issue."
         : "No major consent-triggering issue surfaced in the top findings.",
       toneClass: gdprDisplay.tone.toneClass
     },
@@ -2346,6 +2403,7 @@ export function buildRegulatoryLensesFromUnifiedPackets(
       unifiedContext: {
         beforeConsentCookieEvidence: canonicalBeforeConsentCookieEvidence,
         beforeConsentCookieCount: canonicalBeforeConsentCookieCount,
+        cookieBannerPresent: options?.unifiedContext?.cookieBannerPresent,
         rawBeforeConsentCookieObservationCount: packetDerivedBeforeConsentCookieObservationCount,
         hasSensitiveGamblingTrackingRisk,
         hasSensitiveHealthTrackingRisk,
@@ -2623,6 +2681,7 @@ function BenchmarkMetricCard(input: {
 
 export function deriveBenchmarkScoreExplanation(input: {
   benchmark: DomainBenchmarkCardData;
+  cookieBannerPresent?: boolean | null;
   findings: CertScoreFinding[];
   score: number | null;
   vendorNames?: string[];
@@ -2633,13 +2692,22 @@ export function deriveBenchmarkScoreExplanation(input: {
 
   const delta = input.score - input.benchmark.expectedOverallScore;
   const findingIds = new Set(input.findings.map((finding) => finding.id));
-  const drivers = [
-    findingIds.has("pre_consent_tracking_detected") || findingIds.has("third_party_tracking_pre_consent")
-      ? "tracking before consent"
-      : null,
+  const hasPreConsentTrackingFinding =
+    findingIds.has("pre_consent_tracking_detected") ||
+    findingIds.has("third_party_tracking_pre_consent");
+  const hasPreConsentStorageFinding =
     findingIds.has("third_party_cookie_pre_consent") ||
     findingIds.has("analytics_cookie_pre_consent") ||
-    findingIds.has("adtech_cookie_pre_consent")
+    findingIds.has("adtech_cookie_pre_consent");
+
+  if (input.cookieBannerPresent === false && (hasPreConsentTrackingFinding || hasPreConsentStorageFinding)) {
+    return "Consent and pre-consent tracking risk is the main issue. CertScore did not confirm a first-layer GDPR/ePrivacy cookie consent banner, while advertising/analytics storage and tracking were observed before any recorded consent choice. Footer privacy/ad-choice controls were observed, but they do not establish a GDPR/ePrivacy accept/reject consent surface.";
+  }
+  const drivers = [
+    hasPreConsentTrackingFinding
+      ? "tracking before consent"
+      : null,
+    hasPreConsentStorageFinding
       ? "pre-consent tracking cookies"
       : null,
     findingIds.has("rtb_cookie_sync_observed") ? "RTB cookie-sync activity" : null,
@@ -4373,6 +4441,8 @@ export function ExecutiveSummaryCard(input: {
   }> | null;
   coverageDiagnosticIndicators?: CoverageDiagnosticIndicator[] | null;
   coverageLevel?: string | null;
+  cmpVendorName?: string | null;
+  cookieBannerPresent?: boolean | null;
   domainBenchmark: DomainBenchmarkCardData;
   externalCoverageContextAvailable?: boolean | null;
   finalHost: string | null;
@@ -4403,6 +4473,7 @@ export function ExecutiveSummaryCard(input: {
   policyEnrichmentCount?: number | null;
   policySurfaces?: ExecutivePolicySurface[] | null;
   scanInterruptions?: ExecutiveScanInterruption[] | null;
+  showProtectedRouteInterruptions?: boolean;
   verifiedPublicSurfacesCount?: number | null;
   lightweightHeroMetrics?: Array<{
     accent?: "sky" | "amber" | "emerald" | "slate";
@@ -4439,14 +4510,16 @@ export function ExecutiveSummaryCard(input: {
   const allNamedVendors = uniqueStrings(input.resolvedVendorNames);
   const namedVendors = allNamedVendors.slice(0, 8);
   const thirdPartyDomains = input.thirdPartyDomains;
+  const recognizedCmpBrand = getRecognizedCmpBrand(input.cmpVendorName);
+  const cmpDisplayName =
+    recognizedCmpBrand?.label ??
+    (input.cookieBannerPresent ? "Unknown CMP / consent banner" : "No consent banner observed");
+  const cmpStatusAvailable = Boolean(input.cookieBannerPresent || input.cmpVendorName);
   const fingerprintEvidence = input.fingerprintReasons.filter(Boolean);
   const hasProbableFingerprintingFinding = regulatoryFindingInput.some((finding) => finding.id === "probable_fingerprinting");
   const shouldShowFingerprintSnapshot =
     fingerprintEvidence.length > 0 || input.fingerprintLabel !== "None detected";
-  const vendorEvidence = [
-    ...namedVendors,
-    ...input.unresolvedVendorHosts.slice(0, Math.max(0, 8 - namedVendors.length))
-  ];
+  const vendorEvidence = uniqueStrings([...allNamedVendors, ...input.unresolvedVendorHosts]);
   const trackerFootprintExpandLabel = formatTrackerFootprintExpandLabel({
     thirdPartyDomainCount: input.thirdPartyDomains.length,
     vendorCount: namedVendors.length
@@ -4454,27 +4527,30 @@ export function ExecutiveSummaryCard(input: {
   const trackerFootprintAllDetails = trackerFootprintExpandLabel
     ? uniqueStrings([...vendorEvidence, ...thirdPartyDomains])
     : [];
-  const trackerFootprintVisibleLimit = 6;
-  const trackerFootprintRichDetails = trackerFootprintAllDetails.slice(0, trackerFootprintVisibleLimit).map((label) => ({
+  const trackerFootprintCountLabel = formatTrackerFootprintCountLabel({
+    domainCount: input.thirdPartyDomains.length,
+    vendorCount: allNamedVendors.length
+  });
+  const trackerFootprintRichDetails = trackerFootprintAllDetails.map((label) => ({
         key: label,
         node: (
           <VendorBrandChip
-            category={namedVendors.includes(label) ? "vendor" : "domain"}
+            category={allNamedVendors.includes(label) ? "vendor" : "domain"}
             label={label}
-            suffix={namedVendors.includes(label) ? "vendor" : "domain"}
+            suffix={allNamedVendors.includes(label) ? "vendor" : "domain"}
           />
         )
       }));
-  const hiddenTrackerFootprintCount = Math.max(0, trackerFootprintAllDetails.length - trackerFootprintRichDetails.length);
   const domainTruncationNote =
-    hiddenTrackerFootprintCount > 0
-      ? `And ${hiddenTrackerFootprintCount} more observed ${hiddenTrackerFootprintCount === 1 ? "vendor or domain is" : "vendors or domains are"} retained in evidence.`
-      : thirdPartyDomains.length < input.thirdPartyDomains.length
+    thirdPartyDomains.length < input.thirdPartyDomains.length
         ? `Showing ${thirdPartyDomains.length} of ${input.thirdPartyDomains.length} observed domains.`
       : null;
   const policySurfaces = input.policySurfaces ?? [];
   const policySurfaceLabelsByUrl = buildPolicySurfaceSharedUrlLabels(policySurfaces);
   const scanInterruptions = input.scanInterruptions ?? [];
+  const visibleScanInterruptions = input.showProtectedRouteInterruptions
+    ? scanInterruptions
+    : scanInterruptions.filter((interruption) => !isProtectedRouteInterruption(interruption));
   const displayState: ExecutiveDisplayState = isScanNotRepresentative
     ? "Scan not representative"
     : deriveExecutiveDisplayState({
@@ -4505,9 +4581,7 @@ export function ExecutiveSummaryCard(input: {
     input.status === "completed" &&
     pagesScanned > 0 &&
     !hasMeaningfulInterruption &&
-    scanInterruptions.some((interruption) =>
-      /protected route/i.test(`${interruption.label} ${interruption.details.join(" ")}`)
-    );
+    scanInterruptions.some(isProtectedRouteInterruption);
   const hasIncompleteCoverageNotice =
     !hasProtectedRouteOnlyPartialCoverage &&
     (
@@ -4547,7 +4621,10 @@ export function ExecutiveSummaryCard(input: {
     accessibilitySignals: input.accessibilitySignals,
     agencyMappings: input.agencyMappings,
     benchmarkIndustry: input.domainBenchmark?.industry ?? null,
-    regulatoryRisk: input.regulatoryRisk
+    regulatoryRisk: input.regulatoryRisk,
+    unifiedContext: {
+      cookieBannerPresent: input.cookieBannerPresent
+    }
   };
   const regulatoryLenses = input.unifiedFindings
     ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions)
@@ -4556,6 +4633,7 @@ export function ExecutiveSummaryCard(input: {
     ? null
     : deriveBenchmarkScoreExplanation({
         benchmark: input.domainBenchmark,
+        cookieBannerPresent: input.cookieBannerPresent,
         findings: regulatoryFindingInput,
         score: input.score,
         vendorNames: uniqueStrings([
@@ -4839,6 +4917,34 @@ export function ExecutiveSummaryCard(input: {
                   </div>
                 </details>
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Consent platform</p>
+                  <div className="mt-3 flex items-center gap-3">
+                    {cmpStatusAvailable ? (
+                      <VendorBrandChip
+                        category="cmp"
+                        className="shrink-0"
+                        hideLabel
+                        label={recognizedCmpBrand?.label ?? input.cmpVendorName ?? "Unknown CMP"}
+                        showMeta={false}
+                      />
+                    ) : (
+                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-xs font-bold text-rose-700" aria-hidden="true">
+                        !
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{cmpDisplayName}</p>
+                      <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                        {cmpStatusAvailable
+                          ? recognizedCmpBrand
+                            ? "CMP recognized from scan evidence."
+                            : "Consent banner observed; CMP vendor not recognized."
+                          : "No working consent banner was retained for this scan."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                   <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                     Tracker footprint
                     {input.externalCoverageContextAvailable ? (
@@ -4857,10 +4963,16 @@ export function ExecutiveSummaryCard(input: {
                   <DetailDisclosure
                     defaultOpen={false}
                     summary={trackerFootprintExpandLabel}
+                    summaryMeta={trackerFootprintCountLabel ? (
+                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        {trackerFootprintCountLabel}
+                      </span>
+                    ) : null}
                     title={namedVendors.length > 0 ? "Observed vendors and domains" : "Observed domains"}
                     richItems={trackerFootprintRichDetails}
                     itemDisplay="brand"
                     items={[]}
+                    scrollable={trackerFootprintRichDetails.length > 10}
                     truncationNote={domainTruncationNote}
                   />
                 </div>
@@ -4896,11 +5008,11 @@ export function ExecutiveSummaryCard(input: {
                     </div>
                   </div>
                 ) : null}
-                {scanInterruptions.length > 0 ? (
+                {visibleScanInterruptions.length > 0 ? (
                   <div id="fingerprinting" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Scan Interruption</p>
                     <div className="mt-3 space-y-2">
-                      {scanInterruptions.map((event) => (
+                      {visibleScanInterruptions.map((event) => (
                         <details key={`${event.label}:${event.details.join("|")}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
                           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
                             <span>{event.label}</span>
@@ -4927,7 +5039,7 @@ export function ExecutiveSummaryCard(input: {
                     <p className="mt-1 text-sm text-slate-800">
                       {hasProbableFingerprintingFinding
                         ? input.fingerprintNarrative
-                        : "Minor fingerprinting indicators retained for review. Insufficient evidence for a probable fingerprinting finding."}
+                        : "Minor fingerprinting indicators retained for review."}
                     </p>
                     <DetailDisclosure
                       summary={`${fingerprintEvidence.length} fingerprint indicators retained`}

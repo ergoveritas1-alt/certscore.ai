@@ -33,7 +33,7 @@ function renderTabs(includeAdminOnlyTabs: boolean) {
   ].filter((tab) => includeAdminOnlyTabs || tab.id === "gdpr-eprivacy");
 
   return renderToStaticMarkup(createElement(RegulatoryChecklistSection, {
-    showAdvancedEvidenceToggle: includeAdminOnlyTabs,
+    showAdvancedEvidenceToggle: true,
     tabs
   }));
 }
@@ -42,7 +42,7 @@ test("RegulatoryChecklistSection can render only GDPR / ePrivacy for non-admin v
   const html = renderTabs(false);
 
   assert.match(html, /GDPR \/ ePrivacy/);
-  assert.doesNotMatch(html, /Expand all/);
+  assert.match(html, /Expand all/);
   assert.doesNotMatch(html, /California/);
   assert.doesNotMatch(html, /FTC/);
   assert.doesNotMatch(html, /UK GDPR \/ PECR/);

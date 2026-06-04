@@ -25,7 +25,7 @@ function getFingerprintingReviewPresentation(input: {
   if (input.hasIndicators) {
     return {
       headline: "No probable fingerprinting detected",
-      narrative: "Minor fingerprinting indicators retained for review. Insufficient evidence for a probable fingerprinting finding."
+      narrative: "Minor fingerprinting indicators retained for review."
     };
   }
 

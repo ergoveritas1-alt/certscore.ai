@@ -16,7 +16,7 @@ function governanceEvidence(overrides: Record<string, unknown> = {}) {
     relevanceTriggers: {
       cmpObserved: true,
       consentBannerObserved: true,
-      consentDependentTrackingObserved: true
+      consentRelevantTrackingObserved: true
     },
     missingOrWeakDisclosureSignals: {
       withdrawalProcessNotClearlyExplained: true,
@@ -86,7 +86,7 @@ function makeDisplayPacket(input: {
         footerPreferenceLinkObserved: false,
         preferenceCenterReachableAfterInitialLayer: false,
         initialConsentLayerObserved: true,
-        consentDependentTrackingObserved: true,
+        consentRelevantTrackingObserved: true,
         pagesChecked: ["https://example.com/"],
         controlsSearched: ["cookie preferences", "privacy settings", "manage consent"],
         footerLinksInspected: ["Privacy Policy", "Terms"],
@@ -195,7 +195,7 @@ test("supports consent-dependent tracking plus public policy review", () => {
   const review = evaluateConsentGovernanceDisclosureEvidence({
     consentGovernanceDisclosureEvidence: governanceEvidence({
       relevanceTriggers: {
-        consentDependentTrackingObserved: true
+        consentRelevantTrackingObserved: true
       },
       missingOrWeakDisclosureSignals: {
         consentRetentionOrExpiryNotClearlyExplained: true

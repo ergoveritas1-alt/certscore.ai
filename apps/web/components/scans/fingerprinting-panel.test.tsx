@@ -16,7 +16,7 @@ test("FingerprintingPanel distinguishes weak retained indicators from probable f
 
   assert.match(html, /No probable fingerprinting detected/);
   assert.match(html, /Minor fingerprinting indicators retained for review/);
-  assert.match(html, /Insufficient evidence for a probable fingerprinting finding/);
+  assert.doesNotMatch(html, /Insufficient evidence for a probable fingerprinting finding/);
   assert.match(html, /Observed identifier-like structuring or shaping behavior/);
 });
 

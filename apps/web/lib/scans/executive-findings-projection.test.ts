@@ -908,7 +908,7 @@ test("missing consent preference reopen control projects as lifecycle review, no
           consentControlLifecycleEvidence: [
             JSON.stringify({
               cmpReopenControlObserved: false,
-              consentDependentTrackingObserved: true,
+              trackingRequiringConsentReviewObserved: true,
               controlsSearched: ["footer links", "cookie settings", "privacy settings", "CMP widget"],
               cookiePreferencesLinkObserved: false,
               coverageStatus: "usable",
@@ -958,7 +958,7 @@ test("missing consent preference reopen control without consent or tracking cont
         entities: {
           consentControlLifecycleEvidence: [
             JSON.stringify({
-              consentDependentTrackingObserved: false,
+              trackingRequiringConsentReviewObserved: false,
               controlsSearched: ["footer links", "cookie settings"],
               coverageStatus: "usable",
               footerLinksInspected: ["Privacy Policy"],

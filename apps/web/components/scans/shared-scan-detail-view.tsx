@@ -6205,6 +6205,8 @@ export function SharedScanDetailView({
             coverageDiagnosticIndicators={scanCalibrationSummary.coverage.diagnosticIndicators}
             coverageMicrocards={coverageMicrocards}
             coverageLevel={executiveCoverageLevel}
+            cmpVendorName={typeof scanRecord.snapshot?.cmp_vendor_name === "string" ? scanRecord.snapshot.cmp_vendor_name : null}
+            cookieBannerPresent={typeof scanRecord.snapshot?.cookie_banner_present === "boolean" ? scanRecord.snapshot.cookie_banner_present : null}
             domainBenchmark={scanRecord.domainBenchmark}
             externalCoverageContextAvailable={Boolean(fallbackEvidence)}
             finalHost={certScoreSummary.finalHost}
@@ -6235,10 +6237,11 @@ export function SharedScanDetailView({
             policyEnrichmentCount={scanRecord.policyEnrichment.length}
             policySurfaces={executivePolicySurfaces}
             scanInterruptions={executiveScanInterruptions}
+            showProtectedRouteInterruptions={showAdvancedDiagnostics}
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
           />
           <RegulatoryChecklistSection
-            showAdvancedEvidenceToggle={showAdvancedDiagnostics}
+            showAdvancedEvidenceToggle
             tabs={[
               {
                 content: (

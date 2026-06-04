@@ -1594,7 +1594,7 @@ const illustrativeCookieDisclosureGap = {
     consentGovernanceDisclosure: {
       role: "supporting_disclosure_context",
       subtype: "consent_governance_disclosure_gap",
-      relevanceTriggers: ["cmpObserved", "consentDependentTrackingObserved"],
+      relevanceTriggers: ["cmpObserved", "consentRelevantTrackingObserved"],
       missingSignals: ["withdrawalProcessNotClearlyExplained", "consentRetentionOrExpiryNotClearlyExplained"],
       reviewedSurfaces: ["cookie_policy", "footer_links"],
       evidenceLine:

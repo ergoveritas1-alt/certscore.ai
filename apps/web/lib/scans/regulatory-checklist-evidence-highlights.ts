@@ -55,7 +55,41 @@ function quote(value: string) {
 }
 
 function uniqueStrings(values: string[]) {
-  return [...new Set(values)];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+function normalizeEvidenceVendor(value: string) {
+  if (/cloudflare/i.test(value)) {
+    return null;
+  }
+  if (/linkedin insight|linkedin ads|px\.ads\.linkedin|snap\.licdn/i.test(value)) return "LinkedIn Insight Tag";
+  if (/meta pixel|facebook pixel|connect\.facebook|facebook\.com\/tr/i.test(value)) return "Meta Pixel";
+  if (/google tag manager|googletagmanager|\bgtm\b/i.test(value)) return "Google Tag Manager";
+  if (/google analytics|google-analytics|analytics\.google|google\.com\/g\/collect|^_ga/i.test(value)) return "Google Analytics";
+  if (/reddit/i.test(value)) return "Reddit Pixel";
+  if (/heap/i.test(value)) return "Heap";
+  if (/zoominfo|zi-scripts/i.test(value)) return "ZoomInfo";
+  return value.trim();
+}
+
+function formatList(values: string[]) {
+  if (values.length <= 1) return values[0] ?? "";
+  if (values.length === 2) return `${values[0]} and ${values[1]}`;
+  return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
 }
 
 function normalizeVendorCategory(input: {
@@ -152,6 +186,20 @@ function buildPreConsentTrackingHighlights(finding: ExecutiveEvidenceFinding) {
     return Number(rightPreConsent === true) - Number(leftPreConsent === true);
   });
   const highlights: string[] = [];
+  const summaryVendors = uniqueStrings(rows.flatMap((row) => {
+    const name = getFirstStringValue(row, ["name", "vendor", "label"]);
+    const url = getFirstStringValue(row, ["representativeUrl", "representative_url", "requestUrl", "request_url", "url"]);
+    const normalized = normalizeEvidenceVendor(name ?? url ?? "");
+    return normalized ? [normalized] : [];
+  })).slice(0, 7);
+  if (summaryVendors.length > 0) {
+    const firstSeenMs = rows
+      .map((row) => getFirstNumberValue(row, ["firstSeenMs", "first_seen_ms", "firstRequestMs", "first_request_ms", "timestampMs", "timestamp_ms"]) ?? fallbackFirstSeenMs)
+      .find((value): value is number => typeof value === "number");
+    highlights.push(
+      `Tracking requests observed before consent: ${formatList(summaryVendors)}${typeof firstSeenMs === "number" ? `; firstSeenMs ${Math.round(firstSeenMs)}` : ""}.`
+    );
+  }
 
   for (const row of rows) {
     const name = getFirstStringValue(row, ["name", "vendor", "label"]);
@@ -164,8 +212,12 @@ function buildPreConsentTrackingHighlights(finding: ExecutiveEvidenceFinding) {
     const url = getFirstStringValue(row, ["representativeUrl", "representative_url", "requestUrl", "request_url", "url"]);
     const category = normalizeVendorCategory({ category: retainedCategory, name, url });
     const consentState = getFirstStringValue(row, ["consentState", "consent_state", "runtimePhase", "runtime_phase"]);
+    const normalizedName = normalizeEvidenceVendor(name);
+    if (!normalizedName) {
+      continue;
+    }
     highlights.push([
-      quote(name),
+      quote(normalizedName),
       `${quote("preConsent")}: ${preConsent}`,
       typeof firstSeenMs === "number" ? `${quote("firstSeenMs")}: ${Math.round(firstSeenMs)}` : null,
       consentState ? `${quote("consentState")}: ${quote(consentState)}` : null,
@@ -194,6 +246,20 @@ function buildPreConsentCookieStorageHighlights(finding: ExecutiveEvidenceFindin
     return Number(rightPreConsent === true) - Number(leftPreConsent === true);
   });
   const highlights: string[] = [];
+  const storageVendors = uniqueStrings(rows.flatMap((row) => {
+    const name = getFirstStringValue(row, ["name", "vendor", "label", "cookieName", "cookie_name", "storageKey", "storage_key"]);
+    const normalized = normalizeEvidenceVendor(name ?? "");
+    return normalized ? [normalized] : [];
+  })).slice(0, 4);
+  const domains = uniqueStrings(rows.flatMap((row) => {
+    const domain = getFirstStringValue(row, ["domain", "hostname", "host"]);
+    return domain ? [domain] : [];
+  })).slice(0, 3);
+  if (storageVendors.length > 0 || domains.length > 0) {
+    highlights.push(
+      `Storage observed before consent${storageVendors.length > 0 ? `: ${formatList(storageVendors)}` : ""}${domains.length > 0 ? ` on ${formatList(domains)}` : ""}.`
+    );
+  }
 
   for (const row of rows) {
     const preConsent = getFirstBooleanValue(row, ["preConsent", "pre_consent", "beforeConsent", "before_consent"]);
@@ -211,8 +277,9 @@ function buildPreConsentCookieStorageHighlights(finding: ExecutiveEvidenceFindin
     const domain = getFirstStringValue(row, ["domain", "hostname", "host"]);
     const url = getFirstStringValue(row, ["representativeUrl", "representative_url", "requestUrl", "request_url", "url"]);
     const category = normalizeVendorCategory({ category: retainedCategory, name, url: url ?? domain });
+    const normalizedName = normalizeEvidenceVendor(name) ?? name;
     highlights.push([
-      quote(name),
+      quote(normalizedName),
       `${quote("preConsent")}: ${preConsent ?? true}`,
       typeof firstSeenMs === "number" ? `${quote("firstSeenMs")}: ${Math.round(firstSeenMs)}` : null,
       category ? `${quote("category")}: ${quote(category)}` : null,

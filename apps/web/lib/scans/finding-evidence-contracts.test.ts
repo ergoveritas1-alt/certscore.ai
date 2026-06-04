@@ -846,6 +846,47 @@ test("reject hidden requires inspected banner and reject path evidence", () => {
   assert.equal(strongDecision?.status, "pass_strong");
 });
 
+test("reject and asymmetry findings require confirmed first-layer GDPR consent surface", () => {
+  const rawEvidence = {
+    consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+    consentSurfaceDiagnostics: {
+      bannerRendered: true,
+      candidateButtons: [
+        { label: "Accept all", visible: true, interactable: true },
+        { label: "Manage choices", visible: true, interactable: true }
+      ],
+      hydrationSettleWaitMs: 1500,
+      viewportStatus: "visible_in_viewport"
+    },
+    consentSurfaceObserved: true,
+    hybridConsentSummary: {
+      acceptActionLabels: ["Accept all"],
+      acceptPresent: true,
+      bannerPresent: true,
+      manageActionLabels: ["Manage choices"],
+      rejectActionLabels: [],
+      rejectPresent: false
+    },
+    rejectPathDepthAndAvailability: {
+      bannerLayerInspected: true,
+      choiceAsymmetry: "material",
+      firstLayerCookieConsentBannerObserved: false,
+      gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+      rejectAvailableOnFirstLayer: false
+    }
+  };
+
+  const rejectDecision = evaluateFindingEvidenceContractForRawEvidence("reject_button_missing", rawEvidence);
+  const asymmetryDecision = evaluateFindingEvidenceContractForRawEvidence("accept_more_prominent_than_reject", rawEvidence);
+
+  assert.equal(rejectDecision?.status, "downgrade");
+  assert.equal(rejectDecision?.promotionEligibility, "internal_only");
+  assert.ok(rejectDecision?.missingRequirements.includes("consentSurfaceEvaluable"));
+  assert.equal(asymmetryDecision?.status, "downgrade");
+  assert.equal(asymmetryDecision?.promotionEligibility, "internal_only");
+  assert.ok(asymmetryDecision?.missingRequirements.includes("consentSurfaceEvaluable"));
+});
+
 test("reject behind preferences path satisfies reject path evidence", () => {
   const decision = evaluateFindingEvidenceContractForRawEvidence("reject_button_missing", {
     consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],

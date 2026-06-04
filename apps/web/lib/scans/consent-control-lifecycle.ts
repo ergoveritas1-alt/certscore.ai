@@ -8,7 +8,7 @@ export type ConsentControlLifecycleEvidence = {
   footerPreferenceLinkObserved: boolean;
   preferenceCenterReachableAfterInitialLayer: boolean | null;
   initialConsentLayerObserved: boolean;
-  consentDependentTrackingObserved: boolean;
+  trackingRequiringConsentReviewObserved: boolean;
   pagesChecked: string[];
   controlsSearched: string[];
   footerLinksInspected: string[];
@@ -78,8 +78,15 @@ function normalizeEvidence(raw: Record<string, unknown>): ConsentControlLifecycl
     bannerDismissedOrInitialLayerUnavailable:
       getBoolean(source.bannerDismissedOrInitialLayerUnavailable ?? source.banner_dismissed_or_initial_layer_unavailable) ?? undefined,
     cmpReopenControlObserved: getBoolean(source.cmpReopenControlObserved ?? source.cmp_reopen_control_observed) === true,
-    consentDependentTrackingObserved:
-      getBoolean(source.consentDependentTrackingObserved ?? source.consent_dependent_tracking_observed) === true,
+    trackingRequiringConsentReviewObserved:
+      getBoolean(
+        source.trackingRequiringConsentReviewObserved ??
+          source.tracking_requiring_consent_review_observed ??
+          source.consentRelevantTrackingObserved ??
+          source.consent_relevant_tracking_observed ??
+          source.consentDependentTrackingObserved ??
+          source.consent_dependent_tracking_observed
+      ) === true,
     controlsSearched,
     cookiePreferencesLinkObserved:
       getBoolean(source.cookiePreferencesLinkObserved ?? source.cookie_preferences_link_observed) === true,
@@ -122,7 +129,7 @@ export function getConsentControlLifecycleEvidence(
 function hasConsentOrTrackingContext(evidence: ConsentControlLifecycleEvidence, rawEvidence: Record<string, unknown>) {
   return (
     evidence.initialConsentLayerObserved ||
-    evidence.consentDependentTrackingObserved ||
+    evidence.trackingRequiringConsentReviewObserved ||
     getBoolean(rawEvidence.consentSurfaceObserved ?? rawEvidence.consent_surface_observed) === true ||
     getBoolean(rawEvidence.cookieBannerPresent ?? rawEvidence.cookie_banner_present) === true ||
     getBoolean(rawEvidence.preconsentTrackingDetected ?? rawEvidence.preconsent_tracking_detected) === true ||

@@ -184,6 +184,36 @@ test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards 
   assert.ok(gdprLens?.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
 });
 
+test("buildRegulatoryLenses leads GDPR summary with consent timing when no first-layer banner is confirmed", () => {
+  const lenses = buildRegulatoryLenses(
+    [
+      makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+        severity: "critical",
+        shortSummary: "Advertising and analytics requests fired before any consent action."
+      }),
+      makeFinding("sensitive_data_collection_with_third_party_tracking_present", "Sensitive-surface tracking requires review", {
+        severity: "medium",
+        shortSummary: "Sensitive-surface/tracking correlation requires review."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 15,
+      thirdPartyRequestCount: 46
+    },
+    {
+      unifiedContext: {
+        beforeConsentCookieCount: 15,
+        cookieBannerPresent: false,
+        hasTrackingConcern: true,
+        thirdPartyRequestCount: 46
+      }
+    }
+  );
+
+  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
+  assert.equal(gdprLens?.summary, "Consent and pre-consent tracking risk is the main issue.");
+});
+
 test("buildRegulatoryLenses keeps pre-consent tracking out of FTC unless paired with choice or disclosure context", () => {
   const lenses = buildRegulatoryLenses(
     [
@@ -1080,6 +1110,39 @@ test("benchmark score explanation uses surfaced findings without percentile clai
   assert.doesNotMatch(explanation ?? "", /percent|peer/i);
 });
 
+test("benchmark score explanation leads with unconfirmed banner plus pre-consent tracking storage", () => {
+  const explanation = deriveBenchmarkScoreExplanation({
+    benchmark: {
+      confidence: "medium",
+      estimatedRankLabel: "Typical",
+      expectedCookiesBeforeConsent: 2,
+      expectedOverallScore: 72,
+      expectedThirdPartyRequests: 24,
+      industry: "SaaS / web application",
+      rationale: "Matched to a SaaS benchmark."
+    },
+    cookieBannerPresent: false,
+    findings: [
+      makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
+        shortSummary: "pre-consent tracking"
+      }),
+      makeFinding("third_party_cookie_pre_consent", "Third-party cookies before consent", {
+        shortSummary: "cookie activity before consent"
+      }),
+      makeFinding("sensitive_data_collection_with_third_party_tracking_present", "Sensitive tracking finding retained elsewhere", {
+        shortSummary: "Sensitive surface evidence was retained elsewhere."
+      })
+    ],
+    score: 61,
+    vendorNames: ["Google Analytics"]
+  });
+
+  assert.equal(
+    explanation,
+    "Consent and pre-consent tracking risk is the main issue. CertScore did not confirm a first-layer GDPR/ePrivacy cookie consent banner, while advertising/analytics storage and tracking were observed before any recorded consent choice. Footer privacy/ad-choice controls were observed, but they do not establish a GDPR/ePrivacy accept/reject consent surface."
+  );
+});
+
 test("benchmark score explanation treats tiny negative deltas as near benchmark", () => {
   const explanation = deriveBenchmarkScoreExplanation({
     benchmark: {
@@ -1288,13 +1351,14 @@ test("ExecutiveSummaryCard renders logo badges for observed tracker vendors and 
   assert.match(html, /\/vendor-logos\/magnite\.png/);
   assert.match(html, /\/vendor-logos\/facebook\.png/);
   assert.match(html, /\/vendor-logos\/onetrust\.png/);
-  assert.match(html, /And 10 more observed vendors or domains are retained in evidence\./);
-  assert.doesNotMatch(html, /\/vendor-logos\/adobe\.png/);
-  assert.doesNotMatch(html, /\/vendor-logos\/jwplayer\.png/);
-  assert.doesNotMatch(html, /\/vendor-logos\/vudu\.png/);
+  assert.match(html, /16 total: 6 vendors, 10 domain/);
+  assert.doesNotMatch(html, /13 more\.\.\./);
+  assert.match(html, /\/vendor-logos\/adobe\.png/);
+  assert.match(html, /\/vendor-logos\/jwplayer\.png/);
+  assert.match(html, /\/vendor-logos\/vudu\.png/);
 });
 
-test("ExecutiveSummaryCard treats protected routes outside the homepage as a soft diagnostic", () => {
+test("ExecutiveSummaryCard hides protected-route interruptions for non-admin viewers while keeping posture soft", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
@@ -1337,10 +1401,57 @@ test("ExecutiveSummaryCard treats protected routes outside the homepage as a sof
   );
 
   assert.match(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
-  assert.match(html, /Protected route encountered/);
-  assert.match(html, /Homepage findings are based on observable public-page evidence/);
+  assert.doesNotMatch(html, /Protected route encountered/);
+  assert.doesNotMatch(html, /Homepage findings are based on observable public-page evidence/);
   assert.doesNotMatch(html, /Runtime coverage was limited by site protections/);
   assert.doesNotMatch(html, /Coverage was limited by site protections/);
+});
+
+test("ExecutiveSummaryCard shows protected-route interruptions for admin diagnostics", () => {
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      domainBenchmark: null,
+      finalHost: "certscore.ai",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-14T23:18:11.000Z",
+      pagesScanned: 2,
+      policyEnrichmentCount: 1,
+      posture: "Clear",
+      preConsentVendorNames: [],
+      requestedHost: "certscore.ai",
+      resolvedVendorNames: ["Google Tag Manager"],
+      score: 68,
+      scanInterruptions: [
+        {
+          label: "Protected route encountered",
+          details: [
+            "Some protected routes were encountered outside the public homepage.",
+            "Homepage findings are based on observable public-page evidence."
+          ]
+        }
+      ],
+      sessionReplayVendorNames: [],
+      showProtectedRouteInterruptions: true,
+      thirdPartyRequestCount: 10,
+      thirdPartyDomains: ["www.googletagmanager.com"],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "3 vendors across 10 third-party requests",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: { analytics: 1 },
+      verifiedPublicSurfacesCount: 1
+    })
+  );
+
+  assert.match(html, /Protected route encountered/);
+  assert.match(html, /Homepage findings are based on observable public-page evidence/);
 });
 
 test("ExecutiveSummaryCard qualifies incomplete protected-route scans when homepage evidence is retained", () => {
@@ -3095,7 +3206,8 @@ test("ExecutiveSummaryCard keeps tracker disclosure counts aligned with the full
   );
 
   assert.doesNotMatch(html, /13 third-party domains observed; 1 classified tracker vendor identified\./);
-  assert.match(html, /And 8 more observed vendors or domains are retained in evidence\./);
+  assert.match(html, /14 total: 1 vendor, 13 domain/);
+  assert.doesNotMatch(html, /11 more\.\.\./);
   assert.doesNotMatch(html, /1 vendor names and 13 third-party domains/);
   assert.doesNotMatch(html, /ads 1/);
 });
@@ -3135,6 +3247,76 @@ test("ExecutiveSummaryCard uses domain-only tracker expand copy when no classifi
   assert.doesNotMatch(html, /View observed vendors and domains/);
 });
 
+test("ExecutiveSummaryCard summarizes recognized and unknown consent platforms from retained snapshot evidence", () => {
+  const recognizedHtml = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      cmpVendorName: "OneTrust",
+      cookieBannerPresent: true,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      posture: "Watch",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 82,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyDomains: [],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "No third-party domains observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+  const unknownHtml = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: [],
+      beforeConsentCookieCount: 0,
+      cookieBannerPresent: true,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-05-10T12:00:00.000Z",
+      posture: "Watch",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 82,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 0,
+      thirdPartyDomains: [],
+      topFindings: [],
+      topObservedEntities: [],
+      trackerSummary: "No third-party domains observed",
+      unifiedFindings: [],
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(recognizedHtml, /Consent platform/);
+  assert.match(recognizedHtml, /OneTrust/);
+  assert.match(recognizedHtml, /\/vendor-logos\/onetrust\.png/);
+  assert.match(recognizedHtml, /CMP recognized from scan evidence/);
+  assert.doesNotMatch(recognizedHtml, /recognized CMP/);
+  assert.match(unknownHtml, /Unknown CMP \/ consent banner/);
+  assert.match(unknownHtml, /Consent banner observed; CMP vendor not recognized/);
+});
+
 test("ExecutiveSummaryCard labels truncated observed domain lists", () => {
   const domains = Array.from({ length: 11 }, (_, index) => `observed-${index + 1}.example`);
   const html = renderToStaticMarkup(
@@ -3167,9 +3349,10 @@ test("ExecutiveSummaryCard labels truncated observed domain lists", () => {
   );
 
   assert.doesNotMatch(html, /11 third-party domains observed; no classified tracker vendors identified\./);
-  assert.match(html, /And 5 more observed vendors or domains are retained in evidence\./);
-  assert.doesNotMatch(html, /observed-10\.example/);
-  assert.doesNotMatch(html, /observed-11\.example/);
+  assert.match(html, /11 total: 0 vendors, 11 domain/);
+  assert.doesNotMatch(html, /8 more\.\.\./);
+  assert.match(html, /observed-10\.example/);
+  assert.match(html, /observed-11\.example/);
 });
 
 test("ExecutiveSummaryCard keeps vendor-and-domain tracker expand copy when classified vendors are present", () => {

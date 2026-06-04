@@ -16,8 +16,10 @@ const VENDOR_BRAND_MARKS: Array<{ pattern: RegExp; mark: VendorBrandMark }> = [
   { pattern: /akamai/i, mark: { initials: "A", logoPath: "/vendor-logos/akamai.png", logoDomain: "akamai.com", tone: "border-sky-200 bg-sky-50 text-sky-800" } },
   { pattern: /onetrust|cookielaw|optanon/i, mark: { initials: "OT", logoPath: "/vendor-logos/onetrust.png", logoDomain: "onetrust.com", tone: "border-cyan-200 bg-cyan-50 text-cyan-800" } },
   { pattern: /cookiebot/i, mark: { initials: "CB", logoPath: "/vendor-logos/cookiebot.png", logoDomain: "cookiebot.com", tone: "border-indigo-200 bg-indigo-50 text-indigo-800" } },
+  { pattern: /cookieyes/i, mark: { initials: "CY", logoDomain: "cookieyes.com", tone: "border-sky-200 bg-sky-50 text-sky-800" } },
   { pattern: /trustarc|truste/i, mark: { initials: "TA", logoPath: "/vendor-logos/trustarc.png", logoDomain: "trustarc.com", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" } },
   { pattern: /usercentrics/i, mark: { initials: "UC", logoPath: "/vendor-logos/usercentrics.png", logoDomain: "usercentrics.com", tone: "border-violet-200 bg-violet-50 text-violet-800" } },
+  { pattern: /sourcepoint/i, mark: { initials: "SP", logoDomain: "sourcepoint.com", tone: "border-slate-300 bg-slate-50 text-slate-800" } },
   { pattern: /termly/i, mark: { initials: "T", logoPath: "/vendor-logos/termly.png", logoDomain: "termly.io", tone: "border-teal-200 bg-teal-50 text-teal-800" } },
   { pattern: /didomi/i, mark: { initials: "D", logoPath: "/vendor-logos/didomi.png", logoDomain: "didomi.io", tone: "border-teal-200 bg-teal-50 text-teal-800" } },
   { pattern: /osano/i, mark: { initials: "O", logoPath: "/vendor-logos/osano.png", logoDomain: "osano.com", tone: "border-cyan-200 bg-cyan-50 text-cyan-800" } },
@@ -119,15 +121,45 @@ function formatVendorChipLabel(label: string) {
 export function VendorBrandChip(input: {
   category?: string | null;
   className?: string;
+  hideLabel?: boolean;
   label: string;
   requestCount?: number | null;
+  showMeta?: boolean;
   suffix?: string | null;
 }) {
   const mark = getVendorBrandMark(input.label);
   const logoUrl = getVendorLogoUrl(mark, input.label);
   const category = input.category ?? "vendor";
-  const meta = input.suffix ?? `${category.replaceAll("_", " ")}${typeof input.requestCount === "number" ? ` · ${input.requestCount} req` : ""}`;
+  const meta =
+    input.showMeta === false
+      ? null
+      : input.suffix ?? `${category.replaceAll("_", " ")}${typeof input.requestCount === "number" ? ` · ${input.requestCount} req` : ""}`;
   const displayLabel = formatVendorChipLabel(input.label);
+
+  if (input.hideLabel) {
+    return (
+      <span
+        aria-label={input.label}
+        className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white p-0 ${input.className ?? ""}`}
+        title={input.label}
+      >
+        <span
+          aria-hidden="true"
+          className={`inline-flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border text-[9px] font-bold leading-none ${mark.tone}`}
+        >
+          {logoUrl ? (
+            <img
+              alt=""
+              className="h-full w-full rounded-full object-contain"
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              src={logoUrl}
+            />
+          ) : mark.initials}
+        </span>
+      </span>
+    );
+  }
 
   return (
     <span

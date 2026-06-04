@@ -159,6 +159,7 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "missing_consent_specific_blocking_evidence"
   | "missing_concrete_dark_pattern_child_finding"
   | "consent_surface_not_present"
+  | "privacy_choice_surface_only"
   | "prior_consent_or_suppressed_banner_suspected"
   | "consent_surface_unstable_or_not_evaluable"
   | "reject_present_first_layer"

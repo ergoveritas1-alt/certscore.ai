@@ -393,6 +393,24 @@ function getPriorScanHintUrlKey(value: string) {
   }
 }
 
+function looksLikePriorScanErrorDocument(input: {
+  canonicalUrl: string | null;
+  documentText?: string | null;
+  sourceStatus?: string | null;
+  sourceUrl?: string | null;
+  title?: string | null;
+}) {
+  const combined = `${input.canonicalUrl ?? ""} ${input.sourceUrl ?? ""} ${input.title ?? ""} ${input.documentText ?? ""}`;
+  return (
+    input.sourceStatus !== "ready" ||
+    /\b(?:404|410|page not found|not found|this page is out of tune)\b/i.test(combined) ||
+    /(?:oops|sorry)[!.]?\s+this isn(?:'|’)t like us/i.test(combined) ||
+    /page you(?:'|’)re looking for can(?:'|’)t be found/i.test(combined) ||
+    /we can(?:'|’)t find the page you(?:'|’)re looking for/i.test(combined) ||
+    /\/404(?:\/|$|\?)/i.test(input.canonicalUrl ?? input.sourceUrl ?? "")
+  );
+}
+
 function classifyPriorScanHintType(documentType: string) {
   if (documentType === "privacy_policy") return "privacy_policy";
   if (documentType === "cookie_policy") return "cookie_policy";
@@ -712,6 +730,7 @@ export async function loadPriorScanAccelerationCandidate(input: {
   const candidateScanIds = priorScanRows.rows.map((row) => row.id);
   const documentSourceRows = await query<{
     canonical_url: string | null;
+    document_text: string | null;
     document_type: string | null;
     extraction_status: string | null;
     extracted_fields_json: Record<string, unknown> | null;
@@ -719,12 +738,13 @@ export async function loadPriorScanAccelerationCandidate(input: {
     scan_id: string;
     semantic_confidence: number | null;
     source_url: string | null;
+    source_status: string | null;
+    title: string | null;
   }>(
     `
-      select scan_id, canonical_url, source_url, document_type, extraction_status, extracted_fields_json, metadata_json, semantic_confidence
+      select scan_id, canonical_url, source_url, document_type, source_status, extraction_status, extracted_fields_json, metadata_json, semantic_confidence, title, left(coalesce(document_text, ''), 500) as document_text
         from scan_document_sources
        where scan_id = any($1::uuid[])
-         and source_status = 'ready'
          and canonical_url is not null
        order by scan_id, semantic_confidence desc nulls last, updated_at desc
     `,
@@ -761,7 +781,30 @@ export async function loadPriorScanAccelerationCandidate(input: {
   });
 
   const documentsByScanId = new Map<string, typeof documentSourceRows.rows>();
+  const poisonedDocumentUrlKeysByScanId = new Map<string, Set<string>>();
   for (const row of documentSourceRows.rows) {
+    const canonicalUrl = getString(row.canonical_url);
+    const sourceUrl = getString(row.source_url);
+    const sourceStatus = getString(row.source_status);
+    const poisoned = looksLikePriorScanErrorDocument({
+      canonicalUrl,
+      documentText: getString(row.document_text),
+      sourceStatus,
+      sourceUrl,
+      title: getString(row.title)
+    });
+    if (poisoned) {
+      const poisonedKeys = poisonedDocumentUrlKeysByScanId.get(row.scan_id) ?? new Set<string>();
+      for (const url of [canonicalUrl, sourceUrl]) {
+        if (!url) {
+          continue;
+        }
+        poisonedKeys.add(getPriorScanHintUrlKey(url));
+      }
+      poisonedDocumentUrlKeysByScanId.set(row.scan_id, poisonedKeys);
+      continue;
+    }
+
     const rows = documentsByScanId.get(row.scan_id) ?? [];
     rows.push(row);
     documentsByScanId.set(row.scan_id, rows);
@@ -771,6 +814,9 @@ export async function loadPriorScanAccelerationCandidate(input: {
   for (const row of highYieldPageRows.rows) {
     const pageUrl = getString(row.page_url);
     if (!pageUrl || !isProbablyPublicHttpUrl(pageUrl)) {
+      continue;
+    }
+    if (poisonedDocumentUrlKeysByScanId.get(row.scan_id)?.has(getPriorScanHintUrlKey(pageUrl))) {
       continue;
     }
     const score = getPriorScanPageTypeScore(getString(row.page_type), pageUrl);

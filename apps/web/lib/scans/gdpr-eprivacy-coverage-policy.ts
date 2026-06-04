@@ -3,6 +3,7 @@ import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure"
 export type GdprEprivacyCoverageOutcomeStatus =
   | "Gap observed"
   | "Observed"
+  | "Not confirmed"
   | "Not observed"
   | "Not testable"
   | "Review signal"
@@ -151,6 +152,16 @@ function compactArray<T>(values: T[], limit = 5) {
   return values.filter((value) => value !== null && value !== undefined).slice(0, limit);
 }
 
+function formatInlineList(values: string[]) {
+  if (values.length <= 1) {
+    return values[0] ?? "";
+  }
+  if (values.length === 2) {
+    return `${values[0]} and ${values[1]}`;
+  }
+  return `${values.slice(0, -1).join(", ")}, and ${values[values.length - 1]}`;
+}
+
 function compactRecord(record: Record<string, unknown>) {
   return Object.fromEntries(
     Object.entries(record).filter(([, value]) => {
@@ -226,6 +237,62 @@ function getConsentControlLifecycleEvidence(runtimeArtifacts: Record<string, unk
   );
 }
 
+function isPrivacyChoiceSurfaceOnly(lifecycle: Record<string, unknown> | null) {
+  const surfacePurpose = getString(lifecycle, ["surfacePurpose", "surface_purpose"]);
+  const placement = getString(lifecycle, ["privacyControlPlacement", "privacy_control_placement"]);
+  const layerInspected = getString(lifecycle, ["layerInspected", "layer_inspected"]);
+  const initialConsentLayerObserved = getBoolean(lifecycle, ["initialConsentLayerObserved", "initial_consent_layer_observed"]);
+  const contaminationDetected = getBoolean(lifecycle, [
+    "consentSurfaceContaminationDetected",
+    "consent_surface_contamination_detected"
+  ]);
+
+  return (
+    initialConsentLayerObserved !== true &&
+    surfacePurpose !== "cookie_consent" &&
+    (
+      layerInspected === "footer_link" ||
+      placement === "footer" ||
+      surfacePurpose === "sale_share_opt_out" ||
+      surfacePurpose === "targeted_ads_opt_out" ||
+      surfacePurpose === "ad_choices" ||
+      surfacePurpose === "privacy_policy" ||
+      contaminationDetected === true
+    )
+  );
+}
+
+function getExplicitFirstLayerGdprConsentBannerConfirmed(input: GdprEprivacyCoveragePolicyInput) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const lifecycle = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
+  const consentUiPath = getObject(hybridRuntimeEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]);
+  const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
+  const sources = [lifecycle, consentUiPath, rejectPath, input.runtimeArtifacts, input.snapshot];
+  const firstLayerObserved = sources
+    .map((source) => getBoolean(source, ["firstLayerCookieConsentBannerObserved", "first_layer_cookie_consent_banner_observed"]))
+    .find((value): value is boolean => typeof value === "boolean");
+  const gdprSurfaceObserved = sources
+    .map((source) => getRawValue(source, ["gdprEprivacyConsentSurfaceObserved", "gdpr_eprivacy_consent_surface_observed"]))
+    .find((value) => typeof value === "boolean" || typeof value === "string");
+
+  if (
+    firstLayerObserved === false ||
+    gdprSurfaceObserved === false ||
+    gdprSurfaceObserved === "false" ||
+    gdprSurfaceObserved === "unconfirmed" ||
+    gdprSurfaceObserved === "unknown" ||
+    isPrivacyChoiceSurfaceOnly(lifecycle)
+  ) {
+    return false;
+  }
+
+  if (firstLayerObserved === true && (gdprSurfaceObserved === true || gdprSurfaceObserved === "true")) {
+    return true;
+  }
+
+  return null;
+}
+
 function getConsentLifecycleAuditLimitation(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
   const structuredLimitation = getObject(hybridRuntimeEvidence, ["consentLifecycleAudit", "consent_lifecycle_audit"]);
@@ -294,7 +361,21 @@ function makeConsentLifecycleLimitedOutcome(rowId: string, retainedLimitation: R
 }
 
 const CONSENT_PREFERENCE_CONTROL_PATTERN =
-  /\b(?:ad\s+choices|cookie\s+(?:settings|preferences|choices|center)|customi[sz]e\s+cookies?|privacy\s+(?:settings|choices|preferences|rights)|manage\s+(?:consent|choices|cookies|preferences|settings)|consent\s+preferences?|preference\s+center|do\s+not\s+sell(?:\s+or\s+share)?|do\s+not\s+share|your\s+privacy\s+choices|your\s+privacy\s+rights|opt[-\s]?out(?:\s+of\s+targeted\s+advertising)?|withdraw\s+consent|change\s+your\s+consent|revoke\s+consent)\b/i;
+    /\b(?:ad\s+choices|cookie\s+(?:settings|preferences|choices|center)|customi[sz]e\s+cookies?|privacy\s+(?:settings|choices|preferences|rights)|manage\s+(?:consent|choices|cookies|preferences|settings)|consent\s+preferences?|preference\s+center|do\s+not\s+sell(?:\s+or\s+share)?|do\s+not\s+share|your\s+privacy\s+choices|your\s+privacy\s+rights|opt[-\s]?out(?:\s+of\s+targeted\s+advertising)?|withdraw\s+consent|change\s+your\s+consent|revoke\s+consent)\b/i;
+const COOKIE_CONSENT_WITHDRAWAL_CONTROL_PATTERN =
+  /\b(?:cookie\s+(?:settings|preferences|choices|center)|customi[sz]e\s+cookies?|manage\s+(?:consent|cookies|preferences)|consent\s+preferences?|preference\s+center|withdraw\s+consent|change\s+your\s+consent|revoke\s+consent)\b/i;
+const NON_WITHDRAWAL_CONTROL_ACTION_PATTERN =
+  /\b(?:close|dismiss|cancel|back|continue|learn\s+more|privacy\s+policy|terms|notice)\b/i;
+const PRIVACY_AD_CHOICE_ONLY_CONTROL_PATTERN =
+  /\b(?:ad\s+choices|your\s+privacy\s+choices|privacy\s+(?:choices|rights)|do\s+not\s+sell(?:\s+or\s+share)?|do\s+not\s+share|targeted\s+ads?|targeted\s+advertising|google\s+analytics\s+opt[-\s]?out|vendor\s+opt[-\s]?out|opt[-\s]?out)\b/i;
+
+function isCookieConsentWithdrawalControlLabel(label: string) {
+  const normalized = label.trim();
+  return (
+    COOKIE_CONSENT_WITHDRAWAL_CONTROL_PATTERN.test(normalized) &&
+    !NON_WITHDRAWAL_CONTROL_ACTION_PATTERN.test(normalized)
+  );
+}
 
 function getObservedPreferenceControlLabels(lifecycle: Record<string, unknown>) {
   return getObjectArray(lifecycle, ["observedControls", "observed_controls"])
@@ -371,17 +452,32 @@ function hasRuntimeCapture(input: GdprEprivacyCoveragePolicyInput) {
 
 function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const consentControlLifecycle = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
   const consentUiPathEvidence = getObject(hybridRuntimeEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]);
+  const rejectPathEvidence = getObject(input.runtimeArtifacts, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]);
   const firstLayerConsentChoices = getObject(hybridRuntimeEvidence, ["firstLayerConsentChoices", "first_layer_consent_choices"]);
   const visibleChoiceLabels = getStringArray(firstLayerConsentChoices, ["visibleChoiceLabels", "visible_choice_labels"]);
   const layerInspected = getString(consentUiPathEvidence, ["layerInspected", "layer_inspected"]);
+  const structuredDemotionReasons = [
+    ...getStringArray(consentControlLifecycle, ["consentSurfaceDemotionReasons", "consent_surface_demotion_reasons"]),
+    ...getStringArray(consentUiPathEvidence, ["consentSurfaceDemotionReasons", "consent_surface_demotion_reasons"]),
+    ...getStringArray(rejectPathEvidence, ["consentSurfaceDemotionReasons", "consent_surface_demotion_reasons"])
+  ];
+  const structuredContaminationDetected =
+    getBoolean(consentControlLifecycle, ["consentSurfaceContaminationDetected", "consent_surface_contamination_detected"]) === true ||
+    getBoolean(consentUiPathEvidence, ["consentSurfaceContaminationDetected", "consent_surface_contamination_detected"]) === true ||
+    getBoolean(rejectPathEvidence, ["consentSurfaceContaminationDetected", "consent_surface_contamination_detected"]) === true;
+  const privacyChoiceSurfaceOnly = isPrivacyChoiceSurfaceOnly(consentControlLifecycle) || structuredContaminationDetected;
   const consentSurfaceObserved =
-    getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
-    getBoolean(hybridRuntimeEvidence, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
-    getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]) === true ||
-    getBoolean(firstLayerConsentChoices, ["capturedBeforeInteraction", "captured_before_interaction"]) === true ||
-    visibleChoiceLabels.length > 0 ||
-    (layerInspected !== null && layerInspected !== "none" && layerInspected !== "unknown");
+    !privacyChoiceSurfaceOnly &&
+    (
+      getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
+      getBoolean(hybridRuntimeEvidence, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
+      getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]) === true ||
+      getBoolean(firstLayerConsentChoices, ["capturedBeforeInteraction", "captured_before_interaction"]) === true ||
+      visibleChoiceLabels.length > 0 ||
+      layerInspected === "first_layer"
+    );
 
   if (consentSurfaceObserved) {
     const evidenceRefs = [
@@ -397,6 +493,57 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
       {
         retainedEvidence: {
           consentSurfaceObserved: true,
+          layerInspected,
+          visibleChoiceLabels: compactArray(visibleChoiceLabels, 5)
+        }
+      }
+    );
+  }
+
+    if (privacyChoiceSurfaceOnly && hasRuntimeCapture(input)) {
+      return makeOutcome(
+        "consent_surface_observed",
+        "Not confirmed",
+        "Privacy/ad-choice surface observed; GDPR consent banner not confirmed.",
+        [
+          "Evidence: consent control lifecycle",
+        getString(consentControlLifecycle, ["surfacePurpose", "surface_purpose"]) ? `Surface purpose: ${getString(consentControlLifecycle, ["surfacePurpose", "surface_purpose"])}` : null,
+        getString(consentControlLifecycle, ["privacyControlPlacement", "privacy_control_placement"]) ? `Placement: ${getString(consentControlLifecycle, ["privacyControlPlacement", "privacy_control_placement"])}` : null,
+        ...visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
+        layerInspected ? `Layer inspected: ${layerInspected}` : null
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          adChoicesLinkObserved:
+            getBoolean(consentControlLifecycle, ["adChoicesLinkObserved", "ad_choices_link_observed"]) ??
+            getBoolean(consentUiPathEvidence, ["adChoicesLinkObserved", "ad_choices_link_observed"]) ??
+            getBoolean(rejectPathEvidence, ["adChoicesLinkObserved", "ad_choices_link_observed"]) ??
+            false,
+          consentSurfaceContaminationDetected:
+            getBoolean(consentControlLifecycle, [
+              "consentSurfaceContaminationDetected",
+              "consent_surface_contamination_detected"
+            ]) ??
+            getBoolean(consentUiPathEvidence, [
+              "consentSurfaceContaminationDetected",
+              "consent_surface_contamination_detected"
+            ]) ??
+            getBoolean(rejectPathEvidence, [
+              "consentSurfaceContaminationDetected",
+              "consent_surface_contamination_detected"
+            ]) ??
+            false,
+          consentSurfaceDemotionReasons: [...new Set(structuredDemotionReasons)],
+          consentSurfaceObserved: false,
+          consentSurfaceDecisionStates: ["privacy_choice_surface_only"],
+          firstLayerCookieConsentBannerObserved: false,
+          gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+          privacyControlPlacement:
+            getString(consentControlLifecycle, ["privacyControlPlacement", "privacy_control_placement"]) ??
+            getString(consentUiPathEvidence, ["privacyControlPlacement", "privacy_control_placement"]) ??
+            getString(rejectPathEvidence, ["privacyControlPlacement", "privacy_control_placement"]) ??
+            "unknown",
+          consentControlLifecycleEvidence: consentControlLifecycle ?? undefined,
           layerInspected,
           visibleChoiceLabels: compactArray(visibleChoiceLabels, 5)
         }
@@ -566,17 +713,45 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const rejectInteractionSucceeded =
     getBoolean(rejectPath, ["rejectInteractionSucceeded", "reject_interaction_succeeded"]) === true ||
     getBoolean(input.runtimeArtifacts, ["consent_reject_interaction_succeeded"]) === true;
-  const rejectPathAvailable =
-    rejectInteractionSucceeded ||
-    getBoolean(rejectPath, ["completeRejectPathAvailable", "complete_reject_path_available"]) === true ||
-    getBoolean(rejectPath, ["completeRejectPathDetected", "complete_reject_path_detected"]) === true ||
+    const rejectPathAvailable =
+      rejectInteractionSucceeded ||
+      getBoolean(rejectPath, ["completeRejectPathAvailable", "complete_reject_path_available"]) === true ||
+      getBoolean(rejectPath, ["completeRejectPathDetected", "complete_reject_path_detected"]) === true ||
     getBoolean(rejectPath, ["rejectEquivalentFound", "reject_equivalent_found"]) === true ||
     getBoolean(rejectPath, ["rejectAvailableOnFirstLayer", "reject_available_on_first_layer"]) === true ||
     getBoolean(firstLayerChoices, ["rejectVisibleOnFirstLayer", "reject_visible_on_first_layer"]) === true ||
-    rejectAvailability === "available" ||
-    rejectAvailability === "reject_available_first_layer";
-
-	  if (rejectPathAvailable) {
+      rejectAvailability === "available" ||
+      rejectAvailability === "reject_available_first_layer";
+    const firstLayerGdprBannerConfirmed = getExplicitFirstLayerGdprConsentBannerConfirmed(input);
+  
+    if (firstLayerGdprBannerConfirmed === false) {
+      return makeOutcome(
+        "reject_all_path_availability",
+        "Not testable",
+        "Reject-path availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. Footer privacy/ad-choice controls were observed, but they do not establish an accept/reject consent surface.",
+        [
+          "Evidence: consent surface demotion",
+          "Reason: no_confirmed_first_layer_cookie_consent_banner"
+        ],
+        {
+          missingOrIncompleteSourceSignals: [
+            sourceGap(
+              "WS01.firstLayerCookieConsentBannerObserved",
+              true,
+              false,
+              "Required before WC01 can evaluate first-layer accept/reject availability."
+            )
+          ],
+          retainedEvidence: {
+            firstLayerCookieConsentBannerObserved: false,
+            gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+            reason: "no_confirmed_first_layer_cookie_consent_banner"
+          }
+        }
+      );
+    }
+  
+      if (rejectPathAvailable) {
     const rejectClickDepth = getNumber(rejectPath, [
       "rejectClickDepth",
       "reject_click_depth",
@@ -586,22 +761,22 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     const layerInspected = getString(rejectPath, ["layerInspected", "layer_inspected"]);
     const visibleRejectLabels = getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"])
       .filter((label) => /\b(?:decline|reject|refuse|deny|opt[-\s]?out)\b/i.test(label));
-	    const evidenceRefs = [
-	      "Evidence: reject path depth and availability",
-	      layerInspected
-	        ? `Layer inspected: ${layerInspected}`
-	        : null,
-	      rejectClickDepth !== null
-	        ? `Reject click depth: ${rejectClickDepth}`
-	        : null,
-	      ...visibleRejectLabels.map((label) => `Visible choice: ${label}`)
-	    ].filter((value): value is string => Boolean(value));
-	
-	    return makeOutcome(
+      const evidenceRefs = [
+        "Evidence: reject path depth and availability",
+        layerInspected
+          ? `Layer inspected: ${layerInspected}`
+          : null,
+        rejectClickDepth !== null
+          ? `Reject click depth: ${rejectClickDepth}`
+          : null,
+        ...visibleRejectLabels.map((label) => `Visible choice: ${label}`)
+      ].filter((value): value is string => Boolean(value));
+  
+      return makeOutcome(
       "reject_all_path_availability",
-	      "Observed",
-	      "A reject or equivalent refusal path was retained in the tested consent surface.",
-	      evidenceRefs,
+        "Observed",
+        "A reject or equivalent refusal path was retained in the tested consent surface.",
+        evidenceRefs,
       {
         retainedEvidence: {
           completeRejectPathAvailable: getBoolean(rejectPath, [
@@ -614,8 +789,8 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
           visibleRejectLabels: compactArray(visibleRejectLabels, 5)
         }
       }
-	    );
-	  }
+      );
+    }
 
   if (
     attempted &&
@@ -713,6 +888,9 @@ function getPostRejectFailureReason(failureClass: string | null) {
 function getRetainedConsentSurfaceObserved(input: GdprEprivacyCoveragePolicyInput) {
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const lifecycle = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
+  if (isPrivacyChoiceSurfaceOnly(lifecycle)) {
+    return false;
+  }
   return (
     getBoolean(lifecycle, ["initialConsentLayerObserved", "initial_consent_layer_observed"]) === true ||
     getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
@@ -725,7 +903,11 @@ function normalizePostRejectFailureClass(
   input: GdprEprivacyCoveragePolicyInput,
   failureClass: string | null
 ) {
-  if (failureClass === "consent_surface_not_observed" && getRetainedConsentSurfaceObserved(input)) {
+  if (
+    failureClass === "consent_surface_not_observed" &&
+    getExplicitFirstLayerGdprConsentBannerConfirmed(input) !== false &&
+    getRetainedConsentSurfaceObserved(input)
+  ) {
     return "reject_control_not_found";
   }
 
@@ -824,18 +1006,40 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
           "Required to prove whether non-essential requests persisted after reject."
         )
   ].filter((value): value is GdprEprivacyCoverageSourceSignalGap => Boolean(value));
+  const firstLayerGdprBannerConfirmed = getExplicitFirstLayerGdprConsentBannerConfirmed(input);
 
   if (reductionStatus === "not_testable") {
     return makeOutcome(
       "post_reject_tracking_reduction",
       "Not testable",
-      rejectInteractionFailureReason
+      firstLayerGdprBannerConfirmed === false
+        ? "Post-reject tracking could not be tested because no first-layer GDPR/ePrivacy consent banner and no valid reject action were confirmed. Footer privacy/ad-choice controls were observed, but they do not establish a reject state for comparison."
+        : rejectInteractionFailureReason
         ? `${rejectInteractionFailureReason} Because no valid after-reject state was retained, post-reject tracking reduction could not be evaluated.`
         : "Reject-path audit did not retain a confirmed reject action, so post-reject tracking reduction could not be evaluated.",
       reductionEvidenceRefs,
       {
-        missingOrIncompleteSourceSignals: postRejectMissingSignals,
-        retainedEvidence: postRejectRetainedEvidence
+        missingOrIncompleteSourceSignals: firstLayerGdprBannerConfirmed === false
+          ? [
+              sourceGap(
+                "WS01.firstLayerCookieConsentBannerObserved",
+                true,
+                false,
+                "Required before WC01 can establish a GDPR/ePrivacy reject state for post-choice tracking comparison."
+              ),
+              ...postRejectMissingSignals
+            ]
+          : postRejectMissingSignals,
+        retainedEvidence: {
+          ...postRejectRetainedEvidence,
+          ...(firstLayerGdprBannerConfirmed === false
+            ? {
+                firstLayerCookieConsentBannerObserved: false,
+                gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+                reason: "no_confirmed_first_layer_cookie_consent_banner"
+              }
+            : {})
+        }
       }
     );
   }
@@ -961,30 +1165,56 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
     Boolean(postChoiceClickOutcome) &&
     !postChoiceOutcomeDecisive &&
     !postChoiceOutcomeCleanAbsence;
-  const explicitControlObserved =
-    getBoolean(lifecycle, ["privacySettingsControlObserved", "privacy_settings_control_observed"]) === true ||
-    getBoolean(lifecycle, ["cookiePreferencesLinkObserved", "cookie_preferences_link_observed"]) === true ||
-    getBoolean(lifecycle, ["withdrawalTextObserved", "withdrawal_text_observed"]) === true ||
-    getBoolean(lifecycle, ["footerPreferenceLinkObserved", "footer_preference_link_observed"]) === true;
-  const controlObserved =
-    !postChoiceOutcomeIncomplete &&
-    !postChoiceOutcomeCleanAbsence &&
-    (
-      postChoiceOutcomeDecisive ||
-      explicitControlObserved ||
+    const explicitControlObserved =
+      getBoolean(lifecycle, ["privacySettingsControlObserved", "privacy_settings_control_observed"]) === true ||
+      getBoolean(lifecycle, ["cookiePreferencesLinkObserved", "cookie_preferences_link_observed"]) === true ||
+      getBoolean(lifecycle, ["withdrawalTextObserved", "withdrawal_text_observed"]) === true ||
+      getBoolean(lifecycle, ["footerPreferenceLinkObserved", "footer_preference_link_observed"]) === true;
+    const cookieConsentControlLabels = observedControlLabels.filter(isCookieConsentWithdrawalControlLabel);
+    const openedCookieConsentPreferenceCenter =
+      postChoiceOutcome === "opened_preference_center" &&
+      getExplicitFirstLayerGdprConsentBannerConfirmed(input) !== false &&
+      (
+        getBoolean(lifecycle, ["cookiePreferencesLinkObserved", "cookie_preferences_link_observed"]) === true ||
+        getBoolean(lifecycle, ["withdrawalTextObserved", "withdrawal_text_observed"]) === true ||
+        getBoolean(lifecycle, ["confirmedCookieCategoryControlsObserved", "confirmed_cookie_category_controls_observed"]) === true ||
+        getBoolean(lifecycle, ["manageConsentSurfaceObserved", "manage_consent_surface_observed"]) === true ||
+        getBoolean(lifecycle, ["manageCookiesSurfaceObserved", "manage_cookies_surface_observed"]) === true ||
+        cookieConsentControlLabels.length > 0
+      );
+    const cookieConsentWithdrawalControlObserved =
+      openedCookieConsentPreferenceCenter ||
+      getBoolean(lifecycle, ["cookiePreferencesLinkObserved", "cookie_preferences_link_observed"]) === true ||
+      getBoolean(lifecycle, ["withdrawalTextObserved", "withdrawal_text_observed"]) === true ||
       (
         getBoolean(lifecycle, ["cmpReopenControlObserved", "cmp_reopen_control_observed"]) === true &&
-        observedControlLabels.length > 0
+        cookieConsentControlLabels.length > 0
       ) ||
       (
         getBoolean(lifecycle, [
           "preferenceCenterReachableAfterInitialLayer",
           "preference_center_reachable_after_initial_layer"
         ]) === true &&
-        observedControlLabels.length > 0
-      ) ||
-      observedControlLabels.length > 0
-    );
+        cookieConsentControlLabels.length > 0
+      );
+    const privacyAdChoiceOnlyControlObserved =
+      !cookieConsentWithdrawalControlObserved &&
+      (
+        isPrivacyChoiceSurfaceOnly(lifecycle) ||
+        getExplicitFirstLayerGdprConsentBannerConfirmed(input) === false ||
+        getString(lifecycle, ["surfacePurpose", "surface_purpose"]) === "targeted_ads_opt_out" ||
+        getString(lifecycle, ["surfacePurpose", "surface_purpose"]) === "sale_share_opt_out" ||
+        getString(lifecycle, ["surfacePurpose", "surface_purpose"]) === "ad_choices" ||
+        (
+          observedControlLabels.length > 0 &&
+          observedControlLabels.every((label) => PRIVACY_AD_CHOICE_ONLY_CONTROL_PATTERN.test(label))
+        )
+      ) &&
+      (explicitControlObserved || observedControlLabels.length > 0 || postChoiceOutcome === "navigated_to_policy_or_notice");
+    const controlObserved =
+      !postChoiceOutcomeIncomplete &&
+      !postChoiceOutcomeCleanAbsence &&
+      cookieConsentWithdrawalControlObserved;
   const ambiguousControlEvidence =
     !postChoiceOutcomeCleanAbsence && hasAmbiguousPreferenceControlEvidence(lifecycle, observedControlLabels);
   const evidenceRefs = [
@@ -994,7 +1224,11 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
     postChoiceOutcome ? `Post-choice control outcome: ${postChoiceOutcome}` : null,
     ambiguousControlEvidence ? "Ambiguous control evidence retained" : null
   ].filter((value): value is string => Boolean(value));
-  const lifecycleRetainedEvidence = {
+    const lifecycleRetainedEvidence = {
+    confirmedCookieCategoryControlsObserved: getBoolean(lifecycle, [
+      "confirmedCookieCategoryControlsObserved",
+      "confirmed_cookie_category_controls_observed"
+    ]),
     cmpReopenControlObserved: getBoolean(lifecycle, ["cmpReopenControlObserved", "cmp_reopen_control_observed"]),
     cookiePreferencesLinkObserved: getBoolean(lifecycle, [
       "cookiePreferencesLinkObserved",
@@ -1005,11 +1239,23 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
       "footerPreferenceLinkObserved",
       "footer_preference_link_observed"
     ]),
+    cookieConsentControlLabels,
     observedControlLabels,
+    openedCookieConsentPreferenceCenter,
+    manageConsentSurfaceObserved: getBoolean(lifecycle, ["manageConsentSurfaceObserved", "manage_consent_surface_observed"]),
+    manageCookiesSurfaceObserved: getBoolean(lifecycle, ["manageCookiesSurfaceObserved", "manage_cookies_surface_observed"]),
     postChoicePreferenceControlClickOutcome: postChoiceClickOutcome,
     preferenceCenterReachableAfterInitialLayer: getBoolean(lifecycle, [
       "preferenceCenterReachableAfterInitialLayer",
       "preference_center_reachable_after_initial_layer"
+    ]),
+    trackingRequiringConsentReviewObserved: getBoolean(lifecycle, [
+      "trackingRequiringConsentReviewObserved",
+      "tracking_requiring_consent_review_observed",
+      "consentRelevantTrackingObserved",
+      "consent_relevant_tracking_observed",
+      "consentDependentTrackingObserved",
+      "consent_dependent_tracking_observed"
     ]),
     privacySettingsControlObserved: getBoolean(lifecycle, [
       "privacySettingsControlObserved",
@@ -1024,8 +1270,8 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
     "Required to prove that the retained control actually reopens or changes consent preferences."
   );
 
-  if (controlObserved) {
-    return makeOutcome(
+    if (controlObserved) {
+      return makeOutcome(
       "preference_withdrawal_control",
       "Observed",
       "CertScore observed a post-choice consent or preference control in the tested context.",
@@ -1034,9 +1280,32 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
         retainedEvidence: lifecycleRetainedEvidence
       }
     );
-  }
-
-  if (!initialLayerObserved) {
+    }
+  
+    if (privacyAdChoiceOnlyControlObserved) {
+      return makeOutcome(
+        "preference_withdrawal_control",
+        "Review signal",
+        "Footer privacy/ad-choice and vendor opt-out links were observed, but CertScore did not confirm a GDPR/ePrivacy cookie preference center or consent-withdrawal control.",
+        evidenceRefs,
+        {
+          missingOrIncompleteSourceSignals: [
+            sourceGap(
+              "consentControlLifecycleEvidence.cookiePreferencesLinkObserved",
+              true,
+              getRawValue(lifecycle, ["cookiePreferencesLinkObserved", "cookie_preferences_link_observed"]) ?? false,
+              "Required before WC01 can treat post-choice GDPR/ePrivacy consent withdrawal as checked."
+            )
+          ],
+          retainedEvidence: {
+            ...lifecycleRetainedEvidence,
+            privacyAdChoiceOnlyControlObserved: true
+          }
+        }
+      );
+    }
+  
+    if (!initialLayerObserved) {
     return makeOutcome(
       "preference_withdrawal_control",
       "Not testable",
@@ -1146,6 +1415,36 @@ function deriveVendorDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput) {
       reachedPolicySurfaces > 0
     );
   });
+  const strongestDisclosureMismatch = disclosureEvidence
+    .filter((row) => {
+      const unmatchedRuntimeCount = row.unmatchedRuntimeVendors.length + row.unmatchedRuntimeDomains.length;
+      const observedRuntimeCount = row.observedRuntimeVendors.length + row.observedRuntimeDomains.length;
+      const reachedPolicySurfaces = row.policySurfacesSearched.filter((surface) =>
+        surface.reached && Boolean(surface.url) && Boolean(surface.snippet)
+      ).length;
+      return (
+        row.coverageStatus === "usable" &&
+        row.directVsInferred !== "inferred" &&
+        observedRuntimeCount > 0 &&
+        unmatchedRuntimeCount > 0 &&
+        row.unmatchedVendorDisclosureCount > 0 &&
+        reachedPolicySurfaces > 0
+      );
+    })
+    .sort((left, right) => {
+      const confidenceScore = (value: string) => value === "strong" ? 3 : value === "moderate" ? 2 : 1;
+      return (
+        confidenceScore(right.evidenceConfidence) - confidenceScore(left.evidenceConfidence) ||
+        (right.unmatchedRuntimeVendors.length + right.unmatchedRuntimeDomains.length) -
+          (left.unmatchedRuntimeVendors.length + left.unmatchedRuntimeDomains.length)
+      );
+    })[0] ?? null;
+  const strongestUnmatchedVendors = strongestDisclosureMismatch
+    ? compactArray(strongestDisclosureMismatch.unmatchedRuntimeVendors, 8)
+    : [];
+  const strongestMismatchCopy = strongestUnmatchedVendors.length > 0
+    ? `Observed runtime vendors such as ${formatInlineList(strongestUnmatchedVendors)} were not clearly matched by name or known domain alias in retained policy or cookie disclosure surfaces.`
+    : "Runtime vendor disclosure comparison evidence retained observed runtime vendors that were not clearly matched in reviewed disclosure surfaces.";
 
   if (trackerVendorCount > 0 && !hasPolicySurface) {
     return makeOutcome(
@@ -1200,7 +1499,7 @@ function deriveVendorDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput) {
       "runtime_vendor_disclosure_alignment",
       hasUsableDirectDisclosureMismatch ? "Gap observed" : unmatchedCount > 0 ? "Insufficient evidence" : "Not observed",
       hasUsableDirectDisclosureMismatch
-        ? "Runtime vendor disclosure comparison evidence retained observed runtime vendors that were not clearly matched in reviewed disclosure surfaces."
+        ? strongestMismatchCopy
         : unmatchedCount > 0
           ? "Runtime vendor disclosure comparison evidence was retained, but no eligible disclosure-alignment finding was projected."
         : "Runtime vendor disclosure comparison evidence was retained, and no eligible disclosure-alignment finding was projected.",
@@ -1224,10 +1523,16 @@ function deriveVendorDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput) {
               ]
           : [],
         retainedEvidence: {
+          coverageStatus: strongestDisclosureMismatch?.coverageStatus,
+          directVsInferred: strongestDisclosureMismatch?.directVsInferred,
           disclosureComparisonRows: disclosureEvidence.length,
+          evidenceConfidence: strongestDisclosureMismatch?.evidenceConfidence,
           hasPolicySurface,
+          mismatchRationale: strongestDisclosureMismatch?.mismatchRationale,
+          policySurfaceCount: strongestDisclosureMismatch?.policySurfacesSearched.length,
           runtimeVendorDisclosureEvidence: disclosureEvidence,
           runtimeVendorCount: trackerVendorCount,
+          strongestUnmatchedRuntimeVendors: strongestUnmatchedVendors,
           unmatchedRuntimeVendorOrDomainCount: unmatchedCount
         }
       }
@@ -1271,12 +1576,12 @@ function deriveSensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
     }
 
     const count = eligibleSensitiveFieldCount ?? rawSensitiveFieldCount ?? 0;
-	    if (count <= 0) {
-	      return makeOutcome(
-	        "sensitive_surfaces_third_party_tracking",
-	        "Not observed",
-	        "Sensitive-field correlation completed for the tested context and did not retain eligible sensitive fields alongside third-party tracking.",
-	        ["Evidence: sensitive third-party tracking correlation completed"],
+      if (count <= 0) {
+        return makeOutcome(
+          "sensitive_surfaces_third_party_tracking",
+          "Not observed",
+          "Sensitive-field correlation completed for the tested context and did not retain eligible sensitive fields alongside third-party tracking.",
+          ["Evidence: sensitive third-party tracking correlation completed"],
         {
           retainedEvidence: {
             eligibleSensitiveFieldCount: count,
@@ -1284,14 +1589,14 @@ function deriveSensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
             sensitiveThirdPartyTrackingCorrelationStatus: status
           }
         }
-	      );
-	    }
-	
-	    return makeOutcome(
-	      "sensitive_surfaces_third_party_tracking",
-	      "Insufficient evidence",
-	      "Sensitive-field correlation retained candidate fields, but no eligible sensitive-surface tracking unified finding was projected.",
-	      [`Eligible sensitive fields: ${count}`],
+        );
+      }
+  
+      return makeOutcome(
+        "sensitive_surfaces_third_party_tracking",
+        "Insufficient evidence",
+        "Sensitive-field correlation retained candidate fields, but no eligible sensitive-surface tracking unified finding was projected.",
+        [`Eligible sensitive fields: ${count}`],
       {
         missingOrIncompleteSourceSignals: [
           sourceGap(
@@ -1308,8 +1613,8 @@ function deriveSensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
           sensitiveThirdPartyTrackingCorrelationStatus: status
         }
       }
-	    );
-	  }
+      );
+    }
 
   return null;
 }
@@ -1333,8 +1638,9 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
   const thirdPartyTrackingRequestCount = getNumber(correlation, ["thirdPartyTrackingRequestCount", "third_party_tracking_request_count"]);
   const requestTimingRelativeToForm = getString(correlation, ["requestTimingRelativeToForm", "request_timing_relative_to_form"]);
   const coverageStatus = getString(correlation, ["coverageStatus", "coverage_status"]);
-  const evidenceConfidence = getString(correlation, ["evidenceConfidence", "evidence_confidence"]);
-  const directVsInferred = getString(correlation, ["directVsInferred", "direct_vs_inferred"]);
+    const evidenceConfidence = getString(correlation, ["evidenceConfidence", "evidence_confidence"]);
+    const directVsInferred = getString(correlation, ["directVsInferred", "direct_vs_inferred"]);
+    const evidenceStrengthFlags = getStringArray(correlation, ["evidenceStrengthFlags", "evidence_strength_flags"]);
   const sensitiveDirect =
     getBoolean(correlation, ["sensitiveCollectionSurfaceObserved", "sensitive_collection_surface_observed"]) === true ||
     getBoolean(correlation, ["highSensitivityDataCollectionDetected", "high_sensitivity_data_collection_detected"]) === true ||
@@ -1357,6 +1663,11 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
   const sameContext =
     getBoolean(correlation, ["samePageTrackingObserved", "same_page_tracking_observed"]) === true ||
     getBoolean(correlation, ["sameFlowTrackingObserved", "same_flow_tracking_observed"]) === true ||
+    getBoolean(correlation, ["samePageOrFlow", "same_page_or_flow"]) === true ||
+    getBoolean(correlation, [
+      "thirdPartyTrackingActiveInSameContext",
+      "third_party_tracking_active_in_same_context"
+    ]) === true ||
     requestTimingRelativeToForm === "before_form" ||
     requestTimingRelativeToForm === "during_form" ||
     requestTimingRelativeToForm === "after_form";
@@ -1365,10 +1676,24 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
     thirdPartyTrackingVendors.every((vendor) =>
       infrastructureOnlyVendors.some((infraVendor) => infraVendor.toLowerCase() === vendor.toLowerCase())
     );
-  const payloadEvidenceRows = sensitivePayloadRows.filter(hasThirdPartyRequestOrVendorRetained);
-  const payloadExposureObserved = payloadEvidenceRows.some(payloadExposureObservedInRow);
-  const sensitiveValueInThirdPartyRequest = payloadEvidenceRows.some(hasRetainedSensitiveOrPersonalValueInThirdPartyRequest);
-  const payloadGapObserved = payloadExposureObserved || sensitiveValueInThirdPartyRequest;
+    const payloadEvidenceRows = sensitivePayloadRows.filter(hasThirdPartyRequestOrVendorRetained);
+    const payloadExposureObserved = payloadEvidenceRows.some(payloadExposureObservedInRow);
+    const sensitiveValueInThirdPartyRequest = payloadEvidenceRows.some(hasRetainedSensitiveOrPersonalValueInThirdPartyRequest);
+    const payloadGapObserved = payloadExposureObserved || sensitiveValueInThirdPartyRequest;
+    const fallbackOrPolicyOnly =
+      (
+        evidenceStrengthFlags.some((flag) => flag === "fallback_only" || flag === "policy_text") ||
+        sensitivePayloadRows.some((row) => {
+          const strength = getPayloadRowString(row, ["evidenceStrength", "evidence_strength"]);
+          const source = getPayloadRowString(row, ["evidenceSource", "evidence_source"]);
+          return /fallback|policy/i.test(`${strength} ${source}`);
+        })
+      ) &&
+      !evidenceStrengthFlags.some((flag) => flag === "direct_runtime" || flag === "concrete_payload") &&
+      !payloadEvidenceRows.some((row) => {
+        const strength = getPayloadRowString(row, ["evidenceStrength", "evidence_strength"]);
+          return /concrete|confirmed|direct/i.test(strength ?? "");
+      });
   const coverageUsable =
     coverageStatus === "usable" ||
     evidenceConfidence === "high" ||
@@ -1381,6 +1706,13 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
     coverageStatus,
     directVsInferred,
     evidenceConfidence,
+      evidenceStrengthFlags,
+      fallbackOrPolicyOnly,
+    correlationMethod: getString(correlation, ["correlationMethod", "correlation_method"]),
+    eligibleSensitiveFieldObserved:
+      getBoolean(correlation, ["eligibleSensitiveFieldObserved", "eligible_sensitive_field_observed"]) ??
+      (sensitiveDirect ? true : null),
+    eligibleSensitiveFieldCount: getNumber(correlation, ["eligibleSensitiveFieldCount", "eligible_sensitive_field_count"]),
     fieldLevelPayloadEvidenceObserved: getBoolean(correlation, ["fieldLevelPayloadEvidenceObserved", "field_level_payload_evidence_observed"]),
     infrastructureOnlyVendors,
     payloadEvidenceRows: payloadEvidenceRows.slice(0, 5),
@@ -1390,6 +1722,7 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
     retainedDomEvidenceRef: getString(correlation, ["retainedDomEvidenceRef", "retained_dom_evidence_ref"]),
     retainedScreenshotRef: getString(correlation, ["retainedScreenshotRef", "retained_screenshot_ref"]),
     sameContext,
+    samePageOrFlow: sameContext,
     sensitiveDirect,
     sensitiveFieldLabels: sensitiveFieldLabels.slice(0, 5),
     sensitiveFieldSelectors: sensitiveFieldSelectors.slice(0, 5),
@@ -1400,6 +1733,7 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
     thirdPartyTrackingCategories: thirdPartyTrackingCategories.slice(0, 5),
     thirdPartyTrackingDomains: thirdPartyTrackingDomains.slice(0, 5),
     thirdPartyTrackingRequestCount,
+    thirdPartyTrackingActiveInSameContext: sameContext && trackingObserved,
     thirdPartyTrackingVendors: thirdPartyTrackingVendors.slice(0, 5),
     trackingObserved
   };
@@ -1412,7 +1746,7 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
     ...sensitiveFormUrls.slice(0, 2).map((url) => `Sensitive form URL: ${url}`)
   ].filter((value): value is string => Boolean(value));
 
-  if (!coverageUsable) {
+    if (!coverageUsable) {
     return {
       coverageUsable,
       evidenceRefs,
@@ -1428,9 +1762,28 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
       retainedEvidence,
       status: "Not testable" as const
     };
-  }
-
-  if (payloadGapObserved) {
+    }
+  
+    if (fallbackOrPolicyOnly && sensitiveDirect && trackingObserved) {
+      return {
+        coverageUsable,
+        evidenceRefs,
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "sensitiveThirdPartyTrackingCorrelation.directSameContextRuntimeCorrelation",
+            "direct or moderate same-context runtime correlation",
+            "fallback_only_or_policy_text",
+            "Required before WC01 can project sensitive-surface tracking as a GDPR/ePrivacy gap."
+          )
+        ],
+        reason:
+          "Sensitive-surface/tracking correlation requires review. Retained evidence indicates possible sensitive data context and third-party tracking, but does not conclusively establish same-context sensitive payload exposure.",
+        retainedEvidence,
+        status: "Review signal" as const
+      };
+    }
+  
+    if (payloadGapObserved) {
     return {
       coverageUsable,
       evidenceRefs,
@@ -1442,7 +1795,17 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
     };
   }
 
-  if (sensitiveDirect && trackingObserved && sameContext && !infrastructureOnly && directVsInferred !== "inferred") {
+  const correlationMethod = getString(correlation, ["correlationMethod", "correlation_method"]);
+  const directOrModerateCorrelation =
+    directVsInferred !== "inferred" &&
+    (
+      correlationMethod === "direct" ||
+      correlationMethod === "moderate" ||
+      evidenceConfidence === "high" ||
+      evidenceConfidence === "moderate"
+    );
+
+  if (sensitiveDirect && trackingObserved && sameContext && !infrastructureOnly && directOrModerateCorrelation) {
     return {
       coverageUsable,
       evidenceRefs,
@@ -1460,7 +1823,7 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
       evidenceRefs,
       missingOrIncompleteSourceSignals: [],
       reason:
-        "CertScore retained evidence suggesting sensitive collection and third-party tracking, but the retained evidence does not confirm same-page, same-flow, or payload-level correlation.",
+        "Sensitive-surface/tracking correlation requires review. Retained evidence indicates possible sensitive data context and third-party tracking, but does not conclusively establish same-context sensitive payload exposure.",
       retainedEvidence,
       status: "Review signal" as const
     };
@@ -1871,24 +2234,24 @@ function deriveCrossBorderOutcome(input: GdprEprivacyCoveragePolicyInput) {
     const transferReviewRows = endpointJurisdictionRows.filter((row) =>
       getBoolean(row, ["transferReviewSignal", "transfer_review_signal"]) === true
     ).length;
-	    return makeOutcome(
-	      "cross_border_endpoint_review",
-	      transferReviewRows > 0 ? "Insufficient evidence" : "Not observed",
-	      transferReviewRows > 0
-	        ? "Endpoint transfer-review evidence was retained, but no eligible cross-border endpoint finding was projected."
-	        : "Endpoint jurisdiction evidence was retained, and no eligible cross-border endpoint finding was projected.",
+      return makeOutcome(
+        "cross_border_endpoint_review",
+        transferReviewRows > 0 ? "Review signal" : "Not observed",
+        transferReviewRows > 0
+          ? "Endpoint geography creates a transfer-review signal. The gap status is based on retained disclosure mismatch for transfer-relevant advertising/analytics vendors."
+          : "Endpoint jurisdiction evidence was retained, and no eligible cross-border endpoint finding was projected.",
       [
         `Endpoint jurisdiction rows: ${endpointJurisdictionRows.length}`,
         transferReviewRows > 0 ? `Transfer review signal rows: ${transferReviewRows}` : null
-	      ].filter((value): value is string => Boolean(value)),
+        ].filter((value): value is string => Boolean(value)),
       {
         missingOrIncompleteSourceSignals: transferReviewRows > 0
           ? [
               sourceGap(
-                "WC01.unifiedFindings.crossBorderEndpointFinding",
-                "eligible projected unified finding when transfer-review endpoint evidence satisfies policy gates",
+                "WC01.unifiedFindings.crossBorderVendorDisclosureGap",
+                "eligible projected unified finding when retained transfer-relevant endpoint evidence intersects with vendor-disclosure mismatch evidence",
                 "missing",
-                "Required to classify retained endpoint transfer-review evidence as a canonical review signal.",
+                "Required before WC01 can classify endpoint geography as a disclosure gap rather than a transfer-review signal.",
                 "WC01"
               )
             ]
@@ -1898,15 +2261,15 @@ function deriveCrossBorderOutcome(input: GdprEprivacyCoveragePolicyInput) {
           transferReviewSignalRows: transferReviewRows
         }
       }
-	    );
-	  }
+      );
+    }
 
   if (thirdPartyDomainCount !== null && thirdPartyDomainCount > 0) {
     return makeOutcome(
-	      "cross_border_endpoint_review",
-	      "Not testable",
-	      "Third-party endpoint inventory was retained, but endpoint jurisdiction or transfer-region evidence was not retained for this scan.",
-	      [`Third-party endpoint domains observed: ${thirdPartyDomainCount}`],
+        "cross_border_endpoint_review",
+        "Not testable",
+        "Third-party endpoint inventory was retained, but endpoint jurisdiction or transfer-region evidence was not retained for this scan.",
+        [`Third-party endpoint domains observed: ${thirdPartyDomainCount}`],
       {
         missingOrIncompleteSourceSignals: [
           sourceGap(
@@ -1921,8 +2284,8 @@ function deriveCrossBorderOutcome(input: GdprEprivacyCoveragePolicyInput) {
           thirdPartyDomainCount
         }
       }
-	    );
-	  }
+      );
+    }
 
   return null;
 }
@@ -1953,6 +2316,27 @@ function deriveAccessibilityConsentControlsOutcome(input: GdprEprivacyCoveragePo
     axeEvidenceRows.length > 0 ||
     retainedIssueCount > 0 ||
     controlAccessibilityIssueObserved !== null;
+  const gdprCookieConsentSurfaceObserved = getBoolean(californiaPrivacyEvidence, [
+    "gdprCookieConsentSurfaceObserved",
+    "gdpr_cookie_consent_surface_observed"
+  ]);
+  const privacyAdChoiceSurfaceObserved = getBoolean(californiaPrivacyEvidence, [
+    "privacyAdChoiceSurfaceObserved",
+    "privacy_ad_choice_surface_observed"
+  ]);
+  const privacyChoiceSurfaceObserved = getBoolean(californiaPrivacyEvidence, [
+    "privacyChoiceSurfaceObserved",
+    "privacy_choice_surface_observed"
+  ]);
+  const rawConsentSurfaceObserved =
+    getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) ??
+    getBoolean(getHybridRuntimeEvidence(input.runtimeArtifacts), ["consentSurfaceObserved", "consent_surface_observed"]) ??
+    getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]);
+  const consentSurfaceObserved =
+    gdprCookieConsentSurfaceObserved === false &&
+    (privacyChoiceSurfaceObserved === true || privacyAdChoiceSurfaceObserved === true)
+      ? false
+      : rawConsentSurfaceObserved;
   const evaluation = evaluateConsentControlAccessibility({
     accessibilityAuditRan: accessibilityEvidenceRetained,
     affectedControlLabels: getStringArray(californiaPrivacyEvidence, ["affectedControlLabels", "affected_control_labels"]),
@@ -1964,24 +2348,32 @@ function deriveAccessibilityConsentControlsOutcome(input: GdprEprivacyCoveragePo
     axeEvidenceRows: axeEvidenceRows.length,
     buttonNameIssueCount: getNumber(californiaPrivacyEvidence, ["buttonNameIssueCount", "button_name_issue_count"]),
     consentControlsObserved: getStringArray(californiaPrivacyEvidence, ["consentControlsObserved", "consent_controls_observed"]),
-    consentSurfaceObserved:
-      getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) ??
-      getBoolean(getHybridRuntimeEvidence(input.runtimeArtifacts), ["consentSurfaceObserved", "consent_surface_observed"]) ??
-      getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]),
+    consentSurfaceObserved,
     contrastIssueCount: getNumber(californiaPrivacyEvidence, ["contrastIssueCount", "contrast_issue_count"]),
     controlAccessibilityIssueCount: getNumber(californiaPrivacyEvidence, ["controlAccessibilityIssueCount", "control_accessibility_issue_count"]),
     controlAccessibilityIssueObserved,
     controlAccessibilitySignals,
     controlScopeConfidence: getString(californiaPrivacyEvidence, ["controlScopeConfidence", "control_scope_confidence"]),
+    cookieConsentAccessibilityIssueObserved: getBoolean(californiaPrivacyEvidence, [
+      "cookieConsentAccessibilityIssueObserved",
+      "cookie_consent_accessibility_issue_observed"
+    ]),
     coverageStatus: getString(californiaPrivacyEvidence, ["coverageStatus", "coverage_status"]),
     directVsInferred: getString(californiaPrivacyEvidence, ["directVsInferred", "direct_vs_inferred"]),
     evidenceConfidence: getString(californiaPrivacyEvidence, ["evidenceConfidence", "evidence_confidence"]),
     examplesAreGeneralPageOnly: getBoolean(californiaPrivacyEvidence, ["examplesAreGeneralPageOnly", "examples_are_general_page_only"]),
     focusIssueCount,
+    gdprCookieConsentSurfaceObserved,
     generalPageAccessibilityIssuesObserved: retainedIssueCount > 0 || axeEvidenceRows.length > 0,
     keyboardIssueCount,
     labelIssueCount,
     linkNameIssueCount: getNumber(californiaPrivacyEvidence, ["linkNameIssueCount", "link_name_issue_count"]),
+    privacyAdChoiceSurfaceObserved,
+    privacyChoiceAccessibilityIssueObserved: getBoolean(californiaPrivacyEvidence, [
+      "privacyChoiceAccessibilityIssueObserved",
+      "privacy_choice_accessibility_issue_observed"
+    ]),
+    privacyChoiceSurfaceObserved,
     privacyControlObserved: getBoolean(californiaPrivacyEvidence, ["privacyControlObserved", "privacy_control_observed"]),
     privacyControlsObserved: getStringArray(californiaPrivacyEvidence, ["privacyControlsObserved", "privacy_controls_observed"]),
     retainedDomEvidenceRef: getString(californiaPrivacyEvidence, ["retainedDomEvidenceRef", "retained_dom_evidence_ref"]),
@@ -2060,15 +2452,20 @@ function evaluateConsentControlAccessibility(input: {
   controlAccessibilityIssueObserved: boolean | null;
   controlAccessibilitySignals: string[];
   controlScopeConfidence: string | null;
+  cookieConsentAccessibilityIssueObserved: boolean | null;
   coverageStatus: string | null;
   directVsInferred: string | null;
   evidenceConfidence: string | null;
   examplesAreGeneralPageOnly: boolean | null;
   focusIssueCount: number | null;
+  gdprCookieConsentSurfaceObserved: boolean | null;
   generalPageAccessibilityIssuesObserved: boolean;
   keyboardIssueCount: number | null;
   labelIssueCount: number | null;
   linkNameIssueCount: number | null;
+  privacyAdChoiceSurfaceObserved: boolean | null;
+  privacyChoiceAccessibilityIssueObserved: boolean | null;
+  privacyChoiceSurfaceObserved: boolean | null;
   privacyControlObserved: boolean | null;
   privacyControlsObserved: string[];
   retainedDomEvidenceRef: string | null;
@@ -2076,6 +2473,9 @@ function evaluateConsentControlAccessibility(input: {
   visualAccessReviewRetained: boolean;
 }) {
   const controlObserved =
+    input.gdprCookieConsentSurfaceObserved === true ||
+    input.privacyChoiceSurfaceObserved === true ||
+    input.privacyAdChoiceSurfaceObserved === true ||
     input.consentSurfaceObserved === true ||
     input.privacyControlObserved === true ||
     input.consentControlsObserved.length > 0 ||
@@ -2088,7 +2488,11 @@ function evaluateConsentControlAccessibility(input: {
       ? input.controlAccessibilitySignals.length
       : (input.ariaIssueCount ?? 0) + (input.focusIssueCount ?? 0) + (input.keyboardIssueCount ?? 0) + (input.labelIssueCount ?? 0));
   const controlScopedIssue =
-    input.controlAccessibilityIssueObserved === true &&
+    (input.cookieConsentAccessibilityIssueObserved === true ||
+      input.privacyChoiceAccessibilityIssueObserved === true ||
+      (input.cookieConsentAccessibilityIssueObserved === null &&
+        input.privacyChoiceAccessibilityIssueObserved === null &&
+        input.controlAccessibilityIssueObserved === true)) &&
     input.examplesAreGeneralPageOnly !== true &&
     (
       input.controlScopeConfidence === "high" ||
@@ -2122,14 +2526,19 @@ function evaluateConsentControlAccessibility(input: {
     controlAccessibilityIssueObserved: input.controlAccessibilityIssueObserved,
     controlAccessibilitySignals: input.controlAccessibilitySignals,
     controlScopeConfidence: input.controlScopeConfidence,
+    cookieConsentAccessibilityIssueObserved: input.cookieConsentAccessibilityIssueObserved,
     coverageStatus: input.coverageStatus,
     directVsInferred: input.directVsInferred,
     evidenceConfidence: input.evidenceConfidence,
     examplesAreGeneralPageOnly: input.examplesAreGeneralPageOnly,
     focusIssueCount: input.focusIssueCount ?? 0,
+    gdprCookieConsentSurfaceObserved: input.gdprCookieConsentSurfaceObserved,
     keyboardIssueCount: input.keyboardIssueCount ?? 0,
     labelIssueCount: input.labelIssueCount ?? 0,
     linkNameIssueCount: input.linkNameIssueCount,
+    privacyAdChoiceSurfaceObserved: input.privacyAdChoiceSurfaceObserved,
+    privacyChoiceAccessibilityIssueObserved: input.privacyChoiceAccessibilityIssueObserved,
+    privacyChoiceSurfaceObserved: input.privacyChoiceSurfaceObserved,
     privacyControlObserved: input.privacyControlObserved,
     privacyControlsObserved: input.privacyControlsObserved,
     retainedDomEvidenceRef: input.retainedDomEvidenceRef,

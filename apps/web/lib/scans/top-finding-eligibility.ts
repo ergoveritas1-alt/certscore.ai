@@ -841,7 +841,7 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
         const coverageStatus = getString(lifecycleReview, "coverageStatus");
         const hasConsentOrTrackingContext =
           getBoolean(lifecycleReview, "initialConsentLayerObserved") === true ||
-          getBoolean(lifecycleReview, "consentDependentTrackingObserved") === true;
+          getBoolean(lifecycleReview, "trackingRequiringConsentReviewObserved") === true;
         if (!hasConsentOrTrackingContext) {
           forceEligibility = "audit_only";
           pushUnique(demotionReasons, "missing_consent_tracking_context");

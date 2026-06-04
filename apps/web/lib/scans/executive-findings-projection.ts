@@ -3602,7 +3602,7 @@ function buildGenericCanonicalEvidenceDetails(
           : "privacy_settings_control_not_observed",
         coverageStatus: lifecycleEvidence.coverageStatus,
         initialConsentLayerObserved: lifecycleEvidence.initialConsentLayerObserved,
-        consentDependentTrackingObserved: lifecycleEvidence.consentDependentTrackingObserved,
+        trackingRequiringConsentReviewObserved: lifecycleEvidence.trackingRequiringConsentReviewObserved,
         pagesChecked: lifecycleEvidence.pagesChecked,
         controlsSearched: lifecycleEvidence.controlsSearched,
         footerLinksInspected: lifecycleEvidence.footerLinksInspected.slice(0, 5),

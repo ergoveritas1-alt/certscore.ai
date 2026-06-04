@@ -2237,7 +2237,7 @@ function makeEvidenceExamples(id: string): FindingReferenceExample[] {
       },
       {
         title: "Preference revisitability review signal",
-        code: "artifact=consent_control_lifecycle_001\nrole=finding_supporting_artifact\nurl=https://example.com/\nsubtype=privacy_settings_control_not_observed\ninitial_consent_layer_observed=true\nconsent_dependent_tracking_observed=true\ncoverage_status=usable\npages_checked=[https://example.com/]\ncontrols_searched=[cookie preferences, privacy settings, manage consent]\nfooter_links_inspected=retained_bounded_labels_and_hrefs\nprivacy_settings_control_observed=false\ncookie_preferences_link_observed=false\ncmp_reopen_control_observed=false\nwithdrawal_text_observed=false\nreview_caveat=automated public-page observation; manual review should confirm regional variants, returning-user state, CMP configuration, and legal interpretation"
+        code: "artifact=consent_control_lifecycle_001\nrole=finding_supporting_artifact\nurl=https://example.com/\nsubtype=privacy_settings_control_not_observed\ninitial_consent_layer_observed=true\ntracking_requiring_consent_review_observed=true\ncoverage_status=usable\npages_checked=[https://example.com/]\ncontrols_searched=[cookie preferences, privacy settings, manage consent]\nfooter_links_inspected=retained_bounded_labels_and_hrefs\nprivacy_settings_control_observed=false\ncookie_preferences_link_observed=false\ncmp_reopen_control_observed=false\nwithdrawal_text_observed=false\nreview_caveat=automated public-page observation; manual review should confirm regional variants, returning-user state, CMP configuration, and legal interpretation"
       },
       {
         title: "Review context",

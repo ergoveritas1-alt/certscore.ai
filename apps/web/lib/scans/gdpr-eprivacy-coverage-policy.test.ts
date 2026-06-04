@@ -111,6 +111,159 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained consent surfaces a
   ]);
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes demotes footer privacy choices from GDPR consent surface observation", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "browser_runtime_capture",
+          status: "ok"
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      consent_surface_observed: true,
+      hybridRuntimeEvidence: {
+        consentControlLifecycleEvidence: {
+          consentSurfaceContaminationDetected: true,
+          consentSurfaceDemotionReasons: [
+            "footer_privacy_control_without_initial_consent_layer",
+            "surface_purpose_sale_share_opt_out"
+          ],
+          footerPrivacyChoiceLinkObserved: true,
+          initialConsentLayerObserved: false,
+          layerInspected: "footer_link",
+          observedControls: [
+            {
+              href: "https://www.example.com/privacy/choices",
+              pageUrl: "https://www.example.com/",
+              source: "footer_link",
+              text: "Your Privacy Choices"
+            }
+          ],
+          privacyControlPlacement: "footer",
+          saleShareOptOutSurfaceObserved: true,
+          surfacePurpose: "sale_share_opt_out"
+        }
+      }
+    },
+    snapshot: {
+      cookie_banner_present: true
+    }
+  });
+
+	  assert.equal(outcomes.consent_surface_observed?.status, "Not confirmed");
+	  assert.match(outcomes.consent_surface_observed?.limitation ?? "", /GDPR consent banner not confirmed/i);
+  assert.deepEqual(
+    outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.consentSurfaceDecisionStates,
+    ["privacy_choice_surface_only"]
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 contaminated deeper-layer ad-choice demotion evidence", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "browser_runtime_capture",
+          status: "ok"
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      consent_surface_observed: true,
+      hybridRuntimeEvidence: {
+        consentUiPathEvidence: {
+          layerInspected: "deeper_layer"
+        },
+        firstLayerConsentChoices: {
+          capturedBeforeInteraction: true,
+          visibleChoiceLabels: [
+            "preferences",
+            "shopping guide",
+            "settings",
+            "how a public figure uses a hobby routine to manage stress during travel",
+            "ad choices"
+          ]
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        adChoicesLinkObserved: true,
+        consentSurfaceContaminationDetected: true,
+        consentSurfaceDemotionReasons: [
+          "unrelated_page_text_in_retained_choice_labels",
+          "footer_link_not_first_layer_banner",
+          "no_confirmed_actionable_cookie_consent_surface",
+          "deeper_layer_not_first_layer"
+        ],
+        firstLayerCookieConsentBannerObserved: false,
+        gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+        layerInspected: "deeper_layer",
+        privacyControlPlacement: "deeper_layer"
+      }
+    },
+    snapshot: {
+      cookie_banner_present: true
+    }
+  });
+
+	  assert.equal(outcomes.consent_surface_observed?.status, "Not confirmed");
+	  assert.match(outcomes.consent_surface_observed?.limitation ?? "", /GDPR consent banner not confirmed/i);
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.firstLayerCookieConsentBannerObserved, false);
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.gdprEprivacyConsentSurfaceObserved, "unconfirmed");
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.adChoicesLinkObserved, true);
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.privacyControlPlacement, "deeper_layer");
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.consentSurfaceContaminationDetected, true);
+  assert.deepEqual(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.consentSurfaceDemotionReasons, [
+    "unrelated_page_text_in_retained_choice_labels",
+    "footer_link_not_first_layer_banner",
+    "no_confirmed_actionable_cookie_consent_surface",
+    "deeper_layer_not_first_layer"
+  ]);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes makes reject path not testable without confirmed first-layer GDPR banner", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          consentInteractionSkipNegativeReasonCodes: ["complete_reject_choice_controls_not_detected"],
+          phase: "consent_audit_entry",
+          shouldAttemptConsentAudit: true,
+          status: "ok"
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      rejectPathDepthAndAvailability: {
+        firstLayerCookieConsentBannerObserved: false,
+        gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+        layerInspected: "deeper_layer",
+        privacyControlPlacement: "footer",
+        rejectAvailableOnFirstLayer: false
+      }
+    },
+    snapshot: {
+      consent_reject_button_count: 0,
+      cookie_banner_present: true
+    }
+  });
+
+  assert.equal(outcomes.reject_all_path_availability?.status, "Not testable");
+  assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /no first-layer GDPR\/ePrivacy cookie consent banner was confirmed/i);
+  assert.deepEqual(outcomes.reject_all_path_availability?.criticalEvidence.projectedFindings, []);
+  assert.equal(
+    outcomes.reject_all_path_availability?.criticalEvidence.retainedEvidence.reason,
+    "no_confirmed_first_layer_cookie_consent_banner"
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats unclassified before-consent storage inventory as not observed", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -173,6 +326,96 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats direct same-context sensit
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps footer ad-choice controls as post-choice review signals", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        consentControlLifecycleEvidence: {
+          coverageStatus: "usable",
+          cookiePreferencesLinkObserved: false,
+          footerPreferenceLinkObserved: true,
+          initialConsentLayerObserved: false,
+          observedControls: [
+            {
+              href: "https://example.com/privacy#ads",
+              text: "Ad Choices"
+            },
+            {
+              text: "Close preference center"
+            },
+            {
+              href: "https://tools.google.com/dlpage/gaoptout",
+              text: "Google Analytics Opt-Out"
+            }
+          ],
+          postChoicePreferenceControlClickOutcome: {
+            outcome: "opened_preference_center"
+          },
+          privacyControlPlacement: "footer",
+          surfacePurpose: "targeted_ads_opt_out"
+        }
+      }
+    }
+  });
+
+  assert.equal(outcomes.preference_withdrawal_control?.status, "Review signal");
+  assert.match(
+    outcomes.preference_withdrawal_control?.limitation ?? "",
+    /did not confirm a GDPR\/ePrivacy cookie preference center or consent-withdrawal control/i
+  );
+  assert.equal(
+    outcomes.preference_withdrawal_control?.criticalEvidence.retainedEvidence.cookiePreferencesLinkObserved,
+    false
+  );
+  assert.equal(
+    outcomes.preference_withdrawal_control?.criticalEvidence.retainedEvidence.openedCookieConsentPreferenceCenter,
+    false
+  );
+  assert.equal(
+    outcomes.preference_withdrawal_control?.criticalEvidence.retainedEvidence.privacyAdChoiceOnlyControlObserved,
+    true
+  );
+  assert.deepEqual(outcomes.preference_withdrawal_control?.criticalEvidence.projectedFindings, []);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats cookie preference withdrawal controls as observed", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        consentControlLifecycleEvidence: {
+          cmpReopenControlObserved: true,
+          coverageStatus: "usable",
+          cookiePreferencesLinkObserved: true,
+          initialConsentLayerObserved: true,
+          observedControls: [
+            {
+              href: "https://example.com/#cookie-preferences",
+              text: "Cookie Preferences"
+            }
+          ],
+          postChoicePreferenceControlClickOutcome: {
+            outcome: "opened_preference_center"
+          },
+          withdrawalTextObserved: true
+        }
+      }
+    }
+  });
+
+  assert.equal(outcomes.preference_withdrawal_control?.status, "Observed");
+  assert.match(outcomes.preference_withdrawal_control?.limitation ?? "", /post-choice consent or preference control/i);
+  assert.equal(
+    outcomes.preference_withdrawal_control?.criticalEvidence.retainedEvidence.openedCookieConsentPreferenceCenter,
+    true
+  );
+  assert.deepEqual(
+    outcomes.preference_withdrawal_control?.criticalEvidence.retainedEvidence.cookieConsentControlLabels,
+    ["Cookie Preferences"]
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps disconnected sensitive tracking correlation as review", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -197,7 +440,39 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps disconnected sensitive trac
   });
 
   assert.equal(outcomes.sensitive_surfaces_third_party_tracking?.status, "Review signal");
-  assert.match(outcomes.sensitive_surfaces_third_party_tracking?.limitation ?? "", /does not confirm same-page/i);
+  assert.match(
+    outcomes.sensitive_surfaces_third_party_tracking?.limitation ?? "",
+    /does not conclusively establish same-context sensitive payload exposure/i
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes demotes fallback-only sensitive tracking correlation to review", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          coverageStatus: "usable",
+          directVsInferred: "direct",
+          evidenceConfidence: "moderate",
+          evidenceStrengthFlags: ["fallback_only", "policy_text"],
+          highSensitivityDataCollectionDetected: true,
+          phase: "sensitive_third_party_tracking_correlation",
+          samePageTrackingObserved: true,
+          sensitiveFieldLabels: ["Medical condition"],
+          status: "ok",
+          thirdPartyTrackingVendors: ["Google Analytics"]
+        }
+      }
+    ]
+  });
+
+  assert.equal(outcomes.sensitive_surfaces_third_party_tracking?.status, "Review signal");
+  assert.match(
+    outcomes.sensitive_surfaces_third_party_tracking?.limitation ?? "",
+    /does not conclusively establish same-context sensitive payload exposure/i
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained sensitive third-party payload exposure as a gap", () => {
@@ -270,7 +545,10 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps generic concrete-payload pr
   });
 
   assert.equal(outcomes.sensitive_surfaces_third_party_tracking?.status, "Review signal");
-  assert.match(outcomes.sensitive_surfaces_third_party_tracking?.limitation ?? "", /does not confirm same-page/i);
+  assert.match(
+    outcomes.sensitive_surfaces_third_party_tracking?.limitation ?? "",
+    /does not conclusively establish same-context sensitive payload exposure/i
+  );
   assert.equal(
     outcomes.sensitive_surfaces_third_party_tracking?.criticalEvidence.retainedEvidence.payloadExposureObserved,
     false
@@ -770,13 +1048,15 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
       hybridRuntimeEvidence: {
         consentControlLifecycleEvidence: {
           cmpReopenControlObserved: false,
-          consentDependentTrackingObserved: true,
+          trackingRequiringConsentReviewObserved: true,
           controlsSearched: ["cookie settings"],
           cookiePreferencesLinkObserved: false,
           coverageStatus: "usable",
           footerLinksInspected: ["Privacy Notice -> https://www.example.test/privacy"],
           footerPreferenceLinkObserved: false,
-          initialConsentLayerObserved: true,
+          firstLayerCookieConsentBannerObserved: false,
+          gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+          initialConsentLayerObserved: false,
           observedControls: [],
           pagesChecked: ["https://www.example.test/"],
           policyLinksInspected: ["https://www.example.test/privacy"],
@@ -800,12 +1080,18 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
   assert.equal(retainedLifecycleSurface.post_reject_tracking_reduction?.status, "Not testable");
   assert.equal(
     retainedLifecycleSurface.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.rejectInteractionFailureClass,
-    "reject_control_not_found"
+    "consent_surface_not_observed"
   );
   assert.match(
     retainedLifecycleSurface.post_reject_tracking_reduction?.limitation ?? "",
-    /observed a consent surface but did not retain a reject/i
+    /no first-layer GDPR\/ePrivacy consent banner and no valid reject action were confirmed/i
   );
+  assert.doesNotMatch(
+    retainedLifecycleSurface.post_reject_tracking_reduction?.limitation ?? "",
+    /WS01 observed a consent surface/i
+  );
+  assert.doesNotMatch(JSON.stringify(retainedLifecycleSurface), /consentDependentTrackingObserved/);
+  assert.match(JSON.stringify(retainedLifecycleSurface), /trackingRequiringConsentReviewObserved/);
 
   const insufficient = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -972,6 +1258,48 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks clean consent-control acces
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps privacy-choice-only accessibility surfaces out of generic consent surface evidence", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        cookieConsentAccessibilityIssueObserved: false,
+        gdprCookieConsentSurfaceObserved: false,
+        privacyAdChoiceSurfaceObserved: true,
+        privacyChoiceAccessibilityIssueObserved: false,
+        privacyChoiceSurfaceObserved: true,
+        privacyControlAccessibilityIssueObserved: false,
+        privacyControlAccessibilitySignals: []
+      },
+      consentSurfaceObserved: true,
+      visualAccessReview: {
+        retained: true
+      }
+    },
+    snapshot: {
+      cookie_banner_present: true,
+      wcag_aria_error_count: 0,
+      wcag_focus_indicator_issue_count: 0,
+      wcag_form_label_error_count: 0,
+      wcag_keyboard_navigation_issue_count: 0
+    }
+  });
+
+  assert.equal(outcomes.accessibility_consent_controls?.status, "Not observed");
+  assert.equal(
+    outcomes.accessibility_consent_controls?.criticalEvidence.retainedEvidence.consentSurfaceObserved,
+    false
+  );
+  assert.equal(
+    outcomes.accessibility_consent_controls?.criticalEvidence.retainedEvidence.privacyChoiceSurfaceObserved,
+    true
+  );
+  assert.equal(
+    outcomes.accessibility_consent_controls?.criticalEvidence.retainedEvidence.gdprCookieConsentSurfaceObserved,
+    false
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes flags retained consent-control accessibility evidence as a gap", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -1004,6 +1332,77 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes flags retained consent-control ac
     outcomes.accessibility_consent_controls?.criticalEvidence.retainedEvidence.controlAccessibilitySignals,
     ["button-name"]
   );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes flags retained privacy-choice accessibility evidence as a gap", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      accessibilityAxeEvidence: [
+        {
+          help: "Buttons must have discernible text",
+          impact: "serious",
+          pageUrl: "https://example.com/",
+          representativeSelectors: ["button.privacy-settings"],
+          ruleId: "button-name"
+        }
+      ],
+      californiaPrivacyEvidence: {
+        cookieConsentAccessibilityIssueObserved: false,
+        gdprCookieConsentSurfaceObserved: false,
+        privacyAdChoiceSurfaceObserved: true,
+        privacyChoiceAccessibilityIssueObserved: true,
+        privacyChoiceSurfaceObserved: true,
+        privacyControlAccessibilityIssueObserved: true,
+        privacyControlAccessibilitySignals: ["button-name"]
+      }
+    },
+    snapshot: {
+      wcag_aria_error_count: 1
+    }
+  });
+
+  assert.equal(outcomes.accessibility_consent_controls?.status, "Gap observed");
+  assert.equal(
+    outcomes.accessibility_consent_controls?.criticalEvidence.retainedEvidence.gdprCookieConsentSurfaceObserved,
+    false
+  );
+  assert.equal(
+    outcomes.accessibility_consent_controls?.criticalEvidence.retainedEvidence.privacyChoiceAccessibilityIssueObserved,
+    true
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not promote collapsed accessibility evidence when explicit split says no control issue", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      accessibilityAxeEvidence: [
+        {
+          help: "Buttons must have discernible text",
+          impact: "serious",
+          pageUrl: "https://example.com/",
+          representativeSelectors: ["button.site-nav"],
+          ruleId: "button-name"
+        }
+      ],
+      californiaPrivacyEvidence: {
+        cookieConsentAccessibilityIssueObserved: false,
+        examplesAreGeneralPageOnly: true,
+        gdprCookieConsentSurfaceObserved: false,
+        privacyChoiceAccessibilityIssueObserved: false,
+        privacyChoiceSurfaceObserved: true,
+        privacyControlAccessibilityIssueObserved: true,
+        privacyControlAccessibilitySignals: ["button-name"]
+      }
+    },
+    snapshot: {
+      wcag_aria_error_count: 1
+    }
+  });
+
+  assert.equal(outcomes.accessibility_consent_controls?.status, "Review signal");
+  assert.notEqual(outcomes.accessibility_consent_controls?.status, "Gap observed");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes consumes consent control lifecycle evidence", () => {
@@ -1258,7 +1657,15 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes nested hybrid endpoint j
     }
   });
 
-  assert.equal(outcomes.cross_border_endpoint_review?.status, "Insufficient evidence");
+  assert.equal(outcomes.cross_border_endpoint_review?.status, "Review signal");
+  assert.match(
+    outcomes.cross_border_endpoint_review?.limitation ?? "",
+    /Endpoint geography creates a transfer-review signal/i
+  );
+  assert.match(
+    outcomes.cross_border_endpoint_review?.limitation ?? "",
+    /disclosure mismatch for transfer-relevant advertising\/analytics vendors/i
+  );
   assert.deepEqual(outcomes.cross_border_endpoint_review?.evidenceRefs, [
     "Endpoint jurisdiction rows: 1",
     "Transfer review signal rows: 1"

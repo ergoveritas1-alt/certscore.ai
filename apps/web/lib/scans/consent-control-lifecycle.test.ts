@@ -16,7 +16,7 @@ function baseEvidence(overrides: Record<string, unknown> = {}) {
       footerPreferenceLinkObserved: false,
       preferenceCenterReachableAfterInitialLayer: null,
       initialConsentLayerObserved: true,
-      consentDependentTrackingObserved: true,
+      trackingRequiringConsentReviewObserved: true,
       pagesChecked: ["https://example.com/"],
       controlsSearched: ["cookie preferences", "privacy settings", "manage consent"],
       footerLinksInspected: ["Privacy Policy -> https://example.com/privacy"],
@@ -94,7 +94,7 @@ test("demotes blocked or shallow coverage", () => {
 
 test("does not project without consent or tracking context", () => {
   const review = evaluateConsentControlLifecycleEvidence(baseEvidence({
-    consentDependentTrackingObserved: false,
+    trackingRequiringConsentReviewObserved: false,
     initialConsentLayerObserved: false
   }));
 
@@ -115,4 +115,6 @@ test("normalizes nested lifecycle evidence without raw page content", () => {
   assert.equal(evidence?.postChoicePreferenceControlClickOutcome?.outcome, "opened_preference_center");
   assert.equal(JSON.stringify(evidence).includes("<html"), false);
   assert.equal(JSON.stringify(evidence).includes("Privacy Policy -> https://example.com/privacy"), true);
+  assert.equal(JSON.stringify(evidence).includes("consentDependentTrackingObserved"), false);
+  assert.equal(evidence?.trackingRequiringConsentReviewObserved, true);
 });

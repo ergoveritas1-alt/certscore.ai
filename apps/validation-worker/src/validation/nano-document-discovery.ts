@@ -154,7 +154,15 @@ function isRejectedNanoDocCandidate(input: {
   title?: string | null;
   url: string;
 }) {
-  return isLikelyBrowserCookieHelpDocument(input) || isObviousThirdPartyPolicyDocument(input);
+  const combined = `${input.url} ${input.title ?? ""}`;
+  const looksLikeErrorDocument =
+    /\b(?:404|410|page not found|not found|this page is out of tune)\b/i.test(combined) ||
+    /(?:oops|sorry)[!.]?\s+this isn(?:'|’)t like us/i.test(combined) ||
+    /page you(?:'|’)re looking for can(?:'|’)t be found/i.test(combined) ||
+    /we can(?:'|’)t find the page you(?:'|’)re looking for/i.test(combined) ||
+    /\/404(?:\/|$|\?)/i.test(input.url);
+
+  return looksLikeErrorDocument || isLikelyBrowserCookieHelpDocument(input) || isObviousThirdPartyPolicyDocument(input);
 }
 
 function isSupplementalPrivacySurface(input: { anchorText?: string | null; url: string }) {
@@ -562,10 +570,43 @@ function buildSupplementalPrivacyFallbackCandidates(domainHostname: string | nul
 function limitNanoDocCandidates(candidates: NanoDocCandidate[]) {
   const docTypePriority = (documentType: string) =>
     documentType === "privacy_policy" ? 0 : documentType === "cookie_policy" ? 1 : 2;
+  const specificityScore = (candidate: NanoDocCandidate) => {
+    let pathname = "";
+    try {
+      pathname = new URL(candidate.url).pathname.toLowerCase().replace(/\/+$/, "") || "/";
+    } catch {
+      return 0;
+    }
+
+    if (candidate.documentType === "privacy_policy") {
+      if (pathname === "/privacy") return 100;
+      if (pathname === "/privacy-policy") return 90;
+      if (pathname === "/privacy-notice") return 85;
+      if (pathname.includes("/policies/privacy")) return 70;
+      if (pathname.includes("/legal/privacy")) return 40;
+      return pathname.includes("privacy") ? 50 : 0;
+    }
+
+    if (candidate.documentType === "terms_of_service") {
+      if (pathname === "/terms") return 100;
+      if (pathname === "/terms-of-service" || pathname === "/terms-of-use" || pathname === "/termsofuse") return 90;
+      if (pathname.includes("/policies/terms")) return 70;
+      if (pathname.includes("enterprise-end-user-agreement") || pathname.includes("end-user-agreement")) return 40;
+      if (pathname.includes("/legal/terms")) return 55;
+      return pathname.includes("terms") || pathname.includes("agreement") ? 45 : 0;
+    }
+
+    if (pathname === "/cookies") return 100;
+    if (pathname === "/cookie-policy") return 90;
+    if (pathname.includes("/policies/cookie") || pathname.includes("/policies/cookies")) return 75;
+    if (pathname.includes("/legal/cookie")) return 45;
+    return pathname.includes("cookie") ? 50 : 0;
+  };
   const sorted = [...candidates].sort(
     (left, right) =>
       Number(left.priorityTier === "secondary") - Number(right.priorityTier === "secondary") ||
       docTypePriority(left.documentType) - docTypePriority(right.documentType) ||
+      specificityScore(right) - specificityScore(left) ||
       left.url.localeCompare(right.url)
   );
   const hasMainDocByType = new Set(
@@ -709,7 +750,7 @@ export function buildNanoDocCandidateUrls(input: {
     return limitNanoDocCandidates([...recentDomainCandidates, ...filteredFallbackCandidates]);
   }
 
-  return fallbackCandidates;
+  return limitNanoDocCandidates(fallbackCandidates);
 }
 
 function hasCurrentScanLegalDiscoveryEvidence(input: {
