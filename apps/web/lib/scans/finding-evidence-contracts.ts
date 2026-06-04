@@ -49,6 +49,7 @@ export type EvidenceRequirementType =
   | "videoContentSurfaceEvidence"
   | "videoTrackingRuntimeEvidence"
   | "fingerprintingRuntimeEvidence"
+  | "strongFingerprintingCorroboratorEvidence"
   | "sensitiveInputSurfaceEvidence"
   | "sensitiveDataFieldEvidence"
   | "scanLevelSensitiveSessionReplayCoPresenceEvidence"
@@ -132,6 +133,7 @@ const REQUIREMENT_DESCRIPTIONS: Record<EvidenceRequirementType, string> = {
   videoContentSurfaceEvidence: "A video-content page or media title was retained for the same-page observation.",
   videoTrackingRuntimeEvidence: "Runtime evidence identifies video-page tracking requests or vendors.",
   fingerprintingRuntimeEvidence: "Runtime evidence identifies high-entropy or fingerprinting-style browser/device signals.",
+  strongFingerprintingCorroboratorEvidence: "Fingerprinting evidence includes vendor, transmission, identifier, persistent-ID, or cross-context corroboration.",
   sensitiveInputSurfaceEvidence: "A sensitive input or collection surface was retained.",
   sensitiveDataFieldEvidence: "Evidence identifies sensitive field types, payloads, or field labels.",
   scanLevelSensitiveSessionReplayCoPresenceEvidence: "Observed evidence includes session replay runtime and a same-page or same-flow linked sensitive input surface.",
@@ -505,10 +507,11 @@ export const FINDING_EVIDENCE_CONTRACTS = [
   {
     findingId: "fingerprinting_observed",
     unifiedFindingIds: ["fingerprinting_observed"],
-    requiredForStrong: [req("fingerprintingRuntimeEvidence"), req("coverageNotMateriallyBlocked")],
+    requiredForStrong: [req("fingerprintingRuntimeEvidence"), req("strongFingerprintingCorroboratorEvidence"), req("coverageNotMateriallyBlocked")],
     requiredForGood: [req("fingerprintingRuntimeEvidence")],
     downgradeIf: [
-      { ifMissing: "fingerprintingRuntimeEvidence", to: "audit_only", reason: "Fingerprinting surfacing requires retained high-entropy runtime evidence." }
+      { ifMissing: "fingerprintingRuntimeEvidence", to: "audit_only", reason: "Fingerprinting surfacing requires retained high-entropy runtime evidence." },
+      { ifMissing: "strongFingerprintingCorroboratorEvidence", to: "moderate", reason: "Probable fingerprinting projection requires known fingerprinting/vendor, entropy transmission, identifier-linkage, identifier-like payload, persistent-ID linkage, or equivalent corroboration." }
     ],
     suppressIf: [],
     projectionEligibility: {
@@ -1549,6 +1552,8 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
       return hasVideoTrackingRuntimeEvidence(rawEvidence);
     case "fingerprintingRuntimeEvidence":
       return hasFingerprintingRuntimeEvidence(rawEvidence);
+    case "strongFingerprintingCorroboratorEvidence":
+      return hasStrongFingerprintingEvidence(rawEvidence);
     case "sensitiveInputSurfaceEvidence":
       return hasSensitiveInputSurfaceEvidence(rawEvidence);
     case "sensitiveDataFieldEvidence":
@@ -1602,6 +1607,7 @@ function downgradeFlag(type: EvidenceRequirementType) {
     case "crossDomainIdentifierEvidence":
     case "videoTrackingRuntimeEvidence":
     case "fingerprintingRuntimeEvidence":
+    case "strongFingerprintingCorroboratorEvidence":
     case "videoContentSurfaceEvidence":
       return "missing_specific_runtime_anchor";
     case "sensitiveInputSurfaceEvidence":
@@ -1752,6 +1758,9 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
   const requestPurposeClassificationConfidence = parseObjectArrayValue(
     entities.requestPurposeClassificationConfidence ?? entities.request_purpose_classification_confidence
   );
+  const fingerprintingRuntimeEvidence = parseObjectArrayValue(
+    entities.fingerprintingRuntimeEvidence ?? entities.fingerprinting_runtime_evidence
+  );
   return {
     accept_more_prominent_than_reject:
       packet.unifiedFindingId === "accept_more_prominent_than_reject" ||
@@ -1845,8 +1854,12 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
     fingerprintArtifactRefs: entities.fingerprintArtifactRefs ?? entities.fingerprint_artifact_refs,
     fingerprintAttributeCategories:
       entities.fingerprintAttributeCategories ?? entities.fingerprint_attribute_categories ?? entities.fingerprintingSignals ?? entities.highEntropySignals,
+    deviceDataLikeRequestCount: packet.evidence?.counts?.deviceDataLikeRequestCount,
+    entropyLinkedToIdentifier: packet.evidence?.counts?.entropyLinkedToIdentifier,
+    entropyTransmissionObserved: packet.evidence?.counts?.entropyTransmissionObserved,
     fingerprintTier: packet.evidence?.counts?.fingerprintTier,
-    fingerprintingRuntimeEvidence: entities.fingerprintingRuntimeEvidence ?? entities.fingerprinting_runtime_evidence,
+    identifierLikeRequestCount: packet.evidence?.counts?.identifierLikeRequestCount,
+    fingerprintingRuntimeEvidence,
     fingerprintingSignals: entities.fingerprintingSignals ?? entities.fingerprintAttributeCategories ?? entities.highEntropySignals,
     inputSurfaceUrls: entities.inputSurfaceUrls ?? entities.input_surface_urls,
     metaPixelRequestUrls: entities.metaPixelRequestUrls ?? entities.meta_pixel_request_urls,

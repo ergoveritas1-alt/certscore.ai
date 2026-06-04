@@ -531,7 +531,7 @@ function mapSeverity(
     return tier >= 2 ? "medium" : "low";
   }
   if (findingId === "probable_fingerprinting") {
-    return deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet)).tier >= 3 ? "high" : "medium";
+    return hasStrongFingerprintingEvidence(buildFingerprintingRawEvidence(packet)) ? "high" : "medium";
   }
   if (packet.severity === "high") {
     return "high";
@@ -550,11 +550,12 @@ function getMappedFindingId(
   packet: UnifiedFindingDisplayPacket
 ): keyof typeof CERT_SCORE_FINDING_REGISTRY | null {
   if (packet.unifiedFindingId === "fingerprinting_observed") {
-    const tier = deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet)).tier;
+    const rawEvidence = buildFingerprintingRawEvidence(packet);
+    const tier = deriveFingerprintEvidenceTier(rawEvidence).tier;
     if (tier <= 0) {
       return null;
     }
-    return tier >= 3 && !hasFingerprintingProbableAccessLimitation(packet)
+    return hasStrongFingerprintingEvidence(rawEvidence) && !hasFingerprintingProbableAccessLimitation(packet)
       ? "probable_fingerprinting"
       : "fingerprinting_related_signals_observed";
   }

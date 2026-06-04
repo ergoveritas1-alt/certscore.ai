@@ -10,7 +10,8 @@ import {
   evaluateFindingEvidenceContractForPacket
 } from "./finding-evidence-contracts";
 import {
-  deriveFingerprintEvidenceTier
+  deriveFingerprintEvidenceTier,
+  hasStrongFingerprintingEvidence
 } from "./promotion-evidence-contracts";
 import {
   evaluateRuntimeVendorDisclosureEvidence,
@@ -2372,8 +2373,9 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     }
 
     if (packet.unifiedFindingId === "fingerprinting_observed") {
-      const fingerprintTier = deriveFingerprintEvidenceTier(buildFingerprintingRawEvidence(packet)).tier;
-      if (fingerprintTier >= 3 && packet.confidenceBand === "high" && hasConcreteRuntimeEvidence(packet)) {
+      const rawEvidence = buildFingerprintingRawEvidence(packet);
+      const fingerprintTier = deriveFingerprintEvidenceTier(rawEvidence).tier;
+      if (hasStrongFingerprintingEvidence(rawEvidence) && packet.confidenceBand === "high" && hasConcreteRuntimeEvidence(packet)) {
         overrideDecision(decision, {
           state: "confirmed",
           lane: "main",

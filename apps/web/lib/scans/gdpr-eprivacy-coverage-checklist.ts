@@ -6,7 +6,12 @@ import type {
   GdprEprivacyCoverageSourceSignalGap
 } from "./gdpr-eprivacy-coverage-policy";
 import { buildRegulatoryChecklistEvidenceHighlights } from "./regulatory-checklist-evidence-highlights";
-import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
+import {
+  getRuntimeVendorDisclosureEvidence,
+  runtimeVendorDisclosureNameHasMaterialCategory,
+  runtimeVendorDisclosureNameIsLowerRiskInfrastructure,
+  runtimeVendorDisclosureRowHasPromotionCategory
+} from "./runtime-vendor-disclosure";
 
 export type GdprEprivacyCoverageChecklistStatus =
   | "Observed"
@@ -154,11 +159,10 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "runtime_vendor_disclosure_alignment",
-    label: "Runtime vendors vs. disclosures",
+    label: "Runtime vendor disclosure mismatch",
     explanation: "Whether observed runtime vendors were clearly matched by name or known domain alias in reviewed public privacy/cookie disclosures.",
     findingIds: [
       "cookie_disclosure_gap",
-      "do_not_sell_sharing_disclosure_conflict",
       "missing_technical_disclosure",
       "policy_behavior_conflict",
       "policy_behavior_contradiction_detected",
@@ -853,6 +857,13 @@ function getSessionReplayEvidenceFromOutcome(outcome: GdprEprivacyCoverageOutcom
     : null;
 }
 
+function getBrowserDeviceEntropyEvidenceFromOutcome(outcome: GdprEprivacyCoverageOutcome | undefined) {
+  const evidence = outcome?.criticalEvidence.retainedEvidence.browserDeviceEntropyEvidence;
+  return evidence && typeof evidence === "object" && !Array.isArray(evidence)
+    ? evidence as Record<string, unknown>
+    : null;
+}
+
 function getStringArrayEntity(values: unknown) {
   if (!Array.isArray(values)) {
     return [];
@@ -1183,6 +1194,7 @@ function specializeSessionReplayChecklistRow(input: {
   }
 
   const outcomeEvidence = getSessionReplayEvidenceFromOutcome(input.coverageOutcome);
+  const entropyEvidence = getBrowserDeviceEntropyEvidenceFromOutcome(input.coverageOutcome);
   const vendors = [
     ...new Set([
       ...getSessionReplayFindingVendors(input.findings),
@@ -1202,6 +1214,10 @@ function specializeSessionReplayChecklistRow(input: {
     outcomeEvidence?.preConsentObserved === false ||
     /pre-consent replay (?:not retained|evidence was not retained|evidence retained)/i.test(input.coverageOutcome?.limitation ?? "") ||
     input.findings.some((finding) => finding.unifiedFindingId === "session_replay_observed" || finding.unifiedFindingId === "session_recording_services_detected");
+  const entropyOnlyReview =
+    Boolean(entropyEvidence) &&
+    vendors.length === 0 &&
+    input.coverageOutcome?.criticalEvidence.retainedEvidence.sessionReplayObserved === false;
 
   if (gapObserved) {
     return {
@@ -1213,6 +1229,15 @@ function specializeSessionReplayChecklistRow(input: {
         ? "Session replay before consent observed"
         : "Session replay disclosure or sensitive-surface gap observed",
       status: "Gap observed" as const
+    };
+  }
+
+  if (entropyOnlyReview && input.status === "Review signal") {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation: "Browser/device entropy evidence was retained for review, but no session replay vendor, replay collection endpoint, entropy transmission, identifier linkage, or known fingerprinting library was retained.",
+      label: "Browser/device entropy review signal",
+      status: "Review signal" as const
     };
   }
 
@@ -1283,7 +1308,14 @@ function specializeChecklistRow(input: {
         explanation:
           input.coverageOutcome?.limitation ??
           "A privacy-choice or preference control was retained, but the retained evidence did not confirm a first-layer cookie consent banner or CMP preference surface.",
-        label: input.definition.label,
+        label:
+          /privacy notice gate with privacy-choice link/i.test(input.coverageOutcome?.limitation ?? "")
+            ? "Privacy notice gate with privacy-choice link observed; GDPR/ePrivacy consent surface not confirmed."
+            : /legal\/privacy notice gate/i.test(input.coverageOutcome?.limitation ?? "")
+              ? "Legal/privacy notice gate observed; GDPR/ePrivacy consent surface not confirmed."
+              : /privacy\/ad-choice|ad-choice|footer privacy|vendor opt-out/i.test(input.coverageOutcome?.limitation ?? "")
+            ? "Privacy/ad-choice controls observed; GDPR/ePrivacy consent banner not confirmed."
+            : input.definition.label,
         status: "Not confirmed" as const
       };
     }
@@ -1358,7 +1390,11 @@ function specializeChecklistRow(input: {
           : [];
       return unmatchedRuntimeVendors.filter((value): value is string => typeof value === "string");
     })).slice(0, 8);
-    const visibleUnmatched = unmatched.length > 0 ? unmatched : retainedUnmatched;
+    const rawVisibleUnmatched = unmatched.length > 0 ? unmatched : retainedUnmatched;
+    const materialVisibleUnmatched = rawVisibleUnmatched.filter(runtimeVendorDisclosureNameHasMaterialCategory);
+    const visibleUnmatched = materialVisibleUnmatched.length > 0
+      ? materialVisibleUnmatched
+      : rawVisibleUnmatched.filter((value) => !runtimeVendorDisclosureNameIsLowerRiskInfrastructure(value));
     const observed = getCanonicalVendors(comparisonRows.flatMap((row) => {
       const observedRuntimeVendors = Array.isArray(row.observedRuntimeVendors)
         ? row.observedRuntimeVendors
@@ -1386,7 +1422,7 @@ function specializeChecklistRow(input: {
     return {
       evidenceRefs: input.evidenceRefs,
       explanation:
-        "Endpoint geography creates a transfer-review signal. The gap status is based on retained disclosure mismatch for transfer-relevant advertising/analytics vendors.",
+        "Endpoint geography creates a transfer-review signal. The gap status is based on retained disclosure mismatch for transfer-relevant advertising, analytics, or tag-management vendors.",
       label: "Transfer-relevant vendor disclosure gap",
       status: "Gap observed" as const
     };
@@ -1396,7 +1432,7 @@ function specializeChecklistRow(input: {
     return {
       evidenceRefs: input.evidenceRefs,
       explanation:
-        "Endpoint geography creates a transfer-review signal. The gap status requires retained disclosure mismatch for transfer-relevant advertising/analytics vendors.",
+        "Endpoint geography creates a transfer-review signal. The gap status requires retained disclosure mismatch for transfer-relevant advertising, analytics, or tag-management vendors.",
       label: "Cross-border endpoint transfer review signal",
       status: "Review signal" as const
     };
@@ -1929,7 +1965,24 @@ function hasUsableVendorDisclosureMismatchEvidence(item: GdprEprivacyCoverageChe
       unmatchedVendors.length + unmatchedDomains.length > 0 &&
       (unmatchedDisclosureCount ?? 0) > 0 &&
       reachedPolicySurfaces > 0 &&
-      Boolean(mismatchRationale)
+      Boolean(mismatchRationale) &&
+      runtimeVendorDisclosureRowHasPromotionCategory({
+        coverageStatus: "usable",
+        directVsInferred: directVsInferred === "direct" || directVsInferred === "mixed" ? directVsInferred : "inferred",
+        evidenceConfidence:
+          evidenceConfidence === "strong" || evidenceConfidence === "moderate" || evidenceConfidence === "limited"
+            ? evidenceConfidence
+            : "limited",
+        matchedVendorDisclosureCount: 0,
+        mismatchRationale: mismatchRationale ?? "",
+        observedRuntimeDomains: observedDomains,
+        observedRuntimeVendors: observedVendors,
+        policySurfacesSearched: [],
+        subtype: "runtime_vendor_not_disclosed",
+        unmatchedRuntimeDomains: unmatchedDomains,
+        unmatchedRuntimeVendors: unmatchedVendors,
+        unmatchedVendorDisclosureCount: unmatchedDisclosureCount ?? 0
+      })
     );
   });
   if (retainedRowHasUsableMismatch) {
@@ -2051,7 +2104,7 @@ function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageCheck
     return addDeducibilityDemotion(
       item,
       "Review signal",
-      "Endpoint geography creates a transfer-review signal. The gap status requires retained disclosure mismatch for transfer-relevant advertising/analytics vendors.",
+      "Endpoint geography creates a transfer-review signal. The gap status requires retained disclosure mismatch for transfer-relevant advertising, analytics, or tag-management vendors.",
       "endpoint_geography_without_transfer_relevant_vendor_disclosure_mismatch",
       "observed"
     );

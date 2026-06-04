@@ -182,6 +182,7 @@ test("retains fingerprinting runtime evidence through normalized concerns into e
           { count: 3, firstSeenMs: 140, name: "audio" }
         ],
         confidence: "medium",
+        deviceDataLikeRequestCount: 1,
         reasons: ["Observed identifier-like structuring or shaping behavior."],
         summary: "The page showed multi-signal device and browser data collection consistent with potential fingerprinting.",
         tier: 2

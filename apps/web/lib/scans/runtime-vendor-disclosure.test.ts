@@ -9,12 +9,14 @@ import {
   deriveRuntimeVendorDisclosureEvidenceFromRetainedSources,
   evaluateRuntimeVendorDisclosureEvidence,
   RUNTIME_VENDOR_DISCLOSURE_ALIASES,
-  RUNTIME_VENDOR_DISCLOSURE_SUBTYPE
+  RUNTIME_VENDOR_DISCLOSURE_SUBTYPE,
+  runtimeVendorDisclosureHasPromotionCategory,
+  type RuntimeVendorDisclosureEvidence
 } from "./runtime-vendor-disclosure";
 import { buildUnifiedFindingPackets, type UnifiedFindingDisplayPacket } from "./unified-findings";
 
-function runtimeVendorEvidence(overrides: Record<string, unknown> = {}) {
-  return {
+function runtimeVendorEvidence(overrides: Record<string, unknown> = {}): RuntimeVendorDisclosureEvidence & Record<string, unknown> {
+  const base = {
     subtype: RUNTIME_VENDOR_DISCLOSURE_SUBTYPE,
     parentFindingId: "cookie_disclosure_gap",
     observedRuntimeVendors: ["Meta"],
@@ -41,9 +43,10 @@ function runtimeVendorEvidence(overrides: Record<string, unknown> = {}) {
     coverageStatus: "usable",
     evidenceConfidence: "strong",
     directVsInferred: "direct",
-    categories: ["advertising"],
-    ...overrides
-  };
+    categories: ["advertising"]
+  } satisfies RuntimeVendorDisclosureEvidence;
+
+  return { ...base, ...overrides } as RuntimeVendorDisclosureEvidence & Record<string, unknown>;
 }
 
 function buildPackets(input: {
@@ -174,6 +177,44 @@ test("derives runtime vendor disclosure evidence from retained runtime vendors a
   assert.equal(evidence[0]?.policySurfacesSearched[0]?.reached, true);
   assert.equal(evidence[0]?.policySurfacesSearched[0]?.unmatchedVendorNames?.includes("Microsoft Clarity"), true);
   assert.match(evidence[0]?.mismatchRationale ?? "", /not clearly matched/i);
+});
+
+test("runtime vendor disclosure promotion category requires material unmatched runtime evidence", () => {
+  assert.equal(runtimeVendorDisclosureHasPromotionCategory([
+    runtimeVendorEvidence({
+      categories: ["advertising"],
+      unmatchedRuntimeDomains: ["analytics.tiktok.com"],
+      unmatchedRuntimeVendors: ["TikTok Pixel"]
+    })
+  ]), true);
+
+  assert.equal(runtimeVendorDisclosureHasPromotionCategory([
+    runtimeVendorEvidence({
+      categories: ["tag_manager"],
+      unmatchedRuntimeDomains: ["www.googletagmanager.com"],
+      unmatchedRuntimeVendors: ["Google Tag Manager"]
+    })
+  ]), true);
+
+  assert.equal(runtimeVendorDisclosureHasPromotionCategory([
+    runtimeVendorEvidence({
+      categories: ["advertising"],
+      mismatchRationale:
+        "Observed runtime context included advertising vendors, but unmatched rows were CMP and security infrastructure.",
+      unmatchedRuntimeDomains: ["cdn.cookielaw.org", "geolocation.onetrust.com"],
+      unmatchedRuntimeVendors: ["OneTrust", "bm_sv", "ak_bmsc", "bm_mi", "c_code", "_cs_mk"]
+    })
+  ]), false);
+
+  assert.equal(runtimeVendorDisclosureHasPromotionCategory([
+    runtimeVendorEvidence({
+      categories: ["advertising"],
+      mismatchRationale:
+        "Observed runtime context included advertising vendors, but the unmatched row was Cloudflare bot management.",
+      unmatchedRuntimeDomains: ["example.com"],
+      unmatchedRuntimeVendors: ["Cloudflare bot management / __cf_bm"]
+    })
+  ]), false);
 });
 
 test("projects runtime vendor disclosure subtype through cookie disclosure gap parent", () => {

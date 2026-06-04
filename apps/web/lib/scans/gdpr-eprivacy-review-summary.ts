@@ -42,7 +42,7 @@ const CUSTOMER_LABELS: Record<string, string> = {
   pre_consent_third_party_tracking: "Third-party tracking before consent",
   preference_withdrawal_control: "Post-choice consent controls",
   reject_all_path_availability: "Decline / reject option availability",
-  runtime_vendor_disclosure_alignment: "Runtime vendors vs. disclosures",
+  runtime_vendor_disclosure_alignment: "Runtime vendor disclosure mismatch",
   sensitive_surfaces_third_party_tracking: "Sensitive forms with third-party tracking",
   session_replay_fingerprinting_review: "Session replay / behavioral analytics"
 };

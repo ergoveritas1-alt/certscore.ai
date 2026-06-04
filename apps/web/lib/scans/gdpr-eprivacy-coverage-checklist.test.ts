@@ -186,6 +186,47 @@ test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session r
   assert.doesNotMatch(row.explanation, /before consent observed/i);
 });
 
+test("deriveGdprEprivacyCoverageChecklist labels entropy-only evidence separately from session replay", () => {
+  const outcome = makeCoverageOutcome({
+    evidenceRefs: [
+      "Browser/device entropy review signal",
+      "Observed host: ca-times.brightspotcdn.com"
+    ],
+    limitation: "Browser/device entropy review signal. Retained evidence showed browser or device entropy access, but no session replay vendor, entropy transmission, identifier linkage, known fingerprinting library, or device-data-like request payload was retained.",
+    rowId: "session_replay_fingerprinting_review",
+    status: "Review signal"
+  });
+  outcome.criticalEvidence.retainedEvidence = {
+    ...outcome.criticalEvidence.retainedEvidence,
+    browserDeviceEntropyEvidence: {
+      entropyLinkedToIdentifier: false,
+      entropyTransmissionObserved: false,
+      hosts: ["ca-times.brightspotcdn.com"],
+      knownFingerprintLibraryMatch: null,
+      strongCorroboratorObserved: false
+    },
+    fingerprintingObserved: true,
+    sessionReplayObserved: false
+  };
+
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      session_replay_fingerprinting_review: outcome
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const row = byId(items, "session_replay_fingerprinting_review");
+  assert.equal(row.status, "Review signal");
+  assert.equal(row.evidenceState, "observed");
+  assert.equal(row.assessmentStatus, "review_signal");
+  assert.equal(row.label, "Browser/device entropy review signal");
+  assert.match(row.explanation, /no session replay vendor/i);
+  assert.doesNotMatch(row.label, /Session replay/i);
+});
+
 test("deriveGdprEprivacyCoverageChecklist labels retained pre-consent session replay as a gap", () => {
   const outcome = makeCoverageOutcome({
     evidenceRefs: [
@@ -418,6 +459,13 @@ test("deriveGdprEprivacyCoverageChecklist renders consent choice quality not tes
     unifiedFindings: []
   });
 
+  const consentSurface = byId(items, "consent_surface_observed");
+  assert.equal(
+    consentSurface.label,
+    "Privacy/ad-choice controls observed; GDPR/ePrivacy consent banner not confirmed."
+  );
+  assert.equal(consentSurface.status, "Not confirmed");
+
   const choiceQuality = byId(items, "consent_choice_quality");
   assert.equal(choiceQuality.status, "Not testable");
   assert.equal(choiceQuality.assessmentStatus, "coverage_limitation");
@@ -450,6 +498,35 @@ test("deriveGdprEprivacyCoverageChecklist keeps footer privacy-choice controls a
 	  assert.equal(consentSurface.assessmentStatus, "review_signal");
 	  assert.equal(consentSurface.evidenceState, "not_observed");
   assert.match(consentSurface.explanation, /did not confirm a first-layer cookie consent banner/i);
+});
+
+test("deriveGdprEprivacyCoverageChecklist labels privacy notice gates with privacy choices", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      consent_surface_observed: makeCoverageOutcome({
+        evidenceRefs: [
+          "Evidence: first-layer legal/privacy notice gate",
+          "Visible choice: Your Privacy Choices",
+          "Visible choice: Continue"
+        ],
+        limitation:
+          "Privacy notice gate with privacy-choice link observed; GDPR/ePrivacy consent surface not confirmed. The retained first-layer surface disclosed analytics, marketing, advertising, or partner tracking, but did not show a clear same-layer reject or granular cookie-choice flow.",
+        rowId: "consent_surface_observed",
+        status: "Not confirmed"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const consentSurface = byId(items, "consent_surface_observed");
+  assert.equal(
+    consentSurface.label,
+    "Privacy notice gate with privacy-choice link observed; GDPR/ePrivacy consent surface not confirmed."
+  );
+  assert.equal(consentSurface.status, "Not confirmed");
+  assert.equal(consentSurface.assessmentStatus, "review_signal");
 });
 
 test("deriveGdprEprivacyCoverageChecklist keeps footer ad-choice controls as GDPR post-choice review signals", () => {
@@ -693,7 +770,7 @@ test("deriveGdprEprivacyCoverageChecklist demotes endpoint-only cross-border gap
   const row = byId(items, "cross_border_endpoint_review");
   assert.equal(row.status, "Review signal");
   assert.match(row.explanation, /Endpoint geography creates a transfer-review signal/i);
-  assert.match(row.explanation, /disclosure mismatch for transfer-relevant advertising\/analytics vendors/i);
+  assert.match(row.explanation, /disclosure mismatch for transfer-relevant advertising, analytics, or tag-management vendors/i);
   assert.deepEqual(row.criticalEvidence.projectedFindings, []);
 });
 
@@ -735,7 +812,7 @@ test("deriveGdprEprivacyCoverageChecklist words runtime vendor disclosure gaps a
   });
 
   const row = byId(items, "runtime_vendor_disclosure_alignment");
-  assert.equal(row.label, "Runtime vendors vs. disclosures");
+  assert.equal(row.label, "Runtime vendor disclosure mismatch");
   assert.equal(row.status, "Gap observed");
   assert.match(row.explanation, /not clearly matched by name or known domain alias/i);
   assert.doesNotMatch(row.explanation, /violates|noncompliant|undisclosed/i);
@@ -748,6 +825,67 @@ test("deriveGdprEprivacyCoverageChecklist words runtime vendor disclosure gaps a
     String(row.criticalEvidence.retainedEvidence.selectedEvidenceReason),
     /usable direct runtime-vendor disclosure comparison row/i
   );
+});
+
+test("deriveGdprEprivacyCoverageChecklist emphasizes material runtime vendors over CMP and bot infrastructure", () => {
+  const finding = makeFinding("cookie_disclosure_gap", "Runtime vendor disclosure mismatch", "surface", [], {
+    entities: {
+      findingSubtype: ["runtime_vendor_not_disclosed"],
+      runtimeVendorDisclosureEvidence: [
+        JSON.stringify({
+          coverageStatus: "usable",
+          directVsInferred: "direct",
+          evidenceConfidence: "moderate",
+          matchedVendorDisclosureCount: 0,
+          mismatchRationale:
+            "TikTok Pixel was not clearly matched in retained disclosure evidence; OneTrust and Cloudflare bot management were retained as infrastructure context.",
+          observedRuntimeVendors: ["TikTok Pixel", "OneTrust", "Cloudflare bot management / __cf_bm"],
+          policySurfacesSearched: [
+            {
+              matchedVendorNames: [],
+              reached: true,
+              searchedTerms: ["TikTok Pixel", "OneTrust", "__cf_bm"],
+              snippet: "We use privacy and cookie technologies.",
+              unmatchedVendorNames: ["TikTok Pixel", "OneTrust", "Cloudflare bot management / __cf_bm"],
+              url: "https://example.test/privacy"
+            }
+          ],
+          unmatchedRuntimeDomains: ["analytics.tiktok.com", "cdn.cookielaw.org"],
+          unmatchedRuntimeVendors: ["TikTok Pixel", "OneTrust", "Cloudflare bot management / __cf_bm"],
+          unmatchedVendorDisclosureCount: 3
+        })
+      ]
+    }
+  });
+
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: [finding]
+  });
+
+  const row = byId(items, "runtime_vendor_disclosure_alignment");
+  assert.equal(row.status, "Gap observed");
+  assert.match(row.explanation, /TikTok Pixel/i);
+  assert.doesNotMatch(row.explanation, /OneTrust|Cloudflare bot management|__cf_bm/i);
+});
+
+test("deriveGdprEprivacyCoverageChecklist keeps CCPA do-not-sell conflicts out of GDPR runtime disclosure row", () => {
+  const finding = makeFinding(
+    "do_not_sell_sharing_disclosure_conflict",
+    "Do Not Sell/Share disclosure conflict"
+  );
+
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: [finding]
+  });
+
+  const row = byId(items, "runtime_vendor_disclosure_alignment");
+  assert.equal(row.label, "Runtime vendor disclosure mismatch");
+  assert.equal(row.status, "Not observed");
+  assert.equal(row.assessmentStatus, "checked");
 });
 
 test("deriveGdprEprivacyCoverageChecklist treats missing findings as not testable when public-web coverage is limited", () => {

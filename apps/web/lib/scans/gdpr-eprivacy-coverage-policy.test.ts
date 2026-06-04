@@ -207,6 +207,288 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes confirms simple cookie notices de
   assert.match(outcomes.consent_choice_quality?.limitation ?? "", /Basic same-layer Accept and Decline controls were observed/i);
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes reconciles retained first-layer consent path labels with stale demotion fields", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consent_actionable_choice_observed: true,
+      consent_reject_interaction_succeeded: true,
+      consent_surface_observed: true,
+      hybridRuntimeEvidence: {
+        consentSurfaceObserved: true,
+        consentUiPathEvidence: {
+          acceptClickDepth: 1,
+          acceptLabels: ["Accept Optional Cookies"],
+          consentSurfaceContaminationDetected: true,
+          consentSurfaceDemotionReasons: [
+            "no_confirmed_actionable_cookie_consent_surface",
+            "deeper_layer_not_first_layer"
+          ],
+          firstLayerCookieConsentBannerObserved: false,
+          gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+          layerInspected: "first_layer",
+          preferenceLabels: ["Customize Cookies"],
+          rejectAvailableOnFirstLayer: true,
+          rejectClickDepth: 1,
+          rejectLabels: ["Reject Optional Cookies"]
+        },
+        firstLayerConsentChoices: {
+          acceptVisibleOnFirstLayer: false,
+          capturedBeforeInteraction: true,
+          rejectVisibleOnFirstLayer: false,
+          settingsVisibleOnFirstLayer: true,
+          visibleChoiceLabels: ["Customize Cookies"]
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        availability: "available",
+        bannerLayerInspected: true,
+        completeRejectPathAvailable: true,
+        completeRejectPathDetected: true,
+        consentSurfaceContaminationDetected: true,
+        consentSurfaceDemotionReasons: [
+          "no_confirmed_actionable_cookie_consent_surface",
+          "deeper_layer_not_first_layer"
+        ],
+        evidenceRefs: ["Accept Optional Cookies", "Customize Cookies", "Reject Optional Cookies"],
+        firstLayerCookieConsentBannerObserved: false,
+        firstLayerConsentChoices: {
+          acceptVisibleOnFirstLayer: false,
+          capturedBeforeInteraction: true,
+          rejectVisibleOnFirstLayer: false,
+          settingsVisibleOnFirstLayer: true,
+          visibleChoiceLabels: ["Customize Cookies"]
+        },
+        gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+        layerInspected: "first_layer",
+        rejectAvailableOnFirstLayer: true,
+        rejectClickDepth: 1,
+        rejectEquivalentFound: true,
+        rejectInteractionSucceeded: true,
+        rejectPathAvailabilityClassification: "reject_available_first_layer"
+      }
+    },
+    snapshot: {
+      accept_all_present: true,
+      consent_mechanism_type: "cmp",
+      cookie_banner_present: true,
+      granular_preferences_present: true,
+      reject_all_present: true
+    }
+  });
+
+  assert.equal(outcomes.consent_surface_observed?.status, "Observed");
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.firstLayerCookieConsentBannerObserved, true);
+  assert.equal(outcomes.reject_all_path_availability?.status, "Observed");
+  assert.equal(outcomes.reject_all_path_availability?.criticalEvidence.retainedEvidence.rejectInteractionSucceeded, true);
+  assert.equal(outcomes.consent_choice_quality?.status, "Review signal");
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.firstLayerCookieConsentBannerObserved, true);
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.acceptControlObserved, true);
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.rejectControlObserved, true);
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.sameLayerRejectObserved, true);
+  assert.deepEqual(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.visibleChoiceLabels, [
+    "Customize Cookies",
+    "Accept Optional Cookies",
+    "Reject Optional Cookies"
+  ]);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes preserves retained first-layer cookie consent despite later privacy-choice contamination", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "browser_runtime_capture",
+          status: "ok"
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        consentControlLifecycleEvidence: {
+          cmpReopenControlObserved: true,
+          consentSurfaceContaminationDetected: true,
+          consentSurfaceDemotionReasons: ["surface_purpose_sale_share_opt_out"],
+          footerLinksInspected: [
+            "Cookie Settings We and our third-party partners use cookies. NVIDIA Preference Center Cookie Policy Cookies Details Required Cookies Performance Cookies Personalization Cookies Advertising Cookies Powered by OneTrust."
+          ],
+          initialConsentLayerObserved: true,
+          layerInspected: "footer_link",
+          preferenceCenterReachableAfterInitialLayer: true,
+          privacyControlPlacement: "footer",
+          surfacePurpose: "sale_share_opt_out"
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        consentSurfaceContaminationDetected: true,
+        consentSurfaceDemotionReasons: ["surface_purpose_sale_share_opt_out"],
+        firstLayerCookieConsentBannerObserved: false,
+        firstLayerConsentChoices: {
+          managePreferencesObserved: true,
+          rejectControlObserved: true,
+          rejectVisibleOnFirstLayer: true,
+          visibleChoiceLabels: ["Manage Settings", "Reject Optional"]
+        },
+        gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+        layerInspected: "first_layer",
+        rejectAvailableOnFirstLayer: true,
+        rejectClickDepth: 1
+      }
+    },
+    snapshot: {
+      cookie_banner_present: false
+    }
+  });
+
+  assert.equal(outcomes.consent_surface_observed?.status, "Observed");
+  assert.equal(
+    outcomes.consent_surface_observed?.limitation,
+    "A first-layer cookie consent surface was retained with actionable choice or preference controls."
+  );
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.firstLayerCookieConsentBannerObserved, true);
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.gdprEprivacyConsentSurfaceObserved, true);
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.consentSurfaceContaminationDetected, false);
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.surfacePurpose, "cookie_consent");
+  assert.deepEqual(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.visibleChoiceLabels, [
+    "Manage Settings",
+    "Reject Optional"
+  ]);
+  assert.equal(outcomes.reject_all_path_availability?.status, "Observed");
+  assert.equal(outcomes.consent_choice_quality?.status, "Review signal");
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.firstLayerCookieConsentBannerObserved, true);
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.acceptControlObserved, false);
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.rejectControlObserved, true);
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.managePreferencesObserved, true);
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /did not confirm most choice-quality criteria/i);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes classifies first-layer legal/privacy continue gates separately from consent banners", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "browser_runtime_capture",
+          status: "ok"
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        consentControlLifecycleEvidence: {
+          coverageStatus: "usable",
+          footerLinksInspected: [
+            "Legal Terms and Privacy By continuing, you agree to our Terms of Service and Privacy Policy. You agree that we and our third-party vendors may collect and use your information, including through cookies, pixels and similar technologies."
+          ],
+          initialConsentLayerObserved: true,
+          layerInspected: "first_layer"
+        },
+        firstLayerConsentChoices: {
+          capturedBeforeInteraction: true,
+          visibleChoiceLabels: ["CONTINUE"]
+        }
+      },
+      postRejectTrackingReductionEvidence: {
+        reductionEvaluationStatus: "not_testable",
+        rejectInteractionConfirmed: false,
+        rejectInteractionFailureClass: "reject_control_not_found"
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerConsentChoices: {
+          visibleChoiceLabels: ["CONTINUE"]
+        },
+        layerInspected: "first_layer",
+        rejectAvailableOnFirstLayer: false,
+        rejectClickDepth: null
+      }
+    },
+    snapshot: {
+      cookie_banner_present: true
+    }
+  });
+
+  assert.equal(outcomes.consent_surface_observed?.status, "Not confirmed");
+  assert.match(outcomes.consent_surface_observed?.limitation ?? "", /Legal\/privacy notice gate observed/i);
+  assert.deepEqual(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.consentSurfaceDecisionStates, [
+    "legal_privacy_notice_gate",
+    "notice_only_privacy_interstitial",
+    "forced_continue_notice"
+  ]);
+  assert.equal(outcomes.consent_choice_quality?.status, "Gap observed");
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /single Continue action/i);
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.legalPrivacyNoticeGateObserved, true);
+  assert.equal(outcomes.reject_all_path_availability?.status, "Gap observed");
+  assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /only visible action was Continue/i);
+  assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not testable");
+  assert.match(outcomes.post_reject_tracking_reduction?.limitation ?? "", /no valid after-reject state/i);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes classifies first-layer privacy notice gates with privacy choices", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "browser_runtime_capture",
+          status: "ok"
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        consentControlLifecycleEvidence: {
+          coverageStatus: "usable",
+          footerLinksInspected: [
+            "This site is now part of Versant. By continuing, you agree to our Terms and acknowledge that our updated Privacy Policy applies. We and our partners also use tools on this site to provide the services, personalize your experience, and for analytics, marketing, and advertising."
+          ],
+          initialConsentLayerObserved: true,
+          layerInspected: "first_layer"
+        },
+        firstLayerConsentChoices: {
+          capturedBeforeInteraction: true,
+          visibleChoiceLabels: ["Your Privacy Choices", "Continue"]
+        }
+      },
+      postRejectTrackingReductionEvidence: {
+        reductionEvaluationStatus: "not_testable",
+        rejectInteractionConfirmed: false,
+        rejectInteractionFailureClass: "reject_control_not_found"
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerConsentChoices: {
+          visibleChoiceLabels: ["Your Privacy Choices", "Continue"]
+        },
+        layerInspected: "first_layer",
+        rejectAvailableOnFirstLayer: false
+      }
+    },
+    snapshot: {
+      cookie_banner_present: true
+    }
+  });
+
+  assert.equal(outcomes.consent_surface_observed?.status, "Not confirmed");
+  assert.match(outcomes.consent_surface_observed?.limitation ?? "", /Privacy notice gate with privacy-choice link observed/i);
+  assert.deepEqual(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.consentSurfaceDecisionStates, [
+    "legal_privacy_notice_gate",
+    "privacy_notice_gate_with_privacy_choices",
+    "forced_continue_notice_with_privacy_choices"
+  ]);
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.privacyNoticeGateWithPrivacyChoicesObserved, true);
+  assert.deepEqual(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.privacyChoiceLabels, [
+    "Your Privacy Choices"
+  ]);
+  assert.equal(outcomes.consent_choice_quality?.status, "Gap observed");
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /privacy notice gate with visible actions for privacy choices and Continue/i);
+  assert.equal(outcomes.reject_all_path_availability?.status, "Gap observed");
+  assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /privacy choices and Continue/i);
+  assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not testable");
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks consent choice quality not testable for footer privacy choices only", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -1154,6 +1436,53 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes declares retained session replay 
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes separates weak browser entropy from session replay", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "browser_runtime_capture",
+          status: "ok"
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        fingerprintingRuntimeEvidence: [
+          {
+            entropyLinkedToIdentifier: false,
+            entropyTransmissionObserved: false,
+            fingerprintAttributeCategories: ["screen", "userAgent", "platform", "canvas", "webgl"],
+            host: "ca-times.brightspotcdn.com",
+            knownFingerprintLibraryMatch: null
+          }
+        ]
+      }
+    },
+    snapshot: {
+      fingerprinting_detected: true,
+      session_replay_tool_detected: false,
+      session_replay_tracker_count: 0
+    }
+  });
+
+  const outcome = outcomes.session_replay_fingerprinting_review;
+  assert.equal(outcome?.status, "Review signal");
+  assert.match(outcome?.limitation ?? "", /Browser\/device entropy review signal/i);
+  assert.doesNotMatch(outcome?.limitation ?? "", /Session replay \/ behavioral analytics/i);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.sessionReplayObserved, false);
+  assert.deepEqual(outcome?.criticalEvidence.retainedEvidence.browserDeviceEntropyEvidence, {
+    entropyLinkedToIdentifier: false,
+    entropyTransmissionObserved: false,
+    fingerprintingRuntimeEvidenceCount: 1,
+    highEntropySignals: ["screen", "userAgent", "platform", "canvas", "webgl"],
+    hosts: ["ca-times.brightspotcdn.com"],
+    strongCorroboratorObserved: false
+  });
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 session replay summary request and timing evidence", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -2034,7 +2363,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes nested hybrid endpoint j
   );
   assert.match(
     outcomes.cross_border_endpoint_review?.limitation ?? "",
-    /disclosure mismatch for transfer-relevant advertising\/analytics vendors/i
+    /disclosure mismatch for transfer-relevant advertising, analytics, or tag-management vendors/i
   );
   assert.deepEqual(outcomes.cross_border_endpoint_review?.evidenceRefs, [
     "Endpoint jurisdiction rows: 1",

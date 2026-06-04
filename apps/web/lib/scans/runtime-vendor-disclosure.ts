@@ -649,13 +649,26 @@ export function evaluateRuntimeVendorDisclosureEvidence(
 }
 
 export function runtimeVendorDisclosureHasPromotionCategory(evidence: RuntimeVendorDisclosureEvidence[]) {
-  return evidence.some((row) => {
-    const haystack = [
-      ...(row.categories ?? []),
-      ...row.unmatchedRuntimeVendors,
-      ...row.unmatchedRuntimeDomains,
-      row.mismatchRationale
-    ].join(" ");
-    return /advertising|analytics|identity|cookie[_ -]?sync|rtb|session[_ -]?replay|persistent|identifier-like|identifier_like|pre-consent|pre_consent|post-reject|post_reject|retargeting|marketing/i.test(haystack);
-  });
+  return evidence.some(runtimeVendorDisclosureRowHasPromotionCategory);
+}
+
+const MATERIAL_DISCLOSURE_MISMATCH_PATTERN =
+  /advertising|analytics|tag[_ -]?manager|tag[_ -]?management|\bgtm\b|googletagmanager|google tag manager|identity|cookie[_ -]?sync|rtb|session[_ -]?replay|persistent|identifier-like|identifier_like|pre-consent|pre_consent|post-reject|post_reject|retargeting|marketing|pixel|doubleclick|doubleverify|google ads|meta|facebook|tiktok|twitter|x ads|xandr|appnexus|trade desk|criteo|live.?ramp|magnite|rubicon|media\.net|taboola|scorecard|comscore|clarity|hotjar|contentsquare|fullstory/i;
+const LOWER_RISK_INFRASTRUCTURE_MISMATCH_PATTERN =
+  /(?:^|[\s._-])(?:onetrust|cdn\.cookielaw\.org|geolocation\.onetrust\.com|cookie\s*law|cookielaw|cmp|consent\s+(?:platform|management)|privacy\s+choice|preference\s+center|cloudflare\s+bot|bot\s+management|__cf_bm|cf_bm|cf_clearance|cdnjs|static\s+asset|akamai|bot|security|fraud|strictly\s+necessary|necessary|essential|bm_sv|ak_bmsc|bm_mi|_cs_mk|c_code)(?:$|[\s._-])/i;
+
+export function runtimeVendorDisclosureNameIsLowerRiskInfrastructure(value: string) {
+  return LOWER_RISK_INFRASTRUCTURE_MISMATCH_PATTERN.test(value);
+}
+
+export function runtimeVendorDisclosureNameHasMaterialCategory(value: string) {
+  return MATERIAL_DISCLOSURE_MISMATCH_PATTERN.test(value) && !runtimeVendorDisclosureNameIsLowerRiskInfrastructure(value);
+}
+
+export function runtimeVendorDisclosureRowHasPromotionCategory(row: RuntimeVendorDisclosureEvidence) {
+  const unmatchedValues = [
+    ...row.unmatchedRuntimeVendors,
+    ...row.unmatchedRuntimeDomains
+  ];
+  return unmatchedValues.some(runtimeVendorDisclosureNameHasMaterialCategory);
 }

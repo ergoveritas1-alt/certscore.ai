@@ -2900,7 +2900,7 @@ test("keeps runtime-backed session recording in top findings when consent issues
           fingerprintingRuntimeEvidence: [
             JSON.stringify({
               attributeCategories: ["canvas_webgl", "audio"],
-              requestUrl: "https://fp.example.test/collect",
+              requestUrl: "https://fp.example.test/collect?device_fingerprint=abc",
               tier: 2
             })
           ]
@@ -2908,7 +2908,7 @@ test("keeps runtime-backed session recording in top findings when consent issues
         flags: [],
         pageUrls: [],
         snippets: [],
-        sourceUrls: ["https://fp.example.test/collect"]
+        sourceUrls: ["https://fp.example.test/collect?device_fingerprint=abc"]
       },
       severity: "high",
       summary: "Probable fingerprinting behavior."
@@ -3018,6 +3018,7 @@ test("projects tier-2 fingerprinting-related telemetry only with corroborating t
       details: { family: "consent_tracking", kind: "fingerprinting_observed" },
       evidence: {
         counts: {
+          deviceDataLikeRequestCount: 1,
           fingerprintTier: 2,
           mergedSignalConfidence: 1
         },
@@ -3090,6 +3091,7 @@ test("keeps probable fingerprinting wording for strong high-entropy evidence wit
       details: { family: "consent_tracking", kind: "fingerprinting_observed" },
       evidence: {
         counts: {
+          deviceDataLikeRequestCount: 1,
           fingerprintTier: 2,
           mergedSignalConfidence: 1
         },
@@ -3108,7 +3110,7 @@ test("keeps probable fingerprinting wording for strong high-entropy evidence wit
           fingerprintingRuntimeEvidence: [
             JSON.stringify({
               attributeCategories: ["canvas_webgl", "audio", "fonts_plugins", "hardware"],
-              requestUrl: "https://fp.example.test/collect",
+              requestUrl: "https://fp.example.test/collect?device_fingerprint=abc",
               tier: 2
             })
           ]
@@ -3116,7 +3118,7 @@ test("keeps probable fingerprinting wording for strong high-entropy evidence wit
         flags: [],
         pageUrls: [],
         snippets: [],
-        sourceUrls: ["https://fp.example.test/collect"]
+        sourceUrls: ["https://fp.example.test/collect?device_fingerprint=abc"]
       },
       severity: "high",
       summary: "Probable fingerprinting behavior."
@@ -4276,7 +4278,7 @@ test("focus-management projection keeps WS01 behavior-reproduced traversal evide
   assert.equal(finding.confidence, "strong");
   assert.equal(projection.topFindingEligibility.focus_management_issue?.eligibility, "top_candidate");
   assert.match(finding.shortSummary, /Behavior-reproduced focus-management evidence/);
-  assert.match(String(finding.evidenceDetails?.accessibilityEvidence?.basis ?? ""), /WS01 reproduced/);
+  assert.match(String(finding.evidenceDetails?.accessibilityEvidence?.basis ?? ""), /Scanner reproduced/);
   assert.deepEqual(
     finding.evidenceDetails?.accessibilityEvidence?.focusManagementEvidence,
     [focusManagementEvidence]
