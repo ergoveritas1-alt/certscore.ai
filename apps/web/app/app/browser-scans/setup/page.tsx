@@ -7,7 +7,7 @@ const steps = [
   "Open chrome://extensions in Chrome.",
   "Enable Developer mode.",
   "Choose Load unpacked.",
-  "Select apps/browser-extension from this WC01 checkout.",
+  "Select apps/browser-extension from this local checkout.",
   "Sign in to CertScore in the same Chrome profile.",
   "Return to CertScore, choose Local extension in the scan selector, and click Scan."
 ];

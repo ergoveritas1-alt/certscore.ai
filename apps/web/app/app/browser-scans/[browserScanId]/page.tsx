@@ -101,12 +101,12 @@ function BrowserScanProgressCard({
       state: rawEvidenceCaptured ? "complete" : completed ? "active" : "pending"
     },
     {
-      description: "WS01 converts BX01 evidence into normalized observed runtime signals.",
+      description: "Scanner converts browser-extension evidence into normalized observed runtime signals.",
       label: "Normalize signals",
       state: observedSignalsIngested ? "complete" : rawEvidenceCaptured ? "active" : "pending"
     },
     {
-      description: "WC01 routes normalized concerns through policy and unified findings.",
+      description: "CertScore routes normalized concerns through policy and unified findings.",
       label: "Prepare report",
       state: canonicalScanMaterialized ? "complete" : observedSignalsIngested ? "active" : "pending"
     }
@@ -304,7 +304,7 @@ export default async function BrowserScanPage({ params }: BrowserScanPageProps) 
 
             <div className="border-l border-slate-200 pl-4">
               <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold text-slate-950">WS01 observed signals</p>
+                <p className="font-semibold text-slate-950">Scanner observed signals</p>
                 <Badge className={getProcessingTone(observedSignalsIngested)}>
                   {observedSignalsIngested ? "ingested" : "pending"}
                 </Badge>
@@ -312,14 +312,14 @@ export default async function BrowserScanPage({ params }: BrowserScanPageProps) 
               <p className="mt-2 text-xs leading-5 text-slate-600">
                 {observedSignalsIngested
                   ? `${observedSignalCount} normalized signals accepted${observedSignalsIngestedAt ? ` on ${formatDateTime(observedSignalsIngestedAt)}` : ""}.`
-                  : "Run WS01 normalization before report-driving findings can use BX01 observations."}
+                  : "Run scanner normalization before report-driving findings can use browser-extension observations."}
               </p>
             </div>
           </div>
 
           {canonicalScanMaterialized && !observedSignalsIngested ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-semibold text-slate-950">WS01 normalization command</p>
+              <p className="text-sm font-semibold text-slate-950">Scanner normalization command</p>
               <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-950 p-4 text-xs leading-5 text-slate-50">
                 <code>{ws01Command}</code>
               </pre>

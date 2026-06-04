@@ -404,7 +404,7 @@ function hasBehaviorReproducedFocusManagementEvidence(rows: Array<Record<string,
 
 function buildFocusManagementAccessibilityBasis(rows: Array<Record<string, unknown>>) {
   if (hasBehaviorReproducedFocusManagementEvidence(rows)) {
-    return "WS01 reproduced the focus-management behavior with keyboard interaction tracing.";
+    return "Scanner reproduced the focus-management behavior with keyboard interaction tracing.";
   }
   if (rows.length > 0) {
     return "Focus-management review evidence was retained, but this packet does not include behavior-reproduced keyboard traversal evidence.";
@@ -4832,7 +4832,7 @@ function buildExecutiveShortSummary(
   if (findingId === "focus_management_issue") {
     const focusManagementEvidence = getFocusManagementEvidenceRows(packet);
     return hasBehaviorReproducedFocusManagementEvidence(focusManagementEvidence)
-      ? "Behavior-reproduced focus-management evidence was retained from WS01 keyboard interaction tracing."
+      ? "Behavior-reproduced focus-management evidence was retained from scanner keyboard interaction tracing."
       : "Focus-management review context was retained, but the packet does not include behavior-reproduced keyboard traversal evidence.";
   }
 

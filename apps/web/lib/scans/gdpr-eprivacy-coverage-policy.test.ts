@@ -95,7 +95,19 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained consent surfaces a
         firstLayerConsentChoices: {
           capturedBeforeInteraction: true,
           visibleChoiceLabels: ["Accept", "Decline"]
+        },
+        consentUiPathEvidence: {
+          layerInspected: "first_layer"
         }
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerCookieConsentBannerObserved: true,
+        firstLayerConsentChoices: {
+          visibleChoiceLabels: ["Accept", "Decline"]
+        },
+        gdprEprivacyConsentSurfaceObserved: true,
+        layerInspected: "first_layer",
+        rejectAvailableOnFirstLayer: true
       }
     },
     snapshot: {
@@ -107,7 +119,209 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained consent surfaces a
   assert.deepEqual(outcomes.consent_surface_observed?.evidenceRefs, [
     "Evidence: retained consent surface observation",
     "Visible choice: Accept",
-    "Visible choice: Decline"
+    "Visible choice: Decline",
+    "Layer inspected: first_layer"
+  ]);
+  assert.equal(outcomes.reject_all_path_availability?.status, "Observed");
+  assert.equal(outcomes.consent_choice_quality?.status, "Review signal");
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.firstLayerCookieConsentBannerObserved, true);
+  assert.deepEqual(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.visibleChoiceLabels, ["Accept", "Decline"]);
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /Basic same-layer Accept and Decline controls were observed/i);
+  assert.deepEqual(
+    outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.missingEvidenceNeeded,
+    [
+      "cookie preference center or manage/preferences/settings control",
+      "purpose or cookie-category choices",
+      "vendor-level choices when applicable",
+      "default toggle state evidence",
+      "non-essential defaults observed off",
+      "save or confirm choices control",
+      "accept/reject visual parity evidence"
+    ]
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes confirms simple cookie notices despite stale unknown-purpose demotion", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        consentSummary: {
+          bannerPresent: true,
+          bannerTextSnippet: "This website uses cookies. For more information, review our Privacy & Legal Notice."
+        },
+        consentUiPathEvidence: {
+          consentSurfaceContaminationDetected: true,
+          consentSurfaceDemotionReasons: ["surface_purpose_unknown"],
+          firstLayerCookieConsentBannerObserved: false,
+          gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+          layerInspected: "first_layer"
+        },
+        consentControlLifecycleEvidence: {
+          coverageStatus: "usable",
+          footerLinksInspected: [
+            "This website uses cookies. For more information, review our Privacy & Legal Notice. Questions? Please email privacy@example.edu. More info Accept Decline Cookie"
+          ],
+          initialConsentLayerObserved: true
+        },
+        firstLayerConsentChoices: {
+          capturedBeforeInteraction: true,
+          visibleChoiceLabels: ["accept", "decline"]
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        consentSurfaceContaminationDetected: true,
+        consentSurfaceDemotionReasons: ["surface_purpose_unknown"],
+        firstLayerCookieConsentBannerObserved: false,
+        firstLayerConsentChoices: {
+          visibleChoiceLabels: ["accept", "decline"]
+        },
+        gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+        layerInspected: "first_layer"
+      }
+    },
+    snapshot: {
+      cookie_banner_present: true
+    }
+  });
+
+  assert.equal(outcomes.consent_surface_observed?.status, "Observed");
+  assert.equal(
+    outcomes.consent_surface_observed?.limitation,
+    "A first-layer cookie notice was observed with actionable Accept and Decline controls."
+  );
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.firstLayerCookieConsentBannerObserved, true);
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.gdprEprivacyConsentSurfaceObserved, true);
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.consentSurfaceContaminationDetected, false);
+  assert.deepEqual(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.consentSurfaceDecisionStates, [
+    "first_layer_cookie_notice_observed"
+  ]);
+  assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.surfacePurpose, "cookie_consent");
+  assert.deepEqual(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.visibleChoiceLabels, ["accept", "decline"]);
+  assert.equal(outcomes.reject_all_path_availability?.status, "Observed");
+  assert.equal(
+    outcomes.reject_all_path_availability?.limitation,
+    "A Decline control was observed on the same first-layer cookie notice as Accept."
+  );
+  assert.equal(outcomes.consent_choice_quality?.status, "Review signal");
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /Basic same-layer Accept and Decline controls were observed/i);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes marks consent choice quality not testable for footer privacy choices only", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "browser_runtime_capture",
+          status: "ok"
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        consentControlLifecycleEvidence: {
+          adChoicesLinkObserved: true,
+          consentSurfaceContaminationDetected: true,
+          consentSurfaceDemotionReasons: ["footer_privacy_control_without_initial_consent_layer"],
+          footerPrivacyChoiceLinkObserved: true,
+          initialConsentLayerObserved: false,
+          layerInspected: "footer_link",
+          observedControls: [
+            {
+              href: "https://example.com/privacy/choices",
+              pageUrl: "https://example.com/",
+              source: "footer_link",
+              text: "Your Privacy Choices"
+            },
+            {
+              href: "https://example.com/ad-choices",
+              pageUrl: "https://example.com/",
+              source: "footer_link",
+              text: "Ad Choices"
+            }
+          ],
+          privacyControlPlacement: "footer",
+          surfacePurpose: "ad_choices"
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        adChoicesLinkObserved: true,
+        firstLayerCookieConsentBannerObserved: false,
+        gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+        layerInspected: "footer_link"
+      }
+    },
+    snapshot: {
+      cookie_banner_present: false
+    }
+  });
+
+  assert.equal(outcomes.consent_surface_observed?.status, "Not confirmed");
+  assert.equal(outcomes.consent_choice_quality?.status, "Not testable");
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /no first-layer GDPR\/ePrivacy cookie consent surface was confirmed/i);
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.firstLayerCookieConsentBannerObserved, false);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes checks consent choice quality with retained granular evidence", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        firstLayerConsentChoices: {
+          acceptControlObserved: true,
+          defaultToggleStatesObserved: true,
+          managePreferencesObserved: true,
+          nonEssentialDefaultsOff: true,
+          purposeCategoryControlsObserved: true,
+          rejectControlObserved: true,
+          sameLayerRejectObserved: true,
+          saveChoicesObserved: true,
+          vendorControlsObserved: true,
+          visibleChoiceLabels: ["Reject all", "Manage choices", "Accept all"],
+          visualParityEvidenceObserved: true
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerCookieConsentBannerObserved: true,
+        gdprEprivacyConsentSurfaceObserved: true,
+        rejectAvailableOnFirstLayer: true
+      }
+    }
+  });
+
+  assert.equal(outcomes.consent_choice_quality?.status, "Observed");
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /granular preferences/i);
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.selectedEvidenceStrength, "strong");
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes marks direct poor consent choice quality as a gap", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        firstLayerConsentChoices: {
+          acceptControlObserved: true,
+          defaultToggleStatesObserved: true,
+          nonEssentialDefaultsOff: false,
+          rejectControlObserved: false,
+          visibleChoiceLabels: ["Accept all"]
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerCookieConsentBannerObserved: true,
+        gdprEprivacyConsentSurfaceObserved: true,
+        rejectAvailableOnFirstLayer: false
+      }
+    }
+  });
+
+  assert.equal(outcomes.consent_choice_quality?.status, "Gap observed");
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /poor consent choice quality/i);
+  assert.deepEqual(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.directGapReasons, [
+    "accept_without_same_layer_reject",
+    "non_essential_toggles_default_on"
   ]);
 });
 
@@ -1030,7 +1244,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
         rejectInteractionConfirmed: false,
         rejectInteractionFailureClass: "reject_control_not_found",
         rejectInteractionFailureReason:
-          "WS01 observed a consent surface but did not retain a reject, essential-only, or opt-out control to click.",
+          "Scanner observed a consent surface but did not retain a reject, essential-only, or opt-out control to click.",
         negativeReasonCodes: ["reject_interaction_not_confirmed", "reject_control_not_found"]
       }
     }
@@ -1073,7 +1287,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
         reductionEvaluationStatus: "not_testable",
         rejectInteractionConfirmed: false,
         rejectInteractionFailureClass: "consent_surface_not_observed",
-        rejectInteractionFailureReason: "WS01 did not retain an observed consent surface during the reject-path audit."
+        rejectInteractionFailureReason: "Scanner did not retain an observed consent surface during the reject-path audit."
       }
     }
   });
@@ -1088,7 +1302,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
   );
   assert.doesNotMatch(
     retainedLifecycleSurface.post_reject_tracking_reduction?.limitation ?? "",
-    /WS01 observed a consent surface/i
+    /Scanner observed a consent surface/i
   );
   assert.doesNotMatch(JSON.stringify(retainedLifecycleSurface), /consentDependentTrackingObserved/);
   assert.match(JSON.stringify(retainedLifecycleSurface), /trackingRequiringConsentReviewObserved/);
@@ -1503,7 +1717,11 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes consent control lifecycl
     }
   });
 
-  assert.equal(postChoiceCleanAbsence.preference_withdrawal_control?.status, "Gap observed");
+  assert.equal(postChoiceCleanAbsence.preference_withdrawal_control?.status, "Not observed");
+  assert.equal(
+    postChoiceCleanAbsence.preference_withdrawal_control?.limitation,
+    "CertScore did not retain a qualifying post-choice cookie preference or withdrawal control after the initial consent action."
+  );
   assert.ok(
     postChoiceCleanAbsence.preference_withdrawal_control?.evidenceRefs.includes(
       "Post-choice control outcome: no_qualifying_control_observed"

@@ -45,14 +45,14 @@ function getStatusTone(status: string) {
 function getSignalStatus(scan: { canonical_scan_id?: string | null; observed_signal_count?: number; observed_signals_ingested_at?: string | null; status: string }) {
   if ((scan.observed_signal_count ?? 0) > 0 || scan.observed_signals_ingested_at) {
     return {
-      label: "WS01 ingested",
+      label: "Scanner ingested",
       tone: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
     };
   }
 
   if (scan.canonical_scan_id && scan.status === "complete") {
     return {
-      label: "WS01 pending",
+      label: "Scanner pending",
       tone: "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
     };
   }
@@ -142,7 +142,7 @@ export default async function BrowserScansPage() {
                         {typeof summary.networkRequestCount === "number" ? `${summary.networkRequestCount} requests` : "Requests not summarized"}
                       </span>
                       <span>
-                        {(scan.observed_signal_count ?? 0) > 0 ? `${scan.observed_signal_count ?? 0} WS01 signals` : "No WS01 signals yet"}
+                        {(scan.observed_signal_count ?? 0) > 0 ? `${scan.observed_signal_count ?? 0} scanner signals` : "No scanner signals yet"}
                       </span>
                     </div>
                   </Link>

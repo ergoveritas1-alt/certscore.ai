@@ -153,7 +153,7 @@ function stringifyEvidenceJson(area: BetaRegulatoryChecklistArea, row: BetaRegul
           ? []
           : [
               {
-                source: row.evidenceCapability === "near_term_supported" ? "WS01/WC01" : "WC01",
+                source: row.evidenceCapability === "near_term_supported" ? "scanner" : "CertScore",
                 field:
                   row.evidenceCapability === "near_term_supported"
                     ? "publicWebEvidence.normalizedConcernMapping"

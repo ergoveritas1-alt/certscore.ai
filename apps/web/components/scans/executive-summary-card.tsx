@@ -668,7 +668,7 @@ function DetailDisclosure(input: {
   richItems?: Array<{ key: string; node: React.ReactNode }>;
   summaryMeta?: React.ReactNode;
   summary: string;
-  title: string;
+  title?: string;
   scrollable?: boolean;
   truncationNote?: string | null;
 }) {
@@ -696,7 +696,9 @@ function DetailDisclosure(input: {
         <ScanReportDisclosureIcon />
       </summary>
       <div className="mt-3 space-y-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{input.title}</p>
+        {input.title ? (
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{input.title}</p>
+        ) : null}
         {input.truncationNote ? (
           <p className="text-xs leading-5 text-slate-600">
             {input.truncationNote}
@@ -4655,12 +4657,12 @@ export function ExecutiveSummaryCard(input: {
           <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Exec Summary</p>
           <span
             data-testid="executive-posture-badge"
-            className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] ${getPostureClasses(displayState)}`}
+            className={`rounded-full border px-3 py-1 text-xs font-medium ${getPostureClasses(displayState)}`}
           >
             {displayState}
           </span>
           {input.domainBenchmark ? (
-            <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-600">
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
               Benchmark: {input.domainBenchmark.industry}
             </span>
           ) : null}
@@ -4968,7 +4970,6 @@ export function ExecutiveSummaryCard(input: {
                         {trackerFootprintCountLabel}
                       </span>
                     ) : null}
-                    title={namedVendors.length > 0 ? "Observed vendors and domains" : "Observed domains"}
                     richItems={trackerFootprintRichDetails}
                     itemDisplay="brand"
                     items={[]}

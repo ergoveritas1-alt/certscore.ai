@@ -1345,7 +1345,8 @@ test("ExecutiveSummaryCard renders logo badges for observed tracker vendors and 
     vendorCategoryCounts: {}
   }));
 
-  assert.match(html, /Observed vendors and domains/);
+  assert.match(html, /View observed vendors and domains/);
+  assert.doesNotMatch(html, />Observed vendors and domains</);
   assert.match(html, /\/vendor-logos\/doubleverify\.png/);
   assert.match(html, /\/vendor-logos\/google\.png/);
   assert.match(html, /\/vendor-logos\/magnite\.png/);

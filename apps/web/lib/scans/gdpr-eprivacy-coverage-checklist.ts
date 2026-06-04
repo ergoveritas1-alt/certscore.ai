@@ -68,15 +68,6 @@ export type GdprEprivacyCoverageChecklistInput = {
 
 const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   {
-    id: "consent_surface_observed",
-    label: "Consent banner / preference surface",
-    explanation: "Whether an actionable cookie/consent banner or preference surface was observed in the tested context.",
-    findingIds: [],
-    defaultFindingStatus: "Observed",
-    notObservedText: "No actionable consent surface issue was surfaced from the canonical report findings.",
-    requiresPublicWebCoverage: true
-  },
-  {
     id: "pre_consent_cookies_storage",
     label: "Cookies or storage before consent",
     explanation: "Whether non-essential cookies or browser storage were observed before a recorded consent action.",
@@ -100,6 +91,24 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     ],
     defaultFindingStatus: "Gap observed",
     notObservedText: "No pre-consent third-party tracking finding was surfaced in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "consent_surface_observed",
+    label: "Consent banner / preference surface",
+    explanation: "Whether an actionable cookie/consent banner or preference surface was observed in the tested context.",
+    findingIds: [],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No actionable consent surface issue was surfaced from the canonical report findings.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "consent_choice_quality",
+    label: "Consent choice quality",
+    explanation: "Whether an observed GDPR/ePrivacy cookie consent surface provided meaningful, balanced, and granular user choice.",
+    findingIds: [],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No consent-choice quality outcome was surfaced from retained canonical evidence.",
     requiresPublicWebCoverage: true
   },
   {
@@ -312,12 +321,24 @@ function getMissingEvidenceNeeded(input: {
     return fromSourceGaps;
   }
 
+  if (input.rowId === "consent_choice_quality") {
+    const retainedMissingEvidenceNeeded = retainedStringArray(input.retained, [
+      "missingEvidenceNeeded",
+      "missing_evidence_needed"
+    ]);
+    if (retainedMissingEvidenceNeeded.length > 0) {
+      return [...retainedMissingEvidenceNeeded, ...fromSourceGaps].slice(0, 8);
+    }
+  }
+
   const rowSpecific = (() => {
     switch (input.rowId) {
     case "consent_surface_observed":
       return "Confirmed first-layer GDPR/ePrivacy cookie banner with uncontaminated DOM/control evidence.";
     case "reject_all_path_availability":
       return "Confirmed first-layer GDPR/ePrivacy cookie banner and same-surface accept/reject control inventory.";
+    case "consent_choice_quality":
+      return "Confirmed granular preference center evidence, purpose/vendor choices, default toggle states, save choices, and accept/reject visual parity.";
     case "post_reject_tracking_reduction":
       return "Confirmed reject interaction and retained post-reject request/cookie comparison window.";
     case "preference_withdrawal_control":
@@ -407,6 +428,66 @@ function selectChecklistEvidenceArtifact(input: {
         "Privacy/ad-choice controls were retained, but cookie-consent withdrawal evidence was not confirmed."
       );
     }
+  }
+
+  if (input.rowId === "consent_choice_quality") {
+    const selectedEvidenceStrength = readRetainedString(input.retained, ["selectedEvidenceStrength", "selected_evidence_strength"]);
+    const explicitStrength =
+      selectedEvidenceStrength === "strong" ||
+      selectedEvidenceStrength === "moderate" ||
+      selectedEvidenceStrength === "limited" ||
+      selectedEvidenceStrength === "missing"
+        ? selectedEvidenceStrength
+        : null;
+    const firstLayerObserved = readRetainedBoolean(input.retained, [
+      "firstLayerCookieConsentBannerObserved",
+      "first_layer_cookie_consent_banner_observed"
+    ]) === true;
+    const managePreferencesObserved = readRetainedBoolean(input.retained, ["managePreferencesObserved", "manage_preferences_observed"]) === true;
+    const purposeCategoryControlsObserved = readRetainedBoolean(input.retained, [
+      "purposeCategoryControlsObserved",
+      "purpose_category_controls_observed"
+    ]) === true;
+    const vendorControlsObserved = readRetainedBoolean(input.retained, ["vendorControlsObserved", "vendor_controls_observed"]) === true;
+    const defaultToggleStatesObserved = readRetainedBoolean(input.retained, [
+      "defaultToggleStatesObserved",
+      "default_toggle_states_observed"
+    ]) === true;
+    const nonEssentialDefaultsOff = readRetainedBoolean(input.retained, ["nonEssentialDefaultsOff", "non_essential_defaults_off"]) === true;
+    const saveChoicesObserved = readRetainedBoolean(input.retained, ["saveChoicesObserved", "save_choices_observed"]) === true;
+    const visualParityEvidenceObserved = readRetainedBoolean(input.retained, [
+      "visualParityEvidenceObserved",
+      "visual_parity_evidence_observed"
+    ]) === true;
+    const qualitySignals = [
+      firstLayerObserved,
+      managePreferencesObserved,
+      purposeCategoryControlsObserved,
+      vendorControlsObserved,
+      defaultToggleStatesObserved && nonEssentialDefaultsOff,
+      saveChoicesObserved,
+      visualParityEvidenceObserved
+    ].filter(Boolean).length;
+
+    if (input.status === "Observed" && qualitySignals >= 5) {
+      return selection(
+        "consentChoiceQualityEvidence.strongQuality",
+        explicitStrength ?? "strong",
+        "Selected retained first-layer choice-quality evidence with granular preferences, default-state, save-control, and visual-parity support."
+      );
+    }
+    if (input.status === "Gap observed") {
+      return selection(
+        "consentChoiceQualityEvidence.directGap",
+        explicitStrength ?? "strong",
+        "Selected retained direct evidence of poor consent choice quality."
+      );
+    }
+    return selection(
+      "consentChoiceQualityEvidence",
+      explicitStrength ?? (input.status === "Not testable" ? "missing" : "limited"),
+      "Selected retained first-layer consent choice evidence; granular preference quality evidence was incomplete or missing."
+    );
   }
 
   if (input.rowId === "consent_surface_observed") {
@@ -1355,7 +1436,7 @@ function specializeChecklistRow(input: {
     return {
       evidenceRefs: input.evidenceRefs,
       explanation:
-        "No consent/privacy-control accessibility issue retained. Automated accessibility issues may exist elsewhere in the tested page context, but WS01 did not tie retained examples to the consent banner, preference center, or privacy-choice controls.",
+        "No consent/privacy-control accessibility issue retained. Automated accessibility issues may exist elsewhere in the tested page context, but scanner did not tie retained examples to the consent banner, preference center, or privacy-choice controls.",
       label: input.definition.label,
       status: "Not observed" as const
     };
@@ -1505,7 +1586,7 @@ function makeSourceSignalGap(
   expected: unknown,
   actual: unknown,
   whyNeeded: string,
-  source: "WS01" | "WC01" = "WC01"
+  source: "scanner" | "CertScore" = "CertScore"
 ): GdprEprivacyCoverageSourceSignalGap {
   return { actual, expected, field, source, whyNeeded };
 }
@@ -1535,7 +1616,7 @@ function getUnifiedFindingCriticalEvidence(
     missingOrIncompleteSourceSignals: insufficientPresentationFindings.length > 0
       ? [
           makeSourceSignalGap(
-            "WC01.unifiedFinding.presentationDecision.status",
+            "CertScore.unifiedFinding.presentationDecision.status",
             "surface",
             insufficientPresentationFindings.map((finding) => finding.presentationDecision.status),
             "Required to treat a matched canonical finding as fully surfaced evidence for this checklist row."
@@ -1871,10 +1952,10 @@ function addDeducibilityDemotion(
       missingOrIncompleteSourceSignals: [
         ...item.criticalEvidence.missingOrIncompleteSourceSignals,
         makeSourceSignalGap(
-          "WC01.gdprEprivacyChecklist.evidenceDeducibility",
+          "CertScore.gdprEprivacyChecklist.evidenceDeducibility",
           "mutually consistent row status, assessment, findings, statusBasis, evidenceState, and retainedEvidence",
           reason,
-          "Required before WC01 can render this GDPR/ePrivacy checklist row as checked, observed, or gap-level evidence without overclaiming."
+          "Required before CertScore can render this GDPR/ePrivacy checklist row as checked, observed, or gap-level evidence without overclaiming."
         )
       ],
       projectedFindings: [],
@@ -2105,7 +2186,7 @@ export function deriveGdprEprivacyCoverageChecklist(
           definition.id,
           [
             makeSourceSignalGap(
-              "WC01.coverageOutcomes." + definition.id,
+              "CertScore.coverageOutcomes." + definition.id,
               "row-specific retained policy outcome or projected finding",
               "missing",
               "Required to render row-grade critical evidence without relying on display-layer inference."
@@ -2130,7 +2211,7 @@ export function deriveGdprEprivacyCoverageChecklist(
         definition.id,
         [
           makeSourceSignalGap(
-            "WC01.coverageOutcomes." + definition.id,
+            "CertScore.coverageOutcomes." + definition.id,
             "row-specific retained policy outcome or projected finding",
             "missing",
             "Required to prove this row status from retained canonical evidence rather than default checklist fallback."

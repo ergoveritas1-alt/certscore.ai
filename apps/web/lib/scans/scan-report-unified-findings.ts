@@ -1415,7 +1415,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     candidates.push({
       categoryId: "policy_clarity_consistency_review",
       description:
-        "WS01 retained a specific policy claim and concrete runtime behavior anchor, but no stable bridge provenance was retained for promotion.",
+        "Scanner retained a specific policy claim and concrete runtime behavior anchor, but no stable bridge provenance was retained for promotion.",
       fallbackEvidence: {
         ...nativeContradictionPacketSource,
         candidateReviewStatus: "candidate_insufficient_bridge_provenance",
@@ -1446,7 +1446,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     candidates.push({
       categoryId: "policy_clarity_consistency_review",
       description:
-        "WS01 retained policy disclosure anchors and concrete runtime behavior anchors for policy/runtime alignment review.",
+        "Scanner retained policy disclosure anchors and concrete runtime behavior anchors for policy/runtime alignment review.",
       fallbackEvidence: {
         ...nativeAlignmentPacketSource,
         signalKey: "context.policy_behavior_conflict_detected",

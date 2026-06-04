@@ -622,7 +622,7 @@ pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"`}</CodeBlock>
     "certscore": {
       "command": "pnpm",
       "args": ["mcp:certscore"],
-      "cwd": "/path/to/WC01",
+      "cwd": "/path/to/CertScore",
       "env": {
         "CERTSCORE_API_KEY": "YOUR_TOKEN",
         "CERTSCORE_BASE_URL": "https://certscore.ai"
@@ -635,7 +635,7 @@ pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"`}</CodeBlock>
               stable report with `get_report`, then use `export_findings` or `explain_finding` for review and ticketing.
             </p>
             <p>
-              Preview keys are scoped to `pulse:read`, `pulse:scan`, and `mcp`; WC01 validates bearer tokens before request
+              Preview keys are scoped to `pulse:read`, `pulse:scan`, and `mcp`; CertScore validates bearer tokens before request
               attribution and rate-limit policy, without changing evidence, concern, finding, or projection logic.
             </p>
             <p>

@@ -217,7 +217,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "moderate" },
       ftc: { requiresContractPass: true, minimumTier: "moderate" }
     },
-    notes: "Producer-provided complete/promotion fields are revalidated by WC01 before surfacing or executive projection."
+    notes: "Producer-provided complete/promotion fields are revalidated by CertScore before surfacing or executive projection."
   },
   {
     findingId: "pre_consent_tracking_detected",
@@ -355,7 +355,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
-    notes: "Requires WS01-retained consent UI path evidence showing page access or interaction was blocked until choice."
+    notes: "Requires scanner-retained consent UI path evidence showing page access or interaction was blocked until choice."
   },
   {
     findingId: "dark_pattern_consent_signals_detected",
@@ -465,7 +465,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
-    notes: "WC01 may interpret an opt-out gap only after WS01/validation retain advertising/sharing evidence, control-search scope, and California/CPRA-relevant context."
+    notes: "CertScore may interpret an opt-out gap only after scanner/validation retain advertising/sharing evidence, control-search scope, and California/CPRA-relevant context."
   },
   {
     findingId: "cross_domain_identifier_sharing_observed",
@@ -500,7 +500,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
-    notes: "WC01 owns regulatory framing; the contract only requires same-page video context plus runtime tracking evidence."
+    notes: "CertScore owns regulatory framing; the contract only requires same-page video context plus runtime tracking evidence."
   },
   {
     findingId: "fingerprinting_observed",
@@ -534,7 +534,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
-    notes: "Represents possible replay risk on a sensitive input surface; WC01 owns risk framing and requires retained same-page or same-flow co-occurrence evidence."
+    notes: "Represents possible replay risk on a sensitive input surface; CertScore owns risk framing and requires retained same-page or same-flow co-occurrence evidence."
   },
   {
     findingId: "session_replay_present_with_sensitive_surfaces_observed",

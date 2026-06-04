@@ -11,7 +11,7 @@ export type CaliforniaPrivacyCoverageSourceSignalGap = {
   actual: unknown;
   expected: unknown;
   field: string;
-  source: "WS01" | "WC01";
+  source: "scanner" | "CertScore";
   whyNeeded: string;
 };
 
@@ -106,7 +106,7 @@ function sourceGap(
   expected: unknown,
   actual: unknown,
   whyNeeded: string,
-  source: "WS01" | "WC01" = "WS01"
+  source: "scanner" | "CertScore" = "scanner"
 ): CaliforniaPrivacyCoverageSourceSignalGap {
   return { actual, expected, field, source, whyNeeded };
 }
@@ -188,7 +188,7 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     for (const rowId of rows) {
       outcomes[rowId] = makeOutcome(rowId, "Not testable", "The retained public-web scan context did not support this California privacy review row.", [], {
         missingOrIncompleteSourceSignals: [
-          sourceGap("WS01.californiaPrivacyEvidence", "completed public-web California evidence packet", californiaEvidence ? "partial" : "missing", "Required before WC01 can evaluate this California checklist row.")
+          sourceGap("scanner.californiaPrivacyEvidence", "completed public-web California evidence packet", californiaEvidence ? "partial" : "missing", "Required before CertScore can evaluate this California checklist row.")
         ]
       });
     }
@@ -205,7 +205,7 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
       ? makeOutcome("privacy_notice_availability", "Gap observed", "No public privacy notice or equivalent privacy disclosure was retained in the tested context.", getEvidenceRefs(californiaEvidence, "Privacy notice not observed"), {
           retainedEvidence: { privacyNoticeObserved, privacyNoticeUrls }
         })
-      : makeOutcome("privacy_notice_availability", "Insufficient evidence", "Privacy notice availability could not be resolved from retained WS01 evidence.", [], {
+      : makeOutcome("privacy_notice_availability", "Insufficient evidence", "Privacy notice availability could not be resolved from retained scanner evidence.", [], {
           missingOrIncompleteSourceSignals: [
             sourceGap("californiaPrivacyEvidence.privacyNoticeObserved", "boolean privacy notice observation", "missing", "Required to determine whether a public privacy notice was observed.")
           ]
@@ -266,7 +266,7 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
   outcomes.gpc_opt_out_signal_handling = !gpcTestRan
     ? makeOutcome("gpc_opt_out_signal_handling", "Not testable", "The retained scan context did not include a usable GPC or opt-out preference signal test.", getEvidenceRefs(californiaEvidence), {
         missingOrIncompleteSourceSignals: [
-          sourceGap("californiaPrivacyEvidence.gpcTestRan", true, gpcTestRan, "Required before WC01 can evaluate GPC handling.")
+          sourceGap("californiaPrivacyEvidence.gpcTestRan", true, gpcTestRan, "Required before CertScore can evaluate GPC handling.")
         ],
         retainedEvidence: { gpcTestRan }
       })
@@ -357,7 +357,7 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
   outcomes.post_opt_out_tracking_behavior = optOutInteractionConfirmed !== true
     ? makeOutcome("post_opt_out_tracking_behavior", "Not testable", "No confirmed opt-out or reject action was captured, so post-opt-out tracking behavior could not be evaluated.", getEvidenceRefs(californiaEvidence), {
         missingOrIncompleteSourceSignals: [
-          sourceGap("californiaPrivacyEvidence.optOutInteractionConfirmed", true, optOutInteractionConfirmed, "Required before WC01 can evaluate post-opt-out tracking behavior.")
+          sourceGap("californiaPrivacyEvidence.optOutInteractionConfirmed", true, optOutInteractionConfirmed, "Required before CertScore can evaluate post-opt-out tracking behavior.")
         ],
         retainedEvidence: { optOutInteractionConfirmed }
       })

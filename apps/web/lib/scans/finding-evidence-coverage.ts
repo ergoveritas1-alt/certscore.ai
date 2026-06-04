@@ -34,7 +34,7 @@ export const FINDING_EVIDENCE_NON_CONTRACT_RATIONALES: readonly FindingEvidenceN
     ],
     owner: "accessibility_validation",
     rationale:
-      "Accessibility headline findings are governed by the accessibility validation pipeline and retained axe/rule-level examples. They are evidence observations, not WS01 privacy-runtime contract findings."
+      "Accessibility headline findings are governed by the accessibility validation pipeline and retained axe/rule-level examples. They are evidence observations, not scanner privacy-runtime contract findings."
   },
   {
     id: "financial_claim_validation_contract",
@@ -52,7 +52,7 @@ export const FINDING_EVIDENCE_NON_CONTRACT_RATIONALES: readonly FindingEvidenceN
     ],
     owner: "financial_validation",
     rationale:
-      "High-risk financial promotion findings are governed by the financial validation and judge contracts, which require retained page evidence, claim snippets, and context without moving legal interpretation into WS01."
+      "High-risk financial promotion findings are governed by the financial validation and judge contracts, which require retained page evidence, claim snippets, and context without moving legal interpretation into scanner."
   },
   {
     id: "cookie_security_posture_support",

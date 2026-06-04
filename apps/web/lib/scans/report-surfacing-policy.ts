@@ -1383,7 +1383,7 @@ function policyRuntimeAlignmentReviewOverride(packet: UnifiedFindingPacket): {
   }
   return {
     reason:
-      "A WS01 policy/runtime alignment review bridge was retained across policy disclosure text and concrete runtime evidence, so this can surface as a review signal without being treated as a contradiction.",
+      "A scanner policy/runtime alignment review bridge was retained across policy disclosure text and concrete runtime evidence, so this can surface as a review signal without being treated as a contradiction.",
     ruleId: "evidence.policy_runtime_alignment.review_bridge",
     state: "review"
   };

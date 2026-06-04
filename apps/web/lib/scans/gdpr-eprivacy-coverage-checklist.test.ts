@@ -83,6 +83,25 @@ const usableRuntimeVendorDisclosureMismatch = JSON.stringify({
   unmatchedVendorDisclosureCount: 1
 });
 
+test("deriveGdprEprivacyCoverageChecklist orders consent quality before reject-path availability", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  assert.deepEqual(
+    items.slice(0, 5).map((item) => item.id),
+    [
+      "pre_consent_cookies_storage",
+      "pre_consent_third_party_tracking",
+      "consent_surface_observed",
+      "consent_choice_quality",
+      "reject_all_path_availability"
+    ]
+  );
+});
+
 test("deriveGdprEprivacyCoverageChecklist maps canonical unified findings without creating pass/fail language", () => {
   const postRejectFinding = makeFinding("reject_tracking_persists_after_reject", "Tracking continued after reject");
   postRejectFinding.evidence = {
@@ -245,6 +264,164 @@ test("deriveGdprEprivacyCoverageChecklist keeps consent surface and post-choice 
   assert.match(postChoice.explanation, /No obvious cookie preferences, privacy settings, or consent-preference reopen control/i);
 });
 
+test("deriveGdprEprivacyCoverageChecklist renders consent choice quality as a standalone simple-cookie-notice review signal", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      consent_surface_observed: makeCoverageOutcome({
+        evidenceRefs: [
+          "Evidence: retained consent surface observation",
+          "Visible choice: Accept",
+          "Visible choice: Decline",
+          "Layer inspected: first_layer"
+        ],
+        retainedEvidence: {
+          consentSurfaceObserved: true,
+          firstLayerCookieConsentBannerObserved: true,
+          gdprEprivacyConsentSurfaceObserved: true,
+          layerInspected: "first_layer",
+          visibleChoiceLabels: ["Accept", "Decline"]
+        },
+        limitation: "A consent surface or first-layer consent controls were retained in the tested context.",
+        rowId: "consent_surface_observed",
+        status: "Observed"
+      }),
+      reject_all_path_availability: makeCoverageOutcome({
+        evidenceRefs: [
+          "Evidence: reject path depth and availability",
+          "Layer inspected: first_layer",
+          "Visible choice: Decline"
+        ],
+        retainedEvidence: {
+          firstLayerCookieConsentBannerObserved: true,
+          gdprEprivacyConsentSurfaceObserved: true,
+          layerInspected: "first_layer",
+          rejectInteractionSucceeded: false,
+          sameLayerRejectObserved: true,
+          visibleRejectLabels: ["Decline"]
+        },
+        limitation: "A reject or equivalent refusal path was retained in the tested consent surface.",
+        rowId: "reject_all_path_availability",
+        status: "Observed"
+      }),
+      consent_choice_quality: makeCoverageOutcome({
+        evidenceRefs: [
+          "Evidence: consent choice quality",
+          "Visible choice: Accept",
+          "Visible choice: Decline",
+          "Layer inspected: first_layer"
+        ],
+        retainedEvidence: {
+          acceptControlObserved: true,
+          defaultToggleStatesObserved: null,
+          firstLayerCookieConsentBannerObserved: true,
+          gdprEprivacyConsentSurfaceObserved: true,
+          layerInspected: "first_layer",
+          managePreferencesObserved: false,
+          missingEvidenceNeeded: [
+            "cookie preference center or manage/preferences/settings control",
+            "purpose or cookie-category choices",
+            "vendor-level choices when applicable",
+            "default toggle state evidence",
+            "non-essential defaults observed off",
+            "save or confirm choices control",
+            "accept/reject visual parity evidence"
+          ],
+          nonEssentialDefaultsOff: null,
+          preferenceCenterOpened: false,
+          purposeCategoryControlsObserved: null,
+          rejectControlObserved: true,
+          sameLayerRejectObserved: true,
+          saveChoicesObserved: null,
+          selectedEvidenceArtifactId: "consentChoiceQualityEvidence",
+          selectedEvidenceStrength: "limited",
+          vendorControlsObserved: null,
+          visibleChoiceLabels: ["Accept", "Decline"],
+          visualParityEvidenceObserved: null
+        },
+        limitation:
+          "Basic same-layer Accept and Decline controls were observed, but CertScore did not confirm granular cookie preferences, purpose/vendor choices, default toggle states, or a cookie preference center.",
+        rowId: "consent_choice_quality",
+        status: "Review signal"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const consentSurface = byId(items, "consent_surface_observed");
+  assert.equal(consentSurface.status, "Observed");
+  assert.equal(consentSurface.assessmentStatus, "checked");
+
+  const rejectPath = byId(items, "reject_all_path_availability");
+  assert.equal(rejectPath.status, "Observed");
+  assert.equal(rejectPath.assessmentStatus, "checked");
+
+  const choiceQuality = byId(items, "consent_choice_quality");
+  assert.equal(choiceQuality.label, "Consent choice quality");
+  assert.equal(choiceQuality.status, "Review signal");
+  assert.equal(choiceQuality.assessmentStatus, "review_signal");
+  assert.equal(choiceQuality.evidenceState, "observed");
+  assert.match(choiceQuality.criticalEvidence.statusBasis, /Basic same-layer Accept and Decline controls were observed/i);
+  assert.equal(choiceQuality.criticalEvidence.retainedEvidence.selectedEvidenceArtifactId, "consentChoiceQualityEvidence");
+  assert.equal(choiceQuality.criticalEvidence.retainedEvidence.selectedEvidenceStrength, "limited");
+  assert.deepEqual(choiceQuality.criticalEvidence.retainedEvidence.visibleChoiceLabels, ["Accept", "Decline"]);
+  assert.match(JSON.stringify(choiceQuality.criticalEvidence.retainedEvidence.missingEvidenceNeeded), /purpose or cookie-category choices/i);
+});
+
+test("deriveGdprEprivacyCoverageChecklist renders consent choice quality not testable for footer privacy links only", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      consent_surface_observed: makeCoverageOutcome({
+        evidenceRefs: [
+          "Evidence: consent control lifecycle",
+          "Observed control: Ad Choices",
+          "Observed control: Your Privacy Choices"
+        ],
+        retainedEvidence: {
+          firstLayerCookieConsentBannerObserved: false,
+          gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+          privacyControlPlacement: "footer",
+          visibleChoiceLabels: []
+        },
+        limitation: "Privacy/ad-choice surface observed; GDPR consent banner not confirmed.",
+        rowId: "consent_surface_observed",
+        status: "Not confirmed"
+      }),
+      consent_choice_quality: makeCoverageOutcome({
+        evidenceRefs: [
+          "Evidence: consent choice quality",
+          "Layer inspected: footer_link"
+        ],
+        retainedEvidence: {
+          firstLayerCookieConsentBannerObserved: false,
+          layerInspected: "footer_link",
+          missingEvidenceNeeded: [
+            "cookie preference center or manage/preferences/settings control",
+            "purpose or cookie-category choices"
+          ],
+          selectedEvidenceArtifactId: "consentChoiceQualityEvidence",
+          selectedEvidenceStrength: "missing",
+          visibleChoiceLabels: []
+        },
+        limitation:
+          "Consent choice quality could not be evaluated because no first-layer GDPR/ePrivacy cookie consent surface was confirmed.",
+        rowId: "consent_choice_quality",
+        status: "Not testable"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const choiceQuality = byId(items, "consent_choice_quality");
+  assert.equal(choiceQuality.status, "Not testable");
+  assert.equal(choiceQuality.assessmentStatus, "coverage_limitation");
+  assert.equal(choiceQuality.evidenceState, "not_testable");
+  assert.match(choiceQuality.criticalEvidence.statusBasis, /no first-layer GDPR\/ePrivacy cookie consent surface was confirmed/i);
+});
+
 test("deriveGdprEprivacyCoverageChecklist keeps footer privacy-choice controls as consent-surface review signals", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
@@ -256,7 +433,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps footer privacy-choice controls a
           "Placement: footer"
         ],
         limitation:
-          "WS01 retained a footer/privacy-choice or sale-share opt-out control, but did not confirm a first-layer cookie consent banner or CMP preference surface for GDPR/ePrivacy review.",
+          "Scanner retained a footer/privacy-choice or sale-share opt-out control, but did not confirm a first-layer cookie consent banner or CMP preference surface for GDPR/ePrivacy review.",
         rowId: "consent_surface_observed",
 	        status: "Not confirmed"
       })
@@ -338,7 +515,7 @@ test("deriveGdprEprivacyCoverageChecklist demotes inconsistent checked post-choi
   assert.equal(postChoice.criticalEvidence.retainedEvidence.selectedEvidenceStrength, "limited");
   assert.deepEqual(postChoice.criticalEvidence.retainedEvidence.missingEvidenceNeeded, [
     "Cookie preference center, cookie-category controls, or consent-withdrawal control tied to GDPR/ePrivacy cookie consent.",
-    "WC01.gdprEprivacyChecklist.evidenceDeducibility: Required before WC01 can render this GDPR/ePrivacy checklist row as checked, observed, or gap-level evidence without overclaiming."
+    "CertScore.gdprEprivacyChecklist.evidenceDeducibility: Required before CertScore can render this GDPR/ePrivacy checklist row as checked, observed, or gap-level evidence without overclaiming."
   ]);
   assert.match(
     JSON.stringify(postChoice.criticalEvidence.retainedEvidence.weakerArtifactsIgnored),
@@ -1286,7 +1463,7 @@ test("deriveGdprEprivacyCoverageChecklist ignores non-array entity previews in e
   );
 });
 
-test("deriveGdprEprivacyReviewSummary composes gatech-style reject persistence story from canonical row evidence", () => {
+test("deriveGdprEprivacyReviewSummary composes simple-cookie-notice reject persistence story from canonical row evidence", () => {
   const preConsentFinding = makeFinding("preconsent_tracking", "Pre-consent tracking detected");
   preConsentFinding.evidence = {
     ...preConsentFinding.evidence,

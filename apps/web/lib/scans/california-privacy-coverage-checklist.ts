@@ -154,7 +154,7 @@ function makeSourceSignalGap(
   expected: unknown,
   actual: unknown,
   whyNeeded: string,
-  source: "WS01" | "WC01" = "WC01"
+  source: "scanner" | "CertScore" = "CertScore"
 ): CaliforniaPrivacyCoverageSourceSignalGap {
   return { actual, expected, field, source, whyNeeded };
 }
@@ -289,11 +289,11 @@ export function deriveCaliforniaPrivacyCoverageChecklist(
           ? []
           : [
               makeSourceSignalGap(
-                "WS01.californiaPrivacyEvidence",
+                "scanner.californiaPrivacyEvidence",
                 "completed California evidence packet",
                 "missing_or_limited",
                 "Required to evaluate this California checklist row.",
-                "WS01"
+                "scanner"
               )
             ]
       ),

@@ -2352,8 +2352,89 @@ function deriveVerifiedPolicyInsights(policyEnrichments: Array<Record<string, un
     .filter((item) => item.summary || item.topics.length > 0 || item.flags.length > 0);
 }
 
-function deriveExecutivePolicySurfaces(policyEnrichments: Array<Record<string, unknown>>): ExecutivePolicySurface[] {
-  return policyEnrichments
+function getSnapshotPolicySurfaceLabel(pageType: "privacy_policy" | "terms_of_service" | "cookie_policy") {
+  switch (pageType) {
+    case "privacy_policy":
+      return "Privacy policy";
+    case "terms_of_service":
+      return "Terms of service";
+    case "cookie_policy":
+      return "Cookie policy";
+  }
+}
+
+function getRuntimeKeyPageDiscoverySummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  return getRecord(runtimeArtifacts?.key_page_discovery_summary) ?? getRecord(runtimeArtifacts?.keyPageDiscoverySummary);
+}
+
+function getVerifiedKeyPageSurface(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  pageType: "privacy_policy" | "terms_of_service" | "cookie_policy"
+) {
+  const summary = getRuntimeKeyPageDiscoverySummary(runtimeArtifacts);
+  const pageSummaries = [
+    ...getRecordObjectArray(summary, "pageSummaries"),
+    ...getRecordObjectArray(summary, "page_summaries")
+  ];
+  return pageSummaries.find((row) => {
+    const rowPageType = getRecordString(row, "pageType") ?? getRecordString(row, "page_type");
+    if (rowPageType !== pageType) {
+      return false;
+    }
+    const surfaceState = getRecordString(row, "surfaceState") ?? getRecordString(row, "surface_state");
+    const surfaceDetected = getRecordBoolean(row, "surfaceDetected") ?? getRecordBoolean(row, "surface_detected");
+    return surfaceDetected === true || surfaceState === "linked_and_verified";
+  }) ?? null;
+}
+
+function deriveSnapshotPolicySurfaceFallbacks(
+  snapshot: Record<string, unknown> | null | undefined,
+  existingSurfaces: ExecutivePolicySurface[],
+  runtimeArtifacts?: Record<string, unknown> | null
+): ExecutivePolicySurface[] {
+  if (!snapshot) {
+    return [];
+  }
+
+  const existingLabels = new Set(existingSurfaces.map((surface) => surface.pageLabel.toLowerCase()));
+  const fallbackInputs: Array<{
+    pageType: "privacy_policy" | "terms_of_service" | "cookie_policy";
+    present: boolean;
+  }> = [
+    { pageType: "privacy_policy", present: snapshot.privacy_policy_present === true },
+    { pageType: "terms_of_service", present: snapshot.terms_of_service_present === true },
+    { pageType: "cookie_policy", present: snapshot.cookie_policy_present === true }
+  ];
+
+  return fallbackInputs
+    .filter((input) => input.present)
+    .map((input) => {
+      const pageLabel = getSnapshotPolicySurfaceLabel(input.pageType);
+      const verifiedSurface = getVerifiedKeyPageSurface(runtimeArtifacts, input.pageType);
+      const pageUrl =
+        verifiedSurface
+          ? getRecordString(verifiedSurface, "successfulUrl") ??
+            getRecordString(verifiedSurface, "successful_url") ??
+            getRecordString(verifiedSurface, "bestCandidateUrl") ??
+            getRecordString(verifiedSurface, "best_candidate_url")
+          : null;
+      return {
+        details: pageUrl
+          ? ["Surface presence and URL were retained by the scanner; extracted policy details were not retained for this scan."]
+          : ["Surface presence was retained by the scanner, but no extracted policy details were retained for this scan."],
+        pageLabel,
+        pageUrl
+      };
+    })
+    .filter((surface) => !existingLabels.has(surface.pageLabel.toLowerCase()));
+}
+
+function deriveExecutivePolicySurfaces(
+  policyEnrichments: Array<Record<string, unknown>>,
+  snapshot?: Record<string, unknown> | null,
+  runtimeArtifacts?: Record<string, unknown> | null
+): ExecutivePolicySurface[] {
+  const enrichedSurfaces = policyEnrichments
     .filter(isReportPolicySurfaceRow)
     .map((row) => {
       const pageType = String(getPolicyPageType(row) ?? "");
@@ -2395,6 +2476,10 @@ function deriveExecutivePolicySurfaces(policyEnrichments: Array<Record<string, u
       };
     })
     .filter((surface) => surface.pageUrl || surface.details.length > 0);
+  return [
+    ...enrichedSurfaces,
+    ...deriveSnapshotPolicySurfaceFallbacks(snapshot, enrichedSurfaces, runtimeArtifacts)
+  ];
 }
 
 function pushUniqueInterruption(
@@ -5620,7 +5705,7 @@ function buildBetaRegulatoryChecklistAreas(lenses: BetaRegulatoryLens[]) {
         ["choice_mechanism", "Consent or choice mechanism", "Consent, preference, cookie, or privacy-choice mechanisms can be reviewed when observed in the tested path.", "near_term_supported"],
         ["withdrawal", "Consent withdrawal / preference management", "Withdrawal or preference-management review requires retained post-choice control evidence.", "near_term_supported"],
         ["purpose_transparency", "Purpose / data-use transparency", "Purpose transparency requires policy text extraction and normalized disclosure cues.", "near_term_supported"],
-        ["vendor_alignment", "Vendor / third-party disclosure alignment", "Runtime vendors must be compared with retained public disclosures through WC01 normalized findings.", "near_term_supported"],
+        ["vendor_alignment", "Vendor / third-party disclosure alignment", "Runtime vendors must be compared with retained public disclosures through normalized scanner findings.", "near_term_supported"],
         ["children_data", "Children's data signals", "Child-directed content, age gates, parental-consent cues, or children's notice cues require retained public-page evidence.", "near_term_supported"],
         ["grievance_contact", "Grievance / privacy contact mechanism", "Privacy contact, grievance, or rights request paths require retained policy/contact evidence.", "near_term_supported"],
         ["sensitive_context", "Sensitive or high-risk form context", "Sensitive-field context can be reviewed when forms and tracking are retained together.", "near_term_supported"]
@@ -5640,7 +5725,7 @@ function buildBetaRegulatoryChecklistAreas(lenses: BetaRegulatoryLens[]) {
         ["targeted_ads", "Targeted advertising signals", "Adtech, retargeting, social pixels, and cross-site measurement are eligible when projected through unified findings.", "currently_supported"],
         ["profiling_cues", "Profiling disclosure cues", "Profiling or automated decision-making cues require retained policy text evidence.", "near_term_supported"],
         ["sensitive_context", "Sensitive data collection context", "Sensitive forms or field patterns are reviewed only when retained from the public-web path.", "near_term_supported"],
-        ["vendor_alignment", "Vendor disclosure alignment", "Runtime vendors must be compared with retained public disclosures through WC01 normalized findings.", "near_term_supported"],
+        ["vendor_alignment", "Vendor disclosure alignment", "Runtime vendors must be compared with retained public disclosures through normalized scanner findings.", "near_term_supported"],
         ["post_opt_out", "Post-opt-out tracking behavior", "Before/after tracking comparison requires a confirmed opt-out or reject action.", "near_term_supported"],
         ["control_accessibility", "Privacy control accessibility", "Basic accessibility signals on privacy controls are eligible when retained.", "currently_supported"]
       ])
@@ -6009,7 +6094,7 @@ export function SharedScanDetailView({
         whatThisMeans: executiveAccessLimitationNotice.review.whatThisMeans
       }
     : null;
-  const executivePolicySurfaces = deriveExecutivePolicySurfaces(scanRecord.policyEnrichment);
+  const executivePolicySurfaces = deriveExecutivePolicySurfaces(scanRecord.policyEnrichment, scanRecord.snapshot, runtimeArtifacts);
   const executiveScanInterruptions = deriveExecutiveScanInterruptions(scanRecord.snapshot, scanRecord.events);
   const executiveCoverageLevel =
     scanRecord.snapshot && hasMaterialHomepageAccessLimitation(scanRecord.snapshot)
@@ -6148,15 +6233,12 @@ export function SharedScanDetailView({
         }
         statusLabel={isIncompleteScanCoverage ? "Limited" : undefined}
         statusTone={isIncompleteScanCoverage ? "info" : undefined}
+        scanFromLabel={scanRecord.scan.scanFromLabel}
+        scanFromValue={scanRecord.scan.scanFromValue}
         status={scanRecord.scan.status}
         title={
           <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
             <span className="break-words">Scan: {scanRecord.scan.domainHostname ?? "Unknown website"}</span>
-            {scanRecord.scan.scanFromValue !== "default" ? (
-              <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-800">
-                Scan from: {scanRecord.scan.scanFromLabel}
-              </span>
-            ) : null}
             <InfoTip
               align="start"
               className="translate-y-0.5 align-middle"

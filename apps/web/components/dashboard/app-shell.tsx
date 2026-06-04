@@ -259,7 +259,7 @@ export function AppShell({
                 </button>
 
                 {accountMenuOpen ? (
-                  <div className="absolute right-0 z-[120] mt-3 w-52 overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 p-2 shadow-[0_24px_60px_rgba(2,6,23,0.65)]">
+                  <div className="absolute right-0 z-[120] mt-0 w-52 overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 p-2 shadow-[0_24px_60px_rgba(2,6,23,0.65)]">
                     <div className="space-y-1">
                       <Link
                         href="/app/settings"

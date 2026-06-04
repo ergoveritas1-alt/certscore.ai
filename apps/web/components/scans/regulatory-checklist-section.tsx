@@ -49,12 +49,12 @@ export function RegulatoryChecklistSection({ showAdvancedEvidenceToggle = false,
 
   return (
     <section className="space-y-0">
-      <div className="relative z-10 rounded-t-3xl border border-b-0 border-slate-200 bg-white px-3 py-3 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.45)]">
+      <div className="relative overflow-hidden rounded-t-3xl border border-b-0 border-slate-200 bg-white px-4 py-4 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.45)]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold text-slate-950">Regulatory checklists</p>
-              <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">
+              <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Regulatory checklists</p>
+              <span className="inline-flex shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">
                 Beta
               </span>
             </div>
