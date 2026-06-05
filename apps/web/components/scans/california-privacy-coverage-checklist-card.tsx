@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { cn } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { useRegulatoryChecklistAdvancedEvidence } from "./regulatory-checklist-advanced-evidence-context";
@@ -59,6 +60,11 @@ function getCaliforniaSummary(input: {
   items: CaliforniaPrivacyCoverageChecklistItem[];
   lensSummary?: string;
 }) {
+  const allRowsNotTestable = input.items.length > 0 && input.items.every((item) => item.status === "not_testable");
+  if (allRowsNotTestable) {
+    return "California privacy review was not scored because retained scanner evidence was not complete enough to evaluate the CCPA / CPRA checklist areas. The rows below preserve the missing source-signal reasons for follow-up.";
+  }
+
   const hasIssues = input.items.some((item) => item.status === "potential_gap" || item.status === "review_signal");
   if (input.lensSummary) {
     return `${input.lensSummary} CertScore reviewed sale/share, targeted advertising, opt-out availability, GPC handling, sensitive personal information controls, and notice alignment using retained public-web evidence.`;
@@ -75,6 +81,7 @@ function getSummaryTitle(input: {
   toneClass?: string;
 }) {
   const ratingBucket = typeof input.score === "number" ? Math.max(0, Math.min(5, input.score / 20)) : 0;
+  const scoreLabel = typeof input.score === "number" ? input.score : "Not testable";
   const gapCount = input.items.filter((item) => item.status === "potential_gap").length;
   const reviewCount = input.items.filter((item) => item.status === "review_signal").length;
   const observedCount = input.items.filter((item) =>
@@ -94,7 +101,7 @@ function getSummaryTitle(input: {
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <p className="text-base font-semibold tracking-normal text-slate-950">California CCPA / CPRA</p>
           <span className="shrink-0 whitespace-nowrap text-sm font-semibold tracking-normal text-slate-950">
-            Score: <span className="text-[1.3rem] leading-none">{input.score ?? "—"}</span>
+            Score: <span className="text-[1.3rem] leading-none">{scoreLabel}</span>
             {typeof input.score === "number" ? <span className="text-[0.8rem] font-medium text-slate-500">/100</span> : null}
           </span>
         </div>
@@ -137,14 +144,19 @@ export function CaliforniaPrivacyCoverageChecklistCard({
   items
 }: CaliforniaPrivacyCoverageChecklistCardProps) {
   const { expandAllAdvancedEvidence } = useRegulatoryChecklistAdvancedEvidence();
-  const score = typeof californiaLens?.score === "number" ? californiaLens.score : null;
-  const ratingLabel = californiaLens?.ratingLabel ?? "Not scored";
-  const summary = getCaliforniaSummary({ items, lensSummary: californiaLens?.summary });
+  const hasTestableCaliforniaEvidence = items.some((item) => item.status !== "not_testable");
+  const score = hasTestableCaliforniaEvidence && typeof californiaLens?.score === "number" ? californiaLens.score : null;
+  const ratingLabel = hasTestableCaliforniaEvidence ? californiaLens?.ratingLabel ?? "Not scored" : "Not testable";
+  const toneClass = hasTestableCaliforniaEvidence ? californiaLens?.toneClass : "border-slate-300 bg-slate-100 text-slate-700";
+  const summary = getCaliforniaSummary({
+    items,
+    lensSummary: hasTestableCaliforniaEvidence ? californiaLens?.summary : undefined
+  });
 
   return (
     <CollapsibleSectionCard
       defaultOpen={defaultOpen}
-      title={getSummaryTitle({ items, ratingLabel, score, toneClass: californiaLens?.toneClass })}
+      title={getSummaryTitle({ items, ratingLabel, score, toneClass })}
       contentClassName="space-y-4"
     >
       <section className="rounded-lg border border-slate-200 bg-white p-4">
