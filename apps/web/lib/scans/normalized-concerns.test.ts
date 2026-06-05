@@ -1343,3 +1343,107 @@ test("normalizes snake_case validation rows before building concerns", () => {
   assert.equal(concerns[0]?.originType, "validation_rule");
   assert.equal(concerns[0]?.evidenceBundle.rawEvidence?.preconsent_tracking_detected, true);
 });
+
+test("California runtime evidence is silent when no retained California packet exists", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {},
+    validationFindings: []
+  });
+
+  assert.equal(concerns.some((concern) => concern.originKey.startsWith("california_privacy.")), false);
+});
+
+test("California CPRA opt-out gaps require applicability and inspected choice-control evidence", () => {
+  const incompleteConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      cpraCbaOptOutEvidence: {
+        cbaVendorTier1: ["adsrvr.org"],
+        optOutUiResult: "absent",
+        policyCbaLanguage: "full_cba_language"
+      }
+    },
+    validationFindings: []
+  });
+  assert.equal(
+    incompleteConcerns.some((concern) => concern.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing"),
+    false
+  );
+
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      cpraCbaOptOutEvidence: {
+        cbaVendorTier1: ["adsrvr.org"],
+        choiceControlsInspected: true,
+        optOutControlFound: false,
+        optOutUiResult: "absent",
+        policyCbaLanguage: "full_cba_language",
+        privacyChoiceSearchUrls: ["https://example.test/privacy"]
+      }
+    },
+    validationFindings: []
+  });
+  const concern = concerns.find((candidate) => candidate.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing");
+
+  assert.ok(concern);
+  assert.equal(concern.originKey, "california_privacy.sale_share_control.potential_gap");
+  assert.equal(concern.promotionEligibility, "eligible");
+  assert.equal(concern.externalSurfacingEligibility, "eligible");
+  assert.equal(concern.evidenceBundle.rawEvidence?.californiaEvidenceFamily, "sale_share_control");
+});
+
+test("California GPC runtime evidence flows through unified findings when retained support is concrete", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      gpcVerification: {
+        gpcRecognitionObserved: false,
+        gpcSignalSent: true,
+        policyMentions: ["This policy says Global Privacy Control opt-out preference signals are honored."],
+        thirdPartyCookieCountDelta: 1,
+        trackerCountDelta: 2
+      }
+    },
+    validationFindings: []
+  });
+  const concern = concerns.find((candidate) => candidate.suggestedUnifiedFindingId === "gpc_signal_not_honored");
+  const packets = buildUnifiedFindingPackets({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      gpcVerification: {
+        gpcRecognitionObserved: false,
+        gpcSignalSent: true,
+        policyMentions: ["This policy says Global Privacy Control opt-out preference signals are honored."],
+        thirdPartyCookieCountDelta: 1,
+        trackerCountDelta: 2
+      }
+    },
+    validationFindings: []
+  });
+  const packet = packets.find((candidate) => candidate.unifiedFindingId === "gpc_signal_not_honored");
+
+  assert.equal(concern?.evidenceBundle.rawEvidence?.californiaEvidenceFamily, "gpc_handling");
+  assert.ok(packet);
+});
+
+test("California rights request evidence creates a positive rights-path finding without absence logic", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        consumerRightsRequestMethodObserved: true,
+        consumerRightsRequestMethods: ["access_request", "delete_request"],
+        consumerRightsRequestSnippets: ["Submit a privacy request to access, delete, or correct your personal information."],
+        consumerRightsRequestUrls: ["https://example.test/privacy-request"]
+      }
+    },
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+  const packet = packets.find((candidate) => candidate.unifiedFindingId === "privacy_rights_path_present");
+
+  assert.ok(packet);
+  assert.equal(packets.some((candidate) => /missing/.test(candidate.unifiedFindingId)), false);
+});

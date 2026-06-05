@@ -381,6 +381,49 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function getEvidenceStringArray(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  return uniqueStrings(keys.flatMap((key) => {
+    const value = record?.[key];
+    if (typeof value === "string") {
+      return [value];
+    }
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+    }
+    return [];
+  }));
+}
+
+function getEvidenceStringValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function getEvidenceBooleanValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getEvidenceNumberValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
 function formatConsentEvidenceStepSnippet(step: unknown, prefix: string) {
   if (typeof step === "string" && step.trim().length > 0) {
     return `${prefix}: ${step.trim()}`;
@@ -2222,6 +2265,27 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   ) {
     counts.childrenPrivacyRiskScore = normalizedFallbackEvidence.childrenPrivacyRiskScore;
   }
+  const gpcVerificationEvidence =
+    normalizedFallbackEvidence.gpcVerification && typeof normalizedFallbackEvidence.gpcVerification === "object" && !Array.isArray(normalizedFallbackEvidence.gpcVerification)
+      ? normalizedFallbackEvidence.gpcVerification as Record<string, unknown>
+      : normalizedFallbackEvidence.gpc_verification && typeof normalizedFallbackEvidence.gpc_verification === "object" && !Array.isArray(normalizedFallbackEvidence.gpc_verification)
+        ? normalizedFallbackEvidence.gpc_verification as Record<string, unknown>
+        : null;
+  if (gpcVerificationEvidence) {
+    for (const [countKey, keys] of Object.entries({
+      baselineThirdPartyCookieCount: ["baselineThirdPartyCookieCount", "baseline_third_party_cookie_count"],
+      baselineTrackerCount: ["baselineTrackerCount", "baseline_tracker_count"],
+      gpcThirdPartyCookieCount: ["gpcThirdPartyCookieCount", "gpc_third_party_cookie_count"],
+      gpcTrackerCount: ["gpcTrackerCount", "gpc_tracker_count"],
+      thirdPartyCookieCountDelta: ["thirdPartyCookieCountDelta", "third_party_cookie_count_delta"],
+      trackerCountDelta: ["trackerCountDelta", "tracker_count_delta"]
+    })) {
+      const value = getEvidenceNumberValue(gpcVerificationEvidence, keys);
+      if (value !== null) {
+        counts[countKey] = value;
+      }
+    }
+  }
   if (accessibilityExampleCoverage.representativeExampleCount > 0) {
     counts.representativeAxeExampleCount = accessibilityExampleCoverage.representativeExampleCount;
     counts.representativeAxePageCount = accessibilityExampleCoverage.distinctPageCount;
@@ -2315,6 +2379,34 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   addCpraEntity("policyCbaLanguage", cpraCbaOptOutEvidence.policyCbaLanguage ?? cpraCbaOptOutEvidence.policy_cba_language);
   addCpraEntity("policyUiCongruent", cpraCbaOptOutEvidence.policyUiCongruent ?? cpraCbaOptOutEvidence.policy_ui_congruent);
   addCpraEntity("scanOriginGeo", cpraCbaOptOutEvidence.scanOriginGeo ?? cpraCbaOptOutEvidence.scan_origin_geo);
+  addCpraEntity("cpraIconDetected", cpraCbaOptOutEvidence.cpraIconDetected ?? cpraCbaOptOutEvidence.cpra_icon_detected);
+  addCpraEntity("gpcCbaHonored", cpraCbaOptOutEvidence.gpcCbaHonored ?? cpraCbaOptOutEvidence.gpc_cba_honored);
+  addCpraEntity("findingSeverity", cpraCbaOptOutEvidence.findingSeverity ?? cpraCbaOptOutEvidence.finding_severity);
+  addCpraEntity("limitation", cpraCbaOptOutEvidence.limitation);
+  const cpraPrivacyChoiceSearchUrls = getEvidenceStringArray(cpraCbaOptOutEvidence, [
+    "privacyChoiceSearchUrls",
+    "privacy_choice_search_urls",
+    "gpcOptOutDiscoveryAttemptUrls",
+    "gpc_opt_out_discovery_attempt_urls"
+  ]);
+  if (cpraPrivacyChoiceSearchUrls.length > 0) {
+    entities.privacyChoiceSearchUrls = uniqueStrings([
+      ...(entities.privacyChoiceSearchUrls ?? []),
+      ...cpraPrivacyChoiceSearchUrls
+    ]);
+  }
+  const cpraOptOutUrls = getEvidenceStringArray(cpraCbaOptOutEvidence, [
+    "optOutLinkHref",
+    "opt_out_link_href",
+    "pageUrl",
+    "page_url"
+  ]);
+  if (cpraOptOutUrls.length > 0) {
+    entities.cpraOptOutEvidenceUrls = uniqueStrings([
+      ...(entities.cpraOptOutEvidenceUrls ?? []),
+      ...cpraOptOutUrls
+    ]);
+  }
   if (Array.isArray(cpraCbaOptOutEvidence.advertisingSharingVendors)) {
     entities.advertisingSharingVendors = uniqueStrings([
       ...(entities.advertisingSharingVendors ?? []),
@@ -2326,6 +2418,103 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       ...(entities.advertisingSharingVendors ?? []),
       ...(cpraCbaOptOutEvidence.advertising_sharing_vendors as string[])
     ]);
+  }
+  const cpraVendorTiers = getEvidenceStringArray(cpraCbaOptOutEvidence, [
+    "cbaVendorTier1",
+    "cba_vendor_tier1",
+    "cbaVendorTier2",
+    "cba_vendor_tier2"
+  ]);
+  if (cpraVendorTiers.length > 0) {
+    entities.advertisingSharingVendors = uniqueStrings([
+      ...(entities.advertisingSharingVendors ?? []),
+      ...cpraVendorTiers
+    ]);
+  }
+  const californiaEvidence = normalizedFallbackEvidence.californiaPrivacyEvidence &&
+    typeof normalizedFallbackEvidence.californiaPrivacyEvidence === "object" &&
+    !Array.isArray(normalizedFallbackEvidence.californiaPrivacyEvidence)
+      ? normalizedFallbackEvidence.californiaPrivacyEvidence as Record<string, unknown>
+      : normalizedFallbackEvidence.california_privacy_evidence &&
+          typeof normalizedFallbackEvidence.california_privacy_evidence === "object" &&
+          !Array.isArray(normalizedFallbackEvidence.california_privacy_evidence)
+        ? normalizedFallbackEvidence.california_privacy_evidence as Record<string, unknown>
+        : normalizedFallbackEvidence;
+  const addCaliforniaEntityArray = (entityKey: string, keys: string[]) => {
+    const values = getEvidenceStringArray(californiaEvidence, keys);
+    if (values.length > 0) {
+      entities[entityKey] = uniqueStrings([...(entities[entityKey] ?? []), ...values]);
+    }
+  };
+  const addCaliforniaEntityScalar = (entityKey: string, keys: string[]) => {
+    const stringValue = getEvidenceStringValue(californiaEvidence, keys);
+    const booleanValue = stringValue === null ? getEvidenceBooleanValue(californiaEvidence, keys) : null;
+    if (stringValue !== null) {
+      entities[entityKey] = uniqueStrings([...(entities[entityKey] ?? []), stringValue]);
+    } else if (booleanValue !== null) {
+      entities[entityKey] = uniqueStrings([...(entities[entityKey] ?? []), String(booleanValue)]);
+    }
+  };
+  addCaliforniaEntityScalar("californiaEvidenceFamily", ["californiaEvidenceFamily", "california_evidence_family"]);
+  addCaliforniaEntityScalar("californiaReviewArea", ["californiaReviewArea", "california_review_area", "regulatoryReviewArea", "regulatory_review_area"]);
+  addCaliforniaEntityArray("privacyNoticeUrls", ["privacyNoticeUrls", "privacy_notice_urls"]);
+  addCaliforniaEntityArray("collectionContextUrls", ["collectionContextUrls", "collection_context_urls"]);
+  addCaliforniaEntityArray("collectionContextTypes", ["collectionContextTypes", "collection_context_types"]);
+  addCaliforniaEntityArray("saleShareRequestUrls", ["saleShareRequestUrls", "sale_share_request_urls"]);
+  addCaliforniaEntityArray("saleShareCookieNames", ["saleShareCookieNames", "sale_share_cookie_names"]);
+  addCaliforniaEntityArray("sensitivePiCategories", ["sensitivePiCategories", "sensitive_pi_categories"]);
+  addCaliforniaEntityArray("sensitivePiContextUrls", ["sensitivePiContextUrls", "sensitive_pi_context_urls"]);
+  addCaliforniaEntityArray("sensitiveThirdPartyTrackingVendors", ["sensitiveThirdPartyTrackingVendors", "sensitive_third_party_tracking_vendors"]);
+  addCaliforniaEntityArray("sensitiveThirdPartyTrackingRequestUrls", ["sensitiveThirdPartyTrackingRequestUrls", "sensitive_third_party_tracking_request_urls"]);
+  addCaliforniaEntityArray("consumerRightsRequestMethodUrls", [
+    "consumerRightsRequestMethodUrls",
+    "consumer_rights_request_method_urls",
+    "consumerRightsRequestUrls",
+    "consumer_rights_request_urls"
+  ]);
+  addCaliforniaEntityArray("consumerRightsRequestMethodTypes", [
+    "consumerRightsRequestMethodTypes",
+    "consumer_rights_request_method_types",
+    "consumerRightsRequestMethods",
+    "consumer_rights_request_methods"
+  ]);
+  addCaliforniaEntityArray("policyRuntimeDisclosureSnippets", ["policyRuntimeDisclosureSnippets", "policy_runtime_disclosure_snippets"]);
+  addCaliforniaEntityArray("unmatchedRuntimeDisclosureVendors", ["unmatchedRuntimeDisclosureVendors", "unmatched_runtime_disclosure_vendors"]);
+  addCaliforniaEntityScalar("collectionNoticeCueObserved", ["collectionNoticeCueObserved", "collection_notice_cue_observed"]);
+  addCaliforniaEntityScalar("collectionNoticeCueText", ["collectionNoticeCueText", "collection_notice_cue_text"]);
+  addCaliforniaEntityScalar("doNotSellSharePathObserved", ["doNotSellSharePathObserved", "do_not_sell_share_path_observed"]);
+  addCaliforniaEntityScalar("doNotSellSharePathLabel", ["doNotSellSharePathLabel", "do_not_sell_share_path_label"]);
+  addCaliforniaEntityScalar("doNotSellSharePathUrl", ["doNotSellSharePathUrl", "do_not_sell_share_path_url"]);
+  addCaliforniaEntityScalar("sensitivePiContextObserved", ["sensitivePiContextObserved", "sensitive_pi_context_observed"]);
+  addCaliforniaEntityScalar("sensitiveThirdPartyTrackingObserved", ["sensitiveThirdPartyTrackingObserved", "sensitive_third_party_tracking_observed"]);
+  addCaliforniaEntityScalar("limitUseSensitivePiPathObserved", ["limitUseSensitivePiPathObserved", "limit_use_sensitive_pi_path_observed"]);
+  addCaliforniaEntityScalar("limitUseSensitivePiPathUrl", ["limitUseSensitivePiPathUrl", "limit_use_sensitive_pi_path_url"]);
+  if (gpcVerificationEvidence) {
+    addCaliforniaEntityScalar("gpcStatus", ["status"]);
+    const gpcStatus = getEvidenceStringValue(gpcVerificationEvidence, ["status"]);
+    if (gpcStatus) {
+      entities.gpcStatus = uniqueStrings([...(entities.gpcStatus ?? []), gpcStatus]);
+    }
+    for (const [entityKey, keys] of Object.entries({
+      gpcEvidenceUrls: ["evidenceUrls", "evidence_urls"],
+      gpcPolicyMentions: ["policyMentions", "policy_mentions"]
+    })) {
+      const values = getEvidenceStringArray(gpcVerificationEvidence, keys);
+      if (values.length > 0) {
+        entities[entityKey] = uniqueStrings([...(entities[entityKey] ?? []), ...values]);
+      }
+    }
+    const gpcSignalSent = getEvidenceBooleanValue(gpcVerificationEvidence, ["gpcSignalSent", "gpc_signal_sent"]);
+    const gpcRecognitionObserved = getEvidenceBooleanValue(gpcVerificationEvidence, [
+      "gpcRecognitionObserved",
+      "gpc_recognition_observed"
+    ]);
+    if (gpcSignalSent !== null) {
+      entities.gpcSignalSent = uniqueStrings([...(entities.gpcSignalSent ?? []), String(gpcSignalSent)]);
+    }
+    if (gpcRecognitionObserved !== null) {
+      entities.gpcRecognitionObserved = uniqueStrings([...(entities.gpcRecognitionObserved ?? []), String(gpcRecognitionObserved)]);
+    }
   }
   if (Array.isArray(normalizedFallbackEvidence.relatedVendors)) {
     entities.relatedVendors = uniqueStrings(normalizedFallbackEvidence.relatedVendors as string[]);
@@ -6881,6 +7070,7 @@ function resolveUnifiedFindingForCandidate(candidate: UnifiedFindingCandidate | 
 export function buildUnifiedFindingPackets(input: {
   domainContext?: ScanDomainContext;
   reviewFindingCandidates: UnifiedFindingCandidate[];
+  runtimeArtifacts?: Record<string, unknown> | null;
   scanEvents?: UnifiedFindingScanEvent[];
   validationFindings: ScanValidationFinding[];
 }) {
@@ -6898,6 +7088,7 @@ export function buildUnifiedFindingPackets(input: {
   const normalizedConcerns = buildNormalizedConcerns({
     domainContext: input.domainContext,
     reviewFindingCandidates: [...reviewFindingCandidates, ...familyPacketCandidates, ...synthesizedCandidates],
+    runtimeArtifacts: input.runtimeArtifacts,
     validationFindings: input.validationFindings
   });
   const normalizedCandidates = buildUnifiedFindingCandidatesFromConcerns(normalizedConcerns);
@@ -6974,6 +7165,7 @@ export function buildUnifiedFindingDisplayPackets(input: {
   mergedSignals?: MergedSignalRecord[];
   policyEnrichment?: Array<Record<string, unknown>>;
   reviewFindingCandidates: UnifiedFindingCandidate[];
+  runtimeArtifacts?: Record<string, unknown> | null;
   scanEvents?: UnifiedFindingScanEvent[];
   validationFindings: ScanValidationFinding[];
   validationFindingLookup: Map<string, ScanValidationFinding>;
@@ -6996,6 +7188,7 @@ export function buildUnifiedFindingDisplayPackets(input: {
       ...policyEnrichmentMissingContactCandidates,
       ...policyEnrichmentClarityCandidates
     ],
+    runtimeArtifacts: input.runtimeArtifacts,
     scanEvents: input.scanEvents,
     validationFindings: input.validationFindings
   });

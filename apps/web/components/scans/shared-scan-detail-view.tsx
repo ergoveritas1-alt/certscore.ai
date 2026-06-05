@@ -140,6 +140,7 @@ import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveCaliforniaPrivacyCoverageChecklist } from "../../lib/scans/california-privacy-coverage-checklist";
 import { deriveCaliforniaPrivacyCoveragePolicyOutcomes } from "../../lib/scans/california-privacy-coverage-policy";
+import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import {
@@ -6165,10 +6166,16 @@ export function SharedScanDetailView({
     scanCompleted: scanRecord.scan.status === "completed",
     unifiedFindings: findingEvidenceDiagnostics
   });
+  const californiaPrivacyCoverageConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
   const californiaPrivacyCoverageChecklist = deriveCaliforniaPrivacyCoverageChecklist({
     coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
     coverageOutcomes: deriveCaliforniaPrivacyCoveragePolicyOutcomes({
       coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
+      normalizedConcerns: californiaPrivacyCoverageConcerns,
       runtimeArtifacts,
       scanCompleted: scanRecord.scan.status === "completed"
     }),
@@ -6350,8 +6357,8 @@ export function SharedScanDetailView({
                   />
                 ),
                 id: "california-privacy",
-                label: "California CCPA / CPRA",
-                shortLabel: "California"
+                label: "CCPA/CPRA",
+                shortLabel: "CCPA/CPRA"
               },
               {
                 content: betaRegulatoryChecklistAreaById.get("ftc-dark-patterns") ? (
@@ -6437,7 +6444,7 @@ export function SharedScanDetailView({
                 label: "Singapore PDPA",
                 shortLabel: "Singapore"
               }
-            ].filter((tab) => canViewAllRegulatoryChecklistOptions || tab.id === "gdpr-eprivacy")}
+            ].filter((tab) => canViewAllRegulatoryChecklistOptions || tab.id === "gdpr-eprivacy" || tab.id === "california-privacy")}
           />
           
         </>

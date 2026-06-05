@@ -53,7 +53,7 @@ export function RegulatoryChecklistSection({ showAdvancedEvidenceToggle = false,
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Regulatory checklists</p>
+              <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Regulatory Review</p>
               <span className="inline-flex shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">
                 Beta
               </span>

@@ -22,16 +22,14 @@ type CaliforniaPrivacyCoverageChecklistCardProps = {
 
 function getStatusBadgeClasses(status: CaliforniaPrivacyCoverageChecklistStatus) {
   switch (status) {
-    case "Gap observed":
+    case "potential_gap":
       return "border-amber-200 bg-amber-50 text-amber-900";
-    case "Review signal":
+    case "review_signal":
       return "border-indigo-200 bg-indigo-50 text-indigo-900";
-    case "Insufficient evidence":
-      return "border-violet-200 bg-violet-50 text-violet-900";
-    case "Not testable":
-    case "Not applicable":
+    case "not_testable":
+    case "not_applicable":
       return "border-slate-300 bg-slate-100 text-slate-700";
-    case "Not observed":
+    case "not_observed":
       return "border-slate-200 bg-white text-slate-600";
     default:
       return "border-emerald-200 bg-emerald-50 text-emerald-900";
@@ -43,6 +41,7 @@ function stringifyEvidenceJson(item: CaliforniaPrivacyCoverageChecklistItem) {
     {
       coverageArea: item.label,
       status: item.status,
+      statusLabel: item.statusLabel,
       ...item.criticalEvidence
     },
     (_key, value) => typeof value === "bigint" ? value.toString() : value,
@@ -60,7 +59,7 @@ function getCaliforniaSummary(input: {
   items: CaliforniaPrivacyCoverageChecklistItem[];
   lensSummary?: string;
 }) {
-  const hasIssues = input.items.some((item) => item.status === "Gap observed" || item.status === "Review signal");
+  const hasIssues = input.items.some((item) => item.status === "potential_gap" || item.status === "review_signal");
   if (input.lensSummary) {
     return `${input.lensSummary} CertScore reviewed sale/share, targeted advertising, opt-out availability, GPC handling, sensitive personal information controls, and notice alignment using retained public-web evidence.`;
   }
@@ -76,14 +75,16 @@ function getSummaryTitle(input: {
   toneClass?: string;
 }) {
   const ratingBucket = typeof input.score === "number" ? Math.max(0, Math.min(5, input.score / 20)) : 0;
-  const gapCount = input.items.filter((item) => item.status === "Gap observed").length;
-  const reviewCount = input.items.filter((item) => item.status === "Review signal" || item.status === "Insufficient evidence").length;
-  const checkedCount = input.items.filter((item) => item.status === "Checked" || item.status === "Not observed" || item.status === "Not applicable").length;
-  const notTestableCount = input.items.filter((item) => item.status === "Not testable").length;
+  const gapCount = input.items.filter((item) => item.status === "potential_gap").length;
+  const reviewCount = input.items.filter((item) => item.status === "review_signal").length;
+  const observedCount = input.items.filter((item) =>
+    item.status === "observed" || item.status === "not_observed" || item.status === "not_applicable"
+  ).length;
+  const notTestableCount = input.items.filter((item) => item.status === "not_testable").length;
   const statusSummary = [
-    { className: "border-rose-200 bg-rose-50 text-rose-700", count: gapCount, label: "gaps" },
+    { className: "border-rose-200 bg-rose-50 text-rose-700", count: gapCount, label: "potential gaps" },
     { className: "border-indigo-200 bg-indigo-50 text-indigo-700", count: reviewCount, label: "review" },
-    { className: "border-emerald-200 bg-emerald-50 text-emerald-700", count: checkedCount, label: "checked" },
+    { className: "border-emerald-200 bg-emerald-50 text-emerald-700", count: observedCount, label: "observed" },
     { className: "border-slate-300 bg-slate-100 text-slate-600", count: notTestableCount, label: "not testable" }
   ].filter((item) => item.count > 0);
 
@@ -161,7 +162,7 @@ export function CaliforniaPrivacyCoverageChecklistCard({
               <div className="min-w-0 space-y-2">
                 <p className="font-medium text-slate-950">{item.label}</p>
                 <span className={cn("inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]", getStatusBadgeClasses(item.status))}>
-                  {item.status}
+                  {item.statusLabel}
                 </span>
                 <p className="text-xs leading-5 text-slate-500 md:hidden">{item.limitation}</p>
               </div>

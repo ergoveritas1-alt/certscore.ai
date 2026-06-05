@@ -15,8 +15,8 @@ function renderTabs(includeAdminOnlyTabs: boolean) {
     {
       content: createElement("div", null, "California checklist"),
       id: "california-privacy",
-      label: "California",
-      shortLabel: "California"
+      label: "CCPA/CPRA",
+      shortLabel: "CCPA/CPRA"
     },
     {
       content: createElement("div", null, "FTC checklist"),
@@ -30,7 +30,7 @@ function renderTabs(includeAdminOnlyTabs: boolean) {
       id: "uk-gdpr-pecr",
       label: "UK GDPR / PECR"
     }
-  ].filter((tab) => includeAdminOnlyTabs || tab.id === "gdpr-eprivacy");
+  ].filter((tab) => includeAdminOnlyTabs || tab.id === "gdpr-eprivacy" || tab.id === "california-privacy");
 
   return renderToStaticMarkup(createElement(RegulatoryChecklistSection, {
     showAdvancedEvidenceToggle: true,
@@ -38,12 +38,13 @@ function renderTabs(includeAdminOnlyTabs: boolean) {
   }));
 }
 
-test("RegulatoryChecklistSection can render only GDPR / ePrivacy for non-admin viewers", () => {
+test("RegulatoryChecklistSection can render baseline privacy options for non-admin viewers", () => {
   const html = renderTabs(false);
 
   assert.match(html, /GDPR \/ ePrivacy/);
+  assert.match(html, /Regulatory Review/);
   assert.match(html, /Expand all/);
-  assert.doesNotMatch(html, /California/);
+  assert.match(html, /CCPA\/CPRA/);
   assert.doesNotMatch(html, /FTC/);
   assert.doesNotMatch(html, /UK GDPR \/ PECR/);
   assert.doesNotMatch(html, />More</);
@@ -53,8 +54,9 @@ test("RegulatoryChecklistSection can render all checklist options for admin view
   const html = renderTabs(true);
 
   assert.match(html, /GDPR \/ ePrivacy/);
+  assert.match(html, /Regulatory Review/);
   assert.match(html, /Expand all/);
-  assert.match(html, /California/);
+  assert.match(html, /CCPA\/CPRA/);
   assert.match(html, /FTC/);
   assert.match(html, /UK GDPR \/ PECR/);
   assert.match(html, />More</);

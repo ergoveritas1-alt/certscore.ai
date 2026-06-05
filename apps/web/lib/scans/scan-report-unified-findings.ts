@@ -2564,6 +2564,7 @@ export function buildScanReportUnifiedFindingState(
     mergedSignals: scanRecord.mergedSignals,
     policyEnrichment: scanRecord.policyEnrichment,
     reviewFindingCandidates,
+    runtimeArtifacts,
     scanEvents: scanRecord.events,
     validationFindings: unlinkedValidationFindings,
     validationFindingLookup

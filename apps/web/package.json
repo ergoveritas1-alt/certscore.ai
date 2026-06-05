@@ -23,6 +23,7 @@
     "audit:preconsent-reconciliation": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/reconcile-preconsent-tracking.ts",
     "audit:cookie-evidence-debug": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-cookie-evidence-debug.ts",
     "audit:fingerprinting-evidence-coverage": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-fingerprinting-evidence-coverage.ts",
+    "california:replay": "node --enable-source-maps --import tsx ./scripts/california-phase2-replay.ts",
     "review:cookie-disclosure-gap-urls": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/review-cookie-disclosure-gap-urls.ts",
     "audit:urlscan-supplements": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-urlscan-supplements.ts",
     "review:production-finding-surfacing": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/review-production-finding-surfacing.ts",

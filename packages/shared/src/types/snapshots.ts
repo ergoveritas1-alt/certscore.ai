@@ -832,6 +832,9 @@ export type GpcVerification = {
   gpcThirdPartyCookieCount: number | null;
   trackerCountDelta: number | null;
   thirdPartyCookieCountDelta: number | null;
+  gpcSignalSent?: boolean | null;
+  gpcRecognitionObserved?: boolean | null;
+  policyMentions?: string[];
   evidenceUrls: string[];
 };
 
@@ -856,6 +859,8 @@ export type CpraCbaOptOutEvidence = {
   optOutLinkHref: string | null;
   cpraIconDetected: boolean;
   gpcCbaHonored: boolean;
+  privacyChoiceSearchUrls?: string[];
+  gpcOptOutDiscoveryAttemptUrls?: string[];
   policyCbaLanguage: CpraPolicyCbaLanguage;
   policyUiCongruent: boolean;
   findingSeverity: "critical" | "high" | "medium";
@@ -867,26 +872,179 @@ export type CpraCbaOptOutEvidence = {
 export type CaliforniaPrivacyEvidence = {
   privacyNoticeObserved: boolean | null;
   privacyNoticeUrls: string[];
+  privacyNoticeSourceUrls?: string[];
+  privacyNoticeAttemptedUrls?: string[];
+  privacyNoticeDiscoveryEvidence?: {
+    attempted: boolean;
+    attemptedPrivacyNoticeUrls: string[];
+    attemptedUrls: string[];
+    blockedUrls: string[];
+    failedUrls: string[];
+    homepageCandidateCount: number;
+    homepageFetchStatus: string | null;
+    legalHubCandidateCount: number;
+    legalHubFetchStatus: string | null;
+    legalHubTargetCount: number;
+    legalHubUrl: string | null;
+    privacyTargetAttempted: boolean;
+    privacyTargetVerified: boolean;
+    source: "passive_public_surface_verification";
+    usedUrlscanBackfill: boolean;
+    verifiedPrivacyNoticeUrls: string[];
+    verifiedSurfaceTargets: string[];
+  };
+  californiaNoticeCueObserved?: boolean | null;
+  californiaNoticeCueText?: string | null;
   collectionContextObserved: boolean | null;
   collectionNoticeCueObserved: boolean | null;
   collectionContextUrls: string[];
+  collectionContextTypes?: string[];
+  collectionEvidenceSources?: string[];
+  collectionFieldContexts?: Array<{
+    pageUrl: string;
+    fieldType: string | null;
+    fieldName: string | null;
+    fieldLabel: string | null;
+    source: "form_field" | "sensitive_field" | "pre_submit_capture";
+  }>;
+  collectionNoticeCueText?: string | null;
   saleShareRuntimeSignalsObserved: boolean | null;
   targetedAdvertisingSignalsObserved: boolean | null;
   advertisingSharingVendors: string[];
+  saleShareRequestUrls?: string[];
+  saleShareCookieNames?: string[];
   doNotSellSharePathObserved: boolean | null;
   doNotSellSharePathUrl: string | null;
   doNotSellSharePathLabel: string | null;
+  doNotSellShareUrls?: string[];
+  doNotSellShareLabels?: string[];
+  privacyChoiceUrls?: string[];
+  privacyChoiceLabels?: string[];
+  privacyChoicePathEvidence?: {
+    attempted: boolean;
+    observed: boolean;
+    searchScope:
+      | "homepage_footer_privacy_surfaces"
+      | "discovered_links"
+      | "consent_lifecycle_controls"
+      | "policy_links";
+    candidateCount: number;
+    candidateUrls: string[];
+    candidateLabels: string[];
+    selectedUrl: string | null;
+    selectedLabel: string | null;
+    sourceSignals: string[];
+    interactionAttempted: boolean;
+    interactionConfirmed: boolean | null;
+    interactionOutcome: string | null;
+    limitation: "discovery_only" | "interaction_attempted" | "not_tested";
+  };
+  privacyChoiceInteractionEvidence?: {
+    attempted: boolean;
+    pathObserved: boolean;
+    selectedUrl: string | null;
+    selectedLabel: string | null;
+    source: "cpra_ui" | "discovered_link" | "consent_lifecycle" | "none";
+    clickAttempted: boolean;
+    clickConfirmed: boolean | null;
+    clickDepth: number | null;
+    outcome:
+      | "opened_preference_center"
+      | "navigated_to_policy_or_notice"
+      | "no_ui_change"
+      | "click_failed"
+      | "ambiguous"
+      | "no_observed_path"
+      | "not_attempted";
+    pageUrl: string | null;
+    finalUrl: string | null;
+    visibleTextSnippets: string[];
+    preferenceCenterProbeUrl?: string | null;
+    preferenceCenterProbeFinalUrl?: string | null;
+    preferenceCenterProbeAttempts?: number | null;
+    preferenceCenterProbeErrorCategory?:
+      | "evaluate_failed"
+      | "page_unavailable"
+      | "read_timeout"
+      | "unknown"
+      | null;
+    preferenceCenterProbeReason?:
+      | "preference_text_observed"
+      | "category_controls_observed"
+      | "opt_out_action_observed"
+      | "save_control_observed"
+      | "no_matching_controls_or_text"
+      | "probe_error"
+      | null;
+    preferenceCenterVisibleTextSnippets?: string[];
+    preferenceCenterObserved?: boolean | null;
+    preferenceCenterCategoryLabels?: string[];
+    preferenceCenterToggleCount?: number | null;
+    saleShareToggleObserved?: boolean | null;
+    targetedAdvertisingToggleObserved?: boolean | null;
+    preferenceActionCandidateCount?: number | null;
+    preferenceActionCandidateLabels?: string[];
+    preferenceSaveCandidateCount?: number | null;
+    preferenceSaveCandidateLabels?: string[];
+    preferenceToggleCandidateCount?: number | null;
+    preferenceToggleCandidateLabels?: string[];
+    preferenceSaveControlObserved?: boolean | null;
+    preferenceSaveLabel?: string | null;
+    preferenceSaveAttempted?: boolean | null;
+    preferenceSaveConfirmed?: boolean | null;
+    preferenceActionLabel?: string | null;
+    preferenceActionAttempted?: boolean | null;
+    preferenceActionConfirmed?: boolean | null;
+    preferenceActionLimitation?:
+      | "no_preference_center_observed"
+      | "no_clear_opt_out_action"
+      | "ambiguous_preference_controls"
+      | "save_control_not_observed"
+      | "save_action_failed"
+      | "action_attempted"
+      | "not_attempted";
+    beforeTrackerCount: number | null;
+    afterTrackerCount: number | null;
+    beforeThirdPartyCookieCount: number | null;
+    afterThirdPartyCookieCount: number | null;
+    persistedTrackerVendors: string[];
+    newTrackerVendors: string[];
+    removedTrackerVendors: string[];
+    evidenceUrls: string[];
+    evidenceRefs: string[];
+    limitation:
+      | "validation_harness_only"
+      | "runtime_timeout"
+      | "no_observed_path"
+      | "click_only_no_post_window"
+      | "not_attempted";
+  };
   gpcTestRan: boolean;
   gpcSignalSent: boolean | null;
   gpcRecognitionObserved: boolean | null;
   gpcTrackingReductionObserved: boolean | null;
   sensitivePiContextObserved: boolean | null;
   sensitivePiCategories: string[];
+  sensitivePiContextUrls?: string[];
+  sensitiveThirdPartyTrackingObserved?: boolean | null;
+  sensitiveThirdPartyTrackingVendors?: string[];
+  sensitiveThirdPartyTrackingRequestUrls?: string[];
   limitUseSensitivePiPathObserved: boolean | null;
   limitUseSensitivePiPathUrl: string | null;
+  limitUseSensitivePiPathLabel?: string | null;
   optOutInteractionConfirmed: boolean | null;
+  optOutFrictionSignals?: string[];
+  optOutInteractionSteps?: ConsentInteractionEvidenceStep[];
   postOptOutTrackingReductionObserved: boolean | null;
   postOptOutTrackingPersisted: boolean | null;
+  postOptOutPersistedVendors?: string[];
+  postOptOutRequestUrls?: string[];
+  consumerRightsRequestMethodObserved?: boolean | null;
+  consumerRightsRequestMethodUrls?: string[];
+  consumerRightsRequestMethodTypes?: string[];
+  consumerRightsRequestMethodSnippets?: string[];
+  policyRuntimeDisclosureSnippets?: string[];
+  unmatchedRuntimeDisclosureVendors?: string[];
   affectedControlLabels?: string[];
   affectedControlRoles?: string[];
   affectedControlTypes?: string[];

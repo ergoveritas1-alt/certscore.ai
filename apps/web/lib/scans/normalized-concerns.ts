@@ -51,6 +51,10 @@ import type { ReviewFindingSeverity } from "./canonical-review-finding";
 import { deriveConcernPolicy } from "./concern-policy";
 import type { FetchQuality } from "./signal-fallback-evidence";
 import { normalizeScanValidationFinding, type ScanValidationFinding } from "./validation-review-linking";
+import type {
+  CaliforniaPrivacyEvidenceFamily,
+  CaliforniaPrivacyRegulatoryReviewArea
+} from "@website-signal-risk-scanner/shared";
 
 const MAX_POLICY_SNIPPET_LENGTH = 600;
 
@@ -66,6 +70,7 @@ function truncatePolicySnippet(value: string): string {
 export type NormalizedConcernOriginType =
   | "snapshot_signal"
   | "compatibility_signal"
+  | "runtime_artifact"
   | "policy_enrichment"
   | "document_semantic"
   | "section_review"
@@ -2179,9 +2184,856 @@ function buildCrossBorderTransferDisclosureGapCompanions(concerns: NormalizedCon
   ];
 }
 
+const CALIFORNIA_PRIVACY_REGULATORY_REVIEW_AREA: CaliforniaPrivacyRegulatoryReviewArea = "california_ccpa_cpra";
+
+function getRuntimeRecord(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  keys: string[]
+): Record<string, unknown> | null {
+  for (const key of keys) {
+    const value = runtimeArtifacts?.[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function getCaliforniaRuntimeBoolean(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getCaliforniaRuntimeString(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = getStringValue(record?.[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getCaliforniaRuntimeStringArray(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  return uniqueStrings(keys.flatMap((key) => {
+    const value = record?.[key];
+    if (typeof value === "string") {
+      return [value];
+    }
+    return getStringArrayEvidence(value);
+  }));
+}
+
+function getCaliforniaRuntimeNumber(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = getNumberValue(record?.[key]);
+    if (value !== null) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function makeCaliforniaRawEvidence(input: {
+  evidenceFamily: CaliforniaPrivacyEvidenceFamily;
+  retainedEvidence: Record<string, unknown>;
+  unifiedFindingId: string;
+}) {
+  return {
+    ...input.retainedEvidence,
+    californiaEvidenceFamily: input.evidenceFamily,
+    californiaReviewArea: CALIFORNIA_PRIVACY_REGULATORY_REVIEW_AREA,
+    regulatoryReviewArea: CALIFORNIA_PRIVACY_REGULATORY_REVIEW_AREA,
+    unifiedFindingId: input.unifiedFindingId
+  };
+}
+
+function hasCaliforniaCpraOptOutGapBasis(cpraEvidence: Record<string, unknown> | null) {
+  if (!cpraEvidence) {
+    return false;
+  }
+
+  const tier1 = getCaliforniaRuntimeStringArray(cpraEvidence, [
+    "cbaVendorTier1",
+    "cba_vendor_tier1",
+    "advertisingSharingVendors",
+    "advertising_sharing_vendors"
+  ]);
+  const tier2 = getCaliforniaRuntimeStringArray(cpraEvidence, ["cbaVendorTier2", "cba_vendor_tier2"]);
+  const optOutUiResult = getCaliforniaRuntimeString(cpraEvidence, ["optOutUiResult", "opt_out_ui_result"]);
+  const optOutControlFound = getCaliforniaRuntimeBoolean(cpraEvidence, [
+    "optOutControlFound",
+    "opt_out_control_found"
+  ]);
+  const choiceControlsInspected = getCaliforniaRuntimeBoolean(cpraEvidence, [
+    "choiceControlsInspected",
+    "choice_controls_inspected"
+  ]);
+  const policyCbaLanguage = getCaliforniaRuntimeString(cpraEvidence, [
+    "policyCbaLanguage",
+    "policy_cba_language"
+  ]);
+  const scanOriginGeo = getCaliforniaRuntimeString(cpraEvidence, ["scanOriginGeo", "scan_origin_geo"]);
+  const searchUrls = getCaliforniaRuntimeStringArray(cpraEvidence, [
+    "privacyChoiceSearchUrls",
+    "privacy_choice_search_urls",
+    "gpcOptOutDiscoveryAttemptUrls",
+    "gpc_opt_out_discovery_attempt_urls"
+  ]);
+  const suppressorApplied = cpraEvidence.suppressorApplied ?? cpraEvidence.suppressor_applied;
+
+  const vendorThresholdMet = tier1.length >= 1 || tier2.length >= 2;
+  const missingOrPartialControl =
+    optOutControlFound === false ||
+    optOutUiResult === "absent" ||
+    optOutUiResult === "generic_do_not_sell" ||
+    optOutUiResult === "partial_no_icon";
+  const cpraRelevantContext =
+    Boolean(policyCbaLanguage && policyCbaLanguage !== "absent") ||
+    optOutUiResult === "generic_do_not_sell" ||
+    optOutUiResult === "partial_no_icon" ||
+    /\b(?:ca|california)\b/i.test(scanOriginGeo ?? "") ||
+    searchUrls.length > 0;
+
+  return vendorThresholdMet && choiceControlsInspected === true && missingOrPartialControl && cpraRelevantContext && !suppressorApplied;
+}
+
+function buildCaliforniaPrivacyEvidenceConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const californiaEvidence = getRuntimeRecord(runtimeArtifacts, [
+    "californiaPrivacyEvidence",
+    "california_privacy_evidence"
+  ]);
+  const cpraEvidence = getRuntimeRecord(runtimeArtifacts, [
+    "cpraCbaOptOutEvidence",
+    "cpra_cba_opt_out_evidence"
+  ]);
+  const gpcEvidence = getRuntimeRecord(runtimeArtifacts, ["gpcVerification", "gpc_verification"]);
+  const concerns: NormalizedConcern[] = [];
+
+  const privacyNoticeObserved = getCaliforniaRuntimeBoolean(californiaEvidence, [
+    "privacyNoticeObserved",
+    "privacy_notice_observed"
+  ]);
+  const privacyNoticeUrls = getCaliforniaRuntimeStringArray(californiaEvidence, [
+    "privacyNoticeUrls",
+    "privacy_notice_urls"
+  ]);
+  const privacyNoticeSnippets = getCaliforniaRuntimeStringArray(californiaEvidence, [
+    "privacyNoticeSnippets",
+    "privacy_notice_snippets",
+    "privacyNoticeCueText",
+    "privacy_notice_cue_text"
+  ]);
+  const privacyNoticeDiscoveryEvidence = getRuntimeRecord(californiaEvidence, [
+    "privacyNoticeDiscoveryEvidence",
+    "privacy_notice_discovery_evidence",
+    "privacyNoticeSearchEvidence",
+    "privacy_notice_search_evidence"
+  ]);
+  const privacyNoticeDiscoveryUrls = getCaliforniaRuntimeStringArray(californiaEvidence, [
+    "privacyNoticeSearchUrls",
+    "privacy_notice_search_urls",
+    "privacyNoticeAttemptedUrls",
+    "privacy_notice_attempted_urls",
+    "attemptedPrivacyNoticeUrls",
+    "attempted_privacy_notice_urls"
+  ]);
+  const privacyNoticeDiscoveryAttempted =
+    getCaliforniaRuntimeBoolean(privacyNoticeDiscoveryEvidence, [
+      "privacyTargetAttempted",
+      "privacy_target_attempted"
+    ]) === true || privacyNoticeDiscoveryUrls.length > 0;
+  if (privacyNoticeObserved === true) {
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "privacy_notice_disclosures",
+      description: "A California privacy notice or privacy policy surface was retained in the public-web scan evidence.",
+      domainContext,
+      evidence: privacyNoticeUrls,
+      observedValue: privacyNoticeUrls[0] ?? "observed",
+      originKey: "california_privacy.notice_surface.observed",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "notice_surface",
+        retainedEvidence: {
+          pageUrls: privacyNoticeUrls,
+          policySnippets: privacyNoticeSnippets,
+          privacyNoticeObserved,
+          privacyNoticeUrls,
+          sourceUrls: privacyNoticeUrls
+        },
+        unifiedFindingId: "privacy_policy_present"
+      }),
+      severity: "low",
+      signalKey: "privacy.privacy_policy_present",
+      signalLabel: "Privacy notice observed",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "California privacy notice observed"
+    }));
+  }
+  if (privacyNoticeObserved === false && privacyNoticeDiscoveryAttempted) {
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "privacy_notice_disclosures",
+      description: "Privacy notice discovery ran for the California review context, but no public privacy notice surface was retained.",
+      domainContext,
+      evidence: privacyNoticeDiscoveryUrls,
+      observedValue: "privacy notice not observed",
+      originKey: "california_privacy.notice_surface.potential_gap",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "notice_surface",
+        retainedEvidence: {
+          attemptedUrls: privacyNoticeDiscoveryUrls,
+          pageUrls: privacyNoticeDiscoveryUrls,
+          privacyNoticeDiscoveryEvidence,
+          privacyNoticeDiscoveryUrls,
+          privacyNoticeObserved,
+          sourceUrls: privacyNoticeDiscoveryUrls,
+          urlAssessment: "supports_promotion"
+        },
+        unifiedFindingId: "privacy_policy_missing_surface"
+      }),
+      severity: "medium",
+      signalKey: "privacy.privacy_policy_missing_surface",
+      signalLabel: "Privacy notice not observed",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "California privacy notice not observed"
+    }));
+  }
+
+  const collectionContextObserved = getCaliforniaRuntimeBoolean(californiaEvidence, [
+    "collectionContextObserved",
+    "collection_context_observed"
+  ]);
+  const collectionNoticeCueObserved = getCaliforniaRuntimeBoolean(californiaEvidence, [
+    "collectionNoticeCueObserved",
+    "collection_notice_cue_observed"
+  ]);
+  if (collectionContextObserved === true && collectionNoticeCueObserved === false) {
+    const collectionContextUrls = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "collectionContextUrls",
+      "collection_context_urls"
+    ]);
+    const collectionContextTypes = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "collectionContextTypes",
+      "collection_context_types"
+    ]);
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "privacy_notice_disclosures",
+      description: "A public collection context was retained for California notice-at-collection review without a nearby privacy notice cue.",
+      domainContext,
+      evidence: collectionContextUrls,
+      observedValue: collectionContextTypes[0] ?? "collection context without nearby notice cue",
+      originKey: "california_privacy.collection_notice.potential_gap",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "collection_notice",
+        retainedEvidence: {
+          collectionContextObserved,
+          collectionContextTypes,
+          collectionContextUrls,
+          collectionNoticeCueObserved,
+          pageUrls: collectionContextUrls,
+          sourceUrls: collectionContextUrls
+        },
+        unifiedFindingId: "policy_clarity_risk"
+      }),
+      severity: "medium",
+      signalKey: "privacy.policy_clarity_risk",
+      signalLabel: "Collection notice cue not observed",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "California notice-at-collection cue not observed"
+    }));
+  }
+
+  if (hasCaliforniaCpraOptOutGapBasis(cpraEvidence)) {
+    const vendors = uniqueStrings([
+      ...getCaliforniaRuntimeStringArray(cpraEvidence, ["cbaVendorTier1", "cba_vendor_tier1"]),
+      ...getCaliforniaRuntimeStringArray(cpraEvidence, ["advertisingSharingVendors", "advertising_sharing_vendors"])
+    ]);
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "rights_request_mechanisms",
+      description:
+        "Cross-context advertising or sharing vendors were retained, and the inspected privacy-choice surfaces did not confirm a complete opt-out control.",
+      domainContext,
+      evidence: vendors,
+      observedValue: getCaliforniaRuntimeString(cpraEvidence, ["optOutUiResult", "opt_out_ui_result"]) ?? "privacy choice gap observed",
+      originKey: "california_privacy.sale_share_control.potential_gap",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "sale_share_control",
+        retainedEvidence: {
+          ...cpraEvidence,
+          cpraCbaOptOutEvidence: cpraEvidence,
+          cpra_cba_opt_out_evidence: cpraEvidence,
+          supportingSignals: ["privacy.cpra_cba_opt_out_missing"]
+        },
+        unifiedFindingId: "cpra_cba_opt_out_missing"
+      }),
+      severity: getCaliforniaRuntimeString(cpraEvidence, ["findingSeverity", "finding_severity"]) === "high" ? "high" : "medium",
+      signalKey: "privacy.cpra_cba_opt_out_missing",
+      signalLabel: "CPRA CBA opt-out missing",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "CPRA opt-out control review signal"
+    }));
+  }
+
+  const doNotSellSharePathObserved = getCaliforniaRuntimeBoolean(californiaEvidence, [
+    "doNotSellSharePathObserved",
+    "do_not_sell_share_path_observed",
+    "saleShareControlObserved",
+    "sale_share_control_observed"
+  ]);
+  const privacyChoicePathEvidence = getRuntimeRecord(californiaEvidence, [
+    "privacyChoicePathEvidence",
+    "privacy_choice_path_evidence"
+  ]);
+  const privacyChoiceInteractionEvidence = getRuntimeRecord(californiaEvidence, [
+    "privacyChoiceInteractionEvidence",
+    "privacy_choice_interaction_evidence"
+  ]);
+  const structuredPrivacyChoicePathObserved = getCaliforniaRuntimeBoolean(privacyChoicePathEvidence, ["observed"]);
+  const targetedAdvertisingSignalsObserved = getCaliforniaRuntimeBoolean(californiaEvidence, [
+    "targetedAdvertisingSignalsObserved",
+    "targeted_advertising_signals_observed"
+  ]);
+  const saleShareRequestUrls = getCaliforniaRuntimeStringArray(californiaEvidence, [
+    "saleShareRequestUrls",
+    "sale_share_request_urls"
+  ]);
+  const saleShareCookieNames = getCaliforniaRuntimeStringArray(californiaEvidence, [
+    "saleShareCookieNames",
+    "sale_share_cookie_names"
+  ]);
+  const advertisingSharingVendors = uniqueStrings([
+    ...getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "advertisingSharingVendors",
+      "advertising_sharing_vendors"
+    ]),
+    ...getCaliforniaRuntimeStringArray(cpraEvidence, [
+      "advertisingSharingVendors",
+      "advertising_sharing_vendors",
+      "cbaVendorTier1",
+      "cba_vendor_tier1",
+      "cbaVendorTier2",
+      "cba_vendor_tier2"
+    ])
+  ]);
+  if (doNotSellSharePathObserved === true || structuredPrivacyChoicePathObserved === true) {
+    const controlUrls = uniqueStrings([
+      ...getCaliforniaRuntimeStringArray(californiaEvidence, [
+        "doNotSellShareUrls",
+        "do_not_sell_share_urls",
+        "doNotSellSharePathUrl",
+        "do_not_sell_share_path_url",
+        "privacyChoiceUrls",
+        "privacy_choice_urls",
+        "optOutPathUrls",
+        "opt_out_path_urls"
+      ]),
+      getCaliforniaRuntimeString(privacyChoicePathEvidence, ["selectedUrl", "selected_url"])
+    ]);
+    const controlLabels = uniqueStrings([
+      ...getCaliforniaRuntimeStringArray(californiaEvidence, [
+        "doNotSellShareLabels",
+        "do_not_sell_share_labels",
+        "doNotSellSharePathLabel",
+        "do_not_sell_share_path_label",
+        "privacyChoiceLabels",
+        "privacy_choice_labels",
+        "optOutPathLabels",
+        "opt_out_path_labels"
+      ]),
+      getCaliforniaRuntimeString(privacyChoicePathEvidence, ["selectedLabel", "selected_label"])
+    ]);
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "rights_request_mechanisms",
+      description: "A privacy-choice or targeted-advertising opt-out path was retained in California review evidence.",
+      domainContext,
+      evidence: controlUrls,
+      observedValue: controlLabels[0] ?? controlUrls[0] ?? "observed",
+      originKey: "california_privacy.sale_share_control.observed",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "sale_share_control",
+        retainedEvidence: {
+          doNotSellSharePathLabel: controlLabels[0] ?? null,
+          doNotSellSharePathObserved: true,
+          doNotSellSharePathUrl: controlUrls[0] ?? null,
+          pageUrls: controlUrls,
+          policySnippets: controlLabels,
+          privacyChoicePathEvidence,
+          privacyChoiceInteractionEvidence,
+          privacyChoiceUrls: controlUrls,
+          sourceUrls: controlUrls
+        },
+        unifiedFindingId: "targeted_advertising_choices_present"
+      }),
+      severity: "low",
+      signalKey: "privacy.targeted_advertising_choices_present",
+      signalLabel: "Targeted advertising choices present",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Targeted advertising choices present"
+    }));
+  }
+  if (
+    targetedAdvertisingSignalsObserved === true &&
+    (doNotSellSharePathObserved === false || structuredPrivacyChoicePathObserved === false)
+  ) {
+    const privacyChoiceSearchUrls = getCaliforniaRuntimeStringArray(cpraEvidence, [
+      "privacyChoiceSearchUrls",
+      "privacy_choice_search_urls",
+      "gpcOptOutDiscoveryAttemptUrls",
+      "gpc_opt_out_discovery_attempt_urls"
+    ]);
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "rights_request_mechanisms",
+      description: "Targeted-advertising or sale/share-like runtime signals were retained, and the California privacy-choice search did not retain a clear control path.",
+      domainContext,
+      evidence: uniqueStrings([...saleShareRequestUrls, ...privacyChoiceSearchUrls]),
+      observedValue: "privacy choice path not observed",
+      originKey: "california_privacy.sale_share_control.potential_gap",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "sale_share_control",
+        retainedEvidence: {
+          advertisingSharingVendors,
+          doNotSellLinkPresent: false,
+          pageUrls: uniqueStrings([...saleShareRequestUrls, ...privacyChoiceSearchUrls]),
+          privacyChoiceInteractionEvidence,
+          privacyChoicePathEvidence,
+          privacyChoiceSearchUrls,
+          runtimeVendors: advertisingSharingVendors,
+          saleShareCookieNames,
+          saleShareRequestUrls,
+          saleSharingControlsMissing: true,
+          sourceUrls: uniqueStrings([...saleShareRequestUrls, ...privacyChoiceSearchUrls]),
+          targetedAdvertisingChoicesPresent: false,
+          targetedAdvertisingSignalsObserved,
+          vendorCategories: advertisingSharingVendors
+        },
+        unifiedFindingId: "sale_sharing_controls_missing"
+      }),
+      severity: "medium",
+      signalKey: "privacy.sale_sharing_controls_missing",
+      signalLabel: "Sale/share control not observed",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "California sale/share control not observed"
+    }));
+  }
+
+  const trackerCountDelta = getCaliforniaRuntimeNumber(gpcEvidence, ["trackerCountDelta", "tracker_count_delta"]);
+  const thirdPartyCookieCountDelta = getCaliforniaRuntimeNumber(gpcEvidence, [
+    "thirdPartyCookieCountDelta",
+    "third_party_cookie_count_delta"
+  ]);
+  const gpcSignalSent = getCaliforniaRuntimeBoolean(gpcEvidence, ["gpcSignalSent", "gpc_signal_sent"]);
+  const gpcRecognized = getCaliforniaRuntimeBoolean(gpcEvidence, [
+    "gpcRecognitionObserved",
+    "gpc_recognition_observed",
+    "gpcHonored",
+    "gpc_honored"
+  ]);
+  const gpcPolicyMentions = getCaliforniaRuntimeStringArray(gpcEvidence, [
+    "policyMentions",
+    "policy_mentions",
+    "policySnippets",
+    "policy_snippets"
+  ]);
+  if (
+    gpcSignalSent === true &&
+    gpcRecognized === false &&
+    ((trackerCountDelta ?? 0) !== 0 || (thirdPartyCookieCountDelta ?? 0) !== 0) &&
+    gpcPolicyMentions.some((value) => /gpc|global privacy control|opt-?out preference/i.test(value))
+  ) {
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "rights_request_mechanisms",
+      description: "A GPC test was retained with tracker or third-party cookie deltas and no observed recognition of the signal.",
+      domainContext,
+      evidence: [],
+      observedValue: "GPC effect not evident",
+      originKey: "california_privacy.gpc_handling.review_signal",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "gpc_handling",
+        retainedEvidence: {
+          ...gpcEvidence,
+          gpcVerification: gpcEvidence,
+          gpc_verification: gpcEvidence,
+          policyMentions: gpcPolicyMentions,
+          policySnippets: gpcPolicyMentions
+        },
+        unifiedFindingId: "gpc_signal_not_honored"
+      }),
+      severity: "medium",
+      signalKey: "privacy.gpc_signal_not_honored",
+      signalLabel: "GPC signal not honored",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "GPC signal handling review signal"
+    }));
+  }
+  if (
+    gpcSignalSent === true &&
+    gpcRecognized === false &&
+    targetedAdvertisingSignalsObserved === true
+  ) {
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "rights_request_mechanisms",
+      description: "A GPC signal test was retained for a California targeted-advertising context, with no observed recognition of the signal.",
+      domainContext,
+      evidence: getCaliforniaRuntimeStringArray(gpcEvidence, ["evidenceUrls", "evidence_urls"]),
+      observedValue: "GPC recognition not observed",
+      originKey: "california_privacy.gpc_handling.potential_gap",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "gpc_handling",
+        retainedEvidence: {
+          ...gpcEvidence,
+          advertisingSharingVendors,
+          gpcVerification: gpcEvidence,
+          gpc_verification: gpcEvidence,
+          policyMentions: gpcPolicyMentions,
+          policySnippets: gpcPolicyMentions,
+          saleShareCookieNames,
+          saleShareRequestUrls,
+          targetedAdvertisingSignalsObserved
+        },
+        unifiedFindingId: "gpc_signal_not_honored"
+      }),
+      severity: "medium",
+      signalKey: "privacy.gpc_signal_not_honored",
+      signalLabel: "GPC signal not honored",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "California GPC signal handling potential gap"
+    }));
+  }
+
+  const disclosureAlignment = getCaliforniaRuntimeString(californiaEvidence, [
+    "policyRuntimeDisclosureAlignment",
+    "policy_runtime_disclosure_alignment"
+  ]);
+  if (disclosureAlignment === "gap_observed") {
+    const unmatchedRuntimeDisclosureVendors = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "unmatchedRuntimeDisclosureVendors",
+      "unmatched_runtime_disclosure_vendors"
+    ]);
+    const policyRuntimeDisclosureSnippets = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "policyRuntimeDisclosureSnippets",
+      "policy_runtime_disclosure_snippets"
+    ]);
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "privacy_notice_disclosures",
+      description: "California sale/share disclosure-alignment evidence retained runtime adtech signals without clear corresponding disclosure alignment.",
+      domainContext,
+      evidence: uniqueStrings([...saleShareRequestUrls, ...unmatchedRuntimeDisclosureVendors]),
+      observedValue: unmatchedRuntimeDisclosureVendors[0] ?? "disclosure alignment gap observed",
+      originKey: "california_privacy.disclosure_alignment.potential_gap",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "disclosure_alignment",
+        retainedEvidence: {
+          advertisingSharingVendors,
+          pageUrls: saleShareRequestUrls,
+          policyRuntimeDisclosureAlignment: disclosureAlignment,
+          policyRuntimeDisclosureSnippets,
+          policySnippets: policyRuntimeDisclosureSnippets,
+          runtimeRequestUrls: saleShareRequestUrls,
+          runtimeVendors: advertisingSharingVendors,
+          saleShareRequestUrls,
+          sourceUrls: saleShareRequestUrls,
+          unmatchedRuntimeDisclosureVendors
+        },
+        unifiedFindingId: "third_party_recipient_disclosure_missing"
+      }),
+      severity: "medium",
+      signalKey: "privacy.third_party_recipient_disclosure_missing",
+      signalLabel: "Sale/share disclosure alignment gap",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "California sale/share disclosure alignment potential gap"
+    }));
+  }
+
+  const sensitivePiContextObserved = getCaliforniaRuntimeBoolean(californiaEvidence, [
+    "sensitivePiContextObserved",
+    "sensitive_pi_context_observed",
+    "sensitiveSurfaceObserved",
+    "sensitive_surface_observed"
+  ]);
+  const sensitiveThirdPartyTrackingObserved = getCaliforniaRuntimeBoolean(californiaEvidence, [
+    "sensitiveThirdPartyTrackingObserved",
+    "sensitive_third_party_tracking_observed"
+  ]);
+  if (sensitivePiContextObserved === true && sensitiveThirdPartyTrackingObserved === true) {
+    const sensitiveUrls = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "sensitivePiContextUrls",
+      "sensitive_pi_context_urls",
+      "sensitiveSurfaceUrls",
+      "sensitive_surface_urls"
+    ]);
+    const sensitiveCategories = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "sensitivePiCategories",
+      "sensitive_pi_categories",
+      "sensitiveSurfaceCategories",
+      "sensitive_surface_categories"
+    ]);
+    const vendors = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "sensitiveThirdPartyTrackingVendors",
+      "sensitive_third_party_tracking_vendors",
+      "runtimeVendors",
+      "runtime_vendors"
+    ]);
+    const requestUrls = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "sensitiveThirdPartyTrackingRequestUrls",
+      "sensitive_third_party_tracking_request_urls",
+      "runtimeRequestUrls",
+      "runtime_request_urls"
+    ]);
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "data_collection_minimization",
+      description: "Sensitive public-web collection context and third-party tracking co-presence were retained for California review.",
+      domainContext,
+      evidence: sensitiveUrls,
+      observedValue: uniqueStrings([...sensitiveCategories, ...vendors]).slice(0, 3).join(", ") || "observed",
+      originKey: "california_privacy.sensitive_pi.review_signal",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "sensitive_pi",
+        retainedEvidence: {
+          pageUrls: sensitiveUrls,
+          runtimeRequestUrls: requestUrls,
+          runtimeVendors: vendors,
+          sensitivePiCategories: sensitiveCategories,
+          sensitivePiContextObserved,
+          sensitivePiContextUrls: sensitiveUrls,
+          sensitiveThirdPartyTrackingObserved,
+          sensitiveThirdPartyTrackingRequestUrls: requestUrls,
+          sensitiveThirdPartyTrackingVendors: vendors
+        },
+        unifiedFindingId: "sensitive_data_collection_with_third_party_tracking_present"
+      }),
+      severity: "high",
+      signalKey: "privacy.sensitive_data_collection_with_third_party_tracking_present",
+      signalLabel: "Sensitive data collection with third-party tracking",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Sensitive surface with third-party tracking"
+    }));
+  }
+  const limitUseSensitivePiPathObserved = getCaliforniaRuntimeBoolean(californiaEvidence, [
+    "limitUseSensitivePiPathObserved",
+    "limit_use_sensitive_pi_path_observed"
+  ]);
+  if (sensitivePiContextObserved === true && limitUseSensitivePiPathObserved === false) {
+    const sensitiveUrls = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "sensitivePiContextUrls",
+      "sensitive_pi_context_urls",
+      "sensitiveSurfaceUrls",
+      "sensitive_surface_urls"
+    ]);
+    const sensitiveCategories = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "sensitivePiCategories",
+      "sensitive_pi_categories",
+      "sensitiveSurfaceCategories",
+      "sensitive_surface_categories"
+    ]);
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "data_collection_minimization",
+      description: "Sensitive personal-information context was retained for California review, but no Limit Use path was observed.",
+      domainContext,
+      evidence: sensitiveUrls,
+      observedValue: sensitiveCategories[0] ?? "sensitive PI context observed",
+      originKey: "california_privacy.sensitive_pi_control.potential_gap",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "sensitive_pi",
+        retainedEvidence: {
+          limitUseSensitivePiPathObserved,
+          pageUrls: sensitiveUrls,
+          sensitivePiCategories: sensitiveCategories,
+          sensitivePiContextObserved,
+          sensitivePiContextUrls: sensitiveUrls,
+          sourceUrls: sensitiveUrls
+        },
+        unifiedFindingId: "sensitive_collection_surface_observed"
+      }),
+      severity: "medium",
+      signalKey: "privacy.sensitive_collection_surface_observed",
+      signalLabel: "Sensitive PI context without Limit Use path",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "California Limit Use path not observed"
+    }));
+  }
+
+  const optOutInteractionConfirmed = getCaliforniaRuntimeBoolean(californiaEvidence, [
+    "optOutInteractionConfirmed",
+    "opt_out_interaction_confirmed"
+  ]);
+  const postOptOutTrackingPersisted = getCaliforniaRuntimeBoolean(californiaEvidence, [
+    "postOptOutTrackingPersisted",
+    "post_opt_out_tracking_persisted"
+  ]);
+  if (optOutInteractionConfirmed === true && postOptOutTrackingPersisted === true) {
+    const persistedVendors = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "postOptOutPersistedVendors",
+      "post_opt_out_persisted_vendors"
+    ]);
+    const postOptOutRequestUrls = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "postOptOutRequestUrls",
+      "post_opt_out_request_urls"
+    ]);
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "consent_and_tracking",
+      description: "A confirmed opt-out or reject action was retained, and targeted/non-essential tracking appeared to persist afterward.",
+      domainContext,
+      evidence: postOptOutRequestUrls,
+      observedValue: persistedVendors[0] ?? "post-opt-out tracking persisted",
+      originKey: "california_privacy.post_opt_out_tracking.potential_gap",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "post_opt_out_tracking",
+        retainedEvidence: {
+          consentRejectPersistedTrackerVendors: persistedVendors,
+          optOutInteractionConfirmed,
+          pageUrls: postOptOutRequestUrls,
+          postOptOutPersistedVendors: persistedVendors,
+          postOptOutRequestUrls,
+          postOptOutTrackingPersisted,
+          privacyChoiceInteractionEvidence,
+          reject_did_not_reduce_tracking: true,
+          rejectEvidenceConfirmed: true,
+          rejectInteractionSucceeded: true,
+          runtimeRequestUrls: postOptOutRequestUrls,
+          runtimeVendors: persistedVendors,
+          sourceUrls: postOptOutRequestUrls
+        },
+        unifiedFindingId: "reject_did_not_reduce_tracking"
+      }),
+      severity: "high",
+      signalKey: "privacy.reject_did_not_reduce_tracking",
+      signalLabel: "Post-opt-out tracking persisted",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "California post-opt-out tracking persistence potential gap"
+    }));
+  }
+
+  const rightsMethodObserved = getCaliforniaRuntimeBoolean(californiaEvidence, [
+    "consumerRightsRequestMethodObserved",
+    "consumer_rights_request_method_observed",
+    "rightsRequestMethodObserved",
+    "rights_request_method_observed"
+  ]);
+  if (rightsMethodObserved === false && privacyNoticeObserved === true) {
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "rights_request_mechanisms",
+      description: "A public privacy notice context was retained, but California rights-request method extraction did not observe a request path.",
+      domainContext,
+      evidence: privacyNoticeUrls,
+      observedValue: "consumer rights request method not observed",
+      originKey: "california_privacy.rights_methods.potential_gap",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "rights_methods",
+        retainedEvidence: {
+          consumerRightsRequestMethodObserved: false,
+          pageUrls: privacyNoticeUrls,
+          policySnippets: privacyNoticeSnippets,
+          privacyNoticeObserved,
+          privacyNoticeUrls,
+          sourceUrls: privacyNoticeUrls
+        },
+        unifiedFindingId: "privacy_contact_channel_missing"
+      }),
+      severity: "medium",
+      signalKey: "privacy.privacy_contact_channel_missing",
+      signalLabel: "Consumer rights request method not observed",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "California rights request method not observed"
+    }));
+  }
+  if (rightsMethodObserved === true) {
+    const rightsUrls = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "consumerRightsRequestUrls",
+      "consumer_rights_request_urls",
+      "consumerRightsRequestMethodUrls",
+      "consumer_rights_request_method_urls",
+      "rightsRequestUrls",
+      "rights_request_urls"
+    ]);
+    const rightsSignals = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "consumerRightsRequestMethods",
+      "consumer_rights_request_methods",
+      "consumerRightsRequestMethodTypes",
+      "consumer_rights_request_method_types",
+      "rightsRequestMethods",
+      "rights_request_methods",
+      "policyRightsSignals",
+      "policy_rights_signals"
+    ]);
+    const rightsSnippets = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "consumerRightsRequestSnippets",
+      "consumer_rights_request_snippets",
+      "consumerRightsRequestMethodSnippets",
+      "consumer_rights_request_method_snippets",
+      "rightsRequestSnippets",
+      "rights_request_snippets"
+    ]);
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "rights_request_mechanisms",
+      description: "Consumer privacy rights request methods were retained in California review evidence.",
+      domainContext,
+      evidence: rightsUrls,
+      observedValue: rightsSignals[0] ?? rightsUrls[0] ?? "observed",
+      originKey: "california_privacy.rights_methods.observed",
+      originType: "runtime_artifact",
+      rawEvidence: makeCaliforniaRawEvidence({
+        evidenceFamily: "rights_methods",
+        retainedEvidence: {
+          consumerRightsRequestMethodSnippets: rightsSnippets,
+          consumerRightsRequestMethodTypes: rightsSignals,
+          consumerRightsRequestMethodUrls: rightsUrls,
+          pageUrls: rightsUrls,
+          policyDsarMechanism: rightsSignals[0] ?? "consumer_rights_request_method",
+          policyRightsSignals: rightsSignals,
+          policySnippets: rightsSnippets,
+          sourceUrls: rightsUrls
+        },
+        unifiedFindingId: "privacy_rights_path_present"
+      }),
+      severity: "low",
+      signalKey: "privacy.privacy_rights_path_present",
+      signalLabel: "Privacy rights path present",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Consumer rights request methods observed"
+    }));
+  }
+
+  return concerns;
+}
+
 export function buildNormalizedConcerns(input: {
   domainContext?: ScanDomainContext;
   reviewFindingCandidates: ReviewFindingCandidateInput[];
+  runtimeArtifacts?: Record<string, unknown> | null;
   validationFindings: Array<ScanValidationFinding | Record<string, unknown>>;
 }) {
   const concerns = [
@@ -2191,7 +3043,8 @@ export function buildNormalizedConcerns(input: {
     ...input.validationFindings.flatMap((finding) => {
       const normalizedFinding = normalizeScanValidationFinding(finding);
       return normalizedFinding ? [normalizeConcernFromValidationFinding(normalizedFinding, input.domainContext)] : [];
-    })
+    }),
+    ...buildCaliforniaPrivacyEvidenceConcerns(input.runtimeArtifacts, input.domainContext)
   ];
 
   return [

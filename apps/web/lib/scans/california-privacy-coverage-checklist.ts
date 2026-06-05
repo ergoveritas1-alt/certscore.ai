@@ -1,3 +1,4 @@
+import type { CaliforniaPrivacyRegulatoryReviewArea } from "@website-signal-risk-scanner/shared";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import type { CertScoreFindingEvidenceDetails } from "./finding-registry";
 import type {
@@ -8,6 +9,21 @@ import type {
 } from "./california-privacy-coverage-policy";
 import { buildRegulatoryChecklistEvidenceHighlights } from "./regulatory-checklist-evidence-highlights";
 
+const CALIFORNIA_PRIVACY_REGULATORY_REVIEW_AREA: CaliforniaPrivacyRegulatoryReviewArea = "california_ccpa_cpra";
+
+const CALIFORNIA_PRIVACY_STATUS_LABELS: Record<CaliforniaPrivacyCoverageChecklistStatus, string> = {
+  not_applicable: "Not applicable",
+  not_observed: "Not observed",
+  not_testable: "Not testable",
+  observed: "Observed",
+  potential_gap: "Potential gap",
+  review_signal: "Review signal"
+};
+
+function getCaliforniaPrivacyReviewStatusLabel(status: CaliforniaPrivacyCoverageChecklistStatus) {
+  return CALIFORNIA_PRIVACY_STATUS_LABELS[status];
+}
+
 export type CaliforniaPrivacyCoverageChecklistStatus = CaliforniaPrivacyCoverageOutcomeStatus;
 export type CaliforniaPrivacyCoverageChecklistTone = "neutral" | "review" | "warning" | "muted";
 
@@ -16,6 +32,7 @@ export type CaliforniaPrivacyCoverageChecklistItem = {
   id: string;
   label: string;
   status: CaliforniaPrivacyCoverageChecklistStatus;
+  statusLabel: string;
   tone: CaliforniaPrivacyCoverageChecklistTone;
   explanation: string;
   evidenceRefs: string[];
@@ -27,7 +44,7 @@ type ChecklistRowDefinition = {
   label: string;
   explanation: string;
   findingIds: string[];
-  defaultFindingStatus: Exclude<CaliforniaPrivacyCoverageChecklistStatus, "Not observed" | "Not testable" | "Not applicable">;
+  defaultFindingStatus: Exclude<CaliforniaPrivacyCoverageChecklistStatus, "not_observed" | "not_testable" | "not_applicable">;
   notObservedText: string;
 };
 
@@ -50,7 +67,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     label: "Privacy notice availability",
     explanation: "Whether a public privacy notice or privacy policy was observed and reachable from the tested context.",
     findingIds: ["privacy_policy_present", "privacy_policy_missing_surface", "privacy_policy_unavailable"],
-    defaultFindingStatus: "Review signal",
+    defaultFindingStatus: "review_signal",
     notObservedText: "No privacy notice finding was surfaced in this scan context."
   },
   {
@@ -58,7 +75,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     label: "Notice at collection",
     explanation: "Whether public collection-context surfaces included nearby privacy notice or disclosure cues.",
     findingIds: ["privacy_policy_missing_surface", "policy_clarity_risk"],
-    defaultFindingStatus: "Review signal",
+    defaultFindingStatus: "review_signal",
     notObservedText: "No notice-at-collection issue was surfaced in this scan context."
   },
   {
@@ -66,7 +83,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     label: "Do Not Sell or Share availability",
     explanation: "Whether an equivalent opt-out path was observed when sale/share or targeted-advertising signals were present.",
     findingIds: ["cpra_cba_opt_out_missing", "sale_sharing_controls_missing", "targeted_advertising_choices_present"],
-    defaultFindingStatus: "Gap observed",
+    defaultFindingStatus: "potential_gap",
     notObservedText: "No Do Not Sell or Share availability issue was surfaced in this scan context."
   },
   {
@@ -74,7 +91,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     label: "GPC / opt-out signal handling",
     explanation: "Whether an opt-out preference signal such as GPC was sent and appeared honored or recognized.",
     findingIds: ["gpc_signal_not_honored", "gpc_disclosure_present"],
-    defaultFindingStatus: "Gap observed",
+    defaultFindingStatus: "potential_gap",
     notObservedText: "No GPC handling issue was surfaced in this scan context."
   },
   {
@@ -82,7 +99,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     label: "Targeted advertising signals",
     explanation: "Whether advertising, retargeting, social pixel, or cross-context tracking signals were observed.",
     findingIds: ["cpra_cba_opt_out_missing", "sale_sharing_controls_missing", "targeted_advertising_disclosure_present"],
-    defaultFindingStatus: "Review signal",
+    defaultFindingStatus: "review_signal",
     notObservedText: "No targeted advertising or cross-context tracking signal was surfaced in this scan context."
   },
   {
@@ -90,7 +107,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     label: "Sale/share disclosure alignment",
     explanation: "Whether observed runtime adtech or sale/share-like signals aligned with reviewed public disclosures.",
     findingIds: ["do_not_sell_sharing_disclosure_conflict", "policy_behavior_conflict", "policy_behavior_contradiction_detected", "third_party_recipient_disclosure_missing", "targeted_advertising_disclosure_present"],
-    defaultFindingStatus: "Review signal",
+    defaultFindingStatus: "review_signal",
     notObservedText: "No sale/share disclosure-alignment finding was surfaced in this scan context."
   },
   {
@@ -98,7 +115,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     label: "Limit Use of Sensitive Personal Information",
     explanation: "Whether a Limit Use path was observed when sensitive personal information context was detected.",
     findingIds: ["sensitive_collection_surface_observed", "sensitive_data_collection_with_third_party_tracking_present"],
-    defaultFindingStatus: "Review signal",
+    defaultFindingStatus: "review_signal",
     notObservedText: "No Limit Use or sensitive PI applicability issue was surfaced in this scan context."
   },
   {
@@ -106,7 +123,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     label: "Opt-out friction / choice balance",
     explanation: "Whether privacy choice flows created friction, imbalance, confusing labels, or reduced refusal visibility.",
     findingIds: ["accept_more_prominent_than_reject", "consent_dark_patterns_detected", "dismiss_without_reject", "forced_consent_wall", "reject_option_missing_or_hidden"],
-    defaultFindingStatus: "Review signal",
+    defaultFindingStatus: "review_signal",
     notObservedText: "No opt-out friction finding was surfaced in this scan context."
   },
   {
@@ -114,7 +131,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     label: "Post-opt-out tracking behavior",
     explanation: "Whether targeted advertising, sale/share, or non-essential tracking decreased after opt-out or reject.",
     findingIds: ["reject_did_not_reduce_tracking", "reject_tracking_persists_after_reject", "reject_did_not_reduce_third_party_cookies"],
-    defaultFindingStatus: "Gap observed",
+    defaultFindingStatus: "potential_gap",
     notObservedText: "No post-opt-out tracking persistence finding was surfaced in this scan context."
   },
   {
@@ -122,30 +139,66 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     label: "Sensitive forms with third-party tracking",
     explanation: "Whether sensitive forms or high-risk collection contexts appeared alongside third-party tracking.",
     findingIds: ["sensitive_data_collection_with_third_party_tracking_present", "possible_session_replay_on_sensitive_input_surface"],
-    defaultFindingStatus: "Review signal",
+    defaultFindingStatus: "review_signal",
     notObservedText: "No sensitive form and third-party tracking correlation was surfaced in this scan context."
+  },
+  {
+    id: "consumer_rights_request_methods",
+    label: "Consumer rights request methods",
+    explanation: "Whether public privacy materials exposed a consumer rights request method or equivalent privacy request path.",
+    findingIds: ["privacy_rights_path_present", "privacy_contact_channel_missing", "privacy_contact_path_present"],
+    defaultFindingStatus: "review_signal",
+    notObservedText: "No consumer rights request-method evidence was surfaced in this scan context."
   },
   {
     id: "privacy_control_accessibility",
     label: "Privacy control accessibility",
     explanation: "Whether privacy-choice controls produced basic automated accessibility signals.",
     findingIds: ["focus_management_issue", "keyboard_navigation_accessibility_issue", "semantic_labeling_accessibility_issue", "visual_contrast_accessibility_issue"],
-    defaultFindingStatus: "Review signal",
+    defaultFindingStatus: "review_signal",
     notObservedText: "No privacy-control accessibility issue was surfaced in this scan context."
   }
 ];
 
 function getChecklistTone(status: CaliforniaPrivacyCoverageChecklistStatus): CaliforniaPrivacyCoverageChecklistTone {
   switch (status) {
-    case "Gap observed":
-    case "Review signal":
-    case "Insufficient evidence":
+    case "potential_gap":
+    case "review_signal":
       return "warning";
-    case "Not applicable":
-    case "Not testable":
+    case "not_applicable":
+    case "not_testable":
       return "muted";
     default:
       return "neutral";
+  }
+}
+
+function getEvidenceFamilyForRow(rowId: string): CaliforniaPrivacyCoverageCriticalEvidence["evidenceFamily"] {
+  switch (rowId) {
+    case "privacy_notice_availability":
+      return "notice_surface";
+    case "notice_at_collection":
+      return "collection_notice";
+    case "do_not_sell_share_availability":
+      return "sale_share_control";
+    case "gpc_opt_out_signal_handling":
+      return "gpc_handling";
+    case "targeted_advertising_signals":
+      return "adtech_sharing_runtime";
+    case "sale_share_disclosure_alignment":
+      return "disclosure_alignment";
+    case "limit_use_sensitive_pi":
+      return "sensitive_pi";
+    case "opt_out_friction_dark_patterns":
+      return "opt_out_friction";
+    case "post_opt_out_tracking_behavior":
+      return "post_opt_out_tracking";
+    case "consumer_rights_request_methods":
+      return "rights_methods";
+    case "privacy_control_accessibility":
+      return "privacy_control_accessibility";
+    default:
+      return "adtech_sharing_runtime";
   }
 }
 
@@ -184,10 +237,12 @@ function getUnifiedFindingCriticalEvidence(
   projectedFindings: NonNullable<CaliforniaPrivacyCoverageChecklistInput["projectedFindings"]> = []
 ): CaliforniaPrivacyCoverageCriticalEvidence {
   return {
+    evidenceFamily: getEvidenceFamilyForRow(rowId),
     missingOrIncompleteSourceSignals: [],
     pipeline: {
       concernPolicyKey: `california_privacy_coverage.${rowId}.${status.toLowerCase().replaceAll(" ", "_")}`,
       projectionStage: "unified_finding",
+      regulatoryReviewArea: CALIFORNIA_PRIVACY_REGULATORY_REVIEW_AREA,
       wc01NormalizedConcernKey: `california_privacy.coverage.${rowId}`,
       ws01EvidenceRole: "observed runtime signal identification, evidence capture, and logging"
     },
@@ -217,10 +272,12 @@ function getFallbackCriticalEvidence(
   missingOrIncompleteSourceSignals: CaliforniaPrivacyCoverageSourceSignalGap[] = []
 ): CaliforniaPrivacyCoverageCriticalEvidence {
   return {
+    evidenceFamily: getEvidenceFamilyForRow(rowId),
     missingOrIncompleteSourceSignals,
     pipeline: {
       concernPolicyKey: `california_privacy_coverage.${rowId}.${status.toLowerCase().replaceAll(" ", "_")}`,
       projectionStage: "coverage_fallback",
+      regulatoryReviewArea: CALIFORNIA_PRIVACY_REGULATORY_REVIEW_AREA,
       wc01NormalizedConcernKey: `california_privacy.coverage.${rowId}`,
       ws01EvidenceRole: "observed runtime signal identification, evidence capture, and logging"
     },
@@ -257,6 +314,7 @@ export function deriveCaliforniaPrivacyCoverageChecklist(
         label: definition.label,
         limitation: policyOutcome.limitation,
         status: policyOutcome.status,
+        statusLabel: getCaliforniaPrivacyReviewStatusLabel(policyOutcome.status),
         tone: getChecklistTone(policyOutcome.status)
       };
     }
@@ -272,11 +330,12 @@ export function deriveCaliforniaPrivacyCoverageChecklist(
         label: definition.label,
         limitation: statusBasis,
         status,
+        statusLabel: getCaliforniaPrivacyReviewStatusLabel(status),
         tone: getChecklistTone(status)
       };
     }
 
-    const status = publicCoverageIsTestable ? "Not observed" : "Not testable";
+    const status = publicCoverageIsTestable ? "not_observed" : "not_testable";
     const statusBasis = publicCoverageIsTestable
       ? definition.notObservedText
       : "Public-web coverage was limited, so this California row was not testable.";
@@ -303,6 +362,7 @@ export function deriveCaliforniaPrivacyCoverageChecklist(
       label: definition.label,
       limitation: statusBasis,
       status,
+      statusLabel: getCaliforniaPrivacyReviewStatusLabel(status),
       tone: getChecklistTone(status)
     };
   });
