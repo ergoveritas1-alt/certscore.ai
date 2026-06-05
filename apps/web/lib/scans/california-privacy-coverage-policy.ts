@@ -216,15 +216,27 @@ function makeOutcome(
 }
 
 function getCaliforniaEvidence(input: CaliforniaPrivacyCoveragePolicyInput) {
-  return getRecord(input.runtimeArtifacts?.californiaPrivacyEvidence) ?? null;
+  return (
+    getRecord(input.runtimeArtifacts?.californiaPrivacyEvidence) ??
+    getRecord(input.runtimeArtifacts?.california_privacy_evidence) ??
+    null
+  );
 }
 
 function getCpraEvidence(input: CaliforniaPrivacyCoveragePolicyInput) {
-  return getRecord(input.runtimeArtifacts?.cpraCbaOptOutEvidence) ?? null;
+  return (
+    getRecord(input.runtimeArtifacts?.cpraCbaOptOutEvidence) ??
+    getRecord(input.runtimeArtifacts?.cpra_cba_opt_out_evidence) ??
+    null
+  );
 }
 
 function getGpcEvidence(input: CaliforniaPrivacyCoveragePolicyInput) {
-  return getRecord(input.runtimeArtifacts?.gpcVerification) ?? null;
+  return (
+    getRecord(input.runtimeArtifacts?.gpcVerification) ??
+    getRecord(input.runtimeArtifacts?.gpc_verification) ??
+    null
+  );
 }
 
 function getEvidenceRefs(californiaEvidence: Record<string, unknown> | null, ...refs: Array<string | null>) {
@@ -312,7 +324,7 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
   const gpcEvidence = getGpcEvidence(input);
   const outcomes: Record<string, CaliforniaPrivacyCoverageOutcome> = {};
 
-  if (!input.scanCompleted || input.coverageLimited) {
+  if (!input.scanCompleted) {
     const rows = [
       "privacy_notice_availability",
       "notice_at_collection",
@@ -328,7 +340,7 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
       "privacy_control_accessibility"
     ];
     for (const rowId of rows) {
-      outcomes[rowId] = makeOutcome(rowId, "not_testable", "The retained public-web scan context did not support this California privacy review row.", [], {
+      outcomes[rowId] = makeOutcome(rowId, "not_testable", "The scan did not complete, so this California privacy review row was not testable.", [], {
         missingOrIncompleteSourceSignals: [
           sourceGap("scanner.californiaPrivacyEvidence", "completed public-web California evidence packet", californiaEvidence ? "partial" : "missing", "Required before CertScore can evaluate this California checklist row.")
         ]

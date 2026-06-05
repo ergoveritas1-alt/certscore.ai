@@ -227,7 +227,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   }
 
   const fullScanQueueAvailability = await getFullScanQueueAvailability({
-    allowDegradedScanner: process.env.FULL_SCAN_QUEUE_ALLOW_DEGRADED_HEARTBEAT === "true"
+    allowDegradedScanner: process.env.FULL_SCAN_QUEUE_ALLOW_DEGRADED_HEARTBEAT === "true",
+    scanFrom
   });
 
   if (!fullScanQueueAvailability.enabled) {
@@ -525,18 +526,18 @@ export async function createFullScanAction(
   _previousState: CreateFullScanActionState = initialState,
   formData: FormData
 ): Promise<CreateFullScanActionState> {
-  const fullScanQueueAvailability = await getFullScanQueueAvailability();
+  const dashboardContext = await getDashboardContext();
+  const domainId = String(formData.get("domainId") ?? "").trim();
+  const forceNewScan = formData.get("forceNewScan") === "true";
+  const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
+
+  const fullScanQueueAvailability = await getFullScanQueueAvailability({ scanFrom });
 
   if (!fullScanQueueAvailability.enabled) {
     return {
       error: fullScanQueueAvailability.reason
     };
   }
-
-  const dashboardContext = await getDashboardContext();
-  const domainId = String(formData.get("domainId") ?? "").trim();
-  const forceNewScan = formData.get("forceNewScan") === "true";
-  const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
 
   if (domainId.length === 0) {
     return {

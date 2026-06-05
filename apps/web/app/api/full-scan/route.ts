@@ -12,7 +12,7 @@ import { shouldBypassDnsValidationForProductionLoadTest } from "./load-test-inta
 function isPublicFullScanAvailabilityError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
 
-  return /DATABASE_URL|Invalid environment configuration|Scanner health check failed/i.test(message);
+  return /DATABASE_URL|Invalid environment configuration|Scanner health check failed|residential geo scanner configuration/i.test(message);
 }
 
 function getFirstHeaderValue(value: string | null) {

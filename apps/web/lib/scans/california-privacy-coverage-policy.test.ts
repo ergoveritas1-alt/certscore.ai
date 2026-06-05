@@ -51,6 +51,60 @@ test("deriveCaliforniaPrivacyCoveragePolicyOutcomes emits machine statuses for C
   );
 });
 
+test("deriveCaliforniaPrivacyCoveragePolicyOutcomes reads DB-backed snake_case California runtime evidence", () => {
+  const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    runtimeArtifacts: {
+      california_privacy_evidence: {
+        privacyNoticeObserved: true,
+        privacyNoticeUrls: ["https://example.test/privacy"],
+        collectionContextObserved: false,
+        targetedAdvertisingSignalsObserved: false,
+        doNotSellSharePathObserved: false,
+        gpcTestRan: false,
+        consumerRightsRequestMethodObserved: true,
+        consumerRightsRequestMethodUrls: ["https://example.test/privacy-request"],
+        consumerRightsRequestMethodTypes: ["email"],
+        sensitivePiContextObserved: false,
+        privacyControlAccessibilityIssueObserved: false,
+        evidenceRefs: ["runtime_artifact:california_privacy"]
+      }
+    },
+    scanCompleted: true
+  });
+
+  assert.equal(outcomes.privacy_notice_availability?.status, "observed");
+  assert.equal(outcomes.consumer_rights_request_methods?.status, "observed");
+  assert.notEqual(outcomes.privacy_notice_availability?.status, "not_testable");
+});
+
+test("deriveCaliforniaPrivacyCoveragePolicyOutcomes uses retained California evidence when scan coverage is limited", () => {
+  const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
+    coverageLimited: true,
+    runtimeArtifacts: {
+      california_privacy_evidence: {
+        privacyNoticeObserved: true,
+        privacyNoticeUrls: ["https://example.test/privacy"],
+        collectionContextObserved: false,
+        targetedAdvertisingSignalsObserved: false,
+        doNotSellSharePathObserved: false,
+        gpcTestRan: false,
+        consumerRightsRequestMethodObserved: true,
+        consumerRightsRequestMethodUrls: ["mailto:privacy@example.test"],
+        consumerRightsRequestMethodTypes: ["email"],
+        sensitivePiContextObserved: false,
+        privacyControlAccessibilityIssueObserved: false,
+        evidenceRefs: ["runtime_artifact:california_privacy"]
+      }
+    },
+    scanCompleted: true
+  });
+
+  assert.equal(outcomes.privacy_notice_availability?.status, "observed");
+  assert.equal(outcomes.consumer_rights_request_methods?.status, "observed");
+  assert.equal(outcomes.gpc_opt_out_signal_handling?.status, "not_testable");
+});
+
 test("deriveCaliforniaPrivacyCoveragePolicyOutcomes does not create potential gaps from missing applicability evidence", () => {
   const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
     coverageLimited: false,
@@ -210,7 +264,7 @@ test("deriveCaliforniaPrivacyCoveragePolicyOutcomes reuses CPRA runtime artifact
   assert.deepEqual(outcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.advertisingSharingVendors, ["Meta"]);
 });
 
-test("deriveCaliforniaPrivacyCoveragePolicyOutcomes marks every row not testable when coverage is limited", () => {
+test("deriveCaliforniaPrivacyCoveragePolicyOutcomes marks every row not testable when no California evidence is retained", () => {
   const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
     coverageLimited: true,
     runtimeArtifacts: null,

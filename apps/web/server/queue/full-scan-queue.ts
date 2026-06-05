@@ -1,3 +1,4 @@
+import { normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { loadScannerHeartbeatSources, type WorkerHeartbeatRow } from "./repository";
 
 const SCANNER_HEARTBEAT_WINDOW_MS = 90_000;
@@ -10,6 +11,7 @@ type ScannerServiceHeartbeatSnapshot = {
 
 type FullScanQueueAvailabilityOptions = {
   allowDegradedScanner?: boolean;
+  scanFrom?: ScanFrom;
 };
 
 function normalizeHeartbeatValue(value: unknown) {
@@ -26,6 +28,26 @@ function normalizeHeartbeatValue(value: unknown) {
   return null;
 }
 
+function isResidentialGeoQueueEnabled() {
+  if (process.env.FULL_SCAN_RESIDENTIAL_GEO_ENABLED === "true") {
+    return true;
+  }
+
+  if (process.env.FULL_SCAN_RESIDENTIAL_GEO_ENABLED === "false") {
+    return false;
+  }
+
+  return process.env.NODE_ENV === "production";
+}
+
+export function getResidentialGeoQueueUnavailableReason(scanFrom: ScanFrom) {
+  if (scanFrom === "default" || isResidentialGeoQueueEnabled()) {
+    return null;
+  }
+
+  return "This scan location requires residential geo scanner configuration. Select Cloud for local scanning, or set FULL_SCAN_RESIDENTIAL_GEO_ENABLED=true only when WS01 residential proxy credentials are configured.";
+}
+
 export async function enqueueFullScanJob(_scanId: string) {
   return;
 }
@@ -35,6 +57,16 @@ export function getFullScanQueueAvailabilityFromHeartbeat(
   nowMs = Date.now(),
   options: FullScanQueueAvailabilityOptions = {}
 ) {
+  const scanFrom = normalizeScanFrom(options.scanFrom);
+  const geoUnavailableReason = getResidentialGeoQueueUnavailableReason(scanFrom);
+
+  if (geoUnavailableReason) {
+    return {
+      enabled: false as const,
+      reason: geoUnavailableReason
+    };
+  }
+
   const heartbeatAgeMs = lastHeartbeatAt ? nowMs - new Date(lastHeartbeatAt).getTime() : null;
   const workerHealthy = typeof heartbeatAgeMs === "number" && Number.isFinite(heartbeatAgeMs) && heartbeatAgeMs <= SCANNER_HEARTBEAT_WINDOW_MS;
 

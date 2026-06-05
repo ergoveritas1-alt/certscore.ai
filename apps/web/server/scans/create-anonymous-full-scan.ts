@@ -75,7 +75,8 @@ export async function createAnonymousFullScan(input: {
   }
 
   const fullScanQueueAvailability = await getFullScanQueueAvailability({
-    allowDegradedScanner: process.env.FULL_SCAN_QUEUE_ALLOW_DEGRADED_HEARTBEAT === "true"
+    allowDegradedScanner: process.env.FULL_SCAN_QUEUE_ALLOW_DEGRADED_HEARTBEAT === "true",
+    scanFrom
   });
 
   if (!fullScanQueueAvailability.enabled) {
