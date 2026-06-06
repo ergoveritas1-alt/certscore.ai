@@ -3007,6 +3007,28 @@ export const REPORT_UNIFIED_FINDINGS = [
     aliases: ["Session replay present with sensitive surfaces", "Sensitive surfaces observed with session replay"]
   }),
   defineReportUnifiedFinding({
+    id: "cipa_sensitive_interaction_recording_signal",
+    label: "CIPA-sensitive interaction recording risk signal",
+    owner: "sensitive_data_third_party_exposure_context",
+    mirrors: ["adtech_analytics_replay_footprint"],
+    overlays: ["tracking_profiling_sensitive_data_risk", "consent_lawful_basis_user_choice"],
+    signalMappings: [
+      { source: "runtime_artifact_signal", key: "privacy.cipa_sensitive_interaction_recording_signal" }
+    ],
+    aliases: ["CIPA-sensitive interaction recording risk signal"]
+  }),
+  defineReportUnifiedFinding({
+    id: "cipa_sensitive_communication_interception_signal",
+    label: "CIPA-sensitive third-party communication interception risk signal",
+    owner: "sensitive_data_third_party_exposure_context",
+    mirrors: ["adtech_analytics_replay_footprint", "identity_financial_data_collection", "health_location_other_sensitive_data_collection"],
+    overlays: ["tracking_profiling_sensitive_data_risk", "consent_lawful_basis_user_choice"],
+    signalMappings: [
+      { source: "runtime_artifact_signal", key: "privacy.cipa_sensitive_communication_interception_signal" }
+    ],
+    aliases: ["CIPA-sensitive third-party communication interception risk signal"]
+  }),
+  defineReportUnifiedFinding({
     id: "session_replay_undisclosed",
     label: "Session replay undisclosed",
     owner: "policy_to_behavior_contradictions",

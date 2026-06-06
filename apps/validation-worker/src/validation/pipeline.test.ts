@@ -5307,6 +5307,86 @@ test("pre-consent runtime finding filters CMP script URLs while using them for C
   ]);
 });
 
+test("pre-consent runtime finding filters canonical CookieYes and Transcend CMP URLs", () => {
+  const findings = deriveValidationFindings(
+    buildArtifacts({
+      policyReviewQueue: [],
+      runtimeArtifacts: {
+        hybrid_runtime_evidence: {
+          consentSummary: {
+            cmpDetected: true
+          },
+          networkSummary: {
+            totalRequestCount: 80
+          },
+          requestToVendorObservations: [
+            {
+              hostname: "connect.facebook.net",
+              preConsent: true,
+              vendor: "Meta Pixel"
+            },
+            {
+              hostname: "cdn-cookieyes.com",
+              preConsent: true,
+              vendor: "CookieYes"
+            },
+            {
+              hostname: "privacy-center-api.transcend.io",
+              preConsent: true,
+              vendor: "Transcend"
+            }
+          ],
+          requestObservations: [
+            {
+              domain: "connect.facebook.net",
+              preConsent: true,
+              thirdParty: true,
+              url: "https://connect.facebook.net/en_US/fbevents.js"
+            },
+            {
+              domain: "cdn-cookieyes.com",
+              preConsent: true,
+              thirdParty: true,
+              url: "https://cdn-cookieyes.com/client_data/example/script.js"
+            },
+            {
+              domain: "privacy-center-api.transcend.io",
+              preConsent: true,
+              thirdParty: true,
+              url: "https://privacy-center-api.transcend.io/graphql"
+            }
+          ]
+        },
+        third_party_request_domains: ["connect.facebook.net", "cdn-cookieyes.com", "privacy-center-api.transcend.io"]
+      },
+      snapshot: {
+        cookie_count_total: 10,
+        preconsent_tracking_detected: true,
+        third_party_cookie_count: 3,
+        tracker_count_total: 4,
+        tracker_vendor_count: 4
+      },
+      trackerVendors: [
+        {
+          before_consent: true,
+          first_party_or_third_party: "third_party",
+          vendor_name: "Meta Pixel"
+        }
+      ]
+    })
+  );
+
+  const finding = findings.find((item) => item.ruleKey === "runtime_privacy.preconsent_tracking_observed");
+  assert.ok(finding);
+  assert.equal(finding.evidence.cmp_vendor_name, "CookieYes");
+  assert.deepEqual(finding.evidence.preconsent_tracker_evidence_urls, [
+    "https://connect.facebook.net/en_US/fbevents.js"
+  ]);
+  assert.deepEqual(finding.evidence.runtimeRequestUrls, [
+    "https://connect.facebook.net/en_US/fbevents.js"
+  ]);
+});
+
 test("pre-consent runtime finding narrows framing when privacy controls are explicitly disclosed", () => {
   const findings = deriveValidationFindings(
     buildArtifacts({

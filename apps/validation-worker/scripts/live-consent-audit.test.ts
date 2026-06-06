@@ -181,6 +181,26 @@ test("classifyCookieArtifact still recognizes DoubleClick cookie names", () => {
   assert.equal(classified.category, "advertising_marketing");
 });
 
+test("classifyCookieArtifact recognizes CMP infrastructure by canonical vendor", () => {
+  const cookieYes = classifyCookieArtifact(".example.com", "cookieyes-consent");
+  assert.equal(cookieYes.vendorName, "CookieYes");
+  assert.equal(cookieYes.category, "strictly_necessary");
+
+  const transcend = classifyCookieArtifact(".example.com", "airgap");
+  assert.equal(transcend.vendorName, "Transcend");
+  assert.equal(transcend.category, "strictly_necessary");
+});
+
+test("classifyUrlArtifact recognizes Transcend and Usercentrics CMP infrastructure", () => {
+  const transcend = classifyUrlArtifact("https://cdn.transcend-cdn.com/cm/airgap.js");
+  assert.equal(transcend.vendorName, "Transcend");
+  assert.equal(transcend.category, "strictly_necessary");
+
+  const usercentrics = classifyUrlArtifact("https://consent-api.service.consent.usercentrics.eu/consent");
+  assert.equal(usercentrics.vendorName, "Usercentrics");
+  assert.equal(usercentrics.category, "strictly_necessary");
+});
+
 test("buildSiteReport does not treat inline homepage marketing copy as a consent banner", () => {
   const scenarios: any = {
     accept_all: makeScenario(),

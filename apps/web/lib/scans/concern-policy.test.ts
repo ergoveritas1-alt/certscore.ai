@@ -2109,7 +2109,7 @@ test("CPRA CBA opt-out concern policy requires CPRA-relevant context", () => {
     concern,
     evidenceStrengthFlags: ["direct_runtime"],
     rawEvidence: {
-      cbaVendorTier1: ["adsrvr.org"],
+      directAdvertisingSharingVendors: ["The Trade Desk"],
       optOutUiResult: "absent",
       policyCbaLanguage: "absent",
       suppressorApplied: null
@@ -2122,7 +2122,7 @@ test("CPRA CBA opt-out concern policy requires CPRA-relevant context", () => {
     concern,
     evidenceStrengthFlags: ["direct_runtime"],
     rawEvidence: {
-      cbaVendorTier1: ["adsrvr.org"],
+      directAdvertisingSharingVendors: ["The Trade Desk"],
       choiceControlsInspected: true,
       optOutUiResult: "absent",
       policyCbaLanguage: "full_cba_language",
@@ -3352,7 +3352,7 @@ test("deriveConcernPolicy keeps generic CPRA opt-out absence audit-only without 
     }),
     evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
     rawEvidence: {
-      cbaVendorTier1: ["adsrvr.org"],
+      directAdvertisingSharingVendors: ["The Trade Desk"],
       optOutUiResult: "absent",
       policyCbaLanguage: "absent"
     }

@@ -1310,13 +1310,16 @@ function hasAdvertisingSharingRuntimeEvidence(rawEvidence: Record<string, unknow
     "runtime_vendor_categories",
     "crossDomainIdentifierSharingDestinationCategories"
   ]);
-  const vendors = getStringArrayValues(rawEvidence, ["runtimeVendors", "runtime_vendors", "advertisingSharingVendors"]);
-  const cbaVendorTier1 = getStringArrayValues(rawEvidence, ["cbaVendorTier1", "cba_vendor_tier1"]);
-  const cbaVendorTier2 = getStringArrayValues(rawEvidence, ["cbaVendorTier2", "cba_vendor_tier2"]);
+  const vendors = getStringArrayValues(rawEvidence, [
+    "runtimeVendors",
+    "runtime_vendors",
+    "directAdvertisingSharingVendors",
+    "direct_advertising_sharing_vendors",
+    "advertisingSharingVendors"
+  ]);
   const cpraAdvertisingSharingVendors = [
-    ...getStringArrayValues(cpraEvidence, ["advertisingSharingVendors", "advertising_sharing_vendors"]),
-    ...getStringArrayValues(cpraEvidence, ["cbaVendorTier1", "cba_vendor_tier1"]),
-    ...getStringArrayValues(cpraEvidence, ["cbaVendorTier2", "cba_vendor_tier2"])
+    ...getStringArrayValues(cpraEvidence, ["directAdvertisingSharingVendors", "direct_advertising_sharing_vendors"]),
+    ...getStringArrayValues(cpraEvidence, ["advertisingSharingVendors", "advertising_sharing_vendors"])
   ];
   const evidenceRows = getObjectArrayValues(rawEvidence, [
     "advertisingSharingRuntimeEvidence",
@@ -1326,8 +1329,6 @@ function hasAdvertisingSharingRuntimeEvidence(rawEvidence: Record<string, unknow
   return (
     categories.some((category) => /advertising|retargeting|rtb|identity|marketing|cross_context/i.test(category)) ||
     vendors.length > 0 ||
-    cbaVendorTier1.length > 0 ||
-    cbaVendorTier2.length > 0 ||
     evidenceRows.length > 0 ||
     cpraAdvertisingSharingVendors.length > 0
   );

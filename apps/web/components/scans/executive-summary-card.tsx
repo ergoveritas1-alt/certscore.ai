@@ -1,4 +1,5 @@
 import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
+import { KNOWN_CMP_REGISTRY } from "../../../../packages/shared/src/known-cmps";
 import React from "react";
 import {
   deriveExecutiveDisplayState,
@@ -202,17 +203,10 @@ function formatTrackerFootprintExpandLabel(input: {
   return "";
 }
 
-const RECOGNIZED_CMP_BRANDS = [
-  { key: "onetrust", label: "OneTrust" },
-  { key: "cookiebot", label: "Cookiebot" },
-  { key: "didomi", label: "Didomi" },
-  { key: "trustarc", label: "TrustArc" },
-  { key: "osano", label: "Osano" },
-  { key: "usercentrics", label: "Usercentrics" },
-  { key: "cookieyes", label: "CookieYes" },
-  { key: "quantcast", label: "Quantcast Choice" },
-  { key: "sourcepoint", label: "Sourcepoint" }
-] as const;
+const RECOGNIZED_CMP_BRANDS = KNOWN_CMP_REGISTRY.flatMap((entry) => [
+  { key: entry.canonicalName.toLowerCase(), label: entry.canonicalName },
+  ...entry.aliases.map((alias) => ({ key: alias.toLowerCase(), label: entry.canonicalName }))
+]);
 
 function getRecognizedCmpBrand(cmpVendorName: string | null | undefined) {
   const normalized = cmpVendorName?.trim().toLowerCase();
@@ -848,6 +842,8 @@ const CCPA_CPRA_CIPA_REGULATORY_FINDING_IDS = new Set([
   "sensitive_data_collection_with_third_party_tracking_present",
   "sensitive_collection_surface_observed",
   "possible_session_replay_on_sensitive_input_surface",
+  "cipa_sensitive_interaction_recording_signal",
+  "cipa_sensitive_communication_interception_signal",
   "pre_submit_text_capture_detected",
   "cookie_disclosure_gap",
   "policy_behavior_contradiction_detected",
@@ -1313,10 +1309,6 @@ function capContextOnlyLensTone(input: {
   if (input.findings.length === 0 || input.findings.some((finding) => !isContextOnlyLensFinding(finding))) {
     return { score: input.score, tone: input.tone };
   }
-  if (input.findings.some(isMeasuredCountLensFinding)) {
-    return { score: input.score, tone: input.tone };
-  }
-
   return {
     score: Math.max(input.score, 50),
     tone: buildWatchTone()
@@ -4956,6 +4948,24 @@ export function ExecutiveSummaryCard(input: {
                     </div>
                   </div>
                 </div>
+                {uniqueStrings([...input.topObservedEntities.map((entity) => entity.label), ...namedVendors]).length > 0 ? (
+                  <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Vendor mix</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {uniqueStrings([...input.topObservedEntities.map((entity) => entity.label), ...namedVendors]).slice(0, 10).map((label) => {
+                        const entity = input.topObservedEntities.find((candidate) => candidate.label === label);
+                        return (
+                          <VendorBrandChip
+                            key={label}
+                            category={entity?.category ?? "vendor"}
+                            label={label}
+                            suffix={entity ? `${entity.category} · ${entity.requestCount} req` : "vendor"}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                   <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                     Tracker footprint
@@ -5022,6 +5032,10 @@ export function ExecutiveSummaryCard(input: {
                 {visibleScanInterruptions.length > 0 ? (
                   <div id="fingerprinting" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Scan Interruption</p>
+                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
+                      <p className="font-semibold text-amber-950">Coverage was limited by site protections.</p>
+                      <p>Findings shown here are based on retained observable evidence.</p>
+                    </div>
                     <div className="mt-3 space-y-2">
                       {visibleScanInterruptions.map((event) => (
                         <details key={`${event.label}:${event.details.join("|")}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">

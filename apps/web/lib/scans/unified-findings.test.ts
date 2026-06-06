@@ -4076,8 +4076,7 @@ test("surfaces CPRA CBA opt-out missing from retained runtime evidence", () => {
       {
         description: "CBA vendors were observed without a CPRA-specific opt-out control.",
         fallbackEvidence: {
-          cbaVendorTier1: ["adsrvr.org"],
-          cbaVendorTier2: [],
+          directAdvertisingSharingVendors: ["The Trade Desk"],
           choiceControlsInspected: true,
           cpraIconDetected: false,
           findingSeverity: "high",
@@ -4120,8 +4119,7 @@ test("keeps CPRA CBA opt-out missing audit-only when retained evidence is adtech
       {
         description: "CBA vendors were observed without a CPRA-specific opt-out control.",
         fallbackEvidence: {
-          cbaVendorTier1: ["adsrvr.org"],
-          cbaVendorTier2: [],
+          directAdvertisingSharingVendors: ["The Trade Desk"],
           cpraIconDetected: false,
           findingSeverity: "critical",
           gpcCbaHonored: false,

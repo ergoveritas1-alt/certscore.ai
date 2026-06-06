@@ -682,6 +682,20 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialTier: "headline",
     initialLane: "main"
   },
+  cipa_sensitive_interaction_recording_signal: {
+    findingId: "cipa_sensitive_interaction_recording_signal",
+    family: "sensitive_data",
+    initialState: "review",
+    initialTier: "section",
+    initialLane: "main"
+  },
+  cipa_sensitive_communication_interception_signal: {
+    findingId: "cipa_sensitive_communication_interception_signal",
+    family: "sensitive_data",
+    initialState: "review",
+    initialTier: "section",
+    initialLane: "main"
+  },
   privacy_policy_missing_surface: {
     findingId: "privacy_policy_missing_surface",
     family: "coverage_gap",

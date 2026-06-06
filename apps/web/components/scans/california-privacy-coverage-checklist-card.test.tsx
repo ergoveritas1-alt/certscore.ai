@@ -157,3 +157,24 @@ test("California checklist avoids visible not-applicable posture badges", () => 
   assert.match(html, /Not observed/);
   assert.doesNotMatch(html, />Not applicable</);
 });
+
+test("California checklist renders CIPA overlays only from policy-retained evidence", () => {
+  const item = makeChecklistItem("targeted_advertising_signals", "review_signal");
+  item.criticalEvidence.retainedEvidence.cipaRiskOverlay = {
+    confidence: "high",
+    directEvidenceObserved: true,
+    legalConclusion: false,
+    overlayTags: ["pre_consent_tracking", "cross_domain_or_interaction_event_sharing"],
+    thirdPartyReceiptObserved: true
+  };
+
+  const html = renderToStaticMarkup(
+    createElement(CaliforniaPrivacyCoverageChecklistCard, {
+      items: [item]
+    })
+  );
+
+  assert.match(html, /CIPA overlay: pre consent tracking, cross domain or interaction event sharing; direct retained evidence; high confidence/);
+  assert.match(html, /CertScore does not make legal conclusions/);
+  assert.doesNotMatch(html, new RegExp(`CIPA ${"viol"}ation|illegal ${"wire"}tapping`, "i"));
+});

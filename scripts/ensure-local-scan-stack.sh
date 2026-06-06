@@ -6,11 +6,13 @@ WEB_ENV_FILE="${ROOT_DIR}/apps/web/.env.local"
 LOG_DIR="${ROOT_DIR}/tmp/local-dev"
 WEB_PORT="${WEB_PORT:-3000}"
 STORAGE_PORT="${STORAGE_PORT:-9000}"
+LOCAL_PGDATA="${LOCAL_PGDATA:-${LOG_DIR}/postgres-data}"
 FORCE_RESTART="${FORCE_RESTART:-0}"
 FORCE_RESTART_SCANNER="${FORCE_RESTART_SCANNER:-0}"
 SKIP_SCANNER="${SKIP_SCANNER:-0}"
 SKIP_VALIDATION_WORKER="${SKIP_VALIDATION_WORKER:-0}"
 STATUS_ONLY="${STATUS_ONLY:-0}"
+ALLOW_SUDO_POSTGRES_REPAIR="${ALLOW_SUDO_POSTGRES_REPAIR:-1}"
 
 mkdir -p "${LOG_DIR}"
 
@@ -180,6 +182,13 @@ database_port() {
   '
 }
 
+database_name() {
+  node -e '
+    const url = new URL(process.env.DATABASE_URL);
+    console.log(url.pathname.replace(/^\/+/, "") || "postgres");
+  '
+}
+
 wait_for_database() {
   local timeout="${1:-45}"
 
@@ -212,6 +221,168 @@ EOF
   return 1
 }
 
+wait_for_postgres_server() {
+  local timeout="${1:-30}"
+  local port
+
+  port="$(database_port)"
+  for _ in $(seq 1 "${timeout}"); do
+    if pg_isready -h 127.0.0.1 -p "${port}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  return 1
+}
+
+ensure_database_exists() {
+  local db_name
+  local port
+
+  db_name="$(database_name)"
+  port="$(database_port)"
+
+  if wait_for_database 2; then
+    return 0
+  fi
+
+  if ! wait_for_postgres_server 2; then
+    return 1
+  fi
+
+  log "creating local database ${db_name} if needed"
+  createdb -h 127.0.0.1 -p "${port}" -U postgres "${db_name}" >/dev/null 2>&1 || true
+  wait_for_database 5
+}
+
+diagnose_homebrew_postgres_service() {
+  local service="$1"
+  local data_dir=""
+  local log_file=""
+  local owner=""
+  local mode=""
+
+  case "${service}" in
+    postgresql@*)
+      data_dir="$(brew --prefix)/var/${service}"
+      log_file="$(brew --prefix)/var/log/${service}.log"
+      ;;
+    postgresql)
+      data_dir="$(brew --prefix)/var/postgres"
+      log_file="$(brew --prefix)/var/log/postgresql.log"
+      ;;
+  esac
+
+  [[ -n "${data_dir}" ]] || return 0
+
+  if [[ ! -d "${data_dir}" ]]; then
+    log "${service} data directory is missing: ${data_dir}"
+    log "try: initdb --locale=C -E UTF-8 ${data_dir}"
+    return 0
+  fi
+
+  owner="$(stat -f '%Su:%Sg' "${data_dir}" 2>/dev/null || printf unknown)"
+  mode="$(stat -f '%Sp' "${data_dir}" 2>/dev/null || printf unknown)"
+
+  if [[ ! -r "${data_dir}" || ! -x "${data_dir}" ]]; then
+    log "${service} data directory is not readable by $(whoami): ${data_dir} (${owner}, ${mode})"
+    log "fix ownership, then rerun this script:"
+    log "  sudo chown -R \"\$(whoami)\":admin ${data_dir}"
+    if [[ -e "${log_file}" ]]; then
+      log "  sudo chown \"\$(whoami)\":admin ${log_file}"
+    fi
+    return 0
+  fi
+
+  if [[ ! -f "${data_dir}/PG_VERSION" ]]; then
+    log "${service} data directory is not initialized: ${data_dir}"
+    log "initialize it, then rerun this script:"
+    log "  initdb --locale=C -E UTF-8 ${data_dir}"
+    return 0
+  fi
+
+  if [[ -f "${log_file}" ]]; then
+    log "recent ${service} log lines:"
+    tail -40 "${log_file}" >&2 || true
+  fi
+}
+
+start_repo_local_postgres() {
+  local port
+
+  port="$(database_port)"
+
+  if ! command -v initdb >/dev/null 2>&1 || ! command -v pg_ctl >/dev/null 2>&1; then
+    return 1
+  fi
+
+  if [[ ! -f "${LOCAL_PGDATA}/PG_VERSION" ]]; then
+    log "initializing repo-local Postgres data directory: ${LOCAL_PGDATA}"
+    mkdir -p "${LOCAL_PGDATA}"
+    initdb -U postgres -A trust --locale=C -E UTF-8 "${LOCAL_PGDATA}" >/dev/null
+    {
+      printf '\n# CertScore local scan stack\n'
+      printf "listen_addresses = '127.0.0.1'\n"
+      printf 'port = %s\n' "${port}"
+    } >>"${LOCAL_PGDATA}/postgresql.conf"
+  fi
+
+  log "starting repo-local Postgres on port ${port}"
+  pg_ctl -D "${LOCAL_PGDATA}" -l "${LOG_DIR}/postgres.log" start >/dev/null 2>&1 || true
+
+  if ensure_database_exists; then
+    return 0
+  fi
+
+  tail -80 "${LOG_DIR}/postgres.log" >&2 || true
+  return 1
+}
+
+repair_homebrew_postgres_service_if_needed() {
+  local service="$1"
+  local data_dir=""
+  local log_file=""
+  local owner=""
+  local mode=""
+
+  case "${service}" in
+    postgresql@*)
+      data_dir="$(brew --prefix)/var/${service}"
+      log_file="$(brew --prefix)/var/log/${service}.log"
+      ;;
+    postgresql)
+      data_dir="$(brew --prefix)/var/postgres"
+      log_file="$(brew --prefix)/var/log/postgresql.log"
+      ;;
+  esac
+
+  [[ -n "${data_dir}" && -d "${data_dir}" ]] || return 0
+  [[ -r "${data_dir}" && -x "${data_dir}" ]] && return 0
+
+  owner="$(stat -f '%Su:%Sg' "${data_dir}" 2>/dev/null || printf unknown)"
+  mode="$(stat -f '%Sp' "${data_dir}" 2>/dev/null || printf unknown)"
+  log "${service} data directory needs ownership repair: ${data_dir} (${owner}, ${mode})"
+
+  if [[ "${ALLOW_SUDO_POSTGRES_REPAIR}" != "1" ]]; then
+    return 1
+  fi
+
+  if [[ ! -t 0 ]]; then
+    log "not running in an interactive terminal; cannot prompt for sudo"
+    return 1
+  fi
+
+  log "requesting sudo to repair ${service} ownership"
+  sudo chown -R "$(whoami)":admin "${data_dir}" || return 1
+  if [[ -e "${log_file}" ]]; then
+    sudo chown "$(whoami)":admin "${log_file}" || return 1
+  fi
+
+  log "repaired ${service} ownership"
+  return 0
+}
+
 start_local_database_if_needed() {
   if wait_for_database 3; then
     return 0
@@ -228,11 +399,13 @@ start_local_database_if_needed() {
   if command -v brew >/dev/null 2>&1; then
     for service in postgresql@17 postgresql@16 postgresql@15 postgresql@14 postgresql; do
       if brew services list 2>/dev/null | awk '{print $1}' | grep -qx "${service}"; then
+        repair_homebrew_postgres_service_if_needed "${service}" || true
         log "starting Homebrew service ${service}"
         brew services start "${service}" >/dev/null 2>&1 || true
         if wait_for_database 20; then
           return 0
         fi
+        diagnose_homebrew_postgres_service "${service}"
       fi
     done
   fi
@@ -240,12 +413,17 @@ start_local_database_if_needed() {
   if command -v pg_ctl >/dev/null 2>&1 && [[ -n "${PGDATA:-}" ]]; then
     log "starting Postgres with pg_ctl and PGDATA=${PGDATA}"
     pg_ctl -D "${PGDATA}" start >/dev/null 2>&1 || true
-    if wait_for_database 20; then
+    if ensure_database_exists; then
       return 0
     fi
   fi
 
-  fail "could not start local Postgres; start it manually and rerun this script"
+  log "falling back to repo-local Postgres because Homebrew Postgres is unavailable"
+  if start_repo_local_postgres; then
+    return 0
+  fi
+
+  fail "could not start local Postgres for database $(database_name); repair the diagnostics above and rerun this script"
 }
 
 ensure_visual_evidence_storage() {

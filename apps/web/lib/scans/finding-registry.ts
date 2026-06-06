@@ -492,6 +492,26 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     remediation:
       "Review session replay deployment on sensitive account, login, application, intake, and payment flows; confirm masking and page exclusions before replay collection remains enabled."
   },
+  cipa_sensitive_interaction_recording_signal: {
+    id: "cipa_sensitive_interaction_recording_signal",
+    label: "CIPA-sensitive interaction recording risk signal",
+    section: "Privacy & Tracking",
+    defaultSurfacePriority: 88,
+    whyItMatters:
+      "Third-party technology capable of recording or receiving user interaction signals can create California litigation review risk, especially before clear consent, after rejection, or on sensitive surfaces.",
+    remediation:
+      "Review interaction recording tools, consent timing, page-level exclusions, masking configuration, and public disclosures. CertScore does not make legal conclusions."
+  },
+  cipa_sensitive_communication_interception_signal: {
+    id: "cipa_sensitive_communication_interception_signal",
+    label: "CIPA-sensitive third-party communication interception risk signal",
+    section: "Privacy & Tracking",
+    defaultSurfacePriority: 88,
+    whyItMatters:
+      "Third-party receipt of interaction data during form, search, chat, or support flows can warrant California wiretapping/eavesdropping review without making a legal conclusion.",
+    remediation:
+      "Review third-party scripts and endpoints active during communication flows, consent timing, disclosures, and data-minimization controls. CertScore does not make legal conclusions."
+  },
   sensitive_data_collection_with_third_party_tracking_present: {
     id: "sensitive_data_collection_with_third_party_tracking_present",
     label: "Sensitive collection with third-party tracking observed",

@@ -1358,8 +1358,12 @@ test("California CPRA opt-out gaps require applicability and inspected choice-co
   const incompleteConcerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],
     runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        directAdvertisingSharingVendors: ["The Trade Desk"],
+        targetedAdvertisingSignalsObserved: true
+      },
       cpraCbaOptOutEvidence: {
-        cbaVendorTier1: ["adsrvr.org"],
+        directAdvertisingSharingVendors: ["The Trade Desk"],
         optOutUiResult: "absent",
         policyCbaLanguage: "full_cba_language"
       }
@@ -1374,8 +1378,12 @@ test("California CPRA opt-out gaps require applicability and inspected choice-co
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],
     runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        directAdvertisingSharingVendors: ["The Trade Desk"],
+        targetedAdvertisingSignalsObserved: true
+      },
       cpraCbaOptOutEvidence: {
-        cbaVendorTier1: ["adsrvr.org"],
+        directAdvertisingSharingVendors: ["The Trade Desk"],
         choiceControlsInspected: true,
         optOutControlFound: false,
         optOutUiResult: "absent",
@@ -1392,6 +1400,35 @@ test("California CPRA opt-out gaps require applicability and inspected choice-co
   assert.equal(concern.promotionEligibility, "eligible");
   assert.equal(concern.externalSurfacingEligibility, "eligible");
   assert.equal(concern.evidenceBundle.rawEvidence?.californiaEvidenceFamily, "sale_share_control");
+});
+
+test("California CPRA opt-out gap is suppressed when a retained privacy-choice path exists", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        directAdvertisingSharingVendors: ["The Trade Desk"],
+        doNotSellSharePathObserved: true,
+        doNotSellSharePathUrl: "https://example.test/privacy-choices",
+        privacyChoicePathEvidence: {
+          observed: false,
+          selectedUrl: "https://example.test/privacy-choices"
+        },
+        saleShareRequestUrls: ["https://pixel.adsrvr.org/track"],
+        targetedAdvertisingSignalsObserved: true
+      }
+    },
+    validationFindings: []
+  });
+
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing"),
+    false
+  );
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "targeted_advertising_choices_present"),
+    true
+  );
 });
 
 test("California GPC runtime evidence flows through unified findings when retained support is concrete", () => {
@@ -1426,6 +1463,85 @@ test("California GPC runtime evidence flows through unified findings when retain
 
   assert.equal(concern?.evidenceBundle.rawEvidence?.californiaEvidenceFamily, "gpc_handling");
   assert.ok(packet);
+});
+
+test("California credential-only sensitive context does not create a Limit Use gap concern", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        limitUseSensitivePiPathObserved: false,
+        sensitivePiCategories: ["password"],
+        sensitivePiContextObserved: true,
+        sensitivePiContextUrls: ["https://example.test/login"],
+        sensitiveThirdPartyTrackingObserved: false
+      }
+    },
+    validationFindings: []
+  });
+
+  assert.equal(
+    concerns.some((concern) => concern.originKey === "california_privacy.sensitive_pi_control.potential_gap"),
+    false
+  );
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "sensitive_collection_surface_observed"),
+    false
+  );
+});
+
+test("California CIPA-sensitive retained evidence flows through normalized concerns", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        cipaCommunicationInterceptionEvidence: {
+          cipaConsentTiming: "pre_consent",
+          cipaDisclosureObserved: false,
+          cipaEvidenceConfidence: "medium",
+          cipaSensitive: true,
+          cipaSensitiveSurfaceObserved: false,
+          cipaSignalTypes: ["form_interaction", "third_party_interaction_endpoint"],
+          cipaThirdPartyReceiptObserved: true,
+          directEvidenceObserved: true,
+          legalConclusion: false,
+          pageUrls: ["https://example.test/contact"],
+          requestUrls: ["https://collector.example.test/interaction"],
+          vendors: ["collector.example.test"]
+        },
+        cipaInteractionRecordingEvidence: {
+          cipaConsentTiming: "pre_consent",
+          cipaDisclosureObserved: false,
+          cipaEvidenceConfidence: "high",
+          cipaSensitive: true,
+          cipaSensitiveSurfaceObserved: true,
+          cipaSignalTypes: ["session_replay", "third_party_interaction_endpoint"],
+          cipaThirdPartyReceiptObserved: true,
+          collectionEndpointObserved: true,
+          directEvidenceObserved: true,
+          legalConclusion: false,
+          pageUrls: ["https://example.test/intake"],
+          requestUrls: ["https://rs.fullstory.com/rec/page"],
+          vendors: ["FullStory"]
+        }
+      }
+    },
+    validationFindings: []
+  });
+
+  const interactionConcern = concerns.find(
+    (concern) => concern.suggestedUnifiedFindingId === "cipa_sensitive_interaction_recording_signal"
+  );
+  const communicationConcern = concerns.find(
+    (concern) => concern.suggestedUnifiedFindingId === "cipa_sensitive_communication_interception_signal"
+  );
+
+  assert.ok(interactionConcern);
+  assert.ok(communicationConcern);
+  assert.equal(interactionConcern.evidenceBundle.rawEvidence?.californiaEvidenceFamily, "cipa_interaction_recording");
+  assert.equal(communicationConcern.evidenceBundle.rawEvidence?.californiaEvidenceFamily, "cipa_communication_interception");
+  assert.equal(interactionConcern.evidenceBundle.rawEvidence?.legalConclusion, false);
+  assert.doesNotMatch(`${interactionConcern.title} ${interactionConcern.description}`, /violation|illegal/i);
 });
 
 test("California rights request evidence creates a positive rights-path finding without absence logic", () => {

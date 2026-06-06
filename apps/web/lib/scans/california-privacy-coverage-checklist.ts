@@ -154,6 +154,22 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     notObservedText: "No sensitive form and third-party tracking correlation was surfaced in this scan context."
   },
   {
+    id: "cipa_sensitive_interaction_recording",
+    label: "CIPA-sensitive interaction recording",
+    explanation: "Whether retained runtime evidence showed session replay, behavioral analytics, or interaction recording signals relevant to California CIPA-sensitive review.",
+    findingIds: ["cipa_sensitive_interaction_recording_signal"],
+    defaultFindingStatus: "review_signal",
+    notObservedText: "No CIPA-sensitive interaction recording signal was surfaced in this scan context."
+  },
+  {
+    id: "cipa_sensitive_communication_interception",
+    label: "CIPA-sensitive third-party communication interception",
+    explanation: "Whether retained runtime evidence showed third-party receipt or tracking during public communication, search, form, chat, or support flows.",
+    findingIds: ["cipa_sensitive_communication_interception_signal"],
+    defaultFindingStatus: "review_signal",
+    notObservedText: "No CIPA-sensitive communication interception signal was surfaced in this scan context."
+  },
+  {
     id: "consumer_rights_request_methods",
     label: "Consumer rights request methods",
     explanation: "Whether public privacy materials exposed a consumer rights request method or equivalent privacy request path.",

@@ -14,7 +14,7 @@ export function ExecutiveTopFindingsCarousel({
   const items = React.Children.toArray(children);
   const [activeIndex, setActiveIndex] = React.useState(0);
   const safeCount = Math.max(0, Math.min(count, items.length));
-  const activeItem = safeCount > 0 ? items[Math.min(activeIndex, safeCount - 1)] : null;
+  const boundedActiveIndex = Math.min(activeIndex, Math.max(0, safeCount - 1));
 
   const goPrevious = () => {
     setActiveIndex((current) => (current - 1 + safeCount) % safeCount);
@@ -58,7 +58,16 @@ export function ExecutiveTopFindingsCarousel({
         ) : null}
       </div>
       <div className="min-w-0" data-executive-top-finding-carousel-active>
-        {activeItem}
+        {items.slice(0, safeCount).map((item, index) => (
+          <div
+            key={index}
+            aria-hidden={index === boundedActiveIndex ? undefined : true}
+            className={index === boundedActiveIndex ? undefined : "hidden"}
+            data-executive-top-finding-carousel-item={index === boundedActiveIndex ? "active" : "inactive"}
+          >
+            {item}
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -94,6 +94,28 @@ function getArgValue(flag: string) {
   return process.argv[index + 1] ?? null;
 }
 
+function getMultiArgValue(flag: string) {
+  const values: string[] = [];
+  const argv = process.argv.slice(2);
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (token !== flag) {
+      continue;
+    }
+
+    for (let valueIndex = index + 1; valueIndex < argv.length; valueIndex += 1) {
+      const value = argv[valueIndex];
+      if (!value || value.startsWith("--")) {
+        break;
+      }
+      values.push(value);
+    }
+  }
+
+  return values.length > 0 ? values.join(" ") : null;
+}
+
 function getListArg(flag: string) {
   const raw = getArgValue(flag);
   if (!raw) {
@@ -157,6 +179,16 @@ function diffMs(start: string | null | undefined, end: string | null | undefined
   return Math.max(0, endMs - startMs);
 }
 
+function toIsoString(value: unknown) {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return value.toISOString();
+  }
+  return null;
+}
+
 function stripDbRecord(record: Record<string, unknown> | null | undefined) {
   if (!record) {
     return null;
@@ -167,6 +199,33 @@ function stripDbRecord(record: Record<string, unknown> | null | undefined) {
   delete next.created_at;
   delete next.updated_at;
   return next;
+}
+
+const tableColumnPresenceCache = new Map<string, boolean>();
+
+async function hasTableColumn(tableName: string, columnName: string) {
+  const key = `${tableName}.${columnName}`;
+  const cached = tableColumnPresenceCache.get(key);
+  if (typeof cached === "boolean") {
+    return cached;
+  }
+
+  const row = await queryOne<{ exists: boolean }>(
+    `
+      select exists (
+        select 1
+          from information_schema.columns
+         where table_schema = 'public'
+           and table_name = $1
+           and column_name = $2
+      ) as "exists"
+    `,
+    [tableName, columnName],
+    { readOnly: true }
+  );
+  const exists = row?.exists === true;
+  tableColumnPresenceCache.set(key, exists);
+  return exists;
 }
 
 function getScanConfig(input: {
@@ -364,6 +423,54 @@ async function waitForSignalEnrichmentCompletion(input: {
   }
 }
 
+async function loadValidationFindingRows(scanId: string) {
+  const hasDirectScanId = await hasTableColumn("validation_run_findings", "scan_id").catch(() => false);
+  if (hasDirectScanId) {
+    return query<{ id: string }>(
+      `select id from validation_run_findings where scan_id = $1`,
+      [scanId],
+      { readOnly: true }
+    )
+      .then((result) => ({ data: result.rows, error: null as { code?: string | null; message?: string | null } | null }))
+      .catch((error) => ({ data: [] as Array<{ id: string }>, error: { message: error instanceof Error ? error.message : String(error) } }));
+  }
+
+  const runsResult = await query<{ id: string }>(
+    `select id from validation_runs where scan_id = $1`,
+    [scanId],
+    { readOnly: true }
+  )
+    .then((result) => ({ data: result.rows, error: null as { code?: string | null; message?: string | null } | null }))
+    .catch((error) => ({ data: [] as Array<{ id: string }>, error: { message: error instanceof Error ? error.message : String(error) } }));
+
+  if (runsResult.error) {
+    return isMissingOptionalTableError(runsResult.error) || isMissingColumnError(runsResult.error, "scan_id")
+      ? { data: [] as Array<{ id: string }>, error: null }
+      : runsResult;
+  }
+
+  const runIds = runsResult.data
+    .map((row) => (row && typeof row === "object" ? (row as { id?: unknown }).id : null))
+    .filter((value): value is string => typeof value === "string");
+
+  if (runIds.length === 0) {
+    return { data: [] as Array<{ id: string }>, error: null };
+  }
+
+  return query<{ id: string }>(
+    `select id from validation_run_findings where validation_run_id = any($1::uuid[])`,
+    [runIds],
+    { readOnly: true }
+  )
+    .then((result) => ({ data: result.rows, error: null as { code?: string | null; message?: string | null } | null }))
+    .catch((error) => {
+      const normalized = { message: error instanceof Error ? error.message : String(error) };
+      return isMissingOptionalTableError(normalized) || isMissingColumnError(normalized, "validation_run_id")
+        ? { data: [] as Array<{ id: string }>, error: null }
+        : { data: [] as Array<{ id: string }>, error: normalized };
+    });
+}
+
 async function summarizeScan(input: {
   hostname: string;
   scanId: string;
@@ -399,13 +506,7 @@ async function summarizeScan(input: {
     )
       .then((result) => ({ data: result.rows, error: null as { code?: string | null; message?: string | null } | null }))
       .catch((error) => ({ data: [] as ScanSignalRow[], error: { message: error instanceof Error ? error.message : String(error) } })),
-    query<{ id: string }>(
-      `select id from validation_run_findings where scan_id = $1`,
-      [input.scanId],
-      { readOnly: true }
-    )
-      .then((result) => ({ data: result.rows, error: null as { code?: string | null; message?: string | null } | null }))
-      .catch((error) => ({ data: [] as Array<{ id: string }>, error: { message: error instanceof Error ? error.message : String(error) } })),
+    loadValidationFindingRows(input.scanId),
     queryOne<ScanRow>(
       `select id, status, created_at, started_at, completed_at, error_message from scans where id = $1`,
       [input.scanId],
@@ -439,33 +540,8 @@ async function summarizeScan(input: {
     throw new Error(`Failed to load signals for ${input.hostname}: ${signalsError.message}`);
   }
 
-  let findings = findingsResult.data;
-  let findingsError = findingsResult.error;
-  if (findingsError && isMissingColumnError(findingsError, "scan_id")) {
-    const runs = await query<{ id: string }>(
-      `select id from validation_runs where scan_id = $1`,
-      [input.scanId],
-      { readOnly: true }
-    ).then((result) => result.rows);
-
-    const runIds = runs
-      .map((row) => (row && typeof row === "object" ? (row as { id?: unknown }).id : null))
-      .filter((value): value is string => typeof value === "string");
-
-    if (runIds.length === 0) {
-      findings = [];
-      findingsError = null;
-    } else {
-      findings = await query<{ id: string }>(
-        `select id from validation_run_findings where validation_run_id = any($1::uuid[])`,
-        [runIds],
-        { readOnly: true }
-      ).then((result) => result.rows);
-      findingsError = null;
-    }
-  }
-  if (findingsError) {
-    throw new Error(`Failed to load validation findings for ${input.hostname}: ${findingsError.message}`);
+  if (findingsResult.error) {
+    throw new Error(`Failed to load validation findings for ${input.hostname}: ${findingsResult.error.message}`);
   }
 
   const normalizedDocumentSources = (documentSourcesError ? [] : documentSourcesResult.data) as Array<Record<string, unknown>>;
@@ -476,9 +552,9 @@ async function summarizeScan(input: {
   const readyDocumentSourceCount = getDocumentSourceStatusCount(normalizedDocumentSources, "ready");
   const rejectedDocumentSourceCount = getDocumentSourceStatusCount(normalizedDocumentSources, "rejected");
   const signalRows = (signals ?? []) as ScanSignalRow[];
-  const findingRows = (findings ?? []) as Array<Record<string, unknown>>;
+  const findingRows = (findingsResult.data ?? []) as Array<Record<string, unknown>>;
   const observedAtByScanId = new Map<string, string | null>([
-    [input.scanId, scanRow?.completed_at ?? scanRow?.started_at ?? scanRow?.created_at ?? null]
+    [input.scanId, toIsoString(scanRow?.completed_at) ?? toIsoString(scanRow?.started_at) ?? toIsoString(scanRow?.created_at)]
   ]);
   const mergedSignalsByScanId = await loadMergedSignalsByScanId({
     observedAtByScanId,
@@ -500,7 +576,7 @@ async function summarizeScan(input: {
 
   const repairedEvents = repairFindingFamilyPacketEvents({
     events: events.map((event) => ({
-      createdAt: event.created_at,
+      createdAt: toIsoString(event.created_at) ?? new Date(0).toISOString(),
       eventType: event.event_type,
       id: event.id,
       message: event.message,
@@ -521,8 +597,8 @@ async function summarizeScan(input: {
     primaryPolicyEnrichment: normalizedPolicyRows[0] ?? null,
     runtimeArtifacts: normalizedRuntimeArtifacts,
     scan: {
-      completedAt: typeof scanRow?.completed_at === "string" ? scanRow.completed_at : null,
-      createdAt: typeof scanRow?.created_at === "string" ? scanRow.created_at : new Date().toISOString(),
+      completedAt: toIsoString(scanRow?.completed_at),
+      createdAt: toIsoString(scanRow?.created_at) ?? new Date().toISOString(),
       errorMessage: typeof scanRow?.error_message === "string" ? scanRow.error_message : null,
       domainHostname: input.hostname,
       domainId: null,
@@ -596,14 +672,14 @@ async function summarizeScan(input: {
   const workflow = deriveSignalEnrichmentWorkflowState({
     documentSourceCount: readyDocumentSourceCount,
     events: events.map((event) => ({
-      createdAt: event.created_at,
+      createdAt: toIsoString(event.created_at) ?? new Date(0).toISOString(),
       eventType: event.event_type
     })),
     findingsCount: findingRows.length,
     mergedSignalCount: signalRows.length,
     nanoSignalCount,
     policyDocumentCount: policySemanticRows.length,
-    scanCompletedAt: typeof scanRow?.completed_at === "string" ? scanRow.completed_at : null,
+    scanCompletedAt: toIsoString(scanRow?.completed_at),
     scanStatus: typeof scanRow?.status === "string" ? scanRow.status : null,
     scannerSignalCount
   });
@@ -619,9 +695,9 @@ async function summarizeScan(input: {
       totalSignals: signalRows.length
     },
     scan: {
-      completedAt: typeof scanRow?.completed_at === "string" ? scanRow.completed_at : null,
-      createdAt: typeof scanRow?.created_at === "string" ? scanRow.created_at : null,
-      startedAt: typeof scanRow?.started_at === "string" ? scanRow.started_at : null,
+      completedAt: toIsoString(scanRow?.completed_at),
+      createdAt: toIsoString(scanRow?.created_at),
+      startedAt: toIsoString(scanRow?.started_at),
       status: typeof scanRow?.status === "string" ? scanRow.status : null
     },
     snapshot,
@@ -691,7 +767,7 @@ async function main() {
     positionalDomains.push(token);
   }
 
-  const explicitDomains = getArgValue("--domains");
+  const explicitDomains = getMultiArgValue("--domains");
   const parsedBatch = parseDomainBatchInput(explicitDomains ?? positionalDomains.join(" "));
 
   if (explicitScanIds.length === 0 && parsedBatch.valid.length === 0) {
@@ -760,8 +836,8 @@ async function main() {
 
   for (const entry of parsedBatch.valid) {
     const domain = await ensureDomain({
-      hostname: entry.domain,
-      normalizedUrl: `https://${entry.domain}`,
+      hostname: entry.hostname,
+      normalizedUrl: entry.normalizedUrl,
       organizationId: orgId
     });
 

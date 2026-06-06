@@ -1974,10 +1974,18 @@ export function hasStrongCpraCbaOptOutMissingEvidence(rawEvidence: Record<string
     return false;
   }
   const cpraEvidence = getRecordValue(rawEvidence, ["cpraCbaOptOutEvidence", "cpra_cba_opt_out_evidence"]);
-  const tier1 = getStringArrayValues(rawEvidence, ["cbaVendorTier1", "cba_vendor_tier1"]);
-  const tier2 = getStringArrayValues(rawEvidence, ["cbaVendorTier2", "cba_vendor_tier2"]);
-  const nestedTier1 = getStringArrayValues(cpraEvidence, ["cbaVendorTier1", "cba_vendor_tier1", "advertisingSharingVendors", "advertising_sharing_vendors"]);
-  const nestedTier2 = getStringArrayValues(cpraEvidence, ["cbaVendorTier2", "cba_vendor_tier2"]);
+  const directAdvertisingVendors = getStringArrayValues(rawEvidence, [
+    "directAdvertisingSharingVendors",
+    "direct_advertising_sharing_vendors",
+    "advertisingSharingVendors",
+    "advertising_sharing_vendors"
+  ]);
+  const nestedDirectAdvertisingVendors = getStringArrayValues(cpraEvidence, [
+    "directAdvertisingSharingVendors",
+    "direct_advertising_sharing_vendors",
+    "advertisingSharingVendors",
+    "advertising_sharing_vendors"
+  ]);
   const optOutUiResult =
     getStringArrayValues(cpraEvidence, ["optOutUiResult", "opt_out_ui_result"])[0] ??
     getStringArrayValues(rawEvidence, ["optOutUiResult", "opt_out_ui_result"])[0] ??
@@ -2000,7 +2008,9 @@ export function hasStrongCpraCbaOptOutMissingEvidence(rawEvidence: Record<string
     rawEvidence.choiceControlsInspected === true ||
     rawEvidence.choice_controls_inspected === true ||
     getStringArrayValues(rawEvidence, ["privacyChoiceSearchUrls", "privacy_choice_search_urls", "gpcOptOutDiscoveryAttemptUrls", "gpc_opt_out_discovery_attempt_urls"]).length > 0;
-  const vendorThresholdMet = tier1.length >= 1 || tier2.length >= 2 || nestedTier1.length >= 1 || nestedTier2.length >= 2;
+  const vendorThresholdMet =
+    directAdvertisingVendors.length >= 1 ||
+    nestedDirectAdvertisingVendors.length >= 1;
   const missingOrPartialControl =
     optOutUiResult === "absent" ||
     optOutUiResult === "generic_do_not_sell" ||
