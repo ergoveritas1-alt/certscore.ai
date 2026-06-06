@@ -4165,8 +4165,14 @@ test("ExecutiveSummaryCard switches to blocked-access language when no reliable 
 
   assert.match(html, /Public site access was limited during this scan/);
   assert.doesNotMatch(html, /Scan limitation:/);
-  assert.match(html, /Access limitation/);
-  assert.match(html, /This run was blocked before it established a trustworthy public browsing path/);
+  assert.match(html, /Scan not representative/);
+  assert.match(html, /Scores, regulatory projections, and substantive findings are withheld for this scan/);
+  assert.match(html, /Report status/);
+  assert.match(html, /Not scored/);
+  assert.doesNotMatch(html, /Score note:/);
+  assert.doesNotMatch(html, /Top findings/);
+  assert.doesNotMatch(html, /Access limitation/);
+  assert.doesNotMatch(html, /This run was blocked before it established a trustworthy public browsing path/);
   assert.doesNotMatch(html, /Regulatory findings/);
   assert.doesNotMatch(html, /Review lenses/);
 });

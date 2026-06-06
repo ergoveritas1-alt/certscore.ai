@@ -4493,8 +4493,15 @@ export function ExecutiveSummaryCard(input: {
   ]);
   const availableTopFindings = input.topFindings.filter((finding) => !suppressedTopFindingIds.has(finding.id));
   const nonRepresentativeScanFinding = availableTopFindings.find((finding) => finding.id === "scan_quality_visual_no_go");
-  const isScanNotRepresentative = Boolean(nonRepresentativeScanFinding);
-  const displayedTopFindings = nonRepresentativeScanFinding ? [nonRepresentativeScanFinding] : availableTopFindings;
+  const noReliableFindingsAccessLimitation = availableTopFindings.find((finding) => finding.id === "access_limited_no_reliable_findings");
+  const hardAccessLimitationWithheld =
+    Boolean(input.accessLimitationNotice) &&
+    /no public verification available/i.test(input.accessLimitationNotice?.coverageLabel ?? "") &&
+    Boolean(noReliableFindingsAccessLimitation);
+  const isScanNotRepresentative = Boolean(nonRepresentativeScanFinding) || hardAccessLimitationWithheld;
+  const displayedTopFindings = isScanNotRepresentative
+    ? (nonRepresentativeScanFinding ? [nonRepresentativeScanFinding] : [])
+    : availableTopFindings;
   const topFindingIconKeys = assignUniqueFindingTitleIconKeys(displayedTopFindings);
   const regulatoryFindingInput =
     Array.isArray(input.allFindings) && input.allFindings.length > 0 ? input.allFindings : input.topFindings;
@@ -4632,7 +4639,7 @@ export function ExecutiveSummaryCard(input: {
   const regulatoryLenses = input.unifiedFindings
     ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions)
     : buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);
-  const benchmarkScoreExplanation = isScanNotRepresentative
+  const benchmarkScoreExplanation = isScanNotRepresentative || input.accessLimitationNotice
     ? null
     : deriveBenchmarkScoreExplanation({
         benchmark: input.domainBenchmark,

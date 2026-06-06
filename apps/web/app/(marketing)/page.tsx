@@ -10,6 +10,7 @@ import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 const SAMPLE_REPORT_URL = "https://certscore.ai/scan/bc6e4dfa-8a25-43f8-822d-a10e89950799";
+const BOOK_DEMO_URL = "https://calendly.com/bmasek-w7ou/30min";
 export const metadata: Metadata = {
   ...createPageMetadata({
     title: "CertScore.ai — Evidence-Based Website Risk Signal Scanner",
@@ -129,23 +130,28 @@ export default async function MarketingHomePage() {
               See how websites handle consent, privacy and accessibility.
             </h1>
             <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
-              Automated runtime analysis surfacing pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity,
-              accessibility issues, and disclosure inconsistencies — based on observed behavior, not policy claims. Findings are mapped to GDPR/ePrivacy,
-              CCPA/CPRA/CIPA, FTC and ADA.
+              Evidence based analysis of pre-consent tracking, 3rd-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies. Mapped to GDPR/CCPA/CIPA and more.
             </p>
             <div className="flex flex-col gap-3 pt-1 sm:flex-row">
               <PendingButtonLink
+                className="w-full border-0 bg-[linear-gradient(135deg,#2563eb_0%,#0f8bd7_100%)] text-white shadow-[0_16px_32px_rgba(37,99,235,0.24)] hover:brightness-[1.05] focus-visible:ring-sky-500 sm:w-auto"
+                data-analytics-event="hero_book_demo_clicked"
+                href={BOOK_DEMO_URL}
+                idleContent="Schedule demo"
+                pendingContent="Opening..."
+              />
+              <PendingButtonLink
                 className="w-full border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 sm:w-auto"
                 data-analytics-cta-type="sample_report"
-                data-analytics-event="report_cta_clicked"
+                data-analytics-event="hero_sample_report_clicked"
                 href={SAMPLE_REPORT_URL}
-                idleContent="See sample report"
+                idleContent="See Sample Report"
                 pendingContent="Opening..."
                 variant="secondary"
               />
             </div>
             <p className="max-w-2xl text-xs leading-5 text-slate-500">
-              Built for enterprise teams managing regulatory compliance workflows, API integrations, and structured privacy-risk signals.
+              Built for policy analysts, developers, AI agents and agency/enterprise teams managing regulatory compliance workflows, API integrations, and structured privacy-risk signals.
             </p>
           </div>
 
@@ -221,16 +227,17 @@ export default async function MarketingHomePage() {
               <div className="flex flex-col gap-3 sm:flex-row">
                 <PendingButtonLink
                   className="w-full border-0 bg-[linear-gradient(135deg,#2f63ea_0%,#2454db_100%)] text-white shadow-[0_16px_32px_rgba(47,99,234,0.24)] hover:brightness-[1.04] sm:w-auto"
-                  href="/#homepage-scan"
-                  idleContent="Scan a website"
+                  data-analytics-event="hero_book_demo_clicked"
+                  href={BOOK_DEMO_URL}
+                  idleContent="Schedule demo"
                   pendingContent="Opening..."
                 />
                 <PendingButtonLink
                   className="w-full border border-white/12 bg-white/8 text-white hover:bg-white/12 sm:w-auto"
                   data-analytics-cta-type="sample_report"
-                  data-analytics-event="report_cta_clicked"
+                  data-analytics-event="hero_sample_report_clicked"
                   href={SAMPLE_REPORT_URL}
-                  idleContent="See sample report"
+                  idleContent="See Sample Report"
                   pendingContent="Opening..."
                   variant="secondary"
                 />

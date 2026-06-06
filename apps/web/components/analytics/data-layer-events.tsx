@@ -38,7 +38,7 @@ function isPricingCtaType(value: string | undefined): value is PricingCtaType {
 }
 
 function isLeadFormType(value: string | undefined): value is LeadFormType {
-  return value === "contact_sales" || value === "monitor_request";
+  return value === "contact_sales" || value === "monitor_request" || value === "demo_request";
 }
 
 function isGptCtaLocation(value: string | undefined): value is GptCtaLocation {
@@ -140,6 +140,20 @@ export function DataLayerClickTracker() {
           cta_type: isReportCtaType(trackedElement.dataset.analyticsCtaType)
             ? trackedElement.dataset.analyticsCtaType
             : "unknown"
+        });
+        return;
+      }
+
+      if (eventName === "hero_book_demo_clicked") {
+        pushDataLayerEvent({
+          event: "hero_book_demo_clicked"
+        });
+        return;
+      }
+
+      if (eventName === "hero_sample_report_clicked") {
+        pushDataLayerEvent({
+          event: "hero_sample_report_clicked"
         });
         return;
       }

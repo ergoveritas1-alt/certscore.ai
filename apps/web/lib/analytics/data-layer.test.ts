@@ -134,18 +134,38 @@ test("sample report and pricing CTA events dispatch after analytics consent is g
   ]);
 });
 
+test("demo CTA events dispatch after analytics consent is granted", () => {
+  const mockWindow = installWindow({ certscoreAnalyticsConsent: "granted", dataLayer: [] });
+
+  pushDataLayerEvent({
+    event: "hero_book_demo_clicked"
+  });
+  pushDataLayerEvent({
+    event: "hero_sample_report_clicked"
+  });
+
+  assert.deepEqual(mockWindow.dataLayer, [
+    {
+      event: "hero_book_demo_clicked"
+    },
+    {
+      event: "hero_sample_report_clicked"
+    }
+  ]);
+});
+
 test("lead form events dispatch after analytics consent is granted", () => {
   const mockWindow = installWindow({ certscoreAnalyticsConsent: "granted", dataLayer: [] });
 
   pushDataLayerEvent({
     event: "lead_form_submit_attempted",
-    form_type: "monitor_request"
+    form_type: "demo_request"
   });
 
   assert.deepEqual(mockWindow.dataLayer, [
     {
       event: "lead_form_submit_attempted",
-      form_type: "monitor_request"
+      form_type: "demo_request"
     }
   ]);
 });
