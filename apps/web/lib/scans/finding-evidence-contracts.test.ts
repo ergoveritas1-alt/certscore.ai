@@ -1449,8 +1449,7 @@ test("new runtime contracts require concrete retained evidence shapes", () => {
 
   assert.equal(
     evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
-      cbaVendorTier1: ["adsrvr.org"],
-      cbaVendorTier2: [],
+      directAdvertisingSharingVendors: ["The Trade Desk"],
       choiceControlsInspected: true,
       optOutUiResult: "absent",
       policyCbaLanguage: "full_cba_language",
@@ -1476,7 +1475,7 @@ test("new runtime contracts require concrete retained evidence shapes", () => {
   assert.equal(
     evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
       cpra_cba_opt_out_evidence: {
-        cbaVendorTier1: ["adnxs.com", "criteo.com"],
+        directAdvertisingSharingVendors: ["AppNexus / Xandr", "Criteo"],
         choice_controls_inspected: true,
         opt_out_control_found: false,
         opt_out_ui_result: "absent",

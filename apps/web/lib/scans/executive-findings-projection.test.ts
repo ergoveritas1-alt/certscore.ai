@@ -297,7 +297,7 @@ function makeCpraPacket(input: {
     evidence: {
       counts: {},
       entities: {
-        cbaVendorTier1: ["adsrvr.org"],
+        directAdvertisingSharingVendors: ["The Trade Desk"],
         choiceControlsInspected: ["true"],
         optOutControlFound: input.optOutControlFound ? [input.optOutControlFound] : [],
         optOutUiResult: [input.optOutUiResult],
@@ -4310,7 +4310,7 @@ test("projects CPRA CBA opt-out missing into executive findings and top findings
       evidence: {
         counts: {},
         entities: {
-          cbaVendorTier1: ["adsrvr.org", "pubmatic.com", "rlcdn.com"],
+          directAdvertisingSharingVendors: ["The Trade Desk", "PubMatic", "LiveRamp"],
           optOutUiResult: ["absent"]
         },
         fetchQuality: null,
@@ -4364,7 +4364,7 @@ test("projects CPRA CBA opt-out missing into executive findings and top findings
   assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.matchedCriteria.includes("privacy_choice_control_missing"));
   assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.matchedCriteria.includes("cba_vendor_runtime_context"));
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
-  assert.ok(finding?.shortSummary.includes("adsrvr.org"));
+  assert.ok(finding?.shortSummary.includes("The Trade Desk"));
 });
 
 test("projects CPRA CBA opt-out subtype for partial privacy choice treatment", () => {
@@ -4375,16 +4375,16 @@ test("projects CPRA CBA opt-out subtype for partial privacy choice treatment", (
       evidence: {
         counts: {},
         entities: {
-          cbaVendorTier1: [
-            "adsrvr.org",
-            "amazon-adsystem.com",
-            "criteo.com",
-            "doubleclick.net",
-            "openx.net",
-            "pubmatic.com",
-            "rubiconproject.com",
-            "taboola.com",
-            "yahoo.com"
+          directAdvertisingSharingVendors: [
+            "The Trade Desk",
+            "Amazon Ads",
+            "Criteo",
+            "Google Ads",
+            "OpenX",
+            "PubMatic",
+            "Magnite",
+            "Taboola",
+            "Yahoo Ads"
           ],
           choiceControlsInspected: ["true"],
           gpcHandlingObserved: ["not_determined"],

@@ -4,6 +4,11 @@ import {
   cleanupScanArtifactDirectory,
   getScanArtifactRetentionConfig
 } from "../../../packages/shared/src/utils/artifact-retention";
+import {
+  KNOWN_CMP_REGISTRY,
+  detectKnownCmps,
+  getKnownCmpVendorName
+} from "../../../packages/shared/src/known-cmps";
 import { chromium, type BrowserContext, type Frame, type Locator, type Page, type Request } from "playwright";
 
 type ScenarioName =
@@ -313,23 +318,17 @@ const CONSENT_ACTION_KEYWORDS = [
   "necessary only"
 ];
 
-const CMP_HINTS = [
-  "onetrust",
-  "trustarc",
-  "didomi",
-  "usercentrics",
-  "quantcast",
-  "cookiebot",
-  "sourcepoint",
-  "termly",
+const CMP_HINTS = [...new Set([
+  ...KNOWN_CMP_REGISTRY.flatMap((entry) => [entry.canonicalName, ...entry.aliases, ...entry.domains]),
   "gpp",
   "usp",
   "usprivacy",
   "euconsent",
   "tcf"
-];
+].map((value) => value.toLowerCase()))];
 
-const CMP_ROOT_SELECTORS = [
+const CMP_ROOT_SELECTORS = [...new Set([
+  ...KNOWN_CMP_REGISTRY.flatMap((entry) => entry.domSelectors ?? []),
   "#onetrust-banner-sdk",
   "#onetrust-consent-sdk",
   "#didomi-host",
@@ -343,7 +342,7 @@ const CMP_ROOT_SELECTORS = [
   "iframe[src*='consent' i]",
   "[data-testid*='cookie' i]",
   "[id*='cookie' i][role='dialog']"
-];
+])];
 
 const VENDOR_RULES: Array<{
   category: VendorCategory;
@@ -424,6 +423,11 @@ export function classifyCookieArtifact(domain: string, name: string): { category
     return { category: "strictly_necessary", vendorName: "Security / anti-bot" };
   }
 
+  const cmpVendorName = getKnownCmpVendorName({ cookieNames: [name], domains: [domain], textSnippets: [haystack] });
+  if (cmpVendorName) {
+    return { category: "strictly_necessary", vendorName: cmpVendorName };
+  }
+
   const tokens = new Set(tokenizeArtifact(`${domain} ${name}`));
   const normalizedDomain = domain.toLowerCase();
   const match = VENDOR_RULES.find((rule) =>
@@ -434,7 +438,7 @@ export function classifyCookieArtifact(domain: string, name: string): { category
     return { category: match.category, vendorName: match.name };
   }
 
-  if (/(optanon|onetrust|consent|cookiebot|didomi|trustarc|usercentrics)/i.test(`${domain} ${name}`)) {
+  if (detectKnownCmps({ textSnippets: [`${domain} ${name}`] }).length > 0) {
     return { category: "strictly_necessary", vendorName: "Consent Management Platform" };
   }
 
@@ -448,6 +452,11 @@ export function classifyUrlArtifact(input: string): { category: VendorCategory; 
   }
 
   const hostname = safeHostname(input);
+  const cmpVendorName = getKnownCmpVendorName({ domains: [hostname], urls: [input], textSnippets: [input] });
+  if (cmpVendorName) {
+    return { category: "strictly_necessary", vendorName: cmpVendorName };
+  }
+
   const match = VENDOR_RULES.find((rule) =>
     rule.hostnames?.some((candidate) => hostnameMatches(hostname, candidate)) ||
     rule.urlSubstrings?.some((candidate) => haystack.includes(candidate.toLowerCase()))
@@ -456,7 +465,7 @@ export function classifyUrlArtifact(input: string): { category: VendorCategory; 
     return { category: match.category, vendorName: match.name };
   }
 
-  if (/(optanon|onetrust|consent|cookiebot|didomi|trustarc|usercentrics)/i.test(input)) {
+  if (detectKnownCmps({ textSnippets: [input] }).length > 0) {
     return { category: "strictly_necessary", vendorName: "Consent Management Platform" };
   }
 
@@ -812,11 +821,15 @@ async function detectConsentSurface(page: Page): Promise<SurfaceActionSet> {
   for (const frame of await getAllFrames(page)) {
     const cmpRoot = await findVisibleCmpRoot(frame);
     const cmpRootCandidate = cmpRoot ? await extractActionCandidate(cmpRoot, frame).catch(() => null) : null;
+    const detectedCmpVendor = cmpRootCandidate
+      ? getKnownCmpVendorName({
+        domSelectors: [cmpRootCandidate.selector],
+        iframeUrls: [cmpRootCandidate.frameUrl],
+        textSnippets: [`${cmpRootCandidate.selector}\n${cmpRootCandidate.frameUrl}\n${cmpRootCandidate.text}`]
+      })
+      : null;
     const cmpType =
-      cmpRootCandidate?.selector.includes("onetrust") ? "onetrust" :
-      cmpRootCandidate?.selector.includes("didomi") ? "didomi" :
-      cmpRootCandidate?.selector.toLowerCase().includes("cybot") ? "cookiebot" :
-      cmpRootCandidate?.selector.toLowerCase().includes("usercentrics") ? "usercentrics" :
+      detectedCmpVendor ? detectedCmpVendor.toLowerCase().replace(/[^a-z0-9]+/g, "_") :
       cmpRootCandidate?.selector.toLowerCase().includes("sp_message") ? "sourcepoint" :
       cmpRootCandidate ? "detected_cmp_root" : null;
 

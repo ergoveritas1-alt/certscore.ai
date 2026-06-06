@@ -100,8 +100,7 @@ test("California-derived unified findings retain self-sufficient advanced eviden
   const cpraPacket = getPacket(packets, "cpra_cba_opt_out_missing");
   assert.deepEqual(cpraPacket.evidence?.entities?.advertisingSharingVendors, [
     "Example Ads",
-    "Meta Pixel",
-    "connect.facebook.net"
+    "Meta Pixel"
   ]);
   assert.deepEqual(cpraPacket.evidence?.entities?.privacyChoiceSearchUrls, ["https://example.test/privacy"]);
   assert.deepEqual(cpraPacket.evidence?.entities?.optOutUiResult, ["absent"]);
@@ -183,8 +182,7 @@ test("WS01-shaped California runtime artifact remains self-sufficient through ch
   assert.equal(optOutRow.criticalEvidence.retainedEvidence.cpraOptOutUiResult, "absent");
   assert.deepEqual(optOutRow.criticalEvidence.retainedEvidence.advertisingSharingVendors, [
     "Example Ads",
-    "Meta Pixel",
-    "connect.facebook.net"
+    "Meta Pixel"
   ]);
   assert.deepEqual(optOutRow.criticalEvidence.retainedEvidence.privacyChoiceSearchUrls, [
     "https://example.test/privacy"

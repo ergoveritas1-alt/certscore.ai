@@ -18,6 +18,8 @@ export type CaliforniaPrivacyEvidenceFamily =
   | "adtech_sharing_runtime"
   | "disclosure_alignment"
   | "sensitive_pi"
+  | "cipa_interaction_recording"
+  | "cipa_communication_interception"
   | "opt_out_friction"
   | "post_opt_out_tracking"
   | "rights_methods"

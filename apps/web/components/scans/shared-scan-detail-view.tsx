@@ -12,6 +12,10 @@ import {
   type ReportSignalDefinition,
   type SignalEnrichmentWorkflowStageStatus
 } from "@website-signal-risk-scanner/shared";
+import {
+  isKnownCmpInfrastructureHost,
+  isKnownCmpVendorLabel
+} from "../../../../packages/shared/src/known-cmps";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { ScanCompletedEvent } from "../analytics/data-layer-events";
 import { CookieStoragePanel } from "./cookie-storage-panel";
@@ -155,33 +159,20 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
-const CMP_OR_FUNCTIONAL_VENDOR_DOMAIN_PATTERN =
-  /(?:^|\.)((?:cdn\.)?cookielaw\.org|onetrust\.(?:com|io)|geolocation\.onetrust\.com|optanon\.blob\.core\.windows\.net|trustarc\.com|truste\.com|consent\.trustarc\.com|form-renderer\.trustarc\.com|privacy-policy\.truste\.com|preferences\.trustarc\.com|consent\.cookiebot\.com|app\.cookieinformation\.com|cdn\.privacy-mgmt\.com|sourcepoint\.mgr\.consensu\.org|quantcast\.mgr\.consensu\.org|mgr\.consensu\.org)$/i;
-const CMP_VENDOR_DOMAIN_PATTERN =
-  /(?:^|\.)((?:cdn\.)?cookielaw\.org|onetrust\.(?:com|io)|geolocation\.onetrust\.com|optanon\.blob\.core\.windows\.net|trustarc\.com|truste\.com|consent\.trustarc\.com|form-renderer\.trustarc\.com|privacy-policy\.truste\.com|preferences\.trustarc\.com|consent\.cookiebot\.com|app\.cookieinformation\.com|cdn\.privacy-mgmt\.com|sourcepoint\.mgr\.consensu\.org|quantcast\.mgr\.consensu\.org|mgr\.consensu\.org|fundingchoicesmessages\.google\.com|usercentrics\.(?:eu|com)|termly\.io)$/i;
-
 function isCmpOrFunctionalVendorDomain(value: string | null | undefined) {
-  if (!value) {
-    return false;
-  }
-  const normalized = value.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0]?.replace(/:\d+$/, "") ?? "";
-  return CMP_OR_FUNCTIONAL_VENDOR_DOMAIN_PATTERN.test(normalized);
+  return isKnownCmpInfrastructureHost(value);
 }
 
 function isCmpVendorDomain(value: string | null | undefined) {
-  if (!value) {
-    return false;
-  }
-  const normalized = value.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0]?.replace(/:\d+$/, "") ?? "";
-  return CMP_VENDOR_DOMAIN_PATTERN.test(normalized);
+  return isKnownCmpInfrastructureHost(value);
 }
 
 function isCmpOrFunctionalVendorLabel(value: string | null | undefined) {
-  return /^(onetrust|trustarc|cookiebot|sourcepoint|quantcast choice)$/i.test(value?.trim() ?? "");
+  return isKnownCmpVendorLabel(value);
 }
 
 function isCmpVendorLabel(value: string | null | undefined) {
-  return /^(onetrust|trustarc|cookiebot|sourcepoint|quantcast choice|usercentrics|termly|google funding choices)$/i.test(value?.trim() ?? "");
+  return isKnownCmpVendorLabel(value);
 }
 
 function isFunctionalButNotCmpVendorDomain(value: string | null | undefined) {

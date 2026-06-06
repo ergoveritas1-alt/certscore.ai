@@ -5,6 +5,10 @@ import {
   deriveValidationFindingTaxonomy
 } from "@website-signal-risk-scanner/shared";
 import {
+  getKnownCmpVendorName,
+  isKnownCmpInfrastructureUrl
+} from "../../../../packages/shared/src/known-cmps";
+import {
   appendScanWorkflowEvent,
   claimNextAutomaticTarget,
   createScanForValidationRun,
@@ -4173,58 +4177,26 @@ function inferCmpVendorName(input: {
     const value = typeof row.url === "string" ? row.url : null;
     return value ? [value] : [];
   });
-  const text = [
-    ...input.domains,
-    ...input.initialCookieNames,
-    ...requestUrls,
-    ...getRuntimeStringArray(input.runtimeArtifacts?.consent_baseline_tracker_evidence_urls),
-    ...getRuntimeStringArray(input.runtimeArtifacts?.consentBaselineTrackerEvidenceUrls),
-    typeof input.snapshot?.cmp_vendor_name === "string" ? input.snapshot.cmp_vendor_name : null
-  ].filter((value): value is string => typeof value === "string").join("\n").toLowerCase();
-
-  if (/cookielaw\.org|onetrust\.com|onetrust\.io|optanonconsent|optanonalertboxclosed/.test(text)) {
-    return "OneTrust";
-  }
-  if (/trustarc\.com|truste\.com|notice_behavior|tasessionid|notice_preferences|notice_gdpr_prefs/.test(text)) {
-    return "TrustArc";
-  }
-  if (/cookiebot\.com|cookieconsent/.test(text)) {
-    return "Cookiebot";
-  }
-  if (/privacy-mgmt\.com|sourcepoint\.mgr\.consensu\.org|(^|\b)_sp_/.test(text)) {
-    return "Sourcepoint";
-  }
-  if (/quantcast\.mgr\.consensu\.org|mgr\.consensu\.org/.test(text)) {
-    return "Quantcast Choice";
-  }
-  return null;
+  return getKnownCmpVendorName({
+    cookieNames: input.initialCookieNames,
+    domains: input.domains,
+    labels: [typeof input.snapshot?.cmp_vendor_name === "string" ? input.snapshot.cmp_vendor_name : ""],
+    storageKeys: [
+      ...getRuntimeStringArray(input.runtimeArtifacts?.local_storage_keys),
+      ...getRuntimeStringArray(input.runtimeArtifacts?.localStorageKeys),
+      ...getRuntimeStringArray(input.runtimeArtifacts?.session_storage_keys),
+      ...getRuntimeStringArray(input.runtimeArtifacts?.sessionStorageKeys)
+    ],
+    urls: [
+      ...requestUrls,
+      ...getRuntimeStringArray(input.runtimeArtifacts?.consent_baseline_tracker_evidence_urls),
+      ...getRuntimeStringArray(input.runtimeArtifacts?.consentBaselineTrackerEvidenceUrls)
+    ]
+  });
 }
 
 function isCmpEvidenceUrl(value: string | null | undefined) {
-  if (!value || !/^https?:\/\//i.test(value)) {
-    return false;
-  }
-  let hostname = "";
-  try {
-    hostname = new URL(value).hostname.toLowerCase();
-  } catch {
-    return false;
-  }
-  return [
-    "cdn.cookielaw.org",
-    "geolocation.onetrust.com",
-    "optanon.blob.core.windows.net",
-    "consent.trustarc.com",
-    "form-renderer.trustarc.com",
-    "privacy-policy.truste.com",
-    "preferences.trustarc.com",
-    "consent.cookiebot.com",
-    "app.cookieinformation.com",
-    "cdn.privacy-mgmt.com",
-    "sourcepoint.mgr.consensu.org",
-    "quantcast.mgr.consensu.org",
-    "mgr.consensu.org"
-  ].some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+  return isKnownCmpInfrastructureUrl(value);
 }
 
 function getRuntimeStringArray(value: unknown) {

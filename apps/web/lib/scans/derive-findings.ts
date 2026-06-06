@@ -1,3 +1,7 @@
+import {
+  getKnownCmpVendorForHost as getCanonicalKnownCmpVendorForHost,
+  isKnownCmpCookieName
+} from "../../../../packages/shared/src/known-cmps";
 import type { CertScoreFinding, CertScoreFindingSection } from "./finding-registry";
 import { getHybridRuntimeEvidence } from "./hybrid-runtime-evidence";
 import {
@@ -244,44 +248,11 @@ function looksLikeSessionReplayObservation(category: string | null, vendor: stri
 }
 
 function getKnownCmpVendorForHost(host: string) {
-  const normalized = host.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0]?.replace(/:\d+$/, "") ?? "";
-  if (/(^|\.)((cdn\.)?cookielaw\.org|onetrust\.(?:com|io)|geolocation\.onetrust\.com|optanon\.blob\.core\.windows\.net)$/i.test(normalized)) {
-    return "OneTrust";
-  }
-  if (/(^|\.)(trustarc\.com|truste\.com|consent\.trustarc\.com|form-renderer\.trustarc\.com|privacy-policy\.truste\.com|preferences\.trustarc\.com)$/i.test(normalized)) {
-    return "TrustArc";
-  }
-  if (/(^|\.)consent\.cookiebot\.com$/i.test(normalized)) {
-    return "Cookiebot";
-  }
-  if (/(^|\.)app\.cookieinformation\.com$/i.test(normalized)) {
-    return "Cookie Information";
-  }
-  if (/(^|\.)(sourcepoint\.mgr\.consensu\.org|mgr\.consensu\.org)$/i.test(normalized)) {
-    return "Sourcepoint";
-  }
-  if (/(^|\.)quantcast\.mgr\.consensu\.org$/i.test(normalized)) {
-    return "Quantcast Choice";
-  }
-  if (/(^|\.)fundingchoicesmessages\.google\.com$/i.test(normalized)) {
-    return "Google Funding Choices";
-  }
-  if (/(^|\.)usercentrics\.(?:eu|com)$/i.test(normalized)) {
-    return "Usercentrics";
-  }
-  if (/(^|\.)termly\.io$/i.test(normalized)) {
-    return "Termly";
-  }
-  if (/(^|\.)cdn\.privacy-mgmt\.com$/i.test(normalized)) {
-    return "Privacy Management CMP";
-  }
-  return null;
+  return getCanonicalKnownCmpVendorForHost(host);
 }
 
 function isConsentMechanismCookieName(name: string) {
-  return /^(optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|didomi_token)$/i.test(
-    name
-  ) || /^_sp_/i.test(name);
+  return isKnownCmpCookieName(name) || /^(euconsent-v2|tcfv2|cmapi_cookie_privacy)$/i.test(name) || /^_sp_/i.test(name);
 }
 
 function classifyCookieName(name: string, domain: string | null) {

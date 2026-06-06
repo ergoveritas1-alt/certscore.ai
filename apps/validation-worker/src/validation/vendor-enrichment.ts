@@ -1,4 +1,8 @@
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import {
+  KNOWN_CMP_REGISTRY,
+  isKnownCmpInfrastructureUrl
+} from "../../../../packages/shared/src/known-cmps";
 import { getWorkerEnv } from "../env";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -151,11 +155,13 @@ const STATIC_VENDOR_RULES: StaticVendorRule[] = [
   { vendorName: "Rakuten Advertising", vendorCategory: "performance_marketing", domains: ["rkdms.com", "track.sv.rkdms.com", "rakutenmarketing.com"], urlPatterns: [/\/sv\.js\b/i] },
   { vendorName: "Sportradar", vendorCategory: "sports_data_advertising", domains: ["sportradar.com", "ads.sportradar.com", "tm.ads.sportradar.com"], urlPatterns: [/sportradar/i] },
   { vendorName: "Digital Turbine / Barometric", vendorCategory: "cross_device_identity", domains: ["barometric.com", "digitalturbine.com"], cookieNames: ["barometric[cuid]"], urlPatterns: [/barometric/i] },
-  { vendorName: "OneTrust", vendorCategory: "functional", domains: ["onetrust.com", "onetrust.io", "cookielaw.org", "cdn.cookielaw.org", "geolocation.onetrust.com", "optanon.blob.core.windows.net"] },
-  { vendorName: "TrustArc", vendorCategory: "functional", domains: ["trustarc.com", "truste.com", "consent.trustarc.com", "form-renderer.trustarc.com", "privacy-policy.truste.com", "preferences.trustarc.com"], cookieNames: ["notice_behavior", "TAsessionID", "notice_preferences", "notice_gdpr_prefs"] },
-  { vendorName: "Cookiebot", vendorCategory: "functional", domains: ["cookiebot.com", "consent.cookiebot.com"], cookieNames: ["CookieConsent"] },
-  { vendorName: "Sourcepoint", vendorCategory: "functional", domains: ["privacy-mgmt.com", "cdn.privacy-mgmt.com", "sourcepoint.mgr.consensu.org"], cookieNames: ["_sp_"] },
-  { vendorName: "Quantcast Choice", vendorCategory: "functional", domains: ["quantcast.mgr.consensu.org", "mgr.consensu.org"] },
+  ...KNOWN_CMP_REGISTRY.map((entry): StaticVendorRule => ({
+    cookieNames: entry.cookieNames,
+    domains: entry.domains,
+    urlPatterns: entry.urlPatterns,
+    vendorCategory: "functional",
+    vendorName: entry.canonicalName
+  })),
   { vendorName: "Netflix Assets", vendorCategory: "functional", domains: ["nflxext.com", "nflximg.net", "nflxso.net"] },
   { vendorName: "Netflix Logging", vendorCategory: "functional", domains: ["logs.netflix.com", "ichnaea-web.netflix.com"] },
   { vendorName: "Netflix Web Platform", vendorCategory: "functional", domains: ["www.netflix.com", "web.prod.cloud.netflix.com"] }
@@ -209,21 +215,7 @@ function isCmpEvidenceUrl(value: string | null | undefined) {
   } catch {
     return false;
   }
-  return [
-    "cdn.cookielaw.org",
-    "geolocation.onetrust.com",
-    "optanon.blob.core.windows.net",
-    "consent.trustarc.com",
-    "form-renderer.trustarc.com",
-    "privacy-policy.truste.com",
-    "preferences.trustarc.com",
-    "consent.cookiebot.com",
-    "app.cookieinformation.com",
-    "cdn.privacy-mgmt.com",
-    "sourcepoint.mgr.consensu.org",
-    "quantcast.mgr.consensu.org",
-    "mgr.consensu.org"
-  ].some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+  return isKnownCmpInfrastructureUrl(url) || Boolean(hostname && KNOWN_CMP_REGISTRY.some((entry) => entry.domains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))));
 }
 
 function filterTrackingEvidenceUrls(values: string[]) {

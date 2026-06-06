@@ -848,9 +848,9 @@ export type CpraPolicyCbaLanguage = "full_cba_language" | "legacy_do_not_sell" |
 
 export type CpraCbaOptOutEvidence = {
   pageUrl: string;
-  cbaVendorTier1: string[];
-  cbaVendorTier2: string[];
   advertisingSharingVendors: string[];
+  directAdvertisingSharingVendors?: string[];
+  analyticsTagManagementVendors?: string[];
   choiceControlsInspected: boolean;
   choiceControlSearchScope: "homepage_footer_privacy_surfaces";
   optOutUiResult: CpraCbaOptOutUiResult;
@@ -869,10 +869,43 @@ export type CpraCbaOptOutEvidence = {
   limitation: "homepage_only";
 };
 
+export type CaliforniaCipaSignalType =
+  | "session_replay"
+  | "behavioral_analytics"
+  | "chat_widget"
+  | "search_interaction"
+  | "form_interaction"
+  | "pixel_on_sensitive_surface"
+  | "third_party_interaction_endpoint";
+
+export type CaliforniaCipaConsentTiming = "pre_consent" | "post_consent" | "post_reject" | "unknown";
+export type CaliforniaCipaEvidenceConfidence = "low" | "medium" | "high";
+
+export type CaliforniaCipaSensitiveTrackingEvidence = {
+  cipaSensitive: boolean;
+  cipaSignalTypes: CaliforniaCipaSignalType[];
+  cipaConsentTiming: CaliforniaCipaConsentTiming;
+  cipaThirdPartyReceiptObserved: boolean;
+  cipaSensitiveSurfaceObserved: boolean;
+  cipaDisclosureObserved: boolean;
+  cipaEvidenceConfidence: CaliforniaCipaEvidenceConfidence;
+  directEvidenceObserved: boolean;
+  legalConclusion: false;
+  collectionEndpointObserved?: boolean | null;
+  eventCaptureIndicators?: string[];
+  maskingOrExclusionObserved?: boolean | null;
+  pageUrls?: string[];
+  requestUrls?: string[];
+  statusBasis?: string;
+  vendors?: string[];
+};
+
 export type CaliforniaPrivacyEvidence = {
   privacyNoticeObserved: boolean | null;
   privacyNoticeUrls: string[];
   privacyNoticeSourceUrls?: string[];
+  verifiedPrivacyNoticeUrls?: string[];
+  privacyNoticeCandidateUrls?: string[];
   privacyNoticeAttemptedUrls?: string[];
   privacyNoticeDiscoveryEvidence?: {
     attempted: boolean;
@@ -895,11 +928,22 @@ export type CaliforniaPrivacyEvidence = {
   };
   californiaNoticeCueObserved?: boolean | null;
   californiaNoticeCueText?: string | null;
+  footerNoticeCueObserved?: boolean | null;
+  footerNoticeCueText?: string | null;
   collectionContextObserved: boolean | null;
   collectionNoticeCueObserved: boolean | null;
   collectionContextUrls: string[];
   collectionContextTypes?: string[];
   collectionEvidenceSources?: string[];
+  collectionNoticeEvidenceKind?:
+    | "generic_search_only"
+    | "footer_notice_link_only"
+    | "policy_notice_text_only"
+    | "collection_form_without_notice"
+    | "collection_form_with_notice"
+    | "verified_notice_at_point_of_collection"
+    | "no_collection_context"
+    | "unknown";
   collectionFieldContexts?: Array<{
     pageUrl: string;
     fieldType: string | null;
@@ -911,8 +955,20 @@ export type CaliforniaPrivacyEvidence = {
   saleShareRuntimeSignalsObserved: boolean | null;
   targetedAdvertisingSignalsObserved: boolean | null;
   advertisingSharingVendors: string[];
+  directAdvertisingSharingVendors?: string[];
+  analyticsTagManagementVendors?: string[];
+  directSaleShareOrTargetedAdvertisingRequestUrls?: string[];
+  directSaleShareOrTargetedAdvertisingCookieNames?: string[];
+  directSaleShareOrTargetedAdvertisingVendors?: string[];
+  analyticsOrMeasurementRequestUrls?: string[];
+  analyticsOrMeasurementCookieNames?: string[];
+  analyticsOrMeasurementVendors?: string[];
+  utilityOrInfrastructureRequestUrls?: string[];
   saleShareRequestUrls?: string[];
   saleShareCookieNames?: string[];
+  policySaleShareAdmissionObserved?: boolean | null;
+  policySaleShareAdmissionSnippet?: string | null;
+  policySaleShareAdmissionConfidence?: "high" | "moderate" | "low" | null;
   doNotSellSharePathObserved: boolean | null;
   doNotSellSharePathUrl: string | null;
   doNotSellSharePathLabel: string | null;
@@ -933,6 +989,13 @@ export type CaliforniaPrivacyEvidence = {
     candidateLabels: string[];
     selectedUrl: string | null;
     selectedLabel: string | null;
+    selectionBasis?:
+      | "cpra_ui"
+      | "do_not_sell_share_link"
+      | "privacy_choice_link"
+      | "consent_lifecycle"
+      | "homepage_self_unconfirmed"
+      | "none";
     sourceSignals: string[];
     interactionAttempted: boolean;
     interactionConfirmed: boolean | null;
@@ -1029,20 +1092,29 @@ export type CaliforniaPrivacyEvidence = {
   sensitiveThirdPartyTrackingObserved?: boolean | null;
   sensitiveThirdPartyTrackingVendors?: string[];
   sensitiveThirdPartyTrackingRequestUrls?: string[];
+  cipaInteractionRecordingEvidence?: CaliforniaCipaSensitiveTrackingEvidence | null;
+  cipaCommunicationInterceptionEvidence?: CaliforniaCipaSensitiveTrackingEvidence | null;
   limitUseSensitivePiPathObserved: boolean | null;
   limitUseSensitivePiPathUrl: string | null;
   limitUseSensitivePiPathLabel?: string | null;
   optOutInteractionConfirmed: boolean | null;
+  optOutSavedOrApplied?: boolean | null;
   optOutFrictionSignals?: string[];
   optOutInteractionSteps?: ConsentInteractionEvidenceStep[];
   postOptOutTrackingReductionObserved: boolean | null;
   postOptOutTrackingPersisted: boolean | null;
   postOptOutPersistedVendors?: string[];
+  postOptOutPersistedDirectAdvertisingVendors?: string[];
   postOptOutRequestUrls?: string[];
+  postOptOutDirectAdvertisingRequestUrls?: string[];
+  postOptOutDirectAdvertisingPersisted?: boolean | null;
   consumerRightsRequestMethodObserved?: boolean | null;
   consumerRightsRequestMethodUrls?: string[];
+  consumerRightsRequestMethodSourceUrls?: string[];
   consumerRightsRequestMethodTypes?: string[];
   consumerRightsRequestMethodSnippets?: string[];
+  consumerRightsRequestMethodConfidence?: "high" | "moderate" | "low" | null;
+  rightsLanguageObserved?: boolean | null;
   policyRuntimeDisclosureSnippets?: string[];
   unmatchedRuntimeDisclosureVendors?: string[];
   affectedControlLabels?: string[];
@@ -1061,6 +1133,14 @@ export type CaliforniaPrivacyEvidence = {
   privacyControlObserved?: boolean | null;
   privacyControlsObserved?: string[];
   policyRuntimeDisclosureAlignment: "aligned" | "gap_observed" | "review" | "not_testable";
+  policyRuntimeDisclosureAlignmentBasis?:
+    | "aligned_category_level"
+    | "vendor_specific_unmatched"
+    | "insufficient_policy_evidence"
+    | "potential_gap_no_category_disclosure"
+    | "contradiction_gap"
+    | "no_relevant_runtime_signal"
+    | "unknown";
   evidenceRefs: string[];
 };
 

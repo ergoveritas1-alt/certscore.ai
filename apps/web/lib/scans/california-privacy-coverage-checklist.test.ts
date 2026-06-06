@@ -63,7 +63,7 @@ test("deriveCaliforniaPrivacyCoverageChecklist projects canonical CPRA findings 
   assert.equal(rightsRow?.status, "not_observed");
   assert.equal(rightsRow?.assessmentStatus, "checked");
   assert.equal(rightsRow?.evidenceState, "not_observed");
-  assert.equal(items.length, 12);
+  assert.equal(items.length, 14);
 });
 
 test("deriveCaliforniaPrivacyCoverageChecklist withholds rows for non-representative scan projection", () => {
@@ -194,7 +194,7 @@ test("deriveCaliforniaPrivacyCoverageChecklist marks fallback rows not testable 
     unifiedFindings: []
   });
 
-  assert.equal(items.length, 12);
+  assert.equal(items.length, 14);
   assert.equal(items.every((item) => item.status === "not_testable"), true);
   assert.equal(items.every((item) => item.assessmentStatus === "needs_evidence"), true);
   assert.equal(items.every((item) => item.evidenceState === "not_testable"), true);

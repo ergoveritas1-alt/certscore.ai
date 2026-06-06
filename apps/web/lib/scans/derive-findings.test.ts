@@ -124,7 +124,10 @@ test("deriveCertScoreFindings classifies retained CMP hosts for vendor mix conte
         requestObservations: [
           { domain: "cdn.cookielaw.org", requestUrl: "https://cdn.cookielaw.org/consent/abc/otSDKStub.js", thirdParty: true },
           { domain: "cdn-ukwest.onetrust.com", requestUrl: "https://cdn-ukwest.onetrust.com/scripttemplates/otSDKStub.js", thirdParty: true },
-          { domain: "fundingchoicesmessages.google.com", requestUrl: "https://fundingchoicesmessages.google.com/i/pub-123", thirdParty: true }
+          { domain: "fundingchoicesmessages.google.com", requestUrl: "https://fundingchoicesmessages.google.com/i/pub-123", thirdParty: true },
+          { domain: "cdn-cookieyes.com", requestUrl: "https://cdn-cookieyes.com/client_data/example/script.js", thirdParty: true },
+          { domain: "consent-api.service.consent.usercentrics.eu", requestUrl: "https://consent-api.service.consent.usercentrics.eu/consent", thirdParty: true },
+          { domain: "privacy-center-api.transcend.io", requestUrl: "https://privacy-center-api.transcend.io/graphql", thirdParty: true }
         ]
       }
     },
@@ -142,6 +145,9 @@ test("deriveCertScoreFindings classifies retained CMP hosts for vendor mix conte
   assert.ok(summary.resolvedVendorNames.includes("OneTrust"));
   assert.ok(summary.topObservedEntities.some((entity) => entity.label === "OneTrust" && entity.category === "cmp" && entity.requestCount === 2));
   assert.ok(summary.topObservedEntities.some((entity) => entity.label === "Google Funding Choices" && entity.category === "cmp"));
+  assert.ok(summary.topObservedEntities.some((entity) => entity.label === "CookieYes" && entity.category === "cmp"));
+  assert.ok(summary.topObservedEntities.some((entity) => entity.label === "Usercentrics" && entity.category === "cmp"));
+  assert.ok(summary.topObservedEntities.some((entity) => entity.label === "Transcend" && entity.category === "cmp"));
   assert.ok(!summary.topObservedEntities.some((entity) => entity.label === "cdn.cookielaw.org"));
 });
 

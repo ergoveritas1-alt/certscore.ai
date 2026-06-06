@@ -9,6 +9,7 @@ import type {
   PreviewScanPayload,
   ScanSnapshot
 } from "@website-signal-risk-scanner/shared";
+import { getKnownCmpVendorName } from "../../../../packages/shared/src/known-cmps";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveScannerHealthWarnings } from "../../lib/scans/scanner-health-warnings";
 import {
@@ -821,13 +822,15 @@ function hasFallbackObservableConsentSurface(snapshot: UrlscanFallbackSnapshot) 
 
   return (
     context.cmpVendors.length > 0 ||
-    /\bonetrust\b/i.test(haystack) ||
-    /\bcookielaw\b/i.test(haystack) ||
-    /\btrustarc\b/i.test(haystack) ||
-    /\btruste\b/i.test(haystack) ||
-    /\bcookiebot\b/i.test(haystack) ||
-    /\bsourcepoint\b/i.test(haystack) ||
-    /\bOptanon(?:Consent|AlertBoxClosed)?\b/i.test(haystack)
+    Boolean(
+      getKnownCmpVendorName({
+        cookieNames: snapshot.cookieNames,
+        domains: snapshot.observedDomains,
+        labels: snapshot.technologyNames,
+        textSnippets: [haystack],
+        urls: snapshot.requestUrls
+      })
+    )
   );
 }
 

@@ -3174,7 +3174,7 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
 function buildCpraCbaOptOutEvidenceDetails(packet: UnifiedFindingDisplayPacket): CertScoreFindingEvidenceDetails {
   const vendors = uniqueStrings([
     ...getEntityValues(packet, /cba.*vendor|vendor|runtime.*vendor/i),
-    ...getEntityValues(packet, /cbaVendorTier|advertisingSharingVendors/i)
+    ...getEntityValues(packet, /advertisingSharingVendors/i)
   ]).filter(isDisplayVendorName);
   const optOutUiResult = uniqueStrings(getEntityValues(packet, /optOutUiResult|opt_out_ui_result/i))[0] ?? null;
   const optOutControlFound = parseBooleanEntity(getEntityValues(packet, /optOutControlFound|opt_out_control_found/i)[0]);
@@ -4917,7 +4917,7 @@ function buildExecutiveShortSummary(
   if (findingId === "cpra_cba_opt_out_missing") {
     const vendors = uniqueStrings([
       ...getEntityValues(packet, /cba.*vendor|vendor|runtime.*vendor/i),
-      ...getEntityValues(packet, /cbaVendorTier|advertisingSharingVendors/i)
+      ...getEntityValues(packet, /advertisingSharingVendors/i)
     ]).filter(isDisplayVendorName);
     const optOutUiResult = uniqueStrings(getEntityValues(packet, /optOutUiResult|opt_out_ui_result/i))[0];
     const optOutControlFound = parseBooleanEntity(getEntityValues(packet, /optOutControlFound|opt_out_control_found/i)[0]);

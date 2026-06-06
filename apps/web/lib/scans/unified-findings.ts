@@ -2407,6 +2407,18 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       ...cpraOptOutUrls
     ]);
   }
+  if (Array.isArray(cpraCbaOptOutEvidence.directAdvertisingSharingVendors)) {
+    entities.advertisingSharingVendors = uniqueStrings([
+      ...(entities.advertisingSharingVendors ?? []),
+      ...(cpraCbaOptOutEvidence.directAdvertisingSharingVendors as string[])
+    ]);
+  }
+  if (Array.isArray(cpraCbaOptOutEvidence.direct_advertising_sharing_vendors)) {
+    entities.advertisingSharingVendors = uniqueStrings([
+      ...(entities.advertisingSharingVendors ?? []),
+      ...(cpraCbaOptOutEvidence.direct_advertising_sharing_vendors as string[])
+    ]);
+  }
   if (Array.isArray(cpraCbaOptOutEvidence.advertisingSharingVendors)) {
     entities.advertisingSharingVendors = uniqueStrings([
       ...(entities.advertisingSharingVendors ?? []),
@@ -2417,18 +2429,6 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
     entities.advertisingSharingVendors = uniqueStrings([
       ...(entities.advertisingSharingVendors ?? []),
       ...(cpraCbaOptOutEvidence.advertising_sharing_vendors as string[])
-    ]);
-  }
-  const cpraVendorTiers = getEvidenceStringArray(cpraCbaOptOutEvidence, [
-    "cbaVendorTier1",
-    "cba_vendor_tier1",
-    "cbaVendorTier2",
-    "cba_vendor_tier2"
-  ]);
-  if (cpraVendorTiers.length > 0) {
-    entities.advertisingSharingVendors = uniqueStrings([
-      ...(entities.advertisingSharingVendors ?? []),
-      ...cpraVendorTiers
     ]);
   }
   const californiaEvidence = normalizedFallbackEvidence.californiaPrivacyEvidence &&
@@ -2458,8 +2458,11 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   addCaliforniaEntityScalar("californiaEvidenceFamily", ["californiaEvidenceFamily", "california_evidence_family"]);
   addCaliforniaEntityScalar("californiaReviewArea", ["californiaReviewArea", "california_review_area", "regulatoryReviewArea", "regulatory_review_area"]);
   addCaliforniaEntityArray("privacyNoticeUrls", ["privacyNoticeUrls", "privacy_notice_urls"]);
+  addCaliforniaEntityArray("privacyNoticeCandidateUrls", ["privacyNoticeCandidateUrls", "privacy_notice_candidate_urls"]);
   addCaliforniaEntityArray("collectionContextUrls", ["collectionContextUrls", "collection_context_urls"]);
   addCaliforniaEntityArray("collectionContextTypes", ["collectionContextTypes", "collection_context_types"]);
+  addCaliforniaEntityArray("advertisingSharingVendors", ["directAdvertisingSharingVendors", "direct_advertising_sharing_vendors", "advertisingSharingVendors", "advertising_sharing_vendors"]);
+  addCaliforniaEntityArray("analyticsTagManagementVendors", ["analyticsTagManagementVendors", "analytics_tag_management_vendors"]);
   addCaliforniaEntityArray("saleShareRequestUrls", ["saleShareRequestUrls", "sale_share_request_urls"]);
   addCaliforniaEntityArray("saleShareCookieNames", ["saleShareCookieNames", "sale_share_cookie_names"]);
   addCaliforniaEntityArray("sensitivePiCategories", ["sensitivePiCategories", "sensitive_pi_categories"]);
@@ -2482,6 +2485,9 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   addCaliforniaEntityArray("unmatchedRuntimeDisclosureVendors", ["unmatchedRuntimeDisclosureVendors", "unmatched_runtime_disclosure_vendors"]);
   addCaliforniaEntityScalar("collectionNoticeCueObserved", ["collectionNoticeCueObserved", "collection_notice_cue_observed"]);
   addCaliforniaEntityScalar("collectionNoticeCueText", ["collectionNoticeCueText", "collection_notice_cue_text"]);
+  addCaliforniaEntityScalar("footerNoticeCueObserved", ["footerNoticeCueObserved", "footer_notice_cue_observed"]);
+  addCaliforniaEntityScalar("footerNoticeCueText", ["footerNoticeCueText", "footer_notice_cue_text"]);
+  addCaliforniaEntityScalar("rightsLanguageObserved", ["rightsLanguageObserved", "rights_language_observed"]);
   addCaliforniaEntityScalar("doNotSellSharePathObserved", ["doNotSellSharePathObserved", "do_not_sell_share_path_observed"]);
   addCaliforniaEntityScalar("doNotSellSharePathLabel", ["doNotSellSharePathLabel", "do_not_sell_share_path_label"]);
   addCaliforniaEntityScalar("doNotSellSharePathUrl", ["doNotSellSharePathUrl", "do_not_sell_share_path_url"]);

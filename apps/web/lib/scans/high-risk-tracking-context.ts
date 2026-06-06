@@ -1,3 +1,5 @@
+import { detectKnownCmps } from "../../../../packages/shared/src/known-cmps";
+
 export type HighRiskTrackingVendor = {
   category:
     | "dmp"
@@ -184,20 +186,6 @@ const HIGH_RISK_VENDOR_RULES: VendorRule[] = [
     domains: ["barometric.com", "digitalturbine.com"],
     patterns: [/\bbarometric\b/i, /\bbarometric\[cuid\]/i]
   },
-  {
-    name: "OneTrust",
-    category: "cmp",
-    role: "consent management platform",
-    domains: ["cookielaw.org", "onetrust.com", "onetrust.io"],
-    patterns: [/\botSDKStub\.js\b/i, /\bcookielaw\b/i]
-  },
-  {
-    name: "TrustArc",
-    category: "cmp",
-    role: "privacy seal or preference management service",
-    domains: ["truste.com", "trustarc.com", "privacy-policy.truste.com", "preferences.trustarc.com"],
-    patterns: [/\btrustarc\b/i, /\btruste\b/i, /\bnotice_preferences\b/i, /\bnotice_gdpr_prefs\b/i]
-  }
 ];
 
 const HEALTH_CONTEXT_PATTERNS = [
@@ -309,6 +297,7 @@ export function deriveHighRiskTrackingContext(input: {
   thirdPartyDomains?: string[];
 }): HighRiskTrackingContext {
   const snapshot = getRecord(input.snapshot);
+  const runtimeArtifacts = getRecord(input.runtimeArtifacts);
   const { evidenceUrls, textValues, thirdPartyDomains } = collectTextEvidence(input);
   const haystack = textValues.join("\n");
   const isHealthContext =
@@ -343,13 +332,33 @@ export function deriveHighRiskTrackingContext(input: {
     }];
   });
 
-  const cmpVendors = highRiskVendors.filter((vendor) => vendor.category === "cmp");
+  const cmpVendors = detectKnownCmps({
+    cookieNames: [
+      ...getStringArray(runtimeArtifacts, "initial_cookie_names"),
+      ...getStringArray(runtimeArtifacts, "initialCookieNames")
+    ],
+    domains: thirdPartyDomains,
+    labels: [typeof snapshot?.cmp_vendor_name === "string" ? snapshot.cmp_vendor_name : ""],
+    storageKeys: [
+      ...getStringArray(runtimeArtifacts, "local_storage_keys"),
+      ...getStringArray(runtimeArtifacts, "localStorageKeys"),
+      ...getStringArray(runtimeArtifacts, "session_storage_keys"),
+      ...getStringArray(runtimeArtifacts, "sessionStorageKeys")
+    ],
+    textSnippets: textValues,
+    urls: evidenceUrls
+  }).map((detection): HighRiskTrackingVendor => ({
+    category: "cmp",
+    evidence: uniqueStrings(detection.matchedSignals.map((signal) => signal.value)).slice(0, 4),
+    name: detection.canonicalName,
+    role: "consent management platform"
+  }));
   const cmpVendorName = cmpVendors[0]?.name ?? null;
 
   return {
     cmpVendors,
     cmpVendorName,
-    highRiskVendors: highRiskVendors.filter((vendor) => vendor.category !== "cmp"),
+    highRiskVendors,
     isSensitiveContext,
     sensitiveContextLabel
   };
