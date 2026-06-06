@@ -141,6 +141,99 @@ function hasConcreteValue(value: unknown): boolean {
   return true;
 }
 
+function hasConcretePrivacyChoiceInteractionEvidence(evidence: Record<string, unknown> | null) {
+  if (!evidence) {
+    return false;
+  }
+  const booleanSignals = [
+    "attempted",
+    "pathObserved",
+    "clickAttempted",
+    "clickConfirmed",
+    "preferenceActionAttempted",
+    "preferenceActionConfirmed",
+    "preferenceCenterObserved",
+    "preferenceSaveAttempted",
+    "preferenceSaveConfirmed",
+    "saleShareToggleObserved",
+    "targetedAdvertisingToggleObserved"
+  ];
+  if (booleanSignals.some((key) => getBoolean(evidence, [key]) === true)) {
+    return true;
+  }
+  const scalarSignals = [
+    "finalUrl",
+    "limitation",
+    "outcome",
+    "pageUrl",
+    "preferenceActionLabel",
+    "preferenceActionLimitation",
+    "preferenceCenterProbeErrorCategory",
+    "preferenceCenterProbeFinalUrl",
+    "preferenceCenterProbeReason",
+    "preferenceCenterProbeUrl",
+    "preferenceSaveLabel",
+    "selectedLabel",
+    "selectedUrl",
+    "source"
+  ];
+  if (scalarSignals.some((key) => hasConcreteValue(evidence[key]))) {
+    return true;
+  }
+  const arraySignals = [
+    "evidenceRefs",
+    "evidenceUrls",
+    "newTrackerVendors",
+    "persistedTrackerVendors",
+    "preferenceCenterCategoryLabels",
+    "removedTrackerVendors",
+    "visibleTextSnippets"
+  ];
+  return arraySignals.some((key) => hasConcreteValue(evidence[key]));
+}
+
+function hasPrivacyChoiceTrackingWindowEvidence(evidence: Record<string, unknown> | null) {
+  if (!evidence) {
+    return false;
+  }
+  const numericSignals = [
+    "afterThirdPartyCookieCount",
+    "afterTrackerCount",
+    "beforeThirdPartyCookieCount",
+    "beforeTrackerCount"
+  ];
+  if (numericSignals.some((key) => typeof evidence[key] === "number" && Number.isFinite(evidence[key]))) {
+    return true;
+  }
+  const arraySignals = [
+    "evidenceUrls",
+    "newTrackerVendors",
+    "persistedTrackerVendors",
+    "removedTrackerVendors"
+  ];
+  return arraySignals.some((key) => hasConcreteValue(evidence[key]));
+}
+
+function privacyChoiceSearchConfirmedNoObservedPath(input: {
+  doNotSellSharePathObserved: boolean | null;
+  privacyChoiceInteractionEvidence: Record<string, unknown> | null;
+  privacyChoicePathEvidence: Record<string, unknown> | null;
+}) {
+  const pathAttempted = getBoolean(input.privacyChoicePathEvidence, ["attempted"]) === true;
+  const pathObserved = getBoolean(input.privacyChoicePathEvidence, ["observed"]);
+  const interactionAttempted = getBoolean(input.privacyChoiceInteractionEvidence, ["attempted"]) === true;
+  const interactionPathObserved = getBoolean(input.privacyChoiceInteractionEvidence, ["pathObserved", "path_observed"]);
+  const interactionOutcome = getString(input.privacyChoiceInteractionEvidence, ["outcome"]);
+  return (
+    input.doNotSellSharePathObserved === false &&
+    (
+      (pathAttempted && pathObserved === false) ||
+      (interactionAttempted && interactionPathObserved === false) ||
+      interactionOutcome === "no_observed_path"
+    )
+  );
+}
+
 function sourceGap(
   field: string,
   expected: unknown,
@@ -213,6 +306,49 @@ function makeOutcome(
     rowId,
     status
   };
+}
+
+function addCoverageLimitationContext(
+  outcomes: Record<string, CaliforniaPrivacyCoverageOutcome>,
+  input: CaliforniaPrivacyCoveragePolicyInput
+) {
+  if (!input.coverageLimited) {
+    return outcomes;
+  }
+
+  return Object.fromEntries(
+    Object.entries(outcomes).map(([rowId, outcome]) => {
+      if (outcome.status !== "not_testable") {
+        return [rowId, outcome];
+      }
+
+      const missingOrIncompleteSourceSignals = outcome.criticalEvidence.missingOrIncompleteSourceSignals.some((gap) =>
+        gap.field === "scanner.publicWebCoverage"
+      )
+        ? outcome.criticalEvidence.missingOrIncompleteSourceSignals
+        : [
+            ...outcome.criticalEvidence.missingOrIncompleteSourceSignals,
+            sourceGap(
+              "scanner.publicWebCoverage",
+              "complete enough public-web coverage for California review",
+              "coverage_limited",
+              "Required to evaluate this California checklist row beyond a coverage limitation."
+            )
+          ];
+
+      return [rowId, {
+        ...outcome,
+        criticalEvidence: {
+          ...outcome.criticalEvidence,
+          missingOrIncompleteSourceSignals,
+          retainedEvidence: compactRecord({
+            ...outcome.criticalEvidence.retainedEvidence,
+            coverageLimited: true
+          })
+        }
+      }];
+    })
+  );
 }
 
 function getCaliforniaEvidence(input: CaliforniaPrivacyCoveragePolicyInput) {
@@ -346,7 +482,10 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
         ]
       });
     }
-    return enrichOutcomesWithNormalizedConcerns(outcomes, input.normalizedConcerns);
+    return addCoverageLimitationContext(
+      enrichOutcomesWithNormalizedConcerns(outcomes, input.normalizedConcerns),
+      input
+    );
   }
 
   const privacyNoticeObserved = getBoolean(californiaEvidence, ["privacyNoticeObserved", "privacy_notice_observed"]);
@@ -540,8 +679,12 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     thirdPartyCookieCountDelta: getNumber(gpcEvidence, ["thirdPartyCookieCountDelta", "third_party_cookie_count_delta"]),
     trackerCountDelta: getNumber(gpcEvidence, ["trackerCountDelta", "tracker_count_delta"])
   };
-  outcomes.gpc_opt_out_signal_handling = !gpcTestRan
-    ? makeOutcome("gpc_opt_out_signal_handling", "not_testable", "The retained scan context did not include a usable GPC or opt-out preference signal test.", getEvidenceRefs(californiaEvidence), {
+  outcomes.gpc_opt_out_signal_handling = !gpcTestRan && targetedAdvertisingSignalsObserved === false
+    ? makeOutcome("gpc_opt_out_signal_handling", "not_applicable", "No sale/share or targeted-advertising runtime signal was retained, so no GPC opt-out handling review was applicable in this scan context.", getEvidenceRefs(californiaEvidence), {
+        retainedEvidence: { ...gpcComparisonEvidence, ...saleShareApplicabilityEvidence }
+      })
+    : !gpcTestRan
+      ? makeOutcome("gpc_opt_out_signal_handling", "not_testable", "The retained scan context did not include a usable GPC or opt-out preference signal test.", getEvidenceRefs(californiaEvidence), {
         missingOrIncompleteSourceSignals: [
           sourceGap("californiaPrivacyEvidence.gpcTestRan", true, gpcTestRan, "Required before CertScore can evaluate GPC handling.")
         ],
@@ -632,21 +775,39 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
             ]
           });
 
-  outcomes.opt_out_friction_dark_patterns = doNotSellSharePathObserved !== true
-    ? makeOutcome("opt_out_friction_dark_patterns", "not_testable", "No opt-out path was available or exercised, so opt-out friction could not be evaluated.", getEvidenceRefs(californiaEvidence), {
-        missingOrIncompleteSourceSignals: [
-          sourceGap("californiaPrivacyEvidence.doNotSellSharePathObserved", true, doNotSellSharePathObserved, "Required before opt-out friction can be tested.")
-        ],
+  const optOutFrictionSignals = getStringArray(californiaEvidence, ["optOutFrictionSignals", "opt_out_friction_signals"]);
+  const hasReviewablePrivacyChoiceInteraction = hasConcretePrivacyChoiceInteractionEvidence(privacyChoiceInteractionEvidence);
+  outcomes.opt_out_friction_dark_patterns = doNotSellSharePathObserved !== true && hasReviewablePrivacyChoiceInteraction
+    ? makeOutcome("opt_out_friction_dark_patterns", "review_signal", "Privacy-choice path or interaction evidence was retained, but the opt-out path/action was not clearly confirmed; review for friction or ambiguity.", getEvidenceRefs(californiaEvidence, "Privacy-choice interaction retained for friction review"), {
         retainedEvidence: {
           ...saleShareControlEvidence,
-          optOutFrictionSignals: getStringArray(californiaEvidence, ["optOutFrictionSignals", "opt_out_friction_signals"]),
+          optOutFrictionSignals,
           privacyChoiceInteractionEvidence
         }
       })
+    : doNotSellSharePathObserved === false
+      ? makeOutcome("opt_out_friction_dark_patterns", "not_applicable", "No opt-out path was retained; opt-out friction review does not apply beyond the opt-out availability row.", getEvidenceRefs(californiaEvidence, "Opt-out path not observed"), {
+          retainedEvidence: {
+            ...saleShareControlEvidence,
+            optOutFrictionSignals,
+            privacyChoiceInteractionEvidence
+          }
+        })
+    : doNotSellSharePathObserved !== true
+      ? makeOutcome("opt_out_friction_dark_patterns", "not_testable", "No opt-out path was available or exercised, so opt-out friction could not be evaluated.", getEvidenceRefs(californiaEvidence), {
+          missingOrIncompleteSourceSignals: [
+            sourceGap("californiaPrivacyEvidence.doNotSellSharePathObserved", true, doNotSellSharePathObserved, "Required before opt-out friction can be tested.")
+          ],
+          retainedEvidence: {
+            ...saleShareControlEvidence,
+            optOutFrictionSignals,
+            privacyChoiceInteractionEvidence
+          }
+        })
     : makeOutcome("opt_out_friction_dark_patterns", "review_signal", "An opt-out path was retained; review retained consent/choice path evidence for friction, imbalance, or confusing labels.", getEvidenceRefs(californiaEvidence, "Opt-out path retained for friction review"), {
         retainedEvidence: {
           ...saleShareControlEvidence,
-          optOutFrictionSignals: getStringArray(californiaEvidence, ["optOutFrictionSignals", "opt_out_friction_signals"]),
+          optOutFrictionSignals,
           privacyChoiceInteractionEvidence
         }
       });
@@ -660,22 +821,37 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     postOptOutRequestUrls: getStringArray(californiaEvidence, ["postOptOutRequestUrls", "post_opt_out_request_urls"]),
     postOptOutTrackingPersisted,
     postOptOutTrackingReductionObserved,
+    privacyChoicePathEvidence,
     privacyChoiceInteractionEvidence
   };
-  outcomes.post_opt_out_tracking_behavior = optOutInteractionConfirmed !== true
-    ? makeOutcome("post_opt_out_tracking_behavior", "not_testable", "No confirmed opt-out or reject action was captured, so post-opt-out tracking behavior could not be evaluated.", getEvidenceRefs(californiaEvidence), {
-        missingOrIncompleteSourceSignals: [
-          sourceGap(
-            "californiaPrivacyEvidence.optOutInteractionConfirmed",
-            true,
-            optOutInteractionConfirmed,
-            privacyChoiceInteractionEvidence
-              ? "Privacy-choice path exercise was retained, but no confirmed opt-out/reject action with a post-choice tracking window was captured."
-              : "Required before CertScore can evaluate post-opt-out tracking behavior."
-          )
-        ],
+  const hasPrivacyChoiceTrackingWindow = hasPrivacyChoiceTrackingWindowEvidence(privacyChoiceInteractionEvidence);
+  const noObservedPrivacyChoicePath = privacyChoiceSearchConfirmedNoObservedPath({
+    doNotSellSharePathObserved,
+    privacyChoiceInteractionEvidence,
+    privacyChoicePathEvidence
+  });
+  outcomes.post_opt_out_tracking_behavior = optOutInteractionConfirmed !== true && hasPrivacyChoiceTrackingWindow
+    ? makeOutcome("post_opt_out_tracking_behavior", "review_signal", "A privacy-choice interaction and post-choice tracking window were retained, but the opt-out/reject action was not confirmed; review the tracking behavior as ambiguous.", getEvidenceRefs(californiaEvidence, "Privacy-choice tracking window retained"), {
         retainedEvidence: postOptOutTrackingEvidence
       })
+    : optOutInteractionConfirmed !== true && noObservedPrivacyChoicePath
+      ? makeOutcome("post_opt_out_tracking_behavior", "not_observed", "A privacy-choice path search was retained and no opt-out path was observed, so no post-opt-out tracking behavior was observed in this scan context.", getEvidenceRefs(californiaEvidence, "Privacy-choice path not observed"), {
+          retainedEvidence: postOptOutTrackingEvidence
+        })
+    : optOutInteractionConfirmed !== true
+      ? makeOutcome("post_opt_out_tracking_behavior", "not_testable", "No confirmed opt-out or reject action was captured, so post-opt-out tracking behavior could not be evaluated.", getEvidenceRefs(californiaEvidence), {
+          missingOrIncompleteSourceSignals: [
+            sourceGap(
+              "californiaPrivacyEvidence.optOutInteractionConfirmed",
+              true,
+              optOutInteractionConfirmed,
+              privacyChoiceInteractionEvidence
+                ? "Privacy-choice path exercise was retained, but no confirmed opt-out/reject action with a post-choice tracking window was captured."
+                : "Required before CertScore can evaluate post-opt-out tracking behavior."
+            )
+          ],
+          retainedEvidence: postOptOutTrackingEvidence
+        })
     : postOptOutTrackingPersisted === true
       ? makeOutcome("post_opt_out_tracking_behavior", "potential_gap", "Targeted advertising or non-essential tracking appeared to persist after a confirmed opt-out/reject action.", getEvidenceRefs(californiaEvidence, "Post-opt-out tracking persisted"), {
           retainedEvidence: postOptOutTrackingEvidence
@@ -782,5 +958,8 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
           ]
         });
 
-  return enrichOutcomesWithNormalizedConcerns(outcomes, input.normalizedConcerns);
+  return addCoverageLimitationContext(
+    enrichOutcomesWithNormalizedConcerns(outcomes, input.normalizedConcerns),
+    input
+  );
 }

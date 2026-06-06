@@ -2901,9 +2901,27 @@ function getRuntimeVisualAccessReview(runtimeArtifacts: Record<string, unknown> 
   return getRecord(runtimeArtifacts?.visual_access_review) ?? getRecord(runtimeArtifacts?.visualAccessReview);
 }
 
+function getRuntimeScanNoGoAssessment(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  return getRecord(runtimeArtifacts?.scan_no_go_assessment) ?? getRecord(runtimeArtifacts?.scanNoGoAssessment);
+}
+
+const VISUAL_ACCESS_NO_GO_CONFIDENCE_THRESHOLD = 0.9;
+
 export function deriveVisualAccessLimitationNotice(
   runtimeArtifacts: Record<string, unknown> | null | undefined
 ): ExecutiveAccessLimitationNotice | null {
+  const scanNoGoAssessment = getRuntimeScanNoGoAssessment(runtimeArtifacts);
+  if (!scanNoGoAssessment) {
+    return null;
+  }
+  const decision =
+    getRecordString(scanNoGoAssessment, "decision") ?? getRecordString(scanNoGoAssessment, "scan_no_go_decision");
+  const scanNoGoConfidence =
+    getRecordNumber(scanNoGoAssessment, "scanNoGoConfidence") ??
+    getRecordNumber(scanNoGoAssessment, "scan_no_go_confidence");
+  if (decision !== "no_go" || scanNoGoConfidence === null || scanNoGoConfidence < VISUAL_ACCESS_NO_GO_CONFIDENCE_THRESHOLD) {
+    return null;
+  }
   const visualAccessReview = getRuntimeVisualAccessReview(runtimeArtifacts);
   if (!visualAccessReview) {
     return null;
@@ -2924,6 +2942,7 @@ export function deriveVisualAccessLimitationNotice(
   if (goNoGo !== "NO_GO") {
     return null;
   }
+  const evidenceRefs = ["scan_runtime_artifacts.scan_no_go_assessment", "scan_runtime_artifacts.visual_access_review"];
 
   const shortExplanation =
     getRecordString(visualAccessReview, "shortExplanation") ??
@@ -2970,8 +2989,12 @@ export function deriveVisualAccessLimitationNotice(
         "Retry the scan after visual evidence retention is available and confirm the captured page represents the normal public website.",
       confidence: "strong",
       directVsInferred: "direct",
-      evidencePreview: [shortExplanation, reason],
-      evidenceRefs: ["scan_runtime_artifacts.visual_access_review"],
+      evidencePreview: [
+        shortExplanation,
+        reason,
+        scanNoGoConfidence !== null ? `Scan no-go confidence: ${scanNoGoConfidence.toFixed(2)}.` : null
+      ].filter((value): value is string => Boolean(value)),
+      evidenceRefs,
       severity: "medium",
       shortSummary:
         "Retained visual review did not verify a normal public page, so substantive privacy and consent conclusions are coverage-limited."
@@ -2994,6 +3017,12 @@ export function selectExecutiveAccessLimitationNotice(input: {
     return null;
   }
   return input.notice;
+}
+
+export function shouldShowRegulatoryChecklistSection(input: {
+  executiveAccessLimitationNotice: Pick<ExecutiveAccessLimitationNotice, "finding"> | null;
+}) {
+  return input.executiveAccessLimitationNotice?.finding.id !== "scan_quality_visual_no_go";
 }
 
 function LimitedSurfaceReview(input: { review: UnverifiedHomepageReview }) {
@@ -6098,6 +6127,9 @@ export function SharedScanDetailView({
         whatThisMeans: executiveAccessLimitationNotice.review.whatThisMeans
       }
     : null;
+  const showRegulatoryChecklistSection = shouldShowRegulatoryChecklistSection({
+    executiveAccessLimitationNotice
+  });
   const executivePolicySurfaces = deriveExecutivePolicySurfaces(scanRecord.policyEnrichment, scanRecord.snapshot, runtimeArtifacts);
   const executiveScanInterruptions = deriveExecutiveScanInterruptions(scanRecord.snapshot, scanRecord.events);
   const executiveCoverageLevel =
@@ -6181,7 +6213,8 @@ export function SharedScanDetailView({
     }),
     projectedFindings: allExecutiveFindings,
     scanCompleted: scanRecord.scan.status === "completed",
-    unifiedFindings: findingEvidenceDiagnostics
+    unifiedFindings: findingEvidenceDiagnostics,
+    withholdForNonRepresentativeScan: executiveAccessLimitationNotice?.finding.id === "scan_quality_visual_no_go"
   });
   const regulatoryLensCounts = {
     beforeConsentCookieCount: cookiesBeforeConsentCount,
@@ -6333,6 +6366,7 @@ export function SharedScanDetailView({
             showProtectedRouteInterruptions={showAdvancedDiagnostics}
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
           />
+          {showRegulatoryChecklistSection ? (
           <RegulatoryChecklistSection
             showAdvancedEvidenceToggle
             tabs={[
@@ -6446,6 +6480,7 @@ export function SharedScanDetailView({
               }
             ].filter((tab) => canViewAllRegulatoryChecklistOptions || tab.id === "gdpr-eprivacy" || tab.id === "california-privacy")}
           />
+          ) : null}
           
         </>
         )}

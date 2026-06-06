@@ -25,12 +25,22 @@ function getCaliforniaPrivacyReviewStatusLabel(status: CaliforniaPrivacyCoverage
 }
 
 export type CaliforniaPrivacyCoverageChecklistStatus = CaliforniaPrivacyCoverageOutcomeStatus;
+export type CaliforniaPrivacyCoverageAssessmentStatus =
+  | "checked"
+  | "coverage_limitation"
+  | "gap_observed"
+  | "needs_evidence"
+  | "review_signal";
+export type CaliforniaPrivacyCoverageEvidenceState = "not_observed" | "not_testable" | "observed";
 export type CaliforniaPrivacyCoverageChecklistTone = "neutral" | "review" | "warning" | "muted";
 
 export type CaliforniaPrivacyCoverageChecklistItem = {
+  assessmentStatus: CaliforniaPrivacyCoverageAssessmentStatus;
   criticalEvidence: CaliforniaPrivacyCoverageCriticalEvidence;
+  evidenceState: CaliforniaPrivacyCoverageEvidenceState;
   id: string;
   label: string;
+  note: string;
   status: CaliforniaPrivacyCoverageChecklistStatus;
   statusLabel: string;
   tone: CaliforniaPrivacyCoverageChecklistTone;
@@ -59,6 +69,7 @@ export type CaliforniaPrivacyCoverageChecklistInput = {
   }>;
   scanCompleted: boolean;
   unifiedFindings: UnifiedFindingDisplayPacket[];
+  withholdForNonRepresentativeScan?: boolean;
 };
 
 const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
@@ -171,6 +182,116 @@ function getChecklistTone(status: CaliforniaPrivacyCoverageChecklistStatus): Cal
     default:
       return "neutral";
   }
+}
+
+function getAssessmentStatus(status: CaliforniaPrivacyCoverageChecklistStatus): CaliforniaPrivacyCoverageAssessmentStatus {
+  switch (status) {
+    case "potential_gap":
+      return "gap_observed";
+    case "review_signal":
+      return "review_signal";
+    case "not_testable":
+      return "needs_evidence";
+    case "not_applicable":
+    case "not_observed":
+    case "observed":
+    default:
+      return "checked";
+  }
+}
+
+function hasRetainedEvidenceValue(
+  retainedEvidence: Record<string, unknown>,
+  keys: string[],
+  expected: unknown
+) {
+  return keys.some((key) => retainedEvidence[key] === expected);
+}
+
+function getPotentialGapEvidenceState(rowId: string, criticalEvidence: CaliforniaPrivacyCoverageCriticalEvidence): CaliforniaPrivacyCoverageEvidenceState {
+  const retainedEvidence = criticalEvidence.retainedEvidence;
+
+  switch (rowId) {
+    case "privacy_notice_availability":
+      return hasRetainedEvidenceValue(retainedEvidence, ["privacyNoticeObserved", "noticeSurfaceObserved"], false)
+        ? "not_observed"
+        : "observed";
+    case "notice_at_collection":
+      return hasRetainedEvidenceValue(retainedEvidence, ["nearbyNoticeCueObserved", "noticeAtCollectionCueObserved"], false)
+        ? "not_observed"
+        : "observed";
+    case "do_not_sell_share_availability":
+      return hasRetainedEvidenceValue(retainedEvidence, ["doNotSellSharePathObserved", "privacyChoicesPathObserved", "optOutPathObserved"], false)
+        ? "not_observed"
+        : "observed";
+    case "gpc_opt_out_signal_handling":
+      return hasRetainedEvidenceValue(retainedEvidence, ["gpcHonored", "gpcRecognized", "optOutPreferenceSignalHonored"], false)
+        ? "not_observed"
+        : "observed";
+    case "limit_use_sensitive_pi":
+      return hasRetainedEvidenceValue(retainedEvidence, ["limitUsePathObserved", "limitUseControlObserved"], false)
+        ? "not_observed"
+        : "observed";
+    case "consumer_rights_request_methods":
+      return hasRetainedEvidenceValue(retainedEvidence, ["rightsRequestMethodObserved", "consumerRightsMethodObserved"], false)
+        ? "not_observed"
+        : "observed";
+    default:
+      return "observed";
+  }
+}
+
+function getEvidenceState(input: {
+  criticalEvidence: CaliforniaPrivacyCoverageCriticalEvidence;
+  rowId: string;
+  status: CaliforniaPrivacyCoverageChecklistStatus;
+}): CaliforniaPrivacyCoverageEvidenceState {
+  switch (input.status) {
+    case "not_testable":
+      return "not_testable";
+    case "not_applicable":
+    case "not_observed":
+      return "not_observed";
+    case "potential_gap":
+      return getPotentialGapEvidenceState(input.rowId, input.criticalEvidence);
+    case "observed":
+    case "review_signal":
+    default:
+      return "observed";
+  }
+}
+
+function withChecklistPosture(input: {
+  criticalEvidence: CaliforniaPrivacyCoverageCriticalEvidence;
+  evidenceRefs: string[];
+  explanation: string;
+  id: string;
+  label: string;
+  limitation?: string;
+  status: CaliforniaPrivacyCoverageChecklistStatus;
+}): CaliforniaPrivacyCoverageChecklistItem {
+  const assessmentStatus = getAssessmentStatus(input.status);
+  const evidenceState = getEvidenceState({
+    criticalEvidence: input.criticalEvidence,
+    rowId: input.id,
+    status: input.status
+  });
+  const note = input.limitation ?? input.criticalEvidence.statusBasis;
+
+  return {
+    assessmentStatus,
+    criticalEvidence: input.criticalEvidence,
+    evidenceRefs: input.evidenceRefs,
+    evidenceState,
+    explanation: input.explanation,
+    id: input.id,
+    label: input.label,
+    limitation: input.limitation,
+    note,
+    status: input.status,
+    statusLabel: getCaliforniaPrivacyReviewStatusLabel(input.status),
+    tone: getChecklistTone(input.status)
+  };
 }
 
 function getEvidenceFamilyForRow(rowId: string): CaliforniaPrivacyCoverageCriticalEvidence["evidenceFamily"] {
@@ -290,6 +411,10 @@ function getFallbackCriticalEvidence(
 export function deriveCaliforniaPrivacyCoverageChecklist(
   input: CaliforniaPrivacyCoverageChecklistInput
 ): CaliforniaPrivacyCoverageChecklistItem[] {
+  if (input.withholdForNonRepresentativeScan) {
+    return [];
+  }
+
   const findingsById = new Map(input.unifiedFindings.map((finding) => [finding.unifiedFindingId, finding]));
   const projectedFindingsById = new Map((input.projectedFindings ?? []).map((finding) => [finding.id, finding]));
   const publicCoverageIsTestable = input.scanCompleted && !input.coverageLimited;
@@ -306,40 +431,36 @@ export function deriveCaliforniaPrivacyCoverageChecklist(
     const policyOutcome = input.coverageOutcomes?.[definition.id];
 
     if (policyOutcome) {
-      return {
+      return withChecklistPosture({
         criticalEvidence: policyOutcome.criticalEvidence,
         evidenceRefs: policyOutcome.evidenceRefs,
         explanation: definition.explanation,
         id: definition.id,
         label: definition.label,
         limitation: policyOutcome.limitation,
-        status: policyOutcome.status,
-        statusLabel: getCaliforniaPrivacyReviewStatusLabel(policyOutcome.status),
-        tone: getChecklistTone(policyOutcome.status)
-      };
+        status: policyOutcome.status
+      });
     }
 
     if (matchingFindings.length > 0) {
       const status = definition.defaultFindingStatus;
       const statusBasis = `Canonical unified finding evidence was retained for this California row: ${matchingFindings.map((finding) => finding.presentation?.findingName || finding.title).join(", ")}.`;
-      return {
+      return withChecklistPosture({
         criticalEvidence: getUnifiedFindingCriticalEvidence(status, statusBasis, definition.id, matchingFindings, matchingProjectedFindings),
         evidenceRefs: getEvidenceRefs(matchingFindings),
         explanation: definition.explanation,
         id: definition.id,
         label: definition.label,
         limitation: statusBasis,
-        status,
-        statusLabel: getCaliforniaPrivacyReviewStatusLabel(status),
-        tone: getChecklistTone(status)
-      };
+        status
+      });
     }
 
     const status = publicCoverageIsTestable ? "not_observed" : "not_testable";
     const statusBasis = publicCoverageIsTestable
       ? definition.notObservedText
       : "Public-web coverage was limited, so this California row was not testable.";
-    return {
+    return withChecklistPosture({
       criticalEvidence: getFallbackCriticalEvidence(
         status,
         statusBasis,
@@ -361,9 +482,7 @@ export function deriveCaliforniaPrivacyCoverageChecklist(
       id: definition.id,
       label: definition.label,
       limitation: statusBasis,
-      status,
-      statusLabel: getCaliforniaPrivacyReviewStatusLabel(status),
-      tone: getChecklistTone(status)
-    };
+      status
+    });
   });
 }

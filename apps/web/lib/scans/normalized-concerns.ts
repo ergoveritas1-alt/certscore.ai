@@ -2239,6 +2239,90 @@ function getCaliforniaRuntimeNumber(record: Record<string, unknown> | null | und
   return null;
 }
 
+const SCAN_NO_GO_CONFIDENCE_THRESHOLD = 0.9;
+
+function getScanNoGoAssessment(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  return getRuntimeRecord(runtimeArtifacts, ["scanNoGoAssessment", "scan_no_go_assessment"]);
+}
+
+function getScanNoGoSignalKey(pageState: string | null) {
+  return pageState === "captcha_or_challenge"
+    ? "scan_quality.visual_access_challenge"
+    : pageState === "access_blocked"
+      ? "scan_quality.visual_access_blocked"
+      : pageState === "auth_or_login_wall"
+        ? "scan_quality.visual_auth_or_login_wall"
+        : pageState === "maintenance_or_unavailable"
+          ? "scan_quality.visual_maintenance_or_unavailable"
+          : pageState === "blank_or_unusable"
+            ? "scan_quality.visual_blank_or_unusable"
+            : pageState === "wrong_site_or_soft_404"
+              ? "scan_quality.visual_wrong_site_or_soft_404"
+              : pageState === "parked_or_placeholder"
+                ? "scan_quality.visual_parked_or_placeholder"
+                : "scan_quality.visual_access_blocked";
+}
+
+function buildScanNoGoAssessmentConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = getScanNoGoAssessment(runtimeArtifacts);
+  const decision = getCaliforniaRuntimeString(assessment, ["decision"]);
+  const scanNoGoConfidence = getCaliforniaRuntimeNumber(assessment, [
+    "scanNoGoConfidence",
+    "scan_no_go_confidence"
+  ]);
+  if (decision !== "no_go" || scanNoGoConfidence === null || scanNoGoConfidence < SCAN_NO_GO_CONFIDENCE_THRESHOLD) {
+    return [];
+  }
+
+  const supportingSignals = getRuntimeRecord(assessment, ["supportingSignals", "supporting_signals"]);
+  const visualPageState =
+    getCaliforniaRuntimeString(supportingSignals, ["visualPageState", "visual_page_state"]) ??
+    getCaliforniaRuntimeString(assessment, ["visualPageState", "visual_page_state"]);
+  const signalKey = getScanNoGoSignalKey(visualPageState);
+  const evidenceRefs = getCaliforniaRuntimeStringArray(assessment, ["evidenceRefs", "evidence_refs"]);
+  const reasonCodes = getCaliforniaRuntimeStringArray(assessment, ["reasonCodes", "reason_codes"]);
+  const corroboratorCodes = getCaliforniaRuntimeStringArray(assessment, ["corroboratorCodes", "corroborator_codes"]);
+  const contradictorCodes = getCaliforniaRuntimeStringArray(assessment, ["contradictorCodes", "contradictor_codes"]);
+  const description = [
+    "WS01 retained a scan-level no-go assessment from observed runtime evidence.",
+    corroboratorCodes.length > 0 ? `Corroborators: ${corroboratorCodes.join(", ")}.` : null
+  ].filter((part): part is string => Boolean(part)).join(" ");
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "manual_review_triggers",
+      description,
+      domainContext,
+      evidence: evidenceRefs,
+      observedValue: decision,
+      originKey: "scan_quality.scan_no_go_assessment.no_go",
+      originType: "runtime_artifact",
+      rawEvidence: {
+        ...assessment,
+        runtimeEvidenceArtifacts: evidenceRefs.length > 0
+          ? evidenceRefs
+          : ["scan_runtime_artifacts.scan_no_go_assessment"],
+        scanNoGoConfidence,
+        scanNoGoDecision: decision,
+        scanNoGoReasonCodes: reasonCodes,
+        scanNoGoCorroboratorCodes: corroboratorCodes,
+        scanNoGoContradictorCodes: contradictorCodes,
+        signalKey,
+        unifiedFindingId: "scan_quality_visual_no_go"
+      },
+      severity: "high",
+      signalKey,
+      signalLabel: "Scan-level no-go assessment",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Scan-level no-go assessment"
+    })
+  ];
+}
+
 function makeCaliforniaRawEvidence(input: {
   evidenceFamily: CaliforniaPrivacyEvidenceFamily;
   retainedEvidence: Record<string, unknown>;
@@ -3044,6 +3128,7 @@ export function buildNormalizedConcerns(input: {
       const normalizedFinding = normalizeScanValidationFinding(finding);
       return normalizedFinding ? [normalizeConcernFromValidationFinding(normalizedFinding, input.domainContext)] : [];
     }),
+    ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildCaliforniaPrivacyEvidenceConcerns(input.runtimeArtifacts, input.domainContext)
   ];
 

@@ -1329,35 +1329,24 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   runtimeArtifacts: Record<string, unknown> | null;
 }): CanonicalReviewFinding[] {
   const candidates: CanonicalReviewFinding[] = [];
+  const scanNoGoAssessment = getRuntimeObject(input.runtimeArtifacts, [
+    "scanNoGoAssessment",
+    "scan_no_go_assessment"
+  ]);
+  if (scanNoGoAssessment) {
+    return candidates;
+  }
   const visualAccessReview = getRuntimeObject(input.runtimeArtifacts, ["visualAccessReview", "visual_access_review"]);
   const visualAccessGoNoGo = getRuntimeString(visualAccessReview, ["goNoGo", "go_no_go"]);
   const visualAccessPageState = getRuntimeString(visualAccessReview, ["pageState", "page_state"]);
   const visualAccessStatus = getRuntimeString(visualAccessReview, ["status"]);
   if (
     visualAccessReview &&
-    (visualAccessStatus === "available" || visualAccessStatus === "missing_visual_artifact") &&
-    (visualAccessGoNoGo === "NO_GO" || visualAccessPageState === "degraded_but_useful")
+    visualAccessStatus === "available" &&
+    visualAccessPageState === "degraded_but_useful" &&
+    visualAccessGoNoGo === "GO"
   ) {
-    const ruleKey =
-      visualAccessStatus === "missing_visual_artifact" || visualAccessPageState === "missing_visual_artifact"
-        ? "scan_quality.visual_artifact_missing"
-        : visualAccessPageState === "degraded_but_useful"
-          ? "scan_quality.visual_degraded_but_useful"
-          : visualAccessPageState === "captcha_or_challenge"
-            ? "scan_quality.visual_access_challenge"
-            : visualAccessPageState === "access_blocked"
-              ? "scan_quality.visual_access_blocked"
-              : visualAccessPageState === "auth_or_login_wall"
-                ? "scan_quality.visual_auth_or_login_wall"
-                : visualAccessPageState === "maintenance_or_unavailable"
-                  ? "scan_quality.visual_maintenance_or_unavailable"
-                  : visualAccessPageState === "blank_or_unusable"
-                    ? "scan_quality.visual_blank_or_unusable"
-                    : visualAccessPageState === "wrong_site_or_soft_404"
-                      ? "scan_quality.visual_wrong_site_or_soft_404"
-                      : visualAccessPageState === "parked_or_placeholder"
-                        ? "scan_quality.visual_parked_or_placeholder"
-                        : "scan_quality.visual_access_blocked";
+    const ruleKey = "scan_quality.visual_degraded_but_useful";
     const reasonCode = getRuntimeString(visualAccessReview, ["reasonCode", "reason_code"]) ?? ruleKey;
     const shortExplanation =
       getRuntimeString(visualAccessReview, ["shortExplanation", "short_explanation"]) ??

@@ -59,6 +59,32 @@ test("California Phase 2 replay reads WS01-style artifact exports through the ca
   assert.match(renderCaliforniaPhase2ReplayMarkdown([audit]), /California Phase 2 Validation Replay/);
 });
 
+test("California Phase 2 replay carries snapshot coverage limitations into not-testable row evidence", () => {
+  const audit = replayCaliforniaPhase2Artifact({
+    validationVersion: "california-phase2-validation.v1",
+    domain: "blocked.example",
+    scanId: "scan-blocked",
+    snapshot: {
+      blockedFlag: true,
+      coverageLevel: "limited_none"
+    },
+    runtimeArtifacts: {}
+  });
+
+  assert.equal(audit.rowAudits.length, 12);
+  assert.equal(audit.rowAudits.every((row) => row.evidenceState === "not_testable"), true);
+  assert.equal(
+    audit.rowAudits.every((row) => row.evidenceFields.includes("coverageLimited")),
+    true
+  );
+  assert.equal(
+    audit.rowAudits.every((row) =>
+      row.missingOrIncompleteSourceSignals.some((gap) => gap.field === "scanner.publicWebCoverage")
+    ),
+    true
+  );
+});
+
 test("California Phase 2 replay treats retained collection-context gaps as self-sufficient", () => {
   const audit = replayCaliforniaPhase2Artifact({
     validationVersion: "california-phase2-validation.v1",
@@ -112,7 +138,7 @@ test("California Phase 2 replay keeps confirmed post-opt-out reduction evidence 
   assert.equal(frictionRow?.evidenceFields.includes("privacyChoiceInteractionEvidence.preferenceCenterProbeUrl"), true);
 });
 
-test("California Phase 2 replay preserves limited privacy-choice probe diagnostics without upgrading post-opt-out tracking", () => {
+test("California Phase 2 replay preserves limited privacy-choice probe diagnostics as reviewable evidence", () => {
   const audit = replayCaliforniaPhase2Artifact({
     validationVersion: "california-phase2-validation.v1",
     domain: "privacy-choice-limited.example",
@@ -137,9 +163,10 @@ test("California Phase 2 replay preserves limited privacy-choice probe diagnosti
   assert.equal(frictionRow?.evidenceFields.includes("privacyChoiceInteractionEvidence.visibleTextSnippets"), true);
 
   const postOptOutRow = audit.rowAudits.find((row) => row.rowId === "post_opt_out_tracking_behavior");
-  assert.equal(postOptOutRow?.status, "not_testable");
+  assert.equal(postOptOutRow?.status, "review_signal");
   assert.equal(postOptOutRow?.selfSufficient, true);
-  assert.equal(postOptOutRow?.missingOrIncompleteSourceSignals.some((signal) => signal.field === "californiaPrivacyEvidence.optOutInteractionConfirmed"), true);
+  assert.equal(postOptOutRow?.missingOrIncompleteSourceSignals.length, 0);
+  assert.equal(postOptOutRow?.evidenceFields.includes("privacyChoiceInteractionEvidence.preferenceCenterProbeAttempts"), true);
 });
 
 test("California Phase 2 replay retains sensitive-surface and Limit Use evidence as canonical row postures", () => {

@@ -2086,6 +2086,10 @@ function hasStrongCoverageGapSurfaceMissingEvidence(
     return false;
   }
 
+  if (!explicitAbsenceConfirmation && isWeakUnverifiedCoverageGapDiscovery(input.rawEvidence)) {
+    return false;
+  }
+
   return (
     explicitAbsenceConfirmation ||
     representativeSampleCount >= 2 ||
@@ -2093,6 +2097,51 @@ function hasStrongCoverageGapSurfaceMissingEvidence(
     (attemptCount >= 2 && attemptedUrls.length > 0) ||
     (presenceValue === false && hasConcreteReviewerEvidence)
   );
+}
+
+function isWeakUnverifiedCoverageGapDiscovery(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (!rawEvidence) {
+    return false;
+  }
+
+  if (isGuessedOnlyDiscovery(rawEvidence)) {
+    return true;
+  }
+
+  const stopReason = getFirstString(rawEvidence, ["keyPageStopReason", "key_page_stop_reason", "stopReason", "stop_reason"]);
+  const extractionOutcome = getFirstString(rawEvidence, [
+    "keyPageExtractionOutcome",
+    "key_page_extraction_outcome",
+    "extractionOutcome",
+    "extraction_outcome"
+  ]);
+  if (/guessed_only|not_attempted/i.test(`${stopReason ?? ""}\n${extractionOutcome ?? ""}`)) {
+    return true;
+  }
+
+  const fetchOutcomes = getStringArrayValues(rawEvidence, [
+    "keyPageFetchOutcome",
+    "key_page_fetch_outcome",
+    "keyPageFetchOutcomes",
+    "key_page_fetch_outcomes",
+    "fetchOutcome",
+    "fetch_outcome",
+    "fetchOutcomes",
+    "fetch_outcomes"
+  ]);
+  if (
+    fetchOutcomes.length > 0 &&
+    fetchOutcomes.every((value) => /blocked|forbidden|not_attempted|fetch_failed|timeout|error/i.test(value))
+  ) {
+    return true;
+  }
+
+  const verifiedPublicSurfacesCount = getNumberEvidence(rawEvidence, [
+    "verifiedPublicSurfacesCount",
+    "verified_public_surfaces_count"
+  ]);
+  const coverageLevel = getFirstString(rawEvidence, ["coverageLevel", "coverage_level"]);
+  return verifiedPublicSurfacesCount === 0 && /limited|blocked|partial/i.test(coverageLevel ?? "");
 }
 
 function hasExpectedLegalPageCoverage(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -2309,6 +2358,33 @@ export function deriveConcernPolicy(input: {
       negativeEvidenceFlags: [],
       promotionEligibility: "blocked"
     };
+  }
+  if (suggestedUnifiedFindingId === "scan_quality_visual_no_go") {
+    const scanNoGoDecision = getCanonicalStringEvidence(input.rawEvidence, [
+      "scanNoGoDecision",
+      "scan_no_go_decision",
+      "decision"
+    ]);
+    const scanNoGoConfidence = getNumberEvidence(input.rawEvidence, [
+      "scanNoGoConfidence",
+      "scan_no_go_confidence"
+    ]);
+    if (scanNoGoDecision !== null) {
+      if (scanNoGoDecision === "no_go" && scanNoGoConfidence !== null && scanNoGoConfidence >= 0.9) {
+        return {
+          allowedNarrativeTier: "strong",
+          externalSurfacingEligibility: "eligible",
+          negativeEvidenceFlags: [],
+          promotionEligibility: "eligible"
+        };
+      }
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [],
+        promotionEligibility: "internal_only"
+      };
+    }
   }
 
   const consentSurfaceObserved = getBooleanEvidence(input.rawEvidence, [

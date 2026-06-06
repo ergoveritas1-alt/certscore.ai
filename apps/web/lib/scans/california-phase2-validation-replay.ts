@@ -36,8 +36,10 @@ export type CaliforniaPhase2ValidationArtifact = {
 };
 
 export type CaliforniaPhase2RowAudit = {
+  assessmentStatus: CaliforniaPrivacyCoverageChecklistItem["assessmentStatus"];
   evidenceFields: string[];
   evidenceFamily: CaliforniaPrivacyCoverageChecklistItem["criticalEvidence"]["evidenceFamily"];
+  evidenceState: CaliforniaPrivacyCoverageChecklistItem["evidenceState"];
   missingOrIncompleteSourceSignals: CaliforniaPrivacyCoverageChecklistItem["criticalEvidence"]["missingOrIncompleteSourceSignals"];
   normalizedConcernKeys: string[];
   projectedFindingIds: string[];
@@ -65,6 +67,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function getRuntimeArtifacts(artifact: CaliforniaPhase2ValidationArtifact | Record<string, unknown>) {
   const runtimeArtifacts = isRecord(artifact.runtimeArtifacts) ? artifact.runtimeArtifacts : artifact;
   return runtimeArtifacts;
+}
+
+function getSnapshot(artifact: CaliforniaPhase2ValidationArtifact | Record<string, unknown>) {
+  return isRecord(artifact.snapshot) ? artifact.snapshot : null;
+}
+
+function isCoverageLimited(artifact: CaliforniaPhase2ValidationArtifact | Record<string, unknown>) {
+  const snapshot = getSnapshot(artifact);
+  const coverageLevel = typeof snapshot?.coverageLevel === "string" ? snapshot.coverageLevel : null;
+  return (
+    snapshot?.blockedFlag === true ||
+    coverageLevel === "limited_none" ||
+    coverageLevel === "limited_partial" ||
+    coverageLevel === "limited"
+  );
 }
 
 function hasConcreteValue(value: unknown): boolean {
@@ -128,30 +145,30 @@ export function assessCaliforniaChecklistRowEvidence(item: CaliforniaPrivacyCove
   const reasons: string[] = [];
   let selfSufficient = false;
 
-  if (item.status === "observed") {
+  if (item.assessmentStatus === "checked" && item.evidenceState === "observed") {
     selfSufficient = hasConcreteValue(retainedEvidence) || projectedFindingIds.length > 0 || item.evidenceRefs.length > 0;
     if (!selfSufficient) {
-      reasons.push("Observed rows need retained concrete URL/control/snippet/vendor/count evidence.");
+      reasons.push("Checked observed rows need retained concrete URL/control/snippet/vendor/count evidence.");
     }
-  } else if (item.status === "potential_gap") {
+  } else if (item.assessmentStatus === "gap_observed") {
     selfSufficient = rowHasApplicabilityAndGapEvidence(item);
     if (!selfSufficient) {
       reasons.push("Potential gaps need both applicability evidence and retained missing/failed control evidence.");
     }
-  } else if (item.status === "review_signal") {
+  } else if (item.assessmentStatus === "review_signal") {
     selfSufficient = hasConcreteValue(retainedEvidence) || projectedFindingIds.length > 0 || item.evidenceRefs.length > 0;
     if (!selfSufficient) {
       reasons.push("Review signals need concrete retained runtime, policy, interaction, accessibility, or alignment evidence.");
     }
-  } else if (item.status === "not_testable") {
+  } else if (item.evidenceState === "not_testable") {
     selfSufficient = item.criticalEvidence.missingOrIncompleteSourceSignals.length > 0 || /not testable|unavailable|limited|incomplete/i.test(item.criticalEvidence.statusBasis);
     if (!selfSufficient) {
       reasons.push("Not-testable rows need a retained missing-source-signal reason.");
     }
-  } else if (item.status === "not_applicable") {
-    selfSufficient = hasConcreteValue(retainedEvidence) || /not applicable|no .*signal|no .*context/i.test(item.criticalEvidence.statusBasis);
+  } else if (item.assessmentStatus === "checked" && item.evidenceState === "not_observed") {
+    selfSufficient = hasConcreteValue(retainedEvidence) || /not observed|not surfaced|no .*signal|no .*context|no .*issue|no eligible/i.test(item.criticalEvidence.statusBasis);
     if (!selfSufficient) {
-      reasons.push("Not-applicable rows need evidence or status basis showing applicability was negative.");
+      reasons.push("Checked not-observed rows need evidence or a status basis explaining the negative observation.");
     }
   } else {
     selfSufficient = item.criticalEvidence.statusBasis.trim().length > 0;
@@ -165,8 +182,10 @@ export function assessCaliforniaChecklistRowEvidence(item: CaliforniaPrivacyCove
   }
 
   return {
+    assessmentStatus: item.assessmentStatus,
     evidenceFields,
     evidenceFamily: item.criticalEvidence.evidenceFamily,
+    evidenceState: item.evidenceState,
     missingOrIncompleteSourceSignals: item.criticalEvidence.missingOrIncompleteSourceSignals,
     normalizedConcernKeys,
     projectedFindingIds,
@@ -182,6 +201,7 @@ export function replayCaliforniaPhase2Artifact(
   artifact: CaliforniaPhase2ValidationArtifact | Record<string, unknown>
 ): CaliforniaPhase2ReplayAudit {
   const runtimeArtifacts = getRuntimeArtifacts(artifact);
+  const coverageLimited = isCoverageLimited(artifact);
   const normalizedConcerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],
     runtimeArtifacts,
@@ -194,16 +214,20 @@ export function replayCaliforniaPhase2Artifact(
     validationFindings: []
   });
   const coverageOutcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
-    coverageLimited: false,
+    coverageLimited,
     normalizedConcerns,
     runtimeArtifacts,
     scanCompleted: true
   });
+  const withholdForNonRepresentativeScan = unifiedFindings.some(
+    (finding) => finding.unifiedFindingId === "scan_quality_visual_no_go"
+  );
   const checklist = deriveCaliforniaPrivacyCoverageChecklist({
-    coverageLimited: false,
+    coverageLimited,
     coverageOutcomes,
     scanCompleted: true,
-    unifiedFindings
+    unifiedFindings,
+    withholdForNonRepresentativeScan
   });
 
   return {
@@ -240,10 +264,10 @@ export function renderCaliforniaPhase2ReplayMarkdown(audits: CaliforniaPhase2Rep
     lines.push(`- Unified findings: ${audit.unifiedFindingIds.length ? audit.unifiedFindingIds.join(", ") : "none"}`);
     lines.push(`- Normalized concerns: ${audit.normalizedConcernKeys.length ? audit.normalizedConcernKeys.join(", ") : "none"}`);
     lines.push("");
-    lines.push("| Row | Status | Self-sufficient | Evidence fields |");
-    lines.push("| --- | --- | --- | --- |");
+    lines.push("| Row | Assessment | Evidence state | Status | Self-sufficient | Evidence fields |");
+    lines.push("| --- | --- | --- | --- | --- | --- |");
     for (const row of audit.rowAudits) {
-      lines.push(`| ${row.rowId} | ${row.status} | ${row.selfSufficient ? "yes" : "no"} | ${row.evidenceFields.slice(0, 8).join(", ") || "none"} |`);
+      lines.push(`| ${row.rowId} | ${row.assessmentStatus} | ${row.evidenceState} | ${row.status} | ${row.selfSufficient ? "yes" : "no"} | ${row.evidenceFields.slice(0, 8).join(", ") || "none"} |`);
     }
     lines.push("");
   }

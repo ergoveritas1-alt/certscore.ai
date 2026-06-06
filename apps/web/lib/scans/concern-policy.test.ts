@@ -2047,6 +2047,56 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
   }
 });
 
+test("deriveConcernPolicy keeps guessed or blocked policy-surface absence audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      suggestedUnifiedFindingId: "privacy_policy_missing_surface",
+      title: "Privacy policy surface missing"
+    }),
+    evidenceStrengthFlags: ["key_page_discovery"],
+    rawEvidence: {
+      coverageLevel: "limited_partial",
+      keyPageAttemptCount: 3,
+      keyPageAttemptedUrls: [
+        "https://www.adidas.com/legal/privacy",
+        "https://www.adidas.com/legal/privacy-policy",
+        "https://www.adidas.com/privacy"
+      ],
+      keyPageFetchOutcomes: ["forbidden", "not_attempted"],
+      keyPageGuessedOnly: true,
+      privacyPolicyPresent: false,
+      verifiedPublicSurfacesCount: 0
+    }
+  });
+
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+});
+
+test("deriveConcernPolicy still promotes explicitly confirmed sitewide missing policy surfaces", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      suggestedUnifiedFindingId: "privacy_policy_missing_surface",
+      title: "Privacy policy surface missing"
+    }),
+    evidenceStrengthFlags: ["key_page_discovery", "page_attributed"],
+    rawEvidence: {
+      footerSurfaceAbsentConfirmed: true,
+      keyPageAttemptCount: 3,
+      keyPageAttemptedUrls: [
+        "https://example.com/privacy",
+        "https://example.com/legal/privacy",
+        "https://example.com/privacy-policy"
+      ],
+      privacyPolicyPresent: false,
+      representativePageCount: 2
+    }
+  });
+
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
+});
+
 test("CPRA CBA opt-out concern policy requires CPRA-relevant context", () => {
   const concern = makeConcern({
     originKey: "privacy.cpra_cba_opt_out_missing",
@@ -3023,13 +3073,16 @@ test("deriveConcernPolicy promotes corroborated fingerprinting evidence", () => 
         {
           artifactRef: "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary",
           attributeCategories: ["canvas_webgl", "audio"],
-          requestUrl: "https://fp.example.test/collect"
+          requestUrl: "https://fpjs.example.test/collect",
+          tier: 3,
+          vendor: "FingerprintJS"
         }
       ],
       fingerprintSummary: {
-        tier: 2
+        tier: 3
       },
-      requestUrls: ["https://fp.example.test/collect"]
+      requestUrls: ["https://fpjs.example.test/collect"],
+      runtimeVendors: ["FingerprintJS"]
     }
   });
 

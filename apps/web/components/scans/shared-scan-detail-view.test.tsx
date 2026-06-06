@@ -88,6 +88,37 @@ async function loadHasIncompleteScanCoverage() {
   }).hasIncompleteScanCoverage;
 }
 
+async function loadShouldShowRegulatoryChecklistSection() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule = (
+    sharedScanDetailViewImport as unknown as {
+      default?: Record<string, unknown>;
+      "module.exports"?: Record<string, unknown>;
+      shouldShowRegulatoryChecklistSection?: unknown;
+    }
+  ).shouldShowRegulatoryChecklistSection
+    ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+    : (
+        sharedScanDetailViewImport as unknown as {
+          default?: Record<string, unknown>;
+          "module.exports"?: Record<string, unknown>;
+        }
+      ).default ??
+      (
+        sharedScanDetailViewImport as unknown as {
+          default?: Record<string, unknown>;
+          "module.exports"?: Record<string, unknown>;
+        }
+      )["module.exports"] ??
+      (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    shouldShowRegulatoryChecklistSection: (input: {
+      executiveAccessLimitationNotice: { finding: { id: string } } | null;
+    }) => boolean;
+  }).shouldShowRegulatoryChecklistSection;
+}
+
 async function loadExecutiveSummaryScanCondition() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule =
@@ -1340,12 +1371,13 @@ test("deriveVisualAccessLimitationNotice does not treat degraded but usable visu
   assert.equal(notice, null);
 });
 
-test("deriveVisualAccessLimitationNotice turns retained bad-page visual no-go into a coverage notice", async () => {
+test("deriveVisualAccessLimitationNotice does not treat visual-only no-go as site no-go", async () => {
   const deriveVisualAccessLimitationNotice = await loadVisualAccessLimitationNotice();
 
   const notice = deriveVisualAccessLimitationNotice({
     visual_access_review: {
       artifactRef: "initial_load:3aa98210d0f5",
+      confidence: 0.94,
       goNoGo: "NO_GO",
       pageState: "challenge_or_robot_page",
       reasonCode: "bot_challenge_visible",
@@ -1354,11 +1386,122 @@ test("deriveVisualAccessLimitationNotice turns retained bad-page visual no-go in
     }
   });
 
+  assert.equal(notice, null);
+});
+
+test("deriveVisualAccessLimitationNotice uses scan-level no-go assessment when present", async () => {
+  const deriveVisualAccessLimitationNotice = await loadVisualAccessLimitationNotice();
+
+  const notice = deriveVisualAccessLimitationNotice({
+    scan_no_go_assessment: {
+      decision: "no_go",
+      scanNoGoConfidence: 0.93,
+      visualScreenshotNoGoConfidence: 0.94,
+      reasonCodes: ["maintenance_recharging_page", "scan_no_go_corroborated"],
+      corroboratorCodes: ["document_status_blocked", "origin_not_reached"],
+      contradictorCodes: [],
+      status: "available",
+      supportingSignals: {
+        visualPageState: "maintenance_or_unavailable"
+      }
+    },
+    visual_access_review: {
+      artifactRef: "initial_load:3aa98210d0f5",
+      confidence: 0.94,
+      goNoGo: "NO_GO",
+      pageState: "maintenance_or_unavailable",
+      reasonCode: "maintenance_recharging_page",
+      shortExplanation: "The retained visual evidence showed a maintenance page instead of the normal public page.",
+      status: "available"
+    }
+  });
+
   assert.equal(notice?.finding.id, "scan_quality_visual_no_go");
-  assert.equal(notice?.review.title, "Normal public site was not reached");
-  assert.equal(notice?.review.coverageLabel, "Visual verification unavailable");
-  assert.match(notice?.review.reason ?? "", /bot_challenge_visible/i);
-  assert.match(notice?.summary ?? "", /visual review did not verify a normal public page/i);
+  const finding = notice?.finding as { evidencePreview?: string[]; evidenceRefs?: string[] } | undefined;
+  assert.ok(finding?.evidenceRefs?.includes("scan_runtime_artifacts.scan_no_go_assessment"));
+  assert.ok(finding?.evidencePreview?.some((line) => /Scan no-go confidence: 0\.93/.test(line)));
+});
+
+test("deriveVisualAccessLimitationNotice does not suppress review for diagnostic scan-level no-go assessment", async () => {
+  const deriveVisualAccessLimitationNotice = await loadVisualAccessLimitationNotice();
+
+  const notice = deriveVisualAccessLimitationNotice({
+    scan_no_go_assessment: {
+      decision: "continue_with_diagnostics",
+      scanNoGoConfidence: 0.46,
+      visualScreenshotNoGoConfidence: 0.94,
+      reasonCodes: ["visual_no_go_not_corroborated", "contradicts_no_go:expected_origin_reached"],
+      corroboratorCodes: ["challenge_or_block_signals"],
+      contradictorCodes: ["expected_origin_reached", "runtime_activity_observed"],
+      status: "available",
+      supportingSignals: {
+        visualPageState: "captcha_or_challenge"
+      }
+    },
+    visual_access_review: {
+      artifactRef: "initial_load:3aa98210d0f5",
+      confidence: 0.94,
+      goNoGo: "NO_GO",
+      pageState: "captcha_or_challenge",
+      reasonCode: "captcha_or_challenge",
+      shortExplanation: "The retained visual evidence showed a challenge page.",
+      status: "available"
+    }
+  });
+
+  assert.equal(notice, null);
+});
+
+test("deriveVisualAccessLimitationNotice does not treat lower-confidence visual no-go as site no-go", async () => {
+  const deriveVisualAccessLimitationNotice = await loadVisualAccessLimitationNotice();
+
+  const notice = deriveVisualAccessLimitationNotice({
+    visual_access_review: {
+      artifactRef: "initial_load:c79b32e6a551",
+      confidence: 0.86,
+      goNoGo: "NO_GO",
+      pageState: "blank_or_unusable",
+      reasonCode: "blank_page_no_visible_content",
+      shortExplanation: "The screenshot is essentially blank with no visible page elements.",
+      status: "available"
+    }
+  });
+
+  assert.equal(notice, null);
+});
+
+test("deriveVisualAccessLimitationNotice uses corroborated scan no-go even when screenshot-only confidence is lower", async () => {
+  const deriveVisualAccessLimitationNotice = await loadVisualAccessLimitationNotice();
+
+  const notice = deriveVisualAccessLimitationNotice({
+    scan_no_go_assessment: {
+      decision: "no_go",
+      scanNoGoConfidence: 0.92,
+      visualScreenshotNoGoConfidence: 0.86,
+      reasonCodes: ["blank_page_no_visible_content", "scan_no_go_corroborated", "access_block_text_observed"],
+      corroboratorCodes: ["access_block_text_observed", "first_party_identity_missing"],
+      contradictorCodes: [],
+      status: "available",
+      supportingSignals: {
+        accessBlockTextObserved: true,
+        visualNoGo: true,
+        visualPageState: "blank_or_unusable"
+      }
+    },
+    visual_access_review: {
+      artifactRef: "initial_load:c79b32e6a551",
+      confidence: 0.86,
+      goNoGo: "NO_GO",
+      pageState: "blank_or_unusable",
+      reasonCode: "blank_page_no_visible_content",
+      shortExplanation: "The screenshot is essentially blank with no visible page elements.",
+      status: "available"
+    }
+  });
+
+  assert.equal(notice?.finding.id, "scan_quality_visual_no_go");
+  const finding = notice?.finding as { evidencePreview?: string[] } | undefined;
+  assert.ok(finding?.evidencePreview?.some((line) => /Scan no-go confidence: 0\.92/.test(line)));
 });
 
 test("hasIncompleteScanCoverage suppresses partial flag when retained coverage is substantial", async () => {
@@ -1569,6 +1712,33 @@ test("selectExecutiveAccessLimitationNotice lets retained visual no-go limit sub
       topExecutiveFindings: [visualNoGoFinding]
     }),
     notice
+  );
+});
+
+test("shouldShowRegulatoryChecklistSection hides regulatory review for visual no-go scans", async () => {
+  const shouldShowRegulatoryChecklistSection = await loadShouldShowRegulatoryChecklistSection();
+
+  assert.equal(
+    shouldShowRegulatoryChecklistSection({
+      executiveAccessLimitationNotice: {
+        finding: { id: "scan_quality_visual_no_go" }
+      }
+    }),
+    false
+  );
+  assert.equal(
+    shouldShowRegulatoryChecklistSection({
+      executiveAccessLimitationNotice: {
+        finding: { id: "access_limited_no_reliable_findings" }
+      }
+    }),
+    true
+  );
+  assert.equal(
+    shouldShowRegulatoryChecklistSection({
+      executiveAccessLimitationNotice: null
+    }),
+    true
   );
 });
 

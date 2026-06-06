@@ -1951,13 +1951,17 @@ export function evaluateFindingEvidenceContractForPacket(packet: UnifiedFindingP
   );
 
 	  if (packet.concernContext) {
+	    const promotionEligibilities = packet.concernContext.promotionEligibilities ?? [];
+	    const externalSurfacingEligibilities = packet.concernContext.externalSurfacingEligibilities ?? [];
+	    const assertionLevels = packet.concernContext.assertionLevels ?? [];
+	    const negativeEvidenceFlags = packet.concernContext.negativeEvidenceFlags ?? [];
 	    const requiresPolicyBehaviorContradictionEvidence = contract.requiredForStrong.some(
 	      (requirement) => requirement.type === "policyBehaviorContradictionEvidence"
 	    );
 	    if (
-	      packet.concernContext.promotionEligibilities.length > 0 &&
-	      packet.concernContext.promotionEligibilities.every((value) => value === "eligible") &&
-	      packet.concernContext.externalSurfacingEligibilities.every((value) => value === "eligible")
+	      promotionEligibilities.length > 0 &&
+	      promotionEligibilities.every((value) => value === "eligible") &&
+	      externalSurfacingEligibilities.every((value) => value === "eligible")
 	    ) {
 	      if (packetEvidenceDecision?.status === "pass_strong") {
 	        return packetEvidenceDecision;
@@ -1967,25 +1971,25 @@ export function evaluateFindingEvidenceContractForPacket(packet: UnifiedFindingP
 	      }
 
 	      return {
-        allowedNarrativeTier: packet.concernContext.assertionLevels.includes("strong") ? "strong" : "moderate",
+        allowedNarrativeTier: assertionLevels.includes("strong") ? "strong" : "moderate",
         externalSurfacingEligibility: "eligible",
         missingRequirements: [],
         negativeEvidenceFlags: [],
         promotionEligibility: "eligible",
         satisfiedRequirements: contract.requiredForGood.map((requirement) => requirement.type),
-        status: packet.concernContext.assertionLevels.includes("strong") ? "pass_strong" : "pass_good"
+        status: assertionLevels.includes("strong") ? "pass_strong" : "pass_good"
       } satisfies FindingEvidenceContractDecision;
     }
 
     if (
-      packet.concernContext.promotionEligibilities.length > 0 &&
-      packet.concernContext.promotionEligibilities.every((value) => value !== "eligible")
+      promotionEligibilities.length > 0 &&
+      promotionEligibilities.every((value) => value !== "eligible")
     ) {
       return {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
         missingRequirements: [],
-        negativeEvidenceFlags: packet.concernContext.negativeEvidenceFlags,
+        negativeEvidenceFlags,
         promotionEligibility: "internal_only",
         satisfiedRequirements: [],
         status: "downgrade"

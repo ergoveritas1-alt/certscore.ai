@@ -1302,7 +1302,7 @@ test("observed baseline tracker URL fallback creates canonical preconsent packet
   ]);
 });
 
-test("WS01 visual no-go runtime artifact enters canonical concern pipeline", () => {
+test("WS01 scan-level no-go assessment enters canonical concern pipeline", () => {
   const state = buildScanReportUnifiedFindingState({
     accessibilityRuleCounts: [],
     accessibilityRuleExamples: [],
@@ -1313,6 +1313,33 @@ test("WS01 visual no-go runtime artifact enters canonical concern pipeline", () 
     policyEnrichment: [],
     policyReviewQueue: [],
     runtimeArtifacts: {
+      scan_no_go_assessment: {
+        decision: "no_go",
+        scanNoGoConfidence: 0.94,
+        visualScreenshotNoGoConfidence: 0.94,
+        reasonCodes: ["maintenance_recharging_page", "scan_no_go_corroborated"],
+        corroboratorCodes: ["document_status_blocked", "origin_not_reached", "low_runtime_activity"],
+        contradictorCodes: [],
+        status: "available",
+        supportingSignals: {
+          challengeSignalsDetected: false,
+          consentOrTrackerEvidenceObserved: false,
+          documentStatusBlocked: true,
+          domContentLow: true,
+          expectedOriginReached: false,
+          firstPartyIdentityObserved: false,
+          lowRuntimeActivity: true,
+          retainedVisualArtifactAvailable: true,
+          visualHardNoGoPageState: true,
+          visualNoGo: true,
+          visualPageState: "maintenance_or_unavailable"
+        },
+        evidenceRefs: [
+          "scan_runtime_artifacts.scan_no_go_assessment",
+          "scan_runtime_artifacts.visual_access_review"
+        ],
+        version: "scan-no-go-assessment-v1"
+      },
       visual_access_review: {
         artifact_ref: "initial_load:abc123",
         go_no_go: "NO_GO",
@@ -1321,6 +1348,7 @@ test("WS01 visual no-go runtime artifact enters canonical concern pipeline", () 
           "Page says the site is currently unavailable."
         ],
         page_state: "maintenance_or_unavailable",
+        confidence: 0.94,
         reason_code: "maintenance_recharging_page",
         short_explanation: "Initial-load page text indicated a maintenance or unavailable placeholder instead of normal public content.",
         status: "available",
@@ -1350,7 +1378,143 @@ test("WS01 visual no-go runtime artifact enters canonical concern pipeline", () 
   assert.equal(packet?.surfacingDecision.reportable, true);
   assert.equal(packet?.surfacingDecision.reportLane, "confidence_and_coverage");
   assert.equal(packet?.sourceRefs.some((source) => source.kind === "signal" && source.key === "scan_quality.visual_maintenance_or_unavailable"), true);
-  assert.equal(packet?.concernContext?.originTypes.includes("compatibility_signal"), true);
+  assert.equal(packet?.concernContext?.originTypes.includes("runtime_artifact"), true);
+  assert.equal(packet?.concernContext?.evidenceStrengthFlags.includes("direct_runtime"), true);
+});
+
+test("scan-level diagnostic assessment remains non-projected despite visual no-go", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    runtimeArtifacts: {
+      scan_no_go_assessment: {
+        decision: "continue_with_diagnostics",
+        scanNoGoConfidence: 0.46,
+        visualScreenshotNoGoConfidence: 0.86,
+        reasonCodes: [
+          "captcha_or_challenge",
+          "visual_no_go_not_corroborated",
+          "contradicts_no_go:document_status_2xx",
+          "contradicts_no_go:expected_origin_reached",
+          "contradicts_no_go:runtime_activity_observed"
+        ],
+        corroboratorCodes: ["challenge_or_block_signals"],
+        contradictorCodes: [
+          "document_status_2xx",
+          "expected_origin_reached",
+          "meaningful_dom_content",
+          "runtime_activity_observed",
+          "first_party_identity_observed"
+        ],
+        status: "available",
+        supportingSignals: {
+          challengeSignalsDetected: true,
+          consentOrTrackerEvidenceObserved: true,
+          documentStatusBlocked: false,
+          domContentLow: false,
+          expectedOriginReached: true,
+          firstPartyIdentityObserved: true,
+          lowRuntimeActivity: false,
+          retainedVisualArtifactAvailable: true,
+          visualHardNoGoPageState: true,
+          visualNoGo: true,
+          visualPageState: "captcha_or_challenge"
+        },
+        evidenceRefs: [
+          "scan_runtime_artifacts.scan_no_go_assessment",
+          "scan_runtime_artifacts.visual_access_review",
+          "scan_runtime_artifacts.hybrid_runtime_evidence"
+        ],
+        version: "scan-no-go-assessment-v1"
+      },
+      visual_access_review: {
+        artifact_ref: "initial_load:abc123",
+        confidence: 0.86,
+        go_no_go: "NO_GO",
+        page_state: "captcha_or_challenge",
+        reason_code: "captcha_or_challenge",
+        short_explanation: "The screenshot showed a challenge, but runtime evidence reached the expected origin.",
+        status: "available",
+        version: "visual-access-review-v1"
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.amazon.com/",
+      registered_domain: "amazon.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+
+  assert.equal(
+    state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "scan_quality_visual_no_go"),
+    false
+  );
+});
+
+test("visual-only no-go remains non-projected when scan-level assessment is absent", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    runtimeArtifacts: {
+      dom_node_count: 4449,
+      third_party_request_count: 269,
+      visual_access_review: {
+        artifact_ref: "initial_load:abc123",
+        confidence: 0.9,
+        go_no_go: "NO_GO",
+        page_state: "blank_or_unusable",
+        reason_code: "mostly_blank_page_no_content",
+        short_explanation:
+          "The screenshot is almost entirely blank, but runtime evidence retained substantial page activity.",
+        status: "available",
+        visible_site_identity: "Adidas logo fragment (faint)"
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://www.adidas.com/us",
+      registered_domain: "adidas.com"
+    },
+    trackerVendors: [],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+
+  assert.equal(
+    state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "scan_quality_visual_no_go"),
+    false
+  );
 });
 
 function buildPreconsentRuntimeState(

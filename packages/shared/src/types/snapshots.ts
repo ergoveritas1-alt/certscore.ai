@@ -1123,6 +1123,31 @@ export type BotBlockChallengeEvidence = {
   evidenceRefs?: string[];
 };
 
+export type ScanNoGoAssessment = {
+  status: "available";
+  version: "scan-no-go-assessment-v1";
+  decision: "no_go" | "continue_with_diagnostics" | "go";
+  scanNoGoConfidence: number;
+  visualScreenshotNoGoConfidence: number | null;
+  reasonCodes: string[];
+  corroboratorCodes: string[];
+  contradictorCodes: string[];
+  supportingSignals: {
+    challengeSignalsDetected: boolean;
+    consentOrTrackerEvidenceObserved: boolean;
+    documentStatusBlocked: boolean;
+    domContentLow: boolean;
+    expectedOriginReached: boolean;
+    firstPartyIdentityObserved: boolean;
+    lowRuntimeActivity: boolean;
+    retainedVisualArtifactAvailable: boolean;
+    visualHardNoGoPageState: boolean;
+    visualNoGo: boolean;
+    visualPageState: string | null;
+  };
+  evidenceRefs: string[];
+};
+
 export type ScanRuntimeArtifact = {
   scanId: string;
   thirdPartyRequestDomains: string[];
@@ -1180,6 +1205,7 @@ export type ScanRuntimeArtifact = {
   cookieAttributeSummary?: CookieAttributeSummary | null;
   cpraCbaOptOutEvidence?: CpraCbaOptOutEvidence | null;
   californiaPrivacyEvidence?: CaliforniaPrivacyEvidence | null;
+  scanNoGoAssessment?: ScanNoGoAssessment | null;
   gpcVerification?: GpcVerification | null;
   buildPhaseSummaries?: Array<{
     attempts: number;
