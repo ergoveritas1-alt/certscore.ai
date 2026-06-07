@@ -101,7 +101,7 @@ test("deriveCaliforniaPrivacyCoveragePolicyOutcomes treats unconfirmed privacy-c
   );
   assert.equal(
     outcomes.post_opt_out_tracking_behavior?.criticalEvidence.missingOrIncompleteSourceSignals.length,
-    1
+    2
   );
 });
 
@@ -146,11 +146,11 @@ test("deriveCaliforniaPrivacyCoveragePolicyOutcomes does not double-count fricti
   assert.equal(outcomes.post_opt_out_tracking_behavior?.status, "not_testable");
   assert.equal(
     outcomes.post_opt_out_tracking_behavior?.criticalEvidence.missingOrIncompleteSourceSignals[0]?.field,
-    "californiaPrivacyEvidence.optOutInteractionConfirmed"
+    "californiaPrivacyEvidence.cpraSaleShareOptOutPathObserved"
   );
 });
 
-test("deriveCaliforniaPrivacyCoveragePolicyOutcomes treats retained no-path search as no post-opt-out behavior observed", () => {
+test("deriveCaliforniaPrivacyCoveragePolicyOutcomes treats retained no-path search as not testable for post-opt-out behavior", () => {
   const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
     coverageLimited: false,
     runtimeArtifacts: {
@@ -185,7 +185,7 @@ test("deriveCaliforniaPrivacyCoveragePolicyOutcomes treats retained no-path sear
 
   assert.equal(outcomes.do_not_sell_share_availability?.status, "potential_gap");
   assert.equal(outcomes.opt_out_friction_dark_patterns?.status, "not_applicable");
-  assert.equal(outcomes.post_opt_out_tracking_behavior?.status, "not_observed");
+  assert.equal(outcomes.post_opt_out_tracking_behavior?.status, "not_testable");
   assert.equal(
     outcomes.post_opt_out_tracking_behavior?.criticalEvidence.retainedEvidence.privacyChoicePathEvidence,
     outcomes.opt_out_friction_dark_patterns?.criticalEvidence.retainedEvidence.privacyChoicePathEvidence
@@ -484,7 +484,7 @@ test("California calibration keeps Caltech-like partial evidence in review or no
     scanCompleted: true
   });
 
-  assert.equal(outcomes.privacy_notice_availability?.status, "review_signal");
+  assert.equal(outcomes.privacy_notice_availability?.status, "not_testable");
   assert.equal(outcomes.notice_at_collection?.status, "not_observed");
   assert.equal(outcomes.targeted_advertising_signals?.status, "not_observed");
   assert.equal(outcomes.do_not_sell_share_availability?.status, "not_applicable");
@@ -558,6 +558,162 @@ test("California cohort regression keeps analytics-only privacy-choice scans out
     outcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.advertisingSharingVendors ?? [],
     []
   );
+});
+
+test("California blocks interstitial snippets from satisfying positive notice or rights rows", () => {
+  const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
+    coverageLimited: true,
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        privacyNoticeObserved: true,
+        privacyNoticeUrls: ["https://example.test/blocked?url=https%3A%2F%2Fexample.test%2Fprivacy"],
+        privacyNoticeDiscoveryEvidence: {
+          attempted: true,
+          attemptedPrivacyNoticeUrls: ["https://example.test/privacy"],
+          blockedUrls: ["https://example.test/blocked?url=https%3A%2F%2Fexample.test%2Fprivacy"],
+          privacyTargetAttempted: true,
+          privacyTargetVerified: false,
+          verifiedPrivacyNoticeUrls: []
+        },
+        collectionContextObserved: false,
+        targetedAdvertisingSignalsObserved: false,
+        doNotSellSharePathObserved: false,
+        consumerRightsRequestMethodObserved: true,
+        consumerRightsRequestMethodSnippets: [
+          "You have been blocked. Email the site owner because a security solution blocked this request."
+        ],
+        rightsLanguageObserved: false,
+        gpcTestRan: false,
+        sensitivePiContextObserved: false,
+        privacyControlAccessibilityIssueObserved: null
+      }
+    },
+    scanCompleted: true
+  });
+
+  assert.equal(outcomes.privacy_notice_availability?.status, "not_testable");
+  assert.match(outcomes.privacy_notice_availability?.limitation ?? "", /blocked or interstitial/);
+  assert.equal(outcomes.consumer_rights_request_methods?.status, "not_testable");
+  assert.equal(
+    outcomes.consumer_rights_request_methods?.criticalEvidence.retainedEvidence.consumerRightsRequestMethodSnippets,
+    undefined
+  );
+});
+
+test("California keeps generic privacy-choice paths separate from CPRA sale/share opt-out paths", () => {
+  const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        privacyNoticeObserved: true,
+        privacyNoticeUrls: ["https://example.test/privacy"],
+        verifiedPrivacyNoticeUrls: ["https://example.test/privacy"],
+        collectionContextObserved: false,
+        targetedAdvertisingSignalsObserved: true,
+        directAdvertisingSharingVendors: ["Example Ads"],
+        privacyChoicePathEvidence: {
+          attempted: true,
+          observed: true,
+          searchScope: "discovered_links",
+          candidateCount: 1,
+          candidateUrls: ["https://example.test/search-history"],
+          candidateLabels: ["Search history"],
+          selectedUrl: "https://example.test/search-history",
+          selectedLabel: "Search history",
+          selectionBasis: "privacy_choice_link",
+          sourceSignals: ["privacy_control_link"],
+          interactionAttempted: false,
+          interactionConfirmed: null,
+          interactionOutcome: null,
+          limitation: "discovery_only"
+        },
+        doNotSellSharePathObserved: null,
+        gpcTestRan: false,
+        policyRuntimeDisclosureAlignment: "review",
+        sensitivePiContextObserved: false,
+        consumerRightsRequestMethodObserved: false,
+        rightsLanguageObserved: true,
+        privacyControlAccessibilityIssueObserved: null
+      }
+    },
+    scanCompleted: true
+  });
+
+  assert.equal(outcomes.do_not_sell_share_availability?.status, "potential_gap");
+  assert.equal(
+    outcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.privacyChoicePathObserved,
+    true
+  );
+  assert.equal(
+    outcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.cpraSaleShareOptOutPathObserved,
+    false
+  );
+  assert.equal(outcomes.consumer_rights_request_methods?.status, "not_testable");
+  assert.match(outcomes.consumer_rights_request_methods?.limitation ?? "", /did not verify a usable/);
+});
+
+test("California accepts Ad Choices as CPRA sale-share path only with CPRA context", () => {
+  const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        privacyNoticeObserved: true,
+        privacyNoticeUrls: ["https://example.test/privacy"],
+        verifiedPrivacyNoticeUrls: ["https://example.test/privacy"],
+        collectionContextObserved: false,
+        targetedAdvertisingSignalsObserved: true,
+        directAdvertisingSharingVendors: ["Example Ads"],
+        doNotSellSharePathObserved: true,
+        doNotSellSharePathLabel: "Ad Choices",
+        doNotSellSharePathUrl: "https://example.test/ad-choices",
+        policySaleShareAdmissionObserved: true,
+        policySaleShareAdmissionConfidence: "high",
+        policySaleShareAdmissionSnippet: "We may share personal information for targeted advertising.",
+        gpcTestRan: false,
+        policyRuntimeDisclosureAlignment: "review",
+        sensitivePiContextObserved: false,
+        consumerRightsRequestMethodObserved: true,
+        consumerRightsRequestMethodUrls: ["https://example.test/privacy-request"],
+        consumerRightsRequestMethodTypes: ["web_form"],
+        privacyControlAccessibilityIssueObserved: null
+      }
+    },
+    scanCompleted: true
+  });
+
+  assert.equal(outcomes.do_not_sell_share_availability?.status, "observed");
+  assert.equal(
+    outcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.cpraSaleShareOptOutPathLabel,
+    "Ad Choices"
+  );
+});
+
+test("California first-party retail media evidence is review signal, not third-party targeted advertising", () => {
+  const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
+    coverageLimited: true,
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        privacyNoticeObserved: null,
+        collectionContextObserved: false,
+        targetedAdvertisingSignalsObserved: false,
+        directAdvertisingSharingVendors: [],
+        firstPartyRetailMediaSignalsObserved: true,
+        firstPartyRetailMediaScriptNames: ["ads_core", "sponsored-products-tracking", "fire-pixel"],
+        firstPartyRetailMediaRequestUrls: ["https://www.example-retail.test/ads_core.js"],
+        doNotSellSharePathObserved: false,
+        gpcTestRan: false,
+        policyRuntimeDisclosureAlignment: "not_testable",
+        sensitivePiContextObserved: false,
+        consumerRightsRequestMethodObserved: false,
+        privacyControlAccessibilityIssueObserved: null
+      }
+    },
+    scanCompleted: true
+  });
+
+  assert.equal(outcomes.targeted_advertising_signals?.status, "review_signal");
+  assert.match(outcomes.targeted_advertising_signals?.limitation ?? "", /First-party retail media/);
+  assert.equal(outcomes.do_not_sell_share_availability?.status, "not_applicable");
 });
 
 test("California GPC handling is not applicable without sale/share applicability", () => {
@@ -668,7 +824,7 @@ test("California rights methods reject generic footer contact context", () => {
     scanCompleted: true
   });
 
-  assert.equal(outcomes.consumer_rights_request_methods?.status, "not_observed");
+  assert.equal(outcomes.consumer_rights_request_methods?.status, "not_testable");
   assert.equal(
     outcomes.consumer_rights_request_methods?.criticalEvidence.retainedEvidence.consumerRightsRequestMethodObserved,
     false
@@ -1095,7 +1251,7 @@ test("California CIPA rows project only retained CIPA-sensitive evidence as risk
     scanCompleted: true
   });
 
-  assert.equal(outcomes.cipa_sensitive_interaction_recording?.status, "potential_gap");
+  assert.equal(outcomes.cipa_sensitive_interaction_recording?.status, "observed");
   assert.equal(outcomes.cipa_sensitive_interaction_recording?.criticalEvidence.evidenceFamily, "cipa_interaction_recording");
   assert.equal(
     outcomes.cipa_sensitive_interaction_recording?.criticalEvidence.retainedEvidence.legalConclusion,
@@ -1214,8 +1370,8 @@ test("CIPA negative retained evidence is not observed only when public coverage 
     runtimeArtifacts,
     scanCompleted: true
   });
-  assert.equal(limitedCoverageOutcomes.cipa_sensitive_interaction_recording?.status, "not_observed");
-  assert.equal(limitedCoverageOutcomes.cipa_sensitive_communication_interception?.status, "not_observed");
+  assert.equal(limitedCoverageOutcomes.cipa_sensitive_interaction_recording?.status, "not_testable");
+  assert.equal(limitedCoverageOutcomes.cipa_sensitive_communication_interception?.status, "not_testable");
 
   const insufficientCipaCoverageOutcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
     coverageLimited: true,

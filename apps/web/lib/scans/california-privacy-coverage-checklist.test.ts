@@ -187,6 +187,46 @@ test("deriveCaliforniaPrivacyCoverageChecklist maps not applicable away from CCP
   assert.equal(sensitiveRow?.evidenceState, "not_observed");
 });
 
+test("deriveCaliforniaPrivacyCoverageChecklist labels observed CIPA rows as review signals", () => {
+  const items = deriveCaliforniaPrivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      cipa_sensitive_interaction_recording: {
+        rowId: "cipa_sensitive_interaction_recording",
+        status: "observed",
+        limitation: "CIPA-sensitive interaction recording risk signal was retained with direct collection-endpoint and third-party receipt evidence for CIPA review; CertScore treats this as a review signal, not a legal conclusion.",
+        evidenceRefs: ["CIPA-sensitive interaction recording risk signal"],
+        criticalEvidence: {
+          evidenceFamily: "cipa_interaction_recording",
+          missingOrIncompleteSourceSignals: [],
+          pipeline: {
+            concernPolicyKey: "california_privacy_coverage.cipa_sensitive_interaction_recording.observed",
+            projectionStage: "coverage_policy",
+            regulatoryReviewArea: "california_ccpa_cpra",
+            wc01NormalizedConcernKey: "california_privacy.coverage.cipa_sensitive_interaction_recording",
+            ws01EvidenceRole: "observed runtime signal identification, evidence capture, and logging"
+          },
+          projectedFindings: [],
+          retainedEvidence: {
+            collectionEndpointObserved: true,
+            directEvidenceObserved: true,
+            legalConclusion: false,
+            thirdPartyReceiptObserved: true
+          },
+          statusBasis: "CIPA-sensitive interaction recording risk signal was retained with direct collection-endpoint and third-party receipt evidence for CIPA review; CertScore treats this as a review signal, not a legal conclusion."
+        }
+      }
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const row = items.find((item) => item.id === "cipa_sensitive_interaction_recording");
+  assert.equal(row?.statusLabel, "Observed - Review signal");
+  assert.equal(row?.assessmentStatus, "review_signal");
+});
+
+
 test("deriveCaliforniaPrivacyCoverageChecklist marks fallback rows not testable when coverage is limited", () => {
   const items = deriveCaliforniaPrivacyCoverageChecklist({
     coverageLimited: true,

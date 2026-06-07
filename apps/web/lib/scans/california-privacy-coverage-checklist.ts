@@ -216,6 +216,45 @@ function getAssessmentStatus(status: CaliforniaPrivacyCoverageChecklistStatus): 
   }
 }
 
+function getAssessmentStatusForRow(
+  rowId: string,
+  status: CaliforniaPrivacyCoverageChecklistStatus
+): CaliforniaPrivacyCoverageAssessmentStatus {
+  if (
+    status === "observed" &&
+    (rowId === "cipa_sensitive_interaction_recording" || rowId === "cipa_sensitive_communication_interception")
+  ) {
+    return "review_signal";
+  }
+  return getAssessmentStatus(status);
+}
+
+function getChecklistToneForRow(
+  rowId: string,
+  status: CaliforniaPrivacyCoverageChecklistStatus
+): CaliforniaPrivacyCoverageChecklistTone {
+  if (
+    status === "observed" &&
+    (rowId === "cipa_sensitive_interaction_recording" || rowId === "cipa_sensitive_communication_interception")
+  ) {
+    return "warning";
+  }
+  return getChecklistTone(status);
+}
+
+function getStatusLabelForRow(rowId: string, status: CaliforniaPrivacyCoverageChecklistStatus) {
+  if (rowId === "privacy_control_accessibility" && status === "observed") {
+    return "Control observed";
+  }
+  if (
+    status === "observed" &&
+    (rowId === "cipa_sensitive_interaction_recording" || rowId === "cipa_sensitive_communication_interception")
+  ) {
+    return "Observed - Review signal";
+  }
+  return getCaliforniaPrivacyReviewStatusLabel(status);
+}
+
 function hasRetainedEvidenceValue(
   retainedEvidence: Record<string, unknown>,
   keys: string[],
@@ -286,7 +325,7 @@ function withChecklistPosture(input: {
   limitation?: string;
   status: CaliforniaPrivacyCoverageChecklistStatus;
 }): CaliforniaPrivacyCoverageChecklistItem {
-  const assessmentStatus = getAssessmentStatus(input.status);
+  const assessmentStatus = getAssessmentStatusForRow(input.id, input.status);
   const evidenceState = getEvidenceState({
     criticalEvidence: input.criticalEvidence,
     rowId: input.id,
@@ -305,8 +344,8 @@ function withChecklistPosture(input: {
     limitation: input.limitation,
     note,
     status: input.status,
-    statusLabel: getCaliforniaPrivacyReviewStatusLabel(input.status),
-    tone: getChecklistTone(input.status)
+    statusLabel: getStatusLabelForRow(input.id, input.status),
+    tone: getChecklistToneForRow(input.id, input.status)
   };
 }
 

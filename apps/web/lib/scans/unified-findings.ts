@@ -2488,6 +2488,13 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
   addCaliforniaEntityScalar("footerNoticeCueObserved", ["footerNoticeCueObserved", "footer_notice_cue_observed"]);
   addCaliforniaEntityScalar("footerNoticeCueText", ["footerNoticeCueText", "footer_notice_cue_text"]);
   addCaliforniaEntityScalar("rightsLanguageObserved", ["rightsLanguageObserved", "rights_language_observed"]);
+  addCaliforniaEntityScalar("privacyChoicePathObserved", ["privacyChoicePathObserved", "privacy_choice_path_observed"]);
+  addCaliforniaEntityScalar("privacyChoicePathLabel", ["privacyChoicePathLabel", "privacy_choice_path_label"]);
+  addCaliforniaEntityScalar("privacyChoicePathUrl", ["privacyChoicePathUrl", "privacy_choice_path_url"]);
+  addCaliforniaEntityScalar("cpraSaleShareOptOutPathObserved", ["cpraSaleShareOptOutPathObserved", "cpra_sale_share_opt_out_path_observed"]);
+  addCaliforniaEntityScalar("cpraSaleShareOptOutPathLabel", ["cpraSaleShareOptOutPathLabel", "cpra_sale_share_opt_out_path_label"]);
+  addCaliforniaEntityScalar("cpraSaleShareOptOutPathUrl", ["cpraSaleShareOptOutPathUrl", "cpra_sale_share_opt_out_path_url"]);
+  addCaliforniaEntityScalar("cpraSaleShareOptOutVerificationBasis", ["cpraSaleShareOptOutVerificationBasis", "cpra_sale_share_opt_out_verification_basis"]);
   addCaliforniaEntityScalar("doNotSellSharePathObserved", ["doNotSellSharePathObserved", "do_not_sell_share_path_observed"]);
   addCaliforniaEntityScalar("doNotSellSharePathLabel", ["doNotSellSharePathLabel", "do_not_sell_share_path_label"]);
   addCaliforniaEntityScalar("doNotSellSharePathUrl", ["doNotSellSharePathUrl", "do_not_sell_share_path_url"]);

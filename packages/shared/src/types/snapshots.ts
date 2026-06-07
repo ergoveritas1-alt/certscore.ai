@@ -988,6 +988,9 @@ export type CaliforniaPrivacyEvidence = {
   analyticsOrMeasurementCookieNames?: string[];
   analyticsOrMeasurementVendors?: string[];
   utilityOrInfrastructureRequestUrls?: string[];
+  firstPartyRetailMediaSignalsObserved?: boolean | null;
+  firstPartyRetailMediaRequestUrls?: string[];
+  firstPartyRetailMediaScriptNames?: string[];
   saleShareRequestUrls?: string[];
   saleShareCookieNames?: string[];
   policySaleShareAdmissionObserved?: boolean | null;
@@ -1000,6 +1003,13 @@ export type CaliforniaPrivacyEvidence = {
   doNotSellShareLabels?: string[];
   privacyChoiceUrls?: string[];
   privacyChoiceLabels?: string[];
+  privacyChoicePathObserved?: boolean | null;
+  privacyChoicePathUrl?: string | null;
+  privacyChoicePathLabel?: string | null;
+  cpraSaleShareOptOutPathObserved?: boolean | null;
+  cpraSaleShareOptOutPathUrl?: string | null;
+  cpraSaleShareOptOutPathLabel?: string | null;
+  cpraSaleShareOptOutVerificationBasis?: string | null;
   privacyChoicePathEvidence?: {
     attempted: boolean;
     observed: boolean;

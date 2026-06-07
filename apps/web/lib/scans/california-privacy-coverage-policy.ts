@@ -141,6 +141,54 @@ function hasConcreteValue(value: unknown): boolean {
   return true;
 }
 
+function isBlockedOrInterstitialText(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+  return /\b(?:blocked|access denied|security solution|confirm you are human|verify you are human|challenge page|captcha|cloudflare|akamai|imperva|perimeterx|email the site owner|request unsuccessful|waf|bot detection)\b/i.test(value);
+}
+
+function isBlockedOrInterstitialUrl(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+  return /(?:^|[/?&#_-])(?:blocked|captcha|challenge|interstitial|access-denied|access_denied|verify-human|confirm-human)(?:$|[/?&#=_-])/i.test(value);
+}
+
+function filterUsableUrls(values: string[]) {
+  return values.filter((value) => !isBlockedOrInterstitialUrl(value));
+}
+
+function filterUsableSnippets(values: string[]) {
+  return values.filter((value) => !isBlockedOrInterstitialText(value));
+}
+
+function hasBlockedOrInterstitialEvidence(input: Array<string | null | undefined>) {
+  return input.some((value) => isBlockedOrInterstitialText(value) || isBlockedOrInterstitialUrl(value));
+}
+
+function isCpraSaleShareOptOutCandidate(input: {
+  label: string | null;
+  url: string | null;
+  selectionBasis: string | null;
+  contextualText?: string[];
+}) {
+  const label = input.label ?? "";
+  const url = input.url ?? "";
+  const contextualText = input.contextualText?.join(" ") ?? "";
+  const haystack = `${label} ${url} ${input.selectionBasis ?? ""} ${contextualText}`;
+  if (hasBlockedOrInterstitialEvidence([label, url, contextualText])) {
+    return false;
+  }
+  if (/\bdo not sell(?: or share)?|do not share|sell or share|sale\/share|ccpa|cpra|california privacy|limit the use of my sensitive/i.test(haystack)) {
+    return true;
+  }
+  if (/\b(?:ad choices|privacy choices|your privacy choices|opt[- ]?out|targeted advertising|interest[- ]based ads?|cross[- ]context behavioral)\b/i.test(haystack)) {
+    return /\b(?:ad choices|targeted advertising|interest[- ]based ads?|cross[- ]context behavioral|sale|share|sell|ccpa|cpra|california)\b/i.test(haystack);
+  }
+  return false;
+}
+
 function hasConcretePrivacyChoiceInteractionEvidence(evidence: Record<string, unknown> | null) {
   if (!evidence) {
     return false;
@@ -212,26 +260,6 @@ function hasPrivacyChoiceTrackingWindowEvidence(evidence: Record<string, unknown
     "removedTrackerVendors"
   ];
   return arraySignals.some((key) => hasConcreteValue(evidence[key]));
-}
-
-function privacyChoiceSearchConfirmedNoObservedPath(input: {
-  doNotSellSharePathObserved: boolean | null;
-  privacyChoiceInteractionEvidence: Record<string, unknown> | null;
-  privacyChoicePathEvidence: Record<string, unknown> | null;
-}) {
-  const pathAttempted = getBoolean(input.privacyChoicePathEvidence, ["attempted"]) === true;
-  const pathObserved = getBoolean(input.privacyChoicePathEvidence, ["observed"]);
-  const interactionAttempted = getBoolean(input.privacyChoiceInteractionEvidence, ["attempted"]) === true;
-  const interactionPathObserved = getBoolean(input.privacyChoiceInteractionEvidence, ["pathObserved", "path_observed"]);
-  const interactionOutcome = getString(input.privacyChoiceInteractionEvidence, ["outcome"]);
-  return (
-    input.doNotSellSharePathObserved === false &&
-    (
-      (pathAttempted && pathObserved === false) ||
-      (interactionAttempted && interactionPathObserved === false) ||
-      interactionOutcome === "no_observed_path"
-    )
-  );
 }
 
 function sourceGap(
@@ -408,6 +436,7 @@ function deriveCipaCoverageOutcome(input: {
   const disclosureObserved = getBoolean(input.evidence, ["cipaDisclosureObserved", "cipa_disclosure_observed"]);
   const consentTiming = getString(input.evidence, ["cipaConsentTiming", "cipa_consent_timing"]);
   const confidence = getString(input.evidence, ["cipaEvidenceConfidence", "cipa_evidence_confidence"]);
+  const confidenceIsMediumOrHigh = confidence === "medium" || confidence === "high";
   const signalTypes = getStringArray(input.evidence, ["cipaSignalTypes", "cipa_signal_types"]);
   const requestUrls = getStringArray(input.evidence, ["requestUrls", "request_urls"]);
   const vendors = getStringArray(input.evidence, ["vendors"]);
@@ -448,8 +477,20 @@ function deriveCipaCoverageOutcome(input: {
     });
   }
 
+  const requestPurposeClassificationRowCount = getNumber(input.cipaRuntimeCoverageEvidence, [
+    "requestPurposeClassificationRowCount",
+    "request_purpose_classification_row_count"
+  ]);
+  const cipaCoverageMateriallyBlocked =
+    input.coverageLimited &&
+    (
+      cipaRuntimeCoverageSufficient !== true ||
+      requestPurposeClassificationRowCount === 0 ||
+      /blocked|challenge|captcha|interstitial/i.test(cipaRuntimeCoverageLimitation ?? "")
+    );
+
   if (cipaSensitive === false || signalTypes.length === 0) {
-    if (input.coverageLimited && cipaRuntimeCoverageSufficient !== true) {
+    if (cipaCoverageMateriallyBlocked) {
       return makeOutcome(input.rowId, "not_testable", `${input.signalLabel} was not retained in this limited scan context.`, getEvidenceRefs(input.californiaEvidence), {
         missingOrIncompleteSourceSignals: [
           sourceGap(
@@ -457,6 +498,12 @@ function deriveCipaCoverageOutcome(input: {
             true,
             cipaRuntimeCoverageSufficient ?? "missing",
             "Required before absence of this CIPA-sensitive signal can be treated as not observed under limited public-web coverage."
+          ),
+          sourceGap(
+            "californiaPrivacyEvidence.cipaRuntimeCoverageEvidence.requestPurposeClassificationRowCount",
+            "greater than 0 when coverage is limited",
+            requestPurposeClassificationRowCount ?? "missing",
+            "Required to support a negative CIPA runtime review under limited or blocked coverage."
           )
         ],
         retainedEvidence: {
@@ -471,6 +518,23 @@ function deriveCipaCoverageOutcome(input: {
         ...retainedEvidence,
         cipaRuntimeCoverageEvidence: input.cipaRuntimeCoverageEvidence ?? null,
         cipaRuntimeCoverageLimitation
+      }
+    });
+  }
+
+  if (
+    directEvidenceObserved === true &&
+    collectionEndpointObserved === true &&
+    thirdPartyReceiptObserved === true &&
+    confidenceIsMediumOrHigh
+  ) {
+    return makeOutcome(input.rowId, "observed", `${input.signalLabel} was retained with direct collection-endpoint and third-party receipt evidence for CIPA review; CertScore treats this as a review signal, not a legal conclusion.`, getEvidenceRefs(input.californiaEvidence, input.signalLabel), {
+      retainedEvidence: {
+        ...retainedEvidence,
+        collectionEndpointObserved,
+        pageUrls,
+        requestUrls,
+        vendors
       }
     });
   }
@@ -817,14 +881,19 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     "attempted_privacy_notice_urls"
   ]);
   const privacyNoticeDiscoveryRecord = getRecord(privacyNoticeDiscoveryEvidence);
-  const verifiedPrivacyNoticeUrls = [
+  const verifiedPrivacyNoticeUrls = filterUsableUrls([
     ...getStringArray(californiaEvidence, ["verifiedPrivacyNoticeUrls", "verified_privacy_notice_urls"]),
     ...getStringArray(privacyNoticeDiscoveryRecord, ["verifiedPrivacyNoticeUrls", "verified_privacy_notice_urls"])
-  ].filter((value, index, values) => values.indexOf(value) === index);
+  ].filter((value, index, values) => values.indexOf(value) === index));
   const privacyTargetVerified = getNestedBoolean(privacyNoticeDiscoveryEvidence, ["privacyTargetVerified", "privacy_target_verified"]);
   const privacyNoticeUsedBackfill = getNestedBoolean(privacyNoticeDiscoveryEvidence, ["usedUrlscanBackfill", "used_urlscan_backfill"]);
   const privacyNoticeFailedUrls = getStringArray(privacyNoticeDiscoveryRecord, ["failedUrls", "failed_urls"]);
-  const privacyNoticeBlockedUrls = getStringArray(privacyNoticeDiscoveryRecord, ["blockedUrls", "blocked_urls"]);
+  const privacyNoticeBlockedUrls = [
+    ...getStringArray(californiaEvidence, ["blockedPrivacyNoticeUrls", "blocked_privacy_notice_urls"]),
+    ...getStringArray(privacyNoticeDiscoveryRecord, ["blockedUrls", "blocked_urls", "blockedPrivacyNoticeUrls", "blocked_privacy_notice_urls"]),
+    ...privacyNoticeUrls.filter((url) => isBlockedOrInterstitialUrl(url)),
+    ...privacyNoticeSourceUrls.filter((url) => isBlockedOrInterstitialUrl(url))
+  ].filter((value, index, values) => values.indexOf(value) === index);
   const privacyTargetAttempted = Boolean(
     getNestedBoolean(privacyNoticeDiscoveryEvidence, ["privacyTargetAttempted", "privacy_target_attempted"]) ??
     (privacyNoticeDiscoveryUrls.length > 0)
@@ -836,7 +905,15 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     privacyNoticeDiscoveryUrls.length > 0 ||
     privacyTargetAttempted ||
     rawEvidenceRefs.some((ref) => /privacy notice|privacy policy/i.test(ref));
+  const attemptedPrivacyNoticeUrls = [
+    ...privacyNoticeDiscoveryUrls,
+    ...getStringArray(privacyNoticeDiscoveryRecord, ["attemptedPrivacyNoticeUrls", "attempted_privacy_notice_urls", "attemptedUrls", "attempted_urls"])
+  ].filter((value, index, values) => values.indexOf(value) === index);
+  const privacyNoticeTargetBlocked = privacyNoticeBlockedUrls.length > 0 && verifiedPrivacyNoticeUrls.length === 0;
   const privacyNoticeRetainedEvidence = {
+    attemptedPrivacyNoticeUrls,
+    backfillSource: privacyNoticeUsedBackfill === true ? getString(privacyNoticeDiscoveryRecord, ["source", "backfillSource", "backfill_source"]) ?? "urlscan_backfill" : null,
+    blockedPrivacyNoticeUrls: privacyNoticeBlockedUrls,
     privacyNoticeObserved,
     privacyNoticeUrls,
     privacyNoticeSourceUrls,
@@ -849,6 +926,7 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     privacyNoticeFailedUrls,
     privacyNoticeUsedBackfill,
     privacyTargetVerified,
+    verificationBasis: privacyTargetVerified === true ? "verified_privacy_notice_surface" : privacyNoticeTargetBlocked ? "blocked_or_interstitial_target" : null,
     verifiedPrivacyNoticeUrls
   };
   const privacyNoticeCleanlyVerified =
@@ -858,6 +936,18 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     ? makeOutcome("privacy_notice_availability", "observed", "A public privacy notice or privacy policy surface was retained.", getEvidenceRefs(californiaEvidence, "Privacy notice observed"), {
         retainedEvidence: privacyNoticeRetainedEvidence
       })
+    : privacyNoticeTargetBlocked
+      ? makeOutcome("privacy_notice_availability", "not_testable", "A privacy notice target was identified, but the retained page was blocked or interstitial, so the notice content was not verified.", getEvidenceRefs(californiaEvidence, "Privacy notice target blocked"), {
+          missingOrIncompleteSourceSignals: [
+            sourceGap(
+              "californiaPrivacyEvidence.verifiedPrivacyNoticeUrls",
+              "usable verified privacy notice URL",
+              "blocked_or_interstitial",
+              "Required before a privacy notice target can be counted as observed."
+            )
+          ],
+          retainedEvidence: privacyNoticeRetainedEvidence
+        })
     : privacyNoticeObserved === true
       ? makeOutcome("privacy_notice_availability", "review_signal", "A privacy notice URL was discovered, but verification was partial in this scan context.", getEvidenceRefs(californiaEvidence, "Privacy notice partially verified"), {
           retainedEvidence: privacyNoticeRetainedEvidence
@@ -919,7 +1009,7 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
           retainedEvidence: collectionRetainedEvidence
         })
     : collectionNoticeEvidenceKind === "footer_notice_link_only"
-    ? makeOutcome("notice_at_collection", "review_signal", "A California notice link was observed, but no point-of-collection notice was retained.", getEvidenceRefs(californiaEvidence, "Footer California notice cue observed"), {
+    ? makeOutcome("notice_at_collection", "not_observed", "California/privacy notice link observed; no eligible point-of-collection surface was tested.", getEvidenceRefs(californiaEvidence, "Footer California notice cue observed"), {
         retainedEvidence: collectionRetainedEvidence
       })
     : collectionNoticeEvidenceKind === "policy_notice_text_only"
@@ -952,22 +1042,24 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
   const privacyChoicePathObserved = getBoolean(privacyChoicePathEvidence, ["observed"]);
   const privacyChoiceSelectionBasis = getString(privacyChoicePathEvidence, ["selectionBasis", "selection_basis"]);
   const retainedDoNotSellSharePathObserved = getBoolean(californiaEvidence, ["doNotSellSharePathObserved", "do_not_sell_share_path_observed"]);
+  const explicitCpraSaleShareOptOutPathObserved = getBoolean(californiaEvidence, [
+    "cpraSaleShareOptOutPathObserved",
+    "cpra_sale_share_opt_out_path_observed"
+  ]);
   const cpraOptOutControlFound = getBoolean(cpraEvidence, ["optOutControlFound", "opt_out_control_found"]);
-  const doNotSellSharePathObserved =
-    retainedDoNotSellSharePathObserved === true ||
-    privacyChoicePathObserved === true ||
-    cpraOptOutControlFound === true
-      ? true
-      : retainedDoNotSellSharePathObserved === false || privacyChoicePathObserved === false || cpraOptOutControlFound === false
-        ? false
-        : null;
-  const optOutPathLabel =
+  const privacyChoicePathLabel =
+    getString(californiaEvidence, ["privacyChoicePathLabel", "privacy_choice_path_label"]) ??
+    getString(privacyChoicePathEvidence, ["selectedLabel", "selected_label"]);
+  const privacyChoicePathUrl =
+    getString(californiaEvidence, ["privacyChoicePathUrl", "privacy_choice_path_url"]) ??
+    getString(privacyChoicePathEvidence, ["selectedUrl", "selected_url"]);
+  const explicitCpraSaleShareOptOutPathLabel =
+    getString(californiaEvidence, ["cpraSaleShareOptOutPathLabel", "cpra_sale_share_opt_out_path_label"]) ??
     getString(californiaEvidence, ["doNotSellSharePathLabel", "do_not_sell_share_path_label"]) ??
-    getString(privacyChoicePathEvidence, ["selectedLabel", "selected_label"]) ??
     getString(cpraEvidence, ["optOutLinkText", "opt_out_link_text"]);
-  const optOutPathUrl =
+  const explicitCpraSaleShareOptOutPathUrl =
+    getString(californiaEvidence, ["cpraSaleShareOptOutPathUrl", "cpra_sale_share_opt_out_path_url"]) ??
     getString(californiaEvidence, ["doNotSellSharePathUrl", "do_not_sell_share_path_url"]) ??
-    getString(privacyChoicePathEvidence, ["selectedUrl", "selected_url"]) ??
     getString(cpraEvidence, ["optOutLinkHref", "opt_out_link_href"]);
   const advertisingSharingVendors = [
     ...getStringArray(californiaEvidence, ["directSaleShareOrTargetedAdvertisingVendors", "direct_sale_share_or_targeted_advertising_vendors"]),
@@ -994,8 +1086,24 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
   const analyticsOrMeasurementRequestUrls = getStringArray(californiaEvidence, ["analyticsOrMeasurementRequestUrls", "analytics_or_measurement_request_urls"]);
   const analyticsOrMeasurementCookieNames = getStringArray(californiaEvidence, ["analyticsOrMeasurementCookieNames", "analytics_or_measurement_cookie_names"]);
   const utilityOrInfrastructureRequestUrls = getStringArray(californiaEvidence, ["utilityOrInfrastructureRequestUrls", "utility_or_infrastructure_request_urls"]);
-  const policySaleShareAdmissionObserved = getBoolean(californiaEvidence, ["policySaleShareAdmissionObserved", "policy_sale_share_admission_observed"]);
+  const firstPartyRetailMediaSignalsObserved = getBoolean(californiaEvidence, [
+    "firstPartyRetailMediaSignalsObserved",
+    "first_party_retail_media_signals_observed"
+  ]);
+  const firstPartyRetailMediaRequestUrls = getStringArray(californiaEvidence, [
+    "firstPartyRetailMediaRequestUrls",
+    "first_party_retail_media_request_urls"
+  ]);
+  const firstPartyRetailMediaScriptNames = getStringArray(californiaEvidence, [
+    "firstPartyRetailMediaScriptNames",
+    "first_party_retail_media_script_names"
+  ]);
+  const rawPolicySaleShareAdmissionObserved = getBoolean(californiaEvidence, ["policySaleShareAdmissionObserved", "policy_sale_share_admission_observed"]);
   const policySaleShareAdmissionSnippet = getString(californiaEvidence, ["policySaleShareAdmissionSnippet", "policy_sale_share_admission_snippet"]);
+  const policySaleShareAdmissionObserved =
+    rawPolicySaleShareAdmissionObserved === true && isBlockedOrInterstitialText(policySaleShareAdmissionSnippet)
+      ? false
+      : rawPolicySaleShareAdmissionObserved;
   const policySaleShareAdmissionConfidence = getString(californiaEvidence, ["policySaleShareAdmissionConfidence", "policy_sale_share_admission_confidence"]);
   const highConfidencePolicySaleShareAdmissionObserved =
     policySaleShareAdmissionObserved === true && policySaleShareAdmissionConfidence === "high";
@@ -1010,6 +1118,52 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
   const cpraOptOutUiResult = getString(cpraEvidence, ["optOutUiResult", "opt_out_ui_result"]);
   const cpraPolicyCbaLanguage = getString(cpraEvidence, ["policyCbaLanguage", "policy_cba_language"]);
   const cpraScanOriginGeo = getString(cpraEvidence, ["scanOriginGeo", "scan_origin_geo"]);
+  const cpraSaleShareOptOutVerificationBasis =
+    getString(californiaEvidence, ["cpraSaleShareOptOutVerificationBasis", "cpra_sale_share_opt_out_verification_basis"]) ??
+    getString(privacyChoicePathEvidence, ["selectionBasis", "selection_basis"]) ??
+    getString(cpraEvidence, ["choiceControlSearchScope", "choice_control_search_scope"]);
+  const cpraSaleShareOptOutCandidateConfirmed =
+    explicitCpraSaleShareOptOutPathObserved === true ||
+    (
+      retainedDoNotSellSharePathObserved === true &&
+      !hasBlockedOrInterstitialEvidence([
+        explicitCpraSaleShareOptOutPathLabel,
+        explicitCpraSaleShareOptOutPathUrl
+      ]) &&
+      !/\bsearch history\b/i.test(`${explicitCpraSaleShareOptOutPathLabel ?? ""} ${explicitCpraSaleShareOptOutPathUrl ?? ""}`)
+    ) ||
+    (
+      cpraOptOutControlFound === true &&
+      isCpraSaleShareOptOutCandidate({
+        label: explicitCpraSaleShareOptOutPathLabel ?? privacyChoicePathLabel,
+        url: explicitCpraSaleShareOptOutPathUrl ?? privacyChoicePathUrl,
+        selectionBasis: cpraSaleShareOptOutVerificationBasis,
+        contextualText: [cpraPolicyCbaLanguage, policySaleShareAdmissionSnippet].filter((value): value is string => Boolean(value))
+      })
+    ) ||
+    (
+      privacyChoicePathObserved === true &&
+      isCpraSaleShareOptOutCandidate({
+        label: explicitCpraSaleShareOptOutPathLabel ?? privacyChoicePathLabel,
+        url: explicitCpraSaleShareOptOutPathUrl ?? privacyChoicePathUrl,
+        selectionBasis: cpraSaleShareOptOutVerificationBasis,
+        contextualText: [cpraPolicyCbaLanguage, policySaleShareAdmissionSnippet].filter((value): value is string => Boolean(value))
+      })
+    );
+  const doNotSellSharePathObserved = cpraSaleShareOptOutCandidateConfirmed
+    ? true
+    : explicitCpraSaleShareOptOutPathObserved === false ||
+      retainedDoNotSellSharePathObserved === false ||
+      cpraOptOutControlFound === false ||
+      privacyChoicePathObserved === true
+      ? false
+      : null;
+  const optOutPathLabel = cpraSaleShareOptOutCandidateConfirmed
+    ? explicitCpraSaleShareOptOutPathLabel ?? privacyChoicePathLabel
+    : null;
+  const optOutPathUrl = cpraSaleShareOptOutCandidateConfirmed
+    ? explicitCpraSaleShareOptOutPathUrl ?? privacyChoicePathUrl
+    : null;
   const saleShareApplicabilityEvidence = {
     advertisingSharingVendors,
     analyticsTagManagementVendors,
@@ -1022,7 +1176,10 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     saleShareRequestUrls,
     saleShareApplicabilityObserved,
     targetedAdvertisingSignalsObserved,
-    utilityOrInfrastructureRequestUrls
+    utilityOrInfrastructureRequestUrls,
+    firstPartyRetailMediaSignalsObserved,
+    firstPartyRetailMediaRequestUrls,
+    firstPartyRetailMediaScriptNames
   };
   const saleShareControlEvidence = {
     choiceControlsInspected: cpraChoiceControlsInspected,
@@ -1030,12 +1187,19 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     cpraOptOutUiResult,
     cpraPolicyCbaLanguage,
     cpraScanOriginGeo,
+    cpraSaleShareOptOutPathLabel: optOutPathLabel,
+    cpraSaleShareOptOutPathObserved: doNotSellSharePathObserved,
+    cpraSaleShareOptOutPathUrl: optOutPathUrl,
+    cpraSaleShareOptOutVerificationBasis,
     doNotSellSharePathObserved,
     optOutUiResult: cpraOptOutUiResult,
     optOutPathLabel,
     optOutPathUrl,
     policyCbaLanguage: cpraPolicyCbaLanguage,
     privacyChoicePathEvidence,
+    privacyChoicePathLabel,
+    privacyChoicePathObserved,
+    privacyChoicePathUrl,
     privacyChoiceInteractionEvidence,
     privacyChoiceSelectionBasis,
     privacyChoiceSearchUrls,
@@ -1126,7 +1290,13 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
         retainedEvidence: saleShareApplicabilityEvidence
       })
     : targetedAdvertisingSignalsObserved === false
-      ? saleShareApplicabilityObserved === false
+      ? firstPartyRetailMediaSignalsObserved === true ||
+          firstPartyRetailMediaRequestUrls.length > 0 ||
+          firstPartyRetailMediaScriptNames.some((value) => /ads_core|sponsored-products-tracking|fire-pixel|display-ad-wrapper/i.test(value))
+        ? makeOutcome("targeted_advertising_signals", "review_signal", "First-party retail media / sponsored-products ad stack observed; no eligible third-party targeted advertising recipient was retained.", getEvidenceRefs(californiaEvidence, "First-party retail media signal observed"), {
+            retainedEvidence: saleShareApplicabilityEvidence
+          })
+        : saleShareApplicabilityObserved === false
         ? makeOutcome("targeted_advertising_signals", "not_observed", "No eligible targeted advertising, cross-context tracking, sale/share, or high-confidence applicability signal was retained.", getEvidenceRefs(californiaEvidence), {
             retainedEvidence: saleShareApplicabilityEvidence
           })
@@ -1160,8 +1330,11 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
   };
   const disclosurePolicySnippets = disclosureAlignmentEvidence.policyRuntimeDisclosureSnippets;
   const unmatchedRuntimeDisclosureVendors = disclosureAlignmentEvidence.unmatchedRuntimeDisclosureVendors;
+  const disclosureRuntimeEvidenceObserved = advertisingSharingVendors.length > 0 || saleShareRequestUrls.length > 0;
   const disclosureStrongGap =
     disclosureAlignment === "gap_observed" &&
+    disclosureRuntimeEvidenceObserved &&
+    unmatchedRuntimeDisclosureVendors.length > 0 &&
     (disclosureAlignmentBasis === "potential_gap_no_category_disclosure" ||
       disclosureAlignmentBasis === "contradiction_gap");
   outcomes.sale_share_disclosure_alignment = saleShareApplicabilityObserved === false
@@ -1181,11 +1354,11 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
           retainedEvidence: disclosureAlignmentEvidence
         })
     : disclosureStrongGap
-      ? makeOutcome("sale_share_disclosure_alignment", "potential_gap", "Material sale/share or adtech runtime signals were retained without clear corresponding disclosure alignment.", getEvidenceRefs(californiaEvidence, "Disclosure alignment gap"), {
+      ? makeOutcome("sale_share_disclosure_alignment", "potential_gap", "Observed adtech vendors were not clearly matched to retained sale/share or targeted-advertising disclosures.", getEvidenceRefs(californiaEvidence, "Runtime vendor disclosure alignment review"), {
           retainedEvidence: disclosureAlignmentEvidence
         })
     : disclosureAlignment === "gap_observed"
-      ? makeOutcome("sale_share_disclosure_alignment", "review_signal", "Runtime vendors were retained with partial or vendor-specific disclosure mismatch evidence; review retained policy and vendor evidence.", getEvidenceRefs(californiaEvidence, "Disclosure alignment review"), {
+      ? makeOutcome("sale_share_disclosure_alignment", "review_signal", "Runtime vendor disclosure alignment review requires retained policy and vendor evidence; policy sale/share language alone is not treated as a no-disclosure claim.", getEvidenceRefs(californiaEvidence, "Runtime vendor disclosure alignment review"), {
           retainedEvidence: disclosureAlignmentEvidence
         })
       : disclosureAlignment === "review"
@@ -1298,18 +1471,15 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     postOptOutTrackingEvidence.postOptOutPersistedDirectAdvertisingVendors.length > 0 ||
     getStringArray(privacyChoiceInteractionEvidence, ["removedTrackerVendors", "removed_tracker_vendors"]).length > 0 ||
     getStringArray(privacyChoiceInteractionEvidence, ["persistedTrackerVendors", "persisted_tracker_vendors"]).length > 0;
-  const noObservedPrivacyChoicePath = privacyChoiceSearchConfirmedNoObservedPath({
-    doNotSellSharePathObserved,
-    privacyChoiceInteractionEvidence,
-    privacyChoicePathEvidence
-  });
-  outcomes.post_opt_out_tracking_behavior = optOutInteractionConfirmed !== true && noObservedPrivacyChoicePath
-      ? makeOutcome("post_opt_out_tracking_behavior", "not_observed", "A privacy-choice path search was retained and no opt-out path was observed, so no post-opt-out tracking behavior was observed in this scan context.", getEvidenceRefs(californiaEvidence, "Privacy-choice path not observed"), {
-          retainedEvidence: postOptOutTrackingEvidence
-        })
-    : optOutInteractionConfirmed !== true
+  outcomes.post_opt_out_tracking_behavior = doNotSellSharePathObserved !== true || optOutInteractionConfirmed !== true
       ? makeOutcome("post_opt_out_tracking_behavior", "not_testable", "No confirmed opt-out or reject action was captured, so post-opt-out tracking behavior could not be evaluated.", getEvidenceRefs(californiaEvidence), {
           missingOrIncompleteSourceSignals: [
+            sourceGap(
+              "californiaPrivacyEvidence.cpraSaleShareOptOutPathObserved",
+              true,
+              doNotSellSharePathObserved,
+              "Required before CertScore can evaluate post-opt-out tracking behavior."
+            ),
             sourceGap(
               "californiaPrivacyEvidence.optOutInteractionConfirmed",
               true,
@@ -1415,39 +1585,49 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     "rightsRequestMethodTypes",
     "rights_request_method_types"
   ]);
-  const rightsRequestMethodSnippets = getStringArray(californiaEvidence, [
+  const rightsRequestMethodSnippets = filterUsableSnippets(getStringArray(californiaEvidence, [
     "consumerRightsRequestMethodSnippets",
     "consumer_rights_request_method_snippets",
     "rightsRequestMethodSnippets",
     "rights_request_method_snippets"
-  ]);
+  ]));
   const rightsLanguageObserved = getBoolean(californiaEvidence, ["rightsLanguageObserved", "rights_language_observed"]);
-  const hasRightsMethodEvidence = rightsRequestMethodUrls.length > 0 || rightsRequestMethodTypes.length > 0 || rightsRequestMethodSnippets.length > 0;
+  const usableRightsRequestMethodUrls = filterUsableUrls(rightsRequestMethodUrls);
+  const usableRightsRequestMethodTypes = rightsRequestMethodTypes.filter((value) => !isBlockedOrInterstitialText(value));
+  const hasRightsMethodEvidence = usableRightsRequestMethodUrls.length > 0 || usableRightsRequestMethodTypes.length > 0 || rightsRequestMethodSnippets.length > 0;
   const rightsMethodEvidence = {
     consumerRightsRequestMethodObserved: rightsRequestMethodObserved,
     consumerRightsRequestMethodSnippets: rightsRequestMethodSnippets,
-    consumerRightsRequestMethodTypes: rightsRequestMethodTypes,
-    consumerRightsRequestMethodUrls: rightsRequestMethodUrls,
+    consumerRightsRequestMethodTypes: usableRightsRequestMethodTypes,
+    consumerRightsRequestMethodUrls: usableRightsRequestMethodUrls,
     rightsRequestMethodObserved,
     rightsRequestMethodSnippets,
-    rightsRequestMethodTypes,
+    rightsRequestMethodTypes: usableRightsRequestMethodTypes,
     rightsLanguageObserved,
-    rightsRequestMethodUrls
+    rightsRequestMethodUrls: usableRightsRequestMethodUrls
   };
   const rightsMethodApplicabilityObserved = privacyNoticeCleanlyVerified;
   outcomes.consumer_rights_request_methods = rightsRequestMethodObserved === true && hasRightsMethodEvidence
     ? makeOutcome("consumer_rights_request_methods", "observed", "A consumer rights request method or privacy request path was retained.", getEvidenceRefs(californiaEvidence, "Consumer rights request method observed"), {
         retainedEvidence: rightsMethodEvidence
       })
+    : rightsLanguageObserved === true && !hasRightsMethodEvidence
+      ? makeOutcome("consumer_rights_request_methods", "not_testable", "Rights language was retained, but CertScore did not verify a usable consumer rights request method in this scan context.", getEvidenceRefs(californiaEvidence, "Consumer rights language observed"), {
+          missingOrIncompleteSourceSignals: [
+            sourceGap(
+              "californiaPrivacyEvidence.consumerRightsRequestMethodUrls or consumerRightsRequestMethodTypes",
+              "usable request form, email, toll-free number, request portal, or authenticated request flow",
+              "missing",
+              "Required before consumer rights request-method availability can be treated as observed."
+            )
+          ],
+          retainedEvidence: rightsMethodEvidence
+        })
     : rightsRequestMethodObserved === false && rightsMethodApplicabilityObserved
       ? makeOutcome("consumer_rights_request_methods", "not_observed", "A verified privacy notice context was retained, but no consumer rights request method was observed in this scan context.", getEvidenceRefs(californiaEvidence, "Consumer rights request method not observed"), {
           retainedEvidence: { ...rightsMethodEvidence, privacyNoticeObserved, privacyNoticeUrls }
         })
-    : rightsLanguageObserved === true && !hasRightsMethodEvidence
-      ? makeOutcome("consumer_rights_request_methods", "review_signal", "Privacy rights language was observed, but CertScore did not retain a specific request method.", getEvidenceRefs(californiaEvidence, "Consumer rights language observed"), {
-          retainedEvidence: rightsMethodEvidence
-        })
-      : makeOutcome("consumer_rights_request_methods", "not_testable", "Consumer rights request-method evidence was unavailable or incomplete.", [], {
+    : makeOutcome("consumer_rights_request_methods", "not_testable", "Consumer rights request-method evidence was unavailable or incomplete.", [], {
           missingOrIncompleteSourceSignals: [
             sourceGap("californiaPrivacyEvidence.consumerRightsRequestMethodObserved", "boolean consumer rights request method observation", rightsRequestMethodObserved, "Required to evaluate consumer rights request-method availability."),
             sourceGap("californiaPrivacyEvidence.privacyNoticeObserved", true, privacyNoticeObserved, "Required before absence of rights request methods can be treated as a potential gap rather than a coverage limitation.")

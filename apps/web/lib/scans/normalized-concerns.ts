@@ -67,6 +67,33 @@ function truncatePolicySnippet(value: string): string {
   return `${value.slice(0, endIndex).trimEnd()}...`;
 }
 
+function isBlockedOrInterstitialCaliforniaChoiceText(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+  return /\b(?:blocked|access denied|security solution|confirm you are human|verify you are human|challenge page|captcha|email the site owner|waf|bot detection)\b/i.test(value) ||
+    /(?:^|[/?&#_-])(?:blocked|captcha|challenge|interstitial|access-denied|access_denied|verify-human|confirm-human)(?:$|[/?&#=_-])/i.test(value);
+}
+
+function isCpraSaleShareChoiceCandidate(input: {
+  label: string | null;
+  url: string | null;
+  selectionBasis: string | null;
+  contextualText?: string[];
+}) {
+  const haystack = `${input.label ?? ""} ${input.url ?? ""} ${input.selectionBasis ?? ""} ${(input.contextualText ?? []).join(" ")}`;
+  if (isBlockedOrInterstitialCaliforniaChoiceText(haystack)) {
+    return false;
+  }
+  if (/\bdo not sell(?: or share)?|do not share|sell or share|sale\/share|ccpa|cpra|california privacy|limit the use of my sensitive/i.test(haystack)) {
+    return true;
+  }
+  if (/\b(?:ad choices|privacy choices|your privacy choices|opt[- ]?out|targeted advertising|interest[- ]based ads?|cross[- ]context behavioral)\b/i.test(haystack)) {
+    return /\b(?:ad choices|targeted advertising|interest[- ]based ads?|cross[- ]context behavioral|sale|share|sell|ccpa|cpra|california)\b/i.test(haystack);
+  }
+  return false;
+}
+
 export type NormalizedConcernOriginType =
   | "snapshot_signal"
   | "compatibility_signal"
@@ -2647,11 +2674,44 @@ function buildCaliforniaPrivacyEvidenceConcerns(
     "privacy_choice_path_evidence"
   ]);
   const structuredPrivacyChoicePathObservedForCpraGap = getCaliforniaRuntimeBoolean(privacyChoicePathEvidenceForCpraGap, ["observed"]);
+  const cpraPolicyCbaLanguageForCpraGap = getCaliforniaRuntimeString(cpraEvidence, [
+    "policyCbaLanguage",
+    "policy_cba_language"
+  ]);
+  const cpraSaleSharePathLabelForCpraGap =
+    getCaliforniaRuntimeString(californiaEvidence, ["cpraSaleShareOptOutPathLabel", "cpra_sale_share_opt_out_path_label"]) ??
+    getCaliforniaRuntimeString(californiaEvidence, ["doNotSellSharePathLabel", "do_not_sell_share_path_label"]) ??
+    getCaliforniaRuntimeString(privacyChoicePathEvidenceForCpraGap, ["selectedLabel", "selected_label"]) ??
+    getCaliforniaRuntimeString(cpraEvidence, ["optOutLinkText", "opt_out_link_text"]);
+  const cpraSaleSharePathUrlForCpraGap =
+    getCaliforniaRuntimeString(californiaEvidence, ["cpraSaleShareOptOutPathUrl", "cpra_sale_share_opt_out_path_url"]) ??
+    getCaliforniaRuntimeString(californiaEvidence, ["doNotSellSharePathUrl", "do_not_sell_share_path_url"]) ??
+    getCaliforniaRuntimeString(privacyChoicePathEvidenceForCpraGap, ["selectedUrl", "selected_url"]) ??
+    getCaliforniaRuntimeString(cpraEvidence, ["optOutLinkHref", "opt_out_link_href"]);
+  const cpraSaleSharePathSelectionBasisForCpraGap =
+    getCaliforniaRuntimeString(californiaEvidence, ["cpraSaleShareOptOutVerificationBasis", "cpra_sale_share_opt_out_verification_basis"]) ??
+    getCaliforniaRuntimeString(privacyChoicePathEvidenceForCpraGap, ["selectionBasis", "selection_basis"]) ??
+    getCaliforniaRuntimeString(cpraEvidence, ["choiceControlSearchScope", "choice_control_search_scope"]);
+  const cpraSaleSharePathConfirmedForCpraGap =
+    getCaliforniaRuntimeBoolean(californiaEvidence, ["cpraSaleShareOptOutPathObserved", "cpra_sale_share_opt_out_path_observed"]) === true ||
+    (
+      retainedSaleSharePathObservedForCpraGap === true &&
+      !isBlockedOrInterstitialCaliforniaChoiceText(`${cpraSaleSharePathLabelForCpraGap ?? ""} ${cpraSaleSharePathUrlForCpraGap ?? ""}`) &&
+      !/\bsearch history\b/i.test(`${cpraSaleSharePathLabelForCpraGap ?? ""} ${cpraSaleSharePathUrlForCpraGap ?? ""}`)
+    ) ||
+    (
+      structuredPrivacyChoicePathObservedForCpraGap === true &&
+      isCpraSaleShareChoiceCandidate({
+        label: cpraSaleSharePathLabelForCpraGap,
+        url: cpraSaleSharePathUrlForCpraGap,
+        selectionBasis: cpraSaleSharePathSelectionBasisForCpraGap,
+        contextualText: [cpraPolicyCbaLanguageForCpraGap].filter((value): value is string => Boolean(value))
+      })
+    );
 
   if (
     hasCaliforniaCpraOptOutGapBasis(cpraEvidence) &&
-    retainedSaleSharePathObservedForCpraGap !== true &&
-    structuredPrivacyChoicePathObservedForCpraGap !== true
+    cpraSaleSharePathConfirmedForCpraGap !== true
   ) {
     const vendors = uniqueStrings([
       ...getCaliforniaRuntimeStringArray(cpraEvidence, ["directAdvertisingSharingVendors", "direct_advertising_sharing_vendors"]),
@@ -2744,7 +2804,33 @@ function buildCaliforniaPrivacyEvidenceConcerns(
       "advertising_sharing_vendors"
     ])
   ]);
-  if (doNotSellSharePathObserved === true || structuredPrivacyChoicePathObserved === true) {
+  const cpraSaleSharePathLabel =
+    getCaliforniaRuntimeString(californiaEvidence, ["cpraSaleShareOptOutPathLabel", "cpra_sale_share_opt_out_path_label"]) ??
+    getCaliforniaRuntimeString(californiaEvidence, ["doNotSellSharePathLabel", "do_not_sell_share_path_label"]) ??
+    getCaliforniaRuntimeString(privacyChoicePathEvidence, ["selectedLabel", "selected_label"]);
+  const cpraSaleSharePathUrl =
+    getCaliforniaRuntimeString(californiaEvidence, ["cpraSaleShareOptOutPathUrl", "cpra_sale_share_opt_out_path_url"]) ??
+    getCaliforniaRuntimeString(californiaEvidence, ["doNotSellSharePathUrl", "do_not_sell_share_path_url"]) ??
+    getCaliforniaRuntimeString(privacyChoicePathEvidence, ["selectedUrl", "selected_url"]);
+  const cpraSaleSharePathConfirmed =
+    getCaliforniaRuntimeBoolean(californiaEvidence, ["cpraSaleShareOptOutPathObserved", "cpra_sale_share_opt_out_path_observed"]) === true ||
+    (
+      doNotSellSharePathObserved === true &&
+      !isBlockedOrInterstitialCaliforniaChoiceText(`${cpraSaleSharePathLabel ?? ""} ${cpraSaleSharePathUrl ?? ""}`) &&
+      !/\bsearch history\b/i.test(`${cpraSaleSharePathLabel ?? ""} ${cpraSaleSharePathUrl ?? ""}`)
+    ) ||
+    (
+      structuredPrivacyChoicePathObserved === true &&
+      isCpraSaleShareChoiceCandidate({
+        label: cpraSaleSharePathLabel,
+        url: cpraSaleSharePathUrl,
+        selectionBasis: getCaliforniaRuntimeString(privacyChoicePathEvidence, ["selectionBasis", "selection_basis"]),
+        contextualText: [
+          getCaliforniaRuntimeString(californiaEvidence, ["policySaleShareAdmissionSnippet", "policy_sale_share_admission_snippet"])
+        ].filter((value): value is string => Boolean(value))
+      })
+    );
+  if (cpraSaleSharePathConfirmed) {
     const privacyChoiceSelectionBasis = getCaliforniaRuntimeString(privacyChoicePathEvidence, [
       "selectionBasis",
       "selection_basis"
@@ -2786,6 +2872,9 @@ function buildCaliforniaPrivacyEvidenceConcerns(
       rawEvidence: makeCaliforniaRawEvidence({
         evidenceFamily: "sale_share_control",
         retainedEvidence: {
+          cpraSaleShareOptOutPathLabel: controlLabels[0] ?? null,
+          cpraSaleShareOptOutPathObserved: true,
+          cpraSaleShareOptOutPathUrl: controlUrls[0] ?? null,
           doNotSellSharePathLabel: controlLabels[0] ?? null,
           doNotSellSharePathObserved: true,
           doNotSellSharePathUrl: controlUrls[0] ?? null,
@@ -2810,8 +2899,7 @@ function buildCaliforniaPrivacyEvidenceConcerns(
   if (
     (targetedAdvertisingSignalsObserved === true ||
       (policySaleShareAdmissionObserved === true && policySaleShareAdmissionConfidence === "high")) &&
-    doNotSellSharePathObserved !== true &&
-    structuredPrivacyChoicePathObserved !== true
+    cpraSaleSharePathConfirmed !== true
   ) {
     const privacyChoiceSearchUrls = getCaliforniaRuntimeStringArray(cpraEvidence, [
       "privacyChoiceSearchUrls",

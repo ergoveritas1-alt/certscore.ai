@@ -318,7 +318,7 @@ test("California cohort generic search/footer/contact signals stay negative thro
 
   const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
   assert.equal(coverageOutcomes.notice_at_collection?.status, "not_observed");
-  assert.equal(coverageOutcomes.consumer_rights_request_methods?.status, "not_observed");
+  assert.equal(coverageOutcomes.consumer_rights_request_methods?.status, "not_testable");
 
   const collectionRow = getChecklistRow(checklist, "notice_at_collection");
   assert.equal(collectionRow.status, "not_observed");
@@ -328,10 +328,10 @@ test("California cohort generic search/footer/contact signals stay negative thro
   assert.doesNotMatch(collectionRow.note, /point-of-collection notice was retained/i);
 
   const rightsRow = getChecklistRow(checklist, "consumer_rights_request_methods");
-  assert.equal(rightsRow.status, "not_observed");
+  assert.equal(rightsRow.status, "not_testable");
   assert.equal(rightsRow.criticalEvidence.retainedEvidence.consumerRightsRequestMethodObserved, false);
   assert.deepEqual(rightsRow.criticalEvidence.retainedEvidence.consumerRightsRequestMethodUrls ?? [], []);
-  assert.match(rightsRow.note, /no consumer rights request method was observed/i);
+  assert.match(rightsRow.note, /did not verify a usable consumer rights request method/i);
 });
 
 test("California cohort CMP infrastructure remains attribution context, not direct adtech evidence", () => {
