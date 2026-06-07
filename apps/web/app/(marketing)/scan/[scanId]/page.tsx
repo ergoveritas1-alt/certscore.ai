@@ -145,7 +145,6 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
           }
           headerActionsPlacement="belowTitle"
           scanRecord={scanRecord}
-          showAllRegulatoryChecklistOptions={false}
           viewerAccessRole="user"
         />
         {scanRecord.scan.status === "completed" ? (

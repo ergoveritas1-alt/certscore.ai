@@ -4,13 +4,20 @@ import { useActionState } from "react";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import {
   createIntegrationApiKeyAction,
-  initialApiKeyActionState,
-  revokeIntegrationApiKeyAction
+  revokeIntegrationApiKeyAction,
+  type ApiKeyActionState
 } from "../../server/integrations/api-key-actions";
 import type { IntegrationApiKeyRecord } from "../../server/integrations/api-keys";
 
 type ApiKeysCardProps = {
   apiKeys: IntegrationApiKeyRecord[];
+};
+
+const initialApiKeyActionState: ApiKeyActionState = {
+  error: null,
+  success: null,
+  token: null,
+  tokenPrefix: null
 };
 
 function formatDateTime(value: string | null) {

@@ -3,14 +3,19 @@
 import { useActionState } from "react";
 import { Button } from "@website-signal-risk-scanner/ui";
 import {
-  initialResendVerificationActionState,
-  resendVerificationEmailAction
+  resendVerificationEmailAction,
+  type ResendVerificationActionState
 } from "../../server/auth-flows/resend-verification";
 
 type EmailVerificationCardProps = {
   email: string;
   isVerified?: boolean;
   verifiedAt: string | null;
+};
+
+const initialResendVerificationActionState: ResendVerificationActionState = {
+  error: null,
+  success: null
 };
 
 export function EmailVerificationCard({ email, isVerified, verifiedAt }: EmailVerificationCardProps) {

@@ -10,7 +10,7 @@ export type ResendVerificationActionState = {
   success: string | null;
 };
 
-export const initialResendVerificationActionState: ResendVerificationActionState = {
+const initialResendVerificationActionState: ResendVerificationActionState = {
   error: null,
   success: null
 };

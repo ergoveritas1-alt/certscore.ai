@@ -15,6 +15,7 @@ import { getDashboardContext } from "../../../../server/auth";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { getScanById } from "../../../../server/scans/get-scan-by-id";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
+import { getOrganizationSettings } from "../../../../server/settings/get-organization-settings";
 
 type ScanDetailPageProps = {
   params: Promise<{
@@ -39,13 +40,16 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   ]);
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const recentScanReused = resolvedSearchParams.recentScanReused === "1";
-  const scanRecord = await withServerTiming("app.scan_detail.record", () =>
-    getScanById({
-      organizationId: organization.id,
-      scanId,
-      viewerEmail: user.email
-    })
-  );
+  const [scanRecord, organizationSettings] = await Promise.all([
+    withServerTiming("app.scan_detail.record", () =>
+      getScanById({
+        organizationId: organization.id,
+        scanId,
+        viewerEmail: user.email
+      })
+    ),
+    getOrganizationSettings(organization.id)
+  ]);
 
   if (!scanRecord) {
     notFound();
@@ -128,7 +132,11 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
         headerActionsPlacement="belowTitle"
         scanRecord={scanRecord}
         canViewReviewLenses={isPlatformAdmin || membership.role === "admin"}
-        showAllRegulatoryChecklistOptions={isPlatformAdmin || membership.role === "admin"}
+        signalSnapshotVisibility={{
+          showFingerprinting: organizationSettings?.showSignalSnapshotFingerprinting ?? true,
+          showReviewLenses: organizationSettings?.showSignalSnapshotReviewLenses ?? true,
+          showScanInterruption: organizationSettings?.showSignalSnapshotScanInterruption ?? true
+        }}
         viewerAccessRole={membership.role}
       />
     </>

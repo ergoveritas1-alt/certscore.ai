@@ -4477,7 +4477,9 @@ export function ExecutiveSummaryCard(input: {
   policyEnrichmentCount?: number | null;
   policySurfaces?: ExecutivePolicySurface[] | null;
   scanInterruptions?: ExecutiveScanInterruption[] | null;
+  showFingerprintingSnapshot?: boolean;
   showReviewLenses?: boolean;
+  showScanInterruptionSnapshot?: boolean;
   showProtectedRouteInterruptions?: boolean;
   verifiedPublicSurfacesCount?: number | null;
   lightweightHeroMetrics?: Array<{
@@ -4537,7 +4539,8 @@ export function ExecutiveSummaryCard(input: {
   const fingerprintEvidence = input.fingerprintReasons.filter(Boolean);
   const hasProbableFingerprintingFinding = regulatoryFindingInput.some((finding) => finding.id === "probable_fingerprinting");
   const shouldShowFingerprintSnapshot =
-    fingerprintEvidence.length > 0 || input.fingerprintLabel !== "None detected";
+    input.showFingerprintingSnapshot !== false &&
+    (fingerprintEvidence.length > 0 || input.fingerprintLabel !== "None detected");
   const vendorEvidence = uniqueStrings([...allObservedVendorNames, ...input.unresolvedVendorHosts]);
   const trackerFootprintExpandLabel = formatTrackerFootprintExpandLabel({
     thirdPartyDomainCount: input.thirdPartyDomains.length,
@@ -5016,7 +5019,7 @@ export function ExecutiveSummaryCard(input: {
                     </div>
                   </div>
                 ) : null}
-                {visibleScanInterruptions.length > 0 ? (
+                {input.showScanInterruptionSnapshot !== false && visibleScanInterruptions.length > 0 ? (
                   <div id="fingerprinting" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Scan Interruption</p>
                     <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">

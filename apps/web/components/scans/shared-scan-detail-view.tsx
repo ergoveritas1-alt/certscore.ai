@@ -30,11 +30,10 @@ import {
 import { FindingsSection } from "./findings-section";
 import { FullScanProgressCard } from "./full-scan-progress-card";
 import { FingerprintingPanel } from "./fingerprinting-panel";
-import {
-  BetaRegulatoryChecklistCard,
-  type BetaRegulatoryChecklistArea,
-  type BetaRegulatoryChecklistRow,
-  type BetaRegulatoryChecklistStatus
+import type {
+  BetaRegulatoryChecklistArea,
+  BetaRegulatoryChecklistRow,
+  BetaRegulatoryChecklistStatus
 } from "./beta-regulatory-checklist-card";
 import { CaliforniaPrivacyCoverageChecklistCard } from "./california-privacy-coverage-checklist-card";
 import { GdprEprivacyCoverageChecklistCard } from "./gdpr-eprivacy-coverage-checklist-card";
@@ -5581,7 +5580,11 @@ type SharedScanDetailViewProps = {
   previewMode?: "full" | "homepage";
   scanRecord: ScanDetailResponse;
   canViewReviewLenses?: boolean;
-  showAllRegulatoryChecklistOptions?: boolean;
+  signalSnapshotVisibility?: {
+    showFingerprinting: boolean;
+    showReviewLenses: boolean;
+    showScanInterruption: boolean;
+  };
   viewerAccessRole?: string | null;
 };
 
@@ -5849,14 +5852,14 @@ export function SharedScanDetailView({
   previewMode = "full",
   scanRecord,
   canViewReviewLenses,
-  showAllRegulatoryChecklistOptions,
+  signalSnapshotVisibility,
   viewerAccessRole = "user"
 }: SharedScanDetailViewProps) {
   const scanReportAccessRole = normalizeScanReportAccessRole(viewerAccessRole);
   const showAnalystDetail = scanReportAccessRole !== "user";
   const showAdvancedDiagnostics = scanReportAccessRole === "admin";
-  const canViewSignalSnapshotReviewLenses = canViewReviewLenses ?? scanReportAccessRole === "admin";
-  const canViewAllRegulatoryChecklistOptions = showAllRegulatoryChecklistOptions ?? scanReportAccessRole === "admin";
+  const canViewSignalSnapshotReviewLenses =
+    signalSnapshotVisibility?.showReviewLenses !== false && (canViewReviewLenses ?? scanReportAccessRole === "admin");
   const previewPayload = previewPayloadOverride ?? scanRecord.previewPayload ?? null;
   const snapshot = scanRecord.snapshot;
   const isBrowserExtensionScan = scanRecord.scan.scanType === "browser_extension";
@@ -6237,10 +6240,6 @@ export function SharedScanDetailView({
     executiveRegulatoryLenses.find((lens) => lens.acronym === "GDPR / ePrivacy") ?? null;
   const californiaPrivacyExecutiveLens =
     executiveRegulatoryLenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA") ?? null;
-  const betaRegulatoryChecklistAreas = buildBetaRegulatoryChecklistAreas(executiveRegulatoryLenses);
-  const betaRegulatoryChecklistAreaById = new Map(
-    betaRegulatoryChecklistAreas.map((area) => [area.id, area])
-  );
 
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
@@ -6364,7 +6363,9 @@ export function SharedScanDetailView({
             policyEnrichmentCount={scanRecord.policyEnrichment.length}
             policySurfaces={executivePolicySurfaces}
             scanInterruptions={executiveScanInterruptions}
+            showFingerprintingSnapshot={signalSnapshotVisibility?.showFingerprinting ?? true}
             showReviewLenses={canViewSignalSnapshotReviewLenses}
+            showScanInterruptionSnapshot={signalSnapshotVisibility?.showScanInterruption ?? true}
             showProtectedRouteInterruptions={showAdvancedDiagnostics}
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
           />
@@ -6395,92 +6396,8 @@ export function SharedScanDetailView({
                 id: "gdpr-eprivacy",
                 label: "GDPR / ePrivacy",
                 shortLabel: "GDPR/ePrivacy"
-              },
-              {
-                content: betaRegulatoryChecklistAreaById.get("ftc-dark-patterns") ? (
-                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("ftc-dark-patterns")!} defaultOpen />
-                ) : null,
-                id: "ftc-dark-patterns",
-                label: "FTC / Dark Patterns",
-                shortLabel: "FTC"
-              },
-              {
-                content: betaRegulatoryChecklistAreaById.get("ada-wcag") ? (
-                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("ada-wcag")!} defaultOpen />
-                ) : null,
-                id: "ada-wcag",
-                label: "ADA / WCAG",
-                shortLabel: "ADA / WCAG"
-              },
-              {
-                content: betaRegulatoryChecklistAreaById.get("india-dpdp") ? (
-                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("india-dpdp")!} defaultOpen />
-                ) : null,
-                id: "india-dpdp",
-                label: "India DPDP",
-                shortLabel: "India DPDP"
-              },
-              {
-                content: betaRegulatoryChecklistAreaById.get("us-state-privacy") ? (
-                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("us-state-privacy")!} defaultOpen />
-                ) : null,
-                group: "united_states" as const,
-                id: "us-state-privacy",
-                label: "U.S. State Privacy"
-              },
-              {
-                content: betaRegulatoryChecklistAreaById.get("california-cipa") ? (
-                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("california-cipa")!} defaultOpen />
-                ) : null,
-                group: "united_states" as const,
-                id: "california-cipa",
-                label: "California Tracking Litigation (CIPA)",
-                shortLabel: "CIPA"
-              },
-              {
-                content: betaRegulatoryChecklistAreaById.get("uk-gdpr-pecr") ? (
-                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("uk-gdpr-pecr")!} defaultOpen />
-                ) : null,
-                group: "europe_uk" as const,
-                id: "uk-gdpr-pecr",
-                label: "UK GDPR / PECR"
-              },
-              {
-                content: betaRegulatoryChecklistAreaById.get("brazil-lgpd") ? (
-                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("brazil-lgpd")!} defaultOpen />
-                ) : null,
-                group: "international" as const,
-                id: "brazil-lgpd",
-                label: "Brazil LGPD"
-              },
-              {
-                content: betaRegulatoryChecklistAreaById.get("canada-pipeda-quebec") ? (
-                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("canada-pipeda-quebec")!} defaultOpen />
-                ) : null,
-                group: "international" as const,
-                id: "canada-pipeda-quebec",
-                label: "Canada PIPEDA / Quebec Law 25",
-                shortLabel: "Canada"
-              },
-              {
-                content: betaRegulatoryChecklistAreaById.get("australia-privacy-act") ? (
-                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("australia-privacy-act")!} defaultOpen />
-                ) : null,
-                group: "international" as const,
-                id: "australia-privacy-act",
-                label: "Australia Privacy Act",
-                shortLabel: "Australia"
-              },
-              {
-                content: betaRegulatoryChecklistAreaById.get("singapore-pdpa") ? (
-                  <BetaRegulatoryChecklistCard area={betaRegulatoryChecklistAreaById.get("singapore-pdpa")!} defaultOpen />
-                ) : null,
-                group: "international" as const,
-                id: "singapore-pdpa",
-                label: "Singapore PDPA",
-                shortLabel: "Singapore"
               }
-            ].filter((tab) => canViewAllRegulatoryChecklistOptions || tab.id === "gdpr-eprivacy" || tab.id === "california-privacy")}
+            ]}
           />
           ) : null}
           

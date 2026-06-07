@@ -1303,6 +1303,47 @@ test("ExecutiveSummaryCard hides review lenses when viewer access disallows them
   assert.match(html, /Consent platform/);
 });
 
+test("ExecutiveSummaryCard hides scan interruption and fingerprinting snapshot cards when disabled", () => {
+  const html = renderToStaticMarkup(createElement(ExecutiveSummaryCard, {
+    accessLimitationNotice: null,
+    beforeConsentCookieCount: 0,
+    domainBenchmark: null,
+    finalHost: "example.com",
+    fingerprintReasons: ["canvas_webgl"],
+    fingerprintLabel: "Possible",
+    fingerprintNarrative: "Possible fingerprinting indicators retained.",
+    landedOnDifferentHost: false,
+    lastScannedAt: "2026-04-21T17:07:47.000Z",
+    posture: "Watch",
+    preConsentVendorNames: [],
+    requestedHost: "example.com",
+    resolvedVendorNames: [],
+    scanInterruptions: [{ label: "Captcha/security challenge", details: ["Challenge suspected."] }],
+    score: 72,
+    sessionReplayVendorNames: [],
+    showFingerprintingSnapshot: false,
+    showScanInterruptionSnapshot: false,
+    thirdPartyRequestCount: 0,
+    thirdPartyDomains: [],
+    topFindings: [
+      makeFinding("accessibility_risk_score", "Automated accessibility issues observed", {
+        section: "Accessibility"
+      })
+    ],
+    topObservedEntities: [],
+    trackerSummary: "No meaningful third-party footprint observed",
+    unifiedFindings: [],
+    unresolvedVendorHosts: [],
+    vendorCategoryCounts: {}
+  }));
+
+  assert.match(html, /Signal snapshot/);
+  assert.doesNotMatch(html, /Scan Interruption/);
+  assert.doesNotMatch(html, /Captcha\/security challenge/);
+  assert.doesNotMatch(html, /Fingerprinting/);
+  assert.match(html, /Consent platform/);
+});
+
 test("ExecutiveSummaryCard renders real vendor logo lookups in vendor badges", () => {
   const html = renderToStaticMarkup(createElement(ExecutiveSummaryCard, {
     accessLimitationNotice: null,

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getDashboardContext } from "../auth";
+import { requirePlatformAdminContext } from "../admin/platform-admin";
 import {
   createIntegrationApiKey,
   isIntegrationApiKeyScope,
@@ -17,7 +17,7 @@ export type ApiKeyActionState = {
   tokenPrefix: string | null;
 };
 
-export const initialApiKeyActionState: ApiKeyActionState = {
+const initialApiKeyActionState: ApiKeyActionState = {
   error: null,
   success: null,
   token: null,
@@ -67,7 +67,7 @@ export async function createIntegrationApiKeyAction(
     };
   }
 
-  const { organization, user } = await getDashboardContext();
+  const { organization, user } = await requirePlatformAdminContext();
   const key = await createIntegrationApiKey({
     name: parsed.data.name,
     scopes: parseScopes(formData),
@@ -101,7 +101,7 @@ export async function revokeIntegrationApiKeyAction(
     };
   }
 
-  const { organization } = await getDashboardContext();
+  const { organization } = await requirePlatformAdminContext();
   const revoked = await revokeIntegrationApiKey({
     organizationId: organization.id,
     publicId: parsed.data.publicId
